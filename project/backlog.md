@@ -200,8 +200,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Status: Waiting for testing
 	- Needs local test suite run?: A full pipeline run, plain and with `--container`. Each builds the new image with the nightly, and stage 3 should show the canary caught and no ASan or LSan reports. The plain run does that one step in the image.
 	- Needs external testing: A `cicd-win.ps1 -Wsl` run. A distro with no docker should only warn at the ASan step.
-	- Decisions:
-		- 20261019: A `cicd.bash` run shouldn't need extra flags, so no docker means a warning, not a stop.
 	- Priority: Avg
 	- Opened: 20261017-144450
 	- Opened by: CC
@@ -221,6 +219,8 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261019: The step took 13 to 16 minutes in 4 runs here, at a load of 25 to 45, against under 2 for the plain suite. The first ASan build of std and every crate was about 2 minutes of that.
 		- Note: No third-party leak turned up, and nothing in Mesa, X or the other system libraries either.
 		- Note: The image has no tmux, so the tmux tests pass as skipped there, as they do in a `--container` run. The GPU tests run on software Vulkan and GL. Adding it is 2026101914251765.
+	- Decisions:
+		- 20261019: A `cicd.bash` run shouldn't need extra flags, so no docker means a warning, not a stop.
 	- Swept: every `Box::leak`, `String::leak`, `Vec::leak` and `mem::forget` in the tree. The 3 in text.rs are interned, the 2 in tests are gone, ui_spec's are 2026101912070933, a test stand-in's goes through ui_spec too, and term.rs's is a Windows test.
 	- Verified: 20261019. The step in the image: canary caught, no ASan or LSan reports, 1423 passed and 4 ignored. A leak planted in a knobs test failed the step, with the report naming the test, and a suppression wide enough to hide everything failed it at the canary. The new container and cleanup checks, each watched to fail. The plain unit suite (1397 + 28), clippy for Linux and Windows, fmt, shellcheck, house style, docs check.
 	- Test case: The canary EtAocf6, run by the step itself. New cases in `cicd/tests/container/run.bash` (EsJg9EF) and `cicd/tests/cleanup/run.bash` (EtAiwUl). `a_name_resolved_again_is_kept_once` (EtAv8Lw) for the interned names.
