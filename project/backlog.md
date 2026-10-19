@@ -671,6 +671,20 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Notes:
 		- Pre-next-cut.
 
+- Add a contributor license agreement, like nano-git-db's
+	- ID: 2026101906582193
+	- Type: Task
+	- Status: Queued
+	- Priority: Avg
+	- Opened: 20261019-065821
+	- Opened by: JC
+	- Assigned to: CC
+	- Target OS: All
+	- Requirements:
+		- A `CLA.md`, a section on it in contributing.md, and a check on pull requests that blocks a merge until the author has signed. Same as nano-git-db.
+	- Notes:
+		- Pre-next-cut.
+
 - Settings|Window: New option, disabled by default: "On text zoom change window size too".
 	- ID: 2026101816103602
 	- Type: Enhancement
