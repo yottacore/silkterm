@@ -109,7 +109,6 @@ What a window already gives back while unused is in the [Releasing resources](20
 	| Wallpaper, 2560x1440                          | 15.0
 	| Wallpaper, 4096x2731                          | 44.0
 	| Glyph atlases, four                           |  2.5
-	| Minimap texture                               |  0.6
 	| In use                                        |  167
 	| Reserved in blocks of 128+256+64+64           |  512
 	| Driver's figure, without the dialogs' context |  506
@@ -131,10 +130,8 @@ What a window already gives back while unused is in the [Releasing resources](20
 	| Window with no wallpaper and an empty scrollback |            44 |            53
 	| Wallpaper, 2560x1440                             |            45 |            44
 	| Scrollback full, 10,000 lines                    | 25 (110 cols) | 54 (231 cols)
-	| Minimap store at 10,000 lines                    |             6 |             6
 
 	- A scrollback cell is 24 bytes, for every column of every line, blank or not, per pane. The alt screen adds one more screen of cells.
-	- The minimap store is a row of preview pixels per line, so it grows with the lines and not with the window.
 	- Glyphs go straight into the GPU atlases, so there is no glyph cache in regular memory. The heap is 14 to 26 MiB, mostly the font list (1067 faces here) and shaped text.
 
 ### The memory hint

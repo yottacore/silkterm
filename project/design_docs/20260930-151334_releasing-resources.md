@@ -104,7 +104,7 @@ What a window costs while in use is in the [Reducing resources](20261004-182255_
 
 - The dialogs' warm context keeps its instance and adapter the same way and lets only its device go. On NVIDIA, every Vulkan instance destroyed left two descriptors open.
 
-- The fonts and metrics stay, since layout and input still need them. Gone with the device: the rasterized glyphs, the shaped chrome, the scrim's textures, the minimap's texture and the wallpaper, which is decoded again on the way back, as after a console switch.
+- The fonts and metrics stay, since layout and input still need them. Gone with the device: the rasterized glyphs, the shaped chrome, the scrim's textures and the wallpaper, which is decoded again on the way back, as after a console switch.
 
 - A small copy of the wallpaper is kept through the release, 160 pixels on its long edge, about 56 KiB at 16:9. The rebuilt window draws it stretched and smoothed from its first frame until the real one is prepared again. Before that, a window taking its device back showed the bare background for 1.3 to 3 seconds at 2560x1440, longer for a bigger photo.
 
@@ -136,8 +136,6 @@ So the switch is detected instead. A watcher notes the console the window starte
 	- Since 2026-10-05 it is then held at the size the window draws it at. See the [Reducing resources](20261004-182255_reduce-resources.md#the-wallpaper-at-window-size) design doc.
 
 - The scrim's full-screen textures are made only when needed.
-
-- The minimap's cache is about 5 MB per pane at the default scrollback, and is freed while the map is off.
 
 - The dialogs' GPU context is kept for the life of the process, about 52 MiB, to open Settings in a quarter of the time. See the [Settings dialog](20260930-145721_settings-dialog.md) design doc.
 	- Measured on b23 on 2026-10-04, it is about 200 MiB of graphics memory and 16 MiB of regular memory. See [Measure first](20261004-182255_reduce-resources.md#measure-first) in the Reducing resources design doc.

@@ -294,7 +294,7 @@ Attention:
 
 Scrollbar, outside the theme:
 
-- `scrollbar_thumb`, `scrollbar_trough`: shown in the dialog as Scrollbar handle and Track, at the end of the palette. Their row says they are not part of the theme, since everything above them is. The minimap's marker and its own bar take them too, so they still do something with the scrollbar switched off.
+- `scrollbar_thumb`, `scrollbar_trough`: shown in the dialog as Scrollbar handle and Track, at the end of the palette. Their row says they are not part of the theme, since everything above them is.
 
 Rules that go with them:
 
@@ -353,7 +353,7 @@ Rules that go with them:
 	- On a log slider the step is that share of the track, so it is the same ratio anywhere along it, and never less than 1 for a whole number.
 	- A step never takes a value further past the slider's end than it already is. Up stops at the end, and Down from a typed number steps down from that number.
 
-- Every action reachable by mouse should be reachable by keyboard, and the reverse does not have to hold. Direct manipulation is the standing exception: dragging a divider, reordering a tab or a shell, dragging the minimap marker, and renaming a tab in place have no keyboard equivalent today.
+- Every action reachable by mouse should be reachable by keyboard, and the reverse does not have to hold. Direct manipulation is the standing exception: dragging a divider, reordering a tab or a shell, and renaming a tab in place have no keyboard equivalent today.
 
 - A key that reaches a dialog never also reaches the terminal underneath.
 
@@ -373,7 +373,7 @@ Things the built interface does differently from the rules above. Each is a smal
 
 - The About box pads its `Key: value` lines with extra spaces, which line nothing up in a proportional font. Cosmetic, and shared with the text `--about` prints.
 
-- The Silk tab made eight, one past the ceiling above, before Appearance took in 4 tabs and left 6 at the top level. Its subject is what the look costs, which is a stretch over three sections: the profile, text readability and the scrolling feel. It was put first because the profile governs most of what is under it. Emptying those sections out left the Text tab holding only the font, and the Movement tab holding only the wheel, the scrollbar and the minimap.
+- The Silk tab made eight, one past the ceiling above, before Appearance took in 4 tabs and left 6 at the top level. Its subject is what the look costs, which is a stretch over three sections: the profile, text readability and the scrolling feel. It was put first because the profile governs most of what is under it. Emptying those sections out left the Text tab holding only the font, and the Movement tab holding only the wheel and the scrollbar.
 
 - The Keys tab makes nine. No other tab's subject takes in the hotkeys. Down the left, the list adds its own width to the panel, set by its widest entry.
 
