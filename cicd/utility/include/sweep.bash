@@ -9,7 +9,7 @@
 ##		- Run folders: a test run folder, or the container's /tmp. Each one is
 ##		  written down in a ledger with the token in its owner mark. A later run
 ##		  removes the ones past the newest few still there, and only one whose
-##		  mark still has the token the ledger wrote. A run that passes has
+##		  mark still has the token the ledger wrote. A run taht passes has
 ##		  already removed its own.
 ##		- Cargo build dirs: everything built before a toolchain change, since
 ##		  cargo rebuilds all of it anyway; a dir the config no longer builds into;
