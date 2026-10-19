@@ -287,6 +287,21 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261007: Still present. Run against shcl dev d7903b73, not inferred: the step above still returns `current: false`, `ambiguous: 0`, `lost: 0`, and the stamped `migrate` still shows it only by leaving the Format line off. `Migration` has no new field. shcl's CLI `migrate` now refuses such a file with exit 7, by the same Format line check. No 3.0 beta is published; crates.io still has 2.0.0.
 		- API at the swap: shcl dev now has `upgrade()` and `upgrade_file()`, which convert a whole file with a timestamped backup, and close the open raw block and stamp it. The CLI backup is now `config_backup_<time>_format-v2.shcl`, not `config_old_v2.shcl`.
 
+- ttf-parser is unmaintained, and the advisory scan ignores that until the crates that pull it in move off it
+	- ID: 2026101715240000
+	- Type: Task
+	- Status: Stalled
+	- Priority: Low
+	- Opened: 20261017-152400
+	- Opened by: CC
+	- Related IDs: 2026101714445001
+	- Requirements:
+		- RUSTSEC-2026-0192 says ttf-parser is unmaintained. It comes in through fontdb under glyphon's cosmic-text, and through winit's sctk-adwaita. No release of either drops it yet.
+		- `deny.toml` ignores the advisory with this ID beside it. On a glyphon, cosmic-text or winit bump, check whether ttf-parser is still in the tree, and take the ignore out once it's gone. The scan fails on an ignore that matches nothing, so a stale one shows up by itself.
+	- Progress log:
+		- 20261019: Still stuck upstream. `cargo update --dry-run` moves none of fontdb, cosmic-text, ab_glyph, sctk-adwaita, glyphon or winit, and ttf-parser 0.25.1 still comes in both ways. On crates.io, fontdb 0.24.0 drops it, but the newest cosmic-text, 0.19.0, still asks for fontdb 0.23. sctk-adwaita 0.12.0 still pulls in ab_glyph. Even glyphon 0.12, a breaking bump, still brings cosmic-text 0.19.
+		- Stalled until a cosmic-text release takes fontdb 0.24 or later, and winit's sctk-adwaita drops ab_glyph.
+
 - Demo: the cursor goes to 50% width when the cursor size and animation change
 	- ID: 2026092812581720
 	- Type: Enhancement
@@ -427,32 +442,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- With the line gone, the test stand-in `stand_in_tabs` in settings_ui.rs shows a leak of its own too, since it builds its tree through ui_spec.
 		- The heap-growth test in heap_growth.rs has a `known:` line with this ID too. Take it out with the fix.
 
-- Leak checks: the advisory scan covers dev and build dependencies, beyond what end users run
-	- ID: 2026101714445007
-	- Type: Task
-	- Status: Done
-	- Needs local test suite run?: A full pipeline run runs the new scope test in stage 3, right after the scan. Not needed to close, since the test passed here on its own.
-	- Priority: Low
-	- Opened: 20261017-155500
-	- Opened by: CC
-	- Parent ID: 2026101714015789
-	- Related IDs: 2026101714445001
-	- Requirements:
-		- The advisory scan covers only crates built into a release binary for a release target, per the parent's 20261017 decision.
-	- Notes:
-		- `deny.toml` has no `exclude-dev` and no `targets`, so an advisory in a dev-only or other-platform crate fails a full run today.
-	- Progress log:
-		- 20261019: `deny.toml` now sets `exclude-dev` and lists the 6 release targets: Linux x86_64 and ARM64, Windows x86_64 and ARM64, and the Mac pair. Crates only wasm, Android or another platform use are out, and so are our dev-dependencies, dhat among them.
-		- 20261019: Build-dependencies can't be left out by config. cargo-deny's `[graph]` has `exclude-dev` and nothing for build-dependencies, and its `include-build` switch is for the license check only. So build scripts and proc macros are still scanned. That can fail a run on code users don't run, never let one through.
-		- 20261019: `[graph]` applies to the license, ban and source checks too, which still only warn. Their output didn't change.
-	- Swept: every cargo-deny call, in config.bash and cicd-win.ps1. All read the root `deny.toml`. design.md's pinning line and config.bash's comment now say what the scan covers.
-	- Verified: 20261019. The real scan passes. Against a copy of the advisory db with made-up advisories, the scan fails on unicode-width, windows-core, objc2-app-kit and embed-resource, and passes with them only on dhat, web-sys and android-activity. Scanned for one target at a time, Windows ARM64, Mac ARM64 and Linux ARM64 each caught only their own platform's crate. The old `deny.toml` failed on all 7. shellcheck, test IDs.
-	- Branch: advscope
-	- Commit: ae484d0
-	- Test case: EtBK7tB, `cicd/tests/advscope/run.bash`, run by stage 3 after the scan. It failed with the old `deny.toml` put back and passes now.
-	- Acceptance signoff: Self-closed: does what the parent's decision asks within what cargo-deny allows, and the test failed before and passes after.
-	- Closed: 20261019-134800
-
 - Wayland: a copy a program sends while no SilkTerm window has focus is dropped
 	- ID: 2026101607585700
 	- Type: Enhancement
@@ -467,21 +456,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- A line in usage.md saying a copy made from a window without focus on Wayland waits for it to get focus.
 	- Notes:
 		- Wayland lets a window set the clipboard only while it has the keyboard. X11 doesn't have that limit, and stays as it is.
-
-- ttf-parser is unmaintained, and the advisory scan ignores that until the crates that pull it in move off it
-	- ID: 2026101715240000
-	- Type: Task
-	- Status: Stalled
-	- Priority: Low
-	- Opened: 20261017-152400
-	- Opened by: CC
-	- Related IDs: 2026101714445001
-	- Requirements:
-		- RUSTSEC-2026-0192 says ttf-parser is unmaintained. It comes in through fontdb under glyphon's cosmic-text, and through winit's sctk-adwaita. No release of either drops it yet.
-		- `deny.toml` ignores the advisory with this ID beside it. On a glyphon, cosmic-text or winit bump, check whether ttf-parser is still in the tree, and take the ignore out once it's gone. The scan fails on an ignore that matches nothing, so a stale one shows up by itself.
-	- Progress log:
-		- 20261019: Still stuck upstream. `cargo update --dry-run` moves none of fontdb, cosmic-text, ab_glyph, sctk-adwaita, glyphon or winit, and ttf-parser 0.25.1 still comes in both ways. On crates.io, fontdb 0.24.0 drops it, but the newest cosmic-text, 0.19.0, still asks for fontdb 0.23. sctk-adwaita 0.12.0 still pulls in ab_glyph. Even glyphon 0.12, a breaking bump, still brings cosmic-text 0.19.
-		- Stalled until a cosmic-text release takes fontdb 0.24 or later, and winit's sctk-adwaita drops ab_glyph.
 
 - Wayland: must use the Wayland clipboard, and minimize other X11 features
 	- ID: 2026101509024607
@@ -5384,6 +5358,32 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Commit: c9b40aa
 	- Acceptance signoff: Self-closed: the fix does what the item asks and no more, and its test passes.
 	- Closed: 20261014-152600
+
+- Leak checks: the advisory scan covers dev and build dependencies, beyond what end users run
+	- ID: 2026101714445007
+	- Type: Task
+	- Status: Done
+	- Needs local test suite run?: A full pipeline run runs the new scope test in stage 3, right after the scan. Not needed to close, since the test passed here on its own.
+	- Priority: Low
+	- Opened: 20261017-155500
+	- Opened by: CC
+	- Parent ID: 2026101714015789
+	- Related IDs: 2026101714445001
+	- Requirements:
+		- The advisory scan covers only crates built into a release binary for a release target, per the parent's 20261017 decision.
+	- Notes:
+		- `deny.toml` has no `exclude-dev` and no `targets`, so an advisory in a dev-only or other-platform crate fails a full run today.
+	- Progress log:
+		- 20261019: `deny.toml` now sets `exclude-dev` and lists the 6 release targets: Linux x86_64 and ARM64, Windows x86_64 and ARM64, and the Mac pair. Crates only wasm, Android or another platform use are out, and so are our dev-dependencies, dhat among them.
+		- 20261019: Build-dependencies can't be left out by config. cargo-deny's `[graph]` has `exclude-dev` and nothing for build-dependencies, and its `include-build` switch is for the license check only. So build scripts and proc macros are still scanned. That can fail a run on code users don't run, never let one through.
+		- 20261019: `[graph]` applies to the license, ban and source checks too, which still only warn. Their output didn't change.
+	- Swept: every cargo-deny call, in config.bash and cicd-win.ps1. All read the root `deny.toml`. design.md's pinning line and config.bash's comment now say what the scan covers.
+	- Verified: 20261019. The real scan passes. Against a copy of the advisory db with made-up advisories, the scan fails on unicode-width, windows-core, objc2-app-kit and embed-resource, and passes with them only on dhat, web-sys and android-activity. Scanned for one target at a time, Windows ARM64, Mac ARM64 and Linux ARM64 each caught only their own platform's crate. The old `deny.toml` failed on all 7. shellcheck, test IDs.
+	- Branch: advscope
+	- Commit: ae484d0
+	- Test case: EtBK7tB, `cicd/tests/advscope/run.bash`, run by stage 3 after the scan. It failed with the old `deny.toml` put back and passes now.
+	- Acceptance signoff: Self-closed: does what the parent's decision asks within what cargo-deny allows, and the test failed before and passes after.
+	- Closed: 20261019-134800
 
 - Settings tips end with the current and default values where they differ
 	- ID: 2026100910295905
