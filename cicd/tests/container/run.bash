@@ -301,16 +301,17 @@ fCheck "--quick skips it" grep -q 'ASan run skipped (--quick)' <<<"$(fAsan fQuic
 fNoCmd(){ ASAN_CMD=(); }
 fCheck "--no-asan does" grep -q 'ASan run skipped$' <<<"$(fAsan fNoCmd)"
 fNoDocker(){ asanSkipped="no docker"; }
-fCheck "and the Linux half of a Windows run with no docker warns" grep -qF 'WARNING: ASan run skipped: no docker' <<<"$(fAsan fNoDocker)"
+fCheck "and with no docker it warns" grep -qF 'WARNING: ASan run skipped: no docker' <<<"$(fAsan fNoDocker)"
 
-## Before anything is built: a full run here needs docker for that step.
+## Before anything is built: a full run plans that step in the image, or skipped
+## with no docker.
 fPlan(){ rc=0; out="$(cd "${repo}" && env -u SILK_CICD_IN_CONTAINER -u CARGO_TARGET_DIR -u CICD_LINUX_HALF "${@}" bash cicd/cicd.bash --no-sync </dev/null 2>&1)" || rc=$?; }
 fPlan
 fCheck "a full run plans the ASan step in the image" grep -qE '^ASan \+ LSan \.+: the tests again on nightly-[0-9-]+, in silkterm-cicd:[0-9a-f]{12}$' <<<"${out}"
 fPlan SILK_DOCKER="${work}/no-such-docker"
-fCheck "with no docker a full run stops before it starts" bash -c '(($1)) && [[ "$2" == *"the ASan run needs docker"* && "$2" != *"Fail-fast"* ]]' _ "${rc}" "${out}"
+fCheck "with no docker a full run plans it skipped and goes on" bash -c '[[ "$1" != *"DIE:"* && "$1" == *"Fail-fast"* ]] && grep -qE "^ASan \+ LSan \.+: \(skipped, no docker" <<<"$1"' _ "${out}"
 fPlan SILK_DOCKER="${work}/no-such-docker" CICD_LINUX_HALF=1
-fCheck "the Linux half of a Windows run plans it skipped instead" grep -qE '^ASan \+ LSan \.+: \(skipped, no docker' <<<"${out}"
+fCheck "and so does the Linux half of a Windows run" grep -qE '^ASan \+ LSan \.+: \(skipped, no docker' <<<"${out}"
 rc=0; out="$(cd "${repo}" && env -u SILK_CICD_IN_CONTAINER -u CARGO_TARGET_DIR SILK_DOCKER="${work}/no-such-docker" bash cicd/cicd.bash --no-sync --no-asan </dev/null 2>&1)" || rc=$?
 fCheck "--no-asan needs no docker" bash -c '[[ "$1" != *"needs docker"* ]] && grep -qE "^ASan \+ LSan \.+: \(skipped\)$" <<<"$1"' _ "${out}"
 rc=0; out="$(cd "${repo}" && env -u SILK_CICD_IN_CONTAINER -u CARGO_TARGET_DIR SILK_DOCKER="${work}/no-such-docker" bash cicd/cicd.bash --no-sync --quick </dev/null 2>&1)" || rc=$?

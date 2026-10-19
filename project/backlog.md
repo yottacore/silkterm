@@ -200,6 +200,8 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Status: Waiting for testing
 	- Needs local test suite run?: A full pipeline run, plain and with `--container`. Each builds the new image with the nightly, and stage 3 should show the canary caught and no ASan or LSan reports. The plain run does that one step in the image.
 	- Needs external testing: A `cicd-win.ps1 -Wsl` run. A distro with no docker should only warn at the ASan step.
+	- Decisions:
+		- 20261019: A `cicd.bash` run shouldn't need extra flags, so no docker means a warning, not a stop.
 	- Priority: Avg
 	- Opened: 20261017-144450
 	- Opened by: CC
@@ -210,7 +212,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- The parent's ASan and LSan rows, with the pinned nightly beside the stable toolchain, and any leak it finds fixed or filed.
 	- Progress log:
 		- 20261019: Stage 3 runs the test suite again under ASan and LSan, on nightly-2026-10-15 with `-Zbuild-std` and `--target x86_64-unknown-linux-gnu`, in `target/asan-<date>`. The nightly is dated in a comment in rust-toolchain.toml, and only the container image installs it, so a plain run does this one step in the image. `--no-asan` and `--quick` skip it.
-		- 20261019: A plain full run with no docker stops before it starts, since a check that can't run has found nothing. The Linux half of a Windows run only warns, since cicd-win.ps1 has no way to pass `--no-asan`.
+		- 20261019: With no docker, a full run skips the step with a warning, in the plan and at the step, like the other steps missing a tool. A plain run needs no extra flags.
 		- 20261019: A canary crate that leaks on purpose runs first, under the same flags and suppressions. The step stops unless LSan names its leak, so the planted leak goes red on every run.
 		- 20261019: The first pass found leaks in our code only. The font family names were leaked again on every font change and new window, and are interned now. The Settings spec's leaked strings are filed as 2026101912070933, and the suppression names it. Two tests that leaked on purpose don't anymore.
 		- 20261019: Two tests are ignored under ASan, each with its reason: the peak memory of a huge image, and the scroll record's cost ratio. Four tests that run a child copy of the binary failed only because the child leaked, and pass now.
