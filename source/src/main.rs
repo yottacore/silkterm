@@ -30,6 +30,9 @@ mod front;
 #[cfg(test)]
 mod fuzz;
 mod gfx;
+// Run by cicd.bash --leakcheck, under the dhat-heap feature.
+#[cfg(test)]
+mod heap_growth;
 mod input;
 mod integration;
 mod keys;

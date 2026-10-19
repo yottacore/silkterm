@@ -26,7 +26,8 @@
 ##	   2. debug build (this is what the tests + profiler run against)
 ##	   3. regression tests + lints + fuzz soak (clippy for Linux, Windows and macOS
 ##	      and the advisory scan gating, the rest of cargo-deny not; the tests again
-##	      under ASan and LSan, in the container image; scroll harness)
+##	      under ASan and LSan, in the container image; with --leakcheck, the
+##	      heap-growth test under dhat; scroll harness)
 ##	   4. profiler (flamegraph SVG; non-gating artifact - see failure policy)
 ##	   5. release build (native + cross targets; optimized, for packaging + dogfood),
 ##	      then a check that every Windows binary carries its icon and version block
@@ -50,6 +51,8 @@
 ##	   --no-private        skip the private runner (macOS, Microsoft Store)
 ##	   --no-fuzz           skip the fuzz soak (the short one in the test run still runs)
 ##	   --no-asan           skip the test suite under ASan and LSan
+##	   --leakcheck         add the slow leak checks: the heap-growth test under dhat.
+##	                       Runs under --quick too; not with --gate
 ##	   --no-profile        skip the profiler stage
 ##	   --no-dogfood        skip the dogfood install
 ##	   --no-publish        skip the git backup + publish stage
@@ -116,7 +119,7 @@ cd "${root}"
 stamp="$(date +%Y%m%d-%H%M%S)"
 
 ## Parse options.
-assumeYes=0; quiet=0; quick=0; gate=0; demoAsked=0; noArm=0; noWindows=0; sync=1; cliMessage=""; container=0; innerArgs=()
+assumeYes=0; quiet=0; quick=0; gate=0; leakcheck=0; demoAsked=0; noArm=0; noWindows=0; sync=1; cliMessage=""; container=0; innerArgs=()
 while (($#)); do case "${1}" in
 	-y|--yes)                 assumeYes=1; shift ;;
 	-q|--quiet)               quiet=1; assumeYes=1; shift ;;   ## quiet + unattended; publish runs quiet too
@@ -137,11 +140,13 @@ while (($#)); do case "${1}" in
 	--quick)                  quick=1; noArm=1; PROFILE_ENABLE=0; PACKAGE_ENABLE=0; FUZZ_SECS=0; innerArgs+=("${1}"); shift ;;   ## skip the slow stages
 	--no-fuzz)                FUZZ_SECS=0; innerArgs+=("${1}"); shift ;;
 	--no-asan)                ASAN_CMD=(); innerArgs+=("${1}"); shift ;;
+	--leakcheck)              leakcheck=1; innerArgs+=("${1}"); shift ;;            ## the slow leak checks
 	--message=*|--msg=*|-m=*) cliMessage="${1#*=}"; shift ;;
 	-m|--message|--msg)       cliMessage="${2-}"; shift; (($#)) && shift ;;
 	-h|--help)                sed -n '/^##	- Purpose:/,/^##	History:/p' "${BASH_SOURCE[0]}" | sed '$d; s/^##	\{0,1\}//'; exit 0 ;;
 	*) echo "unknown option: ${1} (try --help)" >&2; exit 2 ;;
 esac; done
+if ((gate && leakcheck)); then echo "--leakcheck adds to a full run; the gate leaves it out" >&2; exit 2; fi
 
 ## --no-arm: drop the ARM64 cross targets so the run (and its packages) stay
 ## x86_64-only. Native x86_64 is untouched; the Windows/Linux x86_64 crosses stay.
@@ -617,6 +622,11 @@ elif [[ -n "${asanSkipped}" ]]; then
 else
 	fEcho_Clean "ASan + LSan .........: the tests again on ${SANITIZER_TOOLCHAIN}, in ${containerImage:-this container}"
 fi
+if ((leakcheck)); then
+	fEcho_Clean "Leak checks .........: heap growth under dhat, reports to ${LEAKCHECK_OUT_DIR}"
+else
+	fEcho_Clean "Leak checks .........: (add --leakcheck)"
+fi
 if ((PROFILE_ENABLE)); then
 	fEcho_Clean "Profiler ............: ${PROFILE_SECS}s run -> flamegraph SVG (on headless ${RPD_HEADLESS_DISPLAY:-:98})"
 	fEcho_Clean "  output dir ........: ${profileDir}"
@@ -996,6 +1006,26 @@ fRunAsan(){
 	fContainerRun "${containerImage}" "${root}/cicd/utility/asan.bash" || fDie "the test suite under ASan and LSan failed (above)"
 }
 
+## --leakcheck's checks, after the ASan run. Each report goes to LEAKCHECK_OUT_DIR,
+## rotated like the flamegraphs. A test filter that matched nothing would pass, so
+## a run that wrote no report fails too.
+fRunLeakcheck(){
+	local outDir report
+	local -i rc=0
+	if ((! leakcheck)); then fEcho_Clean "leak checks skipped (--leakcheck adds them)"; return 0; fi
+	outDir="${root}/${LEAKCHECK_OUT_DIR}"
+	mkdir -p "${outDir}" || fDie "could not make ${outDir}"
+	report="${outDir}/heap_${stamp}.txt"
+	fEcho_Clean "heap growth under dhat ..."
+	SILK_HEAP_REPORT="${report}" fTestLines "${LEAKCHECK_DHAT_CMD[@]}" || rc=$?
+	if [[ -s "${report}" ]]; then sed 's/^/    /' "${report}"; fi
+	((rc == 0)) || fDie "the heap grew past its warm-up, or the test failed (report and dhat profile in ${outDir})"
+	[[ -s "${report}" ]] || fDie "the heap-growth test wrote no report, so it didn't run"
+	gfs_rotate "${outDir}" heap txt >/dev/null 2>&1 || true
+	gfs_rotate "${outDir}" heap dhat.json >/dev/null 2>&1 || true
+	fEcho "OK: no heap growth past the warm-up"
+}
+
 ## The build dirs this config builds into: CLEANUP_BUILD_DIRS under the target
 ## dir, and each cross target's release dir.
 fBuildDirs(){
@@ -1117,6 +1147,7 @@ fBuildTestRelease(){
 		fi
 	fi
 	fRunAsan
+	fRunLeakcheck
 	## A release may only publish what was built from the source being tagged.
 	fRunTest cicd/tests/release/run.bash "release provenance"
 	## The release notes link every download by name, and only those uploaded.

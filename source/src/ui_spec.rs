@@ -408,6 +408,18 @@ pub fn ui() -> &'static Ui {
 	})
 }
 
+/// What `ui` does, once more, for a round of the heap-growth test
+/// (`heap_growth.rs`).
+#[cfg(test)]
+pub(crate) fn heap_round() -> usize {
+	let Ok(mut ui) = parse(SOURCE) else {
+		return 0;
+	};
+	keep_platform(&mut ui.specs, true, false);
+	pick_warnings(&mut ui.specs, false);
+	ui.specs.len()
+}
+
 fn keep_platform(specs: &mut Vec<Spec>, windows: bool, macos: bool) {
 	specs.retain(|spec| (windows || !spec.windows) && !(macos && spec.not_macos));
 }
