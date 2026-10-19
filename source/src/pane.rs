@@ -5407,7 +5407,7 @@ fn band_row_line(screen_row: i32, display_offset: i32, split_row: i32, ob: usize
 }
 
 #[cfg(test)]
-mod replay;
+pub(crate) mod replay;
 #[cfg(test)]
 mod vhist_probe;
 

@@ -56,6 +56,16 @@ struct Replay {
 	frames: usize,
 }
 
+/// Frames over fed bytes with the slides they saw let go, for a run that wants
+/// only the frames (`heap_growth.rs`).
+pub(crate) fn frames(cols: usize, lines: usize, scrollback: usize) -> impl FnMut(&str) {
+	let mut replay = Replay::new(cols, lines, scrollback);
+	move |bytes| {
+		replay.frame(bytes);
+		replay.slides.clear();
+	}
+}
+
 impl Replay {
 	fn new(cols: usize, lines: usize, scrollback: usize) -> Self {
 		let dims = crate::term::TermDimensions {

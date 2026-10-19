@@ -223,6 +223,32 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Test case: The canary EtAocf6, run by the step itself. New cases in `cicd/tests/container/run.bash` (EsJg9EF) and `cicd/tests/cleanup/run.bash` (EtAiwUl). `a_name_resolved_again_is_kept_once` (EtAv8Lw) for the interned names.
 	- Branch: asan
 
+- Leak checks: `--leakcheck` and the dhat heap-growth test
+	- ID: 2026101714445005
+	- Type: Task
+	- Status: Waiting for testing
+	- Needs local test suite run?: A full run with `--leakcheck`, plain and with `--container`. The plan shows the Leak checks line. Stage 3 runs the heap-growth test after the ASan run and prints its report: the planted leak caught, 5 actions flat, and the Settings spec grown but known (2026101912070933). `cicd/artifacts/leakcheck/` gets a `heap_<stamp>` report. A full run without the flag shows "(add --leakcheck)" there, and its ASan step has 1 more ignored test.
+	- Priority: Avg
+	- Opened: 20261017-144450
+	- Opened by: CC
+	- Parent ID: 2026101714015789
+	- Related IDs: 2026101913360695, 2026101913370214
+	- Requirements:
+		- Third-party and vendored code end users run is covered, per the parent's 20261017 decision. What it finds goes on the backlog.
+		- The parent's `--leakcheck`, CodeQL, soak test and dhat rows.
+		- 20261019: Split. CodeQL went to 2026101913360695 and the soak test to 2026101913370214. This item covers the flag and the dhat test.
+	- Progress log:
+		- 20261019: `cicd.bash --leakcheck` adds the slow leak checks to stage 3, after the ASan run. A plain full run leaves them out, `--quick` keeps them when asked, `--gate` refuses the flag, and `--container` passes it in.
+		- 20261019: The heap-growth test runs the main actions in-process with dhat as the allocator, 20 rounds and then 20 more, and fails when an action's heap at round 40 is over round 20 by more than 4 KiB or 10 blocks. The actions are a tab's engine opened, fed and closed, output into a full scrollback, the minimap, text shaping with fallback and color glyphs, the config read and saved, and the Settings spec parsed. About 30 s.
+		- 20261019: A planted leak is one of the actions, and the test fails unless it's caught. The step fails too when the test wrote no report, such as a filter that matched nothing or a build without the feature.
+		- 20261019: dhat sits under the debug build's allocation counter, only in test builds with the `dhat-heap` feature, so release builds don't change. It builds in the debug dir, since the feature changes only the silkterm crate, so there's no new build dir for the cleanup. dhat is a dev-dependency pinned at 0.3.3. The lock gained only its 5 new crates.
+		- 20261019: Found nothing new. Every action but the Settings spec reads exactly flat, and that one is 2026101912070933's leak, about 22 KB a parse, reported with its ID and not failed.
+		- Note: `tmux.rs` keeps every tmux session name the process handed out, one short string per tmux pane opened, by design. Not filed.
+		- Note: Not on Windows. `cicd-win.ps1` has no `--leakcheck`.
+	- Verified: 20261019. The test, run through the step lifted from cicd.bash with the real config: the canary caught, the rest flat, the report kept. A static cache planted in text shaping failed it, and so did the Settings spec with its known ID taken out, with the dhat profile saved. The step failed on a filter matching nothing and on a build without the feature. Engine cases, each watched to fail against a mutated cicd.bash. Unit suite (1397 + 28, 3 ignored), clippy for Linux with and without the feature, Windows and macOS, fmt, the advisory scan, shellcheck, house style, test IDs.
+	- Test case: `the_heap_stops_growing_after_a_warm_up` (EtBDWu8), whose planted leak runs every time. New cases in `cicd/tests/engine/run.bash` (Er2UgY7).
+	- Branch: leakchk
+
 - shcl: a keep-lines save adds a set value as a new line, beside its commented default
 	- ID: 2026100219054510
 	- Type: Task
@@ -349,17 +375,40 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Third-party and vendored code end users run is covered, per the parent's 20261017 decision. What it finds goes on the backlog.
 		- The parent's Miri rows, including the ignore-with-reason rule and the move behind `--leakcheck` if a full run measures too slow.
 
-- Leak checks: `--leakcheck` with CodeQL, the headless soak test and the dhat heap-growth test
-	- ID: 2026101714445005
+- Leak checks: CodeQL under `--leakcheck`, from a pinned CLI on a vendored tree
+	- ID: 2026101913360695
 	- Type: Task
 	- Status: Queued
 	- Priority: Avg
-	- Opened: 20261017-144450
+	- Opened: 20261019-133606
 	- Opened by: CC
 	- Parent ID: 2026101714015789
+	- Related IDs: 2026101714445005
 	- Requirements:
 		- Third-party and vendored code end users run is covered, per the parent's 20261017 decision. What it finds goes on the backlog.
-		- The parent's `--leakcheck`, CodeQL, soak test and dhat rows.
+		- The parent's CodeQL row: a pinned CLI run locally under `--leakcheck`, no hosted service, in the build container or lint image. The dependencies are vendored into the tree first (`cargo vendor`), since CodeQL reports only on source inside the database's root.
+		- Watched to fail on a planted finding before it's trusted.
+	- Notes:
+		- Split from 2026101714445005, which added the flag.
+
+- Leak checks: the headless soak test under `--leakcheck`
+	- ID: 2026101913370214
+	- Type: Task
+	- Status: Queued
+	- Priority: Avg
+	- Opened: 20261019-133702
+	- Opened by: CC
+	- Parent ID: 2026101714015789
+	- Related IDs: 2026101714445005
+	- Requirements:
+		- Third-party and vendored code end users run is covered, per the parent's 20261017 decision. What it finds goes on the backlog.
+		- The parent's soak row: the program's main actions looped headless, failing when the heap at round 2N is over round N by more than a set margin, with the heap report kept as a pipeline artifact. A plain build, since heaptrack can't share one with a sanitizer.
+		- Every tool pinned and run in the build container.
+		- A loop that types goes into a harmless shell, through `--shell` and a test script, never the user's shell config.
+		- Watched to fail on a planted leak before it's trusted.
+	- Notes:
+		- Split from 2026101714445005. Its heap-growth test covers some of the same actions in-process. This one is for what that can't reach: windows, tabs and splits opened and closed, the GPU, the Settings dialog and a real PTY.
+		- `cicd/tests/allocs/run.bash` already drives a window on a private Xvfb.
 
 - The Settings dialog's spec leaks the strings of rows it drops, and each test that parses it leaks a whole copy
 	- ID: 2026101912070933
@@ -376,6 +425,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Notes:
 		- `cicd/lsan-suppressions.txt` lets `silkterm::ui_spec::` through with this ID beside it. Take that line out with the fix.
 		- With the line gone, the test stand-in `stand_in_tabs` in settings_ui.rs shows a leak of its own too, since it builds its tree through ui_spec.
+		- The heap-growth test in heap_growth.rs has a `known:` line with this ID too. Take it out with the fix.
 
 - Leak checks: the advisory scan covers dev and build dependencies, beyond what end users run
 	- ID: 2026101714445007

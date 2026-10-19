@@ -338,10 +338,15 @@ fn latency_report() {
 
 // Heap allocations made on the calling thread. Counted only in a debug build,
 // which is never shipped; a release build keeps the plain allocator and every
-// count reads 0.
+// count reads 0. The heap-growth test puts dhat under the count, since a
+// process has one global allocator.
 #[cfg(debug_assertions)]
 mod counted {
-	use std::alloc::{GlobalAlloc, Layout, System};
+	#[cfg(all(test, feature = "dhat-heap"))]
+	use dhat::Alloc as System;
+	#[cfg(not(all(test, feature = "dhat-heap")))]
+	use std::alloc::System;
+	use std::alloc::{GlobalAlloc, Layout};
 	use std::cell::Cell;
 
 	thread_local! {

@@ -127,6 +127,17 @@ ASAN_CMD=(env "CARGO_TARGET_DIR=${TARGET_DIR}/${ASAN_DIR}" "RUSTFLAGS=-Zsanitize
 ## Leaks LSan lets through, each with the backlog item that fixes it.
 LSAN_SUPPRESSIONS="cicd/lsan-suppressions.txt"
 
+## Stage 3, with --leakcheck only: the slow leak checks, after the ASan run. Any
+## report fails the run.
+##  - The heap-growth test (source/src/heap_growth.rs): the main actions in
+##    rounds, in-process with dhat as the allocator, and the heap at round 2N
+##    against round N. The dhat-heap feature only changes the silkterm crate, so
+##    it builds in the debug dir beside the plain tests. One test thread and the
+##    module as the filter, since dhat counts every thread.
+## Reports go to LEAKCHECK_OUT_DIR (gitignored), rotated like the flamegraphs.
+LEAKCHECK_DHAT_CMD=(cargo test --features dhat-heap --bin "${EXE_NAME}" heap_growth:: -- --test-threads=1)
+LEAKCHECK_OUT_DIR="cicd/artifacts/leakcheck"
+
 ## Stage 3: per-monitor window size on random layouts and steps
 ## (cicd/tests/dpirand/run.py), as seconds of cases. A case is about 30 s on the
 ## debug build, and seeds start from the clock, so each run tries new ones. Skipped

@@ -83,19 +83,33 @@ unset -f uname
 ## --quick turns off every slow stage, and is an option the parser knows. It
 ## keeps the x86_64 cross build and drops the ARM64 ones.
 parse="$(fLift '^assumeYes=0; ' '^esac; done$')"
+## The line after the loop that refuses an option pair, lifted on its own.
+refusal="$(grep -F 'if ((gate && leakcheck)); then' "${engine}" || true)"
+fCheck "the parser has a line refusing --leakcheck with --gate" test -n "${refusal}"
+parse+=$'\n'"${refusal}"
 fParse(){  ## fParse <args...>: prints the settings the parser leaves, or exits as it does
 	BUILD_CROSS=1; PROFILE_ENABLE=1; PACKAGE_ENABLE=1; FUZZ_SECS=60
 	FMT_CMD=(cargo fmt); DOGFOOD_DESTS=(x); GIT_PUBLISH=(x); DEMO_ENABLE=1
 	set -- "${@}"
 	eval "${parse}"
-	echo "quick=${quick} cross=${BUILD_CROSS} arm=$((! noArm)) demo=${DEMO_ENABLE} gate=${gate} profile=${PROFILE_ENABLE} package=${PACKAGE_ENABLE} fuzz=${FUZZ_SECS} yes=${assumeYes} sync=${sync}"
+	echo "quick=${quick} cross=${BUILD_CROSS} arm=$((! noArm)) demo=${DEMO_ENABLE} gate=${gate} profile=${PROFILE_ENABLE} package=${PACKAGE_ENABLE} fuzz=${FUZZ_SECS} yes=${assumeYes} sync=${sync} leak=${leakcheck} inner=${innerArgs[*]}"
 }
 rc=0; out="$(fParse --quick 2>&1)" || rc=$?
 fCheck "--quick is accepted" test "${rc}" -eq 0
 fCheck "and turns off the ARM64 builds, profiling, packages and fuzzing" \
-	test "${out}" = "quick=1 cross=1 arm=0 demo=1 gate=0 profile=0 package=0 fuzz=0 yes=0 sync=1"
-fCheck "with no options every stage is on" \
-	test "$(fParse)" = "quick=0 cross=1 arm=1 demo=1 gate=0 profile=1 package=1 fuzz=60 yes=0 sync=1"
+	test "${out}" = "quick=1 cross=1 arm=0 demo=1 gate=0 profile=0 package=0 fuzz=0 yes=0 sync=1 leak=0 inner=--quick"
+fCheck "with no options every stage is on, and the leak checks are off" \
+	test "$(fParse)" = "quick=0 cross=1 arm=1 demo=1 gate=0 profile=1 package=1 fuzz=60 yes=0 sync=1 leak=0 inner="
+fCheck "--leakcheck adds the leak checks, and goes into the container with the run" \
+	test "$(fParse --leakcheck)" = "quick=0 cross=1 arm=1 demo=1 gate=0 profile=1 package=1 fuzz=60 yes=0 sync=1 leak=1 inner=--leakcheck"
+fCheck "and stays on under --quick" bash -c '[[ "$1" == "quick=1 "*" leak=1 "* ]]' _ "$(fParse --quick --leakcheck)"
+rc=0; out="$(fParse --gate --leakcheck 2>&1)" || rc=$?
+fCheck "--leakcheck with --gate stops the run" test "${rc}" -eq 2
+fCheck "and says why" grep -q 'leaves it out' <<<"${out}"
+fCheck "the leak checks run in stage 3, after the ASan run" \
+	bash -c 'grep -A1 "^[[:space:]]*fRunAsan$" "$1" | grep -q "^[[:space:]]*fRunLeakcheck$"' _ "${engine}"
+fCheck "the config names the heap-growth test, with its feature and one thread" \
+	bash -c 'source "$1" && [[ " ${LEAKCHECK_DHAT_CMD[*]} " == *" --features dhat-heap "*" heap_growth:: "*" --test-threads=1 "* ]]' _ "${cicd}/config.bash"
 fCheck "--no-demo turns the demo off" bash -c '[[ "$1" == *" demo=0 "* ]]' _ "$(fParse --no-demo)"
 fCheck "--gate is the merge gate" bash -c '[[ "$1" == *" gate=1 "* ]]' _ "$(fParse --gate)"
 rc=0; out="$(fParse -y --no-such-thing 2>&1)" || rc=$?

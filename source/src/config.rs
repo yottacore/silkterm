@@ -7669,6 +7669,20 @@ fn default_config() -> &'static str {
 	DEFAULT_CONFIG_TEXT.as_str()
 }
 
+/// A launch's read of the bundled config, then a save of one changed value, with
+/// no file behind either. A round of the heap-growth test (`heap_growth.rs`).
+#[cfg(test)]
+pub(crate) fn heap_round(value: f64) -> usize {
+	let text = default_config();
+	let (raw, _) = read_config_text(text, std::path::Path::new("config.shcl"));
+	let mut settings = resolve(raw);
+	let mut doc = parse_kept(text);
+	settings.model = crate::fields::load(&doc);
+	doc.put_float("scroll.alt_scroll_lines", value);
+	std::hint::black_box(&settings);
+	saved_text(&doc).len()
+}
+
 /// How a shipped default names the home directory: the variable somebody on this
 /// platform would type. A config written here still works if it is carried
 /// elsewhere, since both names are read on both platforms.
