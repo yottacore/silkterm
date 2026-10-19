@@ -188,7 +188,8 @@ Going forward, new issues in the new template at the bottom of this file, will g
 
 		- Left as found: the 343 local and 4 `/tmp` test folders, which no run wrote down; the `tmp.*.ps1` scripts and the b29w test folders on the boxes; the 7 `dash` processes; the remote clones' target dirs, built by hand jobs. The Windows pipeline's own target dir isn't swept yet.
 		- Verified: the four tests below pass, and their new checks failed against the pipeline as it was before.
-		- Question: should a run that built a new image also run `docker builder prune -f`? It's box-wide, so it would drop other projects' cache too. For now the size is only printed.
+	- Decisions:
+		- 20261019: No `docker builder prune` after a new image. The build cache isn't a stale leftover, and other projects share it. A run only prints its size.
 	- Branch: sweep
 	- Commit: e2c4556
 	- Test case: `cicd/tests/cleanup/run.bash` (EtAiwUl) and `cicd/tests/cleanup/win.ps1` (EtAiwnM) plant stale folders and build dirs beside fresh ones, other runs' and unlisted ones. Added to `cicd/tests/container/run.bash` (EsJg9EF) and `cicd/tests/wingui/harness-test.bash` (EqH4isr).
@@ -203,7 +204,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Opened: 20261017-144450
 	- Opened by: CC
 	- Parent ID: 2026101714015789
-	- Related IDs: 2026101912070933
+	- Related IDs: 2026101912070933, 2026101914251765
 	- Requirements:
 		- Third-party and vendored code end users run is covered, per the parent's 20261017 decision. What it finds goes on the backlog.
 		- The parent's ASan and LSan rows, with the pinned nightly beside the stable toolchain, and any leak it finds fixed or filed.
@@ -217,7 +218,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261019: A test that names the foreground program read the child's name before its exec had renamed it, once in 4 ASan runs. Linux lets the parent go on before the rename, so the test now waits for it, up to 5 s. Not reproduced on demand.
 		- 20261019: The step took 13 to 16 minutes in 4 runs here, at a load of 25 to 45, against under 2 for the plain suite. The first ASan build of std and every crate was about 2 minutes of that.
 		- Note: No third-party leak turned up, and nothing in Mesa, X or the other system libraries either.
-		- Note: The image has no tmux, so the tmux tests pass as skipped there, as they do in a `--container` run. The GPU tests run on software Vulkan and GL.
+		- Note: The image has no tmux, so the tmux tests pass as skipped there, as they do in a `--container` run. The GPU tests run on software Vulkan and GL. Adding it is 2026101914251765.
 	- Swept: every `Box::leak`, `String::leak`, `Vec::leak` and `mem::forget` in the tree. The 3 in text.rs are interned, the 2 in tests are gone, ui_spec's are 2026101912070933, a test stand-in's goes through ui_spec too, and term.rs's is a Windows test.
 	- Verified: 20261019. The step in the image: canary caught, no ASan or LSan reports, 1423 passed and 4 ignored. A leak planted in a knobs test failed the step, with the report naming the test, and a suppression wide enough to hide everything failed it at the canary. The new container and cleanup checks, each watched to fail. The plain unit suite (1397 + 28), clippy for Linux and Windows, fmt, shellcheck, house style, docs check.
 	- Test case: The canary EtAocf6, run by the step itself. New cases in `cicd/tests/container/run.bash` (EsJg9EF) and `cicd/tests/cleanup/run.bash` (EtAiwUl). `a_name_resolved_again_is_kept_once` (EtAv8Lw) for the interned names.
@@ -364,6 +365,21 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261017: Priority Avg is a best guess, since none was given. Split into 5 child items, worked one at a time, the cheap static checks first. This item closes when they do.
 	- Closed:
 
+- Always use automatic remote mode when detected.
+	- ID: 2026101914251764
+	- Type: Feature
+	- Status: Queued
+	- Priority: Avg
+	- Opened: 20261019-142517
+	- Opened by: JC
+	- Related IDs: 2026101816103600
+	- Target OS: All
+	- Requirements:
+		- New setting: "Always use automatic remote mode when detected."
+		- Default true.
+	- Notes:
+		- Pre-next-cut.
+
 - Leak checks: the test suite under ThreadSanitizer on every full run
 	- ID: 2026101714445003
 	- Type: Task
@@ -441,6 +457,21 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- `cicd/lsan-suppressions.txt` lets `silkterm::ui_spec::` through with this ID beside it. Take that line out with the fix.
 		- With the line gone, the test stand-in `stand_in_tabs` in settings_ui.rs shows a leak of its own too, since it builds its tree through ui_spec.
 		- The heap-growth test in heap_growth.rs has a `known:` line with this ID too. Take it out with the fix.
+
+- Put tmux in the container image, so the tmux tests run under ASan and in `--container`
+	- ID: 2026101914251765
+	- Type: Task
+	- Status: Queued
+	- Priority: Low
+	- Opened: 20261019-142517
+	- Opened by: CC
+	- Related IDs: 2026101714445002
+	- Target OS: Linux
+	- Requirements:
+		- The image has tmux, so the tmux tests run in the ASan step and in a `--container` run instead of passing as skipped.
+		- The test tmux stays on its own short socket there too.
+	- Notes:
+		- Do it with the next full ASan run, so the image is rebuilt once.
 
 - Wayland: a copy a program sends while no SilkTerm window has focus is dropped
 	- ID: 2026101607585700
