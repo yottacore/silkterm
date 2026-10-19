@@ -205,7 +205,7 @@ printf '%s\n' '#!/usr/bin/env bash' \
 	'exit 0' >"${home}/.cargo/bin/cargo"
 chmod +x "${home}/.cargo/bin/cargo"
 rc=0; env -u SILKTERM_TEST_DIR TMPDIR="${work}/f/base" HOME="${home}" STUB_RECORD="${work}/f/record" \
-	bash "${root}/cicd/cicd.bash" --gate >"${work}/f.log" 2>&1 || rc=$?
+	bash "${root}/cicd/cicd.bash" --gate --no-container >"${work}/f.log" 2>&1 || rc=$?
 fCheck "the gate runs with a stand-in cargo" test "${rc}" -eq 0
 ((rc == 0)) || fShowTail "${work}/f.log"
 given="$(sed -n 1p "${work}/f/record" 2>/dev/null || true)"
@@ -218,7 +218,7 @@ fCheck "and removes the folder once the gate passes" test -n "${given}" -a ! -e 
 ##	F2: a gate whose tests fail keeps the folder, and says where.
 mkdir "${work}/f/base2"
 rc=0; env -u SILKTERM_TEST_DIR TMPDIR="${work}/f/base2" HOME="${home}" STUB_RECORD="${work}/f/record2" STUB_TEST_RC=1 \
-	bash "${root}/cicd/cicd.bash" --gate >"${work}/f2.log" 2>&1 || rc=$?
+	bash "${root}/cicd/cicd.bash" --gate --no-container >"${work}/f2.log" 2>&1 || rc=$?
 given="$(sed -n 1p "${work}/f/record2" 2>/dev/null || true)"
 fCheck "a gate whose tests fail fails" test "${rc}" -ne 0
 fCheck "and keeps the run folder" test -n "${given}" -a -d "${given}"

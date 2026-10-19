@@ -118,7 +118,7 @@ wgpu uses the Metal backend automatically. No extra system packages are needed b
 
 ## The pipeline in a container
 
-`cicd/cicd.bash --container` runs the build, lint, test, profiler, release and package stages in a Debian trixie image built from `cicd/container/Dockerfile`, with every tool at the version `rust-toolchain.toml` and `cicd/tool-pins.txt` pin. It needs docker and nothing else from this page. The first run builds the image, which takes a while. After that the image is reused until the recipe or a pin changes.
+`cicd/cicd.bash` runs the build, lint, test, profiler, release and package stages in a Debian trixie image built from `cicd/container/Dockerfile`, with every tool at the version `rust-toolchain.toml` and `cicd/tool-pins.txt` pin. It needs docker and nothing else from this page, and docker is used whenever it is installed. `--no-container` runs those stages on this machine instead, with the tools from this page. With no docker that is what happens anyway, with a note saying so. The first run builds the image, which takes a while. After that the image is reused until the recipe or a pin changes.
 
 - The repo is mounted at its own path, and the run inside builds into `target/container`, so the builds here are left alone. Count on about as much disk again as `target/` takes.
 
@@ -126,9 +126,9 @@ wgpu uses the Metal backend automatically. No extra system packages are needed b
 
 - Everything that needs this machine stays outside and runs once the container is done: the remote sync, the Windows boxes, the private runner, dogfood, the demo and publish. The window tests inside run on software rendering, so the few that need a render node skip there.
 
-- `cicd/cicd.bash --gate --container` runs the merge gate inside.
+- `cicd/cicd.bash --gate` runs the merge gate inside too.
 
-- A full run without `--container` still uses the image for one step. The test suite under AddressSanitizer needs the nightly that `rust-toolchain.toml` dates, and only the image has it. `--no-asan` skips that step, and then the run needs no docker.
+- A full run with `--no-container` still uses the image for one step. The test suite under AddressSanitizer needs the nightly that `rust-toolchain.toml` dates, and only the image has it. `--no-asan` skips that step, and then the run needs no docker.
 
 ## Formatting
 

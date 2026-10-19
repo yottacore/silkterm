@@ -68,7 +68,8 @@
 ##	   --container         stages 1-6 in the pinned image from cicd/container/Dockerfile,
 ##	                       with its own target dir (target/container); sync, the private
 ##	                       runner, dogfood, the demo and publish stay here. With --gate,
-##	                       the gate runs there.
+##	                       the gate runs there. The default whenever docker is here.
+##	   --no-container      stages 1-6 on this box instead; the default with no docker
 ##	  With no options every stage runs.
 ## - Reuse: copy the cicd/ directory into another project and edit config.bash.
 
@@ -86,10 +87,18 @@ set -Eeuo pipefail
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 root="$(cd "${here}/.." && pwd)"   # the git repo root (cicd/..)
 export PATH="${HOME}/.cargo/bin:${HOME}/.local/bin:${PATH}"       ## rustup toolchain (cross targets, edition 2024) + zig must beat system rust.
-## --container builds in its own target dir, and config.bash derives every build path
-## from CARGO_TARGET_DIR, so it is set before the config loads. The run inside gets
-## the same value, so the two sides of the mount agree on where everything is.
-case " ${*} " in *" --container "*) export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-${root}/target/container}" ;; esac
+## Stages 1-6 run in the image whenever docker is here, and --no-container runs them
+## on this box. The container build uses its own target dir, and config.bash derives
+## every build path from CARGO_TARGET_DIR, so it is set before the config loads. The
+## run inside gets the same value, so the two sides of the mount agree on where
+## everything is.
+useContainer=0
+case " ${*} " in
+	*" --no-container "*) ;;
+	*" --container "*) useContainer=1 ;;
+	*) [[ -n "${SILK_CICD_IN_CONTAINER:-}" ]] || ! command -v "${SILK_DOCKER:-docker}" >/dev/null 2>&1 || useContainer=1 ;;
+esac
+((! useContainer)) || export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-${root}/target/container}"
 source "${here}/config.bash"
 source "${here}/utility/include/gfs-rotate.bash"                  ## gfs_rotate() for the profiler artifacts
 source "${here}/utility/include/remote-git.bash"                  ## fRemoteGit / fRemoteGh, as the folder's own account
@@ -119,12 +128,13 @@ cd "${root}"
 stamp="$(date +%Y%m%d-%H%M%S)"
 
 ## Parse options.
-assumeYes=0; quiet=0; quick=0; gate=0; leakcheck=0; demoAsked=0; noArm=0; noWindows=0; sync=1; cliMessage=""; container=0; innerArgs=()
+assumeYes=0; quiet=0; quick=0; gate=0; leakcheck=0; demoAsked=0; noArm=0; noWindows=0; sync=1; cliMessage=""; container="${useContainer:-0}"; noContainer=0; innerArgs=()
 while (($#)); do case "${1}" in
 	-y|--yes)                 assumeYes=1; shift ;;
 	-q|--quiet)               quiet=1; assumeYes=1; shift ;;   ## quiet + unattended; publish runs quiet too
 	--gate)                   gate=1; shift ;;                  ## merge gate only, then exit
 	--container)              container=1; shift ;;             ## stages 1-6 in the image; innerArgs collects what goes in with them
+	--no-container)           noContainer=1; shift ;;           ## stages 1-6 on this box
 	--no-fmt)                 FMT_CMD=(); innerArgs+=("${1}"); shift ;;
 	--no-cross)               BUILD_CROSS=0; innerArgs+=("${1}"); shift ;;
 	--no-arm)                 noArm=1; innerArgs+=("${1}"); shift ;;                ## drop ARM64 builds + packages
@@ -146,6 +156,7 @@ while (($#)); do case "${1}" in
 	-h|--help)                sed -n '/^##	- Purpose:/,/^##	History:/p' "${BASH_SOURCE[0]}" | sed '$d; s/^##	\{0,1\}//'; exit 0 ;;
 	*) echo "unknown option: ${1} (try --help)" >&2; exit 2 ;;
 esac; done
+if ((noContainer)); then container=0; fi
 if ((gate && leakcheck)); then echo "--leakcheck adds to a full run; the gate leaves it out" >&2; exit 2; fi
 
 ## --no-arm: drop the ARM64 cross targets so the run (and its packages) stay
@@ -514,6 +525,8 @@ containerImage=""; containerTarget=""; containerTmpLedger=""
 if ((container)); then
 	[[ -z "${SILK_CICD_IN_CONTAINER:-}" ]] || fDie "already in the container; --container would start another"
 	command -v "${docker}" >/dev/null 2>&1 || fDie "--container needs docker, or SILK_DOCKER naming a stand-in"
+elif ((! noContainer)) && [[ -z "${SILK_CICD_IN_CONTAINER:-}" ]]; then
+	fEcho_Clean "no docker here, so stages 1-6 run on this box with whatever it has installed"
 fi
 ## The ASan run needs the nightly, which only the image has, so a full run on this
 ## box does that one step in the image. Without docker it's skipped with a warning,

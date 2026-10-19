@@ -99,10 +99,11 @@ fCheck "the base image is pinned by digest" grep -qE '^FROM debian:[a-z-]+@sha25
 fCheck "the image marks itself, so a run inside cannot start another" grep -qE '^[[:space:]]*SILK_CICD_IN_CONTAINER=1' "${recipe}"
 
 ## The options: the stage options go in with the run, the host options stay here.
-parse="$(fLift '^assumeYes=0; ' '^esac; done$')"
+parse="$(fLift '^assumeYes=0; ' '^if ((noContainer)); then container=0; fi$')"
 fParse(){  ## fParse <args...>: prints what the parser leaves for the run inside
 	BUILD_CROSS=1; PROFILE_ENABLE=1; PACKAGE_ENABLE=1; FUZZ_SECS=60
 	FMT_CMD=(cargo fmt); DOGFOOD_DESTS=(x); GIT_PUBLISH=(x); DEMO_ENABLE=0; PRIVATE_RUNNER=x
+	useContainer="${USE_CONTAINER:-0}"
 	set -- "${@}"
 	eval "${parse}"
 	echo "container=${container} inner=${innerArgs[*]:-}"
@@ -112,6 +113,9 @@ fCheck "--container is an option, and the stage options go in with it" \
 fCheck "the host options stay out" test "$(fParse -y --no-sync --no-dogfood --no-publish --no-private --demo -m x)" = "container=0 inner="
 fCheck "and so does --container itself" test "$(fParse --container)" = "container=1 inner="
 fCheck "--no-asan is a stage option" test "$(fParse --container --no-asan)" = "container=1 inner=--no-asan"
+fCheck "with docker here it is the default" test "$(USE_CONTAINER=1 fParse -y)" = "container=1 inner="
+fCheck "--no-container turns it off" test "$(USE_CONTAINER=1 fParse --no-container -y)" = "container=0 inner="
+fCheck "and wins over --container, wherever it sits" test "$(USE_CONTAINER=1 fParse --no-container --container)" = "container=0 inner="
 
 ## What the run inside made: stage 5's list, from the target dir the two share.
 eval "$(fLift '^fContainerArtifacts(){' '^}')"
@@ -308,6 +312,11 @@ fCheck "and with no docker it warns" grep -qF 'WARNING: ASan run skipped: no doc
 fPlan(){ rc=0; out="$(cd "${repo}" && env -u SILK_CICD_IN_CONTAINER -u CARGO_TARGET_DIR -u CICD_LINUX_HALF "${@}" bash cicd/cicd.bash --no-sync </dev/null 2>&1)" || rc=$?; }
 fPlan
 fCheck "a full run plans the ASan step in the image" grep -qE '^ASan \+ LSan \.+: the tests again on nightly-[0-9-]+, in silkterm-cicd:[0-9a-f]{12}$' <<<"${out}"
+fCheck "and plans the container as the default" grep -qE '^Container \.+: stages 1-6 in silkterm-cicd:[0-9a-f]{12}' <<<"${out}"
+fPlan SILK_DOCKER="${work}/no-such-docker"
+fCheck "with no docker the run says it builds here" grep -qF 'no docker here, so stages 1-6 run on this box' <<<"${out}"
+rc=0; out="$(cd "${repo}" && env -u SILK_CICD_IN_CONTAINER -u CARGO_TARGET_DIR -u CICD_LINUX_HALF bash cicd/cicd.bash --no-sync --no-container </dev/null 2>&1)" || rc=$?
+fCheck "--no-container plans no container, and says nothing about docker" bash -c '[[ "$1" != *"Container ."* && "$1" != *"no docker here"* ]]' _ "${out}"
 fPlan SILK_DOCKER="${work}/no-such-docker"
 fCheck "with no docker a full run plans it skipped and goes on" bash -c '[[ "$1" != *"DIE:"* && "$1" == *"Fail-fast"* ]] && grep -qE "^ASan \+ LSan \.+: \(skipped, no docker" <<<"$1"' _ "${out}"
 fPlan SILK_DOCKER="${work}/no-such-docker" CICD_LINUX_HALF=1

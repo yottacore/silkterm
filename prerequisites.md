@@ -126,7 +126,7 @@ Full commands in [build.md](build.md).
 
 For the full `cicd/cicd.bash` run (packages, deps check): `cargo install cargo-deny cargo-deb cargo-generate-rpm cargo-zigbuild` and `makensis` (for the Windows installer). Versions are pinned in `cicd/tool-pins.txt`. The PowerShell lint needs `pwsh` with the PSScriptAnalyzer module.
 
-Or skip all of that and run those stages in a container: `cicd/cicd.bash --container` needs only docker. See [build.md](build.md).
+Or skip all of that: with docker installed, `cicd/cicd.bash` runs those stages in a container and needs nothing else. See [build.md](build.md).
 
 A full run needs docker either way, for the test suite under AddressSanitizer, which runs in that image. `--no-asan` skips it.
 
