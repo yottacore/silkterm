@@ -128,6 +128,8 @@ wgpu uses the Metal backend automatically. No extra system packages are needed b
 
 - `cicd/cicd.bash --gate --container` runs the merge gate inside.
 
+- A full run without `--container` still uses the image for one step. The test suite under AddressSanitizer needs the nightly that `rust-toolchain.toml` dates, and only the image has it. `--no-asan` skips that step, and then the run needs no docker.
+
 ## Formatting
 
 `rustfmt.toml` pins the style (`hard_tabs`). The hand-formatted data tables (the `Palette`/`Dlg` color matrices in `theme.rs`/`settings_ui.rs`, the About table in `dialog.rs`) have `#[rustfmt::skip]` so `cargo fmt` leaves them compact; everything else is rustfmt-canonical.

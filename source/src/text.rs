@@ -17,7 +17,7 @@ use crate::config;
 // build (so the Settings font field / "Use system font" apply live). cosmic-text
 // picks the best face *per query*, so a BOLD run can end up in a different family
 // than the regular run; pinning one name keeps every weight in it. `Attrs` needs
-// a 'static name, so the resolved string is leaked (rare - only on a font change).
+// a 'static name, so the resolved string goes through `intern`.
 static MONO_FAMILY: RwLock<Option<&'static str>> = RwLock::new(None);
 // Nearest-to-Bold weight the pinned mono family actually ships. Terminal bold
 // runs request THIS, not a literal 700: a mono family with no bold face would
@@ -27,6 +27,21 @@ static MONO_FAMILY: RwLock<Option<&'static str>> = RwLock::new(None);
 static MONO_WEIGHT_BOLD: std::sync::atomic::AtomicU16 = std::sync::atomic::AtomicU16::new(700);
 
 static MONO_PINNED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// One 'static copy of each distinct text, for the names `Attrs` wants 'static.
+/// Every font change and new window resolves the families again, and a leak per
+/// resolve grew for as long as the process ran.
+pub(crate) fn intern(text: String) -> &'static str {
+	static KEPT: std::sync::OnceLock<std::sync::Mutex<std::collections::HashSet<&'static str>>> =
+		std::sync::OnceLock::new();
+	let mut kept = crate::locks::lock(KEPT.get_or_init(Default::default));
+	if let Some(&have) = kept.get(text.as_str()) {
+		return have;
+	}
+	let have: &'static str = Box::leak(text.into_boxed_str());
+	kept.insert(have);
+	have
+}
 
 fn mono_family() -> Option<&'static str> {
 	*crate::locks::read(&MONO_FAMILY)
@@ -51,7 +66,7 @@ fn pin_before_first_context(pinned: &std::sync::atomic::AtomicBool, pin: fn(&Fon
 // Re-resolve and pin the monospace family for the current config + font system.
 fn pin_mono_family(fs: &FontSystem) {
 	use std::sync::atomic::Ordering;
-	let name = resolve_mono_family(fs).map(|family| &*Box::leak(family.into_boxed_str()));
+	let name = resolve_mono_family(fs).map(intern);
 	*crate::locks::write(&MONO_FAMILY) = name;
 	// Snap "bold" to the family's boldest available face so it can never eject the
 	// family. No pinned name (generic Monospace) -> keep 700, nothing to snap to.
@@ -182,7 +197,7 @@ fn nearest_face(
 fn pin_ui_family(fs: &FontSystem) {
 	use std::sync::atomic::Ordering;
 	let sys_font = crate::sysfont::interface();
-	let name = resolve_ui_family(fs).map(|family| &*Box::leak(family.into_boxed_str()));
+	let name = resolve_ui_family(fs).map(intern);
 	*crate::locks::write(&UI_FAMILY) = name;
 	// honor the desktop's weight/slant only when its family actually resolved
 	// (a fallback sans shouldn't inherit "Bold" meant for another face)
@@ -816,8 +831,8 @@ impl TextCtx {
 		placed(&ink)
 	}
 
-	// First family that can draw `ch` without color. Leaked because `Attrs` wants
-	// a 'static name, and bounded by the handful of such chars ever seen.
+	// First family that can draw `ch` without color, interned because `Attrs`
+	// wants a 'static name.
 	fn text_family(&mut self, ch: char) -> Option<&'static str> {
 		if let Some(hit) = self.text_families.get(&ch) {
 			return *hit;
@@ -825,7 +840,7 @@ impl TextCtx {
 		let found = crate::coloremoji::text_families(self.font_system.db(), ch)
 			.into_iter()
 			.next()
-			.map(|name| &*Box::leak(name.into_boxed_str()));
+			.map(intern);
 		self.text_families.insert(ch, found);
 		found
 	}
@@ -1204,6 +1219,21 @@ fn shaped_ink(
 #[cfg(test)]
 mod tests {
 	use super::*;
+
+	// A family resolved again, as on every font change and new window, comes
+	// back as the copy already kept rather than one more leaked string.
+	// Test ID: EtAv8Lw
+	#[test]
+	fn a_name_resolved_again_is_kept_once() {
+		let first = intern(String::from("Interned Sans Test"));
+		let again = intern(String::from("Interned Sans Test"));
+		assert!(std::ptr::eq(first, again));
+		assert_eq!(again, "Interned Sans Test");
+		assert!(!std::ptr::eq(
+			first,
+			intern(String::from("Interned Mono Test"))
+		));
+	}
 
 	// Only dark-on-light gets the correction. Applying it the other way would
 	// thin text that linear blending has already made heavy enough.

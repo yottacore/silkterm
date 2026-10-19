@@ -1,0 +1,11 @@
+# Leaks on purpose. cicd/utility/asan.bash runs it before the suite, with the
+# same settings, and stops if the leak isn't reported. Outside the workspace.
+[package]
+name = "sanitizer-canary"
+version = "0.1.0"
+edition = "2024"
+license = "GPL-2.0-or-later"
+publish = false
+
+[lib]
+doctest = false

@@ -6463,7 +6463,7 @@ mod tests {
 	pub(super) fn tip_text(tip: std::borrow::Cow<'static, str>) -> &'static str {
 		match tip {
 			std::borrow::Cow::Borrowed(text) => text,
-			std::borrow::Cow::Owned(text) => Box::leak(text.into_boxed_str()),
+			std::borrow::Cow::Owned(text) => crate::text::intern(text),
 		}
 	}
 

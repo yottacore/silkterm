@@ -2599,7 +2599,15 @@ mod tests {
 		let pid = libc::pid_t::try_from(child.id()).expect("pid");
 		// SAFETY: a plain query on a child this test owns
 		let pgid = unsafe { libc::getpgid(pid) };
-		let name = u32::try_from(pgid).ok().and_then(super::proc_comm);
+		// Linux lets the parent go on before the exec renames the child, so a
+		// busy box can still read the name it had before.
+		let read = || u32::try_from(pgid).ok().and_then(super::proc_comm);
+		let until = std::time::Instant::now() + std::time::Duration::from_secs(5);
+		let mut name = read();
+		while name.as_deref() != Some("sleep") && std::time::Instant::now() < until {
+			std::thread::sleep(std::time::Duration::from_millis(5));
+			name = read();
+		}
 		let _ = child.kill();
 		let _ = child.wait();
 		assert_eq!(pgid, pid, "the child did not lead its own group");

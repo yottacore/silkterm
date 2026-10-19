@@ -114,6 +114,19 @@ DENY_CMD=(cargo deny check licenses bans sources)
 ## can't run has found nothing.
 ADVISORY_CMD=(cargo deny check advisories -D warnings)
 
+## Stage 3: the test suite again under AddressSanitizer and LeakSanitizer, on every
+## full run. Sanitizers need a nightly, dated in rust-toolchain.toml, and only the
+## container image has it, so a run on the host does this one step in the image.
+## -Zbuild-std instruments std too, and the explicit --target keeps the flags off
+## build scripts and proc macros. Its build dir is named for the nightly, so the
+## cleanup takes the old one after a bump. Skipped under --quick and --no-asan;
+## empty () disables it.
+SANITIZER_TOOLCHAIN="$(sed -n 's/^# *nightly *= *"\([^"]*\)".*/\1/p' "$(dirname "${BASH_SOURCE[0]}")/../rust-toolchain.toml")"
+ASAN_DIR="asan-${SANITIZER_TOOLCHAIN#nightly-}"
+ASAN_CMD=(env "CARGO_TARGET_DIR=${TARGET_DIR}/${ASAN_DIR}" "RUSTFLAGS=-Zsanitizer=address -Cforce-frame-pointers=yes --cfg silk_asan" cargo "+${SANITIZER_TOOLCHAIN}" test -Zbuild-std --target x86_64-unknown-linux-gnu --tests --no-fail-fast)
+## Leaks LSan lets through, each with the backlog item that fixes it.
+LSAN_SUPPRESSIONS="cicd/lsan-suppressions.txt"
+
 ## Stage 3: per-monitor window size on random layouts and steps
 ## (cicd/tests/dpirand/run.py), as seconds of cases. A case is about 30 s on the
 ## debug build, and seeds start from the clock, so each run tries new ones. Skipped
@@ -229,6 +242,9 @@ LINT_LOG_DIR="cicd/artifacts/lint"      # relative to repo root; created if miss
 CLEANUP_KEEP_RUNS=5
 CLEANUP_INCREMENTAL_DAYS=7
 CLEANUP_BUILD_DIRS=(debug release "${PROFILE_PROFILE}" lint)
+## The same for the dirs the pinned nightly builds into, which only a nightly bump
+## makes stale.
+CLEANUP_NIGHTLY_DIRS=("${ASAN_DIR}")
 
 ## Old SVGs are pruned by gfs_rotate (cicd/utility/include/gfs-rotate.bash): keeps
 ## ~30 - first + newest-per-hour/day/week/month/year + last 10. Tune with the
@@ -298,7 +314,8 @@ GIT_PUBLISH=(cicd/utility/n8git_backup-and-publish)
 ## backup from the 09-15 history rewrite. source/target and the clipboard-race
 ## test crate's target are stray lint and test builds, and target/darwin is a
 ## macOS type check. target/container is what a --container run builds, a second
-## copy of all of it. A new scratch dir under target/ needs a line here.
+## copy of all of it, and target/asan-* the test build under the sanitizer. A new
+## scratch dir under target/ needs a line here.
 ##
 ## The wallpaper originals (about 350 MB) and duplicates (80 MB) sit behind the
 ## private/wallpaper/source symlink, which rar follows. The originals are the
@@ -313,6 +330,7 @@ export GIT_BACKUP_AND_PUBLISH_RAR_EXCLUDES='*/forks
 */target/gpuctl
 */target/darwin
 */target/container
+*/target/asan-*
 */target/lightnew
 */target/lightold
 */target/mapopt

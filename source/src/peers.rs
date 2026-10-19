@@ -286,9 +286,8 @@ mod tests {
 		let dir = scratch("tell");
 		let _me = join(&dir, 10).unwrap();
 		let _alive = join(&dir, 11).unwrap();
-		let dead = join(&dir, 12).unwrap();
-		#[allow(clippy::mem_forget, reason = "left behind, as a crash leaves it")]
-		std::mem::forget(dead);
+		// left behind, as a crash leaves it
+		File::create(dir.join("12")).unwrap();
 		std::fs::write(dir.join("lock"), "").unwrap();
 		let heard = std::sync::Mutex::new(Vec::new());
 		let mut told = tell_in(&dir, 10, "abc", |pid, line| {

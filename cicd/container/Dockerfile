@@ -122,6 +122,12 @@ RUN : "${VER_cargo_deny:?}${VER_cargo_zigbuild:?}${VER_cargo_deb:?}${VER_cargo_g
 FROM base
 COPY --from=tools /opt/tools/bin/ /opt/cargo/bin/
 
+# The dated nightly from rust-toolchain.toml, for the sanitizer runs only, with
+# rust-src for -Zbuild-std. After the helpers, so a bump doesn't rebuild them.
+ARG RUST_NIGHTLY
+RUN : "${RUST_NIGHTLY:?}" \
+	&& /opt/cargo/bin/rustup toolchain install "${RUST_NIGHTLY}" --profile minimal -c rust-src
+
 # The run drops to the caller's uid once it has a passwd entry (cicd.bash writes
 # one on the way in). /cache takes the named volume, which copies this dir's mode
 # when new, so anyone can write. The crate registry goes there, so the toolchain

@@ -25,7 +25,8 @@
 ##	   1. format (cargo fmt)
 ##	   2. debug build (this is what the tests + profiler run against)
 ##	   3. regression tests + lints + fuzz soak (clippy for Linux, Windows and macOS
-##	      and the advisory scan gating, the rest of cargo-deny not; scroll harness)
+##	      and the advisory scan gating, the rest of cargo-deny not; the tests again
+##	      under ASan and LSan, in the container image; scroll harness)
 ##	   4. profiler (flamegraph SVG; non-gating artifact - see failure policy)
 ##	   5. release build (native + cross targets; optimized, for packaging + dogfood),
 ##	      then a check that every Windows binary carries its icon and version block
@@ -48,6 +49,7 @@
 ##	   --no-package        skip the packages stage (.deb/.rpm/installer)
 ##	   --no-private        skip the private runner (macOS, Microsoft Store)
 ##	   --no-fuzz           skip the fuzz soak (the short one in the test run still runs)
+##	   --no-asan           skip the test suite under ASan and LSan
 ##	   --no-profile        skip the profiler stage
 ##	   --no-dogfood        skip the dogfood install
 ##	   --no-publish        skip the git backup + publish stage
@@ -56,7 +58,8 @@
 ##	   --demo              re-record the demo video, under --quick too
 ##	   --quick             only the quick lints and tests, and the x86_64 release builds;
 ##	                       skips the ARM64 builds, packages, profiling, the fuzz soak,
-##	                       the slow window tests and anything that needs another box
+##	                       the ASan run, the slow window tests and anything that
+##	                       needs another box
 ##	   --gate              merge gate only: fmt --check + clippy + tests, then exit
 ##	                       (fast local stand-in for hosted CI; the pre-push hook runs it)
 ##	   --container         stages 1-6 in the pinned image from cicd/container/Dockerfile,
@@ -133,6 +136,7 @@ while (($#)); do case "${1}" in
 	--no-demo)                DEMO_ENABLE=0; shift ;;
 	--quick)                  quick=1; noArm=1; PROFILE_ENABLE=0; PACKAGE_ENABLE=0; FUZZ_SECS=0; innerArgs+=("${1}"); shift ;;   ## skip the slow stages
 	--no-fuzz)                FUZZ_SECS=0; innerArgs+=("${1}"); shift ;;
+	--no-asan)                ASAN_CMD=(); innerArgs+=("${1}"); shift ;;
 	--message=*|--msg=*|-m=*) cliMessage="${1#*=}"; shift ;;
 	-m|--message|--msg)       cliMessage="${2-}"; shift; (($#)) && shift ;;
 	-h|--help)                sed -n '/^##	- Purpose:/,/^##	History:/p' "${BASH_SOURCE[0]}" | sed '$d; s/^##	\{0,1\}//'; exit 0 ;;
@@ -392,6 +396,7 @@ fContainerArgs(){
 	local pin name ver
 	printf 'VER_rust=%s\n' "$(sed -n 's/^channel *= *"\(.*\)".*/\1/p' "${root}/rust-toolchain.toml")"
 	printf 'RUST_TARGETS=%s\n' "$(sed -n '/^targets *= *\[/,/\]/p' "${root}/rust-toolchain.toml" | grep -oE '"[^"]+"' | tr -d '"' | paste -sd' ')"
+	printf 'RUST_NIGHTLY=%s\n' "${SANITIZER_TOOLCHAIN:-}"
 	for pin in "${TOOL_PINS[@]}"; do
 		name="${pin%%|*}"; name="${name//-/_}"; ver="${pin#*|}"; ver="${ver%%|*}"
 		if grep -qxF "ARG VER_${name}" "${containerRecipe}"; then printf 'VER_%s=%s\n' "${name}" "${ver}"; fi
@@ -442,17 +447,18 @@ fContainerStopped(){
 	done < <("${docker}" ps -aq --filter "label=${containerLabel}=run" --filter status=exited --filter status=created --filter status=dead 2>/dev/null || true)
 	fSweep_Count "stopped containers" "${gone}"
 }
-## fContainerRun <image> <cicd.bash options...>: the engine in the container, against
-## this tree. Its /tmp is a new folder under the target dir each run, so a failed
-## test's files are still there afterward, the X sockets inside never meet this
-## box's, and no lock or socket a killed run left is there for the next. A run
-## that passes removes it; a later run removes the ones failed runs kept. The
-## container starts as root only long enough to give this uid a passwd entry, since
-## the terminal looks its user up (a bare --user has none), and the X socket folder,
-## then drops to it. The run gets a session bus of its own, which xfwm4 needs, and
-## this box's time zone, so a name stamped inside sorts with the ones made here.
+## fContainerRun <image> <script> <options...>: a pipeline script in the container,
+## the engine or the ASan run, against this tree. Its /tmp is a new folder under
+## the target dir each run, so a failed test's files are still there afterward,
+## the X sockets inside never meet this box's, and no lock or socket a killed run
+## left is there for the next. A run that passes removes it; a later run removes
+## the ones failed runs kept. The container starts as root only long enough to
+## give this uid a passwd entry, since the terminal looks its user up (a bare
+## --user has none), and the X socket folder, then drops to it. The run gets a
+## session bus of its own, which xfwm4 needs, and this box's time zone, so a name
+## stamped inside sorts with the ones made here.
 fContainerRun(){
-	local -r image="${1}"; shift
+	local -r image="${1}" script="${2}"; shift 2
 	local gitCommon zone="${TZ:-}" runTmp="" runToken="" why=""
 	local -i rc=0
 	fSweep_MakeDir "${containerTarget}/tmp" run runTmp runToken || return 1
@@ -471,7 +477,7 @@ fContainerRun(){
 		-e "CICD_MAX_JOBS=${CICD_MAX_JOBS}" -e XDG_RUNTIME_DIR=/tmp/xdg-runtime "${zoneArgs[@]}" \
 		"${image}" bash -c 'echo "${USER}:x:${1}:${2}:${USER}:${HOME}:/bin/bash" >>/etc/passwd && echo "${USER}:x:${2}:" >>/etc/group \
 			&& mkdir -m 700 -p "${XDG_RUNTIME_DIR}" && chown "${1}:${2}" "${XDG_RUNTIME_DIR}" && mkdir -m 1777 -p /tmp/.X11-unix \
-			&& exec setpriv --reuid="${1}" --regid="${2}" --init-groups -- dbus-run-session -- bash "${@:3}"' _ "$(id -u)" "$(id -g)" "${root}/cicd/cicd.bash" "${@}" \
+			&& exec setpriv --reuid="${1}" --regid="${2}" --init-groups -- dbus-run-session -- bash "${@:3}"' _ "$(id -u)" "$(id -g)" "${script}" "${@}" \
 		|| rc=$?
 	if ((rc)); then
 		echo "the container's /tmp is kept in ${runTmp}" >&2
@@ -503,10 +509,25 @@ containerImage=""; containerTarget=""; containerTmpLedger=""
 if ((container)); then
 	[[ -z "${SILK_CICD_IN_CONTAINER:-}" ]] || fDie "already in the container; --container would start another"
 	command -v "${docker}" >/dev/null 2>&1 || fDie "--container needs docker, or SILK_DOCKER naming a stand-in"
+fi
+## The ASan run needs the nightly, which only the image has, so a full run on this
+## box does that one step in the image. Without docker the run stops here, since a
+## check that can't run has found nothing. The Linux half of a Windows run has no
+## way to pass --no-asan, so there it warns at the step instead.
+asanInImage=0; asanSkipped=""
+if ((! container && ! gate && ! quick)) && ((${#ASAN_CMD[@]})) && [[ -z "${SILK_CICD_IN_CONTAINER:-}" ]]; then
+	if command -v "${docker}" >/dev/null 2>&1; then asanInImage=1
+	elif [[ -n "${CICD_LINUX_HALF:-}" ]]; then asanSkipped="no docker here for the image with the nightly"
+	else fDie "the ASan run needs docker, since its nightly is only in the container image (--no-asan skips it)"; fi
+fi
+if ((container || asanInImage)); then
 	[[ -f "${containerRecipe}" ]] || fDie "missing ${containerRecipe}"
 	containerImage="$(fContainerImage)"
-	containerTarget="$(mkdir -p "${TARGET_DIR}" && cd "${TARGET_DIR}" && pwd)"
+	## Its real path, since a target dir linked to another disk would dangle inside.
+	containerTarget="$(mkdir -p "${TARGET_DIR}" && cd -P "${TARGET_DIR}" && pwd -P)"
 	containerTmpLedger="${containerTarget}/.cicd-container-tmp"
+fi
+if ((container)); then
 	## The engine inside takes this run's stage options and none of the stages that
 	## need this box: sync, the private runner, dogfood, the demo and publish.
 	innerArgs=(-y --no-sync --no-dogfood --no-publish --no-private "${innerArgs[@]}")
@@ -529,7 +550,7 @@ if ((gate)); then
 	if ((container)); then
 		fSection "Gate in ${containerImage}"
 		fContainerBuild "${containerImage}"
-		fContainerRun "${containerImage}" --gate || fDie "the gate in the container failed (above)"
+		fContainerRun "${containerImage}" "${root}/cicd/cicd.bash" --gate || fDie "the gate in the container failed (above)"
 		exit 0
 	fi
 	fSection "Gate 1/3  Format check"
@@ -587,6 +608,15 @@ if ((${FUZZ_SECS:-0} > 0)) && ((${#FUZZ_CMD[@]})); then
 else
 	fEcho_Clean "Fuzz ................: (skipped)"
 fi
+if ((${#ASAN_CMD[@]} == 0)); then
+	fEcho_Clean "ASan + LSan .........: (skipped)"
+elif ((quick)); then
+	fEcho_Clean "ASan + LSan .........: (skipped --quick)"
+elif [[ -n "${asanSkipped}" ]]; then
+	fEcho_Clean "ASan + LSan .........: (skipped, ${asanSkipped})"
+else
+	fEcho_Clean "ASan + LSan .........: the tests again on ${SANITIZER_TOOLCHAIN}, in ${containerImage:-this container}"
+fi
 if ((PROFILE_ENABLE)); then
 	fEcho_Clean "Profiler ............: ${PROFILE_SECS}s run -> flamegraph SVG (on headless ${RPD_HEADLESS_DISPLAY:-:98})"
 	fEcho_Clean "  output dir ........: ${profileDir}"
@@ -639,7 +669,7 @@ else
 	fEcho_Clean "Demo video ..........: re-record, README gif to assets/demo.gif"
 fi
 if declare -p CLEANUP_BUILD_DIRS &>/dev/null; then
-	fEcho_Clean "Cleanup .............: test folders$( ((container)) && echo ' and container /tmp') past the newest ${CLEANUP_KEEP_RUNS:-5}, stale build dirs$( ((container)) && echo ', stopped containers and old images')"
+	fEcho_Clean "Cleanup .............: test folders$( [[ -n "${containerTmpLedger}" ]] && echo ' and container /tmp') past the newest ${CLEANUP_KEEP_RUNS:-5}, stale build dirs$( [[ -n "${containerTmpLedger}" ]] && echo ', stopped containers and old images')"
 fi
 if ((${#GIT_PUBLISH[@]} == 0)); then
 	fEcho_Clean "Publish (last) ......: (disabled)"
@@ -712,7 +742,7 @@ if [[ -z "${SILK_CICD_IN_CONTAINER:-}" ]]; then
 	fSweep_Ledger "${testLedger}" "${CLEANUP_KEEP_RUNS:-5}" "old test run folders"
 	ownedLine="$(fTestDir_Owned)"
 	if [[ -n "${ownedLine}" ]]; then fSweep_Record "${testLedger}" "${ownedLine%%$'\t'*}" "${ownedLine#*$'\t'}" || true; fi
-	if ((container)); then
+	if [[ -n "${containerTmpLedger}" ]]; then
 		fSweep_Ledger "${containerTmpLedger}" "${CLEANUP_KEEP_RUNS:-5}" "old container /tmp folders"
 		fContainerStopped
 	fi
@@ -951,6 +981,21 @@ fWinGuiScenarios(){
 	fi
 }
 
+## Stage 3's test suite under ASan and LSan (cicd/utility/asan.bash). In the
+## container it runs as is. On this box it runs in the image, which has the
+## nightly, against this tree and target dir.
+fRunAsan(){
+	if ((${#ASAN_CMD[@]} == 0)); then fEcho_Clean "ASan run skipped"; return 0; fi
+	if ((quick)); then fEcho_Clean "ASan run skipped (--quick)"; return 0; fi
+	if [[ -n "${asanSkipped}" ]]; then fEcho "WARNING: ASan run skipped: ${asanSkipped}"; return 0; fi
+	if [[ -n "${SILK_CICD_IN_CONTAINER:-}" ]]; then
+		"${here}/utility/asan.bash" || fDie "the test suite under ASan and LSan failed (above)"
+		return 0
+	fi
+	fContainerBuild "${containerImage}"
+	fContainerRun "${containerImage}" "${root}/cicd/utility/asan.bash" || fDie "the test suite under ASan and LSan failed (above)"
+}
+
 ## The build dirs this config builds into: CLEANUP_BUILD_DIRS under the target
 ## dir, and each cross target's release dir.
 fBuildDirs(){
@@ -964,14 +1009,18 @@ fBuildDirs(){
 ## Stale build output in the target dir, swept where the builds run, so a container
 ## run sweeps its own target dir with its own toolchain.
 fSweepBuilds(){
-	local key="" ver=""
+	local key="" ver="" dir
 	local -a dirs=()
 	declare -p CLEANUP_BUILD_DIRS &>/dev/null || return 0
+	local -a nightlyDirs=()
 	mapfile -t dirs < <(fBuildDirs)
+	## The nightly's build dirs are named for it, so a bump leaves the old one
+	## unnamed, and a change of the stable toolchain has nothing to do with them.
+	for dir in "${CLEANUP_NIGHTLY_DIRS[@]}"; do nightlyDirs+=("${TARGET_DIR}/${dir}"); done
 	if ver="$(rustc -vV 2>/dev/null)"; then key="$(sha256sum <<<"${ver}" | cut -c1-16)"; fi
 	fSweep_Toolchain "${TARGET_DIR}" "${key}" "${dirs[@]}"
-	fSweep_OldBuildDirs "${TARGET_DIR}" "${dirs[@]}"
-	fSweep_Incremental "${CLEANUP_INCREMENTAL_DAYS:-7}" "${dirs[@]}"
+	fSweep_OldBuildDirs "${TARGET_DIR}" "${dirs[@]}" "${nightlyDirs[@]}"
+	fSweep_Incremental "${CLEANUP_INCREMENTAL_DAYS:-7}" "${dirs[@]}" "${nightlyDirs[@]}"
 }
 
 ## Stages 1 to 6: format, debug build, tests and lints, profiler, release builds and
@@ -1067,6 +1116,7 @@ fBuildTestRelease(){
 			fEcho "WARNING: deps check skipped: ${DENY_PROBE[*]} failed (cargo install cargo-deny)"
 		fi
 	fi
+	fRunAsan
 	## A release may only publish what was built from the source being tagged.
 	fRunTest cicd/tests/release/run.bash "release provenance"
 	## The release notes link every download by name, and only those uploaded.
@@ -1335,7 +1385,7 @@ if ((container)); then
 	fSection "Container"
 	fContainerBuild "${containerImage}"
 	fEcho_Clean "runs cicd.bash ${innerArgs[*]}"
-	fContainerRun "${containerImage}" "${innerArgs[@]}" || fDie "the run in the container failed (above)"
+	fContainerRun "${containerImage}" "${root}/cicd/cicd.bash" "${innerArgs[@]}" || fDie "the run in the container failed (above)"
 	fEcho "OK: stages 1-6 in the container"
 	fContainerArtifacts
 	## What needs this box's own trees and keys.
@@ -1463,6 +1513,8 @@ fEcho_Clean
 
 
 ##	History:
+##		- 2026-10-19: Every full run has the test suite again under ASan and LSan,
+##		              in the container image, which has the nightly it needs.
 ##		- 2026-10-19: A full run removes what earlier runs left once it is stale:
 ##		              kept test folders and container /tmp past the newest few,
 ##		              build dirs from an older toolchain or no longer built,

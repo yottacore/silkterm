@@ -128,6 +128,8 @@ For the full `cicd/cicd.bash` run (packages, deps check): `cargo install cargo-d
 
 Or skip all of that and run those stages in a container: `cicd/cicd.bash --container` needs only docker. See [build.md](build.md).
 
+A full run needs docker either way, for the test suite under AddressSanitizer, which runs in that image. `--no-asan` skips it.
+
 ## macOS (native)
 
 macOS builds natively on a Mac (there's no Linux->macOS cross set up here - it needs the Apple SDK).
