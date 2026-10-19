@@ -485,8 +485,9 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Target OS: All
 	- Requirements:
 		- CI/CD has both `--leakcheck` and `--no-leakcheck`.
-		- `--leakcheck` is useful to add back in for `--quick`.
-		- `--no-leakcheck` is useful to exclude it from a default run, or with `--quiet`.
+		- A default run includes the leak checks.
+		- `--leakcheck` exists only to add them back in for something like `--quick`.
+		- `--no-leakcheck` is useful to exclude them from a default run, or with `--quiet`.
 	- Notes:
 		- Before the next cut.
 
