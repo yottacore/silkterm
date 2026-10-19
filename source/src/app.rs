@@ -707,6 +707,7 @@ struct State {
 	maximize_on_reveal: bool,
 	watch: MonitorWatch,
 	pending_size_at: Instant,
+	zoom_kept: Option<window_size::ZoomKept>, // the grid `resize_on_zoom` holds to
 	menu: Option<ContextMenu>,
 	tab_close_arm: Option<usize>, // tab whose close button is held down (closes on release)
 	tab_hover: crate::tip::Dwell<usize>, // tab under the pointer, and since when
@@ -1570,35 +1571,44 @@ impl State {
 	// text context at the new effective size. Window-wide, and remembered with
 	// the window's size.
 	fn font_zoom(&mut self, dir: i32) {
+		let keep = self.grids_to_keep();
 		config::nudge_font_zoom(dir);
-		let scale = config::display_scale(self.window.scale_factor());
-		self.rebuild_text(scale);
-		self.dirty = true;
-		self.note_zoom();
+		self.zoomed(keep);
 	}
 
 	fn font_zoom_reset(&mut self) {
 		if config::font_zoom_px() == 0 {
 			return; // already at the configured size
 		}
+		let keep = self.grids_to_keep();
 		config::reset_font_zoom();
-		let scale = config::display_scale(self.window.scale_factor());
-		self.rebuild_text(scale);
-		self.dirty = true;
-		self.note_zoom();
+		self.zoomed(keep);
 	}
 
-	// The window keeps its size and shows a different grid, so both are
-	// saved: the next launch opens at this zoom and at this size, not at the
-	// old grid drawn bigger.
-	fn note_zoom(&mut self) {
+	fn zoomed(&mut self, keep: Option<window_size::ZoomHold>) {
+		let scale = config::display_scale(self.window.scale_factor());
+		// laid out once, at the size on its way
+		let px = if let Some(hold) = keep {
+			self.retext(scale);
+			self.resize_for_zoom(hold)
+		} else {
+			self.rebuild_text(scale);
+			self.surface_px
+		};
+		self.dirty = true;
+		self.note_zoom(px);
+	}
+
+	// Unless `resize_on_zoom` resized it, the window keeps its size and shows
+	// a different grid. Either way both are saved: the next launch opens at
+	// this zoom and at this size, not at the old grid drawn bigger.
+	fn note_zoom(&mut self, (w, h): (u32, u32)) {
 		if !self.size_tracked {
 			return;
 		}
 		self.watch.font_pinned = false;
 		self.look_unseen();
 		self.watch.noted.zoomed = true;
-		let (w, h) = self.surface_px;
 		self.note_grid(w, h);
 	}
 
@@ -3975,6 +3985,7 @@ impl ApplicationHandler<UserEvent> for App {
 			reveal_deadline: Instant::now() + Duration::from_millis(400),
 			pending_size: None,
 			pending_size_at: Instant::now(),
+			zoom_kept: None,
 			maximize_on_reveal,
 			watch,
 			menu: None,

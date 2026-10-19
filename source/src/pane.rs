@@ -3906,6 +3906,23 @@ impl PaneManager {
 		moved
 	}
 
+	/// The grid each pane would show in `area`, in layout order, with nothing
+	/// laid out yet. The minimap column is fixed in pixels, so a zoom changes
+	/// how many cells it takes.
+	pub fn grids_in(&self, ctx: &TextCtx, area: Rect) -> Vec<(usize, usize)> {
+		let mut out = Vec::new();
+		layout(&self.root, area, ctx.scale, &mut out);
+		let cfg = config::settings();
+		out.into_iter()
+			.map(|(id, rect)| {
+				let map_on = self.panes.get(&id).is_some_and(|pane| pane.map_on);
+				let text = minimap::text_rect(rect, &cfg, ctx.scale, map_on);
+				let (_, _, cols, lines) = content_dims(text, ctx);
+				(cols, lines)
+			})
+			.collect()
+	}
+
 	pub fn relayout(&mut self, ctx: &mut TextCtx, area: Rect) {
 		let mut out = Vec::new();
 		layout(&self.root, area, ctx.scale, &mut out);

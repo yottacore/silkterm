@@ -58,7 +58,7 @@ keys![
 	Outline, MinContrast, CursorScrim, CursorOutline,
 	CursorBlinking, CursorBlinkRate, CursorHeight, CursorWidth, CursorAnimation, CursorResume,
 	SystemFont, SystemFontSize, FontFamily, FontSize, LineHeight,
-	Columns, Rows, RememberSize, RememberPerMonitor, RememberMaximized, Margin, TabRegularWidth, TabMaxWidth,
+	Columns, Rows, RememberSize, RememberPerMonitor, RememberMaximized, ResizeOnZoom, Margin, TabRegularWidth, TabMaxWidth,
 	NewTabNextToCurrent, IdleRelease, IdleHiddenMin, IdleMin, SoftwareRendering,
 	TmuxNewSession, TmuxSessionName, TmuxOnClose,
 	TabTemplate, TitleShowsTab,

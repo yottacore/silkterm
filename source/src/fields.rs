@@ -194,6 +194,7 @@ pub static FIELDS: &[Field] = &[
 	count!(Rows, rows, limits::GRID),
 	flag!(RememberPerMonitor, remember_per_monitor),
 	flag!(RememberMaximized, remember_maximized),
+	flag!(ResizeOnZoom, resize_on_zoom),
 	num!(Margin, margin, limits::MARGIN),
 	num!(TabRegularWidth, tab_regular_pct, (2.0, 100.0)),
 	num!(TabMaxWidth, tab_max_pct, (2.0, 100.0)),

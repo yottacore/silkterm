@@ -340,6 +340,7 @@ macro_rules! keys_of {
 			| Key::RememberSize
 			| Key::RememberPerMonitor
 			| Key::RememberMaximized
+			| Key::ResizeOnZoom
 			| Key::NewTabNextToCurrent
 			| Key::TitleShowsTab
 			| Key::IdleRelease
@@ -532,6 +533,7 @@ fn toggle_of(settings: &Settings, key: Key) -> bool {
 		Key::RememberSize => settings.remember_size,
 		Key::RememberPerMonitor => settings.remember_per_monitor,
 		Key::RememberMaximized => settings.remember_maximized,
+		Key::ResizeOnZoom => settings.resize_on_zoom,
 		Key::NewTabNextToCurrent => settings.new_tab_beside,
 		Key::TitleShowsTab => settings.title_shows_tab,
 		Key::IdleRelease => settings.idle_release,
@@ -3905,6 +3907,7 @@ impl SettingsDialog {
 			Key::RememberSize => self.edited.remember_size = on,
 			Key::RememberPerMonitor => self.edited.remember_per_monitor = on,
 			Key::RememberMaximized => self.edited.remember_maximized = on,
+			Key::ResizeOnZoom => self.edited.resize_on_zoom = on,
 			Key::NewTabNextToCurrent => self.edited.new_tab_beside = on,
 			Key::TitleShowsTab => self.edited.title_shows_tab = on,
 			Key::IdleRelease => self.edited.idle_release = on,

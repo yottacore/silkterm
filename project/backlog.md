@@ -196,17 +196,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261007: Still present. Run against shcl dev d7903b73, not inferred: the step above still returns `current: false`, `ambiguous: 0`, `lost: 0`, and the stamped `migrate` still shows it only by leaving the Format line off. `Migration` has no new field. shcl's CLI `migrate` now refuses such a file with exit 7, by the same Format line check. No 3.0 beta is published; crates.io still has 2.0.0.
 		- API at the swap: shcl dev now has `upgrade()` and `upgrade_file()`, which convert a whole file with a timestamped backup, and close the open raw block and stamp it. The CLI backup is now `config_backup_<time>_format-v2.shcl`, not `config_old_v2.shcl`.
 
-- Settings|Window: New option, disabled by default: "On text zoom change window size too".
-	- ID: 2026101816103602
-	- Type: Enhancement
-	- Status: Queued
-	- Priority: Avg
-	- Opened: 20261018-161036
-	- Opened by: JC
-	- Target OS: All
-	- Notes:
-		- Pre-next-cut.
-
 - Verify or ensure that builds clean up *stale* artifacts and side-effects after they're done
 	- ID: 2026101909222600
 	- Type: Enhancement
@@ -2435,6 +2424,34 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- The Windows run this item came from named only these four. That full suite was not run again.
 	- Acceptance signoff: Self-closed: test fixes only, and all four failed before the fix and pass after on Windows.
 	- Closed: 20260930-125357
+
+- Settings|Window: New option, disabled by default: "On text zoom change window size too".
+	- ID: 2026101816103602
+	- Type: Enhancement
+	- Status: Done
+	- Needs external testing: A look on Windows, macOS and a Wayland desktop: a zoom in to the screen edge and back, and a zoom on a window snapped on Windows, which should keep its size.
+	- Priority: Avg
+	- Opened: 20261018-161036
+	- Opened by: JC
+	- Target OS: All
+	- Notes:
+		- Pre-next-cut.
+	- Decisions:
+		- 20261019: Best guess, since the question of what "change window size too" means went unanswered, and easy to reverse. With it on, a zoom in, out or reset resizes the window so each pane keeps its columns and rows. It stops at the right and bottom edges of the work area on the window's monitor, and past them the grid gets smaller as it does today.
+		- The row is "Resize window on zoom" on the Window tab, under "Remember maximized". The setting is `window.resize_on_zoom`, off by default, so nothing changes until it's turned on.
+		- The panes' grids are kept, not the window's. The minimap is fixed in pixels, so keeping the window's grid gave the shell an extra column at each step in.
+		- The window grows right and down from where it is, and is never moved. Zooming back to where a run of zooms began puts back the size it had then.
+		- A maximized or fullscreen window keeps its size. So does one snapped on Windows. A Wayland compositor refuses a tiled window's resize by itself. X11 and macOS don't say when a window is tiled, so there it resizes.
+		- The size saved after a zoom is the one the zoom asked for, for the monitor as any zoom is. Each window reads the setting when it zooms, so a change in Settings reaches every open window.
+	- Progress log:
+		- 20261019: Done. A zoom asks for the least size, in whole cells, that gives each pane its grid. A zoom in a row keeps the grids from before the first one, until the window is resized some other way, the font changes or a pane is split.
+	- Verified: On X11 with xfwm4, a window at 80x24 with the minimap: each zoom in kept the shell at 70x24 (71 at some steps) up to the screen edge, then the grid shrank. A zoom back and a reset gave back the first size, and the saved size went back to 80x24. With the setting off the window kept its size. A maximized window kept its size, and a split pane kept its grid. The row and its tip at a 24 pt interface font. The unit tests, and clippy for Linux, Windows and macOS.
+	- Swept: Every way to zoom, the keys, the View menu and the macOS menu, goes through the 2 changed functions. The setting is in the config template, its reader, the dialog spec and every key list, and the dialog's completeness tests pass.
+	- Branch: zoomsize
+	- Commit: e5f8a69
+	- Test case: EtAYf9n `a_zoom_grows_the_window_only_to_the_work_area_edge`, EtAYfEC `a_zoom_keeps_to_its_own_monitor_and_its_grid`, EtAYfIz `a_zoom_resizes_the_window_only_when_turned_on`.
+	- Acceptance signoff: Self-closed: the change does what the item asked, read as recorded under Decisions, and its tests and the X11 checks pass.
+	- Closed: 20261019-105453
 
 - Settings dialog: search
 	- ID: 2026101419165501

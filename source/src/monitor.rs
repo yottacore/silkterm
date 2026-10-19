@@ -852,6 +852,45 @@ fn wm_fullscreen(_window: &Window) -> bool {
 	false
 }
 
+/// Is the window snapped to a side or a layout? Only Windows says, through
+/// `IsWindowArranged`, which older Windows 10 builds lack, so it's looked up
+/// rather than linked or the program wouldn't start there.
+#[cfg(windows)]
+pub fn snapped(window: &Window) -> bool {
+	use raw_window_handle::{HasWindowHandle, RawWindowHandle};
+	use std::sync::OnceLock;
+	use windows_sys::Win32::Foundation::{BOOL, HWND};
+	use windows_sys::Win32::System::LibraryLoader::{GetModuleHandleW, GetProcAddress};
+
+	type Arranged = unsafe extern "system" fn(HWND) -> BOOL;
+	static ARRANGED: OnceLock<Option<Arranged>> = OnceLock::new();
+	let Ok(RawWindowHandle::Win32(h)) = window.window_handle().map(|handle| handle.as_raw()) else {
+		return false;
+	};
+	let arranged = ARRANGED.get_or_init(|| {
+		let name: Vec<u16> = "user32.dll".encode_utf16().chain([0]).collect();
+		// SAFETY: user32 is loaded in any process with a window, and a missing
+		// export answers None. The signature is the documented one.
+		unsafe {
+			let module = GetModuleHandleW(name.as_ptr());
+			if module.is_null() {
+				return None;
+			}
+			GetProcAddress(module, c"IsWindowArranged".as_ptr().cast())
+				.map(|f| std::mem::transmute::<unsafe extern "system" fn() -> isize, Arranged>(f))
+		}
+	});
+	// SAFETY: the handle is the live window's own.
+	arranged.is_some_and(|f| unsafe { f(h.hwnd.get() as HWND) } != 0)
+}
+
+/// X11 and macOS have no tiled state a window can read, and a Wayland
+/// compositor refuses a tiled window's resize itself.
+#[cfg(not(windows))]
+pub fn snapped(_window: &Window) -> bool {
+	false
+}
+
 #[cfg(test)]
 mod tests {
 	use super::*;

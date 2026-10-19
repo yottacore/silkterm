@@ -542,6 +542,213 @@ impl State {
 		self.relayout_all();
 		self.dirty = true;
 	}
+
+	/// The grid each pane shows, which a font zoom keeps with `resize_on_zoom`
+	/// on, read before the zoom. None where the window keeps its size: the
+	/// switch is off, or the size is the window manager's, as when maximized,
+	/// fullscreen or snapped. A Wayland compositor refuses a tiled window's
+	/// request on its own.
+	pub(super) fn grids_to_keep(&mut self) -> Option<ZoomHold> {
+		if !config::settings().resize_on_zoom
+			|| !self.revealed
+			|| self.no_area
+			|| self.window.is_maximized()
+			|| crate::monitor::fullscreen(&self.window)
+			|| crate::monitor::snapped(&self.window)
+		{
+			return None;
+		}
+		let now = self
+			.tabs
+			.cur()
+			.grids_in(&self.text, self.area_in(self.surface_px));
+		let cell = (self.text.cell_w, self.text.cell_h);
+		let kept = self
+			.zoom_kept
+			.take_if(|k| k.still_holds(self.surface_px, cell, now.len()))
+			.map(|k| k.hold);
+		Some(kept.unwrap_or(ZoomHold {
+			grids: now,
+			home: (config::font_zoom_px(), self.surface_px),
+		}))
+	}
+
+	/// Ask for the least size that shows every pane's grid in the zoomed
+	/// cells, up to the work area's right and bottom edges. Past them the
+	/// grids get smaller, as with the switch off. The grids are held to while
+	/// nothing else sizes the window, so zooming back gives them back, and
+	/// the size it had at that zoom. The size asked for is the one to save.
+	pub(super) fn resize_for_zoom(&mut self, hold: ZoomHold) -> (u32, u32) {
+		let from = self.surface_px;
+		let frame = {
+			let (outer, inner) = (self.window.outer_size(), self.window.inner_size());
+			(
+				outer.width.saturating_sub(inner.width),
+				outer.height.saturating_sub(inner.height),
+			)
+		};
+		let max_dim = self.gpu.as_ref().map_or(SAFE_MAX_DIM, |gpu| {
+			gpu.gfx.device.limits().max_texture_dimension_2d
+		});
+		let room = zoom_room(
+			area_here(&self.window),
+			self.window.outer_position().ok().map(|p| (p.x, p.y)),
+			frame,
+			from,
+		);
+		let pane_map = self.tabs.cur();
+		let shows = |px: (u32, u32)| pane_map.grids_in(&self.text, self.area_in(px));
+		let most = (room.0.min(max_dim), room.1.min(max_dim));
+		let grids = &hold.grids;
+		let (home_zoom, home) = hold.home;
+		// Back at the zoom it started from: the size it had, slack and all,
+		// so a zoom in and back changes nothing to save.
+		let (w, h) = if home_zoom == config::font_zoom_px() && home.0 <= most.0 && home.1 <= most.1
+		{
+			home
+		} else {
+			let w = least_px(most.0, |w| fits(&shows((w, from.1)), grids, |g| g.0));
+			let h = least_px(most.1, |h| fits(&shows((from.0, h)), grids, |g| g.1));
+			let (margin, chrome) = (self.text.margin, self.chrome_h());
+			(
+				whole_cells(w, most.0, self.text.cell_w, margin, 0.0),
+				whole_cells(h, most.1, self.text.cell_h, margin, chrome),
+			)
+		};
+		mondbg(
+			"zoomsize",
+			self.watch.key.as_deref(),
+			grids.first().copied(),
+			None,
+		);
+		self.zoom_kept = Some(ZoomKept {
+			hold,
+			from,
+			to: (w, h),
+			cell: (self.text.cell_w, self.text.cell_h),
+		});
+		self.dirty = true;
+		if (w, h) == self.surface_px {
+			self.relayout_all();
+			return (w, h);
+		}
+		let Some(applied) = request_size(&self.window, winit::dpi::PhysicalSize::new(w, h)) else {
+			// The shell is told the new grid once, not a smaller one in the
+			// old size first. Its `Resized` lays it out again.
+			self.relayout_all_in((w, h));
+			return (w, h);
+		};
+		self.resize_surface(applied.width, applied.height);
+		self.invalidate_prepared();
+		self.relayout_all();
+		(applied.width, applied.height)
+	}
+}
+
+/// What a run of zooms with `resize_on_zoom` keeps: each pane's grid, and
+/// the zoom and size the run started from.
+#[derive(Debug)]
+pub(super) struct ZoomHold {
+	grids: Vec<(usize, usize)>,
+	home: (i32, (u32, u32)),
+}
+
+/// The last zoom's hold, and the window it asked for.
+#[derive(Debug)]
+pub(super) struct ZoomKept {
+	hold: ZoomHold,
+	from: (u32, u32),
+	to: (u32, u32),
+	cell: (f32, f32),
+}
+
+impl ZoomKept {
+	// Nothing else has sized the window, changed the font or split a pane
+	// since. A size still on its way leaves the window at `from` for a
+	// moment, which two quick zooms on X11 saw.
+	fn still_holds(&self, px: (u32, u32), cell: (f32, f32), panes: usize) -> bool {
+		self.cell == cell && self.hold.grids.len() == panes && (px == self.to || px == self.from)
+	}
+}
+
+// The monitor the window is on, cut down to the work area where the system
+// says what that is. X11's work area spans every monitor, hence the cut.
+fn area_here(window: &Window) -> Option<(i32, i32, i32, i32)> {
+	let monitor = window.current_monitor().map(|m| {
+		let (at, size) = (m.position(), m.size());
+		(at.x, at.y, size.width as i32, size.height as i32)
+	});
+	let work = crate::dialog::work_area(window);
+	match (work, monitor) {
+		(Some(work), Some(monitor)) => overlap(work, monitor).or(Some(monitor)),
+		(work, monitor) => work.or(monitor),
+	}
+}
+
+fn overlap(a: (i32, i32, i32, i32), b: (i32, i32, i32, i32)) -> Option<(i32, i32, i32, i32)> {
+	let (left, top) = (a.0.max(b.0), a.1.max(b.1));
+	let (right, bottom) = ((a.0 + a.2).min(b.0 + b.2), (a.1 + a.3).min(b.1 + b.3));
+	(right > left && bottom > top).then_some((left, top, right - left, bottom - top))
+}
+
+// How big a zoom may make the window: out to the area's right and bottom
+// edges from where its frame is now, less the frame, and never smaller than
+// it already is. Wayland gives no position, so there it's the whole area.
+fn zoom_room(
+	area: Option<(i32, i32, i32, i32)>,
+	outer_at: Option<(i32, i32)>,
+	frame: (u32, u32),
+	now: (u32, u32),
+) -> (u32, u32) {
+	let Some((x, y, w, h)) = area else {
+		return (u32::MAX, u32::MAX);
+	};
+	let (left, top) = outer_at.unwrap_or((x, y));
+	let room = |edge: i32, from: i32, frame: u32, now: u32| {
+		let px = i64::from(edge) - i64::from(from) - i64::from(frame);
+		u32::try_from(px.max(0)).unwrap_or(u32::MAX).max(now)
+	};
+	(
+		room(x + w, left, frame.0, now.0),
+		room(y + h, top, frame.1, now.1),
+	)
+}
+
+// Does every pane show at least the cells it is to keep, one way?
+fn fits(
+	shown: &[(usize, usize)],
+	kept: &[(usize, usize)],
+	way: impl Fn(&(usize, usize)) -> usize,
+) -> bool {
+	shown.len() == kept.len() && shown.iter().zip(kept).all(|(s, k)| way(s) >= way(k))
+}
+
+// Out to whole cells of the window's own grid, which is what gets saved, so
+// the next launch opens at this size. A part cell short of it gave the shell
+// a column less.
+fn whole_cells(px: u32, most: u32, cell: f32, margin: f32, chrome: f32) -> u32 {
+	let cells = ((px as f32 - 2.0 * margin - chrome) / cell).ceil().max(1.0) as usize;
+	let whole = window_px(1, cells, cell, cell, margin, chrome).1;
+	if whole <= most { whole.max(px) } else { px }
+}
+
+// The least size up to `most` that `fits` takes, or `most` where none does.
+// A pane shows more cells in a bigger window, so a halving search finds it.
+fn least_px(most: u32, fits: impl Fn(u32) -> bool) -> u32 {
+	let most = most.max(1);
+	if !fits(most) {
+		return most;
+	}
+	let (mut low, mut high) = (1, most);
+	while low < high {
+		let mid = low + (high - low) / 2;
+		if fits(mid) {
+			high = mid;
+		} else {
+			low = mid + 1;
+		}
+	}
+	low
 }
 
 /// `SILK_MONDBG=1`: the monitor the window counts itself on, and each size it
@@ -1658,5 +1865,108 @@ mod tests {
 		}
 		s.remember_maximized = false;
 		assert!(!launch_maximized(&s, &plain), "the setting is off");
+	}
+
+	// With resize_on_zoom on, a zoom in grows the window to keep each pane's
+	// grid, out to the work area's right and bottom edges and no further. Past
+	// them the grid gets smaller. Zooming back out gives the whole grid back.
+	// The minimap is fixed in pixels, so keeping the window's own grid would
+	// have given the shell more columns at each step in.
+	// Test ID: EtAYf9n
+	#[test]
+	fn a_zoom_grows_the_window_only_to_the_work_area_edge() {
+		use super::{fits, least_px, whole_cells, zoom_room};
+		let area = Some((0, 0, 1920, 1040));
+		let frame = (2, 30);
+		let room = zoom_room(area, Some((100, 50)), frame, (808, 488));
+		assert_eq!(room, (1818, 960));
+		// one pane: margins of 4 and a 100 px minimap beside the text
+		let cols = |w: u32, cell: f32| (((w as f32 - 108.0) / cell).floor() as usize).max(1);
+		let width = |cell: f32, most: u32| {
+			least_px(most, |w| fits(&[(cols(w, cell), 24)], &[(70, 24)], |g| g.0))
+		};
+		assert_eq!(width(10.0, room.0), 808);
+		assert_eq!(width(12.0, room.0), 948, "zoomed in");
+		assert_eq!(cols(948, 12.0), 70);
+		assert_eq!(cols(947, 12.0), 69, "the least that fits");
+		assert_eq!(width(30.0, room.0), 1818, "at the edge");
+		assert_eq!(cols(1818, 30.0), 57);
+		assert_eq!(width(10.0, room.0), 808, "back out");
+		// two panes side by side, each with its own minimap
+		let both = |w: u32| {
+			let half = (w - 6) / 2;
+			[(cols(half, 10.0), 24), (cols(half, 10.0), 24)]
+		};
+		let w = least_px(room.0, |w| fits(&both(w), &[(40, 24), (40, 24)], |g| g.0));
+		assert_eq!(both(w), [(40, 24), (40, 24)]);
+		assert_ne!(both(w - 2), [(40, 24), (40, 24)]);
+		assert!(
+			!fits(&[(80, 24)], &[(40, 24), (40, 24)], |g| g.0),
+			"split since"
+		);
+		// already over the edge: it keeps the size it has
+		assert_eq!(
+			zoom_room(area, Some((1500, 900)), frame, (808, 488)),
+			(808, 488)
+		);
+		// off the left of the area, the right edge still holds
+		assert_eq!(zoom_room(area, Some((-100, 0)), frame, (808, 488)).0, 2018);
+		// Wayland: no position, so the whole area
+		assert_eq!(zoom_room(area, None, frame, (808, 488)), (1918, 1010));
+		assert_eq!(
+			zoom_room(None, None, frame, (808, 488)),
+			(u32::MAX, u32::MAX)
+		);
+		assert_eq!(least_px(0, |_| true), 1);
+		// out to whole cells of the window's grid, which is what's saved: a
+		// zoom in and back kept the shell's 70 columns but saved 79 for 80,
+		// and the next launch gave the shell 69
+		let whole = whole_cells(854, room.0, 10.65, 4.0, 0.0);
+		assert_eq!(whole, window_px(80, 1, 10.65, 1.0, 4.0, 0.0).0);
+		assert_eq!(cells_in(whole, 10.65, 4.0, 0.0), 80);
+		assert_eq!(whole_cells(500, 960, 24.0, 4.0, 30.0), 518);
+		assert_eq!(whole_cells(1818, 1818, 30.0, 4.0, 0.0), 1818, "at the edge");
+	}
+
+	// X11's work area spans both monitors; the window gets the part on its own.
+	// Test ID: EtAYfEC
+	#[test]
+	fn a_zoom_keeps_to_its_own_monitor_and_its_grid() {
+		use super::{ZoomKept, overlap};
+		let work = (0, 0, 5040, 2520);
+		assert_eq!(
+			overlap(work, (1600, 554, 3440, 1440)),
+			Some((1600, 554, 3440, 1440))
+		);
+		assert_eq!(
+			overlap((0, 30, 1920, 1050), (0, 0, 1920, 1080)),
+			Some((0, 30, 1920, 1050))
+		);
+		assert_eq!(overlap((0, 0, 100, 100), (200, 0, 100, 100)), None);
+		// held to while nothing else sized the window, changed the font or
+		// split a pane
+		let kept = ZoomKept {
+			hold: super::ZoomHold {
+				grids: vec![(70, 24)],
+				home: (0, (808, 488)),
+			},
+			from: (808, 488),
+			to: (1818, 960),
+			cell: (30.0, 60.0),
+		};
+		assert!(kept.still_holds((1818, 960), (30.0, 60.0), 1));
+		assert!(
+			kept.still_holds((808, 488), (30.0, 60.0), 1),
+			"size on its way"
+		);
+		assert!(
+			!kept.still_holds((1000, 700), (30.0, 60.0), 1),
+			"resized by hand"
+		);
+		assert!(
+			!kept.still_holds((1818, 960), (12.0, 24.0), 1),
+			"font changed"
+		);
+		assert!(!kept.still_holds((1818, 960), (30.0, 60.0), 2), "split");
 	}
 }
