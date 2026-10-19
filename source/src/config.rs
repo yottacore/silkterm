@@ -869,6 +869,7 @@ pub struct Settings {
 	pub rows: usize,
 	pub remember_per_monitor: bool, // keep a last size for each monitor (monitor_sizes)
 	pub remember_maximized: bool,   // launch maximized if the last window closed that way
+	pub resize_on_zoom: bool,       // a font zoom resizes the window to keep its grid
 	pub hide_single_tab: bool,      // hide the tab bar while only one tab is open
 	pub menu_bar: bool,             // a new window shows the menu bar (never on macOS)
 	pub new_tab_beside: bool,       // a new tab opens right of the active one, else at the end
@@ -1108,6 +1109,7 @@ impl Settings {
 			rows: 48,
 			remember_per_monitor: true,
 			remember_maximized: false,
+			resize_on_zoom: false,
 			hide_single_tab: false,
 			menu_bar: true,
 			new_tab_beside: true,
@@ -2910,6 +2912,7 @@ struct RawConfig {
 	rows: Option<usize>,
 	remember_per_monitor: Option<bool>,
 	remember_maximized: Option<bool>,
+	resize_on_zoom: Option<bool>,
 	hide_single_tab: Option<bool>,
 	menu_bar: Option<bool>,
 	new_tab_beside: Option<bool>,
@@ -3416,6 +3419,7 @@ fn read_raw(text: &str, path: &std::path::Path) -> (RawConfig, Vec<String>) {
 		rows: reader.read_usize("window.rows"),
 		remember_per_monitor: reader.read_bool("window.remember_per_monitor"),
 		remember_maximized: reader.read_bool("window.remember_maximized"),
+		resize_on_zoom: reader.read_bool("window.resize_on_zoom"),
 		hide_single_tab: reader.read_bool("window.hide_single_tab"),
 		menu_bar: reader.read_bool("window.menu_bar"),
 		new_tab_beside: reader.read_bool("window.new_tab_next_to_current"),
@@ -4063,6 +4067,7 @@ fn resolve(raw: RawConfig) -> Settings {
 			.map_or(d.rows, |n| n.clamp(limits::GRID.0, limits::GRID.1)),
 		remember_per_monitor: raw.remember_per_monitor.unwrap_or(d.remember_per_monitor),
 		remember_maximized: raw.remember_maximized.unwrap_or(d.remember_maximized),
+		resize_on_zoom: raw.resize_on_zoom.unwrap_or(d.resize_on_zoom),
 		hide_single_tab: raw.hide_single_tab.unwrap_or(d.hide_single_tab),
 		menu_bar: raw.menu_bar.unwrap_or(d.menu_bar),
 		new_tab_beside: raw.new_tab_beside.unwrap_or(d.new_tab_beside),
@@ -7964,6 +7969,11 @@ window:
 	# remember_per_monitor: true  ## Default
 
 	# remember_maximized: false  ## Default
+
+	## A font zoom resizes the window to keep its columns and rows, up to the
+	## edge of the screen. Off keeps the window's size and changes the grid.
+	## A maximized or fullscreen window keeps its size either way.
+	# resize_on_zoom: false  ## Default
 
 	# hide_single_tab: false  ## Default
 
@@ -14747,6 +14757,22 @@ mod tests {
 		);
 		let off = "window:\n\tnew_tab_next_to_current: false\n";
 		assert!(!resolve(read_raw(off, p).0).new_tab_beside);
+	}
+
+	// Test ID: EtAYfIz
+	#[test]
+	fn a_zoom_resizes_the_window_only_when_turned_on() {
+		let p = std::path::Path::new("test.shcl");
+		assert!(!resolve(read_raw("", p).0).resize_on_zoom, "off by default");
+		let template = setting_lines(default_config())
+			.into_iter()
+			.find_map(|(name, line)| (name == "window.resize_on_zoom").then_some(line));
+		assert_eq!(
+			template.as_deref(),
+			Some("\t# resize_on_zoom: false  ## Default")
+		);
+		let on = "window:\n\tresize_on_zoom: true\n";
+		assert!(resolve(read_raw(on, p).0).resize_on_zoom);
 	}
 
 	// Test ID: Esa0ndg

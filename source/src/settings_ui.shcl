@@ -923,6 +923,13 @@ rows:
 		setting: window.remember_maximized
 		help: "Reopen maximized when the window was last closed maximized."
 
+	ResizeOnZoom:
+		label: Resize window on zoom
+		aliases: "font size", "text zoom", "window size"
+		kind: toggle
+		setting: window.resize_on_zoom
+		help: "Changing the font size from the keyboard or the View menu resizes the window to keep the same columns and rows. It stops at the edge of the screen, where the grid gets smaller as usual. A maximized or fullscreen window keeps its size."
+
 	TabRegularWidth:
 		label: Tab width regular %
 		kind: slider
