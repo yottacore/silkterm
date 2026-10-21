@@ -1,0 +1,23 @@
+# Builds and tests on arm64 macOS. Everything is in cicd/ci-mac.bash, so a
+# different git host only needs to call that script.
+name: macOS arm64
+
+on:
+  push:
+    branches: [dev, main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mac-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  mac:
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash cicd/ci-mac.bash
