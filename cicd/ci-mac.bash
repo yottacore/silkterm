@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
 
 ##	- Purpose:
-##		Build, lint and test on a Mac, with nothing from any git host. A hosted
+##		Build, lint and test on a Mac, using nothing specific to a git host. A hosted
 ##		runner calls this, and so can anyone on a Mac by hand. It runs every step
 ##		and reports them all, so one failure doesn't hide the next.
 ##			- What the Mac is: architecture, macOS version, and the graphics
 ##			  the machine reports.
 ##			- cargo build, clippy with -D warnings, and the unit suite, all on the
 ##			  toolchain rust-toolchain.toml pins.
-##			- Which tests skipped for want of a graphics device. A VM with no GPU
-##			  skips the window tests, and the skip lines are the evidence.
+##			- The graphics adapter the app finds, and which tests skipped for want
+##			  of a device. A VM with no GPU skips the window tests.
 ##	- Syntax: ci-mac.bash
 ##	- Exit: 0 every step passed, 1 a step failed, 3 not a Mac.
 ##	- History: At bottom of file.
@@ -65,7 +65,16 @@ fTest(){
 	local rc=0
 	cargo test --locked -- --nocapture > "${logDir}/test.log" 2>&1 || rc=${?}
 	grep -E '^test result:|^error|FAILED' "${logDir}/test.log" | head -n 60
+	if ((rc)); then sed -n '/^failures:$/,$p' "${logDir}/test.log" | head -n 200; fi
 	return "${rc}"
+}
+
+## What --about reports is the adapter the app would draw with. No Renderer line
+## means none was found, which is an answer and not a failure.
+fAdapter(){
+	local said
+	said="$(cargo run --quiet --locked -- --about 2>&1)" || { echo "${said}"; return 1; }
+	echo "${said}" | grep -E 'Renderer:|Backend:|Acceleration:' || echo "no adapter"
 }
 
 fSkips(){
@@ -81,6 +90,7 @@ fStep "toolchain" fToolchain
 fStep "build" fBuild
 fStep "clippy" fClippy
 fStep "test" fTest
+fStep "adapter" fAdapter
 fStep "skips" fSkips
 
 if [[ -n "${failed}" ]]; then echo "FAILED:${failed}"; exit 1; fi
