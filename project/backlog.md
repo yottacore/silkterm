@@ -305,6 +305,30 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261019: Still stuck upstream. `cargo update --dry-run` moves none of fontdb, cosmic-text, ab_glyph, sctk-adwaita, glyphon or winit, and ttf-parser 0.25.1 still comes in both ways. On crates.io, fontdb 0.24.0 drops it, but the newest cosmic-text, 0.19.0, still asks for fontdb 0.23. sctk-adwaita 0.12.0 still pulls in ab_glyph. Even glyphon 0.12, a breaking bump, still brings cosmic-text 0.19.
 		- Stalled until a cosmic-text release takes fontdb 0.24 or later, and winit's sctk-adwaita drops ab_glyph.
 
+- Over ssh to a host with no alacritty terminfo, full-screen programs fail with "'alacritty': unknown terminal type."
+	- ID: 2026102114411311
+	- Type: Bug
+	- Status: Queued
+	- Severity: Avg
+	- Opened: 20261021-144113
+	- Opened by: CC
+	- Target OS: All
+	- Test environment: b23 to b26 and vmKt6m, both macOS 15.8 on Intel
+	- Steps to reproduce:
+		- In SilkTerm on b23, ssh to a Mac that has never had the alacritty terminfo entry added.
+		- Run `sudo nano /etc/hosts`.
+	- Incorrect behavior: nano exits with "'alacritty': unknown terminal type." Anything else that reads terminfo on that host, like `tput` or `less`, can fail or draw wrong the same way.
+	- Expected behavior: Full-screen programs work over ssh without anything set up on the remote host first.
+	- Reproduced: Yes, 20261021, on b26 and vmKt6m. macOS ships no alacritty entry, and its `/usr/share/terminfo` is read-only under SIP.
+	- Possible cause: The local TERM check only looks at b23's terminfo database. ssh forwards `TERM=alacritty` as-is, and the remote may not know it. This was noted as out of reach in the done item "If host doesn't TERM=alacritty (including remote SSH hosts), then fallback to `TERM=xterm-256color` + `COLORTERM=truecolor`."
+	- Notes:
+		- 20261021: Worked around on both Macs by compiling b23's entry there with the Mac's own `tic` into `~/.terminfo`: `infocmp -x alacritty | ssh <host> 'cat > /tmp/a.ti && /usr/bin/tic -x -o ~/.terminfo /tmp/a.ti'`. sudo on macOS keeps `HOME`, so root finds it too.
+		- Ways to fix it from SilkTerm's side, none picked yet:
+			- A config key to always use `xterm-256color`, which the done item above already suggested.
+			- Notice an ssh command in the pane and offer to copy the terminfo entry over, like kitty's ssh kitten does.
+			- Say in the docs how to install the entry on a remote host.
+	- Closed:
+
 - Demo: the cursor goes to 50% width when the cursor size and animation change
 	- ID: 2026092812581720
 	- Type: Enhancement
