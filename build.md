@@ -116,6 +116,8 @@ cargo build --release
 
 wgpu uses the Metal backend automatically. No extra system packages are needed beyond the Xcode command-line tools (`xcode-select --install`).
 
+`cicd/ci-mac.bash` builds, lints and tests in one go, and needs bash 4.4 or newer ahead of Apple's 3.2 on `PATH` for the prompt tests. GitHub runs it on an arm64 Mac for each push to `dev` and `main`.
+
 ## The pipeline in a container
 
 `cicd/cicd.bash` runs the build, lint, test, profiler, release and package stages in a Debian trixie image built from `cicd/container/Dockerfile`, with every tool at the version `rust-toolchain.toml` and `cicd/tool-pins.txt` pin. It needs docker and nothing else from this page, and docker is used whenever it is installed. `--no-container` runs those stages on this machine instead, with the tools from this page. With no docker that is what happens anyway, with a note saying so. The first run builds the image, which takes a while. After that the image is reused until the recipe or a pin changes.
