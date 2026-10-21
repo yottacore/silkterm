@@ -4,7 +4,7 @@ name: macOS arm64
 
 on:
   push:
-    branches: [dev, main, macci]
+    branches: [dev, main]
   workflow_dispatch:
 
 permissions:
