@@ -44,6 +44,29 @@ fMachine(){
 	return 0
 }
 
+## Apple's /bin/bash is 3.2, and the prompt tests expand ${PS1@P}, which needs
+## 4.4. A developer's Mac has Homebrew's bash first on PATH, so this does the same.
+fBashOk(){
+	local v
+	## The candidate bash expands this, not this one.
+	# shellcheck disable=SC2016
+	v="$("${1}" -c 'echo $((BASH_VERSINFO[0] * 10 + BASH_VERSINFO[1]))' 2>/dev/null)" || return 1
+	[[ "${v}" =~ ^[0-9]+$ ]] && ((v >= 44))
+}
+
+fBash(){
+	local dir
+	if fBashOk bash; then bash --version | head -n 1; return 0; fi
+	if ! fBashOk /opt/homebrew/bin/bash && ! fBashOk /usr/local/bin/bash; then
+		command -v brew >/dev/null 2>&1 || { echo "no bash 4.4 or newer, and no Homebrew"; return 1; }
+		HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_INSTALL_CLEANUP=1 brew install bash || return 1
+	fi
+	for dir in /opt/homebrew/bin /usr/local/bin; do
+		if fBashOk "${dir}/bash"; then export PATH="${dir}:${PATH}"; bash --version | head -n 1; return 0; fi
+	done
+	return 1
+}
+
 ## rustup 1.28 stopped installing the pinned toolchain by itself. The file also
 ## lists the cross targets the Linux box lints, which a Mac run doesn't need, so
 ## the channel is read from it and installed bare.
@@ -97,6 +120,7 @@ fSkips(){
 }
 
 fStep "machine" fMachine
+fStep "bash" fBash
 fStep "toolchain" fToolchain
 fStep "build" fBuild
 fStep "clippy" fClippy
