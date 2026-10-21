@@ -65,8 +65,19 @@ fTest(){
 	local rc=0
 	cargo test --locked -- --nocapture > "${logDir}/test.log" 2>&1 || rc=${?}
 	grep -E '^test result:|^error|FAILED' "${logDir}/test.log" | head -n 60
-	if ((rc)); then sed -n '/^failures:$/,$p' "${logDir}/test.log" | head -n 200; fi
+	if ((rc)); then fWhyFailed; fi
 	return "${rc}"
+}
+
+## --nocapture leaves no per-test failure text, so the failed ones run again
+## alone, with capture on. A test that passes the second time is a flaky one.
+fWhyFailed(){
+	local name
+	local names=()
+	while IFS= read -r name; do names+=("${name}"); done < <(sed -n 's/^test \(.*\) \.\.\. FAILED$/\1/p' "${logDir}/test.log")
+	if ((${#names[@]} == 0)); then return 0; fi
+	echo "--- failed tests, run again alone"
+	cargo test --locked -- --test-threads=1 "${names[@]}" 2>&1 | grep -vE '^\s*(Compiling|Finished|Running)' | head -n 200
 }
 
 ## What --about reports is the adapter the app would draw with. No Renderer line
