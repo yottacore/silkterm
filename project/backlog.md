@@ -230,7 +230,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- ID: 2026101714445005
 	- Type: Task
 	- Status: Waiting on automated testing
-	- Needs local test suite run?: A full run with `--leakcheck`, plain and with `--container`. The plan shows the Leak checks line. Stage 3 runs the heap-growth test after the ASan run and prints its report: the planted leak caught, 5 actions flat, and the Settings spec grown but known (2026101912070933). `cicd/artifacts/leakcheck/` gets a `heap_<stamp>` report. A full run without the flag shows "(add --leakcheck)" there, and its ASan step has 1 more ignored test.
+	- Needs local test suite run?: A full run with `--leakcheck`, plain and with `--container`. The plan shows the Leak checks line. Stage 3 runs the heap-growth test after the ASan run and prints its report: the planted leak caught, all 6 actions flat, the Settings spec included since 2026101912070933 was fixed, and no known line. `cicd/artifacts/leakcheck/` gets a `heap_<stamp>` report. A full run without the flag shows "(add --leakcheck)" there, and its ASan step has 1 more ignored test.
 	- Priority: Avg
 	- Opened: 20261017-144450
 	- Opened by: CC
