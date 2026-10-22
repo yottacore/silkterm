@@ -13383,13 +13383,24 @@ mod tests {
 	];
 	struct TabsStandIn;
 	fn stand_in_tabs(paths: &[&str], side: TabsSide) -> TabsStandIn {
+		// one copy per distinct tree, held where a leak check can still reach it
+		static TREES: std::sync::Mutex<Vec<&'static [super::TabNode]>> =
+			std::sync::Mutex::new(Vec::new());
 		let (nodes, leaves) = crate::ui_spec::tab_tree(paths).expect("a valid tree");
 		assert_eq!(
 			leaves.as_slice(),
 			tab_titles(),
 			"the stand-in's leaves are the real tabs"
 		);
-		super::TAB_TREE.with(|t| t.set(Some(Vec::leak(nodes))));
+		let mut trees = crate::locks::lock(&TREES);
+		let tree = if let Some(&have) = trees.iter().find(|have| **have == nodes.as_slice()) {
+			have
+		} else {
+			let have: &'static [super::TabNode] = Vec::leak(nodes);
+			trees.push(have);
+			have
+		};
+		super::TAB_TREE.with(|t| t.set(Some(tree)));
 		super::TABS_SIDE.with(|t| t.set(Some(side)));
 		TabsStandIn
 	}

@@ -513,11 +513,11 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - The Settings dialog's spec leaks the strings of rows it drops, and each test that parses it leaks a whole copy
 	- ID: 2026101912070933
 	- Type: Bug
-	- Status: Queued
+	- Status: Done
 	- Severity: Low
 	- Opened: 20261019-120709
 	- Opened by: CC
-	- Related IDs: 2026101714445002
+	- Related IDs: 2026101714445002, 2026101714445005
 	- Incorrect behavior: `ui_spec` keeps the strings of `settings_ui.shcl` by leaking them for a `'static` lifetime. The rows dropped for the platform, and each tip replaced by its warning, leak for good, once per process. Every test that parses the spec leaks all of it.
 	- Expected behavior: Nothing the parse made becomes unreachable.
 	- Reproduced: 20261019, by the test suite under LSan.
@@ -526,6 +526,16 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- `cicd/lsan-suppressions.txt` lets `silkterm::ui_spec::` through with this ID beside it. Take that line out with the fix.
 		- With the line gone, the test stand-in `stand_in_tabs` in settings_ui.rs shows a leak of its own too, since it builds its tree through ui_spec.
 		- The heap-growth test in heap_growth.rs has a `known:` line with this ID too. Take it out with the fix.
+	- Actual cause: As the possible cause says. The stand-in also leaked its own copy of the tab tree on every call.
+	- Actual fix: `keep` goes through text.rs's `intern`, and `keep_all` keeps one copy of each distinct list the same way. A string a parse drops stays reachable, and a second parse adds nothing. The stand-in keeps one copy per distinct tree. The suppression and the `known:` line are gone, and design.md no longer names the spec as a known growth.
+	- Branch: rnd1022
+	- Test case: EtBDWu8 (`the_heap_stops_growing_after_a_warm_up`) without its `known:` line, and the ui_spec and stand-in tests under LSan with no suppression.
+	- Progress log:
+		- 20261022: Verified both ways. The heap-growth test failed before (+454820 bytes over 20 parses) and reads flat after (+0). Under LSan with the suppression gone, the 13 ui_spec tests reported 155223 bytes leaked before and nothing after. The 5 tests that use `stand_in_tabs` reported 6912 bytes from it with only the ui_spec half fixed, and nothing after.
+		- The full ASan suite with an empty suppression list rides on 2026101714445002's queued run. Its heap-growth run should now show all 6 actions flat.
+	- Swept: every `String::leak`, `Vec::leak`, `Box::leak` and `mem::forget` in source/src. The ones left are text.rs's `intern`, ui_spec's `keep_all` and the stand-in, all reachable from a static, and term.rs's Windows test.
+	- Acceptance signoff: Self-closed: a mechanical fix, proven failing before and passing after under both dhat and LSan.
+	- Closed: 20261022-105400
 
 - Builds clean up stale artifacts and side effects when done
 	- ID: 2026101916054001

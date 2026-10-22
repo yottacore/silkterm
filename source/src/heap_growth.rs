@@ -232,7 +232,7 @@ fn actions() -> Vec<Action> {
 		},
 		Action {
 			name: "the Settings dialog's spec parsed",
-			known: Some("2026101912070933"),
+			known: None,
 			planted: false,
 			round: Box::new(|_| {
 				std::hint::black_box(crate::ui_spec::heap_round());

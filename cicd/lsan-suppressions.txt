@@ -2,8 +2,3 @@
 # leak:<function, file or library>, with the backlog item that fixes it on the
 # line above. A suppression matches any frame in the leak's stack, so name the
 # narrowest thing that holds: a wide one hides our own leaks too.
-
-# 2026101912070933: the Settings dialog's spec keeps its strings by leaking them.
-# A row dropped after the parse leaks for good, and each test that parses the
-# spec leaks a whole copy.
-leak:silkterm::ui_spec::

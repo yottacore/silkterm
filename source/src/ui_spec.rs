@@ -11,7 +11,8 @@
 //! `the_declarations_are_complete_and_well_formed` fails on all of it -
 //! including the one class no parser can see, a row that is simply absent.
 
-use std::sync::OnceLock;
+use std::collections::HashSet;
+use std::sync::{Mutex, OnceLock};
 
 // Every setting the dialog can address. Declared here so exhaustive matches
 // still fail to compile when one is added or removed; the file is held against
@@ -440,14 +441,26 @@ fn pick_warnings(specs: &mut [Spec], windows: bool) {
 	}
 }
 
-// A parsed string lives as long as the process; there is exactly one document
-// and it is read once, so leaking it is cheaper than threading a lifetime
-// through every signature in the dialog.
+// A parsed string lives as long as the process, which is cheaper than threading
+// a lifetime through every signature in the dialog. Each distinct one is kept
+// once, so a row dropped after the parse, or a parse again in a test, adds
+// nothing and leaves nothing unreachable (2026101912070933).
 fn keep(text: String) -> &'static str {
-	String::leak(text)
+	crate::text::intern(text)
 }
 fn keep_all(items: Vec<String>) -> &'static [&'static str] {
-	Vec::leak(items.into_iter().map(keep).collect::<Vec<_>>())
+	static KEPT: OnceLock<Mutex<HashSet<&'static [&'static str]>>> = OnceLock::new();
+	if items.is_empty() {
+		return &[];
+	}
+	let items: Vec<&'static str> = items.into_iter().map(keep).collect();
+	let mut kept = crate::locks::lock(KEPT.get_or_init(Default::default));
+	if let Some(&have) = kept.get(items.as_slice()) {
+		return have;
+	}
+	let have: &'static [&'static str] = Box::leak(items.into_boxed_slice());
+	kept.insert(have);
+	have
 }
 
 #[allow(clippy::too_many_lines)] // one straight-line read of one document
