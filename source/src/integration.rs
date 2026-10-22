@@ -697,6 +697,38 @@ mod tests {
 		assert!(BASH_PROMPT.contains(&format!("function {}()", super::BASH_PROMPT_FN)));
 	}
 
+	// The prompt tests read what bash would show through `${PS1@P}`, which is bash
+	// 4.4. A Mac's own bash is 3.2, so Homebrew's is tried after the one on PATH,
+	// in both of the places it installs to. None means the test skips.
+	#[cfg(unix)]
+	fn prompt_bash() -> Option<&'static str> {
+		static FOUND: std::sync::OnceLock<Option<&'static str>> = std::sync::OnceLock::new();
+		*FOUND.get_or_init(|| {
+			["bash", "/opt/homebrew/bin/bash", "/usr/local/bin/bash"]
+				.into_iter()
+				.find(|bash| {
+					std::process::Command::new(bash)
+						.args([
+							"--noprofile",
+							"--norc",
+							"-c",
+							r#"PS1='\\'; printf '%s' "${PS1@P}""#,
+						])
+						.output()
+						.is_ok_and(|out| out.status.success() && out.stdout == b"\\")
+				})
+		})
+	}
+
+	#[cfg(unix)]
+	fn prompt_bash_or_skip() -> Option<&'static str> {
+		let found = prompt_bash();
+		if found.is_none() {
+			eprintln!("skipped: no bash 4.4 or newer, which ${{PS1@P}} needs");
+		}
+		found
+	}
+
 	// Anyone who publishes a repository picks its branch names, and bash expands
 	// the prompt text at every prompt. A branch named `$(cmd)` ran cmd in any
 	// bash pane opened in a clone.
@@ -705,6 +737,9 @@ mod tests {
 	#[test]
 	fn a_branch_name_is_shown_and_never_run_by_the_prompt() {
 		use std::process::Command;
+		let Some(bash) = prompt_bash_or_skip() else {
+			return;
+		};
 		let dir = crate::testdir::run_dir().join(format!("silkterm_x9ps1_{}", std::process::id()));
 		let _ = std::fs::remove_dir_all(&dir);
 		let repo = dir.join("repo");
@@ -743,7 +778,7 @@ mod tests {
 
 		// What the pane's PROMPT_COMMAND does, then the expansion bash does to show it
 		let shown = run(
-			"bash",
+			bash,
 			&[
 				"--noprofile",
 				"--norc",
@@ -780,6 +815,9 @@ mod tests {
 	fn the_prompt_shows_any_repository_and_how_far_it_is_from_upstream() {
 		use std::path::Path;
 		use std::process::Command;
+		let Some(bash) = prompt_bash_or_skip() else {
+			return;
+		};
 		let dir =
 			crate::testdir::run_dir().join(format!("silkterm_x9ps1git_{}", std::process::id()));
 		let _ = std::fs::remove_dir_all(&dir);
@@ -832,7 +870,7 @@ mod tests {
 		let shown = |cwd: &Path| {
 			run(
 				cwd,
-				"bash",
+				bash,
 				&[
 					"--noprofile",
 					"--norc",
@@ -961,11 +999,14 @@ mod tests {
 	#[cfg(unix)]
 	#[test]
 	fn a_pane_prompt_shows_the_git_part_only_inside_a_working_tree() {
+		let Some(bash) = prompt_bash_or_skip() else {
+			return;
+		};
 		let dir =
 			crate::testdir::run_dir().join(format!("silkterm_x9ps1shown_{}", std::process::id()));
 		let (outside, deep, script) = prompt_fixture(&dir);
 		let shown = |cwd: &Path| {
-			let out = std::process::Command::new("bash")
+			let out = std::process::Command::new(bash)
 				.args([
 					"--norc",
 					"--noprofile",
@@ -1002,11 +1043,14 @@ mod tests {
 	#[cfg(unix)]
 	#[test]
 	fn the_prompt_arrow_is_one_a_mac_has_a_font_for() {
+		let Some(bash) = prompt_bash_or_skip() else {
+			return;
+		};
 		let dir =
 			crate::testdir::run_dir().join(format!("silkterm_x9ps1arrow_{}", std::process::id()));
 		let (_outside, deep, script) = prompt_fixture(&dir);
 		let shown = |ostype: &str| {
-			let out = std::process::Command::new("bash")
+			let out = std::process::Command::new(bash)
 				.args([
 					"--norc",
 					"--noprofile",

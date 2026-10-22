@@ -92,15 +92,19 @@ fTest(){
 	return "${rc}"
 }
 
-## --nocapture leaves no per-test failure text, so the failed ones run again
-## alone, with capture on. A test that passes the second time is a flaky one.
+## --nocapture leaves no failure section at the end. The panic text is in the
+## log, between the other tests' output, so it's pulled out first. Then the
+## failed ones run again alone. A test that passes the second time is a flaky
+## one, so that run keeps its output too.
 fWhyFailed(){
 	local name
 	local names=()
 	while IFS= read -r name; do names+=("${name}"); done < <(sed -n 's/^test \(.*\) \.\.\. FAILED$/\1/p' "${logDir}/test.log")
 	if ((${#names[@]} == 0)); then return 0; fi
+	echo "--- failed tests, as they failed"
+	awk '/^thread .* panicked at /{n=12} n&&/^(note: |test |$)/{n=0} n{print; n--}' "${logDir}/test.log" | head -n 120
 	echo "--- failed tests, run again alone"
-	cargo test --locked -- --test-threads=1 "${names[@]}" 2>&1 | grep -vE '^\s*(Compiling|Finished|Running)' | head -n 200
+	cargo test --locked -- --test-threads=1 --nocapture "${names[@]}" 2>&1 | grep -vE '^\s*(Compiling|Finished|Running)' | head -n 200
 }
 
 ## What --about reports is the adapter the app would draw with. No Renderer line
@@ -119,6 +123,13 @@ fSkips(){
 	return 0
 }
 
+## A timing test prints what it measured as "measured: ...", pass or fail, so
+## each run shows how close to its limit this machine sits.
+fMeasured(){
+	grep -o 'measured:.*' "${logDir}/test.log" 2>/dev/null | head -n 20
+	return 0
+}
+
 fStep "machine" fMachine
 fStep "bash" fBash
 fStep "toolchain" fToolchain
@@ -127,9 +138,11 @@ fStep "clippy" fClippy
 fStep "test" fTest
 fStep "adapter" fAdapter
 fStep "skips" fSkips
+fStep "measured" fMeasured
 
 if [[ -n "${failed}" ]]; then echo "FAILED:${failed}"; exit 1; fi
 echo "all passed"
 
 ##	History:
 ##		- 20261021 JC: Created.
+##		- 20261022 JC: Failure text from the first run, and what timing tests measured.

@@ -626,7 +626,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - Four prompt tests fail on a Mac where `bash` is Apple's 3.2
 	- ID: 2026102113432601
 	- Type: Bug
-	- Status: Queued
+	- Status: Done
 	- Severity: Low
 	- Opened: 20261021-134326
 	- Opened by: CC
@@ -643,21 +643,40 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Possible cause: The tests run `bash` from PATH and expand `${PS1@P}`, which needs bash 4.4. Apple's is 3.2.
 	- Notes:
 		- `cicd/ci-mac.bash` puts Homebrew's bash first, so the CI run passes.
-		- Not checked: whether the git prompt script itself works under bash 3.2.
+		- 20261022: The prompt script itself works under bash 3.2.57. It builds the same PS1 as 5.3 outside a repository, inside one, with ahead and behind counts (`↑2↓1`), and on a branch and remote named with `$( )`, backquotes and `${ }`. An interactive 3.2 shell shows those names as text and runs nothing. As root, a `$` in a name shows as `#`, in 5.3 too; the script's own comment already says so.
+	- Actual cause: The tests ran whatever `bash` was on PATH and expanded `${PS1@P}`, which is bash 4.4.
+	- Actual fix: The tests find a bash that can expand `${PS1@P}`: the one on PATH, then Homebrew's in `/opt/homebrew/bin` and `/usr/local/bin`. With none, each prints "skipped: no bash 4.4 or newer" and returns, which the Mac CI's skips step counts.
+	- Verified: With a bash on PATH that fails on `${PS1@P}` as 3.2 does, the old tests failed 4 of 4 and the new ones skip 4 of 4 with the reason. With the real bash 5 they pass. Script under bash 3.2 and 5.3, as above. fmt, clippy on Linux, Windows and macOS targets.
+	- Not verified: The Homebrew fallback on a Mac whose PATH has only Apple's bash.
+	- Swept: Every test that runs `bash` in `source/src`. Only these 4 expand `${PS1@P}`. The strace test runs bash 3.2-safe syntax and skips on a Mac anyway.
+	- Branch: rnd1022
+	- Test case: The same 4 tests: EpxrTRY, EqBmHyq, EryR5wI, Es2nCJ6.
+	- Acceptance signoff: Self-closed: red before and green after against a bash that fails as 3.2 does, and the script checked under 3.2.
+	- Closed: 20261022-110907
 
 - `the_scroll_record_costs_a_full_screen_program_little` failed once on the Mac runner
 	- ID: 2026102113432602
 	- Type: Bug
-	- Status: Queued
+	- Status: Waiting on automated testing
+	- Needs external testing: The next Mac CI runs, any push to dev. Each prints the test's ratios and its kept and bare times under the new `measured` step, pass or fail. A failure also prints its panic text under "failed tests, as they failed". Look for where the median sits on the M1 beside the suite. Kept times steadily above bare across the pairs point to neighbours' memory traffic, as on b23. One side jumping between pairs points to the core or the host changing instead.
 	- Severity: Low
 	- Opened: 20261021-134326
 	- Opened by: CC
 	- Assigned to: CC
-	- Related IDs: 2026102113432600
+	- Related IDs: 2026102113432600, 2026100714145220
 	- Target OS: macOS
 	- Test environment: GitHub macos-15, arm64, 3 cores
-	- Reproduced: No. Failed in the first run, and passed in the next 3.
-	- Possible cause: Not looked at. The test is in pane.rs and its name says it measures a cost, so load on a 3-core VM may be enough.
+	- Reproduced: 3 of the 7 full Mac runs to 20261022 16:04 UTC failed it (runs 39667988647, 39709345533, 39810794398). Each time it passed when run again alone, in under a second. No failure kept its numbers.
+	- Possible cause: Memory traffic from the tests running beside it. The test times by the thread's own CPU time, which leaves out waiting for a core but not cache misses. Keeping rows cycles 128 rows of 160 cells, so each scrolled line writes a row last touched 128 lines ago. The bare side reuses rows still in cache. On b23, on 3 pinned cores, the median was 1.02 to 1.07 alone, 1.04 to 1.07 beside 3 CPU-bound loops, and 1.06 to 1.14 beside 3 memory-bound ones, failing 2 of 10 runs there. Bare against bare under the same memory load stayed 0.98 to 1.02, so the pairing is fair and the extra cost is the kept side's. An M1's cores share an L2 per cluster, and the suite runs on all 3 cores, so it may well be more there. Not confirmed on the Mac.
+	- Notes:
+		- Ruled out: the Mac's clock. macOS reads it from `__thread_selfusage()` in mach ticks, about 42 ns on an M1, against runs of about 40 ms. An Apple forum thread reports some M1 Macs leaving out the tick conversion, about 41.7 times too small, but a constant factor cancels in a ratio.
+		- The copy this test was made for cost 28 to 35% here, and the pointer check catches it with no timing at all. The 10% limit is unchanged.
+		- If the Mac shows a steady gap over 10%, the options are to run this test apart from the suite, or to judge the keep cost against something the neighbours slow down as much. Neither is done yet.
+	- Progress log:
+		- 20261022: The failure text never reached the CI log. `ci-mac.bash` now prints each failed test's panic text from the first run, runs the failed tests again with their output shown, and prints every `measured:` line a test writes. The test writes its ratios and each pair's times that way, and puts the times in its failure message too.
+	- Verified: `ci-mac.bash`'s extraction on a test binary with a failing assert, a multi-line `assert_eq!` and a `measured:` line. shellcheck, fmt, clippy on Linux, Windows and macOS targets. The test passes here and prints the new line.
+	- Branch: rnd1022
+	- Test case: `the_scroll_record_costs_a_full_screen_program_little` (EqHIGdO), message only.
 
 - Test on arm64 macOS in CI
 	- ID: 2026102113432600
