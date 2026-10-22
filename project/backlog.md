@@ -34,6 +34,105 @@ Going forward, new issues in the new template at the bottom of this file, will g
 
 ## Issues
 
+- Over ssh to a host with no alacritty terminfo, full-screen programs fail with "'alacritty': unknown terminal type."
+	- ID: 2026102114411311
+	- Type: Bug
+	- Status: Waiting for answers
+		- Waits on the question about the default TERM, and whether to handle ssh by itself.
+	- Needs external testing: Over ssh to a Mac with no alacritty entry, with `shell.term: xterm-256color` set: `sudo nano /etc/hosts`, `less` and `tput cols` work.
+	- Severity: Avg
+	- Opened: 20261021-144113
+	- Opened by: CC
+	- Target OS: All
+	- Test environment: b23 to b26 and vmKt6m, both macOS 15.8 on Intel
+	- Steps to reproduce:
+		- In SilkTerm on b23, ssh to a Mac that has never had the alacritty terminfo entry added.
+		- Run `sudo nano /etc/hosts`.
+	- Incorrect behavior: nano exits with "'alacritty': unknown terminal type." Anything else that reads terminfo on that host, like `tput` or `less`, can fail or draw wrong the same way.
+	- Expected behavior: Full-screen programs work over ssh without anything set up on the remote host first.
+	- Reproduced: Yes, 20261021, on b26 and vmKt6m. macOS ships no alacritty entry, and its `/usr/share/terminfo` is read-only under SIP.
+	- Possible cause: The local TERM check only looks at b23's terminfo database. ssh forwards `TERM=alacritty` as-is, and the remote may not know it. This was noted as out of reach in the done item "If host doesn't TERM=alacritty (including remote SSH hosts), then fallback to `TERM=xterm-256color` + `COLORTERM=truecolor`."
+	- Notes:
+		- 20261021: Worked around on both Macs by compiling b23's entry there with the Mac's own `tic` into `~/.terminfo`: `infocmp -x alacritty | ssh <host> 'cat > /tmp/a.ti && /usr/bin/tic -x -o ~/.terminfo /tmp/a.ti'`. sudo on macOS keeps `HOME`, so root finds it too.
+		- Ways to fix it from SilkTerm's side, none picked yet:
+			- A config key to always use `xterm-256color`, which the done item above already suggested.
+			- Notice an ssh command in the pane and offer to copy the terminfo entry over, like kitty's ssh kitten does.
+			- Say in the docs how to install the entry on a remote host.
+	- Actual cause: Each pane inherits the TERM the engine picks at startup, `alacritty` when this computer has the entry. Nothing let that be changed, and ssh can't know whether the far side has the entry.
+	- Progress log:
+		- 20261022: Added `shell.term`, the TERM a new pane gets. Empty, the default, keeps the engine's pick. A value with a space or control character in it reads as empty.
+		- 20261022: usage.md has a "Programs over ssh" section, with the command that copies the entry to a remote host, and the setting as the other way out.
+		- 20261022: Left open the default, and any ssh handling of its own. Question filed.
+		- 20261022: The pane test failed on macOS: with no TERM set it read `dumb`. bash, which is macOS's `/bin/sh`, makes up an unexported `TERM=dumb` when none is inherited, so the test's own shell said so, not the engine or `login`. The test now reads the environment through `printenv`. Reproduced on Linux under bash with TERM unset; passes there, and on Linux with TERM set and unset.
+		- 20261022: `the_configured_term_reaches_the_program` fails on macOS, at `term.rs:2124`, the empty-setting case: left "dumb", right "". The program sees `TERM=dumb` where the test expects the test process's own TERM, which is unset there. Failed on the Mac CI (run 39842974082, arm64), again when run alone, and on b26 in the private runner, which failed the full pipeline run at stage 6. Linux passes, on the host and in the container. Not fixed here.
+	- Actual fix: `shell.term` in the config, passed to each new pane's environment; usage.md "Programs over ssh".
+	- Branch: rnd1022
+	- Test case: `the_configured_term_reaches_the_program` (term.rs) fails with the setting dropped from the pane's environment and passes with it. `shell_term_reads_one_word_and_defaults_empty` (config.rs) covers the read and the template line.
+		- Swept: `pane_options` has the one spawn caller and one Windows test; no other place sets TERM for a pane. `front.rs`'s TERM is a test's tmux client.
+	- Closed:
+
+- Running on macOS without a GPU fails to launch
+	- ID: 2026102209035801
+	- Type: Bug
+	- Status: Waiting for answers
+		- Waits on the questions.md item for this ID: keep the alert, or ship a real fallback.
+	- Needs external testing:
+		- A Mac with no Metal device, such as a VM with no graphics acceleration: a launch from Finder shows the alert, and the program exits after OK. From a shell, stderr has the same words and the exit code is 2.
+	- Severity: Avg
+	- Opened: 20261022-090358
+	- Opened by: JC
+	- Assigned to: CC
+	- Related IDs: 2026102209035802, 2026100418225504
+	- Target OS: macOS
+	- Steps to reproduce:
+		- Run on macOS without a GPU.
+	- Incorrect behavior: It fails to launch.
+	- Expected behavior: It falls back to software rendering if possible.
+	- Notes:
+		- Pre-next-cut.
+	- Reproduced: No. No Mac here. Traced in the code instead.
+	- Actual cause:
+		- The macOS build has only wgpu's Metal backend. GL there needs ANGLE, and Vulkan needs MoltenVK, which runs on Metal itself. wgpu has no software adapter on macOS. So a Mac with no Metal device finds no adapter at all.
+		- The launch then printed "no usable GPU/renderer" on stderr and exited with 2. A launch from Finder shows no stderr, so the program seemed to just vanish.
+	- Progress log:
+		- 20261022: No fallback is possible with what's in the tree. The options are in questions.md: keep an alert, ship ANGLE with SwiftShader, or write a CPU renderer.
+		- 20261022: Done meanwhile: with no device at all, macOS says why in an alert as well as on stderr, then exits with 2. Other platforms keep their stderr line as it was.
+		- 20261022: Verified: the words test passes. fmt, and clippy for Linux, Windows and macOS, pass. The alert itself is only compiled.
+		- 20261022: No real software path on macOS was found, so the Resource use group's `not_macos` row stays as it is.
+	- Swept: the one exit site where no device could be made at launch. Rebuilds after idle and the dialogs keep their own error paths, and both need a device that once worked.
+	- Branch: rnd1022
+	- Test case: `no_device_on_macos_says_why_and_that_nothing_can_stand_in` (EtS63vE)
+
+- Always use automatic remote mode when detected.
+	- ID: 2026101914251764
+	- Type: Feature
+	- Status: Waiting on UAT
+		- The row's label is shorter than the requested name. See Decisions.
+	- Needs local test suite run?: the slow window tests in a full run. Nothing else here needs one.
+	- Needs external testing: the wingui `wpremote` scenario on vm925w or b29w over a real RDP session with `performance.detect_remote: false`, which should keep the stored profile and the wallpaper. The Windows detection code is unchanged and only compiled here.
+	- Priority: Avg
+	- Opened: 20261019-142517
+	- Opened by: JC
+	- Related IDs: 2026101816103600
+	- Target OS: All
+	- Requirements:
+		- New setting: "Always use automatic remote mode when detected."
+		- Default true.
+	- Notes:
+		- Pre-next-cut.
+	- Decisions:
+		- 20261022: The Settings label is "Use remote mode when detected", with "automatic remote mode" as a search word. The requested wording is 46 characters, and the widest label sets the panel width on every tab; the longest now is 30. The flyover carries the rest.
+		- 20261022: Off doesn't hide anything. The View menu's "Temporary remote display mode" and Remote (temporary) in the Profile dropdown still work by hand.
+		- 20261022: The setting is read at launch. Turning it off in a session already under Remote leaves Remote on until the View menu item or a restart takes it off.
+		- 20261022: The row sits last under Performance, at the top level, since detection doesn't depend on Choose automatically.
+	- Progress log:
+		- 20261022: Added `performance.detect_remote`, default true, with its template line and Settings row on the Silk tab. Off, launch skips the remote check and keeps the stored profile. Linux and Windows both go through the one launch check, so both read it. The performance profile and automatic settings design docs say so.
+		- Verified: rustfmt, clippy for Linux, Windows and macOS, the whole silkterm unit test suite (1403 passed, 3 ignored), and the docs and tables checks.
+		- Swept: `remote_session()` has one caller, the launch check. `set_remote` callers are the View menu toggle, the Profile dropdown and tests, all by hand, so none reads the setting.
+		- Not tried in a real window on any system.
+	- Branch: rnd1022
+	- Test case: `a_remote_screen_is_ignored_when_turned_off` (rating.rs, fails with the check reordered so detection runs first) and `a_remote_screen_takes_remote_unless_turned_off` (config.rs).
+
 - The window doesn't paint while the GPU is busy or short on memory, and stays blank after the load ends
 	- ID: 2026100312470535
 	- Type: Bug
@@ -195,66 +294,82 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Commit: e2c4556
 	- Test case: `cicd/tests/cleanup/run.bash` (EtAiwUl) and `cicd/tests/cleanup/win.ps1` (EtAiwnM) plant stale folders and build dirs beside fresh ones, other runs' and unlisted ones. Added to `cicd/tests/container/run.bash` (EsJg9EF) and `cicd/tests/wingui/harness-test.bash` (EqH4isr).
 
-- Leak checks: the test suite under AddressSanitizer and LeakSanitizer on every full run
-	- ID: 2026101714445002
-	- Type: Task
-	- Status: Done
+- Demo: the cursor goes to 50% width when the cursor size and animation change
+	- ID: 2026092812581720
+	- Type: Enhancement
+	- Status: Waiting on automated testing
+	- Needs external testing: the next demo re-record at release shows the cursor at 50% width in the cursor segment
 	- Priority: Avg
-	- Opened: 20261017-144450
-	- Opened by: CC
-	- Parent ID: 2026101714015789
-	- Related IDs: 2026101912070933, 2026101914251765
+	- Opened: 20260928-125817
+	- Opened by: JC
+	- Assigned to: CC
+	- Target OS: All
 	- Requirements:
-		- Third-party and vendored code end users run is covered, per the parent's 20261017 decision. What it finds goes on the backlog.
-		- The parent's ASan and LSan rows, with the pinned nightly beside the stable toolchain, and any leak it finds fixed or filed.
+		- When changing the cursor size and animation, change to 50% width.
 	- Progress log:
-		- 20261019: Stage 3 runs the test suite again under ASan and LSan, on nightly-2026-10-15 with `-Zbuild-std` and `--target x86_64-unknown-linux-gnu`, in `target/asan-<date>`. The nightly is dated in a comment in rust-toolchain.toml, and only the container image installs it, so a plain run does this one step in the image. `--no-asan` and `--quick` skip it.
-		- 20261019: With no docker, a full run skips the step with a warning, in the plan and at the step, like the other steps missing a tool. A plain run needs no extra flags.
-		- 20261019: A canary crate that leaks on purpose runs first, under the same flags and suppressions. The step stops unless LSan names its leak, so the planted leak goes red on every run.
-		- 20261019: The first pass found leaks in our code only. The font family names were leaked again on every font change and new window, and are interned now. The Settings spec's leaked strings are filed as 2026101912070933, and the suppression names it. Two tests that leaked on purpose don't anymore.
-		- 20261019: Two tests are ignored under ASan, each with its reason: the peak memory of a huge image, and the scroll record's cost ratio. Four tests that run a child copy of the binary failed only because the child leaked, and pass now.
-		- 20261019: `--container` mounted a target dir that links to another disk at its link, so it dangled inside and the build failed. This box's `target` is such a link since 10-16. It goes in at its real path now.
-		- 20261019: A test that names the foreground program read the child's name before its exec had renamed it, once in 4 ASan runs. Linux lets the parent go on before the rename, so the test now waits for it, up to 5 s. Not reproduced on demand.
-		- 20261019: The step took 13 to 16 minutes in 4 runs here, at a load of 25 to 45, against under 2 for the plain suite. The first ASan build of std and every crate was about 2 minutes of that.
-		- Note: No third-party leak turned up, and nothing in Mesa, X or the other system libraries either.
-		- Note: The image has no tmux, so the tmux tests pass as skipped there, as they do in a `--container` run. The GPU tests run on software Vulkan and GL. Adding it is 2026101914251765.
-		- 20261022: Full runs, container and plain: canary caught, no ASan or LSan reports, 1429 passed and 5 ignored, in 720 s and 686 s. The plain run took the step into the image. Not run: `cicd-win.ps1 -Wsl`. Its no-docker warning is the same `cicd.bash` path a Linux run with no docker takes.
+		- 20261022: The cursor scene now goes from the full block to a 50% wide one (`cursor.size.width` is percent of the cell), with the phase animation, in place of the 25% bar. `script.txt` says the same. The gif is not re-recorded, per the decision below.
+		- Verified: the demo test drives the cursor scene and finds width 50 and the phase animation; it failed with the old 25 and passes now. The python lint is clean on both files.
+		- Swept: `script.txt`, the recorder's config comment, scene comment and history, and the docs. Only the cursor scene sets the width on camera; the starting config keeps the 100 block.
 	- Decisions:
-		- 20261019: A `cicd.bash` run shouldn't need extra flags, so no docker means a warning, not a stop.
-	- Swept: every `Box::leak`, `String::leak`, `Vec::leak` and `mem::forget` in the tree. The 3 in text.rs are interned, the 2 in tests are gone, ui_spec's are 2026101912070933, a test stand-in's goes through ui_spec too, and term.rs's is a Windows test.
-	- Verified: 20261019. The step in the image: canary caught, no ASan or LSan reports, 1423 passed and 4 ignored. A leak planted in a knobs test failed the step, with the report naming the test, and a suppression wide enough to hide everything failed it at the canary. The new container and cleanup checks, each watched to fail. The plain unit suite (1397 + 28), clippy for Linux and Windows, fmt, shellcheck, house style, docs check.
-	- Test case: The canary EtAocf6, run by the step itself. New cases in `cicd/tests/container/run.bash` (EsJg9EF) and `cicd/tests/cleanup/run.bash` (EtAiwUl). `a_name_resolved_again_is_kept_once` (EtAv8Lw) for the interned names.
-	- Branch: asan
-	- Acceptance signoff: Self-closed: ASan step clean in both full runs. The WSL half's no-docker warning is shared code, left unrun.
-	- Closed: 20261022-140630
+		- 20260928: Held for the release, with the other demo recorder change.
+	- Branch: rnd1022
+	- Test case: `cicd/tests/demo/run.py`, "the cursor scene narrows the cursor to half width".
+	- Closed:
 
-- Leak checks: `--leakcheck` and the dhat heap-growth test
-	- ID: 2026101714445005
-	- Type: Task
-	- Status: Done
+- CI/CD: `--leakcheck` and `--no-leakcheck`
+	- ID: 2026101916054002
+	- Type: Enhancement
+	- Status: Waiting on automated testing
+	- Needs external testing: `cicd-win.ps1 -Wsl` with `-NoLeakcheck` and with neither, on a Windows box.
 	- Priority: Avg
-	- Opened: 20261017-144450
-	- Opened by: CC
-	- Parent ID: 2026101714015789
-	- Related IDs: 2026101913360695, 2026101913370214
+	- Opened: 20261019-160540
+	- Opened by: JC
+	- Assigned to: CC
+	- Target OS: All
 	- Requirements:
-		- Third-party and vendored code end users run is covered, per the parent's 20261017 decision. What it finds goes on the backlog.
-		- The parent's `--leakcheck`, CodeQL, soak test and dhat rows.
-		- 20261019: Split. CodeQL went to 2026101913360695 and the soak test to 2026101913370214. This item covers the flag and the dhat test.
+		- CI/CD has both `--leakcheck` and `--no-leakcheck`.
+		- A default run includes the leak checks.
+		- `--leakcheck` exists only to add them back in for something like `--quick`.
+		- `--no-leakcheck` is useful to exclude them from a default run, or with `--quiet`.
+	- Notes:
+		- Before the next cut.
 	- Progress log:
-		- 20261019: `cicd.bash --leakcheck` adds the slow leak checks to stage 3, after the ASan run. A plain full run leaves them out, `--quick` keeps them when asked, `--gate` refuses the flag, and `--container` passes it in.
-		- 20261019: The heap-growth test runs the main actions in-process with dhat as the allocator, 20 rounds and then 20 more, and fails when an action's heap at round 40 is over round 20 by more than 4 KiB or 10 blocks. The actions are a tab's engine opened, fed and closed, output into a full scrollback, the minimap, text shaping with fallback and color glyphs, the config read and saved, and the Settings spec parsed. About 30 s.
-		- 20261019: A planted leak is one of the actions, and the test fails unless it's caught. The step fails too when the test wrote no report, such as a filter that matched nothing or a build without the feature.
-		- 20261019: dhat sits under the debug build's allocation counter, only in test builds with the `dhat-heap` feature, so release builds don't change. It builds in the debug dir, since the feature changes only the silkterm crate, so there's no new build dir for the cleanup. dhat is a dev-dependency pinned at 0.3.3. The lock gained only its 5 new crates.
-		- 20261019: Found nothing new. Every action but the Settings spec reads exactly flat, and that one is 2026101912070933's leak, about 22 KB a parse, reported with its ID and not failed.
-		- Note: `tmux.rs` keeps every tmux session name the process handed out, one short string per tmux pane opened, by design. Not filed.
-		- Note: Not on Windows. Since 20261022 `cicd-win.ps1` has `-Leakcheck` and `-NoLeakcheck`, which only reach the Linux half under `-Wsl` (2026101916054002).
-		- 20261022: Full runs, container and plain, no flag: after the ASan run the planted leak was caught, all 6 actions read flat, the Settings spec included, and no known line. Reports `heap_20261022-124647_first.txt` and `heap_20261022-132520_latest.txt`. With `--no-leakcheck` the plan shows "(skipped)". Not run: the ASan step's ignored count under `--no-leakcheck`.
-	- Verified: 20261019. The test, run through the step lifted from cicd.bash with the real config: the canary caught, the rest flat, the report kept. A static cache planted in text shaping failed it, and so did the Settings spec with its known ID taken out, with the dhat profile saved. The step failed on a filter matching nothing and on a build without the feature. Engine cases, each watched to fail against a mutated cicd.bash. Unit suite (1397 + 28, 3 ignored), clippy for Linux with and without the feature, Windows and macOS, fmt, the advisory scan, shellcheck, house style, test IDs.
-	- Test case: `the_heap_stops_growing_after_a_warm_up` (EtBDWu8), whose planted leak runs every time. New cases in `cicd/tests/engine/run.bash` (Er2UgY7).
-	- Branch: leakchk
-	- Acceptance signoff: Self-closed: the heap-growth step passed in both full runs, container and plain.
-	- Closed: 20261022-140630
+		- 20261022: The leak checks are on by default, like the demo. `--no-leakcheck` drops them. `--quick` leaves them out unless `--leakcheck` asks, in either order, and the last of the two flags wins. `--gate` leaves them out and still refuses `--leakcheck`. Both flags go into the container with the run.
+		- 20261022: The switch is the `leakcheck` variable and `fRunLeakcheck`, so CodeQL (2026101913360695) and the soak test (2026101913370214) can join that step.
+		- 20261022: `cicd-win.ps1` got `-NoLeakcheck` and `-Leakcheck`, passed on to the Linux half under `-Wsl`. The Windows half has no leak checks.
+		- 20261022: `--help`, the plan, config.bash, install.md, design.md and the dhat comments say so. The plan row on 2026101714445005 is rewritten to match.
+		- 20261022: Full runs, container and plain, no flag: the plan's Leak checks line names the heap-growth test, and stage 3 ran it right after the ASan run. `cicd.bash --no-leakcheck </dev/null` shows the Leak checks line as "(skipped)". The `--quick` arms passed in the gate run. Left: the Windows check.
+	- Decisions:
+		- 20261022: The engine case that said no options leave the leak checks off now says they're on, per this item's requirements.
+	- Verified: 20261022. Engine cases, each watched to fail against the old cicd.bash and 2 mutants. The plan's Leak checks line with no flag, `--quick`, `--quick --leakcheck` and `-q --no-leakcheck`. shellcheck, house style, PSScriptAnalyzer on `cicd-win.ps1`, cargo check with the feature.
+		- Swept: every `--leakcheck` mention in the repo, the `cicd-win.ps1` handoff to the Linux half, and the demo's on-by-default pattern.
+	- Test case: New cases in `cicd/tests/engine/run.bash` (Er2UgY7).
+	- Branch: rnd1022
+
+- `the_scroll_record_costs_a_full_screen_program_little` failed once on the Mac runner
+	- ID: 2026102113432602
+	- Type: Bug
+	- Status: Waiting on automated testing
+	- Needs external testing: More Mac CI runs, until one fails it with its `measured` line, or enough pass to say the failures are gone. The first run with the new step passed (below). Kept times steadily above bare across the pairs point to neighbours' memory traffic, as on b23. One side jumping between pairs points to the core or the host changing instead.
+	- Severity: Low
+	- Opened: 20261021-134326
+	- Opened by: CC
+	- Assigned to: CC
+	- Related IDs: 2026102113432600, 2026100714145220
+	- Target OS: macOS
+	- Test environment: GitHub macos-15, arm64, 3 cores
+	- Reproduced: 3 of the 7 full Mac runs to 20261022 16:04 UTC failed it (runs 39667988647, 39709345533, 39810794398). Each time it passed when run again alone, in under a second. No failure kept its numbers.
+	- Possible cause: Memory traffic from the tests running beside it. The test times by the thread's own CPU time, which leaves out waiting for a core but not cache misses. Keeping rows cycles 128 rows of 160 cells, so each scrolled line writes a row last touched 128 lines ago. The bare side reuses rows still in cache. On b23, on 3 pinned cores, the median was 1.02 to 1.07 alone, 1.04 to 1.07 beside 3 CPU-bound loops, and 1.06 to 1.14 beside 3 memory-bound ones, failing 2 of 10 runs there. Bare against bare under the same memory load stayed 0.98 to 1.02, so the pairing is fair and the extra cost is the kept side's. An M1's cores share an L2 per cluster, and the suite runs on all 3 cores, so it may well be more there. Not confirmed on the Mac.
+	- Notes:
+		- Ruled out: the Mac's clock. macOS reads it from `__thread_selfusage()` in mach ticks, about 42 ns on an M1, against runs of about 40 ms. An Apple forum thread reports some M1 Macs leaving out the tick conversion, about 41.7 times too small, but a constant factor cancels in a ratio.
+		- The copy this test was made for cost 28 to 35% here, and the pointer check catches it with no timing at all. The 10% limit is unchanged.
+		- If the Mac shows a steady gap over 10%, the options are to run this test apart from the suite, or to judge the keep cost against something the neighbours slow down as much. Neither is done yet.
+	- Progress log:
+		- 20261022: The failure text never reached the CI log. `ci-mac.bash` now prints each failed test's panic text from the first run, runs the failed tests again with their output shown, and prints every `measured:` line a test writes. The test writes its ratios and each pair's times that way, and puts the times in its failure message too.
+		- 20261022: Mac CI run 39842974082 on rnd1022 passed it. Median 1.005 over 15 pairs, from 0.766 to 1.211. Kept was above bare in 9 of 15 pairs, each by a little. The big swings were on the bare side, 24.5 against 32.0 and 23.3 against 27.7 ms, which reads more like the core or host changing than a steady keep cost. One run, so not settled. The run failed on another test, filed on 2026102114411311.
+	- Verified: `ci-mac.bash`'s extraction on a test binary with a failing assert, a multi-line `assert_eq!` and a `measured:` line. shellcheck, fmt, clippy on Linux, Windows and macOS targets. The test passes here and prints the new line.
+	- Branch: rnd1022
+	- Test case: `the_scroll_record_costs_a_full_screen_program_little` (EqHIGdO), message only.
 
 - shcl: a keep-lines save adds a set value as a new line, beside its commented default
 	- ID: 2026100219054510
@@ -309,96 +424,23 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261019: Still stuck upstream. `cargo update --dry-run` moves none of fontdb, cosmic-text, ab_glyph, sctk-adwaita, glyphon or winit, and ttf-parser 0.25.1 still comes in both ways. On crates.io, fontdb 0.24.0 drops it, but the newest cosmic-text, 0.19.0, still asks for fontdb 0.23. sctk-adwaita 0.12.0 still pulls in ab_glyph. Even glyphon 0.12, a breaking bump, still brings cosmic-text 0.19.
 		- Stalled until a cosmic-text release takes fontdb 0.24 or later, and winit's sctk-adwaita drops ab_glyph.
 
-- Over ssh to a host with no alacritty terminfo, full-screen programs fail with "'alacritty': unknown terminal type."
-	- ID: 2026102114411311
-	- Type: Bug
-	- Status: Waiting for answers
-		- Waits on the question about the default TERM, and whether to handle ssh by itself.
-	- Needs external testing: Over ssh to a Mac with no alacritty entry, with `shell.term: xterm-256color` set: `sudo nano /etc/hosts`, `less` and `tput cols` work.
-	- Severity: Avg
-	- Opened: 20261021-144113
-	- Opened by: CC
-	- Target OS: All
-	- Test environment: b23 to b26 and vmKt6m, both macOS 15.8 on Intel
-	- Steps to reproduce:
-		- In SilkTerm on b23, ssh to a Mac that has never had the alacritty terminfo entry added.
-		- Run `sudo nano /etc/hosts`.
-	- Incorrect behavior: nano exits with "'alacritty': unknown terminal type." Anything else that reads terminfo on that host, like `tput` or `less`, can fail or draw wrong the same way.
-	- Expected behavior: Full-screen programs work over ssh without anything set up on the remote host first.
-	- Reproduced: Yes, 20261021, on b26 and vmKt6m. macOS ships no alacritty entry, and its `/usr/share/terminfo` is read-only under SIP.
-	- Possible cause: The local TERM check only looks at b23's terminfo database. ssh forwards `TERM=alacritty` as-is, and the remote may not know it. This was noted as out of reach in the done item "If host doesn't TERM=alacritty (including remote SSH hosts), then fallback to `TERM=xterm-256color` + `COLORTERM=truecolor`."
-	- Notes:
-		- 20261021: Worked around on both Macs by compiling b23's entry there with the Mac's own `tic` into `~/.terminfo`: `infocmp -x alacritty | ssh <host> 'cat > /tmp/a.ti && /usr/bin/tic -x -o ~/.terminfo /tmp/a.ti'`. sudo on macOS keeps `HOME`, so root finds it too.
-		- Ways to fix it from SilkTerm's side, none picked yet:
-			- A config key to always use `xterm-256color`, which the done item above already suggested.
-			- Notice an ssh command in the pane and offer to copy the terminfo entry over, like kitty's ssh kitten does.
-			- Say in the docs how to install the entry on a remote host.
-	- Actual cause: Each pane inherits the TERM the engine picks at startup, `alacritty` when this computer has the entry. Nothing let that be changed, and ssh can't know whether the far side has the entry.
-	- Progress log:
-		- 20261022: Added `shell.term`, the TERM a new pane gets. Empty, the default, keeps the engine's pick. A value with a space or control character in it reads as empty.
-		- 20261022: usage.md has a "Programs over ssh" section, with the command that copies the entry to a remote host, and the setting as the other way out.
-		- 20261022: Left open the default, and any ssh handling of its own. Question filed.
-		- 20261022: The pane test failed on macOS: with no TERM set it read `dumb`. bash, which is macOS's `/bin/sh`, makes up an unexported `TERM=dumb` when none is inherited, so the test's own shell said so, not the engine or `login`. The test now reads the environment through `printenv`. Reproduced on Linux under bash with TERM unset; passes there, and on Linux with TERM set and unset.
-		- 20261022: `the_configured_term_reaches_the_program` fails on macOS, at `term.rs:2124`, the empty-setting case: left "dumb", right "". The program sees `TERM=dumb` where the test expects the test process's own TERM, which is unset there. Failed on the Mac CI (run 39842974082, arm64), again when run alone, and on b26 in the private runner, which failed the full pipeline run at stage 6. Linux passes, on the host and in the container. Not fixed here.
-	- Actual fix: `shell.term` in the config, passed to each new pane's environment; usage.md "Programs over ssh".
-	- Branch: rnd1022
-	- Test case: `the_configured_term_reaches_the_program` (term.rs) fails with the setting dropped from the pane's environment and passes with it. `shell_term_reads_one_word_and_defaults_empty` (config.rs) covers the read and the template line.
-		- Swept: `pane_options` has the one spawn caller and one Windows test; no other place sets TERM for a pane. `front.rs`'s TERM is a test's tmux client.
-	- Closed:
-
-- Running on macOS without a GPU fails to launch
-	- ID: 2026102209035801
-	- Type: Bug
-	- Status: Waiting for answers
-		- Waits on the questions.md item for this ID: keep the alert, or ship a real fallback.
-	- Needs external testing:
-		- A Mac with no Metal device, such as a VM with no graphics acceleration: a launch from Finder shows the alert, and the program exits after OK. From a shell, stderr has the same words and the exit code is 2.
-	- Severity: Avg
-	- Opened: 20261022-090358
-	- Opened by: JC
-	- Assigned to: CC
-	- Related IDs: 2026102209035802, 2026100418225504
-	- Target OS: macOS
-	- Steps to reproduce:
-		- Run on macOS without a GPU.
-	- Incorrect behavior: It fails to launch.
-	- Expected behavior: It falls back to software rendering if possible.
-	- Notes:
-		- Pre-next-cut.
-	- Reproduced: No. No Mac here. Traced in the code instead.
-	- Actual cause:
-		- The macOS build has only wgpu's Metal backend. GL there needs ANGLE, and Vulkan needs MoltenVK, which runs on Metal itself. wgpu has no software adapter on macOS. So a Mac with no Metal device finds no adapter at all.
-		- The launch then printed "no usable GPU/renderer" on stderr and exited with 2. A launch from Finder shows no stderr, so the program seemed to just vanish.
-	- Progress log:
-		- 20261022: No fallback is possible with what's in the tree. The options are in questions.md: keep an alert, ship ANGLE with SwiftShader, or write a CPU renderer.
-		- 20261022: Done meanwhile: with no device at all, macOS says why in an alert as well as on stderr, then exits with 2. Other platforms keep their stderr line as it was.
-		- 20261022: Verified: the words test passes. fmt, and clippy for Linux, Windows and macOS, pass. The alert itself is only compiled.
-		- 20261022: No real software path on macOS was found, so the Resource use group's `not_macos` row stays as it is.
-	- Swept: the one exit site where no device could be made at launch. Rebuilds after idle and the dialogs keep their own error paths, and both need a device that once worked.
-	- Branch: rnd1022
-	- Test case: `no_device_on_macos_says_why_and_that_nothing_can_stand_in` (EtS63vE)
-
-- Demo: the cursor goes to 50% width when the cursor size and animation change
-	- ID: 2026092812581720
-	- Type: Enhancement
-	- Status: Waiting on automated testing
-	- Needs external testing: the next demo re-record at release shows the cursor at 50% width in the cursor segment
+- Leak checks: CodeQL under `--leakcheck`, from a pinned CLI on a vendored tree
+	- ID: 2026101913360695
+	- Type: Task
+	- Status: Started
 	- Priority: Avg
-	- Opened: 20260928-125817
-	- Opened by: JC
-	- Assigned to: CC
-	- Target OS: All
+	- Opened: 20261019-133606
+	- Opened by: CC
+	- Parent ID: 2026101714015789
+	- Related IDs: 2026101714445005
 	- Requirements:
-		- When changing the cursor size and animation, change to 50% width.
+		- Third-party and vendored code end users run is covered, per the parent's 20261017 decision. What it finds goes on the backlog.
+		- The parent's CodeQL row: a pinned CLI run locally under `--leakcheck`, no hosted service, in the build container or lint image. The dependencies are vendored into the tree first (`cargo vendor`), since CodeQL reports only on source inside the database's root.
+		- Watched to fail on a planted finding before it's trusted.
+	- Notes:
+		- Split from 2026101714445005, which added the flag.
 	- Progress log:
-		- 20261022: The cursor scene now goes from the full block to a 50% wide one (`cursor.size.width` is percent of the cell), with the phase animation, in place of the 25% bar. `script.txt` says the same. The gif is not re-recorded, per the decision below.
-		- Verified: the demo test drives the cursor scene and finds width 50 and the phase animation; it failed with the old 25 and passes now. The python lint is clean on both files.
-		- Swept: `script.txt`, the recorder's config comment, scene comment and history, and the docs. Only the cursor scene sets the width on camera; the starting config keeps the 100 block.
-	- Decisions:
-		- 20260928: Held for the release, with the other demo recorder change.
-	- Branch: rnd1022
-	- Test case: `cicd/tests/demo/run.py`, "the cursor scene narrows the cursor to half width".
-	- Closed:
+		- 20261022: Split in 2, too big for one sitting. 2026102211461905 puts the pinned CodeQL in the image and the step in the leak checks. 2026102211462005 watches it fail on a planted finding and files what the first run finds. This item closes when they do.
 
 - A container run tries to record the demo inside the image, even with `--no-demo`
 	- ID: 2026102213461534
@@ -463,36 +505,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261017: Priority Avg is a best guess, since none was given. Split into 5 child items, worked one at a time, the cheap static checks first. This item closes when they do.
 	- Closed:
 
-- Always use automatic remote mode when detected.
-	- ID: 2026101914251764
-	- Type: Feature
-	- Status: Waiting on UAT
-		- The row's label is shorter than the requested name. See Decisions.
-	- Needs local test suite run?: the slow window tests in a full run. Nothing else here needs one.
-	- Needs external testing: the wingui `wpremote` scenario on vm925w or b29w over a real RDP session with `performance.detect_remote: false`, which should keep the stored profile and the wallpaper. The Windows detection code is unchanged and only compiled here.
-	- Priority: Avg
-	- Opened: 20261019-142517
-	- Opened by: JC
-	- Related IDs: 2026101816103600
-	- Target OS: All
-	- Requirements:
-		- New setting: "Always use automatic remote mode when detected."
-		- Default true.
-	- Notes:
-		- Pre-next-cut.
-	- Decisions:
-		- 20261022: The Settings label is "Use remote mode when detected", with "automatic remote mode" as a search word. The requested wording is 46 characters, and the widest label sets the panel width on every tab; the longest now is 30. The flyover carries the rest.
-		- 20261022: Off doesn't hide anything. The View menu's "Temporary remote display mode" and Remote (temporary) in the Profile dropdown still work by hand.
-		- 20261022: The setting is read at launch. Turning it off in a session already under Remote leaves Remote on until the View menu item or a restart takes it off.
-		- 20261022: The row sits last under Performance, at the top level, since detection doesn't depend on Choose automatically.
-	- Progress log:
-		- 20261022: Added `performance.detect_remote`, default true, with its template line and Settings row on the Silk tab. Off, launch skips the remote check and keeps the stored profile. Linux and Windows both go through the one launch check, so both read it. The performance profile and automatic settings design docs say so.
-		- Verified: rustfmt, clippy for Linux, Windows and macOS, the whole silkterm unit test suite (1403 passed, 3 ignored), and the docs and tables checks.
-		- Swept: `remote_session()` has one caller, the launch check. `set_remote` callers are the View menu toggle, the Profile dropdown and tests, all by hand, so none reads the setting.
-		- Not tried in a real window on any system.
-	- Branch: rnd1022
-	- Test case: `a_remote_screen_is_ignored_when_turned_off` (rating.rs, fails with the check reordered so detection runs first) and `a_remote_screen_takes_remote_unless_turned_off` (config.rs).
-
 - Leak checks: the test suite under ThreadSanitizer on every full run
 	- ID: 2026101714445003
 	- Type: Task
@@ -518,52 +530,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Requirements:
 		- Third-party and vendored code end users run is covered, per the parent's 20261017 decision. What it finds goes on the backlog.
 		- The parent's Miri rows, including the ignore-with-reason rule and the move behind `--leakcheck` if a full run measures too slow.
-
-- Leak checks: CodeQL under `--leakcheck`, from a pinned CLI on a vendored tree
-	- ID: 2026101913360695
-	- Type: Task
-	- Status: Started
-	- Priority: Avg
-	- Opened: 20261019-133606
-	- Opened by: CC
-	- Parent ID: 2026101714015789
-	- Related IDs: 2026101714445005
-	- Requirements:
-		- Third-party and vendored code end users run is covered, per the parent's 20261017 decision. What it finds goes on the backlog.
-		- The parent's CodeQL row: a pinned CLI run locally under `--leakcheck`, no hosted service, in the build container or lint image. The dependencies are vendored into the tree first (`cargo vendor`), since CodeQL reports only on source inside the database's root.
-		- Watched to fail on a planted finding before it's trusted.
-	- Notes:
-		- Split from 2026101714445005, which added the flag.
-	- Progress log:
-		- 20261022: Split in 2, too big for one sitting. 2026102211461905 puts the pinned CodeQL in the image and the step in the leak checks. 2026102211462005 watches it fail on a planted finding and files what the first run finds. This item closes when they do.
-
-- Leak checks: CodeQL in the image, the step on a vendored tree
-	- ID: 2026102211461905
-	- Type: Task
-	- Status: Done
-	- Priority: Avg
-	- Opened: 20261022-114619
-	- Opened by: CC
-	- Parent ID: 2026101913360695
-	- Requirements:
-		- The parent's CodeQL row: a pinned CLI, run locally, in the build container, over a vendored tree, with the SARIF kept and any result failing the step.
-	- Progress log:
-		- 20261022: The image gets the CodeQL 2.27.3 bundle, sha256 checked: the CLI plus its query packs, so a run downloads nothing. The other languages' extractors are removed, about 500 MB of its 1.4 GB. The bundle rather than the bare CLI, since the CLI zip has no queries.
-		- 20261022: Rust in CodeQL has build mode `none` only. Its extractor runs rust-analyzer, which runs cargo, build scripts and proc macros, but no full build. Offline it reads the vendored copies through cargo's source replacement.
-		- 20261022: The extractor runs `cargo metadata` under Rust 1.99.0 with `rust-src`, not under the project's 1.96, and fetches that toolchain when it's missing. A run can't, so the image installs it, pinned as `CODEQL_RUST` beside the bundle's version. Not checked: whether it asks for that exact version or for the newest stable, which would break the pin at the next Rust release.
-		- 20261022: When the workspace doesn't load, the extractor goes on without types or macros and the database still builds. The analysis then gave 50 `rust/unused-variable` results in our code, such as `None` in a pattern read as a variable, and missed a planted unused variable. So the step fails when the extractor's log says it couldn't load the workspace.
-		- 20261022: `cicd/utility/codeql.bash` copies the workspace under `<target>/codeql/src`, runs `cargo vendor --versioned-dirs` into it, and builds the database with the dependencies extracted as source, for x86_64 Linux, default features. Only our crates are indexed as files. A vendored crate's own manifest loaded as a workspace of its own and failed offline, 138 of them.
-		- 20261022: Limited to the release binary by path, not by what's extracted: results in `source/`, `knobs/` and the vendored crates `cargo tree -e normal --target x86_64-unknown-linux-gnu` names, proc macros left out, are kept. Build scripts, proc macros and dev or build dependencies are still extracted, since cargo needs them, and their results are dropped. 191 crates on 20261022.
-		- 20261022: Suite `rust-security-and-quality`, not the default `rust-code-scanning`. The parent asks for correctness checks too, and the quality queries are where those are. Set as `CODEQL_SUITE` in `cicd/config.bash`.
-		- 20261022: Under the leak checks, after the heap-growth test, so on in a full run and off under `--quick` and `--gate`. A run here takes it into the image, like the ASan run, and warns and skips without docker. The SARIF goes to `cicd/artifacts/leakcheck/`, rotated with the heap reports.
-		- 20261022: Opt-in for now: `--codeql` adds the step to the leak checks, so it needs them on too, and `--gate` refuses it. A default full run leaves it out, so the run stays green and short until 2026102211462005 settles its cost and files what it finds.
-		- 20261022: Measured here, it's slow. The database takes about 5 to 6 minutes. The analysis ran 35 minutes at 8 threads and about 19 GB of memory without finishing, and was stopped: 39 of 41 queries done, `rust/cleartext-logging` (CWE-312) and the summary stats still running. So the step can add well over half an hour to a full run. 2026102211462005 decides whether it goes back in by default.
-		- 20261022: Full runs, container and plain: the plan's Leak checks line reads "CodeQL (off; --codeql adds it)", stage 3 printed "CodeQL off (--codeql adds it)" after the heap-growth test, no "CodeQL database" line, and no `codeql_*.sarif` in `cicd/artifacts/leakcheck/`. The image was built once, by the gate run.
-	- Verified: 20261022. The step in the rebuilt image, as the run's own uid, on a copy of this tree: vendoring, the release crate list (191), and the database with the workspace loaded and nothing fetched, about 6 minutes at 12 threads. Before the extractor's toolchain went in the image, the workspace failed to load and the new check caught it. The image builds with the new layer. New engine cases, each watched to fail against a mutated cicd.bash. shellcheck, house style.
-	- Test case: New cases in `cicd/tests/engine/run.bash` (Er2UgY7): where CodeQL runs, that the dhat step hands on to it, and `--codeql`: off by default, on with the flag and carried into the container, refused with `--gate`, and the plan line. Each watched to fail against a mutated cicd.bash. The step itself is watched to fail under 2026102211462005.
-	- Branch: rnd1022
-	- Acceptance signoff: Self-closed: CodeQL off in both full runs, nothing written.
-	- Closed: 20261022-140630
 
 - Leak checks: CodeQL watched to fail, and its first findings filed
 	- ID: 2026102211462005
@@ -600,129 +566,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Split from 2026101714445005. Its heap-growth test covers some of the same actions in-process. This one is for what that can't reach: windows, tabs and splits opened and closed, the GPU, the Settings dialog and a real PTY.
 		- `cicd/tests/allocs/run.bash` already drives a window on a private Xvfb.
 
-- The Settings dialog's spec leaks the strings of rows it drops, and each test that parses it leaks a whole copy
-	- ID: 2026101912070933
-	- Type: Bug
-	- Status: Done
-	- Severity: Low
-	- Opened: 20261019-120709
-	- Opened by: CC
-	- Related IDs: 2026101714445002, 2026101714445005
-	- Incorrect behavior: `ui_spec` keeps the strings of `settings_ui.shcl` by leaking them for a `'static` lifetime. The rows dropped for the platform, and each tip replaced by its warning, leak for good, once per process. Every test that parses the spec leaks all of it.
-	- Expected behavior: Nothing the parse made becomes unreachable.
-	- Reproduced: 20261019, by the test suite under LSan.
-	- Possible cause: `keep` and `keep_all` in ui_spec.rs leak each string, and `keep_platform` and `pick_warnings` then drop some of them.
-	- Notes:
-		- `cicd/lsan-suppressions.txt` lets `silkterm::ui_spec::` through with this ID beside it. Take that line out with the fix.
-		- With the line gone, the test stand-in `stand_in_tabs` in settings_ui.rs shows a leak of its own too, since it builds its tree through ui_spec.
-		- The heap-growth test in heap_growth.rs has a `known:` line with this ID too. Take it out with the fix.
-	- Actual cause: As the possible cause says. The stand-in also leaked its own copy of the tab tree on every call.
-	- Actual fix: `keep` goes through text.rs's `intern`, and `keep_all` keeps one copy of each distinct list the same way. A string a parse drops stays reachable, and a second parse adds nothing. The stand-in keeps one copy per distinct tree. The suppression and the `known:` line are gone, and design.md no longer names the spec as a known growth.
-	- Branch: rnd1022
-	- Test case: EtBDWu8 (`the_heap_stops_growing_after_a_warm_up`) without its `known:` line, and the ui_spec and stand-in tests under LSan with no suppression.
-	- Progress log:
-		- 20261022: Verified both ways. The heap-growth test failed before (+454820 bytes over 20 parses) and reads flat after (+0). Under LSan with the suppression gone, the 13 ui_spec tests reported 155223 bytes leaked before and nothing after. The 5 tests that use `stand_in_tabs` reported 6912 bytes from it with only the ui_spec half fixed, and nothing after.
-		- The full ASan suite with an empty suppression list rides on 2026101714445002's queued run. Its heap-growth run should now show all 6 actions flat.
-	- Swept: every `String::leak`, `Vec::leak`, `Box::leak` and `mem::forget` in source/src. The ones left are text.rs's `intern`, ui_spec's `keep_all` and the stand-in, all reachable from a static, and term.rs's Windows test.
-	- Acceptance signoff: Self-closed: a mechanical fix, proven failing before and passing after under both dhat and LSan.
-	- Closed: 20261022-105400
-
-- Builds clean up stale artifacts and side effects when done
-	- ID: 2026101916054001
-	- Type: Enhancement
-	- Status: Moot
-	- Priority: Avg
-	- Opened: 20261019-160540
-	- Opened by: JC
-	- Assigned to: CC
-	- Target OS: All
-	- Requirements:
-		- Verify or insure that builds clean up stale artifacts and side effects after they're done: caches, container cruft, tmp files, etc.
-	- Notes:
-		- Before the next cut.
-		- 20261022: Same request as 2026101909222600, opened the same morning and built that day as `sweep`. It waits on its full run there.
-	- Superseded by ID: 2026101909222600
-	- Closed: 20261022-111900
-
-- CI/CD: `--leakcheck` and `--no-leakcheck`
-	- ID: 2026101916054002
-	- Type: Enhancement
-	- Status: Waiting on automated testing
-	- Needs external testing: `cicd-win.ps1 -Wsl` with `-NoLeakcheck` and with neither, on a Windows box.
-	- Priority: Avg
-	- Opened: 20261019-160540
-	- Opened by: JC
-	- Assigned to: CC
-	- Target OS: All
-	- Requirements:
-		- CI/CD has both `--leakcheck` and `--no-leakcheck`.
-		- A default run includes the leak checks.
-		- `--leakcheck` exists only to add them back in for something like `--quick`.
-		- `--no-leakcheck` is useful to exclude them from a default run, or with `--quiet`.
-	- Notes:
-		- Before the next cut.
-	- Progress log:
-		- 20261022: The leak checks are on by default, like the demo. `--no-leakcheck` drops them. `--quick` leaves them out unless `--leakcheck` asks, in either order, and the last of the two flags wins. `--gate` leaves them out and still refuses `--leakcheck`. Both flags go into the container with the run.
-		- 20261022: The switch is the `leakcheck` variable and `fRunLeakcheck`, so CodeQL (2026101913360695) and the soak test (2026101913370214) can join that step.
-		- 20261022: `cicd-win.ps1` got `-NoLeakcheck` and `-Leakcheck`, passed on to the Linux half under `-Wsl`. The Windows half has no leak checks.
-		- 20261022: `--help`, the plan, config.bash, install.md, design.md and the dhat comments say so. The plan row on 2026101714445005 is rewritten to match.
-		- 20261022: Full runs, container and plain, no flag: the plan's Leak checks line names the heap-growth test, and stage 3 ran it right after the ASan run. `cicd.bash --no-leakcheck </dev/null` shows the Leak checks line as "(skipped)". The `--quick` arms passed in the gate run. Left: the Windows check.
-	- Decisions:
-		- 20261022: The engine case that said no options leave the leak checks off now says they're on, per this item's requirements.
-	- Verified: 20261022. Engine cases, each watched to fail against the old cicd.bash and 2 mutants. The plan's Leak checks line with no flag, `--quick`, `--quick --leakcheck` and `-q --no-leakcheck`. shellcheck, house style, PSScriptAnalyzer on `cicd-win.ps1`, cargo check with the feature.
-		- Swept: every `--leakcheck` mention in the repo, the `cicd-win.ps1` handoff to the Linux half, and the demo's on-by-default pattern.
-	- Test case: New cases in `cicd/tests/engine/run.bash` (Er2UgY7).
-	- Branch: rnd1022
-
-- A flag to start in software-only rendering
-	- ID: 2026102209035802
-	- Type: Enhancement
-	- Status: Done
-	- Priority: Avg
-	- Opened: 20261022-090358
-	- Opened by: JC
-	- Assigned to: CC
-	- Related IDs: 2026102209035801, 2026100418225504
-	- Target OS: All
-	- Requirements:
-		- A flag to start in software-only rendering.
-	- Notes:
-		- Pre-next-cut.
-	- Progress log:
-		- 20261022: Built as `--software-rendering[=BOOL]`, a window option. It holds `window.software_rendering` for the run, as `--font-size` holds its setting, so nothing is saved and a reload keeps it. `=no` puts a run back on the card with the setting on. On macOS it says there's no software renderer and the card draws. Listed in `--help` and usage.md.
-		- 20261022: Verified: the new test passes, and fails with the hold taken out. The usage tests, fmt, and clippy for Linux, Windows and macOS pass.
-		- 20261022: Verified on X11: without the flag the window drew on the GL path, and with it on lavapipe through Vulkan. The config file was left without the setting. Under `--new-tab` the flag is refused as a window option.
-		- 20261022: Only compiled: Windows, which takes the same setting path to WARP that `softrender.ps1` runs, and the macOS note.
-	- Swept: every place the window style is folded: `apply_style`, the reload, Settings opening and a peer's save all go through `fold_window_style`. The first device reads it through `wanted()`, now after the flag is applied.
-	- Branch: rnd1022
-	- Test case: `software_rendering_flag_holds_the_setting_for_the_run` (EtS63cT)
-	- Acceptance signoff: Self-closed: the flag drew on the software device in a real window, and its test pins the hold.
-	- Closed: 20261022-104104
-
-- Put tmux in the container image, so the tmux tests run under ASan and in `--container`
-	- ID: 2026101914251765
-	- Type: Task
-	- Status: Done
-	- Priority: Low
-	- Opened: 20261019-142517
-	- Opened by: CC
-	- Related IDs: 2026101714445002
-	- Target OS: Linux
-	- Requirements:
-		- The image has tmux, so the tmux tests run in the ASan step and in a `--container` run instead of passing as skipped.
-		- The test tmux stays on its own short socket there too.
-	- Notes:
-		- Do it with the next full ASan run, so the image is rebuilt once.
-	- Progress log:
-		- 20261022: tmux is in `cicd/container/Dockerfile`, from trixie's apt, so the image tag changes and the next run builds it.
-		- 20261022: The socket stays short. The unit tests always go by `-S`, under the run's test folder, which is under the container's own `/tmp`. Where that path wouldn't fit they take `/tmp/silktmux-<pid>`. mapfollow puts its socket in its own folder under the test folder.
-		- 20261022: In the image the full runs used: `ending_kills_the_session_started_and_no_other` under ASan, output shown, ran and passed with no skip line, and mapfollow ran all 6 of its tmux checks and passed. The full runs' own ASan step and container mapfollow passed too, but a pass hides the test's output there.
-	- Verified: 20261022. The tmux unit tests under ASan in the current image with tmux added on top: all 9 pass, and the session test runs instead of skipping. Without tmux the same test prints the skip.
-	- Test case: The existing tmux tests, `ending_kills_the_session_started_and_no_other` (Et0Zjp0) and mapfollow's tmux checks.
-	- Branch: rnd1022
-	- Acceptance signoff: Self-closed: the tmux tests ran, not skipped, under ASan and in mapfollow in the image.
-	- Closed: 20261022-140630
-
 - Wayland: a copy a program sends while no SilkTerm window has focus is dropped
 	- ID: 2026101607585700
 	- Type: Enhancement
@@ -737,97 +580,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- A line in usage.md saying a copy made from a window without focus on Wayland waits for it to get focus.
 	- Notes:
 		- Wayland lets a window set the clipboard only while it has the keyboard. X11 doesn't have that limit, and stays as it is.
-
-- Four prompt tests fail on a Mac where `bash` is Apple's 3.2
-	- ID: 2026102113432601
-	- Type: Bug
-	- Status: Done
-	- Severity: Low
-	- Opened: 20261021-134326
-	- Opened by: CC
-	- Assigned to: CC
-	- Related IDs: 2026102113432600
-	- Target OS: macOS
-	- Test environment: GitHub macos-15, arm64
-	- Steps to reproduce:
-		- Run `cargo test` on a Mac with no newer bash ahead of /bin/bash on PATH.
-	- Incorrect behavior:
-		- These fail with `bash: ${PS1@P}: bad substitution`: `a_pane_prompt_shows_the_git_part_only_inside_a_working_tree`, `a_branch_name_is_shown_and_never_run_by_the_prompt`, `the_prompt_arrow_is_one_a_mac_has_a_font_for`, `the_prompt_shows_any_repository_and_how_far_it_is_from_upstream`.
-	- Expected behavior: The tests use a bash that can run them, or skip and say why.
-	- Reproduced: 20261021, GitHub macos-15 runner, 2 runs.
-	- Possible cause: The tests run `bash` from PATH and expand `${PS1@P}`, which needs bash 4.4. Apple's is 3.2.
-	- Notes:
-		- `cicd/ci-mac.bash` puts Homebrew's bash first, so the CI run passes.
-		- 20261022: The prompt script itself works under bash 3.2.57. It builds the same PS1 as 5.3 outside a repository, inside one, with ahead and behind counts (`↑2↓1`), and on a branch and remote named with `$( )`, backquotes and `${ }`. An interactive 3.2 shell shows those names as text and runs nothing. As root, a `$` in a name shows as `#`, in 5.3 too; the script's own comment already says so.
-		- 20261022: Mac CI run 39842974082 on rnd1022, with Homebrew's bash first on PATH: the 4 tests ran and passed, none skipped. That run failed on another test, filed on 2026102114411311.
-	- Actual cause: The tests ran whatever `bash` was on PATH and expanded `${PS1@P}`, which is bash 4.4.
-	- Actual fix: The tests find a bash that can expand `${PS1@P}`: the one on PATH, then Homebrew's in `/opt/homebrew/bin` and `/usr/local/bin`. With none, each prints "skipped: no bash 4.4 or newer" and returns, which the Mac CI's skips step counts.
-	- Verified: With a bash on PATH that fails on `${PS1@P}` as 3.2 does, the old tests failed 4 of 4 and the new ones skip 4 of 4 with the reason. With the real bash 5 they pass. Script under bash 3.2 and 5.3, as above. fmt, clippy on Linux, Windows and macOS targets.
-	- Not verified: The Homebrew fallback on a Mac whose PATH has only Apple's bash.
-	- Swept: Every test that runs `bash` in `source/src`. Only these 4 expand `${PS1@P}`. The strace test runs bash 3.2-safe syntax and skips on a Mac anyway.
-	- Branch: rnd1022
-	- Test case: The same 4 tests: EpxrTRY, EqBmHyq, EryR5wI, Es2nCJ6.
-	- Acceptance signoff: Self-closed: red before and green after against a bash that fails as 3.2 does, and the script checked under 3.2.
-	- Closed: 20261022-110907
-
-- `the_scroll_record_costs_a_full_screen_program_little` failed once on the Mac runner
-	- ID: 2026102113432602
-	- Type: Bug
-	- Status: Waiting on automated testing
-	- Needs external testing: More Mac CI runs, until one fails it with its `measured` line, or enough pass to say the failures are gone. The first run with the new step passed (below). Kept times steadily above bare across the pairs point to neighbours' memory traffic, as on b23. One side jumping between pairs points to the core or the host changing instead.
-	- Severity: Low
-	- Opened: 20261021-134326
-	- Opened by: CC
-	- Assigned to: CC
-	- Related IDs: 2026102113432600, 2026100714145220
-	- Target OS: macOS
-	- Test environment: GitHub macos-15, arm64, 3 cores
-	- Reproduced: 3 of the 7 full Mac runs to 20261022 16:04 UTC failed it (runs 39667988647, 39709345533, 39810794398). Each time it passed when run again alone, in under a second. No failure kept its numbers.
-	- Possible cause: Memory traffic from the tests running beside it. The test times by the thread's own CPU time, which leaves out waiting for a core but not cache misses. Keeping rows cycles 128 rows of 160 cells, so each scrolled line writes a row last touched 128 lines ago. The bare side reuses rows still in cache. On b23, on 3 pinned cores, the median was 1.02 to 1.07 alone, 1.04 to 1.07 beside 3 CPU-bound loops, and 1.06 to 1.14 beside 3 memory-bound ones, failing 2 of 10 runs there. Bare against bare under the same memory load stayed 0.98 to 1.02, so the pairing is fair and the extra cost is the kept side's. An M1's cores share an L2 per cluster, and the suite runs on all 3 cores, so it may well be more there. Not confirmed on the Mac.
-	- Notes:
-		- Ruled out: the Mac's clock. macOS reads it from `__thread_selfusage()` in mach ticks, about 42 ns on an M1, against runs of about 40 ms. An Apple forum thread reports some M1 Macs leaving out the tick conversion, about 41.7 times too small, but a constant factor cancels in a ratio.
-		- The copy this test was made for cost 28 to 35% here, and the pointer check catches it with no timing at all. The 10% limit is unchanged.
-		- If the Mac shows a steady gap over 10%, the options are to run this test apart from the suite, or to judge the keep cost against something the neighbours slow down as much. Neither is done yet.
-	- Progress log:
-		- 20261022: The failure text never reached the CI log. `ci-mac.bash` now prints each failed test's panic text from the first run, runs the failed tests again with their output shown, and prints every `measured:` line a test writes. The test writes its ratios and each pair's times that way, and puts the times in its failure message too.
-		- 20261022: Mac CI run 39842974082 on rnd1022 passed it. Median 1.005 over 15 pairs, from 0.766 to 1.211. Kept was above bare in 9 of 15 pairs, each by a little. The big swings were on the bare side, 24.5 against 32.0 and 23.3 against 27.7 ms, which reads more like the core or host changing than a steady keep cost. One run, so not settled. The run failed on another test, filed on 2026102114411311.
-	- Verified: `ci-mac.bash`'s extraction on a test binary with a failing assert, a multi-line `assert_eq!` and a `measured:` line. shellcheck, fmt, clippy on Linux, Windows and macOS targets. The test passes here and prints the new line.
-	- Branch: rnd1022
-	- Test case: `the_scroll_record_costs_a_full_screen_program_little` (EqHIGdO), message only.
-
-- Test on arm64 macOS in CI
-	- ID: 2026102113432600
-	- Type: Task
-	- Status: Done
-	- Priority: Avg
-	- Opened: 20261021-123000
-	- Opened by: JC
-	- Assigned to: CC
-	- Target OS: macOS
-	- Test environment: GitHub macos-15, arm64
-	- Requirements:
-		- Runs on any git host that can run a bash script.
-		- Free for the public repo.
-	- Notes:
-		- `cicd/ci-mac.bash` builds, lints and tests on a Mac. `.github/workflows/mac.yml` checks out and calls it, on pushes to `dev` and `main` and by hand. Another git host only has to run the script.
-		- GitHub Actions cost: nothing. Standard hosted runners are free and unlimited on public repos, macOS included. `macos-latest`, `macos-26`, `macos-15` and `macos-14` are arm64 M1 standard runners, and `macos-15-intel` is the Intel one. Larger runners are always billed. Source: docs.github.com/en/actions/reference/runners/github-hosted-runners.
-		- The 10x macOS minute multiplier that some blog posts mention only draws down a private repo's included minutes. A public repo isn't charged.
-		- Limits on a Free plan: 5 macOS jobs at once, 20 jobs in all, 6 hours a job. No rate limit is listed for public repos. GitHub warns that macOS arm64 jobs may queue longer. Source: docs.github.com/en/actions/reference/limits.
-		- The runner is an Apple M1 (Virtual) with 3 cores and 7 GB, on macOS 15.7. `system_profiler SPDisplaysDataType` prints nothing there.
-		- wgpu finds a Metal adapter named "Apple Paravirtual device", reported as an integrated GPU, so GPU tests run. GitHub's docs say Metal Performance Shaders aren't supported, which didn't matter here. 2 tests skip: no software adapter, and no Metal allocator report.
-		- A run takes 4 to 6 minutes: build 100 s, clippy 55 s, tests 185 s.
-		- Found along the way:
-			- rustup 1.28 and later doesn't install the toolchain in `rust-toolchain.toml` by itself. Run `rustup toolchain install <channel> --profile minimal --component clippy` first, and set `RUSTUP_TOOLCHAIN`, so the cross targets the file lists aren't downloaded.
-			- `bash` on PATH is Apple's 3.2. Tests that need bash 4.4 fail with `bad substitution`. `brew install bash` takes about 6 s on the runner and gives 5.3, so it goes first on PATH.
-			- `cargo test -- --nocapture` leaves no failure text. The script runs the failed tests again alone to get it.
-			- Cargo fetches glyphon, alacritty, shcl and x11-clipboard from github.com. A move to another git host means changing those URLs too.
-			- `actions/checkout@v4` prints a Node.js 20 deprecation notice. It still works.
-		- Not covered: launching the app in a window.
-		- To reuse this in another project, copy the script and the workflow. The script reads the toolchain from `rust-toolchain.toml`, and uses `--about` for the adapter.
-	- Branch: macci
-	- Commit: ba66aed
-	- Test case: Not applicable. The script was made to fail on a planted test failure, and exited 1 with the failed tests named.
-	- Closed: 20261021-134326
 
 - Wayland: must use the Wayland clipboard, and minimize other X11 features
 	- ID: 2026101509024607
@@ -2892,6 +2644,154 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Acceptance signoff: Self-closed: test fixes only, and all four failed before the fix and pass after on Windows.
 	- Closed: 20260930-125357
 
+- Leak checks: the test suite under AddressSanitizer and LeakSanitizer on every full run
+	- ID: 2026101714445002
+	- Type: Task
+	- Status: Done
+	- Priority: Avg
+	- Opened: 20261017-144450
+	- Opened by: CC
+	- Parent ID: 2026101714015789
+	- Related IDs: 2026101912070933, 2026101914251765
+	- Requirements:
+		- Third-party and vendored code end users run is covered, per the parent's 20261017 decision. What it finds goes on the backlog.
+		- The parent's ASan and LSan rows, with the pinned nightly beside the stable toolchain, and any leak it finds fixed or filed.
+	- Progress log:
+		- 20261019: Stage 3 runs the test suite again under ASan and LSan, on nightly-2026-10-15 with `-Zbuild-std` and `--target x86_64-unknown-linux-gnu`, in `target/asan-<date>`. The nightly is dated in a comment in rust-toolchain.toml, and only the container image installs it, so a plain run does this one step in the image. `--no-asan` and `--quick` skip it.
+		- 20261019: With no docker, a full run skips the step with a warning, in the plan and at the step, like the other steps missing a tool. A plain run needs no extra flags.
+		- 20261019: A canary crate that leaks on purpose runs first, under the same flags and suppressions. The step stops unless LSan names its leak, so the planted leak goes red on every run.
+		- 20261019: The first pass found leaks in our code only. The font family names were leaked again on every font change and new window, and are interned now. The Settings spec's leaked strings are filed as 2026101912070933, and the suppression names it. Two tests that leaked on purpose don't anymore.
+		- 20261019: Two tests are ignored under ASan, each with its reason: the peak memory of a huge image, and the scroll record's cost ratio. Four tests that run a child copy of the binary failed only because the child leaked, and pass now.
+		- 20261019: `--container` mounted a target dir that links to another disk at its link, so it dangled inside and the build failed. This box's `target` is such a link since 10-16. It goes in at its real path now.
+		- 20261019: A test that names the foreground program read the child's name before its exec had renamed it, once in 4 ASan runs. Linux lets the parent go on before the rename, so the test now waits for it, up to 5 s. Not reproduced on demand.
+		- 20261019: The step took 13 to 16 minutes in 4 runs here, at a load of 25 to 45, against under 2 for the plain suite. The first ASan build of std and every crate was about 2 minutes of that.
+		- Note: No third-party leak turned up, and nothing in Mesa, X or the other system libraries either.
+		- Note: The image has no tmux, so the tmux tests pass as skipped there, as they do in a `--container` run. The GPU tests run on software Vulkan and GL. Adding it is 2026101914251765.
+		- 20261022: Full runs, container and plain: canary caught, no ASan or LSan reports, 1429 passed and 5 ignored, in 720 s and 686 s. The plain run took the step into the image. Not run: `cicd-win.ps1 -Wsl`. Its no-docker warning is the same `cicd.bash` path a Linux run with no docker takes.
+	- Decisions:
+		- 20261019: A `cicd.bash` run shouldn't need extra flags, so no docker means a warning, not a stop.
+	- Swept: every `Box::leak`, `String::leak`, `Vec::leak` and `mem::forget` in the tree. The 3 in text.rs are interned, the 2 in tests are gone, ui_spec's are 2026101912070933, a test stand-in's goes through ui_spec too, and term.rs's is a Windows test.
+	- Verified: 20261019. The step in the image: canary caught, no ASan or LSan reports, 1423 passed and 4 ignored. A leak planted in a knobs test failed the step, with the report naming the test, and a suppression wide enough to hide everything failed it at the canary. The new container and cleanup checks, each watched to fail. The plain unit suite (1397 + 28), clippy for Linux and Windows, fmt, shellcheck, house style, docs check.
+	- Test case: The canary EtAocf6, run by the step itself. New cases in `cicd/tests/container/run.bash` (EsJg9EF) and `cicd/tests/cleanup/run.bash` (EtAiwUl). `a_name_resolved_again_is_kept_once` (EtAv8Lw) for the interned names.
+	- Branch: asan
+	- Acceptance signoff: Self-closed: ASan step clean in both full runs. The WSL half's no-docker warning is shared code, left unrun.
+	- Closed: 20261022-140630
+
+- Leak checks: `--leakcheck` and the dhat heap-growth test
+	- ID: 2026101714445005
+	- Type: Task
+	- Status: Done
+	- Priority: Avg
+	- Opened: 20261017-144450
+	- Opened by: CC
+	- Parent ID: 2026101714015789
+	- Related IDs: 2026101913360695, 2026101913370214
+	- Requirements:
+		- Third-party and vendored code end users run is covered, per the parent's 20261017 decision. What it finds goes on the backlog.
+		- The parent's `--leakcheck`, CodeQL, soak test and dhat rows.
+		- 20261019: Split. CodeQL went to 2026101913360695 and the soak test to 2026101913370214. This item covers the flag and the dhat test.
+	- Progress log:
+		- 20261019: `cicd.bash --leakcheck` adds the slow leak checks to stage 3, after the ASan run. A plain full run leaves them out, `--quick` keeps them when asked, `--gate` refuses the flag, and `--container` passes it in.
+		- 20261019: The heap-growth test runs the main actions in-process with dhat as the allocator, 20 rounds and then 20 more, and fails when an action's heap at round 40 is over round 20 by more than 4 KiB or 10 blocks. The actions are a tab's engine opened, fed and closed, output into a full scrollback, the minimap, text shaping with fallback and color glyphs, the config read and saved, and the Settings spec parsed. About 30 s.
+		- 20261019: A planted leak is one of the actions, and the test fails unless it's caught. The step fails too when the test wrote no report, such as a filter that matched nothing or a build without the feature.
+		- 20261019: dhat sits under the debug build's allocation counter, only in test builds with the `dhat-heap` feature, so release builds don't change. It builds in the debug dir, since the feature changes only the silkterm crate, so there's no new build dir for the cleanup. dhat is a dev-dependency pinned at 0.3.3. The lock gained only its 5 new crates.
+		- 20261019: Found nothing new. Every action but the Settings spec reads exactly flat, and that one is 2026101912070933's leak, about 22 KB a parse, reported with its ID and not failed.
+		- Note: `tmux.rs` keeps every tmux session name the process handed out, one short string per tmux pane opened, by design. Not filed.
+		- Note: Not on Windows. Since 20261022 `cicd-win.ps1` has `-Leakcheck` and `-NoLeakcheck`, which only reach the Linux half under `-Wsl` (2026101916054002).
+		- 20261022: Full runs, container and plain, no flag: after the ASan run the planted leak was caught, all 6 actions read flat, the Settings spec included, and no known line. Reports `heap_20261022-124647_first.txt` and `heap_20261022-132520_latest.txt`. With `--no-leakcheck` the plan shows "(skipped)". Not run: the ASan step's ignored count under `--no-leakcheck`.
+	- Verified: 20261019. The test, run through the step lifted from cicd.bash with the real config: the canary caught, the rest flat, the report kept. A static cache planted in text shaping failed it, and so did the Settings spec with its known ID taken out, with the dhat profile saved. The step failed on a filter matching nothing and on a build without the feature. Engine cases, each watched to fail against a mutated cicd.bash. Unit suite (1397 + 28, 3 ignored), clippy for Linux with and without the feature, Windows and macOS, fmt, the advisory scan, shellcheck, house style, test IDs.
+	- Test case: `the_heap_stops_growing_after_a_warm_up` (EtBDWu8), whose planted leak runs every time. New cases in `cicd/tests/engine/run.bash` (Er2UgY7).
+	- Branch: leakchk
+	- Acceptance signoff: Self-closed: the heap-growth step passed in both full runs, container and plain.
+	- Closed: 20261022-140630
+
+- Leak checks: CodeQL in the image, the step on a vendored tree
+	- ID: 2026102211461905
+	- Type: Task
+	- Status: Done
+	- Priority: Avg
+	- Opened: 20261022-114619
+	- Opened by: CC
+	- Parent ID: 2026101913360695
+	- Requirements:
+		- The parent's CodeQL row: a pinned CLI, run locally, in the build container, over a vendored tree, with the SARIF kept and any result failing the step.
+	- Progress log:
+		- 20261022: The image gets the CodeQL 2.27.3 bundle, sha256 checked: the CLI plus its query packs, so a run downloads nothing. The other languages' extractors are removed, about 500 MB of its 1.4 GB. The bundle rather than the bare CLI, since the CLI zip has no queries.
+		- 20261022: Rust in CodeQL has build mode `none` only. Its extractor runs rust-analyzer, which runs cargo, build scripts and proc macros, but no full build. Offline it reads the vendored copies through cargo's source replacement.
+		- 20261022: The extractor runs `cargo metadata` under Rust 1.99.0 with `rust-src`, not under the project's 1.96, and fetches that toolchain when it's missing. A run can't, so the image installs it, pinned as `CODEQL_RUST` beside the bundle's version. Not checked: whether it asks for that exact version or for the newest stable, which would break the pin at the next Rust release.
+		- 20261022: When the workspace doesn't load, the extractor goes on without types or macros and the database still builds. The analysis then gave 50 `rust/unused-variable` results in our code, such as `None` in a pattern read as a variable, and missed a planted unused variable. So the step fails when the extractor's log says it couldn't load the workspace.
+		- 20261022: `cicd/utility/codeql.bash` copies the workspace under `<target>/codeql/src`, runs `cargo vendor --versioned-dirs` into it, and builds the database with the dependencies extracted as source, for x86_64 Linux, default features. Only our crates are indexed as files. A vendored crate's own manifest loaded as a workspace of its own and failed offline, 138 of them.
+		- 20261022: Limited to the release binary by path, not by what's extracted: results in `source/`, `knobs/` and the vendored crates `cargo tree -e normal --target x86_64-unknown-linux-gnu` names, proc macros left out, are kept. Build scripts, proc macros and dev or build dependencies are still extracted, since cargo needs them, and their results are dropped. 191 crates on 20261022.
+		- 20261022: Suite `rust-security-and-quality`, not the default `rust-code-scanning`. The parent asks for correctness checks too, and the quality queries are where those are. Set as `CODEQL_SUITE` in `cicd/config.bash`.
+		- 20261022: Under the leak checks, after the heap-growth test, so on in a full run and off under `--quick` and `--gate`. A run here takes it into the image, like the ASan run, and warns and skips without docker. The SARIF goes to `cicd/artifacts/leakcheck/`, rotated with the heap reports.
+		- 20261022: Opt-in for now: `--codeql` adds the step to the leak checks, so it needs them on too, and `--gate` refuses it. A default full run leaves it out, so the run stays green and short until 2026102211462005 settles its cost and files what it finds.
+		- 20261022: Measured here, it's slow. The database takes about 5 to 6 minutes. The analysis ran 35 minutes at 8 threads and about 19 GB of memory without finishing, and was stopped: 39 of 41 queries done, `rust/cleartext-logging` (CWE-312) and the summary stats still running. So the step can add well over half an hour to a full run. 2026102211462005 decides whether it goes back in by default.
+		- 20261022: Full runs, container and plain: the plan's Leak checks line reads "CodeQL (off; --codeql adds it)", stage 3 printed "CodeQL off (--codeql adds it)" after the heap-growth test, no "CodeQL database" line, and no `codeql_*.sarif` in `cicd/artifacts/leakcheck/`. The image was built once, by the gate run.
+	- Verified: 20261022. The step in the rebuilt image, as the run's own uid, on a copy of this tree: vendoring, the release crate list (191), and the database with the workspace loaded and nothing fetched, about 6 minutes at 12 threads. Before the extractor's toolchain went in the image, the workspace failed to load and the new check caught it. The image builds with the new layer. New engine cases, each watched to fail against a mutated cicd.bash. shellcheck, house style.
+	- Test case: New cases in `cicd/tests/engine/run.bash` (Er2UgY7): where CodeQL runs, that the dhat step hands on to it, and `--codeql`: off by default, on with the flag and carried into the container, refused with `--gate`, and the plan line. Each watched to fail against a mutated cicd.bash. The step itself is watched to fail under 2026102211462005.
+	- Branch: rnd1022
+	- Acceptance signoff: Self-closed: CodeQL off in both full runs, nothing written.
+	- Closed: 20261022-140630
+
+- A flag to start in software-only rendering
+	- ID: 2026102209035802
+	- Type: Enhancement
+	- Status: Done
+	- Priority: Avg
+	- Opened: 20261022-090358
+	- Opened by: JC
+	- Assigned to: CC
+	- Related IDs: 2026102209035801, 2026100418225504
+	- Target OS: All
+	- Requirements:
+		- A flag to start in software-only rendering.
+	- Notes:
+		- Pre-next-cut.
+	- Progress log:
+		- 20261022: Built as `--software-rendering[=BOOL]`, a window option. It holds `window.software_rendering` for the run, as `--font-size` holds its setting, so nothing is saved and a reload keeps it. `=no` puts a run back on the card with the setting on. On macOS it says there's no software renderer and the card draws. Listed in `--help` and usage.md.
+		- 20261022: Verified: the new test passes, and fails with the hold taken out. The usage tests, fmt, and clippy for Linux, Windows and macOS pass.
+		- 20261022: Verified on X11: without the flag the window drew on the GL path, and with it on lavapipe through Vulkan. The config file was left without the setting. Under `--new-tab` the flag is refused as a window option.
+		- 20261022: Only compiled: Windows, which takes the same setting path to WARP that `softrender.ps1` runs, and the macOS note.
+	- Swept: every place the window style is folded: `apply_style`, the reload, Settings opening and a peer's save all go through `fold_window_style`. The first device reads it through `wanted()`, now after the flag is applied.
+	- Branch: rnd1022
+	- Test case: `software_rendering_flag_holds_the_setting_for_the_run` (EtS63cT)
+	- Acceptance signoff: Self-closed: the flag drew on the software device in a real window, and its test pins the hold.
+	- Closed: 20261022-104104
+
+- Test on arm64 macOS in CI
+	- ID: 2026102113432600
+	- Type: Task
+	- Status: Done
+	- Priority: Avg
+	- Opened: 20261021-123000
+	- Opened by: JC
+	- Assigned to: CC
+	- Target OS: macOS
+	- Test environment: GitHub macos-15, arm64
+	- Requirements:
+		- Runs on any git host that can run a bash script.
+		- Free for the public repo.
+	- Notes:
+		- `cicd/ci-mac.bash` builds, lints and tests on a Mac. `.github/workflows/mac.yml` checks out and calls it, on pushes to `dev` and `main` and by hand. Another git host only has to run the script.
+		- GitHub Actions cost: nothing. Standard hosted runners are free and unlimited on public repos, macOS included. `macos-latest`, `macos-26`, `macos-15` and `macos-14` are arm64 M1 standard runners, and `macos-15-intel` is the Intel one. Larger runners are always billed. Source: docs.github.com/en/actions/reference/runners/github-hosted-runners.
+		- The 10x macOS minute multiplier that some blog posts mention only draws down a private repo's included minutes. A public repo isn't charged.
+		- Limits on a Free plan: 5 macOS jobs at once, 20 jobs in all, 6 hours a job. No rate limit is listed for public repos. GitHub warns that macOS arm64 jobs may queue longer. Source: docs.github.com/en/actions/reference/limits.
+		- The runner is an Apple M1 (Virtual) with 3 cores and 7 GB, on macOS 15.7. `system_profiler SPDisplaysDataType` prints nothing there.
+		- wgpu finds a Metal adapter named "Apple Paravirtual device", reported as an integrated GPU, so GPU tests run. GitHub's docs say Metal Performance Shaders aren't supported, which didn't matter here. 2 tests skip: no software adapter, and no Metal allocator report.
+		- A run takes 4 to 6 minutes: build 100 s, clippy 55 s, tests 185 s.
+		- Found along the way:
+			- rustup 1.28 and later doesn't install the toolchain in `rust-toolchain.toml` by itself. Run `rustup toolchain install <channel> --profile minimal --component clippy` first, and set `RUSTUP_TOOLCHAIN`, so the cross targets the file lists aren't downloaded.
+			- `bash` on PATH is Apple's 3.2. Tests that need bash 4.4 fail with `bad substitution`. `brew install bash` takes about 6 s on the runner and gives 5.3, so it goes first on PATH.
+			- `cargo test -- --nocapture` leaves no failure text. The script runs the failed tests again alone to get it.
+			- Cargo fetches glyphon, alacritty, shcl and x11-clipboard from github.com. A move to another git host means changing those URLs too.
+			- `actions/checkout@v4` prints a Node.js 20 deprecation notice. It still works.
+		- Not covered: launching the app in a window.
+		- To reuse this in another project, copy the script and the workflow. The script reads the toolchain from `rust-toolchain.toml`, and uses `--about` for the adapter.
+	- Branch: macci
+	- Commit: ba66aed
+	- Test case: Not applicable. The script was made to fail on a planted test failure, and exited 1 with the failed tests named.
+	- Closed: 20261021-134326
+
 - Settings|Window: New option, disabled by default: "On text zoom change window size too".
 	- ID: 2026101816103602
 	- Type: Enhancement
@@ -4412,6 +4312,65 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Test case: No test. Output only. The gate and a quick run showed all 942 Rust tests with an ID, and a made-up name showed the dashes and the warning.
 	- Closed: 20260928-111812
 
+- The Settings dialog's spec leaks the strings of rows it drops, and each test that parses it leaks a whole copy
+	- ID: 2026101912070933
+	- Type: Bug
+	- Status: Done
+	- Severity: Low
+	- Opened: 20261019-120709
+	- Opened by: CC
+	- Related IDs: 2026101714445002, 2026101714445005
+	- Incorrect behavior: `ui_spec` keeps the strings of `settings_ui.shcl` by leaking them for a `'static` lifetime. The rows dropped for the platform, and each tip replaced by its warning, leak for good, once per process. Every test that parses the spec leaks all of it.
+	- Expected behavior: Nothing the parse made becomes unreachable.
+	- Reproduced: 20261019, by the test suite under LSan.
+	- Possible cause: `keep` and `keep_all` in ui_spec.rs leak each string, and `keep_platform` and `pick_warnings` then drop some of them.
+	- Notes:
+		- `cicd/lsan-suppressions.txt` lets `silkterm::ui_spec::` through with this ID beside it. Take that line out with the fix.
+		- With the line gone, the test stand-in `stand_in_tabs` in settings_ui.rs shows a leak of its own too, since it builds its tree through ui_spec.
+		- The heap-growth test in heap_growth.rs has a `known:` line with this ID too. Take it out with the fix.
+	- Actual cause: As the possible cause says. The stand-in also leaked its own copy of the tab tree on every call.
+	- Actual fix: `keep` goes through text.rs's `intern`, and `keep_all` keeps one copy of each distinct list the same way. A string a parse drops stays reachable, and a second parse adds nothing. The stand-in keeps one copy per distinct tree. The suppression and the `known:` line are gone, and design.md no longer names the spec as a known growth.
+	- Branch: rnd1022
+	- Test case: EtBDWu8 (`the_heap_stops_growing_after_a_warm_up`) without its `known:` line, and the ui_spec and stand-in tests under LSan with no suppression.
+	- Progress log:
+		- 20261022: Verified both ways. The heap-growth test failed before (+454820 bytes over 20 parses) and reads flat after (+0). Under LSan with the suppression gone, the 13 ui_spec tests reported 155223 bytes leaked before and nothing after. The 5 tests that use `stand_in_tabs` reported 6912 bytes from it with only the ui_spec half fixed, and nothing after.
+		- The full ASan suite with an empty suppression list rides on 2026101714445002's queued run. Its heap-growth run should now show all 6 actions flat.
+	- Swept: every `String::leak`, `Vec::leak`, `Box::leak` and `mem::forget` in source/src. The ones left are text.rs's `intern`, ui_spec's `keep_all` and the stand-in, all reachable from a static, and term.rs's Windows test.
+	- Acceptance signoff: Self-closed: a mechanical fix, proven failing before and passing after under both dhat and LSan.
+	- Closed: 20261022-105400
+
+- Four prompt tests fail on a Mac where `bash` is Apple's 3.2
+	- ID: 2026102113432601
+	- Type: Bug
+	- Status: Done
+	- Severity: Low
+	- Opened: 20261021-134326
+	- Opened by: CC
+	- Assigned to: CC
+	- Related IDs: 2026102113432600
+	- Target OS: macOS
+	- Test environment: GitHub macos-15, arm64
+	- Steps to reproduce:
+		- Run `cargo test` on a Mac with no newer bash ahead of /bin/bash on PATH.
+	- Incorrect behavior:
+		- These fail with `bash: ${PS1@P}: bad substitution`: `a_pane_prompt_shows_the_git_part_only_inside_a_working_tree`, `a_branch_name_is_shown_and_never_run_by_the_prompt`, `the_prompt_arrow_is_one_a_mac_has_a_font_for`, `the_prompt_shows_any_repository_and_how_far_it_is_from_upstream`.
+	- Expected behavior: The tests use a bash that can run them, or skip and say why.
+	- Reproduced: 20261021, GitHub macos-15 runner, 2 runs.
+	- Possible cause: The tests run `bash` from PATH and expand `${PS1@P}`, which needs bash 4.4. Apple's is 3.2.
+	- Notes:
+		- `cicd/ci-mac.bash` puts Homebrew's bash first, so the CI run passes.
+		- 20261022: The prompt script itself works under bash 3.2.57. It builds the same PS1 as 5.3 outside a repository, inside one, with ahead and behind counts (`↑2↓1`), and on a branch and remote named with `$( )`, backquotes and `${ }`. An interactive 3.2 shell shows those names as text and runs nothing. As root, a `$` in a name shows as `#`, in 5.3 too; the script's own comment already says so.
+		- 20261022: Mac CI run 39842974082 on rnd1022, with Homebrew's bash first on PATH: the 4 tests ran and passed, none skipped. That run failed on another test, filed on 2026102114411311.
+	- Actual cause: The tests ran whatever `bash` was on PATH and expanded `${PS1@P}`, which is bash 4.4.
+	- Actual fix: The tests find a bash that can expand `${PS1@P}`: the one on PATH, then Homebrew's in `/opt/homebrew/bin` and `/usr/local/bin`. With none, each prints "skipped: no bash 4.4 or newer" and returns, which the Mac CI's skips step counts.
+	- Verified: With a bash on PATH that fails on `${PS1@P}` as 3.2 does, the old tests failed 4 of 4 and the new ones skip 4 of 4 with the reason. With the real bash 5 they pass. Script under bash 3.2 and 5.3, as above. fmt, clippy on Linux, Windows and macOS targets.
+	- Not verified: The Homebrew fallback on a Mac whose PATH has only Apple's bash.
+	- Swept: Every test that runs `bash` in `source/src`. Only these 4 expand `${PS1@P}`. The strace test runs bash 3.2-safe syntax and skips on a Mac anyway.
+	- Branch: rnd1022
+	- Test case: The same 4 tests: EpxrTRY, EqBmHyq, EryR5wI, Es2nCJ6.
+	- Acceptance signoff: Self-closed: red before and green after against a bash that fails as 3.2 does, and the script checked under 3.2.
+	- Closed: 20261022-110907
+
 - For a moment after a scale change, programs in the window are told a much smaller or larger grid
 	- ID: 2026101412311921
 	- Type: Bug
@@ -5731,6 +5690,30 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Acceptance signoff: Self-closed: the fix does what the item asks and no more, and its test passes.
 	- Closed: 20261014-152600
 
+- Put tmux in the container image, so the tmux tests run under ASan and in `--container`
+	- ID: 2026101914251765
+	- Type: Task
+	- Status: Done
+	- Priority: Low
+	- Opened: 20261019-142517
+	- Opened by: CC
+	- Related IDs: 2026101714445002
+	- Target OS: Linux
+	- Requirements:
+		- The image has tmux, so the tmux tests run in the ASan step and in a `--container` run instead of passing as skipped.
+		- The test tmux stays on its own short socket there too.
+	- Notes:
+		- Do it with the next full ASan run, so the image is rebuilt once.
+	- Progress log:
+		- 20261022: tmux is in `cicd/container/Dockerfile`, from trixie's apt, so the image tag changes and the next run builds it.
+		- 20261022: The socket stays short. The unit tests always go by `-S`, under the run's test folder, which is under the container's own `/tmp`. Where that path wouldn't fit they take `/tmp/silktmux-<pid>`. mapfollow puts its socket in its own folder under the test folder.
+		- 20261022: In the image the full runs used: `ending_kills_the_session_started_and_no_other` under ASan, output shown, ran and passed with no skip line, and mapfollow ran all 6 of its tmux checks and passed. The full runs' own ASan step and container mapfollow passed too, but a pass hides the test's output there.
+	- Verified: 20261022. The tmux unit tests under ASan in the current image with tmux added on top: all 9 pass, and the session test runs instead of skipping. Without tmux the same test prints the skip.
+	- Test case: The existing tmux tests, `ending_kills_the_session_started_and_no_other` (Et0Zjp0) and mapfollow's tmux checks.
+	- Branch: rnd1022
+	- Acceptance signoff: Self-closed: the tmux tests ran, not skipped, under ASan and in mapfollow in the image.
+	- Closed: 20261022-140630
+
 - Leak checks: the advisory scan covers dev and build dependencies, beyond what end users run
 	- ID: 2026101714445007
 	- Type: Task
@@ -6157,6 +6140,23 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Test case: None, since no code changed.
 	- Acceptance signoff: JC, 20261013.
 	- Closed: 20261013
+
+- Builds clean up stale artifacts and side effects when done
+	- ID: 2026101916054001
+	- Type: Enhancement
+	- Status: Moot
+	- Priority: Avg
+	- Opened: 20261019-160540
+	- Opened by: JC
+	- Assigned to: CC
+	- Target OS: All
+	- Requirements:
+		- Verify or insure that builds clean up stale artifacts and side effects after they're done: caches, container cruft, tmp files, etc.
+	- Notes:
+		- Before the next cut.
+		- 20261022: Same request as 2026101909222600, opened the same morning and built that day as `sweep`. It waits on its full run there.
+	- Superseded by ID: 2026101909222600
+	- Closed: 20261022-111900
 
 - Settings that depend on a master boolean switch follow the automatic settings design
 	- ID: 2026100907341818
