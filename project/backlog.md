@@ -329,6 +329,23 @@ Going forward, new issues in the new template at the bottom of this file, will g
 			- Say in the docs how to install the entry on a remote host.
 	- Closed:
 
+- Running on macOS without a GPU fails to launch
+	- ID: 2026102209035801
+	- Type: Bug
+	- Status: Queued
+	- Severity: Avg
+	- Opened: 20261022-090358
+	- Opened by: JC
+	- Assigned to: CC
+	- Related IDs: 2026102209035802, 2026100418225504
+	- Target OS: macOS
+	- Steps to reproduce:
+		- Run on macOS without a GPU.
+	- Incorrect behavior: It fails to launch.
+	- Expected behavior: It falls back to software rendering if possible.
+	- Notes:
+		- Pre-next-cut.
+
 - Demo: the cursor goes to 50% width when the cursor size and animation change
 	- ID: 2026092812581720
 	- Type: Enhancement
@@ -514,6 +531,21 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- `--no-leakcheck` is useful to exclude them from a default run, or with `--quiet`.
 	- Notes:
 		- Before the next cut.
+
+- A flag to start in software-only rendering
+	- ID: 2026102209035802
+	- Type: Enhancement
+	- Status: Queued
+	- Priority: Avg
+	- Opened: 20261022-090358
+	- Opened by: JC
+	- Assigned to: CC
+	- Related IDs: 2026102209035801, 2026100418225504
+	- Target OS: All
+	- Requirements:
+		- A flag to start in software-only rendering.
+	- Notes:
+		- Pre-next-cut.
 
 - Put tmux in the container image, so the tmux tests run under ASan and in `--container`
 	- ID: 2026101914251765
