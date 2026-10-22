@@ -65,6 +65,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261022: Left open the default, and any ssh handling of its own. Question filed.
 		- 20261022: The pane test failed on macOS: with no TERM set it read `dumb`. bash, which is macOS's `/bin/sh`, makes up an unexported `TERM=dumb` when none is inherited, so the test's own shell said so, not the engine or `login`. The test now reads the environment through `printenv`. Reproduced on Linux under bash with TERM unset; passes there, and on Linux with TERM set and unset.
 		- 20261022: `the_configured_term_reaches_the_program` fails on macOS, at `term.rs:2124`, the empty-setting case: left "dumb", right "". The program sees `TERM=dumb` where the test expects the test process's own TERM, which is unset there. Failed on the Mac CI (run 39842974082, arm64), again when run alone, and on b26 in the private runner, which failed the full pipeline run at stage 6. Linux passes, on the host and in the container. Not fixed here.
+		- 20261022: The fixed test passed on Mac CI run 39858608191, with the whole suite.
 	- Actual fix: `shell.term` in the config, passed to each new pane's environment; usage.md "Programs over ssh".
 	- Branch: rnd1022
 	- Test case: `the_configured_term_reaches_the_program` (term.rs) fails with the setting dropped from the pane's environment and passes with it. `shell_term_reads_one_word_and_defaults_empty` (config.rs) covers the read and the template line.
@@ -367,6 +368,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Progress log:
 		- 20261022: The failure text never reached the CI log. `ci-mac.bash` now prints each failed test's panic text from the first run, runs the failed tests again with their output shown, and prints every `measured:` line a test writes. The test writes its ratios and each pair's times that way, and puts the times in its failure message too.
 		- 20261022: Mac CI run 39842974082 on rnd1022 passed it. Median 1.005 over 15 pairs, from 0.766 to 1.211. Kept was above bare in 9 of 15 pairs, each by a little. The big swings were on the bare side, 24.5 against 32.0 and 23.3 against 27.7 ms, which reads more like the core or host changing than a steady keep cost. One run, so not settled. The run failed on another test, filed on 2026102114411311.
+		- 20261022: Mac CI run 39858608191 passed it again. Median 1.038, pairs from 0.841 to 2.112, kept above bare in 10 of 15.
 	- Verified: `ci-mac.bash`'s extraction on a test binary with a failing assert, a multi-line `assert_eq!` and a `measured:` line. shellcheck, fmt, clippy on Linux, Windows and macOS targets. The test passes here and prints the new line.
 	- Branch: rnd1022
 	- Test case: `the_scroll_record_costs_a_full_screen_program_little` (EqHIGdO), message only.
