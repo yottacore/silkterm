@@ -53,6 +53,7 @@
 ##	   --no-asan           skip the test suite under ASan and LSan
 ##	   --no-leakcheck      skip the slow leak checks (the heap-growth test under dhat, CodeQL)
 ##	   --leakcheck         run the leak checks, under --quick too; not with --gate
+##	   --codeql            add CodeQL to the leak checks (off by default; slow)
 ##	   --no-profile        skip the profiler stage
 ##	   --no-dogfood        skip the dogfood install
 ##	   --no-publish        skip the git backup + publish stage
@@ -128,7 +129,7 @@ cd "${root}"
 stamp="$(date +%Y%m%d-%H%M%S)"
 
 ## Parse options.
-assumeYes=0; quiet=0; quick=0; gate=0; leakcheck=1; leakAsked=0; demoAsked=0; noArm=0; noWindows=0; sync=1; cliMessage=""; container="${useContainer:-0}"; noContainer=0; innerArgs=()
+assumeYes=0; quiet=0; quick=0; gate=0; leakcheck=1; leakAsked=0; codeql=0; demoAsked=0; noArm=0; noWindows=0; sync=1; cliMessage=""; container="${useContainer:-0}"; noContainer=0; innerArgs=()
 while (($#)); do case "${1}" in
 	-y|--yes)                 assumeYes=1; shift ;;
 	-q|--quiet)               quiet=1; assumeYes=1; shift ;;   ## quiet + unattended; publish runs quiet too
@@ -152,6 +153,7 @@ while (($#)); do case "${1}" in
 	--no-asan)                ASAN_CMD=(); innerArgs+=("${1}"); shift ;;
 	--leakcheck)              leakcheck=1; leakAsked=1; innerArgs+=("${1}"); shift ;;   ## the slow leak checks, under --quick too
 	--no-leakcheck)           leakcheck=0; innerArgs+=("${1}"); shift ;;
+	--codeql)                 codeql=1; innerArgs+=("${1}"); shift ;;                ## CodeQL in the leak checks; off until 2026102211462005
 	--message=*|--msg=*|-m=*) cliMessage="${1#*=}"; shift ;;
 	-m|--message|--msg)       cliMessage="${2-}"; shift; (($#)) && shift ;;
 	-h|--help)                sed -n '/^##	- Purpose:/,/^##	History:/p' "${BASH_SOURCE[0]}" | sed '$d; s/^##	\{0,1\}//'; exit 0 ;;
@@ -159,6 +161,7 @@ while (($#)); do case "${1}" in
 esac; done
 if ((noContainer)); then container=0; fi
 if ((gate && leakAsked && leakcheck)); then echo "--leakcheck adds to a full run; the gate leaves it out" >&2; exit 2; fi
+if ((gate && codeql)); then echo "--codeql is one of the leak checks, which the gate leaves out" >&2; exit 2; fi
 if ((quick && ! leakAsked)) || ((gate)); then leakcheck=0; fi   ## on by default, like the demo
 
 ## --no-arm: drop the ARM64 cross targets so the run (and its packages) stay
@@ -538,9 +541,10 @@ if ((! container && ! gate && ! quick)) && ((${#ASAN_CMD[@]})) && [[ -z "${SILK_
 	if command -v "${docker}" >/dev/null 2>&1; then asanInImage=1
 	else asanSkipped="no docker here for the image with the nightly"; fi
 fi
-## CodeQL, one of the leak checks, is in the image only too.
+## CodeQL, one of the leak checks, is in the image only too. Off unless --codeql
+## asks, since a run takes over half an hour and 19 GB here (2026102211462005).
 codeqlInImage=0; codeqlSkipped=""
-if ((! container && leakcheck)) && [[ -n "${CODEQL_SUITE:-}" && -z "${SILK_CICD_IN_CONTAINER:-}" ]]; then
+if ((! container && leakcheck && codeql)) && [[ -n "${CODEQL_SUITE:-}" && -z "${SILK_CICD_IN_CONTAINER:-}" ]]; then
 	if command -v "${docker}" >/dev/null 2>&1; then codeqlInImage=1
 	else codeqlSkipped="no docker here for the image with CodeQL"; fi
 fi
@@ -642,7 +646,10 @@ else
 	fEcho_Clean "ASan + LSan .........: the tests again on ${SANITIZER_TOOLCHAIN}, in ${containerImage:-this container}"
 fi
 if ((leakcheck)); then
-	fEcho_Clean "Leak checks .........: heap growth under dhat, CodeQL$([[ -n "${codeqlSkipped}" ]] && echo " (skipped, ${codeqlSkipped})"), reports to ${LEAKCHECK_OUT_DIR}"
+	if ((! codeql)); then codeqlLine="CodeQL (off; --codeql adds it)"
+	elif [[ -n "${codeqlSkipped}" ]]; then codeqlLine="CodeQL (skipped, ${codeqlSkipped})"
+	else codeqlLine="CodeQL"; fi
+	fEcho_Clean "Leak checks .........: heap growth under dhat, ${codeqlLine}, reports to ${LEAKCHECK_OUT_DIR}"
 elif ((quick && ! leakAsked)); then
 	fEcho_Clean "Leak checks .........: (skipped --quick; --leakcheck adds them)"
 else
@@ -1052,6 +1059,7 @@ fRunLeakcheck(){
 ## binary links (cicd/utility/codeql.bash), in the image like the ASan run.
 fRunCodeql(){
 	local -r outDir="${1}" why="CodeQL found something new, or couldn't run (above)"
+	if ((! codeql)); then fEcho_Clean "CodeQL off (--codeql adds it)"; return 0; fi
 	if [[ -z "${CODEQL_SUITE:-}" ]]; then fEcho_Clean "CodeQL skipped"; return 0; fi
 	if [[ -n "${codeqlSkipped}" ]]; then fEcho "WARNING: CodeQL skipped: ${codeqlSkipped}"; return 0; fi
 	if [[ -n "${SILK_CICD_IN_CONTAINER:-}" ]]; then
@@ -1584,7 +1592,7 @@ fEcho_Clean
 ##	History:
 ##		- 2026-10-22: The leak checks run by default. --no-leakcheck drops them,
 ##		              and --leakcheck adds them back under --quick.
-##		- 2026-10-22: CodeQL joins the leak checks, in the image.
+##		- 2026-10-22: CodeQL joins the leak checks, in the image, when --codeql asks.
 ##		- 2026-10-19: Every full run has the test suite again under ASan and LSan,
 ##		              in the container image, which has the nightly it needs.
 ##		- 2026-10-19: A full run removes what earlier runs left once it is stale:
