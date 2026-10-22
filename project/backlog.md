@@ -86,7 +86,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- ID: 2026101816103601
 	- Type: Enhancement
 	- Status: Waiting on automated testing
-	- Needs local test suite run?: A full pipeline run with no options, and one with `--quick`.
+	- Needs local test suite run?: A full pipeline run with no options that passes. The `--quick` arm passed in the gate run on 20261022.
 	- Priority: Avg
 	- Opened: 20261018-161036
 	- Opened by: JC
@@ -110,6 +110,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261018: `--quick` also skips the 5 window tests that took 33 s to 103 s each here: monwl, mapfollow, livecfg, wpresize and wpkept. The other 9 took 22 s or less, and the script tests 17 s or less.
 		- 20261018: The test boxes were already skipped under `--quick`: the Windows scenarios and the private runner. The script tests that look like they reach a host all use stand-ins.
 		- 20261018: The plan lists the demo now.
+		- 20261022: Both no-options full runs failed, on other things. The container one passed stages 1 to 6 and the Windows scenarios, then failed in the private runner on b26, on 2026102114411311's test. The plain one failed at mapfollow's tmux checks under a tmux wrapper earlier on that shell's PATH; with the real tmux first they pass. The Mac failure needs fixing before a full run can pass.
 	- Verified: 20261018. shellcheck, house style, the pipeline step, container run, docs and hooks tests. A real `--gate` run passed.
 	- Test case: New cases in `cicd/tests/engine/run.bash` (Er2UgY7) for `--quick`, no options, `--no-demo` and `--gate`. The `--container` run in `cicd/tests/container/run.bash` (EsJg9EF) now expects the Windows x86_64 binary under `--quick`, and failed until its stand-in made one.
 	- Branch: ciflags
@@ -118,7 +119,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- ID: 2026101714445001
 	- Type: Task
 	- Status: Waiting on automated testing
-	- Needs local test suite run?: A full pipeline run, plain and with `--container`, to see the new advisory scan step pass in stage 3.
 	- Needs external testing: A `cicd-win.ps1` run on a Windows box, where the scan gates when cargo-deny is installed.
 	- Priority: Avg
 	- Opened: 20261017-144450
@@ -135,6 +135,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261017: 2 unsafe sites in the macOS menu code had no SAFETY line. Both are inside an objc2 macro, which clippy doesn't look into. Added. A scan of every `unsafe` in our code finds no other.
 		- Note: The pipeline lints Linux and Windows only. macOS code is linted here by hand, with `--target x86_64-apple-darwin`.
 		- 20261018: Stage 3 runs clippy for `x86_64-apple-darwin` too, with warnings as errors, after the Windows lints. The target is in rust-toolchain.toml, so the container image gets it. About 23 s here.
+		- 20261022: The advisory scan passed in stage 3 of both full runs, container and plain: "advisories ok", then the scope check (EtBK7tB). Left: the Windows run.
 	- Decisions:
 		- 20261018: Add a macOS clippy step that fails the pipeline. It adds the x86_64-apple-darwin target to rust-toolchain.toml, so every box and the container image download it.
 	- Verified: clippy `-D warnings` clean for Linux, `x86_64-pc-windows-gnu` and `x86_64-apple-darwin`, and with the profiling feature. Unit suite (1364 + 28), fmt check, docs check.
@@ -162,7 +163,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- ID: 2026101909222600
 	- Type: Enhancement
 	- Status: Waiting on automated testing
-	- Needs local test suite run?: A full run, plain and `--container`. Each shows the Cleanup line in the plan and ends with a `cleanup:` line. The first writes `.cicd-toolchain` and `.cicd-build-dirs` in its target dir and removes no build dir. The `--container` one builds the new image, removes `silkterm-cicd:2c814fabc2c7`, reports the build cache and leaves no `target/container/tmp/run_*` after a pass. Then kill a run part way, run twice more, and check that nothing new piles up in the temp dir, `target/container/tmp` or `docker ps -a`.
 	- Needs external testing: On a Windows box, a `cicd-win.ps1` run that fails keeps its test folder and writes it down, and later runs keep only the newest 5. A wingui run on each box leaves no `silkrig_*` script in `private\winrig` and no run folder; one killed part way is swept by the next run on that box.
 	- Priority: Avg
 	- Opened: 20261019-092226
@@ -186,6 +186,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 			| Xvfb, sway, tmux                           | None left by a pipeline run. 7 `dash scene.sh` from a hand test folder of 10-13 still running             | Not touched
 			| Run logs, flamegraphs, release dirs, shots | Rotated or replaced each run                                                                              | Unchanged
 
+		- 20261022: Done locally. The gate run's image build removed the old image ("cleanup: removed 1 old container images") and reported the build cache. Full runs: both plans show the Cleanup line. The container one ended "cleanup: nothing stale" inside the image and left no `target/container/tmp/run_*`, then failed in the private runner before the host's own cleanup. The plain one wrote `.cicd-toolchain` and `.cicd-build-dirs` at its start, then failed in stage 3 before its cleanup. Then a container `--quick` run killed in stage 3, which left its `run_20261022-14022525`, and a container and a plain `--quick` run that passed. Each ended "cleanup: nothing stale", no build dir went, and nothing new was left in the test temp dir, `target/container/tmp` or `docker ps -a`. Left: the Windows half.
 		- Left as found: the 343 local and 4 `/tmp` test folders, which no run wrote down; the `tmp.*.ps1` scripts and the b29w test folders on the boxes; the 7 `dash` processes; the remote clones' target dirs, built by hand jobs. The Windows pipeline's own target dir isn't swept yet.
 		- Verified: the four tests below pass, and their new checks failed against the pipeline as it was before.
 	- Decisions:
@@ -197,9 +198,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - Leak checks: the test suite under AddressSanitizer and LeakSanitizer on every full run
 	- ID: 2026101714445002
 	- Type: Task
-	- Status: Waiting on automated testing
-	- Needs local test suite run?: A full pipeline run, plain and with `--container`. Each builds the new image with the nightly, and stage 3 should show the canary caught and no ASan or LSan reports. The plain run does that one step in the image.
-	- Needs external testing: A `cicd-win.ps1 -Wsl` run. A distro with no docker should only warn at the ASan step.
+	- Status: Done
 	- Priority: Avg
 	- Opened: 20261017-144450
 	- Opened by: CC
@@ -219,18 +218,20 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261019: The step took 13 to 16 minutes in 4 runs here, at a load of 25 to 45, against under 2 for the plain suite. The first ASan build of std and every crate was about 2 minutes of that.
 		- Note: No third-party leak turned up, and nothing in Mesa, X or the other system libraries either.
 		- Note: The image has no tmux, so the tmux tests pass as skipped there, as they do in a `--container` run. The GPU tests run on software Vulkan and GL. Adding it is 2026101914251765.
+		- 20261022: Full runs, container and plain: canary caught, no ASan or LSan reports, 1429 passed and 5 ignored, in 720 s and 686 s. The plain run took the step into the image. Not run: `cicd-win.ps1 -Wsl`. Its no-docker warning is the same `cicd.bash` path a Linux run with no docker takes.
 	- Decisions:
 		- 20261019: A `cicd.bash` run shouldn't need extra flags, so no docker means a warning, not a stop.
 	- Swept: every `Box::leak`, `String::leak`, `Vec::leak` and `mem::forget` in the tree. The 3 in text.rs are interned, the 2 in tests are gone, ui_spec's are 2026101912070933, a test stand-in's goes through ui_spec too, and term.rs's is a Windows test.
 	- Verified: 20261019. The step in the image: canary caught, no ASan or LSan reports, 1423 passed and 4 ignored. A leak planted in a knobs test failed the step, with the report naming the test, and a suppression wide enough to hide everything failed it at the canary. The new container and cleanup checks, each watched to fail. The plain unit suite (1397 + 28), clippy for Linux and Windows, fmt, shellcheck, house style, docs check.
 	- Test case: The canary EtAocf6, run by the step itself. New cases in `cicd/tests/container/run.bash` (EsJg9EF) and `cicd/tests/cleanup/run.bash` (EtAiwUl). `a_name_resolved_again_is_kept_once` (EtAv8Lw) for the interned names.
 	- Branch: asan
+	- Acceptance signoff: Self-closed: ASan step clean in both full runs. The WSL half's no-docker warning is shared code, left unrun.
+	- Closed: 20261022-140630
 
 - Leak checks: `--leakcheck` and the dhat heap-growth test
 	- ID: 2026101714445005
 	- Type: Task
-	- Status: Waiting on automated testing
-	- Needs local test suite run?: A full run, plain and with `--container`, with no flag, since the leak checks are on by default since 2026101916054002. The plan shows the Leak checks line. Stage 3 runs the heap-growth test after the ASan run and prints its report: the planted leak caught, all 6 actions flat, the Settings spec included since 2026101912070933 was fixed, and no known line. `cicd/artifacts/leakcheck/` gets a `heap_<stamp>` report. A run with `--no-leakcheck` shows "(skipped)" there, and the ASan step has 1 more ignored test.
+	- Status: Done
 	- Priority: Avg
 	- Opened: 20261017-144450
 	- Opened by: CC
@@ -248,9 +249,12 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261019: Found nothing new. Every action but the Settings spec reads exactly flat, and that one is 2026101912070933's leak, about 22 KB a parse, reported with its ID and not failed.
 		- Note: `tmux.rs` keeps every tmux session name the process handed out, one short string per tmux pane opened, by design. Not filed.
 		- Note: Not on Windows. Since 20261022 `cicd-win.ps1` has `-Leakcheck` and `-NoLeakcheck`, which only reach the Linux half under `-Wsl` (2026101916054002).
+		- 20261022: Full runs, container and plain, no flag: after the ASan run the planted leak was caught, all 6 actions read flat, the Settings spec included, and no known line. Reports `heap_20261022-124647_first.txt` and `heap_20261022-132520_latest.txt`. With `--no-leakcheck` the plan shows "(skipped)". Not run: the ASan step's ignored count under `--no-leakcheck`.
 	- Verified: 20261019. The test, run through the step lifted from cicd.bash with the real config: the canary caught, the rest flat, the report kept. A static cache planted in text shaping failed it, and so did the Settings spec with its known ID taken out, with the dhat profile saved. The step failed on a filter matching nothing and on a build without the feature. Engine cases, each watched to fail against a mutated cicd.bash. Unit suite (1397 + 28, 3 ignored), clippy for Linux with and without the feature, Windows and macOS, fmt, the advisory scan, shellcheck, house style, test IDs.
 	- Test case: `the_heap_stops_growing_after_a_warm_up` (EtBDWu8), whose planted leak runs every time. New cases in `cicd/tests/engine/run.bash` (Er2UgY7).
 	- Branch: leakchk
+	- Acceptance signoff: Self-closed: the heap-growth step passed in both full runs, container and plain.
+	- Closed: 20261022-140630
 
 - shcl: a keep-lines save adds a set value as a new line, beside its commented default
 	- ID: 2026100219054510
@@ -334,6 +338,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261022: Added `shell.term`, the TERM a new pane gets. Empty, the default, keeps the engine's pick. A value with a space or control character in it reads as empty.
 		- 20261022: usage.md has a "Programs over ssh" section, with the command that copies the entry to a remote host, and the setting as the other way out.
 		- 20261022: Left open the default, and any ssh handling of its own. Question filed.
+		- 20261022: `the_configured_term_reaches_the_program` fails on macOS, at `term.rs:2124`, the empty-setting case: left "dumb", right "". The program sees `TERM=dumb` where the test expects the test process's own TERM, which is unset there. Failed on the Mac CI (run 39842974082, arm64), again when run alone, and on b26 in the private runner, which failed the full pipeline run at stage 6. Linux passes, on the host and in the container. Not fixed here.
 	- Actual fix: `shell.term` in the config, passed to each new pane's environment; usage.md "Programs over ssh".
 	- Branch: rnd1022
 	- Test case: `the_configured_term_reaches_the_program` (term.rs) fails with the setting dropped from the pane's environment and passes with it. `shell_term_reads_one_word_and_defaults_empty` (config.rs) covers the read and the template line.
@@ -393,6 +398,22 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Branch: rnd1022
 	- Test case: `cicd/tests/demo/run.py`, "the cursor scene narrows the cursor to half width".
 	- Closed:
+
+- A container run tries to record the demo inside the image, even with `--no-demo`
+	- ID: 2026102213461534
+	- Type: Bug
+	- Status: Queued
+	- Severity: Avg
+	- Opened: 20261022-134615
+	- Opened by: CC
+	- Target OS: Linux
+	- Test environment: b23, `cicd/cicd.bash -y --no-publish --no-dogfood --no-demo`, docker default
+	- Steps to reproduce:
+		- Run a full pipeline in the container with `--no-demo`.
+	- Incorrect behavior: The run inside the image prints "recording demo video ..." in its stage 7 and runs `demo-video.py`. Here it failed on a missing `numpy`, so it only warned: "demo video hook failed (non-fatal)".
+	- Expected behavior: `--no-demo` is honored inside the container too, and the demo, a host step, never runs in the image.
+	- Reproduced: 20261022, run log `test_silkterm-batch_20261022-12464452`, lines 3782 to 3791.
+	- Possible cause: The container's own arguments are `-y --no-sync --no-dogfood --no-publish --no-private` plus `innerArgs`, and `--no-demo` never goes into `innerArgs` (`cicd.bash` line 561). The demo is on by default, so the run inside turns it back on. The same on `dev`, at line 549.
 
 - Implement leak and static checks of the Rust code run as part of CI/CD
 	- ID: 2026101714015789
@@ -518,8 +539,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - Leak checks: CodeQL in the image, the step on a vendored tree
 	- ID: 2026102211461905
 	- Type: Task
-	- Status: Waiting on automated testing
-	- Needs local test suite run?: The default full run, plain and with `--container`, which builds the image once (the tmux and CodeQL layers). The plan's Leak checks line reads "CodeQL (off; --codeql adds it)", and stage 3 prints "CodeQL off (--codeql adds it)" after the heap-growth test and runs no CodeQL: no "CodeQL database" line and no new `codeql_<stamp>.sarif` in `cicd/artifacts/leakcheck/`. A run with `--codeql` is left to 2026102211462005.
+	- Status: Done
 	- Priority: Avg
 	- Opened: 20261022-114619
 	- Opened by: CC
@@ -537,9 +557,12 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261022: Under the leak checks, after the heap-growth test, so on in a full run and off under `--quick` and `--gate`. A run here takes it into the image, like the ASan run, and warns and skips without docker. The SARIF goes to `cicd/artifacts/leakcheck/`, rotated with the heap reports.
 		- 20261022: Opt-in for now: `--codeql` adds the step to the leak checks, so it needs them on too, and `--gate` refuses it. A default full run leaves it out, so the run stays green and short until 2026102211462005 settles its cost and files what it finds.
 		- 20261022: Measured here, it's slow. The database takes about 5 to 6 minutes. The analysis ran 35 minutes at 8 threads and about 19 GB of memory without finishing, and was stopped: 39 of 41 queries done, `rust/cleartext-logging` (CWE-312) and the summary stats still running. So the step can add well over half an hour to a full run. 2026102211462005 decides whether it goes back in by default.
+		- 20261022: Full runs, container and plain: the plan's Leak checks line reads "CodeQL (off; --codeql adds it)", stage 3 printed "CodeQL off (--codeql adds it)" after the heap-growth test, no "CodeQL database" line, and no `codeql_*.sarif` in `cicd/artifacts/leakcheck/`. The image was built once, by the gate run.
 	- Verified: 20261022. The step in the rebuilt image, as the run's own uid, on a copy of this tree: vendoring, the release crate list (191), and the database with the workspace loaded and nothing fetched, about 6 minutes at 12 threads. Before the extractor's toolchain went in the image, the workspace failed to load and the new check caught it. The image builds with the new layer. New engine cases, each watched to fail against a mutated cicd.bash. shellcheck, house style.
 	- Test case: New cases in `cicd/tests/engine/run.bash` (Er2UgY7): where CodeQL runs, that the dhat step hands on to it, and `--codeql`: off by default, on with the flag and carried into the container, refused with `--gate`, and the plan line. Each watched to fail against a mutated cicd.bash. The step itself is watched to fail under 2026102211462005.
 	- Branch: rnd1022
+	- Acceptance signoff: Self-closed: CodeQL off in both full runs, nothing written.
+	- Closed: 20261022-140630
 
 - Leak checks: CodeQL watched to fail, and its first findings filed
 	- ID: 2026102211462005
@@ -624,7 +647,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- ID: 2026101916054002
 	- Type: Enhancement
 	- Status: Waiting on automated testing
-	- Needs local test suite run?: A full run, plain and `--container`, with no flag: the plan's Leak checks line names the heap-growth test, and stage 3 runs it after the ASan run. The same with `--no-leakcheck` shows "(skipped)" and runs none. `--quick` shows "(skipped --quick; --leakcheck adds them)", and `--quick --leakcheck` runs them.
 	- Needs external testing: `cicd-win.ps1 -Wsl` with `-NoLeakcheck` and with neither, on a Windows box.
 	- Priority: Avg
 	- Opened: 20261019-160540
@@ -643,6 +665,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261022: The switch is the `leakcheck` variable and `fRunLeakcheck`, so CodeQL (2026101913360695) and the soak test (2026101913370214) can join that step.
 		- 20261022: `cicd-win.ps1` got `-NoLeakcheck` and `-Leakcheck`, passed on to the Linux half under `-Wsl`. The Windows half has no leak checks.
 		- 20261022: `--help`, the plan, config.bash, install.md, design.md and the dhat comments say so. The plan row on 2026101714445005 is rewritten to match.
+		- 20261022: Full runs, container and plain, no flag: the plan's Leak checks line names the heap-growth test, and stage 3 ran it right after the ASan run. `cicd.bash --no-leakcheck </dev/null` shows the Leak checks line as "(skipped)". The `--quick` arms passed in the gate run. Left: the Windows check.
 	- Decisions:
 		- 20261022: The engine case that said no options leave the leak checks off now says they're on, per this item's requirements.
 	- Verified: 20261022. Engine cases, each watched to fail against the old cicd.bash and 2 mutants. The plan's Leak checks line with no flag, `--quick`, `--quick --leakcheck` and `-q --no-leakcheck`. shellcheck, house style, PSScriptAnalyzer on `cicd-win.ps1`, cargo check with the feature.
@@ -678,8 +701,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - Put tmux in the container image, so the tmux tests run under ASan and in `--container`
 	- ID: 2026101914251765
 	- Type: Task
-	- Status: Waiting on automated testing
-	- Needs local test suite run?: tmux tests run, not skipped, in the ASan step and in a container run. The first full run rebuilds the image for the new tag. In the ASan step `ending_kills_the_session_started_and_no_other` runs without "no tmux here; skipped". In a `--container` run `cicd/tests/mapfollow/run.bash` runs its tmux checks instead of "skip the tmux checks: no tmux".
+	- Status: Done
 	- Priority: Low
 	- Opened: 20261019-142517
 	- Opened by: CC
@@ -693,9 +715,12 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Progress log:
 		- 20261022: tmux is in `cicd/container/Dockerfile`, from trixie's apt, so the image tag changes and the next run builds it.
 		- 20261022: The socket stays short. The unit tests always go by `-S`, under the run's test folder, which is under the container's own `/tmp`. Where that path wouldn't fit they take `/tmp/silktmux-<pid>`. mapfollow puts its socket in its own folder under the test folder.
+		- 20261022: In the image the full runs used: `ending_kills_the_session_started_and_no_other` under ASan, output shown, ran and passed with no skip line, and mapfollow ran all 6 of its tmux checks and passed. The full runs' own ASan step and container mapfollow passed too, but a pass hides the test's output there.
 	- Verified: 20261022. The tmux unit tests under ASan in the current image with tmux added on top: all 9 pass, and the session test runs instead of skipping. Without tmux the same test prints the skip.
 	- Test case: The existing tmux tests, `ending_kills_the_session_started_and_no_other` (Et0Zjp0) and mapfollow's tmux checks.
 	- Branch: rnd1022
+	- Acceptance signoff: Self-closed: the tmux tests ran, not skipped, under ASan and in mapfollow in the image.
+	- Closed: 20261022-140630
 
 - Wayland: a copy a program sends while no SilkTerm window has focus is dropped
 	- ID: 2026101607585700
@@ -733,6 +758,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Notes:
 		- `cicd/ci-mac.bash` puts Homebrew's bash first, so the CI run passes.
 		- 20261022: The prompt script itself works under bash 3.2.57. It builds the same PS1 as 5.3 outside a repository, inside one, with ahead and behind counts (`↑2↓1`), and on a branch and remote named with `$( )`, backquotes and `${ }`. An interactive 3.2 shell shows those names as text and runs nothing. As root, a `$` in a name shows as `#`, in 5.3 too; the script's own comment already says so.
+		- 20261022: Mac CI run 39842974082 on rnd1022, with Homebrew's bash first on PATH: the 4 tests ran and passed, none skipped. That run failed on another test, filed on 2026102114411311.
 	- Actual cause: The tests ran whatever `bash` was on PATH and expanded `${PS1@P}`, which is bash 4.4.
 	- Actual fix: The tests find a bash that can expand `${PS1@P}`: the one on PATH, then Homebrew's in `/opt/homebrew/bin` and `/usr/local/bin`. With none, each prints "skipped: no bash 4.4 or newer" and returns, which the Mac CI's skips step counts.
 	- Verified: With a bash on PATH that fails on `${PS1@P}` as 3.2 does, the old tests failed 4 of 4 and the new ones skip 4 of 4 with the reason. With the real bash 5 they pass. Script under bash 3.2 and 5.3, as above. fmt, clippy on Linux, Windows and macOS targets.
@@ -747,7 +773,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- ID: 2026102113432602
 	- Type: Bug
 	- Status: Waiting on automated testing
-	- Needs external testing: The next Mac CI runs, any push to dev. Each prints the test's ratios and its kept and bare times under the new `measured` step, pass or fail. A failure also prints its panic text under "failed tests, as they failed". Look for where the median sits on the M1 beside the suite. Kept times steadily above bare across the pairs point to neighbours' memory traffic, as on b23. One side jumping between pairs points to the core or the host changing instead.
+	- Needs external testing: More Mac CI runs, until one fails it with its `measured` line, or enough pass to say the failures are gone. The first run with the new step passed (below). Kept times steadily above bare across the pairs point to neighbours' memory traffic, as on b23. One side jumping between pairs points to the core or the host changing instead.
 	- Severity: Low
 	- Opened: 20261021-134326
 	- Opened by: CC
@@ -763,6 +789,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- If the Mac shows a steady gap over 10%, the options are to run this test apart from the suite, or to judge the keep cost against something the neighbours slow down as much. Neither is done yet.
 	- Progress log:
 		- 20261022: The failure text never reached the CI log. `ci-mac.bash` now prints each failed test's panic text from the first run, runs the failed tests again with their output shown, and prints every `measured:` line a test writes. The test writes its ratios and each pair's times that way, and puts the times in its failure message too.
+		- 20261022: Mac CI run 39842974082 on rnd1022 passed it. Median 1.005 over 15 pairs, from 0.766 to 1.211. Kept was above bare in 9 of 15 pairs, each by a little. The big swings were on the bare side, 24.5 against 32.0 and 23.3 against 27.7 ms, which reads more like the core or host changing than a steady keep cost. One run, so not settled. The run failed on another test, filed on 2026102114411311.
 	- Verified: `ci-mac.bash`'s extraction on a test binary with a failing assert, a multi-line `assert_eq!` and a `measured:` line. shellcheck, fmt, clippy on Linux, Windows and macOS targets. The test passes here and prints the new line.
 	- Branch: rnd1022
 	- Test case: `the_scroll_record_costs_a_full_screen_program_little` (EqHIGdO), message only.
