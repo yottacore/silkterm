@@ -1,0 +1,4 @@
+# CodeQL results cicd/utility/codeql.bash lets through, each with the backlog
+# item that fixes it. One per line: <rule id> <path glob> <item ID>, the path
+# as the SARIF has it (source/..., vendor/<crate>-<version>/...). Keep the glob
+# as narrow as the cause.

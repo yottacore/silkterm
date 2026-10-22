@@ -51,7 +51,7 @@
 ##	   --no-private        skip the private runner (macOS, Microsoft Store)
 ##	   --no-fuzz           skip the fuzz soak (the short one in the test run still runs)
 ##	   --no-asan           skip the test suite under ASan and LSan
-##	   --no-leakcheck      skip the slow leak checks (the heap-growth test under dhat)
+##	   --no-leakcheck      skip the slow leak checks (the heap-growth test under dhat, CodeQL)
 ##	   --leakcheck         run the leak checks, under --quick too; not with --gate
 ##	   --no-profile        skip the profiler stage
 ##	   --no-dogfood        skip the dogfood install
@@ -538,7 +538,13 @@ if ((! container && ! gate && ! quick)) && ((${#ASAN_CMD[@]})) && [[ -z "${SILK_
 	if command -v "${docker}" >/dev/null 2>&1; then asanInImage=1
 	else asanSkipped="no docker here for the image with the nightly"; fi
 fi
-if ((container || asanInImage)); then
+## CodeQL, one of the leak checks, is in the image only too.
+codeqlInImage=0; codeqlSkipped=""
+if ((! container && leakcheck)) && [[ -n "${CODEQL_SUITE:-}" && -z "${SILK_CICD_IN_CONTAINER:-}" ]]; then
+	if command -v "${docker}" >/dev/null 2>&1; then codeqlInImage=1
+	else codeqlSkipped="no docker here for the image with CodeQL"; fi
+fi
+if ((container || asanInImage || codeqlInImage)); then
 	[[ -f "${containerRecipe}" ]] || fDie "missing ${containerRecipe}"
 	containerImage="$(fContainerImage)"
 	## Its real path, since a target dir linked to another disk would dangle inside.
@@ -636,7 +642,7 @@ else
 	fEcho_Clean "ASan + LSan .........: the tests again on ${SANITIZER_TOOLCHAIN}, in ${containerImage:-this container}"
 fi
 if ((leakcheck)); then
-	fEcho_Clean "Leak checks .........: heap growth under dhat, reports to ${LEAKCHECK_OUT_DIR}"
+	fEcho_Clean "Leak checks .........: heap growth under dhat, CodeQL$([[ -n "${codeqlSkipped}" ]] && echo " (skipped, ${codeqlSkipped})"), reports to ${LEAKCHECK_OUT_DIR}"
 elif ((quick && ! leakAsked)); then
 	fEcho_Clean "Leak checks .........: (skipped --quick; --leakcheck adds them)"
 else
@@ -1040,6 +1046,21 @@ fRunLeakcheck(){
 	gfs_rotate "${outDir}" heap txt >/dev/null 2>&1 || true
 	gfs_rotate "${outDir}" heap dhat.json >/dev/null 2>&1 || true
 	fEcho "OK: no heap growth past the warm-up"
+	fRunCodeql "${outDir}"
+}
+## fRunCodeql <out dir>: CodeQL over our crates and the vendored ones a release
+## binary links (cicd/utility/codeql.bash), in the image like the ASan run.
+fRunCodeql(){
+	local -r outDir="${1}" why="CodeQL found something new, or couldn't run (above)"
+	if [[ -z "${CODEQL_SUITE:-}" ]]; then fEcho_Clean "CodeQL skipped"; return 0; fi
+	if [[ -n "${codeqlSkipped}" ]]; then fEcho "WARNING: CodeQL skipped: ${codeqlSkipped}"; return 0; fi
+	if [[ -n "${SILK_CICD_IN_CONTAINER:-}" ]]; then
+		"${here}/utility/codeql.bash" "${outDir}" "${stamp}" || fDie "${why}"
+	else
+		fContainerBuild "${containerImage}"
+		fContainerRun "${containerImage}" "${root}/cicd/utility/codeql.bash" "${outDir}" "${stamp}" || fDie "${why}"
+	fi
+	gfs_rotate "${outDir}" codeql sarif >/dev/null 2>&1 || true
 }
 
 ## The build dirs this config builds into: CLEANUP_BUILD_DIRS under the target
@@ -1563,6 +1584,7 @@ fEcho_Clean
 ##	History:
 ##		- 2026-10-22: The leak checks run by default. --no-leakcheck drops them,
 ##		              and --leakcheck adds them back under --quick.
+##		- 2026-10-22: CodeQL joins the leak checks, in the image.
 ##		- 2026-10-19: Every full run has the test suite again under ASan and LSan,
 ##		              in the container image, which has the nightly it needs.
 ##		- 2026-10-19: A full run removes what earlier runs left once it is stale:

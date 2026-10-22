@@ -500,7 +500,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - Leak checks: CodeQL under `--leakcheck`, from a pinned CLI on a vendored tree
 	- ID: 2026101913360695
 	- Type: Task
-	- Status: Queued
+	- Status: Started
 	- Priority: Avg
 	- Opened: 20261019-133606
 	- Opened by: CC
@@ -512,6 +512,47 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Watched to fail on a planted finding before it's trusted.
 	- Notes:
 		- Split from 2026101714445005, which added the flag.
+	- Progress log:
+		- 20261022: Split in 2, too big for one sitting. 2026102211461905 puts the pinned CodeQL in the image and the step in the leak checks. 2026102211462005 watches it fail on a planted finding and files what the first run finds. This item closes when they do.
+
+- Leak checks: CodeQL in the image, the step on a vendored tree
+	- ID: 2026102211461905
+	- Type: Task
+	- Status: Waiting on automated testing
+	- Needs local test suite run?: A full run, plain and with `--container`. The image builds once (the tmux and CodeQL layers). The plan's Leak checks line names CodeQL. Stage 3 prints "CodeQL database" and "CodeQL codeql/rust-queries..." after the heap-growth test, and `cicd/artifacts/leakcheck/` gets a `codeql_<stamp>.sarif`. The step fails on any result not in `cicd/codeql-suppressions.txt`, so the first run is expected red until 2026102211462005 files and suppresses what it finds. Note the step's time on that item.
+	- Priority: Avg
+	- Opened: 20261022-114619
+	- Opened by: CC
+	- Parent ID: 2026101913360695
+	- Requirements:
+		- The parent's CodeQL row: a pinned CLI, run locally, in the build container, over a vendored tree, with the SARIF kept and any result failing the step.
+	- Progress log:
+		- 20261022: The image gets the CodeQL 2.27.3 bundle, sha256 checked: the CLI plus its query packs, so a run downloads nothing. The other languages' extractors are removed, about 500 MB of its 1.4 GB. The bundle rather than the bare CLI, since the CLI zip has no queries.
+		- 20261022: Rust in CodeQL has build mode `none` only. Its extractor runs rust-analyzer, which runs cargo, build scripts and proc macros, but no full build. Offline it reads the vendored copies through cargo's source replacement.
+		- 20261022: The extractor runs `cargo metadata` under Rust 1.99.0 with `rust-src`, not under the project's 1.96, and fetches that toolchain when it's missing. A run can't, so the image installs it, pinned as `CODEQL_RUST` beside the bundle's version. Not checked: whether it asks for that exact version or for the newest stable, which would break the pin at the next Rust release.
+		- 20261022: When the workspace doesn't load, the extractor goes on without types or macros and the database still builds. The analysis then gave 50 `rust/unused-variable` results in our code, such as `None` in a pattern read as a variable, and missed a planted unused variable. So the step fails when the extractor's log says it couldn't load the workspace.
+		- 20261022: `cicd/utility/codeql.bash` copies the workspace under `<target>/codeql/src`, runs `cargo vendor --versioned-dirs` into it, and builds the database with the dependencies extracted as source, for x86_64 Linux, default features. Only our crates are indexed as files. A vendored crate's own manifest loaded as a workspace of its own and failed offline, 138 of them.
+		- 20261022: Limited to the release binary by path, not by what's extracted: results in `source/`, `knobs/` and the vendored crates `cargo tree -e normal --target x86_64-unknown-linux-gnu` names, proc macros left out, are kept. Build scripts, proc macros and dev or build dependencies are still extracted, since cargo needs them, and their results are dropped. 191 crates on 20261022.
+		- 20261022: Suite `rust-security-and-quality`, not the default `rust-code-scanning`. The parent asks for correctness checks too, and the quality queries are where those are. Set as `CODEQL_SUITE` in `cicd/config.bash`.
+		- 20261022: Under the leak checks, after the heap-growth test, so on in a full run and off under `--quick` and `--gate`. A run here takes it into the image, like the ASan run, and warns and skips without docker. The SARIF goes to `cicd/artifacts/leakcheck/`, rotated with the heap reports.
+		- 20261022: Measured here, it's slow. The database takes about 5 to 6 minutes. The analysis took over 22 minutes at 8 threads and about 19 GB of memory, and hadn't finished when this was written. So the step adds half an hour or more to a full run. Left in the full run for now; 2026102211462005 decides with the full number.
+	- Verified: 20261022. The step in the rebuilt image, as the run's own uid, on a copy of this tree: vendoring, the release crate list (191), and the database with the workspace loaded and nothing fetched, about 6 minutes at 12 threads. Before the extractor's toolchain went in the image, the workspace failed to load and the new check caught it. The image builds with the new layer. New engine cases, each watched to fail against a mutated cicd.bash. shellcheck, house style.
+	- Test case: New cases in `cicd/tests/engine/run.bash` (Er2UgY7): where CodeQL runs, and that the dhat step hands on to it. The step itself is watched to fail under 2026102211462005.
+	- Branch: rnd1022
+
+- Leak checks: CodeQL watched to fail, and its first findings filed
+	- ID: 2026102211462005
+	- Type: Task
+	- Status: Queued
+	- Priority: Avg
+	- Opened: 20261022-114620
+	- Opened by: CC
+	- Parent ID: 2026101913360695
+	- Prereq IDs: 2026102211461905
+	- Requirements:
+		- Plant a finding the suite flags in a scratch copy of the tree, and see `cicd/utility/codeql.bash` go red. An unused variable in `main` works.
+		- File what the first run finds, one item per distinct cause, or one roll-up for many of one kind in third-party code. Suppress each in `cicd/codeql-suppressions.txt` with its item's ID.
+		- Note the step's measured time on 2026102211461905. If it's too slow for every full run, say so there rather than moving it.
 
 - Leak checks: the headless soak test under `--leakcheck`
 	- ID: 2026101913370214

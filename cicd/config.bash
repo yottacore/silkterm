@@ -139,6 +139,13 @@ LSAN_SUPPRESSIONS="cicd/lsan-suppressions.txt"
 ## Reports go to LEAKCHECK_OUT_DIR (gitignored), rotated like the flamegraphs.
 LEAKCHECK_DHAT_CMD=(cargo test --features dhat-heap --bin "${EXE_NAME}" heap_growth:: -- --test-threads=1)
 LEAKCHECK_OUT_DIR="cicd/artifacts/leakcheck"
+##  - CodeQL's Rust queries (cicd/utility/codeql.bash) over our crates and the
+##    vendored crates a release binary links, in the image, which has the bundle
+##    pinned. security-and-quality, since these checks are for correctness bugs
+##    as well as security ones (2026101714015789). A result the backlog already
+##    has goes in CODEQL_SUPPRESSIONS with its item's ID.
+CODEQL_SUITE="codeql/rust-queries:codeql-suites/rust-security-and-quality.qls"
+CODEQL_SUPPRESSIONS="cicd/codeql-suppressions.txt"
 
 ## Stage 3: per-monitor window size on random layouts and steps
 ## (cicd/tests/dpirand/run.py), as seconds of cases. A case is about 30 s on the

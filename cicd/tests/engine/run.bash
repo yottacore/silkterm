@@ -123,6 +123,22 @@ fCheck "the leak checks run in stage 3, after the ASan run" \
 	bash -c 'grep -A1 "^[[:space:]]*fRunAsan$" "$1" | grep -q "^[[:space:]]*fRunLeakcheck$"' _ "${engine}"
 fCheck "the config names the heap-growth test, with its feature and one thread" \
 	bash -c 'source "$1" && [[ " ${LEAKCHECK_DHAT_CMD[*]} " == *" --features dhat-heap "*" heap_growth:: "*" --test-threads=1 "* ]]' _ "${cicd}/config.bash"
+## CodeQL is in the image only, so a run on this box takes it there, or warns
+## without docker. The run inside the container does it in place.
+fCodeqlWhere(){
+	local container="${1}" leakcheck="${2}" docker="${3}" SILK_CICD_IN_CONTAINER="${4:-}" CODEQL_SUITE=x
+	eval "$(fLift '^codeqlInImage=0' '^fi$')"
+	echo "${codeqlInImage}|${codeqlSkipped}"
+}
+fCheck "a full run here takes CodeQL to the image" test "$(fCodeqlWhere 0 1 bash)" = "1|"
+fCheck "and says so with no docker, rather than stopping" bash -c '[[ "$1" == "0|no docker here"* ]]' _ "$(fCodeqlWhere 0 1 no-such-docker-here)"
+fCheck "but not with the leak checks off" test "$(fCodeqlWhere 0 0 no-such-docker-here)" = "0|"
+fCheck "nor under --container or inside it, which run it in place" \
+	bash -c '[[ "$1" == "0|" && "$2" == "0|" ]]' _ "$(fCodeqlWhere 1 1 bash)" "$(fCodeqlWhere 0 1 bash 1)"
+fCheck "the dhat test hands on to CodeQL, with the report folder" \
+	bash -c 'sed -n "/^fRunLeakcheck(){/,/^}/p" "$1" | grep -q "^[[:space:]]*fRunCodeql \"\${outDir}\"$"' _ "${engine}"
+fCheck "the config names a Rust suite, and the suppressions file is there" \
+	bash -c 'source "$1" && [[ "${CODEQL_SUITE}" == codeql/rust-queries:* && -f "$2/../${CODEQL_SUPPRESSIONS}" ]]' _ "${cicd}/config.bash" "${cicd}"
 fCheck "--no-demo turns the demo off" bash -c '[[ "$1" == *" demo=0 "* ]]' _ "$(fParse --no-demo)"
 fCheck "--gate is the merge gate" bash -c '[[ "$1" == *" gate=1 "* ]]' _ "$(fParse --gate)"
 rc=0; out="$(fParse -y --no-such-thing 2>&1)" || rc=$?
@@ -220,5 +236,6 @@ if ((failures)); then echo "${failures} failed"; exit 1; fi
 echo "all passed"
 
 ##	History:
+##		- 20261022: Where CodeQL runs.
 ##		- 20261022: --no-leakcheck, and the leak checks on with no options.
 ##		- 20260926 JC: Created.
