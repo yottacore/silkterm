@@ -557,9 +557,78 @@ fn message_box(owner: isize, title: &str, body: &str) {
 	});
 }
 
+// What a launch says when no device could be made at all, as a headline and
+// the detail under it. A Mac with no Metal device, such as a virtual machine
+// without graphics, has nothing to fall back to: wgpu has no software adapter
+// there (2026102209035801).
+fn no_device_words(macos: bool, why: &str) -> (String, String) {
+	if !macos {
+		return (format!("no usable GPU/renderer: {why}"), String::new());
+	}
+	(
+		format!(
+			"{} needs a Metal graphics device, and none could be used.",
+			config::APP_NAME
+		),
+		format!(
+			"macOS has no software renderer to draw with instead, so a Mac without Metal, \
+			such as a virtual machine with no graphics acceleration, can't run it.\n\n{why}"
+		),
+	)
+}
+
+/// The launch could not make a device on any adapter. A launch from Finder
+/// shows no stderr, so macOS says it in an alert as well.
+pub(super) fn no_device(e: &anyhow::Error) -> ! {
+	let (headline, detail) = no_device_words(cfg!(target_os = "macos"), &format!("{e:#}"));
+	eprintln!("{}: {headline}", config::APP_NAME);
+	if !detail.is_empty() {
+		eprintln!("{detail}");
+	}
+	#[cfg(target_os = "macos")]
+	alert(&headline, &detail);
+	std::process::exit(2);
+}
+
+// Modal, on the main thread, with nothing of the app's own drawn yet.
+#[cfg(target_os = "macos")]
+fn alert(headline: &str, detail: &str) {
+	use objc2_app_kit::{NSAlert, NSAlertStyle};
+	use objc2_foundation::NSString;
+	let Some(mtm) = objc2::MainThreadMarker::new() else {
+		return;
+	};
+	let alert = NSAlert::new(mtm);
+	alert.setAlertStyle(NSAlertStyle::Critical);
+	alert.setMessageText(&NSString::from_str(headline));
+	alert.setInformativeText(&NSString::from_str(detail));
+	alert.runModal();
+}
+
 #[cfg(test)]
 mod tests {
 	use super::notice_due;
+
+	// A Mac with no Metal device ended the launch with a line on stderr only,
+	// which a launch from Finder never shows.
+	// Test ID: EtS63vE
+	#[test]
+	fn no_device_on_macos_says_why_and_that_nothing_can_stand_in() {
+		let (headline, detail) = super::no_device_words(true, "No suitable graphics adapter found");
+		assert!(headline.contains("Metal"), "{headline}");
+		assert!(detail.contains("no software renderer"), "{detail}");
+		assert!(
+			detail.ends_with("No suitable graphics adapter found"),
+			"{detail}"
+		);
+		let (headline, detail) = super::no_device_words(false, "boom");
+		assert_eq!(
+			headline, "no usable GPU/renderer: boom",
+			"unchanged elsewhere"
+		);
+		assert!(detail.is_empty());
+	}
+
 	// A save nobody asked for can be refused at every resize, so it is said once
 	// a session for each file. An OK in Settings that could not save is said
 	// every time, or the button would seem to do nothing.

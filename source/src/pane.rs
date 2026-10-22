@@ -8432,23 +8432,33 @@ mod tests {
 		// Each pair runs back to back, order swapped every time, so both halves
 		// see the same box, and the median ignores the pairs some other load hit.
 		// The copy was 28% over.
-		let mut ratios: Vec<f64> = (0..15)
+		let pairs: Vec<(f64, f64)> = (0..15)
 			.map(|turn| {
 				if turn % 2 == 0 {
 					let kept = run(crate::scroll::SLIDE_ROWS);
-					kept / run(0)
+					(kept, run(0))
 				} else {
 					let bare = run(0);
-					run(crate::scroll::SLIDE_ROWS) / bare
+					(run(crate::scroll::SLIDE_ROWS), bare)
 				}
 			})
 			.collect();
+		let mut ratios: Vec<f64> = pairs.iter().map(|(kept, bare)| kept / bare).collect();
 		ratios.sort_by(f64::total_cmp);
 		let median = ratios[ratios.len() / 2];
-		eprintln!("rows kept against none: {ratios:.3?}");
+		// Millions of the clock's unit, only good side by side: ms on Linux,
+		// Mcycles on Windows, and some Macs skip the tick conversion. A steady gap
+		// means the kept rows really cost more on that box, as neighbours' memory
+		// traffic does (2026102113432602). One side jumping means the core or the
+		// host changed under it.
+		let times: Vec<(f64, f64)> = pairs
+			.iter()
+			.map(|(kept, bare)| (kept / 1e6, bare / 1e6))
+			.collect();
+		eprintln!("measured: rows kept against none: {ratios:.3?}, kept and bare: {times:.1?}");
 		assert!(
 			median <= 1.10,
-			"keeping rows cost {:.0}% more, pairs {ratios:.3?}",
+			"keeping rows cost {:.0}% more, pairs {ratios:.3?}, kept and bare: {times:.1?}",
 			(median - 1.0) * 100.0
 		);
 	}

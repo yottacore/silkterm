@@ -444,6 +444,9 @@ What a window already gives back while unused is in the [Releasing resources](20
 	- A software device on a machine with a card is not new hardware. The card keeps its rating, and the session steps down to Low with nothing written, the way a remote screen takes Remote. Back on the card, that step comes off.
 	- A fallback prints the reason and the renderer on stderr. Help > About names the adapter of the device the window has now.
 	- `SILK_REFUSE_CARD=<file>` makes every card refuse a device while the file is there, as a full one does.
+	- `--software-rendering[=BOOL]` holds the setting for one run and saves nothing. It goes on before the first device is made. On macOS it says there's no software renderer and the card draws.
+
+- macOS has only wgpu's Metal backend. GL there needs ANGLE, and Vulkan needs MoltenVK, which runs on Metal itself. So a Mac with no Metal device, such as a virtual machine with no graphics acceleration, has no adapter at all. The launch says so in an alert as well as on stderr, since a launch from Finder shows no stderr, and exits with 2. Whether to ship a real fallback there is an open question (2026102209035801).
 
 ### The Resource use group
 

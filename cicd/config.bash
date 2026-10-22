@@ -128,8 +128,9 @@ ASAN_CMD=(env "CARGO_TARGET_DIR=${TARGET_DIR}/${ASAN_DIR}" "RUSTFLAGS=-Zsanitize
 ## Leaks LSan lets through, each with the backlog item that fixes it.
 LSAN_SUPPRESSIONS="cicd/lsan-suppressions.txt"
 
-## Stage 3, with --leakcheck only: the slow leak checks, after the ASan run. Any
-## report fails the run.
+## Stage 3: the slow leak checks, after the ASan run. On in a full run, off under
+## --quick unless --leakcheck asks, and --no-leakcheck drops them. Any report fails
+## the run.
 ##  - The heap-growth test (source/src/heap_growth.rs): the main actions in
 ##    rounds, in-process with dhat as the allocator, and the heap at round 2N
 ##    against round N. The dhat-heap feature only changes the silkterm crate, so
@@ -138,6 +139,13 @@ LSAN_SUPPRESSIONS="cicd/lsan-suppressions.txt"
 ## Reports go to LEAKCHECK_OUT_DIR (gitignored), rotated like the flamegraphs.
 LEAKCHECK_DHAT_CMD=(cargo test --features dhat-heap --bin "${EXE_NAME}" heap_growth:: -- --test-threads=1)
 LEAKCHECK_OUT_DIR="cicd/artifacts/leakcheck"
+##  - CodeQL's Rust queries (cicd/utility/codeql.bash) over our crates and the
+##    vendored crates a release binary links, in the image, which has the bundle
+##    pinned. security-and-quality, since these checks are for correctness bugs
+##    as well as security ones (2026101714015789). A result the backlog already
+##    has goes in CODEQL_SUPPRESSIONS with its item's ID. Off unless --codeql.
+CODEQL_SUITE="codeql/rust-queries:codeql-suites/rust-security-and-quality.qls"
+CODEQL_SUPPRESSIONS="cicd/codeql-suppressions.txt"
 
 ## Stage 3: per-monitor window size on random layouts and steps
 ## (cicd/tests/dpirand/run.py), as seconds of cases. A case is about 30 s on the

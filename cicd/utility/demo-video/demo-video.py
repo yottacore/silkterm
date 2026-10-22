@@ -768,7 +768,7 @@ def write_config(home: Path, profile: Profile) -> None:
 	#    what ships. Pinning them is how the old gif ended up advertising a halo
 	#    and an outline no build had used for weeks.
 	#  - cursor.size.width IS pinned, and to the shipped block on purpose: it is
-	#    the before half of seg_cursor, which narrows it to a bar on camera.
+	#    the before half of seg_cursor, which narrows it to half width on camera.
 	cfgdir = home / ".config" / "silkterm"
 	cfgdir.mkdir(parents=True, exist_ok=True)
 	(cfgdir / "config.shcl").write_text('''font.use_system_family: true
@@ -1154,13 +1154,14 @@ def seg_cursor(rec: Rec, typist: Typist, mouse: Mouse) -> None:
 	# the cursor is the only thing moving on it.
 	#
 	# The scene opens on the pulsing block, already back on in the panes scene's
-	# cut. Then shape and animation change together, block and pulse to a thin bar
-	# that fades. The new animation waits out cursor.animation_resume_s before it
-	# starts, so the second hold is the longer one.
+	# cut. Then shape and animation change together, block and pulse to a
+	# half-width block that fades. The new animation waits out
+	# cursor.animation_resume_s before it starts, so the second hold is the
+	# longer one.
 	with Banner(rec, "Cursor shape and animation, your pick"):
 		rec.xdo("windowactivate", rec.win)
 		time.sleep(1.6)
-		set_cfg(rec, {"cursor.size.width": 25, "cursor.animation": "phase"})
+		set_cfg(rec, {"cursor.size.width": 50, "cursor.animation": "phase"})
 		time.sleep(3.2)
 
 def seg_wallpaper(rec: Rec, typist: Typist, mouse: Mouse) -> None:
@@ -1604,6 +1605,8 @@ if __name__ == "__main__":
 
 
 ##	Script history:
+##		- 20261022: the cursor scene narrows the block to half width, not a
+##		  thin bar.
 ##		- 20261005: type hints; the wm, ffmpeg and app logs are closed on our side
 ##		  once each child has started. Nothing recorded changes.
 ##		- 20260928: the wallpaper arrives through the control socket with

@@ -43,6 +43,9 @@ pub struct Style {
 	pub wallpaper_img: Option<Option<String>>,
 	pub wallpaper_default_fit: Option<Fit>,
 	pub wallpaper_opacity: Option<f32>,
+	/// window scope only, which the parser enforces; here so a reload folds it
+	/// back in with the rest
+	pub software_rendering: Option<bool>,
 }
 
 /// Options that apply to the whole window (only valid before any tab/pane marker).
@@ -437,6 +440,7 @@ pub fn parse<I: IntoIterator<Item = String>>(args: I) -> anyhow::Result<Cli> {
 				| "fullscreen"
 				| "persist" | "config"
 				| "reset-config"
+				| "software-rendering"
 		);
 		if window_only {
 			if cur_tab.is_some() {
@@ -487,6 +491,9 @@ pub fn parse<I: IntoIterator<Item = String>>(args: I) -> anyhow::Result<Cli> {
 				"persist" => cli.win.persist = Some(tokens.bool_value(name, inline)?),
 				"config" => cli.config = Some(PathBuf::from(tokens.value(name, inline)?)),
 				"reset-config" => cli.reset_config = true,
+				"software-rendering" => {
+					cli.win.style.software_rendering = Some(tokens.bool_value(name, inline)?);
+				}
 				_ => unreachable!("name in the matches! set above"),
 			}
 			continue;
@@ -647,6 +654,10 @@ pub fn fold_window_style(settings: &mut config::Settings, style: &Style) {
 	if let Some(opacity) = style.wallpaper_opacity {
 		model.hold(Key::BgOpacity.name(), &Value::Float(f64::from(opacity)));
 	}
+	// no row on macOS, so the hold finds nothing to hold there
+	if let Some(on) = style.software_rendering {
+		model.hold(Key::SoftwareRendering.name(), &Value::Bool(on));
+	}
 	crate::fields::fill(settings, None);
 	if let Some(img) = &style.wallpaper_img {
 		config::name_wallpaper(settings, img.as_ref().map(PathBuf::from));
@@ -664,12 +675,35 @@ impl WindowOpts {
 			|| style.fg_color.is_some()
 			|| style.wallpaper_img.is_some()
 			|| style.wallpaper_default_fit.is_some()
-			|| style.wallpaper_opacity.is_some();
+			|| style.wallpaper_opacity.is_some()
+			|| style.software_rendering.is_some();
 		if !any {
 			return;
 		}
 		let mut settings = config::settings().as_ref().clone();
 		fold_window_style(&mut settings, style);
+		config::update(settings);
+	}
+
+	/// --software-rendering goes on ahead of the rest of the style, since the
+	/// first device has to see it and the colors have to wait for the window.
+	pub fn apply_renderer(&self) {
+		let Some(on) = self.style.software_rendering else {
+			return;
+		};
+		if on && !crate::gfx::SOFTWARE_POSSIBLE {
+			eprintln!(
+				"{}: --software-rendering: macOS has no software renderer; using the graphics card",
+				config::APP_NAME
+			);
+			return;
+		}
+		let only = Style {
+			software_rendering: Some(on),
+			..Style::default()
+		};
+		let mut settings = config::settings().as_ref().clone();
+		fold_window_style(&mut settings, &only);
 		config::update(settings);
 	}
 }
@@ -836,6 +870,7 @@ Window options (must precede any tab/pane):
   --persist[=BOOL]            remember size changes despite a size or font option
   --config PATH               use an alternate config file
   --reset-config              rename the config aside and start from defaults
+  --software-rendering[=BOOL] draw on the CPU for this run, not the graphics card (not on macOS)
 
 Control (run from a shell inside a window; acts on that window, then exits):
   --wallpaper [PATH]          change the wallpaper live (no value = none)
@@ -1374,6 +1409,48 @@ mod tests {
 		let before = (s.font_size, s.bg, s.fg);
 		fold_window_style(&mut s, &c.win.style);
 		assert_eq!((s.font_size, s.bg, s.fg), before);
+	}
+
+	// A launch can ask for software rendering for that run only, beside the
+	// setting, and a save never writes it.
+	// Test ID: EtS63cT
+	#[test]
+	fn software_rendering_flag_holds_the_setting_for_the_run() {
+		assert_eq!(
+			p("--software-rendering").win.style.software_rendering,
+			Some(true)
+		);
+		assert_eq!(
+			p("--software-rendering=no").win.style.software_rendering,
+			Some(false)
+		);
+		assert_eq!(p("--columns 80").win.style.software_rendering, None);
+		let under_tab = parse(["--new-tab", "--software-rendering"].map(String::from));
+		assert!(under_tab.is_err(), "a window option");
+		// macOS has no row to hold
+		if !crate::gfx::SOFTWARE_POSSIBLE {
+			return;
+		}
+
+		let mut s = config::Settings::default();
+		fold_window_style(&mut s, &p("--software-rendering").win.style);
+		assert!(s.software_rendering);
+		assert!(
+			crate::fields::lines_of(&s).is_empty(),
+			"held for the run, so nothing to save"
+		);
+		// a setting that is on stays on without the flag, and =no turns it off
+		let mut on = crate::fields::owning(
+			config::Settings::default(),
+			&[(
+				crate::ui_spec::Key::SoftwareRendering,
+				knobs::Value::Bool(true),
+			)],
+		);
+		fold_window_style(&mut on, &p("--columns 80").win.style);
+		assert!(on.software_rendering);
+		fold_window_style(&mut on, &p("--software-rendering=no").win.style);
+		assert!(!on.software_rendering);
 	}
 
 	// nan parsed fine and went into the live settings. The session's first save

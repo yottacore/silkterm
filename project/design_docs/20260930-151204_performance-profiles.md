@@ -54,6 +54,8 @@ One setting decides how much the look may cost, so a slow machine is a choice on
 
 - A remote screen is never timed. It gets Remote (temporary) for the session, and the local rating stays as it was.
 
+- "Use remote mode when detected" under Performance is on by default. Off, a remote screen keeps the stored profile, and Remote is only put on by hand.
+
 - A graphics adapter with no card behind it gets Low without timing.
 
 - While running, if frames keep missing the display's refresh, the profile steps down one level until SilkTerm restarts. It never steps below Low, and it never writes that step down.
@@ -103,6 +105,8 @@ Remote (temporary) is Standard terminal under another name, and is never written
 - A remote screen is not rated and nothing is written for it. Every frame is encoded and shipped over a network, so the graphics card says nothing about what the person sees, and a benchmark on it would only flatter the machine.
 
 - Remote is left out of the hardware fingerprint.
+
+- "Use remote mode when detected" (`performance.detect_remote`) turns the launch half off, for a remote screen fast enough to keep the stored profile. Off, nothing asks whether the screen is remote, and also the View menu item and the dropdown still put Remote on by hand. It's read at launch, so turning it off in a session already under Remote leaves Remote on until the View menu item or a restart takes it off. It sits under Performance after the hardware check line, at the top level, since detection doesn't depend on Choose automatically.
 
 ### In the dialog
 
@@ -223,6 +227,8 @@ This reverses an earlier rule, that the step was written down. A written step ma
 - "Automatic performance detection is not sensitive enough" (Opened 20260904-163124)
 
 - "Remote display detection: a "Remote (temporary)" performance profile" (Opened 20260905-094509)
+
+- "Always use automatic remote mode when detected." (Opened 20261019-142517)
 
 - "Performance settings." (Opened 20260905-094509)
 

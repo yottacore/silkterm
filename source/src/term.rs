@@ -421,7 +421,9 @@ impl TermInstance {
 			cell_height: cell_h,
 		};
 
-		let pty = tty::new(&pane_options(command.as_deref(), cwd, tmux_client), win, id)?;
+		let term_name = &crate::config::settings().term;
+		let opts = pane_options(command.as_deref(), cwd, tmux_client, term_name);
+		let pty = tty::new(&opts, win, id)?;
 		// Capture the master fd + shell pid before the event loop takes the pty;
 		// they drive the tab title (foreground program). The fd stays valid for
 		// the pane's life (the loop owns the pty until close).
@@ -1658,6 +1660,7 @@ fn pane_options(
 	command: Option<&[String]>,
 	cwd: Option<std::path::PathBuf>,
 	tmux_client: bool,
+	term_name: &str,
 ) -> tty::Options {
 	// a CLI/menu-supplied command runs as argv[0] + args; else the default shell
 	let mut opts = tty::Options::default();
@@ -1683,6 +1686,11 @@ fn pane_options(
 	// session under it. Empty counts as unset to tmux.
 	if tmux_client {
 		opts.env.insert("TMUX".to_string(), String::new());
+	}
+	// Empty keeps the engine's pick from main. ssh passes TERM on as-is, to
+	// hosts that may not know alacritty (2026102114411311).
+	if !term_name.is_empty() {
+		opts.env.insert("TERM".to_string(), term_name.to_string());
 	}
 	opts
 }
@@ -2071,6 +2079,54 @@ mod tests {
 		);
 	}
 
+	// ssh hands TERM to the far side as-is, and a host with no alacritty entry
+	// refused nano. A TERM set in the config has to reach the program itself,
+	// and an empty one has to leave the engine's pick alone.
+	// Test ID: EtS3GO0
+	#[cfg(unix)]
+	#[test]
+	fn the_configured_term_reaches_the_program() {
+		use alacritty_terminal::event::{VoidListener, WindowSize};
+		use alacritty_terminal::event_loop::EventLoop;
+		use alacritty_terminal::index::{Column, Line, Point};
+		use alacritty_terminal::term::Term;
+		use alacritty_terminal::tty;
+
+		let seen_by_program = |term_name: &str| {
+			// What the environment holds, not the shell's $TERM: bash, which is
+			// /bin/sh on macOS, makes up an unexported TERM=dumb when none came in.
+			let probe = "printf \"<%s>\" \"$(/usr/bin/printenv TERM)\"; sleep 0.2";
+			let argv = ["/bin/sh", "-c", probe].map(String::from);
+			let opts = super::pane_options(Some(&argv), None, false, term_name);
+			let dims = grid_dims(80, 24);
+			let term = std::sync::Arc::new(alacritty_terminal::sync::FairMutex::new(Term::new(
+				super::engine_config(),
+				&dims,
+				VoidListener,
+			)));
+			let win = WindowSize {
+				num_cols: 80,
+				num_lines: 24,
+				cell_width: 8,
+				cell_height: 16,
+			};
+			let pty = tty::new(&opts, win, 0).unwrap();
+			let event_loop = EventLoop::new(term.clone(), VoidListener, pty, false, false).unwrap();
+			let _ = event_loop.spawn().join();
+			let text = term.lock().bounds_to_string(
+				Point::new(Line(0), Column(0)),
+				Point::new(Line(0), Column(79)),
+			);
+			let (_, rest) = text.split_once('<').expect("the program printed");
+			rest.split_once('>').expect("the whole TERM").0.to_string()
+		};
+		assert_eq!(seen_by_program("xterm-256color"), "xterm-256color");
+		assert_eq!(seen_by_program("vt220"), "vt220");
+		// the pane keeps this process's TERM, which in the app is setup_env's pick
+		let inherited = std::env::var("TERM").unwrap_or_default();
+		assert_eq!(seen_by_program(""), inherited);
+	}
+
 	fn argv(words: &str) -> Vec<String> {
 		words.split(' ').map(str::to_string).collect()
 	}
@@ -2230,6 +2286,7 @@ mod tests {
 			Some(&wsl),
 			Some(crate::testdir::run_dir().to_path_buf()),
 			false,
+			"",
 		);
 		assert!(
 			opts.escape_args,

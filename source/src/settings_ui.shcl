@@ -253,6 +253,14 @@ rows:
 		gate: PerfAuto
 		help: "Test the machine again at the next launch, even if nothing changed. Turns itself off after the test."
 
+	## Not under Choose automatically: Remote comes on at launch either way.
+	PerfDetectRemote:
+		label: Use remote mode when detected
+		aliases: "automatic remote mode", "remote desktop", "rdp", "vnc", "x forwarding"
+		kind: toggle
+		setting: performance.detect_remote
+		help: "Switch to the Remote (temporary) profile when SilkTerm starts on a remote screen, such as over Remote Desktop, VNC or X forwarding. Turned off, Temporary remote display mode on the View menu still switches it by hand."
+
 	TextReadability:
 		kind: heading
 		label: Text readability

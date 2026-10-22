@@ -3733,6 +3733,7 @@ impl ApplicationHandler<UserEvent> for App {
 		// normal wgpu path is used (Wayland already supports premultiplied alpha).
 		// If the GL context can't be created, fall back to the native wgpu surface.
 		let want_gl = is_x11(event_loop);
+		cli_win.apply_renderer();
 		let want = crate::gfx::wanted();
 		let (mut gfx, window) =
 			match want_gl.then(|| Gfx::new_gl_transparent(event_loop, attrs.clone(), want)) {
@@ -3756,10 +3757,7 @@ impl ApplicationHandler<UserEvent> for App {
 					};
 					#[cfg(not(windows))]
 					let gfx = Gfx::new(window.clone(), want);
-					let gfx = gfx.unwrap_or_else(|e| {
-						eprintln!("{}: no usable GPU/renderer: {e}", config::APP_NAME);
-						std::process::exit(2);
-					});
+					let gfx = gfx.unwrap_or_else(|e| dialogs::no_device(&e));
 					(gfx, window)
 				}
 			};

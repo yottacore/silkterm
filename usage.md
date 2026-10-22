@@ -4,7 +4,7 @@
 <!-- TOC ignore:true -->
 # Using SilkTerm
 
-Where the config lives, what a tab says, panes in tmux, the command line, shell integration, and opening scripts and folders on Windows.
+Where the config lives, what a tab says, panes in tmux, the command line, shell integration, programs over ssh, and opening scripts and folders on Windows.
 
 <!-- TOC ignore:true -->
 ## Table of contents
@@ -21,6 +21,7 @@ Where the config lives, what a tab says, panes in tmux, the command line, shell 
 	- [Tabs and panes](#tabs-and-panes)
 	- [Window, tab or pane](#window-tab-or-pane)
 - [Shell integration](#shell-integration)
+- [Programs over ssh](#programs-over-ssh)
 - [Opening scripts and folders on Windows](#opening-scripts-and-folders-on-windows)
 
 <!-- /TOC -->
@@ -171,8 +172,11 @@ These go before any tab or pane.
 | `--persist[=BOOL]`                    | Remember the size as usual, with a size or font option given.
 | `--config PATH`                       | Use another config file.
 | `--reset-config`                      | Move the config aside and start from the defaults.
+| `--software-rendering[=BOOL]`         | Draw on the CPU for this run only. Not on macOS.
 
 A BOOL can be `yes` or `no`, `true` or `false`, or `1` or `0`. Leaving it off means yes.
+
+`--software-rendering` does what Always use software rendering in Settings does, for that run, and saves nothing. `--software-rendering=no` draws on the graphics card for the run even with the setting on. macOS has no software renderer, so there it says so and uses the card.
 
 A window opened with `--columns`, `--rows`, `--pixel-width`, `--pixel-height`, `--font-size` or `--font-name` doesn't remember its size, font zoom or maximized state, even after a resize. It does again once each of those is changed in Settings, where the pixel sizes count as Columns and Rows. With `--persist` it remembers them as usual from the start.
 
@@ -226,6 +230,22 @@ SilkTerm handles that one for you. A few seconds after launch it adds a small di
 Same story for a shell running behind `ssh` or in a container - that one is yours to set up, since the shell you are typing at is not the process SilkTerm started.
 
 [shell-integration.md](shell-integration.md) covers all of it, including the snippets for bash, zsh and fish.
+
+## Programs over ssh
+
+SilkTerm tells programs what kind of terminal they are in through `TERM`. It is `alacritty` where this computer has that terminfo entry, since SilkTerm's terminal engine comes from Alacritty, and `xterm-256color` where it doesn't. `COLORTERM=truecolor` is set either way.
+
+`ssh` sends the same `TERM` to the other host. A host that has never had the alacritty entry, such as a stock Mac, then can't run `nano`, `less` or other full-screen programs, and says "'alacritty': unknown terminal type." There are two ways out:
+
+- Copy the entry to that host. It goes in your home folder there, so it needs no admin rights:
+
+	~~~sh
+	infocmp -x alacritty | ssh HOST 'cat > /tmp/alacritty.ti && tic -x -o ~/.terminfo /tmp/alacritty.ti && rm /tmp/alacritty.ti'
+	~~~
+
+	On macOS `sudo` keeps `HOME`, so a program run with `sudo` finds it too. Linux usually sets `HOME` to root's, so there root needs its own copy.
+
+- Or set `shell.term: xterm-256color` in the config. Every new pane gets that instead, here and over ssh. A few extras only the alacritty entry describes, such as curly underlines, go unused.
 
 ## Opening scripts and folders on Windows
 

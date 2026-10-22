@@ -136,7 +136,7 @@ cd projects/pulsar
 @ with nothing typed.
 
 @ 1. opens on the pulsing block - hold 1.6 seconds
-@ 2. full block -> thin bar, and pulse -> phase, together - hold 3.2 seconds
+@ 2. full block -> half-width block, and pulse -> phase, together - hold 3.2 seconds
 	@ The new animation starts about a second after the switch, so this hold
 	@ is the longer one.
 

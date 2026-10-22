@@ -26,8 +26,8 @@
 ##	   2. debug build (this is what the tests + profiler run against)
 ##	   3. regression tests + lints + fuzz soak (clippy for Linux, Windows and macOS
 ##	      and the advisory scan gating, the rest of cargo-deny not; the tests again
-##	      under ASan and LSan, in the container image; with --leakcheck, the
-##	      heap-growth test under dhat; scroll harness)
+##	      under ASan and LSan, in the container image; the leak checks, which
+##	      are the heap-growth test under dhat; scroll harness)
 ##	   4. profiler (flamegraph SVG; non-gating artifact - see failure policy)
 ##	   5. release build (native + cross targets; optimized, for packaging + dogfood),
 ##	      then a check that every Windows binary carries its icon and version block
@@ -51,8 +51,9 @@
 ##	   --no-private        skip the private runner (macOS, Microsoft Store)
 ##	   --no-fuzz           skip the fuzz soak (the short one in the test run still runs)
 ##	   --no-asan           skip the test suite under ASan and LSan
-##	   --leakcheck         add the slow leak checks: the heap-growth test under dhat.
-##	                       Runs under --quick too; not with --gate
+##	   --no-leakcheck      skip the slow leak checks (the heap-growth test under dhat, CodeQL)
+##	   --leakcheck         run the leak checks, under --quick too; not with --gate
+##	   --codeql            add CodeQL to the leak checks (off by default; slow)
 ##	   --no-profile        skip the profiler stage
 ##	   --no-dogfood        skip the dogfood install
 ##	   --no-publish        skip the git backup + publish stage
@@ -128,7 +129,7 @@ cd "${root}"
 stamp="$(date +%Y%m%d-%H%M%S)"
 
 ## Parse options.
-assumeYes=0; quiet=0; quick=0; gate=0; leakcheck=0; demoAsked=0; noArm=0; noWindows=0; sync=1; cliMessage=""; container="${useContainer:-0}"; noContainer=0; innerArgs=()
+assumeYes=0; quiet=0; quick=0; gate=0; leakcheck=1; leakAsked=0; codeql=0; demoAsked=0; noArm=0; noWindows=0; sync=1; cliMessage=""; container="${useContainer:-0}"; noContainer=0; innerArgs=()
 while (($#)); do case "${1}" in
 	-y|--yes)                 assumeYes=1; shift ;;
 	-q|--quiet)               quiet=1; assumeYes=1; shift ;;   ## quiet + unattended; publish runs quiet too
@@ -150,14 +151,18 @@ while (($#)); do case "${1}" in
 	--quick)                  quick=1; noArm=1; PROFILE_ENABLE=0; PACKAGE_ENABLE=0; FUZZ_SECS=0; innerArgs+=("${1}"); shift ;;   ## skip the slow stages
 	--no-fuzz)                FUZZ_SECS=0; innerArgs+=("${1}"); shift ;;
 	--no-asan)                ASAN_CMD=(); innerArgs+=("${1}"); shift ;;
-	--leakcheck)              leakcheck=1; innerArgs+=("${1}"); shift ;;            ## the slow leak checks
+	--leakcheck)              leakcheck=1; leakAsked=1; innerArgs+=("${1}"); shift ;;   ## the slow leak checks, under --quick too
+	--no-leakcheck)           leakcheck=0; innerArgs+=("${1}"); shift ;;
+	--codeql)                 codeql=1; innerArgs+=("${1}"); shift ;;                ## CodeQL in the leak checks; off until 2026102211462005
 	--message=*|--msg=*|-m=*) cliMessage="${1#*=}"; shift ;;
 	-m|--message|--msg)       cliMessage="${2-}"; shift; (($#)) && shift ;;
 	-h|--help)                sed -n '/^##	- Purpose:/,/^##	History:/p' "${BASH_SOURCE[0]}" | sed '$d; s/^##	\{0,1\}//'; exit 0 ;;
 	*) echo "unknown option: ${1} (try --help)" >&2; exit 2 ;;
 esac; done
 if ((noContainer)); then container=0; fi
-if ((gate && leakcheck)); then echo "--leakcheck adds to a full run; the gate leaves it out" >&2; exit 2; fi
+if ((gate && leakAsked && leakcheck)); then echo "--leakcheck adds to a full run; the gate leaves it out" >&2; exit 2; fi
+if ((gate && codeql)); then echo "--codeql is one of the leak checks, which the gate leaves out" >&2; exit 2; fi
+if ((quick && ! leakAsked)) || ((gate)); then leakcheck=0; fi   ## on by default, like the demo
 
 ## --no-arm: drop the ARM64 cross targets so the run (and its packages) stay
 ## x86_64-only. Native x86_64 is untouched; the Windows/Linux x86_64 crosses stay.
@@ -536,7 +541,14 @@ if ((! container && ! gate && ! quick)) && ((${#ASAN_CMD[@]})) && [[ -z "${SILK_
 	if command -v "${docker}" >/dev/null 2>&1; then asanInImage=1
 	else asanSkipped="no docker here for the image with the nightly"; fi
 fi
-if ((container || asanInImage)); then
+## CodeQL, one of the leak checks, is in the image only too. Off unless --codeql
+## asks, since a run takes over half an hour and 19 GB here (2026102211462005).
+codeqlInImage=0; codeqlSkipped=""
+if ((! container && leakcheck && codeql)) && [[ -n "${CODEQL_SUITE:-}" && -z "${SILK_CICD_IN_CONTAINER:-}" ]]; then
+	if command -v "${docker}" >/dev/null 2>&1; then codeqlInImage=1
+	else codeqlSkipped="no docker here for the image with CodeQL"; fi
+fi
+if ((container || asanInImage || codeqlInImage)); then
 	[[ -f "${containerRecipe}" ]] || fDie "missing ${containerRecipe}"
 	containerImage="$(fContainerImage)"
 	## Its real path, since a target dir linked to another disk would dangle inside.
@@ -634,9 +646,14 @@ else
 	fEcho_Clean "ASan + LSan .........: the tests again on ${SANITIZER_TOOLCHAIN}, in ${containerImage:-this container}"
 fi
 if ((leakcheck)); then
-	fEcho_Clean "Leak checks .........: heap growth under dhat, reports to ${LEAKCHECK_OUT_DIR}"
+	if ((! codeql)); then codeqlLine="CodeQL (off; --codeql adds it)"
+	elif [[ -n "${codeqlSkipped}" ]]; then codeqlLine="CodeQL (skipped, ${codeqlSkipped})"
+	else codeqlLine="CodeQL"; fi
+	fEcho_Clean "Leak checks .........: heap growth under dhat, ${codeqlLine}, reports to ${LEAKCHECK_OUT_DIR}"
+elif ((quick && ! leakAsked)); then
+	fEcho_Clean "Leak checks .........: (skipped --quick; --leakcheck adds them)"
 else
-	fEcho_Clean "Leak checks .........: (add --leakcheck)"
+	fEcho_Clean "Leak checks .........: (skipped)"
 fi
 if ((PROFILE_ENABLE)); then
 	fEcho_Clean "Profiler ............: ${PROFILE_SECS}s run -> flamegraph SVG (on headless ${RPD_HEADLESS_DISPLAY:-:98})"
@@ -1017,13 +1034,14 @@ fRunAsan(){
 	fContainerRun "${containerImage}" "${root}/cicd/utility/asan.bash" || fDie "the test suite under ASan and LSan failed (above)"
 }
 
-## --leakcheck's checks, after the ASan run. Each report goes to LEAKCHECK_OUT_DIR,
+## The leak checks, after the ASan run. On by default; --no-leakcheck drops them
+## and --quick does unless --leakcheck asks. Each report goes to LEAKCHECK_OUT_DIR,
 ## rotated like the flamegraphs. A test filter that matched nothing would pass, so
 ## a run that wrote no report fails too.
 fRunLeakcheck(){
 	local outDir report
 	local -i rc=0
-	if ((! leakcheck)); then fEcho_Clean "leak checks skipped (--leakcheck adds them)"; return 0; fi
+	if ((! leakcheck)); then fEcho_Clean "leak checks skipped$( ((quick && ! leakAsked)) && echo ' (--quick; --leakcheck adds them)')"; return 0; fi
 	outDir="${root}/${LEAKCHECK_OUT_DIR}"
 	mkdir -p "${outDir}" || fDie "could not make ${outDir}"
 	report="${outDir}/heap_${stamp}.txt"
@@ -1035,6 +1053,22 @@ fRunLeakcheck(){
 	gfs_rotate "${outDir}" heap txt >/dev/null 2>&1 || true
 	gfs_rotate "${outDir}" heap dhat.json >/dev/null 2>&1 || true
 	fEcho "OK: no heap growth past the warm-up"
+	fRunCodeql "${outDir}"
+}
+## fRunCodeql <out dir>: CodeQL over our crates and the vendored ones a release
+## binary links (cicd/utility/codeql.bash), in the image like the ASan run.
+fRunCodeql(){
+	local -r outDir="${1}" why="CodeQL found something new, or couldn't run (above)"
+	if ((! codeql)); then fEcho_Clean "CodeQL off (--codeql adds it)"; return 0; fi
+	if [[ -z "${CODEQL_SUITE:-}" ]]; then fEcho_Clean "CodeQL skipped"; return 0; fi
+	if [[ -n "${codeqlSkipped}" ]]; then fEcho "WARNING: CodeQL skipped: ${codeqlSkipped}"; return 0; fi
+	if [[ -n "${SILK_CICD_IN_CONTAINER:-}" ]]; then
+		"${here}/utility/codeql.bash" "${outDir}" "${stamp}" || fDie "${why}"
+	else
+		fContainerBuild "${containerImage}"
+		fContainerRun "${containerImage}" "${root}/cicd/utility/codeql.bash" "${outDir}" "${stamp}" || fDie "${why}"
+	fi
+	gfs_rotate "${outDir}" codeql sarif >/dev/null 2>&1 || true
 }
 
 ## The build dirs this config builds into: CLEANUP_BUILD_DIRS under the target
@@ -1556,6 +1590,9 @@ fEcho_Clean
 
 
 ##	History:
+##		- 2026-10-22: The leak checks run by default. --no-leakcheck drops them,
+##		              and --leakcheck adds them back under --quick.
+##		- 2026-10-22: CodeQL joins the leak checks, in the image, when --codeql asks.
 ##		- 2026-10-19: Every full run has the test suite again under ASan and LSan,
 ##		              in the container image, which has the nightly it needs.
 ##		- 2026-10-19: A full run removes what earlier runs left once it is stale:

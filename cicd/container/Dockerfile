@@ -19,12 +19,13 @@ ENV DEBIAN_FRONTEND=noninteractive LANG=C.UTF-8
 # puts the icon and version block into the ARM64 Windows exe (mingw's windres only
 # does x86_64), and clang-19 is what it preprocesses the .rc with. libicu and
 # libgssapi are for pwsh. python3-xlib and Pillow are for
-# the test drivers. shellcheck comes from upstream below, since trixie's is 0.10 and
-# its warnings differ.
+# the test drivers, and tmux for the tmux tests, each on a socket of its own.
+# shellcheck comes from upstream below, since trixie's is 0.10 and its warnings
+# differ.
 RUN apt-get update \
 	&& apt-get install -y --no-install-recommends \
 		bash ca-certificates curl git xz-utils unzip zstd file procps iproute2 \
-		python3 python3-venv python3-xlib python3-pil \
+		python3 python3-venv python3-xlib python3-pil tmux \
 		gcc libc6-dev pkg-config gcc-mingw-w64-x86-64 llvm-19 clang-19 dpkg-dev \
 		xvfb xauth x11-utils x11-apps x11-xserver-utils xdotool xfwm4 imagemagick expect \
 		sway xwayland cage grim dbus \
@@ -127,6 +128,23 @@ COPY --from=tools /opt/tools/bin/ /opt/cargo/bin/
 ARG RUST_NIGHTLY
 RUN : "${RUST_NIGHTLY:?}" \
 	&& /opt/cargo/bin/rustup toolchain install "${RUST_NIGHTLY}" --profile minimal -c rust-src
+
+# CodeQL for the leak checks (cicd/utility/codeql.bash). The bundle is the CLI with
+# its query packs, so a run downloads nothing. Only the Rust extractor stays, which
+# drops a third of it. That extractor runs rust-analyzer under a toolchain of its
+# own choosing, with its std source, and fetches it when it's missing, which a
+# run can't. Bump CODEQL_RUST with CODEQL_VER, to what the new extractor asks for.
+ARG CODEQL_VER=2.27.3
+ARG CODEQL_RUST=1.99.0
+ARG CODEQL_SHA256=5e7607e1b721728955e31f5402d460ad227cbd2ffed0d4cc610116755796150e
+WORKDIR /tmp/dl
+RUN curl -fsSLo codeql.tzst "https://github.com/github/codeql-action/releases/download/codeql-bundle-v${CODEQL_VER}/codeql-bundle-linux64.tar.zst" \
+	&& echo "${CODEQL_SHA256}  codeql.tzst" | sha256sum -c - \
+	&& tar -C /opt --zstd -xf codeql.tzst \
+	&& cd /opt/codeql && rm -rf actions cpp csharp go java javascript python ruby swift \
+	&& ln -s /opt/codeql/codeql /usr/local/bin/codeql \
+	&& /opt/cargo/bin/rustup toolchain install "${CODEQL_RUST}" --profile minimal -c rust-src \
+	&& cd / && rm -rf /tmp/dl
 
 # The run drops to the caller's uid once it has a passwd entry (cicd.bash writes
 # one on the way in). /cache takes the named volume, which copies this dir's mode

@@ -83,10 +83,15 @@ unset -f uname
 ## --quick turns off every slow stage, and is an option the parser knows. It
 ## keeps the x86_64 cross build and drops the ARM64 ones.
 parse="$(fLift '^assumeYes=0; ' '^esac; done$')"
-## The line after the loop that refuses an option pair, lifted on its own.
-refusal="$(grep -F 'if ((gate && leakcheck)); then' "${engine}" || true)"
+## The lines after the loop that refuse an option pair and settle the leak
+## checks, lifted on their own.
+refusal="$(grep -F 'if ((gate && leakAsked && leakcheck)); then' "${engine}" || true)"
 fCheck "the parser has a line refusing --leakcheck with --gate" test -n "${refusal}"
-parse+=$'\n'"${refusal}"
+leakOff="$(grep -F 'if ((quick && ! leakAsked)) || ((gate)); then leakcheck=0; fi' "${engine}" || true)"
+fCheck "and one turning the leak checks off under --quick and --gate" test -n "${leakOff}"
+codeqlGate="$(grep -F 'if ((gate && codeql)); then' "${engine}" || true)"
+fCheck "and one refusing --codeql with --gate" test -n "${codeqlGate}"
+parse+=$'\n'"${refusal}"$'\n'"${codeqlGate}"$'\n'"${leakOff}"
 fParse(){  ## fParse <args...>: prints the settings the parser leaves, or exits as it does
 	BUILD_CROSS=1; PROFILE_ENABLE=1; PACKAGE_ENABLE=1; FUZZ_SECS=60
 	FMT_CMD=(cargo fmt); DOGFOOD_DESTS=(x); GIT_PUBLISH=(x); DEMO_ENABLE=1
@@ -98,11 +103,21 @@ rc=0; out="$(fParse --quick 2>&1)" || rc=$?
 fCheck "--quick is accepted" test "${rc}" -eq 0
 fCheck "and turns off the ARM64 builds, profiling, packages and fuzzing" \
 	test "${out}" = "quick=1 cross=1 arm=0 demo=1 gate=0 profile=0 package=0 fuzz=0 yes=0 sync=1 leak=0 inner=--quick"
-fCheck "with no options every stage is on, and the leak checks are off" \
-	test "$(fParse)" = "quick=0 cross=1 arm=1 demo=1 gate=0 profile=1 package=1 fuzz=60 yes=0 sync=1 leak=0 inner="
+fCheck "with no options every stage is on, the leak checks too" \
+	test "$(fParse)" = "quick=0 cross=1 arm=1 demo=1 gate=0 profile=1 package=1 fuzz=60 yes=0 sync=1 leak=1 inner="
 fCheck "--leakcheck adds the leak checks, and goes into the container with the run" \
 	test "$(fParse --leakcheck)" = "quick=0 cross=1 arm=1 demo=1 gate=0 profile=1 package=1 fuzz=60 yes=0 sync=1 leak=1 inner=--leakcheck"
 fCheck "and stays on under --quick" bash -c '[[ "$1" == "quick=1 "*" leak=1 "* ]]' _ "$(fParse --quick --leakcheck)"
+fCheck "whichever comes first" bash -c '[[ "$1" == "quick=1 "*" leak=1 inner=--leakcheck --quick" ]]' _ "$(fParse --leakcheck --quick)"
+fCheck "--no-leakcheck drops them from a full run, and goes into the container" \
+	test "$(fParse --no-leakcheck)" = "quick=0 cross=1 arm=1 demo=1 gate=0 profile=1 package=1 fuzz=60 yes=0 sync=1 leak=0 inner=--no-leakcheck"
+fCheck "and from a quiet one" bash -c '[[ "$1" == *" yes=1 "*" leak=0 "* ]]' _ "$(fParse -q --no-leakcheck)"
+fCheck "the last of --leakcheck and --no-leakcheck wins" \
+	bash -c '[[ "$1" == *" leak=0 "* && "$2" == *" leak=1 "* ]]' _ "$(fParse --leakcheck --no-leakcheck)" "$(fParse --quick --no-leakcheck --leakcheck)"
+rc=0; out="$(fParse --gate 2>&1)" || rc=$?
+fCheck "the gate leaves them out with no flag" bash -c '[[ "$1" == 0 && "$2" == *" gate=1 "*" leak=0 "* ]]' _ "${rc}" "${out}"
+rc=0; out="$(fParse --gate --no-leakcheck 2>&1)" || rc=$?
+fCheck "and takes --no-leakcheck" test "${rc}" -eq 0
 rc=0; out="$(fParse --gate --leakcheck 2>&1)" || rc=$?
 fCheck "--leakcheck with --gate stops the run" test "${rc}" -eq 2
 fCheck "and says why" grep -q 'leaves it out' <<<"${out}"
@@ -110,6 +125,36 @@ fCheck "the leak checks run in stage 3, after the ASan run" \
 	bash -c 'grep -A1 "^[[:space:]]*fRunAsan$" "$1" | grep -q "^[[:space:]]*fRunLeakcheck$"' _ "${engine}"
 fCheck "the config names the heap-growth test, with its feature and one thread" \
 	bash -c 'source "$1" && [[ " ${LEAKCHECK_DHAT_CMD[*]} " == *" --features dhat-heap "*" heap_growth:: "*" --test-threads=1 "* ]]' _ "${cicd}/config.bash"
+## CodeQL is in the image only, so a run on this box takes it there, or warns
+## without docker. The run inside the container does it in place.
+## Off unless --codeql asks, until 2026102211462005 settles its cost.
+fCodeqlWhere(){
+	local container="${1}" leakcheck="${2}" codeql="${3}" docker="${4}" SILK_CICD_IN_CONTAINER="${5:-}" CODEQL_SUITE=x
+	eval "$(fLift '^codeqlInImage=0' '^fi$')"
+	echo "${codeqlInImage}|${codeqlSkipped}"
+}
+fCheck "a full run here takes CodeQL to the image when --codeql asks" test "$(fCodeqlWhere 0 1 1 bash)" = "1|"
+fCheck "and says so with no docker, rather than stopping" bash -c '[[ "$1" == "0|no docker here"* ]]' _ "$(fCodeqlWhere 0 1 1 no-such-docker-here)"
+fCheck "but not with the leak checks off" test "$(fCodeqlWhere 0 0 1 no-such-docker-here)" = "0|"
+fCheck "nor without --codeql, docker or not" \
+	bash -c '[[ "$1" == "0|" && "$2" == "0|" ]]' _ "$(fCodeqlWhere 0 1 0 bash)" "$(fCodeqlWhere 0 1 0 no-such-docker-here)"
+fCheck "nor under --container or inside it, which run it in place" \
+	bash -c '[[ "$1" == "0|" && "$2" == "0|" ]]' _ "$(fCodeqlWhere 1 1 1 bash)" "$(fCodeqlWhere 0 1 1 bash 1)"
+fParseCodeql(){ fParse "${@}" >/dev/null; eval "${parse}"; echo "codeql=${codeql} leak=${leakcheck} inner=${innerArgs[*]}"; }
+fCheck "a full run with no options leaves CodeQL off" bash -c '[[ "$1" == "codeql=0 leak=1 inner=" ]]' _ "$(fParseCodeql)"
+fCheck "--codeql adds it, and goes into the container with the run" \
+	bash -c '[[ "$1" == "codeql=1 leak=1 inner=--codeql" ]]' _ "$(fParseCodeql --codeql)"
+rc=0; out="$(fParse --gate --codeql 2>&1)" || rc=$?
+fCheck "--codeql with --gate stops the run" test "${rc}" -eq 2
+fCodeqlPlan(){ local codeql="${1}" codeqlSkipped="${2:-}"; eval "$(fLift '^	if ((! codeql)); then codeqlLine=' '^	else codeqlLine="CodeQL"; fi$')"; echo "${codeqlLine}"; }
+fCheck "the plan says how to turn it on" test "$(fCodeqlPlan 0)" = "CodeQL (off; --codeql adds it)"
+fCheck "and names it when on" bash -c '[[ "$1" == CodeQL && "$2" == "CodeQL (skipped, no docker"* ]]' _ "$(fCodeqlPlan 1)" "$(fCodeqlPlan 1 'no docker here')"
+fCheck "the step itself stays off without --codeql" \
+	bash -c 'sed -n "/^fRunCodeql(){/,/^}/p" "$1" | grep -qF "if ((! codeql)); then"' _ "${engine}"
+fCheck "the dhat test hands on to CodeQL, with the report folder" \
+	bash -c 'sed -n "/^fRunLeakcheck(){/,/^}/p" "$1" | grep -q "^[[:space:]]*fRunCodeql \"\${outDir}\"$"' _ "${engine}"
+fCheck "the config names a Rust suite, and the suppressions file is there" \
+	bash -c 'source "$1" && [[ "${CODEQL_SUITE}" == codeql/rust-queries:* && -f "$2/../${CODEQL_SUPPRESSIONS}" ]]' _ "${cicd}/config.bash" "${cicd}"
 fCheck "--no-demo turns the demo off" bash -c '[[ "$1" == *" demo=0 "* ]]' _ "$(fParse --no-demo)"
 fCheck "--gate is the merge gate" bash -c '[[ "$1" == *" gate=1 "* ]]' _ "$(fParse --gate)"
 rc=0; out="$(fParse -y --no-such-thing 2>&1)" || rc=$?
@@ -207,4 +252,6 @@ if ((failures)); then echo "${failures} failed"; exit 1; fi
 echo "all passed"
 
 ##	History:
+##		- 20261022: Where CodeQL runs, and --codeql, off by default.
+##		- 20261022: --no-leakcheck, and the leak checks on with no options.
 ##		- 20260926 JC: Created.

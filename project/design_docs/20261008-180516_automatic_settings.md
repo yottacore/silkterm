@@ -138,7 +138,7 @@ A dropdown picks a preset, or Custom. The performance profile and the theme both
 
 - While it is on, a display that can't keep up steps the profile down for the session, never below Low. Nothing is stored.
 
-- Remote is a temporary profile. It is picked by hand, or at launch on a remote screen.
+- Remote is a temporary profile. It is picked by hand, or at launch on a remote screen while "Use remote mode when detected" is on.
 	- It lasts until restart and stores nothing.
 	- The `*` changes of the stored pick are ignored while it is on, and kept.
 	- Changing one of its rows ends it. The change goes on the stored pick as a `*` change.

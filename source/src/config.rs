@@ -894,6 +894,7 @@ pub struct Settings {
 	pub copy_on_select: bool,       // panes start with copy-on-select enabled
 	pub shell_integration: bool,    // put the directory-reporting block in PowerShell profiles
 	pub bash_prompt: bool,          // give bash panes the x9ps1-git prompt (see integration.rs)
+	pub term: String,               // TERM for new panes; empty leaves the engine's pick
 	pub tmux_new_session: bool,     // a split starts in a tmux session of its own (tmux.rs)
 	pub tmux_session_name: String,  // that session's name, as a template
 	pub tmux_on_close: crate::tmux::OnClose, // what closing such a pane does to its session
@@ -933,7 +934,8 @@ pub struct Settings {
 	pub performance_profile: crate::profile::Profile, // the pick, the machine's while automatic
 	pub performance_check_hardware: bool,             // re-rate when the machine underneath changes
 	pub performance_check_next_run: bool,             // re-rate once at the next launch, then clear
-	pub rated_hardware: String, // hardware id the profile was last picked for ("" = never)
+	pub performance_detect_remote: bool, // a remote screen at launch puts the Remote profile on
+	pub rated_hardware: String,          // hardware id the profile was last picked for ("" = never)
 	pub tested_profile: Option<crate::profile::Profile>, // the machine test's pick
 	/// Where the display watch stepped the profile down to, for this session only.
 	/// Never written: one stall used to become every later launch's profile, with
@@ -1140,6 +1142,7 @@ impl Settings {
 			copy_on_select: true,
 			shell_integration: true,
 			bash_prompt: false,
+			term: String::new(),
 			tmux_new_session: false,
 			tmux_session_name: crate::tmux::DEFAULT_SESSION_NAME.to_string(),
 			tmux_on_close: crate::tmux::OnClose::Prompt,
@@ -1166,6 +1169,7 @@ impl Settings {
 			performance_profile: crate::profile::Profile::Max,
 			performance_check_hardware: true,
 			performance_check_next_run: false,
+			performance_detect_remote: true,
 			rated_hardware: String::new(),
 			tested_profile: None,
 			stepped_profile: None,
@@ -2937,6 +2941,7 @@ struct RawConfig {
 	copy_on_select: Option<bool>,
 	shell_integration: Option<bool>,
 	bash_prompt: Option<bool>,
+	term: Option<String>,
 	tmux_new_session: Option<bool>,
 	tmux_session_name: Option<String>,
 	tmux_on_close: Option<String>,
@@ -2946,6 +2951,7 @@ struct RawConfig {
 	performance_profile: Option<String>,
 	performance_check_hardware: Option<bool>,
 	performance_check_next_run: Option<bool>,
+	performance_detect_remote: Option<bool>,
 	rated_hardware: Option<String>,
 	colors: RawColors,
 	user_themes: Vec<crate::theme::UserTheme>,
@@ -3392,6 +3398,7 @@ fn read_raw(text: &str, path: &std::path::Path) -> (RawConfig, Vec<String>) {
 		performance_profile: reader.read_string("performance.profile"),
 		performance_check_hardware: reader.read_bool("performance.check_hardware"),
 		performance_check_next_run: reader.read_bool("performance.check_next_run"),
+		performance_detect_remote: reader.read_bool("performance.detect_remote"),
 		rated_hardware: reader.read_string("performance.rated_hardware"),
 		text_scrim: reader.read_bool("text.scrim.enabled"),
 		text_scrim_radius: reader.read_f32("text.scrim.radius"),
@@ -3444,6 +3451,7 @@ fn read_raw(text: &str, path: &std::path::Path) -> (RawConfig, Vec<String>) {
 		copy_on_select: reader.read_bool("shell.copy_on_select"),
 		shell_integration: reader.read_bool("shell.integration"),
 		bash_prompt: reader.read_bool("shell.bash_prompt"),
+		term: reader.read_string("shell.term"),
 		tmux_new_session: reader.read_bool("shell.tmux.always_new_session"),
 		tmux_session_name: reader.read_string("shell.tmux.session_name"),
 		tmux_on_close: reader.read_string("shell.tmux.on_close"),
@@ -4102,6 +4110,12 @@ fn resolve(raw: RawConfig) -> Settings {
 		copy_on_select: raw.copy_on_select.unwrap_or(d.copy_on_select),
 		shell_integration: raw.shell_integration.unwrap_or(d.shell_integration),
 		bash_prompt: raw.bash_prompt.unwrap_or(d.bash_prompt),
+		// one word or nothing; a space or control character can't be a TERM
+		term: raw
+			.term
+			.map(|term| term.trim().to_string())
+			.filter(|term| term.chars().all(|c| c.is_ascii_graphic()))
+			.unwrap_or(d.term),
 		tmux_new_session: raw.tmux_new_session.unwrap_or(d.tmux_new_session),
 		// blank is the default, as the tab text's is
 		tmux_session_name: raw
@@ -4144,6 +4158,9 @@ fn resolve(raw: RawConfig) -> Settings {
 		performance_check_next_run: raw
 			.performance_check_next_run
 			.unwrap_or(d.performance_check_next_run),
+		performance_detect_remote: raw
+			.performance_detect_remote
+			.unwrap_or(d.performance_detect_remote),
 		rated_hardware: raw.rated_hardware.unwrap_or_default(),
 		tested_profile: None,
 		stepped_profile: None,
@@ -7729,6 +7746,11 @@ performance:
 	# check_hardware: true  ## Default
 	# check_next_run: false  ## Default
 
+	## Use the Remote profile when SilkTerm starts on a remote screen, such as
+	## over Remote Desktop, VNC or X forwarding. Off leaves it to the View
+	## menu, under Temporary remote display mode.
+	# detect_remote: true  ## Default
+
 ## ••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
 ## Theme and colors
 ## ••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
@@ -8088,6 +8110,12 @@ shell:
 	## Give bash panes the x9ps1-git prompt, which shows git status. It
 	## replaces a prompt set in .bashrc.
 	# bash_prompt: false  ## Default
+
+	## The TERM a new pane gets. Empty is alacritty where this computer has
+	## that terminfo entry, and xterm-256color where it doesn't. ssh hands
+	## the same TERM to the remote host, so if programs there say "unknown
+	## terminal type", set xterm-256color here.
+	# term: ""  ## Default
 
 	# copy_on_select: true  ## Default
 
@@ -14655,6 +14683,29 @@ mod tests {
 		assert_eq!(odd.tmux_session_name, d.tmux_session_name);
 	}
 
+	// Empty leaves TERM to the engine; anything else is one word, and a value
+	// with a space in it can't be a TERM, so it reads as the default.
+	// Test ID: EtS3GhL
+	#[test]
+	fn shell_term_reads_one_word_and_defaults_empty() {
+		let p = std::path::Path::new("test.shcl");
+		assert_eq!(Settings::default().term, "");
+		let template = setting_lines(default_config())
+			.into_iter()
+			.find_map(|(name, line)| (name == "shell.term").then_some(line));
+		assert_eq!(template.as_deref(), Some("\t# term: \"\"  ## Default"));
+		for (text, want) in [
+			("shell:\n\tterm: xterm-256color\n", "xterm-256color"),
+			("shell.term: \" xterm-256color \"\n", "xterm-256color"),
+			("shell.term: \"xterm 256color\"\n", ""),
+			("shell.term: \"\"\n", ""),
+			("", ""),
+		] {
+			assert_eq!(resolve(read_raw(text, p).0).term, want, "{text:?}");
+		}
+		assert_eq!(read_text("shell:\n\tterm: vt220\n").term, "vt220");
+	}
+
 	// Test ID: ErnMaKh
 	#[test]
 	fn software_rendering_defaults_off() {
@@ -14771,6 +14822,25 @@ mod tests {
 		);
 		let off = "window:\n\tnew_tab_next_to_current: false\n";
 		assert!(!resolve(read_raw(off, p).0).new_tab_beside);
+	}
+
+	// Test ID: EtSG10m
+	#[test]
+	fn a_remote_screen_takes_remote_unless_turned_off() {
+		let p = std::path::Path::new("test.shcl");
+		assert!(
+			resolve(read_raw("", p).0).performance_detect_remote,
+			"on by default"
+		);
+		let template = setting_lines(default_config())
+			.into_iter()
+			.find_map(|(name, line)| (name == "performance.detect_remote").then_some(line));
+		assert_eq!(
+			template.as_deref(),
+			Some("\t# detect_remote: true  ## Default")
+		);
+		let off = "performance:\n\tdetect_remote: false\n";
+		assert!(!resolve(read_raw(off, p).0).performance_detect_remote);
 	}
 
 	// Test ID: EtAYfIz
