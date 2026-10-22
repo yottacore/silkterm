@@ -128,8 +128,9 @@ ASAN_CMD=(env "CARGO_TARGET_DIR=${TARGET_DIR}/${ASAN_DIR}" "RUSTFLAGS=-Zsanitize
 ## Leaks LSan lets through, each with the backlog item that fixes it.
 LSAN_SUPPRESSIONS="cicd/lsan-suppressions.txt"
 
-## Stage 3, with --leakcheck only: the slow leak checks, after the ASan run. Any
-## report fails the run.
+## Stage 3: the slow leak checks, after the ASan run. On in a full run, off under
+## --quick unless --leakcheck asks, and --no-leakcheck drops them. Any report fails
+## the run.
 ##  - The heap-growth test (source/src/heap_growth.rs): the main actions in
 ##    rounds, in-process with dhat as the allocator, and the heap at round 2N
 ##    against round N. The dhat-heap feature only changes the silkterm crate, so

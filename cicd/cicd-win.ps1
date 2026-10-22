@@ -64,6 +64,11 @@
 	Skip the git publish stage.
 .PARAMETER NoSync
 	Skip the remote sync check (stage 0).
+.PARAMETER NoLeakcheck
+	-Wsl only: the Linux half skips its leak checks (cicd.bash --no-leakcheck).
+	The Windows half has none.
+.PARAMETER Leakcheck
+	-Wsl only: the Linux half runs its leak checks under -Quick too.
 .PARAMETER Wsl
 	Also run the Linux half in WSL2 (.deb/.rpm, profiler, scroll harness -
 	everything Windows can't do).
@@ -91,6 +96,8 @@ param(
 	[switch]$NoDogfood,
 	[switch]$NoPublish,
 	[switch]$NoSync,
+	[switch]$NoLeakcheck,
+	[switch]$Leakcheck,
 	[switch]$Wsl,
 	[string]$WslDistro = "",
 	[string]$Message = "",
@@ -773,6 +780,8 @@ function fWslLinuxHalf {
 	if ($Quick)     { $cicdArgs += "--quick" }
 	if ($NoArm)     { $cicdArgs += "--no-arm" }
 	if ($NoPackage) { $cicdArgs += "--no-package" }
+	if ($NoLeakcheck) { $cicdArgs += "--no-leakcheck" }
+	elseif ($Leakcheck) { $cicdArgs += "--leakcheck" }
 
 	fNote "distro ......: $distro"
 	fNote "tree ........: $wslRepo (this one, not a second checkout)"
@@ -965,6 +974,7 @@ try {
 
 
 ##	History:
+##		- 2026-10-22: -NoLeakcheck and -Leakcheck, passed on to the Linux half.
 ##		- 2026-10-19 JC: The test run folder is made after the prompt, and the
 ##		  ones failed runs kept go once past the newest few.
 ##		- 2026-10-06 JC: Stage 3 runs the launcher's Start menu test.

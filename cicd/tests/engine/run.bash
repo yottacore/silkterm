@@ -83,10 +83,13 @@ unset -f uname
 ## --quick turns off every slow stage, and is an option the parser knows. It
 ## keeps the x86_64 cross build and drops the ARM64 ones.
 parse="$(fLift '^assumeYes=0; ' '^esac; done$')"
-## The line after the loop that refuses an option pair, lifted on its own.
-refusal="$(grep -F 'if ((gate && leakcheck)); then' "${engine}" || true)"
+## The lines after the loop that refuse an option pair and settle the leak
+## checks, lifted on their own.
+refusal="$(grep -F 'if ((gate && leakAsked && leakcheck)); then' "${engine}" || true)"
 fCheck "the parser has a line refusing --leakcheck with --gate" test -n "${refusal}"
-parse+=$'\n'"${refusal}"
+leakOff="$(grep -F 'if ((quick && ! leakAsked)) || ((gate)); then leakcheck=0; fi' "${engine}" || true)"
+fCheck "and one turning the leak checks off under --quick and --gate" test -n "${leakOff}"
+parse+=$'\n'"${refusal}"$'\n'"${leakOff}"
 fParse(){  ## fParse <args...>: prints the settings the parser leaves, or exits as it does
 	BUILD_CROSS=1; PROFILE_ENABLE=1; PACKAGE_ENABLE=1; FUZZ_SECS=60
 	FMT_CMD=(cargo fmt); DOGFOOD_DESTS=(x); GIT_PUBLISH=(x); DEMO_ENABLE=1
@@ -98,11 +101,21 @@ rc=0; out="$(fParse --quick 2>&1)" || rc=$?
 fCheck "--quick is accepted" test "${rc}" -eq 0
 fCheck "and turns off the ARM64 builds, profiling, packages and fuzzing" \
 	test "${out}" = "quick=1 cross=1 arm=0 demo=1 gate=0 profile=0 package=0 fuzz=0 yes=0 sync=1 leak=0 inner=--quick"
-fCheck "with no options every stage is on, and the leak checks are off" \
-	test "$(fParse)" = "quick=0 cross=1 arm=1 demo=1 gate=0 profile=1 package=1 fuzz=60 yes=0 sync=1 leak=0 inner="
+fCheck "with no options every stage is on, the leak checks too" \
+	test "$(fParse)" = "quick=0 cross=1 arm=1 demo=1 gate=0 profile=1 package=1 fuzz=60 yes=0 sync=1 leak=1 inner="
 fCheck "--leakcheck adds the leak checks, and goes into the container with the run" \
 	test "$(fParse --leakcheck)" = "quick=0 cross=1 arm=1 demo=1 gate=0 profile=1 package=1 fuzz=60 yes=0 sync=1 leak=1 inner=--leakcheck"
 fCheck "and stays on under --quick" bash -c '[[ "$1" == "quick=1 "*" leak=1 "* ]]' _ "$(fParse --quick --leakcheck)"
+fCheck "whichever comes first" bash -c '[[ "$1" == "quick=1 "*" leak=1 inner=--leakcheck --quick" ]]' _ "$(fParse --leakcheck --quick)"
+fCheck "--no-leakcheck drops them from a full run, and goes into the container" \
+	test "$(fParse --no-leakcheck)" = "quick=0 cross=1 arm=1 demo=1 gate=0 profile=1 package=1 fuzz=60 yes=0 sync=1 leak=0 inner=--no-leakcheck"
+fCheck "and from a quiet one" bash -c '[[ "$1" == *" yes=1 "*" leak=0 "* ]]' _ "$(fParse -q --no-leakcheck)"
+fCheck "the last of --leakcheck and --no-leakcheck wins" \
+	bash -c '[[ "$1" == *" leak=0 "* && "$2" == *" leak=1 "* ]]' _ "$(fParse --leakcheck --no-leakcheck)" "$(fParse --quick --no-leakcheck --leakcheck)"
+rc=0; out="$(fParse --gate 2>&1)" || rc=$?
+fCheck "the gate leaves them out with no flag" bash -c '[[ "$1" == 0 && "$2" == *" gate=1 "*" leak=0 "* ]]' _ "${rc}" "${out}"
+rc=0; out="$(fParse --gate --no-leakcheck 2>&1)" || rc=$?
+fCheck "and takes --no-leakcheck" test "${rc}" -eq 0
 rc=0; out="$(fParse --gate --leakcheck 2>&1)" || rc=$?
 fCheck "--leakcheck with --gate stops the run" test "${rc}" -eq 2
 fCheck "and says why" grep -q 'leaves it out' <<<"${out}"
@@ -207,4 +220,5 @@ if ((failures)); then echo "${failures} failed"; exit 1; fi
 echo "all passed"
 
 ##	History:
+##		- 20261022: --no-leakcheck, and the leak checks on with no options.
 ##		- 20260926 JC: Created.

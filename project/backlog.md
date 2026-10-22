@@ -230,7 +230,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- ID: 2026101714445005
 	- Type: Task
 	- Status: Waiting on automated testing
-	- Needs local test suite run?: A full run with `--leakcheck`, plain and with `--container`. The plan shows the Leak checks line. Stage 3 runs the heap-growth test after the ASan run and prints its report: the planted leak caught, all 6 actions flat, the Settings spec included since 2026101912070933 was fixed, and no known line. `cicd/artifacts/leakcheck/` gets a `heap_<stamp>` report. A full run without the flag shows "(add --leakcheck)" there, and its ASan step has 1 more ignored test.
+	- Needs local test suite run?: A full run, plain and with `--container`, with no flag, since the leak checks are on by default since 2026101916054002. The plan shows the Leak checks line. Stage 3 runs the heap-growth test after the ASan run and prints its report: the planted leak caught, all 6 actions flat, the Settings spec included since 2026101912070933 was fixed, and no known line. `cicd/artifacts/leakcheck/` gets a `heap_<stamp>` report. A run with `--no-leakcheck` shows "(skipped)" there, and the ASan step has 1 more ignored test.
 	- Priority: Avg
 	- Opened: 20261017-144450
 	- Opened by: CC
@@ -579,7 +579,9 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - CI/CD: `--leakcheck` and `--no-leakcheck`
 	- ID: 2026101916054002
 	- Type: Enhancement
-	- Status: Queued
+	- Status: Waiting on automated testing
+	- Needs local test suite run?: A full run, plain and `--container`, with no flag: the plan's Leak checks line names the heap-growth test, and stage 3 runs it after the ASan run. The same with `--no-leakcheck` shows "(skipped)" and runs none. `--quick` shows "(skipped --quick; --leakcheck adds them)", and `--quick --leakcheck` runs them.
+	- Needs external testing: `cicd-win.ps1 -Wsl` with `-NoLeakcheck` and with neither, on a Windows box.
 	- Priority: Avg
 	- Opened: 20261019-160540
 	- Opened by: JC
@@ -592,6 +594,17 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- `--no-leakcheck` is useful to exclude them from a default run, or with `--quiet`.
 	- Notes:
 		- Before the next cut.
+	- Progress log:
+		- 20261022: The leak checks are on by default, like the demo. `--no-leakcheck` drops them. `--quick` leaves them out unless `--leakcheck` asks, in either order, and the last of the two flags wins. `--gate` leaves them out and still refuses `--leakcheck`. Both flags go into the container with the run.
+		- 20261022: The switch is the `leakcheck` variable and `fRunLeakcheck`, so CodeQL (2026101913360695) and the soak test (2026101913370214) can join that step.
+		- 20261022: `cicd-win.ps1` got `-NoLeakcheck` and `-Leakcheck`, passed on to the Linux half under `-Wsl`. The Windows half has no leak checks.
+		- 20261022: `--help`, the plan, config.bash, install.md, design.md and the dhat comments say so. The plan row on 2026101714445005 is rewritten to match.
+	- Decisions:
+		- 20261022: The engine case that said no options leave the leak checks off now says they're on, per this item's requirements.
+	- Verified: 20261022. Engine cases, each watched to fail against the old cicd.bash and 2 mutants. The plan's Leak checks line with no flag, `--quick`, `--quick --leakcheck` and `-q --no-leakcheck`. shellcheck, house style, PSScriptAnalyzer on `cicd-win.ps1`, cargo check with the feature.
+		- Swept: every `--leakcheck` mention in the repo, the `cicd-win.ps1` handoff to the Linux half, and the demo's on-by-default pattern.
+	- Test case: New cases in `cicd/tests/engine/run.bash` (Er2UgY7).
+	- Branch: rnd1022
 
 - A flag to start in software-only rendering
 	- ID: 2026102209035802
@@ -621,7 +634,8 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - Put tmux in the container image, so the tmux tests run under ASan and in `--container`
 	- ID: 2026101914251765
 	- Type: Task
-	- Status: Queued
+	- Status: Waiting on automated testing
+	- Needs local test suite run?: tmux tests run, not skipped, in the ASan step and in a container run. The first full run rebuilds the image for the new tag. In the ASan step `ending_kills_the_session_started_and_no_other` runs without "no tmux here; skipped". In a `--container` run `cicd/tests/mapfollow/run.bash` runs its tmux checks instead of "skip the tmux checks: no tmux".
 	- Priority: Low
 	- Opened: 20261019-142517
 	- Opened by: CC
@@ -632,6 +646,12 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- The test tmux stays on its own short socket there too.
 	- Notes:
 		- Do it with the next full ASan run, so the image is rebuilt once.
+	- Progress log:
+		- 20261022: tmux is in `cicd/container/Dockerfile`, from trixie's apt, so the image tag changes and the next run builds it.
+		- 20261022: The socket stays short. The unit tests always go by `-S`, under the run's test folder, which is under the container's own `/tmp`. Where that path wouldn't fit they take `/tmp/silktmux-<pid>`. mapfollow puts its socket in its own folder under the test folder.
+	- Verified: 20261022. The tmux unit tests under ASan in the current image with tmux added on top: all 9 pass, and the session test runs instead of skipping. Without tmux the same test prints the skip.
+	- Test case: The existing tmux tests, `ending_kills_the_session_started_and_no_other` (Et0Zjp0) and mapfollow's tmux checks.
+	- Branch: rnd1022
 
 - Wayland: a copy a program sends while no SilkTerm window has focus is dropped
 	- ID: 2026101607585700

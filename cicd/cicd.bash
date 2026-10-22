@@ -26,8 +26,8 @@
 ##	   2. debug build (this is what the tests + profiler run against)
 ##	   3. regression tests + lints + fuzz soak (clippy for Linux, Windows and macOS
 ##	      and the advisory scan gating, the rest of cargo-deny not; the tests again
-##	      under ASan and LSan, in the container image; with --leakcheck, the
-##	      heap-growth test under dhat; scroll harness)
+##	      under ASan and LSan, in the container image; the leak checks, which
+##	      are the heap-growth test under dhat; scroll harness)
 ##	   4. profiler (flamegraph SVG; non-gating artifact - see failure policy)
 ##	   5. release build (native + cross targets; optimized, for packaging + dogfood),
 ##	      then a check that every Windows binary carries its icon and version block
@@ -51,8 +51,8 @@
 ##	   --no-private        skip the private runner (macOS, Microsoft Store)
 ##	   --no-fuzz           skip the fuzz soak (the short one in the test run still runs)
 ##	   --no-asan           skip the test suite under ASan and LSan
-##	   --leakcheck         add the slow leak checks: the heap-growth test under dhat.
-##	                       Runs under --quick too; not with --gate
+##	   --no-leakcheck      skip the slow leak checks (the heap-growth test under dhat)
+##	   --leakcheck         run the leak checks, under --quick too; not with --gate
 ##	   --no-profile        skip the profiler stage
 ##	   --no-dogfood        skip the dogfood install
 ##	   --no-publish        skip the git backup + publish stage
@@ -128,7 +128,7 @@ cd "${root}"
 stamp="$(date +%Y%m%d-%H%M%S)"
 
 ## Parse options.
-assumeYes=0; quiet=0; quick=0; gate=0; leakcheck=0; demoAsked=0; noArm=0; noWindows=0; sync=1; cliMessage=""; container="${useContainer:-0}"; noContainer=0; innerArgs=()
+assumeYes=0; quiet=0; quick=0; gate=0; leakcheck=1; leakAsked=0; demoAsked=0; noArm=0; noWindows=0; sync=1; cliMessage=""; container="${useContainer:-0}"; noContainer=0; innerArgs=()
 while (($#)); do case "${1}" in
 	-y|--yes)                 assumeYes=1; shift ;;
 	-q|--quiet)               quiet=1; assumeYes=1; shift ;;   ## quiet + unattended; publish runs quiet too
@@ -150,14 +150,16 @@ while (($#)); do case "${1}" in
 	--quick)                  quick=1; noArm=1; PROFILE_ENABLE=0; PACKAGE_ENABLE=0; FUZZ_SECS=0; innerArgs+=("${1}"); shift ;;   ## skip the slow stages
 	--no-fuzz)                FUZZ_SECS=0; innerArgs+=("${1}"); shift ;;
 	--no-asan)                ASAN_CMD=(); innerArgs+=("${1}"); shift ;;
-	--leakcheck)              leakcheck=1; innerArgs+=("${1}"); shift ;;            ## the slow leak checks
+	--leakcheck)              leakcheck=1; leakAsked=1; innerArgs+=("${1}"); shift ;;   ## the slow leak checks, under --quick too
+	--no-leakcheck)           leakcheck=0; innerArgs+=("${1}"); shift ;;
 	--message=*|--msg=*|-m=*) cliMessage="${1#*=}"; shift ;;
 	-m|--message|--msg)       cliMessage="${2-}"; shift; (($#)) && shift ;;
 	-h|--help)                sed -n '/^##	- Purpose:/,/^##	History:/p' "${BASH_SOURCE[0]}" | sed '$d; s/^##	\{0,1\}//'; exit 0 ;;
 	*) echo "unknown option: ${1} (try --help)" >&2; exit 2 ;;
 esac; done
 if ((noContainer)); then container=0; fi
-if ((gate && leakcheck)); then echo "--leakcheck adds to a full run; the gate leaves it out" >&2; exit 2; fi
+if ((gate && leakAsked && leakcheck)); then echo "--leakcheck adds to a full run; the gate leaves it out" >&2; exit 2; fi
+if ((quick && ! leakAsked)) || ((gate)); then leakcheck=0; fi   ## on by default, like the demo
 
 ## --no-arm: drop the ARM64 cross targets so the run (and its packages) stay
 ## x86_64-only. Native x86_64 is untouched; the Windows/Linux x86_64 crosses stay.
@@ -635,8 +637,10 @@ else
 fi
 if ((leakcheck)); then
 	fEcho_Clean "Leak checks .........: heap growth under dhat, reports to ${LEAKCHECK_OUT_DIR}"
+elif ((quick && ! leakAsked)); then
+	fEcho_Clean "Leak checks .........: (skipped --quick; --leakcheck adds them)"
 else
-	fEcho_Clean "Leak checks .........: (add --leakcheck)"
+	fEcho_Clean "Leak checks .........: (skipped)"
 fi
 if ((PROFILE_ENABLE)); then
 	fEcho_Clean "Profiler ............: ${PROFILE_SECS}s run -> flamegraph SVG (on headless ${RPD_HEADLESS_DISPLAY:-:98})"
@@ -1017,13 +1021,14 @@ fRunAsan(){
 	fContainerRun "${containerImage}" "${root}/cicd/utility/asan.bash" || fDie "the test suite under ASan and LSan failed (above)"
 }
 
-## --leakcheck's checks, after the ASan run. Each report goes to LEAKCHECK_OUT_DIR,
+## The leak checks, after the ASan run. On by default; --no-leakcheck drops them
+## and --quick does unless --leakcheck asks. Each report goes to LEAKCHECK_OUT_DIR,
 ## rotated like the flamegraphs. A test filter that matched nothing would pass, so
 ## a run that wrote no report fails too.
 fRunLeakcheck(){
 	local outDir report
 	local -i rc=0
-	if ((! leakcheck)); then fEcho_Clean "leak checks skipped (--leakcheck adds them)"; return 0; fi
+	if ((! leakcheck)); then fEcho_Clean "leak checks skipped$( ((quick && ! leakAsked)) && echo ' (--quick; --leakcheck adds them)')"; return 0; fi
 	outDir="${root}/${LEAKCHECK_OUT_DIR}"
 	mkdir -p "${outDir}" || fDie "could not make ${outDir}"
 	report="${outDir}/heap_${stamp}.txt"
@@ -1556,6 +1561,8 @@ fEcho_Clean
 
 
 ##	History:
+##		- 2026-10-22: The leak checks run by default. --no-leakcheck drops them,
+##		              and --leakcheck adds them back under --quick.
 ##		- 2026-10-19: Every full run has the test suite again under ASan and LSan,
 ##		              in the container image, which has the nightly it needs.
 ##		- 2026-10-19: A full run removes what earlier runs left once it is stale:

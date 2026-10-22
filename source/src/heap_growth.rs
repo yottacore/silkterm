@@ -8,7 +8,7 @@
 //! static or a list nobody trims, fails here. The sanitizers see nothing
 //! there, since the memory is still reachable.
 //!
-//! It needs the `dhat-heap` feature, which `cicd.bash --leakcheck` turns on, and
+//! It needs the `dhat-heap` feature, which the cicd.bash leak checks turn on, and
 //! a run of its own: dhat counts every thread, so `--test-threads=1` and this
 //! module's name as the filter. The report goes to `SILK_HEAP_REPORT`, or the
 //! run's test folder, and the dhat profile beside it when the test fails.
@@ -256,7 +256,7 @@ fn report_path() -> PathBuf {
 #[test]
 #[cfg_attr(
 	not(feature = "dhat-heap"),
-	ignore = "needs the dhat-heap feature, as cicd.bash --leakcheck runs it"
+	ignore = "needs the dhat-heap feature, as cicd.bash's leak checks run it"
 )]
 fn the_heap_stops_growing_after_a_warm_up() {
 	let report = report_path();

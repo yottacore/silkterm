@@ -103,8 +103,8 @@ pprof = { version = "0.14", features = ["flamegraph"], optional = true }
 [features]
 profiling = ["dep:pprof"]
 # The heap-growth test (heap_growth.rs) with dhat as the allocator. Only test
-# builds read it, so a release build with it is the same binary. `cicd.bash
-# --leakcheck` turns it on.
+# builds read it, so a release build with it is the same binary. The leak
+# checks in `cicd.bash` turn it on.
 dhat-heap = []
 
 # Test builds only. dhat counts the heap for the heap-growth test.

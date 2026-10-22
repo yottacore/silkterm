@@ -19,12 +19,13 @@ ENV DEBIAN_FRONTEND=noninteractive LANG=C.UTF-8
 # puts the icon and version block into the ARM64 Windows exe (mingw's windres only
 # does x86_64), and clang-19 is what it preprocesses the .rc with. libicu and
 # libgssapi are for pwsh. python3-xlib and Pillow are for
-# the test drivers. shellcheck comes from upstream below, since trixie's is 0.10 and
-# its warnings differ.
+# the test drivers, and tmux for the tmux tests, each on a socket of its own.
+# shellcheck comes from upstream below, since trixie's is 0.10 and its warnings
+# differ.
 RUN apt-get update \
 	&& apt-get install -y --no-install-recommends \
 		bash ca-certificates curl git xz-utils unzip zstd file procps iproute2 \
-		python3 python3-venv python3-xlib python3-pil \
+		python3 python3-venv python3-xlib python3-pil tmux \
 		gcc libc6-dev pkg-config gcc-mingw-w64-x86-64 llvm-19 clang-19 dpkg-dev \
 		xvfb xauth x11-utils x11-apps x11-xserver-utils xdotool xfwm4 imagemagick expect \
 		sway xwayland cage grim dbus \
