@@ -6122,6 +6122,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 ### Bugs
 
 - 🔘 Pipeline and installer review 20260924
+	- Status: Deferred
 	- 🔘 The one-liners run the installers on main, which still lack the 09-17 fixes and the 5.1 fix below.
 		- Note: held for the RC1 release.
 		- Note: 20260924, main also lacks the later installer fixes under Done: version order, API errors, the running-copy upgrade and the re-run repair.
