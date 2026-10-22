@@ -131,13 +131,15 @@ wayland-client = "0.31"
 
 # macOS: the system font sizes (sysfont.rs), the part of the screen a window
 # can use, below the menu bar and clear of the Dock (dialog.rs), and the menu
-# bar itself (macmenu.rs). Already in the tree through wgpu and glutin.
+# bar itself (macmenu.rs), and the alert when no device can be made
+# (app/dialogs.rs). Already in the tree through wgpu and glutin.
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6"
 objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSArray", "NSGeometry", "NSString"] }
 objc2-app-kit = { version = "0.3", default-features = false, features = [
     "std",
     "objc2-core-foundation",
+    "NSAlert",
     "NSApplication",
     "NSCell",
     "NSEvent",

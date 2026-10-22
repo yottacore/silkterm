@@ -343,7 +343,10 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - Running on macOS without a GPU fails to launch
 	- ID: 2026102209035801
 	- Type: Bug
-	- Status: Queued
+	- Status: Waiting for answers
+		- Waits on the questions.md item for this ID: keep the alert, or ship a real fallback.
+	- Needs external testing:
+		- A Mac with no Metal device, such as a VM with no graphics acceleration: a launch from Finder shows the alert, and the program exits after OK. From a shell, stderr has the same words and the exit code is 2.
 	- Severity: Avg
 	- Opened: 20261022-090358
 	- Opened by: JC
@@ -356,6 +359,18 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Expected behavior: It falls back to software rendering if possible.
 	- Notes:
 		- Pre-next-cut.
+	- Reproduced: No. No Mac here. Traced in the code instead.
+	- Actual cause:
+		- The macOS build has only wgpu's Metal backend. GL there needs ANGLE, and Vulkan needs MoltenVK, which runs on Metal itself. wgpu has no software adapter on macOS. So a Mac with no Metal device finds no adapter at all.
+		- The launch then printed "no usable GPU/renderer" on stderr and exited with 2. A launch from Finder shows no stderr, so the program seemed to just vanish.
+	- Progress log:
+		- 20261022: No fallback is possible with what's in the tree. The options are in questions.md: keep an alert, ship ANGLE with SwiftShader, or write a CPU renderer.
+		- 20261022: Done meanwhile: with no device at all, macOS says why in an alert as well as on stderr, then exits with 2. Other platforms keep their stderr line as it was.
+		- 20261022: Verified: the words test passes. fmt, and clippy for Linux, Windows and macOS, pass. The alert itself is only compiled.
+		- 20261022: No real software path on macOS was found, so the Resource use group's `not_macos` row stays as it is.
+	- Swept: the one exit site where no device could be made at launch. Rebuilds after idle and the dialogs keep their own error paths, and both need a device that once worked.
+	- Branch: rnd1022
+	- Test case: `no_device_on_macos_says_why_and_that_nothing_can_stand_in` (EtS63vE)
 
 - Demo: the cursor goes to 50% width when the cursor size and animation change
 	- ID: 2026092812581720
@@ -546,7 +561,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - A flag to start in software-only rendering
 	- ID: 2026102209035802
 	- Type: Enhancement
-	- Status: Queued
+	- Status: Done
 	- Priority: Avg
 	- Opened: 20261022-090358
 	- Opened by: JC
@@ -557,6 +572,16 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- A flag to start in software-only rendering.
 	- Notes:
 		- Pre-next-cut.
+	- Progress log:
+		- 20261022: Built as `--software-rendering[=BOOL]`, a window option. It holds `window.software_rendering` for the run, as `--font-size` holds its setting, so nothing is saved and a reload keeps it. `=no` puts a run back on the card with the setting on. On macOS it says there's no software renderer and the card draws. Listed in `--help` and usage.md.
+		- 20261022: Verified: the new test passes, and fails with the hold taken out. The usage tests, fmt, and clippy for Linux, Windows and macOS pass.
+		- 20261022: Verified on X11: without the flag the window drew on the GL path, and with it on lavapipe through Vulkan. The config file was left without the setting. Under `--new-tab` the flag is refused as a window option.
+		- 20261022: Only compiled: Windows, which takes the same setting path to WARP that `softrender.ps1` runs, and the macOS note.
+	- Swept: every place the window style is folded: `apply_style`, the reload, Settings opening and a peer's save all go through `fold_window_style`. The first device reads it through `wanted()`, now after the flag is applied.
+	- Branch: rnd1022
+	- Test case: `software_rendering_flag_holds_the_setting_for_the_run` (EtS63cT)
+	- Acceptance signoff: Self-closed: the flag drew on the software device in a real window, and its test pins the hold.
+	- Closed: 20261022-104104
 
 - Put tmux in the container image, so the tmux tests run under ASan and in `--container`
 	- ID: 2026101914251765

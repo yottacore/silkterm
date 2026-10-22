@@ -172,8 +172,11 @@ These go before any tab or pane.
 | `--persist[=BOOL]`                    | Remember the size as usual, with a size or font option given.
 | `--config PATH`                       | Use another config file.
 | `--reset-config`                      | Move the config aside and start from the defaults.
+| `--software-rendering[=BOOL]`         | Draw on the CPU for this run only. Not on macOS.
 
 A BOOL can be `yes` or `no`, `true` or `false`, or `1` or `0`. Leaving it off means yes.
+
+`--software-rendering` does what Always use software rendering in Settings does, for that run, and saves nothing. `--software-rendering=no` draws on the graphics card for the run even with the setting on. macOS has no software renderer, so there it says so and uses the card.
 
 A window opened with `--columns`, `--rows`, `--pixel-width`, `--pixel-height`, `--font-size` or `--font-name` doesn't remember its size, font zoom or maximized state, even after a resize. It does again once each of those is changed in Settings, where the pixel sizes count as Columns and Rows. With `--persist` it remembers them as usual from the start.
 
