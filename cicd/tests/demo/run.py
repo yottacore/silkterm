@@ -196,6 +196,24 @@ cfg.write_text("wallpaper:\n\tfallback_builtin: false\n")
 demo.set_cfg(rec, {"wallpaper.fallback_builtin": True})
 check("a switch is written the way shcl reads one",
 	cfg.read_text().split("\n")[1] == "\tfallback_builtin: true", repr(cfg.read_text()))
+## The cursor scene goes from the block to half width, as the script says.
+cfg.write_text('cursor:\n\tsize:\n\t\theight: 100\n\t\twidth: 100\n\tanimation: "pulse_vertical"\n')
+real_time = demo.time
+demo.time = SimpleNamespace(sleep=lambda s: None, time=time.time)
+rec.xdo = lambda *a: None
+sent.clear()
+try:
+	demo.seg_cursor(rec, None, None)
+	err = ""
+except RuntimeError as ex:
+	err = str(ex)
+finally:
+	demo.time = real_time
+lines = cfg.read_text().split("\n")
+check("the cursor scene narrows the cursor to half width",
+	not err and lines[3] == "\t\twidth: 50" and lines[2] == "\t\theight: 100", err or repr(lines))
+check("and switches the animation with it",
+	lines[4] == '\tanimation: "phase"' and sent == ["reload"], f"{lines[4]!r} {sent}")
 demo.ctl = real_ctl
 demo.write_config(rec.home, demo.PROFILES["gif"])
 check("the recording's config turns wallpaper rotation off",
@@ -244,3 +262,4 @@ print("all passed")
 ##		- 20260917 JC: Created.
 ##		- 20260926 JC: Wayland session, frame rate pin, settings changes.
 ##		- 20261005 JC: Desktop session manager; background pid.
+##		- 20261022 JC: The cursor scene's half-width cursor.

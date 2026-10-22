@@ -375,7 +375,8 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - Demo: the cursor goes to 50% width when the cursor size and animation change
 	- ID: 2026092812581720
 	- Type: Enhancement
-	- Status: Queued
+	- Status: Waiting on automated testing
+	- Needs external testing: the next demo re-record at release shows the cursor at 50% width in the cursor segment
 	- Priority: Avg
 	- Opened: 20260928-125817
 	- Opened by: JC
@@ -383,8 +384,14 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Target OS: All
 	- Requirements:
 		- When changing the cursor size and animation, change to 50% width.
+	- Progress log:
+		- 20261022: The cursor scene now goes from the full block to a 50% wide one (`cursor.size.width` is percent of the cell), with the phase animation, in place of the 25% bar. `script.txt` says the same. The gif is not re-recorded, per the decision below.
+		- Verified: the demo test drives the cursor scene and finds width 50 and the phase animation; it failed with the old 25 and passes now. The python lint is clean on both files.
+		- Swept: `script.txt`, the recorder's config comment, scene comment and history, and the docs. Only the cursor scene sets the width on camera; the starting config keeps the 100 block.
 	- Decisions:
 		- 20260928: Held for the release, with the other demo recorder change.
+	- Branch: rnd1022
+	- Test case: `cicd/tests/demo/run.py`, "the cursor scene narrows the cursor to half width".
 	- Closed:
 
 - Implement leak and static checks of the Rust code run as part of CI/CD
