@@ -545,6 +545,76 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Notes:
 		- Wayland lets a window set the clipboard only while it has the keyboard. X11 doesn't have that limit, and stays as it is.
 
+- Four prompt tests fail on a Mac where `bash` is Apple's 3.2
+	- ID: 2026102113432601
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261021-134326
+	- Opened by: CC
+	- Assigned to: CC
+	- Related IDs: 2026102113432600
+	- Target OS: macOS
+	- Test environment: GitHub macos-15, arm64
+	- Steps to reproduce:
+		- Run `cargo test` on a Mac with no newer bash ahead of /bin/bash on PATH.
+	- Incorrect behavior:
+		- These fail with `bash: ${PS1@P}: bad substitution`: `a_pane_prompt_shows_the_git_part_only_inside_a_working_tree`, `a_branch_name_is_shown_and_never_run_by_the_prompt`, `the_prompt_arrow_is_one_a_mac_has_a_font_for`, `the_prompt_shows_any_repository_and_how_far_it_is_from_upstream`.
+	- Expected behavior: The tests use a bash that can run them, or skip and say why.
+	- Reproduced: 20261021, GitHub macos-15 runner, 2 runs.
+	- Possible cause: The tests run `bash` from PATH and expand `${PS1@P}`, which needs bash 4.4. Apple's is 3.2.
+	- Notes:
+		- `cicd/ci-mac.bash` puts Homebrew's bash first, so the CI run passes.
+		- Not checked: whether the git prompt script itself works under bash 3.2.
+
+- `the_scroll_record_costs_a_full_screen_program_little` failed once on the Mac runner
+	- ID: 2026102113432602
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261021-134326
+	- Opened by: CC
+	- Assigned to: CC
+	- Related IDs: 2026102113432600
+	- Target OS: macOS
+	- Test environment: GitHub macos-15, arm64, 3 cores
+	- Reproduced: No. Failed in the first run, and passed in the next 3.
+	- Possible cause: Not looked at. The test is in pane.rs and its name says it measures a cost, so load on a 3-core VM may be enough.
+
+- Test on arm64 macOS in CI
+	- ID: 2026102113432600
+	- Type: Task
+	- Status: Done
+	- Priority: Avg
+	- Opened: 20261021-123000
+	- Opened by: JC
+	- Assigned to: CC
+	- Target OS: macOS
+	- Test environment: GitHub macos-15, arm64
+	- Requirements:
+		- Runs on any git host that can run a bash script.
+		- Free for the public repo.
+	- Notes:
+		- `cicd/ci-mac.bash` builds, lints and tests on a Mac. `.github/workflows/mac.yml` checks out and calls it, on pushes to `dev` and `main` and by hand. Another git host only has to run the script.
+		- GitHub Actions cost: nothing. Standard hosted runners are free and unlimited on public repos, macOS included. `macos-latest`, `macos-26`, `macos-15` and `macos-14` are arm64 M1 standard runners, and `macos-15-intel` is the Intel one. Larger runners are always billed. Source: docs.github.com/en/actions/reference/runners/github-hosted-runners.
+		- The 10x macOS minute multiplier that some blog posts mention only draws down a private repo's included minutes. A public repo isn't charged.
+		- Limits on a Free plan: 5 macOS jobs at once, 20 jobs in all, 6 hours a job. No rate limit is listed for public repos. GitHub warns that macOS arm64 jobs may queue longer. Source: docs.github.com/en/actions/reference/limits.
+		- The runner is an Apple M1 (Virtual) with 3 cores and 7 GB, on macOS 15.7. `system_profiler SPDisplaysDataType` prints nothing there.
+		- wgpu finds a Metal adapter named "Apple Paravirtual device", reported as an integrated GPU, so GPU tests run. GitHub's docs say Metal Performance Shaders aren't supported, which didn't matter here. 2 tests skip: no software adapter, and no Metal allocator report.
+		- A run takes 4 to 6 minutes: build 100 s, clippy 55 s, tests 185 s.
+		- Found along the way:
+			- rustup 1.28 and later doesn't install the toolchain in `rust-toolchain.toml` by itself. Run `rustup toolchain install <channel> --profile minimal --component clippy` first, and set `RUSTUP_TOOLCHAIN`, so the cross targets the file lists aren't downloaded.
+			- `bash` on PATH is Apple's 3.2. Tests that need bash 4.4 fail with `bad substitution`. `brew install bash` takes about 6 s on the runner and gives 5.3, so it goes first on PATH.
+			- `cargo test -- --nocapture` leaves no failure text. The script runs the failed tests again alone to get it.
+			- Cargo fetches glyphon, alacritty, shcl and x11-clipboard from github.com. A move to another git host means changing those URLs too.
+			- `actions/checkout@v4` prints a Node.js 20 deprecation notice. It still works.
+		- Not covered: launching the app in a window.
+		- To reuse this in another project, copy the script and the workflow. The script reads the toolchain from `rust-toolchain.toml`, and uses `--about` for the adapter.
+	- Branch: macci
+	- Commit: ba66aed
+	- Test case: Not applicable. The script was made to fail on a planted test failure, and exited 1 with the failed tests named.
+	- Closed: 20261021-134326
+
 - Wayland: must use the Wayland clipboard, and minimize other X11 features
 	- ID: 2026101509024607
 	- Type: Bug
