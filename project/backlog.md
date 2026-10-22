@@ -562,7 +562,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - Builds clean up stale artifacts and side effects when done
 	- ID: 2026101916054001
 	- Type: Enhancement
-	- Status: Queued
+	- Status: Moot
 	- Priority: Avg
 	- Opened: 20261019-160540
 	- Opened by: JC
@@ -572,6 +572,9 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Verify or insure that builds clean up stale artifacts and side effects after they're done: caches, container cruft, tmp files, etc.
 	- Notes:
 		- Before the next cut.
+		- 20261022: Same request as 2026101909222600, opened the same morning and built that day as `sweep`. It waits on its full run there.
+	- Superseded by ID: 2026101909222600
+	- Closed: 20261022-111900
 
 - CI/CD: `--leakcheck` and `--no-leakcheck`
 	- ID: 2026101916054002
