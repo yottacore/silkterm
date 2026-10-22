@@ -308,7 +308,9 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - Over ssh to a host with no alacritty terminfo, full-screen programs fail with "'alacritty': unknown terminal type."
 	- ID: 2026102114411311
 	- Type: Bug
-	- Status: Queued
+	- Status: Waiting for answers
+		- Waits on the question about the default TERM, and whether to handle ssh by itself.
+	- Needs external testing: Over ssh to a Mac with no alacritty entry, with `shell.term: xterm-256color` set: `sudo nano /etc/hosts`, `less` and `tput cols` work.
 	- Severity: Avg
 	- Opened: 20261021-144113
 	- Opened by: CC
@@ -327,6 +329,15 @@ Going forward, new issues in the new template at the bottom of this file, will g
 			- A config key to always use `xterm-256color`, which the done item above already suggested.
 			- Notice an ssh command in the pane and offer to copy the terminfo entry over, like kitty's ssh kitten does.
 			- Say in the docs how to install the entry on a remote host.
+	- Actual cause: Each pane inherits the TERM the engine picks at startup, `alacritty` when this computer has the entry. Nothing let that be changed, and ssh can't know whether the far side has the entry.
+	- Progress log:
+		- 20261022: Added `shell.term`, the TERM a new pane gets. Empty, the default, keeps the engine's pick. A value with a space or control character in it reads as empty.
+		- 20261022: usage.md has a "Programs over ssh" section, with the command that copies the entry to a remote host, and the setting as the other way out.
+		- 20261022: Left open the default, and any ssh handling of its own. Question filed.
+	- Actual fix: `shell.term` in the config, passed to each new pane's environment; usage.md "Programs over ssh".
+	- Branch: rnd1022
+	- Test case: `the_configured_term_reaches_the_program` (term.rs) fails with the setting dropped from the pane's environment and passes with it. `shell_term_reads_one_word_and_defaults_empty` (config.rs) covers the read and the template line.
+		- Swept: `pane_options` has the one spawn caller and one Windows test; no other place sets TERM for a pane. `front.rs`'s TERM is a test's tmux client.
 	- Closed:
 
 - Running on macOS without a GPU fails to launch

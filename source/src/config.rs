@@ -894,6 +894,7 @@ pub struct Settings {
 	pub copy_on_select: bool,       // panes start with copy-on-select enabled
 	pub shell_integration: bool,    // put the directory-reporting block in PowerShell profiles
 	pub bash_prompt: bool,          // give bash panes the x9ps1-git prompt (see integration.rs)
+	pub term: String,               // TERM for new panes; empty leaves the engine's pick
 	pub tmux_new_session: bool,     // a split starts in a tmux session of its own (tmux.rs)
 	pub tmux_session_name: String,  // that session's name, as a template
 	pub tmux_on_close: crate::tmux::OnClose, // what closing such a pane does to its session
@@ -1140,6 +1141,7 @@ impl Settings {
 			copy_on_select: true,
 			shell_integration: true,
 			bash_prompt: false,
+			term: String::new(),
 			tmux_new_session: false,
 			tmux_session_name: crate::tmux::DEFAULT_SESSION_NAME.to_string(),
 			tmux_on_close: crate::tmux::OnClose::Prompt,
@@ -2937,6 +2939,7 @@ struct RawConfig {
 	copy_on_select: Option<bool>,
 	shell_integration: Option<bool>,
 	bash_prompt: Option<bool>,
+	term: Option<String>,
 	tmux_new_session: Option<bool>,
 	tmux_session_name: Option<String>,
 	tmux_on_close: Option<String>,
@@ -3444,6 +3447,7 @@ fn read_raw(text: &str, path: &std::path::Path) -> (RawConfig, Vec<String>) {
 		copy_on_select: reader.read_bool("shell.copy_on_select"),
 		shell_integration: reader.read_bool("shell.integration"),
 		bash_prompt: reader.read_bool("shell.bash_prompt"),
+		term: reader.read_string("shell.term"),
 		tmux_new_session: reader.read_bool("shell.tmux.always_new_session"),
 		tmux_session_name: reader.read_string("shell.tmux.session_name"),
 		tmux_on_close: reader.read_string("shell.tmux.on_close"),
@@ -4102,6 +4106,12 @@ fn resolve(raw: RawConfig) -> Settings {
 		copy_on_select: raw.copy_on_select.unwrap_or(d.copy_on_select),
 		shell_integration: raw.shell_integration.unwrap_or(d.shell_integration),
 		bash_prompt: raw.bash_prompt.unwrap_or(d.bash_prompt),
+		// one word or nothing; a space or control character can't be a TERM
+		term: raw
+			.term
+			.map(|term| term.trim().to_string())
+			.filter(|term| term.chars().all(|c| c.is_ascii_graphic()))
+			.unwrap_or(d.term),
 		tmux_new_session: raw.tmux_new_session.unwrap_or(d.tmux_new_session),
 		// blank is the default, as the tab text's is
 		tmux_session_name: raw
@@ -8088,6 +8098,12 @@ shell:
 	## Give bash panes the x9ps1-git prompt, which shows git status. It
 	## replaces a prompt set in .bashrc.
 	# bash_prompt: false  ## Default
+
+	## The TERM a new pane gets. Empty is alacritty where this computer has
+	## that terminfo entry, and xterm-256color where it doesn't. ssh hands
+	## the same TERM to the remote host, so if programs there say "unknown
+	## terminal type", set xterm-256color here.
+	# term: ""  ## Default
 
 	# copy_on_select: true  ## Default
 
@@ -14653,6 +14669,29 @@ mod tests {
 		);
 		assert_eq!(odd.tmux_on_close, OnClose::Prompt);
 		assert_eq!(odd.tmux_session_name, d.tmux_session_name);
+	}
+
+	// Empty leaves TERM to the engine; anything else is one word, and a value
+	// with a space in it can't be a TERM, so it reads as the default.
+	// Test ID: EtS3GhL
+	#[test]
+	fn shell_term_reads_one_word_and_defaults_empty() {
+		let p = std::path::Path::new("test.shcl");
+		assert_eq!(Settings::default().term, "");
+		let template = setting_lines(default_config())
+			.into_iter()
+			.find_map(|(name, line)| (name == "shell.term").then_some(line));
+		assert_eq!(template.as_deref(), Some("\t# term: \"\"  ## Default"));
+		for (text, want) in [
+			("shell:\n\tterm: xterm-256color\n", "xterm-256color"),
+			("shell.term: \" xterm-256color \"\n", "xterm-256color"),
+			("shell.term: \"xterm 256color\"\n", ""),
+			("shell.term: \"\"\n", ""),
+			("", ""),
+		] {
+			assert_eq!(resolve(read_raw(text, p).0).term, want, "{text:?}");
+		}
+		assert_eq!(read_text("shell:\n\tterm: vt220\n").term, "vt220");
 	}
 
 	// Test ID: ErnMaKh
