@@ -137,6 +137,7 @@ pub static FIELDS: &[Field] = &[
 	},
 	flag!(PerfCheckHardware, performance_check_hardware),
 	flag!(PerfCheckNext, performance_check_next_run),
+	flag!(PerfDetectRemote, performance_detect_remote),
 	flag!(Transparency, transparent_background),
 	num!(Opacity, opacity, (0.0, 1.0)),
 	flag!(BackdropBlur, transparent_background_blur),

@@ -444,7 +444,10 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - Always use automatic remote mode when detected.
 	- ID: 2026101914251764
 	- Type: Feature
-	- Status: Queued
+	- Status: Waiting on UAT
+		- The row's label is shorter than the requested name. See Decisions.
+	- Needs local test suite run?: the slow window tests in a full run. Nothing else here needs one.
+	- Needs external testing: the wingui `wpremote` scenario on vm925w or b29w over a real RDP session with `performance.detect_remote: false`, which should keep the stored profile and the wallpaper. The Windows detection code is unchanged and only compiled here.
 	- Priority: Avg
 	- Opened: 20261019-142517
 	- Opened by: JC
@@ -455,6 +458,18 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Default true.
 	- Notes:
 		- Pre-next-cut.
+	- Decisions:
+		- 20261022: The Settings label is "Use remote mode when detected", with "automatic remote mode" as a search word. The requested wording is 46 characters, and the widest label sets the panel width on every tab; the longest now is 30. The flyover carries the rest.
+		- 20261022: Off doesn't hide anything. The View menu's "Temporary remote display mode" and Remote (temporary) in the Profile dropdown still work by hand.
+		- 20261022: The setting is read at launch. Turning it off in a session already under Remote leaves Remote on until the View menu item or a restart takes it off.
+		- 20261022: The row sits last under Performance, at the top level, since detection doesn't depend on Choose automatically.
+	- Progress log:
+		- 20261022: Added `performance.detect_remote`, default true, with its template line and Settings row on the Silk tab. Off, launch skips the remote check and keeps the stored profile. Linux and Windows both go through the one launch check, so both read it. The performance profile and automatic settings design docs say so.
+		- Verified: rustfmt, clippy for Linux, Windows and macOS, the whole silkterm unit test suite (1403 passed, 3 ignored), and the docs and tables checks.
+		- Swept: `remote_session()` has one caller, the launch check. `set_remote` callers are the View menu toggle, the Profile dropdown and tests, all by hand, so none reads the setting.
+		- Not tried in a real window on any system.
+	- Branch: rnd1022
+	- Test case: `a_remote_screen_is_ignored_when_turned_off` (rating.rs, fails with the check reordered so detection runs first) and `a_remote_screen_takes_remote_unless_turned_off` (config.rs).
 
 - Leak checks: the test suite under ThreadSanitizer on every full run
 	- ID: 2026101714445003

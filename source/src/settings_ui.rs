@@ -328,6 +328,7 @@ macro_rules! keys_of {
 			| Key::PerfAuto
 			| Key::PerfCheckHardware
 			| Key::PerfCheckNext
+			| Key::PerfDetectRemote
 			| Key::Transparency
 			| Key::BackdropBlur
 			| Key::TextScrim
@@ -521,6 +522,7 @@ fn toggle_of(settings: &Settings, key: Key) -> bool {
 		Key::PerfAuto => settings.performance_automatic,
 		Key::PerfCheckHardware => settings.performance_check_hardware,
 		Key::PerfCheckNext => settings.performance_check_next_run,
+		Key::PerfDetectRemote => settings.performance_detect_remote,
 		Key::Transparency => settings.transparent_background,
 		Key::BackdropBlur => settings.transparent_background_blur,
 		Key::TextScrim => settings.text_scrim,
@@ -3895,6 +3897,7 @@ impl SettingsDialog {
 			}
 			Key::PerfCheckHardware => self.edited.performance_check_hardware = on,
 			Key::PerfCheckNext => self.edited.performance_check_next_run = on,
+			Key::PerfDetectRemote => self.edited.performance_detect_remote = on,
 			Key::Transparency => self.edited.transparent_background = on,
 			Key::BackdropBlur => self.edited.transparent_background_blur = on,
 			Key::TextScrim => self.edited.text_scrim = on,

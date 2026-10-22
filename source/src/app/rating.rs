@@ -14,10 +14,16 @@ use std::time::Instant;
 /// and nothing is rated: the console keeps the profile it had, and the override
 /// lifts at the next launch unless that one is remote too.
 pub(super) fn remote_override_at_launch() {
-	if !crate::profile::remote_session() {
+	if !takes_remote(&config::settings(), crate::profile::remote_session) {
 		return;
 	}
 	set_live(|live| crate::profile::set_remote(live, true));
+}
+
+// Turned off, a remote screen is not even asked about; the View menu still
+// puts Remote on by hand (2026101914251764).
+fn takes_remote(live: &config::Settings, detected: impl FnOnce() -> bool) -> bool {
+	live.performance_detect_remote && detected()
 }
 
 /// What the performance watch does with a pass of the event loop.
@@ -536,6 +542,26 @@ mod tests {
 			);
 			assert_eq!(session_step(&live(true, None), drawn, true), None);
 		}
+	}
+
+	// Detection is right but unwanted: turned off, a remote screen keeps the
+	// stored profile, and nothing asks the system whether it is remote.
+	// Test ID: EtSG1KO
+	#[test]
+	fn a_remote_screen_is_ignored_when_turned_off() {
+		let on = config::Settings::default();
+		assert!(super::takes_remote(&on, || true), "on by default");
+		assert!(!super::takes_remote(&on, || false));
+		let off = config::Settings {
+			performance_detect_remote: false,
+			..on
+		};
+		let asked = std::cell::Cell::new(false);
+		assert!(!super::takes_remote(&off, || {
+			asked.set(true);
+			true
+		}));
+		assert!(!asked.get(), "detection ran with the setting off");
 	}
 
 	// Test ID: EpXN9p2

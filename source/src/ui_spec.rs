@@ -51,7 +51,7 @@ macro_rules! keys {
 
 #[rustfmt::skip]
 keys![
-	PerfAuto, PerfProfile, PerfCheckHardware, PerfCheckNext,
+	PerfAuto, PerfProfile, PerfCheckHardware, PerfCheckNext, PerfDetectRemote,
 	Transparency, Opacity, BackdropBlur,
 	BgEnabled, BgRotate, BgOpacity, BgBlur, BgFit, BgHonorXmp, BgHonorXmpLook, BgImage,
 	BgContrastMask, BgContrastSize, BgContrastStrength, BgContrastAuto,

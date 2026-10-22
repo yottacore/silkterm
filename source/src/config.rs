@@ -934,7 +934,8 @@ pub struct Settings {
 	pub performance_profile: crate::profile::Profile, // the pick, the machine's while automatic
 	pub performance_check_hardware: bool,             // re-rate when the machine underneath changes
 	pub performance_check_next_run: bool,             // re-rate once at the next launch, then clear
-	pub rated_hardware: String, // hardware id the profile was last picked for ("" = never)
+	pub performance_detect_remote: bool, // a remote screen at launch puts the Remote profile on
+	pub rated_hardware: String,          // hardware id the profile was last picked for ("" = never)
 	pub tested_profile: Option<crate::profile::Profile>, // the machine test's pick
 	/// Where the display watch stepped the profile down to, for this session only.
 	/// Never written: one stall used to become every later launch's profile, with
@@ -1168,6 +1169,7 @@ impl Settings {
 			performance_profile: crate::profile::Profile::Max,
 			performance_check_hardware: true,
 			performance_check_next_run: false,
+			performance_detect_remote: true,
 			rated_hardware: String::new(),
 			tested_profile: None,
 			stepped_profile: None,
@@ -2949,6 +2951,7 @@ struct RawConfig {
 	performance_profile: Option<String>,
 	performance_check_hardware: Option<bool>,
 	performance_check_next_run: Option<bool>,
+	performance_detect_remote: Option<bool>,
 	rated_hardware: Option<String>,
 	colors: RawColors,
 	user_themes: Vec<crate::theme::UserTheme>,
@@ -3395,6 +3398,7 @@ fn read_raw(text: &str, path: &std::path::Path) -> (RawConfig, Vec<String>) {
 		performance_profile: reader.read_string("performance.profile"),
 		performance_check_hardware: reader.read_bool("performance.check_hardware"),
 		performance_check_next_run: reader.read_bool("performance.check_next_run"),
+		performance_detect_remote: reader.read_bool("performance.detect_remote"),
 		rated_hardware: reader.read_string("performance.rated_hardware"),
 		text_scrim: reader.read_bool("text.scrim.enabled"),
 		text_scrim_radius: reader.read_f32("text.scrim.radius"),
@@ -4154,6 +4158,9 @@ fn resolve(raw: RawConfig) -> Settings {
 		performance_check_next_run: raw
 			.performance_check_next_run
 			.unwrap_or(d.performance_check_next_run),
+		performance_detect_remote: raw
+			.performance_detect_remote
+			.unwrap_or(d.performance_detect_remote),
 		rated_hardware: raw.rated_hardware.unwrap_or_default(),
 		tested_profile: None,
 		stepped_profile: None,
@@ -7738,6 +7745,11 @@ performance:
 
 	# check_hardware: true  ## Default
 	# check_next_run: false  ## Default
+
+	## Use the Remote profile when SilkTerm starts on a remote screen, such as
+	## over Remote Desktop, VNC or X forwarding. Off leaves it to the View
+	## menu, under Temporary remote display mode.
+	# detect_remote: true  ## Default
 
 ## ••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
 ## Theme and colors
@@ -14810,6 +14822,25 @@ mod tests {
 		);
 		let off = "window:\n\tnew_tab_next_to_current: false\n";
 		assert!(!resolve(read_raw(off, p).0).new_tab_beside);
+	}
+
+	// Test ID: EtSG10m
+	#[test]
+	fn a_remote_screen_takes_remote_unless_turned_off() {
+		let p = std::path::Path::new("test.shcl");
+		assert!(
+			resolve(read_raw("", p).0).performance_detect_remote,
+			"on by default"
+		);
+		let template = setting_lines(default_config())
+			.into_iter()
+			.find_map(|(name, line)| (name == "performance.detect_remote").then_some(line));
+		assert_eq!(
+			template.as_deref(),
+			Some("\t# detect_remote: true  ## Default")
+		);
+		let off = "performance:\n\tdetect_remote: false\n";
+		assert!(!resolve(read_raw(off, p).0).performance_detect_remote);
 	}
 
 	// Test ID: EtAYfIz
