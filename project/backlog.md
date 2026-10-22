@@ -247,7 +247,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261019: dhat sits under the debug build's allocation counter, only in test builds with the `dhat-heap` feature, so release builds don't change. It builds in the debug dir, since the feature changes only the silkterm crate, so there's no new build dir for the cleanup. dhat is a dev-dependency pinned at 0.3.3. The lock gained only its 5 new crates.
 		- 20261019: Found nothing new. Every action but the Settings spec reads exactly flat, and that one is 2026101912070933's leak, about 22 KB a parse, reported with its ID and not failed.
 		- Note: `tmux.rs` keeps every tmux session name the process handed out, one short string per tmux pane opened, by design. Not filed.
-		- Note: Not on Windows. `cicd-win.ps1` has no `--leakcheck`.
+		- Note: Not on Windows. Since 20261022 `cicd-win.ps1` has `-Leakcheck` and `-NoLeakcheck`, which only reach the Linux half under `-Wsl` (2026101916054002).
 	- Verified: 20261019. The test, run through the step lifted from cicd.bash with the real config: the canary caught, the rest flat, the report kept. A static cache planted in text shaping failed it, and so did the Settings spec with its known ID taken out, with the dhat profile saved. The step failed on a filter matching nothing and on a build without the feature. Engine cases, each watched to fail against a mutated cicd.bash. Unit suite (1397 + 28, 3 ignored), clippy for Linux with and without the feature, Windows and macOS, fmt, the advisory scan, shellcheck, house style, test IDs.
 	- Test case: `the_heap_stops_growing_after_a_warm_up` (EtBDWu8), whose planted leak runs every time. New cases in `cicd/tests/engine/run.bash` (Er2UgY7).
 	- Branch: leakchk
