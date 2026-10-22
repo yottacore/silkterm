@@ -535,7 +535,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261022: Limited to the release binary by path, not by what's extracted: results in `source/`, `knobs/` and the vendored crates `cargo tree -e normal --target x86_64-unknown-linux-gnu` names, proc macros left out, are kept. Build scripts, proc macros and dev or build dependencies are still extracted, since cargo needs them, and their results are dropped. 191 crates on 20261022.
 		- 20261022: Suite `rust-security-and-quality`, not the default `rust-code-scanning`. The parent asks for correctness checks too, and the quality queries are where those are. Set as `CODEQL_SUITE` in `cicd/config.bash`.
 		- 20261022: Under the leak checks, after the heap-growth test, so on in a full run and off under `--quick` and `--gate`. A run here takes it into the image, like the ASan run, and warns and skips without docker. The SARIF goes to `cicd/artifacts/leakcheck/`, rotated with the heap reports.
-		- 20261022: Measured here, it's slow. The database takes about 5 to 6 minutes. The analysis took over 22 minutes at 8 threads and about 19 GB of memory, and hadn't finished when this was written. So the step adds half an hour or more to a full run. Left in the full run for now; 2026102211462005 decides with the full number.
+		- 20261022: Measured here, it's slow. The database takes about 5 to 6 minutes. The analysis ran 35 minutes at 8 threads and about 19 GB of memory without finishing, and was stopped: 39 of 41 queries done, `rust/cleartext-logging` (CWE-312) and the summary stats still running. So the step can add well over half an hour to a full run. Left in the full run for now; 2026102211462005 decides.
 	- Verified: 20261022. The step in the rebuilt image, as the run's own uid, on a copy of this tree: vendoring, the release crate list (191), and the database with the workspace loaded and nothing fetched, about 6 minutes at 12 threads. Before the extractor's toolchain went in the image, the workspace failed to load and the new check caught it. The image builds with the new layer. New engine cases, each watched to fail against a mutated cicd.bash. shellcheck, house style.
 	- Test case: New cases in `cicd/tests/engine/run.bash` (Er2UgY7): where CodeQL runs, and that the dhat step hands on to it. The step itself is watched to fail under 2026102211462005.
 	- Branch: rnd1022
@@ -553,6 +553,8 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Plant a finding the suite flags in a scratch copy of the tree, and see `cicd/utility/codeql.bash` go red. An unused variable in `main` works.
 		- File what the first run finds, one item per distinct cause, or one roll-up for many of one kind in third-party code. Suppress each in `cicd/codeql-suppressions.txt` with its item's ID.
 		- Note the step's measured time on 2026102211461905. If it's too slow for every full run, say so there rather than moving it.
+		- 20261022: The first try didn't finish in 35 minutes (see 2026102211461905). Options: a per-query `--timeout` that fails the step, the smaller `rust-code-scanning` suite, a memory cap with `--ram`, or the step behind `--leakcheck` only. Pick after one full measured run.
+		- 20261022: The first full run will be red at this step until the findings are filed and suppressed here.
 
 - Leak checks: the headless soak test under `--leakcheck`
 	- ID: 2026101913370214
