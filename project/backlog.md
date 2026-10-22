@@ -37,7 +37,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - The window doesn't paint while the GPU is busy or short on memory, and stays blank after the load ends
 	- ID: 2026100312470535
 	- Type: Bug
-	- Status: Waiting for testing
+	- Status: Waiting on automated testing
 	- Needs external testing: A dogfood look on b23 with the GPU busy or nearly full. Move to another desktop and back, end the load, and leave the window alone. It should paint on its own. Try it once with "Free resources when idle" on and short idle times too. Started from a terminal with `SILK_IDLEDBG=1`, it prints any refused frame or rebuild.
 	- Severity: High
 	- Opened: 20261003-124705
@@ -85,7 +85,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - Updates to CICD script flags
 	- ID: 2026101816103601
 	- Type: Enhancement
-	- Status: Waiting for testing
+	- Status: Waiting on automated testing
 	- Needs local test suite run?: A full pipeline run with no options, and one with `--quick`.
 	- Priority: Avg
 	- Opened: 20261018-161036
@@ -117,7 +117,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - Leak checks: advisory scan on every full run, the extra clippy lints, and a SAFETY comment on every unsafe block
 	- ID: 2026101714445001
 	- Type: Task
-	- Status: Waiting for testing
+	- Status: Waiting on automated testing
 	- Needs local test suite run?: A full pipeline run, plain and with `--container`, to see the new advisory scan step pass in stage 3.
 	- Needs external testing: A `cicd-win.ps1` run on a Windows box, where the scan gates when cargo-deny is installed.
 	- Priority: Avg
@@ -145,7 +145,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - Add a contributor license agreement, like nano-git-db's
 	- ID: 2026101906582193
 	- Type: Task
-	- Status: Waiting for testing
+	- Status: Waiting on automated testing
 	- Priority: Avg
 	- Opened: 20261019-065821
 	- Opened by: JC
@@ -161,7 +161,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - Verify or ensure that builds clean up *stale* artifacts and side-effects after they're done
 	- ID: 2026101909222600
 	- Type: Enhancement
-	- Status: Waiting for testing
+	- Status: Waiting on automated testing
 	- Needs local test suite run?: A full run, plain and `--container`. Each shows the Cleanup line in the plan and ends with a `cleanup:` line. The first writes `.cicd-toolchain` and `.cicd-build-dirs` in its target dir and removes no build dir. The `--container` one builds the new image, removes `silkterm-cicd:2c814fabc2c7`, reports the build cache and leaves no `target/container/tmp/run_*` after a pass. Then kill a run part way, run twice more, and check that nothing new piles up in the temp dir, `target/container/tmp` or `docker ps -a`.
 	- Needs external testing: On a Windows box, a `cicd-win.ps1` run that fails keeps its test folder and writes it down, and later runs keep only the newest 5. A wingui run on each box leaves no `silkrig_*` script in `private\winrig` and no run folder; one killed part way is swept by the next run on that box.
 	- Priority: Avg
@@ -197,7 +197,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - Leak checks: the test suite under AddressSanitizer and LeakSanitizer on every full run
 	- ID: 2026101714445002
 	- Type: Task
-	- Status: Waiting for testing
+	- Status: Waiting on automated testing
 	- Needs local test suite run?: A full pipeline run, plain and with `--container`. Each builds the new image with the nightly, and stage 3 should show the canary caught and no ASan or LSan reports. The plain run does that one step in the image.
 	- Needs external testing: A `cicd-win.ps1 -Wsl` run. A distro with no docker should only warn at the ASan step.
 	- Priority: Avg
@@ -229,7 +229,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - Leak checks: `--leakcheck` and the dhat heap-growth test
 	- ID: 2026101714445005
 	- Type: Task
-	- Status: Waiting for testing
+	- Status: Waiting on automated testing
 	- Needs local test suite run?: A full run with `--leakcheck`, plain and with `--container`. The plan shows the Leak checks line. Stage 3 runs the heap-growth test after the ASan run and prints its report: the planted leak caught, 5 actions flat, and the Settings spec grown but known (2026101912070933). `cicd/artifacts/leakcheck/` gets a `heap_<stamp>` report. A full run without the flag shows "(add --leakcheck)" there, and its ASan step has 1 more ignored test.
 	- Priority: Avg
 	- Opened: 20261017-144450
@@ -701,7 +701,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Actual fix [Bug]: Output is a repaint when the screen comes back mostly as it was and almost none of the rows it showed went up with the new lines. A repaint does not ease. The view goes to the bottom, or eases only the row or so the picture itself moved. Rows that only got respaced, when a column grows wider, still count as the same. A scrollback clear is left out here. Since 2026101310563297 a clear does not ease at all.
 	- Verified: 20261013 on b23, a real `flatpak update` of 60 apps. The frames that eased during the update went from 55 to 8 with the scrollback not full, and from 50 to 12 with it full. What is left is the first table and its first redraw. The same output fed straight into the terminal eased the first table and 1 of its 242 redraws, against all of them before. The gate and the 11 scroll scenes pass.
 	- Progress log:
-		- 20261013: Waiting on signoff for a look at a real update with downloads in a real window. Still eases once: the first redraw, when the table gets its progress column.
+		- 20261013: Waiting on UAT for a look at a real update with downloads in a real window. Still eases once: the first redraw, when the table gets its progress column.
 	- Branch: fpaksnap
 	- Commit: 544b01b
 	- Acceptance signoff: JC, 20261016.
@@ -737,7 +737,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Progress log:
 		- 20261014: Short and long commands, `clear`, nano, less, `git log`, atuin's Ctrl+R, resizes and programs turning mouse and focus reports on and off were all tried, on half-empty, full and full-scrollback screens. Only the in-place redraw near the bottom slid.
 		- 20261014: The class has opened and closed several times. Every earlier fix is kept, and each is now pinned by a test that goes red when its own part is broken.
-		- 20261014: Already covered and still passing: the muffer pill smear (`pill` scene and its unit tests), nano's static rows (`nano` scene), and `clear` (`clear` scene). Waiting on signoff, since it changes what is seen and the case above isn't confirmed as the one reported.
+		- 20261014: Already covered and still passing: the muffer pill smear (`pill` scene and its unit tests), nano's static rows (`nano` scene), and `clear` (`clear` scene). Waiting on UAT, since it changes what is seen and the case above isn't confirmed as the one reported.
 		- Question: does this match what's seen, a prompt sliding down after a program that took the whole window exits? If it shows up some other way, the command and roughly where the prompt was on the screen would settle it.
 			- Now I can't reproduce it.
 	- Actual fix: a scroll counts as visible only when a row with text in it is now where the scroll put it, or a row with text left. On the normal screen, a recorded scroll with no snapshot to check against shows in place. The alt screen keeps sliding on the record alone, as before.
@@ -1853,7 +1853,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- `the_depth_sampler_says_when_a_clear_fell_in_its_span` (EscGnqt) and `a_scrollback_clear_reads_as_everything_that_refilled_it` are unchanged and still true.
 		- The flatpak item's "so `clear` eases as before" and its "pin what still eases" no longer hold. That item was left as it was.
 	- Progress log:
-		- 20261013: Waiting on signoff, since it reverses 2 recorded decisions and changes what is seen. Which `clear` was seen isn't known. Ctrl+L, or a clear followed by long output, fit what was measured. A look in a real window with the usual shell would settle it.
+		- 20261013: Waiting on UAT, since it reverses 2 recorded decisions and changes what is seen. Which `clear` was seen isn't known. Ctrl+L, or a clear followed by long output, fit what was measured. A look in a real window with the usual shell would settle it.
 		- Not checked: Windows, where ConPTY may send a clear some other way. If it repaints rather than clears, nothing here changes there.
 		- 20261013: Answer (JC): `clear` command, after e.g. a directory listing.
 		- 20261013: That isn't what was measured. `clear` here sends home, erase screen and erase scrollback, and showed at once on the build from before. b23's login shell moved to n8env with ble.sh the same day, so next is a retry of `ls` then `clear` under that shell, on the build from before and on this one.
@@ -2964,7 +2964,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 			- The run inside now gets this box's time zone. Names it stamped, such as test folders and flamegraphs, were in UTC and sorted after the ones made here.
 			- Inside, every window test passes, the new live settings one too, except the one that needs a render node, which skips as before. The Windows scenarios ran here after the container and skipped, since the console session was locked.
 			- The packages stage makes the same 12 files as the 10-09 run on this box: 4 binaries, 2 deb, 2 rpm, 2 installers, the sums and built-from.txt. Each is about 1% bigger, in line with the code added since. makensis inside is 3.12. Each package holds the exact binary that run built.
-			- Waiting on signoff, since it changes how the pipeline runs. Not merged into dev.
+			- Waiting on UAT, since it changes how the pipeline runs. Not merged into dev.
 	- Branch: container
 	- Test case: `cicd/tests/container/run.bash` (EsJg9EF): the tag, the recipe against the pins, the option split, the artifacts picked up, and the engine against a stand-in docker, the time zone included. The full run above.
 	- Acceptance signoff: Self-closed: `--container` is opt-in, so the host run is unchanged. The full run inside passed and made the same packages, and the container test passes on dev at 07f3f6a.
@@ -11635,10 +11635,10 @@ Going forward, new issues in the new template at the bottom of this file, will g
 
 	- The ID is the local time to the hundredth of a second. Opened is when it was written down, which may differ. (Use a keyboard macro and possibly something like project 'zuid' to generate.)
 
-	- Status values meaning: Testing means the fix is in and checks are running or still to run. Waiting on signoff means automated testing passed. Moot means something else changed that made it irrelevant. Canceled means it still applies but was decided against. Waiting for testing means the fix is in and waits on a long CI run or an outside test host. Can't reproduce means a real attempt to reproduce it failed.
+	- Status values meaning: Testing means the fix is in and checks are running or still to run. Waiting on UAT means automated testing passed and a person still has to try it. Moot means something else changed that made it irrelevant. Canceled means it still applies but was decided against. Waiting on automated testing means the fix is in and waits on a long CI run, a slow local suite, or an outside test host. Can't reproduce means a real attempt to reproduce it failed.
 
 	- As issues are worked, and statuses change, place them in correct sorting order within the list:
-		- First by status: Waiting for answers, Waiting on signoff, Testing, Waiting for testing, Can't reproduce, Stalled, Started, Queued, Done, Deferred, Canceled, Moot
+		- First by status: Waiting for answers, Waiting on UAT, Testing, Waiting on automated testing, Can't reproduce, Stalled, Started, Queued, Done, Deferred, Canceled, Moot
 		- Then by severity|priority: Critical, High, Avg, Low
 		- Then by type: Bugs, [not bugs together]
 
@@ -11649,7 +11649,7 @@ Template:
 - Title
 	- ID: YYYYmmDDHHMMSSNN
 	- Type: [Bug|Feature|Enhancement|Task]
-	- Status: [Queued|Waiting for answers|Waiting on signoff|Waiting for testing|Started|Testing|Stalled|Can't reproduce|Moot|Canceled|Deferred|Done]
+	- Status: [Queued|Waiting for answers|Waiting on UAT|Waiting on automated testing|Started|Testing|Stalled|Can't reproduce|Moot|Canceled|Deferred|Done]
 	- Needs local test suite run?:
 	- Needs external testing:
 	- Priority [Feature|Enhancement] | Severity [Bug]: [Critical|High|Avg|Low]
