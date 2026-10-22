@@ -2093,7 +2093,10 @@ mod tests {
 		use alacritty_terminal::tty;
 
 		let seen_by_program = |term_name: &str| {
-			let argv = ["/bin/sh", "-c", "printf \"<%s>\" \"$TERM\"; sleep 0.2"].map(String::from);
+			// What the environment holds, not the shell's $TERM: bash, which is
+			// /bin/sh on macOS, makes up an unexported TERM=dumb when none came in.
+			let probe = "printf \"<%s>\" \"$(/usr/bin/printenv TERM)\"; sleep 0.2";
+			let argv = ["/bin/sh", "-c", probe].map(String::from);
 			let opts = super::pane_options(Some(&argv), None, false, term_name);
 			let dims = grid_dims(80, 24);
 			let term = std::sync::Arc::new(alacritty_terminal::sync::FairMutex::new(Term::new(

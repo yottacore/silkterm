@@ -338,6 +338,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261022: Added `shell.term`, the TERM a new pane gets. Empty, the default, keeps the engine's pick. A value with a space or control character in it reads as empty.
 		- 20261022: usage.md has a "Programs over ssh" section, with the command that copies the entry to a remote host, and the setting as the other way out.
 		- 20261022: Left open the default, and any ssh handling of its own. Question filed.
+		- 20261022: The pane test failed on macOS: with no TERM set it read `dumb`. bash, which is macOS's `/bin/sh`, makes up an unexported `TERM=dumb` when none is inherited, so the test's own shell said so, not the engine or `login`. The test now reads the environment through `printenv`. Reproduced on Linux under bash with TERM unset; passes there, and on Linux with TERM set and unset.
 		- 20261022: `the_configured_term_reaches_the_program` fails on macOS, at `term.rs:2124`, the empty-setting case: left "dumb", right "". The program sees `TERM=dumb` where the test expects the test process's own TERM, which is unset there. Failed on the Mac CI (run 39842974082, arm64), again when run alone, and on b26 in the private runner, which failed the full pipeline run at stage 6. Linux passes, on the host and in the container. Not fixed here.
 	- Actual fix: `shell.term` in the config, passed to each new pane's environment; usage.md "Programs over ssh".
 	- Branch: rnd1022
