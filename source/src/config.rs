@@ -8583,6 +8583,7 @@ mod tests {
 	// order is the menu's and names the default shell.
 	// Test ID: Er1q5Y8
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_fresh_file_keeps_the_order_the_scan_found() {
 		let _guard = super::test_config_lock();
 		let _ = settings();
@@ -8615,6 +8616,7 @@ mod tests {
 	// stands in for the box's, so the real one is never at risk here.
 	// Test ID: Erl5E2U
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_test_run_never_writes_the_boxs_own_config() {
 		struct PutBack(Option<PathBuf>);
 		impl Drop for PutBack {
@@ -9022,6 +9024,7 @@ mod tests {
 	// would outlive the picture they came from.
 	// Test ID: EqRxesl
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_text_color_taken_from_the_wallpaper_never_reaches_the_file() {
 		let mine = ([0x12u8, 0x34, 0x56], [0x65u8, 0x43, 0x21]);
 		let _guard = super::test_config_lock();
@@ -9085,6 +9088,7 @@ mod tests {
 	// color line has to be written for it, and one written by hand stays.
 	// Test ID: Esa43ID
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_file_with_the_wallpaper_colors_off_keeps_the_theme_s() {
 		let _guard = super::test_config_lock();
 		let _ = settings();
@@ -9149,6 +9153,7 @@ mod tests {
 	// on - that took a desktop to Standard terminal and its wallpaper with it.
 	// Test ID: EpWow4f
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_session_step_down_never_reaches_the_file() {
 		let _guard = super::test_config_lock();
 		let _ = settings();
@@ -9199,6 +9204,7 @@ mod tests {
 	// state, so a reload must not lift a remote profile or a watch step.
 	// Test ID: EpWow4g
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_reload_keeps_what_the_file_never_held() {
 		let mut live = Settings {
 			stepped_profile: Some(crate::profile::Profile::High),
@@ -9219,6 +9225,7 @@ mod tests {
 	// lifts them.
 	// Test ID: EpX7AvY
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn an_apply_keeps_the_session_state_the_dialog_did_not_touch() {
 		use crate::profile::Profile;
 		let apply = |live: &Settings, opened: &Settings, edited: &Settings| {
@@ -9311,6 +9318,7 @@ mod tests {
 	// over the file, and an Apply keeps it unless the dialog picked another.
 	// Test ID: Epytxce
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_command_line_wallpaper_outlasts_a_reload_and_an_apply() {
 		let with = |raw: &str| {
 			let mut s = if raw.is_empty() {
@@ -9387,6 +9395,7 @@ mod tests {
 	// crash or a full disk during one left nothing where the config was.
 	// Test ID: EpHaZLU
 	#[test]
+	#[cfg_attr(miri, ignore = "Miri can't set a file's owner")]
 	fn a_launch_time_rewrite_never_truncates_the_config() {
 		let dir =
 			crate::testdir::run_dir().join(format!("silkterm_cfgatomic_{}", std::process::id()));
@@ -9423,6 +9432,7 @@ mod tests {
 	// be saved. Only the window can say so, so a refused write leaves word of it.
 	// Test ID: EqGnMOv
 	#[test]
+	#[cfg_attr(miri, ignore = "Miri can't sync a folder")]
 	fn a_refused_save_leaves_word_for_the_window() {
 		let _guard = super::test_config_lock();
 		let dir =
@@ -9456,6 +9466,7 @@ mod tests {
 	// this permanent.
 	// Test ID: EpHOR0K
 	#[test]
+	#[cfg_attr(miri, ignore = "Miri can't sync a folder")]
 	fn a_save_that_failed_is_not_reported_as_a_save() {
 		let dir =
 			crate::testdir::run_dir().join(format!("silkterm_cfgfail_{}", std::process::id()));
@@ -9577,6 +9588,7 @@ mod tests {
 	// nothing is written over it and nothing waits.
 	// Test ID: Epa8S0g
 	#[test]
+	#[cfg_attr(miri, ignore = "Miri is too slow for the test's time bound")]
 	fn a_failed_write_that_left_the_file_changes_nothing() {
 		let refuse: RestorePublish = |_, _| Err("refused".to_string());
 		let dir = restore_test_dir("restorekeep");
@@ -9920,6 +9932,7 @@ mod tests {
 	// so is a chord taken from another hotkey's default.
 	// Test ID: EreU3sb
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_hotkey_set_in_the_file_loads_and_a_bad_one_is_reported() {
 		use crate::input::Hotkey;
 		use crate::keys::Chord;
@@ -9976,6 +9989,7 @@ mod tests {
 	// Settings dialog's Keys tab is to save through this.
 	// Test ID: EreU3sc
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_changed_hotkey_is_written_back_by_its_name() {
 		use crate::input::Hotkey;
 		use crate::keys::{Bindings, Chord, value_text};
@@ -10019,6 +10033,7 @@ mod tests {
 	// arrow is a save of the default, and a hotkey is taken out by name.
 	// Test ID: Erekiyk
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_revert_takes_out_a_value_saved_beside_its_default() {
 		let _guard = super::test_config_lock();
 		let _ = settings();
@@ -10286,6 +10301,7 @@ mod tests {
 	// not be the thing that makes the next save rewrite it.
 	// Test ID: EpXN9p6
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_rating_leaves_a_canonical_file_canonical() {
 		for flag in [false, true] {
 			let lines = RatingLines {
@@ -10431,6 +10447,7 @@ mod tests {
 	// a reload shows the write.
 	// Test ID: EpXiS3s
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_rating_reaches_a_clean_file_wherever_its_lines_sit() {
 		let _guard = super::test_config_lock();
 		let _ = settings();
@@ -10456,6 +10473,7 @@ mod tests {
 	// byte for byte and in order, apart from the cleared value that gets one.
 	// Test ID: EpXiS3t
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_rating_in_a_clean_file_moves_no_other_line() {
 		let lines = RatingLines {
 			check_next_run: Some(true),
@@ -10568,6 +10586,7 @@ mod tests {
 	// one in are the floor: the rating writer keeps one in each of them too.
 	// Test ID: EpXiS3u
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_rating_is_kept_wherever_the_dialogs_save_kept_it() {
 		let _guard = super::test_config_lock();
 		let _ = settings();
@@ -10610,6 +10629,7 @@ mod tests {
 	// file the writer still cannot place gets a reason that is true of it.
 	// Test ID: EpXiS3v
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_clean_file_is_never_called_unreadable() {
 		let clear = RatingLines {
 			check_next_run: Some(false),
@@ -10726,6 +10746,7 @@ mod tests {
 	// line writer would then never reach the save's text.
 	// Test ID: EpXyGI5
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_rating_is_kept_where_a_save_only_requotes() {
 		let _guard = super::test_config_lock();
 		let _ = settings();
@@ -10796,6 +10817,7 @@ mod tests {
 	// again before the rating, as a launch that found it busy leaves it.
 	// Test ID: EpYDF0i
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_rating_changes_nothing_the_next_launch_migrates() {
 		let stack = format!(
 			"performance.automatic: true\nfont:\n\tuse_system_family: false\n\tfamily: '{}'\n",
@@ -10836,6 +10858,7 @@ mod tests {
 	// check has to look through the conversion as well.
 	// Test ID: EqHPuMK
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_rating_changes_nothing_the_next_launch_converts() {
 		let flat = format!("font_family: '{}'\n", SUPERSEDED_FONT_STACKS[0]);
 		let font = |s: &Settings| format!("{:?}", s.font_family);
@@ -10939,6 +10962,7 @@ mod tests {
 	// second `window:` block under one typed with a capital.
 	// Test ID: ErwTlu9
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_name_typed_in_capitals_is_the_same_setting() {
 		let text = default_config()
 			.replacen("\nwindow:\n", "\nWindow:\n", 1)
@@ -11111,6 +11135,7 @@ mod tests {
 	// theme, where the reload's backfill adds nothing that could give it a level.
 	// Test ID: EpXN9p7
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_rating_is_kept_beside_an_unreadable_line() {
 		let _guard = super::test_config_lock();
 		let _ = settings();
@@ -11157,6 +11182,7 @@ mod tests {
 	// Test ID: EpXN9p8
 	#[cfg(target_os = "linux")]
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_held_settings_file_keeps_no_rating() {
 		let _guard = super::test_config_lock();
 		let _ = settings();
@@ -11205,6 +11231,7 @@ mod tests {
 	// Test ID: EsGVpEO
 	#[cfg(target_os = "linux")]
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_window_size_saves_past_a_config_held_open() {
 		use std::os::unix::fs::MetadataExt;
 		let _guard = super::test_config_lock();
@@ -11259,6 +11286,7 @@ mod tests {
 	// Test ID: EpXatHM
 	#[cfg(unix)]
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_rating_keeps_a_linked_private_settings_file() {
 		use std::os::unix::fs::PermissionsExt;
 		let _guard = super::test_config_lock();
@@ -11299,6 +11327,7 @@ mod tests {
 	// Test ID: EpyTXE0
 	#[cfg(unix)]
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_launch_rewrite_keeps_a_linked_private_settings_file() {
 		use std::os::unix::fs::PermissionsExt;
 		let dir =
@@ -11330,6 +11359,7 @@ mod tests {
 	// Test ID: EpyTXE1
 	#[cfg(unix)]
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_launch_rewrite_writes_through_no_link_left_at_a_temp_name() {
 		let dir =
 			crate::testdir::run_dir().join(format!("silkterm_launchplant_{}", std::process::id()));
@@ -11371,6 +11401,7 @@ mod tests {
 	// Test ID: EpXatHN
 	#[cfg(unix)]
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_rating_writes_through_no_link_left_at_a_temp_name() {
 		let _guard = super::test_config_lock();
 		let _ = settings();
@@ -11417,6 +11448,7 @@ mod tests {
 	// the parser is forgiving now, so the guarantee has to be re-proven here.
 	// Test ID: ElcTgW8
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_bad_line_drops_only_its_own_setting() {
 		let p = std::path::Path::new("test.shcl");
 		let s = resolve(
@@ -11466,6 +11498,7 @@ mod tests {
 	// value aside rather than dropping it.
 	// Test ID: EsDxpmE
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_switch_s_rule_gives_the_value_and_one_set_by_hand_comes_back() {
 		let mut s = Settings::default();
 		let os = crate::sysfont::monospace();
@@ -11635,6 +11668,7 @@ mod tests {
 	// line. The reset arrow takes it out, and the next launch reads the default.
 	// Test ID: EsEAitK
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_value_writes_its_line_and_the_arrow_takes_it_out() {
 		let _guard = test_config_lock();
 		let dir = format_test_dir("auto_lines");
@@ -11686,6 +11720,7 @@ mod tests {
 	// value set aside under one comes back with it.
 	// Test ID: EsDxpmG
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_switch_and_what_it_set_aside_read_the_same_after_a_relaunch() {
 		let _guard = super::test_config_lock();
 		let _ = settings();
@@ -11738,6 +11773,7 @@ mod tests {
 	// size on, Columns and Rows follow it, and with it off they stay.
 	// Test ID: EsDxpmH
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_remembered_size_follows_the_window_and_one_set_by_hand_stays() {
 		let mut s = Settings::default();
 		remember_window(&mut s, Some("m1"), Some((120, 40)), Some(0));
@@ -11894,6 +11930,7 @@ mod tests {
 	// reloads it; this one reads it from a file written by hand.
 	// Test ID: Es9f11y
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_number_typed_past_a_slider_reads_back_without_a_word() {
 		let p = std::path::Path::new("test.shcl");
 		let ui = crate::ui_spec::ui();
@@ -11948,6 +11985,7 @@ mod tests {
 
 	// Test ID: EpHb2Tw
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_config_says_what_is_wrong_with_it() {
 		// a key set twice
 		let twice =
@@ -11999,6 +12037,7 @@ mod tests {
 	// nothing in it to complain about. A real typo beside it still gets a line.
 	// Test ID: Epz2LOS
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_saved_theme_is_not_taken_for_a_typo() {
 		let pal = crate::theme::resolve_in(&[], "SilkTerm", crate::theme::Mode::Dark, true);
 		let theme = crate::theme::UserTheme {
@@ -12031,6 +12070,7 @@ mod tests {
 	// the system switches between dark and light.
 	// Test ID: Epz2LOT
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_color_override_survives_the_system_switching_modes() {
 		let _store = test_store_lock();
 		let before = settings();
@@ -12067,6 +12107,7 @@ mod tests {
 	// there in the file, plainly set, and doing nothing.
 	// Test ID: Em2JGe0
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_setting_written_twice_falls_back_and_is_reported() {
 		let p = std::path::Path::new("test.shcl");
 		let s = resolve(
@@ -12333,6 +12374,7 @@ mod tests {
 	// after a power save, and so came up as a monitor with another size.
 	// Test ID: EsDZDJd
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_monitor_read_to_the_cm_finds_and_keeps_its_own_entry() {
 		let entry = |key: &str, columns, rows, font_zoom| MonitorSize {
 			key: key.to_string(),
@@ -12368,6 +12410,7 @@ mod tests {
 
 	// Test ID: EreYcuQ
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_size_set_by_hand_is_kept_for_its_monitor_and_found_again_there() {
 		let mut s = Settings::default();
 		let (a, b) = (Some("2560x1440_125pct_597x336mm"), Some("1920x1080_100pct"));
@@ -12478,6 +12521,7 @@ mod tests {
 	// What another window kept is read back the way a launch reads it.
 	// Test ID: EreYcuT
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_window_reads_back_the_sizes_another_window_kept() {
 		let p = std::path::Path::new("state.shcl");
 		let text = "window:\n\tremembered_columns: 132\n\tremembered_font_zoom: -3\n\tremembered_maximized: true\n\tmonitors:\n\t\t1920x1080_100pct:\n\t\t\tcolumns: 90\n\t\t\trows: 30\n\t\t\tfont_zoom: 2\n";
@@ -12818,6 +12862,7 @@ mod tests {
 	// next launch has nothing to convert and leaves the copy alone.
 	// Test ID: EreLZJY
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_launch_keeps_the_2x_file_beside_the_converted_one() {
 		let _guard = test_config_lock();
 		let dir = format_test_dir("fmtcopy_launch");
@@ -12866,6 +12911,7 @@ mod tests {
 	// leaves the first as it was, and a current file gets no copy at all.
 	// Test ID: EreLZMm
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_second_conversion_keeps_a_second_copy() {
 		let dir = format_test_dir("fmtcopy_kept");
 		let path = dir.join("config.shcl");
@@ -13096,6 +13142,7 @@ mod tests {
 	// and the copy it really made. A launch that loses nothing leaves none.
 	// Test ID: Erf0Qhu
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_launch_that_loses_a_setting_leaves_a_notice_for_the_window() {
 		let _guard = test_config_lock();
 		let _ = take_conversion_loss();
@@ -13125,6 +13172,7 @@ mod tests {
 	// converts without losing anything still keeps a copy and says nothing.
 	// Test ID: ErfTRqP
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_save_that_loses_a_setting_converting_leaves_a_notice_for_the_window() {
 		let _guard = test_config_lock();
 		let _ = take_conversion_loss();
@@ -13165,6 +13213,7 @@ mod tests {
 	// settings that still read, and every line it could not carry is counted.
 	// Test ID: ErgDo2H
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_file_shcl_cannot_migrate_is_written_new() {
 		assert!(
 			matches!(
@@ -13195,6 +13244,7 @@ mod tests {
 	// The next launch has nothing to do.
 	// Test ID: ErgDoNP
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_file_shcl_cannot_read_is_written_new() {
 		let _guard = test_config_lock();
 		let _ = take_conversion_loss();
@@ -13261,6 +13311,7 @@ mod tests {
 	// keeps the old one, and says what it could not carry as a launch would.
 	// Test ID: ErgDp3N
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_save_on_a_file_shcl_cannot_read_writes_it_new() {
 		let _guard = test_config_lock();
 		let _ = take_conversion_loss();
@@ -13394,6 +13445,7 @@ mod tests {
 	// reads, which is the defaults.
 	// Test ID: ErgZK0Q
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_current_file_that_is_not_utf8_drops_only_those_lines() {
 		let body = not_utf8_current_file();
 		let Upgrade::Dropped {
@@ -13471,6 +13523,7 @@ mod tests {
 	// still not UTF-8, and says so on the terminal only.
 	// Test ID: ErgZKCc
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_footer_line_that_is_not_utf8_goes_back_to_the_original() {
 		let latin1 = |text: &str| -> Vec<u8> {
 			text.chars()
@@ -13534,6 +13587,7 @@ mod tests {
 	// after it writes as usual.
 	// Test ID: ErgZK4X
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_launch_writes_a_current_file_that_is_not_utf8_again() {
 		let _guard = test_config_lock();
 		let _ = take_conversion_loss();
@@ -13600,6 +13654,7 @@ mod tests {
 	// Each keeps the old bytes and says what went, and neither is refused.
 	// Test ID: ErgZK8b
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_save_on_a_current_file_that_is_not_utf8_writes_it_again() {
 		let _guard = test_config_lock();
 		let _ = take_conversion_loss();
@@ -13695,6 +13750,7 @@ mod tests {
 	// that only lasts the session.
 	// Test ID: ErkRECv
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_save_on_a_deleted_file_writes_it_new() {
 		let _guard = test_config_lock();
 		let dir = format_test_dir("deleted_save");
@@ -13736,6 +13792,7 @@ mod tests {
 	// it has read the settings file.
 	// Test ID: ErqPAI7
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_save_on_a_deleted_file_keeps_it_after_a_profile_write() {
 		let _guard = test_config_lock();
 		let dir = format_test_dir("deleted_after_profile");
@@ -13758,6 +13815,7 @@ mod tests {
 	// file must not read as another window having removed every entry.
 	// Test ID: ErkREXH
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_save_on_a_deleted_file_keeps_the_shell_list() {
 		let _guard = test_config_lock();
 		let dir = format_test_dir("deleted_shells");
@@ -13814,6 +13872,7 @@ mod tests {
 	// Quotes, a space indent and a dotted line nobody changed stay as typed.
 	// Test ID: EqwBj7o
 	#[test]
+	#[cfg_attr(miri, ignore = "Miri can't set a file's owner")]
 	fn a_save_writes_only_the_lines_it_changed() {
 		let dir =
 			crate::testdir::run_dir().join(format!("silkterm_keeplines_{}", std::process::id()));
@@ -14126,6 +14185,7 @@ mod tests {
 	// one for the template, and the template's commented line comes in.
 	// Test ID: Et0TY7r
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_config_from_before_the_tab_text_template_upgrades_to_the_current_one() {
 		let new_block = setting_groups(default_config())
 			.into_iter()
@@ -14157,6 +14217,7 @@ mod tests {
 	// fix, and the launch says why the tabs don't follow it.
 	// Test ID: Et0TY7s
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_tab_text_that_cannot_be_read_is_kept_and_said() {
 		let p = std::path::Path::new("test.shcl");
 		let text = "window:\n\ttab_text: \"{ %SHELL%\"\n";
@@ -14284,6 +14345,7 @@ mod tests {
 	// save that does change one writes the word above.
 	// Test ID: Erstagk
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_config_with_each_fixed_choice_loads_and_saves_byte_identical() {
 		use crate::pane::CursorAnimation;
 		use crate::profile::Profile;
@@ -14894,6 +14956,7 @@ mod tests {
 
 	// Test ID: EtSG10m
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_remote_screen_takes_remote_unless_turned_off() {
 		let p = std::path::Path::new("test.shcl");
 		assert!(
@@ -14913,6 +14976,7 @@ mod tests {
 
 	// Test ID: EtAYfIz
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_zoom_resizes_the_window_only_when_turned_on() {
 		let p = std::path::Path::new("test.shcl");
 		assert!(!resolve(read_raw("", p).0).resize_on_zoom, "off by default");
@@ -14929,6 +14993,7 @@ mod tests {
 
 	// Test ID: Esa0ndg
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_theme_pick_leaves_the_font_alone_unless_turned_off() {
 		let p = std::path::Path::new("test.shcl");
 		assert!(
@@ -14951,6 +15016,7 @@ mod tests {
 	// font even with fonts following themes.
 	// Test ID: Esa0nip
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_saved_theme_keeps_its_font_and_an_old_one_still_loads() {
 		let old = "theme: Mine\n\
 			font:\n\
@@ -15214,6 +15280,7 @@ mod tests {
 	// list is the user's own: every entry carries, in order, with all its fields.
 	// Test ID: EpyvpeD
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_converted_file_keeps_its_shell_list() {
 		let list = vec![
 			crate::shells::ShellEntry {
@@ -15261,6 +15328,7 @@ mod tests {
 	// from Settings then loads every carried value the same.
 	// Test ID: EpZcBUO
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_flat_wallpaper_converts_to_the_image_and_survives_a_save() {
 		let _guard = super::test_config_lock();
 		let _ = settings();
@@ -15336,6 +15404,7 @@ mod tests {
 	// is either carried to a setting or dropped, and the block keeps its heading.
 	// Test ID: EpZcBUP
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_flat_key_named_like_a_block_never_ends_up_on_its_heading() {
 		let dir =
 			crate::testdir::run_dir().join(format!("silkterm_flathead_{}", std::process::id()));
@@ -15543,6 +15612,7 @@ mod tests {
 	// Test ID: EpZtWPY
 	#[cfg(target_os = "linux")]
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_busy_launch_defers_the_wallpaper_repair() {
 		let _guard = super::test_config_lock();
 		let _ = settings();
@@ -15608,6 +15678,7 @@ mod tests {
 	// Test ID: EpZts0G
 	#[cfg(unix)]
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_repair_keeps_a_linked_private_settings_file() {
 		use std::os::unix::fs::PermissionsExt;
 		let dir = crate::testdir::run_dir().join(format!("silkterm_wplink_{}", std::process::id()));
@@ -15655,6 +15726,7 @@ mod tests {
 	// Test ID: EpZfVmi
 	#[cfg(unix)]
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_conversion_keeps_a_linked_private_settings_file() {
 		use std::os::unix::fs::PermissionsExt;
 		let dir =
@@ -15713,6 +15785,7 @@ mod tests {
 	// Test ID: EpZfVmj
 	#[cfg(unix)]
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_conversion_that_cannot_write_keeps_no_backup() {
 		use std::os::unix::fs::PermissionsExt;
 		let dir =
@@ -15752,6 +15825,7 @@ mod tests {
 	// failed conversion drops its backup only when the file reads back whole.
 	// Test ID: EpZszNA
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_failed_conversion_keeps_the_backup_unless_the_file_is_whole() {
 		type Write = fn(&std::path::Path, &str) -> anyhow::Result<()>;
 		let refuse: Write = |_, _| anyhow::bail!("refused");
@@ -15820,6 +15894,7 @@ mod tests {
 	// does not move them - so this one stays inside `scroll:`.
 	// Test ID: ElpQBii
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_renamed_setting_keeps_its_value_and_its_block() {
 		let out = migrate_config_text("scroll:\n\tinview_tau_ms: 45.0\n").expect("should migrate");
 		assert_eq!(out, "scroll:\n\tsingle_screen_tau_ms: 45.0\n");
@@ -15844,6 +15919,7 @@ mod tests {
 	// on the whole path rather than the leaf.
 	// Test ID: EoqHGQy
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_renamed_setting_two_blocks_deep_is_found() {
 		assert_eq!(
 			migrate_config_text(
@@ -15867,6 +15943,7 @@ mod tests {
 	// dropping or re-renaming it would delete a user's color on every launch.
 	// Test ID: Em3Pif2
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_renamed_key_frees_its_old_name_for_a_new_setting() {
 		// first launch: the one color there is becomes the calm one
 		let once = migrate_config_text("colors:\n\tfocus: \"#abcdef\"\n").expect("should migrate");
@@ -16128,6 +16205,7 @@ mod tests {
 	// falls back past the space-indented comment that closes `window:`.
 	// Test ID: ErfAH9f
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_commented_new_name_counts_the_same_whichever_save_runs() {
 		let load = |t: &str| shcl::Document::parse(&next_launch_text(t));
 		let file = "window:\n\trows: 30\n    # x:\ncolors:\n\tfocus: \"#112233\"\n# highlight: \"#aabbcc\"\n\tbackground: \"#000000\"\n";
@@ -16171,6 +16249,7 @@ mod tests {
 	// must load every value as the launch before it did.
 	// Test ID: EpZCS15
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_settings_save_moves_no_value_at_the_next_launch() {
 		type Reader = fn(&Settings) -> String;
 		let _guard = super::test_config_lock();
@@ -16559,6 +16638,7 @@ mod tests {
 	// the config's own folder.
 	// Test ID: Er2UFeU
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_wallpaper_in_the_usual_place_is_found() {
 		let _guard = super::test_config_lock();
 		let _ = settings();
@@ -16591,6 +16671,7 @@ mod tests {
 	// backup; with no file left there is nothing to do.
 	// Test ID: Er2UFeV
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_reset_keeps_every_earlier_config() {
 		let _guard = super::test_config_lock();
 		let _ = settings();
@@ -16775,6 +16856,7 @@ mod tests {
 	// are being relied on, so a failure names the one that moved.
 	// Test ID: ElmIYG3
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_save_keeps_nested_comment_layout() {
 		let mut doc = shcl::Document::parse(default_config());
 		assert!(doc.set_float("wallpaper.opacity", 0.5));
@@ -16850,6 +16932,7 @@ mod tests {
 	// name the line where the file has it after that.
 	// Test ID: ErUrgB9
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_rating_write_restates_the_lines_the_launch_named() {
 		let _guard = super::test_config_lock();
 		let dir =
@@ -16900,6 +16983,7 @@ mod tests {
 	// and the line is still there, still reported, and still sets nothing.
 	// Test ID: EqtUcp6
 	#[test]
+	#[cfg_attr(miri, ignore = "Miri can't set a file's owner")]
 	fn a_save_keeps_a_space_indented_stray() {
 		let dir = crate::testdir::run_dir().join(format!("silk-keptstray-{}", std::process::id()));
 		std::fs::create_dir_all(&dir).unwrap();
@@ -16934,6 +17018,7 @@ mod tests {
 	// the file, attached to the siblings.
 	// Test ID: EllvVHE
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_straggler_goes_beside_its_siblings_not_with_a_second_paragraph() {
 		let path = crate::testdir::run_dir().join("silkterm_backfill_straggler_test.shcl");
 		// interval_s is missing from an otherwise-present rotation block
@@ -18273,6 +18358,7 @@ mod peer_tests {
 	// moment as the others, and each change is in the file after.
 	// Test ID: EsaCcC6
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn saves_at_the_same_moment_keep_each_others_change() {
 		let _guard = super::test_config_lock();
 		let _ = settings();
@@ -18315,6 +18401,7 @@ mod peer_tests {
 	// file, which holds this window's size.
 	// Test ID: EsaCcC7
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn only_a_settings_write_is_news() {
 		let _guard = super::test_config_lock();
 		let _ = settings();
@@ -18342,6 +18429,7 @@ mod peer_tests {
 	// another picture or folder.
 	// Test ID: EsaCcC8
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_reload_for_another_window_keeps_this_windows_own() {
 		let folder = |dir: &str| format!("wallpaper:\n\trotate:\n\t\tfolder: \"{dir}\"\n");
 		let mut live = read_text(&folder("/pics/a"));
@@ -18379,6 +18467,7 @@ mod peer_tests {
 	// keeps what it shows, both ways, and still takes the rest of the save.
 	// Test ID: Esdy2dz
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn another_windows_save_leaves_this_windows_view() {
 		let off = "shell:\n\tcopy_on_select: false\nscroll:\n\tminimap:\n\t\tenabled: false\n\
 			window:\n\thide_single_tab: true\n\tmenu_bar: false\n";
@@ -18426,6 +18515,7 @@ mod peer_tests {
 
 	// Test ID: EtZoB0q
 	#[test]
+	#[cfg_attr(miri, ignore = "Miri can't reread the time zone")]
 	fn the_build_date_follows_the_viewers_zone() {
 		// Noon UTC on 2026-06-15, read through TZ the way localtime_r does. Far
 		// enough east it is already the 16th.
