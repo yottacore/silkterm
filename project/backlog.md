@@ -527,6 +527,8 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Each test has to run alone, several at once, to sort the suite. One unsupported call or UB report stops the whole test binary, and the tests after it never run.
 	- Progress log:
 		- 20261023: Went through the 145 tests in the modules most likely to call into C: term, gfx, tmux, shells, monitor, cwd, fileassoc, front, ctl and sysfont. 118 passed under Miri, and 12 ran past 45 s, 8 of them in term. 15 stopped at a call Miri can't make, and are ignored under Miri now: 11 start a process, and 4 load the graphics driver. Three of the 11 stop at a `socketpair`, which is std starting the process.
+		- 20261023: Four tests from the sample that ran past 90 s were let run longer. bc1's flat color test passed in 477 s. A Settings dialog test reached the test folder's `atexit` after 568 s, run without `SILKTERM_TEST_DIR`. An autotheme and a config test started a process after about 10 minutes: `sysfont::monospace` asks `gsettings` and `xfconf-query` for the desktop's font.
+		- 20261023: That font probe is likely on the path of many config and Settings tests. A stand-in answer under `cfg(miri)` there may beat an ignore on each of them. Not decided.
 		- 20261023: Left: the other 1292 tests, and the slow ones once the bar is set.
 	- Verified: 20261023. The 15 pass in a plain run and show as ignored under Miri. fmt check, clippy for Linux.
 	- Swept: the 145 tests above. A test elsewhere that starts a process or opens a device turns up in the rest of the run.
