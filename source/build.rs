@@ -119,6 +119,18 @@ fn emit_build_number() {
 		})
 	};
 	println!("cargo:rustc-env=SILK_BUILD={}", crockford32(minutes));
+	// The date shown beside a non-release build is worked out when the build
+	// number is viewed, in the viewer's time zone, so only the instant goes in.
+	println!(
+		"cargo:rustc-env=SILK_BUILD_UNIX={}",
+		EPOCH_2000_UNIX + minutes * 60
+	);
+
+	// A release build shows the number alone. cicd sets SILK_RELEASE=1 for the
+	// run that can be tagged.
+	println!("cargo:rerun-if-env-changed=SILK_RELEASE");
+	let release = env::var("SILK_RELEASE").is_ok_and(|value| value.trim() == "1");
+	println!("cargo:rustc-env=SILK_RELEASE_BUILD={}", u8::from(release));
 }
 
 // Seconds since the unix epoch. A clock set before 1970 reads as 0, which comes

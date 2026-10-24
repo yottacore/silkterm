@@ -79,7 +79,7 @@ buildId=""
 if [[ -x "${native}" ]]; then
 	## || true: pipefail makes an artifact that won't run (wrong arch, missing lib)
 	## fail the assignment, and set -e would take the whole release down with it.
-	buildId="$("${native}" --version 2>/dev/null | sed -n 's/.* build \([^ ]*\)$/\1/p' || true)"
+	buildId="$("${native}" --version 2>/dev/null | sed -n 's/.* build \([^ ]*\)\( ([0-9-]*)\)\{0,1\}$/\1/p' || true)"
 fi
 [[ -n "${buildId}" ]] || fEcho_Clean "note: could not read a build number from ${native##*/}; notes will omit it"
 

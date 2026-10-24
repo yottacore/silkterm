@@ -494,7 +494,7 @@ fContainerRun(){
 	gitCommon="$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null || true)"
 	[[ -z "${gitCommon}" || "${gitCommon}" == "${root}/"* ]] || mounts+=(-v "${gitCommon}:${gitCommon}")
 	"${docker}" run --rm --init --shm-size 1g --name "${containerLabel}-${stamp}-$$" --label "${containerLabel}=run" "${mounts[@]}" -w "${root}" \
-		-e "USER=${USER:-$(id -un)}" -e "CARGO_TARGET_DIR=${containerTarget}" -e "SILK_BUILD_MINUTES=${SILK_BUILD_MINUTES:-}" \
+		-e "USER=${USER:-$(id -un)}" -e "CARGO_TARGET_DIR=${containerTarget}" -e "SILK_BUILD_MINUTES=${SILK_BUILD_MINUTES:-}" -e "SILK_RELEASE=${SILK_RELEASE:-0}" \
 		-e "CICD_MAX_JOBS=${CICD_MAX_JOBS}" -e XDG_RUNTIME_DIR=/tmp/xdg-runtime "${zoneArgs[@]}" \
 		"${image}" bash -c 'echo "${USER}:x:${1}:${2}:${USER}:${HOME}:/bin/bash" >>/etc/passwd && echo "${USER}:x:${2}:" >>/etc/group \
 			&& mkdir -m 700 -p "${XDG_RUNTIME_DIR}" && chown "${1}:${2}" "${XDG_RUNTIME_DIR}" && mkdir -m 1777 -p /tmp/.X11-unix \
@@ -854,6 +854,19 @@ fPinBuildMinutes(){
 	export SILK_BUILD_MINUTES=$(( (buildSecs - 946684800) / 60 ))
 }
 fPinBuildMinutes
+
+## Only a run on a clean main can be tagged (release.bash refuses anything else), so
+## only its binaries drop the date that a non-release build shows after its number.
+## A value handed down is kept.
+fMarkRelease(){
+	[[ -z "${SILK_RELEASE:-}" ]] || return 0
+	if [[ "$(git rev-parse --abbrev-ref HEAD 2>/dev/null)" == "main" && -z "$(git status --porcelain --untracked-files=no 2>/dev/null || echo dirty)" ]]; then
+		export SILK_RELEASE=1
+	else
+		export SILK_RELEASE=0
+	fi
+}
+fMarkRelease
 
 ## The fuzz corpus is read-only data: every file in it is replayed on each run
 ## and chewed on by the mutator. A run that writes one through changes what

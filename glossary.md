@@ -89,7 +89,7 @@ A view mode that hides the window frame, the menu bar and the tab strip together
 
 ## Build number
 
-A short code baked into every build, printed by `--version` and shown in Help > About. It counts whole minutes since the year 2000 and sorts in build order. Two builds of the same release version are told apart by it.
+A short code baked into every build, printed by `--version` and shown in Help > About. It counts whole minutes since the year 2000 and sorts in build order. Two builds of the same release version are told apart by it. A build that isn't a release also shows its date after the number, as `(YYYY-mm-DD)`, in the local time of whoever is looking.
 
 ## Cell
 

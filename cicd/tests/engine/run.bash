@@ -229,6 +229,19 @@ mkdir -p "${work}/plain"
 fCheck "and so does a folder that is not a repository" fNearNow "$(fMinutes "${work}/plain")"
 fCheck "a value handed down is kept" test "$(cd "${repo}" && SILK_BUILD_MINUTES=12345 && fPinBuildMinutes && echo "${SILK_BUILD_MINUTES}")" = 12345
 
+## Only a clean main is marked a release build, which is what drops the date
+## from the build number.
+eval "$(fLift '^fMarkRelease(){' '^}')"
+fRelease(){ (cd "${1}" && unset SILK_RELEASE && fMarkRelease && echo "${SILK_RELEASE}"); }
+fCheck "a dirty main is not a release build" test "$(fRelease "${repo}")" = 0
+git -C "${repo}" commit -qam second
+fCheck "a clean main is" test "$(fRelease "${repo}")" = 1
+git -C "${repo}" checkout -qb side
+fCheck "a clean side branch is not" test "$(fRelease "${repo}")" = 0
+git -C "${repo}" checkout -q main
+fCheck "nor is a folder that is not a repository" test "$(fRelease "${work}/plain")" = 0
+fCheck "a value handed down is kept" test "$(cd "${repo}" && SILK_RELEASE=0 && fMarkRelease && echo "${SILK_RELEASE}")" = 0
+
 ## The plan's host line, for each host the pipeline runs on.
 eval "$(fLift '^fHostDescribe(){' '^}')"
 fHost(){ test "$(env -u CICD_LINUX_HALF -u WSL_DISTRO_NAME "${@:3}" bash -c "$(declare -f fHostDescribe); "'fHostDescribe "$@"' _ "${1}" x86_64 "${2}" "Debian GNU/Linux 13 (trixie)")" = "${want}"; }
