@@ -603,25 +603,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Split from 2026101714445005. Its heap-growth test covers some of the same actions in-process. This one is for what that can't reach: windows, tabs and splits opened and closed, the GPU, the Settings dialog and a real PTY.
 		- `cicd/tests/allocs/run.bash` already drives a window on a private Xvfb.
 
-- The nightly warns that silkterm's `Send` check on wgpu's types passes the recursion limit, which a later Rust makes an error
-	- ID: 2026102321073303
-	- Type: Bug
-	- Status: Queued
-	- Severity: Low
-	- Opened: 20261023-210733
-	- Opened by: CC
-	- Related IDs: 2026102320591313
-	- Steps to reproduce:
-		- Build the tests on nightly-2026-10-16, as the Miri run does.
-	- Incorrect behavior:
-		- A `recursion_depth_exceeding_limit` warning on the whole crate, from proving `wgpu_core`'s `Global` is `Send`. It says it's being phased out to a hard error, rust-lang/rust#159228.
-	- Expected behavior:
-		- No warning, so a toolchain bump past the change still builds.
-	- Possible cause:
-		- The default limit of 128. The warning suggests `#![recursion_limit = "256"]`, or a manual `Send` impl on a type in between.
-	- Notes:
-		- Not checked yet whether the stable 1.96 or the sanitizer nightly says the same.
-
 - The allocations per frame test failed its drag limit once under load
 	- ID: 2026102321230038
 	- Type: Bug
@@ -669,6 +650,34 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- The Windows GUI scenarios and the scroll harness turn off only with `--quick`, and dpirand only with `DPIRAND_SECS=0` in config.bash.
 	- Notes:
 		- Not every stage needs its own flag. A few grouped ones may do, such as one for the lints and one for the script tests.
+
+- The nightly warns that silkterm's `Send` check on wgpu's types passes the recursion limit, which a later Rust makes an error
+	- ID: 2026102321073303
+	- Type: Bug
+	- Status: Done
+	- Severity: Low
+	- Opened: 20261023-210733
+	- Opened by: CC
+	- Related IDs: 2026102320591313
+	- Steps to reproduce:
+		- Build the tests on nightly-2026-10-16, as the Miri run does.
+	- Incorrect behavior:
+		- A `recursion_depth_exceeding_limit` warning on the whole crate, from proving `wgpu_core`'s `Global` is `Send`. It says it's being phased out to a hard error, rust-lang/rust#159228.
+	- Expected behavior:
+		- No warning, so a toolchain bump past the change still builds.
+	- Possible cause:
+		- The default limit of 128. The warning suggests `#![recursion_limit = "256"]`, or a manual `Send` impl on a type in between.
+	- Reproduced: 20261024 on b23. nightly-2026-10-16 warns once, at the dialog GPU warm-up thread in `gfx.rs`, for the plain build and the tests, and for the Windows target too. Stable 1.96 says nothing, since it has no such lint.
+	- Actual cause:
+		- Proving `Option<DialogGpu>` is `Send` walks `wgpu::Queue` down through `wgpu_core`'s `Global`, its registries and storage, past 128 levels. The new trait solver counts that depth where the old one didn't. wgpu is a known case upstream (gfx-rs/wgpu#9608), and rustc plans to fix most of it before the new solver is the default.
+	- Actual fix: `#![recursion_limit = "256"]` in `main.rs`. The issue's other way, a manual `unsafe impl Send` on a type in between, adds unsafe code to quiet a warning. A higher limit only costs a library its users, and this is a binary.
+	- Progress log:
+		- 20261024: Verified: on nightly-2026-10-16, the workspace with all targets, and the Windows and macOS targets with `-Zbuild-std`, check with no warning. Without the line the Linux and Windows checks warn again. Stable fmt check and clippy for Linux pass. `cicd/utility/gpu-stress` checks clean on the nightly too.
+		- 20261024: Not checked on the sanitizer nightly, nightly-2026-10-15, which is only in the image. It's a day older than the one checked.
+	- Swept: the other crate roots, knobs and the `glyphon_gl` example, and `cicd/utility/gpu-stress`. None warns.
+	- Test case: None. Only a nightly has the lint, and stable doesn't know its name, so a `deny` on it would break the stable build.
+	- Branch: rnd1024
+	- Closed: 20261024-065132
 
 - Wayland: must use the Wayland clipboard, and minimize other X11 features
 	- ID: 2026101509024607

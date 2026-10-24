@@ -4,6 +4,10 @@
 	all(target_os = "windows", not(debug_assertions)),
 	windows_subsystem = "windows"
 )]
+// Proving a wgpu::Queue is Send walks wgpu_core's Global down past the default
+// 128, which newer rustc warns on and will refuse (rust-lang/rust#159228). A
+// binary has no downstream to pass the higher limit on to.
+#![recursion_limit = "256"]
 mod app;
 mod autotheme;
 mod bc1;
