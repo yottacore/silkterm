@@ -18427,26 +18427,29 @@ mod peer_tests {
 	// Test ID: EtZoB0q
 	#[test]
 	fn the_build_date_follows_the_viewers_zone() {
-		// 2026-06-15T12:00:00Z is the 15th in every zone from -11 to +11. Past
-		// that, only the zone moves it, so the same instant must read as the 14th
-		// or the 16th somewhere. Pinned through TZ, which localtime_r reads.
+		// Noon UTC on 2026-06-15, read through TZ the way localtime_r does. Far
+		// enough east it is already the 16th.
 		#[cfg(unix)]
 		{
 			unsafe extern "C" {
 				fn tzset();
 			}
 			let noon = 1_781_524_800;
-			let read = |zone: &str| {
-				// SAFETY: this test is the only one that sets TZ.
-				unsafe { std::env::set_var("TZ", zone) };
-				unsafe { tzset() };
+			let read = |zone: Option<&str>| {
+				// SAFETY: no other test touches TZ, and tzset only rereads it.
+				unsafe {
+					match zone {
+						Some(zone) => std::env::set_var("TZ", zone),
+						None => std::env::remove_var("TZ"),
+					}
+					tzset();
+				}
 				local_date(noon)
 			};
-			assert_eq!(read("UTC"), "2026-06-15");
-			assert_eq!(read("Pacific/Kiritimati"), "2026-06-16");
-			assert_eq!(read("Etc/GMT+12"), "2026-06-15");
-			unsafe { std::env::remove_var("TZ") };
-			unsafe { tzset() };
+			assert_eq!(read(Some("UTC")), "2026-06-15");
+			assert_eq!(read(Some("Pacific/Kiritimati")), "2026-06-16");
+			assert_eq!(read(Some("Etc/GMT+12")), "2026-06-15");
+			read(None);
 		}
 	}
 }
