@@ -678,6 +678,24 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Notes:
 		- Not checked yet whether the stable 1.96 or the sanitizer nightly says the same.
 
+- The allocations per frame test failed its drag limit once under load
+	- ID: 2026102321230038
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261023-212300
+	- Opened by: CC
+	- Target OS: Linux
+	- Test environment: b23 at load 23 to 25, the quick gate in the container on `rnd1023`, llvmpipe
+	- Steps to reproduce:
+		- Run `cicd/cicd.bash -y --quick --no-publish --no-dogfood --no-demo` while the box is busy.
+	- Incorrect behavior: `cicd/tests/allocs/run.bash` (ErzCQC2) failed with "drag: 364 per frame, limit 360". The same binary then passed 3 times in a row, at 339, 346 and 347.
+	- Expected behavior: The drag check doesn't go red on load alone.
+	- Reproduced: 20261023, once in 4 runs. Gate log `/mnt/ext/wip2/wip/tmp/silkterm-floss/20261023-211203/001/gate.log`.
+	- Possible cause: The test's own comment says the per-frame count in a drag rises with load, since a slow box folds more moves into each frame. The frame's own count still drifts with it, and 360 leaves about 4% over the measured 340.
+	- Notes:
+		- The round didn't change the drag path. Its source edits were test attributes only.
+
 - Wayland: a copy a program sends while no SilkTerm window has focus is dropped
 	- ID: 2026101607585700
 	- Type: Enhancement
