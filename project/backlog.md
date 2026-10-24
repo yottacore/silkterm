@@ -595,7 +595,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261024: Split in 5 by module, since the rest is too much for one sitting: 2026102407430372, 2026102407430375, 2026102407430377, 2026102407430379 and 2026102407430381. This item closes when they do.
 		- 20261024: 2026102407430372 is done: 278 tests, 178 passing under Miri and 99 newly ignored there with a reason.
 		- 20261024: 2026102407430375 is done: 330 tests, 184 passing under Miri and 146 newly ignored there with a reason.
-		- 20261024: Left: 2026102407430377, 2026102407430379 and 2026102407430381, about 700 tests.
+		- 20261024: Left: 2026102407430379 and 2026102407430381, about 440 tests. 2026102407430377 is done.
 	- Verified: 20261023. The 15 pass in a plain run and show as ignored under Miri. fmt check, clippy for Linux.
 	- Decisions:
 		- 20261024: The slow bar is 60 s of CPU time under Miri, not wall time, so a verdict doesn't swing with the box's load. Miri runs a test's threads on one core, so on an idle box the two are about the same.
