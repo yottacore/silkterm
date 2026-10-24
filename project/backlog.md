@@ -349,6 +349,34 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Test case: New cases in `cicd/tests/engine/run.bash` (Er2UgY7).
 	- Branch: rnd1022
 
+- Leak checks: the test suite under ThreadSanitizer on every full run
+	- ID: 2026101714445003
+	- Type: Task
+	- Status: Waiting on automated testing
+	- Needs local test suite run?: A full run in the container, to see the step pass through `cicd.bash` with the suppressions, and its time inside a whole run.
+	- Priority: Avg
+	- Opened: 20261017-144450
+	- Opened by: CC
+	- Parent ID: 2026101714015789
+	- Prereq IDs: 2026101714445002
+	- Related IDs: 2026102320070112
+	- Requirements:
+		- Third-party and vendored code end users run is covered, per the parent's 20261017 decision. What it finds goes on the backlog.
+		- The parent's TSan row.
+	- Progress log:
+		- 20261023: Stage 3 runs the test suite again under TSan, after the leak checks, through `cicd/utility/tsan.bash`. Same nightly and image as the ASan run, with `-Zbuild-std` and `--target x86_64-unknown-linux-gnu`, in `target/tsan-<date>`. A plain run takes the step into the image, and no docker means a warning. `--no-tsan` and `--quick` skip it, and the plan has a TSan line.
+		- 20261023: The sanitizer canary races on purpose too. The step stops unless TSan reports that race by name.
+		- 20261023: The first run found 2 races, both inside Mesa's lavapipe, the software Vulkan the GPU tests use in the image. The GPU tests then showed more of the same in Mesa's LLVM and the Vulkan loader. All are system libraries TSan can't see into, not crates a release binary is built from, so `cicd/tsan-suppressions.txt` lets them through by library. Nothing in our code or a crate.
+		- 20261023: The peak-memory test and the scroll record's cost ratio are ignored under `cfg(silk_tsan)`, as under ASan.
+		- 20261023: The suite took about 28 minutes here at a load of 40 to 47, with 8 test threads. A full run was about 56 minutes before this.
+		- Note: The run also failed `every_script_has_the_license_header_with_history_at_the_bottom`, which fails plain too since the knobs crate went MIT. Filed as 2026102320070112.
+	- Decisions:
+		- 20261023: Report suppressions (`race:` and `deadlock:` by library), not `called_from_lib`. With that on the loader, TSan stopped tracking a lock the loader took, and its unlock then read as a fault in ash.
+	- Verified: 20261023. `tsan.bash` in the image: canary caught, then 1431 passed, 1 failed (the header test above) and 5 ignored, with only the lavapipe reports, which failed the step as they should. With the final suppressions the 18 GPU tests ran clean, and the canary was still caught. A suppression wide enough to hide the canary's race let it pass, which the step refuses. New container cases, watched to fail against 4 mutants of cicd.bash. Engine and cleanup tests, clippy for Linux, fmt, shellcheck, house style, test IDs, docs check.
+	- Swept: every `ASAN_CMD`, `asanInImage`, `fRunAsan` and `--no-asan` site in cicd.bash, config.bash's cleanup list and rar excludes, the `silk_asan` ignores, build.md, prerequisites.md and design.md. `cicd-win.ps1` has no sanitizer flags.
+	- Test case: The canary race EtaER2K, run by the step itself. New cases in `cicd/tests/container/run.bash` (EsJg9EF).
+	- Branch: rnd1023
+
 - `the_scroll_record_costs_a_full_screen_program_little` failed once on the Mac runner
 	- ID: 2026102113432602
 	- Type: Bug
@@ -472,6 +500,22 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Branch: rnd1023
 	- Test case: `cicd/tests/container/run.bash` (EsJg9EF), "the demo among them, though nothing here asked for it off": the run inside gets `--no-demo` when nothing asked for it.
 
+- The license header test fails on the knobs crate since it went MIT
+	- ID: 2026102320070112
+	- Type: Bug
+	- Status: Queued
+	- Severity: Avg
+	- Opened: 20261023-200701
+	- Opened by: CC
+	- Steps to reproduce:
+		- `cargo test --bin silkterm every_script_has_the_license_header` on rnd1023.
+	- Incorrect behavior: 6 header faults. `knobs/src/lib.rs`, `knobs/src/tests.rs` and `knobs/demo/src/main.rs` each give "line 1 is not the license" and "a GPL file in the Bubbles form".
+	- Expected behavior: The test knows which crates are MIT and checks them for that header.
+	- Reproduced: 20261023, here, in a plain test run. It fails under TSan too.
+	- Possible cause: 99f5810 ("knobs: MIT") changed the headers, and the test's `.rs` branch still wants GPL on every tracked `.rs` file.
+	- Notes:
+		- Found while working 2026101714445003. It fails every full run until fixed.
+
 - Implement leak and static checks of the Rust code run as part of CI/CD
 	- ID: 2026101714015789
 	- Type: Task
@@ -518,19 +562,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Progress log:
 		- 20261017: Priority Avg is a best guess, since none was given. Split into 5 child items, worked one at a time, the cheap static checks first. This item closes when they do.
 	- Closed:
-
-- Leak checks: the test suite under ThreadSanitizer on every full run
-	- ID: 2026101714445003
-	- Type: Task
-	- Status: Queued
-	- Priority: Avg
-	- Opened: 20261017-144450
-	- Opened by: CC
-	- Parent ID: 2026101714015789
-	- Prereq IDs: 2026101714445002
-	- Requirements:
-		- Third-party and vendored code end users run is covered, per the parent's 20261017 decision. What it finds goes on the backlog.
-		- The parent's TSan row.
 
 - Leak checks: the test suite under Miri on every full run
 	- ID: 2026101714445004

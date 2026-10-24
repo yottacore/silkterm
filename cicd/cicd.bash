@@ -27,7 +27,8 @@
 ##	   3. regression tests + lints + fuzz soak (clippy for Linux, Windows and macOS
 ##	      and the advisory scan gating, the rest of cargo-deny not; the tests again
 ##	      under ASan and LSan, in the container image; the leak checks, which
-##	      are the heap-growth test under dhat; scroll harness)
+##	      are the heap-growth test under dhat; the tests again under TSan, in the
+##	      image too; scroll harness)
 ##	   4. profiler (flamegraph SVG; non-gating artifact - see failure policy)
 ##	   5. release build (native + cross targets; optimized, for packaging + dogfood),
 ##	      then a check that every Windows binary carries its icon and version block
@@ -51,6 +52,7 @@
 ##	   --no-private        skip the private runner (macOS, Microsoft Store)
 ##	   --no-fuzz           skip the fuzz soak (the short one in the test run still runs)
 ##	   --no-asan           skip the test suite under ASan and LSan
+##	   --no-tsan           skip the test suite under TSan
 ##	   --no-leakcheck      skip the slow leak checks (the heap-growth test under dhat, CodeQL)
 ##	   --leakcheck         run the leak checks, under --quick too; not with --gate
 ##	   --codeql            add CodeQL to the leak checks (off by default; slow)
@@ -62,8 +64,8 @@
 ##	   --demo              re-record the demo video, under --quick too
 ##	   --quick             only the quick lints and tests, and the x86_64 release builds;
 ##	                       skips the ARM64 builds, packages, profiling, the fuzz soak,
-##	                       the ASan run, the slow window tests and anything that
-##	                       needs another box
+##	                       the ASan and TSan runs, the slow window tests and anything
+##	                       that needs another box
 ##	   --gate              merge gate only: fmt --check + clippy + tests, then exit
 ##	                       (fast local stand-in for hosted CI; the pre-push hook runs it)
 ##	   --container         stages 1-6 in the pinned image from cicd/container/Dockerfile,
@@ -151,6 +153,7 @@ while (($#)); do case "${1}" in
 	--quick)                  quick=1; noArm=1; PROFILE_ENABLE=0; PACKAGE_ENABLE=0; FUZZ_SECS=0; innerArgs+=("${1}"); shift ;;   ## skip the slow stages
 	--no-fuzz)                FUZZ_SECS=0; innerArgs+=("${1}"); shift ;;
 	--no-asan)                ASAN_CMD=(); innerArgs+=("${1}"); shift ;;
+	--no-tsan)                TSAN_CMD=(); innerArgs+=("${1}"); shift ;;
 	--leakcheck)              leakcheck=1; leakAsked=1; innerArgs+=("${1}"); shift ;;   ## the slow leak checks, under --quick too
 	--no-leakcheck)           leakcheck=0; innerArgs+=("${1}"); shift ;;
 	--codeql)                 codeql=1; innerArgs+=("${1}"); shift ;;                ## CodeQL in the leak checks; off until 2026102211462005
@@ -541,6 +544,12 @@ if ((! container && ! gate && ! quick)) && ((${#ASAN_CMD[@]})) && [[ -z "${SILK_
 	if command -v "${docker}" >/dev/null 2>&1; then asanInImage=1
 	else asanSkipped="no docker here for the image with the nightly"; fi
 fi
+## The TSan run the same way, on the same nightly.
+tsanInImage=0; tsanSkipped=""
+if ((! container && ! gate && ! quick)) && ((${#TSAN_CMD[@]})) && [[ -z "${SILK_CICD_IN_CONTAINER:-}" ]]; then
+	if command -v "${docker}" >/dev/null 2>&1; then tsanInImage=1
+	else tsanSkipped="no docker here for the image with the nightly"; fi
+fi
 ## CodeQL, one of the leak checks, is in the image only too. Off unless --codeql
 ## asks, since a run takes over half an hour and 19 GB here (2026102211462005).
 codeqlInImage=0; codeqlSkipped=""
@@ -548,7 +557,7 @@ if ((! container && leakcheck && codeql)) && [[ -n "${CODEQL_SUITE:-}" && -z "${
 	if command -v "${docker}" >/dev/null 2>&1; then codeqlInImage=1
 	else codeqlSkipped="no docker here for the image with CodeQL"; fi
 fi
-if ((container || asanInImage || codeqlInImage)); then
+if ((container || asanInImage || tsanInImage || codeqlInImage)); then
 	[[ -f "${containerRecipe}" ]] || fDie "missing ${containerRecipe}"
 	containerImage="$(fContainerImage)"
 	## Its real path, since a target dir linked to another disk would dangle inside.
@@ -654,6 +663,15 @@ elif ((quick && ! leakAsked)); then
 	fEcho_Clean "Leak checks .........: (skipped --quick; --leakcheck adds them)"
 else
 	fEcho_Clean "Leak checks .........: (skipped)"
+fi
+if ((${#TSAN_CMD[@]} == 0)); then
+	fEcho_Clean "TSan ................: (skipped)"
+elif ((quick)); then
+	fEcho_Clean "TSan ................: (skipped --quick)"
+elif [[ -n "${tsanSkipped}" ]]; then
+	fEcho_Clean "TSan ................: (skipped, ${tsanSkipped})"
+else
+	fEcho_Clean "TSan ................: the tests again on ${SANITIZER_TOOLCHAIN}, in ${containerImage:-this container}"
 fi
 if ((PROFILE_ENABLE)); then
 	fEcho_Clean "Profiler ............: ${PROFILE_SECS}s run -> flamegraph SVG (on headless ${RPD_HEADLESS_DISPLAY:-:98})"
@@ -1047,6 +1065,20 @@ fRunAsan(){
 	fContainerRun "${containerImage}" "${root}/cicd/utility/asan.bash" || fDie "the test suite under ASan and LSan failed (above)"
 }
 
+## Stage 3's test suite under TSan (cicd/utility/tsan.bash), after the leak
+## checks, in the image like the ASan run.
+fRunTsan(){
+	if ((${#TSAN_CMD[@]} == 0)); then fEcho_Clean "TSan run skipped"; return 0; fi
+	if ((quick)); then fEcho_Clean "TSan run skipped (--quick)"; return 0; fi
+	if [[ -n "${tsanSkipped}" ]]; then fEcho "WARNING: TSan run skipped: ${tsanSkipped}"; return 0; fi
+	if [[ -n "${SILK_CICD_IN_CONTAINER:-}" ]]; then
+		"${here}/utility/tsan.bash" || fDie "the test suite under TSan failed (above)"
+		return 0
+	fi
+	fContainerBuild "${containerImage}"
+	fContainerRun "${containerImage}" "${root}/cicd/utility/tsan.bash" || fDie "the test suite under TSan failed (above)"
+}
+
 ## The leak checks, after the ASan run. On by default; --no-leakcheck drops them
 ## and --quick does unless --leakcheck asks. Each report goes to LEAKCHECK_OUT_DIR,
 ## rotated like the flamegraphs. A test filter that matched nothing would pass, so
@@ -1207,6 +1239,7 @@ fBuildTestRelease(){
 	fi
 	fRunAsan
 	fRunLeakcheck
+	fRunTsan
 	## A release may only publish what was built from the source being tagged.
 	fRunTest cicd/tests/release/run.bash "release provenance"
 	## The release notes link every download by name, and only those uploaded.
@@ -1603,6 +1636,8 @@ fEcho_Clean
 
 
 ##	History:
+##		- 2026-10-23: The test suite again under TSan, after the leak checks, in
+##		              the image like the ASan run. --no-tsan skips it.
 ##		- 2026-10-23: The run in the container gets --no-demo, so the demo is
 ##		              recorded only here, and only when this run asks for it.
 ##		- 2026-10-22: The leak checks run by default. --no-leakcheck drops them,

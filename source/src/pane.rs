@@ -8398,6 +8398,10 @@ mod tests {
 		silk_asan,
 		ignore = "ASan's checks change what each half costs, so the ratio means nothing"
 	)]
+	#[cfg_attr(
+		silk_tsan,
+		ignore = "TSan's checks change what each half costs, so the ratio means nothing"
+	)]
 	fn the_scroll_record_costs_a_full_screen_program_little() {
 		// tmux, vim and less scroll a screen that keeps no history, so the engine
 		// keeps the rows that leave for the slide to draw. It copied each one, and

@@ -1,0 +1,18 @@
+# Races ThreadSanitizer lets through in cicd/utility/tsan.bash. One per line, as
+# race:<function, file or library> (or another TSan suppression type), with the
+# backlog item that fixes it, or why it isn't ours, on the line above. A
+# suppression matches any frame in the report's stacks, so name the narrowest
+# thing that holds: a wide one hides our own races too.
+
+# The software Vulkan the image's GPU tests run on: Mesa's lavapipe, the LLVM it
+# JITs shaders with, and the Vulkan loader. System libraries, not built here and
+# so not instrumented: TSan sees the pthread calls they make but not the ordering
+# around them, and reports a mutex destroyed after its last unlock and locks
+# taken in an order it can't follow. None is a crate a release binary is built
+# from. Reports only, by the library in a stack: called_from_lib would stop TSan
+# tracking a lock the loader takes, and then its unlock reads as a fault.
+race:libvulkan_lvp.so
+deadlock:libvulkan_lvp.so
+race:libLLVM.so
+deadlock:libLLVM.so
+deadlock:libvulkan.so

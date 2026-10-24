@@ -113,6 +113,7 @@ fCheck "--container is an option, and the stage options go in with it" \
 fCheck "the host options stay out" test "$(fParse -y --no-sync --no-dogfood --no-publish --no-private --demo -m x)" = "container=0 inner="
 fCheck "and so does --container itself" test "$(fParse --container)" = "container=1 inner="
 fCheck "--no-asan is a stage option" test "$(fParse --container --no-asan)" = "container=1 inner=--no-asan"
+fCheck "--no-tsan is too" test "$(fParse --container --no-tsan)" = "container=1 inner=--no-tsan"
 fCheck "with docker here it is the default" test "$(USE_CONTAINER=1 fParse -y)" = "container=1 inner="
 fCheck "--no-container turns it off" test "$(USE_CONTAINER=1 fParse --no-container -y)" = "container=0 inner="
 fCheck "and wins over --container, wherever it sits" test "$(USE_CONTAINER=1 fParse --no-container --container)" = "container=0 inner="
@@ -309,11 +310,30 @@ fCheck "--no-asan does" grep -q 'ASan run skipped$' <<<"$(fAsan fNoCmd)"
 fNoDocker(){ asanSkipped="no docker"; }
 fCheck "and with no docker it warns" grep -qF 'WARNING: ASan run skipped: no docker' <<<"$(fAsan fNoDocker)"
 
+## The TSan run goes the same way.
+eval "$(fLift '^fRunTsan(){' '^}')"
+printf '#!/bin/sh\necho "tsan ran here"\nexit "${FAKE_RC:-0}"\n' >"${asanStand}/utility/tsan.bash"; chmod +x "${asanStand}/utility/tsan.bash"
+fTsan(){ (TSAN_CMD=(cargo test); quick=0; tsanSkipped=""; containerImage=img:1; root=/r; here="${asanStand}"; unset SILK_CICD_IN_CONTAINER FAKE_RC; "${@}"; fRunTsan) 2>&1; }
+out="$(fTsan fNothing)"
+fCheck "a run here does the TSan step in the image" bash -c '[[ "$1" == *"build img:1"* && "$1" == *"run img:1 /r/cicd/utility/tsan.bash"* ]]' _ "${out}"
+rc=0; out="$(fTsan fReport)" || rc=$?
+fCheck "a TSan report there stops the run" test "${rc}" -ne 0
+fCheck "and says so" grep -q '^DIE: the test suite under TSan failed' <<<"${out}"
+fCheck "inside the container it runs tsan.bash as is" bash -c '[[ "$1" == *"tsan ran here"* && "$1" != *"run img"* ]]' _ "$(fTsan fInside)"
+fCheck "--quick skips TSan" grep -q 'TSan run skipped (--quick)' <<<"$(fTsan fQuick)"
+fNoTsan(){ TSAN_CMD=(); }
+fCheck "--no-tsan does" grep -q 'TSan run skipped$' <<<"$(fTsan fNoTsan)"
+fNoDockerT(){ tsanSkipped="no docker"; }
+fCheck "and with no docker it warns" grep -qF 'WARNING: TSan run skipped: no docker' <<<"$(fTsan fNoDockerT)"
+fCheck "the TSan run follows the leak checks in stage 3" \
+	bash -c 'grep -A1 "^[[:space:]]*fRunLeakcheck$" "$1" | grep -q "^[[:space:]]*fRunTsan$"' _ "${engine}"
+
 ## Before anything is built: a full run plans that step in the image, or skipped
 ## with no docker.
 fPlan(){ rc=0; out="$(cd "${repo}" && env -u SILK_CICD_IN_CONTAINER -u CARGO_TARGET_DIR -u CICD_LINUX_HALF "${@}" bash cicd/cicd.bash --no-sync </dev/null 2>&1)" || rc=$?; }
 fPlan
 fCheck "a full run plans the ASan step in the image" grep -qE '^ASan \+ LSan \.+: the tests again on nightly-[0-9-]+, in silkterm-cicd:[0-9a-f]{12}$' <<<"${out}"
+fCheck "and the TSan step" grep -qE '^TSan \.+: the tests again on nightly-[0-9-]+, in silkterm-cicd:[0-9a-f]{12}$' <<<"${out}"
 fCheck "and plans the container as the default" grep -qE '^Container \.+: stages 1-6 in silkterm-cicd:[0-9a-f]{12}' <<<"${out}"
 fPlan SILK_DOCKER="${work}/no-such-docker"
 fCheck "with no docker the run says it builds here" grep -qF 'no docker here, so stages 1-6 run on this box' <<<"${out}"
@@ -321,12 +341,18 @@ rc=0; out="$(cd "${repo}" && env -u SILK_CICD_IN_CONTAINER -u CARGO_TARGET_DIR -
 fCheck "--no-container plans no container, and says nothing about docker" bash -c '[[ "$1" != *"Container ."* && "$1" != *"no docker here"* ]]' _ "${out}"
 fPlan SILK_DOCKER="${work}/no-such-docker"
 fCheck "with no docker a full run plans it skipped and goes on" bash -c '[[ "$1" != *"DIE:"* && "$1" == *"Fail-fast"* ]] && grep -qE "^ASan \+ LSan \.+: \(skipped, no docker" <<<"$1"' _ "${out}"
+fCheck "and TSan too" grep -qE '^TSan \.+: \(skipped, no docker' <<<"${out}"
 fPlan SILK_DOCKER="${work}/no-such-docker" CICD_LINUX_HALF=1
 fCheck "and so does the Linux half of a Windows run" grep -qE '^ASan \+ LSan \.+: \(skipped, no docker' <<<"${out}"
 rc=0; out="$(cd "${repo}" && env -u SILK_CICD_IN_CONTAINER -u CARGO_TARGET_DIR SILK_DOCKER="${work}/no-such-docker" bash cicd/cicd.bash --no-sync --no-asan </dev/null 2>&1)" || rc=$?
 fCheck "--no-asan needs no docker" bash -c '[[ "$1" != *"needs docker"* ]] && grep -qE "^ASan \+ LSan \.+: \(skipped\)$" <<<"$1"' _ "${out}"
+rc=0; out="$(cd "${repo}" && env -u SILK_CICD_IN_CONTAINER -u CARGO_TARGET_DIR SILK_DOCKER="${work}/no-such-docker" bash cicd/cicd.bash --no-sync --no-tsan </dev/null 2>&1)" || rc=$?
+fCheck "--no-tsan plans it skipped" grep -qE '^TSan \.+: \(skipped\)$' <<<"${out}"
+rc=0; out="$(cd "${repo}" && env -u SILK_CICD_IN_CONTAINER -u CARGO_TARGET_DIR -u CICD_LINUX_HALF bash cicd/cicd.bash --no-sync --no-container --no-asan </dev/null 2>&1)" || rc=$?
+fCheck "and a run here with only TSan still takes it into the image" grep -qE '^TSan \.+: the tests again on nightly-[0-9-]+, in silkterm-cicd:[0-9a-f]{12}$' <<<"${out}"
 rc=0; out="$(cd "${repo}" && env -u SILK_CICD_IN_CONTAINER -u CARGO_TARGET_DIR SILK_DOCKER="${work}/no-such-docker" bash cicd/cicd.bash --no-sync --quick </dev/null 2>&1)" || rc=$?
 fCheck "and nor does --quick" bash -c '[[ "$1" != *"needs docker"* ]] && grep -qE "^ASan \+ LSan \.+: \(skipped --quick\)$" <<<"$1"' _ "${out}"
+fCheck "which skips TSan too" grep -qE '^TSan \.+: \(skipped --quick\)$' <<<"${out}"
 
 ## A target dir linked to another disk would dangle inside, so it goes in at its
 ## real path.
@@ -350,3 +376,4 @@ echo "all passed"
 ##		- 20261019 JC: A new /tmp per run, and what earlier runs left in docker.
 ##		- 20261019 JC: The sanitizer nightly, the ASan step, and a linked target dir.
 ##		- 20261023 JC: The run inside gets --no-demo.
+##		- 20261023 JC: The TSan step.
