@@ -573,6 +573,7 @@ mod tests {
 
 	// Test ID: EsdqcVY
 	#[test]
+	#[cfg_attr(miri, ignore = "Miri can't start a process")]
 	fn a_pipeline_whose_first_stage_exited_is_named_for_the_last() {
 		let mut first = std::process::Command::new("sleep")
 			.arg("0.3")
@@ -593,6 +594,7 @@ mod tests {
 
 	// Test ID: Esdqcbw
 	#[test]
+	#[cfg_attr(miri, ignore = "Miri can't start a process")]
 	fn a_program_s_own_children_are_not_stages() {
 		let mut sh = std::process::Command::new("sh")
 			.args(["-c", "sleep 30; :"])

@@ -1979,6 +1979,7 @@ mod tests {
 	// Test ID: EqBacFs
 	#[cfg(target_os = "linux")]
 	#[test]
+	#[cfg_attr(miri, ignore = "Miri can't start a process")]
 	fn a_hung_up_terminal_does_not_spin_the_reader() {
 		let out = std::process::Command::new(std::env::current_exe().unwrap())
 			.args(["--exact", "term::tests::hung_up_child", "--nocapture"])
@@ -2579,6 +2580,7 @@ mod tests {
 	// Test ID: ErkhGGP
 	#[cfg(unix)]
 	#[test]
+	#[cfg_attr(miri, ignore = "Miri can't start a process")]
 	fn a_unix_shell_reports_where_it_is_now_not_where_it_started() {
 		use std::io::Write;
 		use std::process::{Command, Stdio};
@@ -2641,6 +2643,7 @@ mod tests {
 	// Test ID: ErkjAN1
 	#[cfg(unix)]
 	#[test]
+	#[cfg_attr(miri, ignore = "Miri can't start a process")]
 	fn the_foreground_program_is_named_by_its_process_group() {
 		use std::os::unix::process::CommandExt;
 		use std::process::{Command, Stdio};

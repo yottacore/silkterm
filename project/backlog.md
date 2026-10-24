@@ -104,6 +104,20 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Branch: rnd1022
 	- Test case: `no_device_on_macos_says_why_and_that_nothing_can_stand_in` (EtS63vE)
 
+- Leak checks: where the Miri step runs
+	- ID: 2026102320591323
+	- Type: Task
+	- Status: Waiting for answers
+		- Waits on the 2026102320591323 question in questions.md: the leak checks, an opt-in flag, or a fast part by default.
+	- Priority: Avg
+	- Opened: 20261023-205913
+	- Opened by: CC
+	- Parent ID: 2026101714445004
+	- Requirements:
+		- The parent's rule: Miri runs on every full run, and moves behind `--leakcheck` only if a full run measures too slow.
+	- Notes:
+		- It measures far too slow (see 2026101714445004). The leak checks are on in a default full run since 10-22, so `--leakcheck` alone no longer keeps it out.
+
 - Always use automatic remote mode when detected.
 	- ID: 2026101914251764
 	- Type: Feature
@@ -474,6 +488,51 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Progress log:
 		- 20261022: Split in 2, too big for one sitting. 2026102211461905 puts the pinned CodeQL in the image and the step in the leak checks. 2026102211462005 watches it fail on a planted finding and files what the first run finds. This item closes when they do.
 
+- Leak checks: the test suite under Miri on every full run
+	- ID: 2026101714445004
+	- Type: Task
+	- Status: Started
+	- Priority: Avg
+	- Opened: 20261017-144450
+	- Opened by: CC
+	- Parent ID: 2026101714015789
+	- Prereq IDs: 2026101714445002
+	- Requirements:
+		- Third-party and vendored code end users run is covered, per the parent's 20261017 decision. What it finds goes on the backlog.
+		- The parent's Miri rows, including the ignore-with-reason rule and the move behind `--leakcheck` if a full run measures too slow.
+	- Progress log:
+		- 20261023: Measured on 72 of the suite's 1437 tests, picked at random, each run alone under Miri on nightly-2026-10-16, 12 at a time, at a load of 25 to 60. 19 passed, in 5 to 35 s each. 14 stopped at Miri's isolation. 39 were still running at 90 s, the Settings dialog and config tests most of all. The knobs crate got through 3 tests in 220 s.
+		- 20261023: Of the 14 isolation stops, 8 pass with isolation off and the test folder given. The other 4 didn't finish in the time.
+		- 20261023: Too slow for every full run. Over half the suite at more than 90 s each is at least 19 hours of CPU, against under 2 minutes for the plain suite.
+		- 20261023: The sanitizer canary works under Miri as it is, each test run alone. Miri reports the race as UB and the forgotten Vec as leaked memory.
+		- 20261023: No UB or leak turned up in the tests that finished.
+		- 20261023: Since 10-22 the leak checks are on in every full run by default (2026101916054002), so moving Miri behind `--leakcheck` no longer keeps it out of one. That's the question on 2026102320591323.
+		- 20261023: Split in 3. 2026102320591313 makes the suite runnable under Miri, 2026102320591318 adds the step, and 2026102320591323 settles where it runs. This item closes when they do.
+
+- Leak checks: the test suite runnable under Miri
+	- ID: 2026102320591313
+	- Type: Task
+	- Status: Started
+	- Priority: Avg
+	- Opened: 20261023-205913
+	- Opened by: CC
+	- Parent ID: 2026101714445004
+	- Related IDs: 2026102321073303
+	- Requirements:
+		- Every test passes under `cargo miri test`, or is ignored under Miri with a one-line reason: `#[cfg_attr(miri, ignore = "...")]`. None is left out silently.
+		- Miri runs with isolation off (`-Zmiri-disable-isolation`) and with `SILKTERM_TEST_DIR` set, as the sanitizer steps run the suite. Isolation stops a test at the clock, the local time, a directory listing or a path lookup, and with no test folder given, `testdir.rs` calls `atexit`, which Miri refuses.
+		- The reasons go by kind: it calls into C (the GPU, X11, the OS's fonts), it starts a process or a PTY, or it's too slow under Miri. The slow bar depends on the answer on 2026102320591323.
+		- What Miri reports in a crate a release binary links is filed, one item per cause. What it reports in our code is fixed.
+	- Notes:
+		- Each test has to run alone, several at once, to sort the suite. One unsupported call or UB report stops the whole test binary, and the tests after it never run.
+	- Progress log:
+		- 20261023: Went through the 145 tests in the modules most likely to call into C: term, gfx, tmux, shells, monitor, cwd, fileassoc, front, ctl and sysfont. 118 passed under Miri, and 12 ran past 45 s, 8 of them in term. 15 stopped at a call Miri can't make, and are ignored under Miri now: 11 start a process, and 4 load the graphics driver. Three of the 11 stop at a `socketpair`, which is std starting the process.
+		- 20261023: Left: the other 1292 tests, and the slow ones once the bar is set.
+	- Verified: 20261023. The 15 pass in a plain run and show as ignored under Miri. fmt check, clippy for Linux.
+	- Swept: the 145 tests above. A test elsewhere that starts a process or opens a device turns up in the rest of the run.
+	- Test case: None new. The ignores are test attributes, checked by the runs above.
+	- Branch: rnd1023
+
 - A container run tries to record the demo inside the image, even with `--no-demo`
 	- ID: 2026102213461534
 	- Type: Bug
@@ -547,18 +606,40 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261017: Priority Avg is a best guess, since none was given. Split into 5 child items, worked one at a time, the cheap static checks first. This item closes when they do.
 	- Closed:
 
-- Leak checks: the test suite under Miri on every full run
-	- ID: 2026101714445004
+- Leak checks: the Miri step, with the canary
+	- ID: 2026102320591318
 	- Type: Task
 	- Status: Queued
 	- Priority: Avg
-	- Opened: 20261017-144450
+	- Opened: 20261023-205913
 	- Opened by: CC
-	- Parent ID: 2026101714015789
-	- Prereq IDs: 2026101714445002
+	- Parent ID: 2026101714445004
+	- Prereq IDs: 2026102320591313
 	- Requirements:
-		- Third-party and vendored code end users run is covered, per the parent's 20261017 decision. What it finds goes on the backlog.
-		- The parent's Miri rows, including the ignore-with-reason rule and the move behind `--leakcheck` if a full run measures too slow.
+		- The image installs the `miri` component on the pinned nightly, beside `rust-src`.
+		- A step script, like `tsan.bash`, runs the sanitizer canary first, then the suite, in a target dir and Miri sysroot of its own under `target/`.
+		- The canary's two tests run apart, since a UB report stops the binary. The step stops unless Miri reports the race as a data race and the forgotten Vec as leaked memory.
+		- A `--no-miri` flag, a plan line, and the cleanup and rar exclude lines. New container and engine cases, watched to fail.
+		- Where the step runs follows the answer on 2026102320591323.
+
+- The nightly warns that silkterm's `Send` check on wgpu's types passes the recursion limit, which a later Rust makes an error
+	- ID: 2026102321073303
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261023-210733
+	- Opened by: CC
+	- Related IDs: 2026102320591313
+	- Steps to reproduce:
+		- Build the tests on nightly-2026-10-16, as the Miri run does.
+	- Incorrect behavior:
+		- A `recursion_depth_exceeding_limit` warning on the whole crate, from proving `wgpu_core`'s `Global` is `Send`. It says it's being phased out to a hard error, rust-lang/rust#159228.
+	- Expected behavior:
+		- No warning, so a toolchain bump past the change still builds.
+	- Possible cause:
+		- The default limit of 128. The warning suggests `#![recursion_limit = "256"]`, or a manual `Send` impl on a type in between.
+	- Notes:
+		- Not checked yet whether the stable 1.96 or the sanitizer nightly says the same.
 
 - Leak checks: CodeQL watched to fail, and its first findings filed
 	- ID: 2026102211462005

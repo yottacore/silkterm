@@ -421,6 +421,7 @@ mod tests {
 	// Test ID: Et9OGdk
 	#[cfg(unix)]
 	#[test]
+	#[cfg_attr(miri, ignore = "Miri can't start a process")]
 	fn a_test_with_no_socket_of_its_own_reaches_no_server() {
 		TEST_SOCKET.with(|sock| *sock.borrow_mut() = None);
 		let cmd = command(Path::new("tmux"));
@@ -480,6 +481,7 @@ mod tests {
 	// Test ID: Et0Zjp0
 	#[cfg(unix)]
 	#[test]
+	#[cfg_attr(miri, ignore = "Miri can't start a process")]
 	fn ending_kills_the_session_started_and_no_other() {
 		let Some(tmux) = program() else {
 			eprintln!("no tmux here; skipped");

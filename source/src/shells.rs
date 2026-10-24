@@ -2419,6 +2419,7 @@ mod tests {
 	// Test ID: ErkT4k5
 	#[cfg(unix)]
 	#[test]
+	#[cfg_attr(miri, ignore = "Miri can't start a process")]
 	fn the_version_probe_gives_up_on_a_program_that_never_answers() {
 		use std::os::unix::fs::PermissionsExt;
 		let dir = crate::testdir::run_dir().join(format!("silkterm_probe_{}", std::process::id()));

@@ -2748,6 +2748,7 @@ mod tests {
 	// dialogs' warm-up builds, on this thread. Skips without a software adapter.
 	// Test ID: ErnMa8F
 	#[test]
+	#[cfg_attr(miri, ignore = "Miri can't load the graphics driver")]
 	fn a_card_that_refuses_a_device_falls_back_to_software() {
 		let _loader = hold_loader();
 		let instance = plain_instance(wgpu::Backends::PRIMARY);
@@ -2813,6 +2814,7 @@ mod tests {
 	// Metal).
 	// Test ID: Ern7Y1J
 	#[test]
+	#[cfg_attr(miri, ignore = "Miri can't load the graphics driver")]
 	fn a_new_device_reserves_little_graphics_memory() {
 		let _loader = hold_loader();
 		let gpu = match DialogGpu::build(Want::Card) {
@@ -2850,6 +2852,7 @@ mod tests {
 	// out wrong in bc7.rs shows even where its own decode agrees with it.
 	// Test ID: Erz0m6t
 	#[test]
+	#[cfg_attr(miri, ignore = "Miri can't load the graphics driver")]
 	fn a_bc1_wallpaper_draws_like_the_plain_one() {
 		let _loader = hold_loader();
 		let gpu = match DialogGpu::build(Want::Software) {
@@ -3130,6 +3133,7 @@ mod tests {
 	// software adapter.
 	// Test ID: Es9NHfD
 	#[test]
+	#[cfg_attr(miri, ignore = "Miri can't load the graphics driver")]
 	fn a_warm_up_never_overlaps_what_the_window_draws() {
 		let gpu = {
 			let _loader = hold_loader();

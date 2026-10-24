@@ -470,6 +470,7 @@ mod tests {
 	// Test ID: Eq4qaCW
 	#[cfg(unix)]
 	#[test]
+	#[cfg_attr(miri, ignore = "Miri can't start a process")]
 	fn a_report_is_dropped_once_the_program_that_sent_it_exits() {
 		let mut child = std::process::Command::new("sleep")
 			.arg("30")
