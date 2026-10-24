@@ -431,12 +431,38 @@ mod tests {
 		faults
 	}
 
+	// The `license` of the nearest Cargo.toml above a .rs file. A crate that
+	// names none is under the project's GPL.
+	fn crate_license(repo: &std::path::Path, file: &std::path::Path) -> String {
+		let gpl = "GPL-2.0-or-later".to_string();
+		for dir in file.ancestors().skip(1) {
+			if !dir.starts_with(repo) {
+				break;
+			}
+			let Ok(manifest) = std::fs::read_to_string(dir.join("Cargo.toml")) else {
+				continue;
+			};
+			return manifest
+				.lines()
+				.find_map(|line| {
+					let value = line
+						.strip_prefix("license")?
+						.trim_start()
+						.strip_prefix('=')?;
+					Some(value.trim().trim_matches('"').to_string())
+				})
+				.unwrap_or(gpl);
+		}
+		gpl
+	}
+
 	// The rest of the tree: build.rs, the Rust outside src/, and every script
 	// git tracks. A copyright line in the Jim Collier or the Bubbles form (or
 	// a .ps1's ASCII one), the license within a few lines under it, nothing but
 	// comments above it, and
-	// History at the bottom of the file, not in the header. Tracked files only,
-	// so a scratch file in a working tree is never judged.
+	// History at the bottom of the file, not in the header. A .rs file takes
+	// its crate's license, and only an MIT one may be in the Bubbles form.
+	// Tracked files only, so a scratch file in a working tree is never judged.
 	// Test ID: ErloT4L
 	#[test]
 	fn every_script_has_the_license_header_with_history_at_the_bottom() {
@@ -479,14 +505,21 @@ mod tests {
 				.map(|line| line.trim_end_matches('\r'))
 				.collect();
 			if ext == "rs" {
-				if lines.first() != Some(&"// SPDX-License-Identifier: GPL-2.0-or-later") {
-					faults.push(format!("{name}: line 1 is not the license"));
+				let license = crate_license(repo, &path);
+				if lines
+					.first()
+					.and_then(|line| line.strip_prefix("// SPDX-License-Identifier: "))
+					!= Some(license.as_str())
+				{
+					faults.push(format!("{name}: line 1 is not the {license} license"));
 				}
+				let mit = license == "MIT";
 				let copyright = lines
 					.get(1)
 					.and_then(|line| line.strip_prefix("// Copyright "));
 				match copyright.map(|text| copyright_form(text, &marker, false)) {
 					Some(Ok(false)) => {}
+					Some(Ok(true)) if mit => {}
 					Some(Ok(true)) => {
 						faults.push(format!("{name}: a GPL file in the Bubbles form"));
 					}

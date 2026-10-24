@@ -76,10 +76,10 @@ glyphon = { git = "https://github.com/jim-collier/glyphon", branch = "text-srgb-
 # 3.0.0-beta.1 is on crates.io.
 shcl = { git = "https://github.com/yottacore/shcl", branch = "dev" }
 
-# silk_asan is set by the ASan run (cicd/config.bash), for the few tests that
-# can't mean anything under it.
+# silk_asan and silk_tsan are set by the sanitizer runs (cicd/config.bash), for
+# the few tests that can't mean anything under them.
 [workspace.lints.rust]
-unexpected_cfgs = { level = "warn", check-cfg = ["cfg(silk_asan)"] }
+unexpected_cfgs = { level = "warn", check-cfg = ["cfg(silk_asan)", "cfg(silk_tsan)"] }
 
 # Clippy gate (cicd lints stage runs -D warnings). pedantic is on; the allows
 # below are deliberate house style, not suppressed problems.

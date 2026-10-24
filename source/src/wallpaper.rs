@@ -1610,6 +1610,10 @@ mod tests {
 		silk_asan,
 		ignore = "ASan's shadow memory and quarantine count in the peak this measures"
 	)]
+	#[cfg_attr(
+		silk_tsan,
+		ignore = "TSan's shadow memory counts in the peak this measures"
+	)]
 	fn a_huge_image_costs_its_decode_and_no_more() {
 		let dir =
 			crate::testdir::run_dir().join(format!("silkterm_wp_huge_{}", std::process::id()));

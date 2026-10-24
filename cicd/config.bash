@@ -127,6 +127,15 @@ ASAN_DIR="asan-${SANITIZER_TOOLCHAIN#nightly-}"
 ASAN_CMD=(env "CARGO_TARGET_DIR=${TARGET_DIR}/${ASAN_DIR}" "RUSTFLAGS=-Zsanitizer=address -Cforce-frame-pointers=yes --cfg silk_asan" cargo "+${SANITIZER_TOOLCHAIN}" test -Zbuild-std --target x86_64-unknown-linux-gnu --tests --no-fail-fast)
 ## Leaks LSan lets through, each with the backlog item that fixes it.
 LSAN_SUPPRESSIONS="cicd/lsan-suppressions.txt"
+## Stage 3: the same again under ThreadSanitizer, since the program starts
+## threads. Same nightly and the same reasons for -Zbuild-std and --target, which
+## matter more here: an uninstrumented std makes TSan report races that aren't.
+## ASan and TSan can't share a build, so it has a build dir of its own. Skipped
+## under --quick and --no-tsan; empty () disables it.
+TSAN_DIR="tsan-${SANITIZER_TOOLCHAIN#nightly-}"
+TSAN_CMD=(env "CARGO_TARGET_DIR=${TARGET_DIR}/${TSAN_DIR}" "RUSTFLAGS=-Zsanitizer=thread -Cforce-frame-pointers=yes --cfg silk_tsan" cargo "+${SANITIZER_TOOLCHAIN}" test -Zbuild-std --target x86_64-unknown-linux-gnu --tests --no-fail-fast)
+## Races TSan lets through, each with the backlog item that fixes it.
+TSAN_SUPPRESSIONS="cicd/tsan-suppressions.txt"
 
 ## Stage 3: the slow leak checks, after the ASan run. On in a full run, off under
 ## --quick unless --leakcheck asks, and --no-leakcheck drops them. Any report fails
@@ -264,7 +273,7 @@ CLEANUP_INCREMENTAL_DAYS=7
 CLEANUP_BUILD_DIRS=(debug release "${PROFILE_PROFILE}" lint)
 ## The same for the dirs the pinned nightly builds into, which only a nightly bump
 ## makes stale.
-CLEANUP_NIGHTLY_DIRS=("${ASAN_DIR}")
+CLEANUP_NIGHTLY_DIRS=("${ASAN_DIR}" "${TSAN_DIR}")
 
 ## Old SVGs are pruned by gfs_rotate (cicd/utility/include/gfs-rotate.bash): keeps
 ## ~30 - first + newest-per-hour/day/week/month/year + last 10. Tune with the
@@ -334,8 +343,8 @@ GIT_PUBLISH=(cicd/utility/n8git_backup-and-publish)
 ## backup from the 09-15 history rewrite. source/target and the clipboard-race
 ## test crate's target are stray lint and test builds, and target/darwin is a
 ## macOS type check. target/container is what a --container run builds, a second
-## copy of all of it, and target/asan-* the test build under the sanitizer. A new
-## scratch dir under target/ needs a line here.
+## copy of all of it, and target/asan-* and target/tsan-* the test builds under
+## the sanitizers. A new scratch dir under target/ needs a line here.
 ##
 ## The wallpaper originals (about 350 MB) and duplicates (80 MB) sit behind the
 ## private/wallpaper/source symlink, which rar follows. The originals are the
@@ -351,6 +360,7 @@ export GIT_BACKUP_AND_PUBLISH_RAR_EXCLUDES='*/forks
 */target/darwin
 */target/container
 */target/asan-*
+*/target/tsan-*
 */target/lightnew
 */target/lightold
 */target/mapopt

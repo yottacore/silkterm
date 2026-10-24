@@ -466,6 +466,7 @@ mod tests {
 	// Test ID: EsaCcC5
 	#[cfg(unix)]
 	#[test]
+	#[cfg_attr(miri, ignore = "Miri can't start a process")]
 	fn a_poke_reaches_a_listener_and_finds_the_dead() {
 		let dir =
 			crate::testdir::run_dir().join(format!("silkterm_ctl_poke_{}", std::process::id()));
@@ -565,6 +566,7 @@ mod tests {
 	// Test ID: Eq4Yrbg
 	#[cfg(unix)]
 	#[test]
+	#[cfg_attr(miri, ignore = "Miri can't start a process")]
 	fn the_socket_file_goes_away_however_the_process_ends() {
 		use std::os::unix::process::ExitStatusExt;
 		let exe = std::env::current_exe().unwrap();

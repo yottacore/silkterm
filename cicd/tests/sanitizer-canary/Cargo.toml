@@ -1,5 +1,6 @@
-# Leaks on purpose. cicd/utility/asan.bash runs it before the suite, with the
-# same settings, and stops if the leak isn't reported. Outside the workspace.
+# Leaks and races on purpose. cicd/utility/asan.bash and tsan.bash run it before
+# the suite, with the same settings, and stop if theirs isn't reported. Outside
+# the workspace.
 [package]
 name = "sanitizer-canary"
 version = "0.1.0"
