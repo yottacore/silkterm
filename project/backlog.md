@@ -500,22 +500,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Branch: rnd1023
 	- Test case: `cicd/tests/container/run.bash` (EsJg9EF), "the demo among them, though nothing here asked for it off": the run inside gets `--no-demo` when nothing asked for it.
 
-- The license header test fails on the knobs crate since it went MIT
-	- ID: 2026102320070112
-	- Type: Bug
-	- Status: Queued
-	- Severity: Avg
-	- Opened: 20261023-200701
-	- Opened by: CC
-	- Steps to reproduce:
-		- `cargo test --bin silkterm every_script_has_the_license_header` on rnd1023.
-	- Incorrect behavior: 6 header faults. `knobs/src/lib.rs`, `knobs/src/tests.rs` and `knobs/demo/src/main.rs` each give "line 1 is not the license" and "a GPL file in the Bubbles form".
-	- Expected behavior: The test knows which crates are MIT and checks them for that header.
-	- Reproduced: 20261023, here, in a plain test run. It fails under TSan too.
-	- Possible cause: 99f5810 ("knobs: MIT") changed the headers, and the test's `.rs` branch still wants GPL on every tracked `.rs` file.
-	- Notes:
-		- Found while working 2026101714445003. It fails every full run until fixed.
-
 - Implement leak and static checks of the Rust code run as part of CI/CD
 	- ID: 2026101714015789
 	- Type: Task
@@ -640,6 +624,30 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- The Windows GUI scenarios and the scroll harness turn off only with `--quick`, and dpirand only with `DPIRAND_SECS=0` in config.bash.
 	- Notes:
 		- Not every stage needs its own flag. A few grouped ones may do, such as one for the lints and one for the script tests.
+
+- The license header test fails on the knobs crate since it went MIT
+	- ID: 2026102320070112
+	- Type: Bug
+	- Status: Done
+	- Severity: Avg
+	- Opened: 20261023-200701
+	- Opened by: CC
+	- Steps to reproduce:
+		- `cargo test --bin silkterm every_script_has_the_license_header` on rnd1023.
+	- Incorrect behavior: 6 header faults. `knobs/src/lib.rs`, `knobs/src/tests.rs` and `knobs/demo/src/main.rs` each give "line 1 is not the license" and "a GPL file in the Bubbles form".
+	- Expected behavior: The test knows which crates are MIT and checks them for that header.
+	- Reproduced: 20261023, here, in a plain test run. It fails under TSan too.
+	- Possible cause: 99f5810 ("knobs: MIT") changed the headers, and the test's `.rs` branch still wants GPL on every tracked `.rs` file.
+	- Notes:
+		- Found while working 2026101714445003. It fails every full run until fixed.
+	- Actual cause [Bug]: The test's `.rs` branch had GPL and the Jim Collier form written in for every tracked `.rs` file, so it couldn't follow a crate that changed license.
+	- Actual fix [Bug]: A `.rs` file takes the `license` of the nearest Cargo.toml above it, GPL when that names none. Its line 1 has to match. An MIT file may use either copyright form, as an MIT script may, and a GPL one still needs the Jim Collier form.
+	- Swept: every tracked `.rs` file and Cargo.toml. knobs and knobs/demo are MIT. source and sanitizer-canary say GPL, and clipboard-race and gpu-stress name no license and have GPL headers. The script branch already took MIT. `every_source_file_has_the_license_header` reads only `source/src/`, which stays GPL.
+	- Verified: 20261023. The test failed with the 6 faults before and passes after. A GPL header put into `knobs/src/tests.rs`, and an MIT Bubbles header into gpu-stress, each made it fail. fmt and clippy are clean.
+	- Branch: rnd1023
+	- Test case: `every_script_has_the_license_header_with_history_at_the_bottom` (ErloT4L), now per crate.
+	- Acceptance signoff: Self-closed: mechanical. The test failed before and passes after.
+	- Closed: 20261023-203811
 
 - Wayland: must use the Wayland clipboard, and minimize other X11 features
 	- ID: 2026101509024607
