@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 rust-version = "1.96"
 description = "A settings dialog with nothing behind it, for trying out knobs"
-license = "GPL-2.0-or-later"
+license = "MIT"
 publish = false
 
 # Kept out of SilkTerm's workspace, so egui stays out of its lock file, lint

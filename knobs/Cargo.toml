@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 rust-version = "1.96"
 description = "Settings declared in shcl, and what a change to one does to the others"
-license = "GPL-2.0-or-later"
+license = "MIT"
 publish = false
 
 # Its docs have no examples, and the doc test run makes a temp folder of its own,
