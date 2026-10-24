@@ -345,6 +345,39 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Test case: New cases in `cicd/tests/engine/run.bash` (Er2UgY7).
 	- Branch: rnd1022
 
+- The allocations per frame test failed its drag limit once under load
+	- ID: 2026102321230038
+	- Type: Bug
+	- Status: Waiting on automated testing
+	- Needs local test suite run?: The gate step, in the container as usual, which runs ErzCQC2 in stage 3.
+	- Severity: Low
+	- Opened: 20261023-212300
+	- Opened by: CC
+	- Related IDs: 2026102407065855, 2026102407065861
+	- Target OS: Linux
+	- Test environment: b23 at load 23 to 25, the quick gate in the container on `rnd1023`, llvmpipe
+	- Steps to reproduce:
+		- Run `cicd/cicd.bash -y --quick --no-publish --no-dogfood --no-demo` while the box is busy.
+	- Incorrect behavior: `cicd/tests/allocs/run.bash` (ErzCQC2) failed with "drag: 364 per frame, limit 360". The same binary then passed 3 times in a row, at 339, 346 and 347.
+	- Expected behavior: The drag check doesn't go red on load alone.
+	- Reproduced: 20261023, once in 4 runs. Gate log `/mnt/ext/wip2/wip/tmp/silkterm-floss/20261023-211203/001/gate.log`.
+		- 20261024: on b23 with 8 cores loaded, the old drag failed 2 runs in 3, at 362 and 368, and read 350 on the third.
+	- Possible cause: The test's own comment says the per-frame count in a drag rises with load, since a slow box folds more moves into each frame. The frame's own count still drifts with it, and 360 leaves about 4% over the measured 340.
+	- Actual cause:
+		- The drag frame had two shares that grow with load. Measured per frame on the debug build:
+			- The minimap recomposes once its 90 ms gap is up, about 20 allocations. An idle box composes on every third drag frame or so, a busy one on every frame. With the map off, a one-row drag read a flat 320.
+			- Each row the selection newly covers costs about 17. At 80 frames for 80 moves a frame covers a third of a row. At 13 frames each covers 2 or more, which read 359 to 370.
+		- The first has a ceiling, one compose a frame. The second doesn't.
+	- Actual fix:
+		- The drag goes down to cover the rows first, waits a second for that frame, and only then is counted, moving along that one row. A busy box can then add no more than the compose. The limit stays 360.
+		- Filed apart: the at-rest check at load 50 (2026102407065855), and the drag's needless minimap compose (2026102407065861).
+	- Verified: 20261024, the new drag check passed 6 runs at load 30 to 52, at 336, 339 and 345 with no extra load, adn 335, 335 and 331 with 8 cores loaded. The old one, alternated with it under that load, failed 2 of 3.
+		- At load 52 both versions failed the at-rest check instead, which is 2026102407065855.
+		- shellcheck is clean.
+	- Swept: the at-rest and per-move checks in the same test, and every reader of the allocation counter. No other test reads it.
+	- Branch: rnd1024
+	- Test case: ErzCQC2 itself. The old drag failing under load and the new one passing are under Verified.
+
 - Add a contributor license agreement, like nano-git-db's
 	- ID: 2026101906582193
 	- Type: Task
@@ -603,23 +636,24 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Split from 2026101714445005. Its heap-growth test covers some of the same actions in-process. This one is for what that can't reach: windows, tabs and splits opened and closed, the GPU, the Settings dialog and a real PTY.
 		- `cicd/tests/allocs/run.bash` already drives a window on a private Xvfb.
 
-- The allocations per frame test failed its drag limit once under load
-	- ID: 2026102321230038
+- The allocations per frame test fails its at-rest limit at load 50 or so, with the shells' output still coming in
+	- ID: 2026102407065855
 	- Type: Bug
 	- Status: Queued
 	- Severity: Low
-	- Opened: 20261023-212300
+	- Opened: 20261024-070658
 	- Opened by: CC
+	- Related IDs: 2026102321230038
 	- Target OS: Linux
-	- Test environment: b23 at load 23 to 25, the quick gate in the container on `rnd1023`, llvmpipe
+	- Test environment: b23 at load 42 to 52, with 8 cores also loaded, llvmpipe
 	- Steps to reproduce:
-		- Run `cicd/cicd.bash -y --quick --no-publish --no-dogfood --no-demo` while the box is busy.
-	- Incorrect behavior: `cicd/tests/allocs/run.bash` (ErzCQC2) failed with "drag: 364 per frame, limit 360". The same binary then passed 3 times in a row, at 339, 346 and 347.
-	- Expected behavior: The drag check doesn't go red on load alone.
-	- Reproduced: 20261023, once in 4 runs. Gate log `/mnt/ext/wip2/wip/tmp/silkterm-floss/20261023-211203/001/gate.log`.
-	- Possible cause: The test's own comment says the per-frame count in a drag rises with load, since a slow box folds more moves into each frame. The frame's own count still drifts with it, and 360 leaves about 4% over the measured 340.
+		- Run `cicd/tests/allocs/run.bash` (ErzCQC2) on a box at load 50 or so.
+	- Incorrect behavior: "at rest: 15552 per frame, limit 178", and 3914 on the next run. The old and the new drag both failed it the same way.
+	- Expected behavior: The at-rest check counts frames at rest, at any load.
+	- Reproduced: 20261024, 2 runs in a row at load 52. At load 30 to 42 it passed 6 times.
+	- Possible cause: The test waits 6 s after the window is up before it counts. At that load the 3 shells' 400 colored lines each are still being drawn, so the window isn't at rest yet. The drag check can also see as few as 9 frames there, against its floor of 6.
 	- Notes:
-		- The round didn't change the drag path. Its source edits were test attributes only.
+		- Found while working 2026102321230038.
 
 - Wayland: a copy a program sends while no SilkTerm window has focus is dropped
 	- ID: 2026101607585700
@@ -650,6 +684,23 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- The Windows GUI scenarios and the scroll harness turn off only with `--quick`, and dpirand only with `DPIRAND_SECS=0` in config.bash.
 	- Notes:
 		- Not every stage needs its own flag. A few grouped ones may do, such as one for the lints and one for the script tests.
+
+- A drag select recomposes the minimap about 11 times a second, though the map shows no selection
+	- ID: 2026102407065861
+	- Type: Enhancement
+	- Status: Queued
+	- Priority: Low
+	- Opened: 20261024-070658
+	- Opened by: CC
+	- Related IDs: 2026102321230038
+	- Target OS: All
+	- Requirements:
+		- A pane rebuild that changes nothing the map shows, such as a selection change, doesn't recompose the map.
+		- Typing on the prompt line, output, a scroll, a resize and a color change still reach the map.
+	- Notes:
+		- `Pane::build` calls `map.update` on every forced rebuild, and that composes whenever the 90 ms gap is up. A drag rebuilds every frame, so the map composes on every frame past the gap: about 20 allocations a time on b23, and the compose's own CPU.
+		- The due compose is also what picks up a changed screen row with no new history, so skipping it needs some other sign the screen's text changed. `last_rows` already holds a hash per row.
+		- ErzCQC2's drag limit has the compose in every frame, so this lowers its figure.
 
 - The nightly warns that silkterm's `Send` check on wgpu's types passes the recursion limit, which a later Rust makes an error
 	- ID: 2026102321073303
