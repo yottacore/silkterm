@@ -118,38 +118,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Notes:
 		- It measures far too slow (see 2026101714445004). The leak checks are on in a default full run since 10-22, so `--leakcheck` alone no longer keeps it out.
 
-- Always use automatic remote mode when detected.
-	- ID: 2026101914251764
-	- Type: Feature
-	- Status: Waiting on automated testing
-		- The row's label is shorter than the requested name. See Decisions.
-		- 20261023: Back from Waiting on UAT, since the 2 rows below are machine runs.
-	- Needs hand testing: OK the shorter Settings label.
-	- Needs local test suite run?: the slow window tests in a full run. Nothing else here needs one.
-	- Needs external testing: the wingui `wpremote` scenario on vm925w or b29w over a real RDP session with `performance.detect_remote: false`, which should keep the stored profile and the wallpaper. The Windows detection code is unchanged and only compiled here.
-	- Priority: Avg
-	- Opened: 20261019-142517
-	- Opened by: JC
-	- Related IDs: 2026101816103600
-	- Target OS: All
-	- Requirements:
-		- New setting: "Always use automatic remote mode when detected."
-		- Default true.
-	- Notes:
-		- Pre-next-cut.
-	- Decisions:
-		- 20261022: The Settings label is "Use remote mode when detected", with "automatic remote mode" as a search word. The requested wording is 46 characters, and the widest label sets the panel width on every tab; the longest now is 30. The flyover carries the rest.
-		- 20261022: Off doesn't hide anything. The View menu's "Temporary remote display mode" and Remote (temporary) in the Profile dropdown still work by hand.
-		- 20261022: The setting is read at launch. Turning it off in a session already under Remote leaves Remote on until the View menu item or a restart takes it off.
-		- 20261022: The row sits last under Performance, at the top level, since detection doesn't depend on Choose automatically.
-	- Progress log:
-		- 20261022: Added `performance.detect_remote`, default true, with its template line and Settings row on the Silk tab. Off, launch skips the remote check and keeps the stored profile. Linux and Windows both go through the one launch check, so both read it. The performance profile and automatic settings design docs say so.
-		- Verified: rustfmt, clippy for Linux, Windows and macOS, the whole silkterm unit test suite (1403 passed, 3 ignored), and the docs and tables checks.
-		- Swept: `remote_session()` has one caller, the launch check. `set_remote` callers are the View menu toggle, the Profile dropdown and tests, all by hand, so none reads the setting.
-		- Not tried in a real window on any system.
-	- Branch: rnd1022
-	- Test case: `a_remote_screen_is_ignored_when_turned_off` (rating.rs, fails with the check reordered so detection runs first) and `a_remote_screen_takes_remote_unless_turned_off` (config.rs).
-
 - The window doesn't paint while the GPU is busy or short on memory, and stays blank after the load ends
 	- ID: 2026100312470535
 	- Type: Bug
@@ -197,6 +165,64 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Commit: 8cb6a4d
 	- Test case: `a_refused_frame_is_drawn_again_on_a_backoff` (Erfy7et) and `a_refused_rebuild_stays_pending_and_is_tried_again` (Erfy7yk). The GL swap result has no test, since it needs a real GL context.
 	- Note: 20261003, Free resources when idle was on for some of the windows that went blank and off for others. Which ones is not remembered, so both the frame path and the rebuild path stay suspects.
+
+- A container run tries to record the demo inside the image, even with `--no-demo`
+	- ID: 2026102213461534
+	- Type: Bug
+	- Status: Waiting on automated testing
+	- Needs local test suite run?: A full run in the container, `cicd/cicd.bash -y --no-publish --no-dogfood --no-demo`. Its log shows no "recording demo video ..." from the run inside, and the host's stage 7 says "demo video disabled".
+	- Severity: Avg
+	- Opened: 20261022-134615
+	- Opened by: CC
+	- Target OS: Linux
+	- Test environment: b23, `cicd/cicd.bash -y --no-publish --no-dogfood --no-demo`, docker default
+	- Steps to reproduce:
+		- Run a full pipeline in the container with `--no-demo`.
+	- Incorrect behavior: The run inside the image prints "recording demo video ..." in its stage 7 and runs `demo-video.py`. Here it failed on a missing `numpy`, so it only warned: "demo video hook failed (non-fatal)".
+	- Expected behavior: `--no-demo` is honored inside the container too, and the demo, a host step, never runs in the image.
+	- Reproduced: 20261022, run log `test_silkterm-batch_20261022-12464452`, lines 3782 to 3791.
+	- Possible cause: The container's own arguments are `-y --no-sync --no-dogfood --no-publish --no-private` plus `innerArgs`, and `--no-demo` never goes into `innerArgs` (`cicd.bash` line 561). The demo is on by default, so the run inside turns it back on. The same on `dev`, at line 549.
+	- Actual cause: As above. The run inside got every host stage off but the demo, which `DEMO_ENABLE=1` in config.bash turns on. The comment above that line already listed the demo among the stages left out. It ran inside on every full container run, not only with `--no-demo`. With the demo on, it ran twice: in the image, then here.
+	- Progress log:
+		- 20261023: The run inside gets `--no-demo` with the other host stages. The demo runs only on this box, and only when the run here asks for it.
+		- 20261023: The container test's check of the inner command line now expects `--no-demo` after `--no-private`. It was `-y --no-sync --no-dogfood --no-publish --no-private --quick --no-fuzz`, and is `-y --no-sync --no-dogfood --no-publish --no-private --no-demo --quick --no-fuzz`.
+	- Actual fix: `--no-demo` added to the fixed options in `cicd.bash` for the run inside.
+	- Verified: 20261023. The new check failed before the fix and passes after. The container and engine tests, shellcheck at the pipeline's level, the bash style check, `lint-report.bash --check` and the docs check.
+		- Swept: every `fContainerRun` call. The gate, ASan and CodeQL calls run their own script, not the engine's later stages. The rest of the host-only steps: sync, the private runner, dogfood and publish have their flags in the list, and the content scrub, the Windows scenarios and the run log check `SILK_CICD_IN_CONTAINER`. `cicd-win.ps1 -Wsl` starts no container. design.md already says the demo stays outside.
+	- Branch: rnd1023
+	- Test case: `cicd/tests/container/run.bash` (EsJg9EF), "the demo among them, though nothing here asked for it off": the run inside gets `--no-demo` when nothing asked for it.
+
+- Always use automatic remote mode when detected.
+	- ID: 2026101914251764
+	- Type: Feature
+	- Status: Waiting on automated testing
+		- The row's label is shorter than the requested name. See Decisions.
+		- 20261023: Back from Waiting on UAT, since the 2 rows below are machine runs.
+	- Needs hand testing: OK the shorter Settings label.
+	- Needs local test suite run?: the slow window tests in a full run. Nothing else here needs one.
+	- Needs external testing: the wingui `wpremote` scenario on vm925w or b29w over a real RDP session with `performance.detect_remote: false`, which should keep the stored profile and the wallpaper. The Windows detection code is unchanged and only compiled here.
+	- Priority: Avg
+	- Opened: 20261019-142517
+	- Opened by: JC
+	- Related IDs: 2026101816103600
+	- Target OS: All
+	- Requirements:
+		- New setting: "Always use automatic remote mode when detected."
+		- Default true.
+	- Notes:
+		- Pre-next-cut.
+	- Decisions:
+		- 20261022: The Settings label is "Use remote mode when detected", with "automatic remote mode" as a search word. The requested wording is 46 characters, and the widest label sets the panel width on every tab; the longest now is 30. The flyover carries the rest.
+		- 20261022: Off doesn't hide anything. The View menu's "Temporary remote display mode" and Remote (temporary) in the Profile dropdown still work by hand.
+		- 20261022: The setting is read at launch. Turning it off in a session already under Remote leaves Remote on until the View menu item or a restart takes it off.
+		- 20261022: The row sits last under Performance, at the top level, since detection doesn't depend on Choose automatically.
+	- Progress log:
+		- 20261022: Added `performance.detect_remote`, default true, with its template line and Settings row on the Silk tab. Off, launch skips the remote check and keeps the stored profile. Linux and Windows both go through the one launch check, so both read it. The performance profile and automatic settings design docs say so.
+		- Verified: rustfmt, clippy for Linux, Windows and macOS, the whole silkterm unit test suite (1403 passed, 3 ignored), and the docs and tables checks.
+		- Swept: `remote_session()` has one caller, the launch check. `set_remote` callers are the View menu toggle, the Profile dropdown and tests, all by hand, so none reads the setting.
+		- Not tried in a real window on any system.
+	- Branch: rnd1022
+	- Test case: `a_remote_screen_is_ignored_when_turned_off` (rating.rs, fails with the check reordered so detection runs first) and `a_remote_screen_takes_remote_unless_turned_off` (config.rs).
 
 - Updates to CICD script flags
 	- ID: 2026101816103601
@@ -535,32 +561,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Test case: None new. The ignores are test attributes, checked by the runs above.
 	- Branch: rnd1023
 
-- A container run tries to record the demo inside the image, even with `--no-demo`
-	- ID: 2026102213461534
-	- Type: Bug
-	- Status: Waiting on automated testing
-	- Needs local test suite run?: A full run in the container, `cicd/cicd.bash -y --no-publish --no-dogfood --no-demo`. Its log shows no "recording demo video ..." from the run inside, and the host's stage 7 says "demo video disabled".
-	- Severity: Avg
-	- Opened: 20261022-134615
-	- Opened by: CC
-	- Target OS: Linux
-	- Test environment: b23, `cicd/cicd.bash -y --no-publish --no-dogfood --no-demo`, docker default
-	- Steps to reproduce:
-		- Run a full pipeline in the container with `--no-demo`.
-	- Incorrect behavior: The run inside the image prints "recording demo video ..." in its stage 7 and runs `demo-video.py`. Here it failed on a missing `numpy`, so it only warned: "demo video hook failed (non-fatal)".
-	- Expected behavior: `--no-demo` is honored inside the container too, and the demo, a host step, never runs in the image.
-	- Reproduced: 20261022, run log `test_silkterm-batch_20261022-12464452`, lines 3782 to 3791.
-	- Possible cause: The container's own arguments are `-y --no-sync --no-dogfood --no-publish --no-private` plus `innerArgs`, and `--no-demo` never goes into `innerArgs` (`cicd.bash` line 561). The demo is on by default, so the run inside turns it back on. The same on `dev`, at line 549.
-	- Actual cause: As above. The run inside got every host stage off but the demo, which `DEMO_ENABLE=1` in config.bash turns on. The comment above that line already listed the demo among the stages left out. It ran inside on every full container run, not only with `--no-demo`. With the demo on, it ran twice: in the image, then here.
-	- Progress log:
-		- 20261023: The run inside gets `--no-demo` with the other host stages. The demo runs only on this box, and only when the run here asks for it.
-		- 20261023: The container test's check of the inner command line now expects `--no-demo` after `--no-private`. It was `-y --no-sync --no-dogfood --no-publish --no-private --quick --no-fuzz`, and is `-y --no-sync --no-dogfood --no-publish --no-private --no-demo --quick --no-fuzz`.
-	- Actual fix: `--no-demo` added to the fixed options in `cicd.bash` for the run inside.
-	- Verified: 20261023. The new check failed before the fix and passes after. The container and engine tests, shellcheck at the pipeline's level, the bash style check, `lint-report.bash --check` and the docs check.
-		- Swept: every `fContainerRun` call. The gate, ASan and CodeQL calls run their own script, not the engine's later stages. The rest of the host-only steps: sync, the private runner, dogfood and publish have their flags in the list, and the content scrub, the Windows scenarios and the run log check `SILK_CICD_IN_CONTAINER`. `cicd-win.ps1 -Wsl` starts no container. design.md already says the demo stays outside.
-	- Branch: rnd1023
-	- Test case: `cicd/tests/container/run.bash` (EsJg9EF), "the demo among them, though nothing here asked for it off": the run inside gets `--no-demo` when nothing asked for it.
-
 - Implement leak and static checks of the Rust code run as part of CI/CD
 	- ID: 2026101714015789
 	- Type: Task
@@ -624,25 +624,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- A `--no-miri` flag, a plan line, and the cleanup and rar exclude lines. New container and engine cases, watched to fail.
 		- Where the step runs follows the answer on 2026102320591323.
 
-- The nightly warns that silkterm's `Send` check on wgpu's types passes the recursion limit, which a later Rust makes an error
-	- ID: 2026102321073303
-	- Type: Bug
-	- Status: Queued
-	- Severity: Low
-	- Opened: 20261023-210733
-	- Opened by: CC
-	- Related IDs: 2026102320591313
-	- Steps to reproduce:
-		- Build the tests on nightly-2026-10-16, as the Miri run does.
-	- Incorrect behavior:
-		- A `recursion_depth_exceeding_limit` warning on the whole crate, from proving `wgpu_core`'s `Global` is `Send`. It says it's being phased out to a hard error, rust-lang/rust#159228.
-	- Expected behavior:
-		- No warning, so a toolchain bump past the change still builds.
-	- Possible cause:
-		- The default limit of 128. The warning suggests `#![recursion_limit = "256"]`, or a manual `Send` impl on a type in between.
-	- Notes:
-		- Not checked yet whether the stable 1.96 or the sanitizer nightly says the same.
-
 - Leak checks: CodeQL watched to fail, and its first findings filed
 	- ID: 2026102211462005
 	- Type: Task
@@ -678,6 +659,25 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Split from 2026101714445005. Its heap-growth test covers some of the same actions in-process. This one is for what that can't reach: windows, tabs and splits opened and closed, the GPU, the Settings dialog and a real PTY.
 		- `cicd/tests/allocs/run.bash` already drives a window on a private Xvfb.
 
+- The nightly warns that silkterm's `Send` check on wgpu's types passes the recursion limit, which a later Rust makes an error
+	- ID: 2026102321073303
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261023-210733
+	- Opened by: CC
+	- Related IDs: 2026102320591313
+	- Steps to reproduce:
+		- Build the tests on nightly-2026-10-16, as the Miri run does.
+	- Incorrect behavior:
+		- A `recursion_depth_exceeding_limit` warning on the whole crate, from proving `wgpu_core`'s `Global` is `Send`. It says it's being phased out to a hard error, rust-lang/rust#159228.
+	- Expected behavior:
+		- No warning, so a toolchain bump past the change still builds.
+	- Possible cause:
+		- The default limit of 128. The warning suggests `#![recursion_limit = "256"]`, or a manual `Send` impl on a type in between.
+	- Notes:
+		- Not checked yet whether the stable 1.96 or the sanitizer nightly says the same.
+
 - Wayland: a copy a program sends while no SilkTerm window has focus is dropped
 	- ID: 2026101607585700
 	- Type: Enhancement
@@ -707,30 +707,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- The Windows GUI scenarios and the scroll harness turn off only with `--quick`, and dpirand only with `DPIRAND_SECS=0` in config.bash.
 	- Notes:
 		- Not every stage needs its own flag. A few grouped ones may do, such as one for the lints and one for the script tests.
-
-- The license header test fails on the knobs crate since it went MIT
-	- ID: 2026102320070112
-	- Type: Bug
-	- Status: Done
-	- Severity: Avg
-	- Opened: 20261023-200701
-	- Opened by: CC
-	- Steps to reproduce:
-		- `cargo test --bin silkterm every_script_has_the_license_header` on rnd1023.
-	- Incorrect behavior: 6 header faults. `knobs/src/lib.rs`, `knobs/src/tests.rs` and `knobs/demo/src/main.rs` each give "line 1 is not the license" and "a GPL file in the Bubbles form".
-	- Expected behavior: The test knows which crates are MIT and checks them for that header.
-	- Reproduced: 20261023, here, in a plain test run. It fails under TSan too.
-	- Possible cause: 99f5810 ("knobs: MIT") changed the headers, and the test's `.rs` branch still wants GPL on every tracked `.rs` file.
-	- Notes:
-		- Found while working 2026101714445003. It fails every full run until fixed.
-	- Actual cause [Bug]: The test's `.rs` branch had GPL and the Jim Collier form written in for every tracked `.rs` file, so it couldn't follow a crate that changed license.
-	- Actual fix [Bug]: A `.rs` file takes the `license` of the nearest Cargo.toml above it, GPL when that names none. Its line 1 has to match. An MIT file may use either copyright form, as an MIT script may, and a GPL one still needs the Jim Collier form.
-	- Swept: every tracked `.rs` file and Cargo.toml. knobs and knobs/demo are MIT. source and sanitizer-canary say GPL, and clipboard-race and gpu-stress name no license and have GPL headers. The script branch already took MIT. `every_source_file_has_the_license_header` reads only `source/src/`, which stays GPL.
-	- Verified: 20261023. The test failed with the 6 faults before and passes after. A GPL header put into `knobs/src/tests.rs`, and an MIT Bubbles header into gpu-stress, each made it fail. fmt and clippy are clean.
-	- Branch: rnd1023
-	- Test case: `every_script_has_the_license_header_with_history_at_the_bottom` (ErloT4L), now per crate.
-	- Acceptance signoff: Self-closed: mechanical. The test failed before and passes after.
-	- Closed: 20261023-203811
 
 - Wayland: must use the Wayland clipboard, and minimize other X11 features
 	- ID: 2026101509024607
@@ -1805,6 +1781,30 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Test case: None for the figures, which are a measurement. `SILK_MEMDBG` is covered by `each_debug_switch_reads_its_own_variable` (Erg4k2j). Its minimap count is pinned by `the_memory_count_covers_every_stored_row` (Ern2oTz), seen to fail with the stored rows left out.
 	- Acceptance signoff: Self-closed: the numbers are in the design doc and nothing is left to judge.
 	- Closed: 20261004-194634
+
+- The license header test fails on the knobs crate since it went MIT
+	- ID: 2026102320070112
+	- Type: Bug
+	- Status: Done
+	- Severity: Avg
+	- Opened: 20261023-200701
+	- Opened by: CC
+	- Steps to reproduce:
+		- `cargo test --bin silkterm every_script_has_the_license_header` on rnd1023.
+	- Incorrect behavior: 6 header faults. `knobs/src/lib.rs`, `knobs/src/tests.rs` and `knobs/demo/src/main.rs` each give "line 1 is not the license" and "a GPL file in the Bubbles form".
+	- Expected behavior: The test knows which crates are MIT and checks them for that header.
+	- Reproduced: 20261023, here, in a plain test run. It fails under TSan too.
+	- Possible cause: 99f5810 ("knobs: MIT") changed the headers, and the test's `.rs` branch still wants GPL on every tracked `.rs` file.
+	- Notes:
+		- Found while working 2026101714445003. It fails every full run until fixed.
+	- Actual cause [Bug]: The test's `.rs` branch had GPL and the Jim Collier form written in for every tracked `.rs` file, so it couldn't follow a crate that changed license.
+	- Actual fix [Bug]: A `.rs` file takes the `license` of the nearest Cargo.toml above it, GPL when that names none. Its line 1 has to match. An MIT file may use either copyright form, as an MIT script may, and a GPL one still needs the Jim Collier form.
+	- Swept: every tracked `.rs` file and Cargo.toml. knobs and knobs/demo are MIT. source and sanitizer-canary say GPL, and clipboard-race and gpu-stress name no license and have GPL headers. The script branch already took MIT. `every_source_file_has_the_license_header` reads only `source/src/`, which stays GPL.
+	- Verified: 20261023. The test failed with the 6 faults before and passes after. A GPL header put into `knobs/src/tests.rs`, and an MIT Bubbles header into gpu-stress, each made it fail. fmt and clippy are clean.
+	- Branch: rnd1023
+	- Test case: `every_script_has_the_license_header_with_history_at_the_bottom` (ErloT4L), now per crate.
+	- Acceptance signoff: Self-closed: mechanical. The test failed before and passes after.
+	- Closed: 20261023-203811
 
 - Windows version doesn't remember "wallpaper" being enabled.
 	- ID: 2026101816103600
