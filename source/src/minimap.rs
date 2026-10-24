@@ -1822,6 +1822,7 @@ mod tests {
 	// column that are not in the text at all.
 	// Test ID: EqRBEHA
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_page_of_one_line_composes_evenly() {
 		let settings = config::Settings::default();
 		let (cols, lines) = (80, 40);
@@ -1873,6 +1874,7 @@ mod tests {
 	// them - a comb down the column that is not in the text.
 	// Test ID: EqRBEHB
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_repeating_line_composes_without_a_comb() {
 		let cfg = config::Settings::default();
 		let (cols, width) = (100, 90);
@@ -1914,6 +1916,7 @@ mod tests {
 
 	// Test ID: EopeF4y
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_full_screen_program_takes_the_column_unless_it_is_named() {
 		let mut s = cfg(true, 100.0);
 		s.minimap_tui_whitelist = "less tmux screen".to_string();
@@ -1938,6 +1941,7 @@ mod tests {
 	// default nothing keeps the column there.
 	// Test ID: EshLdeY
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn by_default_less_tmux_and_screen_take_the_column_too() {
 		let s = cfg(true, 100.0);
 		for program in ["less", "tmux", "screen"] {
@@ -1948,6 +1952,7 @@ mod tests {
 
 	// Test ID: EscYyBa
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_program_redrawing_the_main_screen_takes_the_column_too() {
 		let mut s = cfg(true, 100.0);
 		s.minimap_tui_whitelist = "less tmux screen".to_string();
@@ -1988,6 +1993,7 @@ mod tests {
 	// prints anything, seen on Windows 11 26200. The focus ask is its own.
 	// Test ID: EsgiG0N
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_plain_command_keeps_the_column_under_the_windows_console_host() {
 		let mut s = cfg(true, 100.0);
 		s.minimap_tui_whitelist = "less tmux screen".to_string();
@@ -2020,6 +2026,7 @@ mod tests {
 	// reports only inside tmux, where the outer terminal never sees them.
 	// Test ID: EsdlZZz
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_nested_fish_prompt_keeps_the_column() {
 		let mut s = cfg(true, 100.0);
 		s.minimap_tui_whitelist = "less tmux screen".to_string();
@@ -2076,6 +2083,7 @@ mod tests {
 
 	// Test ID: EoXOeuW
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn off_costs_the_pane_nothing() {
 		let full = Rect {
 			x: 0.0,
@@ -2090,6 +2098,7 @@ mod tests {
 
 	// Test ID: EpyCuGf
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_column_takes_its_width_and_no_more() {
 		let s = cfg(true, 100.0);
 		assert_eq!(column_w(&s, 800.0, 1.0, true), 100.0);
@@ -2104,6 +2113,7 @@ mod tests {
 
 	// Test ID: EoXOeuX
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_narrow_pane_gives_up_the_column() {
 		// half a pane is the most the column may take, and below the narrowest
 		// column there is nothing worth showing
@@ -2138,6 +2148,7 @@ mod tests {
 	// works from the grab instead.
 	// Test ID: EoXOeua
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_drag_round_trips_through_the_mapping() {
 		let track = 600.0;
 		let (total, rows) = (1000, 40);
@@ -2204,6 +2215,7 @@ mod tests {
 	// its own.
 	// Test ID: EqMZXTc
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_marker_reads_back_the_position_it_was_drawn_at() {
 		let track = 900.0;
 		// a full screen, a screen holding only a prompt at two history depths,
@@ -2330,6 +2342,7 @@ mod tests {
 	// mostly blank lines has to look different from a solid page.
 	// Test ID: Eolyf2O
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_sparse_stretch_reads_dimmer_than_a_full_one() {
 		let width = 4;
 		let solid: Vec<Row> = (0..5000).map(|_| row(width, 4, [0, 200, 0])).collect();
@@ -2355,6 +2368,7 @@ mod tests {
 	// more than the history and the screen, however much output went by.
 	// Test ID: EqLtc6K
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_flood_rasterizes_only_what_a_compose_shows() {
 		let (cols, lines, scrollback) = (80, 24, 1000);
 		let (mut term, mut parser) = live_term(cols, lines, scrollback);
@@ -2414,6 +2428,7 @@ mod tests {
 	// small share of the time at any depth.
 	// Test ID: EqLtc6L
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_slow_compose_waits_its_share_out() {
 		assert_eq!(gap(Duration::ZERO), Duration::from_millis(COMPOSE_MS));
 		for ms in [5, 40, 700] {
@@ -2459,6 +2474,7 @@ mod tests {
 	// nearly nine seconds.
 	// Test ID: ErCaBEG
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_whole_redraw_does_not_set_the_wait() {
 		let (cols, lines) = (40, 5);
 		let (mut term, mut parser) = live_term(cols, lines, 100);
@@ -2503,6 +2519,7 @@ mod tests {
 	// thread of its own while the builds carry on.
 	// Test ID: ErEKIJ0
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_deep_redraw_reads_only_its_budget_here() {
 		let (cols, lines, scrollback) = (40, 10, 3000);
 		let (mut term, mut parser) = live_term(cols, lines, scrollback);
@@ -2576,6 +2593,7 @@ mod tests {
 	// under both filters.
 	// Test ID: ErEKIcQ
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn stand_ins_give_way_to_the_lines_they_stand_for() {
 		let cfg = config::Settings::default();
 		let (cols, lines, img_h) = (40, 10, 300);
@@ -2638,6 +2656,7 @@ mod tests {
 	// a texture the pixels could not fill, and wgpu killed the window.
 	// Test ID: EqLzJNY
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_map_reports_the_size_its_pixels_have() {
 		let (cols, lines) = (20, 4);
 		let (mut term, mut parser) = live_term(cols, lines, 50);
@@ -2737,6 +2756,7 @@ mod tests {
 
 	// Test ID: EqLzJNZ
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_rasterized_line_matches_a_plain_per_cell_pass() {
 		let cfg = config::Settings::default();
 		for seed in 0..24 {
@@ -2779,6 +2799,7 @@ mod tests {
 	// reading as one bar.
 	// Test ID: EqMTH4y
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_glyphs_weight_follows_how_much_it_inks() {
 		let cfg = config::Settings::default();
 		let (cols, width) = (40, 40); // one pixel per cell, so alpha arrives unmixed
@@ -2858,6 +2879,7 @@ mod tests {
 	// With the ease at rest it draws the whole buffer again.
 	// Test ID: EqN59w0
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_map_stops_where_the_eased_text_has_reached() {
 		let settings = config::Settings::default();
 		let (cols, lines) = (40, 48);
@@ -2950,6 +2972,7 @@ mod tests {
 	// of the buffer, and the marker reaches over them.
 	// Test ID: EqQ3t6m
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn blank_rows_under_a_prompt_are_part_of_the_map() {
 		let settings = config::Settings::default();
 		let (cols, lines) = (40, 48);
@@ -3024,6 +3047,7 @@ mod tests {
 	// out short has to ask for another compose or it stays short.
 	// Test ID: EqN59w1
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_trimmed_compose_needs_another() {
 		let settings = config::Settings::default();
 		let (cols, lines) = (40, 24);
@@ -3061,6 +3085,7 @@ mod tests {
 	// pane sat there, with no output and nobody touching it.
 	// Test ID: EqQ9f4K
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_parked_view_stops_asking_for_composes() {
 		let _g = config::test_store_lock();
 		config::update(config::Settings::default());
@@ -3138,6 +3163,7 @@ mod tests {
 	// its gap. Every frame had both panes shaped again, at rest, for good.
 	// Test ID: EsJ8TzU
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_build_inside_the_gap_owes_nothing_new() {
 		let settings = config::Settings::default();
 		let (cols, lines) = (40, 24);
@@ -3193,6 +3219,7 @@ mod tests {
 	// one a fresh cache makes from the same grid, whatever went by in between.
 	// Test ID: EqLtc6M
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_late_raster_composes_the_image_a_fresh_one_would() {
 		let cfg = config::Settings::default();
 		for seed in 0..40 {

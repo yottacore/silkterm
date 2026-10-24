@@ -1798,6 +1798,7 @@ mod tests {
 	// reads.
 	// Test ID: EpyJWG0
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_program_can_set_the_clipboard_but_never_read_it() {
 		use alacritty_terminal::event::{Event, EventListener};
 		use alacritty_terminal::term::Term;
@@ -1838,6 +1839,7 @@ mod tests {
 	// fish, vim and muffer ask for focus changes, and got nothing.
 	// Test ID: Ese7i9o
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_program_that_asks_for_focus_changes_is_told() {
 		use alacritty_terminal::event::VoidListener;
 		use alacritty_terminal::term::Term;
@@ -1866,6 +1868,7 @@ mod tests {
 	// The configured word separators are what the engine splits words on.
 	// Test ID: Er2UFeT
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_engine_splits_words_on_the_configured_separators() {
 		let s = crate::config::Settings {
 			word_separators: " ,;".to_string(),
@@ -1882,6 +1885,7 @@ mod tests {
 	// program by about 4 GiB.
 	// Test ID: EqBcj6m
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_program_title_is_held_to_a_size() {
 		use alacritty_terminal::event::{Event, EventListener};
 		use alacritty_terminal::term::Term;
@@ -1932,6 +1936,7 @@ mod tests {
 	// memory ran out.
 	// Test ID: EqBQjc0
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_pane_too_narrow_for_a_wide_character_still_takes_one() {
 		use alacritty_terminal::event::VoidListener;
 		use alacritty_terminal::grid::Dimensions;
@@ -2086,6 +2091,7 @@ mod tests {
 	// Test ID: EtS3GO0
 	#[cfg(unix)]
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_configured_term_reaches_the_program() {
 		use alacritty_terminal::event::{VoidListener, WindowSize};
 		use alacritty_terminal::event_loop::EventLoop;
@@ -2137,6 +2143,7 @@ mod tests {
 	// named slots and the whole palette answer now; anything else does not.
 	// Test ID: EpHUIAS
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_color_query_gets_an_answer() {
 		use alacritty_terminal::event::{Event, WindowSize};
 		use alacritty_terminal::vte::ansi::NamedColor;
@@ -2934,6 +2941,7 @@ mod tests {
 
 		// Test ID: EpQN0oS
 		#[test]
+		#[cfg_attr(miri, ignore = "too slow under Miri")]
 		fn a_program_cannot_make_the_terminal_type() {
 			let corpus = fuzz::corpus("vt");
 			for case in &corpus {

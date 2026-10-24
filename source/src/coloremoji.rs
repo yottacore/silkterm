@@ -1042,6 +1042,7 @@ mod tests {
 	// exactly what a wholesale clear caused.
 	// Test ID: ElKWljk
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn overflow_keeps_every_raster_the_current_frame_warmed() {
 		let mut cg = ColorGlyphs::new();
 		cg.begin_frame();
@@ -1075,6 +1076,7 @@ mod tests {
 	// changing font size would grow without limit.
 	// Test ID: ElKWljl
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn overflow_drops_rasters_no_recent_frame_touched() {
 		let mut cg = ColorGlyphs::new();
 		stamped(&mut cg, MAX_RASTERS as u16, 1);
@@ -1104,6 +1106,7 @@ mod tests {
 	// has no color font at all.
 	// Test ID: ElDEZZo
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn colr_v1_emoji_rasterizes_in_color() {
 		let mut db = fontdb::Database::new();
 		db.load_system_fonts();

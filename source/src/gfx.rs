@@ -2704,6 +2704,7 @@ mod tests {
 	// trashed VRAM: right size, deterministic, and not a trivial fill.
 	// Test ID: Ekm1rM0
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn sentinel_pattern_is_deterministic_and_varied() {
 		let a = sentinel_pattern();
 		assert_eq!(a.len(), SENTINEL_BYTES);
@@ -3079,6 +3080,7 @@ mod tests {
 	// about 230 ms each time on b23, against about 21 MiB to keep it.
 	// Test ID: ErqRBp6
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn every_dialog_open_takes_the_kept_context() {
 		let _loader = hold_loader();
 		let mut warm = GpuWarm::idle();

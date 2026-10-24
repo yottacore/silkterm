@@ -592,10 +592,62 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261023: Four tests from the sample that ran past 90 s were let run longer. bc1's flat color test passed in 477 s. A Settings dialog test reached the test folder's `atexit` after 568 s, run without `SILKTERM_TEST_DIR`. An autotheme and a config test started a process after about 10 minutes: `sysfont::monospace` asks `gsettings` and `xfconf-query` for the desktop's font.
 		- 20261023: That font probe is likely on the path of many config and Settings tests. A stand-in answer under `cfg(miri)` there may beat an ignore on each of them. Not decided.
 		- 20261023: Left: the other 1292 tests, and the slow ones once the bar is set.
+		- 20261024: Split in 5 by module, since the rest is too much for one sitting: 2026102407430372, 2026102407430375, 2026102407430377, 2026102407430379 and 2026102407430381. This item closes when they do.
+		- 20261024: 2026102407430372 is done: 278 tests, 178 passing under Miri and 99 newly ignored there with a reason.
+		- 20261024: Left: 2026102407430375, 2026102407430377, 2026102407430379 and 2026102407430381, about 1000 tests.
 	- Verified: 20261023. The 15 pass in a plain run and show as ignored under Miri. fmt check, clippy for Linux.
+	- Decisions:
+		- 20261024: The slow bar is 60 s of CPU time under Miri, not wall time, so a verdict doesn't swing with the box's load. Miri runs a test's threads on one core, so on an idle box the two are about the same.
 	- Swept: the 145 tests above. A test elsewhere that starts a process or opens a device turns up in the rest of the run.
 	- Test case: None new. The ignores are test attributes, checked by the runs above.
 	- Branch: rnd1023
+
+- Leak checks: Miri sort, modules palette to xmp, and knobs
+	- ID: 2026102407430375
+	- Type: Task
+	- Status: Queued
+	- Priority: Avg
+	- Opened: 20261024-074303
+	- Opened by: CC
+	- Parent ID: 2026102320591313
+	- Requirements:
+		- The parent's requirements, for the 301 tests in the modules from palette to xmp, in name order, and the knobs crate's 28.
+
+- Leak checks: Miri sort, pane and app
+	- ID: 2026102407430377
+	- Type: Task
+	- Status: Queued
+	- Priority: Avg
+	- Opened: 20261024-074303
+	- Opened by: CC
+	- Parent ID: 2026102320591313
+	- Requirements:
+		- The parent's requirements, for the 262 tests in `pane` and `app`.
+
+- Leak checks: Miri sort, config
+	- ID: 2026102407430379
+	- Type: Task
+	- Status: Queued
+	- Priority: Avg
+	- Opened: 20261024-074303
+	- Opened by: CC
+	- Parent ID: 2026102320591313
+	- Requirements:
+		- The parent's requirements, for the 232 tests in `config`.
+		- Decide whether `sysfont::monospace` gets a stand-in answer under `cfg(miri)`, in place of an ignore on each test that asks it. Only worth it where the test is under the slow bar.
+	- Notes:
+		- shcl's save calls `fchown` to keep a file's owner, which Miri can't do, so a test that saves the config likely stops there (seen on 2026102407430372).
+
+- Leak checks: Miri sort, settings_ui
+	- ID: 2026102407430381
+	- Type: Task
+	- Status: Queued
+	- Priority: Avg
+	- Opened: 20261024-074303
+	- Opened by: CC
+	- Parent ID: 2026102320591313
+	- Requirements:
+		- The parent's requirements, for the 203 tests in `settings_ui`.
 
 - Implement leak and static checks of the Rust code run as part of CI/CD
 	- ID: 2026101714015789
@@ -724,6 +776,27 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- The Windows GUI scenarios and the scroll harness turn off only with `--quick`, and dpirand only with `DPIRAND_SECS=0` in config.bash.
 	- Notes:
 		- Not every stage needs its own flag. A few grouped ones may do, such as one for the lints and one for the script tests.
+
+- Leak checks: Miri sort, modules autotheme to minimap
+	- ID: 2026102407430372
+	- Type: Task
+	- Status: Done
+	- Priority: Avg
+	- Opened: 20261024-074303
+	- Opened by: CC
+	- Parent ID: 2026102320591313
+	- Requirements:
+		- The parent's requirements, for the 266 tests in the modules from autotheme to minimap, in name order.
+		- Last round's 12 tests that ran past 45 s, judged again against the slow bar.
+	- Progress log:
+		- 20261024: Each test run alone under Miri, against the slow bar of 60 s of CPU time. 178 passed. 86 are too slow under Miri and are ignored as that: 27 in minimap, 18 in autotheme, 12 in dialog, and a few each in bc1, bc7, buildnum, cli, coloremoji, input, integration and links. 13 stopped at a call Miri can't make and are ignored with it: 9 start a process, and 4 reach `fchown`, where shcl's save keeps a file's owner. The dhat heap test was already ignored, with its reason.
+		- 20261024: Of last round's 12 that ran past 45 s, cwd's and fileassoc's pass under the bar. The other 10, 8 in term and 2 in gfx, are too slow and are ignored as that.
+		- 20261024: Miri reported no UB and no leak.
+	- Verified: 20261024. The 99 new ignores each show as ignored under Miri. The whole silkterm unit suite passes in a plain run (1407 passed, 3 ignored). fmt check, clippy for Linux with all targets.
+	- Swept: the 278 tests above. Nothing else needs a full run, since the attributes only change a Miri run, which no pipeline step makes yet (2026102320591318).
+	- Test case: None new. The ignores are test attributes, checked by the runs above.
+	- Branch: rnd1024
+	- Closed: 20261024-080831
 
 - The nightly warns that silkterm's `Send` check on wgpu's types passes the recursion limit, which a later Rust makes an error
 	- ID: 2026102321073303

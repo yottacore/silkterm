@@ -616,6 +616,7 @@ mod tests {
 	// case that failed, in both 5.1 and 7; elsewhere it checks the query parses.
 	// Test ID: Eq4upT7
 	#[test]
+	#[cfg_attr(miri, ignore = "Miri can't start a process")]
 	fn a_powershell_names_a_profile_outside_ascii() {
 		let query = super::PROFILE_QUERY.replace(
 			"$PROFILE",
@@ -640,6 +641,7 @@ mod tests {
 	// on only for somebody who asked for it.
 	// Test ID: Eq4uQkq
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_bash_prompt_is_off_until_asked_for() {
 		assert!(!crate::config::Settings::default().bash_prompt);
 	}
@@ -735,6 +737,7 @@ mod tests {
 	// Test ID: EpxrTRY
 	#[cfg(unix)]
 	#[test]
+	#[cfg_attr(miri, ignore = "Miri can't start a process")]
 	fn a_branch_name_is_shown_and_never_run_by_the_prompt() {
 		use std::process::Command;
 		let Some(bash) = prompt_bash_or_skip() else {
@@ -812,6 +815,7 @@ mod tests {
 	// Test ID: EqBmHyq
 	#[cfg(unix)]
 	#[test]
+	#[cfg_attr(miri, ignore = "Miri can't start a process")]
 	fn the_prompt_shows_any_repository_and_how_far_it_is_from_upstream() {
 		use std::path::Path;
 		use std::process::Command;
@@ -930,6 +934,7 @@ mod tests {
 	// Test ID: EryR5sU
 	#[cfg(unix)]
 	#[test]
+	#[cfg_attr(miri, ignore = "Miri can't start a process")]
 	fn a_pane_prompt_starts_no_process_outside_a_repository() {
 		use std::io::Write;
 		use std::process::{Command, Stdio};
@@ -998,6 +1003,7 @@ mod tests {
 	// Test ID: EryR5wI
 	#[cfg(unix)]
 	#[test]
+	#[cfg_attr(miri, ignore = "Miri can't start a process")]
 	fn a_pane_prompt_shows_the_git_part_only_inside_a_working_tree() {
 		let Some(bash) = prompt_bash_or_skip() else {
 			return;
@@ -1042,6 +1048,7 @@ mod tests {
 	// Test ID: Es2nCJ6
 	#[cfg(unix)]
 	#[test]
+	#[cfg_attr(miri, ignore = "Miri can't start a process")]
 	fn the_prompt_arrow_is_one_a_mac_has_a_font_for() {
 		let Some(bash) = prompt_bash_or_skip() else {
 			return;
@@ -1090,6 +1097,7 @@ mod tests {
 	// Test ID: Eq4qaCX
 	#[cfg(unix)]
 	#[test]
+	#[cfg_attr(miri, ignore = "Miri can't set a file's owner")]
 	fn a_profile_write_keeps_its_link_and_mode_and_follows_no_planted_link() {
 		use std::os::unix::fs::{PermissionsExt, symlink};
 		let dir =
@@ -1160,6 +1168,7 @@ mod tests {
 	// noting it. Deleting such a block put it straight back at the next launch.
 	// Test ID: Eq4qaCY
 	#[test]
+	#[cfg_attr(miri, ignore = "Miri can't set a file's owner")]
 	fn a_block_already_there_is_noted_so_deleting_it_sticks() {
 		let dir =
 			crate::testdir::run_dir().join(format!("silkterm_intnote_{}", std::process::id()));
@@ -1212,6 +1221,7 @@ mod tests {
 	// run: the 5.1 one by forcing the test that picks it.
 	// Test ID: Eq4qaCa
 	#[test]
+	#[cfg_attr(miri, ignore = "Miri can't start a process")]
 	fn the_block_keeps_an_earlier_hook_and_survives_loading_twice() {
 		let Some(pwsh) = a_pwsh() else {
 			eprintln!("no pwsh here, skipped");
@@ -1270,6 +1280,7 @@ Write-Host \"COLOR=$global:__SilkTermHostColor\"",
 	// It named only an origin remote and showed no count, a day after bash got both.
 	// Test ID: EqFy7VA
 	#[test]
+	#[cfg_attr(miri, ignore = "Miri can't start a process")]
 	fn the_powershell_prompt_shows_any_repository_and_how_far_it_is_from_upstream() {
 		use std::path::Path;
 		use std::process::Command;
@@ -1466,6 +1477,7 @@ Write-Host \"COLOR=$global:__SilkTermHostColor\"",
 	// was no marker to match and the next launch put it straight back.
 	// Test ID: EpHWuEq
 	#[test]
+	#[cfg_attr(miri, ignore = "Miri can't set a file's owner")]
 	fn a_deleted_block_stays_deleted() {
 		let dir = crate::testdir::run_dir().join(format!("silkterm_intoff_{}", std::process::id()));
 		let _ = std::fs::remove_dir_all(&dir);
@@ -1504,6 +1516,7 @@ Write-Host \"COLOR=$global:__SilkTermHostColor\"",
 	// follow what is there, and never do it twice.
 	// Test ID: EnalvtS
 	#[test]
+	#[cfg_attr(miri, ignore = "Miri can't set a file's owner")]
 	fn a_profile_is_backed_up_once_and_added_to_once() {
 		let dir = crate::testdir::run_dir().join("silkterm-integration-test");
 		let _ = std::fs::remove_dir_all(&dir);

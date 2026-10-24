@@ -1383,6 +1383,7 @@ mod tests {
 
 	// Test ID: EiYTyQS
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn window_style_folds_into_settings() {
 		let c = p(
 			"--font-name=Iosevka --font-size=20 --background-color=#102030 \
@@ -1406,6 +1407,7 @@ mod tests {
 
 	// Test ID: EiYTyQT
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn window_style_noop_leaves_defaults() {
 		// no style flags -> settings untouched
 		let c = p("--columns 80");
@@ -1419,6 +1421,7 @@ mod tests {
 	// setting, and a save never writes it.
 	// Test ID: EtS63cT
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn software_rendering_flag_holds_the_setting_for_the_run() {
 		assert_eq!(
 			p("--software-rendering").win.style.software_rendering,
@@ -1614,6 +1617,7 @@ mod tests {
 
 	// Test ID: Er2UJeY
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn stretch_is_taken_in_both_spellings_and_reaches_the_settings() {
 		for flag in ["--background-image-stretch", "--wallpaper-stretch"] {
 			let c = p(flag);

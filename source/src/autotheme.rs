@@ -442,6 +442,7 @@ mod tests {
 	// and put the text where the strip swallows it.
 	// Test ID: EqRxesT
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_bright_end_finds_a_strip_most_of_the_picture_disagrees_with() {
 		// four fifths near-black, one fifth white
 		let img = image::RgbaImage::from_fn(300, 80, |x, _| {
@@ -481,6 +482,7 @@ mod tests {
 	// the vivid patch is what anybody looking at it would call its color.
 	// Test ID: EqRxesV
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_hue_weight_is_chroma_rather_than_how_many_cells_have_it() {
 		let faint: [u8; 3] = [0x76, 0x78, 0x84]; // barely blue
 		let vivid: [u8; 3] = [0xe6, 0x78, 0x14]; // plainly orange
@@ -504,6 +506,7 @@ mod tests {
 
 	// Test ID: EqRxesW
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_dark_theme_keeps_light_text_and_a_light_theme_keeps_dark_text() {
 		let sum = summarize(&plain([90, 110, 160], 32, 32), 0.35);
 		let dark = derive(&sum, &settings(SILK_BG, SILK_FG, SILK_CURSOR));
@@ -521,6 +524,7 @@ mod tests {
 	// "never dimmer than the theme" floor would swallow the range being measured.
 	// Test ID: EqRxesX
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_brighter_image_pushes_the_text_further_away() {
 		let s = settings(SILK_BG, [0x70, 0x70, 0x70], SILK_CURSOR);
 		let mut last = 0.0;
@@ -541,6 +545,7 @@ mod tests {
 	// mid-gray text and read as the wallpaper spoiling the theme.
 	// Test ID: EqRxesY
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_dark_image_never_dims_the_text_below_the_themes_own() {
 		let s = settings(SILK_BG, SILK_FG, SILK_CURSOR);
 		let out = derive(&summarize(&plain([2, 2, 2], 32, 32), 0.1), &s);
@@ -555,6 +560,7 @@ mod tests {
 	// own foreground was.
 	// Test ID: EqRxesZ
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_blue_image_gives_warm_text_and_a_warm_image_gives_cool_text() {
 		let s = settings(SILK_BG, SILK_FG, SILK_CURSOR);
 		let blue = derive(&summarize(&plain([40, 70, 180], 32, 32), 0.5), &s).fg;
@@ -567,6 +573,7 @@ mod tests {
 	// that little chroma would swing the text about between two gray images.
 	// Test ID: EqRxesa
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_gray_image_keeps_the_themes_own_hue() {
 		let s = settings(SILK_BG, SILK_FG, SILK_CURSOR);
 		let out = derive(&summarize(&plain([100, 100, 100], 32, 32), 0.3), &s);
@@ -580,6 +587,7 @@ mod tests {
 	// complementary hue is what made a green theme answer pure yellow.
 	// Test ID: EqRxesb
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_vivid_theme_foreground_comes_back_as_a_tint() {
 		let s = settings([0x00, 0x08, 0x02], [0x33, 0xff, 0x66], [0x0a, 0x7a, 0x2a]);
 		assert!(
@@ -602,6 +610,7 @@ mod tests {
 	// that the theme's own foreground wins either way.
 	// Test ID: EqT4HIe
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn light_mode_places_the_text_against_the_alpha_it_will_be_drawn_at() {
 		let light_bg = [0xf6u8, 0xf5, 0xf0];
 		let dark_text = [0x30u8, 0x32, 0x38];
@@ -638,6 +647,7 @@ mod tests {
 	// second background, so the text on it must clear the floor too.
 	// Test ID: EqRxesc
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn text_on_the_derived_cursor_plate_clears_the_floor() {
 		let floor = Settings::default().text_min_contrast;
 		for bg in [[0u8, 0, 0], [0x1d, 0x20, 0x28], [0xf6, 0xf5, 0xf0]] {
@@ -706,6 +716,7 @@ mod tests {
 	// install re-colors its text without anyone visiting the Themes tab.
 	// Test ID: EqSm2Rk
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_defaults_take_the_text_color_from_the_wallpaper() {
 		let mut s = Settings::default();
 		assert!(s.colors_from_wallpaper, "shipped off");
@@ -719,6 +730,7 @@ mod tests {
 
 	// Test ID: EqRxese
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_wallpaper_colors_need_the_switch_the_wallpaper_and_a_picture() {
 		use crate::ui_spec::Key;
 		use knobs::Value;
@@ -750,6 +762,7 @@ mod tests {
 	// theme's back.
 	// Test ID: EqRxesf
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_wallpaper_colors_come_from_the_theme_s_every_time() {
 		use crate::ui_spec::Key;
 		let mut s = crate::fields::adopt(settings(SILK_BG, SILK_FG, SILK_CURSOR));
@@ -766,6 +779,7 @@ mod tests {
 	// decode. That only works if the background is read live.
 	// Test ID: EqRxesg
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_same_image_answers_differently_under_a_different_background() {
 		let sum = summarize(&plain([120, 120, 130], 32, 32), 0.3);
 		let on_black = derive(&sum, &settings(SILK_BG, SILK_FG, SILK_CURSOR));
@@ -782,6 +796,7 @@ mod tests {
 	// nothing to say and the theme's own brightness stands.
 	// Test ID: EqRxesh
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_floor_of_zero_leaves_the_lightness_alone() {
 		let mut s = settings(SILK_BG, SILK_FG, SILK_CURSOR);
 		s.text_min_contrast = 0.0;
@@ -797,6 +812,7 @@ mod tests {
 	// must not happen is a panic or a color outside the cube.
 	// Test ID: EqRxesi
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn an_image_brighter_than_the_floor_allows_goes_to_the_limit() {
 		let s = settings(SILK_BG, SILK_FG, SILK_CURSOR);
 		let out = derive(&summarize(&plain([255, 255, 255], 8, 8), 1.0), &s);
@@ -805,6 +821,7 @@ mod tests {
 
 	// Test ID: EqRxesj
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn an_empty_image_is_answered_rather_than_panicking() {
 		let sum = summarize(&image::RgbaImage::new(0, 0), 0.5);
 		assert_eq!(sum.alpha, 1.0);
@@ -816,6 +833,7 @@ mod tests {
 	// background and the text should sit where the theme put it.
 	// Test ID: EqRxesk
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_fully_transparent_image_leaves_the_field_as_the_background() {
 		let clear = image::RgbaImage::from_pixel(32, 32, image::Rgba([255, 255, 255, 0]));
 		let sum = summarize(&clear, 1.0);
