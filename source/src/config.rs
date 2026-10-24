@@ -8859,6 +8859,7 @@ mod tests {
 	// line instead, so it is refused and the choice has to wait.
 	// Test ID: EpyvpeC
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn an_old_default_shell_waits_for_a_save_that_can_happen() {
 		let _guard = super::test_config_lock();
 		let dir = crate::testdir::run_dir()
@@ -8917,6 +8918,7 @@ mod tests {
 	// drive prefix (the alacritty default splits on ':'). Regression guard.
 	// Test ID: EkVfEUC
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn default_word_separators_keep_drive_colon() {
 		let d = Settings::default();
 		assert!(
@@ -8931,6 +8933,7 @@ mod tests {
 	// Word separators are read from the file, not only defaulted.
 	// Test ID: Er2UFeR
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn word_separators_come_from_the_file() {
 		let s = resolve(
 			read_raw(
@@ -8946,6 +8949,7 @@ mod tests {
 	// not a pair and is dropped.
 	// Test ID: Er2UFeS
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn selection_pairs_parse_in_order_and_come_from_the_file() {
 		assert_eq!(
 			parse_pairs(DEFAULT_SELECTION_PAIRS),
@@ -8980,6 +8984,7 @@ mod tests {
 	// not carry them into the file - or Custom would have nothing to put back.
 	// Test ID: EorkTk0
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_file_keeps_the_users_values_under_a_profile() {
 		let _guard = super::test_config_lock();
 		let _ = settings();
@@ -9282,6 +9287,7 @@ mod tests {
 	// off still wins for both.
 	// Test ID: Eq4Yrbf
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn naming_a_wallpaper_turns_it_on_unless_the_profile_says_off() {
 		let picked = |profile: &str| {
 			crate::fields::owning(
@@ -9902,6 +9908,7 @@ mod tests {
 	// through write_config_atomic instead.
 	// Test ID: Epa8S0j
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn every_settings_write_goes_through_the_restore() {
 		let body = include_str!("config.rs")
 			.split("\nmod tests {")
@@ -10082,6 +10089,7 @@ mod tests {
 	// every line commented at its default, and loads the same bindings.
 	// Test ID: EreU3sd
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn an_older_file_gains_the_keys_block_commented() {
 		let text = "window:\n\tmargin: 6\n";
 		let after = backfilled_text(text)
@@ -10100,6 +10108,7 @@ mod tests {
 
 	// Test ID: Eq4SnxO
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn persist_writes_nothing_for_a_nan_on_both_sides() {
 		let _guard = super::test_config_lock();
 		let _ = settings();
@@ -10137,6 +10146,7 @@ mod tests {
 
 	// Test ID: EjkEYAK
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn persist_survives_bare_decimal_float() {
 		// Memoize settings() BEFORE installing the override: a test on another
 		// thread initializing settings() after the override would load() - an
@@ -10197,6 +10207,7 @@ mod tests {
 	// Test ID: EjwSEES
 	#[cfg(target_os = "linux")]
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn config_open_elsewhere_sees_a_holder() {
 		let path =
 			crate::testdir::run_dir().join(format!("silkterm_busy_{}.shcl", std::process::id()));
@@ -10894,6 +10905,7 @@ mod tests {
 	// settings read as missing at the next launch and were added again.
 	// Test ID: EquUFK4
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn backfill_puts_each_group_in_its_own_section() {
 		let text = "wallpaper:\n\timage: x\nwindow:\n\tmargin: 6\nperformance:\n\tautomatic: false\n\tprofile: custom\n";
 		let text = next_launch_text(text).into_owned();
@@ -10940,6 +10952,7 @@ mod tests {
 	// block, and the stray started being read as a window setting.
 	// Test ID: ErCHjkM
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn backfill_leaves_a_dropped_line_dropped() {
 		let text = "window:\n\t\tmargin: 4\n\trows: 40\n";
 		let before = shcl::Document::parse(text);
@@ -10989,6 +11002,7 @@ mod tests {
 
 	// Test ID: EpZCS12
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn backfill_keeps_a_setting_that_is_indented_too_deep() {
 		let files = [
 			("window.rows", "window:\n\t# x:\n\t\trows: 31\n"),
@@ -11471,6 +11485,7 @@ mod tests {
 	// a line in the shipped template.
 	// Test ID: EsDxpmD
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn every_setting_knobs_keeps_has_a_field_and_a_template_line() {
 		let paths: std::collections::HashSet<String> = walk_settings(default_config())
 			.into_iter()
@@ -11556,6 +11571,7 @@ mod tests {
 	// to its first font (2026100913394946).
 	// Test ID: EsZk42X
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_family_keeps_the_whole_list_when_the_switch_goes_off() {
 		let mut s = Settings::default();
 		assert!(s.use_system_font);
@@ -11601,6 +11617,7 @@ mod tests {
 	// file's own lines.
 	// Test ID: EsEAijd
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_theme_colors_follow_the_theme_and_a_change_stays() {
 		let _guard = test_config_lock();
 		let p = std::path::Path::new("test.shcl");
@@ -11640,6 +11657,7 @@ mod tests {
 	// way an older build's file meant them.
 	// Test ID: EsG6IFN
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_open_command_and_the_wallpaper_default_to_their_rules() {
 		let _guard = test_config_lock();
 		let p = std::path::Path::new("test.shcl");
@@ -11793,6 +11811,7 @@ mod tests {
 	// went loads with no conversion.
 	// Test ID: EsDxpmI
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn an_old_file_s_switches_are_read_as_they_are() {
 		let p = std::path::Path::new("test.shcl");
 		let read = |text: &str| {
@@ -11855,6 +11874,7 @@ mod tests {
 	// it good, and infinity survives a clamp.
 	// Test ID: EpHOzrc
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn every_numeric_setting_has_a_floor_and_a_ceiling() {
 		#[rustfmt::skip]
 		let keys: &[(&str, f32, f32)] = &[
@@ -11965,6 +11985,7 @@ mod tests {
 	// of it anywhere.
 	// Test ID: ErCYi4K
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn an_unquoted_color_is_named() {
 		let said = config_complaints("colors:\n\tbackground: #112233\n\tcursor: #abc  # mine\n");
 		assert_eq!(said.len(), 2, "{said:?}");
@@ -12168,6 +12189,7 @@ mod tests {
 	// under a theme are Custom's, and stay that way.
 	// Test ID: EsGMVgc
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn an_old_file_moves_its_state_out_and_shows_the_same() {
 		let _guard = test_config_lock();
 		let dir = format_test_dir("oldfile");
@@ -12277,6 +12299,7 @@ mod tests {
 	// build wrote keeps Custom's colors as Custom's, however many launches.
 	// Test ID: EscrdlY
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn an_old_file_with_no_state_lines_still_shows_its_colors_over_the_theme() {
 		let _guard = test_config_lock();
 		let dir = format_test_dir("oldcolors");
@@ -12477,6 +12500,7 @@ mod tests {
 	// or its change to a shared one, stays.
 	// Test ID: EreYcuR
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn monitor_sizes_round_trip_and_leave_another_windows_alone() {
 		let p = std::path::Path::new("test.shcl");
 		let entry = |key: &str, columns, rows, font_zoom| MonitorSize {
@@ -12551,6 +12575,7 @@ mod tests {
 	// comment and all, under the size it follows and above remember_maximized.
 	// Test ID: EreYcuS
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn an_older_file_gets_the_per_monitor_switch_beside_the_size_it_follows() {
 		let template = default_config();
 		let paragraph = "\t## While remember_size is on";
@@ -12615,6 +12640,7 @@ mod tests {
 	// loaded. This reads the template, so a line added later is checked too.
 	// Test ID: Eq4CjrE
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn every_commented_default_line_loads_as_the_default() {
 		// resolve() hunts for a wallpaper folder under the config and data dirs,
 		// so a test that points those elsewhere mid-loop would move the answer
@@ -13006,6 +13032,7 @@ mod tests {
 	// ticked between them, and no temp file is left.
 	// Test ID: EreLZQQ
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn launches_converting_at_once_leave_one_whole_copy() {
 		let dir = format_test_dir("fmtcopy_race");
 		let path = dir.join("config.shcl");
@@ -13924,6 +13951,7 @@ mod tests {
 	// #142: the default values.
 	// Test ID: EibwbOi
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn changed_defaults() {
 		let d = Settings::default();
 		assert!(d.text_scrim, "text_scrim should default on");
@@ -13971,6 +13999,7 @@ mod tests {
 	// as the same curve rather than silently falling back to the default.
 	// Test ID: EjYS5vM
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn scrim_function_and_ramp_resolve() {
 		let p = std::path::Path::new("test.shcl");
 		for f in ["dilate", "sdf", "dt", "gaussian"] {
@@ -14005,6 +14034,7 @@ mod tests {
 	// note or a value that is not a number stays as written.
 	// Test ID: EsDSBQ8
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn an_old_blink_rate_in_ms_becomes_the_same_cycle_in_seconds() {
 		let template = setting_lines(default_config())
 			.into_iter()
@@ -14063,6 +14093,7 @@ mod tests {
 	// still reads as off, so no file starts blinking that did not before.
 	// Test ID: EsDSBUl
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn animation_none_becomes_blink_off() {
 		let p = std::path::Path::new("test.shcl");
 		let read = |text: &str| resolve(read_raw(&loaded_text(text), p).0);
@@ -14098,6 +14129,7 @@ mod tests {
 	// file whose boxes said what shipped gets no line, only the commented one.
 	// Test ID: Et0TY7q
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_old_tab_check_boxes_become_a_template_that_says_the_same() {
 		use crate::tabtitle::{DEFAULT_TAB_TEXT, Parts, tab_text_for};
 		let template = |parts: Parts| tab_text_for(parts);
@@ -14237,6 +14269,7 @@ mod tests {
 	// or the next launch reads it as off again.
 	// Test ID: EsDSBYd
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn turning_the_blink_on_replaces_an_old_none() {
 		let _guard = super::test_config_lock();
 		let _ = settings();
@@ -14271,6 +14304,7 @@ mod tests {
 	// here and not in somebody's config.
 	// Test ID: ErstaMt
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn every_fixed_choice_reads_and_writes_its_own_word() {
 		use crate::pane::CursorAnimation as C;
 		use crate::scrim::{Function as F, Ramp as R};
@@ -14507,6 +14541,7 @@ mod tests {
 	// process-wide, hence the store lock.
 	// Test ID: Er2UFeP
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn font_zoom_steps_a_pixel_and_stops_at_the_floor() {
 		let _store = test_store_lock();
 		let before = settings();
@@ -14535,6 +14570,7 @@ mod tests {
 	// A family of its own with no face line turns the face off the same way.
 	// Test ID: EkoQjqK
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn system_font_size_split_inference() {
 		let s = read_text("");
 		assert!(s.use_system_font && s.use_system_font_size, "defaults on");
@@ -14594,6 +14630,7 @@ mod tests {
 	// same thing or the first save rewrites the file we just wrote (G69, G72).
 	// Test ID: Eq3hq92
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_default_startup_directory_is_this_platforms_home_variable() {
 		let home = super::home_string();
 		assert!(!home.is_empty(), "this box names no home directory");
@@ -14736,6 +14773,7 @@ mod tests {
 
 	// Test ID: EkrTZxY
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn copy_on_select_key_parses_and_defaults_on() {
 		let p = std::path::Path::new("test.shcl");
 		assert!(resolve(read_raw("", p).0).copy_on_select, "default on");
@@ -14744,6 +14782,7 @@ mod tests {
 
 	// Test ID: Erg8fz0
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn idle_release_defaults_on() {
 		let p = std::path::Path::new("test.shcl");
 		assert!(Settings::default().idle_release);
@@ -14762,6 +14801,7 @@ mod tests {
 	// word or name the file can't use reads as the default.
 	// Test ID: Et0dflx
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_tmux_settings_read_from_the_file_and_default_off() {
 		use crate::tmux::OnClose;
 		let p = std::path::Path::new("test.shcl");
@@ -14817,6 +14857,7 @@ mod tests {
 	// with a space in it can't be a TERM, so it reads as the default.
 	// Test ID: EtS3GhL
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn shell_term_reads_one_word_and_defaults_empty() {
 		let p = std::path::Path::new("test.shcl");
 		assert_eq!(Settings::default().term, "");
@@ -14838,6 +14879,7 @@ mod tests {
 
 	// Test ID: ErnMaKh
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn software_rendering_defaults_off() {
 		let p = std::path::Path::new("test.shcl");
 		assert!(!Settings::default().software_rendering);
@@ -14900,6 +14942,7 @@ mod tests {
 	// new 1. A hidden wait the user set stays as set.
 	// Test ID: ErsV4Ak
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn an_existing_config_loses_the_minimized_wait() {
 		let p = std::path::Path::new("test.shcl");
 		let d = resolve(read_raw("", p).0);
@@ -14940,6 +14983,7 @@ mod tests {
 
 	// Test ID: ErsV4Fc
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn new_tabs_go_next_to_current_unless_turned_off() {
 		let p = std::path::Path::new("test.shcl");
 		assert!(resolve(read_raw("", p).0).new_tab_beside, "on by default");
@@ -15065,6 +15109,7 @@ mod tests {
 
 	// Test ID: Em1S9yq
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn hyperlink_keys_parse_in_their_block() {
 		let d = read_text("");
 		assert!(d.hyperlinks, "on by default");
@@ -15081,6 +15126,7 @@ mod tests {
 	// as a lower bound and panics (aborts, in release) when it exceeds the cap.
 	// Test ID: EjNOyIT
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn output_ease_lines_clamps_to_backlog_cap() {
 		let raw = read_raw(
 			"scroll.output_ease_lines: 20.0\n",
@@ -15110,6 +15156,7 @@ mod tests {
 
 	// Test ID: EiuvVey
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn chrome_colors_default_and_override() {
 		// theme provides the chrome; the default matches the shared menu colors
 		let d = Settings::default();
@@ -15134,6 +15181,7 @@ mod tests {
 	// one wins.
 	// Test ID: ElmIYG0
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn legacy_config_converts_with_values_kept() {
 		let dir =
 			crate::testdir::run_dir().join(format!("silkterm_convert_{}", std::process::id()));
@@ -15229,6 +15277,7 @@ mod tests {
 	// outline. A flat file from before that keeps every value.
 	// Test ID: Er2UFeQ
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_old_glow_names_convert_to_scrim_and_outline() {
 		let out = converted_config_text(
 			"text_glow: false\ntext_glow_radius: 7\ntext_glow_softness: 0.3\ncursor_glow: true\ntext_glow_border: 2.5\ntext_glow_ramp: \"s\"\n",
@@ -15442,6 +15491,7 @@ mod tests {
 	// converts the file nor changes it again.
 	// Test ID: EpZefUm
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn an_image_left_on_the_wallpaper_heading_moves_to_image() {
 		let _guard = super::test_config_lock();
 		let _ = settings();
@@ -15541,6 +15591,7 @@ mod tests {
 	// the one an earlier conversion wrote is left alone.
 	// Test ID: EpZefUn
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn only_a_heading_holding_a_value_is_repaired() {
 		let damaged = misplaced_image(default_config());
 		let want = default_config().replacen(
@@ -15984,6 +16035,7 @@ mod tests {
 	// commented lines both go; the settings around them stay put.
 	// Test ID: Elqv6O0
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn retired_scroll_knobs_are_removed_not_kept() {
 		let out = migrate_config_text(
 			"scroll:\n\ttau_ms: 120.0\n\tease_in: 0.5\n\tramp_up_ms: 200.0\n\t# tau_ms: 230.0  ## Default\n",
@@ -16398,6 +16450,7 @@ mod tests {
 	// been retuned twice - the lookup must not stop at the first match.
 	// Test ID: Elzq5VQ
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn migrate_refreshes_a_superseded_commented_default() {
 		// the path's blocks, one indent level each, with the leaf last
 		let nest = |path: &str, line: &str| {
@@ -16445,6 +16498,7 @@ mod tests {
 	// rewrites the file just written (G69, G72).
 	// Test ID: Er1vmpM
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_default_wallpaper_folder_is_this_platforms_usual_place() {
 		let want = if cfg!(windows) {
 			r"%LOCALAPPDATA%\silkterm\wallpaper"
@@ -16571,6 +16625,7 @@ mod tests {
 	// outranks the image.
 	// Test ID: Er1vmpO
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_default_wallpaper_folder_is_found_in_the_usual_place() {
 		let _guard = super::test_config_lock();
 		let _ = settings();
@@ -16700,6 +16755,7 @@ mod tests {
 	// View menu's save reaches the file.
 	// Test ID: Er2UFeW
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn hide_single_tab_is_off_and_survives_a_save() {
 		assert!(!Settings::default().hide_single_tab);
 		let _guard = super::test_config_lock();
@@ -16725,6 +16781,7 @@ mod tests {
 	// right-click menus save it, and the next window opens with it.
 	// Test ID: Esdy2iX
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_menu_bar_is_on_and_survives_a_save() {
 		assert!(Settings::default().menu_bar);
 		let template = setting_lines(default_config())
@@ -17078,6 +17135,7 @@ mod tests {
 	// is kept as .bak, missing keys arrive, and the chain is stable.
 	// Test ID: ElmIYG4
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn pipeline_convert_migrate_backfill_on_disk() {
 		let dir =
 			crate::testdir::run_dir().join(format!("silkterm_pipeline_{}", std::process::id()));
@@ -17156,6 +17214,7 @@ mod tests {
 	// font a grid is kept for is the one a launch without the options has.
 	// Test ID: Eso2wHz
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_font_a_launch_without_the_font_options_has() {
 		let plain = Settings::default();
 		let mut held = plain.clone();
@@ -17395,6 +17454,7 @@ mod tests {
 
 		// Test ID: EpZCS16
 		#[test]
+		#[cfg_attr(miri, ignore = "too slow under Miri")]
 		fn a_settings_save_moves_no_value_at_the_next_launch() {
 			// the next launch adopts a default shell, a save that can be refused
 			let _guard = super::super::test_config_lock();
@@ -17418,6 +17478,7 @@ mod tests {
 		// forever, so each is looked for by name.
 		// Test ID: EpZCS17
 		#[test]
+		#[cfg_attr(miri, ignore = "too slow under Miri")]
 		fn the_save_generator_reaches_every_shape() {
 			let indent = |line: &str| line.len() - line.trim_start().len();
 			let comment = |line: &str| line.trim_start().starts_with('#');
@@ -17588,6 +17649,7 @@ mod tests {
 
 		// Test ID: EpQN0oD
 		#[test]
+		#[cfg_attr(miri, ignore = "too slow under Miri")]
 		fn no_config_file_can_take_the_program_down() {
 			let corpus = fuzz::corpus("config");
 			for case in &corpus {
@@ -17604,6 +17666,7 @@ mod tests {
 		// byte-order mark, and the parser has to hold up under those too.
 		// Test ID: EpQN0oE
 		#[test]
+		#[cfg_attr(miri, ignore = "too slow under Miri")]
 		fn arbitrary_bytes_parse_without_panicking() {
 			let corpus = fuzz::corpus("config-bytes");
 			for case in &corpus {
@@ -17627,6 +17690,7 @@ mod tests {
 		// no second conversion.
 		// Test ID: EpZcBUQ
 		#[test]
+		#[cfg_attr(miri, ignore = "too slow under Miri")]
 		fn a_flat_file_moves_every_value_to_its_path() {
 			use super::super::{
 				CONFIG_CONVERTS, CONFIG_REMOVED, LEGACY_KEYS, converted_config_text,
@@ -17730,6 +17794,7 @@ mod tests {
 		// block needs is what an added line can take over.
 		// Test ID: EpZCS18
 		#[test]
+		#[cfg_attr(miri, ignore = "too slow under Miri")]
 		fn backfill_changes_nothing_that_loaded() {
 			use super::super::backfilled_text;
 			fuzz::soak("config-backfill", |seed| {
@@ -17771,6 +17836,7 @@ mod tests {
 		// second pass finds nothing missing.
 		// Test ID: EquUFK5
 		#[test]
+		#[cfg_attr(miri, ignore = "too slow under Miri")]
 		fn backfill_settles_in_one_pass() {
 			use super::super::backfilled_text;
 			fuzz::soak("config-backfill-settles", |seed| {
@@ -17793,6 +17859,7 @@ mod tests {
 		// files shcl's own migration gives up on.
 		// Test ID: ErgHEfO
 		#[test]
+		#[cfg_attr(miri, ignore = "too slow under Miri")]
 		fn an_upgrade_settles_in_one_pass() {
 			use super::super::{Rewrite, Upgrade, from_shcl2_text, unreadable_lines, upgrade};
 			fuzz::soak("config-upgrade", |seed| {
@@ -17854,6 +17921,7 @@ mod tests {
 		// shipped, and written from the template it has no line shcl cannot read.
 		// Test ID: ErgZKGo
 		#[test]
+		#[cfg_attr(miri, ignore = "too slow under Miri")]
 		fn a_rewrite_for_lines_that_are_not_utf8_settles() {
 			use super::super::{
 				Rewrite, SHCL_BANNER, Upgrade, format_of, garbled_indexes, unreadable_lines,
@@ -17930,6 +17998,7 @@ mod tests {
 		// every other setting loads as before.
 		// Test ID: EpZefUo
 		#[test]
+		#[cfg_attr(miri, ignore = "too slow under Miri")]
 		fn a_wallpaper_repair_changes_nothing_else() {
 			fuzz::soak("config-repair", wallpaper_repair_case);
 		}
@@ -17938,6 +18007,7 @@ mod tests {
 		// repair folds that to two. A plain test run's soak stops short of it.
 		// Test ID: ErCFlaa
 		#[test]
+		#[cfg_attr(miri, ignore = "too slow under Miri")]
 		fn a_key_written_three_times_survives_the_wallpaper_repair() {
 			wallpaper_repair_case(107_671);
 		}
@@ -18312,6 +18382,7 @@ mod tests {
 
 		// Test ID: EpXeZQX
 		#[test]
+		#[cfg_attr(miri, ignore = "too slow under Miri")]
 		fn a_rating_changes_nothing_else_in_any_file() {
 			let corpus = fuzz::corpus("config");
 			for case in &corpus {

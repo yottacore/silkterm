@@ -595,48 +595,15 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261024: Split in 5 by module, since the rest is too much for one sitting: 2026102407430372, 2026102407430375, 2026102407430377, 2026102407430379 and 2026102407430381. This item closes when they do.
 		- 20261024: 2026102407430372 is done: 278 tests, 178 passing under Miri and 99 newly ignored there with a reason.
 		- 20261024: 2026102407430375 is done: 330 tests, 184 passing under Miri and 146 newly ignored there with a reason.
-		- 20261024: Left: 2026102407430379 and 2026102407430381, about 300 tests. 2026102407430377 is done. 2026102407430379 sorted 135 of config's 232, 45 passing under Miri and 90 newly ignored there, and its child 2026102410035982 has the other 97.
+		- 20261024: 2026102407430377 is done: 262 tests, 199 passing under Miri and 61 newly ignored there with a reason.
+		- 20261024: 2026102407430379 is done, with its child 2026102410035982: 232 tests, 71 passing under Miri and 161 newly ignored there with a reason.
+		- 20261024: Left: 2026102407430381, the settings_ui tests.
 	- Verified: 20261023. The 15 pass in a plain run and show as ignored under Miri. fmt check, clippy for Linux.
 	- Decisions:
 		- 20261024: The slow bar is 60 s of CPU time under Miri, not wall time, so a verdict doesn't swing with the box's load. Miri runs a test's threads on one core, so on an idle box the two are about the same.
 	- Swept: the 145 tests above. A test elsewhere that starts a process or opens a device turns up in the rest of the run.
 	- Test case: None new. The ignores are test attributes, checked by the runs above.
 	- Branch: rnd1023
-
-- Leak checks: Miri sort, config
-	- ID: 2026102407430379
-	- Type: Task
-	- Status: Started
-	- Priority: Avg
-	- Opened: 20261024-074303
-	- Opened by: CC
-	- Parent ID: 2026102320591313
-	- Requirements:
-		- The parent's requirements, for the 232 tests in `config`.
-		- Decide whether `sysfont::monospace` gets a stand-in answer under `cfg(miri)`, in place of an ignore on each test that asks it. Only worth it where the test is under the slow bar.
-	- Notes:
-		- shcl's save calls `fchown` to keep a file's owner, which Miri can't do, so a test that saves the config likely stops there (seen on 2026102407430372).
-	- Progress log:
-		- 20261024: The first 135 tests in name order were run alone under Miri, against the slow bar of 60 s of CPU time, up to `an_old_default_shell_becomes_the_top_of_the_list`. 45 passed. 83 are too slow under Miri and are ignored as that. 7 are ignored for a call Miri can't make or a bound it can't meet: 3 reach `fchown` in shcl's save, 2 reach shcl's `fsync` of a folder, one calls `tzset`, and one checks a write takes under 50 ms.
-		- 20261024: Miri reported no UB and no leak.
-		- 20261024: The other 97 didn't fit in the time, so they went to 2026102410035982. This item closes with it.
-	- Decisions:
-		- 20261024: No stand-in for `sysfont::monospace` for now. None of the 135 reached the font probe under the bar. The one config test seen to reach it, on 10-23, took about 10 minutes to get there. Look again if 2026102410035982 or 2026102407430381 finds one under the bar.
-	- Verified: 20261024. The 90 new ignores each show as ignored under Miri (`--ignored --list`). The 232 config tests pass in a plain run. fmt check, clippy for Linux with all targets.
-	- Swept: the 135 tests above.
-	- Test case: None new. The ignores are test attributes, checked by the runs above.
-	- Branch: rnd1024
-
-- Leak checks: Miri sort, config, the rest
-	- ID: 2026102410035982
-	- Type: Task
-	- Status: Queued
-	- Priority: Avg
-	- Opened: 20261024-100359
-	- Opened by: CC
-	- Parent ID: 2026102407430379
-	- Requirements:
-		- The parent's requirements, for the 97 config tests in name order from `an_existing_config_loses_the_minimized_wait` on. The list is `private/claude_simple/tools/miri-results-20261024/config-left.txt`.
 
 - Leak checks: Miri sort, settings_ui
 	- ID: 2026102407430381
@@ -776,6 +743,52 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- The Windows GUI scenarios and the scroll harness turn off only with `--quick`, and dpirand only with `DPIRAND_SECS=0` in config.bash.
 	- Notes:
 		- Not every stage needs its own flag. A few grouped ones may do, such as one for the lints and one for the script tests.
+
+- Leak checks: Miri sort, config, the rest
+	- ID: 2026102410035982
+	- Type: Task
+	- Status: Done
+	- Priority: Avg
+	- Opened: 20261024-100359
+	- Opened by: CC
+	- Parent ID: 2026102407430379
+	- Requirements:
+		- The parent's requirements, for the 97 config tests in name order from `an_existing_config_loses_the_minimized_wait` on. The list is `private/claude_simple/tools/miri-results-20261024/config-left.txt`.
+	- Progress log:
+		- 20261024: Each of the 97 was run alone under Miri, 4 at a time, against the slow bar of 60 s of CPU time. 26 passed. 71 are too slow under Miri and are ignored as that. None stopped at a call Miri can't make.
+		- 20261024: Miri reported no UB and no leak. None reached `sysfont::monospace`'s font probe under the bar.
+	- Verified: 20261024. The 71 new ignores each show as ignored under Miri (`--ignored --list`), and none of the 26 that passed is. The 232 config tests pass in a plain run. fmt check, clippy for Linux with all targets.
+	- Swept: the 97 tests above. With 2026102407430379's 135, that is all 232 in config.
+	- Test case: None new. The ignores are test attributes, checked by the runs above.
+	- Branch: rnd1024
+	- Closed: 20261024-104109
+
+- Leak checks: Miri sort, config
+	- ID: 2026102407430379
+	- Type: Task
+	- Status: Done
+	- Priority: Avg
+	- Opened: 20261024-074303
+	- Opened by: CC
+	- Parent ID: 2026102320591313
+	- Requirements:
+		- The parent's requirements, for the 232 tests in `config`.
+		- Decide whether `sysfont::monospace` gets a stand-in answer under `cfg(miri)`, in place of an ignore on each test that asks it. Only worth it where the test is under the slow bar.
+	- Notes:
+		- shcl's save calls `fchown` to keep a file's owner, which Miri can't do, so a test that saves the config likely stops there (seen on 2026102407430372).
+	- Progress log:
+		- 20261024: The first 135 tests in name order were run alone under Miri, against the slow bar of 60 s of CPU time, up to `an_old_default_shell_becomes_the_top_of_the_list`. 45 passed. 83 are too slow under Miri and are ignored as that. 7 are ignored for a call Miri can't make or a bound it can't meet: 3 reach `fchown` in shcl's save, 2 reach shcl's `fsync` of a folder, one calls `tzset`, and one checks a write takes under 50 ms.
+		- 20261024: Miri reported no UB and no leak.
+		- 20261024: The other 97 didn't fit in the time, so they went to 2026102410035982. This item closes with it.
+		- 20261024: 2026102410035982 is done: 26 more pass under Miri and 71 more are ignored as too slow. All 232 are sorted: 71 pass and 161 are ignored under Miri with a reason.
+	- Decisions:
+		- 20261024: No stand-in for `sysfont::monospace` for now. None of the 135 reached the font probe under the bar. The one config test seen to reach it, on 10-23, took about 10 minutes to get there. Look again if 2026102410035982 or 2026102407430381 finds one under the bar.
+		- 20261024: Still no stand-in. None of the other 97 reached the font probe under the bar either.
+	- Verified: 20261024. The 90 new ignores each show as ignored under Miri (`--ignored --list`). The 232 config tests pass in a plain run. fmt check, clippy for Linux with all targets.
+	- Swept: the 135 tests above, and the 97 on 2026102410035982.
+	- Test case: None new. The ignores are test attributes, checked by the runs above.
+	- Branch: rnd1024
+	- Closed: 20261024-104109
 
 - Leak checks: Miri sort, pane and app
 	- ID: 2026102407430377
