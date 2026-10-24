@@ -148,6 +148,7 @@ mod tests {
 	// one of the inputs, and so do the lock file and both manifests.
 	// Test ID: Eq4Yrbe
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_build_inputs_cover_every_included_file_and_the_lock() {
 		let crate_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
 		let real = |path: &std::path::Path| {
@@ -254,6 +255,7 @@ mod tests {
 	// reachable from outside the crate, and a binary exports none.
 	// Test ID: ErlrvUZ
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn every_public_type_has_debug() {
 		let mut texts = Vec::new();
 		for path in rust_sources() {
@@ -465,6 +467,7 @@ mod tests {
 	// Tracked files only, so a scratch file in a working tree is never judged.
 	// Test ID: ErloT4L
 	#[test]
+	#[cfg_attr(miri, ignore = "Miri can't start a process")]
 	fn every_script_has_the_license_header_with_history_at_the_bottom() {
 		// shell_integration.ps1 is written whole into a user's PowerShell
 		// profile, so it names no license there. It ships inside the binary,

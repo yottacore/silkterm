@@ -1156,6 +1156,7 @@ mod tests {
 	// GPU scaled it to the window every frame.
 	// Test ID: ErqyRJF
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_wallpaper_is_held_at_the_size_it_is_drawn_at() {
 		use super::Sizing;
 		let held = |full, window| Sizing::new(full, 0.0, 4.0).held(window);
@@ -1192,6 +1193,7 @@ mod tests {
 	// the same size, it should look the same as the whole image did.
 	// Test ID: ErqyRUK
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_held_wallpaper_looks_like_the_whole_one_drawn_at_its_size() {
 		use crate::config::{from_linear_u8, to_linear};
 		let s = Settings {
@@ -1245,6 +1247,7 @@ mod tests {
 	// than the window for a light blur.
 	// Test ID: Erym5o5
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_blurred_wallpaper_is_held_by_its_blur() {
 		use super::{Sizing, per_sigma};
 		use crate::profile::Profile;
@@ -1325,6 +1328,7 @@ mod tests {
 	// half of each edge texel came out flat.
 	// Test ID: Erym5q4
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_bordered_wallpaper_looks_like_the_window_size_one() {
 		use crate::config::{from_linear_u8, to_linear};
 		let s = Settings {
@@ -1414,6 +1418,7 @@ mod tests {
 	// stay where they were.
 	// Test ID: ErqyUlS
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_resize_keeps_the_pictures_summary() {
 		let request = |window, summary| Request {
 			seq: 1,
@@ -1520,6 +1525,7 @@ mod tests {
 	// rather than on nothing.
 	// Test ID: ElvpdEu
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn an_unreadable_image_still_falls_back_to_the_builtin() {
 		let mut s = flat_settings();
 		let missing = crate::testdir::run_dir().join("silkterm_no_such_wallpaper.png");
@@ -1537,6 +1543,7 @@ mod tests {
 	// and took the terminal with it.
 	// Test ID: Eq8KqtE
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_subnormal_blur_is_no_blur() {
 		let mut s = flat_settings();
 		s.wallpaper_blur = 1e-40;
@@ -1606,6 +1613,7 @@ mod tests {
 	// Test ID: Eq8KqtF
 	#[cfg(target_os = "linux")]
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	#[cfg_attr(
 		silk_asan,
 		ignore = "ASan's shadow memory and quarantine count in the peak this measures"
@@ -1679,6 +1687,7 @@ mod tests {
 	// now, and every stage boundary is a place it gives up.
 	// Test ID: Eq9J5HU
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_superseded_request_stops_before_its_next_stage() {
 		use std::cell::Cell;
 		let s = Settings {
@@ -1795,6 +1804,7 @@ mod tests {
 	// suppression has to key on what the scan found, not on the folder existing.
 	// Test ID: ElvpdEv
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn an_empty_rotation_folder_falls_back_to_the_builtin() {
 		let mut s = flat_settings();
 		let dir =
@@ -1813,6 +1823,7 @@ mod tests {
 	// not whatever `wallpaper` happened to name).
 	// Test ID: ElvpdEw
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_builtin_keeps_the_configured_fit() {
 		let s = Settings {
 			wallpaper_default_fit: Fit::Zoom,
@@ -1827,6 +1838,7 @@ mod tests {
 
 	// Test ID: Er2UJeL
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_master_switch_turns_the_wallpaper_off() {
 		let request = |enabled| Request {
 			seq: 1,
@@ -1853,6 +1865,7 @@ mod tests {
 	// letting go is the memory, so the copy has to stay small.
 	// Test ID: Ersiipp
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn every_picture_comes_with_a_small_standin() {
 		let request = |window, enabled| Request {
 			seq: 1,
@@ -1891,6 +1904,7 @@ mod tests {
 	// 128; the eye, and the real picture drawn small, say 188.
 	// Test ID: ErsiiuM
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_standin_is_averaged_in_linear_light() {
 		use crate::config::{from_linear_u8, to_linear};
 		let checker = image::RgbaImage::from_fn(320, 180, |x, y| {
@@ -1926,6 +1940,7 @@ mod tests {
 	// picks up where it was.
 	// Test ID: Er2UJeM
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn rotation_off_stops_rotating_and_keeps_the_folder() {
 		let dir =
 			crate::testdir::run_dir().join(format!("silkterm_wp_rot_off_{}", std::process::id()));
@@ -1967,6 +1982,7 @@ mod tests {
 
 	// Test ID: Er2UJeN
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn an_images_layout_tags_win_until_honor_tags_is_off() {
 		let path = tagged_file(
 			"layout",
@@ -1989,6 +2005,7 @@ mod tests {
 
 	// Test ID: Er2UJeO
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn an_images_look_tags_win_until_honor_look_tags_is_off() {
 		let path = tagged_file("look", "<wallpaper:Opacity>40%</wallpaper:Opacity>");
 		let mut s = Settings {
@@ -2008,6 +2025,7 @@ mod tests {
 	// about 128 there, where half the light is sRGB 188.
 	// Test ID: Er2UJeP
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_blur_mixes_in_linear_light() {
 		let path =
 			crate::testdir::run_dir().join(format!("silkterm_wp_edge_{}.png", std::process::id()));
@@ -2033,6 +2051,7 @@ mod tests {
 	// Without the folder this used to show the built-in.
 	// Test ID: Eq4Yrbi
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_cleared_wallpaper_shows_nothing_with_or_without_a_folder() {
 		let dir =
 			crate::testdir::run_dir().join(format!("silkterm_wp_cleared_{}", std::process::id()));
@@ -2070,6 +2089,7 @@ mod tests {
 	// pixels has moved. What only changes how it is drawn stays out of the key.
 	// Test ID: EryHI98
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_kept_copy_is_keyed_on_everything_that_changes_its_pixels() {
 		use super::{Origin, kept_key};
 		let path = tagged_file("key", "");
@@ -2211,6 +2231,7 @@ mod tests {
 	// request for it, or for a size within 5% of the pixels, reads the copy.
 	// Test ID: EryHICk
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_prepared_wallpaper_is_kept_and_read_back() {
 		use super::answer;
 		let dir =
@@ -2307,6 +2328,7 @@ mod tests {
 	// picture again.
 	// Test ID: Es1erXj
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_profile_picks_bc1_or_bc7_unless_the_file_says() {
 		use super::packing;
 		use crate::config::Compression;
@@ -2369,6 +2391,7 @@ mod tests {
 	// kind: each keeps its own copy and reads back only that one.
 	// Test ID: Es1erXk
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_bc7_window_never_takes_a_bc1_copy() {
 		use super::answer;
 		use crate::config::Compression;
@@ -2438,6 +2461,7 @@ mod tests {
 	// takes that copy, near as the size is.
 	// Test ID: Erym5s3
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_bordered_copy_is_kept_apart() {
 		use super::answer;
 		let dir =

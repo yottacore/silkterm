@@ -381,6 +381,7 @@ mod tests {
 	// would creep every time the box opened.
 	// Test ID: EqSaSRc
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_color_survives_the_trip_through_hue_saturation_and_brightness() {
 		let seed = hsv(0.25, 0.5, 0.5);
 		let mut checked = 0;

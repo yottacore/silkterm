@@ -690,6 +690,10 @@ struct State {
 	bench_from: Option<crate::profile::Profile>,
 	bench_stalled: bool,
 	dirty: bool,
+	// A drag select moved its far end, or a link hover is being probed. The
+	// panes draw again as for `dirty`, but the minimap shows neither, so it
+	// isn't asked to compose for them.
+	marks_moved: bool,
 	bell_flash: f32,    // visual-bell brightness, set to 1.0 on BEL, decays to 0
 	size_tracked: bool, // false until the first frame, so startup/programmatic resizes don't overwrite remembered_size
 	// The window is born hidden and revealed once a real frame is on screen at its
@@ -943,7 +947,7 @@ impl State {
 			p.set_hover(at.filter(|_| over == Some(*id)), text);
 			probing |= p.link_probing();
 		}
-		self.dirty |= probing;
+		self.marks_moved |= probing;
 	}
 
 	// Whether the pointer is over an underlined link - the pane's own hover state,
@@ -1763,18 +1767,20 @@ impl State {
 	// returns true while any pane is still animating (caller keeps frames coming).
 	// `force_rebuild` = the frame changed content/scroll/bell (not a pure cursor
 	// animation), so panes re-shape text; false lets them reuse the cached frame.
+	// `map_rebuild` = that change may show in the minimap too, which a moved
+	// selection or link hover doesn't.
 	// A frame, on the device the window has. No device means nothing drawn and
 	// no animation to keep frames coming for.
-	fn render(&mut self, force_rebuild: bool) -> bool {
+	fn render(&mut self, force_rebuild: bool, map_rebuild: bool) -> bool {
 		let Some(mut gpu) = self.gpu.take() else {
 			return false;
 		};
-		let animating = self.render_with(&mut gpu, force_rebuild);
+		let animating = self.render_with(&mut gpu, force_rebuild, map_rebuild);
 		self.gpu = Some(gpu);
 		animating
 	}
 
-	fn render_with(&mut self, gpu: &mut Gpu, force_rebuild: bool) -> bool {
+	fn render_with(&mut self, gpu: &mut Gpu, force_rebuild: bool, map_rebuild: bool) -> bool {
 		// once a frame has been drawn, later resizes are user-driven and may update
 		// the remembered window size (startup/programmatic ones happen before this)
 		self.size_tracked = true;
@@ -1881,13 +1887,16 @@ impl State {
 			// PTY output (content_dirty), an active scroll ease, or a global
 			// cause (bell flash, chrome/UI change) - idle siblings reuse their
 			// cached frame instead of re-shaping at the busy pane's rate
-			let force = force_rebuild || pane.content_dirty || pane.scroll.animating();
+			let own = pane.content_dirty || pane.scroll.animating();
+			let force = force_rebuild || own;
+			let map = map_rebuild || own;
 			crate::perf::timed(&crate::perf::BUILD_NS, || {
 				pane.build(
 					&mut self.text,
 					dt,
 					bell,
 					force,
+					map,
 					win_focused && *id == active_pane,
 				);
 			});
@@ -3975,6 +3984,7 @@ impl ApplicationHandler<UserEvent> for App {
 			bench_from: None,
 			bench_stalled: false,
 			dirty: true,
+			marks_moved: false,
 			bell_flash: 0.0,
 			size_tracked: false,
 			revealed: false,
@@ -4078,6 +4088,7 @@ impl ApplicationHandler<UserEvent> for App {
 				if let Some(dialog) = self.dialog.as_mut() {
 					dialog.fold_shells(&found);
 				}
+				crate::perf::allocs_note("shell scan folded in");
 			}
 			UserEvent::Wakeup(id) => {
 				crate::perf::bump(&crate::perf::WAKEUPS);
@@ -4463,7 +4474,7 @@ impl ApplicationHandler<UserEvent> for App {
 					if let Some(p) = state.tabs.cur().panes.get(&id) {
 						p.drag_selection_to(x, y, &state.text);
 					}
-					state.dirty = true;
+					state.marks_moved = true;
 				} else if state.dragging_pane.is_some() {
 					// redraw the drop-target highlight as the cursor moves
 					state.dirty = true;
@@ -5234,7 +5245,7 @@ impl ApplicationHandler<UserEvent> for App {
 					state.note_active("redraw request");
 					return;
 				}
-				let _ = state.render(true);
+				let _ = state.render(true, true);
 			}
 
 			_ => {}
@@ -5687,16 +5698,34 @@ impl ApplicationHandler<UserEvent> for App {
 		let flow = if hidden || state.gpu.is_none() {
 			state.rating.pause();
 			ControlFlow::Wait
-		} else if state.dirty || content || scroll_anim || cursor_anim || bell_anim {
+		} else if state.dirty
+			|| state.marks_moved
+			|| content
+			|| scroll_anim
+			|| cursor_anim
+			|| bell_anim
+		{
 			// UI/chrome changes and the bell force ALL panes to re-shape; fresh
 			// output and scroll eases are scoped per pane inside render (a pure
 			// cursor-animation frame lets every pane reuse its cached frame).
-			let force = state.dirty || bell_anim;
+			let map = state.dirty || bell_anim;
+			let force = map || state.marks_moved;
 			state.dirty = false;
+			state.marks_moved = false;
 			crate::perf::bump(&crate::perf::FRAMES);
 			let allocs = crate::perf::thread_allocs();
-			let animating = crate::perf::timed(&crate::perf::RENDER_NS, || state.render(force));
-			crate::perf::frame_allocs(allocs);
+			let animating =
+				crate::perf::timed(&crate::perf::RENDER_NS, || state.render(force, map));
+			crate::perf::frame_allocs(
+				allocs,
+				crate::perf::FrameCause {
+					rebuild: force,
+					output: content,
+					scroll: scroll_anim,
+					cursor: cursor_anim,
+					bell: bell_anim,
+				},
+			);
 			// how the ease is paced tells whether the display keeps up
 			let step = rating_step(
 				state.bench.is_some(),
@@ -5798,7 +5827,8 @@ impl ApplicationHandler<UserEvent> for App {
 		let flow = wake_by(flow, state.tabs.task_wake(Instant::now()));
 		let flow = wake_by(
 			flow,
-			(state.dirty && !hidden && state.gpu.is_some()).then(Instant::now),
+			((state.dirty || state.marks_moved) && !hidden && state.gpu.is_some())
+				.then(Instant::now),
 		);
 		// a frame or a device the GPU refused is tried again on its backoff
 		let refused = if state.gpu.is_some() {
@@ -5918,6 +5948,7 @@ mod tests {
 	// child copy of this test binary, since the answers are cached per process.
 	// Test ID: Erg4k2j
 	#[test]
+	#[cfg_attr(miri, ignore = "Miri can't start a process")]
 	fn each_debug_switch_reads_its_own_variable() {
 		for set in super::EnvFlag::ALL {
 			let mut child = std::process::Command::new(std::env::current_exe().unwrap());
@@ -6065,6 +6096,7 @@ mod tests {
 	// and the only direct write left is the reply the terminal owes the program.
 	// Test ID: EpHQ61Q
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_read_only_pane_takes_nothing_the_user_sent() {
 		// this file and the ones under app/, each above its own tests
 		let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/app");
@@ -6103,6 +6135,7 @@ mod tests {
 	// So: the same geometry at 2x must come out at twice the size, everywhere.
 	// Test ID: EnLuU52
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_chrome_doubles_when_the_display_does() {
 		// the tab's close button, measured against a bar that has itself doubled
 		let one = tab_close_box(0.0, 200.0, 0.0, 30.0, 1.0);
@@ -6329,6 +6362,7 @@ mod tests {
 	// The default shell is the first entry switched on, not the first entry.
 	// Test ID: Er2VLed
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_default_shell_is_the_first_active_entry() {
 		let _store = config::test_store_lock();
 		let saved = config::settings();

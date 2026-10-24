@@ -418,6 +418,7 @@ mod tests {
 
 		// Test ID: EpQN0oL
 		#[test]
+		#[cfg_attr(miri, ignore = "too slow under Miri")]
 		fn only_an_allowlisted_url_is_ever_offered_to_the_opener() {
 			let corpus = fuzz::corpus("links");
 			for case in &corpus {

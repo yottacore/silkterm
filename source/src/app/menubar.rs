@@ -336,6 +336,7 @@ mod tests {
 	// and rode half a descent higher.
 	// Test ID: Er2VLee
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_bar_titles_and_the_copy_labels_share_a_baseline() {
 		let text = TextCtx::new_cpu(1.0);
 		let menu_h = text.ui_line_h + text.dip(MENU_BAR_VPAD);

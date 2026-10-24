@@ -345,6 +345,33 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Test case: New cases in `cicd/tests/engine/run.bash` (Er2UgY7).
 	- Branch: rnd1022
 
+- A drag select recomposes the minimap about 11 times a second, though the map shows no selection
+	- ID: 2026102407065861
+	- Type: Enhancement
+	- Status: Waiting on automated testing
+	- Needs local test suite run?: A full run, for the scroll harness, since `Pane::build` and the frame loop changed. The gate step runs ErzCQC2.
+	- Needs hand testing: With the map on, a drag select, a link hover, typing on the prompt line and a color change in Settings, all in a real window.
+	- Priority: Low
+	- Opened: 20261024-070658
+	- Opened by: CC
+	- Related IDs: 2026102321230038, 2026102407065855
+	- Target OS: All
+	- Requirements:
+		- A pane rebuild that changes nothing the map shows, such as a selection change, doesn't recompose the map.
+		- Typing on the prompt line, output, a scroll, a resize and a color change still reach the map.
+	- Notes:
+		- `Pane::build` calls `map.update` on every forced rebuild, and that composes whenever the 90 ms gap is up. A drag rebuilds every frame, so the map composes on every frame past the gap: about 20 allocations a time on b23, and the compose's own CPU.
+		- The due compose is also what picks up a changed screen row with no new history, so skipping it needs some other sign the screen's text changed. `last_rows` already holds a hash per row.
+		- ErzCQC2's drag limit has the compose in every frame, so this lowers its figure.
+	- Decisions:
+		- 20261024: Done by where the rebuild comes from, not by a hash of the screen. A moved selection and a link hover probe now mark the window with their own flag. The panes draw again as before, but the map is only updated for the window's other causes, a pane's own output and its scroll. So typing, output, a scroll, a resize and a color change take the same path to the map as before.
+	- Progress log:
+		- 20261024: The selection alone wasn't enough. A pointer moving over text also starts a link hover probe, which marked the whole window, so both panes still composed on every drag frame. The hover probe takes the same flag now.
+	- Verified: 20261024, with a compose logged for the run, a drag frame under load composed both panes every frame before and none after, bar the press. ErzCQC2's drag frame read 315 and 317 with 8 cores loaded, against 333 to 370 before, and 327 idle against 332. With the map off it reads 321. Unit suite, clippy for Linux and Windows, fmt and shellcheck pass.
+	- Swept: every `state.dirty` set on a pointer move. The thumb and map drags move the view, and a divider drag and a pane drag change the layout, so they still compose. The menu, tab and bar hovers don't touch a pane. The wake after a frame looks at the new flag too.
+	- Branch: rnd1024
+	- Test case: ErzCQC2's drag figure, under Verified. The limit stays 360, since the saving is about 5% and the 2026102321230038 margin was set by load.
+
 - Add a contributor license agreement, like nano-git-db's
 	- ID: 2026101906582193
 	- Type: Task
@@ -500,10 +527,29 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261023: Four tests from the sample that ran past 90 s were let run longer. bc1's flat color test passed in 477 s. A Settings dialog test reached the test folder's `atexit` after 568 s, run without `SILKTERM_TEST_DIR`. An autotheme and a config test started a process after about 10 minutes: `sysfont::monospace` asks `gsettings` and `xfconf-query` for the desktop's font.
 		- 20261023: That font probe is likely on the path of many config and Settings tests. A stand-in answer under `cfg(miri)` there may beat an ignore on each of them. Not decided.
 		- 20261023: Left: the other 1292 tests, and the slow ones once the bar is set.
+		- 20261024: Split in 5 by module, since the rest is too much for one sitting: 2026102407430372, 2026102407430375, 2026102407430377, 2026102407430379 and 2026102407430381. This item closes when they do.
+		- 20261024: 2026102407430372 is done: 278 tests, 178 passing under Miri and 99 newly ignored there with a reason.
+		- 20261024: 2026102407430375 is done: 330 tests, 184 passing under Miri and 146 newly ignored there with a reason.
+		- 20261024: 2026102407430377 is done: 262 tests, 199 passing under Miri and 61 newly ignored there with a reason.
+		- 20261024: 2026102407430379 is done, with its child 2026102410035982: 232 tests, 71 passing under Miri and 161 newly ignored there with a reason.
+		- 20261024: Left: 2026102407430381, the settings_ui tests.
 	- Verified: 20261023. The 15 pass in a plain run and show as ignored under Miri. fmt check, clippy for Linux.
+	- Decisions:
+		- 20261024: The slow bar is 60 s of CPU time under Miri, not wall time, so a verdict doesn't swing with the box's load. Miri runs a test's threads on one core, so on an idle box the two are about the same.
 	- Swept: the 145 tests above. A test elsewhere that starts a process or opens a device turns up in the rest of the run.
 	- Test case: None new. The ignores are test attributes, checked by the runs above.
 	- Branch: rnd1023
+
+- Leak checks: Miri sort, settings_ui
+	- ID: 2026102407430381
+	- Type: Task
+	- Status: Queued
+	- Priority: Avg
+	- Opened: 20261024-074303
+	- Opened by: CC
+	- Parent ID: 2026102320591313
+	- Requirements:
+		- The parent's requirements, for the 203 tests in `settings_ui`.
 
 - Implement leak and static checks of the Rust code run as part of CI/CD
 	- ID: 2026101714015789
@@ -603,42 +649,21 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Split from 2026101714445005. Its heap-growth test covers some of the same actions in-process. This one is for what that can't reach: windows, tabs and splits opened and closed, the GPU, the Settings dialog and a real PTY.
 		- `cicd/tests/allocs/run.bash` already drives a window on a private Xvfb.
 
-- The nightly warns that silkterm's `Send` check on wgpu's types passes the recursion limit, which a later Rust makes an error
-	- ID: 2026102321073303
+- A config test's 50 ms bound for a failed write went red under load in a full run
+	- ID: 2026102410441001
 	- Type: Bug
 	- Status: Queued
 	- Severity: Low
-	- Opened: 20261023-210733
+	- Opened: 20261024-104410
 	- Opened by: CC
-	- Related IDs: 2026102320591313
-	- Steps to reproduce:
-		- Build the tests on nightly-2026-10-16, as the Miri run does.
-	- Incorrect behavior:
-		- A `recursion_depth_exceeding_limit` warning on the whole crate, from proving `wgpu_core`'s `Global` is `Send`. It says it's being phased out to a hard error, rust-lang/rust#159228.
-	- Expected behavior:
-		- No warning, so a toolchain bump past the change still builds.
-	- Possible cause:
-		- The default limit of 128. The warning suggests `#![recursion_limit = "256"]`, or a manual `Send` impl on a type in between.
-	- Notes:
-		- Not checked yet whether the stable 1.96 or the sanitizer nightly says the same.
-
-- The allocations per frame test failed its drag limit once under load
-	- ID: 2026102321230038
-	- Type: Bug
-	- Status: Queued
-	- Severity: Low
-	- Opened: 20261023-212300
-	- Opened by: CC
+	- Related IDs: 2026102407430379
 	- Target OS: Linux
-	- Test environment: b23 at load 23 to 25, the quick gate in the container on `rnd1023`, llvmpipe
+	- Test environment: b23 at load about 20 to 30, the full run in the container at 550ff60 on `rnd1024`
 	- Steps to reproduce:
-		- Run `cicd/cicd.bash -y --quick --no-publish --no-dogfood --no-demo` while the box is busy.
-	- Incorrect behavior: `cicd/tests/allocs/run.bash` (ErzCQC2) failed with "drag: 364 per frame, limit 360". The same binary then passed 3 times in a row, at 339, 346 and 347.
-	- Expected behavior: The drag check doesn't go red on load alone.
-	- Reproduced: 20261023, once in 4 runs. Gate log `/mnt/ext/wip2/wip/tmp/silkterm-floss/20261023-211203/001/gate.log`.
-	- Possible cause: The test's own comment says the per-frame count in a drag rises with load, since a slow box folds more moves into each frame. The frame's own count still drifts with it, and 360 leaves about 4% over the measured 340.
-	- Notes:
-		- The round didn't change the drag path. Its source edits were test attributes only.
+		- Run the full run while the box is busy.
+	- Incorrect behavior: `config::tests::a_failed_write_that_left_the_file_changes_nothing` failed its "no pause when the file is still there" check, under 50 ms, in the testdir step's read-only run (ErOj67l). The full run stopped in stage 3 there.
+	- Expected behavior: A timing bound doesn't go red on load alone.
+	- Reproduced: No. Run alone 3 times right after, at load 23, it passed each time.
 
 - Wayland: a copy a program sends while no SilkTerm window has focus is dropped
 	- ID: 2026101607585700
@@ -2785,6 +2810,113 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Acceptance signoff: Self-closed: test fixes only, and all four failed before the fix and pass after on Windows.
 	- Closed: 20260930-125357
 
+- Leak checks: Miri sort, config, the rest
+	- ID: 2026102410035982
+	- Type: Task
+	- Status: Done
+	- Priority: Avg
+	- Opened: 20261024-100359
+	- Opened by: CC
+	- Parent ID: 2026102407430379
+	- Requirements:
+		- The parent's requirements, for the 97 config tests in name order from `an_existing_config_loses_the_minimized_wait` on. The list is `private/claude_simple/tools/miri-results-20261024/config-left.txt`.
+	- Progress log:
+		- 20261024: Each of the 97 was run alone under Miri, 4 at a time, against the slow bar of 60 s of CPU time. 26 passed. 71 are too slow under Miri and are ignored as that. None stopped at a call Miri can't make.
+		- 20261024: Miri reported no UB and no leak. None reached `sysfont::monospace`'s font probe under the bar.
+	- Verified: 20261024. The 71 new ignores each show as ignored under Miri (`--ignored --list`), and none of the 26 that passed is. The 232 config tests pass in a plain run. fmt check, clippy for Linux with all targets.
+	- Swept: the 97 tests above. With 2026102407430379's 135, that is all 232 in config.
+	- Test case: None new. The ignores are test attributes, checked by the runs above.
+	- Branch: rnd1024
+	- Closed: 20261024-104109
+
+- Leak checks: Miri sort, config
+	- ID: 2026102407430379
+	- Type: Task
+	- Status: Done
+	- Priority: Avg
+	- Opened: 20261024-074303
+	- Opened by: CC
+	- Parent ID: 2026102320591313
+	- Requirements:
+		- The parent's requirements, for the 232 tests in `config`.
+		- Decide whether `sysfont::monospace` gets a stand-in answer under `cfg(miri)`, in place of an ignore on each test that asks it. Only worth it where the test is under the slow bar.
+	- Notes:
+		- shcl's save calls `fchown` to keep a file's owner, which Miri can't do, so a test that saves the config likely stops there (seen on 2026102407430372).
+	- Progress log:
+		- 20261024: The first 135 tests in name order were run alone under Miri, against the slow bar of 60 s of CPU time, up to `an_old_default_shell_becomes_the_top_of_the_list`. 45 passed. 83 are too slow under Miri and are ignored as that. 7 are ignored for a call Miri can't make or a bound it can't meet: 3 reach `fchown` in shcl's save, 2 reach shcl's `fsync` of a folder, one calls `tzset`, and one checks a write takes under 50 ms.
+		- 20261024: Miri reported no UB and no leak.
+		- 20261024: The other 97 didn't fit in the time, so they went to 2026102410035982. This item closes with it.
+		- 20261024: 2026102410035982 is done: 26 more pass under Miri and 71 more are ignored as too slow. All 232 are sorted: 71 pass and 161 are ignored under Miri with a reason.
+	- Decisions:
+		- 20261024: No stand-in for `sysfont::monospace` for now. None of the 135 reached the font probe under the bar. The one config test seen to reach it, on 10-23, took about 10 minutes to get there. Look again if 2026102410035982 or 2026102407430381 finds one under the bar.
+		- 20261024: Still no stand-in. None of the other 97 reached the font probe under the bar either.
+	- Verified: 20261024. The 90 new ignores each show as ignored under Miri (`--ignored --list`). The 232 config tests pass in a plain run. fmt check, clippy for Linux with all targets.
+	- Swept: the 135 tests above, and the 97 on 2026102410035982.
+	- Test case: None new. The ignores are test attributes, checked by the runs above.
+	- Branch: rnd1024
+	- Closed: 20261024-104109
+
+- Leak checks: Miri sort, pane and app
+	- ID: 2026102407430377
+	- Type: Task
+	- Status: Done
+	- Priority: Avg
+	- Opened: 20261024-074303
+	- Opened by: CC
+	- Parent ID: 2026102320591313
+	- Requirements:
+		- The parent's requirements, for the 262 tests in `pane` and `app`.
+	- Progress log:
+		- 20261024: Each test run alone under Miri, against the slow bar of 60 s of CPU time. 199 passed. 59 are too slow under Miri and are ignored as that: 37 in pane (26 in its own tests, 9 in replay, 2 in vhist_probe) and 22 in app, 6 of them in rating. 2 start a process, since they run the test binary again to read an env switch at startup, and are ignored as that. 2 were already ignored for needing a recording.
+		- 20261024: One idle test ran out the 400 s wall backstop at a load of about 50 without reaching the bar. Run again alone, it hit the bar in 75 s, so it's slow, not stuck.
+		- 20261024: Miri reported no UB and no leak.
+	- Verified: 20261024. The 61 new ignores each show as ignored under Miri. The silkterm unit suite passes in a plain run (1407 passed, 3 ignored). fmt check, clippy for Linux on the workspace with all targets.
+	- Swept: the 262 tests above.
+	- Test case: None new. The ignores are test attributes, checked by the runs above.
+	- Branch: rnd1024
+	- Closed: 20261024-090832
+
+- Leak checks: Miri sort, modules palette to xmp, and knobs
+	- ID: 2026102407430375
+	- Type: Task
+	- Status: Done
+	- Priority: Avg
+	- Opened: 20261024-074303
+	- Opened by: CC
+	- Parent ID: 2026102320591313
+	- Requirements:
+		- The parent's requirements, for the 301 tests in the modules from palette to xmp, in name order, and the knobs crate's 28.
+	- Progress log:
+		- 20261024: 302 tests in the modules, one more than at filing. 180 pass under Miri. 116 are too slow and are ignored as that, most in scroll (37), wallpaper (24) and visibility (17). 6 are ignored for a call Miri can't make or answers its own way: 2 start a process, one asks the machine's memory size (`sysconf`), one copies a file (`copy_file_range`), one sees Miri's made-up user id (1000, against the real 1001) and refuses its own folder as not private, and one compares two `exp` results that Miri makes inexact on purpose. That last one passes with `-Zmiri-deterministic-floats`.
+		- 20261024: knobs: 4 pass and 24 are too slow, ignored as that.
+		- 20261024: Miri reported no UB and no leak.
+	- Verified: 20261024. The 146 new ignores each show as ignored under Miri. The silkterm and knobs unit suites pass in a plain run (1407 passed, 3 ignored, and 28). fmt check, clippy for Linux on the workspace with all targets.
+	- Swept: the 330 tests above.
+	- Test case: None new. The ignores are test attributes, checked by the runs above.
+	- Branch: rnd1024
+	- Closed: 20261024-083141
+
+- Leak checks: Miri sort, modules autotheme to minimap
+	- ID: 2026102407430372
+	- Type: Task
+	- Status: Done
+	- Priority: Avg
+	- Opened: 20261024-074303
+	- Opened by: CC
+	- Parent ID: 2026102320591313
+	- Requirements:
+		- The parent's requirements, for the 266 tests in the modules from autotheme to minimap, in name order.
+		- Last round's 12 tests that ran past 45 s, judged again against the slow bar.
+	- Progress log:
+		- 20261024: Each test run alone under Miri, against the slow bar of 60 s of CPU time. 178 passed. 86 are too slow under Miri and are ignored as that: 27 in minimap, 18 in autotheme, 12 in dialog, and a few each in bc1, bc7, buildnum, cli, coloremoji, input, integration and links. 13 stopped at a call Miri can't make and are ignored with it: 9 start a process, and 4 reach `fchown`, where shcl's save keeps a file's owner. The dhat heap test was already ignored, with its reason.
+		- 20261024: Of last round's 12 that ran past 45 s, cwd's and fileassoc's pass under the bar. The other 10, 8 in term and 2 in gfx, are too slow and are ignored as that.
+		- 20261024: Miri reported no UB and no leak.
+	- Verified: 20261024. The 99 new ignores each show as ignored under Miri. The whole silkterm unit suite passes in a plain run (1407 passed, 3 ignored). fmt check, clippy for Linux with all targets.
+	- Swept: the 278 tests above. Nothing else needs a full run, since the attributes only change a Miri run, which no pipeline step makes yet (2026102320591318).
+	- Test case: None new. The ignores are test attributes, checked by the runs above.
+	- Branch: rnd1024
+	- Closed: 20261024-080831
+
 - Leak checks: where the Miri step runs
 	- ID: 2026102320591323
 	- Type: Task
@@ -4498,6 +4630,101 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Branch: testlines
 	- Test case: No test. Output only. The gate and a quick run showed all 942 Rust tests with an ID, and a made-up name showed the dashes and the warning.
 	- Closed: 20260928-111812
+
+- The allocations per frame test failed its drag limit once under load
+	- ID: 2026102321230038
+	- Type: Bug
+	- Status: Done
+	- Acceptance signoff: Self-closed: ErzCQC2 passed in the gate step's container run at 550ff60, with the box at load about 20.
+	- Closed: 20261024-104410
+	- Severity: Low
+	- Opened: 20261023-212300
+	- Opened by: CC
+	- Related IDs: 2026102407065855, 2026102407065861
+	- Target OS: Linux
+	- Test environment: b23 at load 23 to 25, the quick gate in the container on `rnd1023`, llvmpipe
+	- Steps to reproduce:
+		- Run `cicd/cicd.bash -y --quick --no-publish --no-dogfood --no-demo` while the box is busy.
+	- Incorrect behavior: `cicd/tests/allocs/run.bash` (ErzCQC2) failed with "drag: 364 per frame, limit 360". The same binary then passed 3 times in a row, at 339, 346 and 347.
+	- Expected behavior: The drag check doesn't go red on load alone.
+	- Reproduced: 20261023, once in 4 runs. Gate log `/mnt/ext/wip2/wip/tmp/silkterm-floss/20261023-211203/001/gate.log`.
+		- 20261024: on b23 with 8 cores loaded, the old drag failed 2 runs in 3, at 362 and 368, and read 350 on the third.
+	- Possible cause: The test's own comment says the per-frame count in a drag rises with load, since a slow box folds more moves into each frame. The frame's own count still drifts with it, and 360 leaves about 4% over the measured 340.
+	- Actual cause:
+		- The drag frame had two shares that grow with load. Measured per frame on the debug build:
+			- The minimap recomposes once its 90 ms gap is up, about 20 allocations. An idle box composes on every third drag frame or so, a busy one on every frame. With the map off, a one-row drag read a flat 320.
+			- Each row the selection newly covers costs about 17. At 80 frames for 80 moves a frame covers a third of a row. At 13 frames each covers 2 or more, which read 359 to 370.
+		- The first has a ceiling, one compose a frame. The second doesn't.
+	- Actual fix:
+		- The drag goes down to cover the rows first, waits a second for that frame, and only then is counted, moving along that one row. A busy box can then add no more than the compose. The limit stays 360.
+		- Filed apart: the at-rest check at load 50 (2026102407065855), and the drag's needless minimap compose (2026102407065861).
+	- Verified: 20261024, the new drag check passed 6 runs at load 30 to 52, at 336, 339 and 345 with no extra load, adn 335, 335 and 331 with 8 cores loaded. The old one, alternated with it under that load, failed 2 of 3.
+		- At load 52 both versions failed the at-rest check instead, which is 2026102407065855.
+		- shellcheck is clean.
+	- Swept: the at-rest and per-move checks in the same test, and every reader of the allocation counter. No other test reads it.
+	- Branch: rnd1024
+	- Test case: ErzCQC2 itself. The old drag failing under load and the new one passing are under Verified.
+
+- The allocations per frame test fails its at-rest limit at load 50 or so, with the shells' output still coming in
+	- ID: 2026102407065855
+	- Type: Bug
+	- Status: Done
+	- Acceptance signoff: Self-closed: ErzCQC2 passed in the gate step's container run at 550ff60, with the box at load about 20.
+	- Closed: 20261024-104410
+	- Severity: Low
+	- Opened: 20261024-070658
+	- Opened by: CC
+	- Related IDs: 2026102321230038, 2026102407065861
+	- Target OS: Linux
+	- Test environment: b23 at load 42 to 52, with 8 cores also loaded, llvmpipe
+	- Steps to reproduce:
+		- Run `cicd/tests/allocs/run.bash` (ErzCQC2) on a box at load 50 or so.
+	- Incorrect behavior: "at rest: 15552 per frame, limit 178", and 3914 on the next run. The old and the new drag both failed it the same way.
+	- Expected behavior: The at-rest check counts frames at rest, at any load.
+	- Reproduced: 20261024, 2 runs in a row at load 52. At load 30 to 42 it passed 6 times.
+		- 20261024: again with the test and 24 busy loops on the same 8 cores, at 13511, 15852, 3073 and 634.
+	- Possible cause: The test waits 6 s after the window is up before it counts. At that load the 3 shells' 400 colored lines each are still being drawn, so the window isn't at rest yet. The drag check can also see as few as 9 frames there, against its floor of 6.
+	- Actual cause:
+		- Two launch steps were still going 6 s after the window was up:
+			- The shells' output was still easing in, at 1 or 2 frames a second, up to about 20 s after launch.
+			- The shell scan starts 3 s after the window shows. Under load it came back later, and folding it in, which rewrites the config, made about 87000 allocations between two frames.
+		- Either one in the counted 4 s fails the check. The scan alone did it in runs where the output had already settled.
+	- Actual fix:
+		- `SILK_ALLOCS` now ends each frame's line with what it was drawn for (`for cursor`, `for rebuild+scroll+cursor` and so on), and prints a line when the shell scan is folded in.
+		- The test waits, up to 60 s, for that line and then 5 frames in a row drawn for the cursor alone. It counts until it has 20 frames or 20 s have passed, at least 4 s. A window that never comes to rest fails a check of its own.
+	- Verified: 20261024, with the test and 24 busy loops on the same 8 cores, box load 12 to 72: the new at-rest check passed 10 runs in a row, at 170 to 173. The old count, alternated with it on the same build, failed 3 of 3. With no extra load it passed at 167.
+		- `a_frame_cause_prints_the_words_the_window_test_reads` (EtcxfWd) passes. Unit suite, clippy for Linux and Windows, fmt, shellcheck and the test ID check pass.
+	- Swept: every reader of the `[allocs]` lines. Only ErzCQC2 reads them, and its drag count takes the new line shape too. The drag starts after the count at rest, so it waits for rest as well.
+	- Branch: rnd1024
+	- Test case: ErzCQC2 itself, and EtcxfWd for the words it reads. The old count failing under load and the new one passing are under Verified.
+
+- The nightly warns that silkterm's `Send` check on wgpu's types passes the recursion limit, which a later Rust makes an error
+	- ID: 2026102321073303
+	- Type: Bug
+	- Status: Done
+	- Severity: Low
+	- Opened: 20261023-210733
+	- Opened by: CC
+	- Related IDs: 2026102320591313
+	- Steps to reproduce:
+		- Build the tests on nightly-2026-10-16, as the Miri run does.
+	- Incorrect behavior:
+		- A `recursion_depth_exceeding_limit` warning on the whole crate, from proving `wgpu_core`'s `Global` is `Send`. It says it's being phased out to a hard error, rust-lang/rust#159228.
+	- Expected behavior:
+		- No warning, so a toolchain bump past the change still builds.
+	- Possible cause:
+		- The default limit of 128. The warning suggests `#![recursion_limit = "256"]`, or a manual `Send` impl on a type in between.
+	- Reproduced: 20261024 on b23. nightly-2026-10-16 warns once, at the dialog GPU warm-up thread in `gfx.rs`, for the plain build and the tests, and for the Windows target too. Stable 1.96 says nothing, since it has no such lint.
+	- Actual cause:
+		- Proving `Option<DialogGpu>` is `Send` walks `wgpu::Queue` down through `wgpu_core`'s `Global`, its registries and storage, past 128 levels. The new trait solver counts that depth where the old one didn't. wgpu is a known case upstream (gfx-rs/wgpu#9608), and rustc plans to fix most of it before the new solver is the default.
+	- Actual fix: `#![recursion_limit = "256"]` in `main.rs`. The issue's other way, a manual `unsafe impl Send` on a type in between, adds unsafe code to quiet a warning. A higher limit only costs a library its users, and this is a binary.
+	- Progress log:
+		- 20261024: Verified: on nightly-2026-10-16, the workspace with all targets, and the Windows and macOS targets with `-Zbuild-std`, check with no warning. Without the line the Linux and Windows checks warn again. Stable fmt check and clippy for Linux pass. `cicd/utility/gpu-stress` checks clean on the nightly too.
+		- 20261024: Not checked on the sanitizer nightly, nightly-2026-10-15, which is only in the image. It's a day older than the one checked.
+	- Swept: the other crate roots, knobs and the `glyphon_gl` example, and `cicd/utility/gpu-stress`. None warns.
+	- Test case: None. Only a nightly has the lint, and stable doesn't know its name, so a `deny` on it would break the stable build.
+	- Branch: rnd1024
+	- Closed: 20261024-065132
 
 - The Settings dialog's spec leaks the strings of rows it drops, and each test that parses it leaks a whole copy
 	- ID: 2026101912070933

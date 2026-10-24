@@ -6,7 +6,8 @@
 ##		The window has two tabs, a split pane and the halo on, so the tab
 ##		strip, both panes and the scrim are all in every frame.
 ##			- At rest: the cursor pulse redraws and nothing else changes.
-##			- Drag: the pointer held down and moved across a pane's text.
+##			- Drag: the pointer held down, taken down a pane's rows, then moved
+##			  along the last one.
 ##	- Syntax: run.bash [--bin PATH] [--report]   (default: the debug build)
 ##		--report prints the figures and checks no limit.
 ##	- Exit: 0 passed, 1 a check failed, 3 nothing ran (no debug binary,
@@ -32,9 +33,27 @@ headless="${root}/cicd/utility/gui-headless.bash"
 ## the frame lists were kept, 167 after; drag 382 and 340. Between frames in
 ## a drag, about 2.5 per move (20261010). A driver update can move the floor,
 ## so read the figures with --report before moving a limit.
+## The drag frame still had two shares that grow with load (20261024). The
+## minimap recomposes once its gap is up, so on every third frame or so on an
+## idle box and every frame on a busy one, about 20 each. And each row the
+## selection newly covers costs about 17, and a slow frame folds more of them.
+## So the drag first jumps down to cover the rows, and only then is counted,
+## moving along one row: a busy box can then add no more than the compose.
+## Measured: 331 to 345, idle or with 8 cores loaded. Later that day a moved
+## selection or link hover stopped composing the map, and the drag read 327
+## idle and 315 to 317 loaded, against 321 with the map off.
+## At load 50 or so the shells' output was still easing in, at 1 or 2 frames
+## a second, 20 s after launch, and the shell scan, started 3 s after the
+## window shows, was folded in later still: about 87000 allocations in one go
+## (20261024). So the count at rest starts once the scan is in and the last few
+## frames were drawn for the cursor alone, and runs until it has enough
+## frames, not for a fixed time.
 idleLimit="${ALLOCS_IDLE_LIMIT:-178}"
 dragLimit="${ALLOCS_DRAG_LIMIT:-360}"
 moveLimit="${ALLOCS_MOVE_LIMIT:-6}"
+restWait="${ALLOCS_REST_WAIT:-60}"
+restRun=5
+idleWant=20
 
 bin=""; report=0
 while (($#)); do case "${1}" in
@@ -127,28 +146,45 @@ fCheck "a window came up" test -n "${window}"
 if [[ -z "${window}" ]]; then echo "${failures} failed"; exit 1; fi
 
 ## Over the lines after line $1 up to line $2: frames, the mean frame, the
-## mean of frame plus between, and the between total.
+## mean of frame plus between, and the between total. Each line ends with what
+## the frame was drawn for.
 fMean(){
 	sed -n "$((${1} + 1)),${2}p" "${said}" | awk '
-		/^\[allocs\] frame [0-9]+ between [0-9]+$/ { n++; f += $3; b += $5; t += $3 + $5 }
+		/^\[allocs\] frame [0-9]+ between [0-9]+ for / { n++; f += $3; b += $5; t += $3 + $5 }
 		END { if (n) printf "%d %.0f %.0f %d\n", n, f / n, t / n, b; else print "0 0 0 0" }'
 }
 fLines(){ wc -l <"${said}"; }
+## The shell scan has been folded in, and the last few frames since were drawn
+## for the cursor pulse and nothing else.
+fAtRest(){
+	local -i n
+	grep -qxF '[allocs] shell scan folded in' "${said}" || return 1
+	n="$(sed -n '/^\[allocs\] shell scan folded in$/,$p' "${said}" | grep -F '[allocs] frame ' | tail -n "${restRun}" | grep -c ' for cursor$' || true)"
+	((n == restRun))
+}
 
 ## The pointer rests over the left pane's text for the whole run, so hover
 ## settles before anything is counted.
 fX xdotool windowactivate --sync "${window}" 2>/dev/null || true
 fX xdotool mousemove --window "${window}" 120 200
 sleep 6
-from="$(fLines)"; sleep 4; to="$(fLines)"
+restBy=$((SECONDS + restWait))
+until fAtRest || ((SECONDS >= restBy)); do sleep 0.25; done
+if ((report)); then fAtRest || echo "    not at rest after ${restWait} s"
+else fCheck "came to rest within ${restWait} s" fAtRest; fi
+from="$(fLines)"; countFrom="${SECONDS}"; sleep 4
+while (($(fMean "${from}" "$(fLines)" | cut -d' ' -f1) < idleWant && SECONDS - countFrom < 20)); do sleep 0.5; done
+to="$(fLines)"
 read -r idleFrames idleFrame idleTotal _ < <(fMean "${from}" "${to}")
 echo "    at rest: ${idleFrames} frames, ${idleFrame} allocations drawing each, ${idleTotal} with what came before"
 
 moves=80
-from="$(fLines)"
 fX xdotool mousedown 1
-for step in $(seq 0 $((moves - 1))); do
-	fX xdotool mousemove --window "${window}" $((60 + step * 4)) $((140 + step * 4))
+fX xdotool mousemove --window "${window}" 60 456
+sleep 1
+from="$(fLines)"
+for step in $(seq 1 "${moves}"); do
+	fX xdotool mousemove --window "${window}" $((60 + step * 4)) 456
 	sleep 0.03
 done
 fX xdotool mouseup 1
@@ -176,3 +212,5 @@ echo "all passed"
 ##	History:
 ##		- 20261006 JC: Created.
 ##		- 20261010 JC: The drag holds its frame and its pointer moves apart.
+##		- 20261024 JC: The counted drag moves along one row.
+##		- 20261024 JC: The count at rest waits for frames drawn for the cursor alone.

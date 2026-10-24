@@ -395,6 +395,7 @@ mod tests {
 	// reach, and the alpha stays opaque.
 	// Test ID: Es1eEgS
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_flat_color_comes_back_exact() {
 		for value in 0..=255u8 {
 			let shade = [value, 255 - value, value / 3 + 40];
@@ -417,6 +418,7 @@ mod tests {
 	// under BC1 on average.
 	// Test ID: Es1eEgT
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_slow_gradient_comes_back_within_a_level() {
 		let rgba = image::RgbaImage::from_fn(256, 96, |x, y| {
 			image::Rgba([
@@ -436,6 +438,7 @@ mod tests {
 	// Noise is the worst case for one line a block. Still closer than BC1.
 	// Test ID: Es1eEgU
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn busy_detail_is_no_worse_than_bc1() {
 		let mut seed = 0x2545_f491_u32;
 		let mut next = move || {
@@ -498,6 +501,7 @@ mod tests {
 
 	// Test ID: Es1eEgV
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn sizes_round_up_to_whole_blocks_and_only_mode_6_reads() {
 		assert_eq!(len_for((1917, 993)), 480 * 249 * 16);
 		// the texels past the picture repeat its last row and column

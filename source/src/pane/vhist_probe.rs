@@ -508,6 +508,7 @@ fn transcript_scene(lines: usize, repaint: bool) -> (Vec<Vec<u8>>, usize) {
 
 // Test ID: Ese21WF
 #[test]
+#[cfg_attr(miri, ignore = "too slow under Miri")]
 fn a_transcript_scrolled_by_region_is_rebuilt_whole() {
 	let (lines, cols) = (30, 80);
 	let height = lines - 6;
@@ -532,6 +533,7 @@ fn a_transcript_scrolled_by_region_is_rebuilt_whole() {
 
 // Test ID: Ese21WG
 #[test]
+#[cfg_attr(miri, ignore = "too slow under Miri")]
 fn a_burst_past_a_screenful_between_frames_loses_nothing() {
 	// a frame every 30 new lines on a 24-row transcript: 6 rows each time were
 	// never on screen when a frame was built, and only the ledger kept them

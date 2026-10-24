@@ -421,6 +421,7 @@ mod tests {
 	// tables every byte value comes back within one.
 	// Test ID: Erz0m8u
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_flat_color_comes_back_within_a_level() {
 		for value in 0..=255u8 {
 			let shade = [value, 255 - value, value / 3 + 40];
@@ -442,6 +443,7 @@ mod tests {
 	// two of change, and it comes back within two.
 	// Test ID: Erz0mAu
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_slow_gradient_comes_back_within_two_levels() {
 		let rgba = image::RgbaImage::from_fn(256, 96, |x, y| {
 			image::Rgba([
@@ -457,6 +459,7 @@ mod tests {
 
 	// Test ID: Erz0mCs
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn sizes_round_up_to_whole_blocks() {
 		assert_eq!(padded((1, 1)), (4, 4));
 		assert_eq!(padded((2560, 1440)), (2560, 1440));

@@ -398,6 +398,7 @@ mod tests {
 	// display watch took goes, and the stored profile is the user's own values.
 	// Test ID: EpWow4e
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_measured_profile_replaces_a_session_step() {
 		use crate::profile::Profile;
 		let mut live = config::Settings {
@@ -418,6 +419,7 @@ mod tests {
 	// one stall became every later launch's profile and took the wallpaper.
 	// Test ID: EpX5Wgq
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_watch_step_never_reaches_the_stored_profile_or_the_file() {
 		use crate::profile::Profile;
 		let _guard = config::test_config_lock();
@@ -496,6 +498,7 @@ mod tests {
 	// nothing; the card drawing again takes off only a step made that way.
 	// Test ID: ErnMaCH
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_software_device_steps_the_session_and_the_card_takes_it_back() {
 		use super::session_step;
 		use crate::gfx::Drawn;
@@ -548,6 +551,7 @@ mod tests {
 	// stored profile, and nothing asks the system whether it is remote.
 	// Test ID: EtSG1KO
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_remote_screen_is_ignored_when_turned_off() {
 		let on = config::Settings::default();
 		assert!(super::takes_remote(&on, || true), "on by default");
@@ -566,6 +570,7 @@ mod tests {
 
 	// Test ID: EpXN9p2
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn rating_due_matches_the_launch_rules() {
 		let hardware = "0123456789abcdef";
 		let base = config::Settings {
@@ -635,6 +640,7 @@ mod tests {
 	// with a line the parse cannot place, and one with the key twice.
 	// Test ID: EpXN9p3
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_rating_survives_to_the_next_launch_whatever_else_is_in_the_file() {
 		use crate::profile::Profile;
 		let _guard = config::test_config_lock();

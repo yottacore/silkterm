@@ -991,6 +991,7 @@ mod tests {
 	// and the Ctrl chords are the program's.
 	// Test ID: ErbGPD5
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_command_chords_are_the_only_program_chords_on_macos() {
 		let on = |typed: &str, mods, mac| hotkey_on(&Key::Character(typed.into()), mods, true, mac);
 		let mac_chords = command_defaults(true);

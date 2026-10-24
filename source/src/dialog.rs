@@ -3170,6 +3170,7 @@ mod tests {
 	// flyover, and the box is wide enough that the flyover is not cut off.
 	// Test ID: Er2UJeZ
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_about_box_has_a_support_button_with_room_for_its_address() {
 		let mut text = TextCtx::new_cpu(1.0);
 		let (lines, links, (box_w, _)) = layout_about(&mut text, &adapter());
@@ -3185,6 +3186,7 @@ mod tests {
 
 	// Test ID: Er2UJea
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_about_box_names_the_version_copyright_license_and_build() {
 		let (lines, _, _) = layout_about(&mut TextCtx::new_cpu(1.0), &adapter());
 		let said: Vec<&str> = lines.iter().map(|l| l.text.as_str()).collect();
@@ -3206,6 +3208,7 @@ mod tests {
 
 	// Test ID: Er2UJeb
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_about_box_leads_with_a_bold_title_and_links_the_repository() {
 		let (lines, links, _) = layout_about(&mut TextCtx::new_cpu(1.0), &adapter());
 		assert_eq!(lines[0].text, format!("About {}", config::APP_NAME));
@@ -3239,6 +3242,7 @@ mod tests {
 	// changes, and what comes back has to be measured at the new scale.
 	// Test ID: Er2UJec
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn about_and_the_notice_lay_out_again_at_twice_the_size() {
 		let sources = [
 			AboutSource::About(Box::new(adapter())),
@@ -3352,6 +3356,7 @@ mod tests {
 	// the last one did shapes nothing, on every tab.
 	// Test ID: ErlkwlW
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_dialog_frame_shapes_nothing_the_last_one_did() {
 		let mut text = TextCtx::new_cpu(1.0);
 		let mut content = settings_content(&mut text);
@@ -3381,6 +3386,7 @@ mod tests {
 	// a new clip is the same text somewhere else.
 	// Test ID: Erlkwox
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_dialog_frame_shapes_only_text_that_changed() {
 		let mut text = TextCtx::new_cpu(1.0);
 		let mut content = settings_content(&mut text);
@@ -3462,6 +3468,7 @@ mod tests {
 	// Other marks on the same text are another buffer.
 	// Test ID: EsodoYf
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn marked_text_is_larger_and_colored_on_the_same_line_box() {
 		let mut text = TextCtx::new_cpu(1.0);
 		let mut shaped = super::ShapedText::default();
@@ -3520,6 +3527,7 @@ mod tests {
 	// out again, the same as a fresh one.
 	// Test ID: ErlkwsK
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_kept_buffer_is_shaped_again_when_what_shaping_reads_changes() {
 		let mut text = TextCtx::new_cpu(1.0);
 		let mut shaped = super::ShapedText::default();
@@ -3656,6 +3664,7 @@ mod tests {
 	// shared the tip's pass and landed on top of its box (2026100913394952).
 	// Test ID: EsZp4RG
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_tip_draws_over_everything_else_in_a_dialog() {
 		let tip = "A tip";
 		let mut text = TextCtx::new_cpu(1.0);
@@ -3723,6 +3732,7 @@ mod tests {
 	// pointer resting or moving there starts no clock (2026101009220760).
 	// Test ID: EsZp4ah
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_dialog_without_the_focus_draws_no_tip() {
 		let mut text = TextCtx::new_cpu(1.0);
 		let mut content = settings_content(&mut text);
@@ -3780,6 +3790,7 @@ mod tests {
 	// and once to draw it.
 	// Test ID: Erlkwvi
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_dialog_frame_looks_up_the_tip_once() {
 		let mut text = TextCtx::new_cpu(1.0);
 		let content = settings_content(&mut text);
@@ -3819,6 +3830,7 @@ mod tests {
 	// wake has passed, since the wake stops answering then.
 	// Test ID: Erlkwz5
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_pointer_move_that_changes_nothing_drawn_needs_no_frame() {
 		let mut text = TextCtx::new_cpu(1.0);
 		let mut content = settings_content(&mut text);

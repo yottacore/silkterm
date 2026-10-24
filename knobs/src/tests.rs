@@ -42,6 +42,7 @@ fn text(t: &str) -> Value {
 
 // Test ID: EsFc30B
 #[test]
+#[cfg_attr(miri, ignore = "too slow under Miri")]
 fn the_demo_spec_parses_and_works_out_indents() {
 	let m = demo();
 	assert_eq!(m.spec.at("strength").indent, 1, "under Text scrim");
@@ -79,6 +80,7 @@ fn a_bad_spec_names_every_mistake() {
 
 // Test ID: EsFc30D
 #[test]
+#[cfg_attr(miri, ignore = "too slow under Miri")]
 fn a_switch_keeps_the_value_set_by_hand_for_the_round_trip() {
 	let mut m = demo();
 	assert_eq!(
@@ -110,6 +112,7 @@ fn a_switch_keeps_the_value_set_by_hand_for_the_round_trip() {
 
 // Test ID: EsFc30E
 #[test]
+#[cfg_attr(miri, ignore = "too slow under Miri")]
 fn switching_off_with_nothing_kept_keeps_what_shows() {
 	let mut m = demo();
 	m.set("use_system_family", &Value::Bool(false), &DESK);
@@ -122,6 +125,7 @@ fn switching_off_with_nothing_kept_keeps_what_shows() {
 
 // Test ID: EsFc30F
 #[test]
+#[cfg_attr(miri, ignore = "too slow under Miri")]
 fn with_nothing_to_follow_the_value_set_by_hand_is_used() {
 	let mut m = demo();
 	m.set("family", &text("Fira Code"), &DESK);
@@ -135,6 +139,7 @@ fn with_nothing_to_follow_the_value_set_by_hand_is_used() {
 
 // Test ID: EsFc30G
 #[test]
+#[cfg_attr(miri, ignore = "too slow under Miri")]
 fn editing_one_member_turns_its_switch_off_and_the_others_keep_what_they_show() {
 	let mut m = demo();
 	m.set("last_columns", &int(100), &DESK);
@@ -152,6 +157,7 @@ fn editing_one_member_turns_its_switch_off_and_the_others_keep_what_they_show() 
 
 // Test ID: EsFc30H
 #[test]
+#[cfg_attr(miri, ignore = "too slow under Miri")]
 fn changing_a_row_under_a_switch_that_is_off_turns_it_on() {
 	let mut m = demo();
 	m.set("idle_release", &Value::Bool(false), &DESK);
@@ -162,6 +168,7 @@ fn changing_a_row_under_a_switch_that_is_off_turns_it_on() {
 
 // Test ID: EsFc30I
 #[test]
+#[cfg_attr(miri, ignore = "too slow under Miri")]
 fn a_row_changed_on_a_preset_stars_it_stops_the_machine_and_spares_custom() {
 	let mut m = demo();
 	m.set("tested_profile", &text("low"), &DESK);
@@ -192,6 +199,7 @@ fn a_row_changed_on_a_preset_stars_it_stops_the_machine_and_spares_custom() {
 
 // Test ID: EsFc30J
 #[test]
+#[cfg_attr(miri, ignore = "too slow under Miri")]
 fn resetting_every_changed_row_takes_the_star_away() {
 	let mut m = demo();
 	m.set("strength", &int(80), &DESK);
@@ -204,6 +212,7 @@ fn resetting_every_changed_row_takes_the_star_away() {
 
 // Test ID: EsFc30K
 #[test]
+#[cfg_attr(miri, ignore = "too slow under Miri")]
 fn picking_another_profile_drops_the_changes_and_custom_comes_back() {
 	let mut m = demo();
 	m.fill_custom("perf", &DESK);
@@ -234,6 +243,7 @@ fn picking_another_profile_drops_the_changes_and_custom_comes_back() {
 
 // Test ID: EsFc30L
 #[test]
+#[cfg_attr(miri, ignore = "too slow under Miri")]
 fn choose_automatically_is_the_profile_s_own_switch() {
 	let mut m = demo();
 	m.set("tested_profile", &text("max_silk"), &DESK);
@@ -251,6 +261,7 @@ fn choose_automatically_is_the_profile_s_own_switch() {
 
 // Test ID: EsFc30M
 #[test]
+#[cfg_attr(miri, ignore = "too slow under Miri")]
 fn a_temporary_preset_ignores_changes_stores_nothing_and_ends_on_an_edit() {
 	let mut m = demo();
 	m.set("profile", &text("low"), &DESK);
@@ -273,6 +284,7 @@ fn a_temporary_preset_ignores_changes_stores_nothing_and_ends_on_an_edit() {
 // spec spells it, so a save writes the usual word back.
 // Test ID: EsGFVZe
 #[test]
+#[cfg_attr(miri, ignore = "too slow under Miri")]
 fn a_choice_matches_without_case_and_keeps_the_spec_s_word() {
 	let m = demo();
 	let s = m.spec.get("profile").unwrap();
@@ -285,6 +297,7 @@ fn a_choice_matches_without_case_and_keeps_the_spec_s_word() {
 // as if it named nothing.
 // Test ID: EsGFIt0
 #[test]
+#[cfg_attr(miri, ignore = "too slow under Miri")]
 fn a_file_naming_a_temporary_preset_loads_as_no_pick() {
 	let mut m = demo();
 	m.set("profile", &text("remote"), &DESK);
@@ -298,6 +311,7 @@ fn a_file_naming_a_temporary_preset_loads_as_no_pick() {
 
 // Test ID: EsFc30N
 #[test]
+#[cfg_attr(miri, ignore = "too slow under Miri")]
 fn wallpaper_colors_beat_the_theme_and_an_edit_turns_them_off() {
 	let mut m = demo();
 	assert_eq!(m.value("fg", &DESK), text("#eeeeee"));
@@ -326,6 +340,7 @@ fn wallpaper_colors_beat_the_theme_and_an_edit_turns_them_off() {
 
 // Test ID: EsFc30O
 #[test]
+#[cfg_attr(miri, ignore = "too slow under Miri")]
 fn the_files_round_trip_and_set_aside_values_go_in_kept() {
 	let mut m = demo();
 	m.set("family", &text("Fira Code"), &DESK);
@@ -342,6 +357,7 @@ fn the_files_round_trip_and_set_aside_values_go_in_kept() {
 
 // Test ID: EsFc30P
 #[test]
+#[cfg_attr(miri, ignore = "too slow under Miri")]
 fn a_bad_value_in_the_file_is_dropped() {
 	let m = demo();
 	let config = "text:\n\tscrim:\n\t\tstrength: 400\nfont:\n\tfamily: \"Fira Code\"\ntheme:\n\tname: plaid\n";
@@ -353,6 +369,7 @@ fn a_bad_value_in_the_file_is_dropped() {
 
 // Test ID: EsFc30Q
 #[test]
+#[cfg_attr(miri, ignore = "too slow under Miri")]
 fn slider_scales_round_trip_and_snap_to_detents() {
 	let m = demo();
 	for id in ["ease_in", "ramp_down", "blur", "idle_min", "line_height"] {
@@ -382,6 +399,7 @@ fn slider_scales_round_trip_and_snap_to_detents() {
 
 // Test ID: EsFdZzC
 #[test]
+#[cfg_attr(miri, ignore = "too slow under Miri")]
 fn custom_starts_as_the_preset_not_as_what_a_rule_shows_over_it() {
 	let mut m = demo();
 	m.fill_custom("theme", &DESK);
@@ -399,6 +417,7 @@ fn custom_starts_as_the_preset_not_as_what_a_rule_shows_over_it() {
 
 // Test ID: EsFdZzD
 #[test]
+#[cfg_attr(miri, ignore = "too slow under Miri")]
 fn the_kept_block_comes_last() {
 	let mut m = demo();
 	m.set("family", &text("Fira Code"), &DESK);
@@ -418,6 +437,7 @@ fn the_kept_block_comes_last() {
 
 // Test ID: EsFdq3f
 #[test]
+#[cfg_attr(miri, ignore = "too slow under Miri")]
 fn turning_choose_automatically_back_on_drops_the_changes() {
 	let mut m = demo();
 	m.set("strength", &int(80), &DESK);
@@ -590,6 +610,7 @@ fn a_group_s_presets_can_come_from_the_program() {
 
 // Test ID: EsFwJ4B
 #[test]
+#[cfg_attr(miri, ignore = "too slow under Miri")]
 fn changes_under_a_temporary_preset_are_still_saved() {
 	let mut m = demo();
 	m.set("profile", &text("low"), &DESK);
@@ -604,6 +625,7 @@ fn changes_under_a_temporary_preset_are_still_saved() {
 
 // Test ID: EsFwJ8T
 #[test]
+#[cfg_attr(miri, ignore = "too slow under Miri")]
 fn lines_put_set_aside_values_and_changes_under_kept() {
 	let mut m = demo();
 	m.set("family", &text("Fira Code"), &DESK);
@@ -630,6 +652,7 @@ fn lines_put_set_aside_values_and_changes_under_kept() {
 
 // Test ID: EsG0DsQ
 #[test]
+#[cfg_attr(miri, ignore = "too slow under Miri")]
 fn a_held_value_wins_for_the_run_and_is_never_saved() {
 	let mut m = demo();
 	m.hold("family", &text("Iosevka"));
@@ -665,6 +688,7 @@ fn a_held_value_wins_for_the_run_and_is_never_saved() {
 
 // Test ID: EsG8XbQ
 #[test]
+#[cfg_attr(miri, ignore = "too slow under Miri")]
 fn the_chooser_s_arrow_ends_a_temporary_preset_and_drops_the_changes() {
 	let mut m = demo();
 	m.set("profile", &text("low"), &DESK);

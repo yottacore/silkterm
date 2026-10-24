@@ -373,6 +373,7 @@ mod tests {
 	// a value the command line did not name has to come from the file.
 	// Test ID: Eq4Yrbd
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_reload_keeps_the_launch_options_over_the_file() {
 		let launch = crate::cli::Style {
 			font_size: Some(21.0),
