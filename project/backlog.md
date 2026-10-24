@@ -72,52 +72,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Swept: `pane_options` has the one spawn caller and one Windows test; no other place sets TERM for a pane. `front.rs`'s TERM is a test's tmux client.
 	- Closed:
 
-- Running on macOS without a GPU fails to launch
-	- ID: 2026102209035801
-	- Type: Bug
-	- Status: Waiting for answers
-		- Waits on the questions.md item for this ID: keep the alert, or ship a real fallback.
-	- Needs external testing:
-		- A Mac with no Metal device, such as a VM with no graphics acceleration: a launch from Finder shows the alert, and the program exits after OK. From a shell, stderr has the same words and the exit code is 2.
-	- Severity: Avg
-	- Opened: 20261022-090358
-	- Opened by: JC
-	- Assigned to: CC
-	- Related IDs: 2026102209035802, 2026100418225504
-	- Target OS: macOS
-	- Steps to reproduce:
-		- Run on macOS without a GPU.
-	- Incorrect behavior: It fails to launch.
-	- Expected behavior: It falls back to software rendering if possible.
-	- Notes:
-		- Pre-next-cut.
-	- Reproduced: No. No Mac here. Traced in the code instead.
-	- Actual cause:
-		- The macOS build has only wgpu's Metal backend. GL there needs ANGLE, and Vulkan needs MoltenVK, which runs on Metal itself. wgpu has no software adapter on macOS. So a Mac with no Metal device finds no adapter at all.
-		- The launch then printed "no usable GPU/renderer" on stderr and exited with 2. A launch from Finder shows no stderr, so the program seemed to just vanish.
-	- Progress log:
-		- 20261022: No fallback is possible with what's in the tree. The options are in questions.md: keep an alert, ship ANGLE with SwiftShader, or write a CPU renderer.
-		- 20261022: Done meanwhile: with no device at all, macOS says why in an alert as well as on stderr, then exits with 2. Other platforms keep their stderr line as it was.
-		- 20261022: Verified: the words test passes. fmt, and clippy for Linux, Windows and macOS, pass. The alert itself is only compiled.
-		- 20261022: No real software path on macOS was found, so the Resource use group's `not_macos` row stays as it is.
-	- Swept: the one exit site where no device could be made at launch. Rebuilds after idle and the dialogs keep their own error paths, and both need a device that once worked.
-	- Branch: rnd1022
-	- Test case: `no_device_on_macos_says_why_and_that_nothing_can_stand_in` (EtS63vE)
-
-- Leak checks: where the Miri step runs
-	- ID: 2026102320591323
-	- Type: Task
-	- Status: Waiting for answers
-		- Waits on the 2026102320591323 question in questions.md: the leak checks, an opt-in flag, or a fast part by default.
-	- Priority: Avg
-	- Opened: 20261023-205913
-	- Opened by: CC
-	- Parent ID: 2026101714445004
-	- Requirements:
-		- The parent's rule: Miri runs on every full run, and moves behind `--leakcheck` only if a full run measures too slow.
-	- Notes:
-		- It measures far too slow (see 2026101714445004). The leak checks are on in a default full run since 10-22, so `--leakcheck` alone no longer keeps it out.
-
 - Updates to CICD script flags
 	- ID: 2026101816103601
 	- Type: Enhancement
@@ -228,6 +182,39 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Commit: 8cb6a4d
 	- Test case: `a_refused_frame_is_drawn_again_on_a_backoff` (Erfy7et) and `a_refused_rebuild_stays_pending_and_is_tried_again` (Erfy7yk). The GL swap result has no test, since it needs a real GL context.
 	- Note: 20261003, Free resources when idle was on for some of the windows that went blank and off for others. Which ones is not remembered, so both the frame path and the rebuild path stay suspects.
+
+- Running on macOS without a GPU fails to launch
+	- ID: 2026102209035801
+	- Type: Bug
+	- Status: Waiting on automated testing
+		- Answered: keep the alert. Left is the no-Metal check, on vmKt6m, which has no Metal.
+	- Needs external testing:
+		- A Mac with no Metal device, such as a VM with no graphics acceleration: a launch from Finder shows the alert, and the program exits after OK. From a shell, stderr has the same words and the exit code is 2.
+	- Severity: Avg
+	- Opened: 20261022-090358
+	- Opened by: JC
+	- Assigned to: CC
+	- Related IDs: 2026102209035802, 2026100418225504
+	- Target OS: macOS
+	- Steps to reproduce:
+		- Run on macOS without a GPU.
+	- Incorrect behavior: It fails to launch.
+	- Expected behavior: It falls back to software rendering if possible.
+	- Notes:
+		- Pre-next-cut.
+	- Reproduced: No. No Mac here. Traced in the code instead.
+	- Actual cause:
+		- The macOS build has only wgpu's Metal backend. GL there needs ANGLE, and Vulkan needs MoltenVK, which runs on Metal itself. wgpu has no software adapter on macOS. So a Mac with no Metal device finds no adapter at all.
+		- The launch then printed "no usable GPU/renderer" on stderr and exited with 2. A launch from Finder shows no stderr, so the program seemed to just vanish.
+	- Progress log:
+		- 20261022: No fallback is possible with what's in the tree. The options are in questions.md: keep an alert, ship ANGLE with SwiftShader, or write a CPU renderer.
+		- 20261022: Done meanwhile: with no device at all, macOS says why in an alert as well as on stderr, then exits with 2. Other platforms keep their stderr line as it was.
+		- 20261022: Verified: the words test passes. fmt, and clippy for Linux, Windows and macOS, pass. The alert itself is only compiled.
+		- 20261022: No real software path on macOS was found, so the Resource use group's `not_macos` row stays as it is.
+		- 20261024: Answer: A, keep the alert. A Mac with no Metal can't run SilkTerm, and the alert says why. A real fallback through ANGLE would be its own item, if Mac VMs turn out to matter.
+	- Swept: the one exit site where no device could be made at launch. Rebuilds after idle and the dialogs keep their own error paths, and both need a device that once worked.
+	- Branch: rnd1022
+	- Test case: `no_device_on_macos_says_why_and_that_nothing_can_stand_in` (EtS63vE)
 
 - Always use automatic remote mode when detected.
 	- ID: 2026101914251764
@@ -579,7 +566,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- A step script, like `tsan.bash`, runs the sanitizer canary first, then the suite, in a target dir and Miri sysroot of its own under `target/`.
 		- The canary's two tests run apart, since a UB report stops the binary. The step stops unless Miri reports the race as a data race and the forgotten Vec as leaked memory.
 		- A `--no-miri` flag, a plan line, and the cleanup and rar exclude lines. New container and engine cases, watched to fail.
-		- Where the step runs follows the answer on 2026102320591323.
+		- Miri runs only when `--leakcheck` is given, and says first that it's very slow. A run with no flags keeps the other leak checks, which stay on by default. Tests over a time bar under Miri, such as 60 s, are ignored under Miri as too slow, so even a `--leakcheck` run takes the fast part (answer on 2026102320591323).
 
 - Leak checks: CodeQL watched to fail, and its first findings filed
 	- ID: 2026102211462005
@@ -2797,6 +2784,22 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- The Windows run this item came from named only these four. That full suite was not run again.
 	- Acceptance signoff: Self-closed: test fixes only, and all four failed before the fix and pass after on Windows.
 	- Closed: 20260930-125357
+
+- Leak checks: where the Miri step runs
+	- ID: 2026102320591323
+	- Type: Task
+	- Status: Done
+		- Answered 10-24. The answer is on 2026102320591318's requirements.
+	- Priority: Avg
+	- Opened: 20261023-205913
+	- Opened by: CC
+	- Parent ID: 2026101714445004
+	- Requirements:
+		- The parent's rule: Miri runs on every full run, and moves behind `--leakcheck` only if a full run measures too slow.
+	- Notes:
+		- It measures far too slow (see 2026101714445004). The leak checks are on in a default full run since 10-22, so `--leakcheck` alone no longer keeps it out.
+		- 20261024: Answer: mostly the fast part (C), but behind `--leakcheck`, with a warning that it's very slow. Even a warning someone has to Ctrl+C out of is fine, no Y/N needed. The quick leak checks still run in a run with no flags.
+	- Closed: 20261024-064004
 
 - Leak checks: the test suite under ThreadSanitizer on every full run
 	- ID: 2026101714445003
