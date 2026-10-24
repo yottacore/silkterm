@@ -26,6 +26,32 @@ pub const KOFI_URL: &str = "https://ko-fi.com/jimcollier";
 /// order, and decodes back to the minute it was built.
 pub const BUILD_ID: &str = env!("SILK_BUILD");
 
+/// The build number as shown to people. A non-release build gets the local date
+/// of the viewer after it, ` (YYYY-mm-DD)`, since the number alone doesn't say
+/// how old a dogfood copy is. A release build is the number alone.
+pub fn build_label() -> String {
+	let built = env!("SILK_BUILD_UNIX").parse::<u64>().unwrap_or_default();
+	build_label_for(
+		BUILD_ID,
+		env!("SILK_RELEASE_BUILD") == "1",
+		built,
+		local_date,
+	)
+}
+
+fn build_label_for(
+	id: &str,
+	release: bool,
+	built_unix: u64,
+	date: impl Fn(u64) -> String,
+) -> String {
+	if release {
+		id.to_string()
+	} else {
+		format!("{id} ({})", date(built_unix))
+	}
+}
+
 /// A dogfood copy is installed as `slktrmdf_<stamp>_<tag>`, and the pool holds
 /// several at once, so the window title has to say which one is running. Anything
 /// else (a release install, a cargo build) answers None.
@@ -2308,6 +2334,48 @@ pub(crate) fn local_stamp() -> (String, u32) {
 		),
 		u32::from(now.wMilliseconds / 10),
 	)
+}
+
+/// `YYYY-mm-DD` of a unix time, in the local zone of whoever is running this.
+#[cfg(unix)]
+pub(crate) fn local_date(unix_secs: u64) -> String {
+	let seconds = libc::time_t::try_from(unix_secs).unwrap_or(libc::time_t::MAX);
+	// SAFETY: tm is plain data, so all zeros is a valid value, and localtime_r
+	// only writes the tm it is handed.
+	let fields = unsafe {
+		let mut fields: libc::tm = std::mem::zeroed();
+		libc::localtime_r(&raw const seconds, &raw mut fields);
+		fields
+	};
+	format!(
+		"{:04}-{:02}-{:02}",
+		fields.tm_year + 1900,
+		fields.tm_mon + 1,
+		fields.tm_mday
+	)
+}
+
+#[cfg(windows)]
+pub(crate) fn local_date(unix_secs: u64) -> String {
+	use windows_sys::Win32::Foundation::{FILETIME, SYSTEMTIME};
+	use windows_sys::Win32::System::Time::{FileTimeToSystemTime, SystemTimeToTzSpecificLocalTime};
+	// FILETIME counts 100 ns from 1601, which is 11_644_473_600 s before 1970.
+	let ticks = (unix_secs + 11_644_473_600) * 10_000_000;
+	let file = FILETIME {
+		dwLowDateTime: ticks as u32,
+		dwHighDateTime: (ticks >> 32) as u32,
+	};
+	// SAFETY: SYSTEMTIME is plain data, so all zeros is a valid value, and both
+	// calls only fill the structs they are handed.
+	let (utc, local) = unsafe {
+		let mut utc: SYSTEMTIME = std::mem::zeroed();
+		let mut local: SYSTEMTIME = std::mem::zeroed();
+		FileTimeToSystemTime(&raw const file, &raw mut utc);
+		SystemTimeToTzSpecificLocalTime(std::ptr::null(), &raw const utc, &raw mut local);
+		(utc, local)
+	};
+	let shown = if local.wYear == 0 { utc } else { local };
+	format!("{:04}-{:02}-{:02}", shown.wYear, shown.wMonth, shown.wDay)
 }
 
 // Writes the text where the file was, only while nothing is at that name. The
@@ -18334,5 +18402,54 @@ mod peer_tests {
 		assert!(fresh.menu_bar);
 		assert_eq!(own(&fresh, Key::Minimap), own(&stock, Key::Minimap));
 		assert_eq!(fresh.margin, 22.0);
+	}
+
+	// Test ID: EtZoAXH
+	#[test]
+	fn a_release_build_shows_the_number_alone() {
+		let label = build_label_for("3x7k2", true, 0, |_| panic!("a release has no date"));
+		assert_eq!(label, "3x7k2");
+	}
+
+	// Test ID: EtZoAsL
+	#[test]
+	fn a_non_release_build_shows_the_local_date_after_the_number() {
+		let label = build_label_for("3x7k2", false, 1_000, |at| format!("date-of-{at}"));
+		assert_eq!(label, "3x7k2 (date-of-1000)");
+		// the real thing: ASCII digits, dashed, and the baked-in instant
+		let shown = local_date(env!("SILK_BUILD_UNIX").parse().unwrap());
+		let parts: Vec<&str> = shown.split('-').collect();
+		assert_eq!(parts.len(), 3, "{shown}");
+		assert_eq!([parts[0].len(), parts[1].len(), parts[2].len()], [4, 2, 2]);
+		assert!(shown.bytes().all(|b| b.is_ascii_digit() || b == b'-'));
+	}
+
+	// Test ID: EtZoB0q
+	#[test]
+	fn the_build_date_follows_the_viewers_zone() {
+		// Noon UTC on 2026-06-15, read through TZ the way localtime_r does. Far
+		// enough east it is already the 16th.
+		#[cfg(unix)]
+		{
+			unsafe extern "C" {
+				fn tzset();
+			}
+			let noon = 1_781_524_800;
+			let read = |zone: Option<&str>| {
+				// SAFETY: no other test touches TZ, and tzset only rereads it.
+				unsafe {
+					match zone {
+						Some(zone) => std::env::set_var("TZ", zone),
+						None => std::env::remove_var("TZ"),
+					}
+					tzset();
+				}
+				local_date(noon)
+			};
+			assert_eq!(read(Some("UTC")), "2026-06-15");
+			assert_eq!(read(Some("Pacific/Kiritimati")), "2026-06-16");
+			assert_eq!(read(Some("Etc/GMT+12")), "2026-06-15");
+			read(None);
+		}
 	}
 }

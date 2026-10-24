@@ -2127,7 +2127,7 @@ fn layout_about(
 		("Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]".into(), menu_dim, 0.0, 0.0, false, 1.0),
 		(format!("License: {}", env!("CARGO_PKG_LICENSE")), menu_dim, 0.0, 0.0, false, 1.0),
 		("Info".into(), menu_fg, 0.0, gap, true, 1.0),
-		(format!("Build:  {}  {build}", config::BUILD_ID), menu_dim, indent, tight, false, 1.0),
+		(format!("Build:  {}  {build}", config::build_label()), menu_dim, indent, tight, false, 1.0),
 		(format!("Renderer:  {}", info.name), menu_dim, indent, 0.0, false, 1.0),
 		(format!("Backend:  {:?}", info.backend), menu_dim, indent, 0.0, false, 1.0),
 		(format!("Acceleration:  {accel}"), menu_dim, indent, 0.0, false, 1.0),
@@ -3189,7 +3189,11 @@ mod tests {
 		let (lines, _, _) = layout_about(&mut TextCtx::new_cpu(1.0), &adapter());
 		let said: Vec<&str> = lines.iter().map(|l| l.text.as_str()).collect();
 		let version = format!("Version {}", env!("CARGO_PKG_VERSION"));
-		let build = format!("Build:  {}  {}", config::BUILD_ID, config::build_target());
+		let build = format!(
+			"Build:  {}  {}",
+			config::build_label(),
+			config::build_target()
+		);
 		assert!(said.contains(&version.as_str()), "{said:?}");
 		assert!(
 			said.iter().any(|l| l.starts_with("Copyright © ")),

@@ -46,6 +46,8 @@ fi
 ## The build number the way cicd.bash pins it for a clean tree: the commit's time.
 SILK_BUILD_MINUTES=$(( ($(git -C "${root}" log -1 --format=%ct "${commit}") - 946684800) / 60 ))
 export SILK_BUILD_MINUTES
+## A published binary is built as a release, which shows no date after its number.
+export SILK_RELEASE=1
 
 mkdir -p "${root}/target"
 work="$(mktemp -d "${root}/target/repro.XXXXXX")"

@@ -789,7 +789,7 @@ function fWslLinuxHalf {
 	fNote "cicd.bash ...: $($cicdArgs -join ' ')"
 	fEcho_Clean
 
-	& wsl.exe -d $distro --cd $wslRepo -e env "CARGO_TARGET_DIR=$wslTarget" "SILK_BUILD_MINUTES=$env:SILK_BUILD_MINUTES" CICD_LINUX_HALF=1 bash cicd/cicd.bash @cicdArgs
+	& wsl.exe -d $distro --cd $wslRepo -e env "CARGO_TARGET_DIR=$wslTarget" "SILK_BUILD_MINUTES=$env:SILK_BUILD_MINUTES" "SILK_RELEASE=$env:SILK_RELEASE" CICD_LINUX_HALF=1 bash cicd/cicd.bash @cicdArgs
 	if ($LASTEXITCODE -ne 0) { fDie "Linux half failed (exit $LASTEXITCODE)" }
 	fEcho "OK: Linux half"
 }
@@ -899,6 +899,13 @@ function fMain {
 			if ($commitSecs -match '^\d+$') { $buildSecs = [long]$commitSecs }
 		}
 		$env:SILK_BUILD_MINUTES = "$([math]::Floor(($buildSecs - 946684800) / 60))"
+	}
+
+	## Only a clean main can be tagged, so only it builds without the date.
+	if (-not $env:SILK_RELEASE) {
+		$branchNow = "$(& git rev-parse --abbrev-ref HEAD 2>$null)".Trim()
+		$dirtyNow = @(& git status --porcelain --untracked-files=no 2>$null)
+		$env:SILK_RELEASE = if ($branchNow -eq 'main' -and $dirtyNow.Count -eq 0) { '1' } else { '0' }
 	}
 
 	## Stage 1: format.

@@ -783,7 +783,7 @@ pub fn version_line() -> String {
 		"{} v{} build {}",
 		config::APP_NAME,
 		env!("CARGO_PKG_VERSION"),
-		config::BUILD_ID
+		config::build_label()
 	)
 }
 
@@ -806,7 +806,11 @@ pub fn about(info: Option<&wgpu::AdapterInfo>) -> String {
 		format!("License: {}", env!("CARGO_PKG_LICENSE")),
 		String::new(),
 		"Info".to_string(),
-		format!("  Build:  {}  {}", config::BUILD_ID, config::build_target()),
+		format!(
+			"  Build:  {}  {}",
+			config::build_label(),
+			config::build_target()
+		),
 	];
 	if let Some(info) = info {
 		lines.push(format!("  Renderer:  {}", info.name));
@@ -1056,7 +1060,7 @@ mod tests {
 				"{} v{} build {}",
 				config::APP_NAME,
 				env!("CARGO_PKG_VERSION"),
-				config::BUILD_ID
+				config::build_label()
 			)
 		);
 	}
