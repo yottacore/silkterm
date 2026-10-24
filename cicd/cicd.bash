@@ -558,7 +558,7 @@ fi
 if ((container)); then
 	## The engine inside takes this run's stage options and none of the stages that
 	## need this box: sync, the private runner, dogfood, the demo and publish.
-	innerArgs=(-y --no-sync --no-dogfood --no-publish --no-private "${innerArgs[@]}")
+	innerArgs=(-y --no-sync --no-dogfood --no-publish --no-private --no-demo "${innerArgs[@]}")
 	((quiet)) && innerArgs[0]=-q
 fi
 
@@ -1603,6 +1603,8 @@ fEcho_Clean
 
 
 ##	History:
+##		- 2026-10-23: The run in the container gets --no-demo, so the demo is
+##		              recorded only here, and only when this run asks for it.
 ##		- 2026-10-22: The leak checks run by default. --no-leakcheck drops them,
 ##		              and --leakcheck adds them back under --quick.
 ##		- 2026-10-22: CodeQL joins the leak checks, in the image, when --codeql asks.

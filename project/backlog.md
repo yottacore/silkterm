@@ -449,7 +449,8 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - A container run tries to record the demo inside the image, even with `--no-demo`
 	- ID: 2026102213461534
 	- Type: Bug
-	- Status: Queued
+	- Status: Waiting on automated testing
+	- Needs local test suite run?: A full run in the container, `cicd/cicd.bash -y --no-publish --no-dogfood --no-demo`. Its log shows no "recording demo video ..." from the run inside, and the host's stage 7 says "demo video disabled".
 	- Severity: Avg
 	- Opened: 20261022-134615
 	- Opened by: CC
@@ -461,6 +462,15 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Expected behavior: `--no-demo` is honored inside the container too, and the demo, a host step, never runs in the image.
 	- Reproduced: 20261022, run log `test_silkterm-batch_20261022-12464452`, lines 3782 to 3791.
 	- Possible cause: The container's own arguments are `-y --no-sync --no-dogfood --no-publish --no-private` plus `innerArgs`, and `--no-demo` never goes into `innerArgs` (`cicd.bash` line 561). The demo is on by default, so the run inside turns it back on. The same on `dev`, at line 549.
+	- Actual cause: As above. The run inside got every host stage off but the demo, which `DEMO_ENABLE=1` in config.bash turns on. The comment above that line already listed the demo among the stages left out. It ran inside on every full container run, not only with `--no-demo`. With the demo on, it ran twice: in the image, then here.
+	- Progress log:
+		- 20261023: The run inside gets `--no-demo` with the other host stages. The demo runs only on this box, and only when the run here asks for it.
+		- 20261023: The container test's check of the inner command line now expects `--no-demo` after `--no-private`. It was `-y --no-sync --no-dogfood --no-publish --no-private --quick --no-fuzz`, and is `-y --no-sync --no-dogfood --no-publish --no-private --no-demo --quick --no-fuzz`.
+	- Actual fix: `--no-demo` added to the fixed options in `cicd.bash` for the run inside.
+	- Verified: 20261023. The new check failed before the fix and passes after. The container and engine tests, shellcheck at the pipeline's level, the bash style check, `lint-report.bash --check` and the docs check.
+		- Swept: every `fContainerRun` call. The gate, ASan and CodeQL calls run their own script, not the engine's later stages. The rest of the host-only steps: sync, the private runner, dogfood and publish have their flags in the list, and the content scrub, the Windows scenarios and the run log check `SILK_CICD_IN_CONTAINER`. `cicd-win.ps1 -Wsl` starts no container. design.md already says the demo stays outside.
+	- Branch: rnd1023
+	- Test case: `cicd/tests/container/run.bash` (EsJg9EF), "the demo among them, though nothing here asked for it off": the run inside gets `--no-demo` when nothing asked for it.
 
 - Implement leak and static checks of the Rust code run as part of CI/CD
 	- ID: 2026101714015789

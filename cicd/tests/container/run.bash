@@ -201,7 +201,9 @@ fCheck "the container is named for the run and labeled as the pipeline's" bash -
 fCheck "the target dir for both sides" bash -c '[[ "$1" == *" CARGO_TARGET_DIR=$2/target/container "* ]]' _ "${runLine}" "${repo}"
 fCheck "the build number pinned here" bash -c '[[ "$1" == *" SILK_BUILD_MINUTES="[0-9]* ]]' _ "${runLine}"
 fCheck "the engine inside gets the stage options and the host stages off" \
-	bash -c '[[ "$1" == *" $2/cicd/cicd.bash -y --no-sync --no-dogfood --no-publish --no-private --quick --no-fuzz" ]]' _ "${runLine}" "${repo}"
+	bash -c '[[ "$1" == *" $2/cicd/cicd.bash -y --no-sync --no-dogfood --no-publish --no-private --no-demo --quick --no-fuzz" ]]' _ "${runLine}" "${repo}"
+## The demo is on by default, so a run inside left to itself records it there too.
+fCheck "the demo among them, though nothing here asked for it off" bash -c '[[ "$1" == *"/cicd/cicd.bash "*" --no-demo"* ]]' _ "${runLine}"
 fCheck "and nothing else of this box" test "$(grep -o ' -v ' <<<"${runLine}" | wc -l)" -eq 3
 ## Names stamped inside, such as test folders and flamegraphs, sort with the ones
 ## made here.
@@ -347,3 +349,4 @@ echo "all passed"
 ##		- 20261013 JC: The time zone goes in.
 ##		- 20261019 JC: A new /tmp per run, and what earlier runs left in docker.
 ##		- 20261019 JC: The sanitizer nightly, the ASan step, and a linked target dir.
+##		- 20261023 JC: The run inside gets --no-demo.
