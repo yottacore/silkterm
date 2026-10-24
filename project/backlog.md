@@ -585,6 +585,21 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Notes:
 		- Wayland lets a window set the clipboard only while it has the keyboard. X11 doesn't have that limit, and stays as it is.
 
+- CI/CD: a flag to turn off each full-run stage that has none
+	- ID: 2026102319535661
+	- Type: Task
+	- Status: Queued
+	- Priority: Low
+	- Opened: 20261023-195356
+	- Opened by: CC
+	- Related IDs: 2026101816103601
+	- Requirements:
+		- A failure in a stage with no off flag stops the whole full run, and a test batch can't run past it.
+		- Stages with no flag now: the debug build and `cargo test`, the 3 clippy runs, shellcheck and `bash-style.bash`, the PowerShell and Python lints, the content scrub, the advisory scan and `cargo deny`, the script tests under `cicd/tests`, the docs, TOC, table and test ID checks, the wallpaper gallery check, the launcher harness, and the native release build with its checks, plus the stale-run cleanup.
+		- The Windows GUI scenarios and the scroll harness turn off only with `--quick`, and dpirand only with `DPIRAND_SECS=0` in config.bash.
+	- Notes:
+		- Not every stage needs its own flag. A few grouped ones may do, such as one for the lints and one for the script tests.
+
 - Wayland: must use the Wayland clipboard, and minimize other X11 features
 	- ID: 2026101509024607
 	- Type: Bug
