@@ -107,8 +107,10 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - Always use automatic remote mode when detected.
 	- ID: 2026101914251764
 	- Type: Feature
-	- Status: Waiting on UAT
+	- Status: Waiting on automated testing
 		- The row's label is shorter than the requested name. See Decisions.
+		- 20261023: Back from Waiting on UAT, since the 2 rows below are machine runs.
+	- Needs hand testing: OK the shorter Settings label.
 	- Needs local test suite run?: the slow window tests in a full run. Nothing else here needs one.
 	- Needs external testing: the wingui `wpremote` scenario on vm925w or b29w over a real RDP session with `performance.detect_remote: false`, which should keep the stored profile and the wallpaper. The Windows detection code is unchanged and only compiled here.
 	- Priority: Avg
