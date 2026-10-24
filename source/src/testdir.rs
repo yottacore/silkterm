@@ -341,6 +341,7 @@ mod tests {
 
 	// Test ID: ErOj5oF
 	#[test]
+	#[cfg_attr(miri, ignore = "Miri can't start a process")]
 	fn a_run_folder_is_stamped_in_local_time() {
 		let stamp = local_stamp();
 		assert_eq!(stamp.len(), 17, "{stamp}");
@@ -426,6 +427,7 @@ mod tests {
 
 	// Test ID: ErbiCgG
 	#[test]
+	#[cfg_attr(miri, ignore = "Miri can't copy a file")]
 	fn a_link_in_place_of_the_run_folder_is_left() {
 		let (base, dir, token) = marked_folder("swapped");
 		let target = base.join("elsewhere");
@@ -489,6 +491,7 @@ mod tests {
 	// catch_expected_panic. fuzz.rs catches only to name the seed, then fails.
 	// Test ID: Erner3A
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn no_test_catches_a_panic_behind_the_run_folders_back() {
 		let src = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
 		let mut offenders = Vec::new();

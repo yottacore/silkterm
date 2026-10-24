@@ -828,6 +828,7 @@ mod tests {
 
 	// Test ID: EorkTk1
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_profile_shows_its_values_and_custom_puts_back_the_own() {
 		let s = tuned("max");
 		assert!(s.scroll_smooth, "Max is the shipped default");
@@ -845,6 +846,7 @@ mod tests {
 
 	// Test ID: EorkTk3
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn each_profile_costs_less_than_the_one_above() {
 		let mut radius = f32::MAX;
 		for profile in ["max", "high"] {
@@ -882,6 +884,7 @@ mod tests {
 	// touching it.
 	// Test ID: Ep17Tqz
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_remote_profile_sits_over_the_stored_one() {
 		let mut s = tuned("max");
 		super::set_remote(&mut s, true);
@@ -907,6 +910,7 @@ mod tests {
 	// makes a profile heavier, and a pick by hand is left alone.
 	// Test ID: EpWow4h
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_session_step_sits_over_the_tested_profile() {
 		let s = tested(Profile::Max, Some(Profile::Low));
 		assert_eq!(super::current(&s), Profile::Low);
@@ -940,6 +944,7 @@ mod tests {
 	// again rather than kept.
 	// Test ID: EpWpSam
 	#[test]
+	#[cfg_attr(miri, ignore = "Miri can't ask how much memory the machine has")]
 	fn a_rating_from_before_the_version_is_stale() {
 		let card = adapter("NVIDIA GeForce RTX 3060 Ti", wgpu::DeviceType::DiscreteGpu);
 		let machine = super::MACHINE

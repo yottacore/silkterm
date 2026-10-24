@@ -1280,6 +1280,7 @@ mod tests {
 	// returns at 1 is the alpha of every pixel in the pane.
 	// Test ID: EqN5SfI
 	#[test]
+	#[cfg_attr(miri, ignore = "Miri's exp is inexact on purpose")]
 	fn the_exponential_falloff_drops_away_hard() {
 		assert!(
 			WGSL.contains(&format!("let k = {EXP_K:.1};")),
@@ -1303,6 +1304,7 @@ mod tests {
 	// a window. This catches it here, with no GPU.
 	// Test ID: Ers4srl
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_scrim_shader_compiles() {
 		use wgpu::naga;
 		let module = naga::front::wgsl::parse_str(WGSL).expect("the scrim shader parses");

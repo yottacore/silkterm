@@ -975,6 +975,7 @@ mod tests {
 	// silently missing from the dialog is exactly the failure worth catching.
 	// Test ID: Em2iOem
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_declarations_are_complete_and_well_formed() {
 		let ui = match parse(SOURCE) {
 			Ok(ui) => ui,
@@ -1023,6 +1024,7 @@ mod tests {
 
 	// Test ID: Em2iOen
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn every_tab_has_rows_and_every_row_a_tab() {
 		let ui = ui();
 		for (index, title) in ui.tabs.iter().enumerate() {
@@ -1040,6 +1042,7 @@ mod tests {
 	// content can outgrow, so the only real mistake is a negative or absurd one.
 	// Test ID: Em2iOeo
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_layout_numbers_are_sane() {
 		let lay = &ui().layout;
 		for (name, value) in [
@@ -1077,6 +1080,7 @@ mod tests {
 	// The macOS build leaves out software rendering and nothing else.
 	// Test ID: ErycRzO
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn only_software_rendering_leaves_the_macos_build() {
 		let Ok(mut ui) = parse(SOURCE) else {
 			panic!("settings_ui.shcl does not parse")
@@ -1099,6 +1103,7 @@ mod tests {
 	// nothing else goes with it.
 	// Test ID: ErNFx0g
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_windows_rows_leave_every_other_build() {
 		let Ok(mut ui) = parse(SOURCE) else {
 			panic!("settings_ui.shcl does not parse")
@@ -1160,6 +1165,7 @@ mod tests {
 	// with Transparency on never let go. No other row's mark differs.
 	// Test ID: EryD9zK
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn only_the_windows_build_warns_that_transparency_keeps_memory() {
 		let read = |windows: bool| {
 			let Ok(mut ui) = parse(SOURCE) else {
@@ -1198,6 +1204,7 @@ mod tests {
 	// for the dialog, both platforms' marks included.
 	// Test ID: Es9Vugt
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn no_dialog_text_says_carry() {
 		let Ok(ui) = parse(SOURCE) else {
 			panic!("settings_ui.shcl does not parse")
@@ -1275,6 +1282,7 @@ mod tests {
 	// table with no row would otherwise be settable only by hand.
 	// Test ID: ErektRs
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn every_hotkey_has_one_row_on_the_keys_tab() {
 		let ui = ui();
 		let keys_tab = ui

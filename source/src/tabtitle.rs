@@ -2318,6 +2318,7 @@ mod tests {
 	// those boxes said, over every mix of them and every kind of tab.
 	// Test ID: Et0TY7v
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_template_says_what_the_check_boxes_said() {
 		const SHELLS: [&str; 5] = [
 			"PowerShell 7",

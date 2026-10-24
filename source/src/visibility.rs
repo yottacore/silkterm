@@ -380,6 +380,7 @@ mod tests {
 	// only holds with the ramp off, which is what the second half checks.
 	// Test ID: EqTTXtg
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn dark_mode_still_draws_the_blend_it_always_has() {
 		for name in crate::theme::names() {
 			// "system" resolves through the OS bit, which the tests leave dark
@@ -441,6 +442,7 @@ mod tests {
 
 	// Test ID: EqTOWF7
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn light_mode_shows_the_contrast_dark_mode_shows() {
 		for name in crate::theme::names() {
 			let (dark, light) = (bg_luma(name, "dark"), bg_luma(name, "light"));
@@ -466,6 +468,7 @@ mod tests {
 
 	// Test ID: EqTOWF8
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_default_asks_for_the_scale_black_would_have_given() {
 		let s = themed("SilkTerm", "light");
 		let mix = wallpaper_mix(&s, 0.10, None);
@@ -481,6 +484,7 @@ mod tests {
 	// its light mode shows less too. Self-consistent rather than uniform.
 	// Test ID: EqTOWF9
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_theme_with_a_lifted_dark_background_asks_for_less() {
 		let silk = wallpaper_mix(&themed("SilkTerm", "light"), 0.10, None).amount;
 		let pastel = wallpaper_mix(&themed("Pastel", "light"), 0.10, None).amount;
@@ -554,6 +558,7 @@ mod tests {
 
 	// Test ID: EqT4HIf
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_halo_is_quietened_wherever_a_picture_is_up() {
 		let s = themed("SilkTerm", "light");
 		for v in [0.05f32, 0.1, 0.35, 0.75, 1.0] {
@@ -570,6 +575,7 @@ mod tests {
 	// the tail and the dark parts are where the old gain left light mode loud.
 	// Test ID: EqT4HIg
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_halo_covers_the_same_ground_in_both_modes() {
 		for name in crate::theme::names() {
 			let s = themed(name, "light");
@@ -606,6 +612,7 @@ mod tests {
 	// draws it from black, so without this its halo was the loudest of all.
 	// Test ID: Ers4sAg
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_halo_follows_the_picture_it_sits_on() {
 		let s = themed("SilkTerm", "light");
 		for v in [0.1f32, 0.35] {
@@ -625,6 +632,7 @@ mod tests {
 
 	// Test ID: Ers4sWJ
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_matched_halo_only_ever_grows_with_what_was_asked() {
 		for name in crate::theme::names() {
 			for picture in [DIM, ORDINARY, BRIGHT] {
@@ -647,6 +655,7 @@ mod tests {
 	// it is keyed on moves.
 	// Test ID: Ers4ttU
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_memo_never_hands_back_a_stale_halo() {
 		let mut memo = HaloMemo::default();
 		let light = themed("SilkTerm", "light");
@@ -684,6 +693,7 @@ mod tests {
 
 	// Test ID: EqTTXth
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn an_ordinary_picture_is_drawn_at_what_the_slider_says() {
 		for name in crate::theme::names() {
 			for mode in ["dark", "light"] {
@@ -702,6 +712,7 @@ mod tests {
 
 	// Test ID: EqTTXti
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_glaring_picture_is_held_back_and_a_faint_one_lifted() {
 		let s = themed("SilkTerm", "dark");
 		for v in [0.05f32, 0.1, 0.35, 0.6] {
@@ -718,6 +729,7 @@ mod tests {
 	// for: over a light background it is the DARK picture that stands out.
 	// Test ID: EqTTXtj
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn light_mode_tones_down_the_picture_that_stands_out_there_instead() {
 		let s = themed("SilkTerm", "light");
 		for v in [0.05f32, 0.1, 0.35, 0.6] {
@@ -748,6 +760,7 @@ mod tests {
 	// nothing like it to look at, so the ramp has to tell them apart.
 	// Test ID: EqTTXtk
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_dark_picture_with_a_bright_area_is_not_a_dark_picture() {
 		let s = themed("SilkTerm", "dark");
 		let flat = (0.05f32, 0.08f32);
@@ -761,6 +774,7 @@ mod tests {
 
 	// Test ID: EqTTXtl
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_full_slider_always_draws_the_picture_as_it_is() {
 		for name in crate::theme::names() {
 			for mode in ["dark", "light"] {
@@ -781,6 +795,7 @@ mod tests {
 
 	// Test ID: EqTTXtm
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_strength_setting_turns_the_ramp_off() {
 		let mut s = themed("SilkTerm", "dark");
 		s.wallpaper_even = 0.0;
@@ -797,6 +812,7 @@ mod tests {
 
 	// Test ID: EqTTXtn
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_ramp_never_takes_the_slider_backwards() {
 		for mode in ["dark", "light"] {
 			let s = themed("SilkTerm", mode);
@@ -816,6 +832,7 @@ mod tests {
 
 	// Test ID: EqT4HIh
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn no_picture_leaves_the_halo_alone() {
 		assert_eq!(
 			halo_match(&themed("SilkTerm", "light"), 0.0, None, &SPREAD),

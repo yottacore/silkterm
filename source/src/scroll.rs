@@ -537,6 +537,7 @@ mod tests {
 
 	// Test ID: EpaxTdw
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn chasing_output_is_the_output_ease_only() {
 		let _g = pin();
 		let mut s = Scroll::new();
@@ -558,6 +559,7 @@ mod tests {
 	// Nothing printed, so nothing is unshown, whatever the view is doing.
 	// Test ID: EqQ3t6n
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_gesture_to_the_bottom_is_not_unshown_output() {
 		let _g = pin();
 		for jump in [true, false] {
@@ -599,6 +601,7 @@ mod tests {
 	// for the rest of the flood at the first one.
 	// Test ID: EqQ3t6o
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_flood_stays_trimmed_through_a_keystroke() {
 		let _g = pin();
 		for keystroke in [true, false] {
@@ -639,6 +642,7 @@ mod tests {
 	// second half walks a mixed script and holds the invariants over all of it.
 	// Test ID: EqQ3t6p
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn unshown_output_drains_as_the_view_reaches_it() {
 		let _g = pin();
 		let mut s = Scroll::new();
@@ -731,6 +735,7 @@ mod tests {
 	// lag to ease and nothing for the map to hold back.
 	// Test ID: EqQ3t6q
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn smooth_off_leaves_nothing_unshown() {
 		let _g = pin();
 		// a profile would mask the master switch, so pin the feel to custom
@@ -751,6 +756,7 @@ mod tests {
 
 	// Test ID: Eion5oO
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn starts_following() {
 		let _g = pin();
 		let s = Scroll::new();
@@ -761,6 +767,7 @@ mod tests {
 
 	// Test ID: Eion5oP
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn wheel_clamps_to_history() {
 		let _g = pin();
 		let mut s = Scroll::new();
@@ -783,6 +790,7 @@ mod tests {
 
 	// Test ID: EkzU0Jc
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn fractional_wheel_rests_on_a_whole_line() {
 		let _g = pin();
 		// pixel-delta wheels (touchpad, hi-res) send fractional line amounts; the
@@ -815,6 +823,7 @@ mod tests {
 	// under a line of travel, but a visible reversal against the gesture.
 	// Test ID: Eo6nUjQ
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_wheel_settles_on_the_line_it_was_heading_for() {
 		let _g = pin();
 		let settle = |lines: f32| {
@@ -843,6 +852,7 @@ mod tests {
 
 	// Test ID: EloyL8K
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn nudge_accumulates_without_a_line_cap() {
 		let _g = pin();
 		let mut s = Scroll::new();
@@ -862,6 +872,7 @@ mod tests {
 
 	// Test ID: Eion5oQ
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn nudge_ignored_when_scrolled_back() {
 		let _g = pin();
 		let mut s = Scroll::new();
@@ -875,6 +886,7 @@ mod tests {
 
 	// Test ID: Eion5oR
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn output_backlog_settles_to_bottom() {
 		let _g = pin();
 		let mut s = Scroll::new();
@@ -894,6 +906,7 @@ mod tests {
 
 	// Test ID: Elqv6O1
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_burst_leaves_rest_slowly_with_the_ramp_still_ahead() {
 		let _g = pin();
 		// THE core complaint this model answers: a dump used to hit full speed
@@ -919,6 +932,7 @@ mod tests {
 
 	// Test ID: Eion5oS
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn burst_ramps_faster_than_trickle() {
 		let _g = pin();
 		// a sustained deep backlog must be moving measurably faster later in the
@@ -944,6 +958,7 @@ mod tests {
 
 	// Test ID: EorTe2N
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn app_scroll_grows_within_the_cover_and_eases_to_rest() {
 		let _g = pin();
 		let mut s = Scroll::new();
@@ -969,6 +984,7 @@ mod tests {
 
 	// Test ID: EorTe2O
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn app_slide_keeps_up_with_a_fast_app() {
 		let _g = pin();
 		// A line every other frame for a while: the chase must ramp to the app's
@@ -1000,6 +1016,7 @@ mod tests {
 
 	// Test ID: EorTe2P
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn app_slide_and_output_chase_run_the_same_curve() {
 		let _g = pin();
 		// The whole point of the slide's own chase: an app scrolling its region
@@ -1040,6 +1057,7 @@ mod tests {
 
 	// Test ID: EjICKOZ
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn output_ease_descends_monotonically() {
 		let _g = pin();
 		// After output stops, the visual position must ease straight down to the live
@@ -1068,6 +1086,7 @@ mod tests {
 
 	// Test ID: ElpQBij
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_single_screen_burst_eases_gentler_than_an_overflowed_one() {
 		let _g = pin();
 		// Same backlog, two screen heights: the burst that stays wholly on screen
@@ -1098,6 +1117,7 @@ mod tests {
 
 	// Test ID: EloSH6G
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_burst_ends_at_rest_and_the_next_starts_in_view() {
 		let _g = pin();
 		// Overflow must not outlive its burst: once the ease has settled at the
@@ -1133,6 +1153,7 @@ mod tests {
 
 	// Test ID: EjICKOa
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn app_slide_eases_monotonically_without_overshoot() {
 		let _g = pin();
 		// A single detected app-scroll step must glide to rest in one direction: the
@@ -1156,6 +1177,7 @@ mod tests {
 
 	// Test ID: EjFiQFd
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn cancel_app_scroll_hard_cuts_the_slide() {
 		let _g = pin();
 		// an alt-screen enter/exit must drop any in-flight slide at once (no ease)
@@ -1169,6 +1191,7 @@ mod tests {
 
 	// Test ID: ElcxMmv
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn snap_comes_to_rest_instantly() {
 		let _g = pin();
 		// unfreeze catch-up: pending output backlog and any slide drop at once
@@ -1190,6 +1213,7 @@ mod tests {
 
 	// Test ID: EloyL8L
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn smooth_off_finishes_every_scroll_instantly() {
 		let _g = pin();
 		// the master switch: no eased wheel, no output lag, no app slide
@@ -1219,6 +1243,7 @@ mod tests {
 
 	// Test ID: EloyL8M
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_user_jump_to_bottom_is_not_chase_limited() {
 		let _g = pin();
 		// Returning from deep scrollback is the user driving: the gap closes at
@@ -1244,6 +1269,7 @@ mod tests {
 
 	// Test ID: EloiOa0
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_fresh_motion_builds_speed_instead_of_spiking() {
 		let _g = pin();
 		// The first frame of a new scroll must be gentler than the motion a few
@@ -1271,6 +1297,7 @@ mod tests {
 
 	// Test ID: EloiOa1
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_tail_sweeps_in_instead_of_crawling() {
 		let _g = pin();
 		// Once within STOP_BAND of the target the remainder must fall in well
@@ -1311,6 +1338,7 @@ mod tests {
 
 	// Test ID: ElpQBik
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn ease_in_sets_how_gently_motion_leaves_rest() {
 		let _g = pin();
 		let traveled = |ease_in_ms: f32| {
@@ -1337,6 +1365,7 @@ mod tests {
 
 	// Test ID: Elqv6O2
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn ease_in_also_paces_a_bursts_first_moments() {
 		let _g = pin();
 		// The same knob shapes the output curve's leave-from-rest: a longer
@@ -1367,6 +1396,7 @@ mod tests {
 
 	// Test ID: ElpQBil
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn ramp_up_sets_how_fast_catch_up_accelerates() {
 		let _g = pin();
 		let left = |ramp_up_ms: f32| {
@@ -1393,6 +1423,7 @@ mod tests {
 
 	// Test ID: Elqv6O3
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn ramp_down_sets_how_gradually_speed_winds_down() {
 		let _g = pin();
 		// Ramp-down is the braking curve, traced backwards from the ease-out
@@ -1430,6 +1461,7 @@ mod tests {
 
 	// Test ID: Elqv6O4
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_stopped_burst_decelerates_instead_of_stopping_dead() {
 		let _g = pin();
 		// The reserve: while output pours in at a steady rate, the braking cap
@@ -1474,6 +1506,7 @@ mod tests {
 
 	// Test ID: ElpQBim
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn ease_out_sets_how_gently_the_tail_settles() {
 		let _g = pin();
 		// Frames spent inside the stop band - the tail, and nothing else: the
@@ -1510,6 +1543,7 @@ mod tests {
 
 	// Test ID: Eion5oT
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn set_max_clamps_positions() {
 		let _g = pin();
 		let mut s = Scroll::new();
@@ -1533,6 +1567,7 @@ mod tests {
 	// once per line of leftover backlog (the nano wobble).
 	// Test ID: Eo9w0Z6
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn an_alt_screen_entry_puts_a_running_ease_at_rest() {
 		let _g = pin();
 		let mut s = Scroll::new();
@@ -1555,6 +1590,7 @@ mod tests {
 	// when the stop band took over. Both halves are asserted here.
 	// Test ID: EowmlLM
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_short_advance_is_one_motion_and_the_settings_reach_it() {
 		let _g = pin();
 		let steps = |cfg: config::Settings| {
@@ -1608,6 +1644,7 @@ mod tests {
 	// view never renders a line the grid cannot show.
 	// Test ID: Eo9w0Z7
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_ease_floor_is_capped_by_the_history() {
 		let _g = pin();
 		let mut s = Scroll::new();

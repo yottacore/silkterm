@@ -1423,6 +1423,7 @@ mod tests {
 	// retry must find a face that actually paints.
 	// Test ID: ElBP6CG
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn emoji_falls_back_to_a_face_that_rasterizes() {
 		let mut fs = FontSystem::new();
 		let mut swash = SwashCache::new();
@@ -1481,6 +1482,7 @@ mod tests {
 
 	// Test ID: Eip4OOO
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn ui_font_resolves_to_concrete_family() {
 		let fs = FontSystem::new();
 		let fam = resolve_ui_family(&fs);
@@ -1490,6 +1492,7 @@ mod tests {
 
 	// Test ID: EipMwEi
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn ui_attrs_shape_in_pinned_family() {
 		let mut fs = FontSystem::new();
 		pin_ui_family(&fs);
@@ -1525,6 +1528,7 @@ mod tests {
 	// boldest available face instead, so bold never leaves the family.
 	// Test ID: EkhEfku
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn mono_bold_stays_in_pinned_family() {
 		let mut fs = FontSystem::new();
 		pin_mono_family(&fs);
@@ -1572,6 +1576,7 @@ mod tests {
 	// line, and the cursor sat visibly past the end of it.
 	// Test ID: Er2VGXK
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_cell_width_is_the_texts_real_pitch() {
 		let mut fs = FontSystem::new();
 		pin_mono_family(&fs);
@@ -1606,6 +1611,7 @@ mod tests {
 	// bold run lands on the cell pitch exactly.
 	// Test ID: Er2VGXL
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn bold_is_stripped_for_the_glow_only_where_it_keeps_the_pitch() {
 		let mut fs = FontSystem::new();
 		pin_mono_family(&fs);
@@ -1624,6 +1630,7 @@ mod tests {
 	// use or a grid saved at it would drift.
 	// Test ID: EsjoVeF
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_cell_measured_for_a_font_size_is_the_cell_that_font_gets() {
 		let mut ctx = TextCtx::new_cpu(1.0);
 		let mut font = config::font_now();
@@ -1639,6 +1646,7 @@ mod tests {
 	// char whose advance matches the grid's cell count may ride the row buffer.
 	// Test ID: Er2VGXM
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_char_the_face_draws_one_cell_wide_is_not_taken_for_two() {
 		let mut ctx = TextCtx::new_cpu(1.0);
 		if mono_family().is_none() {
@@ -1670,6 +1678,7 @@ mod tests {
 	// of this test binary, where no other test has built a context yet.
 	// Test ID: Esa77JI
 	#[test]
+	#[cfg_attr(miri, ignore = "Miri can't start a process")]
 	fn attrs_read_before_the_first_context_match_the_context() {
 		let out = std::process::Command::new(std::env::current_exe().unwrap())
 			.args([

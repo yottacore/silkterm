@@ -461,6 +461,7 @@ mod tests {
 	// invisible on a dark ground by definition, which is the case the floor is for.
 	// Test ID: EoTQgug
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_theme_fg_clears_the_floor_and_ansi_black_does_not() {
 		for (name, t) in THEMES {
 			for pal in [t.dark, t.light] {
@@ -485,6 +486,7 @@ mod tests {
 	// unreadable, and nothing repaints chrome at run time.
 	// Test ID: EqQPotH
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn tip_text_clears_the_floor_on_its_own_box() {
 		let floor = crate::config::Settings::default().text_min_contrast;
 		for (name, t) in THEMES {
@@ -510,6 +512,7 @@ mod tests {
 	// setting says, dark mode exactly at it, and off stays off.
 	// Test ID: ErwdARW
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_light_theme_keeps_text_a_little_further_off() {
 		let floor = crate::config::Settings::default().text_min_contrast;
 		for (name, t) in THEMES {
@@ -538,6 +541,7 @@ mod tests {
 	// on, and a cursor at the fg's own brightness fails it.
 	// Test ID: Eq9PYAL
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn text_on_the_cursor_plate_clears_the_floor() {
 		for (name, t) in THEMES {
 			for (mode, pal) in [("dark", t.dark), ("light", t.light)] {
@@ -557,6 +561,7 @@ mod tests {
 	// light text is darker now and the plate stronger, and this holds the room.
 	// Test ID: ErJIAXF
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_light_cursor_plate_stands_off_the_background_like_a_dark_one() {
 		let lightness = |c: [u8; 3]| crate::palette::to_oklab(c).0;
 		for (name, t) in THEMES {
@@ -575,6 +580,7 @@ mod tests {
 	// own and keep enough chroma, for its lightness, to still read as its color.
 	// Test ID: Ers4tYC
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn light_text_is_dark_and_still_a_color() {
 		let lab = crate::palette::to_oklab;
 		for (name, t) in THEMES {

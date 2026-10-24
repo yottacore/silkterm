@@ -534,6 +534,7 @@ mod tests {
 
 		// Test ID: EpQN0oO
 		#[test]
+		#[cfg_attr(miri, ignore = "too slow under Miri")]
 		fn a_shape_span_never_runs_past_the_row_it_was_found_in() {
 			let corpus = fuzz::corpus("shapes");
 			fuzz::soak("shapes", |seed| {

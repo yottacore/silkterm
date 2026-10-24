@@ -594,24 +594,14 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261023: Left: the other 1292 tests, and the slow ones once the bar is set.
 		- 20261024: Split in 5 by module, since the rest is too much for one sitting: 2026102407430372, 2026102407430375, 2026102407430377, 2026102407430379 and 2026102407430381. This item closes when they do.
 		- 20261024: 2026102407430372 is done: 278 tests, 178 passing under Miri and 99 newly ignored there with a reason.
-		- 20261024: Left: 2026102407430375, 2026102407430377, 2026102407430379 and 2026102407430381, about 1000 tests.
+		- 20261024: 2026102407430375 is done: 330 tests, 184 passing under Miri and 146 newly ignored there with a reason.
+		- 20261024: Left: 2026102407430377, 2026102407430379 and 2026102407430381, about 700 tests.
 	- Verified: 20261023. The 15 pass in a plain run and show as ignored under Miri. fmt check, clippy for Linux.
 	- Decisions:
 		- 20261024: The slow bar is 60 s of CPU time under Miri, not wall time, so a verdict doesn't swing with the box's load. Miri runs a test's threads on one core, so on an idle box the two are about the same.
 	- Swept: the 145 tests above. A test elsewhere that starts a process or opens a device turns up in the rest of the run.
 	- Test case: None new. The ignores are test attributes, checked by the runs above.
 	- Branch: rnd1023
-
-- Leak checks: Miri sort, modules palette to xmp, and knobs
-	- ID: 2026102407430375
-	- Type: Task
-	- Status: Queued
-	- Priority: Avg
-	- Opened: 20261024-074303
-	- Opened by: CC
-	- Parent ID: 2026102320591313
-	- Requirements:
-		- The parent's requirements, for the 301 tests in the modules from palette to xmp, in name order, and the knobs crate's 28.
 
 - Leak checks: Miri sort, pane and app
 	- ID: 2026102407430377
@@ -776,6 +766,26 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- The Windows GUI scenarios and the scroll harness turn off only with `--quick`, and dpirand only with `DPIRAND_SECS=0` in config.bash.
 	- Notes:
 		- Not every stage needs its own flag. A few grouped ones may do, such as one for the lints and one for the script tests.
+
+- Leak checks: Miri sort, modules palette to xmp, and knobs
+	- ID: 2026102407430375
+	- Type: Task
+	- Status: Done
+	- Priority: Avg
+	- Opened: 20261024-074303
+	- Opened by: CC
+	- Parent ID: 2026102320591313
+	- Requirements:
+		- The parent's requirements, for the 301 tests in the modules from palette to xmp, in name order, and the knobs crate's 28.
+	- Progress log:
+		- 20261024: 302 tests in the modules, one more than at filing. 180 pass under Miri. 116 are too slow and are ignored as that, most in scroll (37), wallpaper (24) and visibility (17). 6 are ignored for a call Miri can't make or answers its own way: 2 start a process, one asks the machine's memory size (`sysconf`), one copies a file (`copy_file_range`), one sees Miri's made-up user id (1000, against the real 1001) and refuses its own folder as not private, and one compares two `exp` results that Miri makes inexact on purpose. That last one passes with `-Zmiri-deterministic-floats`.
+		- 20261024: knobs: 4 pass and 24 are too slow, ignored as that.
+		- 20261024: Miri reported no UB and no leak.
+	- Verified: 20261024. The 146 new ignores each show as ignored under Miri. The silkterm and knobs unit suites pass in a plain run (1407 passed, 3 ignored, and 28). fmt check, clippy for Linux on the workspace with all targets.
+	- Swept: the 330 tests above.
+	- Test case: None new. The ignores are test attributes, checked by the runs above.
+	- Branch: rnd1024
+	- Closed: 20261024-083141
 
 - Leak checks: Miri sort, modules autotheme to minimap
 	- ID: 2026102407430372

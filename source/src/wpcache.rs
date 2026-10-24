@@ -473,6 +473,7 @@ mod tests {
 
 	// Test ID: EryHHuh
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_kept_copy_reads_back_as_stored() {
 		let dir = folder("roundtrip");
 		let key = key("a");
@@ -508,6 +509,7 @@ mod tests {
 	// any 8 bytes unpack to something.
 	// Test ID: Erz0mF1
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_bc1_copy_comes_back_block_for_block() {
 		blocks_come_back(Packing::Bc1);
 	}
@@ -515,6 +517,7 @@ mod tests {
 	// The same for BC7, and the copy says which it is.
 	// Test ID: Es1eZ5s
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_bc7_copy_comes_back_block_for_block() {
 		blocks_come_back(Packing::Bc7);
 	}
@@ -557,6 +560,7 @@ mod tests {
 	// and the next prune takes it however recent, under the limit or not.
 	// Test ID: Erz0mH0
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_copy_in_the_old_format_is_pruned() {
 		let dir = folder("oldformat");
 		let key = key("old");
@@ -582,6 +586,7 @@ mod tests {
 
 	// Test ID: EryHHyF
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_nearest_copy_within_five_percent_of_the_pixels_is_used() {
 		let dir = folder("near");
 		let key = key("near");
@@ -605,6 +610,7 @@ mod tests {
 
 	// Test ID: EryHI1u
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_cache_prunes_the_least_recently_used_first() {
 		let dir = folder("prune");
 		let now = SystemTime::now();
@@ -668,6 +674,7 @@ mod tests {
 
 	// Test ID: EryHI5c
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_broken_copy_is_ignored_and_replaced() {
 		let dir = folder("broken");
 		let key = key("broken");

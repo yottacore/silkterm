@@ -323,6 +323,7 @@ mod tests {
 	// other window, and a take inside a held one does not wait on itself.
 	// Test ID: EsaCcC3
 	#[test]
+	#[cfg_attr(miri, ignore = "Miri gives a made-up user id")]
 	fn a_second_save_waits_for_the_first() {
 		let dir = scratch("lock");
 		let path = dir.join("lock");
