@@ -1503,7 +1503,8 @@ impl Pane {
 		dt: f32,
 		bell: f32,
 		force_rebuild: bool,
-		active: bool, // the focused pane of the focused window (cursor animates only there)
+		map_rebuild: bool, // the minimap may show the change (a moved selection or hover doesn't)
+		active: bool,      // the focused pane of the focused window (cursor animates only there)
 	) {
 		// Result goes in self.last_draw (read via draw()) - returning it by value
 		// cloned the whole bg-quad Vec per pane per frame.
@@ -1645,9 +1646,11 @@ impl Pane {
 
 		// Minimap: fold this build's grid into the column's cache. Switched off it
 		// is one bool, and the cache is freed at relayout. A pure cursor frame
-		// changes nothing it shows, so it is skipped there.
+		// changes nothing it shows, so it is skipped there, and so is a frame
+		// for a moved selection: a drag draws one every frame, and once the
+		// throttle's gap was up each one composed the map again.
 		if settings.minimap
-			&& (force_rebuild || !self.text_built || advanced > 0 || self.map.pending())
+			&& (map_rebuild || !self.text_built || advanced > 0 || self.map.pending())
 		{
 			// Where the map has to stop: the output ease is holding the text this
 			// far above the newest line. `Scroll` owns the rule, because a user

@@ -401,14 +401,62 @@ pub fn thread_allocs() -> u64 {
 }
 
 /// `SILK_ALLOCS=1`: one line per frame with the allocations the window thread
-/// made drawing it, and since the last frame ended (events and loop passes).
+/// made drawing it, and since the last frame ended (events and loop passes),
+/// then what the frame was drawn for.
 pub fn allocs_on() -> bool {
 	static ON: OnceLock<bool> = OnceLock::new();
 	*ON.get_or_init(|| std::env::var_os("SILK_ALLOCS").is_some())
 }
 
+/// What a frame was drawn for, as `SILK_ALLOCS` prints it. A window test
+/// waits for frames drawn for the cursor alone before it counts "at rest",
+/// since on a slow box the shells' output can still be easing in.
+#[derive(Clone, Copy, Default, PartialEq, Eq, Debug)]
+pub struct FrameCause {
+	pub rebuild: bool,
+	pub output: bool,
+	pub scroll: bool,
+	pub cursor: bool,
+	pub bell: bool,
+}
+
+impl std::fmt::Display for FrameCause {
+	// Written from fixed words, so printing it allocates nothing the next
+	// frame's count would pick up.
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		let words = [
+			(self.rebuild, "rebuild"),
+			(self.output, "output"),
+			(self.scroll, "scroll"),
+			(self.cursor, "cursor"),
+			(self.bell, "bell"),
+		];
+		let mut first = true;
+		for (_, word) in words.iter().filter(|(on, _)| *on) {
+			if !first {
+				f.write_str("+")?;
+			}
+			f.write_str(word)?;
+			first = false;
+		}
+		if first {
+			f.write_str("nothing")?;
+		}
+		Ok(())
+	}
+}
+
+/// `SILK_ALLOCS=1`: a one-off launch step the window thread did between frames.
+/// The shell scan's fold rewrites the config, tens of thousands of allocations,
+/// and on a busy box it lands seconds later than on an idle one.
+pub fn allocs_note(what: &str) {
+	if allocs_on() {
+		eprintln!("[allocs] {what}");
+	}
+}
+
 /// Called after a frame with the count taken just before it.
-pub fn frame_allocs(before: u64) {
+pub fn frame_allocs(before: u64, cause: FrameCause) {
 	thread_local! {
 		static LAST_END: std::cell::Cell<Option<u64>> = const { std::cell::Cell::new(None) };
 	}
@@ -418,14 +466,38 @@ pub fn frame_allocs(before: u64) {
 	let end = thread_allocs();
 	let between = LAST_END.with(|last| last.replace(Some(end)).map(|prev| before - prev));
 	match between {
-		Some(between) => eprintln!("[allocs] frame {} between {between}", end - before),
-		None => eprintln!("[allocs] frame {}", end - before),
+		Some(between) => eprintln!(
+			"[allocs] frame {} between {between} for {cause}",
+			end - before
+		),
+		None => eprintln!("[allocs] frame {} for {cause}", end - before),
 	}
 }
 
 #[cfg(test)]
 mod tests {
-	use super::percentiles;
+	use super::{FrameCause, percentiles};
+
+	// The allocs window test reads these words to tell a frame at rest from one
+	// still drawing output, so their spelling is part of its contract.
+	// Test ID: EtcxfWd
+	#[test]
+	fn a_frame_cause_prints_the_words_the_window_test_reads() {
+		let cursor = FrameCause {
+			cursor: true,
+			..FrameCause::default()
+		};
+		assert_eq!(cursor.to_string(), "cursor");
+		let busy = FrameCause {
+			rebuild: true,
+			output: true,
+			scroll: true,
+			cursor: true,
+			bell: true,
+		};
+		assert_eq!(busy.to_string(), "rebuild+output+scroll+cursor+bell");
+		assert_eq!(FrameCause::default().to_string(), "nothing");
+	}
 
 	// One sample is the whole distribution, and 95% of one still has to fall on
 	// it rather than one past the end.

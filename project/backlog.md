@@ -378,6 +378,65 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Branch: rnd1024
 	- Test case: ErzCQC2 itself. The old drag failing under load and the new one passing are under Verified.
 
+- The allocations per frame test fails its at-rest limit at load 50 or so, with the shells' output still coming in
+	- ID: 2026102407065855
+	- Type: Bug
+	- Status: Waiting on automated testing
+	- Needs local test suite run?: The gate step, in the container as usual, which runs ErzCQC2 in stage 3.
+	- Severity: Low
+	- Opened: 20261024-070658
+	- Opened by: CC
+	- Related IDs: 2026102321230038, 2026102407065861
+	- Target OS: Linux
+	- Test environment: b23 at load 42 to 52, with 8 cores also loaded, llvmpipe
+	- Steps to reproduce:
+		- Run `cicd/tests/allocs/run.bash` (ErzCQC2) on a box at load 50 or so.
+	- Incorrect behavior: "at rest: 15552 per frame, limit 178", and 3914 on the next run. The old and the new drag both failed it the same way.
+	- Expected behavior: The at-rest check counts frames at rest, at any load.
+	- Reproduced: 20261024, 2 runs in a row at load 52. At load 30 to 42 it passed 6 times.
+		- 20261024: again with the test and 24 busy loops on the same 8 cores, at 13511, 15852, 3073 and 634.
+	- Possible cause: The test waits 6 s after the window is up before it counts. At that load the 3 shells' 400 colored lines each are still being drawn, so the window isn't at rest yet. The drag check can also see as few as 9 frames there, against its floor of 6.
+	- Actual cause:
+		- Two launch steps were still going 6 s after the window was up:
+			- The shells' output was still easing in, at 1 or 2 frames a second, up to about 20 s after launch.
+			- The shell scan starts 3 s after the window shows. Under load it came back later, and folding it in, which rewrites the config, made about 87000 allocations between two frames.
+		- Either one in the counted 4 s fails the check. The scan alone did it in runs where the output had already settled.
+	- Actual fix:
+		- `SILK_ALLOCS` now ends each frame's line with what it was drawn for (`for cursor`, `for rebuild+scroll+cursor` and so on), and prints a line when the shell scan is folded in.
+		- The test waits, up to 60 s, for that line and then 5 frames in a row drawn for the cursor alone. It counts until it has 20 frames or 20 s have passed, at least 4 s. A window that never comes to rest fails a check of its own.
+	- Verified: 20261024, with the test and 24 busy loops on the same 8 cores, box load 12 to 72: the new at-rest check passed 10 runs in a row, at 170 to 173. The old count, alternated with it on the same build, failed 3 of 3. With no extra load it passed at 167.
+		- `a_frame_cause_prints_the_words_the_window_test_reads` (EtcxfWd) passes. Unit suite, clippy for Linux and Windows, fmt, shellcheck and the test ID check pass.
+	- Swept: every reader of the `[allocs]` lines. Only ErzCQC2 reads them, and its drag count takes the new line shape too. The drag starts after the count at rest, so it waits for rest as well.
+	- Branch: rnd1024
+	- Test case: ErzCQC2 itself, and EtcxfWd for the words it reads. The old count failing under load and the new one passing are under Verified.
+
+- A drag select recomposes the minimap about 11 times a second, though the map shows no selection
+	- ID: 2026102407065861
+	- Type: Enhancement
+	- Status: Waiting on automated testing
+	- Needs local test suite run?: A full run, for the scroll harness, since `Pane::build` and the frame loop changed. The gate step runs ErzCQC2.
+	- Needs hand testing: With the map on, a drag select, a link hover, typing on the prompt line and a color change in Settings, all in a real window.
+	- Priority: Low
+	- Opened: 20261024-070658
+	- Opened by: CC
+	- Related IDs: 2026102321230038, 2026102407065855
+	- Target OS: All
+	- Requirements:
+		- A pane rebuild that changes nothing the map shows, such as a selection change, doesn't recompose the map.
+		- Typing on the prompt line, output, a scroll, a resize and a color change still reach the map.
+	- Notes:
+		- `Pane::build` calls `map.update` on every forced rebuild, and that composes whenever the 90 ms gap is up. A drag rebuilds every frame, so the map composes on every frame past the gap: about 20 allocations a time on b23, and the compose's own CPU.
+		- The due compose is also what picks up a changed screen row with no new history, so skipping it needs some other sign the screen's text changed. `last_rows` already holds a hash per row.
+		- ErzCQC2's drag limit has the compose in every frame, so this lowers its figure.
+	- Decisions:
+		- 20261024: Done by where the rebuild comes from, not by a hash of the screen. A moved selection and a link hover probe now mark the window with their own flag. The panes draw again as before, but the map is only updated for the window's other causes, a pane's own output and its scroll. So typing, output, a scroll, a resize and a color change take the same path to the map as before.
+	- Progress log:
+		- 20261024: The selection alone wasn't enough. A pointer moving over text also starts a link hover probe, which marked the whole window, so both panes still composed on every drag frame. The hover probe takes the same flag now.
+	- Verified: 20261024, with a compose logged for the run, a drag frame under load composed both panes every frame before and none after, bar the press. ErzCQC2's drag frame read 315 and 317 with 8 cores loaded, against 333 to 370 before, and 327 idle against 332. With the map off it reads 321. Unit suite, clippy for Linux and Windows, fmt and shellcheck pass.
+	- Swept: every `state.dirty` set on a pointer move. The thumb and map drags move the view, and a divider drag and a pane drag change the layout, so they still compose. The menu, tab and bar hovers don't touch a pane. The wake after a frame looks at the new flag too.
+	- Branch: rnd1024
+	- Test case: ErzCQC2's drag figure, under Verified. The limit stays 360, since the saving is about 5% and the 2026102321230038 margin was set by load.
+
 - Add a contributor license agreement, like nano-git-db's
 	- ID: 2026101906582193
 	- Type: Task
@@ -636,25 +695,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Split from 2026101714445005. Its heap-growth test covers some of the same actions in-process. This one is for what that can't reach: windows, tabs and splits opened and closed, the GPU, the Settings dialog and a real PTY.
 		- `cicd/tests/allocs/run.bash` already drives a window on a private Xvfb.
 
-- The allocations per frame test fails its at-rest limit at load 50 or so, with the shells' output still coming in
-	- ID: 2026102407065855
-	- Type: Bug
-	- Status: Queued
-	- Severity: Low
-	- Opened: 20261024-070658
-	- Opened by: CC
-	- Related IDs: 2026102321230038
-	- Target OS: Linux
-	- Test environment: b23 at load 42 to 52, with 8 cores also loaded, llvmpipe
-	- Steps to reproduce:
-		- Run `cicd/tests/allocs/run.bash` (ErzCQC2) on a box at load 50 or so.
-	- Incorrect behavior: "at rest: 15552 per frame, limit 178", and 3914 on the next run. The old and the new drag both failed it the same way.
-	- Expected behavior: The at-rest check counts frames at rest, at any load.
-	- Reproduced: 20261024, 2 runs in a row at load 52. At load 30 to 42 it passed 6 times.
-	- Possible cause: The test waits 6 s after the window is up before it counts. At that load the 3 shells' 400 colored lines each are still being drawn, so the window isn't at rest yet. The drag check can also see as few as 9 frames there, against its floor of 6.
-	- Notes:
-		- Found while working 2026102321230038.
-
 - Wayland: a copy a program sends while no SilkTerm window has focus is dropped
 	- ID: 2026101607585700
 	- Type: Enhancement
@@ -684,23 +724,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- The Windows GUI scenarios and the scroll harness turn off only with `--quick`, and dpirand only with `DPIRAND_SECS=0` in config.bash.
 	- Notes:
 		- Not every stage needs its own flag. A few grouped ones may do, such as one for the lints and one for the script tests.
-
-- A drag select recomposes the minimap about 11 times a second, though the map shows no selection
-	- ID: 2026102407065861
-	- Type: Enhancement
-	- Status: Queued
-	- Priority: Low
-	- Opened: 20261024-070658
-	- Opened by: CC
-	- Related IDs: 2026102321230038
-	- Target OS: All
-	- Requirements:
-		- A pane rebuild that changes nothing the map shows, such as a selection change, doesn't recompose the map.
-		- Typing on the prompt line, output, a scroll, a resize and a color change still reach the map.
-	- Notes:
-		- `Pane::build` calls `map.update` on every forced rebuild, and that composes whenever the 90 ms gap is up. A drag rebuilds every frame, so the map composes on every frame past the gap: about 20 allocations a time on b23, and the compose's own CPU.
-		- The due compose is also what picks up a changed screen row with no new history, so skipping it needs some other sign the screen's text changed. `last_rows` already holds a hash per row.
-		- ErzCQC2's drag limit has the compose in every frame, so this lowers its figure.
 
 - The nightly warns that silkterm's `Send` check on wgpu's types passes the recursion limit, which a later Rust makes an error
 	- ID: 2026102321073303
