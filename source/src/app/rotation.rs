@@ -249,6 +249,7 @@ mod tests {
 	// the picture on screen. Rotation turned back on picks too.
 	// Test ID: EsaCcCA
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn only_a_new_folder_picks_a_new_picture() {
 		let at = |folder: &str| crate::config::Settings {
 			wallpaper_enabled: true,

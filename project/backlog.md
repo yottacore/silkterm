@@ -603,17 +603,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Test case: None new. The ignores are test attributes, checked by the runs above.
 	- Branch: rnd1023
 
-- Leak checks: Miri sort, pane and app
-	- ID: 2026102407430377
-	- Type: Task
-	- Status: Queued
-	- Priority: Avg
-	- Opened: 20261024-074303
-	- Opened by: CC
-	- Parent ID: 2026102320591313
-	- Requirements:
-		- The parent's requirements, for the 262 tests in `pane` and `app`.
-
 - Leak checks: Miri sort, config
 	- ID: 2026102407430379
 	- Type: Task
@@ -766,6 +755,26 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- The Windows GUI scenarios and the scroll harness turn off only with `--quick`, and dpirand only with `DPIRAND_SECS=0` in config.bash.
 	- Notes:
 		- Not every stage needs its own flag. A few grouped ones may do, such as one for the lints and one for the script tests.
+
+- Leak checks: Miri sort, pane and app
+	- ID: 2026102407430377
+	- Type: Task
+	- Status: Done
+	- Priority: Avg
+	- Opened: 20261024-074303
+	- Opened by: CC
+	- Parent ID: 2026102320591313
+	- Requirements:
+		- The parent's requirements, for the 262 tests in `pane` and `app`.
+	- Progress log:
+		- 20261024: Each test run alone under Miri, against the slow bar of 60 s of CPU time. 199 passed. 59 are too slow under Miri and are ignored as that: 37 in pane (26 in its own tests, 9 in replay, 2 in vhist_probe) and 22 in app, 6 of them in rating. 2 start a process, since they run the test binary again to read an env switch at startup, and are ignored as that. 2 were already ignored for needing a recording.
+		- 20261024: One idle test ran out the 400 s wall backstop at a load of about 50 without reaching the bar. Run again alone, it hit the bar in 75 s, so it's slow, not stuck.
+		- 20261024: Miri reported no UB and no leak.
+	- Verified: 20261024. The 61 new ignores each show as ignored under Miri. The silkterm unit suite passes in a plain run (1407 passed, 3 ignored). fmt check, clippy for Linux on the workspace with all targets.
+	- Swept: the 262 tests above.
+	- Test case: None new. The ignores are test attributes, checked by the runs above.
+	- Branch: rnd1024
+	- Closed: 20261024-090832
 
 - Leak checks: Miri sort, modules palette to xmp, and knobs
 	- ID: 2026102407430375

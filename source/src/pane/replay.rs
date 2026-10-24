@@ -324,6 +324,7 @@ fn run(r: &mut Replay, cmd: &str, out: &str) -> (Frame, Frame) {
 
 // Test ID: Esib1t0
 #[test]
+#[cfg_attr(miri, ignore = "too slow under Miri")]
 fn a_prompt_coming_back_under_blesh_pops_in() {
 	let _g = config::test_store_lock();
 	config::update(config::Settings::default());
@@ -363,6 +364,7 @@ fn a_prompt_coming_back_under_blesh_pops_in() {
 
 // Test ID: Esib1y3
 #[test]
+#[cfg_attr(miri, ignore = "too slow under Miri")]
 fn blesh_redrawing_its_prompt_pops_in() {
 	let _g = config::test_store_lock();
 	config::update(config::Settings::default());
@@ -402,6 +404,7 @@ fn blesh_redrawing_its_prompt_pops_in() {
 
 // Test ID: Esib22C
 #[test]
+#[cfg_attr(miri, ignore = "too slow under Miri")]
 fn a_listing_repeated_under_a_plain_prompt_pops_in() {
 	let _g = config::test_store_lock();
 	config::update(config::Settings::default());
@@ -420,6 +423,7 @@ fn a_listing_repeated_under_a_plain_prompt_pops_in() {
 
 // Test ID: Esib26L
 #[test]
+#[cfg_attr(miri, ignore = "too slow under Miri")]
 fn a_table_redraw_snaps_and_a_prompt_still_eases() {
 	let _g = config::test_store_lock();
 	config::update(config::Settings::default());
@@ -461,6 +465,7 @@ fn a_table_redraw_snaps_and_a_prompt_still_eases() {
 
 // Test ID: Esib2AU
 #[test]
+#[cfg_attr(miri, ignore = "too slow under Miri")]
 fn a_burst_still_easing_is_at_rest_on_the_alt_screen() {
 	let _g = config::test_store_lock();
 	config::update(config::Settings::default());
@@ -487,6 +492,7 @@ fn a_burst_still_easing_is_at_rest_on_the_alt_screen() {
 
 // Test ID: EsiiYQ2
 #[test]
+#[cfg_attr(miri, ignore = "too slow under Miri")]
 fn a_prompt_drawn_across_two_reads_pops_in() {
 	// A read can end anywhere in what ble.sh writes, and a frame can fall in
 	// between, so every split of the prompt and of its redraw is tried, with the
@@ -520,6 +526,7 @@ fn a_prompt_drawn_across_two_reads_pops_in() {
 
 // Test ID: Esiikpm
 #[test]
+#[cfg_attr(miri, ignore = "too slow under Miri")]
 fn a_prompt_redrawn_right_after_a_resize_pops_in() {
 	// The minimap column coming back as a program exits is a relayout, which
 	// drops the snapshot a slide is judged against. ble.sh redraws its prompt
@@ -598,6 +605,7 @@ fn tmux_clear(lines: usize, how: &str) -> String {
 
 // Test ID: EstO7ww
 #[test]
+#[cfg_attr(miri, ignore = "too slow under Miri")]
 fn a_clear_inside_tmux_shows_at_once() {
 	// 2026101611321631. tmux keeps the outer terminal on the alt screen and
 	// redraws its pane itself, so the clear arrives as a region scrolled away
@@ -646,6 +654,7 @@ fn a_clear_inside_tmux_shows_at_once() {
 
 // Test ID: EstO8Ff
 #[test]
+#[cfg_attr(miri, ignore = "too slow under Miri")]
 fn output_inside_tmux_still_slides() {
 	// What 2026101611321631 had to keep: a burst scrolls the pane away whole
 	// too, and a line at a time scrolls it by one.

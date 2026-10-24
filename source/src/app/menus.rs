@@ -1764,6 +1764,7 @@ mod tests {
 	// never three dots.
 	// Test ID: Er2UvPm
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_row_that_asks_for_more_ends_in_a_real_ellipsis() {
 		use crate::ui_spec::{Key, Kind};
 		let spec = crate::ui_spec::ui()

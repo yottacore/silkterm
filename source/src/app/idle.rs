@@ -533,6 +533,7 @@ mod tests {
 	// copy of this test binary, since the answer is cached per process.
 	// Test ID: ErgPfvU
 	#[test]
+	#[cfg_attr(miri, ignore = "Miri can't start a process")]
 	fn the_idle_wait_switch_is_read_once() {
 		let out = std::process::Command::new(std::env::current_exe().unwrap())
 			.args([
@@ -631,6 +632,7 @@ mod tests {
 	// again elsewhere is how a veto gets forgotten.
 	// Test ID: Eq8b2Gu
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_idle_release_waits_on_the_window_and_only_an_unwatched_one() {
 		let since = Instant::now();
 		let idle = |focused, hidden| Idle {
@@ -697,6 +699,7 @@ mod tests {
 	// out of sight, and only then for the hidden wait.
 	// Test ID: ErksiLn
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_window_that_would_go_blank_is_never_let_go_in_view() {
 		let since = Instant::now();
 		let cfg = config::Settings {
@@ -798,6 +801,7 @@ mod tests {
 	// desktop calls it covered as well makes no difference.
 	// Test ID: ErsV4Jy
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_minimized_window_takes_the_hidden_wait() {
 		let since = Instant::now();
 		let cfg = config::Settings {

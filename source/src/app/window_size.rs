@@ -1470,6 +1470,7 @@ mod tests {
 	// monitor also read back to the cm, which named a monitor with another size.
 	// Test ID: EsDZDNJ
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_window_herded_off_a_monitor_and_back_takes_its_size_again() {
 		use crate::config::{KeptWindow, MonitorSize, Settings, remembered_window};
 		let t0 = Instant::now();
@@ -1746,6 +1747,7 @@ mod tests {
 	// Settings, unless --persist asks for the usual saves.
 	// Test ID: EsthbIT
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_size_or_font_from_the_command_line_saves_nothing_until_changed_in_settings() {
 		use super::{CliSize, hand_back, saves_size};
 		use crate::config::Settings;
@@ -1824,6 +1826,7 @@ mod tests {
 	// command line asked for a size or fullscreen of its own.
 	// Test ID: ErPSaVM
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_window_left_maximized_opens_maximized() {
 		use crate::cli::WindowOpts;
 		let mut s = crate::config::Settings::default();

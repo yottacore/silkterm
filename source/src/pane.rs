@@ -5487,6 +5487,7 @@ mod tests {
 
 	// Test ID: EloGKCm
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn no_scrollbar_without_scrollback_or_on_the_alt_screen() {
 		let mut cfg = crate::config::Settings {
 			scrollbar: true,
@@ -6264,6 +6265,7 @@ mod tests {
 	// shipped rate keeps that same one second cycle.
 	// Test ID: EsDSBcQ
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_blink_rate_is_one_whole_cycle_peak_to_peak() {
 		let shipped = crate::config::Settings::default();
 		assert_eq!(shipped.cursor_blink_rate_s, 1.0);
@@ -7348,6 +7350,7 @@ mod tests {
 
 	// Test ID: EorTe2M
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn strip_rows_style_the_rows_the_engine_kept() {
 		// alt screen, no scrollback: the rows a scroll pushes off come back styled
 		// for the strip, in screen order, in the color they were drawn in
@@ -7399,6 +7402,7 @@ mod tests {
 
 	// Test ID: EqAQm2a
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_slide_survives_nanos_odd_region_step() {
 		// nano scrolling up: ncurses scrolls the edit window (rows 2 to 45 of 48)
 		// and, whenever the line leaving it is blank, the blank status row under
@@ -7483,6 +7487,7 @@ mod tests {
 
 	// Test ID: EqLbxfU
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_box_growing_into_blank_rows_by_insert_line_pops_in() {
 		// muffer's input box taking a paste: insert-line pushes the border and
 		// footer down into rows that were blank, which the engine records as a
@@ -7580,6 +7585,7 @@ mod tests {
 
 	// Test ID: EqLgrmK
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_pager_scrolling_back_is_not_room() {
 		// less (and man) answer a step back by clearing the prompt row, then a
 		// reverse index at the top, then the prompt again, all in one write. The
@@ -7919,6 +7925,7 @@ mod tests {
 	// still does not take it as a slide.
 	// Test ID: EqHIGdN
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_clear_is_instant_at_a_full_scrollback_too() {
 		let _g = config::test_store_lock();
 		config::update(config::Settings::default());
@@ -8013,6 +8020,7 @@ mod tests {
 	// on every run.
 	// Test ID: EscSd2Y
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_clear_shows_at_once_and_only_what_follows_it_eases() {
 		let _g = config::test_store_lock();
 		config::update(config::Settings::default());
@@ -8069,6 +8077,7 @@ mod tests {
 	// clear, into the screen the clear took away.
 	// Test ID: EscSd7l
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_ease_floor_does_not_reach_back_past_a_clear() {
 		let _g = config::test_store_lock();
 		config::update(config::Settings {
@@ -8104,6 +8113,7 @@ mod tests {
 
 	// Test ID: EsdYO1M
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_prompt_ble_redraws_after_a_clear_shows_at_once() {
 		let _g = config::test_store_lock();
 		config::update(config::Settings::default());
@@ -8142,6 +8152,7 @@ mod tests {
 	// under way are part of that ease.
 	// Test ID: EsdYO5h
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn blank_lines_that_move_ink_still_ease() {
 		let _g = config::test_store_lock();
 		config::update(config::Settings::default());
@@ -8199,6 +8210,7 @@ mod tests {
 
 	// Test ID: EscGnYG
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_flatpak_table_taller_than_the_screen_is_not_eased() {
 		let _g = config::test_store_lock();
 		config::update(config::Settings::default());
@@ -8397,6 +8409,7 @@ mod tests {
 
 	// Test ID: EqHIGdO
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	#[cfg_attr(
 		silk_asan,
 		ignore = "ASan's checks change what each half costs, so the ratio means nothing"
@@ -8491,6 +8504,7 @@ mod tests {
 
 	// Test ID: Ep3UXRI
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_scroll_of_blank_rows_is_not_slid() {
 		// ble.sh, after a command: two linefeeds, then insert- and delete-line on
 		// the blank rows under the cursor to make room for the prompt. The engine
@@ -8792,6 +8806,7 @@ mod tests {
 
 	// Test ID: Em1S9yw
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_url_in_the_grid_maps_back_to_the_cells_it_occupies() {
 		let term = term_fed(40, 4, 100, "see http://example.com/x now");
 		let hit = link_probe(&term, 40, 4, 0, 8).expect("link under the pointer");
@@ -8810,6 +8825,7 @@ mod tests {
 	// nothing, depending on where the break fell.
 	// Test ID: Em1S9yx
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_wrapped_url_is_found_whole_from_either_half() {
 		let cols = 20;
 		let term = term_fed(cols, 4, 100, "https://example.com/ab");
@@ -8826,6 +8842,7 @@ mod tests {
 	// clamping there would underline a link the pointer is not on.
 	// Test ID: Em1S9yy
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_margin_is_over_no_link() {
 		let term = term_fed(40, 4, 100, "http://example.com/x");
 		let settings = config::Settings::default();
@@ -8922,6 +8939,7 @@ mod tests {
 		// span it comes back with indexes straight into the row.
 		// Test ID: EpQN0oN
 		#[test]
+		#[cfg_attr(miri, ignore = "too slow under Miri")]
 		fn a_selected_pair_stays_inside_its_row() {
 			const PAIRS: [(char, char); 5] =
 				[('(', ')'), ('[', ']'), ('{', '}'), ('"', '"'), ('\'', '\'')];
@@ -9001,6 +9019,7 @@ mod tests {
 	// nano's title and status bars are drawn bold - unless the setting says not.
 	// Test ID: Er2VGX3
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn inverse_video_is_drawn_bold_unless_turned_off() {
 		let term = term_fed(8, 2, 100, "\x1b[7mX\x1b[0mY");
 		let grid = term.grid();
@@ -9028,6 +9047,7 @@ mod tests {
 	// full-screen app owns, ignore them.
 	// Test ID: Er2VGX4
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_block_cursor_takes_its_size_from_the_settings() {
 		let _g = config::test_store_lock();
 		config::update(config::Settings {
@@ -9196,6 +9216,7 @@ mod tests {
 	// call itself is what is pinned.
 	// Test ID: Er2VGX8
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn arming_a_copy_waits_for_the_term_instead_of_giving_up() {
 		// a Windows checkout has CRLF line ends, and a body left uncut runs on into
 		// code that does try the lock
@@ -9315,6 +9336,7 @@ mod tests {
 	// the old screen in from below. Ordinary output after it still eases.
 	// Test ID: Er2VGXC
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn an_alt_screen_exit_hands_back_its_depth_without_easing() {
 		let _g = config::test_store_lock();
 		config::update(config::Settings::default());
@@ -9342,6 +9364,7 @@ mod tests {
 	// when it was hidden is gone too.
 	// Test ID: Er2VGXD
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_frozen_pane_catches_up_without_motion() {
 		let _g = config::test_store_lock();
 		config::update(config::Settings::default());
@@ -9416,6 +9439,7 @@ mod tests {
 	// column when there is one, which used to carry a bar of its own.
 	// Test ID: Er2VGXG
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_scrollbar_sits_at_the_far_edge_past_the_minimap() {
 		let full = Rect {
 			x: 10.0,
@@ -9453,6 +9477,7 @@ mod tests {
 	// else kept, while the text drawn on top keeps its bold.
 	// Test ID: Er2VGXH
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_glow_source_loses_bold_and_nothing_else() {
 		let base = mono_attrs();
 		let mut bold = base.clone();
@@ -9508,6 +9533,7 @@ mod tests {
 	// it: the bottom line went invisible while the cursor still moved.
 	// Test ID: Er2VGXJ
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_bottom_row_survives_an_exact_multiple_height() {
 		let mut ctx = crate::text::TextCtx::new_cpu(1.0);
 		if !matches!(mono_attrs().family, glyphon::Family::Name(_)) {

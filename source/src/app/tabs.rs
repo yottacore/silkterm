@@ -926,6 +926,7 @@ mod tests {
 	// with nothing on screen changing.
 	// Test ID: Erlb8mF
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn idle_frames_build_no_tab_labels() {
 		let mut text = TextCtx::new_cpu(1.0);
 		let settings = label_settings("Work shell");
@@ -947,6 +948,7 @@ mod tests {
 	// something else happened.
 	// Test ID: Erlb98Q
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_tab_label_builds_again_when_what_it_shows_moves() {
 		use crate::term::Task;
 		let mut text = TextCtx::new_cpu(1.0);
@@ -1017,6 +1019,7 @@ mod tests {
 	// label kept by position has to follow its tab, not stay in the slot.
 	// Test ID: ErsV4PO
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_new_tab_goes_next_to_the_current_one() {
 		use super::{active_after_close, insert_tab};
 		let mut list = vec![0, 1, 2, 3];

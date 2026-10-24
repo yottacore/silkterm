@@ -5948,6 +5948,7 @@ mod tests {
 	// child copy of this test binary, since the answers are cached per process.
 	// Test ID: Erg4k2j
 	#[test]
+	#[cfg_attr(miri, ignore = "Miri can't start a process")]
 	fn each_debug_switch_reads_its_own_variable() {
 		for set in super::EnvFlag::ALL {
 			let mut child = std::process::Command::new(std::env::current_exe().unwrap());
@@ -6095,6 +6096,7 @@ mod tests {
 	// and the only direct write left is the reply the terminal owes the program.
 	// Test ID: EpHQ61Q
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_read_only_pane_takes_nothing_the_user_sent() {
 		// this file and the ones under app/, each above its own tests
 		let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/app");
@@ -6133,6 +6135,7 @@ mod tests {
 	// So: the same geometry at 2x must come out at twice the size, everywhere.
 	// Test ID: EnLuU52
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_chrome_doubles_when_the_display_does() {
 		// the tab's close button, measured against a bar that has itself doubled
 		let one = tab_close_box(0.0, 200.0, 0.0, 30.0, 1.0);
@@ -6359,6 +6362,7 @@ mod tests {
 	// The default shell is the first entry switched on, not the first entry.
 	// Test ID: Er2VLed
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_default_shell_is_the_first_active_entry() {
 		let _store = config::test_store_lock();
 		let saved = config::settings();
