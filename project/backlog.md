@@ -118,6 +118,68 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Notes:
 		- It measures far too slow (see 2026101714445004). The leak checks are on in a default full run since 10-22, so `--leakcheck` alone no longer keeps it out.
 
+- Updates to CICD script flags
+	- ID: 2026101816103601
+	- Type: Enhancement
+	- Status: Waiting on UAT
+		- The full run that passed had publish, dogfood and the demo off, per the round's line, so it is not quite a run with no options.
+	- Needs hand testing: OK the 20261023 run below as the no-options check, or run one with publish, dogfood and the demo on.
+	- Priority: Avg
+	- Opened: 20261018-161036
+	- Opened by: JC
+	- Target OS: All
+	- Requirements:
+		- `--ci`: Rename *to* `--gate`.
+		- `--quick`:
+			- Should run whatever linting, validation, and testing steps are very quick.
+			- Cross-compile whatever is fast; e.g. maybe skip slow arm64.
+			- Skip anything requiring an external host.
+		- No flags by default should do everything.
+		- The other existing flags can stay.
+	- Notes:
+		- Pre-next-cut. Do next.
+	- Decisions:
+		- 20261018: The demo re-record is on by default now, with a new `--no-demo`. `--demo` still turns it on under `--quick`.
+		- 20261018: `--quick` keeps the remote sync and the publish. Only the test and build boxes count as external hosts.
+		- 20261018: `--gate` keeps its name. Nothing was named `--ci`.
+	- Progress log:
+		- 20261018: `--quick` now builds the Windows x86_64 release too, and drops only the ARM64 ones. Packages, profiling and the fuzz soak stay skipped.
+		- 20261018: `--quick` also skips the 5 window tests that took 33 s to 103 s each here: monwl, mapfollow, livecfg, wpresize and wpkept. The other 9 took 22 s or less, and the script tests 17 s or less.
+		- 20261018: The test boxes were already skipped under `--quick`: the Windows scenarios and the private runner. The script tests that look like they reach a host all use stand-ins.
+		- 20261018: The plan lists the demo now.
+		- 20261022: Both no-options full runs failed, on other things. The container one passed stages 1 to 6 and the Windows scenarios, then failed in the private runner on b26, on 2026102114411311's test. The plain one failed at mapfollow's tmux checks under a tmux wrapper earlier on that shell's PATH; with the real tmux first they pass. The Mac failure needs fixing before a full run can pass.
+		- 20261023: A full container run, `-y --no-publish --no-dogfood --no-demo`, passed end to end at 2da75a7 in about 91 minutes. Its plan had every other stage on, the ARM64 builds, packages and the profiler included. The private runner's Mac part passed on b26. Its store part skipped, since vm925w was held by another session, and so did the Windows scenarios.
+	- Verified: 20261018. shellcheck, house style, the pipeline step, container run, docs and hooks tests. A real `--gate` run passed.
+	- Test case: New cases in `cicd/tests/engine/run.bash` (Er2UgY7) for `--quick`, no options, `--no-demo` and `--gate`. The `--container` run in `cicd/tests/container/run.bash` (EsJg9EF) now expects the Windows x86_64 binary under `--quick`, and failed until its stand-in made one.
+	- Branch: ciflags
+
+- `the_scroll_record_costs_a_full_screen_program_little` failed once on the Mac runner
+	- ID: 2026102113432602
+	- Type: Bug
+	- Status: Waiting on UAT
+		- 6 Mac CI runs in a row passed it since 20261022, against 3 failures in the 7 before. The cause was never found. Close it as Can't reproduce, or keep it open. Mac CI runs on every push to dev, so a new failure would show its numbers.
+	- Severity: Low
+	- Opened: 20261021-134326
+	- Opened by: CC
+	- Assigned to: CC
+	- Related IDs: 2026102113432600, 2026100714145220
+	- Target OS: macOS
+	- Test environment: GitHub macos-15, arm64, 3 cores
+	- Reproduced: 3 of the 7 full Mac runs to 20261022 16:04 UTC failed it (runs 39667988647, 39709345533, 39810794398). Each time it passed when run again alone, in under a second. No failure kept its numbers.
+	- Possible cause: Memory traffic from the tests running beside it. The test times by the thread's own CPU time, which leaves out waiting for a core but not cache misses. Keeping rows cycles 128 rows of 160 cells, so each scrolled line writes a row last touched 128 lines ago. The bare side reuses rows still in cache. On b23, on 3 pinned cores, the median was 1.02 to 1.07 alone, 1.04 to 1.07 beside 3 CPU-bound loops, and 1.06 to 1.14 beside 3 memory-bound ones, failing 2 of 10 runs there. Bare against bare under the same memory load stayed 0.98 to 1.02, so the pairing is fair and the extra cost is the kept side's. An M1's cores share an L2 per cluster, and the suite runs on all 3 cores, so it may well be more there. Not confirmed on the Mac.
+	- Notes:
+		- Ruled out: the Mac's clock. macOS reads it from `__thread_selfusage()` in mach ticks, about 42 ns on an M1, against runs of about 40 ms. An Apple forum thread reports some M1 Macs leaving out the tick conversion, about 41.7 times too small, but a constant factor cancels in a ratio.
+		- The copy this test was made for cost 28 to 35% here, and the pointer check catches it with no timing at all. The 10% limit is unchanged.
+		- If the Mac shows a steady gap over 10%, the options are to run this test apart from the suite, or to judge the keep cost against something the neighbours slow down as much. Neither is done yet.
+	- Progress log:
+		- 20261022: The failure text never reached the CI log. `ci-mac.bash` now prints each failed test's panic text from the first run, runs the failed tests again with their output shown, and prints every `measured:` line a test writes. The test writes its ratios and each pair's times that way, and puts the times in its failure message too.
+		- 20261022: Mac CI run 39842974082 on rnd1022 passed it. Median 1.005 over 15 pairs, from 0.766 to 1.211. Kept was above bare in 9 of 15 pairs, each by a little. The big swings were on the bare side, 24.5 against 32.0 and 23.3 against 27.7 ms, which reads more like the core or host changing than a steady keep cost. One run, so not settled. The run failed on another test, filed on 2026102114411311.
+		- 20261022: Mac CI run 39858608191 passed it again. Median 1.038, pairs from 0.841 to 2.112, kept above bare in 10 of 15.
+		- 20261023: Mac CI runs 39859635085, 40049932196, 40051324149 and 40062142185 passed it. Medians 1.008, 1.032, 1.035 and 1.032, with kept above bare in 8, 9, 15 and 9 of 15 pairs. 40051324149 had tight pairs, about 20.2 against 19.4 ms, which is the steady keep cost seen on b23. It failed on the header test, 2026102320070112. The private runner's run on b26 in the full run passed it too.
+	- Verified: `ci-mac.bash`'s extraction on a test binary with a failing assert, a multi-line `assert_eq!` and a `measured:` line. shellcheck, fmt, clippy on Linux, Windows and macOS targets. The test passes here and prints the new line.
+	- Branch: rnd1022
+	- Test case: `the_scroll_record_costs_a_full_screen_program_little` (EqHIGdO), message only.
+
 - The window doesn't paint while the GPU is busy or short on memory, and stays blank after the load ends
 	- ID: 2026100312470535
 	- Type: Bug
@@ -160,37 +222,12 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261003: Also seen in both builds with Free resources when idle on, under load: after waking, the window sometimes showed only the last character of the prompt instead of the earlier text, until typed into.
 		- 20261003: Not covered: the Windows terminal draws through wgpu on Vulkan, or DX12 with Transparency, not the X11 GL swap b23 uses, so the failed swap path was never reached. vm925w has no WSL2, so there was no run through Mesa on the same GPU.
 		- 20261003: The black window and the missing text seen in both builds are filed as 2026100319134501 and 2026100319134502.
+		- 20261023: Both tests passed in the full run at 2da75a7. The b23 look is not done yet. This round had no dogfood or desktop runs.
 	- Swept: every frame and rebuild site. The terminal's acquire and GL swap in `render_with`, reached from both `about_to_wait` and the desktop's redraw. The dialog and notice windows' acquire and swap in `DialogWin::render`. `rebuild_gpu`, which the console-return heal also calls. `grep -n 'begin_frame\|end_frame\|Gfx::rebuild'` finds no others.
 	- Branch: gpuload
 	- Commit: 8cb6a4d
 	- Test case: `a_refused_frame_is_drawn_again_on_a_backoff` (Erfy7et) and `a_refused_rebuild_stays_pending_and_is_tried_again` (Erfy7yk). The GL swap result has no test, since it needs a real GL context.
 	- Note: 20261003, Free resources when idle was on for some of the windows that went blank and off for others. Which ones is not remembered, so both the frame path and the rebuild path stay suspects.
-
-- A container run tries to record the demo inside the image, even with `--no-demo`
-	- ID: 2026102213461534
-	- Type: Bug
-	- Status: Waiting on automated testing
-	- Needs local test suite run?: A full run in the container, `cicd/cicd.bash -y --no-publish --no-dogfood --no-demo`. Its log shows no "recording demo video ..." from the run inside, and the host's stage 7 says "demo video disabled".
-	- Severity: Avg
-	- Opened: 20261022-134615
-	- Opened by: CC
-	- Target OS: Linux
-	- Test environment: b23, `cicd/cicd.bash -y --no-publish --no-dogfood --no-demo`, docker default
-	- Steps to reproduce:
-		- Run a full pipeline in the container with `--no-demo`.
-	- Incorrect behavior: The run inside the image prints "recording demo video ..." in its stage 7 and runs `demo-video.py`. Here it failed on a missing `numpy`, so it only warned: "demo video hook failed (non-fatal)".
-	- Expected behavior: `--no-demo` is honored inside the container too, and the demo, a host step, never runs in the image.
-	- Reproduced: 20261022, run log `test_silkterm-batch_20261022-12464452`, lines 3782 to 3791.
-	- Possible cause: The container's own arguments are `-y --no-sync --no-dogfood --no-publish --no-private` plus `innerArgs`, and `--no-demo` never goes into `innerArgs` (`cicd.bash` line 561). The demo is on by default, so the run inside turns it back on. The same on `dev`, at line 549.
-	- Actual cause: As above. The run inside got every host stage off but the demo, which `DEMO_ENABLE=1` in config.bash turns on. The comment above that line already listed the demo among the stages left out. It ran inside on every full container run, not only with `--no-demo`. With the demo on, it ran twice: in the image, then here.
-	- Progress log:
-		- 20261023: The run inside gets `--no-demo` with the other host stages. The demo runs only on this box, and only when the run here asks for it.
-		- 20261023: The container test's check of the inner command line now expects `--no-demo` after `--no-private`. It was `-y --no-sync --no-dogfood --no-publish --no-private --quick --no-fuzz`, and is `-y --no-sync --no-dogfood --no-publish --no-private --no-demo --quick --no-fuzz`.
-	- Actual fix: `--no-demo` added to the fixed options in `cicd.bash` for the run inside.
-	- Verified: 20261023. The new check failed before the fix and passes after. The container and engine tests, shellcheck at the pipeline's level, the bash style check, `lint-report.bash --check` and the docs check.
-		- Swept: every `fContainerRun` call. The gate, ASan and CodeQL calls run their own script, not the engine's later stages. The rest of the host-only steps: sync, the private runner, dogfood and publish have their flags in the list, and the content scrub, the Windows scenarios and the run log check `SILK_CICD_IN_CONTAINER`. `cicd-win.ps1 -Wsl` starts no container. design.md already says the demo stays outside.
-	- Branch: rnd1023
-	- Test case: `cicd/tests/container/run.bash` (EsJg9EF), "the demo among them, though nothing here asked for it off": the run inside gets `--no-demo` when nothing asked for it.
 
 - Always use automatic remote mode when detected.
 	- ID: 2026101914251764
@@ -199,7 +236,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- The row's label is shorter than the requested name. See Decisions.
 		- 20261023: Back from Waiting on UAT, since the 2 rows below are machine runs.
 	- Needs hand testing: OK the shorter Settings label.
-	- Needs local test suite run?: the slow window tests in a full run. Nothing else here needs one.
 	- Needs external testing: the wingui `wpremote` scenario on vm925w or b29w over a real RDP session with `performance.detect_remote: false`, which should keep the stored profile and the wallpaper. The Windows detection code is unchanged and only compiled here.
 	- Priority: Avg
 	- Opened: 20261019-142517
@@ -221,41 +257,9 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Verified: rustfmt, clippy for Linux, Windows and macOS, the whole silkterm unit test suite (1403 passed, 3 ignored), and the docs and tables checks.
 		- Swept: `remote_session()` has one caller, the launch check. `set_remote` callers are the View menu toggle, the Profile dropdown and tests, all by hand, so none reads the setting.
 		- Not tried in a real window on any system.
+		- 20261023: The slow window tests passed in the full run at 2da75a7, apart from monwl (window size per Wayland output), which skipped without a reason in the log. Both new tests passed there and on b26. Left: the Windows scenario. No Windows box was free this round.
 	- Branch: rnd1022
 	- Test case: `a_remote_screen_is_ignored_when_turned_off` (rating.rs, fails with the check reordered so detection runs first) and `a_remote_screen_takes_remote_unless_turned_off` (config.rs).
-
-- Updates to CICD script flags
-	- ID: 2026101816103601
-	- Type: Enhancement
-	- Status: Waiting on automated testing
-	- Needs local test suite run?: A full pipeline run with no options that passes. The `--quick` arm passed in the gate run on 20261022.
-	- Priority: Avg
-	- Opened: 20261018-161036
-	- Opened by: JC
-	- Target OS: All
-	- Requirements:
-		- `--ci`: Rename *to* `--gate`.
-		- `--quick`:
-			- Should run whatever linting, validation, and testing steps are very quick.
-			- Cross-compile whatever is fast; e.g. maybe skip slow arm64.
-			- Skip anything requiring an external host.
-		- No flags by default should do everything.
-		- The other existing flags can stay.
-	- Notes:
-		- Pre-next-cut. Do next.
-	- Decisions:
-		- 20261018: The demo re-record is on by default now, with a new `--no-demo`. `--demo` still turns it on under `--quick`.
-		- 20261018: `--quick` keeps the remote sync and the publish. Only the test and build boxes count as external hosts.
-		- 20261018: `--gate` keeps its name. Nothing was named `--ci`.
-	- Progress log:
-		- 20261018: `--quick` now builds the Windows x86_64 release too, and drops only the ARM64 ones. Packages, profiling and the fuzz soak stay skipped.
-		- 20261018: `--quick` also skips the 5 window tests that took 33 s to 103 s each here: monwl, mapfollow, livecfg, wpresize and wpkept. The other 9 took 22 s or less, and the script tests 17 s or less.
-		- 20261018: The test boxes were already skipped under `--quick`: the Windows scenarios and the private runner. The script tests that look like they reach a host all use stand-ins.
-		- 20261018: The plan lists the demo now.
-		- 20261022: Both no-options full runs failed, on other things. The container one passed stages 1 to 6 and the Windows scenarios, then failed in the private runner on b26, on 2026102114411311's test. The plain one failed at mapfollow's tmux checks under a tmux wrapper earlier on that shell's PATH; with the real tmux first they pass. The Mac failure needs fixing before a full run can pass.
-	- Verified: 20261018. shellcheck, house style, the pipeline step, container run, docs and hooks tests. A real `--gate` run passed.
-	- Test case: New cases in `cicd/tests/engine/run.bash` (Er2UgY7) for `--quick`, no options, `--no-demo` and `--gate`. The `--container` run in `cicd/tests/container/run.bash` (EsJg9EF) now expects the Windows x86_64 binary under `--quick`, and failed until its stand-in made one.
-	- Branch: ciflags
 
 - Leak checks: advisory scan on every full run, the extra clippy lints, and a SAFETY comment on every unsafe block
 	- ID: 2026101714445001
@@ -278,28 +282,13 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Note: The pipeline lints Linux and Windows only. macOS code is linted here by hand, with `--target x86_64-apple-darwin`.
 		- 20261018: Stage 3 runs clippy for `x86_64-apple-darwin` too, with warnings as errors, after the Windows lints. The target is in rust-toolchain.toml, so the container image gets it. About 23 s here.
 		- 20261022: The advisory scan passed in stage 3 of both full runs, container and plain: "advisories ok", then the scope check (EtBK7tB). Left: the Windows run.
+		- 20261023: The advisory scan, its scope check and the macOS lints passed again in the full run at 2da75a7. The Windows run is still left. No Windows box was free this round.
 	- Decisions:
 		- 20261018: Add a macOS clippy step that fails the pipeline. It adds the x86_64-apple-darwin target to rust-toolchain.toml, so every box and the container image download it.
 	- Verified: clippy `-D warnings` clean for Linux, `x86_64-pc-windows-gnu` and `x86_64-apple-darwin`, and with the profiling feature. Unit suite (1364 + 28), fmt check, docs check.
 	- Test case: The gates themselves, each seen to fail on a planted fault and pass once it was removed. An unsafe block with no SAFETY line in Windows-only and in macOS-only code failed clippy for those targets, and a `mem::forget` failed it on all 3. The advisory scan failed with the ttf-parser ignore taken out, and with an ignore for an advisory not in the tree. The cicd step failed with cargo-deny missing. The macOS step failed on an unused variable planted in macOS-only code, where the Windows lints passed.
 	- Branch: safelint, ciflags
 	- Commit: adee468
-
-- Add a contributor license agreement, like nano-git-db's
-	- ID: 2026101906582193
-	- Type: Task
-	- Status: Waiting on automated testing
-	- Priority: Avg
-	- Opened: 20261019-065821
-	- Opened by: JC
-	- Assigned to: CC
-	- Target OS: All
-	- Requirements:
-		- A `CLA.md`, a section on it in contributing.md, and a check on pull requests that blocks a merge until the author has signed. Same as nano-git-db.
-	- Notes:
-		- Pre-next-cut.
-	- Progress log:
-		- 20261019: `CLA.md`, a section in contributing.md, and `.github/workflows/cla.yml`, the same as nano-git-db's. Owner review on both files. The check still needs a first pull request from someone else to prove it.
 
 - Verify or ensure that builds clean up *stale* artifacts and side-effects after they're done
 	- ID: 2026101909222600
@@ -331,33 +320,12 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261022: Done locally. The gate run's image build removed the old image ("cleanup: removed 1 old container images") and reported the build cache. Full runs: both plans show the Cleanup line. The container one ended "cleanup: nothing stale" inside the image and left no `target/container/tmp/run_*`, then failed in the private runner before the host's own cleanup. The plain one wrote `.cicd-toolchain` and `.cicd-build-dirs` at its start, then failed in stage 3 before its cleanup. Then a container `--quick` run killed in stage 3, which left its `run_20261022-14022525`, and a container and a plain `--quick` run that passed. Each ended "cleanup: nothing stale", no build dir went, and nothing new was left in the test temp dir, `target/container/tmp` or `docker ps -a`. Left: the Windows half.
 		- Left as found: the 343 local and 4 `/tmp` test folders, which no run wrote down; the `tmp.*.ps1` scripts and the b29w test folders on the boxes; the 7 `dash` processes; the remote clones' target dirs, built by hand jobs. The Windows pipeline's own target dir isn't swept yet.
 		- Verified: the four tests below pass, and their new checks failed against the pipeline as it was before.
+		- 20261023: The full run at 2da75a7 ended "cleanup: nothing stale" in the image and on the host, and the cleanup test passed. The Windows half is still left. No Windows box was free this round.
 	- Decisions:
 		- 20261019: No `docker builder prune` after a new image. The build cache isn't a stale leftover, and other projects share it. A run only prints its size.
 	- Branch: sweep
 	- Commit: e2c4556
 	- Test case: `cicd/tests/cleanup/run.bash` (EtAiwUl) and `cicd/tests/cleanup/win.ps1` (EtAiwnM) plant stale folders and build dirs beside fresh ones, other runs' and unlisted ones. Added to `cicd/tests/container/run.bash` (EsJg9EF) and `cicd/tests/wingui/harness-test.bash` (EqH4isr).
-
-- Demo: the cursor goes to 50% width when the cursor size and animation change
-	- ID: 2026092812581720
-	- Type: Enhancement
-	- Status: Waiting on automated testing
-	- Needs external testing: the next demo re-record at release shows the cursor at 50% width in the cursor segment
-	- Priority: Avg
-	- Opened: 20260928-125817
-	- Opened by: JC
-	- Assigned to: CC
-	- Target OS: All
-	- Requirements:
-		- When changing the cursor size and animation, change to 50% width.
-	- Progress log:
-		- 20261022: The cursor scene now goes from the full block to a 50% wide one (`cursor.size.width` is percent of the cell), with the phase animation, in place of the 25% bar. `script.txt` says the same. The gif is not re-recorded, per the decision below.
-		- Verified: the demo test drives the cursor scene and finds width 50 and the phase animation; it failed with the old 25 and passes now. The python lint is clean on both files.
-		- Swept: `script.txt`, the recorder's config comment, scene comment and history, and the docs. Only the cursor scene sets the width on camera; the starting config keeps the 100 block.
-	- Decisions:
-		- 20260928: Held for the release, with the other demo recorder change.
-	- Branch: rnd1022
-	- Test case: `cicd/tests/demo/run.py`, "the cursor scene narrows the cursor to half width".
-	- Closed:
 
 - CI/CD: `--leakcheck` and `--no-leakcheck`
 	- ID: 2026101916054002
@@ -382,6 +350,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261022: `cicd-win.ps1` got `-NoLeakcheck` and `-Leakcheck`, passed on to the Linux half under `-Wsl`. The Windows half has no leak checks.
 		- 20261022: `--help`, the plan, config.bash, install.md, design.md and the dhat comments say so. The plan row on 2026101714445005 is rewritten to match.
 		- 20261022: Full runs, container and plain, no flag: the plan's Leak checks line names the heap-growth test, and stage 3 ran it right after the ASan run. `cicd.bash --no-leakcheck </dev/null` shows the Leak checks line as "(skipped)". The `--quick` arms passed in the gate run. Left: the Windows check.
+		- 20261023: In the full run at 2da75a7, with no flag, stage 3 ran the heap growth check after the ASan run. It caught the planted leak and found no other growth. The `cicd-win.ps1 -Wsl` check is still left. No Windows box was free this round.
 	- Decisions:
 		- 20261022: The engine case that said no options leave the leak checks off now says they're on, per this item's requirements.
 	- Verified: 20261022. Engine cases, each watched to fail against the old cicd.bash and 2 mutants. The plan's Leak checks line with no flag, `--quick`, `--quick --leakcheck` and `-q --no-leakcheck`. shellcheck, house style, PSScriptAnalyzer on `cicd-win.ps1`, cargo check with the feature.
@@ -389,59 +358,47 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Test case: New cases in `cicd/tests/engine/run.bash` (Er2UgY7).
 	- Branch: rnd1022
 
-- Leak checks: the test suite under ThreadSanitizer on every full run
-	- ID: 2026101714445003
+- Add a contributor license agreement, like nano-git-db's
+	- ID: 2026101906582193
 	- Type: Task
-	- Status: Waiting on automated testing
-	- Needs local test suite run?: A full run in the container, to see the step pass through `cicd.bash` with the suppressions, and its time inside a whole run.
+	- Status: Stalled
+		- Held for a first pull request from someone else.
 	- Priority: Avg
-	- Opened: 20261017-144450
-	- Opened by: CC
-	- Parent ID: 2026101714015789
-	- Prereq IDs: 2026101714445002
-	- Related IDs: 2026102320070112
-	- Requirements:
-		- Third-party and vendored code end users run is covered, per the parent's 20261017 decision. What it finds goes on the backlog.
-		- The parent's TSan row.
-	- Progress log:
-		- 20261023: Stage 3 runs the test suite again under TSan, after the leak checks, through `cicd/utility/tsan.bash`. Same nightly and image as the ASan run, with `-Zbuild-std` and `--target x86_64-unknown-linux-gnu`, in `target/tsan-<date>`. A plain run takes the step into the image, and no docker means a warning. `--no-tsan` and `--quick` skip it, and the plan has a TSan line.
-		- 20261023: The sanitizer canary races on purpose too. The step stops unless TSan reports that race by name.
-		- 20261023: The first run found 2 races, both inside Mesa's lavapipe, the software Vulkan the GPU tests use in the image. The GPU tests then showed more of the same in Mesa's LLVM and the Vulkan loader. All are system libraries TSan can't see into, not crates a release binary is built from, so `cicd/tsan-suppressions.txt` lets them through by library. Nothing in our code or a crate.
-		- 20261023: The peak-memory test and the scroll record's cost ratio are ignored under `cfg(silk_tsan)`, as under ASan.
-		- 20261023: The suite took about 28 minutes here at a load of 40 to 47, with 8 test threads. A full run was about 56 minutes before this.
-		- Note: The run also failed `every_script_has_the_license_header_with_history_at_the_bottom`, which fails plain too since the knobs crate went MIT. Filed as 2026102320070112.
-	- Decisions:
-		- 20261023: Report suppressions (`race:` and `deadlock:` by library), not `called_from_lib`. With that on the loader, TSan stopped tracking a lock the loader took, and its unlock then read as a fault in ash.
-	- Verified: 20261023. `tsan.bash` in the image: canary caught, then 1431 passed, 1 failed (the header test above) and 5 ignored, with only the lavapipe reports, which failed the step as they should. With the final suppressions the 18 GPU tests ran clean, and the canary was still caught. A suppression wide enough to hide the canary's race let it pass, which the step refuses. New container cases, watched to fail against 4 mutants of cicd.bash. Engine and cleanup tests, clippy for Linux, fmt, shellcheck, house style, test IDs, docs check.
-	- Swept: every `ASAN_CMD`, `asanInImage`, `fRunAsan` and `--no-asan` site in cicd.bash, config.bash's cleanup list and rar excludes, the `silk_asan` ignores, build.md, prerequisites.md and design.md. `cicd-win.ps1` has no sanitizer flags.
-	- Test case: The canary race EtaER2K, run by the step itself. New cases in `cicd/tests/container/run.bash` (EsJg9EF).
-	- Branch: rnd1023
-
-- `the_scroll_record_costs_a_full_screen_program_little` failed once on the Mac runner
-	- ID: 2026102113432602
-	- Type: Bug
-	- Status: Waiting on automated testing
-	- Needs external testing: More Mac CI runs, until one fails it with its `measured` line, or enough pass to say the failures are gone. The first run with the new step passed (below). Kept times steadily above bare across the pairs point to neighbours' memory traffic, as on b23. One side jumping between pairs points to the core or the host changing instead.
-	- Severity: Low
-	- Opened: 20261021-134326
-	- Opened by: CC
+	- Opened: 20261019-065821
+	- Opened by: JC
 	- Assigned to: CC
-	- Related IDs: 2026102113432600, 2026100714145220
-	- Target OS: macOS
-	- Test environment: GitHub macos-15, arm64, 3 cores
-	- Reproduced: 3 of the 7 full Mac runs to 20261022 16:04 UTC failed it (runs 39667988647, 39709345533, 39810794398). Each time it passed when run again alone, in under a second. No failure kept its numbers.
-	- Possible cause: Memory traffic from the tests running beside it. The test times by the thread's own CPU time, which leaves out waiting for a core but not cache misses. Keeping rows cycles 128 rows of 160 cells, so each scrolled line writes a row last touched 128 lines ago. The bare side reuses rows still in cache. On b23, on 3 pinned cores, the median was 1.02 to 1.07 alone, 1.04 to 1.07 beside 3 CPU-bound loops, and 1.06 to 1.14 beside 3 memory-bound ones, failing 2 of 10 runs there. Bare against bare under the same memory load stayed 0.98 to 1.02, so the pairing is fair and the extra cost is the kept side's. An M1's cores share an L2 per cluster, and the suite runs on all 3 cores, so it may well be more there. Not confirmed on the Mac.
+	- Target OS: All
+	- Requirements:
+		- A `CLA.md`, a section on it in contributing.md, and a check on pull requests that blocks a merge until the author has signed. Same as nano-git-db.
 	- Notes:
-		- Ruled out: the Mac's clock. macOS reads it from `__thread_selfusage()` in mach ticks, about 42 ns on an M1, against runs of about 40 ms. An Apple forum thread reports some M1 Macs leaving out the tick conversion, about 41.7 times too small, but a constant factor cancels in a ratio.
-		- The copy this test was made for cost 28 to 35% here, and the pointer check catches it with no timing at all. The 10% limit is unchanged.
-		- If the Mac shows a steady gap over 10%, the options are to run this test apart from the suite, or to judge the keep cost against something the neighbours slow down as much. Neither is done yet.
+		- Pre-next-cut.
 	- Progress log:
-		- 20261022: The failure text never reached the CI log. `ci-mac.bash` now prints each failed test's panic text from the first run, runs the failed tests again with their output shown, and prints every `measured:` line a test writes. The test writes its ratios and each pair's times that way, and puts the times in its failure message too.
-		- 20261022: Mac CI run 39842974082 on rnd1022 passed it. Median 1.005 over 15 pairs, from 0.766 to 1.211. Kept was above bare in 9 of 15 pairs, each by a little. The big swings were on the bare side, 24.5 against 32.0 and 23.3 against 27.7 ms, which reads more like the core or host changing than a steady keep cost. One run, so not settled. The run failed on another test, filed on 2026102114411311.
-		- 20261022: Mac CI run 39858608191 passed it again. Median 1.038, pairs from 0.841 to 2.112, kept above bare in 10 of 15.
-	- Verified: `ci-mac.bash`'s extraction on a test binary with a failing assert, a multi-line `assert_eq!` and a `measured:` line. shellcheck, fmt, clippy on Linux, Windows and macOS targets. The test passes here and prints the new line.
+		- 20261019: `CLA.md`, a section in contributing.md, and `.github/workflows/cla.yml`, the same as nano-git-db's. Owner review on both files. The check still needs a first pull request from someone else to prove it.
+		- 20261023: Neither a full run nor Mac CI reaches `cla.yml`, which runs only on pull requests.
+
+- Demo: the cursor goes to 50% width when the cursor size and animation change
+	- ID: 2026092812581720
+	- Type: Enhancement
+	- Status: Stalled
+		- Held for the next release's demo re-record.
+	- Needs external testing: the next demo re-record at release shows the cursor at 50% width in the cursor segment
+	- Priority: Avg
+	- Opened: 20260928-125817
+	- Opened by: JC
+	- Assigned to: CC
+	- Target OS: All
+	- Requirements:
+		- When changing the cursor size and animation, change to 50% width.
+	- Progress log:
+		- 20261022: The cursor scene now goes from the full block to a 50% wide one (`cursor.size.width` is percent of the cell), with the phase animation, in place of the 25% bar. `script.txt` says the same. The gif is not re-recorded, per the decision below.
+		- Verified: the demo test drives the cursor scene and finds width 50 and the phase animation; it failed with the old 25 and passes now. The python lint is clean on both files.
+		- Swept: `script.txt`, the recorder's config comment, scene comment and history, and the docs. Only the cursor scene sets the width on camera; the starting config keeps the 100 block.
+		- 20261023: The demo recorder test (EqBe4cC) passed in the full run at 2da75a7.
+	- Decisions:
+		- 20260928: Held for the release, with the other demo recorder change.
 	- Branch: rnd1022
-	- Test case: `the_scroll_record_costs_a_full_screen_program_little` (EqHIGdO), message only.
+	- Test case: `cicd/tests/demo/run.py`, "the cursor scene narrows the cursor to half width".
+	- Closed:
 
 - shcl: a keep-lines save adds a set value as a new line, beside its commented default
 	- ID: 2026100219054510
@@ -1800,6 +1757,34 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Acceptance signoff: Self-closed: the numbers are in the design doc and nothing is left to judge.
 	- Closed: 20261004-194634
 
+- A container run tries to record the demo inside the image, even with `--no-demo`
+	- ID: 2026102213461534
+	- Type: Bug
+	- Status: Done
+	- Severity: Avg
+	- Opened: 20261022-134615
+	- Opened by: CC
+	- Target OS: Linux
+	- Test environment: b23, `cicd/cicd.bash -y --no-publish --no-dogfood --no-demo`, docker default
+	- Steps to reproduce:
+		- Run a full pipeline in the container with `--no-demo`.
+	- Incorrect behavior: The run inside the image prints "recording demo video ..." in its stage 7 and runs `demo-video.py`. Here it failed on a missing `numpy`, so it only warned: "demo video hook failed (non-fatal)".
+	- Expected behavior: `--no-demo` is honored inside the container too, and the demo, a host step, never runs in the image.
+	- Reproduced: 20261022, run log `test_silkterm-batch_20261022-12464452`, lines 3782 to 3791.
+	- Possible cause: The container's own arguments are `-y --no-sync --no-dogfood --no-publish --no-private` plus `innerArgs`, and `--no-demo` never goes into `innerArgs` (`cicd.bash` line 561). The demo is on by default, so the run inside turns it back on. The same on `dev`, at line 549.
+	- Actual cause: As above. The run inside got every host stage off but the demo, which `DEMO_ENABLE=1` in config.bash turns on. The comment above that line already listed the demo among the stages left out. It ran inside on every full container run, not only with `--no-demo`. With the demo on, it ran twice: in the image, then here.
+	- Progress log:
+		- 20261023: The run inside gets `--no-demo` with the other host stages. The demo runs only on this box, and only when the run here asks for it.
+		- 20261023: The container test's check of the inner command line now expects `--no-demo` after `--no-private`. It was `-y --no-sync --no-dogfood --no-publish --no-private --quick --no-fuzz`, and is `-y --no-sync --no-dogfood --no-publish --no-private --no-demo --quick --no-fuzz`.
+		- 20261023: A full container run at 2da75a7 passed end to end. The run inside got `--no-demo`, its plan showed the demo as disabled, and its stage 7 said "demo video disabled". No "recording demo video ..." showed. The host's stage 7 said "demo video disabled" too.
+	- Actual fix: `--no-demo` added to the fixed options in `cicd.bash` for the run inside.
+	- Verified: 20261023. The new check failed before the fix and passes after. The container and engine tests, shellcheck at the pipeline's level, the bash style check, `lint-report.bash --check` and the docs check.
+		- Swept: every `fContainerRun` call. The gate, ASan and CodeQL calls run their own script, not the engine's later stages. The rest of the host-only steps: sync, the private runner, dogfood and publish have their flags in the list, and the content scrub, the Windows scenarios and the run log check `SILK_CICD_IN_CONTAINER`. `cicd-win.ps1 -Wsl` starts no container. design.md already says the demo stays outside.
+	- Branch: rnd1023
+	- Test case: `cicd/tests/container/run.bash` (EsJg9EF), "the demo among them, though nothing here asked for it off": the run inside gets `--no-demo` when nothing asked for it.
+	- Acceptance signoff: Self-closed: the full container run showed the demo off inside and on the host.
+	- Closed: 20261023-230413
+
 - The license header test fails on the knobs crate since it went MIT
 	- ID: 2026102320070112
 	- Type: Bug
@@ -2812,6 +2797,36 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- The Windows run this item came from named only these four. That full suite was not run again.
 	- Acceptance signoff: Self-closed: test fixes only, and all four failed before the fix and pass after on Windows.
 	- Closed: 20260930-125357
+
+- Leak checks: the test suite under ThreadSanitizer on every full run
+	- ID: 2026101714445003
+	- Type: Task
+	- Status: Done
+	- Priority: Avg
+	- Opened: 20261017-144450
+	- Opened by: CC
+	- Parent ID: 2026101714015789
+	- Prereq IDs: 2026101714445002
+	- Related IDs: 2026102320070112
+	- Requirements:
+		- Third-party and vendored code end users run is covered, per the parent's 20261017 decision. What it finds goes on the backlog.
+		- The parent's TSan row.
+	- Progress log:
+		- 20261023: Stage 3 runs the test suite again under TSan, after the leak checks, through `cicd/utility/tsan.bash`. Same nightly and image as the ASan run, with `-Zbuild-std` and `--target x86_64-unknown-linux-gnu`, in `target/tsan-<date>`. A plain run takes the step into the image, and no docker means a warning. `--no-tsan` and `--quick` skip it, and the plan has a TSan line.
+		- 20261023: The sanitizer canary races on purpose too. The step stops unless TSan reports that race by name.
+		- 20261023: The first run found 2 races, both inside Mesa's lavapipe, the software Vulkan the GPU tests use in the image. The GPU tests then showed more of the same in Mesa's LLVM and the Vulkan loader. All are system libraries TSan can't see into, not crates a release binary is built from, so `cicd/tsan-suppressions.txt` lets them through by library. Nothing in our code or a crate.
+		- 20261023: The peak-memory test and the scroll record's cost ratio are ignored under `cfg(silk_tsan)`, as under ASan.
+		- 20261023: The suite took about 28 minutes here at a load of 40 to 47, with 8 test threads. A full run was about 56 minutes before this.
+		- Note: The run also failed `every_script_has_the_license_header_with_history_at_the_bottom`, which fails plain too since the knobs crate went MIT. Filed as 2026102320070112.
+		- 20261023: A full container run at 2da75a7 passed end to end. The step caught the canary, then ran 1432 passed, 0 failed and 5 ignored with no TSan reports, in 1709 s. The whole run took about 91 minutes, against about 56 before this step.
+	- Decisions:
+		- 20261023: Report suppressions (`race:` and `deadlock:` by library), not `called_from_lib`. With that on the loader, TSan stopped tracking a lock the loader took, and its unlock then read as a fault in ash.
+	- Verified: 20261023. `tsan.bash` in the image: canary caught, then 1431 passed, 1 failed (the header test above) and 5 ignored, with only the lavapipe reports, which failed the step as they should. With the final suppressions the 18 GPU tests ran clean, and the canary was still caught. A suppression wide enough to hide the canary's race let it pass, which the step refuses. New container cases, watched to fail against 4 mutants of cicd.bash. Engine and cleanup tests, clippy for Linux, fmt, shellcheck, house style, test IDs, docs check.
+	- Swept: every `ASAN_CMD`, `asanInImage`, `fRunAsan` and `--no-asan` site in cicd.bash, config.bash's cleanup list and rar excludes, the `silk_asan` ignores, build.md, prerequisites.md and design.md. `cicd-win.ps1` has no sanitizer flags.
+	- Test case: The canary race EtaER2K, run by the step itself. New cases in `cicd/tests/container/run.bash` (EsJg9EF).
+	- Branch: rnd1023
+	- Acceptance signoff: Self-closed: the step passed a full container run.
+	- Closed: 20261023-230413
 
 - Leak checks: the test suite under AddressSanitizer and LeakSanitizer on every full run
 	- ID: 2026101714445002
