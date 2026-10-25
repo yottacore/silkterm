@@ -262,7 +262,7 @@ fi
 fRoute(){  ## fRoute <dir> <hosts lines> <held: 1 or ''>: sets rc and out
 	local -r dir="${1}" hosts="${2}" held="${3}"
 	mkdir -p "${dir}"
-	rc=0; out="$(STUB_HOSTS="${hosts}" STUB_LOG="${dir}/calls" STUB_DIR="${dir}" WINRIG_HELD="${held}" SILK_CICD_SKIPS="${dir}/skips" \
+	rc=0; out="$(STUB_HOSTS="${hosts}" STUB_LOG="${dir}/calls" STUB_DIR="${dir}" WINRIG_HELD="${held}" \
 		WINGUI_RUNS="${dir}/runs.txt" WINGUI_WIN_REMOTE="${work}/win-remote" WINGUI_EXE="${work}/silkterm.exe" \
 		"${meDir}/run.bash" smoke perfladder 2>&1)" || rc=$?
 }
@@ -271,23 +271,14 @@ fRoute "${work}/route-both" "${bothUp}" 1
 fCheck "perfladder is marked as needing a GPU box" grep -qE '^##[[:space:]]+Box: gpu$' "${meDir}/perfladder.ps1"
 fCheck "with both boxes up, the first takes the plain scenario" test "$(cat "${work}/route-both/ran" 2>/dev/null)" = $'boxb smoke\nboxg perfladder'
 fCheck "and the GPU box only what needs it, with nothing skipped" fNot grep -q '^SKIP' <<< "${out}"
-fCheck "so the run's skip list gets nothing" test ! -s "${work}/route-both/skips"
 fRoute "${work}/route-nogpu" $'boxb     up    192.0.2.2\nboxg     down  192.0.2.3 gpu' ""
 fCheck "with the GPU box down, the plain scenario still runs" test "$(cat "${work}/route-nogpu/ran" 2>/dev/null)" = "boxb smoke"
 fCheck "and the GPU one is a SKIP that says why" grep -qFx "SKIP wingui: perfladder, no box tagged gpu answered" <<< "${out}"
 fCheck "which doesn't fail the run" test "${rc}" -eq 0
-fCheck "and goes on the run's skip list too, for the summary at the end" \
-	test "$(cat "${work}/route-nogpu/skips" 2>/dev/null)" = "SKIP wingui: perfladder, no box tagged gpu answered"
 fRoute "${work}/route-gpuonly" $'boxb     down  192.0.2.2\nboxg     up    192.0.2.3 gpu' 1
 fCheck "with only the GPU box up, it runs both" test "$(cat "${work}/route-gpuonly/ran" 2>/dev/null)" = $'boxg smoke\nboxg perfladder'
 fRoute "${work}/route-none" $'boxb     down  192.0.2.2\nboxg     down  192.0.2.3 gpu' ""
 fCheck "with no box up, each scenario is a SKIP" test "$(grep -c '^SKIP wingui: ' <<< "${out}")" -eq 2 -a "${rc}" -eq 0
-fCheck "and both are on the run's skip list" test "$(grep -c '^SKIP wingui: ' "${work}/route-none/skips" 2>/dev/null)" = 2
-mkdir -p "${work}/route-nolist"
-rc=0; out="$(STUB_HOSTS=$'boxb     down  192.0.2.2' STUB_LOG="${work}/route-nolist/calls" STUB_DIR="${work}/route-nolist" \
-	WINGUI_RUNS="${work}/route-nolist/runs.txt" WINGUI_WIN_REMOTE="${work}/win-remote" WINGUI_EXE="${work}/silkterm.exe" \
-	SILK_CICD_SKIPS="" "${meDir}/run.bash" smoke 2>&1)" || rc=$?
-fCheck "with no skip list named, the SKIP line is still printed" test "$(grep -c '^SKIP wingui: smoke' <<< "${out}")" -eq 1 -a "${rc}" -eq 0
 
 ((failures == 0)) || { echo "${failures} check(s) failed"; exit 1; }
 echo "all passed"
@@ -299,4 +290,3 @@ echo "all passed"
 ##		- 20261002: Run folders are removed, here and on the box.
 ##		- 20261019: So are the scripts it sends, and a killed run's, by the next run.
 ##		- 20261025: Which box each scenario runs on.
-##		- 20261025: The SKIP lines on the run's skip list.

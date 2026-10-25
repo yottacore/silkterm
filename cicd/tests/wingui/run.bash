@@ -14,8 +14,7 @@
 ##		Each scenario runs once, on the first box in the host config that is up and
 ##		free. One whose header has a '##	Box: gpu' line runs only on a box tagged
 ##		gpu there, since the other box's card is integrated. A scenario no box took
-##		is a SKIP line at the end, added to the file SILK_CICD_SKIPS names as well,
-##		which is how cicd.bash lists them again when the run is over.
+##		is a SKIP line at the end.
 ##		The binary is cross-built here from the tree under test and sent along, so
 ##		the result is for this commit and not whatever was last built on the box.
 ##		WINGUI_EXE names a binary to send instead. WINGUI_EXTRA lists more files,
@@ -76,11 +75,7 @@ fSkipsLeft(){
 if [[ -z "${WINRIG_HELD:-}" ]]; then
 	WINGUI_RAN="$(mktemp)"; export WINGUI_RAN
 	rc=0; "${winRemote}" "${host[@]}" --optional hold "${0}" "${origArgs[@]}" || rc=$?
-	skips="$(fSkipsLeft)"
-	if [[ -n "${skips}" ]]; then
-		echo "${skips}"
-		[[ -z "${SILK_CICD_SKIPS:-}" ]] || echo "${skips}" >>"${SILK_CICD_SKIPS}"
-	fi
+	fSkipsLeft
 	rm -f "${WINGUI_RAN}"
 	exit "${rc}"
 fi
@@ -362,4 +357,3 @@ if ((! keep)); then find "${shotDir}" -name '*.png' -printf '  shot %P\n' 2>/dev
 ##		  folder, and a killed run's are swept by the next run on that box.
 ##		- 20261025: each scenario runs once, on the first box free for it, and a
 ##		  'Box: gpu' one only on a box tagged gpu. What no box took is a SKIP.
-##		- 20261025: the SKIP lines go to SILK_CICD_SKIPS too.

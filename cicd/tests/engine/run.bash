@@ -261,86 +261,10 @@ fCheck "anything else is named as it is" fHost FreeBSD ""
 eval "$(fLift '^fHostLine(){' '^}')"
 fCheck "and this box gets a line" test -n "$(fHostLine)"
 
-## --no-remote leaves out every other box, and a box that wasn't there is a SKIP
-## in its step's line and again at the end.
-fLiftF(){  ## fLiftF <first line, exactly>: from that line to the first top-level fi
-	local n; n="$(grep -m1 -nxF -- "${1}" "${engine}" | cut -d: -f1)"
-	[[ -n "${n}" ]] && sed -n "${n},\$ { p; /^fi\$/q }" "${engine}"
-}
-fParseRemote(){ fParse "${@}" >/dev/null; eval "${parse}"; echo "noremote=${noRemote} inner=${innerArgs[*]}"; }
-fCheck "a run with no options reaches the other boxes" test "$(fParseRemote)" = "noremote=0 inner="
-fCheck "--no-remote leaves them out, and isn't handed to the container" test "$(fParseRemote --no-remote)" = "noremote=1 inner="
-fCheck "--help names it" bash -c '"$1" --help | grep -q -- "--no-remote "' _ "${engine}"
-wingPlan="$(fLiftF 'if [[ -z "${WINGUI_HARNESS+x}" ]] || ((${#WINGUI_HARNESS[@]} == 0)); then')"
-fCheck "the plan has a Windows scenarios line" test -n "${wingPlan}"
-fWingPlan(){ local quick="${1}" noRemote="${2}" container=0 SILK_CICD_IN_CONTAINER=""; WINGUI_HARNESS=(run.bash a b c); fEcho_Clean(){ echo "${*}"; }; eval "${wingPlan}"; }
-fCheck "which counts the scenarios" test "$(fWingPlan 0 0)" = "Windows scenarios ...: 3 on the Windows boxes, each on the first one free"
-fCheck "and says --no-remote left them out" test "$(fWingPlan 0 1)" = "Windows scenarios ...: (skipped --no-remote)"
-fCheck "or --quick" test "$(fWingPlan 1 1)" = "Windows scenarios ...: (skipped --quick)"
-privPlan="$(fLiftF 'if ((quick)); then')"
-fCheck "the private runner's plan line says --no-remote left it out" grep -qF '"Private runner ......: (skipped --no-remote)"' <<<"${privPlan}"
-eval "$(grep '^fSkipCount(){' "${engine}")"
-eval "$(fLift '^fStepDone(){' '^}')"
-eval "$(fLift '^fSkipSummary(){' '^}')"
-eval "$(fLift '^fWinGuiScenarios(){' '^}')"
-fEcho_Clean(){ echo "${*}"; }
-root="${work}/rootw"; mkdir -p "${root}/cicd/tests/wingui" "${work}/priv/cicd"
-## A harness and a private runner that each skip what STUB_SKIPS names and note
-## that they ran.
-cat >"${root}/cicd/tests/wingui/run.bash" <<'STUB'
-#!/usr/bin/env bash
-echo ran >>"${STUB_RAN}"
-for s in ${STUB_SKIPS:-}; do echo "SKIP wingui: ${s}, no box answered"; [[ -z "${SILK_CICD_SKIPS:-}" ]] || echo "SKIP wingui: ${s}, no box answered" >>"${SILK_CICD_SKIPS}"; done
-exit "${STUB_EXIT:-0}"
-STUB
-cp "${root}/cicd/tests/wingui/run.bash" "${work}/priv/cicd/run.bash"
-sed -i 's/SKIP wingui: /SKIP private: /g' "${work}/priv/cicd/run.bash"
-chmod +x "${root}/cicd/tests/wingui/run.bash" "${work}/priv/cicd/run.bash"
-WINGUI_HARNESS=(cicd/tests/wingui/run.bash a b); export STUB_RAN="${work}/ran"
-fWing(){  ## fWing <noRemote> <skips>: sets out; skipLog is a fresh list
-	local quick=0 noRemote="${1}" SILK_CICD_IN_CONTAINER=""
-	skipLog="${work}/skips.txt"; : >"${skipLog}"; : >"${STUB_RAN}"
-	out="$(STUB_SKIPS="${2}" fWinGuiScenarios 2>&1)" || true
-}
-fWing 0 ""
-fCheck "with every box there, the scenarios' line is OK" test "$(tail -1 <<<"${out}")" = "    OK: windows gui scenarios"
-fWing 0 "b"
-fCheck "with one left out, it's a SKIP saying how many" test "$(tail -1 <<<"${out}")" = "    SKIP: windows gui scenarios, 1 not run (SKIP lines above)"
-fCheck "and the harness's own line is on the run's list" test "$(cat "${skipLog}")" = "SKIP wingui: b, no box answered"
-fWing 1 "b"
-fCheck "--no-remote leaves the scenarios out, and says so" test "${out}" = "windows gui scenarios skipped (--no-remote)"
-fCheck "without starting the harness" test ! -s "${STUB_RAN}"
-fCheck "nor putting anything on the list" test ! -s "${skipLog}"
-privStep="$(fLiftF '## The private runner builds on boxes that are often off or busy, so it skips')"
-fCheck "the private runner's step can be lifted" test -n "${privStep}"
-fPriv(){  ## fPriv <noRemote> <skips>: sets out
-	local quick=0 noRemote="${1}" PRIVATE_RUNNER="${work}/priv/cicd/run.bash" ver=0 EXE_NAME=x builtArts=()
-	: >"${STUB_RAN}"
-	out="$(STUB_SKIPS="${2}" eval "${privStep}" 2>&1)" || true
-}
-skipLog="${work}/skips.txt"; : >"${skipLog}"
-fPriv 0 ""
-fCheck "with both boxes there, the private runner's line is OK" test "$(tail -1 <<<"${out}")" = "    OK: private runner"
-fPriv 0 "mac store"
-fCheck "a job it skipped makes it a SKIP" test "$(tail -1 <<<"${out}")" = "    SKIP: private runner, 2 not run (SKIP lines above)"
-fPriv 1 "mac"
-fCheck "--no-remote leaves it out, and says so" test "${out}" = "private runner skipped (--no-remote)"
-fCheck "without starting it" test ! -s "${STUB_RAN}"
-out="$(fSkipSummary)"
-fCheck "the summary at the end lists every SKIP line, in order" \
-	test "${out}" = $'Not run, since a box wasn\'t there:\nSKIP private: mac, no box answered\nSKIP private: store, no box answered'
-skipLog="${work}/skips.txt"; : >"${skipLog}"
-fCheck "and is left out when nothing was skipped" test -z "$(fSkipSummary)"
-skipLog=""
-fCheck "or when the run has no list" test -z "$(fSkipSummary)" -a "$(fSkipCount)" = 0
-fCheck "and the run says it last, after the sweep's line" \
-	bash -c 'grep -A1 -F "fEcho_Clean \"\$(fSweep_Summary)\"" "$1" | grep -qx "fSkipSummary"' _ "${engine}"
-
 if ((failures)); then echo "${failures} failed"; exit 1; fi
 echo "all passed"
 
 ##	History:
-##		- 20261025: --no-remote, and the SKIP lines in a step's line and at the end.
 ##		- 20261022: Where CodeQL runs, and --codeql, off by default.
 ##		- 20261022: --no-leakcheck, and the leak checks on with no options.
 ##		- 20260926 JC: Created.

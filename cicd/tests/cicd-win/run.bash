@@ -44,15 +44,9 @@ PY
 }
 fCheck "the path map reads back as the paths it was given" fMapReads
 
-## -NoRemote reaches the Linux half, which is the one that goes to the other boxes.
-ps1="${meDir}/../../cicd-win.ps1"
-fCheck "-NoRemote is a parameter" bash -c 'pwsh -NoProfile -NonInteractive -Command "(Get-Command -Name \"$1\").Parameters.ContainsKey(\"NoRemote\")" | grep -qx True' _ "${ps1}"
-fCheck "and goes to the Linux half as --no-remote" grep -qE '^[[:space:]]*if \(\$NoRemote\)[[:space:]]+\{ \$cicdArgs \+= "--no-remote" \}'$'\r''?$' "${ps1}"
-
 if ((failures)); then echo "${failures} failed"; exit 1; fi
 echo "all passed"
 
 ##	History:
 ##		- 20260926 JC: Created.
 ##		- 20261006 JC: The stash before a pull.
-##		- 20261025: -NoRemote goes to the Linux half.

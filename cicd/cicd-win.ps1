@@ -69,9 +69,6 @@
 	The Windows half has none.
 .PARAMETER Leakcheck
 	-Wsl only: the Linux half runs its leak checks under -Quick too.
-.PARAMETER NoRemote
-	-Wsl only: the Linux half skips every other box, the Windows scenarios and
-	the private runner (cicd.bash --no-remote).
 .PARAMETER Wsl
 	Also run the Linux half in WSL2 (.deb/.rpm, profiler, scroll harness -
 	everything Windows can't do).
@@ -101,7 +98,6 @@ param(
 	[switch]$NoSync,
 	[switch]$NoLeakcheck,
 	[switch]$Leakcheck,
-	[switch]$NoRemote,
 	[switch]$Wsl,
 	[string]$WslDistro = "",
 	[string]$Message = "",
@@ -786,7 +782,6 @@ function fWslLinuxHalf {
 	if ($NoPackage) { $cicdArgs += "--no-package" }
 	if ($NoLeakcheck) { $cicdArgs += "--no-leakcheck" }
 	elseif ($Leakcheck) { $cicdArgs += "--leakcheck" }
-	if ($NoRemote)  { $cicdArgs += "--no-remote" }
 
 	fNote "distro ......: $distro"
 	fNote "tree ........: $wslRepo (this one, not a second checkout)"
@@ -986,7 +981,6 @@ try {
 
 
 ##	History:
-##		- 2026-10-25: -NoRemote, passed on to the Linux half.
 ##		- 2026-10-22: -NoLeakcheck and -Leakcheck, passed on to the Linux half.
 ##		- 2026-10-19 JC: The test run folder is made after the prompt, and the
 ##		  ones failed runs kept go once past the newest few.
