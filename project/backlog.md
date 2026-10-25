@@ -139,8 +139,9 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - The window doesn't paint while the GPU is busy or short on memory, and stays blank after the load ends
 	- ID: 2026100312470535
 	- Type: Bug
-	- Status: Waiting on automated testing
-	- Needs external testing: A dogfood look on b23 with the GPU busy or nearly full. Move to another desktop and back, end the load, and leave the window alone. It should paint on its own. Try it once with "Free resources when idle" on and short idle times too. Started from a terminal with `SILK_IDLEDBG=1`, it prints any refused frame or rebuild.
+	- Status: Waiting on UAT
+		- 20261025: Only the look on b23's own desktop is left, which is a person's part.
+	- Needs hand testing: A dogfood look on b23 with the GPU busy or nearly full. Move to another desktop and back, end the load, and leave the window alone. It should paint on its own. Try it once with "Free resources when idle" on and short idle times too. Started from a terminal with `SILK_IDLEDBG=1`, it prints any refused frame or rebuild.
 	- Severity: High
 	- Opened: 20261003-124705
 	- Opened by: JC
@@ -179,6 +180,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261003: Not covered: the Windows terminal draws through wgpu on Vulkan, or DX12 with Transparency, not the X11 GL swap b23 uses, so the failed swap path was never reached. vm925w has no WSL2, so there was no run through Mesa on the same GPU.
 		- 20261003: The black window and the missing text seen in both builds are filed as 2026100319134501 and 2026100319134502.
 		- 20261023: Both tests passed in the full run at 2da75a7. The b23 look is not done yet. This round had no dogfood or desktop runs.
+		- 20261025: Both tests passed again in both full runs at e95b81b. The b23 look moved to the hand testing row, since it needs the visible desktop.
 	- Swept: every frame and rebuild site. The terminal's acquire and GL swap in `render_with`, reached from both `about_to_wait` and the desktop's redraw. The dialog and notice windows' acquire and swap in `DialogWin::render`. `rebuild_gpu`, which the console-return heal also calls. `grep -n 'begin_frame\|end_frame\|Gfx::rebuild'` finds no others.
 	- Branch: gpuload
 	- Commit: 8cb6a4d
@@ -188,9 +190,9 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - CICD reset: containers
 	- ID: 2026102416233801
 	- Type: Task
-	- Status: Waiting on automated testing
+	- Status: Waiting on UAT
 		- Departs from the wording: the profiler now draws on the card, through a headless sway, where before it drew in software on Xvfb, here as in the image. And the render node test runs here too, where it had only skipped inside.
-	- Needs local test suite run?: One container full run, from the round's full-run line. Look for "on the card, through a headless sway's Xwayland" and an NVIDIA renderer line in the profiler step after the container, and the render node test passing there, not skipped.
+		- Stand-in: 20261025. The container full run at e95b81b passed stages 1 to 6, with the container test (EsJg9EF) and "the render node test runs outside the container" inside, then stopped on a Windows scenario before the host's profiler and render node steps. Those two ran alone here on rnd1025 instead, as below.
 	- Priority: High
 	- Opened: 20261024-162338
 	- Opened by: CC
@@ -208,6 +210,8 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261025: A container run now runs the profiler and the render node test here, once the container is done. Inside, both only say they run outside. The render node test had skipped in every container run, so it hadn't run in a default full run since docker became the default.
 		- 20261025: Nothing else in stages 1 to 6 reads the card. The scroll harness checks the shape of each frame on Xvfb, not its timing. The graphics memory unit test falls back to software Vulkan, where it still checks the allocator's hint.
 		- Note: The render node test skips when its test folder sits under a long temp path, since sway's socket path is then too long. Filed as 2026102507092877.
+		- 20261025: The flamegraph's text shaping share is about twice the last one on dev, 48% against 23%. The source differs from dev only in test code, so that comes from drawing on the card rather than llvmpipe, not from the round.
+	- Verified: 20261025, at 6965e34. The host's profiler step alone: "on the card, through a headless sway's Xwayland", renderer NVIDIA GeForce RTX 3060 Ti, flamegraph written. The render node test (ErxxHzT) against a fresh debug build, with its temp folder under the run's own: all passed, in software at launch and switched to it.
 	- Verified: 20261025. The profiler step from cicd.bash, run alone here: on the card, NVIDIA renderer, flamegraph written, sway gone and its socket folder removed after. With no XDG_RUNTIME_DIR: the warning, then llvmpipe on Xvfb, flamegraph written. The render node test on this box against the image's debug binary: all passed with a short temp folder, skipped under the long one above. Container test with new cases, watched to fail against the old cicd.bash and against a mutant without the guard inside. Engine test, shellcheck, house style, docs check, lint report. The plan lines in both arms.
 	- Swept: every step in stages 1 to 6 that starts a window or a GPU device: the window tests under `cicd/tests`, the scroll harness, the allocs test, `a_new_device_reserves_little_graphics_memory`, the profiler. `cicd/utility/mem-per-window` and `gpu-stress` aren't pipeline steps.
 	- Test case: New cases in `cicd/tests/container/run.bash` (EsJg9EF): the render node test and the profiler run here after the container, and inside only say so.
@@ -413,6 +417,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261022: Verified: the words test passes. fmt, and clippy for Linux, Windows and macOS, pass. The alert itself is only compiled.
 		- 20261022: No real software path on macOS was found, so the Resource use group's `not_macos` row stays as it is.
 		- 20261024: Answer: A, keep the alert. A Mac with no Metal can't run SilkTerm, and the alert says why. A real fallback through ANGLE would be its own item, if Mac VMs turn out to matter.
+		- 20261025: The words test passed again in both full runs at e95b81b, and the hosted Mac workflow passed on rnd1025. The vmKt6m check didn't fit this round's time.
 	- Swept: the one exit site where no device could be made at launch. Rebuilds after idle and the dialogs keep their own error paths, and both need a device that once worked.
 	- Branch: rnd1022
 	- Test case: `no_device_on_macos_says_why_and_that_nothing_can_stand_in` (EtS63vE)
@@ -446,6 +451,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Swept: `remote_session()` has one caller, the launch check. `set_remote` callers are the View menu toggle, the Profile dropdown and tests, all by hand, so none reads the setting.
 		- Not tried in a real window on any system.
 		- 20261023: The slow window tests passed in the full run at 2da75a7, apart from monwl (window size per Wayland output), which skipped without a reason in the log. Both new tests passed there and on b26. Left: the Windows scenario. No Windows box was free this round.
+		- 20261025: Both new tests passed again in both full runs at e95b81b. `wpremote` skipped on b29w, whose console session was locked, and never got to vm925w.
 	- Branch: rnd1022
 	- Test case: `a_remote_screen_is_ignored_when_turned_off` (rating.rs, fails with the check reordered so detection runs first) and `a_remote_screen_takes_remote_unless_turned_off` (config.rs).
 
@@ -471,6 +477,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261018: Stage 3 runs clippy for `x86_64-apple-darwin` too, with warnings as errors, after the Windows lints. The target is in rust-toolchain.toml, so the container image gets it. About 23 s here.
 		- 20261022: The advisory scan passed in stage 3 of both full runs, container and plain: "advisories ok", then the scope check (EtBK7tB). Left: the Windows run.
 		- 20261023: The advisory scan, its scope check and the macOS lints passed again in the full run at 2da75a7. The Windows run is still left. No Windows box was free this round.
+		- 20261025: "advisories ok" again in both full runs at e95b81b. The `cicd-win.ps1` run didn't fit this round's time.
 	- Decisions:
 		- 20261018: Add a macOS clippy step that fails the pipeline. It adds the x86_64-apple-darwin target to rust-toolchain.toml, so every box and the container image download it.
 	- Verified: clippy `-D warnings` clean for Linux, `x86_64-pc-windows-gnu` and `x86_64-apple-darwin`, and with the profiling feature. Unit suite (1364 + 28), fmt check, docs check.
@@ -509,6 +516,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Left as found: the 343 local and 4 `/tmp` test folders, which no run wrote down; the `tmp.*.ps1` scripts and the b29w test folders on the boxes; the 7 `dash` processes; the remote clones' target dirs, built by hand jobs. The Windows pipeline's own target dir isn't swept yet.
 		- Verified: the four tests below pass, and their new checks failed against the pipeline as it was before.
 		- 20261023: The full run at 2da75a7 ended "cleanup: nothing stale" in the image and on the host, and the cleanup test passed. The Windows half is still left. No Windows box was free this round.
+		- 20261025: The container full run at e95b81b passed the cleanup test (EtAiwUl) and the container test, and ended "cleanup: nothing stale". The Windows half didn't fit this round's time.
 	- Decisions:
 		- 20261019: No `docker builder prune` after a new image. The build cache isn't a stale leftover, and other projects share it. A run only prints its size.
 		- 20261024: 2026102416233805 supersedes this. Under the CICD reset a run ends with `docker builder prune -f --filter until=168h`. 2026102416233803 also replaces the newest-5 rule for folders failed runs keep.
@@ -540,6 +548,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261022: `--help`, the plan, config.bash, install.md, design.md and the dhat comments say so. The plan row on 2026101714445005 is rewritten to match.
 		- 20261022: Full runs, container and plain, no flag: the plan's Leak checks line names the heap-growth test, and stage 3 ran it right after the ASan run. `cicd.bash --no-leakcheck </dev/null` shows the Leak checks line as "(skipped)". The `--quick` arms passed in the gate run. Left: the Windows check.
 		- 20261023: In the full run at 2da75a7, with no flag, stage 3 ran the heap growth check after the ASan run. It caught the planted leak and found no other growth. The `cicd-win.ps1 -Wsl` check is still left. No Windows box was free this round.
+		- 20261025: The engine test (Er2UgY7) passed in the full run at e95b81b, and `--no-leakcheck` showed Leak checks "(skipped)" in its plan. The other full run stopped in the ASan step before the leak checks. The Windows check didn't fit this round's time.
 	- Decisions:
 		- 20261022: The engine case that said no options leave the leak checks off now says they're on, per this item's requirements.
 	- Verified: 20261022. Engine cases, each watched to fail against the old cicd.bash and 2 mutants. The plan's Leak checks line with no flag, `--quick`, `--quick --leakcheck` and `-q --no-leakcheck`. shellcheck, house style, PSScriptAnalyzer on `cicd-win.ps1`, cargo check with the feature.
@@ -550,8 +559,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - A drag select recomposes the minimap about 11 times a second, though the map shows no selection
 	- ID: 2026102407065861
 	- Type: Enhancement
-	- Status: Waiting on automated testing
-	- Needs local test suite run?: A full run, for the scroll harness, since `Pane::build` and the frame loop changed. The gate step runs ErzCQC2.
+	- Status: Waiting on UAT
 	- Needs hand testing: With the map on, a drag select, a link hover, typing on the prompt line and a color change in Settings, all in a real window.
 	- Priority: Low
 	- Opened: 20261024-070658
@@ -569,6 +577,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261024: Done by where the rebuild comes from, not by a hash of the screen. A moved selection and a link hover probe now mark the window with their own flag. The panes draw again as before, but the map is only updated for the window's other causes, a pane's own output and its scroll. So typing, output, a scroll, a resize and a color change take the same path to the map as before.
 	- Progress log:
 		- 20261024: The selection alone wasn't enough. A pointer moving over text also starts a link hover probe, which marked the whole window, so both panes still composed on every drag frame. The hover probe takes the same flag now.
+		- 20261025: Verified: the container full run at e95b81b passed the scroll harness on X11 and on Wayland (EjIG8ro) and the allocations per frame test (ErzCQC2), as did the gate step. Only the hand look is left.
 	- Verified: 20261024, with a compose logged for the run, a drag frame under load composed both panes every frame before and none after, bar the press. ErzCQC2's drag frame read 315 and 317 with 8 cores loaded, against 333 to 370 before, and 327 idle against 332. With the map off it reads 321. Unit suite, clippy for Linux and Windows, fmt and shellcheck pass.
 	- Swept: every `state.dirty` set on a pointer move. The thumb and map drags move the view, and a divider drag and a pane drag change the layout, so they still compose. The menu, tab and bar hovers don't touch a pane. The wake after a frame looks at the new flag too.
 	- Branch: rnd1024
