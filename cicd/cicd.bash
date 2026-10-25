@@ -51,6 +51,8 @@
 ##	                       what a Windows box's own pipeline delegates here
 ##	   --no-package        skip the packages stage (.deb/.rpm/installer)
 ##	   --no-private        skip the private runner (macOS, Microsoft Store)
+##	   --no-remote         skip every other box: the Windows scenarios and the
+##	                       private runner's Mac and Microsoft Store jobs
 ##	   --no-fuzz           skip the fuzz soak (the short one in the test run still runs)
 ##	   --no-asan           skip the test suite under ASan and LSan
 ##	   --no-tsan           skip the test suite under TSan
@@ -134,7 +136,7 @@ cd "${root}"
 stamp="$(date +%Y%m%d-%H%M%S)"
 
 ## Parse options.
-assumeYes=0; quiet=0; quick=0; gate=0; leakcheck=1; leakAsked=0; codeql=0; demoAsked=0; noArm=0; noWindows=0; sync=1; cliMessage=""; container="${useContainer:-0}"; noContainer=0; innerArgs=()
+assumeYes=0; quiet=0; quick=0; noRemote=0; skipLog=""; gate=0; leakcheck=1; leakAsked=0; codeql=0; demoAsked=0; noArm=0; noWindows=0; sync=1; cliMessage=""; container="${useContainer:-0}"; noContainer=0; innerArgs=()
 while (($#)); do case "${1}" in
 	-y|--yes)                 assumeYes=1; shift ;;
 	-q|--quiet)               quiet=1; assumeYes=1; shift ;;   ## quiet + unattended; publish runs quiet too
@@ -147,6 +149,7 @@ while (($#)); do case "${1}" in
 	--no-windows)             noWindows=1; innerArgs+=("${1}"); shift ;;            ## drop the Windows cross targets
 	--no-package)             PACKAGE_ENABLE=0; innerArgs+=("${1}"); shift ;;
 	--no-private)             PRIVATE_RUNNER=""; shift ;;
+	--no-remote)              noRemote=1; shift ;;              ## no other box; the container never reaches one anyway
 	--no-profile)             PROFILE_ENABLE=0; innerArgs+=("${1}"); shift ;;
 	--no-dogfood)             DOGFOOD_DESTS=(); shift ;;
 	--no-publish)             GIT_PUBLISH=(); shift ;;
@@ -676,6 +679,17 @@ elif [[ -n "${tsanSkipped}" ]]; then
 else
 	fEcho_Clean "TSan ................: the tests again on ${SANITIZER_TOOLCHAIN}, in ${containerImage:-this container}"
 fi
+if [[ -z "${WINGUI_HARNESS+x}" ]] || ((${#WINGUI_HARNESS[@]} == 0)); then
+	fEcho_Clean "Windows scenarios ...: (disabled)"
+elif ((quick)); then
+	fEcho_Clean "Windows scenarios ...: (skipped --quick)"
+elif ((noRemote)); then
+	fEcho_Clean "Windows scenarios ...: (skipped --no-remote)"
+elif [[ -n "${SILK_CICD_IN_CONTAINER:-}" ]]; then
+	fEcho_Clean "Windows scenarios ...: (run outside the container)"
+else
+	fEcho_Clean "Windows scenarios ...: $(( ${#WINGUI_HARNESS[@]} > 1 ? ${#WINGUI_HARNESS[@]} - 1 : 1 )) on the Windows boxes, each on the first one free$( ((container)) && echo ', here after the container')"
+fi
 if ((PROFILE_ENABLE)) && [[ -n "${SILK_CICD_IN_CONTAINER:-}" ]]; then
 	fEcho_Clean "Profiler ............: (runs outside the container, on the card)"
 elif ((PROFILE_ENABLE)); then
@@ -706,6 +720,8 @@ else
 fi
 if ((quick)); then
 	fEcho_Clean "Private runner ......: (skipped --quick)"
+elif ((noRemote)); then
+	fEcho_Clean "Private runner ......: (skipped --no-remote)"
 elif [[ -n "${PRIVATE_RUNNER:-}" && -x "${PRIVATE_RUNNER}" ]]; then
 	fEcho_Clean "Private runner ......: ${PRIVATE_RUNNER} (macOS, Microsoft Store)"
 else
@@ -755,6 +771,7 @@ if ((! assumeYes)); then
 fi
 
 fTestDir_Make || fDie "could not make the test run folder"
+skipLog="${SILKTERM_TEST_DIR}/skips.txt"; : >"${skipLog}"
 
 ## Tee the rest of the run (all stages) to a gitignored log so warnings from any
 ## stage can be reviewed after the fact. Rotate the prior (closed) logs first.
@@ -1124,16 +1141,40 @@ fContentScrub(){
 	"${root}/../private/hooks/scrub.bash" "${root}" || fDie "content scrub failed"
 	fEcho "OK: content scrub"
 }
+## A box or VM that isn't there is a skip, never a failure. A step that reaches
+## another box hands its scripts this run's skip list as SILK_CICD_SKIPS, and each
+## one adds a "SKIP <what>, <why>" line for what it couldn't run. Only those steps
+## get it, so a test of one of those scripts can't add to the real list. skipLog
+## is made with the test run folder.
+fSkipCount(){ if [[ -s "${skipLog}" ]]; then grep -c '^SKIP ' "${skipLog}" || true; else echo 0; fi ;}
+## fStepDone <name> <skips before>: the step's own line, SKIP when it left something out.
+fStepDone(){
+	local -r name="${1}" before="${2}"
+	local -ri skipped=$(( $(fSkipCount) - before ))
+	if ((skipped)); then fEcho "SKIP: ${name}, ${skipped} not run (SKIP lines above)"
+	else fEcho "OK: ${name}"; fi
+}
+## The run's last section, so a skip doesn't scroll away with the stage it was in.
+fSkipSummary(){
+	[[ -s "${skipLog}" ]] || return 0
+	fEcho_Clean "Not run, since a box wasn't there:"
+	grep '^SKIP ' "${skipLog}" || true
+	fEcho_Clean
+}
+
 ## Graphical scenarios on the Windows boxes. Neither box is build hardware, so an
 ## unreachable or locked one is reported and stepped over; a scenario that actually
-## ran and failed aborts. Skipped under --quick, and inside the container, which has
-## no way to the boxes; the run outside takes it up once the container is done.
+## ran and failed aborts. Skipped under --quick and --no-remote, and inside the
+## container, which has no way to the boxes; the run outside takes it up once the
+## container is done.
 fWinGuiScenarios(){
 	if ((quick)) || [[ -z "${WINGUI_HARNESS+x}" ]] || ((${#WINGUI_HARNESS[@]} == 0)) || [[ ! -x "${root}/${WINGUI_HARNESS[0]}" ]]; then return 0; fi
 	if [[ -n "${SILK_CICD_IN_CONTAINER:-}" ]]; then fEcho_Clean "windows gui scenarios run outside the container"; return 0; fi
+	if ((noRemote)); then fEcho_Clean "windows gui scenarios skipped (--no-remote)"; return 0; fi
 	fEcho_Clean "windows gui scenarios ..."
-	if "${root}/${WINGUI_HARNESS[0]}" "${WINGUI_HARNESS[@]:1}"; then
-		fEcho "OK: windows gui scenarios"
+	local -ri before="$(fSkipCount)"
+	if SILK_CICD_SKIPS="${skipLog}" "${root}/${WINGUI_HARNESS[0]}" "${WINGUI_HARNESS[@]:1}"; then
+		fStepDone "windows gui scenarios" "${before}"
 	else
 		fDie "a windows gui scenario failed"
 	fi
@@ -1611,11 +1652,14 @@ fi
 ## those itself and says so. Only a job that ran and failed stops the run.
 if ((quick)); then
 	fEcho_Clean "private runner skipped (--quick)"
+elif ((noRemote)); then
+	fEcho_Clean "private runner skipped (--no-remote)"
 elif [[ -n "${PRIVATE_RUNNER:-}" && -x "${PRIVATE_RUNNER}" ]]; then
 	fEcho_Clean "private runner (macOS, Microsoft Store) ..."
 	privStart="$(mktemp)"
-	"${PRIVATE_RUNNER}" --public "${root}" || fDie "a private runner job failed"
-	fEcho "OK: private runner"
+	privSkips="$(fSkipCount)"
+	SILK_CICD_SKIPS="${skipLog}" "${PRIVATE_RUNNER}" --public "${root}" || fDie "a private runner job failed"
+	fStepDone "private runner" "${privSkips}"
 	## The Mac build joins this run's set only if the runner made it just now. One
 	## left from an earlier run of the same version must not be dogfooded again.
 	macBin="${PRIVATE_RUNNER%/cicd/*}/dist/${ver}/macos/${EXE_NAME}-${ver}-macos-universal"
@@ -1719,12 +1763,16 @@ fi
 
 fEcho_Clean
 fEcho_Clean "$(fSweep_Summary)"
+fSkipSummary
 
 fSection "${APP_NAME} CI/CD: done."
 fEcho_Clean
 
 
 ##	History:
+##		- 2026-10-25: --no-remote skips the Windows scenarios and the private
+##		              runner. What a box that wasn't there left out is a SKIP in
+##		              its step's line, and listed again at the end of the run.
 ##		- 2026-10-25: The profiler and the render node test run on this box, after
 ##		              the container, and the profiler draws on the card through a
 ##		              headless sway, with a private Xvfb as the fallback.

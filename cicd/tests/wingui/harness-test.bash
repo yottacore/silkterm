@@ -35,17 +35,20 @@ trap fEnd EXIT
 ## launcher, and the binary is a file named here, so nothing is built or sent.
 cat > "${work}/win-remote" <<'STUB'
 #!/usr/bin/env bash
-while [[ "${1:-}" == --* ]]; do [[ "$1" == --host ]] && shift; shift; done
+stubHost=box
+while [[ "${1:-}" == --* ]]; do [[ "$1" == --host ]] && { stubHost="$2"; shift; }; shift; done
 echo "$*" >> "${STUB_LOG}"
 case "${1:-}" in
 	hold) shift; WINRIG_HELD=1 exec "$@" ;;
 	push) [[ -z "${STUB_PUSHFAIL:-}" ]] || exit 1 ;;
-	hosts) if [[ -n "${STUB_DOWN:-}" ]]; then echo "box      down  192.0.2.1"; else echo "box      up    192.0.2.1"; fi ;;
+	hosts)
+		if [[ -n "${STUB_HOSTS:-}" ]]; then printf '%s\n' "${STUB_HOSTS}"
+		elif [[ -n "${STUB_DOWN:-}" ]]; then echo "box      down  192.0.2.1"; else echo "box      up    192.0.2.1"; fi ;;
 	run)
 		if grep -qE $'^fStage\r?$' "$2"; then
 			cp "$2" "${STUB_DIR}/stage.ps1"
 			[[ -n "${STUB_NOSTAGE:-}" ]] && { echo "test run folder: refused"; exit 1; }
-			[[ -n "${STUB_NOSESSION:-}" ]] && { printf 'NOSESSION nobody is logged on at the console\r\n'; exit 0; }
+			[[ " ${STUB_NOSESSION:-} " == *" ${stubHost} "* ]] && { printf 'NOSESSION nobody is logged on at the console\r\n'; exit 0; }
 			echo "RUNFOR wintest"
 			printf 'RUNDIR %s\r\n' 'C:\Users\wintest\AppData\Local\Temp\test_silkterm_20260101-00000000'
 			printf 'RUNTOKEN %s\r\n' '4242-1234567890'
@@ -55,6 +58,7 @@ case "${1:-}" in
 			[[ -n "${STUB_SILENT:-}" ]] || { echo "${STUB_SWEPT:-REMOVED}"; echo SWEPT; }
 		else
 			cp "$2" "${STUB_DIR}/launcher-$(date +%s%N).ps1"; echo "VERDICT pass"
+			echo "${stubHost} $(sed -n 's/^\$scenario = "\(.*\)"\r\{0,1\}$/\1/p' "$2")" >> "${STUB_DIR}/ran"
 		fi ;;
 esac
 STUB
@@ -168,7 +172,7 @@ fCheck "and still has the stage script swept, with no folder to remove" bash -c 
 ## for a task that never started. Now it's a skip that says why.
 mkdir "${work}/nosession"
 rc=0
-out="$(STUB_NOSESSION=1 STUB_LOG="${work}/nosession/calls" STUB_DIR="${work}/nosession" WINRIG_HELD=1 \
+out="$(STUB_NOSESSION=box STUB_LOG="${work}/nosession/calls" STUB_DIR="${work}/nosession" WINRIG_HELD=1 \
 	WINGUI_WIN_REMOTE="${work}/win-remote" WINGUI_EXE="${work}/silkterm.exe" "${meDir}/run.bash" smoke 2>&1)" || rc=$?
 fCheck "a box nobody is logged on at is a skip that says why" grep -qFx "wingui: box: nobody is logged on at the console, skipped" <<< "${out}"
 fCheck "which doesn't fail the run" test "${rc}" -eq 0
@@ -304,6 +308,52 @@ PS
 else
 	echo "  skip the console user half: pwsh not found"
 fi
+## Where each scenario runs. The box listed first takes what it can, and one
+## marked 'Box: gpu' goes only to a box tagged gpu. Each runs once.
+fRoute(){  ## fRoute <dir> <hosts lines> <held: 1 or ''>: sets rc and out
+	local -r dir="${1}" hosts="${2}" held="${3}"
+	mkdir -p "${dir}"
+	rc=0; out="$(STUB_HOSTS="${hosts}" STUB_LOG="${dir}/calls" STUB_DIR="${dir}" WINRIG_HELD="${held}" SILK_CICD_SKIPS="${dir}/skips" \
+		WINGUI_RUNS="${dir}/runs.txt" WINGUI_WIN_REMOTE="${work}/win-remote" WINGUI_EXE="${work}/silkterm.exe" \
+		"${meDir}/run.bash" smoke perfladder 2>&1)" || rc=$?
+}
+bothUp=$'boxb     up    192.0.2.2\nboxg     up    192.0.2.3 gpu'
+fRoute "${work}/route-both" "${bothUp}" 1
+fCheck "perfladder is marked as needing a GPU box" grep -qE '^##[[:space:]]+Box: gpu'$'\r''?$' "${meDir}/perfladder.ps1"
+fCheck "with both boxes up, the first takes the plain scenario" test "$(cat "${work}/route-both/ran" 2>/dev/null)" = $'boxb smoke\nboxg perfladder'
+fCheck "and the GPU box only what needs it, with nothing skipped" fNot grep -q '^SKIP' <<< "${out}"
+fCheck "so the run's skip list gets nothing" test ! -s "${work}/route-both/skips"
+fRoute "${work}/route-nogpu" $'boxb     up    192.0.2.2\nboxg     down  192.0.2.3 gpu' ""
+fCheck "with the GPU box down, the plain scenario still runs" test "$(cat "${work}/route-nogpu/ran" 2>/dev/null)" = "boxb smoke"
+fCheck "and the GPU one is a SKIP that says why" grep -qFx "SKIP wingui: perfladder, no box tagged gpu answered" <<< "${out}"
+fCheck "which doesn't fail the run" test "${rc}" -eq 0
+fCheck "and goes on the run's skip list too, for the summary at the end" \
+	test "$(cat "${work}/route-nogpu/skips" 2>/dev/null)" = "SKIP wingui: perfladder, no box tagged gpu answered"
+fRoute "${work}/route-gpuonly" $'boxb     down  192.0.2.2\nboxg     up    192.0.2.3 gpu' 1
+fCheck "with only the GPU box up, it runs both" test "$(cat "${work}/route-gpuonly/ran" 2>/dev/null)" = $'boxg smoke\nboxg perfladder'
+STUB_NOSESSION=boxg fRoute "${work}/route-nosession" "${bothUp}" 1
+fCheck "a GPU box nobody is logged on at runs nothing" test "$(cat "${work}/route-nosession/ran" 2>/dev/null)" = "boxb smoke"
+fCheck "and its SKIP line gives that box's reason" grep -qFx "SKIP wingui: perfladder, no box tagged gpu answered (boxg: nobody is logged on at the console)" <<< "${out}"
+fCheck "which doesn't fail the run either" test "${rc}" -eq 0
+fRoute "${work}/route-none" $'boxb     down  192.0.2.2\nboxg     down  192.0.2.3 gpu' ""
+fCheck "with no box up, each scenario is a SKIP" test "$(grep -c '^SKIP wingui: ' <<< "${out}")" -eq 2 -a "${rc}" -eq 0
+fCheck "and both are on the run's skip list" test "$(grep -c '^SKIP wingui: ' "${work}/route-none/skips" 2>/dev/null)" = 2
+## A scenario is read the same whichever line ends the checkout gave it, since
+## .gitattributes makes them CRLF and an editor can leave one LF.
+mkdir -p "${work}/eol"
+eval "$(grep -E '^fGpuOnly\(\)' "${meDir}/run.bash")"
+printf '##\tTest ID: x\r\n##\tBox: gpu\r\n\r\nfOne\r\n' > "${work}/eol/gpucrlf.ps1"
+printf '##\tTest ID: x\n##\tBox: gpu\n\nfOne\n' > "${work}/eol/gpulf.ps1"
+printf '##\tTest ID: x\r\n\r\nfOne\r\n' > "${work}/eol/plaincrlf.ps1"
+fEol(){ local meDir="${work}/eol"; fGpuOnly "${1}" ;}  ## run.bash's own test, against the files here
+fCheck "a 'Box: gpu' line with CRLF ends marks the scenario" fEol gpucrlf
+fCheck "and with LF ends" fEol gpulf
+fCheck "and a scenario without one isn't marked" fNot fEol plaincrlf
+mkdir -p "${work}/route-nolist"
+rc=0; out="$(STUB_HOSTS=$'boxb     down  192.0.2.2' STUB_LOG="${work}/route-nolist/calls" STUB_DIR="${work}/route-nolist" \
+	WINGUI_RUNS="${work}/route-nolist/runs.txt" WINGUI_WIN_REMOTE="${work}/win-remote" WINGUI_EXE="${work}/silkterm.exe" \
+	SILK_CICD_SKIPS="" "${meDir}/run.bash" smoke 2>&1)" || rc=$?
+fCheck "with no skip list named, the SKIP line is still printed" test "$(grep -c '^SKIP wingui: smoke' <<< "${out}")" -eq 1 -a "${rc}" -eq 0
 
 ((failures == 0)) || { echo "${failures} check(s) failed"; exit 1; }
 echo "all passed"
@@ -315,3 +365,6 @@ echo "all passed"
 ##		- 20261002: Run folders are removed, here and on the box.
 ##		- 20261019: So are the scripts it sends, and a killed run's, by the next run.
 ##		- 20261025: A box nobody is logged on at is a skip.
+##		- 20261025: Which box each scenario runs on.
+##		- 20261025: The SKIP lines on the run's skip list.
+##		- 20261025: The 'Box: gpu' line with CRLF ends.

@@ -139,9 +139,41 @@ fCheck "even when its own exit looks like the lock's" test "${rc}" -eq 3
 fLocked "boxa" 0 hold "${work}/held"
 fCheck "without --optional a busy box still stops the run" test "${rc}" -eq 3
 
+## Tags after the address, as hosts prints them for the scenario harness.
+printf 'boxa 192.0.2.10\nboxb 192.0.2.20 gpu  # the card\n' >"${conf}"
+fRemote "" hosts
+fCheck "hosts prints a box's tags after its address" test -n "$(grep -E '^boxb +up +192\.0\.2\.20 gpu$' <<<"${out}")" -a -n "$(grep -E '^boxa +up +192\.0\.2\.10$' <<<"${out}")"
+
+## The VM state helper holds through the same lock and wakes a VM first. One that
+## never wakes exits before the command, which is a skip like a busy box.
+cat >"${stubs}/vmstate" <<'STUB'
+#!/usr/bin/env bash
+[[ "${1}" == wrap ]] || exit 2; shift
+names=(); while [[ "${1}" != -- ]]; do case "${1}" in --wait) shift 2 ;; *) names+=("${1}"); shift ;; esac; done; shift
+echo "vmstate ${names[*]}" >>"${STUB_LOG}"
+for h in "${names[@]}"; do
+	if [[ " ${STUB_ASLEEP:-} " == *" ${h} "* ]]; then echo "${h}: no ssh after 600s" >&2; exit 1; fi
+done
+exec "${STUB_LOCK}" wrap "${names[@]}" -- "$@"
+STUB
+chmod +x "${stubs}/vmstate"
+{ printf '@lock %s\n@vmstate %s\n' "${stubs}/lock" "${stubs}/vmstate"; cat "${conf}"; } >"${lockConf}"
+export STUB_LOCK="${stubs}/lock"
+fLocked "" 0 --optional hold "${work}/held"
+fCheck "with a VM state helper named, each box is held through it" test "$(grep -c '^vmstate' "${work}/calls")" -eq 2 -a "$(grep -c '^held with' <<<"${out}")" -eq 2
+STUB_ASLEEP="boxb" fLocked "" 0 --optional hold "${work}/held"
+fCheck "a VM that never wakes is stepped over" fSaid "boxb: could not be held or woken (exit 1), skipped"
+fCheck "and the other box still runs" fSaid "held with boxa"
+fCheck "and the run passes" test "${rc}" -eq 0
+fLocked "" 1 --optional hold "${work}/held"
+fCheck "through it, a command that ran and failed still fails" test "${rc}" -eq 1
+STUB_ASLEEP="boxb" fLocked "" 0 hold "${work}/held"
+fCheck "without --optional a VM that never wakes stops the run" test "${rc}" -eq 1
+
 if ((failures)); then echo "${failures} failed"; exit 1; fi
 echo "all passed"
 
 ##	History:
 ##		- 20260926 JC: Created.
 ##		- 20260928 JC: a box another session holds.
+##		- 20261025: tags, and holds through the VM state helper.
