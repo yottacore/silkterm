@@ -2399,6 +2399,8 @@ fn restore_config(
 		if name_taken(&real) {
 			return Err(err);
 		}
+		#[cfg(test)]
+		RESTORE_PAUSES.with(|n| n.set(n.get() + 1));
 		std::thread::sleep(RESTORE_PAUSE);
 		let mut opts = std::fs::OpenOptions::new();
 		opts.write(true).create_new(true);
@@ -4448,6 +4450,13 @@ const BACKUPS_MAX: u32 = 99;
 // only when a replace took the file, so the wait costs nothing otherwise.
 const RESTORE_ATTEMPTS: u32 = 5;
 const RESTORE_PAUSE: std::time::Duration = std::time::Duration::from_millis(100);
+
+// Pauses a restore took on this thread. A test counts them, since a wall clock
+// bound under a container's CPU quota can stall a whole 100 ms period.
+#[cfg(test)]
+thread_local! {
+	static RESTORE_PAUSES: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
+}
 
 // Move a config aside to the first free `.bak` name - so doing it twice never
 // overwrites the copy from the first time. Returns where it went.
@@ -9502,6 +9511,10 @@ mod tests {
 		dir
 	}
 
+	fn restore_pauses() -> u32 {
+		super::RESTORE_PAUSES.with(std::cell::Cell::get)
+	}
+
 	fn names_in_dir(dir: &std::path::Path) -> Vec<String> {
 		let mut names: Vec<String> = std::fs::read_dir(dir)
 			.unwrap()
@@ -9594,7 +9607,6 @@ mod tests {
 	// nothing is written over it and nothing waits.
 	// Test ID: Epa8S0g
 	#[test]
-	#[cfg_attr(miri, ignore = "Miri is too slow for the test's time bound")]
 	fn a_failed_write_that_left_the_file_changes_nothing() {
 		let refuse: RestorePublish = |_, _| Err("refused".to_string());
 		let dir = restore_test_dir("restorekeep");
@@ -9602,9 +9614,9 @@ mod tests {
 		let old = "font:\n\tsize: 12\n";
 		std::fs::write(&path, old).unwrap();
 
-		let started = std::time::Instant::now();
+		let before = restore_pauses();
 		let result = write_config_atomic_with(&path, "font:\n\tsize: 13\n", refuse);
-		let elapsed = started.elapsed();
+		let pauses = restore_pauses() - before;
 
 		let bytes = std::fs::read(&path).ok();
 		let _ = std::fs::remove_dir_all(&dir);
@@ -9614,10 +9626,7 @@ mod tests {
 			"the publish's own error"
 		);
 		assert_eq!(bytes.as_deref(), Some(old.as_bytes()), "the file as it was");
-		assert!(
-			elapsed < std::time::Duration::from_millis(50),
-			"no pause when the file is still there: {elapsed:?}"
-		);
+		assert_eq!(pauses, 0, "no pause when the file is still there");
 	}
 
 	// Something can take the empty name before the restore does. A link left
@@ -9679,9 +9688,11 @@ mod tests {
 		let path = dir.join("config.shcl");
 		std::fs::write(&path, "font:\n\tsize: 12\n").unwrap();
 
+		let before = restore_pauses();
 		let started = std::time::Instant::now();
 		let result = write_config_atomic_with(&path, "font:\n\tsize: 13\n", locked);
 		let elapsed = started.elapsed();
+		let pauses = restore_pauses() - before;
 
 		unlock();
 		let left = std::fs::symlink_metadata(&path).is_ok();
@@ -9691,10 +9702,11 @@ mod tests {
 			err.contains("replaced file gone") && err.contains("is gone"),
 			"names the replace's error and that the file is gone: {err}"
 		);
+		assert_eq!(pauses, RESTORE_ATTEMPTS, "five tries");
+		// a pause can only run long, so load cannot fail this
 		assert!(
-			elapsed >= std::time::Duration::from_millis(400)
-				&& elapsed < std::time::Duration::from_secs(2),
-			"five tries, a tenth of a second apart: {elapsed:?}"
+			elapsed >= std::time::Duration::from_millis(400),
+			"a tenth of a second apart: {elapsed:?}"
 		);
 		assert!(!left, "nothing at the name");
 	}

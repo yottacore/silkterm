@@ -52,6 +52,11 @@ failures=0
 fCheck(){ local -r what="${1}"; shift; if "${@}"; then echo "  ok   ${what}"; else echo "  FAIL ${what}"; failures=$((failures + 1)); fi; }
 
 work="$(mktemp -d "${SILKTERM_TEST_DIR}/livecfg.XXXXXX")"
+## The windows' sockets go here, and a socket path has to fit in 108 bytes.
+## Under a long temp path that means a short folder of its own.
+runDir="${work}/run"
+shortRun=""
+if ((${#runDir} > 70)); then shortRun="$(mktemp -d /tmp/silklive.XXXXXX)"; runDir="${shortRun}"; else mkdir -m 700 "${runDir}"; fi
 declare -A pids=() windows=()
 startedDisplay=0
 fCleanup(){
@@ -59,6 +64,7 @@ fCleanup(){
 	local name
 	for name in "${!pids[@]}"; do fStopOurs "${pids[${name}]}"; done
 	if ((startedDisplay)); then "${headless}" stop >/dev/null 2>&1 || true; fi
+	if [[ -n "${shortRun}" && "${shortRun}" == /tmp/silklive.* && -d "${shortRun}" && ! -L "${shortRun}" && -O "${shortRun}" ]]; then rm -rf "${shortRun}"; fi
 	if [[ "${rc}" == 0 ]]; then rm -rf "${work}"; fi
 	fTestDir_End "${rc}"
 }
@@ -112,11 +118,11 @@ shared="${work}/shared/config.shcl"
 other="${work}/other/config.shcl"
 fConfig "${shared}"
 fConfig "${other}"
-mkdir -p "${work}/home" "${work}/run"
+mkdir -p "${work}/home"
 
 fLaunch(){  ## fLaunch <name> <config>
 	DISPLAY="${display}" XAUTHORITY="${auth}" env -u WAYLAND_DISPLAY -u WAYLAND_SOCKET -u SILKTERM_SOCKET LIBGL_ALWAYS_SOFTWARE=1 \
-		HOME="${work}/home" XDG_CONFIG_HOME="${work}/home/.config" XDG_CACHE_HOME="${work}/home/.cache" XDG_DATA_HOME="${work}/home/.local/share" XDG_RUNTIME_DIR="${work}/run" \
+		HOME="${work}/home" XDG_CONFIG_HOME="${work}/home/.config" XDG_CACHE_HOME="${work}/home/.cache" XDG_DATA_HOME="${work}/home/.local/share" XDG_RUNTIME_DIR="${runDir}" \
 		"${bin}" --config "${2}" --shell "/bin/sh -c 'seq 1 400; sleep 300'" >/dev/null 2>"${work}/${1}.said.txt" &
 	pids[${1}]=$!
 	windows[${1}]="$(fX timeout 30 xdotool search --sync --onlyvisible --pid "${pids[${1}]}" 2>/dev/null | head -n 1 || true)"
@@ -167,7 +173,7 @@ fWaitMinimap(){  ## fWaitMinimap <file> <true|false>
 
 fMarkers(){  ## fMarkers <name> -> the meeting folder holding this window's marker
 	local dir
-	for dir in "${work}/run"/silkterm-*/; do
+	for dir in "${runDir}"/silkterm-*/; do
 		if [[ -e "${dir}${pids[${1}]}" ]]; then echo "${dir}"; return 0; fi
 	done
 	return 1
@@ -208,7 +214,7 @@ fCheck "nobody picked a new wallpaper" test "$(fHistory "${work}/shared")" == "$
 echo "a new folder, read again in a"
 for name in b c; do fSettled "${name}" "${work}/${name}2.png" West || true; done
 sed -i "s|${work}/pics1|${work}/pics2|" "${shared}"
-SILKTERM_SOCKET="${work}/run/silkterm-ctl-${pids[a]}.sock" "${bin}" --reload-settings >/dev/null 2>&1 || true
+SILKTERM_SOCKET="${runDir}/silkterm-ctl-${pids[a]}.sock" "${bin}" --reload-settings >/dev/null 2>&1 || true
 sleep 1
 for name in b c; do fSettled "${name}" "${work}/${name}3.png" West || true; done
 ## each window picks on its own, and two picks can land on one name
@@ -258,3 +264,4 @@ echo "all passed"
 ##	History:
 ##		- 20261013 JC: Created.
 ##		- 20261013 JC: B keeps its own minimap; D opens with the saved one.
+##		- 20261025 JC: Sockets go in a short folder when the test folder's path is long.

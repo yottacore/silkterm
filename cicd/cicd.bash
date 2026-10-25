@@ -29,7 +29,8 @@
 ##	      under ASan and LSan, in the container image; the leak checks, which
 ##	      are the heap-growth test under dhat; the tests again under TSan, in the
 ##	      image too; scroll harness)
-##	   4. profiler (flamegraph SVG; non-gating artifact - see failure policy)
+##	   4. profiler (flamegraph SVG; non-gating artifact - see failure policy), on
+##	      the card through a headless sway, and always on this box
 ##	   5. release build (native + cross targets; optimized, for packaging + dogfood),
 ##	      then a check that every Windows binary carries its icon and version block
 ##	   6. packages (.deb/.rpm per Linux arch; NSIS installer .exe per Windows arch),
@@ -70,7 +71,9 @@
 ##	                       (fast local stand-in for hosted CI; the pre-push hook runs it)
 ##	   --container         stages 1-6 in the pinned image from cicd/container/Dockerfile,
 ##	                       with its own target dir (target/container); sync, the private
-##	                       runner, dogfood, the demo and publish stay here. With --gate,
+##	                       runner, dogfood, the demo and publish stay here, and so do
+##	                       the steps that need the card: the profiler and the render
+##	                       node test, run here once the container is done. With --gate,
 ##	                       the gate runs there. The default whenever docker is here.
 ##	   --no-container      stages 1-6 on this box instead; the default with no docker
 ##	  With no options every stage runs.
@@ -673,8 +676,10 @@ elif [[ -n "${tsanSkipped}" ]]; then
 else
 	fEcho_Clean "TSan ................: the tests again on ${SANITIZER_TOOLCHAIN}, in ${containerImage:-this container}"
 fi
-if ((PROFILE_ENABLE)); then
-	fEcho_Clean "Profiler ............: ${PROFILE_SECS}s run -> flamegraph SVG (on headless ${RPD_HEADLESS_DISPLAY:-:98})"
+if ((PROFILE_ENABLE)) && [[ -n "${SILK_CICD_IN_CONTAINER:-}" ]]; then
+	fEcho_Clean "Profiler ............: (runs outside the container, on the card)"
+elif ((PROFILE_ENABLE)); then
+	fEcho_Clean "Profiler ............: ${PROFILE_SECS}s run -> flamegraph SVG (on the card through a headless sway, or software GL on headless ${RPD_HEADLESS_DISPLAY:-:98})$( ((container)) && echo ', here after the container')"
 	fEcho_Clean "  output dir ........: ${profileDir}"
 	fEcho_Clean "  workload ..........: python3 ${PROFILE_WORKLOAD_SCRIPT} ${PROFILE_WORKLOAD_ARGS}"
 else
@@ -893,18 +898,90 @@ fMarkRelease
 ## by hand before the run is not mistaken for one the run made.
 fCorpusHashes(){ find "${root}/cicd/tests/fuzz-corpus" -type f -exec sha256sum {} + 2>/dev/null | sort; }
 
-## Stage 4's profiler (non-gating artifact; failures classified below).
+## A headless sway drawing on the card's render node, with its own Xwayland, so an
+## app on it renders on the card and nothing reaches the desktop. On a private Xvfb
+## the app draws with software GL, here as in the image, so a profile there sampled
+## llvmpipe's drawing as well as the app.
+## fCardDisplay_Start <folder>: sets cardDisplay and cardSway, or sets cardWhy to
+## why it could not and returns 1. The folder gets sway's config and log. Its
+## sockets go in a folder of their own under XDG_RUNTIME_DIR, since a test folder
+## under a long temp path is past the socket length limit.
+cardDisplay=""; cardSway=""; cardWhy=""; cardRuntime=""
+fCardDisplay_Start(){
+	local -r dir="${1}"
+	local tool node="" sockets
+	for tool in sway Xwayland ss xdpyinfo; do
+		command -v "${tool}" >/dev/null 2>&1 || { cardWhy="no ${tool}"; return 1; }
+	done
+	for node in /dev/dri/renderD*; do
+		if [[ -r "${node}" && -w "${node}" ]]; then break; fi
+		node=""
+	done
+	[[ -n "${node}" ]] || { cardWhy="no render node"; return 1; }
+	cardRuntime=""
+	if [[ -d "${XDG_RUNTIME_DIR:-}" && -w "${XDG_RUNTIME_DIR:-}" ]]; then
+		cardRuntime="$(mktemp -d "${XDG_RUNTIME_DIR}/silk-sway.XXXXXX")" || cardRuntime=""
+	fi
+	[[ -n "${cardRuntime}" ]] || { cardWhy="no XDG_RUNTIME_DIR for its sockets"; return 1; }
+	## A Unix socket path is at most 107 bytes.
+	((${#cardRuntime} + 16 <= 107)) || { fCardDisplay_Stop; cardWhy="XDG_RUNTIME_DIR is too long for a socket"; return 1; }
+	printf 'output HEADLESS-1 resolution 1920x1080 position 0 0\nxwayland force\ndefault_border none\n' >"${dir}/sway.conf"
+	env -u DISPLAY -u WAYLAND_DISPLAY -u WAYLAND_SOCKET XDG_RUNTIME_DIR="${cardRuntime}" WLR_BACKENDS=headless WLR_HEADLESS_OUTPUTS=1 \
+		WLR_RENDERER=gles2 WLR_RENDER_DRM_DEVICE="${node}" WLR_LIBINPUT_NO_DEVICES=1 \
+		sway -c "${dir}/sway.conf" >"${dir}/sway.log" 2>&1 &
+	cardSway=$!
+	## sway's Xwayland takes whichever X display number is free, so it is read from
+	## the socket sway itself listens on.
+	cardDisplay=""
+	for _ in {1..100}; do
+		sockets="$(ss -xlpH 2>/dev/null || true)"
+		cardDisplay="$(awk -v p="pid=${cardSway}," 'index($0, p) && $5 ~ /^\/tmp\/\.X11-unix\/X[0-9]+$/ {sub(/.*X/, ":", $5); print $5; exit}' <<<"${sockets}")"
+		if [[ -n "${cardDisplay}" ]] && DISPLAY="${cardDisplay}" xdpyinfo >/dev/null 2>&1; then return 0; fi
+		cardDisplay=""
+		kill -0 "${cardSway}" 2>/dev/null || break
+		sleep 0.1
+	done
+	fCardDisplay_Stop
+	cardWhy="sway's Xwayland did not come up (${dir}/sway.log)"
+	return 1
+}
+## Only the sway started above, which takes its Xwayland with it, then the sockets
+## it left, by name, and their folder if that leaves it empty.
+fCardDisplay_Stop(){
+	if [[ -n "${cardSway}" ]]; then
+		kill "${cardSway}" 2>/dev/null || true
+		wait "${cardSway}" 2>/dev/null || true
+	fi
+	if [[ -n "${cardRuntime}" && -d "${cardRuntime}" ]]; then
+		rm -f -- "${cardRuntime}"/wayland-* "${cardRuntime}"/sway-ipc.* 2>/dev/null || true
+		rmdir -- "${cardRuntime}" 2>/dev/null || true
+	fi
+	cardSway=""; cardDisplay=""; cardRuntime=""
+}
+
+## Software rendering on an X server with no shared pixmaps, at launch and switched
+## on later. It needs a compositor drawing on the card, so it runs on this box, and
+## a container run takes it up here once the container is done. Exit 3 is a skip:
+## no binary, sway, Xwayland with DRI3, render node or tools.
+fRenderNodeTest(){
+	if [[ -n "${SILK_CICD_IN_CONTAINER:-}" ]]; then fEcho_Clean "the render node test runs outside the container"; return 0; fi
+	fRunTest_MaySkip cicd/tests/swnoshm/run.bash "software rendering without shared pixmaps"
+}
+
+## Stage 4's profiler (non-gating artifact; failures classified below). It runs on
+## this box, since the card is what it is for, so a container run calls it here
+## once the container is done.
 fRunProfiler(){
 	((PROFILE_ENABLE)) || { fEcho_Clean "profiler disabled"; return 0; }
+	if [[ -n "${SILK_CICD_IN_CONTAINER:-}" ]]; then fEcho_Clean "the profiler runs outside the container, on the card"; return 0; fi
 
 	## Mundane/environmental reasons -> skip with a warning (not the app's fault),
 	## unless PROFILE_STRICT. Genuine run failures below still abort. The app runs
-	## on a private Xvfb (gui-headless.bash), so no visible DISPLAY is needed - only
-	## Xvfb + python3 + the workload.
+	## on a headless display, never the visible one: the card's through sway, or a
+	## private Xvfb (gui-headless.bash) where that can't start.
 	local skip=""
 	command -v python3 >/dev/null 2>&1 || skip="python3 not found"
 	[[ -z "${skip}" ]] && [[ ! -f "${absScript}" ]] && skip="workload missing: ${absScript}"
-	[[ -z "${skip}" ]] && ! command -v Xvfb >/dev/null 2>&1 && skip="Xvfb not found (headless display unavailable)"
 	if [[ -n "${skip}" ]]; then
 		((PROFILE_STRICT)) && fDie "profiler: ${skip}"
 		fEcho "WARNING: profiler skipped: ${skip}"; return 0
@@ -915,15 +992,27 @@ fRunProfiler(){
 	fRetryBuild profiler cargo build --profile "${PROFILE_PROFILE}" --features "${PROFILE_FEATURE}"
 	mkdir -p "${profileDir}"
 
-	## Bring up a private in-memory display so the profiler window never touches the
-	## user's visible session (renders via software GL / llvmpipe on Xvfb).
-	local headless="${here}/utility/gui-headless.bash"
-	## Not :99 - rapid-photo-downloader-pro uses that display for its own testing.
-	export CICD_HEADLESS_DISPLAY="${CICD_HEADLESS_DISPLAY:-${RPD_HEADLESS_DISPLAY:-:98}}"
-	local hdisp="${CICD_HEADLESS_DISPLAY}"
-	if ! "${headless}" start >/dev/null 2>&1; then
-		((PROFILE_STRICT)) && fDie "profiler: headless display failed to start"
-		fEcho "WARNING: profiler skipped: headless display failed to start"; return 0
+	local headless="${here}/utility/gui-headless.bash" hdisp="" why="" swayDir=""
+	if [[ -n "${SILKTERM_TEST_DIR:-}" ]] && swayDir="$(mktemp -d "${SILKTERM_TEST_DIR}/profiler.XXXXXX")"; then
+		if fCardDisplay_Start "${swayDir}"; then hdisp="${cardDisplay}"; else why="${cardWhy}"; fi
+	else
+		why="no test run folder for sway"
+	fi
+	if [[ -n "${hdisp}" ]]; then
+		fEcho_Clean "on the card, through a headless sway's Xwayland at ${hdisp}"
+	else
+		((PROFILE_STRICT)) && fDie "profiler: not on the card: ${why}"
+		fEcho "WARNING: profiler on software GL, not the card: ${why}"
+		if ! command -v Xvfb >/dev/null 2>&1; then
+			fEcho "WARNING: profiler skipped: Xvfb not found (headless display unavailable)"; return 0
+		fi
+		## Not :99 - rapid-photo-downloader-pro uses that display for its own testing.
+		export CICD_HEADLESS_DISPLAY="${CICD_HEADLESS_DISPLAY:-${RPD_HEADLESS_DISPLAY:-:98}}"
+		hdisp="${CICD_HEADLESS_DISPLAY}"
+		if ! "${headless}" start >/dev/null 2>&1; then
+			((PROFILE_STRICT)) && fDie "profiler: headless display failed to start"
+			fEcho "WARNING: profiler skipped: headless display failed to start"; return 0
+		fi
 	fi
 
 	## Born canonical (role "frequent"); the rotation retags the newest as "latest".
@@ -939,7 +1028,7 @@ fRunProfiler(){
 	env -u WAYLAND_DISPLAY -u XDG_SESSION_TYPE \
 	SILK_PROFILE_OUT="${part}" SILK_PROFILE_SECS="${PROFILE_SECS}" DISPLAY="${hdisp}" \
 		"${PROFILE_BIN}" --shell "python3 ${absScript} ${PROFILE_WORKLOAD_ARGS}" || prc=$?
-	"${headless}" stop >/dev/null 2>&1 || true
+	if [[ -n "${cardSway}" ]]; then fCardDisplay_Stop; else "${headless}" stop >/dev/null 2>&1 || true; fi
 	((prc == 0)) || { rm -f "${part}"; fDie "profiler run failed (non-zero exit - app problem)"; }
 	[[ -s "${part}" ]] || { rm -f "${part}"; fDie "profiler produced no SVG (app problem): ${out}"; }
 	mv -f "${part}" "${out}"
@@ -1145,7 +1234,7 @@ fSweepBuilds(){
 
 ## Stages 1 to 6: format, debug build, tests and lints, profiler, release builds and
 ## packages. One function, so --container can run them in the image instead, with this
-## box picking up at the private runner.
+## box taking up the steps that need the card, then the private runner.
 fBuildTestRelease(){
 	fSweepBuilds
 	## Stage 1: format.
@@ -1323,10 +1412,7 @@ fBuildTestRelease(){
 	## Heap allocations per frame at rest and in a drag select, against a limit.
 	## Exit 3 is a skip: no debug binary, display, window manager or xdotool.
 	fRunTest_MaySkip cicd/tests/allocs/run.bash "allocations per frame"
-	## Software rendering on an X server with no shared pixmaps, at launch and
-	## switched on later. Exit 3 is a skip: no binary, sway, Xwayland with DRI3,
-	## render node or tools.
-	fRunTest_MaySkip cicd/tests/swnoshm/run.bash "software rendering without shared pixmaps"
+	fRenderNodeTest
 	## This script's own steps: the build retry, the dogfood tag, the options, the
 	## running-copy check, the build number and the host line.
 	fRunTest cicd/tests/engine/run.bash "pipeline steps" "pipeline step test failed"
@@ -1511,9 +1597,12 @@ if ((container)); then
 	fContainerRun "${containerImage}" "${root}/cicd/cicd.bash" "${innerArgs[@]}" || fDie "the run in the container failed (above)"
 	fEcho "OK: stages 1-6 in the container"
 	fContainerArtifacts
-	## What needs this box's own trees and keys.
+	## What needs this box's own trees and keys, or the card.
 	fContentScrub
 	fWinGuiScenarios
+	fRenderNodeTest
+	fSection "4/8  Profiler (here)"
+	fRunProfiler
 else
 	fBuildTestRelease
 fi
@@ -1636,6 +1725,9 @@ fEcho_Clean
 
 
 ##	History:
+##		- 2026-10-25: The profiler and the render node test run on this box, after
+##		              the container, and the profiler draws on the card through a
+##		              headless sway, with a private Xvfb as the fallback.
 ##		- 2026-10-23: The test suite again under TSan, after the leak checks, in
 ##		              the image like the ASan run. --no-tsan skips it.
 ##		- 2026-10-23: The run in the container gets --no-demo, so the demo is

@@ -72,6 +72,87 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Swept: `pane_options` has the one spawn caller and one Windows test; no other place sets TERM for a pane. `front.rs`'s TERM is a test's tmux client.
 	- Closed:
 
+- The window doesn't paint while the GPU is busy or short on memory, and stays blank after the load ends
+	- ID: 2026100312470535
+	- Type: Bug
+	- Status: Waiting on UAT
+		- 20261025: Only the look on b23's own desktop is left, which is a person's part.
+	- Needs hand testing: A dogfood look on b23 with the GPU busy or nearly full. Move to another desktop and back, end the load, and leave the window alone. It should paint on its own. Try it once with "Free resources when idle" on and short idle times too. Started from a terminal with `SILK_IDLEDBG=1`, it prints any refused frame or rebuild.
+	- Severity: High
+	- Opened: 20261003-124705
+	- Opened by: JC
+	- Assigned to: CC
+	- Related IDs: 2026100312470540, 2026100418225504
+	- Target OS: All
+	- Test environment: b23
+	- Steps to reproduce:
+		- Have something else keep the GPU busy, or holding most of its memory.
+		- Move to another virtual desktop and back to one with a SilkTerm window.
+	- Incorrect behavior:
+		- SilkTerm doesn't paint. The only thing visible is the window frame, and other windows and the desktop behind the terminal area.
+		- When whatever was using the GPU ends, the blank window is still not repainted. Switching to a different virtual desktop and back repaints it.
+	- Expected behavior: The window paints as soon as the GPU can take the work, and never stays blank once the load is gone.
+	- Reproduced: No. Seen on b23 when moving between virtual desktops. Not known yet if a window left on screen would also stop painting.
+	- Possible cause: A frame that can't get its surface or GPU device under that load is dropped, and nothing tries again until the desktop asks for a redraw.
+	- Actual cause:
+		- A frame the GPU refused was dropped. The pass that asked for it had already cleared its redraw flag, so nothing asked again until the desktop sent another redraw. That covers a surface that timed out or went out of date, and on X11 a buffer swap that failed, whose error was ignored.
+		- A device that could not be built again after the idle release waited for the next key, click or focus change.
+		- Which one happened on b23 is not known. The terminal window always draws through GL on X11, so the failed swap and the rebuild are the likely ones. It is also not known whether "Free resources when idle" was on at the time.
+	- Notes:
+		- Before RC1.
+		- 20261003: At filing, b23's GPU had 7.7 GB of its 8 GB in use.
+		- 20261003: Settings and the notice window had the same gap, and get the same retry.
+		- 20261003: For 2026100312470540: a rebuild refused after the idle release now tries again by itself while the window shows, with a wait that grows to a few seconds.
+		- 20261003: Not covered. A GL error that arrives after the swap has returned is not seen. A GPU out of memory while getting a surface on the native path ends the program rather than blanking it, from wgpu's default error handler. wgpu wants a lost surface made again, and the code only reconfigures it, so a lost surface would keep being refused. While the GPU keeps timing out, each try can hold the window up for about a second inside wgpu.
+		- 20261004: Falling back to software rendering when the card cannot make a device is filed as 2026100418225504.
+	- Actual fix: A refused frame is drawn again after a short wait that doubles up to a couple of seconds, and starts over once a frame gets through. A refused rebuild stays pending and is tried again the same way, with longer waits, while the window shows. A refused frame no longer keeps animation frames coming, so the wait is the only pace while the GPU says no.
+	- Progress log:
+		- 20261003: Verified: both new tests fail with the retry taken out and pass with it. The full unit suite, clippy for Linux and Windows, and fmt pass.
+		- 20261003: Verified: three refused rebuilds were tried again at about 0.25, 0.5 and 1 s, and the device came back with no input. Eight refused frames backed off from 16 ms to 2 s, and the window painted again with no input. An idle release and wake with nothing refused still works.
+		- 20261003: Tried on vm925w (RTX 2060, 6 GB) with another program keeping the GPU at 100% and holding 4.6 GB, then again with memory full until the driver refused more and longer GPU work. The build from just before the fix and the fixed build both kept painting: on screen while typed into, after minimize and restore, and after a move to another virtual desktop and back. Neither went blank. Both still showed the right picture 3 and 10 s after the load ended, with no input.
+		- 20261003: Same with Free resources when idle on and a 5 s idle time. The device was let go and built again under load each time, in about 1 s, and no rebuild was refused. The fixed build logged one refused frame now and then around a minimize, drawn again after 16 ms, never two in a row.
+		- 20261003: With Transparency on, which draws through DX12 on Windows, both builds did the same thing: a window restored without focus was let go after the idle time while still on screen, went black when the load ended, and stayed black until typed into. The fix does not change this, since a window let go on purpose needs no frame. Not tried without load: that run hung vm925w and did not finish.
+		- 20261003: Also seen in both builds with Free resources when idle on, under load: after waking, the window sometimes showed only the last character of the prompt instead of the earlier text, until typed into.
+		- 20261003: Not covered: the Windows terminal draws through wgpu on Vulkan, or DX12 with Transparency, not the X11 GL swap b23 uses, so the failed swap path was never reached. vm925w has no WSL2, so there was no run through Mesa on the same GPU.
+		- 20261003: The black window and the missing text seen in both builds are filed as 2026100319134501 and 2026100319134502.
+		- 20261023: Both tests passed in the full run at 2da75a7. The b23 look is not done yet. This round had no dogfood or desktop runs.
+		- 20261025: Both tests passed again in both full runs at e95b81b. The b23 look moved to the hand testing row, since it needs the visible desktop.
+	- Swept: every frame and rebuild site. The terminal's acquire and GL swap in `render_with`, reached from both `about_to_wait` and the desktop's redraw. The dialog and notice windows' acquire and swap in `DialogWin::render`. `rebuild_gpu`, which the console-return heal also calls. `grep -n 'begin_frame\|end_frame\|Gfx::rebuild'` finds no others.
+	- Branch: gpuload
+	- Commit: 8cb6a4d
+	- Test case: `a_refused_frame_is_drawn_again_on_a_backoff` (Erfy7et) and `a_refused_rebuild_stays_pending_and_is_tried_again` (Erfy7yk). The GL swap result has no test, since it needs a real GL context.
+	- Note: 20261003, Free resources when idle was on for some of the windows that went blank and off for others. Which ones is not remembered, so both the frame path and the rebuild path stay suspects.
+
+- CICD reset: containers
+	- ID: 2026102416233801
+	- Type: Task
+	- Status: Waiting on UAT
+		- Departs from the wording: the profiler now draws on the card, through a headless sway, where before it drew in software on Xvfb, here as in the image. And the render node test runs here too, where it had only skipped inside.
+		- Stand-in: 20261025. The container full run at e95b81b passed stages 1 to 6, with the container test (EsJg9EF) and "the render node test runs outside the container" inside, then stopped on a Windows scenario before the host's profiler and render node steps. Those two ran alone here on rnd1025 instead, as below.
+	- Priority: High
+	- Opened: 20261024-162338
+	- Opened by: CC
+	- Related IDs: 2026101009221201, 2026102416233802, 2026102507092877
+	- Target OS: All
+	- Requirements:
+		- Per `Containers` in the shared CICD rules. The pinned image, docker by default, the fallback to this box and `--no-container` are in.
+		- Left: a step whose point is the real GPU runs on this box, not in the image. That's the profiler, and anything else that reads frame times or graphics memory off the card. The render-node test already skips inside.
+		- Windows GPU work stays on vm925w, per 2026102416233802.
+		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
+		- Overrides: the private notes' line that stages 1 to 6 run in the image, the profiler included.
+	- Progress log:
+		- 20261025: Measured first. The profiler ran on a private Xvfb, and there the app draws with llvmpipe on this box too, not only in the image. So moving it here alone would not have put it on the card.
+		- 20261025: The profiler now runs on a headless sway drawing on the card's render node, through sway's own Xwayland. The app reports the RTX 3060 Ti there. Without sway, a render node or XDG_RUNTIME_DIR it falls back to the private Xvfb, with a warning saying why.
+		- 20261025: A container run now runs the profiler and the render node test here, once the container is done. Inside, both only say they run outside. The render node test had skipped in every container run, so it hadn't run in a default full run since docker became the default.
+		- 20261025: Nothing else in stages 1 to 6 reads the card. The scroll harness checks the shape of each frame on Xvfb, not its timing. The graphics memory unit test falls back to software Vulkan, where it still checks the allocator's hint.
+		- Note: The render node test skips when its test folder sits under a long temp path, since sway's socket path is then too long. Filed as 2026102507092877.
+		- 20261025: The flamegraph's text shaping share is about twice the last one on dev, 48% against 23%. The source differs from dev only in test code, so that comes from drawing on the card rather than llvmpipe, not from the round.
+	- Verified: 20261025, at 6965e34. The host's profiler step alone: "on the card, through a headless sway's Xwayland", renderer NVIDIA GeForce RTX 3060 Ti, flamegraph written. The render node test (ErxxHzT) against a fresh debug build, with its temp folder under the run's own: all passed, in software at launch and switched to it.
+	- Verified: 20261025. The profiler step from cicd.bash, run alone here: on the card, NVIDIA renderer, flamegraph written, sway gone and its socket folder removed after. With no XDG_RUNTIME_DIR: the warning, then llvmpipe on Xvfb, flamegraph written. The render node test on this box against the image's debug binary: all passed with a short temp folder, skipped under the long one above. Container test with new cases, watched to fail against the old cicd.bash and against a mutant without the guard inside. Engine test, shellcheck, house style, docs check, lint report. The plan lines in both arms.
+	- Swept: every step in stages 1 to 6 that starts a window or a GPU device: the window tests under `cicd/tests`, the scroll harness, the allocs test, `a_new_device_reserves_little_graphics_memory`, the profiler. `cicd/utility/mem-per-window` and `gpu-stress` aren't pipeline steps.
+	- Test case: New cases in `cicd/tests/container/run.bash` (EsJg9EF): the render node test and the profiler run here after the container, and inside only say so.
+	- Branch: rnd1025
+
 - Updates to CICD script flags
 	- ID: 2026101816103601
 	- Type: Enhancement
@@ -136,54 +217,32 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Branch: rnd1022
 	- Test case: `the_scroll_record_costs_a_full_screen_program_little` (EqHIGdO), message only.
 
-- The window doesn't paint while the GPU is busy or short on memory, and stays blank after the load ends
-	- ID: 2026100312470535
-	- Type: Bug
-	- Status: Waiting on automated testing
-	- Needs external testing: A dogfood look on b23 with the GPU busy or nearly full. Move to another desktop and back, end the load, and leave the window alone. It should paint on its own. Try it once with "Free resources when idle" on and short idle times too. Started from a terminal with `SILK_IDLEDBG=1`, it prints any refused frame or rebuild.
-	- Severity: High
-	- Opened: 20261003-124705
-	- Opened by: JC
-	- Assigned to: CC
-	- Related IDs: 2026100312470540, 2026100418225504
+- A drag select recomposes the minimap about 11 times a second, though the map shows no selection
+	- ID: 2026102407065861
+	- Type: Enhancement
+	- Status: Waiting on UAT
+	- Needs hand testing: With the map on, a drag select, a link hover, typing on the prompt line and a color change in Settings, all in a real window.
+	- Priority: Low
+	- Opened: 20261024-070658
+	- Opened by: CC
+	- Related IDs: 2026102321230038, 2026102407065855
 	- Target OS: All
-	- Test environment: b23
-	- Steps to reproduce:
-		- Have something else keep the GPU busy, or holding most of its memory.
-		- Move to another virtual desktop and back to one with a SilkTerm window.
-	- Incorrect behavior:
-		- SilkTerm doesn't paint. The only thing visible is the window frame, and other windows and the desktop behind the terminal area.
-		- When whatever was using the GPU ends, the blank window is still not repainted. Switching to a different virtual desktop and back repaints it.
-	- Expected behavior: The window paints as soon as the GPU can take the work, and never stays blank once the load is gone.
-	- Reproduced: No. Seen on b23 when moving between virtual desktops. Not known yet if a window left on screen would also stop painting.
-	- Possible cause: A frame that can't get its surface or GPU device under that load is dropped, and nothing tries again until the desktop asks for a redraw.
-	- Actual cause:
-		- A frame the GPU refused was dropped. The pass that asked for it had already cleared its redraw flag, so nothing asked again until the desktop sent another redraw. That covers a surface that timed out or went out of date, and on X11 a buffer swap that failed, whose error was ignored.
-		- A device that could not be built again after the idle release waited for the next key, click or focus change.
-		- Which one happened on b23 is not known. The terminal window always draws through GL on X11, so the failed swap and the rebuild are the likely ones. It is also not known whether "Free resources when idle" was on at the time.
+	- Requirements:
+		- A pane rebuild that changes nothing the map shows, such as a selection change, doesn't recompose the map.
+		- Typing on the prompt line, output, a scroll, a resize and a color change still reach the map.
 	- Notes:
-		- Before RC1.
-		- 20261003: At filing, b23's GPU had 7.7 GB of its 8 GB in use.
-		- 20261003: Settings and the notice window had the same gap, and get the same retry.
-		- 20261003: For 2026100312470540: a rebuild refused after the idle release now tries again by itself while the window shows, with a wait that grows to a few seconds.
-		- 20261003: Not covered. A GL error that arrives after the swap has returned is not seen. A GPU out of memory while getting a surface on the native path ends the program rather than blanking it, from wgpu's default error handler. wgpu wants a lost surface made again, and the code only reconfigures it, so a lost surface would keep being refused. While the GPU keeps timing out, each try can hold the window up for about a second inside wgpu.
-		- 20261004: Falling back to software rendering when the card cannot make a device is filed as 2026100418225504.
-	- Actual fix: A refused frame is drawn again after a short wait that doubles up to a couple of seconds, and starts over once a frame gets through. A refused rebuild stays pending and is tried again the same way, with longer waits, while the window shows. A refused frame no longer keeps animation frames coming, so the wait is the only pace while the GPU says no.
+		- `Pane::build` calls `map.update` on every forced rebuild, and that composes whenever the 90 ms gap is up. A drag rebuilds every frame, so the map composes on every frame past the gap: about 20 allocations a time on b23, and the compose's own CPU.
+		- The due compose is also what picks up a changed screen row with no new history, so skipping it needs some other sign the screen's text changed. `last_rows` already holds a hash per row.
+		- ErzCQC2's drag limit has the compose in every frame, so this lowers its figure.
+	- Decisions:
+		- 20261024: Done by where the rebuild comes from, not by a hash of the screen. A moved selection and a link hover probe now mark the window with their own flag. The panes draw again as before, but the map is only updated for the window's other causes, a pane's own output and its scroll. So typing, output, a scroll, a resize and a color change take the same path to the map as before.
 	- Progress log:
-		- 20261003: Verified: both new tests fail with the retry taken out and pass with it. The full unit suite, clippy for Linux and Windows, and fmt pass.
-		- 20261003: Verified: three refused rebuilds were tried again at about 0.25, 0.5 and 1 s, and the device came back with no input. Eight refused frames backed off from 16 ms to 2 s, and the window painted again with no input. An idle release and wake with nothing refused still works.
-		- 20261003: Tried on vm925w (RTX 2060, 6 GB) with another program keeping the GPU at 100% and holding 4.6 GB, then again with memory full until the driver refused more and longer GPU work. The build from just before the fix and the fixed build both kept painting: on screen while typed into, after minimize and restore, and after a move to another virtual desktop and back. Neither went blank. Both still showed the right picture 3 and 10 s after the load ended, with no input.
-		- 20261003: Same with Free resources when idle on and a 5 s idle time. The device was let go and built again under load each time, in about 1 s, and no rebuild was refused. The fixed build logged one refused frame now and then around a minimize, drawn again after 16 ms, never two in a row.
-		- 20261003: With Transparency on, which draws through DX12 on Windows, both builds did the same thing: a window restored without focus was let go after the idle time while still on screen, went black when the load ended, and stayed black until typed into. The fix does not change this, since a window let go on purpose needs no frame. Not tried without load: that run hung vm925w and did not finish.
-		- 20261003: Also seen in both builds with Free resources when idle on, under load: after waking, the window sometimes showed only the last character of the prompt instead of the earlier text, until typed into.
-		- 20261003: Not covered: the Windows terminal draws through wgpu on Vulkan, or DX12 with Transparency, not the X11 GL swap b23 uses, so the failed swap path was never reached. vm925w has no WSL2, so there was no run through Mesa on the same GPU.
-		- 20261003: The black window and the missing text seen in both builds are filed as 2026100319134501 and 2026100319134502.
-		- 20261023: Both tests passed in the full run at 2da75a7. The b23 look is not done yet. This round had no dogfood or desktop runs.
-	- Swept: every frame and rebuild site. The terminal's acquire and GL swap in `render_with`, reached from both `about_to_wait` and the desktop's redraw. The dialog and notice windows' acquire and swap in `DialogWin::render`. `rebuild_gpu`, which the console-return heal also calls. `grep -n 'begin_frame\|end_frame\|Gfx::rebuild'` finds no others.
-	- Branch: gpuload
-	- Commit: 8cb6a4d
-	- Test case: `a_refused_frame_is_drawn_again_on_a_backoff` (Erfy7et) and `a_refused_rebuild_stays_pending_and_is_tried_again` (Erfy7yk). The GL swap result has no test, since it needs a real GL context.
-	- Note: 20261003, Free resources when idle was on for some of the windows that went blank and off for others. Which ones is not remembered, so both the frame path and the rebuild path stay suspects.
+		- 20261024: The selection alone wasn't enough. A pointer moving over text also starts a link hover probe, which marked the whole window, so both panes still composed on every drag frame. The hover probe takes the same flag now.
+		- 20261025: Verified: the container full run at e95b81b passed the scroll harness on X11 and on Wayland (EjIG8ro) and the allocations per frame test (ErzCQC2), as did the gate step. Only the hand look is left.
+	- Verified: 20261024, with a compose logged for the run, a drag frame under load composed both panes every frame before and none after, bar the press. ErzCQC2's drag frame read 315 and 317 with 8 cores loaded, against 333 to 370 before, and 327 idle against 332. With the map off it reads 321. Unit suite, clippy for Linux and Windows, fmt and shellcheck pass.
+	- Swept: every `state.dirty` set on a pointer move. The thumb and map drags move the view, and a divider drag and a pane drag change the layout, so they still compose. The menu, tab and bar hovers don't touch a pane. The wake after a frame looks at the new flag too.
+	- Branch: rnd1024
+	- Test case: ErzCQC2's drag figure, under Verified. The limit stays 360, since the saving is about 5% and the 2026102321230038 margin was set by load.
 
 - Running on macOS without a GPU fails to launch
 	- ID: 2026102209035801
@@ -214,6 +273,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261022: Verified: the words test passes. fmt, and clippy for Linux, Windows and macOS, pass. The alert itself is only compiled.
 		- 20261022: No real software path on macOS was found, so the Resource use group's `not_macos` row stays as it is.
 		- 20261024: Answer: A, keep the alert. A Mac with no Metal can't run SilkTerm, and the alert says why. A real fallback through ANGLE would be its own item, if Mac VMs turn out to matter.
+		- 20261025: The words test passed again in both full runs at e95b81b, and the hosted Mac workflow passed on rnd1025. The vmKt6m check didn't fit this round's time.
 	- Swept: the one exit site where no device could be made at launch. Rebuilds after idle and the dialogs keep their own error paths, and both need a device that once worked.
 	- Branch: rnd1022
 	- Test case: `no_device_on_macos_says_why_and_that_nothing_can_stand_in` (EtS63vE)
@@ -247,6 +307,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Swept: `remote_session()` has one caller, the launch check. `set_remote` callers are the View menu toggle, the Profile dropdown and tests, all by hand, so none reads the setting.
 		- Not tried in a real window on any system.
 		- 20261023: The slow window tests passed in the full run at 2da75a7, apart from monwl (window size per Wayland output), which skipped without a reason in the log. Both new tests passed there and on b26. Left: the Windows scenario. No Windows box was free this round.
+		- 20261025: Both new tests passed again in both full runs at e95b81b. `wpremote` skipped on b29w, whose console session was locked, and never got to vm925w.
 	- Branch: rnd1022
 	- Test case: `a_remote_screen_is_ignored_when_turned_off` (rating.rs, fails with the check reordered so detection runs first) and `a_remote_screen_takes_remote_unless_turned_off` (config.rs).
 
@@ -272,6 +333,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261018: Stage 3 runs clippy for `x86_64-apple-darwin` too, with warnings as errors, after the Windows lints. The target is in rust-toolchain.toml, so the container image gets it. About 23 s here.
 		- 20261022: The advisory scan passed in stage 3 of both full runs, container and plain: "advisories ok", then the scope check (EtBK7tB). Left: the Windows run.
 		- 20261023: The advisory scan, its scope check and the macOS lints passed again in the full run at 2da75a7. The Windows run is still left. No Windows box was free this round.
+		- 20261025: "advisories ok" again in both full runs at e95b81b. The `cicd-win.ps1` run didn't fit this round's time.
 	- Decisions:
 		- 20261018: Add a macOS clippy step that fails the pipeline. It adds the x86_64-apple-darwin target to rust-toolchain.toml, so every box and the container image download it.
 	- Verified: clippy `-D warnings` clean for Linux, `x86_64-pc-windows-gnu` and `x86_64-apple-darwin`, and with the profiling feature. Unit suite (1364 + 28), fmt check, docs check.
@@ -310,6 +372,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Left as found: the 343 local and 4 `/tmp` test folders, which no run wrote down; the `tmp.*.ps1` scripts and the b29w test folders on the boxes; the 7 `dash` processes; the remote clones' target dirs, built by hand jobs. The Windows pipeline's own target dir isn't swept yet.
 		- Verified: the four tests below pass, and their new checks failed against the pipeline as it was before.
 		- 20261023: The full run at 2da75a7 ended "cleanup: nothing stale" in the image and on the host, and the cleanup test passed. The Windows half is still left. No Windows box was free this round.
+		- 20261025: The container full run at e95b81b passed the cleanup test (EtAiwUl) and the container test, and ended "cleanup: nothing stale". The Windows half didn't fit this round's time.
 	- Decisions:
 		- 20261019: No `docker builder prune` after a new image. The build cache isn't a stale leftover, and other projects share it. A run only prints its size.
 		- 20261024: 2026102416233805 supersedes this. Under the CICD reset a run ends with `docker builder prune -f --filter until=168h`. 2026102416233803 also replaces the newest-5 rule for folders failed runs keep.
@@ -341,39 +404,13 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261022: `--help`, the plan, config.bash, install.md, design.md and the dhat comments say so. The plan row on 2026101714445005 is rewritten to match.
 		- 20261022: Full runs, container and plain, no flag: the plan's Leak checks line names the heap-growth test, and stage 3 ran it right after the ASan run. `cicd.bash --no-leakcheck </dev/null` shows the Leak checks line as "(skipped)". The `--quick` arms passed in the gate run. Left: the Windows check.
 		- 20261023: In the full run at 2da75a7, with no flag, stage 3 ran the heap growth check after the ASan run. It caught the planted leak and found no other growth. The `cicd-win.ps1 -Wsl` check is still left. No Windows box was free this round.
+		- 20261025: The engine test (Er2UgY7) passed in the full run at e95b81b, and `--no-leakcheck` showed Leak checks "(skipped)" in its plan. The other full run stopped in the ASan step before the leak checks. The Windows check didn't fit this round's time.
 	- Decisions:
 		- 20261022: The engine case that said no options leave the leak checks off now says they're on, per this item's requirements.
 	- Verified: 20261022. Engine cases, each watched to fail against the old cicd.bash and 2 mutants. The plan's Leak checks line with no flag, `--quick`, `--quick --leakcheck` and `-q --no-leakcheck`. shellcheck, house style, PSScriptAnalyzer on `cicd-win.ps1`, cargo check with the feature.
 		- Swept: every `--leakcheck` mention in the repo, the `cicd-win.ps1` handoff to the Linux half, and the demo's on-by-default pattern.
 	- Test case: New cases in `cicd/tests/engine/run.bash` (Er2UgY7).
 	- Branch: rnd1022
-
-- A drag select recomposes the minimap about 11 times a second, though the map shows no selection
-	- ID: 2026102407065861
-	- Type: Enhancement
-	- Status: Waiting on automated testing
-	- Needs local test suite run?: A full run, for the scroll harness, since `Pane::build` and the frame loop changed. The gate step runs ErzCQC2.
-	- Needs hand testing: With the map on, a drag select, a link hover, typing on the prompt line and a color change in Settings, all in a real window.
-	- Priority: Low
-	- Opened: 20261024-070658
-	- Opened by: CC
-	- Related IDs: 2026102321230038, 2026102407065855
-	- Target OS: All
-	- Requirements:
-		- A pane rebuild that changes nothing the map shows, such as a selection change, doesn't recompose the map.
-		- Typing on the prompt line, output, a scroll, a resize and a color change still reach the map.
-	- Notes:
-		- `Pane::build` calls `map.update` on every forced rebuild, and that composes whenever the 90 ms gap is up. A drag rebuilds every frame, so the map composes on every frame past the gap: about 20 allocations a time on b23, and the compose's own CPU.
-		- The due compose is also what picks up a changed screen row with no new history, so skipping it needs some other sign the screen's text changed. `last_rows` already holds a hash per row.
-		- ErzCQC2's drag limit has the compose in every frame, so this lowers its figure.
-	- Decisions:
-		- 20261024: Done by where the rebuild comes from, not by a hash of the screen. A moved selection and a link hover probe now mark the window with their own flag. The panes draw again as before, but the map is only updated for the window's other causes, a pane's own output and its scroll. So typing, output, a scroll, a resize and a color change take the same path to the map as before.
-	- Progress log:
-		- 20261024: The selection alone wasn't enough. A pointer moving over text also starts a link hover probe, which marked the whole window, so both panes still composed on every drag frame. The hover probe takes the same flag now.
-	- Verified: 20261024, with a compose logged for the run, a drag frame under load composed both panes every frame before and none after, bar the press. ErzCQC2's drag frame read 315 and 317 with 8 cores loaded, against 333 to 370 before, and 327 idle against 332. With the map off it reads 321. Unit suite, clippy for Linux and Windows, fmt and shellcheck pass.
-	- Swept: every `state.dirty` set on a pointer move. The thumb and map drags move the view, and a divider drag and a pane drag change the layout, so they still compose. The menu, tab and bar hovers don't touch a pane. The wake after a frame looks at the new flag too.
-	- Branch: rnd1024
-	- Test case: ErzCQC2's drag figure, under Verified. The limit stays 360, since the saving is about 5% and the 2026102321230038 margin was set by load.
 
 - Add a contributor license agreement, like nano-git-db's
 	- ID: 2026101906582193
@@ -543,21 +580,126 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Test case: None new. The ignores are test attributes, checked by the runs above.
 	- Branch: rnd1023
 
-- CICD reset: containers
-	- ID: 2026102416233801
+- CICD reset: the Windows boxes, VM state and where each scenario runs
+	- ID: 2026102507245255
 	- Type: Task
 	- Status: Queued
+		- Reverted on `rnd1025` after the full run's wingui stage failed on a woken vm925w. See 2026102510420001. The work is on `wip/rnd1025-2026102507245255`. The host config change outside the repo, `~/.config/silkterm/winrig.conf`, wasn't reverted, and its `@vmstate` line does nothing without this item's code.
+	- Needs external testing: The wingui stage, `cicd/tests/wingui/run.bash` with the config's scenario list, with vm925w off and b29w up: the plain scenarios run on b29w, `perfladder` alone on vm925w, and vm925w is off again after. Then once with b29w off, so vm925w takes them all.
+	- Priority: High
+	- Opened: 20261025-072452
+	- Opened by: CC
+	- Parent ID: 2026102416233802
+	- Target OS: Windows
+	- Requirements:
+		- vm925w is put back the way it was found, through the VM state helper.
+		- The Windows scenarios favor b29w. The GPU and timed ones, such as `perfladder`, run on vm925w only.
+		- Windows testing names `b29w` only. Drop `b29w-wif` from the host config outside the repo.
+		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
+	- Progress log:
+		- 20261025: The host config can name the VM state helper (`@vmstate`), and then every hold in `win-remote.bash` goes through it, so a VM is woken and put back the way it was found. A box that can't be held or woken is a skip under `--optional`. Host lines take tags, and `hosts` prints them.
+		- 20261025: Each Windows scenario runs once, on the first box in the host config that's up and free. A scenario with a `Box: gpu` header line runs only on a box tagged `gpu`; that's `perfladder`. What no box took is a `SKIP` line at the end of the stage.
+		- 20261025: The host config lists b29w first and alone, with no `b29w-wif`, then vm925w tagged `gpu`, and the `@vmstate` line.
+		- Verified: both test scripts pass, and their new checks failed against the scripts as they were. shellcheck, the bash style check, the PowerShell lint, the test ID check, the docs check and the lint report pass. A job through the live config on b29w went through the VM state helper and the lock, and `hosts` printed vm925w's tag.
+		- Not run: a real wake of vm925w. It was off, and the box was at load 44.
+		- Swept: `win-unlock.bash` holds the same way and reads only the name and address from `hosts`, so the tags don't reach it. No other script reads `hosts` or calls `hold`. The jobs under `win-jobs` run through `job`, which holds the same way.
+	- Decisions:
+		- 20261025: Which box is favored, and which has a real card, live in the host config outside the repo, by order and the `gpu` tag. Machine names stay out of the repo, as before.
+		- 20261025: A scenario marks itself as needing a card in its own header, so the list in `config.bash` doesn't have to track it.
+	- Branch: rnd1025
+	- Test case: `cicd/tests/win-remote/run.bash` (Er2UgYA), 7 new checks for tags, holding through the VM state helper and a VM that never wakes. `cicd/tests/wingui/harness-test.bash` (EqH4isr), 8 new checks for which box each scenario runs on, and the `SKIP` lines.
+
+- CICD reset: `--no-remote`, and a skipped box shown as `SKIP`
+	- ID: 2026102507245260
+	- Type: Task
+	- Status: Queued
+		- Reverted on `rnd1025` with 2026102507245255, which it builds on. See 2026102510420001. The work is on `wip/rnd1025-2026102507245255`.
+	- Prereq IDs: 2026102507245255
+		- Departs from the wording: the Windows runner's test still runs under `--no-remote`, since it uses stand-ins and reaches no box.
+	- Needs external testing: A full run with b29w and vm925w both off, or held: the Windows scenarios' line reads `SKIP: windows gui scenarios, 16 not run`, and the run ends with a "Not run, since a box wasn't there" list of the 16 `SKIP wingui:` lines. Then `cicd.bash -y --no-remote --quick` once, for the plan's two `(skipped --no-remote)` lines.
+	- Priority: High
+	- Opened: 20261025-072452
+	- Opened by: CC
+	- Parent ID: 2026102416233802
+	- Related IDs: 2026102416233807, 2026102416233808
+	- Target OS: All
+	- Requirements:
+		- `--no-remote` skips every other box: the Windows scenarios, the Windows runner tests, and the private runner's Mac and store parts.
+		- A skipped box shows as `SKIP` in its step's line and in the summary at the end.
+		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
+	- Progress log:
+		- 20261025: `--no-remote` skips the Windows scenarios and the private runner, and the plan says so for each. The plan has a Windows scenarios line now.
+		- 20261025: A step that reaches another box hands its scripts the run's skip list as `SILK_CICD_SKIPS`. The Windows scenarios write their `SKIP wingui:` lines there. A step that skipped anything ends with a `SKIP:` line rather than `OK:`, and the run lists every `SKIP` line again at the end.
+		- 20261025: `cicd-win.ps1 -NoRemote` passes `--no-remote` to the Linux half, which is the half that reaches the boxes.
+		- 20261025: The private runner doesn't write to the list yet, so its skips are still only warnings. That half is silkterm-private's 2026102416285601.
+	- Decisions:
+		- 20261025: A step turned off by `--no-remote` is in the plan, not in the end list, which is for boxes that weren't there, per the shared rules.
+	- Verified: the engine, Windows scenario harness, Windows pipeline and container tests pass, and each new check failed against a broken copy of what it checks. shellcheck, the bash style check, the PowerShell lint, the test ID and docs checks pass. The plan printed by a real `cicd.bash` showed both lines for no options, `--no-remote` and `--quick`.
+	- Swept: everything `cicd.bash` runs that reaches a box: the Windows scenarios and the private runner. The script tests under `cicd/tests`, `win-remote` included, use stand-ins. `cicd-win.ps1`'s Linux half got the flag. The demo and `ci-mac.bash` reach no other box.
+	- Branch: rnd1025
+	- Test case: `cicd/tests/engine/run.bash` (Er2UgY7), 23 new checks for `--no-remote`, the plan lines, the `SKIP` step lines and the end list. `cicd/tests/wingui/harness-test.bash` (EqH4isr), 4 for the skip list. `cicd/tests/cicd-win/run.bash` (Er2UgYE), 2 for `-NoRemote`.
+
+- CICD reset: Zig cache
+	- ID: 2026102416233804
+	- Type: Task
+	- Status: Queued
+		- Reverted on `rnd1025` after its cap check failed the gate step on ZFS. See 2026102509002701. The work, with the fix for the startup gate test, is on `wip/rnd1025-2026102416233804`.
+	- Needs local test suite run?: One container full run, from the round's full-run line, so the ARM64 builds fill `silkterm-zig-cache`. Look for the volume made with both labels and a `.cicd-zig-version` of 0.16.0 in it.
 	- Priority: High
 	- Opened: 20261024-162338
 	- Opened by: CC
-	- Related IDs: 2026101009221201, 2026102416233802
-	- Target OS: All
+	- Target OS: Linux
 	- Requirements:
-		- Per `Containers` in the shared CICD rules. The pinned image, docker by default, the fallback to this box and `--no-container` are in.
-		- Left: a step whose point is the real GPU runs on this box, not in the image. That's the profiler, and anything else that reads frame times or graphics memory off the card. The render-node test already skips inside.
-		- Windows GPU work stays on vm925w, per 2026102416233802.
+		- Per the Zig bullets in `Cleanup after a run` in the shared CICD rules. The ARM64 builds use `cargo zigbuild`, and nothing looks after Zig's caches yet.
+		- At the end of a run, empty a project Zig cache that's over 2 GB, or that an older Zig filled, going by a version stamp inside it. Always the whole folder.
+		- In the container, Zig's global cache goes on a volume of its own, `silkterm-zig-cache`, under the same rule. On this box `~/.cache/zig` is left alone.
 		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
-		- Overrides: the private notes' line that stages 1 to 6 run in the image, the profiler included.
+	- Progress log:
+		- 20261025: The container mounts `silkterm-zig-cache` at `/zig-cache`, with `ZIG_GLOBAL_CACHE_DIR` pointed there. The first run to use it writes the Zig version into `.cicd-zig-version`. At the end of a run the volume goes whole when it's over 2 GB or another Zig filled it, through the container cleanup in 2026102416233805. The cap is `CLEANUP_CACHE_CAP_MB` in config.bash.
+		- 20261025: A `.zig-cache` or `zig-cache` folder in the tree goes whole under the same rule at the end of a run, where the builds ran, and gets the stamp when it has none. `zig cc` keeps to its global cache, so none turned up here.
+		- Note: Until now Zig's cache inside the container sat in `silkterm-cicd-cache`, under `/cache/home/.cache/zig`. It stays there until that volume is cleaned up by hand, per 2026102416233805.
+	- Verified: 20261025. In the image, `zig cc` for aarch64 wrote its cache into a stand-in volume at `/zig-cache`, owned by this uid, with the stamp `0.16.0`. The cleanup test's new Zig cases, and the container test's volume cases, against a stand-in docker. Both new sets failed against the pipeline as it was. Shellcheck, house style, engine test, docs check.
+	- Swept: every `zigbuild` and `zig` call in cicd and the Dockerfile. Only the two ARM64 cross targets in config.bash use it.
+	- Test case: New cases in `cicd/tests/cleanup/run.bash` (EtAiwUl) and `cicd/tests/container/run.bash` (EsJg9EF).
+	- Branch: rnd1025
+
+- CICD reset: container cleanup
+	- ID: 2026102416233805
+	- Type: Task
+	- Status: Queued
+		- Reverted on `rnd1025` with 2026102416233804, whose cap check failed the gate step on ZFS. See 2026102509002701. The work is on `wip/rnd1025-2026102416233804`.
+		- The hand cleanup of what was made before the labels is left for the next round, once the in-flight run of 2026-10-25 is done.
+	- Needs local test suite run?: One container full run, from the round's full-run line. Look for containers named `silkterm-<run>-engine`, `-asan` and `-tsan` in `docker ps` while it runs, then at the end "docker build cache over a week old pruned" and the `docker:` line, and no `silkterm-` container left after.
+	- Priority: High
+	- Opened: 20261024-162338
+	- Opened by: CC
+	- Related IDs: 2026101909222600
+	- Target OS: Linux
+	- Requirements:
+		- Per the container bullets in `Cleanup after a run` in the shared CICD rules. `--rm`, a pipeline label, and sweeps of old tags and stopped containers are in.
+		- Every container, image and volume gets `dev.project=silkterm` and `dev.run=<run folder name>`, and each container is named `silkterm-<run folder name>-<step>`.
+		- At the end of a run, on failure and Ctrl+C too, the run's containers are stopped and removed by `dev.run`. `--keep-temp` keeps them.
+		- The current image tag and the one before it stay. Every older tag goes now.
+		- `docker builder prune -f --filter until=168h` runs at the end.
+		- The cache volume gets the 2 GB rule.
+		- The end line compares `docker system df` before and after.
+		- What was made before the labels gets one cleanup by hand, by ID.
+		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
+		- Overrides: 2026101909222600's 20261019 decision of no `docker builder prune`, and the same call in the private notes' "Calls already made".
+	- Progress log:
+		- 20261025: Every container, image and volume a run makes is labeled `dev.project=silkterm` and `dev.run=<run>`, and containers are named `silkterm-<run>-<step>`, the step being `engine`, `gate`, `asan`, `tsan`, `codeql` or `tidy`. The run's name is its test run folder's for now, without the `test_silkterm_` part. 2026102416233803 moves the run folder under `HOST_TEMP`. The cache volumes are made with the labels when missing.
+		- 20261025: At the end of a run, failed or stopped by Ctrl+C too, the run's containers are stopped and removed by `dev.run`. Then untagged images with our label go. Once the run passed, our tags older than the current one and the one before it go. Then the volume rule: a cache volume over 2 GB goes whole, and the Zig one when another Zig filled it. docker keeps a volume another run still holds. Last, `docker builder prune -f --filter until=168h`, and one line comparing `docker system df` before and after.
+		- 20261025: `--keep-temp` starts the containers without `--rm`, keeps them at the end with their names printed, and leaves the volumes they hold.
+		- 20261025: The older-tag sweep moved from the start of a run to its end, and only runs after a pass, so the last image that passed isn't lost to a broken recipe.
+		- 20261025: Nothing without the label is touched, so the `silkterm-cicd` images, the `silkterm-cicd-cache` volume and any stopped container from before today stay until the hand cleanup.
+		- Note: A `docker run --rm` can return before docker has removed the container, which then still holds its volumes. So the step that reads the volumes runs without `--rm` and is removed with a plain `docker rm`, which waits.
+		- 20261025: The container test's checks of the old label, the build cache left alone and the old tag sweep are commented out with the reason, and replaced. The `-v` count it checks went from 3 to 4, for the Zig volume.
+	- Decisions:
+		- 20261025: The older-tag sweep keeps the newest tag before the current one by creation time, among images with our label only.
+	- Verified: 20261025. The end cleanup against real docker, on throwaway images, containers and volumes under another project name: this run's container gone, another run's and another project's kept, the current and previous tags kept, older labeled tags and a labeled untagged image gone, an unlabeled tag kept, an over-cap volume and a stale Zig volume gone, one held by another run left with a message, an unlabeled volume never read. It failed at first, on the `--rm` race above. The container test's new cases, against a stand-in docker, Ctrl+C in a gate and in a full run through the log tee included. All failed against the pipeline as it was. Shellcheck, house style, engine test, docs check, build.md markdown check.
+	- Swept: every `docker` call in cicd.bash, and every `fContainerRun` and `fContainerBuild` call (gate, ASan, TSan, CodeQL, engine). The asan, tsan and codeql scripts start no container. No other script names the old label.
+	- Test case: New cases in `cicd/tests/container/run.bash` (EsJg9EF).
+	- Branch: rnd1025
 
 - CICD reset: other hosts and VMs
 	- ID: 2026102416233802
@@ -576,41 +718,34 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- A skipped box shows as `SKIP` in its step's line and in the summary at the end.
 		- The Linux ARM64 build gets a `--version` smoke run on the arm64 Linux VM. Nothing runs it now.
 		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
+	- Progress log:
+		- 20261025: Split in 4, since it's too big for one go: 2026102507245255 (the Windows boxes), 2026102507245260 (`--no-remote` and `SKIP`), 2026102507245265 (vmKt6m in the private runner) and 2026102507245270 (the ARM64 smoke run). This one closes with the last of them.
 
-- CICD reset: Zig cache
-	- ID: 2026102416233804
+- CICD reset: vmKt6m put back through the VM state helper
+	- ID: 2026102507245265
 	- Type: Task
 	- Status: Queued
 	- Priority: High
-	- Opened: 20261024-162338
+	- Opened: 20261025-072452
 	- Opened by: CC
-	- Target OS: Linux
+	- Parent ID: 2026102416233802
+	- Target OS: macOS
 	- Requirements:
-		- Per the Zig bullets in `Cleanup after a run` in the shared CICD rules. The ARM64 builds use `cargo zigbuild`, and nothing looks after Zig's caches yet.
-		- At the end of a run, empty a project Zig cache that's over 2 GB, or that an older Zig filled, going by a version stamp inside it. Always the whole folder.
-		- In the container, Zig's global cache goes on a volume of its own, `silkterm-zig-cache`, under the same rule. On this box `~/.cache/zig` is left alone.
+		- The private runner's Mac part puts vmKt6m back the way it found it, through the VM state helper. The runner is in `silkterm-private`.
 		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
 
-- CICD reset: container cleanup
-	- ID: 2026102416233805
+- CICD reset: a `--version` smoke run of the Linux ARM64 build
+	- ID: 2026102507245270
 	- Type: Task
 	- Status: Queued
 	- Priority: High
-	- Opened: 20261024-162338
+	- Opened: 20261025-072452
 	- Opened by: CC
-	- Related IDs: 2026101909222600
+	- Parent ID: 2026102416233802
 	- Target OS: Linux
 	- Requirements:
-		- Per the container bullets in `Cleanup after a run` in the shared CICD rules. `--rm`, a pipeline label, and sweeps of old tags and stopped containers are in.
-		- Every container, image and volume gets `dev.project=silkterm` and `dev.run=<run folder name>`, and each container is named `silkterm-<run folder name>-<step>`.
-		- At the end of a run, on failure and Ctrl+C too, the run's containers are stopped and removed by `dev.run`. `--keep-temp` keeps them.
-		- The current image tag and the one before it stay. Every older tag goes now.
-		- `docker builder prune -f --filter until=168h` runs at the end.
-		- The cache volume gets the 2 GB rule.
-		- The end line compares `docker system df` before and after.
-		- What was made before the labels gets one cleanup by hand, by ID.
+		- The Linux ARM64 build gets a `--version` smoke run on the arm64 Linux VM, held and put back through the VM state helper. Nothing runs it now.
 		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
-		- Overrides: 2026101909222600's 20261019 decision of no `docker builder prune`, and the same call in the private notes' "Calls already made".
 
 - CICD reset: CPU and priority
 	- ID: 2026102416233806
@@ -649,6 +784,8 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- The pre-push hook runs `--merge-gate` on a push to main, and skips it when the push changes only docs and other files no build reads. Those paths are listed in one place the hook reads.
 		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
 		- Overrides: 2026101816103601's decision that `--gate` keeps its name as the merge gate, design.md's merge gate bullet under "Delivery", and the gate and full-run lines in the private notes' "Round settings".
+	- Progress log:
+		- 20261025: `--no-remote` is in, from 2026102507245260, with `-NoRemote` in `cicd-win.ps1`.
 
 - CICD reset: step output
 	- ID: 2026102416233808
@@ -665,6 +802,8 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- A step that's turned off isn't counted, and the first section lists those with the flag or reason for each.
 		- The same goes for `cicd-win.ps1` and the Mac CI script.
 		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
+	- Progress log:
+		- 20261025: From 2026102507245260: a step that left something out on another box ends with a `SKIP:` line, through `fStepDone`, and the run lists the `SKIP` lines again at the end. The plan has a Windows scenarios line. The closing-line form here should keep the `SKIP` case.
 
 - CICD reset: a test for every Done item
 	- ID: 2026102416233809
@@ -695,6 +834,56 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Every regression and fuzz test prints one line, such as `PASS decp8 <name>`, with `FAIL` or `SKIP` in place of `PASS`. The scroll harness scenes and the fuzz cases have no IDs of their own yet.
 		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
 		- Overrides: 2026092711142900's decision that the scroll harness scenes keep their PASS lines with no IDs, and the base 62 rule in the private notes.
+
+- The Windows scenario run fails on a VM it just woke from off, since the session never answers
+	- ID: 2026102510420001
+	- Type: Bug
+	- Status: Queued
+	- Severity: Avg
+	- Opened: 20261025-104200
+	- Opened by: CC
+	- Related IDs: 2026102507245255, 2026102507245260
+	- Target OS: Windows
+	- Test environment: b23, the full run's wingui stage at e95b81b on `rnd1025`, vm925w off before the run and b29w up
+	- Steps to reproduce:
+		- Leave vm925w off and run the full run's wingui stage.
+	- Incorrect behavior: The VM state helper started vm925w, then `perfladder` failed with "VERDICT fail the session never answered" in session 1, and the stage failed the run. Before 2026102507245255 a box that was off was skipped.
+	- Expected behavior: A woken VM gets time for its logged-on session to answer before a scenario runs, or the box is a skip with a reason.
+	- Reproduced: Once, in the full run.
+	- Tried: The item's worker (ccaeeb7) and one fix worker for a CRLF header bug (86da5d0). 2026102507245260 (bf47323) builds on it. All 3 were reverted on `rnd1025`, and the work is on `wip/rnd1025-2026102507245255`. That branch also has eddf89a, which has its own `wip/rnd1025-2026102416233804`.
+
+- A config conversion race test leaves a backup per launch under ASan
+	- ID: 2026102510010001
+	- Type: Bug
+	- Status: Queued
+	- Severity: Avg
+	- Opened: 20261025-100100
+	- Opened by: CC
+	- Related IDs: 2026102509002701
+	- Target OS: Linux
+	- Test environment: b23 at load 20 to 45, the full run's ASan step in the container at e95b81b on `rnd1025`, and the same test alone under ASan on dev at b0c2238
+	- Steps to reproduce:
+		- Run `config::tests::launches_converting_at_once_leave_one_whole_copy` (EreLZQQ) alone under ASan, as `private/claude_simple/tools/lsan_some_tests.bash` does, a few times.
+	- Incorrect behavior: Launches converting at once each kept their own backup, with stamps a second apart, so the test found 3 copies where it wants 1. Under ASan each conversion took over a second. The full run stopped in stage 3 there.
+	- Expected behavior: One whole copy, or a test that doesn't hang on how long a conversion takes.
+	- Reproduced: Yes. 2 of 3 alone under ASan on `rnd1025`, and 2 of 3 on dev, so it was there before the round.
+
+- The Zig and container cleanup's 2 GB cap check fails when the cache sits on ZFS
+	- ID: 2026102509002701
+	- Type: Bug
+	- Status: Queued
+	- Severity: Avg
+	- Opened: 20261025-090027
+	- Opened by: CC
+	- Related IDs: 2026102416233804, 2026102416233805
+	- Target OS: Linux
+	- Test environment: b23, the round's gate step in the container at 80f0f57 on `rnd1025`, whose /tmp is under the target dir on ZFS
+	- Steps to reproduce:
+		- Run `cicd/tests/cleanup/run.bash` with `TMPDIR` on a ZFS folder.
+	- Incorrect behavior: The stale run cleanup test (EtAiwUl) fails "one over the cap goes whole" and "and the summary counts them". It passes with `TMPDIR` on ext4. ZFS reports compressed size, so the test's over-cap stand-in doesn't read as over the cap.
+	- Expected behavior: The cap check and its test give the same answer on any filesystem.
+	- Reproduced: Yes, 3 of 3 on ZFS, 0 of 3 on ext4.
+	- Tried: The group's worker (eddf89a) and one fix worker (d80c878, a missing stub in the startup gate test) on `rnd1025`. The fix cleared that failure, then this one showed. Both items were reverted on `rnd1025`, and the work is on `wip/rnd1025-2026102416233804`.
 
 - Leak checks: Miri sort, settings_ui
 	- ID: 2026102407430381
@@ -813,6 +1002,8 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Opened: 20261024-162338
 	- Opened by: CC
 	- Related IDs: 2026101909222600
+	- Prereq IDs: 2026102507092877
+		- The render-node test skips under a long temp path, so moving run folders under `HOST_TEMP` first would make it skip on every run.
 	- Target OS: All
 	- Requirements:
 		- Per `Temp files` and `Safe removal` in the shared CICD rules.
@@ -820,6 +1011,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- A run removes its own folder at the end, on failure and Ctrl+C too, and `--keep-temp` keeps it and prints where. Now a failed run keeps it, and the newest 5 of those stay.
 		- Stale folders go after 2 days, when no process from the folder's `run.pid` is left.
 		- Every recursive removal goes through the repo's copy of the shared guard. About 63 `rm -r` lines in the scripts and 35 `Remove-Item -Recurse` lines in PowerShell have none. File list in the private notes.
+			- Add the short socket folder cleanups in `swnoshm` and `livecfg` from 2026102507092877, and their siblings in `wlclip`, `monwl`, `monwake` and `dpirand`.
 		- The release artifacts folder in the repo is cleared through a guard that names that one parent.
 		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
 		- Overrides: 2026101909222600's rule that failed runs keep their folders and the newest 5 stay.
@@ -857,22 +1049,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 			- The cleanup line at the end says roughly what it freed.
 		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
 		- Overrides: design.md's CodeQL and heap growth bullets under "Delivery", which keep CodeQL behind `--codeql` and every leak check out of `--quick`.
-
-- A config test's 50 ms bound for a failed write went red under load in a full run
-	- ID: 2026102410441001
-	- Type: Bug
-	- Status: Queued
-	- Severity: Low
-	- Opened: 20261024-104410
-	- Opened by: CC
-	- Related IDs: 2026102407430379
-	- Target OS: Linux
-	- Test environment: b23 at load about 20 to 30, the full run in the container at 550ff60 on `rnd1024`
-	- Steps to reproduce:
-		- Run the full run while the box is busy.
-	- Incorrect behavior: `config::tests::a_failed_write_that_left_the_file_changes_nothing` failed its "no pause when the file is still there" check, under 50 ms, in the testdir step's read-only run (ErOj67l). The full run stopped in stage 3 there.
-	- Expected behavior: A timing bound doesn't go red on load alone.
-	- Reproduced: No. Run alone 3 times right after, at load 23, it passed each time.
 
 - Wayland: a copy a program sends while no SilkTerm window has focus is dropped
 	- ID: 2026101607585700
@@ -1977,6 +2153,32 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Test case: None for the figures, which are a measurement. `SILK_MEMDBG` is covered by `each_debug_switch_reads_its_own_variable` (Erg4k2j). Its minimap count is pinned by `the_memory_count_covers_every_stored_row` (Ern2oTz), seen to fail with the stored rows left out.
 	- Acceptance signoff: Self-closed: the numbers are in the design doc and nothing is left to judge.
 	- Closed: 20261004-194634
+
+- The render node test skips when its test folder is under a long temp path
+	- ID: 2026102507092877
+	- Type: Bug
+	- Status: Done
+	- Severity: Avg
+	- Opened: 20261025-070928
+	- Opened by: CC
+	- Related IDs: 2026102416233801, 2026102416233803
+	- Target OS: Linux
+	- Steps to reproduce:
+		- `TMPDIR=/mnt/ext/wip2/wip/tmp/silkterm/<stamp>_001 cicd/tests/swnoshm/run.bash` on this box.
+	- Incorrect behavior: "skip: sway's Xwayland did not come up". sway's log says "Unable to open wayland socket".
+	- Expected behavior: the test runs, wherever the temp folder is.
+	- Reproduced: 20261025, on this box, with the path above.
+	- Possible cause: sway's runtime dir is `<test folder>/swnoshm.XXXXXX/sway`, and with the socket name that passes the 107 byte limit. A run folder under HOST_TEMP, per 2026102416233803, would make it skip on every run. The profiler step puts its sway sockets under XDG_RUNTIME_DIR for this reason.
+	- Actual cause: sway's Wayland socket, and in the swap case the window's control and peer sockets, went in folders under the test folder. Under a long temp path those paths pass the 107 byte limit. The live settings test had the same fault, and failed 6 checks under the long path.
+	- Actual fix: Both tests put their sockets in a short folder of their own under /tmp when the test folder's path is long, as the Wayland clipboard, monitor and dpirand tests already did, and remove it at the end.
+	- Progress log:
+		- 20261025: With only sway's folder moved, the swap case still failed 2 checks under the long path, since `--reload-settings` couldn't reach the window's control socket. So the window's runtime dir moved too.
+	- Swept: every script test that starts sway or cage, or talks to the control socket. wlclip, monwl, monwake and dpirand already used a short folder, and livecfg didn't, fixed here. The scroll harness runs cage under the box's XDG_RUNTIME_DIR, and the profiler uses XDG_RUNTIME_DIR. The wingui scripts use named pipes. The other window tests point XDG_RUNTIME_DIR at their test folder but use no socket there.
+	- Branch: rnd1025
+	- Test case: `cicd/tests/swnoshm/run.bash` (ErxxHzT) and `cicd/tests/livecfg/run.bash` (EsaF4Qe), under a long TMPDIR. A new check in `cicd/tests/testdir/run.bash` (ErOj67l) fails any script test that starts sway or talks to the control socket without the short folder.
+	- Verified: 20261025, with TMPDIR under HOST_TEMP. swnoshm skipped before the fix and passed all 12 checks after. livecfg failed 6 checks before and passed after. Both also pass with a short test folder, and leave nothing in /tmp. The new testdir check passes on the tree and names both scripts against their old copies. shellcheck, bash-style, the test ID check and the docs check pass.
+	- Acceptance signoff: Self-closed: reproduced, and both tests fail before the fix and pass after.
+	- Closed: 20261025-072057
 
 - A container run tries to record the demo inside the image, even with `--no-demo`
 	- ID: 2026102213461534
@@ -4839,6 +5041,32 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Branch: testlines
 	- Test case: No test. Output only. The gate and a quick run showed all 942 Rust tests with an ID, and a made-up name showed the dashes and the warning.
 	- Closed: 20260928-111812
+
+- A config test's 50 ms bound for a failed write went red under load in a full run
+	- ID: 2026102410441001
+	- Type: Bug
+	- Status: Done
+	- Severity: Low
+	- Opened: 20261024-104410
+	- Opened by: CC
+	- Related IDs: 2026102407430379
+	- Target OS: Linux
+	- Test environment: b23 at load about 20 to 30, the full run in the container at 550ff60 on `rnd1024`
+	- Steps to reproduce:
+		- Run the full run while the box is busy.
+	- Incorrect behavior: `config::tests::a_failed_write_that_left_the_file_changes_nothing` failed its "no pause when the file is still there" check, under 50 ms, in the testdir step's read-only run (ErOj67l). The full run stopped in stage 3 there.
+	- Expected behavior: A timing bound doesn't go red on load alone.
+	- Reproduced: No. Run alone 3 times right after, at load 23, it passed each time.
+		- 20261025: Yes, inside a 5% CPU quota beside 2 busy loops: 4 of 40 runs failed, each at about 98.5 ms.
+	- Actual cause: A wall clock bound. Under a CPU quota, which is how a container's `--cpus` works, the whole group stalls for the rest of a 100 ms period once it uses up its share, so a bound under 100 ms can fail on load alone. The write itself takes no pause there.
+	- Actual fix: The restore counts its pauses on the test's thread, and the test checks the count is 0 instead of timing the write. The sibling `a_restore_that_cannot_write_gives_up_and_says_so` (Epa8S0i) checks 5 pauses in place of its under-2 s bound, and keeps its at-least-400 ms bound, which load can't fail.
+	- Decisions:
+		- 20261025: The Miri ignore on this test is gone, since it had only failed the time bound there.
+	- Verified: 20261025. Under the same quota the fixed test passed 40 of 40, and Epa8S0i 15 of 15. With a pause put before the name check, the test failed on the count. Under Miri, it, Epa8S0i and `a_restore_never_writes_through_a_name_taken_meanwhile` pass. The 232 config tests, fmt, clippy for Linux and Windows with all targets.
+	- Swept: every wall clock bound in the unit tests. The rest have 0.9 s or more of slack (peers, term, shells). The two Windows restore tests (EpaOYRt, EpaOYRu) are left as they were: EpaOYRu's 1400 ms bound is part of its race with a 1500 ms hold.
+	- Branch: rnd1025
+	- Test case: `a_failed_write_that_left_the_file_changes_nothing` (Epa8S0g), same ID, rewritten in place. Red under the quota before, green after.
+	- Closed: 20261025-065046
 
 - The allocations per frame test failed its drag limit once under load
 	- ID: 2026102321230038
