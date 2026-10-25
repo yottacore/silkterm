@@ -185,6 +185,34 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Test case: `a_refused_frame_is_drawn_again_on_a_backoff` (Erfy7et) and `a_refused_rebuild_stays_pending_and_is_tried_again` (Erfy7yk). The GL swap result has no test, since it needs a real GL context.
 	- Note: 20261003, Free resources when idle was on for some of the windows that went blank and off for others. Which ones is not remembered, so both the frame path and the rebuild path stay suspects.
 
+- CICD reset: containers
+	- ID: 2026102416233801
+	- Type: Task
+	- Status: Waiting on automated testing
+		- Departs from the wording: the profiler now draws on the card, through a headless sway, where before it drew in software on Xvfb, here as in the image. And the render node test runs here too, where it had only skipped inside.
+	- Needs local test suite run?: One container full run, from the round's full-run line. Look for "on the card, through a headless sway's Xwayland" and an NVIDIA renderer line in the profiler step after the container, and the render node test passing there, not skipped.
+	- Priority: High
+	- Opened: 20261024-162338
+	- Opened by: CC
+	- Related IDs: 2026101009221201, 2026102416233802, 2026102507092877
+	- Target OS: All
+	- Requirements:
+		- Per `Containers` in the shared CICD rules. The pinned image, docker by default, the fallback to this box and `--no-container` are in.
+		- Left: a step whose point is the real GPU runs on this box, not in the image. That's the profiler, and anything else that reads frame times or graphics memory off the card. The render-node test already skips inside.
+		- Windows GPU work stays on vm925w, per 2026102416233802.
+		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
+		- Overrides: the private notes' line that stages 1 to 6 run in the image, the profiler included.
+	- Progress log:
+		- 20261025: Measured first. The profiler ran on a private Xvfb, and there the app draws with llvmpipe on this box too, not only in the image. So moving it here alone would not have put it on the card.
+		- 20261025: The profiler now runs on a headless sway drawing on the card's render node, through sway's own Xwayland. The app reports the RTX 3060 Ti there. Without sway, a render node or XDG_RUNTIME_DIR it falls back to the private Xvfb, with a warning saying why.
+		- 20261025: A container run now runs the profiler and the render node test here, once the container is done. Inside, both only say they run outside. The render node test had skipped in every container run, so it hadn't run in a default full run since docker became the default.
+		- 20261025: Nothing else in stages 1 to 6 reads the card. The scroll harness checks the shape of each frame on Xvfb, not its timing. The graphics memory unit test falls back to software Vulkan, where it still checks the allocator's hint.
+		- Note: The render node test skips when its test folder sits under a long temp path, since sway's socket path is then too long. Filed as 2026102507092877.
+	- Verified: 20261025. The profiler step from cicd.bash, run alone here: on the card, NVIDIA renderer, flamegraph written, sway gone and its socket folder removed after. With no XDG_RUNTIME_DIR: the warning, then llvmpipe on Xvfb, flamegraph written. The render node test on this box against the image's debug binary: all passed with a short temp folder, skipped under the long one above. Container test with new cases, watched to fail against the old cicd.bash and against a mutant without the guard inside. Engine test, shellcheck, house style, docs check, lint report. The plan lines in both arms.
+	- Swept: every step in stages 1 to 6 that starts a window or a GPU device: the window tests under `cicd/tests`, the scroll harness, the allocs test, `a_new_device_reserves_little_graphics_memory`, the profiler. `cicd/utility/mem-per-window` and `gpu-stress` aren't pipeline steps.
+	- Test case: New cases in `cicd/tests/container/run.bash` (EsJg9EF): the render node test and the profiler run here after the container, and inside only say so.
+	- Branch: rnd1025
+
 - Running on macOS without a GPU fails to launch
 	- ID: 2026102209035801
 	- Type: Bug
@@ -543,22 +571,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Test case: None new. The ignores are test attributes, checked by the runs above.
 	- Branch: rnd1023
 
-- CICD reset: containers
-	- ID: 2026102416233801
-	- Type: Task
-	- Status: Queued
-	- Priority: High
-	- Opened: 20261024-162338
-	- Opened by: CC
-	- Related IDs: 2026101009221201, 2026102416233802
-	- Target OS: All
-	- Requirements:
-		- Per `Containers` in the shared CICD rules. The pinned image, docker by default, the fallback to this box and `--no-container` are in.
-		- Left: a step whose point is the real GPU runs on this box, not in the image. That's the profiler, and anything else that reads frame times or graphics memory off the card. The render-node test already skips inside.
-		- Windows GPU work stays on vm925w, per 2026102416233802.
-		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
-		- Overrides: the private notes' line that stages 1 to 6 run in the image, the profiler included.
-
 - CICD reset: other hosts and VMs
 	- ID: 2026102416233802
 	- Type: Task
@@ -695,6 +707,22 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Every regression and fuzz test prints one line, such as `PASS decp8 <name>`, with `FAIL` or `SKIP` in place of `PASS`. The scroll harness scenes and the fuzz cases have no IDs of their own yet.
 		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
 		- Overrides: 2026092711142900's decision that the scroll harness scenes keep their PASS lines with no IDs, and the base 62 rule in the private notes.
+
+- The render node test skips when its test folder is under a long temp path
+	- ID: 2026102507092877
+	- Type: Bug
+	- Status: Queued
+	- Severity: Avg
+	- Opened: 20261025-070928
+	- Opened by: CC
+	- Related IDs: 2026102416233801, 2026102416233803
+	- Target OS: Linux
+	- Steps to reproduce:
+		- `TMPDIR=/mnt/ext/wip2/wip/tmp/silkterm/<stamp>_001 cicd/tests/swnoshm/run.bash` on this box.
+	- Incorrect behavior: "skip: sway's Xwayland did not come up". sway's log says "Unable to open wayland socket".
+	- Expected behavior: the test runs, wherever the temp folder is.
+	- Reproduced: 20261025, on this box, with the path above.
+	- Possible cause: sway's runtime dir is `<test folder>/swnoshm.XXXXXX/sway`, and with the socket name that passes the 107 byte limit. A run folder under HOST_TEMP, per 2026102416233803, would make it skip on every run. The profiler step puts its sway sockets under XDG_RUNTIME_DIR for this reason.
 
 - Leak checks: Miri sort, settings_ui
 	- ID: 2026102407430381

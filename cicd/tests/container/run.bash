@@ -214,6 +214,22 @@ fCheck "the image was there, so nothing was built" fNot grep -q '^build ' "${wor
 fCheck "the run here went on to the end" grep -q 'CI/CD: done' <<<"${out}"
 fCheck "with the container's stages marked done" grep -q 'OK: stages 1-6 in the container' <<<"${out}"
 fCheck "and the plan named the image" grep -q '^Container .*: stages 1-6 in silkterm-cicd:' <<<"${out}"
+## The steps that need the card run here once the container is done: the render
+## node test, then the profiler, which --quick turns off.
+fAfter(){ awk -v a="${1}" -v b="${2}" 'index($0, a) && !x {x = NR} index($0, b) && x && !y {y = NR} END {exit !(x && y)}' <<<"${out}"; }
+fCheck "the render node test runs here after the container" fAfter 'OK: stages 1-6 in the container' 'software rendering without shared pixmaps'
+fCheck "and the profiler after it" fAfter 'software rendering without shared pixmaps' '4/8  Profiler (here)'
+fCheck "off under --quick" grep -q 'profiler disabled' <<<"${out}"
+## Inside, both only say where they run, and the profiler builds nothing.
+eval "$(fLift '^fRenderNodeTest(){' '^}')"
+eval "$(fLift '^fRunProfiler(){' '^}')"
+inside="$(fRunTest_MaySkip(){ echo "ran ${1}"; }; fRetryBuild(){ echo "built ${*}"; }
+	export SILK_CICD_IN_CONTAINER=1; PROFILE_ENABLE=1; fRunProfiler; fRenderNodeTest 2>&1)" || true
+fCheck "inside the container the profiler says it runs outside" grep -qx '    the profiler runs outside the container, on the card' <<<"${inside}"
+fCheck "and builds nothing" fNot grep -q '^built ' <<<"${inside}"
+fCheck "the render node test the same, and does not run" bash -c 'grep -qx "    the render node test runs outside the container" <<<"$1" && ! grep -q "^ran " <<<"$1"' _ "${inside}"
+inside="$(fRunTest_MaySkip(){ echo "ran ${1}"; }; unset SILK_CICD_IN_CONTAINER; fRenderNodeTest)" || true
+fCheck "outside it runs" grep -qx 'ran cicd/tests/swnoshm/run.bash' <<<"${inside}"
 
 FAKE_IMAGE_MISSING=1 fRun build.log --container -y --no-sync --no-dogfood --no-publish --no-private --quick
 buildLine="$(grep '^build ' "${work}/build.log" || true)"
@@ -377,3 +393,4 @@ echo "all passed"
 ##		- 20261019 JC: The sanitizer nightly, the ASan step, and a linked target dir.
 ##		- 20261023 JC: The run inside gets --no-demo.
 ##		- 20261023 JC: The TSan step.
+##		- 20261025 JC: The render node test and the profiler run here, after the container.
