@@ -155,27 +155,6 @@ fCheck "and keeps the new one" test -f "${TARGET_DIR}/asan-2026-02-02/CACHEDIR.T
 fCheck "the config names the ASan dir for the nightly" bash -c 'source "$1" && [[ " ${CLEANUP_NIGHTLY_DIRS[*]} " == *" ${ASAN_DIR} "* && "${ASAN_DIR}" == asan-* ]]' _ "${root}/cicd/config.bash"
 unset -f rustc
 
-## H: Zig caches, emptied whole once another Zig filled them or once over the cap,
-## never part of one. 1 MB is the cap here.
-zc="${work}/h"; mkdir -p "${zc}"
-fZig(){ mkdir -p "${zc}/${1}/o/ab" "${zc}/${1}/h"; echo x >"${zc}/${1}/o/ab/obj"; [[ -z "${2:-}" ]] || echo "${2}" >"${zc}/${1}/.cicd-zig-version"; }
-fZig fresh; fSweep_ZigCache "${zc}/fresh" 0.16.0 1
-fCheck "a zig cache with no stamp is stamped with this zig, and kept" bash -c '[[ "$(cat "$1/.cicd-zig-version")" == 0.16.0 && -f "$1/o/ab/obj" ]]' _ "${zc}/fresh"
-fZig same 0.16.0; fSweep_ZigCache "${zc}/same" 0.16.0 1
-fCheck "one this zig filled stays" test -f "${zc}/same/o/ab/obj"
-fZig older 0.15.1; fSweep_ZigCache "${zc}/older" 0.16.0 1
-fCheck "one another zig filled goes whole" test ! -e "${zc}/older"
-fZig big 0.16.0; head -c 1100000 /dev/zero >"${zc}/big/o/ab/blob"; fSweep_ZigCache "${zc}/big" 0.16.0 1
-fCheck "one over the cap goes whole" test ! -e "${zc}/big"
-fZig linked 0.15.1; ln -s "${zc}/linked" "${zc}/link"; fSweep_ZigCache "${zc}/link" 0.16.0 1
-fCheck "a link is never followed" test -f "${zc}/linked/o/ab/obj" -a -L "${zc}/link"
-fZig nover 0.15.1; fSweep_ZigCache "${zc}/nover" "" 1
-fCheck "with no zig to ask, nothing goes" test -f "${zc}/nover/o/ab/obj"
-fCheck "and the summary counts them" grep -qF '2 zig caches' <<<"$(fSweep_Summary)"
-fCheck "the run sweeps them where the builds ran, before its summary" \
-	bash -c 'awk "/fSweep_ZigCache/ {z = NR} /fEcho_Clean \"\\\$\\(fSweep_Summary\\)\"/ {s = NR} END {exit !(z && s && z < s)}" "$1" && grep -qF "if ((! container)) && command -v zig" "$1"' _ "${engine}"
-fCheck "the cap is 2 GB in the config" bash -c 'source "$1" && [[ "${CLEANUP_CACHE_CAP_MB}" == 2048 ]]' _ "${root}/cicd/config.bash"
-
 ## G: the PowerShell side, for cicd-win.ps1's test folders on Windows.
 if command -v pwsh >/dev/null 2>&1; then
 	rc=0; pwsh -NoProfile -NonInteractive -File "${meDir}/win.ps1" || rc=$?
@@ -190,4 +169,3 @@ echo "all passed"
 ##	History:
 ##		- 20261019 JC: Created.
 ##		- 20261019 JC: The nightly's build dirs.
-##		- 20261025 JC: Zig caches.

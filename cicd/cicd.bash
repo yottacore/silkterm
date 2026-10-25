@@ -78,7 +78,6 @@
 ##	                       node test, run here once the container is done. With --gate,
 ##	                       the gate runs there. The default whenever docker is here.
 ##	   --no-container      stages 1-6 on this box instead; the default with no docker
-##	   --keep-temp         keep the run's containers when it ends, and print their names
 ##	  With no options every stage runs.
 ## - Reuse: copy the cicd/ directory into another project and edit config.bash.
 
@@ -137,14 +136,13 @@ cd "${root}"
 stamp="$(date +%Y%m%d-%H%M%S)"
 
 ## Parse options.
-assumeYes=0; quiet=0; quick=0; noRemote=0; skipLog=""; gate=0; leakcheck=1; leakAsked=0; codeql=0; demoAsked=0; noArm=0; noWindows=0; sync=1; cliMessage=""; container="${useContainer:-0}"; noContainer=0; keepTemp=0; innerArgs=()
+assumeYes=0; quiet=0; quick=0; noRemote=0; skipLog=""; gate=0; leakcheck=1; leakAsked=0; codeql=0; demoAsked=0; noArm=0; noWindows=0; sync=1; cliMessage=""; container="${useContainer:-0}"; noContainer=0; innerArgs=()
 while (($#)); do case "${1}" in
 	-y|--yes)                 assumeYes=1; shift ;;
 	-q|--quiet)               quiet=1; assumeYes=1; shift ;;   ## quiet + unattended; publish runs quiet too
 	--gate)                   gate=1; shift ;;                  ## merge gate only, then exit
 	--container)              container=1; shift ;;             ## stages 1-6 in the image; innerArgs collects what goes in with them
 	--no-container)           noContainer=1; shift ;;           ## stages 1-6 on this box
-	--keep-temp)              keepTemp=1; shift ;;
 	--no-fmt)                 FMT_CMD=(); innerArgs+=("${1}"); shift ;;
 	--no-cross)               BUILD_CROSS=0; innerArgs+=("${1}"); shift ;;
 	--no-arm)                 noArm=1; innerArgs+=("${1}"); shift ;;                ## drop ARM64 builds + packages
@@ -418,14 +416,9 @@ trap 'rc=$?; printf "\n[ CICD ABORTED (exit %s) at line %s: %s ]\n\n" "$rc" "$LI
 ## sees this tree at its own path, the target dir CARGO_TARGET_DIR named before the
 ## config loaded, and a named volume for its home and the crate cache.
 docker="${SILK_DOCKER:-docker}"
-## Every container, image and volume the pipeline makes carries the project and
-## the run, so a cleanup takes only its own from a shared docker. runName is the
-## run folder's name, set once that folder is made (fRunName).
-projectLabel="dev.project=${EXE_NAME}"
-runName=""; dockerUsed=0; dockerDfBefore=""
-cacheVolume="${EXE_NAME}-cicd-cache"; zigVolume="${EXE_NAME}-zig-cache"
-zigStamp=".cicd-zig-version"
-fLabels(){ printf '%s\n' --label "${projectLabel}" --label "dev.run=${runName:?}"; }
+## What the pipeline labels, so its own containers and images can be told from
+## everybody else's on a shared docker.
+containerLabel="${EXE_NAME}-cicd"
 containerRecipe="${here}/container/Dockerfile"
 ## The build args: the toolchain and its targets, then VER_<pin> for each pin the
 ## recipe takes, so a pin the image does not install changes nothing.
@@ -440,40 +433,37 @@ fContainerArgs(){
 	done
 }
 fContainerImage(){ printf '%s-cicd:%s' "${EXE_NAME}" "$({ cat "${containerRecipe}"; fContainerArgs; } | sha256sum | cut -c1-12)"; }
-## fRunName: the run folder's name, for the labels and container names. The test
-## run folder is the run's folder for now; one handed in from outside can be
-## shared, so then the stamp and pid stand in.
-fRunName(){
-	local owned=""
-	owned="$(fTestDir_Owned)"; owned="${owned%%$'\t'*}"
-	if [[ -n "${owned}" ]]; then runName="${owned##*/}"; runName="${runName#test_"${EXE_NAME}"_}"
-	else runName="${stamp}-$$"; fi
-}
-## fDockerStart: notes what docker holds, once, for the end line.
-fDockerStart(){
-	((! dockerUsed)) || return 0
-	dockerUsed=1
-	dockerDfBefore="$("${docker}" system df --format '{{.Type}}|{{.Size}}' 2>/dev/null || true)"
-}
-## fContainerBuild <image>: builds it when it is not there.
+## fContainerBuild <image>: builds it when it is not there, then fContainerTidy.
 fContainerBuild(){
 	local -r image="${1}"
-	local arg
-	local -a args=() labels=()
-	fDockerStart
-	if "${docker}" image inspect "${image}" >/dev/null 2>&1; then fEcho_Clean "image ${image}"; return 0; fi
+	local arg cache=""
+	local -a args=()
+	if "${docker}" image inspect "${image}" >/dev/null 2>&1; then fEcho_Clean "image ${image}"; fContainerTidy "${image}"; return 0; fi
 	fEcho_Clean "building ${image} (the recipe or a pin changed; this takes a while)"
 	while IFS= read -r arg; do args+=(--build-arg "${arg}"); done < <(fContainerArgs)
-	mapfile -t labels < <(fLabels)
-	"${docker}" build -t "${image}" "${labels[@]}" "${args[@]}" --build-arg "JOBS=${CICD_MAX_JOBS}" "${here}/container" || fDie "image build failed"
+	"${docker}" build -t "${image}" --label "${containerLabel}=image" "${args[@]}" --build-arg "JOBS=${CICD_MAX_JOBS}" "${here}/container" || fDie "image build failed"
+	fContainerTidy "${image}"
+	## The build cache is shared with every other project's builds, so it is
+	## left alone and only reported.
+	cache="$("${docker}" system df --format '{{.Type}}|{{.Reclaimable}}' 2>/dev/null | sed -n 's/^Build Cache|//p' || true)"
+	[[ -z "${cache}" ]] || fEcho_Clean "docker build cache: ${cache} reclaimable, shared with other projects, not pruned here"
 }
-## fContainerVolume <name>: made with the labels when it is not there, since one
-## docker run makes on the fly has none.
-fContainerVolume(){
-	local -a labels=()
-	"${docker}" volume inspect "${1}" >/dev/null 2>&1 && return 0
-	mapfile -t labels < <(fLabels)
-	"${docker}" volume create "${labels[@]}" "${1}" >/dev/null || echo "WARNING: could not make the volume ${1}" >&2
+## fContainerTidy <image>: the older images of the same name go, since a new tag
+## means the old recipe is gone, and so do untagged ones a build of ours left.
+## Plain image rm, so one a container still uses stays, and goes on a later run.
+fContainerTidy(){
+	local -r image="${1}"
+	local old
+	local -i gone=0
+	while IFS= read -r old; do
+		[[ -n "${old}" && "${old}" != "${image}" ]] || continue
+		if "${docker}" image rm "${old}" >/dev/null 2>&1; then fEcho_Clean "removed ${old}"; gone+=1; fi
+	done < <("${docker}" image ls "${image%%:*}" --format '{{.Repository}}:{{.Tag}}' 2>/dev/null || true)
+	while IFS= read -r old; do
+		[[ -n "${old}" ]] || continue
+		if "${docker}" image rm "${old}" >/dev/null 2>&1; then gone+=1; fi
+	done < <("${docker}" image ls -q --filter dangling=true --filter "label=${containerLabel}=image" 2>/dev/null || true)
+	fSweep_Count "old container images" "${gone}"
 }
 ## A container of ours that stopped without going, as one does when the docker
 ## daemon restarts under --rm. A running one is left, since it can be another
@@ -484,95 +474,8 @@ fContainerStopped(){
 	while IFS= read -r id; do
 		[[ -n "${id}" ]] || continue
 		if "${docker}" rm "${id}" >/dev/null 2>&1; then gone+=1; fi
-	done < <("${docker}" ps -aq --filter "label=${projectLabel}" --filter status=exited --filter status=created --filter status=dead 2>/dev/null || true)
+	done < <("${docker}" ps -aq --filter "label=${containerLabel}=run" --filter status=exited --filter status=created --filter status=dead 2>/dev/null || true)
 	fSweep_Count "stopped containers" "${gone}"
-}
-## fContainerTags <image>: of the pipeline's images, the one this run used and the
-## newest before it stay, and older ones go. Plain image rm, so one a container
-## still uses stays, and goes on a later run.
-fContainerTags(){
-	local -r image="${1}"
-	local line old
-	local -i held=0 gone=0
-	while IFS= read -r line; do
-		old="${line#*|}"
-		[[ -n "${old}" && "${old}" != "${image}" && "${old}" != *"<none>"* ]] || continue
-		if ((held < 1)); then held+=1; continue; fi
-		if "${docker}" image rm "${old}" >/dev/null 2>&1; then gone+=1; fi
-	done < <("${docker}" image ls "${image%%:*}" --filter "label=${projectLabel}" --format '{{.CreatedAt}}|{{.Repository}}:{{.Tag}}' 2>/dev/null | sort -r || true)
-	((! gone)) || fEcho_Clean "cleanup: removed ${gone} older container images"
-}
-## fContainerVolumes: a cache volume of ours over the cap goes whole, and so does
-## the Zig one once another Zig version filled it. docker refuses a volume that a
-## container still holds, such as another run's, so that one stays.
-fContainerVolumes(){
-	local name size stamped zigNow why seen=""
-	local -r capBytes=$(( ${CLEANUP_CACHE_CAP_MB:-2048} * 1048576 )) tidy="${EXE_NAME}-${runName}-tidy"
-	local -a ours=() mounts=() labels=()
-	mapfile -t ours < <("${docker}" volume ls -q --filter "label=${projectLabel}" 2>/dev/null | grep -xF -e "${cacheVolume}" -e "${zigVolume}" || true)
-	((${#ours[@]})) || return 0
-	for name in "${ours[@]}"; do mounts+=(-v "${name}:/v/${name}:ro"); done
-	mapfile -t labels < <(fLabels)
-	## No --rm: it can return before the container is gone, which still holds the
-	## volumes. A plain rm waits.
-	seen="$("${docker}" run "${labels[@]}" --name "${tidy}" "${mounts[@]}" "${containerImage}" bash -c '
-		for d in /v/*; do
-			s=""; [[ -f "${d}/${1}" ]] && read -r s <"${d}/${1}"
-			printf "%s|%s|%s|%s\n" "${d##*/}" "$(du -sb "${d}" | cut -f1)" "${s}" "$(zig version)"
-		done' _ "${zigStamp}" 2>/dev/null || true)"
-	"${docker}" rm "${tidy}" >/dev/null 2>&1 || true
-	while IFS='|' read -r name size stamped zigNow; do
-		why=""
-		[[ "${size}" =~ ^[0-9]+$ ]] || continue
-		if [[ "${name}" == "${zigVolume}" && -n "${stamped}" && "${stamped}" != "${zigNow}" ]]; then why="filled by zig ${stamped}"
-		elif ((size > capBytes)); then why="over ${CLEANUP_CACHE_CAP_MB:-2048} MB"; fi
-		[[ -n "${why}" ]] || continue
-		if "${docker}" volume rm "${name}" >/dev/null 2>&1; then fEcho_Clean "cleanup: removed the volume ${name}, ${why}"
-		else fEcho_Clean "cleanup: left the volume ${name} (${why}), still in use"; fi
-	done <<<"${seen}"
-}
-## fContainerEnd <status>: at the end of a run, failed or stopped too. The run's
-## containers go by its label, unless --keep-temp. Then untagged images of ours,
-## older tags once this run has passed, the cache volume rule, and build cache
-## over a week old, every project's, so the next build stays warm. All of it is
-## done before a word is printed, since Ctrl+C takes the log tee down too, and a
-## write to it then ends the run on the spot.
-fContainerEnd(){
-	local said=""
-	((dockerUsed)) && [[ -n "${runName}" && -z "${SILK_CICD_IN_CONTAINER:-}" ]] || return 0
-	dockerUsed=0
-	said="$(fContainerEnd_Work "${1:-0}" 2>&1)" || true
-	[[ -z "${said}" ]] || printf '%s\n' "${said}"
-}
-fContainerEnd_Work(){
-	local -ri rc="${1:-0}"
-	local id freed="" before after line kind
-	local -a ids=() names=()
-	local -A was=()
-	mapfile -t ids < <("${docker}" ps -aq --filter "label=dev.run=${runName}" --filter "label=${projectLabel}" 2>/dev/null | grep . || true)
-	if ((keepTemp)); then
-		mapfile -t names < <("${docker}" ps -a --filter "label=dev.run=${runName}" --filter "label=${projectLabel}" --format '{{.Names}}' 2>/dev/null | grep . || true)
-		((! ${#names[@]})) || fEcho_Clean "kept the run's containers (--keep-temp): ${names[*]}"
-	elif ((${#ids[@]})); then
-		"${docker}" stop -t 10 "${ids[@]}" >/dev/null 2>&1 || true
-		"${docker}" rm "${ids[@]}" >/dev/null 2>&1 || true
-		fEcho_Clean "cleanup: stopped and removed ${#ids[@]} of the run's containers"
-	fi
-	while IFS= read -r id; do
-		[[ -z "${id}" ]] || "${docker}" image rm "${id}" >/dev/null 2>&1 || true
-	done < <("${docker}" image ls -q --filter dangling=true --filter "label=${projectLabel}" 2>/dev/null || true)
-	if ((rc == 0)) && [[ -n "${containerImage}" ]]; then fContainerTags "${containerImage}"; fi
-	if ((! keepTemp)) && [[ -n "${containerImage}" ]]; then fContainerVolumes; fi
-	freed="$("${docker}" builder prune -f --filter until=168h 2>/dev/null | sed -n 's/^Total reclaimed space: *//p' || true)"
-	fEcho_Clean "docker build cache over a week old pruned${freed:+, ${freed} freed}"
-	after="$("${docker}" system df --format '{{.Type}}|{{.Size}}' 2>/dev/null || true)"
-	while IFS='|' read -r kind line; do [[ -z "${kind}" ]] || was[${kind}]="${line}"; done <<<"${dockerDfBefore}"
-	line=""
-	while IFS='|' read -r kind before; do
-		[[ -n "${kind}" ]] || continue
-		line+="${line:+, }${kind} ${was[${kind}]:-?} -> ${before}"
-	done <<<"${after}"
-	[[ -z "${line}" ]] || fEcho_Clean "docker: ${line}"
 }
 ## fContainerRun <image> <script> <options...>: a pipeline script in the container,
 ## the engine or the ASan run, against this tree. Its /tmp is a new folder under
@@ -586,18 +489,11 @@ fContainerEnd_Work(){
 ## stamped inside sorts with the ones made here.
 fContainerRun(){
 	local -r image="${1}" script="${2}"; shift 2
-	local gitCommon zone="${TZ:-}" runTmp="" runToken="" why="" step="${script##*/}"
+	local gitCommon zone="${TZ:-}" runTmp="" runToken="" why=""
 	local -i rc=0
-	local -a labels=() rmArg=(--rm)
-	step="${step%.bash}"; [[ "${1:-}" != --gate ]] || step=gate; [[ "${step}" != cicd ]] || step=engine
-	((! keepTemp)) || rmArg=()
-	fDockerStart
-	mapfile -t labels < <(fLabels)
-	fContainerVolume "${cacheVolume}"; fContainerVolume "${zigVolume}"
 	fSweep_MakeDir "${containerTarget}/tmp" run runTmp runToken || return 1
 	fSweep_Record "${containerTmpLedger}" "${runTmp}" "${runToken}" || true
-	## Zig's global cache on a volume of its own, stamped with the Zig that filled it.
-	local -a mounts=(-v "${root}:${root}" -v "${cacheVolume}:/cache" -v "${zigVolume}:/zig-cache" -v "${runTmp}:/tmp") zoneArgs=()
+	local -a mounts=(-v "${root}:${root}" -v "${EXE_NAME}-cicd-cache:/cache" -v "${runTmp}:/tmp") zoneArgs=()
 	if [[ -z "${zone}" ]]; then
 		zone="$(realpath -e /etc/localtime 2>/dev/null || true)"
 		if [[ "${zone}" == */zoneinfo/* ]]; then zone="${zone#*/zoneinfo/}"; else zone=""; fi
@@ -606,13 +502,12 @@ fContainerRun(){
 	[[ "${containerTarget}" == "${root}/"* ]] || mounts+=(-v "${containerTarget}:${containerTarget}")
 	gitCommon="$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null || true)"
 	[[ -z "${gitCommon}" || "${gitCommon}" == "${root}/"* ]] || mounts+=(-v "${gitCommon}:${gitCommon}")
-	"${docker}" run "${rmArg[@]}" --init --shm-size 1g --name "${EXE_NAME}-${runName}-${step}" "${labels[@]}" "${mounts[@]}" -w "${root}" \
+	"${docker}" run --rm --init --shm-size 1g --name "${containerLabel}-${stamp}-$$" --label "${containerLabel}=run" "${mounts[@]}" -w "${root}" \
 		-e "USER=${USER:-$(id -un)}" -e "CARGO_TARGET_DIR=${containerTarget}" -e "SILK_BUILD_MINUTES=${SILK_BUILD_MINUTES:-}" -e "SILK_RELEASE=${SILK_RELEASE:-0}" \
-		-e "CICD_MAX_JOBS=${CICD_MAX_JOBS}" -e XDG_RUNTIME_DIR=/tmp/xdg-runtime -e ZIG_GLOBAL_CACHE_DIR=/zig-cache "${zoneArgs[@]}" \
+		-e "CICD_MAX_JOBS=${CICD_MAX_JOBS}" -e XDG_RUNTIME_DIR=/tmp/xdg-runtime "${zoneArgs[@]}" \
 		"${image}" bash -c 'echo "${USER}:x:${1}:${2}:${USER}:${HOME}:/bin/bash" >>/etc/passwd && echo "${USER}:x:${2}:" >>/etc/group \
 			&& mkdir -m 700 -p "${XDG_RUNTIME_DIR}" && chown "${1}:${2}" "${XDG_RUNTIME_DIR}" && mkdir -m 1777 -p /tmp/.X11-unix \
-			&& { [[ -s "/zig-cache/${3}" ]] || zig version >"/zig-cache/${3}" || true; } && chown "${1}:${2}" /zig-cache \
-			&& exec setpriv --reuid="${1}" --regid="${2}" --init-groups -- dbus-run-session -- bash "${@:4}"' _ "$(id -u)" "$(id -g)" "${zigStamp}" "${script}" "${@}" \
+			&& exec setpriv --reuid="${1}" --regid="${2}" --init-groups -- dbus-run-session -- bash "${@:3}"' _ "$(id -u)" "$(id -g)" "${script}" "${@}" \
 		|| rc=$?
 	if ((rc)); then
 		echo "the container's /tmp is kept in ${runTmp}" >&2
@@ -695,8 +590,6 @@ source "${root}/cicd/tests/_testdir.bash"
 ## reaches the release branch unverified even outside a full run.
 if ((gate)); then
 	fTestDir_Make || fDie "could not make the test run folder"
-	fRunName
-	trap 'rc=$?; fContainerEnd "${rc}"; fTestDir_End "${rc}"' EXIT
 	if ((container)); then
 		fSection "Gate in ${containerImage}"
 		fContainerBuild "${containerImage}"
@@ -878,8 +771,6 @@ if ((! assumeYes)); then
 fi
 
 fTestDir_Make || fDie "could not make the test run folder"
-fRunName
-trap 'rc=$?; fContainerEnd "${rc}"; fTestDir_End "${rc}"' EXIT
 skipLog="${SILKTERM_TEST_DIR}/skips.txt"; : >"${skipLog}"
 
 ## Tee the rest of the run (all stages) to a gitignored log so warnings from any
@@ -916,8 +807,8 @@ if [[ -n "${LINT_LOG_DIR:-}" && -z "${SILK_CICD_IN_CONTAINER:-}" ]] && mkdir -p 
 		END { for (; blanks > 0; blanks--) print "" }
 	' | tee "${lintLog}.part") 2>&1
 	lintTee=$!
-	## fContainerEnd and fTestDir_End before fFinishLog, so their lines reach the log.
-	trap 'rc=$?; fContainerEnd "${rc}"; fTestDir_End "${rc}"; fFinishLog; exit $rc' EXIT
+	## fTestDir_End before fFinishLog, so its line reaches the log.
+	trap 'rc=$?; fTestDir_End "${rc}"; fFinishLog; exit $rc' EXIT
 fi
 
 ## What earlier runs left: the test run folders failed runs kept, past the newest
@@ -1870,14 +1761,6 @@ else
 	fEcho "OK: published"
 fi
 
-## Zig's caches in the tree, where the builds ran. zig cc keeps to its global
-## cache, which the container has on a volume and this box shares, so most runs
-## find none.
-if ((! container)) && command -v zig >/dev/null 2>&1; then
-	zigNow="$(zig version 2>/dev/null || true)"
-	while IFS= read -r -d '' zigDir; do fSweep_ZigCache "${zigDir}" "${zigNow}" "${CLEANUP_CACHE_CAP_MB:-2048}" || true
-	done < <(find "${root}" -xdev \( -name .git -o -name target -o -path "${root}/forks" -o -path "${root}/cicd/artifacts" \) -prune -o -type d \( -name .zig-cache -o -name zig-cache \) -print0 -prune 2>/dev/null)
-fi
 fEcho_Clean
 fEcho_Clean "$(fSweep_Summary)"
 fSkipSummary

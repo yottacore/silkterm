@@ -272,10 +272,28 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Branch: rnd1025
 	- Test case: `cicd/tests/engine/run.bash` (Er2UgY7), 23 new checks for `--no-remote`, the plan lines, the `SKIP` step lines and the end list. `cicd/tests/wingui/harness-test.bash` (EqH4isr), 4 for the skip list. `cicd/tests/cicd-win/run.bash` (Er2UgYE), 2 for `-NoRemote`.
 
+- The Zig and container cleanup's 2 GB cap check fails when the cache sits on ZFS
+	- ID: 2026102509002701
+	- Type: Bug
+	- Status: Queued
+	- Severity: Avg
+	- Opened: 20261025-090027
+	- Opened by: CC
+	- Related IDs: 2026102416233804, 2026102416233805
+	- Target OS: Linux
+	- Test environment: b23, the round's gate step in the container at 80f0f57 on `rnd1025`, whose /tmp is under the target dir on ZFS
+	- Steps to reproduce:
+		- Run `cicd/tests/cleanup/run.bash` with `TMPDIR` on a ZFS folder.
+	- Incorrect behavior: The stale run cleanup test (EtAiwUl) fails "one over the cap goes whole" and "and the summary counts them". It passes with `TMPDIR` on ext4. ZFS reports compressed size, so the test's over-cap stand-in doesn't read as over the cap.
+	- Expected behavior: The cap check and its test give the same answer on any filesystem.
+	- Reproduced: Yes, 3 of 3 on ZFS, 0 of 3 on ext4.
+	- Tried: The group's worker (eddf89a) and one fix worker (d80c878, a missing stub in the startup gate test) on `rnd1025`. The fix cleared that failure, then this one showed. Both items were reverted on `rnd1025`, and the work is on `wip/rnd1025-2026102416233804`.
+
 - CICD reset: Zig cache
 	- ID: 2026102416233804
 	- Type: Task
-	- Status: Waiting on automated testing
+	- Status: Queued
+		- Reverted on `rnd1025` after its cap check failed the gate step on ZFS. See 2026102509002701. The work, with the fix for the startup gate test, is on `wip/rnd1025-2026102416233804`.
 	- Needs local test suite run?: One container full run, from the round's full-run line, so the ARM64 builds fill `silkterm-zig-cache`. Look for the volume made with both labels and a `.cicd-zig-version` of 0.16.0 in it.
 	- Priority: High
 	- Opened: 20261024-162338
@@ -298,7 +316,8 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - CICD reset: container cleanup
 	- ID: 2026102416233805
 	- Type: Task
-	- Status: Waiting on automated testing
+	- Status: Queued
+		- Reverted on `rnd1025` with 2026102416233804, whose cap check failed the gate step on ZFS. See 2026102509002701. The work is on `wip/rnd1025-2026102416233804`.
 		- The hand cleanup of what was made before the labels is left for the next round, once the in-flight run of 2026-10-25 is done.
 	- Needs local test suite run?: One container full run, from the round's full-run line. Look for containers named `silkterm-<run>-engine`, `-asan` and `-tsan` in `docker ps` while it runs, then at the end "docker build cache over a week old pruned" and the `docker:` line, and no `silkterm-` container left after.
 	- Priority: High

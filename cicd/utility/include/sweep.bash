@@ -17,9 +17,6 @@
 ##		- Only what the pipeline made and can show it made. A dir has to be a real
 ##		  dir of this user's, and a build dir has to be cargo's, checked right
 ##		  before it goes.
-##		- Zig caches: one emptied whole once it is over the cap, or once another
-##		  Zig version filled it, going by the stamp it carries. Never part of
-##		  one, since its manifests point into the rest.
 ##		- fSweep_Summary prints what went, on one line.
 ##	History: At bottom of file.
 
@@ -212,22 +209,6 @@ fSweep_Incremental(){
 	done
 }
 
-##	fSweep_ZigCache <dir> <zig version> <cap MB>: a Zig cache goes whole when the
-##	stamp in it names another Zig, or it is over <cap MB>. One with no stamp yet
-##	gets this version's.
-fSweep_ZigCache(){
-	local -r dir="${1%/}" ver="${2}" stampFile="${1%/}/.cicd-zig-version"
-	local -ri capKb=$(( ${3} * 1024 ))
-	local old="" kb=""
-	[[ -n "${ver}" && -d "${dir}" && ! -L "${dir}" && -O "${dir}" ]] || return 0
-	[[ -f "${stampFile}" && ! -L "${stampFile}" ]] && read -r old <"${stampFile}"
-	if [[ -n "${old}" && "${old}" != "${ver}" ]]; then fSweep_Remove "${dir}" "zig caches"; return; fi
-	kb="$(du -sk -- "${dir}" 2>/dev/null)" || true
-	kb="${kb%%[[:space:]]*}"
-	if [[ "${kb}" =~ ^[0-9]+$ ]] && ((kb > capKb)); then fSweep_Remove "${dir}" "zig caches"; return; fi
-	[[ -n "${old}" ]] || printf '%s\n' "${ver}" >"${stampFile}"
-}
-
 ##	fSweep_Summary: one line, what went and about what it freed.
 fSweep_Summary(){
 	local what list="" size=""
@@ -241,4 +222,3 @@ fSweep_Summary(){
 
 ##	History:
 ##		- 20261019 JC: Created.
-##		- 20261025 JC: Zig caches.
