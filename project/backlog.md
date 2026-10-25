@@ -622,7 +622,9 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - CICD reset: `--no-remote`, and a skipped box shown as `SKIP`
 	- ID: 2026102507245260
 	- Type: Task
-	- Status: Queued
+	- Status: Waiting on automated testing
+		- Departs from the wording: the Windows runner's test still runs under `--no-remote`, since it uses stand-ins and reaches no box.
+	- Needs external testing: A full run with b29w and vm925w both off, or held: the Windows scenarios' line reads `SKIP: windows gui scenarios, 16 not run`, and the run ends with a "Not run, since a box wasn't there" list of the 16 `SKIP wingui:` lines. Then `cicd.bash -y --no-remote --quick` once, for the plan's two `(skipped --no-remote)` lines.
 	- Priority: High
 	- Opened: 20261025-072452
 	- Opened by: CC
@@ -633,6 +635,17 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- `--no-remote` skips every other box: the Windows scenarios, the Windows runner tests, and the private runner's Mac and store parts.
 		- A skipped box shows as `SKIP` in its step's line and in the summary at the end.
 		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
+	- Progress log:
+		- 20261025: `--no-remote` skips the Windows scenarios and the private runner, and the plan says so for each. The plan has a Windows scenarios line now.
+		- 20261025: A step that reaches another box hands its scripts the run's skip list as `SILK_CICD_SKIPS`. The Windows scenarios write their `SKIP wingui:` lines there. A step that skipped anything ends with a `SKIP:` line rather than `OK:`, and the run lists every `SKIP` line again at the end.
+		- 20261025: `cicd-win.ps1 -NoRemote` passes `--no-remote` to the Linux half, which is the half that reaches the boxes.
+		- 20261025: The private runner doesn't write to the list yet, so its skips are still only warnings. That half is silkterm-private's 2026102416285601.
+	- Decisions:
+		- 20261025: A step turned off by `--no-remote` is in the plan, not in the end list, which is for boxes that weren't there, per the shared rules.
+	- Verified: the engine, Windows scenario harness, Windows pipeline and container tests pass, and each new check failed against a broken copy of what it checks. shellcheck, the bash style check, the PowerShell lint, the test ID and docs checks pass. The plan printed by a real `cicd.bash` showed both lines for no options, `--no-remote` and `--quick`.
+	- Swept: everything `cicd.bash` runs that reaches a box: the Windows scenarios and the private runner. The script tests under `cicd/tests`, `win-remote` included, use stand-ins. `cicd-win.ps1`'s Linux half got the flag. The demo and `ci-mac.bash` reach no other box.
+	- Branch: rnd1025
+	- Test case: `cicd/tests/engine/run.bash` (Er2UgY7), 23 new checks for `--no-remote`, the plan lines, the `SKIP` step lines and the end list. `cicd/tests/wingui/harness-test.bash` (EqH4isr), 4 for the skip list. `cicd/tests/cicd-win/run.bash` (Er2UgYE), 2 for `-NoRemote`.
 
 - CICD reset: vmKt6m put back through the VM state helper
 	- ID: 2026102507245265
@@ -732,6 +745,8 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- The pre-push hook runs `--merge-gate` on a push to main, and skips it when the push changes only docs and other files no build reads. Those paths are listed in one place the hook reads.
 		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
 		- Overrides: 2026101816103601's decision that `--gate` keeps its name as the merge gate, design.md's merge gate bullet under "Delivery", and the gate and full-run lines in the private notes' "Round settings".
+	- Progress log:
+		- 20261025: `--no-remote` is in, from 2026102507245260, with `-NoRemote` in `cicd-win.ps1`.
 
 - CICD reset: step output
 	- ID: 2026102416233808
@@ -748,6 +763,8 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- A step that's turned off isn't counted, and the first section lists those with the flag or reason for each.
 		- The same goes for `cicd-win.ps1` and the Mac CI script.
 		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
+	- Progress log:
+		- 20261025: From 2026102507245260: a step that left something out on another box ends with a `SKIP:` line, through `fStepDone`, and the run lists the `SKIP` lines again at the end. The plan has a Windows scenarios line. The closing-line form here should keep the `SKIP` case.
 
 - CICD reset: a test for every Done item
 	- ID: 2026102416233809
