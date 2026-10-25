@@ -96,6 +96,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261018: The demo re-record is on by default now, with a new `--no-demo`. `--demo` still turns it on under `--quick`.
 		- 20261018: `--quick` keeps the remote sync and the publish. Only the test and build boxes count as external hosts.
 		- 20261018: `--gate` keeps its name. Nothing was named `--ci`.
+		- 20261024: 2026102416233807 supersedes the `--gate` decision above. Under the CICD reset the merge gate is `--merge-gate`, and `--gate` becomes another name for `--backlog-run-quick`.
 	- Progress log:
 		- 20261018: `--quick` now builds the Windows x86_64 release too, and drops only the ARM64 ones. Packages, profiling and the fuzz soak stay skipped.
 		- 20261018: `--quick` also skips the 5 window tests that took 33 s to 103 s each here: monwl, mapfollow, livecfg, wpresize and wpkept. The other 9 took 22 s or less, and the script tests 17 s or less.
@@ -311,6 +312,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261023: The full run at 2da75a7 ended "cleanup: nothing stale" in the image and on the host, and the cleanup test passed. The Windows half is still left. No Windows box was free this round.
 	- Decisions:
 		- 20261019: No `docker builder prune` after a new image. The build cache isn't a stale leftover, and other projects share it. A run only prints its size.
+		- 20261024: 2026102416233805 supersedes this. Under the CICD reset a run ends with `docker builder prune -f --filter until=168h`. 2026102416233803 also replaces the newest-5 rule for folders failed runs keep.
 	- Branch: sweep
 	- Commit: e2c4556
 	- Test case: `cicd/tests/cleanup/run.bash` (EtAiwUl) and `cicd/tests/cleanup/win.ps1` (EtAiwnM) plant stale folders and build dirs beside fresh ones, other runs' and unlisted ones. Added to `cicd/tests/container/run.bash` (EsJg9EF) and `cicd/tests/wingui/harness-test.bash` (EqH4isr).
@@ -541,6 +543,159 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Test case: None new. The ignores are test attributes, checked by the runs above.
 	- Branch: rnd1023
 
+- CICD reset: containers
+	- ID: 2026102416233801
+	- Type: Task
+	- Status: Queued
+	- Priority: High
+	- Opened: 20261024-162338
+	- Opened by: CC
+	- Related IDs: 2026101009221201, 2026102416233802
+	- Target OS: All
+	- Requirements:
+		- Per `Containers` in the shared CICD rules. The pinned image, docker by default, the fallback to this box and `--no-container` are in.
+		- Left: a step whose point is the real GPU runs on this box, not in the image. That's the profiler, and anything else that reads frame times or graphics memory off the card. The render-node test already skips inside.
+		- Windows GPU work stays on vm925w, per 2026102416233802.
+		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
+		- Overrides: the private notes' line that stages 1 to 6 run in the image, the profiler included.
+
+- CICD reset: other hosts and VMs
+	- ID: 2026102416233802
+	- Type: Task
+	- Status: Queued
+	- Priority: High
+	- Opened: 20261024-162338
+	- Opened by: CC
+	- Target OS: All
+	- Requirements:
+		- Per `Other hosts and VMs` in the shared CICD rules. The Windows runs already hold the boxes through the shared host lock's `wrap`, and a box that's off is a skip.
+		- A VM is put back the way it was found, through the VM state helper, for vm925w and vmKt6m.
+		- `--no-remote` skips every other box: the Windows scenarios, the Windows runner tests, and the private runner's Mac and store parts.
+		- The Windows scenarios favor b29w. The GPU and timed ones, such as `perfladder`, run on vm925w only, since b29w's GPU is integrated. Every scenario runs on both boxes now.
+		- Windows testing names `b29w` only. The boxes' host config outside the repo still lists `b29w-wif` as a second address for it. Drop it, since the hosts file points `b29w` at the link that works.
+		- A skipped box shows as `SKIP` in its step's line and in the summary at the end.
+		- The Linux ARM64 build gets a `--version` smoke run on the arm64 Linux VM. Nothing runs it now.
+		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
+
+- CICD reset: Zig cache
+	- ID: 2026102416233804
+	- Type: Task
+	- Status: Queued
+	- Priority: High
+	- Opened: 20261024-162338
+	- Opened by: CC
+	- Target OS: Linux
+	- Requirements:
+		- Per the Zig bullets in `Cleanup after a run` in the shared CICD rules. The ARM64 builds use `cargo zigbuild`, and nothing looks after Zig's caches yet.
+		- At the end of a run, empty a project Zig cache that's over 2 GB, or that an older Zig filled, going by a version stamp inside it. Always the whole folder.
+		- In the container, Zig's global cache goes on a volume of its own, `silkterm-zig-cache`, under the same rule. On this box `~/.cache/zig` is left alone.
+		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
+
+- CICD reset: container cleanup
+	- ID: 2026102416233805
+	- Type: Task
+	- Status: Queued
+	- Priority: High
+	- Opened: 20261024-162338
+	- Opened by: CC
+	- Related IDs: 2026101909222600
+	- Target OS: Linux
+	- Requirements:
+		- Per the container bullets in `Cleanup after a run` in the shared CICD rules. `--rm`, a pipeline label, and sweeps of old tags and stopped containers are in.
+		- Every container, image and volume gets `dev.project=silkterm` and `dev.run=<run folder name>`, and each container is named `silkterm-<run folder name>-<step>`.
+		- At the end of a run, on failure and Ctrl+C too, the run's containers are stopped and removed by `dev.run`. `--keep-temp` keeps them.
+		- The current image tag and the one before it stay. Every older tag goes now.
+		- `docker builder prune -f --filter until=168h` runs at the end.
+		- The cache volume gets the 2 GB rule.
+		- The end line compares `docker system df` before and after.
+		- What was made before the labels gets one cleanup by hand, by ID.
+		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
+		- Overrides: 2026101909222600's 20261019 decision of no `docker builder prune`, and the same call in the private notes' "Calls already made".
+
+- CICD reset: CPU and priority
+	- ID: 2026102416233806
+	- Type: Task
+	- Status: Queued
+	- Priority: High
+	- Opened: 20261024-162338
+	- Opened by: CC
+	- Target OS: All
+	- Requirements:
+		- Per `Machine use` in the shared CICD rules. Half the CPUs is in, through `CICD_MAX_JOBS`.
+		- When the 1-minute load is over half the CPU count, at the start or before a step, that step gets a quarter.
+		- The hard steps always get a quarter: ASan, TSan, Miri, CodeQL, the fuzz soak and the soak test.
+		- The counts are worked out in one place. The sanitizer, CodeQL and repro scripts each work out their own now.
+		- The whole run goes under `nice -n 19` and `ionice -c 3`.
+		- Containers get `--cpus <jobs>` and `--cpu-shares 256`, with `nice` inside.
+		- `cicd-win.ps1` sets `BelowNormal` on its own process at the top, and `Idle` for the hard steps.
+		- Jobs on the other boxes go by that box's CPU count and load.
+		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
+
+- CICD reset: standard flags
+	- ID: 2026102416233807
+	- Type: Task
+	- Status: Queued
+	- Priority: High
+	- Opened: 20261024-162338
+	- Opened by: CC
+	- Related IDs: 2026101816103601, 2026102319535661
+	- Target OS: All
+	- Requirements:
+		- Per the flags in `CICD style guide` and `Merge gate` in the shared CICD rules. `--quick`, `--leakcheck`, `--no-leakcheck`, `--no-container`, `--no-sync`, `-q` and `-m` are in.
+		- Add `--long`, with `--slow` as another name, `--backlog-run-quick [<area>...]` with its areas in `--help`, `--backlog-run-full`, `--merge-gate`, `--no-remote`, `--keep-temp` and `--list`.
+		- `--gate` becomes another name for `--backlog-run-quick`, and `--ci` for `--merge-gate`. Each says so in one line when used.
+		- The backlog runs and the merge gate never dogfood, publish, commit, push, install, sync or rewrite a tracked file, and never prompt.
+		- The default run fits in about an hour. It takes about 90 minutes now, so a step moves to `--long`.
+		- The pre-push hook runs `--merge-gate` on a push to main, and skips it when the push changes only docs and other files no build reads. Those paths are listed in one place the hook reads.
+		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
+		- Overrides: 2026101816103601's decision that `--gate` keeps its name as the merge gate, design.md's merge gate bullet under "Delivery", and the gate and full-run lines in the private notes' "Round settings".
+
+- CICD reset: step output
+	- ID: 2026102416233808
+	- Type: Task
+	- Status: Queued
+	- Priority: High
+	- Opened: 20261024-162338
+	- Opened by: CC
+	- Target OS: All
+	- Requirements:
+		- Per the step lines in `CICD style guide` in the shared CICD rules.
+		- Each step starts after a 79-character rule with `[ <stamp>: Step N of M; Starting <name> ]` and ends with a `PASS` or `FAIL` line of the same form. The stamp is local time, `YYYYmmDD-HHMMSS.NN`.
+		- Now the rule is 74 characters, a header reads like `3/8  Regression tests` with no time, and a step has no closing line.
+		- A step that's turned off isn't counted, and the first section lists those with the flag or reason for each.
+		- The same goes for `cicd-win.ps1` and the Mac CI script.
+		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
+
+- CICD reset: a test for every Done item
+	- ID: 2026102416233809
+	- Type: Task
+	- Status: Queued
+	- Priority: High
+	- Opened: 20261024-162338
+	- Opened by: CC
+	- Target OS: All
+	- Requirements:
+		- Per the regression bullet in `Testing` in the shared CICD rules. Every Done item has a regression test in CI where one could exist, and names its test ID, or says in a few words why it has none.
+		- Most Done items in the new format name one. Left: 4 there that don't, and the Done items in the old format, which name none.
+		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
+
+- CICD reset: test IDs
+	- ID: 2026102416233810
+	- Type: Task
+	- Status: Queued
+	- Priority: High
+	- Opened: 20261024-162338
+	- Opened by: CC
+	- Related IDs: 2026092711142900
+	- Target OS: All
+	- Requirements:
+		- Per the ID and per-test line bullets in `Testing` in the shared CICD rules. Every test has an ID, and the check stage refuses a missing or shared one.
+		- IDs move from base 62 milliseconds to whole minutes since 2000-01-01 00:00 UTC, in lowercase Crockford base 32, like `decp8`. Each existing ID is converted once, from the time it already stands for. When 2 land on one minute, the newer takes the next free one.
+		- The ID tool and the check stage follow the new form.
+		- Every regression and fuzz test prints one line, such as `PASS decp8 <name>`, with `FAIL` or `SKIP` in place of `PASS`. The scroll harness scenes and the fuzz cases have no IDs of their own yet.
+		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
+		- Overrides: 2026092711142900's decision that the scroll harness scenes keep their PASS lines with no IDs, and the base 62 rule in the private notes.
+
 - Leak checks: Miri sort, settings_ui
 	- ID: 2026102407430381
 	- Type: Task
@@ -649,6 +804,59 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Notes:
 		- Split from 2026101714445005. Its heap-growth test covers some of the same actions in-process. This one is for what that can't reach: windows, tabs and splits opened and closed, the GPU, the Settings dialog and a real PTY.
 		- `cicd/tests/allocs/run.bash` already drives a window on a private Xvfb.
+
+- CICD reset: temp files and safe removal
+	- ID: 2026102416233803
+	- Type: Task
+	- Status: Queued
+	- Priority: Avg
+	- Opened: 20261024-162338
+	- Opened by: CC
+	- Related IDs: 2026101909222600
+	- Target OS: All
+	- Requirements:
+		- Per `Temp files` and `Safe removal` in the shared CICD rules.
+		- A run's folder is `${HOST_TEMP}/silkterm/<YYYYmmDD-HHMMSS>_<NNN>/`, on every OS, with `TMPDIR`, `TEMP` and `TMP` pointed at it. Now it's a `test_silkterm_<stamp>` folder straight under the temp dir, plus the container's /tmp under the target dir.
+		- A run removes its own folder at the end, on failure and Ctrl+C too, and `--keep-temp` keeps it and prints where. Now a failed run keeps it, and the newest 5 of those stay.
+		- Stale folders go after 2 days, when no process from the folder's `run.pid` is left.
+		- Every recursive removal goes through the repo's copy of the shared guard. About 63 `rm -r` lines in the scripts and 35 `Remove-Item -Recurse` lines in PowerShell have none. File list in the private notes.
+		- The release artifacts folder in the repo is cleared through a guard that names that one parent.
+		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
+		- Overrides: 2026101909222600's rule that failed runs keep their folders and the newest 5 stay.
+
+- CICD reset: version line
+	- ID: 2026102416233811
+	- Type: Task
+	- Status: Queued
+	- Priority: Avg
+	- Opened: 20261024-162338
+	- Opened by: CC
+	- Target OS: All
+	- Requirements:
+		- Per the build number bullets in `Branches and releases` in the shared CICD rules. The build number in Crockford base 32 and the date on a non-release build are in.
+		- Left: `--version` and `--about` print the copyright line under `SilkTerm v<version> build <build>`.
+		- Left: a build from a dirty tree takes its number from the clock. The rule takes it from the commit.
+		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
+		- Overrides: the 09-24 call in the private notes that `--version` is one line with no copyright line.
+
+- CICD reset: CICD process gaps
+	- ID: 2026102416233812
+	- Type: Task
+	- Status: Queued
+	- Priority: Avg
+	- Opened: 20261024-162338
+	- Opened by: CC
+	- Related IDs: 2026101714445004, 2026101913360695
+	- Target OS: All
+	- Requirements:
+		- What else in the shared CICD rules isn't done yet, past the other reset items:
+			- The fast leak checks run under `--quick` too.
+			- The leak checks that take hours, such as the whole suite under Miri, run only under `--long` or `--leakcheck`.
+			- CodeQL runs in the default run, not only behind `--codeql`.
+			- Miri runs from a nightly pinned in the image. Only the host's nightly has it now.
+			- The cleanup line at the end says roughly what it freed.
+		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
+		- Overrides: design.md's CodeQL and heap growth bullets under "Delivery", which keep CodeQL behind `--codeql` and every leak check out of `--quick`.
 
 - A config test's 50 ms bound for a failed write went red under load in a full run
 	- ID: 2026102410441001
