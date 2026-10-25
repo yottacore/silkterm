@@ -870,23 +870,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Expected behavior: Each underline style a program sets is drawn, in the underline color it sets, or the text color.
 	- Reproduced: Not run in a window. Found in the code while answering 2026102114411311.
 
-- The Windows scenario run fails on a VM it just woke from off, since the session never answers
-	- ID: 2026102510420001
-	- Type: Bug
-	- Status: Queued
-	- Severity: Avg
-	- Opened: 20261025-104200
-	- Opened by: CC
-	- Related IDs: 2026102507245255, 2026102507245260
-	- Target OS: Windows
-	- Test environment: b23, the full run's wingui stage at e95b81b on `rnd1025`, vm925w off before the run and b29w up
-	- Steps to reproduce:
-		- Leave vm925w off and run the full run's wingui stage.
-	- Incorrect behavior: The VM state helper started vm925w, then `perfladder` failed with "VERDICT fail the session never answered" in session 1, and the stage failed the run. Before 2026102507245255 a box that was off was skipped.
-	- Expected behavior: A woken VM gets time for its logged-on session to answer before a scenario runs, or the box is a skip with a reason.
-	- Reproduced: Once, in the full run.
-	- Tried: The item's worker (ccaeeb7) and one fix worker for a CRLF header bug (86da5d0). 2026102507245260 (bf47323) builds on it. All 3 were reverted on `rnd1025`, and the work is on `wip/rnd1025-2026102507245255`. That branch also has eddf89a, which has its own `wip/rnd1025-2026102416233804`.
-
 - A config conversion race test leaves a backup per launch under ASan
 	- ID: 2026102510010001
 	- Type: Bug
@@ -1114,6 +1097,33 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- The Windows GUI scenarios and the scroll harness turn off only with `--quick`, and dpirand only with `DPIRAND_SECS=0` in config.bash.
 	- Notes:
 		- Not every stage needs its own flag. A few grouped ones may do, such as one for the lints and one for the script tests.
+
+- The Windows scenario run fails on a VM it just woke from off, since the session never answers
+	- ID: 2026102510420001
+	- Type: Bug
+	- Status: Done
+	- Severity: Avg
+	- Opened: 20261025-104200
+	- Opened by: CC
+	- Related IDs: 2026102507245255, 2026102507245260
+	- Target OS: Windows
+	- Test environment: b23, the full run's wingui stage at e95b81b on `rnd1025`, vm925w off before the run and b29w up
+	- Steps to reproduce:
+		- Leave vm925w off and run the full run's wingui stage.
+	- Incorrect behavior: The VM state helper started vm925w, then `perfladder` failed with "VERDICT fail the session never answered" in session 1, and the stage failed the run. Before 2026102507245255 a box that was off was skipped.
+	- Expected behavior: A woken VM gets time for its logged-on session to answer before a scenario runs, or the box is a skip with a reason.
+	- Reproduced: Once, in the full run.
+	- Tried: The item's worker (ccaeeb7) and one fix worker for a CRLF header bug (86da5d0). 2026102507245260 (bf47323) builds on it. All 3 were reverted on `rnd1025`, and the work is on `wip/rnd1025-2026102507245255`. That branch also has eddf89a, which has its own `wip/rnd1025-2026102416233804`.
+	- Actual cause:
+		- vm925w doesn't log anyone on at boot (`AutoAdminLogon` is 0). Woken from off, its console sat at the logon screen, session 1 with no user, for the 5 minutes watched after ssh answered.
+		- The stage took the console user from `quser`, and with nobody there it fell back to the ssh account. The scenario then went to an interactive task for an account with no session, which never runs, so it waited out its 4 minutes.
+	- Actual fix: Nobody on the console is a skip with a reason: `wingui: <box>: nobody is logged on at the console, skipped`. A box set to log a user on by itself gets up to 120 s for it first. A scenario that finds the console empty fails with that reason, rather than "the console is now <ssh account>'s".
+	- Verified: 20261025. vm925w woken from off through the VM state helper: the stage said the line above in seconds, sent and ran nothing, and vm925w was off again after. The new harness checks fail against the scripts as they were and pass now. shellcheck, the bash style check and the PowerShell lint pass.
+	- Swept: the other place that reads the console user, the scenario launcher in `run.bash`, had the same fallback, fixed. The scenarios' own `fSessionUsable` runs inside the session, so it can't see this.
+	- Test case: `cicd/tests/wingui/harness-test.bash` (EqH4isr), 12 new checks for a box nobody is logged on at, and the console user and wait in `_stage.ps1`.
+	- Branch: rnd1025b
+	- Acceptance signoff: Self-closed: the cause was seen on vm925w, and the fix skipped it there.
+	- Closed: 20261025-160900
 
 - Wayland: must use the Wayland clipboard, and minimize other X11 features
 	- ID: 2026101509024607

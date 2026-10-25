@@ -45,6 +45,7 @@ case "${1:-}" in
 		if grep -qE $'^fStage\r?$' "$2"; then
 			cp "$2" "${STUB_DIR}/stage.ps1"
 			[[ -n "${STUB_NOSTAGE:-}" ]] && { echo "test run folder: refused"; exit 1; }
+			[[ -n "${STUB_NOSESSION:-}" ]] && { printf 'NOSESSION nobody is logged on at the console\r\n'; exit 0; }
 			echo "RUNFOR wintest"
 			printf 'RUNDIR %s\r\n' 'C:\Users\wintest\AppData\Local\Temp\test_silkterm_20260101-00000000'
 			printf 'RUNTOKEN %s\r\n' '4242-1234567890'
@@ -162,6 +163,19 @@ out="$(STUB_NOSTAGE=1 STUB_LOG="${work}/nostage/calls" STUB_DIR="${work}/nostage
 nsweep="$(find "${work}/nostage" -name 'sweep-*.ps1' | head -1)"
 fCheck "and still has the stage script swept, with no folder to remove" bash -c '[[ -n "$1" ]] && grep -qF -- "-Filter '"'"'silkrig_" "$1" && ! grep -q "^if (fTestDir_Remove" "$1"' _ "${nsweep}"
 
+## A box nobody is logged on at, such as a VM just started, has no desktop for
+## a scenario. It was run anyway, as the ssh account, and waited out 4 minutes
+## for a task that never started. Now it's a skip that says why.
+mkdir "${work}/nosession"
+rc=0
+out="$(STUB_NOSESSION=1 STUB_LOG="${work}/nosession/calls" STUB_DIR="${work}/nosession" WINRIG_HELD=1 \
+	WINGUI_WIN_REMOTE="${work}/win-remote" WINGUI_EXE="${work}/silkterm.exe" "${meDir}/run.bash" smoke 2>&1)" || rc=$?
+fCheck "a box nobody is logged on at is a skip that says why" grep -qFx "wingui: box: nobody is logged on at the console, skipped" <<< "${out}"
+fCheck "which doesn't fail the run" test "${rc}" -eq 0
+fCheck "and sends and runs nothing there" bash -c '! grep -qE "^push |^run .*_smoke\.ps1" "$1"' _ "${work}/nosession/calls"
+fCheck "but still sweeps the stage script" test "$(fSweeps "${work}/nosession")" -eq 1
+fCheck "a scenario stops if nobody is on the console by the time it runs" grep -qF '"VERDICT fail nobody is logged on at the console now"' "${launcher}"
+
 ## A box that is off is a skip: the run passes, and nothing is sent or run.
 rc=0
 out="$(STUB_DOWN=1 STUB_LOG="${work}/calls-down" STUB_DIR="${work}" WINRIG_HELD=1 WINGUI_WIN_REMOTE="${work}/win-remote" \
@@ -253,6 +267,44 @@ else
 	echo "  skip the temp folder half: pwsh not found"
 fi
 
+## Who holds the console: nobody at a logon screen, never the ssh account. A box
+## that logs on by itself is waited for, and one that doesn't isn't.
+if command -v pwsh >/dev/null 2>&1; then
+	cat > "${work}/console.ps1" <<PS
+\$ast = [System.Management.Automation.Language.Parser]::ParseFile("${meDir}/_stage.ps1", [ref]\$null, [ref]\$null)
+foreach (\$name in 'fConsoleUserIn', 'fWaitConsoleUser') {
+	\$fn = \$ast.Find({ param(\$n) \$n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and \$n.Name -eq \$name }, \$true)
+	Invoke-Expression \$fn.Extent.Text
+}
+Set-StrictMode -Version Latest
+\$env:USERNAME = 'sshacct'
+\$head = ' USERNAME              SESSIONNAME        ID  STATE   IDLE TIME  LOGON TIME'
+"in:" + (fConsoleUserIn @(\$head, '>wintest               console             1  Active      none   10/25/2026 9:00 AM') 1)
+"other:" + (fConsoleUserIn @(\$head, ' wintest                                   2  Disc        none   10/25/2026 9:00 AM') 1)
+"none:" + (fConsoleUserIn @() 1)
+\$script:calls = 0
+function fConsoleUser { \$script:calls++; if (\$script:calls -ge 3) { 'wintest' } }
+function fLogsOnByItself { \$false }
+"nowait:" + (fWaitConsoleUser 5 1) + ":" + \$script:calls
+\$script:calls = 0
+function fLogsOnByItself { \$true }
+"waited:" + (fWaitConsoleUser 5 0) + ":" + \$script:calls
+function fConsoleUser { }
+\$t = [DateTime]::UtcNow
+"gaveup:" + (fWaitConsoleUser 1 0) + ":" + [int]([DateTime]::UtcNow - \$t).TotalSeconds
+PS
+	mapfile -t con < <(pwsh -NoProfile -File "${work}/console.ps1" 2>&1)
+	fCheck "the console user is read from the console's own session" test "${con[0]:-}" = 'in:wintest'
+	fCheck "a user on another session isn't it" test "${con[1]:-}" = 'other:'
+	fCheck "with nobody logged on it's nobody, not the ssh account" test "${con[2]:-}" = 'none:'
+	fCheck "a box that doesn't log on by itself isn't waited for" test "${con[3]:-}" = 'nowait::1'
+	fCheck "one that does is waited for until someone's on" test "${con[4]:-}" = 'waited:wintest:3'
+	fCheck "for a while, and then it's nobody" test "${con[5]:-}" = 'gaveup::1'
+	fCheck "the stage says NOSESSION rather than make a folder for nobody" grep -qE $'^\t\tif \\(fLogsOnByItself\\) \\{ "NOSESSION ' "${meDir}/_stage.ps1"
+else
+	echo "  skip the console user half: pwsh not found"
+fi
+
 ((failures == 0)) || { echo "${failures} check(s) failed"; exit 1; }
 echo "all passed"
 
@@ -262,3 +314,4 @@ echo "all passed"
 ##		- 20261002: The run folder is in the console user's temp folder.
 ##		- 20261002: Run folders are removed, here and on the box.
 ##		- 20261019: So are the scripts it sends, and a killed run's, by the next run.
+##		- 20261025: A box nobody is logged on at is a skip.
