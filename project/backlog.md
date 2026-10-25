@@ -858,22 +858,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
 		- Overrides: design.md's CodeQL and heap growth bullets under "Delivery", which keep CodeQL behind `--codeql` and every leak check out of `--quick`.
 
-- A config test's 50 ms bound for a failed write went red under load in a full run
-	- ID: 2026102410441001
-	- Type: Bug
-	- Status: Queued
-	- Severity: Low
-	- Opened: 20261024-104410
-	- Opened by: CC
-	- Related IDs: 2026102407430379
-	- Target OS: Linux
-	- Test environment: b23 at load about 20 to 30, the full run in the container at 550ff60 on `rnd1024`
-	- Steps to reproduce:
-		- Run the full run while the box is busy.
-	- Incorrect behavior: `config::tests::a_failed_write_that_left_the_file_changes_nothing` failed its "no pause when the file is still there" check, under 50 ms, in the testdir step's read-only run (ErOj67l). The full run stopped in stage 3 there.
-	- Expected behavior: A timing bound doesn't go red on load alone.
-	- Reproduced: No. Run alone 3 times right after, at load 23, it passed each time.
-
 - Wayland: a copy a program sends while no SilkTerm window has focus is dropped
 	- ID: 2026101607585700
 	- Type: Enhancement
@@ -903,6 +887,32 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- The Windows GUI scenarios and the scroll harness turn off only with `--quick`, and dpirand only with `DPIRAND_SECS=0` in config.bash.
 	- Notes:
 		- Not every stage needs its own flag. A few grouped ones may do, such as one for the lints and one for the script tests.
+
+- A config test's 50 ms bound for a failed write went red under load in a full run
+	- ID: 2026102410441001
+	- Type: Bug
+	- Status: Done
+	- Severity: Low
+	- Opened: 20261024-104410
+	- Opened by: CC
+	- Related IDs: 2026102407430379
+	- Target OS: Linux
+	- Test environment: b23 at load about 20 to 30, the full run in the container at 550ff60 on `rnd1024`
+	- Steps to reproduce:
+		- Run the full run while the box is busy.
+	- Incorrect behavior: `config::tests::a_failed_write_that_left_the_file_changes_nothing` failed its "no pause when the file is still there" check, under 50 ms, in the testdir step's read-only run (ErOj67l). The full run stopped in stage 3 there.
+	- Expected behavior: A timing bound doesn't go red on load alone.
+	- Reproduced: No. Run alone 3 times right after, at load 23, it passed each time.
+		- 20261025: Yes, inside a 5% CPU quota beside 2 busy loops: 4 of 40 runs failed, each at about 98.5 ms.
+	- Actual cause: A wall clock bound. Under a CPU quota, which is how a container's `--cpus` works, the whole group stalls for the rest of a 100 ms period once it uses up its share, so a bound under 100 ms can fail on load alone. The write itself takes no pause there.
+	- Actual fix: The restore counts its pauses on the test's thread, and the test checks the count is 0 instead of timing the write. The sibling `a_restore_that_cannot_write_gives_up_and_says_so` (Epa8S0i) checks 5 pauses in place of its under-2 s bound, and keeps its at-least-400 ms bound, which load can't fail.
+	- Decisions:
+		- 20261025: The Miri ignore on this test is gone, since it had only failed the time bound there.
+	- Verified: 20261025. Under the same quota the fixed test passed 40 of 40, and Epa8S0i 15 of 15. With a pause put before the name check, the test failed on the count. Under Miri, it, Epa8S0i and `a_restore_never_writes_through_a_name_taken_meanwhile` pass. The 232 config tests, fmt, clippy for Linux and Windows with all targets.
+	- Swept: every wall clock bound in the unit tests. The rest have 0.9 s or more of slack (peers, term, shells). The two Windows restore tests (EpaOYRt, EpaOYRu) are left as they were: EpaOYRu's 1400 ms bound is part of its race with a 1500 ms hold.
+	- Branch: rnd1025
+	- Test case: `a_failed_write_that_left_the_file_changes_nothing` (Epa8S0g), same ID, rewritten in place. Red under the quota before, green after.
+	- Closed: 20261025-065046
 
 - Wayland: must use the Wayland clipboard, and minimize other X11 features
 	- ID: 2026101509024607
