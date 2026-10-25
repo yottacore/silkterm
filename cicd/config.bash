@@ -276,6 +276,10 @@ CLEANUP_BUILD_DIRS=(debug release "${PROFILE_PROFILE}" lint)
 ## The same for the dirs the pinned nightly builds into, which only a nightly bump
 ## makes stale.
 CLEANUP_NIGHTLY_DIRS=("${ASAN_DIR}" "${TSAN_DIR}")
+## At the end of a run a cache over this many MB is emptied whole: the container's
+## cache volumes, and a Zig cache in the tree. A Zig cache is also emptied when
+## another Zig version filled it. Zig's global cache on this box is never touched.
+CLEANUP_CACHE_CAP_MB=2048
 
 ## Old SVGs are pruned by gfs_rotate (cicd/utility/include/gfs-rotate.bash): keeps
 ## ~30 - first + newest-per-hour/day/week/month/year + last 10. Tune with the

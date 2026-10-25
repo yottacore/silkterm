@@ -676,7 +676,8 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - CICD reset: Zig cache
 	- ID: 2026102416233804
 	- Type: Task
-	- Status: Queued
+	- Status: Waiting on automated testing
+	- Needs local test suite run?: One container full run, from the round's full-run line, so the ARM64 builds fill `silkterm-zig-cache`. Look for the volume made with both labels and a `.cicd-zig-version` of 0.16.0 in it.
 	- Priority: High
 	- Opened: 20261024-162338
 	- Opened by: CC
@@ -686,11 +687,21 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- At the end of a run, empty a project Zig cache that's over 2 GB, or that an older Zig filled, going by a version stamp inside it. Always the whole folder.
 		- In the container, Zig's global cache goes on a volume of its own, `silkterm-zig-cache`, under the same rule. On this box `~/.cache/zig` is left alone.
 		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
+	- Progress log:
+		- 20261025: The container mounts `silkterm-zig-cache` at `/zig-cache`, with `ZIG_GLOBAL_CACHE_DIR` pointed there. The first run to use it writes the Zig version into `.cicd-zig-version`. At the end of a run the volume goes whole when it's over 2 GB or another Zig filled it, through the container cleanup in 2026102416233805. The cap is `CLEANUP_CACHE_CAP_MB` in config.bash.
+		- 20261025: A `.zig-cache` or `zig-cache` folder in the tree goes whole under the same rule at the end of a run, where the builds ran, and gets the stamp when it has none. `zig cc` keeps to its global cache, so none turned up here.
+		- Note: Until now Zig's cache inside the container sat in `silkterm-cicd-cache`, under `/cache/home/.cache/zig`. It stays there until that volume is cleaned up by hand, per 2026102416233805.
+	- Verified: 20261025. In the image, `zig cc` for aarch64 wrote its cache into a stand-in volume at `/zig-cache`, owned by this uid, with the stamp `0.16.0`. The cleanup test's new Zig cases, and the container test's volume cases, against a stand-in docker. Both new sets failed against the pipeline as it was. Shellcheck, house style, engine test, docs check.
+	- Swept: every `zigbuild` and `zig` call in cicd and the Dockerfile. Only the two ARM64 cross targets in config.bash use it.
+	- Test case: New cases in `cicd/tests/cleanup/run.bash` (EtAiwUl) and `cicd/tests/container/run.bash` (EsJg9EF).
+	- Branch: rnd1025
 
 - CICD reset: container cleanup
 	- ID: 2026102416233805
 	- Type: Task
-	- Status: Queued
+	- Status: Waiting on automated testing
+		- The hand cleanup of what was made before the labels is left for the next round, once the in-flight run of 2026-10-25 is done.
+	- Needs local test suite run?: One container full run, from the round's full-run line. Look for containers named `silkterm-<run>-engine`, `-asan` and `-tsan` in `docker ps` while it runs, then at the end "docker build cache over a week old pruned" and the `docker:` line, and no `silkterm-` container left after.
 	- Priority: High
 	- Opened: 20261024-162338
 	- Opened by: CC
@@ -707,6 +718,20 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- What was made before the labels gets one cleanup by hand, by ID.
 		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
 		- Overrides: 2026101909222600's 20261019 decision of no `docker builder prune`, and the same call in the private notes' "Calls already made".
+	- Progress log:
+		- 20261025: Every container, image and volume a run makes is labeled `dev.project=silkterm` and `dev.run=<run>`, and containers are named `silkterm-<run>-<step>`, the step being `engine`, `gate`, `asan`, `tsan`, `codeql` or `tidy`. The run's name is its test run folder's for now, without the `test_silkterm_` part. 2026102416233803 moves the run folder under `HOST_TEMP`. The cache volumes are made with the labels when missing.
+		- 20261025: At the end of a run, failed or stopped by Ctrl+C too, the run's containers are stopped and removed by `dev.run`. Then untagged images with our label go. Once the run passed, our tags older than the current one and the one before it go. Then the volume rule: a cache volume over 2 GB goes whole, and the Zig one when another Zig filled it. docker keeps a volume another run still holds. Last, `docker builder prune -f --filter until=168h`, and one line comparing `docker system df` before and after.
+		- 20261025: `--keep-temp` starts the containers without `--rm`, keeps them at the end with their names printed, and leaves the volumes they hold.
+		- 20261025: The older-tag sweep moved from the start of a run to its end, and only runs after a pass, so the last image that passed isn't lost to a broken recipe.
+		- 20261025: Nothing without the label is touched, so the `silkterm-cicd` images, the `silkterm-cicd-cache` volume and any stopped container from before today stay until the hand cleanup.
+		- Note: A `docker run --rm` can return before docker has removed the container, which then still holds its volumes. So the step that reads the volumes runs without `--rm` and is removed with a plain `docker rm`, which waits.
+		- 20261025: The container test's checks of the old label, the build cache left alone and the old tag sweep are commented out with the reason, and replaced. The `-v` count it checks went from 3 to 4, for the Zig volume.
+	- Decisions:
+		- 20261025: The older-tag sweep keeps the newest tag before the current one by creation time, among images with our label only.
+	- Verified: 20261025. The end cleanup against real docker, on throwaway images, containers and volumes under another project name: this run's container gone, another run's and another project's kept, the current and previous tags kept, older labeled tags and a labeled untagged image gone, an unlabeled tag kept, an over-cap volume and a stale Zig volume gone, one held by another run left with a message, an unlabeled volume never read. It failed at first, on the `--rm` race above. The container test's new cases, against a stand-in docker, Ctrl+C in a gate and in a full run through the log tee included. All failed against the pipeline as it was. Shellcheck, house style, engine test, docs check, build.md markdown check.
+	- Swept: every `docker` call in cicd.bash, and every `fContainerRun` and `fContainerBuild` call (gate, ASan, TSan, CodeQL, engine). The asan, tsan and codeql scripts start no container. No other script names the old label.
+	- Test case: New cases in `cicd/tests/container/run.bash` (EsJg9EF).
+	- Branch: rnd1025
 
 - CICD reset: CPU and priority
 	- ID: 2026102416233806
