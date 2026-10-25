@@ -24,11 +24,9 @@
 ##		win-remote.bash [--host <name>] [--optional] hold <command> [args...]
 ##	Notes:
 ##		Hosts are read from $WINRIG_CONF (default ~/.config/silkterm/winrig.conf),
-##		one per line as '<name> <addr>[,<addr>...] [<tag>...]'. First address that
-##		answers wins. The file lives outside the repo on purpose - machine names are
-##		not project data. Boxes are used in the order listed, so the favored one goes
-##		first. The tag 'gpu' marks a box with a real card, which is the only kind a
-##		scenario that needs one runs on. hosts prints the tags after the address.
+##		one per line as '<name> <addr>[,<addr>...]'. First address that answers wins,
+##		which is how a laptop that moves between wired and wifi stays reachable. The
+##		file lives outside the repo on purpose - machine names are not project data.
 ##		A host that is down is skipped with a warning. Exit is 1 only if every
 ##		selected host was unreachable, or if a job failed on a host that was up.
 ##		--optional drops the first of those, so nothing reachable is a skip rather
@@ -49,9 +47,7 @@
 ##		the host config names a host lock, and then everything but hosts waits for the
 ##		selected boxes through it, unless the caller already holds them. A lock that is
 ##		missing, cannot run, or does not know a box is passed over. WINRIG_LOCK_WAIT
-##		caps the wait in seconds. A line '@vmstate <command>' names the VM state
-##		helper, which holds the boxes through the same lock, wakes a VM that is
-##		paused or off, and puts it back the way it was found once the job is done.
+##		caps the wait in seconds.
 ##		hold runs a local command with the boxes held, for a caller that makes several
 ##		calls in a row and cannot have another session get in between them.
 ##		With --optional, each box is held and run on in turn, and one that another
@@ -86,8 +82,8 @@ sshOpts=(-o BatchMode=yes -o ConnectTimeout=6 -o StrictHostKeyChecking=accept-ne
 fWarn() { echo "win-remote: ${*}" >&2; }
 fFail() { echo "win-remote: ${1}" >&2; exit "${2:-1}"; }
 
-declare -a hostNames=() hostAddrs=() hostTags=()
-lockCmd=""; vmStateCmd=""
+declare -a hostNames=() hostAddrs=()
+lockCmd=""
 
 fLoadConf() {
 	##	The config lives outside the repo, so having none is the ordinary state on
@@ -97,12 +93,11 @@ fLoadConf() {
 		fFail "no host config at ${conf}
   Create it with one line per box:  <name> <addr>[,<addr>...]" 2
 	fi
-	local name addrs tags
-	while read -r name addrs tags; do
+	local name addrs
+	while read -r name addrs _; do
 		[[ -z "${name}" || "${name:0:1}" == "#" ]] && continue
 		[[ "${name}" == "@lock" ]] && { lockCmd="${addrs}"; continue; }
-		[[ "${name}" == "@vmstate" ]] && { vmStateCmd="${addrs}"; continue; }
-		hostNames+=("${name}"); hostAddrs+=("${addrs:-${name}}"); hostTags+=("${tags%%#*}")
+		hostNames+=("${name}"); hostAddrs+=("${addrs:-${name}}")
 	done < "${conf}"
 	if ((! ${#hostNames[@]})); then
 		((optional)) && { fWarn "no hosts listed in ${conf}, skipped"; exit 0; }
@@ -199,18 +194,6 @@ fOverHosts() {
 	((bad == 0))
 }
 
-##	The VM state helper's wrap where there is one, since it takes the same lock
-##	and also puts a VM back the way it was found. It has no --why.
-fWrap() {
-	local -a names=()
-	while [[ "${1}" != -- ]]; do names+=("${1}"); shift; done; shift
-	if [[ -n "${vmStateCmd}" ]] && command -v "${vmStateCmd}" >/dev/null; then
-		"${vmStateCmd}" wrap "${names[@]}" ${WINRIG_LOCK_WAIT:+--wait "${WINRIG_LOCK_WAIT}"} -- "${@}"
-	else
-		"${lockCmd}" wrap "${names[@]}" --why "silkterm win-remote ${cmd}" ${WINRIG_LOCK_WAIT:+--wait "${WINRIG_LOCK_WAIT}"} -- "${@}"
-	fi
-}
-
 ##	Run this same command again under the host lock's wrap, unless the caller
 ##	already holds the boxes. The lock only exists on one machine and knows only
 ##	the boxes beside it, so anywhere else this goes ahead without it.
@@ -233,28 +216,25 @@ fHoldBoxes() {
 	[[ "${WINRIG_LOCKED:-}" != "${names[*]}" ]] || fFail "the host lock does not show ${names[*]} as held, even under wrap" 2
 	((optional)) && fHoldEachOrSkip "${lock}" "${names[@]}"
 	export WINRIG_LOCKED="${names[*]}"
-	rc=0; fWrap "${names[@]}" -- "${0}" "${origArgs[@]}" || rc=$?
-	exit "${rc}"
+	exec "${lock}" wrap "${names[@]}" --why "silkterm win-remote ${cmd}" ${WINRIG_LOCK_WAIT:+--wait "${WINRIG_LOCK_WAIT}"} -- "${0}" "${origArgs[@]}"
 }
 
 ##	For --optional, a box another session holds is stepped over like one that is
 ##	off. Asking for every box at once would wait on the busy one and skip the free
 ##	one too, so each is taken and run on in turn, and the lock's wait is capped.
-##	Only a hold that failed before the command started is a skip, such as a wait
-##	that ran out or a VM that never woke; the command's own exit is passed on.
+##	Only a wait that ran out before the command started is a skip; the command's
+##	own exit is passed on.
 fHoldEachOrSkip() {
-	shift
+	local lock="${1}"; shift
 	local name started rc worst=0
 	started="$(mktemp)"
 	for name in "${@}"; do
 		rm -f "${started}"
 		rc=0
-		WINRIG_ONLY="${name}" WINRIG_LOCKED="${name}" WINRIG_STARTED="${started}" WINRIG_LOCK_WAIT="${WINRIG_LOCK_WAIT:-100}" \
-			fWrap "${name}" -- "${0}" "${origArgs[@]}" || rc=$?
+		WINRIG_ONLY="${name}" WINRIG_LOCKED="${name}" WINRIG_STARTED="${started}" \
+			"${lock}" wrap "${name}" --why "silkterm win-remote ${cmd}" --wait "${WINRIG_LOCK_WAIT:-100}" -- "${0}" "${origArgs[@]}" || rc=$?
 		if ((rc == 3)) && [[ ! -e "${started}" ]]; then
 			fWarn "${name}: held by another session, skipped"
-		elif ((rc)) && [[ ! -e "${started}" ]]; then
-			fWarn "${name}: could not be held or woken (exit ${rc}), skipped"
 		elif ((rc > worst)); then
 			worst=${rc}
 		fi
@@ -296,10 +276,9 @@ case "${cmd}" in
 		fNoRef
 		fNoArgs "hosts" "${@}"
 		for i in $(fSelected); do
-			tags="${hostTags[${i}]:+ ${hostTags[${i}]}}"; tags="${tags%"${tags##*[! ]}"}"
 			if addr="$(fLiveAddr "${hostAddrs[${i}]}")"
-				then printf '%-8s up    %s%s\n' "${hostNames[${i}]}" "${addr}" "${tags}"
-				else printf '%-8s down  %s%s\n' "${hostNames[${i}]}" "${hostAddrs[${i}]}" "${tags}"
+				then printf '%-8s up    %s\n' "${hostNames[${i}]}" "${addr}"
+				else printf '%-8s down  %s\n' "${hostNames[${i}]}" "${hostAddrs[${i}]}"
 			fi
 		done
 		;;
@@ -384,5 +363,3 @@ esac
 ##		- 20260910: waits for the host lock, and hold.
 ##		- 20260918: push, for a binary built here.
 ##		- 20260928: --optional steps over a box another session holds.
-##		- 20261025: holds through the VM state helper where the config names one, so
-##		  a VM is put back the way it was found. Host lines take tags.

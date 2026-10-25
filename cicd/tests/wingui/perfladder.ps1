@@ -12,7 +12,6 @@
 #>
 
 ##	Test ID: EpJ5h1E
-##	Box: gpu
 
 
 if (-not (fSessionUsable)) { fSkip "console session is locked - the banner cannot be grabbed" }
