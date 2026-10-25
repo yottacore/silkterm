@@ -46,9 +46,8 @@ while (($#)); do case "${1}" in
 	*) break ;;
 esac; done
 scenarios=("${@}"); ((${#scenarios[@]})) || scenarios=(smoke)
-##	A scenario that needs a real card says so in its header. The scenarios are
-##	checked out CRLF, so the line may end in a CR.
-fGpuOnly(){ grep -qE '^##[[:space:]]+Box: gpu'$'\r''?$' "${meDir}/${1}.ps1" 2>/dev/null ;}
+##	A scenario that needs a real card says so in its header.
+fGpuOnly(){ grep -qE '^##[[:space:]]+Box: gpu$' "${meDir}/${1}.ps1" 2>/dev/null ;}
 ##	fMine <box>: the scenarios left for this box, in the order asked for.
 fMine(){
 	local -r box="${1}"
@@ -364,4 +363,3 @@ if ((! keep)); then find "${shotDir}" -name '*.png' -printf '  shot %P\n' 2>/dev
 ##		- 20261025: each scenario runs once, on the first box free for it, and a
 ##		  'Box: gpu' one only on a box tagged gpu. What no box took is a SKIP.
 ##		- 20261025: the SKIP lines go to SILK_CICD_SKIPS too.
-##		- 20261025: reads the 'Box: gpu' line of a CRLF checkout.

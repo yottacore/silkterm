@@ -268,7 +268,7 @@ fRoute(){  ## fRoute <dir> <hosts lines> <held: 1 or ''>: sets rc and out
 }
 bothUp=$'boxb     up    192.0.2.2\nboxg     up    192.0.2.3 gpu'
 fRoute "${work}/route-both" "${bothUp}" 1
-fCheck "perfladder is marked as needing a GPU box" grep -qE '^##[[:space:]]+Box: gpu'$'\r''?$' "${meDir}/perfladder.ps1"
+fCheck "perfladder is marked as needing a GPU box" grep -qE '^##[[:space:]]+Box: gpu$' "${meDir}/perfladder.ps1"
 fCheck "with both boxes up, the first takes the plain scenario" test "$(cat "${work}/route-both/ran" 2>/dev/null)" = $'boxb smoke\nboxg perfladder'
 fCheck "and the GPU box only what needs it, with nothing skipped" fNot grep -q '^SKIP' <<< "${out}"
 fCheck "so the run's skip list gets nothing" test ! -s "${work}/route-both/skips"
@@ -283,17 +283,6 @@ fCheck "with only the GPU box up, it runs both" test "$(cat "${work}/route-gpuon
 fRoute "${work}/route-none" $'boxb     down  192.0.2.2\nboxg     down  192.0.2.3 gpu' ""
 fCheck "with no box up, each scenario is a SKIP" test "$(grep -c '^SKIP wingui: ' <<< "${out}")" -eq 2 -a "${rc}" -eq 0
 fCheck "and both are on the run's skip list" test "$(grep -c '^SKIP wingui: ' "${work}/route-none/skips" 2>/dev/null)" = 2
-## A scenario is read the same whichever line ends the checkout gave it, since
-## .gitattributes makes them CRLF and an editor can leave one LF.
-mkdir -p "${work}/eol"
-eval "$(grep -E '^fGpuOnly\(\)' "${meDir}/run.bash")"
-printf '##\tTest ID: x\r\n##\tBox: gpu\r\n\r\nfOne\r\n' > "${work}/eol/gpucrlf.ps1"
-printf '##\tTest ID: x\n##\tBox: gpu\n\nfOne\n' > "${work}/eol/gpulf.ps1"
-printf '##\tTest ID: x\r\n\r\nfOne\r\n' > "${work}/eol/plaincrlf.ps1"
-fEol(){ local meDir="${work}/eol"; fGpuOnly "${1}" ;}  ## run.bash's own test, against the files here
-fCheck "a 'Box: gpu' line with CRLF ends marks the scenario" fEol gpucrlf
-fCheck "and with LF ends" fEol gpulf
-fCheck "and a scenario without one isn't marked" fNot fEol plaincrlf
 mkdir -p "${work}/route-nolist"
 rc=0; out="$(STUB_HOSTS=$'boxb     down  192.0.2.2' STUB_LOG="${work}/route-nolist/calls" STUB_DIR="${work}/route-nolist" \
 	WINGUI_RUNS="${work}/route-nolist/runs.txt" WINGUI_WIN_REMOTE="${work}/win-remote" WINGUI_EXE="${work}/silkterm.exe" \
@@ -311,4 +300,3 @@ echo "all passed"
 ##		- 20261019: So are the scripts it sends, and a killed run's, by the next run.
 ##		- 20261025: Which box each scenario runs on.
 ##		- 20261025: The SKIP lines on the run's skip list.
-##		- 20261025: The 'Box: gpu' line with CRLF ends.

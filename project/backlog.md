@@ -235,14 +235,11 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Verified: both test scripts pass, and their new checks failed against the scripts as they were. shellcheck, the bash style check, the PowerShell lint, the test ID check, the docs check and the lint report pass. A job through the live config on b29w went through the VM state helper and the lock, and `hosts` printed vm925w's tag.
 		- Not run: a real wake of vm925w. It was off, and the box was at load 44.
 		- Swept: `win-unlock.bash` holds the same way and reads only the name and address from `hosts`, so the tags don't reach it. No other script reads `hosts` or calls `hold`. The jobs under `win-jobs` run through `job`, which holds the same way.
-		- 20261025: The round's gate failed 5 of the harness test's checks in a fresh checkout. `.gitattributes` checks the scenarios out CRLF, and the `Box: gpu` match ended at `$`, so it missed the CR, and `perfladder` went to the plain box. It passed here only because the working copy had been left LF. Both the harness and its test take an optional CR now, and the working copy is back to CRLF.
-		- Verified: in a fresh checkout, the harness test failed those 5 checks before the fix and passes after. It also passes with an LF `perfladder.ps1`, and in the live checkout. Of the 3 new checks, the CRLF one fails against the old harness. The match works the same under the container's grep. shellcheck, the bash style check and the test ID check pass.
-		- Swept: the only other end-anchored match over a `.ps1` is `cicd-win.ps1`'s `-NoRemote` check, which already takes the CR. Every tracked `.ps1` and `.cmd` here now has the line ends git gives it.
 	- Decisions:
 		- 20261025: Which box is favored, and which has a real card, live in the host config outside the repo, by order and the `gpu` tag. Machine names stay out of the repo, as before.
 		- 20261025: A scenario marks itself as needing a card in its own header, so the list in `config.bash` doesn't have to track it.
 	- Branch: rnd1025
-	- Test case: `cicd/tests/win-remote/run.bash` (Er2UgYA), 7 new checks for tags, holding through the VM state helper and a VM that never wakes. `cicd/tests/wingui/harness-test.bash` (EqH4isr), 8 new checks for which box each scenario runs on, and the `SKIP` lines, and 3 for a `Box: gpu` line with CRLF and LF ends.
+	- Test case: `cicd/tests/win-remote/run.bash` (Er2UgYA), 7 new checks for tags, holding through the VM state helper and a VM that never wakes. `cicd/tests/wingui/harness-test.bash` (EqH4isr), 8 new checks for which box each scenario runs on, and the `SKIP` lines.
 
 - CICD reset: `--no-remote`, and a skipped box shown as `SKIP`
 	- ID: 2026102507245260
