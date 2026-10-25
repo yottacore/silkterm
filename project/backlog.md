@@ -272,6 +272,22 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Branch: rnd1025
 	- Test case: `cicd/tests/engine/run.bash` (Er2UgY7), 23 new checks for `--no-remote`, the plan lines, the `SKIP` step lines and the end list. `cicd/tests/wingui/harness-test.bash` (EqH4isr), 4 for the skip list. `cicd/tests/cicd-win/run.bash` (Er2UgYE), 2 for `-NoRemote`.
 
+- A config conversion race test leaves a backup per launch under ASan
+	- ID: 2026102510010001
+	- Type: Bug
+	- Status: Queued
+	- Severity: Avg
+	- Opened: 20261025-100100
+	- Opened by: CC
+	- Related IDs: 2026102509002701
+	- Target OS: Linux
+	- Test environment: b23 at load 20 to 45, the full run's ASan step in the container at e95b81b on `rnd1025`, and the same test alone under ASan on dev at b0c2238
+	- Steps to reproduce:
+		- Run `config::tests::launches_converting_at_once_leave_one_whole_copy` (EreLZQQ) alone under ASan, as `private/claude_simple/tools/lsan_some_tests.bash` does, a few times.
+	- Incorrect behavior: Launches converting at once each kept their own backup, with stamps a second apart, so the test found 3 copies where it wants 1. Under ASan each conversion took over a second. The full run stopped in stage 3 there.
+	- Expected behavior: One whole copy, or a test that doesn't hang on how long a conversion takes.
+	- Reproduced: Yes. 2 of 3 alone under ASan on `rnd1025`, and 2 of 3 on dev, so it was there before the round.
+
 - The Zig and container cleanup's 2 GB cap check fails when the cache sits on ZFS
 	- ID: 2026102509002701
 	- Type: Bug
