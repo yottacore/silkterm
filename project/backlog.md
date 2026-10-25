@@ -325,12 +325,10 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261025: Nothing without the label is touched, so the `silkterm-cicd` images, the `silkterm-cicd-cache` volume and any stopped container from before today stay until the hand cleanup.
 		- Note: A `docker run --rm` can return before docker has removed the container, which then still holds its volumes. So the step that reads the volumes runs without `--rm` and is removed with a plain `docker rm`, which waits.
 		- 20261025: The container test's checks of the old label, the build cache left alone and the old tag sweep are commented out with the reason, and replaced. The `-v` count it checks went from 3 to 4, for the Zig volume.
-		- 20261025: The gate failed the startup gate test (EqBfc5Y). It lifts the logging block out of cicd.bash, and the exit trap now calls `fContainerEnd`, which the test didn't stub, so the lifted run stopped before finishing its log. The pipeline itself was fine. The test stubs it now, and fails by name on any call the lifted block makes that isn't stubbed. Fixed on rnd1025-fix.
 	- Decisions:
 		- 20261025: The older-tag sweep keeps the newest tag before the current one by creation time, among images with our label only.
 	- Verified: 20261025. The end cleanup against real docker, on throwaway images, containers and volumes under another project name: this run's container gone, another run's and another project's kept, the current and previous tags kept, older labeled tags and a labeled untagged image gone, an unlabeled tag kept, an over-cap volume and a stale Zig volume gone, one held by another run left with a message, an unlabeled volume never read. It failed at first, on the `--rm` race above. The container test's new cases, against a stand-in docker, Ctrl+C in a gate and in a full run through the log tee included. All failed against the pipeline as it was. Shellcheck, house style, engine test, docs check, build.md markdown check.
 	- Swept: every `docker` call in cicd.bash, and every `fContainerRun` and `fContainerBuild` call (gate, ASan, TSan, CodeQL, engine). The asan, tsan and codeql scripts start no container. No other script names the old label.
-		- 20261025: the other tests that lift code out of cicd.bash (publish, packaging, sync) lift blocks this change didn't touch, and pass.
 	- Test case: New cases in `cicd/tests/container/run.bash` (EsJg9EF).
 	- Branch: rnd1025
 
