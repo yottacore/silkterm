@@ -708,22 +708,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
 		- Overrides: 2026092711142900's decision that the scroll harness scenes keep their PASS lines with no IDs, and the base 62 rule in the private notes.
 
-- The render node test skips when its test folder is under a long temp path
-	- ID: 2026102507092877
-	- Type: Bug
-	- Status: Queued
-	- Severity: Avg
-	- Opened: 20261025-070928
-	- Opened by: CC
-	- Related IDs: 2026102416233801, 2026102416233803
-	- Target OS: Linux
-	- Steps to reproduce:
-		- `TMPDIR=/mnt/ext/wip2/wip/tmp/silkterm/<stamp>_001 cicd/tests/swnoshm/run.bash` on this box.
-	- Incorrect behavior: "skip: sway's Xwayland did not come up". sway's log says "Unable to open wayland socket".
-	- Expected behavior: the test runs, wherever the temp folder is.
-	- Reproduced: 20261025, on this box, with the path above.
-	- Possible cause: sway's runtime dir is `<test folder>/swnoshm.XXXXXX/sway`, and with the socket name that passes the 107 byte limit. A run folder under HOST_TEMP, per 2026102416233803, would make it skip on every run. The profiler step puts its sway sockets under XDG_RUNTIME_DIR for this reason.
-
 - Leak checks: Miri sort, settings_ui
 	- ID: 2026102407430381
 	- Type: Task
@@ -917,6 +901,32 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- The Windows GUI scenarios and the scroll harness turn off only with `--quick`, and dpirand only with `DPIRAND_SECS=0` in config.bash.
 	- Notes:
 		- Not every stage needs its own flag. A few grouped ones may do, such as one for the lints and one for the script tests.
+
+- The render node test skips when its test folder is under a long temp path
+	- ID: 2026102507092877
+	- Type: Bug
+	- Status: Done
+	- Severity: Avg
+	- Opened: 20261025-070928
+	- Opened by: CC
+	- Related IDs: 2026102416233801, 2026102416233803
+	- Target OS: Linux
+	- Steps to reproduce:
+		- `TMPDIR=/mnt/ext/wip2/wip/tmp/silkterm/<stamp>_001 cicd/tests/swnoshm/run.bash` on this box.
+	- Incorrect behavior: "skip: sway's Xwayland did not come up". sway's log says "Unable to open wayland socket".
+	- Expected behavior: the test runs, wherever the temp folder is.
+	- Reproduced: 20261025, on this box, with the path above.
+	- Possible cause: sway's runtime dir is `<test folder>/swnoshm.XXXXXX/sway`, and with the socket name that passes the 107 byte limit. A run folder under HOST_TEMP, per 2026102416233803, would make it skip on every run. The profiler step puts its sway sockets under XDG_RUNTIME_DIR for this reason.
+	- Actual cause: sway's Wayland socket, and in the swap case the window's control and peer sockets, went in folders under the test folder. Under a long temp path those paths pass the 107 byte limit. The live settings test had the same fault, and failed 6 checks under the long path.
+	- Actual fix: Both tests put their sockets in a short folder of their own under /tmp when the test folder's path is long, as the Wayland clipboard, monitor and dpirand tests already did, and remove it at the end.
+	- Progress log:
+		- 20261025: With only sway's folder moved, the swap case still failed 2 checks under the long path, since `--reload-settings` couldn't reach the window's control socket. So the window's runtime dir moved too.
+	- Swept: every script test that starts sway or cage, or talks to the control socket. wlclip, monwl, monwake and dpirand already used a short folder, and livecfg didn't, fixed here. The scroll harness runs cage under the box's XDG_RUNTIME_DIR, and the profiler uses XDG_RUNTIME_DIR. The wingui scripts use named pipes. The other window tests point XDG_RUNTIME_DIR at their test folder but use no socket there.
+	- Branch: rnd1025
+	- Test case: `cicd/tests/swnoshm/run.bash` (ErxxHzT) and `cicd/tests/livecfg/run.bash` (EsaF4Qe), under a long TMPDIR. A new check in `cicd/tests/testdir/run.bash` (ErOj67l) fails any script test that starts sway or talks to the control socket without the short folder.
+	- Verified: 20261025, with TMPDIR under HOST_TEMP. swnoshm skipped before the fix and passed all 12 checks after. livecfg failed 6 checks before and passed after. Both also pass with a short test folder, and leave nothing in /tmp. The new testdir check passes on the tree and names both scripts against their old copies. shellcheck, bash-style, the test ID check and the docs check pass.
+	- Acceptance signoff: Self-closed: reproduced, and both tests fail before the fix and pass after.
+	- Closed: 20261025-072057
 
 - A config test's 50 ms bound for a failed write went red under load in a full run
 	- ID: 2026102410441001

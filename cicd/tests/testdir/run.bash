@@ -184,6 +184,18 @@ for rel in "${scripts[@]}" ../cicd.bash ../cicd-win.ps1; do
 	grep -qE 'fTestDir_End|_testdir\.end\(' "${tests}/${rel}" || unended+=" ${rel}"
 done
 fCheck "and every one that makes a run folder ends it${unended:+ (not:${unended})}" test -z "${unended}"
+##	A socket bound under a run folder in a long temp dir is past the 107-byte
+##	limit, so sway never comes up and the control socket never answers. A script
+##	that starts sway or talks to that socket moves its runtime dir to a short
+##	folder when the path is long.
+unshortened=""
+for rel in "${scripts[@]}"; do
+	## This file names the patterns, so it matches them.
+	[[ "${rel}" == wingui/* || "${rel}" == testdir/run.bash ]] && continue
+	grep -qE 'sway -c|"sway", "-c"|SILKTERM_SOCKET=|--reload-settings' "${tests}/${rel}" || continue
+	grep -qE '\(\(\$\{#runDir\} > 70\)\)|len\(str\(run\)\) > 70' "${tests}/${rel}" || unshortened+=" ${rel}"
+done
+fCheck "and every one that binds sockets there keeps them short${unshortened:+ (not:${unshortened})}" test -z "${unshortened}"
 stray="$(git -C "${root}" grep -n 'temp_dir' -- 'source/src/*.rs' \
 	| grep -v '^source/src/testdir\.rs:' \
 	| grep -v -E '^source/src/peers\.rs:[0-9]+:[[:space:]]*\.map_or_else\(std::env::temp_dir, PathBuf::from\)$' || true)"
@@ -298,3 +310,4 @@ echo "all passed"
 ##	History:
 ##		- 20260930 JC: Created.
 ##		- 20261002 JC: A run removes the folder it made when it passes.
+##		- 20261025 JC: A script that binds sockets under its run folder keeps them short.

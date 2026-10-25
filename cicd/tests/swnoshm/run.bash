@@ -55,12 +55,18 @@ failures=0
 fCheck(){ local -r what="${1}"; shift; if "${@}"; then echo "  ok   ${what}"; else echo "  FAIL ${what}"; failures=$((failures + 1)); fi; }
 
 work="$(mktemp -d "${SILKTERM_TEST_DIR}/swnoshm.XXXXXX")"
+## sway's and the app's sockets go here, and a socket path has to fit in 108
+## bytes. Under a long temp path that means a short folder of its own.
+runDir="${work}/run"
+shortRun=""
+if ((${#runDir} > 70)); then shortRun="$(mktemp -d /tmp/silknoshm.XXXXXX)"; runDir="${shortRun}"; else mkdir -m 700 "${runDir}"; fi
 appPid=""; swayPid=""; proxyPid=""
 fCleanup(){
 	local -r rc="${1}"
 	if [[ -n "${appPid}" ]]; then fStopOurs "${appPid}"; fi
 	if [[ -n "${proxyPid}" ]]; then kill "${proxyPid}" 2>/dev/null || true; wait "${proxyPid}" 2>/dev/null || true; fi
 	if [[ -n "${swayPid}" ]]; then kill "${swayPid}" 2>/dev/null || true; wait "${swayPid}" 2>/dev/null || true; fi
+	if [[ -n "${shortRun}" && "${shortRun}" == /tmp/silknoshm.* && -d "${shortRun}" && ! -L "${shortRun}" && -O "${shortRun}" ]]; then rm -rf "${shortRun}"; fi
 	if [[ "${rc}" == 0 ]]; then rm -rf "${work}"; fi
 	fTestDir_End "${rc}"
 }
@@ -81,9 +87,9 @@ fStopOurs(){
 
 ## sway takes whichever X display number is free, so it is read from the
 ## socket sway itself listens on.
-mkdir -p "${work}/sway"
+mkdir -m 700 "${runDir}/sway"
 printf 'output HEADLESS-1 resolution 1280x800 position 0 0\nxwayland force\ndefault_border none\n' >"${work}/sway.conf"
-env -u DISPLAY -u WAYLAND_DISPLAY -u WAYLAND_SOCKET XDG_RUNTIME_DIR="${work}/sway" WLR_BACKENDS=headless WLR_HEADLESS_OUTPUTS=1 \
+env -u DISPLAY -u WAYLAND_DISPLAY -u WAYLAND_SOCKET XDG_RUNTIME_DIR="${runDir}/sway" WLR_BACKENDS=headless WLR_HEADLESS_OUTPUTS=1 \
 	WLR_RENDERER=gles2 WLR_RENDER_DRM_DEVICE="${renderNode}" WLR_LIBINPUT_NO_DEVICES=1 \
 	sway -c "${work}/sway.conf" >"${work}/sway.log" 2>&1 &
 swayPid=$!
@@ -115,10 +121,11 @@ echo "  server: ${realDisplay} answered as ${display}"
 
 fLaunch(){  ## fLaunch <case> <software true|false>
 	local -r dir="${work}/${1}"
-	mkdir -p "${dir}/home" "${dir}/run"
+	mkdir -p "${dir}/home"
+	mkdir -m 700 "${runDir}/${1}"
 	printf '%s\n' 'performance:' $'\tautomatic: false' 'window:' $'\tremember_per_monitor: false' $'\tsoftware_rendering: '"${2}" >"${dir}/config.shcl"
 	DISPLAY="${display}" env -u WAYLAND_DISPLAY -u WAYLAND_SOCKET -u MESA_VK_WSI_DEBUG SILK_IDLEDBG=1 \
-		HOME="${dir}/home" XDG_CONFIG_HOME="${dir}/home/.config" XDG_DATA_HOME="${dir}/home/.local/share" XDG_RUNTIME_DIR="${dir}/run" \
+		HOME="${dir}/home" XDG_CONFIG_HOME="${dir}/home/.config" XDG_DATA_HOME="${dir}/home/.local/share" XDG_RUNTIME_DIR="${runDir}/${1}" \
 		"${bin}" --config "${dir}/config.shcl" --shell "/bin/sh -c 'sleep 120'" >/dev/null 2>"${dir}/said.txt" &
 	appPid=$!
 	window="$(fX timeout 30 xdotool search --sync --onlyvisible --pid "${appPid}" 2>/dev/null | head -n 1 || true)"
@@ -167,7 +174,7 @@ if fSaid swap 'Cpu]'; then
 	echo "  skip swap: the card made no device here"
 else
 	sed -i 's/software_rendering: false/software_rendering: true/' "${work}/swap/config.shcl"
-	SILKTERM_SOCKET="${work}/swap/run/silkterm-ctl-${appPid}.sock" "${bin}" --reload-settings >/dev/null 2>&1 || true
+	SILKTERM_SOCKET="${runDir}/swap/silkterm-ctl-${appPid}.sock" "${bin}" --reload-settings >/dev/null 2>&1 || true
 	## The swap waits for the loop's next pass, and a pointer move is one.
 	sleep 2
 	fX xdotool mousemove --window "${window}" 40 40 2>/dev/null || true
@@ -190,3 +197,4 @@ echo "all passed"
 
 ##	History:
 ##		- 20261006 JC: Created.
+##		- 20261025 JC: Sockets go in a short folder when the test folder's path is long.
