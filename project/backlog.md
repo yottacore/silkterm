@@ -841,6 +841,8 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Opened: 20261024-162338
 	- Opened by: CC
 	- Related IDs: 2026101909222600
+	- Prereq IDs: 2026102507092877
+		- The render-node test skips under a long temp path, so moving run folders under `HOST_TEMP` first would make it skip on every run.
 	- Target OS: All
 	- Requirements:
 		- Per `Temp files` and `Safe removal` in the shared CICD rules.
