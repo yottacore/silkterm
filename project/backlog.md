@@ -572,6 +572,8 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261025: A scenario marks itself as needing a card in its own header, so the list in `config.bash` doesn't have to track it.
 	- Branch: rnd1025
 	- Test case: `cicd/tests/win-remote/run.bash` (Er2UgYA), 7 new checks for tags, holding through the VM state helper and a VM that never wakes. `cicd/tests/wingui/harness-test.bash` (EqH4isr), 8 new checks for which box each scenario runs on, and the `SKIP` lines.
+	- Prereq IDs: 2026102510420001
+	- Waits on Bug 2026102510420001, the woken VM failure that got this reverted last round.
 
 - CICD reset: `--no-remote`, and a skipped box shown as `SKIP`
 	- ID: 2026102507245260
@@ -626,6 +628,8 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Swept: every `zigbuild` and `zig` call in cicd and the Dockerfile. Only the two ARM64 cross targets in config.bash use it.
 	- Test case: New cases in `cicd/tests/cleanup/run.bash` (EtAiwUl) and `cicd/tests/container/run.bash` (EsJg9EF).
 	- Branch: rnd1025
+	- Prereq IDs: 2026102509002701
+	- Waits on Bug 2026102509002701, the ZFS cap check that got this reverted last round.
 
 - CICD reset: container cleanup
 	- ID: 2026102416233805
@@ -664,6 +668,8 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Swept: every `docker` call in cicd.bash, and every `fContainerRun` and `fContainerBuild` call (gate, ASan, TSan, CodeQL, engine). The asan, tsan and codeql scripts start no container. No other script names the old label.
 	- Test case: New cases in `cicd/tests/container/run.bash` (EsJg9EF).
 	- Branch: rnd1025
+	- Prereq IDs: 2026102509002701
+	- Waits on Bug 2026102509002701, the ZFS cap check that got this reverted last round.
 
 - CICD reset: other hosts and VMs
 	- ID: 2026102416233802
