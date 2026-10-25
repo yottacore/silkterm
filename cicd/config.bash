@@ -170,6 +170,8 @@ SCROLL_HARNESS=(cicd/tests/scroll/run.bash)
 ## Stage 3: graphical scenarios against a real Windows desktop, over ssh. Slow, so
 ## it is skipped under --quick. A box that is off, or whose session is locked, is a
 ## skip and not a failure - both are somebody's machine rather than build hardware.
+## Each scenario runs once, on the first box free for it, and one that needs a
+## real card only on a box tagged gpu (run.bash's header has the rule).
 ## Empty () to disable. Extra scenario names may be listed after run.bash.
 WINGUI_HARNESS=(cicd/tests/wingui/run.bash smoke injchar settingsdlg perfladder pathannounce consolemsg savenotice openwith softrender newwin gbtitle conmap cmdgui conload quiettab wpremote)
 

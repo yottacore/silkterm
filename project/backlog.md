@@ -213,6 +213,34 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Test case: New cases in `cicd/tests/container/run.bash` (EsJg9EF): the render node test and the profiler run here after the container, and inside only say so.
 	- Branch: rnd1025
 
+- CICD reset: the Windows boxes, VM state and where each scenario runs
+	- ID: 2026102507245255
+	- Type: Task
+	- Status: Waiting on automated testing
+	- Needs external testing: The wingui stage, `cicd/tests/wingui/run.bash` with the config's scenario list, with vm925w off and b29w up: the plain scenarios run on b29w, `perfladder` alone on vm925w, and vm925w is off again after. Then once with b29w off, so vm925w takes them all.
+	- Priority: High
+	- Opened: 20261025-072452
+	- Opened by: CC
+	- Parent ID: 2026102416233802
+	- Target OS: Windows
+	- Requirements:
+		- vm925w is put back the way it was found, through the VM state helper.
+		- The Windows scenarios favor b29w. The GPU and timed ones, such as `perfladder`, run on vm925w only.
+		- Windows testing names `b29w` only. Drop `b29w-wif` from the host config outside the repo.
+		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
+	- Progress log:
+		- 20261025: The host config can name the VM state helper (`@vmstate`), and then every hold in `win-remote.bash` goes through it, so a VM is woken and put back the way it was found. A box that can't be held or woken is a skip under `--optional`. Host lines take tags, and `hosts` prints them.
+		- 20261025: Each Windows scenario runs once, on the first box in the host config that's up and free. A scenario with a `Box: gpu` header line runs only on a box tagged `gpu`; that's `perfladder`. What no box took is a `SKIP` line at the end of the stage.
+		- 20261025: The host config lists b29w first and alone, with no `b29w-wif`, then vm925w tagged `gpu`, and the `@vmstate` line.
+		- Verified: both test scripts pass, and their new checks failed against the scripts as they were. shellcheck, the bash style check, the PowerShell lint, the test ID check, the docs check and the lint report pass. A job through the live config on b29w went through the VM state helper and the lock, and `hosts` printed vm925w's tag.
+		- Not run: a real wake of vm925w. It was off, and the box was at load 44.
+		- Swept: `win-unlock.bash` holds the same way and reads only the name and address from `hosts`, so the tags don't reach it. No other script reads `hosts` or calls `hold`. The jobs under `win-jobs` run through `job`, which holds the same way.
+	- Decisions:
+		- 20261025: Which box is favored, and which has a real card, live in the host config outside the repo, by order and the `gpu` tag. Machine names stay out of the repo, as before.
+		- 20261025: A scenario marks itself as needing a card in its own header, so the list in `config.bash` doesn't have to track it.
+	- Branch: rnd1025
+	- Test case: `cicd/tests/win-remote/run.bash` (Er2UgYA), 7 new checks for tags, holding through the VM state helper and a VM that never wakes. `cicd/tests/wingui/harness-test.bash` (EqH4isr), 8 new checks for which box each scenario runs on, and the `SKIP` lines.
+
 - Running on macOS without a GPU fails to launch
 	- ID: 2026102209035801
 	- Type: Bug
@@ -587,6 +615,49 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Windows testing names `b29w` only. The boxes' host config outside the repo still lists `b29w-wif` as a second address for it. Drop it, since the hosts file points `b29w` at the link that works.
 		- A skipped box shows as `SKIP` in its step's line and in the summary at the end.
 		- The Linux ARM64 build gets a `--version` smoke run on the arm64 Linux VM. Nothing runs it now.
+		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
+	- Progress log:
+		- 20261025: Split in 4, since it's too big for one go: 2026102507245255 (the Windows boxes), 2026102507245260 (`--no-remote` and `SKIP`), 2026102507245265 (vmKt6m in the private runner) and 2026102507245270 (the ARM64 smoke run). This one closes with the last of them.
+
+- CICD reset: `--no-remote`, and a skipped box shown as `SKIP`
+	- ID: 2026102507245260
+	- Type: Task
+	- Status: Queued
+	- Priority: High
+	- Opened: 20261025-072452
+	- Opened by: CC
+	- Parent ID: 2026102416233802
+	- Related IDs: 2026102416233807, 2026102416233808
+	- Target OS: All
+	- Requirements:
+		- `--no-remote` skips every other box: the Windows scenarios, the Windows runner tests, and the private runner's Mac and store parts.
+		- A skipped box shows as `SKIP` in its step's line and in the summary at the end.
+		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
+
+- CICD reset: vmKt6m put back through the VM state helper
+	- ID: 2026102507245265
+	- Type: Task
+	- Status: Queued
+	- Priority: High
+	- Opened: 20261025-072452
+	- Opened by: CC
+	- Parent ID: 2026102416233802
+	- Target OS: macOS
+	- Requirements:
+		- The private runner's Mac part puts vmKt6m back the way it found it, through the VM state helper. The runner is in `silkterm-private`.
+		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
+
+- CICD reset: a `--version` smoke run of the Linux ARM64 build
+	- ID: 2026102507245270
+	- Type: Task
+	- Status: Queued
+	- Priority: High
+	- Opened: 20261025-072452
+	- Opened by: CC
+	- Parent ID: 2026102416233802
+	- Target OS: Linux
+	- Requirements:
+		- The Linux ARM64 build gets a `--version` smoke run on the arm64 Linux VM, held and put back through the VM state helper. Nothing runs it now.
 		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
 
 - CICD reset: Zig cache

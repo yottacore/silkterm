@@ -11,6 +11,10 @@
 ##	- Syntax:
 ##		run.bash [--host <name>] [--keep] [<scenario> ...]
 ##		With no scenario it runs 'smoke'. Shots come back under cicd/artifacts/wingui.
+##		Each scenario runs once, on the first box in the host config that is up and
+##		free. One whose header has a '##	Box: gpu' line runs only on a box tagged
+##		gpu there, since the other box's card is integrated. A scenario no box took
+##		is a SKIP line at the end.
 ##		The binary is cross-built here from the tree under test and sent along, so
 ##		the result is for this commit and not whatever was last built on the box.
 ##		WINGUI_EXE names a binary to send instead. WINGUI_EXTRA lists more files,
@@ -41,13 +45,44 @@ while (($#)); do case "${1}" in
 	*) break ;;
 esac; done
 scenarios=("${@}"); ((${#scenarios[@]})) || scenarios=(smoke)
+##	A scenario that needs a real card says so in its header.
+fGpuOnly(){ grep -qE '^##[[:space:]]+Box: gpu$' "${meDir}/${1}.ps1" 2>/dev/null ;}
+##	fMine <box>: the scenarios left for this box, in the order asked for.
+fMine(){
+	local -r box="${1}"
+	local scenario
+	for scenario in "${scenarios[@]}"; do
+		grep -qx -- "${scenario}" "${WINGUI_RAN}" && continue
+		if fGpuOnly "${scenario}" && [[ "${boxTags[${box}]:-}" != *" gpu "* ]]; then continue; fi
+		echo "${scenario}"
+	done
+}
+##	fSkipsLeft: a SKIP line for each scenario no box took.
+fSkipsLeft(){
+	local scenario
+	for scenario in "${scenarios[@]}"; do
+		grep -qx -- "${scenario}" "${WINGUI_RAN}" && continue
+		if fGpuOnly "${scenario}"; then echo "SKIP wingui: ${scenario}, no box tagged gpu answered"
+		else echo "SKIP wingui: ${scenario}, no box answered"; fi
+	done
+}
 
 [[ -x "${winRemote}" ]] || { echo "wingui: no win-remote.bash, skipped"; exit 0; }
 ##	Keep the boxes for the whole run, or another session can get in between a
-##	scenario and fetching its shots.
-[[ -n "${WINRIG_HELD:-}" ]] || exec "${winRemote}" "${host[@]}" --optional hold "${0}" "${origArgs[@]}"
-##	Only after the exec, which runs no trap, so the held pass makes the run
-##	folder and removes it.
+##	scenario and fetching its shots. Each box is held in a pass of its own, so
+##	the passes write down what they ran in WINGUI_RAN, and the next box takes
+##	only the rest.
+if [[ -z "${WINRIG_HELD:-}" ]]; then
+	WINGUI_RAN="$(mktemp)"; export WINGUI_RAN
+	rc=0; "${winRemote}" "${host[@]}" --optional hold "${0}" "${origArgs[@]}" || rc=$?
+	fSkipsLeft
+	rm -f "${WINGUI_RAN}"
+	exit "${rc}"
+fi
+##	Held already by the caller, so this pass is the only one.
+ownRan=0
+if [[ -z "${WINGUI_RAN:-}" ]]; then WINGUI_RAN="$(mktemp)"; ownRan=1; fi
+##	Only in the held pass, so that pass makes the run folder and removes it.
 # shellcheck source=cicd/tests/_testdir.bash
 source "${meDir}/../_testdir.bash"; fTestDir_Use
 
@@ -61,15 +96,28 @@ runId="$(date +%Y%m%d%H%M%S)-$$"
 scripts="$(mktemp -d)"
 ##	install.ps1 goes along for the scenario that checks its PATH change.
 tar czf "${bundle}" -C "${meDir}" --exclude=run.bash --exclude=harness-test.bash --exclude=_stage.ps1 . -C "${root}" install.ps1
-fEnd(){ local -r rc=$?; rm -f "${bundle}"; rm -rf "${scripts}"; fTestDir_End "${rc}"; }
+fEnd(){
+	local -r rc=$?
+	rm -f "${bundle}"; rm -rf "${scripts}"
+	if ((ownRan)); then fSkipsLeft; rm -f "${WINGUI_RAN}"; fi
+	fTestDir_End "${rc}"
+}
 trap fEnd EXIT
 
 ##	Nothing to build for when every box is off.
 declare -a boxes=()
-while read -r box state _; do
-	if [[ "${state}" == "up" ]]; then boxes+=("${box}"); fi
+declare -A boxTags=()
+while read -r box state _ tags; do
+	if [[ "${state}" == "up" ]]; then boxes+=("${box}"); boxTags["${box}"]=" ${tags} "; fi
 done < <("${winRemote}" "${host[@]}" --optional hosts 2>/dev/null || true)
 if ((! ${#boxes[@]})); then echo "wingui: no box up, skipped"; exit 0; fi
+##	Nor when the boxes up have nothing left to run.
+declare -a withWork=()
+for box in "${boxes[@]}"; do
+	if [[ -n "$(fMine "${box}")" ]]; then withWork+=("${box}"); else echo "wingui: ${box}: nothing left for it"; fi
+done
+boxes=("${withWork[@]}")
+if ((! ${#boxes[@]})); then exit 0; fi
 
 commit="$(git -C "${root}" rev-parse --short HEAD)"
 [[ -z "$(git -C "${root}" status --porcelain 2>/dev/null)" ]] || commit+="+uncommitted"
@@ -241,6 +289,9 @@ fBox(){
 	local -r box="${1}" stage="${scripts}/silkrig_${runId}_stage.ps1"
 	local said scenario
 	local -i boxFailed=0
+	local -a mine=()
+	mapfile -t mine < <(fMine "${box}")
+	if ((! ${#mine[@]})); then echo "wingui: ${box}: nothing left for it"; return 0; fi
 	runDir=""; runFor=""; runToken=""
 	fSweepOld "${box}"
 	cat "${meDir}/../_testdir.ps1" "${meDir}/_stage.ps1" > "${stage}"
@@ -269,9 +320,10 @@ fBox(){
 		echo "wingui: ${box}: sending the binary failed"
 		boxFailed=1
 	else
-		for scenario in "${scenarios[@]}"; do
-			echo "== wingui: ${scenario}"
+		for scenario in "${mine[@]}"; do
+			echo "== wingui: ${scenario} on ${box}"
 			if ! fRun "${box}" "${scenario}" | sed 's/^/  /'; then boxFailed=1; fi
+			echo "${scenario}" >>"${WINGUI_RAN}"
 		done
 		##	Shots are the whole point of a graphical test, so bring them home.
 		if ((! keep)); then
@@ -303,3 +355,5 @@ if ((! keep)); then find "${shotDir}" -name '*.png' -printf '  shot %P\n' 2>/dev
 ##		- 20261003: WINGUI_EXTRA.
 ##		- 20261019: the scripts it sends are named for the run and swept with its
 ##		  folder, and a killed run's are swept by the next run on that box.
+##		- 20261025: each scenario runs once, on the first box free for it, and a
+##		  'Box: gpu' one only on a box tagged gpu. What no box took is a SKIP.
