@@ -2189,8 +2189,86 @@ fn keep_old_format_at(
 		&body,
 		perms.as_ref(),
 	)
-	.map(|copy| Some((copy, old)))
+	.map(|copy| Some((settle_on_earliest(path, stem, old, copy, &body), old)))
 	.with_context(|| format!("could not keep the old file beside {}", path.display()))
+}
+
+// Whether `name` is one of `backup_name`'s copies of `stem` in format `n`, any
+// stamp and any attempt.
+fn is_copy_name(name: &str, stem: &str, n: u32) -> bool {
+	let Some(rest) = name.strip_prefix(&format!("{stem}_backup_")) else {
+		return false;
+	};
+	let Some(rest) = rest.strip_suffix(".shcl") else {
+		return false;
+	};
+	let (stamp, tail) = rest.split_at_checked(15).unwrap_or((rest, ""));
+	let stamped = stamp.len() == 15
+		&& stamp.bytes().enumerate().all(|(at, c)| {
+			if at == 8 {
+				c == b'-'
+			} else {
+				c.is_ascii_digit()
+			}
+		});
+	let again = |rest: &str| {
+		rest.strip_prefix('_')
+			.is_some_and(|n| !n.is_empty() && n.bytes().all(|c| c.is_ascii_digit()))
+	};
+	stamped
+		&& tail
+			.strip_prefix(&format!("_format-v{n}"))
+			.is_some_and(|rest| rest.is_empty() || again(rest))
+}
+
+// Launches converting the same file at once each keep a copy, and when the
+// clock ticks between them the copies have different names. A conversion
+// takes over a second under a sanitizer or a loaded box, so that is not rare.
+// Each then settles on the earliest copy of that format holding the same
+// bytes, and drops its own if that is another one. Nobody drops the earliest,
+// so one is always left. Answers the copy settled on.
+fn settle_on_earliest(
+	path: &std::path::Path,
+	stem: &str,
+	n: u32,
+	ours: PathBuf,
+	body: &[u8],
+) -> PathBuf {
+	let dir = path
+		.parent()
+		.filter(|dir| !dir.as_os_str().is_empty())
+		.unwrap_or(std::path::Path::new("."));
+	let same = |at: &std::path::Path| {
+		std::fs::metadata(at).is_ok_and(|meta| meta.len() == body.len() as u64)
+			&& std::fs::read(at).is_ok_and(|seen| seen == body)
+	};
+	let earliest = || {
+		let mut names: Vec<String> = std::fs::read_dir(dir)
+			.ok()?
+			.filter_map(|entry| entry.ok()?.file_name().into_string().ok())
+			.filter(|name| is_copy_name(name, stem, n))
+			.collect();
+		names.sort();
+		names
+			.into_iter()
+			.map(|name| dir.join(name))
+			.find(|at| same(at))
+	};
+	// An earliest that is gone by the time it is read again was dropped for an
+	// earlier one still, so look again. Each look finds an earlier name.
+	for _ in 0..BACKUPS_MAX {
+		let Some(first) = earliest() else {
+			break;
+		};
+		if first.file_name() == ours.file_name() {
+			break;
+		}
+		let _ = std::fs::remove_file(&ours);
+		if same(&first) {
+			return first;
+		}
+	}
+	ours
 }
 
 // Writes `body` at the first of `names(1)`, `names(2)` and on that nothing has,
@@ -13039,9 +13117,73 @@ mod tests {
 		let _ = std::fs::remove_dir_all(&dir);
 	}
 
+	// Two launches whose conversions straddle a tick stamp different seconds.
+	// The later copy holds the same bytes as the earlier one, so it is dropped
+	// and the earlier one named. A copy with other bytes, or of another format,
+	// is its own copy and is left alone.
+	// Test ID: Etl0u6f
+	#[test]
+	fn a_copy_stamped_a_second_later_with_the_same_bytes_is_the_earlier_one() {
+		let dir = format_test_dir("fmtcopy_tick");
+		let path = dir.join("config.shcl");
+		let keep = |body: &str, stamp: &str| {
+			std::fs::write(&path, body).unwrap();
+			keep_old_format_at(&path, default_config(), stamp)
+				.unwrap()
+				.unwrap()
+				.0
+		};
+		let earlier = dir.join("config_backup_20261025-100100_format-v2.shcl");
+		let other_format = dir.join("config_backup_20261025-100059_format-v1.shcl");
+		std::fs::write(&other_format, SHCL2_FILE).unwrap();
+		assert_eq!(keep(SHCL2_FILE, "20261025-100100"), earlier);
+		assert_eq!(keep(SHCL2_FILE, "20261025-100101"), earlier);
+		assert_eq!(keep(SHCL2_FILE, "20261025-100102"), earlier);
+		let other = "font:\n\tsize: 9\n";
+		let later = keep(other, "20261025-100103");
+		assert_eq!(
+			later,
+			dir.join("config_backup_20261025-100103_format-v2.shcl")
+		);
+		assert_eq!(std::fs::read_to_string(&earlier).unwrap(), SHCL2_FILE);
+		assert_eq!(std::fs::read_to_string(&later).unwrap(), other);
+		assert_eq!(std::fs::read_to_string(&other_format).unwrap(), SHCL2_FILE);
+		assert_eq!(
+			backups_in(&dir, "config"),
+			[
+				"config_backup_20261025-100059_format-v1.shcl",
+				"config_backup_20261025-100100_format-v2.shcl",
+				"config_backup_20261025-100103_format-v2.shcl",
+			]
+		);
+		assert_eq!(dir_names(&dir).len(), 4, "no temp file is left");
+
+		assert!(is_copy_name(
+			"config_backup_20261025-100100_format-v2.shcl",
+			"config",
+			2
+		));
+		assert!(is_copy_name(
+			"config_backup_20261025-100100_format-v2_12.shcl",
+			"config",
+			2
+		));
+		for name in [
+			"config_backup_20261025-100100_format-v2_.shcl",
+			"config_backup_20261025-100100_format-v21.shcl",
+			"config_backup_20261025-1001_format-v2.shcl",
+			"config_backup_20261025x100100_format-v2.shcl",
+			"mine_backup_20261025-100100_format-v2.shcl",
+			"config_backup_20261025-100100_format-v2.shcl.tmp",
+		] {
+			assert!(!is_copy_name(name, "config", 2), "{name}");
+		}
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
 	// Several windows can launch at once, and each converts the file it read.
-	// Every copy that comes of it is whole, they are one copy unless the clock
-	// ticked between them, and no temp file is left.
+	// Every copy that comes of it is whole, they leave one copy however long the
+	// conversions take, and no temp file is left.
 	// Test ID: EreLZQQ
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
@@ -13098,7 +13240,7 @@ mod tests {
 				"a part copy was seen"
 			);
 			let kept = backups_in(&dir, "config");
-			assert!((1..=2).contains(&kept.len()), "{kept:?}");
+			assert_eq!(kept.len(), 1, "{kept:?}");
 			for name in &kept {
 				assert!(is_backup_name(name, "config", 2), "{kept:?}");
 				assert_eq!(std::fs::read(dir.join(name)).unwrap(), body.as_bytes());

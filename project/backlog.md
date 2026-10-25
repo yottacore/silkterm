@@ -874,22 +874,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Expected behavior: Each underline style a program sets is drawn, in the underline color it sets, or the text color.
 	- Reproduced: Not run in a window. Found in the code while answering 2026102114411311.
 
-- A config conversion race test leaves a backup per launch under ASan
-	- ID: 2026102510010001
-	- Type: Bug
-	- Status: Queued
-	- Severity: Avg
-	- Opened: 20261025-100100
-	- Opened by: CC
-	- Related IDs: 2026102509002701
-	- Target OS: Linux
-	- Test environment: b23 at load 20 to 45, the full run's ASan step in the container at e95b81b on `rnd1025`, and the same test alone under ASan on dev at b0c2238
-	- Steps to reproduce:
-		- Run `config::tests::launches_converting_at_once_leave_one_whole_copy` (EreLZQQ) alone under ASan, as `private/claude_simple/tools/lsan_some_tests.bash` does, a few times.
-	- Incorrect behavior: Launches converting at once each kept their own backup, with stamps a second apart, so the test found 3 copies where it wants 1. Under ASan each conversion took over a second. The full run stopped in stage 3 there.
-	- Expected behavior: One whole copy, or a test that doesn't hang on how long a conversion takes.
-	- Reproduced: Yes. 2 of 3 alone under ASan on `rnd1025`, and 2 of 3 on dev, so it was there before the round.
-
 - The Zig and container cleanup's 2 GB cap check fails when the cache sits on ZFS
 	- ID: 2026102509002701
 	- Type: Bug
@@ -1101,6 +1085,32 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- The Windows GUI scenarios and the scroll harness turn off only with `--quick`, and dpirand only with `DPIRAND_SECS=0` in config.bash.
 	- Notes:
 		- Not every stage needs its own flag. A few grouped ones may do, such as one for the lints and one for the script tests.
+
+- A config conversion race test leaves a backup per launch under ASan
+	- ID: 2026102510010001
+	- Type: Bug
+	- Status: Done
+	- Severity: Avg
+	- Opened: 20261025-100100
+	- Opened by: CC
+	- Related IDs: 2026102509002701
+	- Target OS: Linux
+	- Test environment: b23 at load 20 to 45, the full run's ASan step in the container at e95b81b on `rnd1025`, and the same test alone under ASan on dev at b0c2238
+	- Steps to reproduce:
+		- Run `config::tests::launches_converting_at_once_leave_one_whole_copy` (EreLZQQ) alone under ASan, as `private/claude_simple/tools/lsan_some_tests.bash` does, a few times.
+	- Incorrect behavior: Launches converting at once each kept their own backup, with stamps a second apart, so the test found 3 copies where it wants 1. Under ASan each conversion took over a second. The full run stopped in stage 3 there.
+	- Expected behavior: One whole copy, or a test that doesn't hang on how long a conversion takes.
+	- Reproduced: Yes. 2 of 3 alone under ASan on `rnd1025`, and 2 of 3 on dev, so it was there before the round.
+	- Actual cause: Each launch that reads the old file keeps a copy, stamped when its write starts. Only a copy with the same name, so the same second, counted as the same copy. Under ASan a conversion takes over a second, so launches converting at once stamped different seconds and each kept one, all with the same bytes.
+	- Actual fix: A new copy settles on the earliest copy of the same format holding the same bytes, whatever its stamp, and is dropped if that is another one. Nobody drops the earliest, so one is always left. The race test now wants exactly one copy. design.md says so.
+	- Progress log:
+		- 20261025: A file converted again with bytes already kept, such as a backup copied back over the config, gets no new copy, and the message names the old one. Filed as a Check in questions.md.
+	- Verified: The new test fails without the fix, naming the second-later copy, and passes with it. The 226 config tests pass plain, and 2 runs of them under ASan, plus 1 run of the race test alone, all at load about 10. The quick gate passes, its 1408 unit tests and `cicd/tests/config-convert/run.bash` (ErgDpjX) included. fmt and clippy are clean for Linux and Windows. The docs check passes.
+	- Swept: `write_new_file` and `keep_old_format_at` have one caller each outside the tests. The `.bak` copies of the flat conversion and a reset (`backup_copy`, `backup_aside`) take the next free name with no stamp, so the clock cannot split them, and are left as they were.
+	- Branch: rnd1025b
+	- Test case: `a_copy_stamped_a_second_later_with_the_same_bytes_is_the_earlier_one` (Etl0u6f), and `launches_converting_at_once_leave_one_whole_copy` (EreLZQQ) under ASan.
+	- Acceptance signoff: Self-closed: the cause was found, the new test fails before and passes after, and the race test passed 3 of 3 under ASan.
+	- Closed: 20261025-163442
 
 - The Windows scenario run fails on a VM it just woke from off, since the session never answers
 	- ID: 2026102510420001
