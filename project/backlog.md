@@ -34,51 +34,13 @@ Going forward, new issues in the new template at the bottom of this file, will g
 
 ## Issues
 
-- Over ssh to a host with no alacritty terminfo, full-screen programs fail with "'alacritty': unknown terminal type."
-	- ID: 2026102114411311
-	- Type: Bug
-	- Status: Waiting for answers
-		- Waits on the question about the default TERM, and whether to handle ssh by itself.
-	- Needs external testing: Over ssh to a Mac with no alacritty entry, with `shell.term: xterm-256color` set: `sudo nano /etc/hosts`, `less` and `tput cols` work.
-	- Severity: Avg
-	- Opened: 20261021-144113
-	- Opened by: CC
-	- Target OS: All
-	- Test environment: b23 to b26 and vmKt6m, both macOS 15.8 on Intel
-	- Steps to reproduce:
-		- In SilkTerm on b23, ssh to a Mac that has never had the alacritty terminfo entry added.
-		- Run `sudo nano /etc/hosts`.
-	- Incorrect behavior: nano exits with "'alacritty': unknown terminal type." Anything else that reads terminfo on that host, like `tput` or `less`, can fail or draw wrong the same way.
-	- Expected behavior: Full-screen programs work over ssh without anything set up on the remote host first.
-	- Reproduced: Yes, 20261021, on b26 and vmKt6m. macOS ships no alacritty entry, and its `/usr/share/terminfo` is read-only under SIP.
-	- Possible cause: The local TERM check only looks at b23's terminfo database. ssh forwards `TERM=alacritty` as-is, and the remote may not know it. This was noted as out of reach in the done item "If host doesn't TERM=alacritty (including remote SSH hosts), then fallback to `TERM=xterm-256color` + `COLORTERM=truecolor`."
-	- Notes:
-		- 20261021: Worked around on both Macs by compiling b23's entry there with the Mac's own `tic` into `~/.terminfo`: `infocmp -x alacritty | ssh <host> 'cat > /tmp/a.ti && /usr/bin/tic -x -o ~/.terminfo /tmp/a.ti'`. sudo on macOS keeps `HOME`, so root finds it too.
-		- Ways to fix it from SilkTerm's side, none picked yet:
-			- A config key to always use `xterm-256color`, which the done item above already suggested.
-			- Notice an ssh command in the pane and offer to copy the terminfo entry over, like kitty's ssh kitten does.
-			- Say in the docs how to install the entry on a remote host.
-	- Actual cause: Each pane inherits the TERM the engine picks at startup, `alacritty` when this computer has the entry. Nothing let that be changed, and ssh can't know whether the far side has the entry.
-	- Progress log:
-		- 20261022: Added `shell.term`, the TERM a new pane gets. Empty, the default, keeps the engine's pick. A value with a space or control character in it reads as empty.
-		- 20261022: usage.md has a "Programs over ssh" section, with the command that copies the entry to a remote host, and the setting as the other way out.
-		- 20261022: Left open the default, and any ssh handling of its own. Question filed.
-		- 20261022: The pane test failed on macOS: with no TERM set it read `dumb`. bash, which is macOS's `/bin/sh`, makes up an unexported `TERM=dumb` when none is inherited, so the test's own shell said so, not the engine or `login`. The test now reads the environment through `printenv`. Reproduced on Linux under bash with TERM unset; passes there, and on Linux with TERM set and unset.
-		- 20261022: `the_configured_term_reaches_the_program` fails on macOS, at `term.rs:2124`, the empty-setting case: left "dumb", right "". The program sees `TERM=dumb` where the test expects the test process's own TERM, which is unset there. Failed on the Mac CI (run 39842974082, arm64), again when run alone, and on b26 in the private runner, which failed the full pipeline run at stage 6. Linux passes, on the host and in the container. Not fixed here.
-		- 20261022: The fixed test passed on Mac CI run 39858608191, with the whole suite.
-	- Actual fix: `shell.term` in the config, passed to each new pane's environment; usage.md "Programs over ssh".
-	- Branch: rnd1022
-	- Test case: `the_configured_term_reaches_the_program` (term.rs) fails with the setting dropped from the pane's environment and passes with it. `shell_term_reads_one_word_and_defaults_empty` (config.rs) covers the read and the template line.
-		- Swept: `pane_options` has the one spawn caller and one Windows test; no other place sets TERM for a pane. `front.rs`'s TERM is a test's tmux client.
-	- Closed:
-
 - The window doesn't paint while the GPU is busy or short on memory, and stays blank after the load ends
 	- ID: 2026100312470535
 	- Type: Bug
 	- Status: Waiting on UAT
 		- 20261025: Only the look on b23's own desktop is left, which is a person's part.
 	- Needs hand testing: A dogfood look on b23 with the GPU busy or nearly full. Move to another desktop and back, end the load, and leave the window alone. It should paint on its own. Try it once with "Free resources when idle" on and short idle times too. Started from a terminal with `SILK_IDLEDBG=1`, it prints any refused frame or rebuild.
-		- b23 runs build de5r9 (10-25), from before 10-23, so it lacks this round's and the 10-24 round's fixes. Update asked for in questions.md.
+		- 20261025: The dogfood pool now has build dedvg, from dev at a9daddc, for Linux and Windows, with the 10-24 and 10-25 rounds' fixes. A window started before the next launch still runs de5r9.
 	- Severity: High
 	- Opened: 20261003-124705
 	- Opened by: JC
@@ -223,7 +185,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Type: Enhancement
 	- Status: Waiting on UAT
 	- Needs hand testing: With the map on, a drag select, a link hover, typing on the prompt line and a color change in Settings, all in a real window.
-		- b23 runs build de5r9 (10-25), from before 10-23, so it lacks this round's and the 10-24 round's fixes. Update asked for in questions.md.
+		- 20261025: The dogfood pool now has build dedvg, from dev at a9daddc, for Linux and Windows, with the 10-24 and 10-25 rounds' fixes. A window started before the next launch still runs de5r9.
 	- Priority: Low
 	- Opened: 20261024-070658
 	- Opened by: CC
@@ -836,6 +798,71 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Every regression and fuzz test prints one line, such as `PASS decp8 <name>`, with `FAIL` or `SKIP` in place of `PASS`. The scroll harness scenes and the fuzz cases have no IDs of their own yet.
 		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
 		- Overrides: 2026092711142900's decision that the scroll harness scenes keep their PASS lines with no IDs, and the base 62 rule in the private notes.
+
+- Over ssh to a host with no alacritty terminfo, full-screen programs fail with "'alacritty': unknown terminal type."
+	- ID: 2026102114411311
+	- Type: Bug
+	- Status: Queued
+		- 20261025: Answered. The default TERM becomes `xterm-256color` everywhere, with no ssh wrapping.
+	- Needs external testing: Over ssh to a Mac with no alacritty entry, with no `shell.term` set: `sudo nano /etc/hosts`, `less` and `tput cols` work.
+	- Severity: Avg
+	- Opened: 20261021-144113
+	- Opened by: CC
+	- Target OS: All
+	- Test environment: b23 to b26 and vmKt6m, both macOS 15.8 on Intel
+	- Steps to reproduce:
+		- In SilkTerm on b23, ssh to a Mac that has never had the alacritty terminfo entry added.
+		- Run `sudo nano /etc/hosts`.
+	- Incorrect behavior: nano exits with "'alacritty': unknown terminal type." Anything else that reads terminfo on that host, like `tput` or `less`, can fail or draw wrong the same way.
+	- Expected behavior: Full-screen programs work over ssh without anything set up on the remote host first.
+	- Reproduced: Yes, 20261021, on b26 and vmKt6m. macOS ships no alacritty entry, and its `/usr/share/terminfo` is read-only under SIP.
+	- Possible cause: The local TERM check only looks at b23's terminfo database. ssh forwards `TERM=alacritty` as-is, and the remote may not know it. This was noted as out of reach in the done item "If host doesn't TERM=alacritty (including remote SSH hosts), then fallback to `TERM=xterm-256color` + `COLORTERM=truecolor`."
+	- Notes:
+		- 20261021: Worked around on both Macs by compiling b23's entry there with the Mac's own `tic` into `~/.terminfo`: `infocmp -x alacritty | ssh <host> 'cat > /tmp/a.ti && /usr/bin/tic -x -o ~/.terminfo /tmp/a.ti'`. sudo on macOS keeps `HOME`, so root finds it too.
+		- Ways to fix it from SilkTerm's side, none picked yet:
+			- A config key to always use `xterm-256color`, which the done item above already suggested.
+			- Notice an ssh command in the pane and offer to copy the terminfo entry over, like kitty's ssh kitten does.
+			- Say in the docs how to install the entry on a remote host.
+	- Actual cause: Each pane inherits the TERM the engine picks at startup, `alacritty` when this computer has the entry. Nothing let that be changed, and ssh can't know whether the far side has the entry.
+	- Requirements:
+		- An empty `shell.term`, the default, gives a pane `TERM=xterm-256color` on every OS, whether or not this computer has the alacritty entry. A set `shell.term` still wins, so `alacritty` stays one line away.
+		- ssh to a host with no alacritty entry works with nothing set up on either end.
+		- `COLORTERM=truecolor` stays as it is.
+		- The config template comment, usage.md's "Programs over ssh" and the pane test follow the new default.
+	- Decisions:
+		- 20261025: B, `xterm-256color` everywhere. No wrapping of ssh, and no swapping TERM per program, which can't be done without a wrapper, since the shell hands TERM to ssh before SilkTerm sees the process.
+			- The cursor costs nothing. SilkTerm draws its own cursor, size and animation, for any block a program asks for, and ignores the program's blink flag. xterm-256color's reset asks for a steady block and alacritty's for the default block, so both end on the configured cursor.
+			- Curly underlines cost nothing today, since SilkTerm draws no text underlines yet (2026102511131401).
+			- Check before closing: the engine has no left and right margins, which xterm-256color claims (`smglr`). GNOME Terminal, Konsole and Windows Terminal claim them too without them, so few programs rely on it.
+	- Progress log:
+		- 20261022: Added `shell.term`, the TERM a new pane gets. Empty, the default, keeps the engine's pick. A value with a space or control character in it reads as empty.
+		- 20261022: usage.md has a "Programs over ssh" section, with the command that copies the entry to a remote host, and the setting as the other way out.
+		- 20261022: Left open the default, and any ssh handling of its own. Question filed.
+		- 20261022: The pane test failed on macOS: with no TERM set it read `dumb`. bash, which is macOS's `/bin/sh`, makes up an unexported `TERM=dumb` when none is inherited, so the test's own shell said so, not the engine or `login`. The test now reads the environment through `printenv`. Reproduced on Linux under bash with TERM unset; passes there, and on Linux with TERM set and unset.
+		- 20261022: `the_configured_term_reaches_the_program` fails on macOS, at `term.rs:2124`, the empty-setting case: left "dumb", right "". The program sees `TERM=dumb` where the test expects the test process's own TERM, which is unset there. Failed on the Mac CI (run 39842974082, arm64), again when run alone, and on b26 in the private runner, which failed the full pipeline run at stage 6. Linux passes, on the host and in the container. Not fixed here.
+		- 20261022: The fixed test passed on Mac CI run 39858608191, with the whole suite.
+	- Actual fix: `shell.term` in the config, passed to each new pane's environment; usage.md "Programs over ssh".
+	- Branch: rnd1022
+	- Test case: `the_configured_term_reaches_the_program` (term.rs) fails with the setting dropped from the pane's environment and passes with it. `shell_term_reads_one_word_and_defaults_empty` (config.rs) covers the read and the template line.
+		- Swept: `pane_options` has the one spawn caller and one Windows test; no other place sets TERM for a pane. `front.rs`'s TERM is a test's tmux client.
+	- Closed:
+
+- Text underlines aren't drawn
+	- ID: 2026102511131401
+	- Type: Bug
+	- Status: Queued
+	- Severity: Avg
+	- Opened: 20261025-111314
+	- Opened by: CC
+	- Related IDs: 2026102114411311
+	- Target OS: All
+	- Test environment: b23, dev at a9daddc
+	- Steps to reproduce:
+		- In SilkTerm, run `printf '\e[4mplain\e[0m \e[4:3mcurly\e[0m \e[21mdouble\e[0m\n'`.
+		- Or turn on spell checking in vim or Neovim.
+	- Incorrect behavior: No underline under any of them. The drawing code reads no underline flag from the engine, so plain, double, curly, dotted and dashed underlines all show as plain text. The link hover underline is SilkTerm's own and works.
+	- Expected behavior: Each underline style a program sets is drawn, in the underline color it sets, or the text color.
+	- Reproduced: Not run in a window. Found in the code while answering 2026102114411311.
 
 - The Windows scenario run fails on a VM it just woke from off, since the session never answers
 	- ID: 2026102510420001
