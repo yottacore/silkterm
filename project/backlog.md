@@ -213,10 +213,28 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Test case: New cases in `cicd/tests/container/run.bash` (EsJg9EF): the render node test and the profiler run here after the container, and inside only say so.
 	- Branch: rnd1025
 
+- The Windows scenario run fails on a VM it just woke from off, since the session never answers
+	- ID: 2026102510420001
+	- Type: Bug
+	- Status: Queued
+	- Severity: Avg
+	- Opened: 20261025-104200
+	- Opened by: CC
+	- Related IDs: 2026102507245255, 2026102507245260
+	- Target OS: Windows
+	- Test environment: b23, the full run's wingui stage at e95b81b on `rnd1025`, vm925w off before the run and b29w up
+	- Steps to reproduce:
+		- Leave vm925w off and run the full run's wingui stage.
+	- Incorrect behavior: The VM state helper started vm925w, then `perfladder` failed with "VERDICT fail the session never answered" in session 1, and the stage failed the run. Before 2026102507245255 a box that was off was skipped.
+	- Expected behavior: A woken VM gets time for its logged-on session to answer before a scenario runs, or the box is a skip with a reason.
+	- Reproduced: Once, in the full run.
+	- Tried: The item's worker (ccaeeb7) and one fix worker for a CRLF header bug (86da5d0). 2026102507245260 (bf47323) builds on it. All 3 were reverted on `rnd1025`, and the work is on `wip/rnd1025-2026102507245255`. That branch also has eddf89a, which has its own `wip/rnd1025-2026102416233804`.
+
 - CICD reset: the Windows boxes, VM state and where each scenario runs
 	- ID: 2026102507245255
 	- Type: Task
-	- Status: Waiting on automated testing
+	- Status: Queued
+		- Reverted on `rnd1025` after the full run's wingui stage failed on a woken vm925w. See 2026102510420001. The work is on `wip/rnd1025-2026102507245255`. The host config change outside the repo, `~/.config/silkterm/winrig.conf`, wasn't reverted, and its `@vmstate` line does nothing without this item's code.
 	- Needs external testing: The wingui stage, `cicd/tests/wingui/run.bash` with the config's scenario list, with vm925w off and b29w up: the plain scenarios run on b29w, `perfladder` alone on vm925w, and vm925w is off again after. Then once with b29w off, so vm925w takes them all.
 	- Priority: High
 	- Opened: 20261025-072452
@@ -244,7 +262,9 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - CICD reset: `--no-remote`, and a skipped box shown as `SKIP`
 	- ID: 2026102507245260
 	- Type: Task
-	- Status: Waiting on automated testing
+	- Status: Queued
+		- Reverted on `rnd1025` with 2026102507245255, which it builds on. See 2026102510420001. The work is on `wip/rnd1025-2026102507245255`.
+	- Prereq IDs: 2026102507245255
 		- Departs from the wording: the Windows runner's test still runs under `--no-remote`, since it uses stand-ins and reaches no box.
 	- Needs external testing: A full run with b29w and vm925w both off, or held: the Windows scenarios' line reads `SKIP: windows gui scenarios, 16 not run`, and the run ends with a "Not run, since a box wasn't there" list of the 16 `SKIP wingui:` lines. Then `cicd.bash -y --no-remote --quick` once, for the plan's two `(skipped --no-remote)` lines.
 	- Priority: High
