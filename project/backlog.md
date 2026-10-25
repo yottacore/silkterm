@@ -834,6 +834,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- A run removes its own folder at the end, on failure and Ctrl+C too, and `--keep-temp` keeps it and prints where. Now a failed run keeps it, and the newest 5 of those stay.
 		- Stale folders go after 2 days, when no process from the folder's `run.pid` is left.
 		- Every recursive removal goes through the repo's copy of the shared guard. About 63 `rm -r` lines in the scripts and 35 `Remove-Item -Recurse` lines in PowerShell have none. File list in the private notes.
+			- Add the short socket folder cleanups in `swnoshm` and `livecfg` from 2026102507092877, and their siblings in `wlclip`, `monwl`, `monwake` and `dpirand`.
 		- The release artifacts folder in the repo is cleared through a guard that names that one parent.
 		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
 		- Overrides: 2026101909222600's rule that failed runs keep their folders and the newest 5 stay.
