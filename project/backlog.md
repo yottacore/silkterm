@@ -549,6 +549,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Type: Task
 	- Status: Queued
 		- Reverted on `rnd1025` after the full run's wingui stage failed on a woken vm925w. See 2026102510420001. The work is on `wip/rnd1025-2026102507245255`. The host config change outside the repo, `~/.config/silkterm/winrig.conf`, wasn't reverted, and its `@vmstate` line does nothing without this item's code.
+		- 20261025: Held at Queued. Bug 2026102510420001 is fixed, so a woken vm925w is now a skip, but vm925w logs nobody on at boot, so waking it for scenarios gains nothing yet. Waits on the question in `questions.md` about how a woken vm925w gets a logged-on session. The work, brought onto rnd1025b with that fix, is on `wip/rnd1025b-2026102507245255`.
 	- Needs external testing: The wingui stage, `cicd/tests/wingui/run.bash` with the config's scenario list, with vm925w off and b29w up: the plain scenarios run on b29w, `perfladder` alone on vm925w, and vm925w is off again after. Then once with b29w off, so vm925w takes them all.
 	- Priority: High
 	- Opened: 20261025-072452
@@ -566,6 +567,8 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261025: The host config lists b29w first and alone, with no `b29w-wif`, then vm925w tagged `gpu`, and the `@vmstate` line.
 		- Verified: both test scripts pass, and their new checks failed against the scripts as they were. shellcheck, the bash style check, the PowerShell lint, the test ID check, the docs check and the lint report pass. A job through the live config on b29w went through the VM state helper and the lock, and `hosts` printed vm925w's tag.
 		- Not run: a real wake of vm925w. It was off, and the box was at load 44.
+		- 20261025: On `wip/rnd1025b-2026102507245255`: a box nobody is logged on at leaves its reason in the stage's `SKIP` lines, such as `SKIP wingui: perfladder, no box tagged gpu answered (vm925w: nobody is logged on at the console)`.
+		- Verified: 20261025, on that branch. vm925w woken from off through `@vmstate`, from a copy of the host config: both scenarios were `SKIP` lines with that reason, on the skip list too, and vm925w was off again after. The win-remote, wingui, engine and Windows pipeline tests pass, and the new reason check failed without the line that writes it. shellcheck, the bash style check, the PowerShell lint, the test ID and docs checks pass.
 		- Swept: `win-unlock.bash` holds the same way and reads only the name and address from `hosts`, so the tags don't reach it. No other script reads `hosts` or calls `hold`. The jobs under `win-jobs` run through `job`, which holds the same way.
 	- Decisions:
 		- 20261025: Which box is favored, and which has a real card, live in the host config outside the repo, by order and the `gpu` tag. Machine names stay out of the repo, as before.
@@ -580,6 +583,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Type: Task
 	- Status: Queued
 		- Reverted on `rnd1025` with 2026102507245255, which it builds on. See 2026102510420001. The work is on `wip/rnd1025-2026102507245255`.
+		- 20261025: Held at Queued with 2026102507245255, which it builds on. Both are on `wip/rnd1025b-2026102507245255`.
 	- Prereq IDs: 2026102507245255
 		- Departs from the wording: the Windows runner's test still runs under `--no-remote`, since it uses stand-ins and reaches no box.
 	- Needs external testing: A full run with b29w and vm925w both off, or held: the Windows scenarios' line reads `SKIP: windows gui scenarios, 16 not run`, and the run ends with a "Not run, since a box wasn't there" list of the 16 `SKIP wingui:` lines. Then `cicd.bash -y --no-remote --quick` once, for the plan's two `(skipped --no-remote)` lines.
