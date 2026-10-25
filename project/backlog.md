@@ -78,6 +78,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Status: Waiting on UAT
 		- 20261025: Only the look on b23's own desktop is left, which is a person's part.
 	- Needs hand testing: A dogfood look on b23 with the GPU busy or nearly full. Move to another desktop and back, end the load, and leave the window alone. It should paint on its own. Try it once with "Free resources when idle" on and short idle times too. Started from a terminal with `SILK_IDLEDBG=1`, it prints any refused frame or rebuild.
+		- b23 runs build de5r9 (10-25), from before 10-23, so it lacks this round's and the 10-24 round's fixes. Update asked for in questions.md.
 	- Severity: High
 	- Opened: 20261003-124705
 	- Opened by: JC
@@ -222,6 +223,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Type: Enhancement
 	- Status: Waiting on UAT
 	- Needs hand testing: With the map on, a drag select, a link hover, typing on the prompt line and a color change in Settings, all in a real window.
+		- b23 runs build de5r9 (10-25), from before 10-23, so it lacks this round's and the 10-24 round's fixes. Update asked for in questions.md.
 	- Priority: Low
 	- Opened: 20261024-070658
 	- Opened by: CC
