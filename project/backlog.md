@@ -547,7 +547,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - CICD reset: the Windows boxes, VM state and where each scenario runs
 	- ID: 2026102507245255
 	- Type: Task
-	- Status: Waiting for answers
+	- Status: Queued
 		- Reverted on `rnd1025` after the full run's wingui stage failed on a woken vm925w. See 2026102510420001. The work is on `wip/rnd1025-2026102507245255`. The host config change outside the repo, `~/.config/silkterm/winrig.conf`, wasn't reverted, and its `@vmstate` line does nothing without this item's code.
 		- 20261025: Held at Queued. Bug 2026102510420001 is fixed, so a woken vm925w is now a skip, but vm925w logs nobody on at boot, so waking it for scenarios gains nothing yet. Waits on the question in `questions.md` about how a woken vm925w gets a logged-on session. The work, brought onto rnd1025b with that fix, is on `wip/rnd1025b-2026102507245255`.
 	- Needs external testing: The wingui stage, `cicd/tests/wingui/run.bash` with the config's scenario list, with vm925w off and b29w up: the plain scenarios run on b29w, `perfladder` alone on vm925w, and vm925w is off again after. Then once with b29w off, so vm925w takes them all.
@@ -577,6 +577,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Test case: `cicd/tests/win-remote/run.bash` (Er2UgYA), 7 new checks for tags, holding through the VM state helper and a VM that never wakes. `cicd/tests/wingui/harness-test.bash` (EqH4isr), 8 new checks for which box each scenario runs on, and the `SKIP` lines.
 	- Prereq IDs: 2026102510420001
 	- Waits on Bug 2026102510420001, the woken VM failure that got this reverted last round.
+	- Answered 10-25: D. Leave vm925w unwoken and @vmstate off. The work on wip/rnd1025b-2026102507245255 is ready to merge as it is.
 
 - CICD reset: `--no-remote`, and a skipped box shown as `SKIP`
 	- ID: 2026102507245260
@@ -873,6 +874,22 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Incorrect behavior: No underline under any of them. The drawing code reads no underline flag from the engine, so plain, double, curly, dotted and dashed underlines all show as plain text. The link hover underline is SilkTerm's own and works.
 	- Expected behavior: Each underline style a program sets is drawn, in the underline color it sets, or the text color.
 	- Reproduced: Not run in a window. Found in the code while answering 2026102114411311.
+
+- The rotate test's fork count went over its limit once inside the test run folder test
+	- ID: 2026102518360001
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261025-183600
+	- Opened by: CC
+	- Related IDs: 2026102416233803
+	- Target OS: Linux
+	- Test environment: b23, the full run in the container at 591a9a8 on `rnd1025b`, box load about 20
+	- Steps to reproduce:
+		- Run the full pipeline in the container on a busy box. The test run folder test (ErOj67l) runs `rotate/run.bash` with the temp dir read-only.
+	- Incorrect behavior: "rotating 200 files costs a few forks beyond the files it changes" counted 366 forks beyond the files changed, limit 300, and the full run stopped there.
+	- Expected behavior: The fork count stays under its limit however busy the box is, or the check counts only forks the rotate script makes.
+	- Reproduced: No. `rotate/run.bash` alone passed 3 of 3 with 18 forks, limit 30, and `testdir/run.bash` passed its rotate check 3 of 3 on the host.
 
 - The Zig and container cleanup's 2 GB cap check fails when the cache sits on ZFS
 	- ID: 2026102509002701
