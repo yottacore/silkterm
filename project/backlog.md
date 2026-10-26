@@ -39,6 +39,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Type: Bug
 	- Status: Waiting on UAT
 		- 20261025: Only the look on b23's own desktop is left, which is a person's part.
+	- Stand-in: none. The blank window was seen only on b23's desktop, through the X11 GL swap and a virtual desktop switch. A headless display has neither, and the 10-03 tries on vm925w never reproduced it.
 	- Needs hand testing: A dogfood look on b23 with the GPU busy or nearly full. Move to another desktop and back, end the load, and leave the window alone. It should paint on its own. Try it once with "Free resources when idle" on and short idle times too. Started from a terminal with `SILK_IDLEDBG=1`, it prints any refused frame or rebuild.
 		- 20261025: The dogfood pool now has build dedvg, from dev at a9daddc, for Linux and Windows, with the 10-24 and 10-25 rounds' fixes. A window started before the next launch still runs de5r9.
 	- Severity: High
@@ -86,77 +87,50 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Test case: `a_refused_frame_is_drawn_again_on_a_backoff` (Erfy7et) and `a_refused_rebuild_stays_pending_and_is_tried_again` (Erfy7yk). The GL swap result has no test, since it needs a real GL context.
 	- Note: 20261003, Free resources when idle was on for some of the windows that went blank and off for others. Which ones is not remembered, so both the frame path and the rebuild path stay suspects.
 
-- CICD reset: containers
-	- ID: 2026102416233801
-	- Type: Task
+- Running on macOS without a GPU fails to launch
+	- ID: 2026102209035801
+	- Type: Bug
 	- Status: Waiting on UAT
-		- Departs from the wording: the profiler now draws on the card, through a headless sway, where before it drew in software on Xvfb, here as in the image. And the render node test runs here too, where it had only skipped inside.
-		- Stand-in: 20261025. The container full run at e95b81b passed stages 1 to 6, with the container test (EsJg9EF) and "the render node test runs outside the container" inside, then stopped on a Windows scenario before the host's profiler and render node steps. Those two ran alone here on rnd1025 instead, as below.
-	- Priority: High
-	- Opened: 20261024-162338
-	- Opened by: CC
-	- Related IDs: 2026101009221201, 2026102416233802, 2026102507092877
-	- Target OS: All
-	- Requirements:
-		- Per `Containers` in the shared CICD rules. The pinned image, docker by default, the fallback to this box and `--no-container` are in.
-		- Left: a step whose point is the real GPU runs on this box, not in the image. That's the profiler, and anything else that reads frame times or graphics memory off the card. The render-node test already skips inside.
-		- Windows GPU work stays on vm925w, per 2026102416233802.
-		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
-		- Overrides: the private notes' line that stages 1 to 6 run in the image, the profiler included.
-	- Progress log:
-		- 20261025: Measured first. The profiler ran on a private Xvfb, and there the app draws with llvmpipe on this box too, not only in the image. So moving it here alone would not have put it on the card.
-		- 20261025: The profiler now runs on a headless sway drawing on the card's render node, through sway's own Xwayland. The app reports the RTX 3060 Ti there. Without sway, a render node or XDG_RUNTIME_DIR it falls back to the private Xvfb, with a warning saying why.
-		- 20261025: A container run now runs the profiler and the render node test here, once the container is done. Inside, both only say they run outside. The render node test had skipped in every container run, so it hadn't run in a default full run since docker became the default.
-		- 20261025: Nothing else in stages 1 to 6 reads the card. The scroll harness checks the shape of each frame on Xvfb, not its timing. The graphics memory unit test falls back to software Vulkan, where it still checks the allocator's hint.
-		- Note: The render node test skips when its test folder sits under a long temp path, since sway's socket path is then too long. Filed as 2026102507092877.
-		- 20261025: The flamegraph's text shaping share is about twice the last one on dev, 48% against 23%. The source differs from dev only in test code, so that comes from drawing on the card rather than llvmpipe, not from the round.
-	- Verified: 20261025, at 6965e34. The host's profiler step alone: "on the card, through a headless sway's Xwayland", renderer NVIDIA GeForce RTX 3060 Ti, flamegraph written. The render node test (ErxxHzT) against a fresh debug build, with its temp folder under the run's own: all passed, in software at launch and switched to it.
-	- Verified: 20261025. The profiler step from cicd.bash, run alone here: on the card, NVIDIA renderer, flamegraph written, sway gone and its socket folder removed after. With no XDG_RUNTIME_DIR: the warning, then llvmpipe on Xvfb, flamegraph written. The render node test on this box against the image's debug binary: all passed with a short temp folder, skipped under the long one above. Container test with new cases, watched to fail against the old cicd.bash and against a mutant without the guard inside. Engine test, shellcheck, house style, docs check, lint report. The plan lines in both arms.
-	- Swept: every step in stages 1 to 6 that starts a window or a GPU device: the window tests under `cicd/tests`, the scroll harness, the allocs test, `a_new_device_reserves_little_graphics_memory`, the profiler. `cicd/utility/mem-per-window` and `gpu-stress` aren't pipeline steps.
-	- Test case: New cases in `cicd/tests/container/run.bash` (EsJg9EF): the render node test and the profiler run here after the container, and inside only say so.
-	- Branch: rnd1025
-
-- Updates to CICD script flags
-	- ID: 2026101816103601
-	- Type: Enhancement
-	- Status: Waiting on UAT
-		- The full run that passed had publish, dogfood and the demo off, per the round's line, so it is not quite a run with no options.
-	- Needs hand testing: OK the 20261023 run below as the no-options check, or run one with publish, dogfood and the demo on.
-	- Priority: Avg
-	- Opened: 20261018-161036
+		- Answered: keep the alert. Left is the no-Metal check, on vmKt6m, which has no Metal.
+		- 20261025: The round's build runs on vmKt6m, but a launch with nobody logged on at its console never gets to the device check. Logging on there is a person's part.
+		- Stand-in: 20261025. A debug build of 8a28055, made on b26, run on vmKt6m over ssh as `mactest`. `--version` printed `build deea6 (2026-10-25)`. A plain launch printed nothing and was still running after 60 s, its main thread waiting for events in `NSApplication run`. With no one logged on the app never finishes launching, so nothing reaches the device check.
+	- Needs hand testing:
+		- On vmKt6m, logged on at the console: a launch from Finder shows the alert, and the program exits after OK. From Terminal, stderr has the same words and the exit code is 2.
+	- Severity: Avg
+	- Opened: 20261022-090358
 	- Opened by: JC
-	- Target OS: All
-	- Requirements:
-		- `--ci`: Rename *to* `--gate`.
-		- `--quick`:
-			- Should run whatever linting, validation, and testing steps are very quick.
-			- Cross-compile whatever is fast; e.g. maybe skip slow arm64.
-			- Skip anything requiring an external host.
-		- No flags by default should do everything.
-		- The other existing flags can stay.
+	- Assigned to: CC
+	- Related IDs: 2026102209035802, 2026100418225504
+	- Target OS: macOS
+	- Steps to reproduce:
+		- Run on macOS without a GPU.
+	- Incorrect behavior: It fails to launch.
+	- Expected behavior: It falls back to software rendering if possible.
 	- Notes:
-		- Pre-next-cut. Do next.
-	- Decisions:
-		- 20261018: The demo re-record is on by default now, with a new `--no-demo`. `--demo` still turns it on under `--quick`.
-		- 20261018: `--quick` keeps the remote sync and the publish. Only the test and build boxes count as external hosts.
-		- 20261018: `--gate` keeps its name. Nothing was named `--ci`.
-		- 20261024: 2026102416233807 supersedes the `--gate` decision above. Under the CICD reset the merge gate is `--merge-gate`, and `--gate` becomes another name for `--backlog-run-quick`.
+		- Pre-next-cut.
+	- Reproduced: No. No Mac here. Traced in the code instead.
+	- Actual cause:
+		- The macOS build has only wgpu's Metal backend. GL there needs ANGLE, and Vulkan needs MoltenVK, which runs on Metal itself. wgpu has no software adapter on macOS. So a Mac with no Metal device finds no adapter at all.
+		- The launch then printed "no usable GPU/renderer" on stderr and exited with 2. A launch from Finder shows no stderr, so the program seemed to just vanish.
 	- Progress log:
-		- 20261018: `--quick` now builds the Windows x86_64 release too, and drops only the ARM64 ones. Packages, profiling and the fuzz soak stay skipped.
-		- 20261018: `--quick` also skips the 5 window tests that took 33 s to 103 s each here: monwl, mapfollow, livecfg, wpresize and wpkept. The other 9 took 22 s or less, and the script tests 17 s or less.
-		- 20261018: The test boxes were already skipped under `--quick`: the Windows scenarios and the private runner. The script tests that look like they reach a host all use stand-ins.
-		- 20261018: The plan lists the demo now.
-		- 20261022: Both no-options full runs failed, on other things. The container one passed stages 1 to 6 and the Windows scenarios, then failed in the private runner on b26, on 2026102114411311's test. The plain one failed at mapfollow's tmux checks under a tmux wrapper earlier on that shell's PATH; with the real tmux first they pass. The Mac failure needs fixing before a full run can pass.
-		- 20261023: A full container run, `-y --no-publish --no-dogfood --no-demo`, passed end to end at 2da75a7 in about 91 minutes. Its plan had every other stage on, the ARM64 builds, packages and the profiler included. The private runner's Mac part passed on b26. Its store part skipped, since vm925w was held by another session, and so did the Windows scenarios.
-	- Verified: 20261018. shellcheck, house style, the pipeline step, container run, docs and hooks tests. A real `--gate` run passed.
-	- Test case: New cases in `cicd/tests/engine/run.bash` (Er2UgY7) for `--quick`, no options, `--no-demo` and `--gate`. The `--container` run in `cicd/tests/container/run.bash` (EsJg9EF) now expects the Windows x86_64 binary under `--quick`, and failed until its stand-in made one.
-	- Branch: ciflags
+		- 20261022: No fallback is possible with what's in the tree. The options are in questions.md: keep an alert, ship ANGLE with SwiftShader, or write a CPU renderer.
+		- 20261022: Done meanwhile: with no device at all, macOS says why in an alert as well as on stderr, then exits with 2. Other platforms keep their stderr line as it was.
+		- 20261022: Verified: the words test passes. fmt, and clippy for Linux, Windows and macOS, pass. The alert itself is only compiled.
+		- 20261022: No real software path on macOS was found, so the Resource use group's `not_macos` row stays as it is.
+		- 20261024: Answer: A, keep the alert. A Mac with no Metal can't run SilkTerm, and the alert says why. A real fallback through ANGLE would be its own item, if Mac VMs turn out to matter.
+		- 20261025: The words test passed again in both full runs at e95b81b, and the hosted Mac workflow passed on rnd1025. The vmKt6m check didn't fit this round's time.
+		- 20261025: Tried on vmKt6m over ssh, per the Stand-in row. A launch with nobody logged on waits quietly for the window server, as macOS apps do there, so that isn't filed.
+	- Swept: the one exit site where no device could be made at launch. Rebuilds after idle and the dialogs keep their own error paths, and both need a device that once worked.
+	- Branch: rnd1022
+	- Test case: `no_device_on_macos_says_why_and_that_nothing_can_stand_in` (EtS63vE)
 
 - `the_scroll_record_costs_a_full_screen_program_little` failed once on the Mac runner
 	- ID: 2026102113432602
 	- Type: Bug
 	- Status: Waiting on UAT
 		- 6 Mac CI runs in a row passed it since 20261022, against 3 failures in the 7 before. The cause was never found. Close it as Can't reproduce, or keep it open. Mac CI runs on every push to dev, so a new failure would show its numbers.
+		- 20261025: Since the 10-24 failure, 6 more Mac CI runs passed it (40118767927, 40119271523, 40145850085, 40214477949, 40218542312, 40221760659), and one was cancelled.
+	- Stand-in: none. It fails only on the hosted runner beside the rest of the suite. b26 is another machine, so a pass there settles nothing.
 	- Severity: Low
 	- Opened: 20261021-134326
 	- Opened by: CC
@@ -185,6 +159,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Type: Enhancement
 	- Status: Waiting on UAT
 	- Needs hand testing: With the map on, a drag select, a link hover, typing on the prompt line and a color change in Settings, all in a real window.
+	- Stand-in: none. The machine part already ran: ErzCQC2 and the scroll harness passed at e95b81b. What's left is how the map looks.
 		- 20261025: The dogfood pool now has build dedvg, from dev at a9daddc, for Linux and Windows, with the 10-24 and 10-25 rounds' fixes. A window started before the next launch still runs de5r9.
 	- Priority: Low
 	- Opened: 20261024-070658
@@ -207,40 +182,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Swept: every `state.dirty` set on a pointer move. The thumb and map drags move the view, and a divider drag and a pane drag change the layout, so they still compose. The menu, tab and bar hovers don't touch a pane. The wake after a frame looks at the new flag too.
 	- Branch: rnd1024
 	- Test case: ErzCQC2's drag figure, under Verified. The limit stays 360, since the saving is about 5% and the 2026102321230038 margin was set by load.
-
-- Running on macOS without a GPU fails to launch
-	- ID: 2026102209035801
-	- Type: Bug
-	- Status: Waiting on automated testing
-		- Answered: keep the alert. Left is the no-Metal check, on vmKt6m, which has no Metal.
-	- Needs external testing:
-		- A Mac with no Metal device, such as a VM with no graphics acceleration: a launch from Finder shows the alert, and the program exits after OK. From a shell, stderr has the same words and the exit code is 2.
-	- Severity: Avg
-	- Opened: 20261022-090358
-	- Opened by: JC
-	- Assigned to: CC
-	- Related IDs: 2026102209035802, 2026100418225504
-	- Target OS: macOS
-	- Steps to reproduce:
-		- Run on macOS without a GPU.
-	- Incorrect behavior: It fails to launch.
-	- Expected behavior: It falls back to software rendering if possible.
-	- Notes:
-		- Pre-next-cut.
-	- Reproduced: No. No Mac here. Traced in the code instead.
-	- Actual cause:
-		- The macOS build has only wgpu's Metal backend. GL there needs ANGLE, and Vulkan needs MoltenVK, which runs on Metal itself. wgpu has no software adapter on macOS. So a Mac with no Metal device finds no adapter at all.
-		- The launch then printed "no usable GPU/renderer" on stderr and exited with 2. A launch from Finder shows no stderr, so the program seemed to just vanish.
-	- Progress log:
-		- 20261022: No fallback is possible with what's in the tree. The options are in questions.md: keep an alert, ship ANGLE with SwiftShader, or write a CPU renderer.
-		- 20261022: Done meanwhile: with no device at all, macOS says why in an alert as well as on stderr, then exits with 2. Other platforms keep their stderr line as it was.
-		- 20261022: Verified: the words test passes. fmt, and clippy for Linux, Windows and macOS, pass. The alert itself is only compiled.
-		- 20261022: No real software path on macOS was found, so the Resource use group's `not_macos` row stays as it is.
-		- 20261024: Answer: A, keep the alert. A Mac with no Metal can't run SilkTerm, and the alert says why. A real fallback through ANGLE would be its own item, if Mac VMs turn out to matter.
-		- 20261025: The words test passed again in both full runs at e95b81b, and the hosted Mac workflow passed on rnd1025. The vmKt6m check didn't fit this round's time.
-	- Swept: the one exit site where no device could be made at launch. Rebuilds after idle and the dialogs keep their own error paths, and both need a device that once worked.
-	- Branch: rnd1022
-	- Test case: `no_device_on_macos_says_why_and_that_nothing_can_stand_in` (EtS63vE)
 
 - Always use automatic remote mode when detected.
 	- ID: 2026101914251764
@@ -272,109 +213,9 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Not tried in a real window on any system.
 		- 20261023: The slow window tests passed in the full run at 2da75a7, apart from monwl (window size per Wayland output), which skipped without a reason in the log. Both new tests passed there and on b26. Left: the Windows scenario. No Windows box was free this round.
 		- 20261025: Both new tests passed again in both full runs at e95b81b. `wpremote` skipped on b29w, whose console session was locked, and never got to vm925w.
+		- 20261025: Not run in the second batch either. It needs an RDP session on a box, and a woken vm925w sits at the logon screen (2026102510420001).
 	- Branch: rnd1022
 	- Test case: `a_remote_screen_is_ignored_when_turned_off` (rating.rs, fails with the check reordered so detection runs first) and `a_remote_screen_takes_remote_unless_turned_off` (config.rs).
-
-- Leak checks: advisory scan on every full run, the extra clippy lints, and a SAFETY comment on every unsafe block
-	- ID: 2026101714445001
-	- Type: Task
-	- Status: Waiting on automated testing
-	- Needs external testing: A `cicd-win.ps1` run on a Windows box, where the scan gates when cargo-deny is installed.
-	- Priority: Avg
-	- Opened: 20261017-144450
-	- Opened by: CC
-	- Parent ID: 2026101714015789
-	- Related IDs: 2026101715240000
-	- Requirements:
-		- Scoped to third-party code end users run, per the parent's 20261017 decision. Filed as 2026101714445007 after this item's fix went in.
-		- The parent's advisory scan, clippy and `// SAFETY:` rows.
-	- Progress log:
-		- 20261017: clippy already ran with `-D warnings` and `undocumented_unsafe_blocks` for Linux and Windows. Added `mem_forget` to the workspace lints. The 2 forgets in our code are in tests and leak on purpose, so each has an allow with the reason.
-		- 20261017: `cargo deny check advisories -D warnings` now fails every full run on a report, a warning too, such as a yanked crate or an ignore that no longer matches. The rest of cargo-deny still only warns. No cargo-deny fails the Linux run. On Windows it warns, like the other lints there.
-		- 20261017: The one standing advisory, ttf-parser unmaintained, has no fix yet. Its ignore names 2026101715240000.
-		- 20261017: 2 unsafe sites in the macOS menu code had no SAFETY line. Both are inside an objc2 macro, which clippy doesn't look into. Added. A scan of every `unsafe` in our code finds no other.
-		- Note: The pipeline lints Linux and Windows only. macOS code is linted here by hand, with `--target x86_64-apple-darwin`.
-		- 20261018: Stage 3 runs clippy for `x86_64-apple-darwin` too, with warnings as errors, after the Windows lints. The target is in rust-toolchain.toml, so the container image gets it. About 23 s here.
-		- 20261022: The advisory scan passed in stage 3 of both full runs, container and plain: "advisories ok", then the scope check (EtBK7tB). Left: the Windows run.
-		- 20261023: The advisory scan, its scope check and the macOS lints passed again in the full run at 2da75a7. The Windows run is still left. No Windows box was free this round.
-		- 20261025: "advisories ok" again in both full runs at e95b81b. The `cicd-win.ps1` run didn't fit this round's time.
-	- Decisions:
-		- 20261018: Add a macOS clippy step that fails the pipeline. It adds the x86_64-apple-darwin target to rust-toolchain.toml, so every box and the container image download it.
-	- Verified: clippy `-D warnings` clean for Linux, `x86_64-pc-windows-gnu` and `x86_64-apple-darwin`, and with the profiling feature. Unit suite (1364 + 28), fmt check, docs check.
-	- Test case: The gates themselves, each seen to fail on a planted fault and pass once it was removed. An unsafe block with no SAFETY line in Windows-only and in macOS-only code failed clippy for those targets, and a `mem::forget` failed it on all 3. The advisory scan failed with the ttf-parser ignore taken out, and with an ignore for an advisory not in the tree. The cicd step failed with cargo-deny missing. The macOS step failed on an unused variable planted in macOS-only code, where the Windows lints passed.
-	- Branch: safelint, ciflags
-	- Commit: adee468
-
-- Verify or ensure that builds clean up *stale* artifacts and side-effects after they're done
-	- ID: 2026101909222600
-	- Type: Enhancement
-	- Status: Waiting on automated testing
-	- Needs external testing: On a Windows box, a `cicd-win.ps1` run that fails keeps its test folder and writes it down, and later runs keep only the newest 5. A wingui run on each box leaves no `silkrig_*` script in `private\winrig` and no run folder; one killed part way is swept by the next run on that box.
-	- Priority: Avg
-	- Opened: 20261019-092226
-	- Opened by: JC
-	- Target OS: All
-	- Requirements:
-		- Caches, container cruft, tmp files, etc.
-	- Notes:
-		- Pre-next-cut.
-	- Progress log:
-		- 20261019: What runs left behind on 10-19, and what removes it now. A full run sweeps at its start, after the prompt; the gate sweeps nothing. Only what a run wrote down with a token, or cargo's own dirs on the config's list.
-
-			| Left behind                                | Found 10-19                                                                                               | Now
-			| :----------------------------------------- | :-------------------------------------------------------------------------------------------------------- | :-------------------------------------------------------------------------------------------------------------
-			| Test run folders that failed runs kept     | 343 in b23's test temp dir (19 GB, most from hand runs), 49 of them empty from runs stopped at the prompt | Kept failed ones past the newest 5 go. The folder is made after the prompt
-			| The container's /tmp                       | One folder shared by every run, so a killed run's X locks and sockets met the next                        | A new one per run, gone on a pass; failed ones past the newest 5 go
-			| Docker                                     | A stale `silkterm-cicd` image; no stopped containers; 56 GB of build cache, shared box-wide               | Old tags go every run, untagged and stopped ones by the pipeline's label; build cache only reported
-			| Cargo build dirs                           | 3.5 GB, nothing stale yet; incremental caches for old build setups pile up                                | Wiped on a toolchain change; a dir no longer built goes; incremental caches unused a week before the newest go
-			| Scripts sent to the Windows boxes          | 636 on vm925w and 616 on b29w in `private\winrig`, 23 MB each, one per scenario since 09-08               | Named per run and swept with its run folder; a killed run's are swept by the next run there
-			| Test folders on the boxes and in `%TEMP%`  | None on vm925w; 1 per account on b29w, from 10-14                                                         | `cicd-win.ps1` sweeps its own the same way as Linux
-			| Xvfb, sway, tmux                           | None left by a pipeline run. 7 `dash scene.sh` from a hand test folder of 10-13 still running             | Not touched
-			| Run logs, flamegraphs, release dirs, shots | Rotated or replaced each run                                                                              | Unchanged
-
-		- 20261022: Done locally. The gate run's image build removed the old image ("cleanup: removed 1 old container images") and reported the build cache. Full runs: both plans show the Cleanup line. The container one ended "cleanup: nothing stale" inside the image and left no `target/container/tmp/run_*`, then failed in the private runner before the host's own cleanup. The plain one wrote `.cicd-toolchain` and `.cicd-build-dirs` at its start, then failed in stage 3 before its cleanup. Then a container `--quick` run killed in stage 3, which left its `run_20261022-14022525`, and a container and a plain `--quick` run that passed. Each ended "cleanup: nothing stale", no build dir went, and nothing new was left in the test temp dir, `target/container/tmp` or `docker ps -a`. Left: the Windows half.
-		- Left as found: the 343 local and 4 `/tmp` test folders, which no run wrote down; the `tmp.*.ps1` scripts and the b29w test folders on the boxes; the 7 `dash` processes; the remote clones' target dirs, built by hand jobs. The Windows pipeline's own target dir isn't swept yet.
-		- Verified: the four tests below pass, and their new checks failed against the pipeline as it was before.
-		- 20261023: The full run at 2da75a7 ended "cleanup: nothing stale" in the image and on the host, and the cleanup test passed. The Windows half is still left. No Windows box was free this round.
-		- 20261025: The container full run at e95b81b passed the cleanup test (EtAiwUl) and the container test, and ended "cleanup: nothing stale". The Windows half didn't fit this round's time.
-	- Decisions:
-		- 20261019: No `docker builder prune` after a new image. The build cache isn't a stale leftover, and other projects share it. A run only prints its size.
-		- 20261024: 2026102416233805 supersedes this. Under the CICD reset a run ends with `docker builder prune -f --filter until=168h`. 2026102416233803 also replaces the newest-5 rule for folders failed runs keep.
-	- Branch: sweep
-	- Commit: e2c4556
-	- Test case: `cicd/tests/cleanup/run.bash` (EtAiwUl) and `cicd/tests/cleanup/win.ps1` (EtAiwnM) plant stale folders and build dirs beside fresh ones, other runs' and unlisted ones. Added to `cicd/tests/container/run.bash` (EsJg9EF) and `cicd/tests/wingui/harness-test.bash` (EqH4isr).
-
-- CI/CD: `--leakcheck` and `--no-leakcheck`
-	- ID: 2026101916054002
-	- Type: Enhancement
-	- Status: Waiting on automated testing
-	- Needs external testing: `cicd-win.ps1 -Wsl` with `-NoLeakcheck` and with neither, on a Windows box.
-	- Priority: Avg
-	- Opened: 20261019-160540
-	- Opened by: JC
-	- Assigned to: CC
-	- Target OS: All
-	- Requirements:
-		- CI/CD has both `--leakcheck` and `--no-leakcheck`.
-		- A default run includes the leak checks.
-		- `--leakcheck` exists only to add them back in for something like `--quick`.
-		- `--no-leakcheck` is useful to exclude them from a default run, or with `--quiet`.
-	- Notes:
-		- Before the next cut.
-	- Progress log:
-		- 20261022: The leak checks are on by default, like the demo. `--no-leakcheck` drops them. `--quick` leaves them out unless `--leakcheck` asks, in either order, and the last of the two flags wins. `--gate` leaves them out and still refuses `--leakcheck`. Both flags go into the container with the run.
-		- 20261022: The switch is the `leakcheck` variable and `fRunLeakcheck`, so CodeQL (2026101913360695) and the soak test (2026101913370214) can join that step.
-		- 20261022: `cicd-win.ps1` got `-NoLeakcheck` and `-Leakcheck`, passed on to the Linux half under `-Wsl`. The Windows half has no leak checks.
-		- 20261022: `--help`, the plan, config.bash, install.md, design.md and the dhat comments say so. The plan row on 2026101714445005 is rewritten to match.
-		- 20261022: Full runs, container and plain, no flag: the plan's Leak checks line names the heap-growth test, and stage 3 ran it right after the ASan run. `cicd.bash --no-leakcheck </dev/null` shows the Leak checks line as "(skipped)". The `--quick` arms passed in the gate run. Left: the Windows check.
-		- 20261023: In the full run at 2da75a7, with no flag, stage 3 ran the heap growth check after the ASan run. It caught the planted leak and found no other growth. The `cicd-win.ps1 -Wsl` check is still left. No Windows box was free this round.
-		- 20261025: The engine test (Er2UgY7) passed in the full run at e95b81b, and `--no-leakcheck` showed Leak checks "(skipped)" in its plan. The other full run stopped in the ASan step before the leak checks. The Windows check didn't fit this round's time.
-	- Decisions:
-		- 20261022: The engine case that said no options leave the leak checks off now says they're on, per this item's requirements.
-	- Verified: 20261022. Engine cases, each watched to fail against the old cicd.bash and 2 mutants. The plan's Leak checks line with no flag, `--quick`, `--quick --leakcheck` and `-q --no-leakcheck`. shellcheck, house style, PSScriptAnalyzer on `cicd-win.ps1`, cargo check with the feature.
-		- Swept: every `--leakcheck` mention in the repo, the `cicd-win.ps1` handoff to the Linux half, and the demo's on-by-default pattern.
-	- Test case: New cases in `cicd/tests/engine/run.bash` (Er2UgY7).
-	- Branch: rnd1022
 
 - Add a contributor license agreement, like nano-git-db's
 	- ID: 2026101906582193
@@ -549,6 +390,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Type: Task
 	- Status: Queued
 		- Reverted on `rnd1025` after the full run's wingui stage failed on a woken vm925w. See 2026102510420001. The work is on `wip/rnd1025-2026102507245255`. The host config change outside the repo, `~/.config/silkterm/winrig.conf`, wasn't reverted, and its `@vmstate` line does nothing without this item's code.
+		- 20261025: Held at Queued. Bug 2026102510420001 is fixed, so a woken vm925w is now a skip, but vm925w logs nobody on at boot, so waking it for scenarios gains nothing yet. Waits on the question in `questions.md` about how a woken vm925w gets a logged-on session. The work, brought onto rnd1025b with that fix, is on `wip/rnd1025b-2026102507245255`.
 	- Needs external testing: The wingui stage, `cicd/tests/wingui/run.bash` with the config's scenario list, with vm925w off and b29w up: the plain scenarios run on b29w, `perfladder` alone on vm925w, and vm925w is off again after. Then once with b29w off, so vm925w takes them all.
 	- Priority: High
 	- Opened: 20261025-072452
@@ -566,18 +408,24 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261025: The host config lists b29w first and alone, with no `b29w-wif`, then vm925w tagged `gpu`, and the `@vmstate` line.
 		- Verified: both test scripts pass, and their new checks failed against the scripts as they were. shellcheck, the bash style check, the PowerShell lint, the test ID check, the docs check and the lint report pass. A job through the live config on b29w went through the VM state helper and the lock, and `hosts` printed vm925w's tag.
 		- Not run: a real wake of vm925w. It was off, and the box was at load 44.
+		- 20261025: On `wip/rnd1025b-2026102507245255`: a box nobody is logged on at leaves its reason in the stage's `SKIP` lines, such as `SKIP wingui: perfladder, no box tagged gpu answered (vm925w: nobody is logged on at the console)`.
+		- Verified: 20261025, on that branch. vm925w woken from off through `@vmstate`, from a copy of the host config: both scenarios were `SKIP` lines with that reason, on the skip list too, and vm925w was off again after. The win-remote, wingui, engine and Windows pipeline tests pass, and the new reason check failed without the line that writes it. shellcheck, the bash style check, the PowerShell lint, the test ID and docs checks pass.
 		- Swept: `win-unlock.bash` holds the same way and reads only the name and address from `hosts`, so the tags don't reach it. No other script reads `hosts` or calls `hold`. The jobs under `win-jobs` run through `job`, which holds the same way.
 	- Decisions:
 		- 20261025: Which box is favored, and which has a real card, live in the host config outside the repo, by order and the `gpu` tag. Machine names stay out of the repo, as before.
 		- 20261025: A scenario marks itself as needing a card in its own header, so the list in `config.bash` doesn't have to track it.
 	- Branch: rnd1025
 	- Test case: `cicd/tests/win-remote/run.bash` (Er2UgYA), 7 new checks for tags, holding through the VM state helper and a VM that never wakes. `cicd/tests/wingui/harness-test.bash` (EqH4isr), 8 new checks for which box each scenario runs on, and the `SKIP` lines.
+	- Prereq IDs: 2026102510420001
+	- Waits on Bug 2026102510420001, the woken VM failure that got this reverted last round.
+	- Answered 10-25: D. Leave vm925w unwoken and @vmstate off. The work on wip/rnd1025b-2026102507245255 is ready to merge as it is.
 
 - CICD reset: `--no-remote`, and a skipped box shown as `SKIP`
 	- ID: 2026102507245260
 	- Type: Task
 	- Status: Queued
 		- Reverted on `rnd1025` with 2026102507245255, which it builds on. See 2026102510420001. The work is on `wip/rnd1025-2026102507245255`.
+		- 20261025: Held at Queued with 2026102507245255, which it builds on. Both are on `wip/rnd1025b-2026102507245255`.
 	- Prereq IDs: 2026102507245255
 		- Departs from the wording: the Windows runner's test still runs under `--no-remote`, since it uses stand-ins and reaches no box.
 	- Needs external testing: A full run with b29w and vm925w both off, or held: the Windows scenarios' line reads `SKIP: windows gui scenarios, 16 not run`, and the run ends with a "Not run, since a box wasn't there" list of the 16 `SKIP wingui:` lines. Then `cicd.bash -y --no-remote --quick` once, for the plan's two `(skipped --no-remote)` lines.
@@ -626,6 +474,8 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Swept: every `zigbuild` and `zig` call in cicd and the Dockerfile. Only the two ARM64 cross targets in config.bash use it.
 	- Test case: New cases in `cicd/tests/cleanup/run.bash` (EtAiwUl) and `cicd/tests/container/run.bash` (EsJg9EF).
 	- Branch: rnd1025
+	- Prereq IDs: 2026102509002701
+	- Waits on Bug 2026102509002701, the ZFS cap check that got this reverted last round.
 
 - CICD reset: container cleanup
 	- ID: 2026102416233805
@@ -664,6 +514,8 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Swept: every `docker` call in cicd.bash, and every `fContainerRun` and `fContainerBuild` call (gate, ASan, TSan, CodeQL, engine). The asan, tsan and codeql scripts start no container. No other script names the old label.
 	- Test case: New cases in `cicd/tests/container/run.bash` (EsJg9EF).
 	- Branch: rnd1025
+	- Prereq IDs: 2026102509002701
+	- Waits on Bug 2026102509002701, the ZFS cap check that got this reverted last round.
 
 - CICD reset: other hosts and VMs
 	- ID: 2026102416233802
@@ -864,39 +716,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Expected behavior: Each underline style a program sets is drawn, in the underline color it sets, or the text color.
 	- Reproduced: Not run in a window. Found in the code while answering 2026102114411311.
 
-- The Windows scenario run fails on a VM it just woke from off, since the session never answers
-	- ID: 2026102510420001
-	- Type: Bug
-	- Status: Queued
-	- Severity: Avg
-	- Opened: 20261025-104200
-	- Opened by: CC
-	- Related IDs: 2026102507245255, 2026102507245260
-	- Target OS: Windows
-	- Test environment: b23, the full run's wingui stage at e95b81b on `rnd1025`, vm925w off before the run and b29w up
-	- Steps to reproduce:
-		- Leave vm925w off and run the full run's wingui stage.
-	- Incorrect behavior: The VM state helper started vm925w, then `perfladder` failed with "VERDICT fail the session never answered" in session 1, and the stage failed the run. Before 2026102507245255 a box that was off was skipped.
-	- Expected behavior: A woken VM gets time for its logged-on session to answer before a scenario runs, or the box is a skip with a reason.
-	- Reproduced: Once, in the full run.
-	- Tried: The item's worker (ccaeeb7) and one fix worker for a CRLF header bug (86da5d0). 2026102507245260 (bf47323) builds on it. All 3 were reverted on `rnd1025`, and the work is on `wip/rnd1025-2026102507245255`. That branch also has eddf89a, which has its own `wip/rnd1025-2026102416233804`.
-
-- A config conversion race test leaves a backup per launch under ASan
-	- ID: 2026102510010001
-	- Type: Bug
-	- Status: Queued
-	- Severity: Avg
-	- Opened: 20261025-100100
-	- Opened by: CC
-	- Related IDs: 2026102509002701
-	- Target OS: Linux
-	- Test environment: b23 at load 20 to 45, the full run's ASan step in the container at e95b81b on `rnd1025`, and the same test alone under ASan on dev at b0c2238
-	- Steps to reproduce:
-		- Run `config::tests::launches_converting_at_once_leave_one_whole_copy` (EreLZQQ) alone under ASan, as `private/claude_simple/tools/lsan_some_tests.bash` does, a few times.
-	- Incorrect behavior: Launches converting at once each kept their own backup, with stamps a second apart, so the test found 3 copies where it wants 1. Under ASan each conversion took over a second. The full run stopped in stage 3 there.
-	- Expected behavior: One whole copy, or a test that doesn't hang on how long a conversion takes.
-	- Reproduced: Yes. 2 of 3 alone under ASan on `rnd1025`, and 2 of 3 on dev, so it was there before the round.
-
 - The Zig and container cleanup's 2 GB cap check fails when the cache sits on ZFS
 	- ID: 2026102509002701
 	- Type: Bug
@@ -913,6 +732,26 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Expected behavior: The cap check and its test give the same answer on any filesystem.
 	- Reproduced: Yes, 3 of 3 on ZFS, 0 of 3 on ext4.
 	- Tried: The group's worker (eddf89a) and one fix worker (d80c878, a missing stub in the startup gate test) on `rnd1025`. The fix cleared that failure, then this one showed. Both items were reverted on `rnd1025`, and the work is on `wip/rnd1025-2026102416233804`.
+
+- The advisory scan misses a crate yanked since cargo's index cache was filled, and clipboard-win 5.4.1 is yanked
+	- ID: 2026102518563500
+	- Type: Bug
+	- Status: Queued
+	- Severity: Avg
+	- Opened: 20261025-185635
+	- Opened by: CC
+	- Related IDs: 2026101714445001
+	- Target OS: All
+	- Test environment: b29w (cargo-deny 0.19.9) and b23 (cargo-deny 0.19.9), `rnd1025b` at 8a28055
+	- Steps to reproduce:
+		- Run `cargo deny check advisories -D warnings` on b29w and on b23.
+	- Incorrect behavior:
+		- On b29w the scan fails: "detected yanked crate (try `cargo update -p clipboard-win`)", for clipboard-win 5.4.1 from copypasta. So `cicd-win.ps1` fails stage 3 on any Windows box today.
+		- On b23 the same tree passes ("advisories ok"). b23's cached crates.io index entry for clipboard-win is from 2026-06-22, from before 5.4.1 was yanked and 5.4.2 and 5.4.3 came out, and the scan reads it as it is.
+	- Expected behavior: Every box gives the same answer, and a yank shows up on the next run wherever it runs.
+	- Reproduced: Yes. The live index marks 5.2.0 to 5.4.1 yanked. `cargo update -p clipboard-win --precise 5.4.3` changes only those 2 lock lines, and then the scan passes on b29w.
+	- Notes:
+		- Two parts: bump the lock, and make the scan refresh the index entries it reads, or fail when it can't. The container's cache volume may be just as stale.
 
 - Leak checks: Miri sort, settings_ui
 	- ID: 2026102407430381
@@ -1078,6 +917,38 @@ Going forward, new issues in the new template at the bottom of this file, will g
 			- The cleanup line at the end says roughly what it freed.
 		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
 		- Overrides: design.md's CodeQL and heap growth bullets under "Delivery", which keep CodeQL behind `--codeql` and every leak check out of `--quick`.
+
+- The rotate test's fork count went over its limit once inside the test run folder test
+	- ID: 2026102518360001
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261025-183600
+	- Opened by: CC
+	- Related IDs: 2026102416233803
+	- Target OS: Linux
+	- Test environment: b23, the full run in the container at 591a9a8 on `rnd1025b`, box load about 20
+	- Steps to reproduce:
+		- Run the full pipeline in the container on a busy box. The test run folder test (ErOj67l) runs `rotate/run.bash` with the temp dir read-only.
+	- Incorrect behavior: "rotating 200 files costs a few forks beyond the files it changes" counted 366 forks beyond the files changed, limit 300, and the full run stopped there.
+	- Expected behavior: The fork count stays under its limit however busy the box is, or the check counts only forks the rotate script makes.
+	- Reproduced: No. `rotate/run.bash` alone passed 3 of 3 with 18 forks, limit 30, and `testdir/run.bash` passed its rotate check 3 of 3 on the host.
+
+- `cicd/tests/cleanup/win.ps1` fails when run on its own
+	- ID: 2026102518564647
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261025-185646
+	- Opened by: CC
+	- Related IDs: 2026101909222600
+	- Target OS: All
+	- Test environment: b23 and b29w, `rnd1025b` at 8a28055
+	- Steps to reproduce:
+		- Run `pwsh -NoProfile -File cicd/tests/cleanup/win.ps1` with no `SILKTERM_TEST_DIR` set.
+	- Incorrect behavior: "a folder handed down is never written down" fails, and the test keeps its run folder. The check calls `fTestDir_Record` in the test's own process, which made and owns its folder when nothing was handed down.
+	- Expected behavior: The test passes alone as it does under `cleanup/run.bash`, which always hands it a folder.
+	- Reproduced: Yes, on b23 and b29w. With `SILKTERM_TEST_DIR` set it passed on b23, and 3 of 3 on b29w.
 
 - Wayland: a copy a program sends while no SilkTerm window has focus is dropped
 	- ID: 2026101607585700
@@ -1754,6 +1625,40 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Acceptance signoff: JC, 20261003.
 	- Closed: 20261003-193000
 
+- CICD reset: containers
+	- ID: 2026102416233801
+	- Type: Task
+	- Status: Done
+		- Departs from the wording: the profiler now draws on the card, through a headless sway, where before it drew in software on Xvfb, here as in the image. And the render node test runs here too, where it had only skipped inside.
+		- Stand-in: 20261025. The container full run at e95b81b passed stages 1 to 6, with the container test (EsJg9EF) and "the render node test runs outside the container" inside, then stopped on a Windows scenario before the host's profiler and render node steps. Those two ran alone here on rnd1025 instead, as below.
+	- Priority: High
+	- Opened: 20261024-162338
+	- Opened by: CC
+	- Related IDs: 2026101009221201, 2026102416233802, 2026102507092877
+	- Target OS: All
+	- Requirements:
+		- Per `Containers` in the shared CICD rules. The pinned image, docker by default, the fallback to this box and `--no-container` are in.
+		- Left: a step whose point is the real GPU runs on this box, not in the image. That's the profiler, and anything else that reads frame times or graphics memory off the card. The render-node test already skips inside.
+		- Windows GPU work stays on vm925w, per 2026102416233802.
+		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
+		- Overrides: the private notes' line that stages 1 to 6 run in the image, the profiler included.
+	- Progress log:
+		- 20261025: Measured first. The profiler ran on a private Xvfb, and there the app draws with llvmpipe on this box too, not only in the image. So moving it here alone would not have put it on the card.
+		- 20261025: The profiler now runs on a headless sway drawing on the card's render node, through sway's own Xwayland. The app reports the RTX 3060 Ti there. Without sway, a render node or XDG_RUNTIME_DIR it falls back to the private Xvfb, with a warning saying why.
+		- 20261025: A container run now runs the profiler and the render node test here, once the container is done. Inside, both only say they run outside. The render node test had skipped in every container run, so it hadn't run in a default full run since docker became the default.
+		- 20261025: Nothing else in stages 1 to 6 reads the card. The scroll harness checks the shape of each frame on Xvfb, not its timing. The graphics memory unit test falls back to software Vulkan, where it still checks the allocator's hint.
+		- Note: The render node test skips when its test folder sits under a long temp path, since sway's socket path is then too long. Filed as 2026102507092877.
+		- 20261025: The second batch had no new full run to read. The one at 8a28055 started after its gate, at about 18:40, so the host's profiler and render node steps after the container weren't reached in the batch's time.
+		- 20261025: The flamegraph's text shaping share is about twice the last one on dev, 48% against 23%. The source differs from dev only in test code, so that comes from drawing on the card rather than llvmpipe, not from the round.
+	- Verified: 20261025, at 6965e34. The host's profiler step alone: "on the card, through a headless sway's Xwayland", renderer NVIDIA GeForce RTX 3060 Ti, flamegraph written. The render node test (ErxxHzT) against a fresh debug build, with its temp folder under the run's own: all passed, in software at launch and switched to it.
+	- Verified: 20261025. The profiler step from cicd.bash, run alone here: on the card, NVIDIA renderer, flamegraph written, sway gone and its socket folder removed after. With no XDG_RUNTIME_DIR: the warning, then llvmpipe on Xvfb, flamegraph written. The render node test on this box against the image's debug binary: all passed with a short temp folder, skipped under the long one above. Container test with new cases, watched to fail against the old cicd.bash and against a mutant without the guard inside. Engine test, shellcheck, house style, docs check, lint report. The plan lines in both arms.
+	- Swept: every step in stages 1 to 6 that starts a window or a GPU device: the window tests under `cicd/tests`, the scroll harness, the allocs test, `a_new_device_reserves_little_graphics_memory`, the profiler. `cicd/utility/mem-per-window` and `gpu-stress` aren't pipeline steps.
+	- Test case: New cases in `cicd/tests/container/run.bash` (EsJg9EF): the render node test and the profiler run here after the container, and inside only say so.
+	- Branch: rnd1025
+	- Acceptance signoff: Self-closed: the default container full run at 8a28055 ran the profiler on the card and the render node test on the host, and passed end to end. The change from the wording is the point of the item.
+	- Closed: 20261025-201500
+	- Verified: 20261025, full run at 8a28055 in the container, 18:48 to 20:13 local: container run (EsJg9EF), then on the host the profiler on the card through a headless sway's Xwayland and software rendering without shared pixmaps (ErxxHzT), all OK.
+
 - Light mode: text looks thinner than in dark mode
 	- ID: 2026100607293301
 	- Type: Enhancement
@@ -2182,6 +2087,60 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Test case: None for the figures, which are a measurement. `SILK_MEMDBG` is covered by `each_debug_switch_reads_its_own_variable` (Erg4k2j). Its minimap count is pinned by `the_memory_count_covers_every_stored_row` (Ern2oTz), seen to fail with the stored rows left out.
 	- Acceptance signoff: Self-closed: the numbers are in the design doc and nothing is left to judge.
 	- Closed: 20261004-194634
+
+- A config conversion race test leaves a backup per launch under ASan
+	- ID: 2026102510010001
+	- Type: Bug
+	- Status: Done
+	- Severity: Avg
+	- Opened: 20261025-100100
+	- Opened by: CC
+	- Related IDs: 2026102509002701
+	- Target OS: Linux
+	- Test environment: b23 at load 20 to 45, the full run's ASan step in the container at e95b81b on `rnd1025`, and the same test alone under ASan on dev at b0c2238
+	- Steps to reproduce:
+		- Run `config::tests::launches_converting_at_once_leave_one_whole_copy` (EreLZQQ) alone under ASan, as `private/claude_simple/tools/lsan_some_tests.bash` does, a few times.
+	- Incorrect behavior: Launches converting at once each kept their own backup, with stamps a second apart, so the test found 3 copies where it wants 1. Under ASan each conversion took over a second. The full run stopped in stage 3 there.
+	- Expected behavior: One whole copy, or a test that doesn't hang on how long a conversion takes.
+	- Reproduced: Yes. 2 of 3 alone under ASan on `rnd1025`, and 2 of 3 on dev, so it was there before the round.
+	- Actual cause: Each launch that reads the old file keeps a copy, stamped when its write starts. Only a copy with the same name, so the same second, counted as the same copy. Under ASan a conversion takes over a second, so launches converting at once stamped different seconds and each kept one, all with the same bytes.
+	- Actual fix: A new copy settles on the earliest copy of the same format holding the same bytes, whatever its stamp, and is dropped if that is another one. If it is its own, it drops the later copies with those bytes instead, since a launch with a later stamp can write and look first. Nobody drops the earliest, so one is always left. The race test now wants exactly one copy. design.md says so.
+	- Progress log:
+		- 20261025: A file converted again with bytes already kept, such as a backup copied back over the config, gets no new copy, and the message names the old one. Filed as a Check in questions.md.
+		- 20261025: Sent back. The first fix at 591a9a8 still left 2 copies in 1 of 3 batch reruns, plain. A launch with the later stamp wrote and looked before the earlier one had written, found nothing earlier, and kept its copy. The earlier one then kept its own too. Now the earliest also drops its later twins.
+	- Verified: Both new tests fail without their part of the fix and pass with it. At load 30 to 40, the race test passed 40 of 40 plain, against 15 of 16 for the first fix, whose failure was 2 copies. It passed 3 of 3 alone under ASan. The 227 config tests pass, and `cicd/tests/testdir/run.bash` (ErOj67l) passes. fmt and clippy are clean for Linux and Windows. The first fix's quick gate passed, its 1408 unit tests and `cicd/tests/config-convert/run.bash` (ErgDpjX) included.
+	- Swept: `write_new_file` and `keep_old_format_at` have one caller each outside the tests. The `.bak` copies of the flat conversion and a reset (`backup_copy`, `backup_aside`) take the next free name with no stamp, so the clock cannot split them, and are left as they were.
+	- Branch: rnd1025b
+	- Test case: `a_copy_stamped_a_second_later_with_the_same_bytes_is_the_earlier_one` (Etl0u6f), `a_later_copy_written_first_gives_way_to_the_earlier_one` (EtlUJPD), and `launches_converting_at_once_leave_one_whole_copy` (EreLZQQ) under ASan.
+	- Acceptance signoff: Self-closed: the order the batch hit is pinned by a test that fails before and passes after, and the race test passed 40 of 40 plain at load 30 to 40 and 3 of 3 under ASan.
+	- Closed: 20261025-183454
+
+- The Windows scenario run fails on a VM it just woke from off, since the session never answers
+	- ID: 2026102510420001
+	- Type: Bug
+	- Status: Done
+	- Severity: Avg
+	- Opened: 20261025-104200
+	- Opened by: CC
+	- Related IDs: 2026102507245255, 2026102507245260
+	- Target OS: Windows
+	- Test environment: b23, the full run's wingui stage at e95b81b on `rnd1025`, vm925w off before the run and b29w up
+	- Steps to reproduce:
+		- Leave vm925w off and run the full run's wingui stage.
+	- Incorrect behavior: The VM state helper started vm925w, then `perfladder` failed with "VERDICT fail the session never answered" in session 1, and the stage failed the run. Before 2026102507245255 a box that was off was skipped.
+	- Expected behavior: A woken VM gets time for its logged-on session to answer before a scenario runs, or the box is a skip with a reason.
+	- Reproduced: Once, in the full run.
+	- Tried: The item's worker (ccaeeb7) and one fix worker for a CRLF header bug (86da5d0). 2026102507245260 (bf47323) builds on it. All 3 were reverted on `rnd1025`, and the work is on `wip/rnd1025-2026102507245255`. That branch also has eddf89a, which has its own `wip/rnd1025-2026102416233804`.
+	- Actual cause:
+		- vm925w doesn't log anyone on at boot (`AutoAdminLogon` is 0). Woken from off, its console sat at the logon screen, session 1 with no user, for the 5 minutes watched after ssh answered.
+		- The stage took the console user from `quser`, and with nobody there it fell back to the ssh account. The scenario then went to an interactive task for an account with no session, which never runs, so it waited out its 4 minutes.
+	- Actual fix: Nobody on the console is a skip with a reason: `wingui: <box>: nobody is logged on at the console, skipped`. A box set to log a user on by itself gets up to 120 s for it first. A scenario that finds the console empty fails with that reason, rather than "the console is now <ssh account>'s".
+	- Verified: 20261025. vm925w woken from off through the VM state helper: the stage said the line above in seconds, sent and ran nothing, and vm925w was off again after. The new harness checks fail against the scripts as they were and pass now. shellcheck, the bash style check and the PowerShell lint pass.
+	- Swept: the other place that reads the console user, the scenario launcher in `run.bash`, had the same fallback, fixed. The scenarios' own `fSessionUsable` runs inside the session, so it can't see this.
+	- Test case: `cicd/tests/wingui/harness-test.bash` (EqH4isr), 12 new checks for a box nobody is logged on at, and the console user and wait in `_stage.ps1`.
+	- Branch: rnd1025b
+	- Acceptance signoff: Self-closed: the cause was seen on vm925w, and the fix skipped it there.
+	- Closed: 20261025-160900
 
 - The render node test skips when its test folder is under a long temp path
 	- ID: 2026102507092877
@@ -3249,6 +3208,154 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- The Windows run this item came from named only these four. That full suite was not run again.
 	- Acceptance signoff: Self-closed: test fixes only, and all four failed before the fix and pass after on Windows.
 	- Closed: 20260930-125357
+
+- Updates to CICD script flags
+	- ID: 2026101816103601
+	- Type: Enhancement
+	- Status: Done
+		- The full run that passed had publish, dogfood and the demo off, per the round's line, so it is not quite a run with no options.
+		- 20261025: Closed on that run. A round may never run those 3 stages, the engine test pins that no options turns them on, and dogfood ran on its own on 10-25 (build dedvg).
+	- Priority: Avg
+	- Opened: 20261018-161036
+	- Opened by: JC
+	- Target OS: All
+	- Requirements:
+		- `--ci`: Rename *to* `--gate`.
+		- `--quick`:
+			- Should run whatever linting, validation, and testing steps are very quick.
+			- Cross-compile whatever is fast; e.g. maybe skip slow arm64.
+			- Skip anything requiring an external host.
+		- No flags by default should do everything.
+		- The other existing flags can stay.
+	- Notes:
+		- Pre-next-cut. Do next.
+	- Decisions:
+		- 20261018: The demo re-record is on by default now, with a new `--no-demo`. `--demo` still turns it on under `--quick`.
+		- 20261018: `--quick` keeps the remote sync and the publish. Only the test and build boxes count as external hosts.
+		- 20261018: `--gate` keeps its name. Nothing was named `--ci`.
+		- 20261024: 2026102416233807 supersedes the `--gate` decision above. Under the CICD reset the merge gate is `--merge-gate`, and `--gate` becomes another name for `--backlog-run-quick`.
+	- Progress log:
+		- 20261018: `--quick` now builds the Windows x86_64 release too, and drops only the ARM64 ones. Packages, profiling and the fuzz soak stay skipped.
+		- 20261018: `--quick` also skips the 5 window tests that took 33 s to 103 s each here: monwl, mapfollow, livecfg, wpresize and wpkept. The other 9 took 22 s or less, and the script tests 17 s or less.
+		- 20261018: The test boxes were already skipped under `--quick`: the Windows scenarios and the private runner. The script tests that look like they reach a host all use stand-ins.
+		- 20261018: The plan lists the demo now.
+		- 20261022: Both no-options full runs failed, on other things. The container one passed stages 1 to 6 and the Windows scenarios, then failed in the private runner on b26, on 2026102114411311's test. The plain one failed at mapfollow's tmux checks under a tmux wrapper earlier on that shell's PATH; with the real tmux first they pass. The Mac failure needs fixing before a full run can pass.
+		- 20261023: A full container run, `-y --no-publish --no-dogfood --no-demo`, passed end to end at 2da75a7 in about 91 minutes. Its plan had every other stage on, the ARM64 builds, packages and the profiler included. The private runner's Mac part passed on b26. Its store part skipped, since vm925w was held by another session, and so did the Windows scenarios.
+	- Verified: 20261018. shellcheck, house style, the pipeline step, container run, docs and hooks tests. A real `--gate` run passed.
+	- Test case: New cases in `cicd/tests/engine/run.bash` (Er2UgY7) for `--quick`, no options, `--no-demo` and `--gate`. The `--container` run in `cicd/tests/container/run.bash` (EsJg9EF) now expects the Windows x86_64 binary under `--quick`, and failed until its stand-in made one.
+	- Branch: ciflags
+	- Acceptance signoff: Self-closed: the 20261023 full run passed end to end with every stage on that a round may run, and Er2UgY7's no-options case covers publish, dogfood and the demo.
+	- Closed: 20261025-185707
+
+- Leak checks: advisory scan on every full run, the extra clippy lints, and a SAFETY comment on every unsafe block
+	- ID: 2026101714445001
+	- Type: Task
+	- Status: Done
+		- Stand-in: 20261025, on b29w with cargo-deny 0.19.9: `cicd-win.ps1`'s own `fAdvisoryScan`, taken from the script, run in a clone of 8a28055 in place of a whole `cicd-win.ps1` run.
+	- Priority: Avg
+	- Opened: 20261017-144450
+	- Opened by: CC
+	- Parent ID: 2026101714015789
+	- Related IDs: 2026101715240000
+	- Requirements:
+		- Scoped to third-party code end users run, per the parent's 20261017 decision. Filed as 2026101714445007 after this item's fix went in.
+		- The parent's advisory scan, clippy and `// SAFETY:` rows.
+	- Progress log:
+		- 20261017: clippy already ran with `-D warnings` and `undocumented_unsafe_blocks` for Linux and Windows. Added `mem_forget` to the workspace lints. The 2 forgets in our code are in tests and leak on purpose, so each has an allow with the reason.
+		- 20261017: `cargo deny check advisories -D warnings` now fails every full run on a report, a warning too, such as a yanked crate or an ignore that no longer matches. The rest of cargo-deny still only warns. No cargo-deny fails the Linux run. On Windows it warns, like the other lints there.
+		- 20261017: The one standing advisory, ttf-parser unmaintained, has no fix yet. Its ignore names 2026101715240000.
+		- 20261017: 2 unsafe sites in the macOS menu code had no SAFETY line. Both are inside an objc2 macro, which clippy doesn't look into. Added. A scan of every `unsafe` in our code finds no other.
+		- Note: The pipeline lints Linux and Windows only. macOS code is linted here by hand, with `--target x86_64-apple-darwin`.
+		- 20261018: Stage 3 runs clippy for `x86_64-apple-darwin` too, with warnings as errors, after the Windows lints. The target is in rust-toolchain.toml, so the container image gets it. About 23 s here.
+		- 20261022: The advisory scan passed in stage 3 of both full runs, container and plain: "advisories ok", then the scope check (EtBK7tB). Left: the Windows run.
+		- 20261023: The advisory scan, its scope check and the macOS lints passed again in the full run at 2da75a7. The Windows run is still left. No Windows box was free this round.
+		- 20261025: "advisories ok" again in both full runs at e95b81b. The `cicd-win.ps1` run didn't fit this round's time.
+		- 20261025: Verified on b29w, per the Stand-in row. As committed, the scan failed the run on a real report: clipboard-win 5.4.1 is yanked, filed as 2026102518563500. With only that lock entry moved to 5.4.3 it passed, "OK: no known advisories". With the ttf-parser ignore then taken out it failed again, "known advisories against the dependencies".
+	- Decisions:
+		- 20261018: Add a macOS clippy step that fails the pipeline. It adds the x86_64-apple-darwin target to rust-toolchain.toml, so every box and the container image download it.
+	- Verified: clippy `-D warnings` clean for Linux, `x86_64-pc-windows-gnu` and `x86_64-apple-darwin`, and with the profiling feature. Unit suite (1364 + 28), fmt check, docs check.
+	- Test case: The gates themselves, each seen to fail on a planted fault and pass once it was removed. An unsafe block with no SAFETY line in Windows-only and in macOS-only code failed clippy for those targets, and a `mem::forget` failed it on all 3. The advisory scan failed with the ttf-parser ignore taken out, and with an ignore for an advisory not in the tree. The cicd step failed with cargo-deny missing. The macOS step failed on an unused variable planted in macOS-only code, where the Windows lints passed.
+	- Branch: safelint, ciflags
+	- Commit: adee468
+	- Acceptance signoff: Self-closed: the Windows scan failed on a real report and on a planted one, and passed with both gone, using the script's own step and a real cargo-deny on b29w.
+	- Closed: 20261025-185707
+
+- Verify or ensure that builds clean up *stale* artifacts and side-effects after they're done
+	- ID: 2026101909222600
+	- Type: Enhancement
+	- Status: Done
+		- Stand-in: 20261025, on b29w. `cleanup/win.ps1` (EtAiwnM) and `testdir/remove.ps1` in a clone of 8a28055, in place of a failing `cicd-win.ps1` run, plus a look at what the 10-25 wingui run left there. vm925w wasn't checked, since it was off.
+	- Priority: Avg
+	- Opened: 20261019-092226
+	- Opened by: JC
+	- Target OS: All
+	- Requirements:
+		- Caches, container cruft, tmp files, etc.
+	- Notes:
+		- Pre-next-cut.
+	- Progress log:
+		- 20261019: What runs left behind on 10-19, and what removes it now. A full run sweeps at its start, after the prompt; the gate sweeps nothing. Only what a run wrote down with a token, or cargo's own dirs on the config's list.
+
+			| Left behind                                | Found 10-19                                                                                               | Now
+			| :----------------------------------------- | :-------------------------------------------------------------------------------------------------------- | :-------------------------------------------------------------------------------------------------------------
+			| Test run folders that failed runs kept     | 343 in b23's test temp dir (19 GB, most from hand runs), 49 of them empty from runs stopped at the prompt | Kept failed ones past the newest 5 go. The folder is made after the prompt
+			| The container's /tmp                       | One folder shared by every run, so a killed run's X locks and sockets met the next                        | A new one per run, gone on a pass; failed ones past the newest 5 go
+			| Docker                                     | A stale `silkterm-cicd` image; no stopped containers; 56 GB of build cache, shared box-wide               | Old tags go every run, untagged and stopped ones by the pipeline's label; build cache only reported
+			| Cargo build dirs                           | 3.5 GB, nothing stale yet; incremental caches for old build setups pile up                                | Wiped on a toolchain change; a dir no longer built goes; incremental caches unused a week before the newest go
+			| Scripts sent to the Windows boxes          | 636 on vm925w and 616 on b29w in `private\winrig`, 23 MB each, one per scenario since 09-08               | Named per run and swept with its run folder; a killed run's are swept by the next run there
+			| Test folders on the boxes and in `%TEMP%`  | None on vm925w; 1 per account on b29w, from 10-14                                                         | `cicd-win.ps1` sweeps its own the same way as Linux
+			| Xvfb, sway, tmux                           | None left by a pipeline run. 7 `dash scene.sh` from a hand test folder of 10-13 still running             | Not touched
+			| Run logs, flamegraphs, release dirs, shots | Rotated or replaced each run                                                                              | Unchanged
+
+		- 20261022: Done locally. The gate run's image build removed the old image ("cleanup: removed 1 old container images") and reported the build cache. Full runs: both plans show the Cleanup line. The container one ended "cleanup: nothing stale" inside the image and left no `target/container/tmp/run_*`, then failed in the private runner before the host's own cleanup. The plain one wrote `.cicd-toolchain` and `.cicd-build-dirs` at its start, then failed in stage 3 before its cleanup. Then a container `--quick` run killed in stage 3, which left its `run_20261022-14022525`, and a container and a plain `--quick` run that passed. Each ended "cleanup: nothing stale", no build dir went, and nothing new was left in the test temp dir, `target/container/tmp` or `docker ps -a`. Left: the Windows half.
+		- Left as found: the 343 local and 4 `/tmp` test folders, which no run wrote down; the `tmp.*.ps1` scripts and the b29w test folders on the boxes; the 7 `dash` processes; the remote clones' target dirs, built by hand jobs. The Windows pipeline's own target dir isn't swept yet.
+		- Verified: the four tests below pass, and their new checks failed against the pipeline as it was before.
+		- 20261023: The full run at 2da75a7 ended "cleanup: nothing stale" in the image and on the host, and the cleanup test passed. The Windows half is still left. No Windows box was free this round.
+		- 20261025: The container full run at e95b81b passed the cleanup test (EtAiwUl) and the container test, and ended "cleanup: nothing stale". The Windows half didn't fit this round's time.
+		- 20261025: Verified on b29w, per the Stand-in row. EtAiwnM passed 3 of 3 with real junctions: the newest kept, an older one of ours gone, another run's, a link and an unlisted folder left. `testdir/remove.ps1` passed all 12 checks. `private\winrig` held no `silkrig_*` script and no run folder after the 10-25 wingui run there, and no `test_silkterm_*` folder was in either account's `%TEMP%`. Run alone, EtAiwnM fails one check on any box, filed as 2026102518564647.
+	- Decisions:
+		- 20261019: No `docker builder prune` after a new image. The build cache isn't a stale leftover, and other projects share it. A run only prints its size.
+		- 20261024: 2026102416233805 supersedes this. Under the CICD reset a run ends with `docker builder prune -f --filter until=168h`. 2026102416233803 also replaces the newest-5 rule for folders failed runs keep.
+	- Branch: sweep
+	- Commit: e2c4556
+	- Test case: `cicd/tests/cleanup/run.bash` (EtAiwUl) and `cicd/tests/cleanup/win.ps1` (EtAiwnM) plant stale folders and build dirs beside fresh ones, other runs' and unlisted ones. Added to `cicd/tests/container/run.bash` (EsJg9EF) and `cicd/tests/wingui/harness-test.bash` (EqH4isr).
+	- Acceptance signoff: Self-closed: the sweep passed on Windows with real junctions, and nothing was left on b29w after the 10-25 wingui run, though a hand cleanup since 10-19 may share the credit. The newest-5 rule is replaced by 2026102416233803 anyway.
+	- Closed: 20261025-185707
+
+- CI/CD: `--leakcheck` and `--no-leakcheck`
+	- ID: 2026101916054002
+	- Type: Enhancement
+	- Status: Done
+		- Stand-in: 20261025, on b29w. `cicd-win.ps1`'s own `fWslLinuxHalf`, taken from the script, handed off to the real DebianWSL2 in a clone of 8a28055, with the Linux half's `cicd.bash` cut off after its plan, in place of a whole `cicd-win.ps1 -Wsl` run.
+	- Priority: Avg
+	- Opened: 20261019-160540
+	- Opened by: JC
+	- Assigned to: CC
+	- Target OS: All
+	- Requirements:
+		- CI/CD has both `--leakcheck` and `--no-leakcheck`.
+		- A default run includes the leak checks.
+		- `--leakcheck` exists only to add them back in for something like `--quick`.
+		- `--no-leakcheck` is useful to exclude them from a default run, or with `--quiet`.
+	- Notes:
+		- Before the next cut.
+	- Progress log:
+		- 20261022: The leak checks are on by default, like the demo. `--no-leakcheck` drops them. `--quick` leaves them out unless `--leakcheck` asks, in either order, and the last of the two flags wins. `--gate` leaves them out and still refuses `--leakcheck`. Both flags go into the container with the run.
+		- 20261022: The switch is the `leakcheck` variable and `fRunLeakcheck`, so CodeQL (2026101913360695) and the soak test (2026101913370214) can join that step.
+		- 20261022: `cicd-win.ps1` got `-NoLeakcheck` and `-Leakcheck`, passed on to the Linux half under `-Wsl`. The Windows half has no leak checks.
+		- 20261022: `--help`, the plan, config.bash, install.md, design.md and the dhat comments say so. The plan row on 2026101714445005 is rewritten to match.
+		- 20261022: Full runs, container and plain, no flag: the plan's Leak checks line names the heap-growth test, and stage 3 ran it right after the ASan run. `cicd.bash --no-leakcheck </dev/null` shows the Leak checks line as "(skipped)". The `--quick` arms passed in the gate run. Left: the Windows check.
+		- 20261023: In the full run at 2da75a7, with no flag, stage 3 ran the heap growth check after the ASan run. It caught the planted leak and found no other growth. The `cicd-win.ps1 -Wsl` check is still left. No Windows box was free this round.
+		- 20261025: The engine test (Er2UgY7) passed in the full run at e95b81b, and `--no-leakcheck` showed Leak checks "(skipped)" in its plan. The other full run stopped in the ASan step before the leak checks. The Windows check didn't fit this round's time.
+		- 20261025: Verified on b29w, per the Stand-in row. `-NoLeakcheck`: the Linux half got `--no-leakcheck`, and its plan said Leak checks "(skipped)". Neither flag: no leak flag went over, and the plan listed "heap growth under dhat". `-Leakcheck`: `--leakcheck` went over.
+	- Decisions:
+		- 20261022: The engine case that said no options leave the leak checks off now says they're on, per this item's requirements.
+	- Verified: 20261022. Engine cases, each watched to fail against the old cicd.bash and 2 mutants. The plan's Leak checks line with no flag, `--quick`, `--quick --leakcheck` and `-q --no-leakcheck`. shellcheck, house style, PSScriptAnalyzer on `cicd-win.ps1`, cargo check with the feature.
+		- Swept: every `--leakcheck` mention in the repo, the `cicd-win.ps1` handoff to the Linux half, and the demo's on-by-default pattern.
+	- Test case: New cases in `cicd/tests/engine/run.bash` (Er2UgY7).
+	- Branch: rnd1022
+	- Acceptance signoff: Self-closed: on a real Windows box and WSL2, `-NoLeakcheck` reached the Linux half as `--no-leakcheck` and its plan said "(skipped)"; with neither flag the plan listed the heap growth check.
+	- Closed: 20261025-185707
 
 - Leak checks: Miri sort, config, the rest
 	- ID: 2026102410035982

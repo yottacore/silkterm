@@ -184,10 +184,11 @@ Add-Type -Namespace Con -Name W -MemberDefinition @"
 [DllImport("kernel32.dll")] public static extern uint WTSGetActiveConsoleSessionId();
 "@
 $consoleId = [Con.W]::WTSGetActiveConsoleSessionId()
-$who = $env:USERNAME
+$who = ''
 foreach ($l in (quser 2>$null | Select-Object -Skip 1)) {
 	if ($l -match '^\s*>?(\S+)\s+.*?(\d+)\s+(Active|Disc)\b' -and [int]$Matches[2] -eq $consoleId) { $who = $Matches[1] }
 }
+if (-not $who) { "VERDICT fail nobody is logged on at the console now"; exit 1 }
 ##	The run's folder is in that user's temp folder, which nobody else can use.
 if ($who -ne $runFor) { "VERDICT fail the console is now $who's, and the run folder is in ${runFor}'s temp folder"; exit 1 }
 
@@ -249,6 +250,12 @@ fBox(){
 	runDir="$(sed -n 's/^RUNDIR //p' <<< "${said}")"
 	runFor="$(sed -n 's/^RUNFOR //p' <<< "${said}")"
 	runToken="$(sed -n 's/^RUNTOKEN //p' <<< "${said}")"
+	##	No desktop to run on, such as a VM just started that logs nobody on.
+	if grep -q '^NOSESSION ' <<< "${said}"; then
+		echo "wingui: ${box}: $(sed -n 's/^NOSESSION //p' <<< "${said}" | head -1), skipped"
+		fSweepOwn "${box}"
+		return 0
+	fi
 	if [[ -z "${runDir}" || -z "${runFor}" || -z "${runToken}" ]]; then
 		if grep -q 'skipped' <<< "${said}"; then echo "wingui: ${box} went away, skipped"; return 0; fi
 		sed 's/^/  /' <<< "${said}"
@@ -303,3 +310,5 @@ if ((! keep)); then find "${shotDir}" -name '*.png' -printf '  shot %P\n' 2>/dev
 ##		- 20261003: WINGUI_EXTRA.
 ##		- 20261019: the scripts it sends are named for the run and swept with its
 ##		  folder, and a killed run's are swept by the next run on that box.
+##		- 20261025: a box nobody is logged on at is a skip, not a 4 minute wait
+##		  for a task that never runs.
