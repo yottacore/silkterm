@@ -127,7 +127,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - `the_scroll_record_costs_a_full_screen_program_little` failed once on the Mac runner
 	- ID: 2026102113432602
 	- Type: Bug
-	- Status: Waiting on UAT
+	- Status: Queued
 		- 6 Mac CI runs in a row passed it since 20261022, against 3 failures in the 7 before. The cause was never found. Close it as Can't reproduce, or keep it open. Mac CI runs on every push to dev, so a new failure would show its numbers.
 		- 20261025: Since the 10-24 failure, 6 more Mac CI runs passed it (40118767927, 40119271523, 40145850085, 40214477949, 40218542312, 40221760659), and one was cancelled.
 	- Stand-in: none. It fails only on the hosted runner beside the rest of the suite. b26 is another machine, so a pass there settles nothing.
@@ -153,6 +153,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Verified: `ci-mac.bash`'s extraction on a test binary with a failing assert, a multi-line `assert_eq!` and a `measured:` line. shellcheck, fmt, clippy on Linux, Windows and macOS targets. The test passes here and prints the new line.
 	- Branch: rnd1022
 	- Test case: `the_scroll_record_costs_a_full_screen_program_little` (EqHIGdO), message only.
+	- 20261026: It failed again on Mac CI run 40263068770 at 0b16ae9, with keeping rows 10% over and pairs from 0.711 to 2.116. It passed when run again alone. Back to Queued, since a 7th failure makes it more than a one-off.
 
 - A drag select recomposes the minimap about 11 times a second, though the map shows no selection
 	- ID: 2026102407065861
