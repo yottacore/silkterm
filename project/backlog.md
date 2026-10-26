@@ -1102,15 +1102,16 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Expected behavior: One whole copy, or a test that doesn't hang on how long a conversion takes.
 	- Reproduced: Yes. 2 of 3 alone under ASan on `rnd1025`, and 2 of 3 on dev, so it was there before the round.
 	- Actual cause: Each launch that reads the old file keeps a copy, stamped when its write starts. Only a copy with the same name, so the same second, counted as the same copy. Under ASan a conversion takes over a second, so launches converting at once stamped different seconds and each kept one, all with the same bytes.
-	- Actual fix: A new copy settles on the earliest copy of the same format holding the same bytes, whatever its stamp, and is dropped if that is another one. Nobody drops the earliest, so one is always left. The race test now wants exactly one copy. design.md says so.
+	- Actual fix: A new copy settles on the earliest copy of the same format holding the same bytes, whatever its stamp, and is dropped if that is another one. If it is its own, it drops the later copies with those bytes instead, since a launch with a later stamp can write and look first. Nobody drops the earliest, so one is always left. The race test now wants exactly one copy. design.md says so.
 	- Progress log:
 		- 20261025: A file converted again with bytes already kept, such as a backup copied back over the config, gets no new copy, and the message names the old one. Filed as a Check in questions.md.
-	- Verified: The new test fails without the fix, naming the second-later copy, and passes with it. The 226 config tests pass plain, and 2 runs of them under ASan, plus 1 run of the race test alone, all at load about 10. The quick gate passes, its 1408 unit tests and `cicd/tests/config-convert/run.bash` (ErgDpjX) included. fmt and clippy are clean for Linux and Windows. The docs check passes.
+		- 20261025: Sent back. The first fix at 591a9a8 still left 2 copies in 1 of 3 batch reruns, plain. A launch with the later stamp wrote and looked before the earlier one had written, found nothing earlier, and kept its copy. The earlier one then kept its own too. Now the earliest also drops its later twins.
+	- Verified: Both new tests fail without their part of the fix and pass with it. At load 30 to 40, the race test passed 40 of 40 plain, against 15 of 16 for the first fix, whose failure was 2 copies. It passed 3 of 3 alone under ASan. The 227 config tests pass, and `cicd/tests/testdir/run.bash` (ErOj67l) passes. fmt and clippy are clean for Linux and Windows. The first fix's quick gate passed, its 1408 unit tests and `cicd/tests/config-convert/run.bash` (ErgDpjX) included.
 	- Swept: `write_new_file` and `keep_old_format_at` have one caller each outside the tests. The `.bak` copies of the flat conversion and a reset (`backup_copy`, `backup_aside`) take the next free name with no stamp, so the clock cannot split them, and are left as they were.
 	- Branch: rnd1025b
-	- Test case: `a_copy_stamped_a_second_later_with_the_same_bytes_is_the_earlier_one` (Etl0u6f), and `launches_converting_at_once_leave_one_whole_copy` (EreLZQQ) under ASan.
-	- Acceptance signoff: Self-closed: the cause was found, the new test fails before and passes after, and the race test passed 3 of 3 under ASan.
-	- Closed: 20261025-163442
+	- Test case: `a_copy_stamped_a_second_later_with_the_same_bytes_is_the_earlier_one` (Etl0u6f), `a_later_copy_written_first_gives_way_to_the_earlier_one` (EtlUJPD), and `launches_converting_at_once_leave_one_whole_copy` (EreLZQQ) under ASan.
+	- Acceptance signoff: Self-closed: the order the batch hit is pinned by a test that fails before and passes after, and the race test passed 40 of 40 plain at load 30 to 40 and 3 of 3 under ASan.
+	- Closed: 20261025-183454
 
 - The Windows scenario run fails on a VM it just woke from off, since the session never answers
 	- ID: 2026102510420001

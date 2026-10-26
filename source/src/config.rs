@@ -2225,8 +2225,10 @@ fn is_copy_name(name: &str, stem: &str, n: u32) -> bool {
 // clock ticks between them the copies have different names. A conversion
 // takes over a second under a sanitizer or a loaded box, so that is not rare.
 // Each then settles on the earliest copy of that format holding the same
-// bytes, and drops its own if that is another one. Nobody drops the earliest,
-// so one is always left. Answers the copy settled on.
+// bytes. It drops its own if that is another one, and drops the later twins
+// if it is its own, since a launch with a later stamp may have written and
+// looked first. Nobody drops the earliest, so one is always left. Answers the
+// copy settled on.
 fn settle_on_earliest(
 	path: &std::path::Path,
 	stem: &str,
@@ -2242,9 +2244,11 @@ fn settle_on_earliest(
 		std::fs::metadata(at).is_ok_and(|meta| meta.len() == body.len() as u64)
 			&& std::fs::read(at).is_ok_and(|seen| seen == body)
 	};
-	let earliest = || {
+	// every copy holding the same bytes, earliest first
+	let twins = || {
 		let mut names: Vec<String> = std::fs::read_dir(dir)
-			.ok()?
+			.into_iter()
+			.flatten()
 			.filter_map(|entry| entry.ok()?.file_name().into_string().ok())
 			.filter(|name| is_copy_name(name, stem, n))
 			.collect();
@@ -2252,20 +2256,25 @@ fn settle_on_earliest(
 		names
 			.into_iter()
 			.map(|name| dir.join(name))
-			.find(|at| same(at))
+			.filter(|at| same(at))
+			.collect::<Vec<_>>()
 	};
 	// An earliest that is gone by the time it is read again was dropped for an
 	// earlier one still, so look again. Each look finds an earlier name.
 	for _ in 0..BACKUPS_MAX {
-		let Some(first) = earliest() else {
+		let found = twins();
+		let Some(first) = found.first() else {
 			break;
 		};
 		if first.file_name() == ours.file_name() {
+			for later in &found[1..] {
+				let _ = std::fs::remove_file(later);
+			}
 			break;
 		}
 		let _ = std::fs::remove_file(&ours);
-		if same(&first) {
-			return first;
+		if same(first) {
+			return first.clone();
 		}
 	}
 	ours
@@ -13178,6 +13187,39 @@ mod tests {
 		] {
 			assert!(!is_copy_name(name, "config", 2), "{name}");
 		}
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
+	// The launch with the later stamp can write and look before the earlier one
+	// has written, and find nothing earlier. The earlier one, writing after it,
+	// still settles on its own copy and drops the later twin, so one is left.
+	// Test ID: EtlUJPD
+	#[test]
+	fn a_later_copy_written_first_gives_way_to_the_earlier_one() {
+		let dir = format_test_dir("fmtcopy_order");
+		let path = dir.join("config.shcl");
+		let keep = |body: &str, stamp: &str| {
+			std::fs::write(&path, body).unwrap();
+			keep_old_format_at(&path, default_config(), stamp)
+				.unwrap()
+				.unwrap()
+				.0
+		};
+		let later = dir.join("config_backup_20261025-100101_format-v2.shcl");
+		let earlier = dir.join("config_backup_20261025-100100_format-v2.shcl");
+		let other = dir.join("config_backup_20261025-100102_format-v2.shcl");
+		std::fs::write(&other, "font:\n\tsize: 9\n").unwrap();
+		assert_eq!(keep(SHCL2_FILE, "20261025-100101"), later);
+		assert_eq!(keep(SHCL2_FILE, "20261025-100100"), earlier);
+		assert_eq!(std::fs::read_to_string(&earlier).unwrap(), SHCL2_FILE);
+		assert_eq!(
+			backups_in(&dir, "config"),
+			[
+				"config_backup_20261025-100100_format-v2.shcl",
+				"config_backup_20261025-100102_format-v2.shcl",
+			],
+			"the later twin is gone, and a copy with other bytes stays"
+		);
 		let _ = std::fs::remove_dir_all(&dir);
 	}
 
