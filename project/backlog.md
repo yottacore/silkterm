@@ -386,72 +386,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Test case: None new. The ignores are test attributes, checked by the runs above.
 	- Branch: rnd1023
 
-- CICD reset: the Windows boxes, VM state and where each scenario runs
-	- ID: 2026102507245255
-	- Type: Task
-	- Status: Queued
-		- Reverted on `rnd1025` after the full run's wingui stage failed on a woken vm925w. See 2026102510420001. The work is on `wip/rnd1025-2026102507245255`. The host config change outside the repo, `~/.config/silkterm/winrig.conf`, wasn't reverted, and its `@vmstate` line does nothing without this item's code.
-		- 20261025: Held at Queued. Bug 2026102510420001 is fixed, so a woken vm925w is now a skip, but vm925w logs nobody on at boot, so waking it for scenarios gains nothing yet. Waits on the question in `questions.md` about how a woken vm925w gets a logged-on session. The work, brought onto rnd1025b with that fix, is on `wip/rnd1025b-2026102507245255`.
-	- Needs external testing: The wingui stage, `cicd/tests/wingui/run.bash` with the config's scenario list, with vm925w off and b29w up: the plain scenarios run on b29w, `perfladder` alone on vm925w, and vm925w is off again after. Then once with b29w off, so vm925w takes them all.
-	- Priority: High
-	- Opened: 20261025-072452
-	- Opened by: CC
-	- Parent ID: 2026102416233802
-	- Target OS: Windows
-	- Requirements:
-		- vm925w is put back the way it was found, through the VM state helper.
-		- The Windows scenarios favor b29w. The GPU and timed ones, such as `perfladder`, run on vm925w only.
-		- Windows testing names `b29w` only. Drop `b29w-wif` from the host config outside the repo.
-		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
-	- Progress log:
-		- 20261025: The host config can name the VM state helper (`@vmstate`), and then every hold in `win-remote.bash` goes through it, so a VM is woken and put back the way it was found. A box that can't be held or woken is a skip under `--optional`. Host lines take tags, and `hosts` prints them.
-		- 20261025: Each Windows scenario runs once, on the first box in the host config that's up and free. A scenario with a `Box: gpu` header line runs only on a box tagged `gpu`; that's `perfladder`. What no box took is a `SKIP` line at the end of the stage.
-		- 20261025: The host config lists b29w first and alone, with no `b29w-wif`, then vm925w tagged `gpu`, and the `@vmstate` line.
-		- Verified: both test scripts pass, and their new checks failed against the scripts as they were. shellcheck, the bash style check, the PowerShell lint, the test ID check, the docs check and the lint report pass. A job through the live config on b29w went through the VM state helper and the lock, and `hosts` printed vm925w's tag.
-		- Not run: a real wake of vm925w. It was off, and the box was at load 44.
-		- 20261025: On `wip/rnd1025b-2026102507245255`: a box nobody is logged on at leaves its reason in the stage's `SKIP` lines, such as `SKIP wingui: perfladder, no box tagged gpu answered (vm925w: nobody is logged on at the console)`.
-		- Verified: 20261025, on that branch. vm925w woken from off through `@vmstate`, from a copy of the host config: both scenarios were `SKIP` lines with that reason, on the skip list too, and vm925w was off again after. The win-remote, wingui, engine and Windows pipeline tests pass, and the new reason check failed without the line that writes it. shellcheck, the bash style check, the PowerShell lint, the test ID and docs checks pass.
-		- Swept: `win-unlock.bash` holds the same way and reads only the name and address from `hosts`, so the tags don't reach it. No other script reads `hosts` or calls `hold`. The jobs under `win-jobs` run through `job`, which holds the same way.
-	- Decisions:
-		- 20261025: Which box is favored, and which has a real card, live in the host config outside the repo, by order and the `gpu` tag. Machine names stay out of the repo, as before.
-		- 20261025: A scenario marks itself as needing a card in its own header, so the list in `config.bash` doesn't have to track it.
-	- Branch: rnd1025
-	- Test case: `cicd/tests/win-remote/run.bash` (Er2UgYA), 7 new checks for tags, holding through the VM state helper and a VM that never wakes. `cicd/tests/wingui/harness-test.bash` (EqH4isr), 8 new checks for which box each scenario runs on, and the `SKIP` lines.
-	- Prereq IDs: 2026102510420001
-	- Waits on Bug 2026102510420001, the woken VM failure that got this reverted last round.
-	- Answered 10-25: D. Leave vm925w unwoken and @vmstate off. The work on wip/rnd1025b-2026102507245255 is ready to merge as it is.
-
-- CICD reset: `--no-remote`, and a skipped box shown as `SKIP`
-	- ID: 2026102507245260
-	- Type: Task
-	- Status: Queued
-		- Reverted on `rnd1025` with 2026102507245255, which it builds on. See 2026102510420001. The work is on `wip/rnd1025-2026102507245255`.
-		- 20261025: Held at Queued with 2026102507245255, which it builds on. Both are on `wip/rnd1025b-2026102507245255`.
-	- Prereq IDs: 2026102507245255
-		- Departs from the wording: the Windows runner's test still runs under `--no-remote`, since it uses stand-ins and reaches no box.
-	- Needs external testing: A full run with b29w and vm925w both off, or held: the Windows scenarios' line reads `SKIP: windows gui scenarios, 16 not run`, and the run ends with a "Not run, since a box wasn't there" list of the 16 `SKIP wingui:` lines. Then `cicd.bash -y --no-remote --quick` once, for the plan's two `(skipped --no-remote)` lines.
-	- Priority: High
-	- Opened: 20261025-072452
-	- Opened by: CC
-	- Parent ID: 2026102416233802
-	- Related IDs: 2026102416233807, 2026102416233808
-	- Target OS: All
-	- Requirements:
-		- `--no-remote` skips every other box: the Windows scenarios, the Windows runner tests, and the private runner's Mac and store parts.
-		- A skipped box shows as `SKIP` in its step's line and in the summary at the end.
-		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
-	- Progress log:
-		- 20261025: `--no-remote` skips the Windows scenarios and the private runner, and the plan says so for each. The plan has a Windows scenarios line now.
-		- 20261025: A step that reaches another box hands its scripts the run's skip list as `SILK_CICD_SKIPS`. The Windows scenarios write their `SKIP wingui:` lines there. A step that skipped anything ends with a `SKIP:` line rather than `OK:`, and the run lists every `SKIP` line again at the end.
-		- 20261025: `cicd-win.ps1 -NoRemote` passes `--no-remote` to the Linux half, which is the half that reaches the boxes.
-		- 20261025: The private runner doesn't write to the list yet, so its skips are still only warnings. That half is silkterm-private's 2026102416285601.
-	- Decisions:
-		- 20261025: A step turned off by `--no-remote` is in the plan, not in the end list, which is for boxes that weren't there, per the shared rules.
-	- Verified: the engine, Windows scenario harness, Windows pipeline and container tests pass, and each new check failed against a broken copy of what it checks. shellcheck, the bash style check, the PowerShell lint, the test ID and docs checks pass. The plan printed by a real `cicd.bash` showed both lines for no options, `--no-remote` and `--quick`.
-	- Swept: everything `cicd.bash` runs that reaches a box: the Windows scenarios and the private runner. The script tests under `cicd/tests`, `win-remote` included, use stand-ins. `cicd-win.ps1`'s Linux half got the flag. The demo and `ci-mac.bash` reach no other box.
-	- Branch: rnd1025
-	- Test case: `cicd/tests/engine/run.bash` (Er2UgY7), 23 new checks for `--no-remote`, the plan lines, the `SKIP` step lines and the end list. `cicd/tests/wingui/harness-test.bash` (EqH4isr), 4 for the skip list. `cicd/tests/cicd-win/run.bash` (Er2UgYE), 2 for `-NoRemote`.
-
 - CICD reset: Zig cache
 	- ID: 2026102416233804
 	- Type: Task
@@ -980,6 +914,80 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- The Windows GUI scenarios and the scroll harness turn off only with `--quick`, and dpirand only with `DPIRAND_SECS=0` in config.bash.
 	- Notes:
 		- Not every stage needs its own flag. A few grouped ones may do, such as one for the lints and one for the script tests.
+
+- CICD reset: the Windows boxes, VM state and where each scenario runs
+	- ID: 2026102507245255
+	- Type: Task
+	- Status: Done
+		- 20261026: Brought onto `rnd1026` from `wip/rnd1025b-2026102507245255`. Verified there: the win-remote, wingui harness, engine and Windows pipeline tests, shellcheck, the bash style check, the PowerShell lint, the test ID and docs checks and the lint report pass.
+		- 20261026: The external test row is dropped. Under D, vm925w is never woken for scenarios and `@vmstate` stays off in the host config, so `perfladder` is a `SKIP` line while vm925w is off. The round's full run takes the wingui stage with b29w up and vm925w off.
+		- Reverted on `rnd1025` after the full run's wingui stage failed on a woken vm925w. See 2026102510420001. The work is on `wip/rnd1025-2026102507245255`. The host config change outside the repo, `~/.config/silkterm/winrig.conf`, wasn't reverted, and its `@vmstate` line does nothing without this item's code.
+		- 20261025: Held at Queued. Bug 2026102510420001 is fixed, so a woken vm925w is now a skip, but vm925w logs nobody on at boot, so waking it for scenarios gains nothing yet. Waits on the question in `questions.md` about how a woken vm925w gets a logged-on session. The work, brought onto rnd1025b with that fix, is on `wip/rnd1025b-2026102507245255`.
+	- Priority: High
+	- Opened: 20261025-072452
+	- Opened by: CC
+	- Parent ID: 2026102416233802
+	- Target OS: Windows
+	- Requirements:
+		- vm925w is put back the way it was found, through the VM state helper.
+		- The Windows scenarios favor b29w. The GPU and timed ones, such as `perfladder`, run on vm925w only.
+		- Windows testing names `b29w` only. Drop `b29w-wif` from the host config outside the repo.
+		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
+	- Progress log:
+		- 20261025: The host config can name the VM state helper (`@vmstate`), and then every hold in `win-remote.bash` goes through it, so a VM is woken and put back the way it was found. A box that can't be held or woken is a skip under `--optional`. Host lines take tags, and `hosts` prints them.
+		- 20261025: Each Windows scenario runs once, on the first box in the host config that's up and free. A scenario with a `Box: gpu` header line runs only on a box tagged `gpu`; that's `perfladder`. What no box took is a `SKIP` line at the end of the stage.
+		- 20261025: The host config lists b29w first and alone, with no `b29w-wif`, then vm925w tagged `gpu`, and the `@vmstate` line.
+		- Verified: both test scripts pass, and their new checks failed against the scripts as they were. shellcheck, the bash style check, the PowerShell lint, the test ID check, the docs check and the lint report pass. A job through the live config on b29w went through the VM state helper and the lock, and `hosts` printed vm925w's tag.
+		- Not run: a real wake of vm925w. It was off, and the box was at load 44.
+		- 20261025: On `wip/rnd1025b-2026102507245255`: a box nobody is logged on at leaves its reason in the stage's `SKIP` lines, such as `SKIP wingui: perfladder, no box tagged gpu answered (vm925w: nobody is logged on at the console)`.
+		- Verified: 20261025, on that branch. vm925w woken from off through `@vmstate`, from a copy of the host config: both scenarios were `SKIP` lines with that reason, on the skip list too, and vm925w was off again after. The win-remote, wingui, engine and Windows pipeline tests pass, and the new reason check failed without the line that writes it. shellcheck, the bash style check, the PowerShell lint, the test ID and docs checks pass.
+		- Swept: `win-unlock.bash` holds the same way and reads only the name and address from `hosts`, so the tags don't reach it. No other script reads `hosts` or calls `hold`. The jobs under `win-jobs` run through `job`, which holds the same way.
+	- Decisions:
+		- 20261025: Which box is favored, and which has a real card, live in the host config outside the repo, by order and the `gpu` tag. Machine names stay out of the repo, as before.
+		- 20261025: A scenario marks itself as needing a card in its own header, so the list in `config.bash` doesn't have to track it.
+	- Branch: rnd1026
+	- Commit: e673d53
+	- Test case: `cicd/tests/win-remote/run.bash` (Er2UgYA), 7 new checks for tags, holding through the VM state helper and a VM that never wakes. `cicd/tests/wingui/harness-test.bash` (EqH4isr), 8 new checks for which box each scenario runs on, and the `SKIP` lines.
+	- Prereq IDs: 2026102510420001
+	- Waits on Bug 2026102510420001, the woken VM failure that got this reverted last round.
+	- Answered 10-25: D. Leave vm925w unwoken and @vmstate off. The work on wip/rnd1025b-2026102507245255 is ready to merge as it is.
+	- Acceptance signoff: Self-closed: the work was tested on its wip branch last round, its question was settled as D, and its checks pass on rnd1026.
+	- Closed: 20261026-165053
+
+- CICD reset: `--no-remote`, and a skipped box shown as `SKIP`
+	- ID: 2026102507245260
+	- Type: Task
+	- Status: Done
+		- 20261026: Brought onto `rnd1026` from `wip/rnd1025b-2026102507245255`. Verified there: the win-remote, wingui harness, engine and Windows pipeline tests, shellcheck, the bash style check, the PowerShell lint, the test ID and docs checks and the lint report pass.
+		- 20261026: The external test row is dropped. The engine test covers the `SKIP` step line, the end list and the `--no-remote` plan lines with stand-ins, and the round's full run shows the wingui `SKIP` lines with vm925w off.
+		- Reverted on `rnd1025` with 2026102507245255, which it builds on. See 2026102510420001. The work is on `wip/rnd1025-2026102507245255`.
+		- 20261025: Held at Queued with 2026102507245255, which it builds on. Both are on `wip/rnd1025b-2026102507245255`.
+	- Prereq IDs: 2026102507245255
+		- Departs from the wording: the Windows runner's test still runs under `--no-remote`, since it uses stand-ins and reaches no box.
+	- Priority: High
+	- Opened: 20261025-072452
+	- Opened by: CC
+	- Parent ID: 2026102416233802
+	- Related IDs: 2026102416233807, 2026102416233808
+	- Target OS: All
+	- Requirements:
+		- `--no-remote` skips every other box: the Windows scenarios, the Windows runner tests, and the private runner's Mac and store parts.
+		- A skipped box shows as `SKIP` in its step's line and in the summary at the end.
+		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
+	- Progress log:
+		- 20261025: `--no-remote` skips the Windows scenarios and the private runner, and the plan says so for each. The plan has a Windows scenarios line now.
+		- 20261025: A step that reaches another box hands its scripts the run's skip list as `SILK_CICD_SKIPS`. The Windows scenarios write their `SKIP wingui:` lines there. A step that skipped anything ends with a `SKIP:` line rather than `OK:`, and the run lists every `SKIP` line again at the end.
+		- 20261025: `cicd-win.ps1 -NoRemote` passes `--no-remote` to the Linux half, which is the half that reaches the boxes.
+		- 20261025: The private runner doesn't write to the list yet, so its skips are still only warnings. That half is silkterm-private's 2026102416285601.
+	- Decisions:
+		- 20261025: A step turned off by `--no-remote` is in the plan, not in the end list, which is for boxes that weren't there, per the shared rules.
+	- Verified: the engine, Windows scenario harness, Windows pipeline and container tests pass, and each new check failed against a broken copy of what it checks. shellcheck, the bash style check, the PowerShell lint, the test ID and docs checks pass. The plan printed by a real `cicd.bash` showed both lines for no options, `--no-remote` and `--quick`.
+	- Swept: everything `cicd.bash` runs that reaches a box: the Windows scenarios and the private runner. The script tests under `cicd/tests`, `win-remote` included, use stand-ins. `cicd-win.ps1`'s Linux half got the flag. The demo and `ci-mac.bash` reach no other box.
+	- Branch: rnd1026
+	- Commit: e673d53
+	- Test case: `cicd/tests/engine/run.bash` (Er2UgY7), 23 new checks for `--no-remote`, the plan lines, the `SKIP` step lines and the end list. `cicd/tests/wingui/harness-test.bash` (EqH4isr), 4 for the skip list. `cicd/tests/cicd-win/run.bash` (Er2UgYE), 2 for `-NoRemote`.
+	- Acceptance signoff: Self-closed: the work was tested on its wip branch last round, its question was settled as D, and its checks pass on rnd1026.
+	- Closed: 20261026-165053
 
 - Wayland: must use the Wayland clipboard, and minimize other X11 features
 	- ID: 2026101509024607
