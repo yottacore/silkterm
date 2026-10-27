@@ -124,37 +124,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Branch: rnd1022
 	- Test case: `no_device_on_macos_says_why_and_that_nothing_can_stand_in` (EtS63vE)
 
-- `the_scroll_record_costs_a_full_screen_program_little` failed once on the Mac runner
-	- ID: 2026102113432602
-	- Type: Bug
-	- Status: Queued
-		- 6 Mac CI runs in a row passed it since 20261022, against 3 failures in the 7 before. The cause was never found. Close it as Can't reproduce, or keep it open. Mac CI runs on every push to dev, so a new failure would show its numbers.
-		- 20261025: Since the 10-24 failure, 6 more Mac CI runs passed it (40118767927, 40119271523, 40145850085, 40214477949, 40218542312, 40221760659), and one was cancelled.
-	- Stand-in: none. It fails only on the hosted runner beside the rest of the suite. b26 is another machine, so a pass there settles nothing.
-	- Severity: Low
-	- Opened: 20261021-134326
-	- Opened by: CC
-	- Assigned to: CC
-	- Related IDs: 2026102113432600, 2026100714145220
-	- Target OS: macOS
-	- Test environment: GitHub macos-15, arm64, 3 cores
-	- Reproduced: 3 of the 7 full Mac runs to 20261022 16:04 UTC failed it (runs 39667988647, 39709345533, 39810794398). Each time it passed when run again alone, in under a second. No failure kept its numbers.
-	- Possible cause: Memory traffic from the tests running beside it. The test times by the thread's own CPU time, which leaves out waiting for a core but not cache misses. Keeping rows cycles 128 rows of 160 cells, so each scrolled line writes a row last touched 128 lines ago. The bare side reuses rows still in cache. On b23, on 3 pinned cores, the median was 1.02 to 1.07 alone, 1.04 to 1.07 beside 3 CPU-bound loops, and 1.06 to 1.14 beside 3 memory-bound ones, failing 2 of 10 runs there. Bare against bare under the same memory load stayed 0.98 to 1.02, so the pairing is fair and the extra cost is the kept side's. An M1's cores share an L2 per cluster, and the suite runs on all 3 cores, so it may well be more there. Not confirmed on the Mac.
-	- Notes:
-		- Ruled out: the Mac's clock. macOS reads it from `__thread_selfusage()` in mach ticks, about 42 ns on an M1, against runs of about 40 ms. An Apple forum thread reports some M1 Macs leaving out the tick conversion, about 41.7 times too small, but a constant factor cancels in a ratio.
-		- The copy this test was made for cost 28 to 35% here, and the pointer check catches it with no timing at all. The 10% limit is unchanged.
-		- If the Mac shows a steady gap over 10%, the options are to run this test apart from the suite, or to judge the keep cost against something the neighbours slow down as much. Neither is done yet.
-	- Progress log:
-		- 20261022: The failure text never reached the CI log. `ci-mac.bash` now prints each failed test's panic text from the first run, runs the failed tests again with their output shown, and prints every `measured:` line a test writes. The test writes its ratios and each pair's times that way, and puts the times in its failure message too.
-		- 20261022: Mac CI run 39842974082 on rnd1022 passed it. Median 1.005 over 15 pairs, from 0.766 to 1.211. Kept was above bare in 9 of 15 pairs, each by a little. The big swings were on the bare side, 24.5 against 32.0 and 23.3 against 27.7 ms, which reads more like the core or host changing than a steady keep cost. One run, so not settled. The run failed on another test, filed on 2026102114411311.
-		- 20261022: Mac CI run 39858608191 passed it again. Median 1.038, pairs from 0.841 to 2.112, kept above bare in 10 of 15.
-		- 20261023: Mac CI runs 39859635085, 40049932196, 40051324149 and 40062142185 passed it. Medians 1.008, 1.032, 1.035 and 1.032, with kept above bare in 8, 9, 15 and 9 of 15 pairs. 40051324149 had tight pairs, about 20.2 against 19.4 ms, which is the steady keep cost seen on b23. It failed on the header test, 2026102320070112. The private runner's run on b26 in the full run passed it too.
-		- 20261024: Mac CI run 40099145373 on dev at 936658b failed it again: kept cost 18% more, pairs from 0.768 to 1.568, with kept above bare in most. Run again alone it passed, median 1.002 over pairs from 0.623 to 1.643. The merge's run 40118767927 passed. So it's still live, and the spread on both sides is wide.
-	- Verified: `ci-mac.bash`'s extraction on a test binary with a failing assert, a multi-line `assert_eq!` and a `measured:` line. shellcheck, fmt, clippy on Linux, Windows and macOS targets. The test passes here and prints the new line.
-	- Branch: rnd1022
-	- Test case: `the_scroll_record_costs_a_full_screen_program_little` (EqHIGdO), message only.
-	- 20261026: It failed again on Mac CI run 40263068770 at 0b16ae9, with keeping rows 10% over and pairs from 0.711 to 2.116. It passed when run again alone. Back to Queued, since a 7th failure makes it more than a one-off.
-
 - A drag select recomposes the minimap about 11 times a second, though the map shows no selection
 	- ID: 2026102407065861
 	- Type: Enhancement
@@ -183,6 +152,212 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Swept: every `state.dirty` set on a pointer move. The thumb and map drags move the view, and a divider drag and a pane drag change the layout, so they still compose. The menu, tab and bar hovers don't touch a pane. The wake after a frame looks at the new flag too.
 	- Branch: rnd1024
 	- Test case: ErzCQC2's drag figure, under Verified. The limit stays 360, since the saving is about 5% and the 2026102321230038 margin was set by load.
+
+- CICD reset: Zig cache
+	- ID: 2026102416233804
+	- Type: Task
+	- Status: Waiting on automated testing
+		- Reverted on `rnd1025` after its cap check failed the gate step on ZFS. See 2026102509002701. Back on `rnd1026` from `wip/rnd1025-2026102416233804`, with the ZFS fix 18454d6. Waits on its container full run.
+	- Needs local test suite run?: One container full run, from the round's full-run line, so the ARM64 builds fill `silkterm-zig-cache`. Look for the volume made with both labels and a `.cicd-zig-version` of 0.16.0 in it.
+	- Priority: High
+	- Opened: 20261024-162338
+	- Opened by: CC
+	- Target OS: Linux
+	- Requirements:
+		- Per the Zig bullets in `Cleanup after a run` in the shared CICD rules. The ARM64 builds use `cargo zigbuild`, and nothing looks after Zig's caches yet.
+		- At the end of a run, empty a project Zig cache that's over 2 GB, or that an older Zig filled, going by a version stamp inside it. Always the whole folder.
+		- In the container, Zig's global cache goes on a volume of its own, `silkterm-zig-cache`, under the same rule. On this box `~/.cache/zig` is left alone.
+		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
+	- Progress log:
+		- 20261025: The container mounts `silkterm-zig-cache` at `/zig-cache`, with `ZIG_GLOBAL_CACHE_DIR` pointed there. The first run to use it writes the Zig version into `.cicd-zig-version`. At the end of a run the volume goes whole when it's over 2 GB or another Zig filled it, through the container cleanup in 2026102416233805. The cap is `CLEANUP_CACHE_CAP_MB` in config.bash.
+		- 20261025: A `.zig-cache` or `zig-cache` folder in the tree goes whole under the same rule at the end of a run, where the builds ran, and gets the stamp when it has none. `zig cc` keeps to its global cache, so none turned up here.
+		- 20261026: Back on `rnd1026`, with 18454d6 and the startup gate test stub. The backlog quick run in the container made `silkterm-zig-cache` with both labels.
+		- Note: Until now Zig's cache inside the container sat in `silkterm-cicd-cache`, under `/cache/home/.cache/zig`. It stays there until that volume is cleaned up by hand, per 2026102416233805.
+	- Verified: 20261025. In the image, `zig cc` for aarch64 wrote its cache into a stand-in volume at `/zig-cache`, owned by this uid, with the stamp `0.16.0`. The cleanup test's new Zig cases, and the container test's volume cases, against a stand-in docker. Both new sets failed against the pipeline as it was. Shellcheck, house style, engine test, docs check.
+	- Verified: 20261026. On `rnd1026`: EtAiwUl with `TMPDIR` on ZFS and on ext4, EsJg9EF, the startup gate test, shellcheck, and `--backlog-run-quick scripts docs` in the container.
+	- Swept: every `zigbuild` and `zig` call in cicd and the Dockerfile. Only the two ARM64 cross targets in config.bash use it.
+	- Test case: New cases in `cicd/tests/cleanup/run.bash` (EtAiwUl) and `cicd/tests/container/run.bash` (EsJg9EF).
+	- Branch: rnd1026
+	- Prereq IDs: 2026102509002701
+	- Waits on Bug 2026102509002701, the ZFS cap check that got this reverted last round.
+
+- CICD reset: container cleanup
+	- ID: 2026102416233805
+	- Type: Task
+	- Status: Waiting on automated testing
+		- Reverted on `rnd1025` with 2026102416233804, whose cap check failed the gate step on ZFS. See 2026102509002701. Back on `rnd1026` from `wip/rnd1025-2026102416233804`. Waits on its container full run.
+		- The hand cleanup of what was made before the labels is left for the next round, once the in-flight run of 2026-10-25 is done.
+	- Needs local test suite run?: One container full run, from the round's full-run line. Look for containers named `silkterm-<run>-engine`, `-asan` and `-tsan` in `docker ps` while it runs, then at the end "docker build cache over a week old pruned" and the `docker:` line, and no `silkterm-` container left after.
+	- Priority: High
+	- Opened: 20261024-162338
+	- Opened by: CC
+	- Related IDs: 2026101909222600
+	- Target OS: Linux
+	- Requirements:
+		- Per the container bullets in `Cleanup after a run` in the shared CICD rules. `--rm`, a pipeline label, and sweeps of old tags and stopped containers are in.
+		- Every container, image and volume gets `dev.project=silkterm` and `dev.run=<run folder name>`, and each container is named `silkterm-<run folder name>-<step>`.
+		- At the end of a run, on failure and Ctrl+C too, the run's containers are stopped and removed by `dev.run`. `--keep-temp` keeps them.
+		- The current image tag and the one before it stay. Every older tag goes now.
+		- `docker builder prune -f --filter until=168h` runs at the end.
+		- The cache volume gets the 2 GB rule.
+		- The end line compares `docker system df` before and after.
+		- What was made before the labels gets one cleanup by hand, by ID.
+		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
+		- Overrides: 2026101909222600's 20261019 decision of no `docker builder prune`, and the same call in the private notes' "Calls already made".
+	- Progress log:
+		- 20261025: Every container, image and volume a run makes is labeled `dev.project=silkterm` and `dev.run=<run>`, and containers are named `silkterm-<run>-<step>`, the step being `engine`, `gate`, `asan`, `tsan`, `codeql` or `tidy`. The run's name is its test run folder's for now, without the `test_silkterm_` part. 2026102416233803 moves the run folder under `HOST_TEMP`. The cache volumes are made with the labels when missing.
+		- 20261025: At the end of a run, failed or stopped by Ctrl+C too, the run's containers are stopped and removed by `dev.run`. Then untagged images with our label go. Once the run passed, our tags older than the current one and the one before it go. Then the volume rule: a cache volume over 2 GB goes whole, and the Zig one when another Zig filled it. docker keeps a volume another run still holds. Last, `docker builder prune -f --filter until=168h`, and one line comparing `docker system df` before and after.
+		- 20261025: `--keep-temp` starts the containers without `--rm`, keeps them at the end with their names printed, and leaves the volumes they hold.
+		- 20261025: The older-tag sweep moved from the start of a run to its end, and only runs after a pass, so the last image that passed isn't lost to a broken recipe.
+		- 20261025: Nothing without the label is touched, so the `silkterm-cicd` images, the `silkterm-cicd-cache` volume and any stopped container from before today stay until the hand cleanup.
+		- 20261026: Back on `rnd1026`, merged with the backlog run flags. `--keep-temp` sits with the other run flags. After the merge the gate's container was named `-engine`, since the gate now goes in as `--backlog-run-quick`. It's `-gate` again, and the container test caught it.
+		- 20261026: The backlog quick run in the container passed, ended with "docker build cache over a week old pruned" and the `docker:` line, and left no `silkterm-` container.
+		- Note: A `docker run --rm` can return before docker has removed the container, which then still holds its volumes. So the step that reads the volumes runs without `--rm` and is removed with a plain `docker rm`, which waits.
+		- 20261025: The container test's checks of the old label, the build cache left alone and the old tag sweep are commented out with the reason, and replaced. The `-v` count it checks went from 3 to 4, for the Zig volume.
+	- Decisions:
+		- 20261026: The gate's step name goes by `--backlog-run-quick`, the flag the gate passes in now. `--gate` is only another name for it.
+		- 20261025: The older-tag sweep keeps the newest tag before the current one by creation time, among images with our label only.
+	- Verified: 20261025. The end cleanup against real docker, on throwaway images, containers and volumes under another project name: this run's container gone, another run's and another project's kept, the current and previous tags kept, older labeled tags and a labeled untagged image gone, an unlabeled tag kept, an over-cap volume and a stale Zig volume gone, one held by another run left with a message, an unlabeled volume never read. It failed at first, on the `--rm` race above. The container test's new cases, against a stand-in docker, Ctrl+C in a gate and in a full run through the log tee included. All failed against the pipeline as it was. Shellcheck, house style, engine test, docs check, build.md markdown check.
+	- Verified: 20261026. On `rnd1026`: EsJg9EF, with the gate step name case failing before the fix and passing after. EtAiwUl on ZFS and ext4, shellcheck, and `--backlog-run-quick scripts docs` in the container.
+	- Swept: every `docker` call in cicd.bash, and every `fContainerRun` and `fContainerBuild` call (gate, ASan, TSan, CodeQL, engine). The asan, tsan and codeql scripts start no container. No other script names the old label.
+	- Test case: New cases in `cicd/tests/container/run.bash` (EsJg9EF).
+	- Branch: rnd1026
+	- Prereq IDs: 2026102509002701
+	- Waits on Bug 2026102509002701, the ZFS cap check that got this reverted last round.
+
+- CICD reset: CPU and priority
+	- ID: 2026102416233806
+	- Type: Task
+	- Status: Waiting on automated testing
+	- Needs local test suite run?: one container full run, `--backlog-run-full`. Its log should show the `jobs:` lines, a quarter at the ASan, leak check and TSan steps, and EtrCPPO passing.
+	- Needs external testing: `cicd-win.ps1 -Quick` on a Windows box through `win-remote.bash`: the run sits at BelowNormal and prints its `jobs:` line per stage.
+	- Priority: High
+	- Opened: 20261024-162338
+	- Opened by: CC
+	- Target OS: All
+	- Requirements:
+		- Per `Machine use` in the shared CICD rules. Half the CPUs is in, through `CICD_MAX_JOBS`.
+		- When the 1-minute load is over half the CPU count, at the start or before a step, that step gets a quarter.
+		- The hard steps always get a quarter: ASan, TSan, Miri, CodeQL, the fuzz soak and the soak test.
+		- The counts are worked out in one place. The sanitizer, CodeQL and repro scripts each work out their own now.
+		- The whole run goes under `nice -n 19` and `ionice -c 3`.
+		- Containers get `--cpus <jobs>` and `--cpu-shares 256`, with `nice` inside.
+		- `cicd-win.ps1` sets `BelowNormal` on its own process at the top, and `Idle` for the hard steps.
+		- Jobs on the other boxes go by that box's CPU count and load.
+		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
+	- Progress log:
+		- 20261026: In. `cicd/utility/include/jobs.bash` works out the count before each stage and hard step, for cicd.bash and the ASan, TSan, CodeQL and repro scripts. The run lowers its own priority at the top, a container gets `--cpus` and `--cpu-shares 256`, and cicd-win.ps1 does the same per stage at BelowNormal.
+		- 20261026: The container test's docker run line now has `--cpus N --cpu-shares 256` in it (EsJg9EF, "the gate's container is named for the step"), since the issue asks for those flags.
+	- Decisions:
+		- 20261026: No Miri or soak test step exists in the pipeline, so the hard steps are ASan, TSan, the leak checks, CodeQL and the fuzz soak. A new one calls `fJobs hard`.
+		- 20261026: Priority goes on the run's own shell with `renice` and `ionice -p`, not a re-exec under `nice`, so arguments and traps stay as they are. Each script in the container lowers itself the same way.
+		- 20261026: A `CICD_MAX_JOBS` set by config.bash or handed down by the outer run is a ceiling. `CICD_CORES` goes into the container too, so a `--cpus` cap isn't counted twice.
+		- 20261026: Windows keeps no load average, so busy there is the CPU load percentage over 50. cicd-win.ps1 has no hard step of its own. Its WSL half is cicd.bash, which lowers itself.
+		- 20261026: `ci-mac.bash` on the hosted runner is left alone, filed as a Check in questions.md. The private runner on b26 lives in silkterm-private.
+	- Verified: 20261026, EtrCPPO (new), EsJg9EF and the backlog quick run, all five areas, passed. The quick run printed `jobs: 8 of 32 CPUs (busy, load 19.63)`. cicd-win.ps1's `fSetJobs`, lifted out and run under pwsh here, gave 8 at BelowNormal, then 4 at Idle for a hard step, and 1 on 2 CPUs.
+	- Swept: every `nproc` and `ProcessorCount` in cicd/ (now only jobs.bash and cicd-win.ps1), both `docker run` sites (the tidy run only reads volume sizes, so it keeps no cap), and the stage sections of both pipelines.
+	- Branch: rnd1026
+	- Test case: EtrCPPO, plus EsJg9EF's container checks.
+
+- CICD reset: the backlog runs and the merge gate
+	- ID: 2026102616543933
+	- Type: Task
+	- Status: Waiting on automated testing
+	- Needs local test suite run?: One `cicd/cicd.bash --merge-gate` from `repo/`, in the container. It can stand in for the round's full run.
+	- Priority: High
+	- Opened: 20261026-165439
+	- Opened by: CC
+	- Parent ID: 2026102416233807
+	- Target OS: All
+	- Requirements:
+		- `--backlog-run-quick [<area>...]`, with its areas in `--help`, `--backlog-run-full` and `--merge-gate`, per the parent.
+		- `--gate` is another name for `--backlog-run-quick`, and `--ci` for `--merge-gate`. Each says so in one line when used.
+		- None of the 3 dogfoods, publishes, commits, pushes, installs, syncs or rewrites a tracked file, and none prompts.
+		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
+	- Progress log:
+		- 20261026: `--backlog-run-quick` runs the old gate's format check, clippy and tests, plus the script lints and the docs checks, each as an area. Named areas run in the order given. An unknown area stops the run and lists them.
+		- 20261026: `--backlog-run-full` and `--merge-gate` are the default run with sync, dogfood, the demo and publish off, the format checked, and no prompt. They refuse `--quick` and `--backlog-run-quick`. The plan has a Run line naming which.
+		- 20261026: New `--fmt-check`, which the full runs hand to the run inside the container.
+		- 20261026: The script lints and the docs checks moved into 2 functions, so stage 3 and the quick run share them.
+		- 20261026: The pre-push hook calls `--backlog-run-quick` by name. It moves to `--merge-gate` with 2026102616543943.
+		- 20261026: The container test's `--gate --container` check expected `cicd.bash --gate` inside, and now expects `cicd.bash --backlog-run-quick fmt clippy tests scripts docs`. The engine test's "--gate is the merge gate" check is renamed "--gate is the backlog quick run", with the same assert.
+	- Decisions:
+		- 20261026: The areas are `fmt`, `clippy`, `tests`, `scripts` and `docs`, by kind of check, not by part of the program. Each maps to one step, and cargo's test filters already cover a narrower test run.
+		- 20261026: `--backlog-run-full` and `--merge-gate` run the same checks. The rules define both as every check of the default run, the other boxes included. They differ only in who calls them.
+		- 20261026: The demo stays off in both, since it rewrites the README gif, a tracked file.
+	- Verified: 20261026. A real `cicd.bash --backlog-run-quick` in the container passed all 5 areas in 207 s at a load of 12 to 20, 1409 tests among them. `--no-container --backlog-run-quick docs scripts` passed in 76 s. The plan for `--merge-gate` and `--backlog-run-full` showed sync, dogfood, the demo and publish off and `cargo fmt --check`. The engine, container and hooks tests, shellcheck and the bash style check pass. The 19 new engine checks failed against the old cicd.bash, and 4 failed against a copy that kept dogfood on.
+		- Swept: every `--gate` and `--ci` caller in the repo: the pre-push hook, the container and engine tests, config.bash and design.md. `cicd-win.ps1 -Gate` is 2026102616543946.
+	- Branch: rnd1026
+	- Test case: `cicd/tests/engine/run.bash` (Er2UgY7), 19 new checks. `cicd/tests/container/run.bash` (EsJg9EF), 3 for the areas going into the container and the `--gate` line.
+	- Commit: d7a73a7
+
+- CICD reset: `--keep-temp` and `--list`
+	- ID: 2026102616543939
+	- Type: Task
+	- Status: Waiting on automated testing
+	- Needs local test suite run?: The round's full run, `cicd/cicd.bash --backlog-run-full`, since stage 3's test scripts moved into one function.
+	- Priority: High
+	- Opened: 20261026-165439
+	- Opened by: CC
+	- Parent ID: 2026102416233807
+	- Prereq IDs: 2026102616543933
+	- Target OS: All
+	- Requirements:
+		- `--keep-temp` keeps the run's temp folder and containers, and prints where they are.
+		- `--list` prints the steps and test IDs the other flags given would run, and runs nothing. It works with the 3 runs from 2026102616543933 too.
+		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
+	- Progress log:
+		- 20261026: `--keep-temp` keeps the test run folder, pass or fail, and the container's /tmp, and prints both paths. The run inside the container keeps its own test folder there too.
+		- 20261026: `--list` prints the plan, then the Rust tests by ID and name, then the test scripts and harnesses by ID, and exits before the prompt. With `--backlog-run-quick` it prints the areas as steps, and the IDs of the tests and docs areas. It starts no container.
+		- 20261026: Stage 3's test scripts moved into `fScriptTests`, and the 2 advisory tests into `fAdvisoryTests`, so `--list` goes through the same calls a run makes. New `test-id.py --list`.
+		- 20261026: The engine and testout tests set `listing=0` for the functions they lift. No assert changed.
+	- Decisions:
+		- 20261026: `--list` lists by walking the run's own test calls, each printing its line instead of running, rather than keeping a second list that could drift.
+		- 20261026: The Rust tests listed are every `#[test]` test-id.py finds, the same set cargo test builds. A test gated by `cfg` for another OS is listed too.
+		- 20261026: The run inside the container gets `SILKTERM_TEST_DIR` set under `--keep-temp`, not the flag, so a folder handed in is kept by the rule it already has. The container test's "--keep-temp stays out of the run inside" check still holds.
+	- Verified: 20261026. EsJg9EF with 12 new checks, 9 of which failed against the old cicd.bash. Er2UgY7, the testout and hooks tests, shellcheck, the bash style check, `test-id.py --check`, and `--backlog-run-quick scripts docs` in the container. A plain `--backlog-run-quick docs --keep-temp` kept its folder and named it. `--list` with no run flag, `--quick`, `--merge-gate`, `--backlog-run-full` and `--backlog-run-quick` all printed and ran nothing.
+		- Swept: every fLift of fRunTest, fRunTest_MaySkip, fWinGuiScenarios and fRenderNodeTest in cicd/tests, and every EXIT trap in cicd.bash. `cicd-win.ps1 -KeepTemp` and `-List` are 2026102616543946.
+	- Branch: rnd1026
+	- Test case: `cicd/tests/container/run.bash` (EsJg9EF), the `--keep-temp` and `--list` checks.
+	- Commit: dd6bdbb
+
+- The advisory scan misses a crate yanked since cargo's index cache was filled, and clipboard-win 5.4.1 is yanked
+	- ID: 2026102518563500
+	- Type: Bug
+	- Status: Waiting on automated testing
+	- Needs local test suite run?: One container full run (`--backlog-run-full`): stage 3's index refresh, the advisory scan and Etr6FuE, against the container's own cache volume.
+	- Severity: Avg
+	- Opened: 20261025-185635
+	- Opened by: CC
+	- Related IDs: 2026101714445001
+	- Target OS: All
+	- Test environment: b29w (cargo-deny 0.19.9) and b23 (cargo-deny 0.19.9), `rnd1025b` at 8a28055
+	- Steps to reproduce:
+		- Run `cargo deny check advisories -D warnings` on b29w and on b23.
+	- Incorrect behavior:
+		- On b29w the scan fails: "detected yanked crate (try `cargo update -p clipboard-win`)", for clipboard-win 5.4.1 from copypasta. So `cicd-win.ps1` fails stage 3 on any Windows box today.
+		- On b23 the same tree passes ("advisories ok"). b23's cached crates.io index entry for clipboard-win is from 2026-06-22, from before 5.4.1 was yanked and 5.4.2 and 5.4.3 came out, and the scan reads it as it is.
+	- Expected behavior: Every box gives the same answer, and a yank shows up on the next run wherever it runs.
+	- Reproduced: Yes. The live index marks 5.2.0 to 5.4.1 yanked. `cargo update -p clipboard-win --precise 5.4.3` changes only those 2 lock lines, and then the scan passes on b29w.
+	- Notes:
+		- Two parts: bump the lock, and make the scan refresh the index entries it reads, or fail when it can't. The container's cache volume may be just as stale.
+	- Actual cause: cargo-deny reads yanks from cargo's cached index entries and never fetches them. Its `fetch index` only downloads crates. So a box sees a yank only after some other cargo call refreshed that entry. b23's entry was refreshed on 10-26 by another cargo call, and b23 then failed too.
+	- Actual fix:
+		- Lock: clipboard-win 5.4.1 -> 5.4.3, 2 lines.
+		- Before the scan, both pipelines run `cargo update --dry-run --quiet --config net.offline=false` (`INDEX_REFRESH_CMD` in config.bash, and `fAdvisoryScan` in cicd-win.ps1). It revalidates the entry of every locked crate and writes nothing. If it can't reach the index the run fails, since the scan couldn't see a yank.
+	- Decisions:
+		- 20261026: Refresh through cargo itself, not our own fetch of the index. With the etag blanked on all 357 locked crates' entries, one dry run rewrote all 357. It takes about 3 s, and 0.8 s of CPU.
+		- 20261026: No network fails the scan rather than skipping it, per the issue. `net.offline=false` keeps `CARGO_NET_OFFLINE` from making it a quiet pass. The dry run also fetches the git deps, so the git host has to answer too.
+	- Progress log:
+		- 20261026: Reproduced here with b23's 06-22 clipboard-win entry from a snapshot, in a cargo home of its own: the scan passed on 5.4.1. `cargo update --workspace --dry-run` left the entry stale. The full dry run refreshed it, and the scan then failed on the yank.
+	- Verified:
+		- 20261026: Etr6FuE passes. It failed 2 of 4 with the refresh swapped for `true`.
+		- 20261026: On b29w, `fAdvisoryScan` taken from the edited cicd-win.ps1, run in its dev clone: failed on 5.4.1, passed on 5.4.3, and failed "can't refresh" with no network. The clone's lock was put back after.
+		- 20261026: `--backlog-run-quick clippy scripts`, and clippy `-D warnings` for `x86_64-pc-windows-gnu` with 5.4.3. The real scan passes here.
+	- Swept: every cargo-deny advisories call, in config.bash, cicd.bash and cicd-win.ps1. ci-mac.bash and the hosted workflows don't run it. advscope uses its own db and `--disable-fetch`, and doesn't read yanks.
+	- Test case: Etr6FuE, `cicd/tests/yankfresh/run.bash`, run by stage 3 after advscope. It plants a stale yank in a copied index cache: the scan alone must fail, the refresh must fail with no network, and after the refresh the scan must pass with the lock untouched.
+	- Branch: rnd1026
+	- Commit: 1353c9c
 
 - Always use automatic remote mode when detected.
 	- ID: 2026101914251764
@@ -217,6 +392,32 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261025: Not run in the second batch either. It needs an RDP session on a box, and a woken vm925w sits at the logon screen (2026102510420001).
 	- Branch: rnd1022
 	- Test case: `a_remote_screen_is_ignored_when_turned_off` (rating.rs, fails with the check reordered so detection runs first) and `a_remote_screen_takes_remote_unless_turned_off` (config.rs).
+
+- CICD reset: version line
+	- ID: 2026102416233811
+	- Type: Task
+	- Status: Waiting on automated testing
+	- Needs external testing: the `cliflags` job on a Windows box through `win-remote.bash`: `--version` shows both lines through the joined console. Also cicd-win.ps1's pin on a dirty tree, in the run 2026102416233806 asks for.
+	- Priority: Avg
+	- Opened: 20261024-162338
+	- Opened by: CC
+	- Target OS: All
+	- Requirements:
+		- Per the build number bullets in `Branches and releases` in the shared CICD rules. The build number in Crockford base 32 and the date on a non-release build are in.
+		- Left: `--version` and `--about` print the copyright line under `SilkTerm v<version> build <build>`.
+		- Left: a build from a dirty tree takes its number from the clock. The rule takes it from the commit.
+		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
+		- Overrides: the 09-24 call in the private notes that `--version` is one line with no copyright line.
+	- Progress log:
+		- 20261026: In. `--version` prints the version line, then the copyright line. `--about` opens with the same two lines, in place of its "About SilkTerm" and "Version" lines. cicd.bash and cicd-win.ps1 pin the build number to the commit's time, dirty tree or not. The clock stands in only where there is no commit.
+		- 20261026: Er2UgY7's "a dirty tree takes the clock" is now "a dirty tree takes its commit's time too": was the clock, now the commit's minutes. It failed with the old pin and passes with the new one.
+	- Decisions:
+		- 20261026: A plain `cargo build` with no pin still takes the clock in build.rs, since reading git there would need the build script to watch `.git`. Only pipeline builds are numbered from the commit.
+		- 20261026: design.md's Command-line options and Delivery bullets say the same now.
+	- Verified: 20261026, EtrCPPP (new), Eo4auD9, EmrsJ5P, Er2UJeR, Er2UgY7, EpHWVGS (release.bash still reads only the build number), and the backlog quick run, all five areas. A debug build printed both lines for `--version` and `--about`.
+	- Swept: every caller of `version_line` and every reader of `--version` output: release.bash's pattern, the release test, cliflags.ps1, the Help text, which keeps the one line above the usage.
+	- Branch: rnd1026
+	- Test case: EtrCPPP, Er2UgY7, EpHWVGS.
 
 - Add a contributor license agreement, like nano-git-db's
 	- ID: 2026101906582193
@@ -386,78 +587,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Test case: None new. The ignores are test attributes, checked by the runs above.
 	- Branch: rnd1023
 
-- CICD reset: Zig cache
-	- ID: 2026102416233804
-	- Type: Task
-	- Status: Waiting on automated testing
-		- Reverted on `rnd1025` after its cap check failed the gate step on ZFS. See 2026102509002701. Back on `rnd1026` from `wip/rnd1025-2026102416233804`, with the ZFS fix 18454d6. Waits on its container full run.
-	- Needs local test suite run?: One container full run, from the round's full-run line, so the ARM64 builds fill `silkterm-zig-cache`. Look for the volume made with both labels and a `.cicd-zig-version` of 0.16.0 in it.
-	- Priority: High
-	- Opened: 20261024-162338
-	- Opened by: CC
-	- Target OS: Linux
-	- Requirements:
-		- Per the Zig bullets in `Cleanup after a run` in the shared CICD rules. The ARM64 builds use `cargo zigbuild`, and nothing looks after Zig's caches yet.
-		- At the end of a run, empty a project Zig cache that's over 2 GB, or that an older Zig filled, going by a version stamp inside it. Always the whole folder.
-		- In the container, Zig's global cache goes on a volume of its own, `silkterm-zig-cache`, under the same rule. On this box `~/.cache/zig` is left alone.
-		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
-	- Progress log:
-		- 20261025: The container mounts `silkterm-zig-cache` at `/zig-cache`, with `ZIG_GLOBAL_CACHE_DIR` pointed there. The first run to use it writes the Zig version into `.cicd-zig-version`. At the end of a run the volume goes whole when it's over 2 GB or another Zig filled it, through the container cleanup in 2026102416233805. The cap is `CLEANUP_CACHE_CAP_MB` in config.bash.
-		- 20261025: A `.zig-cache` or `zig-cache` folder in the tree goes whole under the same rule at the end of a run, where the builds ran, and gets the stamp when it has none. `zig cc` keeps to its global cache, so none turned up here.
-		- 20261026: Back on `rnd1026`, with 18454d6 and the startup gate test stub. The backlog quick run in the container made `silkterm-zig-cache` with both labels.
-		- Note: Until now Zig's cache inside the container sat in `silkterm-cicd-cache`, under `/cache/home/.cache/zig`. It stays there until that volume is cleaned up by hand, per 2026102416233805.
-	- Verified: 20261025. In the image, `zig cc` for aarch64 wrote its cache into a stand-in volume at `/zig-cache`, owned by this uid, with the stamp `0.16.0`. The cleanup test's new Zig cases, and the container test's volume cases, against a stand-in docker. Both new sets failed against the pipeline as it was. Shellcheck, house style, engine test, docs check.
-	- Verified: 20261026. On `rnd1026`: EtAiwUl with `TMPDIR` on ZFS and on ext4, EsJg9EF, the startup gate test, shellcheck, and `--backlog-run-quick scripts docs` in the container.
-	- Swept: every `zigbuild` and `zig` call in cicd and the Dockerfile. Only the two ARM64 cross targets in config.bash use it.
-	- Test case: New cases in `cicd/tests/cleanup/run.bash` (EtAiwUl) and `cicd/tests/container/run.bash` (EsJg9EF).
-	- Branch: rnd1026
-	- Prereq IDs: 2026102509002701
-	- Waits on Bug 2026102509002701, the ZFS cap check that got this reverted last round.
-
-- CICD reset: container cleanup
-	- ID: 2026102416233805
-	- Type: Task
-	- Status: Waiting on automated testing
-		- Reverted on `rnd1025` with 2026102416233804, whose cap check failed the gate step on ZFS. See 2026102509002701. Back on `rnd1026` from `wip/rnd1025-2026102416233804`. Waits on its container full run.
-		- The hand cleanup of what was made before the labels is left for the next round, once the in-flight run of 2026-10-25 is done.
-	- Needs local test suite run?: One container full run, from the round's full-run line. Look for containers named `silkterm-<run>-engine`, `-asan` and `-tsan` in `docker ps` while it runs, then at the end "docker build cache over a week old pruned" and the `docker:` line, and no `silkterm-` container left after.
-	- Priority: High
-	- Opened: 20261024-162338
-	- Opened by: CC
-	- Related IDs: 2026101909222600
-	- Target OS: Linux
-	- Requirements:
-		- Per the container bullets in `Cleanup after a run` in the shared CICD rules. `--rm`, a pipeline label, and sweeps of old tags and stopped containers are in.
-		- Every container, image and volume gets `dev.project=silkterm` and `dev.run=<run folder name>`, and each container is named `silkterm-<run folder name>-<step>`.
-		- At the end of a run, on failure and Ctrl+C too, the run's containers are stopped and removed by `dev.run`. `--keep-temp` keeps them.
-		- The current image tag and the one before it stay. Every older tag goes now.
-		- `docker builder prune -f --filter until=168h` runs at the end.
-		- The cache volume gets the 2 GB rule.
-		- The end line compares `docker system df` before and after.
-		- What was made before the labels gets one cleanup by hand, by ID.
-		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
-		- Overrides: 2026101909222600's 20261019 decision of no `docker builder prune`, and the same call in the private notes' "Calls already made".
-	- Progress log:
-		- 20261025: Every container, image and volume a run makes is labeled `dev.project=silkterm` and `dev.run=<run>`, and containers are named `silkterm-<run>-<step>`, the step being `engine`, `gate`, `asan`, `tsan`, `codeql` or `tidy`. The run's name is its test run folder's for now, without the `test_silkterm_` part. 2026102416233803 moves the run folder under `HOST_TEMP`. The cache volumes are made with the labels when missing.
-		- 20261025: At the end of a run, failed or stopped by Ctrl+C too, the run's containers are stopped and removed by `dev.run`. Then untagged images with our label go. Once the run passed, our tags older than the current one and the one before it go. Then the volume rule: a cache volume over 2 GB goes whole, and the Zig one when another Zig filled it. docker keeps a volume another run still holds. Last, `docker builder prune -f --filter until=168h`, and one line comparing `docker system df` before and after.
-		- 20261025: `--keep-temp` starts the containers without `--rm`, keeps them at the end with their names printed, and leaves the volumes they hold.
-		- 20261025: The older-tag sweep moved from the start of a run to its end, and only runs after a pass, so the last image that passed isn't lost to a broken recipe.
-		- 20261025: Nothing without the label is touched, so the `silkterm-cicd` images, the `silkterm-cicd-cache` volume and any stopped container from before today stay until the hand cleanup.
-		- 20261026: Back on `rnd1026`, merged with the backlog run flags. `--keep-temp` sits with the other run flags. After the merge the gate's container was named `-engine`, since the gate now goes in as `--backlog-run-quick`. It's `-gate` again, and the container test caught it.
-		- 20261026: The backlog quick run in the container passed, ended with "docker build cache over a week old pruned" and the `docker:` line, and left no `silkterm-` container.
-		- Note: A `docker run --rm` can return before docker has removed the container, which then still holds its volumes. So the step that reads the volumes runs without `--rm` and is removed with a plain `docker rm`, which waits.
-		- 20261025: The container test's checks of the old label, the build cache left alone and the old tag sweep are commented out with the reason, and replaced. The `-v` count it checks went from 3 to 4, for the Zig volume.
-	- Decisions:
-		- 20261026: The gate's step name goes by `--backlog-run-quick`, the flag the gate passes in now. `--gate` is only another name for it.
-		- 20261025: The older-tag sweep keeps the newest tag before the current one by creation time, among images with our label only.
-	- Verified: 20261025. The end cleanup against real docker, on throwaway images, containers and volumes under another project name: this run's container gone, another run's and another project's kept, the current and previous tags kept, older labeled tags and a labeled untagged image gone, an unlabeled tag kept, an over-cap volume and a stale Zig volume gone, one held by another run left with a message, an unlabeled volume never read. It failed at first, on the `--rm` race above. The container test's new cases, against a stand-in docker, Ctrl+C in a gate and in a full run through the log tee included. All failed against the pipeline as it was. Shellcheck, house style, engine test, docs check, build.md markdown check.
-	- Verified: 20261026. On `rnd1026`: EsJg9EF, with the gate step name case failing before the fix and passing after. EtAiwUl on ZFS and ext4, shellcheck, and `--backlog-run-quick scripts docs` in the container.
-	- Swept: every `docker` call in cicd.bash, and every `fContainerRun` and `fContainerBuild` call (gate, ASan, TSan, CodeQL, engine). The asan, tsan and codeql scripts start no container. No other script names the old label.
-	- Test case: New cases in `cicd/tests/container/run.bash` (EsJg9EF).
-	- Branch: rnd1026
-	- Prereq IDs: 2026102509002701
-	- Waits on Bug 2026102509002701, the ZFS cap check that got this reverted last round.
-
 - CICD reset: other hosts and VMs
 	- ID: 2026102416233802
 	- Type: Task
@@ -504,40 +633,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- The Linux ARM64 build gets a `--version` smoke run on the arm64 Linux VM, held and put back through the VM state helper. Nothing runs it now.
 		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
 
-- CICD reset: CPU and priority
-	- ID: 2026102416233806
-	- Type: Task
-	- Status: Waiting on automated testing
-	- Needs local test suite run?: one container full run, `--backlog-run-full`. Its log should show the `jobs:` lines, a quarter at the ASan, leak check and TSan steps, and EtrCPPO passing.
-	- Needs external testing: `cicd-win.ps1 -Quick` on a Windows box through `win-remote.bash`: the run sits at BelowNormal and prints its `jobs:` line per stage.
-	- Priority: High
-	- Opened: 20261024-162338
-	- Opened by: CC
-	- Target OS: All
-	- Requirements:
-		- Per `Machine use` in the shared CICD rules. Half the CPUs is in, through `CICD_MAX_JOBS`.
-		- When the 1-minute load is over half the CPU count, at the start or before a step, that step gets a quarter.
-		- The hard steps always get a quarter: ASan, TSan, Miri, CodeQL, the fuzz soak and the soak test.
-		- The counts are worked out in one place. The sanitizer, CodeQL and repro scripts each work out their own now.
-		- The whole run goes under `nice -n 19` and `ionice -c 3`.
-		- Containers get `--cpus <jobs>` and `--cpu-shares 256`, with `nice` inside.
-		- `cicd-win.ps1` sets `BelowNormal` on its own process at the top, and `Idle` for the hard steps.
-		- Jobs on the other boxes go by that box's CPU count and load.
-		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
-	- Progress log:
-		- 20261026: In. `cicd/utility/include/jobs.bash` works out the count before each stage and hard step, for cicd.bash and the ASan, TSan, CodeQL and repro scripts. The run lowers its own priority at the top, a container gets `--cpus` and `--cpu-shares 256`, and cicd-win.ps1 does the same per stage at BelowNormal.
-		- 20261026: The container test's docker run line now has `--cpus N --cpu-shares 256` in it (EsJg9EF, "the gate's container is named for the step"), since the issue asks for those flags.
-	- Decisions:
-		- 20261026: No Miri or soak test step exists in the pipeline, so the hard steps are ASan, TSan, the leak checks, CodeQL and the fuzz soak. A new one calls `fJobs hard`.
-		- 20261026: Priority goes on the run's own shell with `renice` and `ionice -p`, not a re-exec under `nice`, so arguments and traps stay as they are. Each script in the container lowers itself the same way.
-		- 20261026: A `CICD_MAX_JOBS` set by config.bash or handed down by the outer run is a ceiling. `CICD_CORES` goes into the container too, so a `--cpus` cap isn't counted twice.
-		- 20261026: Windows keeps no load average, so busy there is the CPU load percentage over 50. cicd-win.ps1 has no hard step of its own. Its WSL half is cicd.bash, which lowers itself.
-		- 20261026: `ci-mac.bash` on the hosted runner is left alone, filed as a Check in questions.md. The private runner on b26 lives in silkterm-private.
-	- Verified: 20261026, EtrCPPO (new), EsJg9EF and the backlog quick run, all five areas, passed. The quick run printed `jobs: 8 of 32 CPUs (busy, load 19.63)`. cicd-win.ps1's `fSetJobs`, lifted out and run under pwsh here, gave 8 at BelowNormal, then 4 at Idle for a hard step, and 1 on 2 CPUs.
-	- Swept: every `nproc` and `ProcessorCount` in cicd/ (now only jobs.bash and cicd-win.ps1), both `docker run` sites (the tidy run only reads volume sizes, so it keeps no cap), and the stage sections of both pipelines.
-	- Branch: rnd1026
-	- Test case: EtrCPPO, plus EsJg9EF's container checks.
-
 - CICD reset: standard flags
 	- ID: 2026102416233807
 	- Type: Task
@@ -561,38 +656,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261026: Split, since it doesn't fit one sitting. Children: 2026102616543933 (the backlog runs and the merge gate), 2026102616543936 (`--long`, and a default run in about an hour), 2026102616543939 (`--keep-temp` and `--list`), 2026102616543943 (the pre-push hook), 2026102616543946 (the same in `cicd-win.ps1`).
 		- 20261026: 2026102616543933 is in: `--backlog-run-quick`, `--backlog-run-full`, `--merge-gate`, and `--gate` and `--ci` as other names.
 
-- CICD reset: the backlog runs and the merge gate
-	- ID: 2026102616543933
-	- Type: Task
-	- Status: Waiting on automated testing
-	- Needs local test suite run?: One `cicd/cicd.bash --merge-gate` from `repo/`, in the container. It can stand in for the round's full run.
-	- Priority: High
-	- Opened: 20261026-165439
-	- Opened by: CC
-	- Parent ID: 2026102416233807
-	- Target OS: All
-	- Requirements:
-		- `--backlog-run-quick [<area>...]`, with its areas in `--help`, `--backlog-run-full` and `--merge-gate`, per the parent.
-		- `--gate` is another name for `--backlog-run-quick`, and `--ci` for `--merge-gate`. Each says so in one line when used.
-		- None of the 3 dogfoods, publishes, commits, pushes, installs, syncs or rewrites a tracked file, and none prompts.
-		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
-	- Progress log:
-		- 20261026: `--backlog-run-quick` runs the old gate's format check, clippy and tests, plus the script lints and the docs checks, each as an area. Named areas run in the order given. An unknown area stops the run and lists them.
-		- 20261026: `--backlog-run-full` and `--merge-gate` are the default run with sync, dogfood, the demo and publish off, the format checked, and no prompt. They refuse `--quick` and `--backlog-run-quick`. The plan has a Run line naming which.
-		- 20261026: New `--fmt-check`, which the full runs hand to the run inside the container.
-		- 20261026: The script lints and the docs checks moved into 2 functions, so stage 3 and the quick run share them.
-		- 20261026: The pre-push hook calls `--backlog-run-quick` by name. It moves to `--merge-gate` with 2026102616543943.
-		- 20261026: The container test's `--gate --container` check expected `cicd.bash --gate` inside, and now expects `cicd.bash --backlog-run-quick fmt clippy tests scripts docs`. The engine test's "--gate is the merge gate" check is renamed "--gate is the backlog quick run", with the same assert.
-	- Decisions:
-		- 20261026: The areas are `fmt`, `clippy`, `tests`, `scripts` and `docs`, by kind of check, not by part of the program. Each maps to one step, and cargo's test filters already cover a narrower test run.
-		- 20261026: `--backlog-run-full` and `--merge-gate` run the same checks. The rules define both as every check of the default run, the other boxes included. They differ only in who calls them.
-		- 20261026: The demo stays off in both, since it rewrites the README gif, a tracked file.
-	- Verified: 20261026. A real `cicd.bash --backlog-run-quick` in the container passed all 5 areas in 207 s at a load of 12 to 20, 1409 tests among them. `--no-container --backlog-run-quick docs scripts` passed in 76 s. The plan for `--merge-gate` and `--backlog-run-full` showed sync, dogfood, the demo and publish off and `cargo fmt --check`. The engine, container and hooks tests, shellcheck and the bash style check pass. The 19 new engine checks failed against the old cicd.bash, and 4 failed against a copy that kept dogfood on.
-		- Swept: every `--gate` and `--ci` caller in the repo: the pre-push hook, the container and engine tests, config.bash and design.md. `cicd-win.ps1 -Gate` is 2026102616543946.
-	- Branch: rnd1026
-	- Test case: `cicd/tests/engine/run.bash` (Er2UgY7), 19 new checks. `cicd/tests/container/run.bash` (EsJg9EF), 3 for the areas going into the container and the `--gate` line.
-	- Commit: d7a73a7
-
 - CICD reset: `--long`, and a default run in about an hour
 	- ID: 2026102616543936
 	- Type: Task
@@ -607,36 +670,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- `--long`, with `--slow` as another name: everything, the leak checks and benchmarks that take hours included.
 		- The default run fits in about an hour. It takes about 90 minutes now, so a step moves to `--long`. The TSan run is about 28 minutes of it.
 		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
-
-- CICD reset: `--keep-temp` and `--list`
-	- ID: 2026102616543939
-	- Type: Task
-	- Status: Waiting on automated testing
-	- Needs local test suite run?: The round's full run, `cicd/cicd.bash --backlog-run-full`, since stage 3's test scripts moved into one function.
-	- Priority: High
-	- Opened: 20261026-165439
-	- Opened by: CC
-	- Parent ID: 2026102416233807
-	- Prereq IDs: 2026102616543933
-	- Target OS: All
-	- Requirements:
-		- `--keep-temp` keeps the run's temp folder and containers, and prints where they are.
-		- `--list` prints the steps and test IDs the other flags given would run, and runs nothing. It works with the 3 runs from 2026102616543933 too.
-		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
-	- Progress log:
-		- 20261026: `--keep-temp` keeps the test run folder, pass or fail, and the container's /tmp, and prints both paths. The run inside the container keeps its own test folder there too.
-		- 20261026: `--list` prints the plan, then the Rust tests by ID and name, then the test scripts and harnesses by ID, and exits before the prompt. With `--backlog-run-quick` it prints the areas as steps, and the IDs of the tests and docs areas. It starts no container.
-		- 20261026: Stage 3's test scripts moved into `fScriptTests`, and the 2 advisory tests into `fAdvisoryTests`, so `--list` goes through the same calls a run makes. New `test-id.py --list`.
-		- 20261026: The engine and testout tests set `listing=0` for the functions they lift. No assert changed.
-	- Decisions:
-		- 20261026: `--list` lists by walking the run's own test calls, each printing its line instead of running, rather than keeping a second list that could drift.
-		- 20261026: The Rust tests listed are every `#[test]` test-id.py finds, the same set cargo test builds. A test gated by `cfg` for another OS is listed too.
-		- 20261026: The run inside the container gets `SILKTERM_TEST_DIR` set under `--keep-temp`, not the flag, so a folder handed in is kept by the rule it already has. The container test's "--keep-temp stays out of the run inside" check still holds.
-	- Verified: 20261026. EsJg9EF with 12 new checks, 9 of which failed against the old cicd.bash. Er2UgY7, the testout and hooks tests, shellcheck, the bash style check, `test-id.py --check`, and `--backlog-run-quick scripts docs` in the container. A plain `--backlog-run-quick docs --keep-temp` kept its folder and named it. `--list` with no run flag, `--quick`, `--merge-gate`, `--backlog-run-full` and `--backlog-run-quick` all printed and ran nothing.
-		- Swept: every fLift of fRunTest, fRunTest_MaySkip, fWinGuiScenarios and fRenderNodeTest in cicd/tests, and every EXIT trap in cicd.bash. `cicd-win.ps1 -KeepTemp` and `-List` are 2026102616543946.
-	- Branch: rnd1026
-	- Test case: `cicd/tests/container/run.bash` (EsJg9EF), the `--keep-temp` and `--list` checks.
-	- Commit: dd6bdbb
 
 - CICD reset: the pre-push hook runs the merge gate
 	- ID: 2026102616543943
@@ -782,44 +815,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Expected behavior: Each underline style a program sets is drawn, in the underline color it sets, or the text color.
 	- Reproduced: Not run in a window. Found in the code while answering 2026102114411311.
 
-- The advisory scan misses a crate yanked since cargo's index cache was filled, and clipboard-win 5.4.1 is yanked
-	- ID: 2026102518563500
-	- Type: Bug
-	- Status: Waiting on automated testing
-	- Needs local test suite run?: One container full run (`--backlog-run-full`): stage 3's index refresh, the advisory scan and Etr6FuE, against the container's own cache volume.
-	- Severity: Avg
-	- Opened: 20261025-185635
-	- Opened by: CC
-	- Related IDs: 2026101714445001
-	- Target OS: All
-	- Test environment: b29w (cargo-deny 0.19.9) and b23 (cargo-deny 0.19.9), `rnd1025b` at 8a28055
-	- Steps to reproduce:
-		- Run `cargo deny check advisories -D warnings` on b29w and on b23.
-	- Incorrect behavior:
-		- On b29w the scan fails: "detected yanked crate (try `cargo update -p clipboard-win`)", for clipboard-win 5.4.1 from copypasta. So `cicd-win.ps1` fails stage 3 on any Windows box today.
-		- On b23 the same tree passes ("advisories ok"). b23's cached crates.io index entry for clipboard-win is from 2026-06-22, from before 5.4.1 was yanked and 5.4.2 and 5.4.3 came out, and the scan reads it as it is.
-	- Expected behavior: Every box gives the same answer, and a yank shows up on the next run wherever it runs.
-	- Reproduced: Yes. The live index marks 5.2.0 to 5.4.1 yanked. `cargo update -p clipboard-win --precise 5.4.3` changes only those 2 lock lines, and then the scan passes on b29w.
-	- Notes:
-		- Two parts: bump the lock, and make the scan refresh the index entries it reads, or fail when it can't. The container's cache volume may be just as stale.
-	- Actual cause: cargo-deny reads yanks from cargo's cached index entries and never fetches them. Its `fetch index` only downloads crates. So a box sees a yank only after some other cargo call refreshed that entry. b23's entry was refreshed on 10-26 by another cargo call, and b23 then failed too.
-	- Actual fix:
-		- Lock: clipboard-win 5.4.1 -> 5.4.3, 2 lines.
-		- Before the scan, both pipelines run `cargo update --dry-run --quiet --config net.offline=false` (`INDEX_REFRESH_CMD` in config.bash, and `fAdvisoryScan` in cicd-win.ps1). It revalidates the entry of every locked crate and writes nothing. If it can't reach the index the run fails, since the scan couldn't see a yank.
-	- Decisions:
-		- 20261026: Refresh through cargo itself, not our own fetch of the index. With the etag blanked on all 357 locked crates' entries, one dry run rewrote all 357. It takes about 3 s, and 0.8 s of CPU.
-		- 20261026: No network fails the scan rather than skipping it, per the issue. `net.offline=false` keeps `CARGO_NET_OFFLINE` from making it a quiet pass. The dry run also fetches the git deps, so the git host has to answer too.
-	- Progress log:
-		- 20261026: Reproduced here with b23's 06-22 clipboard-win entry from a snapshot, in a cargo home of its own: the scan passed on 5.4.1. `cargo update --workspace --dry-run` left the entry stale. The full dry run refreshed it, and the scan then failed on the yank.
-	- Verified:
-		- 20261026: Etr6FuE passes. It failed 2 of 4 with the refresh swapped for `true`.
-		- 20261026: On b29w, `fAdvisoryScan` taken from the edited cicd-win.ps1, run in its dev clone: failed on 5.4.1, passed on 5.4.3, and failed "can't refresh" with no network. The clone's lock was put back after.
-		- 20261026: `--backlog-run-quick clippy scripts`, and clippy `-D warnings` for `x86_64-pc-windows-gnu` with 5.4.3. The real scan passes here.
-	- Swept: every cargo-deny advisories call, in config.bash, cicd.bash and cicd-win.ps1. ci-mac.bash and the hosted workflows don't run it. advscope uses its own db and `--disable-fetch`, and doesn't read yanks.
-	- Test case: Etr6FuE, `cicd/tests/yankfresh/run.bash`, run by stage 3 after advscope. It plants a stale yank in a copied index cache: the scan alone must fail, the refresh must fail with no network, and after the refresh the scan must pass with the lock untouched.
-	- Branch: rnd1026
-	- Commit: 1353c9c
-
 - Leak checks: Miri sort, settings_ui
 	- ID: 2026102407430381
 	- Type: Task
@@ -951,32 +946,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
 		- Overrides: 2026101909222600's rule that failed runs keep their folders and the newest 5 stay.
 
-- CICD reset: version line
-	- ID: 2026102416233811
-	- Type: Task
-	- Status: Waiting on automated testing
-	- Needs external testing: the `cliflags` job on a Windows box through `win-remote.bash`: `--version` shows both lines through the joined console. Also cicd-win.ps1's pin on a dirty tree, in the run 2026102416233806 asks for.
-	- Priority: Avg
-	- Opened: 20261024-162338
-	- Opened by: CC
-	- Target OS: All
-	- Requirements:
-		- Per the build number bullets in `Branches and releases` in the shared CICD rules. The build number in Crockford base 32 and the date on a non-release build are in.
-		- Left: `--version` and `--about` print the copyright line under `SilkTerm v<version> build <build>`.
-		- Left: a build from a dirty tree takes its number from the clock. The rule takes it from the commit.
-		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
-		- Overrides: the 09-24 call in the private notes that `--version` is one line with no copyright line.
-	- Progress log:
-		- 20261026: In. `--version` prints the version line, then the copyright line. `--about` opens with the same two lines, in place of its "About SilkTerm" and "Version" lines. cicd.bash and cicd-win.ps1 pin the build number to the commit's time, dirty tree or not. The clock stands in only where there is no commit.
-		- 20261026: Er2UgY7's "a dirty tree takes the clock" is now "a dirty tree takes its commit's time too": was the clock, now the commit's minutes. It failed with the old pin and passes with the new one.
-	- Decisions:
-		- 20261026: A plain `cargo build` with no pin still takes the clock in build.rs, since reading git there would need the build script to watch `.git`. Only pipeline builds are numbered from the commit.
-		- 20261026: design.md's Command-line options and Delivery bullets say the same now.
-	- Verified: 20261026, EtrCPPP (new), Eo4auD9, EmrsJ5P, Er2UJeR, Er2UgY7, EpHWVGS (release.bash still reads only the build number), and the backlog quick run, all five areas. A debug build printed both lines for `--version` and `--about`.
-	- Swept: every caller of `version_line` and every reader of `--version` output: release.bash's pattern, the release test, cliflags.ps1, the Help text, which keeps the one line above the usage.
-	- Branch: rnd1026
-	- Test case: EtrCPPP, Er2UgY7, EpHWVGS.
-
 - CICD reset: CICD process gaps
 	- ID: 2026102416233812
 	- Type: Task
@@ -995,6 +964,37 @@ Going forward, new issues in the new template at the bottom of this file, will g
 			- The cleanup line at the end says roughly what it freed.
 		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
 		- Overrides: design.md's CodeQL and heap growth bullets under "Delivery", which keep CodeQL behind `--codeql` and every leak check out of `--quick`.
+
+- `the_scroll_record_costs_a_full_screen_program_little` failed once on the Mac runner
+	- ID: 2026102113432602
+	- Type: Bug
+	- Status: Queued
+		- 6 Mac CI runs in a row passed it since 20261022, against 3 failures in the 7 before. The cause was never found. Close it as Can't reproduce, or keep it open. Mac CI runs on every push to dev, so a new failure would show its numbers.
+		- 20261025: Since the 10-24 failure, 6 more Mac CI runs passed it (40118767927, 40119271523, 40145850085, 40214477949, 40218542312, 40221760659), and one was cancelled.
+	- Stand-in: none. It fails only on the hosted runner beside the rest of the suite. b26 is another machine, so a pass there settles nothing.
+	- Severity: Low
+	- Opened: 20261021-134326
+	- Opened by: CC
+	- Assigned to: CC
+	- Related IDs: 2026102113432600, 2026100714145220
+	- Target OS: macOS
+	- Test environment: GitHub macos-15, arm64, 3 cores
+	- Reproduced: 3 of the 7 full Mac runs to 20261022 16:04 UTC failed it (runs 39667988647, 39709345533, 39810794398). Each time it passed when run again alone, in under a second. No failure kept its numbers.
+	- Possible cause: Memory traffic from the tests running beside it. The test times by the thread's own CPU time, which leaves out waiting for a core but not cache misses. Keeping rows cycles 128 rows of 160 cells, so each scrolled line writes a row last touched 128 lines ago. The bare side reuses rows still in cache. On b23, on 3 pinned cores, the median was 1.02 to 1.07 alone, 1.04 to 1.07 beside 3 CPU-bound loops, and 1.06 to 1.14 beside 3 memory-bound ones, failing 2 of 10 runs there. Bare against bare under the same memory load stayed 0.98 to 1.02, so the pairing is fair and the extra cost is the kept side's. An M1's cores share an L2 per cluster, and the suite runs on all 3 cores, so it may well be more there. Not confirmed on the Mac.
+	- Notes:
+		- Ruled out: the Mac's clock. macOS reads it from `__thread_selfusage()` in mach ticks, about 42 ns on an M1, against runs of about 40 ms. An Apple forum thread reports some M1 Macs leaving out the tick conversion, about 41.7 times too small, but a constant factor cancels in a ratio.
+		- The copy this test was made for cost 28 to 35% here, and the pointer check catches it with no timing at all. The 10% limit is unchanged.
+		- If the Mac shows a steady gap over 10%, the options are to run this test apart from the suite, or to judge the keep cost against something the neighbours slow down as much. Neither is done yet.
+	- Progress log:
+		- 20261022: The failure text never reached the CI log. `ci-mac.bash` now prints each failed test's panic text from the first run, runs the failed tests again with their output shown, and prints every `measured:` line a test writes. The test writes its ratios and each pair's times that way, and puts the times in its failure message too.
+		- 20261022: Mac CI run 39842974082 on rnd1022 passed it. Median 1.005 over 15 pairs, from 0.766 to 1.211. Kept was above bare in 9 of 15 pairs, each by a little. The big swings were on the bare side, 24.5 against 32.0 and 23.3 against 27.7 ms, which reads more like the core or host changing than a steady keep cost. One run, so not settled. The run failed on another test, filed on 2026102114411311.
+		- 20261022: Mac CI run 39858608191 passed it again. Median 1.038, pairs from 0.841 to 2.112, kept above bare in 10 of 15.
+		- 20261023: Mac CI runs 39859635085, 40049932196, 40051324149 and 40062142185 passed it. Medians 1.008, 1.032, 1.035 and 1.032, with kept above bare in 8, 9, 15 and 9 of 15 pairs. 40051324149 had tight pairs, about 20.2 against 19.4 ms, which is the steady keep cost seen on b23. It failed on the header test, 2026102320070112. The private runner's run on b26 in the full run passed it too.
+		- 20261024: Mac CI run 40099145373 on dev at 936658b failed it again: kept cost 18% more, pairs from 0.768 to 1.568, with kept above bare in most. Run again alone it passed, median 1.002 over pairs from 0.623 to 1.643. The merge's run 40118767927 passed. So it's still live, and the spread on both sides is wide.
+	- Verified: `ci-mac.bash`'s extraction on a test binary with a failing assert, a multi-line `assert_eq!` and a `measured:` line. shellcheck, fmt, clippy on Linux, Windows and macOS targets. The test passes here and prints the new line.
+	- Branch: rnd1022
+	- Test case: `the_scroll_record_costs_a_full_screen_program_little` (EqHIGdO), message only.
+	- 20261026: It failed again on Mac CI run 40263068770 at 0b16ae9, with keeping rows 10% over and pairs from 0.711 to 2.116. It passed when run again alone. Back to Queued, since a 7th failure makes it more than a one-off.
 
 - The rotate test's fork count went over its limit once inside the test run folder test
 	- ID: 2026102518360001
@@ -1041,80 +1041,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- The Windows GUI scenarios and the scroll harness turn off only with `--quick`, and dpirand only with `DPIRAND_SECS=0` in config.bash.
 	- Notes:
 		- Not every stage needs its own flag. A few grouped ones may do, such as one for the lints and one for the script tests.
-
-- CICD reset: the Windows boxes, VM state and where each scenario runs
-	- ID: 2026102507245255
-	- Type: Task
-	- Status: Done
-		- 20261026: Brought onto `rnd1026` from `wip/rnd1025b-2026102507245255`. Verified there: the win-remote, wingui harness, engine and Windows pipeline tests, shellcheck, the bash style check, the PowerShell lint, the test ID and docs checks and the lint report pass.
-		- 20261026: The external test row is dropped. Under D, vm925w is never woken for scenarios and `@vmstate` stays off in the host config, so `perfladder` is a `SKIP` line while vm925w is off. The round's full run takes the wingui stage with b29w up and vm925w off.
-		- Reverted on `rnd1025` after the full run's wingui stage failed on a woken vm925w. See 2026102510420001. The work is on `wip/rnd1025-2026102507245255`. The host config change outside the repo, `~/.config/silkterm/winrig.conf`, wasn't reverted, and its `@vmstate` line does nothing without this item's code.
-		- 20261025: Held at Queued. Bug 2026102510420001 is fixed, so a woken vm925w is now a skip, but vm925w logs nobody on at boot, so waking it for scenarios gains nothing yet. Waits on the question in `questions.md` about how a woken vm925w gets a logged-on session. The work, brought onto rnd1025b with that fix, is on `wip/rnd1025b-2026102507245255`.
-	- Priority: High
-	- Opened: 20261025-072452
-	- Opened by: CC
-	- Parent ID: 2026102416233802
-	- Target OS: Windows
-	- Requirements:
-		- vm925w is put back the way it was found, through the VM state helper.
-		- The Windows scenarios favor b29w. The GPU and timed ones, such as `perfladder`, run on vm925w only.
-		- Windows testing names `b29w` only. Drop `b29w-wif` from the host config outside the repo.
-		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
-	- Progress log:
-		- 20261025: The host config can name the VM state helper (`@vmstate`), and then every hold in `win-remote.bash` goes through it, so a VM is woken and put back the way it was found. A box that can't be held or woken is a skip under `--optional`. Host lines take tags, and `hosts` prints them.
-		- 20261025: Each Windows scenario runs once, on the first box in the host config that's up and free. A scenario with a `Box: gpu` header line runs only on a box tagged `gpu`; that's `perfladder`. What no box took is a `SKIP` line at the end of the stage.
-		- 20261025: The host config lists b29w first and alone, with no `b29w-wif`, then vm925w tagged `gpu`, and the `@vmstate` line.
-		- Verified: both test scripts pass, and their new checks failed against the scripts as they were. shellcheck, the bash style check, the PowerShell lint, the test ID check, the docs check and the lint report pass. A job through the live config on b29w went through the VM state helper and the lock, and `hosts` printed vm925w's tag.
-		- Not run: a real wake of vm925w. It was off, and the box was at load 44.
-		- 20261025: On `wip/rnd1025b-2026102507245255`: a box nobody is logged on at leaves its reason in the stage's `SKIP` lines, such as `SKIP wingui: perfladder, no box tagged gpu answered (vm925w: nobody is logged on at the console)`.
-		- Verified: 20261025, on that branch. vm925w woken from off through `@vmstate`, from a copy of the host config: both scenarios were `SKIP` lines with that reason, on the skip list too, and vm925w was off again after. The win-remote, wingui, engine and Windows pipeline tests pass, and the new reason check failed without the line that writes it. shellcheck, the bash style check, the PowerShell lint, the test ID and docs checks pass.
-		- Swept: `win-unlock.bash` holds the same way and reads only the name and address from `hosts`, so the tags don't reach it. No other script reads `hosts` or calls `hold`. The jobs under `win-jobs` run through `job`, which holds the same way.
-	- Decisions:
-		- 20261025: Which box is favored, and which has a real card, live in the host config outside the repo, by order and the `gpu` tag. Machine names stay out of the repo, as before.
-		- 20261025: A scenario marks itself as needing a card in its own header, so the list in `config.bash` doesn't have to track it.
-	- Branch: rnd1026
-	- Commit: e673d53
-	- Test case: `cicd/tests/win-remote/run.bash` (Er2UgYA), 7 new checks for tags, holding through the VM state helper and a VM that never wakes. `cicd/tests/wingui/harness-test.bash` (EqH4isr), 8 new checks for which box each scenario runs on, and the `SKIP` lines.
-	- Prereq IDs: 2026102510420001
-	- Waits on Bug 2026102510420001, the woken VM failure that got this reverted last round.
-	- Answered 10-25: D. Leave vm925w unwoken and @vmstate off. The work on wip/rnd1025b-2026102507245255 is ready to merge as it is.
-	- Acceptance signoff: Self-closed: the work was tested on its wip branch last round, its question was settled as D, and its checks pass on rnd1026.
-	- Closed: 20261026-165053
-
-- CICD reset: `--no-remote`, and a skipped box shown as `SKIP`
-	- ID: 2026102507245260
-	- Type: Task
-	- Status: Done
-		- 20261026: Brought onto `rnd1026` from `wip/rnd1025b-2026102507245255`. Verified there: the win-remote, wingui harness, engine and Windows pipeline tests, shellcheck, the bash style check, the PowerShell lint, the test ID and docs checks and the lint report pass.
-		- 20261026: The external test row is dropped. The engine test covers the `SKIP` step line, the end list and the `--no-remote` plan lines with stand-ins, and the round's full run shows the wingui `SKIP` lines with vm925w off.
-		- Reverted on `rnd1025` with 2026102507245255, which it builds on. See 2026102510420001. The work is on `wip/rnd1025-2026102507245255`.
-		- 20261025: Held at Queued with 2026102507245255, which it builds on. Both are on `wip/rnd1025b-2026102507245255`.
-	- Prereq IDs: 2026102507245255
-		- Departs from the wording: the Windows runner's test still runs under `--no-remote`, since it uses stand-ins and reaches no box.
-	- Priority: High
-	- Opened: 20261025-072452
-	- Opened by: CC
-	- Parent ID: 2026102416233802
-	- Related IDs: 2026102416233807, 2026102416233808
-	- Target OS: All
-	- Requirements:
-		- `--no-remote` skips every other box: the Windows scenarios, the Windows runner tests, and the private runner's Mac and store parts.
-		- A skipped box shows as `SKIP` in its step's line and in the summary at the end.
-		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
-	- Progress log:
-		- 20261025: `--no-remote` skips the Windows scenarios and the private runner, and the plan says so for each. The plan has a Windows scenarios line now.
-		- 20261025: A step that reaches another box hands its scripts the run's skip list as `SILK_CICD_SKIPS`. The Windows scenarios write their `SKIP wingui:` lines there. A step that skipped anything ends with a `SKIP:` line rather than `OK:`, and the run lists every `SKIP` line again at the end.
-		- 20261025: `cicd-win.ps1 -NoRemote` passes `--no-remote` to the Linux half, which is the half that reaches the boxes.
-		- 20261025: The private runner doesn't write to the list yet, so its skips are still only warnings. That half is silkterm-private's 2026102416285601.
-	- Decisions:
-		- 20261025: A step turned off by `--no-remote` is in the plan, not in the end list, which is for boxes that weren't there, per the shared rules.
-	- Verified: the engine, Windows scenario harness, Windows pipeline and container tests pass, and each new check failed against a broken copy of what it checks. shellcheck, the bash style check, the PowerShell lint, the test ID and docs checks pass. The plan printed by a real `cicd.bash` showed both lines for no options, `--no-remote` and `--quick`.
-	- Swept: everything `cicd.bash` runs that reaches a box: the Windows scenarios and the private runner. The script tests under `cicd/tests`, `win-remote` included, use stand-ins. `cicd-win.ps1`'s Linux half got the flag. The demo and `ci-mac.bash` reach no other box.
-	- Branch: rnd1026
-	- Commit: e673d53
-	- Test case: `cicd/tests/engine/run.bash` (Er2UgY7), 23 new checks for `--no-remote`, the plan lines, the `SKIP` step lines and the end list. `cicd/tests/wingui/harness-test.bash` (EqH4isr), 4 for the skip list. `cicd/tests/cicd-win/run.bash` (Er2UgYE), 2 for `-NoRemote`.
-	- Acceptance signoff: Self-closed: the work was tested on its wip branch last round, its question was settled as D, and its checks pass on rnd1026.
-	- Closed: 20261026-165053
 
 - Wayland: must use the Wayland clipboard, and minimize other X11 features
 	- ID: 2026101509024607
@@ -1760,6 +1686,80 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Verified: seed 30 alone, the native unit tests (1058 passed), the fuzz soak at 60 seconds a target (23 targets, all clean), and native and Windows-target clippy.
 	- Acceptance signoff: JC, 20261003.
 	- Closed: 20261003-193000
+
+- CICD reset: the Windows boxes, VM state and where each scenario runs
+	- ID: 2026102507245255
+	- Type: Task
+	- Status: Done
+		- 20261026: Brought onto `rnd1026` from `wip/rnd1025b-2026102507245255`. Verified there: the win-remote, wingui harness, engine and Windows pipeline tests, shellcheck, the bash style check, the PowerShell lint, the test ID and docs checks and the lint report pass.
+		- 20261026: The external test row is dropped. Under D, vm925w is never woken for scenarios and `@vmstate` stays off in the host config, so `perfladder` is a `SKIP` line while vm925w is off. The round's full run takes the wingui stage with b29w up and vm925w off.
+		- Reverted on `rnd1025` after the full run's wingui stage failed on a woken vm925w. See 2026102510420001. The work is on `wip/rnd1025-2026102507245255`. The host config change outside the repo, `~/.config/silkterm/winrig.conf`, wasn't reverted, and its `@vmstate` line does nothing without this item's code.
+		- 20261025: Held at Queued. Bug 2026102510420001 is fixed, so a woken vm925w is now a skip, but vm925w logs nobody on at boot, so waking it for scenarios gains nothing yet. Waits on the question in `questions.md` about how a woken vm925w gets a logged-on session. The work, brought onto rnd1025b with that fix, is on `wip/rnd1025b-2026102507245255`.
+	- Priority: High
+	- Opened: 20261025-072452
+	- Opened by: CC
+	- Parent ID: 2026102416233802
+	- Target OS: Windows
+	- Requirements:
+		- vm925w is put back the way it was found, through the VM state helper.
+		- The Windows scenarios favor b29w. The GPU and timed ones, such as `perfladder`, run on vm925w only.
+		- Windows testing names `b29w` only. Drop `b29w-wif` from the host config outside the repo.
+		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
+	- Progress log:
+		- 20261025: The host config can name the VM state helper (`@vmstate`), and then every hold in `win-remote.bash` goes through it, so a VM is woken and put back the way it was found. A box that can't be held or woken is a skip under `--optional`. Host lines take tags, and `hosts` prints them.
+		- 20261025: Each Windows scenario runs once, on the first box in the host config that's up and free. A scenario with a `Box: gpu` header line runs only on a box tagged `gpu`; that's `perfladder`. What no box took is a `SKIP` line at the end of the stage.
+		- 20261025: The host config lists b29w first and alone, with no `b29w-wif`, then vm925w tagged `gpu`, and the `@vmstate` line.
+		- Verified: both test scripts pass, and their new checks failed against the scripts as they were. shellcheck, the bash style check, the PowerShell lint, the test ID check, the docs check and the lint report pass. A job through the live config on b29w went through the VM state helper and the lock, and `hosts` printed vm925w's tag.
+		- Not run: a real wake of vm925w. It was off, and the box was at load 44.
+		- 20261025: On `wip/rnd1025b-2026102507245255`: a box nobody is logged on at leaves its reason in the stage's `SKIP` lines, such as `SKIP wingui: perfladder, no box tagged gpu answered (vm925w: nobody is logged on at the console)`.
+		- Verified: 20261025, on that branch. vm925w woken from off through `@vmstate`, from a copy of the host config: both scenarios were `SKIP` lines with that reason, on the skip list too, and vm925w was off again after. The win-remote, wingui, engine and Windows pipeline tests pass, and the new reason check failed without the line that writes it. shellcheck, the bash style check, the PowerShell lint, the test ID and docs checks pass.
+		- Swept: `win-unlock.bash` holds the same way and reads only the name and address from `hosts`, so the tags don't reach it. No other script reads `hosts` or calls `hold`. The jobs under `win-jobs` run through `job`, which holds the same way.
+	- Decisions:
+		- 20261025: Which box is favored, and which has a real card, live in the host config outside the repo, by order and the `gpu` tag. Machine names stay out of the repo, as before.
+		- 20261025: A scenario marks itself as needing a card in its own header, so the list in `config.bash` doesn't have to track it.
+	- Branch: rnd1026
+	- Commit: e673d53
+	- Test case: `cicd/tests/win-remote/run.bash` (Er2UgYA), 7 new checks for tags, holding through the VM state helper and a VM that never wakes. `cicd/tests/wingui/harness-test.bash` (EqH4isr), 8 new checks for which box each scenario runs on, and the `SKIP` lines.
+	- Prereq IDs: 2026102510420001
+	- Waits on Bug 2026102510420001, the woken VM failure that got this reverted last round.
+	- Answered 10-25: D. Leave vm925w unwoken and @vmstate off. The work on wip/rnd1025b-2026102507245255 is ready to merge as it is.
+	- Acceptance signoff: Self-closed: the work was tested on its wip branch last round, its question was settled as D, and its checks pass on rnd1026.
+	- Closed: 20261026-165053
+
+- CICD reset: `--no-remote`, and a skipped box shown as `SKIP`
+	- ID: 2026102507245260
+	- Type: Task
+	- Status: Done
+		- 20261026: Brought onto `rnd1026` from `wip/rnd1025b-2026102507245255`. Verified there: the win-remote, wingui harness, engine and Windows pipeline tests, shellcheck, the bash style check, the PowerShell lint, the test ID and docs checks and the lint report pass.
+		- 20261026: The external test row is dropped. The engine test covers the `SKIP` step line, the end list and the `--no-remote` plan lines with stand-ins, and the round's full run shows the wingui `SKIP` lines with vm925w off.
+		- Reverted on `rnd1025` with 2026102507245255, which it builds on. See 2026102510420001. The work is on `wip/rnd1025-2026102507245255`.
+		- 20261025: Held at Queued with 2026102507245255, which it builds on. Both are on `wip/rnd1025b-2026102507245255`.
+	- Prereq IDs: 2026102507245255
+		- Departs from the wording: the Windows runner's test still runs under `--no-remote`, since it uses stand-ins and reaches no box.
+	- Priority: High
+	- Opened: 20261025-072452
+	- Opened by: CC
+	- Parent ID: 2026102416233802
+	- Related IDs: 2026102416233807, 2026102416233808
+	- Target OS: All
+	- Requirements:
+		- `--no-remote` skips every other box: the Windows scenarios, the Windows runner tests, and the private runner's Mac and store parts.
+		- A skipped box shows as `SKIP` in its step's line and in the summary at the end.
+		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
+	- Progress log:
+		- 20261025: `--no-remote` skips the Windows scenarios and the private runner, and the plan says so for each. The plan has a Windows scenarios line now.
+		- 20261025: A step that reaches another box hands its scripts the run's skip list as `SILK_CICD_SKIPS`. The Windows scenarios write their `SKIP wingui:` lines there. A step that skipped anything ends with a `SKIP:` line rather than `OK:`, and the run lists every `SKIP` line again at the end.
+		- 20261025: `cicd-win.ps1 -NoRemote` passes `--no-remote` to the Linux half, which is the half that reaches the boxes.
+		- 20261025: The private runner doesn't write to the list yet, so its skips are still only warnings. That half is silkterm-private's 2026102416285601.
+	- Decisions:
+		- 20261025: A step turned off by `--no-remote` is in the plan, not in the end list, which is for boxes that weren't there, per the shared rules.
+	- Verified: the engine, Windows scenario harness, Windows pipeline and container tests pass, and each new check failed against a broken copy of what it checks. shellcheck, the bash style check, the PowerShell lint, the test ID and docs checks pass. The plan printed by a real `cicd.bash` showed both lines for no options, `--no-remote` and `--quick`.
+	- Swept: everything `cicd.bash` runs that reaches a box: the Windows scenarios and the private runner. The script tests under `cicd/tests`, `win-remote` included, use stand-ins. `cicd-win.ps1`'s Linux half got the flag. The demo and `ci-mac.bash` reach no other box.
+	- Branch: rnd1026
+	- Commit: e673d53
+	- Test case: `cicd/tests/engine/run.bash` (Er2UgY7), 23 new checks for `--no-remote`, the plan lines, the `SKIP` step lines and the end list. `cicd/tests/wingui/harness-test.bash` (EqH4isr), 4 for the skip list. `cicd/tests/cicd-win/run.bash` (Er2UgYE), 2 for `-NoRemote`.
+	- Acceptance signoff: Self-closed: the work was tested on its wip branch last round, its question was settled as D, and its checks pass on rnd1026.
+	- Closed: 20261026-165053
 
 - CICD reset: containers
 	- ID: 2026102416233801
