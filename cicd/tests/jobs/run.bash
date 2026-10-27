@@ -63,7 +63,7 @@ fAfterHard(){
 	)
 }
 fCheck "the step after a hard one is back at half" test "$(fAfterHard)" = 8
-fCheck "it says when the count changes" bash -c 'source "$1"; fJobs_Load(){ echo 0; }; CICD_CORES=8; out="$(fJobs; fJobs; fJobs hard)"; [[ "${out}" == $'"'"'jobs: 4 of 8 CPUs\njobs: 2 of 8 CPUs (hard step)'"'"' ]]' _ "${jobsLib}"
+fCheck "it says when the count changes" bash -c 'source "$1"; fJobs_Load(){ echo 0; }; CICD_CORES=8; unset CICD_MAX_JOBS; out="$(fJobs; fJobs; fJobs hard)"; [[ "${out}" == $'"'"'jobs: 4 of 8 CPUs\njobs: 2 of 8 CPUs (hard step)'"'"' ]]' _ "${jobsLib}"
 fCheck "the real load reads as a number" bash -c 'source "$1"; [[ "$(fJobs_Load)" =~ ^[0-9]+(\.[0-9]+)?$ ]]' _ "${jobsLib}"
 
 fCheck "the run goes at nice 19" bash -c 'source "$1"; fJobs_LowPriority; [[ "$(ps -o ni= -p "$$" | tr -d " ")" == 19 ]]' _ "${jobsLib}"
