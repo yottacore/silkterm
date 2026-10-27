@@ -30,7 +30,7 @@ trap 'rc=$?; rm -rf "${work}"; fTestDir_End "${rc}"' EXIT
 ## the rest of cicd.bash is stubbed, or its exit trap stops at the missing one
 ## and never finishes the log.
 lifted="$(sed -n '/^fFinishLog(){/,/^fi$/p' "${cicd}/cicd.bash")"
-stubs=(gfs_rotate fTestDir_End fContainerEnd)
+stubs=(gfs_rotate fTestDir_End fContainerEnd fRunEnd)
 unstubbed=""
 while read -r name; do
 	grep -qE "^${name}\(\)" <<<"${lifted}" && continue
