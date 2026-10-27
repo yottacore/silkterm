@@ -746,23 +746,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Expected behavior: Each underline style a program sets is drawn, in the underline color it sets, or the text color.
 	- Reproduced: Not run in a window. Found in the code while answering 2026102114411311.
 
-- The Zig and container cleanup's 2 GB cap check fails when the cache sits on ZFS
-	- ID: 2026102509002701
-	- Type: Bug
-	- Status: Queued
-	- Severity: Avg
-	- Opened: 20261025-090027
-	- Opened by: CC
-	- Related IDs: 2026102416233804, 2026102416233805
-	- Target OS: Linux
-	- Test environment: b23, the round's gate step in the container at 80f0f57 on `rnd1025`, whose /tmp is under the target dir on ZFS
-	- Steps to reproduce:
-		- Run `cicd/tests/cleanup/run.bash` with `TMPDIR` on a ZFS folder.
-	- Incorrect behavior: The stale run cleanup test (EtAiwUl) fails "one over the cap goes whole" and "and the summary counts them". It passes with `TMPDIR` on ext4. ZFS reports compressed size, so the test's over-cap stand-in doesn't read as over the cap.
-	- Expected behavior: The cap check and its test give the same answer on any filesystem.
-	- Reproduced: Yes, 3 of 3 on ZFS, 0 of 3 on ext4.
-	- Tried: The group's worker (eddf89a) and one fix worker (d80c878, a missing stub in the startup gate test) on `rnd1025`. The fix cleared that failure, then this one showed. Both items were reverted on `rnd1025`, and the work is on `wip/rnd1025-2026102416233804`.
-
 - The advisory scan misses a crate yanked since cargo's index cache was filled, and clipboard-win 5.4.1 is yanked
 	- ID: 2026102518563500
 	- Type: Bug
@@ -981,22 +964,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Incorrect behavior: "rotating 200 files costs a few forks beyond the files it changes" counted 366 forks beyond the files changed, limit 300, and the full run stopped there.
 	- Expected behavior: The fork count stays under its limit however busy the box is, or the check counts only forks the rotate script makes.
 	- Reproduced: No. `rotate/run.bash` alone passed 3 of 3 with 18 forks, limit 30, and `testdir/run.bash` passed its rotate check 3 of 3 on the host.
-
-- `cicd/tests/cleanup/win.ps1` fails when run on its own
-	- ID: 2026102518564647
-	- Type: Bug
-	- Status: Queued
-	- Severity: Low
-	- Opened: 20261025-185646
-	- Opened by: CC
-	- Related IDs: 2026101909222600
-	- Target OS: All
-	- Test environment: b23 and b29w, `rnd1025b` at 8a28055
-	- Steps to reproduce:
-		- Run `pwsh -NoProfile -File cicd/tests/cleanup/win.ps1` with no `SILKTERM_TEST_DIR` set.
-	- Incorrect behavior: "a folder handed down is never written down" fails, and the test keeps its run folder. The check calls `fTestDir_Record` in the test's own process, which made and owns its folder when nothing was handed down.
-	- Expected behavior: The test passes alone as it does under `cleanup/run.bash`, which always hands it a folder.
-	- Reproduced: Yes, on b23 and b29w. With `SILKTERM_TEST_DIR` set it passed on b23, and 3 of 3 on b29w.
 
 - Wayland: a copy a program sends while no SilkTerm window has focus is dropped
 	- ID: 2026101607585700
@@ -2209,6 +2176,38 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Test case: None for the figures, which are a measurement. `SILK_MEMDBG` is covered by `each_debug_switch_reads_its_own_variable` (Erg4k2j). Its minimap count is pinned by `the_memory_count_covers_every_stored_row` (Ern2oTz), seen to fail with the stored rows left out.
 	- Acceptance signoff: Self-closed: the numbers are in the design doc and nothing is left to judge.
 	- Closed: 20261004-194634
+
+- The Zig and container cleanup's 2 GB cap check fails when the cache sits on ZFS
+	- ID: 2026102509002701
+	- Type: Bug
+	- Status: Done
+	- Severity: Avg
+	- Opened: 20261025-090027
+	- Opened by: CC
+	- Related IDs: 2026102416233804, 2026102416233805
+	- Target OS: Linux
+	- Test environment: b23, the round's gate step in the container at 80f0f57 on `rnd1025`, whose /tmp is under the target dir on ZFS
+	- Steps to reproduce:
+		- Run `cicd/tests/cleanup/run.bash` with `TMPDIR` on a ZFS folder.
+	- Incorrect behavior: The stale run cleanup test (EtAiwUl) fails "one over the cap goes whole" and "and the summary counts them". It passes with `TMPDIR` on ext4. ZFS reports compressed size, so the test's over-cap stand-in doesn't read as over the cap.
+	- Expected behavior: The cap check and its test give the same answer on any filesystem.
+	- Reproduced: Yes, 3 of 3 on ZFS, 0 of 3 on ext4.
+	- Tried: The group's worker (eddf89a) and one fix worker (d80c878, a missing stub in the startup gate test) on `rnd1025`. The fix cleared that failure, then this one showed. Both items were reverted on `rnd1025`, and the work is on `wip/rnd1025-2026102416233804`.
+	- Actual cause: The cap read `du -sk`, the blocks on disk. ZFS with compression, and any sparse file, take far fewer blocks than the bytes in them, so 1.1 MB of zeros read as under the 1 MB cap there.
+	- Actual fix: `fSweep_ZigCache` reads `du -sb`, the apparent size, the same as the cache volume check in `fContainerVolumes` already did.
+	- Decisions:
+		- 20261026: Apparent size, not blocks. It's what the cache holds whatever the filesystem does with it, it's what the volume check reads, and it doesn't lag on ZFS until the write commits. The freed size in the summary still reads blocks, since that is what a removal frees.
+		- 20261026: The fix goes on `wip/rnd1025-2026102416233804`, where the cap check lives, since it was reverted from the round branch. It comes back with 2026102416233804 and 2026102416233805.
+	- Progress log:
+		- 20261026: Reproduced on that branch with `TMPDIR` on the ZFS target dir: "one over the cap goes whole" and "and the summary counts them" failed, and passed on ext4.
+		- 20261026: New case: a sparse file over the cap, which takes no blocks on any filesystem, so the check fails on ext4 too when it goes by blocks.
+	- Verified: 20261026. EtAiwUl passes with `TMPDIR` on ZFS and on ext4. With the old `sweep.bash` it failed 3 checks on ZFS and 2 on ext4, the sparse case and the count. Shellcheck, house style.
+	- Swept: every `du` in cicd. `fContainerVolumes` already reads `du -sb`. `fSweep_Remove` reads blocks only for the freed size in the summary. The rest are `--apparent-size` for printed sizes.
+	- Test case: The sparse-file case in `cicd/tests/cleanup/run.bash` (EtAiwUl), and its ZFS case run with `TMPDIR` there.
+	- Branch: wip/rnd1025-2026102416233804
+	- Commit: 18454d6
+	- Acceptance signoff: Self-closed: the test gives the same answer on ZFS and ext4.
+	- Closed: 20261026-172644
 
 - A config conversion race test leaves a backup per launch under ASan
 	- ID: 2026102510010001
@@ -5299,6 +5298,30 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Branch: testlines
 	- Test case: No test. Output only. The gate and a quick run showed all 942 Rust tests with an ID, and a made-up name showed the dashes and the warning.
 	- Closed: 20260928-111812
+
+- `cicd/tests/cleanup/win.ps1` fails when run on its own
+	- ID: 2026102518564647
+	- Type: Bug
+	- Status: Done
+	- Severity: Low
+	- Opened: 20261025-185646
+	- Opened by: CC
+	- Related IDs: 2026101909222600
+	- Target OS: All
+	- Test environment: b23 and b29w, `rnd1025b` at 8a28055
+	- Steps to reproduce:
+		- Run `pwsh -NoProfile -File cicd/tests/cleanup/win.ps1` with no `SILKTERM_TEST_DIR` set.
+	- Incorrect behavior: "a folder handed down is never written down" fails, and the test keeps its run folder. The check calls `fTestDir_Record` in the test's own process, which made and owns its folder when nothing was handed down.
+	- Expected behavior: The test passes alone as it does under `cleanup/run.bash`, which always hands it a folder.
+	- Reproduced: Yes, on b23 and b29w. With `SILKTERM_TEST_DIR` set it passed on b23, and 3 of 3 on b29w.
+	- Actual cause: The test checked a handed-down folder in its own process. Run alone, that process made its own folder, so `fTestDir_Record` wrote it down as it should.
+	- Actual fix: That check runs in a child with `SILKTERM_TEST_DIR` set, like the check beside it for a folder a run made. It also checks the handed-down folder is never removed.
+	- Verified: 20261026. Alone, it failed before the fix and passed after, 3 of 3 here and 3 of 3 on b29w, with no run folder left in the temp folder. It still passes with `SILKTERM_TEST_DIR` set, and under `cleanup/run.bash`. With the guard in `fTestDir_Record` taken out, the new check failed. `--backlog-run-quick scripts`.
+	- Swept: the other checks in `win.ps1`, and `testdir/remove.ps1`. None other reads the process's own folder state as a handed-down one.
+	- Test case: EtAiwnM, `cicd/tests/cleanup/win.ps1`.
+	- Branch: rnd1026
+	- Acceptance signoff: Self-closed: a test-only fix whose test passes alone and in the suite.
+	- Closed: 20261026-172644
 
 - A config test's 50 ms bound for a failed write went red under load in a full run
 	- ID: 2026102410441001

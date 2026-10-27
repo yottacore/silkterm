@@ -60,13 +60,23 @@ fCheck 'a folder nobody wrote down stays' (Test-Path -LiteralPath $stray)
 $left = @([System.IO.File]::ReadAllLines($ledger) | ForEach-Object { ($_ -split "`t")[1] })
 fCheck 'the ledger keeps only what it kept' (($left -join ' ') -eq 'tok-5 tok-6')
 
+##	In a child, since this process made its own folder when run alone.
+$given = Join-Path $work 'given'
 $handed = Join-Path $work 'handed'
-fTestDir_Record -Ledger $handed
+$child = Join-Path $work 'child.ps1'
+Set-Content -LiteralPath $child -Value @"
+`$env:SILKTERM_TEST_DIR = '$given'
+. '$helper'
+fTestDir_Make
+fTestDir_Record -Ledger '$handed'
+fTestDir_End 0
+"@
+& (Get-Process -Id $PID).Path -NoProfile -File $child
 fCheck 'a folder handed down is never written down' (-not (Test-Path -LiteralPath $handed))
+fCheck 'and is never removed' (Test-Path -LiteralPath $given -PathType Container)
 
 ##	A child with no folder handed down makes one, writes it down, and removes it on a pass.
 $own = Join-Path $work 'own'
-$child = Join-Path $work 'child.ps1'
 Set-Content -LiteralPath $child -Value @"
 `$env:SILKTERM_TEST_DIR = `$null
 . '$helper'
@@ -85,3 +95,4 @@ Write-Output 'all passed'
 
 ##	History:
 ##		- 20261019 JC: Created.
+##		- 20261026 JC: The handed-down check runs in a child, so it passes alone.
