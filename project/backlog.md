@@ -570,6 +570,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Swept: every `--gate` and `--ci` caller in the repo: the pre-push hook, the container and engine tests, config.bash and design.md. `cicd-win.ps1 -Gate` is 2026102616543946.
 	- Branch: rnd1026
 	- Test case: `cicd/tests/engine/run.bash` (Er2UgY7), 19 new checks. `cicd/tests/container/run.bash` (EsJg9EF), 3 for the areas going into the container and the `--gate` line.
+	- Commit: d7a73a7
 
 - CICD reset: `--long`, and a default run in about an hour
 	- ID: 2026102616543936
@@ -798,6 +799,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Swept: every cargo-deny advisories call, in config.bash, cicd.bash and cicd-win.ps1. ci-mac.bash and the hosted workflows don't run it. advscope uses its own db and `--disable-fetch`, and doesn't read yanks.
 	- Test case: Etr6FuE, `cicd/tests/yankfresh/run.bash`, run by stage 3 after advscope. It plants a stale yank in a copied index cache: the scan alone must fail, the refresh must fail with no network, and after the refresh the scan must pass with the lock untouched.
 	- Branch: rnd1026
+	- Commit: 1353c9c
 
 - Leak checks: Miri sort, settings_ui
 	- ID: 2026102407430381
