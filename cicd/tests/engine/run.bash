@@ -91,10 +91,13 @@ leakOff="$(grep -F 'if ((quick && ! leakAsked)) || ((gate)); then leakcheck=0; f
 fCheck "and one turning the leak checks off under --quick and --gate" test -n "${leakOff}"
 codeqlGate="$(grep -F 'if ((gate && codeql)); then' "${engine}" || true)"
 fCheck "and one refusing --codeql with --gate" test -n "${codeqlGate}"
-parse+=$'\n'"${refusal}"$'\n'"${codeqlGate}"$'\n'"${leakOff}"
+## The backlog runs and the merge gate, settled after the loop.
+runs="$(fLift '^gateAreasAll=' '^if ((fmtCheck ')"
+fCheck "the parser settles the backlog runs and the merge gate after the loop" test -n "${runs}"
+parse+=$'\n'"${refusal}"$'\n'"${codeqlGate}"$'\n'"${leakOff}"$'\n'"${runs}"
 fParse(){  ## fParse <args...>: prints the settings the parser leaves, or exits as it does
 	BUILD_CROSS=1; PROFILE_ENABLE=1; PACKAGE_ENABLE=1; FUZZ_SECS=60
-	FMT_CMD=(cargo fmt); DOGFOOD_DESTS=(x); GIT_PUBLISH=(x); DEMO_ENABLE=1
+	FMT_CMD=(cargo fmt); FMT_CHECK_CMD=(cargo fmt --check); DOGFOOD_DESTS=(x); GIT_PUBLISH=(x); DEMO_ENABLE=1
 	set -- "${@}"
 	eval "${parse}"
 	echo "quick=${quick} cross=${BUILD_CROSS} arm=$((! noArm)) demo=${DEMO_ENABLE} gate=${gate} profile=${PROFILE_ENABLE} package=${PACKAGE_ENABLE} fuzz=${FUZZ_SECS} yes=${assumeYes} sync=${sync} leak=${leakcheck} inner=${innerArgs[*]}"
@@ -156,7 +159,42 @@ fCheck "the dhat test hands on to CodeQL, with the report folder" \
 fCheck "the config names a Rust suite, and the suppressions file is there" \
 	bash -c 'source "$1" && [[ "${CODEQL_SUITE}" == codeql/rust-queries:* && -f "$2/../${CODEQL_SUPPRESSIONS}" ]]' _ "${cicd}/config.bash" "${cicd}"
 fCheck "--no-demo turns the demo off" bash -c '[[ "$1" == *" demo=0 "* ]]' _ "$(fParse --no-demo)"
-fCheck "--gate is the merge gate" bash -c '[[ "$1" == *" gate=1 "* ]]' _ "$(fParse --gate)"
+fCheck "--gate is the backlog quick run" bash -c '[[ "$1" == *" gate=1 "* ]]' _ "$(fParse --gate 2>/dev/null)"
+
+## --backlog-run-quick, --backlog-run-full and --merge-gate. None of them syncs,
+## dogfoods, publishes, rewrites a tracked file or prompts.
+fParseRun(){  ## fParseRun <args...>: what the 3 runs settle, or exits as the parser does
+	BUILD_CROSS=1; PROFILE_ENABLE=1; PACKAGE_ENABLE=1; FUZZ_SECS=60
+	FMT_CMD=(cargo fmt); FMT_CHECK_CMD=(cargo fmt --check); DOGFOOD_DESTS=(x); GIT_PUBLISH=(x); DEMO_ENABLE=1
+	eval "${parse}"
+	echo "gate=${gate} areas=${gateAreas[*]} full=${fullRun} yes=${assumeYes} sync=${sync} fmt=${FMT_CMD[*]} dogfood=${#DOGFOOD_DESTS[@]} publish=${#GIT_PUBLISH[@]} demo=${DEMO_ENABLE} leak=${leakcheck} inner=${innerArgs[*]}"
+}
+fCheck "--backlog-run-quick runs every area with none named" \
+	test "$(fParseRun --backlog-run-quick)" = "gate=1 areas=fmt clippy tests scripts docs full=0 yes=0 sync=1 fmt=cargo fmt dogfood=1 publish=1 demo=1 leak=0 inner="
+fCheck "or only the ones named, in order, up to the next option" \
+	bash -c '[[ "$1" == "gate=1 areas=docs fmt full=0 "*" inner=--no-fuzz" ]]' _ "$(fParseRun --backlog-run-quick docs fmt --no-fuzz)"
+rc=0; out="$(fParseRun --backlog-run-quick fmt parser 2>&1)" || rc=$?
+fCheck "an unknown area stops the run, naming the areas" bash -c '[[ "$1" == 2 && "$2" == *"unknown area: parser (areas: fmt clippy tests scripts docs)"* ]]' _ "${rc}" "${out}"
+rc=0; out="$(fParseRun --gate docs 2>&1)" || rc=$?
+fCheck "--gate takes areas too" bash -c '[[ "$1" == 0 && "$2" == *"gate=1 areas=docs full=0 "* ]]' _ "${rc}" "${out}"
+fCheck "and says in one line what it is another name for" test "$(grep -c -- '--gate is another name for --backlog-run-quick' <<<"${out}")" -eq 1
+for run in --backlog-run-full --merge-gate; do
+	fCheck "${run} turns off sync, dogfood, the demo and publish, checks the format, and asks nothing" \
+		test "$(fParseRun "${run}")" = "gate=0 areas= full=1 yes=1 sync=0 fmt=cargo fmt --check dogfood=0 publish=0 demo=0 leak=1 inner=--fmt-check"
+	fCheck "${run} keeps them off when asked for after it" \
+		bash -c '[[ "$1" == *" sync=0 fmt=cargo fmt --check dogfood=0 publish=0 demo=0 "* ]]' _ "$(fParseRun "${run}" --demo -m hello)"
+	rc=0; out="$(fParseRun "${run}" --quick 2>&1)" || rc=$?
+	fCheck "${run} with --quick stops the run" bash -c '[[ "$1" == 2 && "$2" == *"every check of the default run"* ]]' _ "${rc}" "${out}"
+	rc=0; out="$(fParseRun "${run}" --backlog-run-quick 2>&1)" || rc=$?
+	fCheck "${run} with --backlog-run-quick stops the run" bash -c '[[ "$1" == 2 && "$2" == *"different runs"* ]]' _ "${rc}" "${out}"
+done
+rc=0; out="$(fParseRun --ci 2>&1)" || rc=$?
+fCheck "--ci is the merge gate" bash -c '[[ "$1" == 0 && "$2" == *" full=1 yes=1 sync=0 "* ]]' _ "${rc}" "${out}"
+fCheck "and says so in one line" test "$(grep -c -- '--ci is another name for --merge-gate' <<<"${out}")" -eq 1
+fCheck "--fmt-check checks rather than rewrites, and goes into the container" \
+	bash -c '[[ "$1" == *" fmt=cargo fmt --check "*" inner=--fmt-check" ]]' _ "$(fParseRun --fmt-check)"
+fCheck "--no-fmt still wins over it" bash -c '[[ "$1" == *" fmt= dogfood="* ]]' _ "$(fParseRun --no-fmt --fmt-check)"
+fCheck "the plan names the run" grep -qF 'if ((fullRun)); then fEcho_Clean "Run .................: ${fullRunName}' "${engine}"
 rc=0; out="$(fParse -y --no-such-thing 2>&1)" || rc=$?
 fCheck "an unknown option still stops the run" test "${rc}" -eq 2
 
@@ -207,8 +245,8 @@ fCheck "nor a file whose hard link one process there runs" fNot fInUseFake "${wo
 fCheck "but that link is in use by its own name" fInUseFake "${work}/idlehard"
 fCheck "and 2000 processes cost a few forks, not one each" fFewForks
 
-## The build number: a clean tree takes its commit's time, a dirty one the clock,
-## and a value handed down is kept.
+## The build number: the commit's time, dirty tree or not, the clock only where
+## there is no commit, and a value handed down is kept.
 eval "$(fLift '^fPinBuildMinutes(){' '^}')"
 repo="${work}/repo"
 export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
@@ -224,7 +262,8 @@ fCheck "a clean tree takes its commit's time" test "$(fMinutes "${repo}")" = "${
 echo stray >"${repo}/untracked.txt"
 fCheck "an untracked file leaves it clean" test "$(fMinutes "${repo}")" = "${commitMinutes}"
 echo two >>"${repo}/file.txt"
-fCheck "a dirty tree takes the clock" fNearNow "$(fMinutes "${repo}")"
+## Was "a dirty tree takes the clock" until 2026-10-26; the CICD rules take it from the commit.
+fCheck "a dirty tree takes its commit's time too" test "$(fMinutes "${repo}")" = "${commitMinutes}"
 mkdir -p "${work}/plain"
 fCheck "and so does a folder that is not a repository" fNearNow "$(fMinutes "${work}/plain")"
 fCheck "a value handed down is kept" test "$(cd "${repo}" && SILK_BUILD_MINUTES=12345 && fPinBuildMinutes && echo "${SILK_BUILD_MINUTES}")" = 12345
@@ -261,10 +300,88 @@ fCheck "anything else is named as it is" fHost FreeBSD ""
 eval "$(fLift '^fHostLine(){' '^}')"
 fCheck "and this box gets a line" test -n "$(fHostLine)"
 
+## --no-remote leaves out every other box, and a box that wasn't there is a SKIP
+## in its step's line and again at the end.
+fLiftF(){  ## fLiftF <first line, exactly>: from that line to the first top-level fi
+	local n; n="$(grep -m1 -nxF -- "${1}" "${engine}" | cut -d: -f1)"
+	[[ -n "${n}" ]] && sed -n "${n},\$ { p; /^fi\$/q }" "${engine}"
+}
+fParseRemote(){ fParse "${@}" >/dev/null; eval "${parse}"; echo "noremote=${noRemote} inner=${innerArgs[*]}"; }
+fCheck "a run with no options reaches the other boxes" test "$(fParseRemote)" = "noremote=0 inner="
+fCheck "--no-remote leaves them out, and isn't handed to the container" test "$(fParseRemote --no-remote)" = "noremote=1 inner="
+fCheck "--help names it" bash -c '"$1" --help | grep -q -- "--no-remote "' _ "${engine}"
+wingPlan="$(fLiftF 'if [[ -z "${WINGUI_HARNESS+x}" ]] || ((${#WINGUI_HARNESS[@]} == 0)); then')"
+fCheck "the plan has a Windows scenarios line" test -n "${wingPlan}"
+fWingPlan(){ local quick="${1}" noRemote="${2}" container=0 SILK_CICD_IN_CONTAINER=""; WINGUI_HARNESS=(run.bash a b c); fEcho_Clean(){ echo "${*}"; }; eval "${wingPlan}"; }
+fCheck "which counts the scenarios" test "$(fWingPlan 0 0)" = "Windows scenarios ...: 3 on the Windows boxes, each on the first one free"
+fCheck "and says --no-remote left them out" test "$(fWingPlan 0 1)" = "Windows scenarios ...: (skipped --no-remote)"
+fCheck "or --quick" test "$(fWingPlan 1 1)" = "Windows scenarios ...: (skipped --quick)"
+privPlan="$(fLiftF 'if ((quick)); then')"
+fCheck "the private runner's plan line says --no-remote left it out" grep -qF '"Private runner ......: (skipped --no-remote)"' <<<"${privPlan}"
+eval "$(grep '^fSkipCount(){' "${engine}")"
+eval "$(fLift '^fStepDone(){' '^}')"
+eval "$(fLift '^fSkipSummary(){' '^}')"
+eval "$(fLift '^fWinGuiScenarios(){' '^}')"
+listing=0
+fEcho_Clean(){ echo "${*}"; }
+root="${work}/rootw"; mkdir -p "${root}/cicd/tests/wingui" "${work}/priv/cicd"
+## A harness and a private runner that each skip what STUB_SKIPS names and note
+## that they ran.
+cat >"${root}/cicd/tests/wingui/run.bash" <<'STUB'
+#!/usr/bin/env bash
+echo ran >>"${STUB_RAN}"
+for s in ${STUB_SKIPS:-}; do echo "SKIP wingui: ${s}, no box answered"; [[ -z "${SILK_CICD_SKIPS:-}" ]] || echo "SKIP wingui: ${s}, no box answered" >>"${SILK_CICD_SKIPS}"; done
+exit "${STUB_EXIT:-0}"
+STUB
+cp "${root}/cicd/tests/wingui/run.bash" "${work}/priv/cicd/run.bash"
+sed -i 's/SKIP wingui: /SKIP private: /g' "${work}/priv/cicd/run.bash"
+chmod +x "${root}/cicd/tests/wingui/run.bash" "${work}/priv/cicd/run.bash"
+WINGUI_HARNESS=(cicd/tests/wingui/run.bash a b); export STUB_RAN="${work}/ran"
+fWing(){  ## fWing <noRemote> <skips>: sets out; skipLog is a fresh list
+	local quick=0 noRemote="${1}" SILK_CICD_IN_CONTAINER=""
+	skipLog="${work}/skips.txt"; : >"${skipLog}"; : >"${STUB_RAN}"
+	out="$(STUB_SKIPS="${2}" fWinGuiScenarios 2>&1)" || true
+}
+fWing 0 ""
+fCheck "with every box there, the scenarios' line is OK" test "$(tail -1 <<<"${out}")" = "    OK: windows gui scenarios"
+fWing 0 "b"
+fCheck "with one left out, it's a SKIP saying how many" test "$(tail -1 <<<"${out}")" = "    SKIP: windows gui scenarios, 1 not run (SKIP lines above)"
+fCheck "and the harness's own line is on the run's list" test "$(cat "${skipLog}")" = "SKIP wingui: b, no box answered"
+fWing 1 "b"
+fCheck "--no-remote leaves the scenarios out, and says so" test "${out}" = "windows gui scenarios skipped (--no-remote)"
+fCheck "without starting the harness" test ! -s "${STUB_RAN}"
+fCheck "nor putting anything on the list" test ! -s "${skipLog}"
+privStep="$(fLiftF '## The private runner builds on boxes that are often off or busy, so it skips')"
+fCheck "the private runner's step can be lifted" test -n "${privStep}"
+fPriv(){  ## fPriv <noRemote> <skips>: sets out
+	local quick=0 noRemote="${1}" PRIVATE_RUNNER="${work}/priv/cicd/run.bash" ver=0 EXE_NAME=x builtArts=()
+	: >"${STUB_RAN}"
+	out="$(STUB_SKIPS="${2}" eval "${privStep}" 2>&1)" || true
+}
+skipLog="${work}/skips.txt"; : >"${skipLog}"
+fPriv 0 ""
+fCheck "with both boxes there, the private runner's line is OK" test "$(tail -1 <<<"${out}")" = "    OK: private runner"
+fPriv 0 "mac store"
+fCheck "a job it skipped makes it a SKIP" test "$(tail -1 <<<"${out}")" = "    SKIP: private runner, 2 not run (SKIP lines above)"
+fPriv 1 "mac"
+fCheck "--no-remote leaves it out, and says so" test "${out}" = "private runner skipped (--no-remote)"
+fCheck "without starting it" test ! -s "${STUB_RAN}"
+out="$(fSkipSummary)"
+fCheck "the summary at the end lists every SKIP line, in order" \
+	test "${out}" = $'Not run, since a box wasn\'t there:\nSKIP private: mac, no box answered\nSKIP private: store, no box answered'
+skipLog="${work}/skips.txt"; : >"${skipLog}"
+fCheck "and is left out when nothing was skipped" test -z "$(fSkipSummary)"
+skipLog=""
+fCheck "or when the run has no list" test -z "$(fSkipSummary)" -a "$(fSkipCount)" = 0
+fCheck "and the run says it last, after the sweep's line" \
+	bash -c 'grep -A1 -F "fEcho_Clean \"\$(fSweep_Summary)\"" "$1" | grep -qx "fSkipSummary"' _ "${engine}"
+
 if ((failures)); then echo "${failures} failed"; exit 1; fi
 echo "all passed"
 
 ##	History:
+##		- 20261026: --backlog-run-quick, --backlog-run-full, --merge-gate and their other names.
+##		- 20261025: --no-remote, and the SKIP lines in a step's line and at the end.
 ##		- 20261022: Where CodeQL runs, and --codeql, off by default.
 ##		- 20261022: --no-leakcheck, and the leak checks on with no options.
 ##		- 20260926 JC: Created.

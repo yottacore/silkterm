@@ -11,6 +11,7 @@
 ##		test-id.py --decode ID    the time an ID stands for
 ##		test-id.py --check        every test has a well-formed ID and no two share one
 ##		test-id.py --annotate     copy cargo test output, each result line as status, ID, name
+##		test-id.py --list         every Rust test, as ID and name
 ##	Exit: 0 fine, 1 --check found a problem, 2 bad arguments.
 ##	History: At bottom of script.
 
@@ -154,6 +155,12 @@ def annotate() -> int:
 	return 0
 
 
+def list_rust() -> int:
+	for _, tid, name in rust_tests():
+		print(f"{tid or '-------':<7}  {name}")
+	return 0
+
+
 def check() -> int:
 	now = to_ms(datetime.now(timezone.utc)) + 86_400_000
 	first = to_ms(datetime(2026, 1, 1, tzinfo=timezone.utc))
@@ -184,12 +191,15 @@ def main() -> int:
 	ap.add_argument("--decode", metavar="ID")
 	ap.add_argument("--check", action="store_true")
 	ap.add_argument("--annotate", action="store_true")
+	ap.add_argument("--list", action="store_true")
 	args = ap.parse_args()
 
 	if args.check:
 		return check()
 	if args.annotate:
 		return annotate()
+	if args.list:
+		return list_rust()
 	if args.decode:
 		if not re.fullmatch(r"[0-9A-Za-z]+", args.decode):
 			ap.error(f"not base 62: {args.decode}")
@@ -223,3 +233,4 @@ if __name__ == "__main__":
 ##		- 20260927: --annotate, for the test lines cicd prints.
 ##		- 20261005: PEP 8 names and type hints.
 ##		- 20261006: Module paths take the folder for a file under src/<module>/.
+##		- 20261026: --list, for cicd.bash --list.

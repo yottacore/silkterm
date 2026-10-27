@@ -151,7 +151,7 @@ fn main() -> anyhow::Result<()> {
 				cli::padded(&cli::about(gfx::probe_adapter_info().as_ref()))
 			),
 			cli::Info::Donate => print!("{}", cli::padded(&cli::donate())),
-			cli::Info::Version => println!("{}", cli::version_line()),
+			cli::Info::Version => println!("{}", cli::version_text()),
 		}
 		return Ok(());
 	}

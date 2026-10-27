@@ -787,6 +787,15 @@ pub fn version_line() -> String {
 	)
 }
 
+/// The line under the version line in --version and --about.
+pub const COPYRIGHT: &str = "Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]";
+
+/// What --version prints: the version line, then the copyright line. Still flush,
+/// so a script can take the first line.
+pub fn version_text() -> String {
+	format!("{}\n{COPYRIGHT}", version_line())
+}
+
 /// A CLI-only flag's output with a blank line above and below, so the block sits
 /// clear of the shell prompts either side of it. Print with `print!` - the
 /// trailing blank line is part of the string. --version is deliberately NOT run
@@ -800,9 +809,8 @@ pub fn padded(body: &str) -> String {
 /// worth having, so that reads as three missing lines rather than a failure.
 pub fn about(info: Option<&wgpu::AdapterInfo>) -> String {
 	let mut lines = vec![
-		format!("About {}", config::APP_NAME),
-		format!("Version {}", env!("CARGO_PKG_VERSION")),
-		"Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]".to_string(),
+		version_line(),
+		COPYRIGHT.to_string(),
 		format!("License: {}", env!("CARGO_PKG_LICENSE")),
 		String::new(),
 		"Info".to_string(),
@@ -1063,6 +1071,24 @@ mod tests {
 				config::build_label()
 			)
 		);
+	}
+
+	// --version and --about both open with the version line and the copyright
+	// line under it, per the CICD rules.
+	// Test ID: EtrCPPP
+	#[test]
+	fn version_and_about_put_the_copyright_under_the_version_line() {
+		let text = version_text();
+		let lines: Vec<&str> = text.lines().collect();
+		assert_eq!(lines, [version_line().as_str(), COPYRIGHT]);
+		assert!(COPYRIGHT.starts_with("Copyright © "));
+		for info in [
+			None,
+			Some(crate::gfx::test_adapter("X", wgpu::DeviceType::Cpu)),
+		] {
+			let about = about(info.as_ref());
+			assert!(about.starts_with(&format!("{text}\n")), "{about}");
+		}
 	}
 
 	// Test ID: Eo4auDA

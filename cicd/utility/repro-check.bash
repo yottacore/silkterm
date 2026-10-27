@@ -34,6 +34,8 @@ commit="$(git -C "${root}" rev-parse --verify "${commit}^{commit}")" || exit 2
 ## The build command, from the same table cicd.bash builds releases from.
 # shellcheck source=cicd/config.bash
 source "${root}/cicd/config.bash"
+# shellcheck source=cicd/utility/include/jobs.bash
+source "${here}/include/jobs.bash"
 buildCmd="${RELEASE_NATIVE_CMD[*]}"
 if [[ -n "${triple}" ]]; then
 	buildCmd=""
@@ -57,8 +59,7 @@ trap fCleanup EXIT
 ## Two folders of different depth and length, so a path that leaks in shows as a
 ## difference rather than cancelling out.
 sides=("${work}/a" "${work}/second/checkout-b")
-jobs="$(( $(nproc) / 2 ))"; ((jobs > 0)) || jobs=1
-export CARGO_BUILD_JOBS="${jobs}"
+fJobs_LowPriority; fJobs
 
 fBuild(){
 	local dir="${1}" try
@@ -99,3 +100,4 @@ exit 1
 
 ##	History:
 ##		- 20260925 JC: Created.
+##		- 20261026 JC: Jobs and priority from include/jobs.bash.

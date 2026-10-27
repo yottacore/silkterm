@@ -69,6 +69,9 @@
 	The Windows half has none.
 .PARAMETER Leakcheck
 	-Wsl only: the Linux half runs its leak checks under -Quick too.
+.PARAMETER NoRemote
+	-Wsl only: the Linux half skips every other box, the Windows scenarios and
+	the private runner (cicd.bash --no-remote).
 .PARAMETER Wsl
 	Also run the Linux half in WSL2 (.deb/.rpm, profiler, scroll harness -
 	everything Windows can't do).
@@ -98,6 +101,7 @@ param(
 	[switch]$NoSync,
 	[switch]$NoLeakcheck,
 	[switch]$Leakcheck,
+	[switch]$NoRemote,
 	[switch]$Wsl,
 	[string]$WslDistro = "",
 	[string]$Message = "",
@@ -118,6 +122,8 @@ $ErrorActionPreference = "Stop"
 ## probes (git diff --quiet, clippy) return non-zero ON PURPOSE. Keep a non-zero
 ## native exit from throwing so those reads work regardless of the caller's shell.
 $PSNativeCommandUseErrorActionPreference = $false
+## Low priority for the whole run, set here so every child inherits it.
+try { (Get-Process -Id $PID).PriorityClass = 'BelowNormal' } catch { Write-Warning "could not lower the priority: $_" }
 
 if ($Help) {
 	Get-Help -Name $PSCommandPath -Detailed
@@ -204,9 +210,11 @@ $ToolPinsFile = Join-Path $PSScriptRoot "tool-pins.txt"
 ## newest few are enough.
 $LogKeep = 30
 
-## Cap compile/test parallelism to half the cores so a run stays usable.
+## Half the CPUs, or a quarter when the box is busy or the step is hard on it.
+## fSetJobs works it out again before each step.
 $Cores       = [Environment]::ProcessorCount
 $CicdMaxJobs = [Math]::Max(1, [Math]::Floor($Cores / 2))
+$script:JobsLast = 0
 
 ## Where the toolchains live. cargo/rustup first, then the mingw linker for the
 ## gnu target (matches the memory'd build setup).
@@ -228,6 +236,28 @@ function fEcho_Clean {
 function fEcho     { param([string]$Msg = ""); if ($Msg) { fEcho_Clean "[ $Msg ]" } else { fEcho_Clean } }
 function fSection  { param([string]$Msg);      fEcho_Clean; fEcho_Clean $script:Letterbox; fEcho $Msg }
 function fNote     { param([string]$Msg); fEcho_Clean $Msg }
+
+## Windows keeps no load average, so busy is the CPUs over half used, by
+## Win32_Processor's LoadPercentage. A hard step also drops to Idle.
+function fSetJobs {
+	param([switch]$Hard)
+	$why = ''
+	if ($Hard) { $why = 'hard step' }
+	else {
+		$load = $null
+		try { $load = (Get-CimInstance -ClassName Win32_Processor -ErrorAction Stop | Measure-Object -Property LoadPercentage -Average).Average } catch { $load = $null }
+		if ($null -ne $load -and $load -gt 50) { $why = "busy, CPU at $([int]$load)%" }
+	}
+	$jobs = [Math]::Floor($Cores / 2)
+	if ($why) { $jobs = [Math]::Min($jobs, [Math]::Floor($Cores / 4)) }
+	$jobs = [int][Math]::Max(1, $jobs)
+	$script:CicdMaxJobs    = $jobs
+	$env:CARGO_BUILD_JOBS  = "$jobs"
+	$env:RUST_TEST_THREADS = "$jobs"
+	$class = if ($Hard) { 'Idle' } else { 'BelowNormal' }
+	try { (Get-Process -Id $PID).PriorityClass = $class } catch { fWarn "could not set the priority to ${class}: $_" }
+	if ($script:JobsLast -ne $jobs) { fNote "jobs: $jobs of $Cores CPUs$(if ($why) { " ($why)" })"; $script:JobsLast = $jobs }
+}
 function fWarn     { param([string]$Msg); fEcho "WARNING: $Msg" }
 function fDie      { param([string]$Msg); fEcho "FAILED: $Msg"; fTestDir_End 1; exit 1 }
 
@@ -416,6 +446,7 @@ function fBuildTarget {
 	}
 
 	fSection "4  Release build: $($Target.OsArch)"
+	fSetJobs
 	$exe = Join-Path (fTargetDir) "$($Target.Triple)\release\$ExeName.exe"
 
 	$cargoArgs = if ($Target.Builder -eq "zigbuild") {
@@ -677,6 +708,10 @@ function fLintAdvisory {
 ## one gates, as in cicd.bash: any report fails the run, a warning too.
 function fAdvisoryScan {
 	if (Get-Command cargo-deny -ErrorAction SilentlyContinue) {
+		## cargo-deny reads yanks from cargo's cached index and never refreshes it,
+		## see INDEX_REFRESH_CMD in config.bash.
+		& cargo update --dry-run --quiet --config net.offline=false
+		if ($LASTEXITCODE -ne 0) { fDie "can't refresh the crates.io index, so the advisory scan can't see a yanked crate (above)" }
 		& cargo deny check advisories -D warnings
 		if ($LASTEXITCODE -ne 0) { fDie "known advisories against the dependencies (above)" }
 		fEcho "OK: no known advisories"
@@ -782,6 +817,7 @@ function fWslLinuxHalf {
 	if ($NoPackage) { $cicdArgs += "--no-package" }
 	if ($NoLeakcheck) { $cicdArgs += "--no-leakcheck" }
 	elseif ($Leakcheck) { $cicdArgs += "--leakcheck" }
+	if ($NoRemote)  { $cicdArgs += "--no-remote" }
 
 	fNote "distro ......: $distro"
 	fNote "tree ........: $wslRepo (this one, not a second checkout)"
@@ -801,9 +837,7 @@ function fWslLinuxHalf {
 function fMain {
 	## Toolchain PATH: rustup (cross targets, edition 2024) then the mingw linker.
 	$env:PATH = "$CargoBin;$MingwBin;$env:PATH"
-	## Cap parallelism.
-	$env:CARGO_BUILD_JOBS  = "$CicdMaxJobs"
-	$env:RUST_TEST_THREADS = "$CicdMaxJobs"
+	fSetJobs
 
 	Set-Location -LiteralPath $Root
 	$stamp = Get-Date -Format "yyyyMMdd-HHmmss"
@@ -812,11 +846,14 @@ function fMain {
 	## stand-in for a hosted CI check; nothing is mutated or published.
 	if ($Gate) {
 		fSection "Gate 1/3  Format check"
+		fSetJobs
 		fExec -What "format check" -File "cargo" -CmdArgs @("fmt", "--check")
 		fEcho "OK: formatting clean"
 		fSection "Gate 2/3  Lints (advisory)"
+		fSetJobs
 		fLintAdvisory
 		fSection "Gate 3/3  Tests"
+		fSetJobs
 		fExec -What "tests" -File "cargo" -CmdArgs @("test")
 		fEcho "OK: tests passed"
 		fSection "$AppName gate: PASSED."
@@ -885,19 +922,17 @@ function fMain {
 
 	## Stage 0: remote sync.
 	fSection "0  Remote sync"
+	fSetJobs
 	if ($NoSync) { fNote "remote sync skipped" }
 	else { fRemoteSync }
 
 	## Pin the build number for the run, as cicd.bash does, and hand it to the WSL half.
-	## A clean tree takes its commit's time, so a rebuild of a release commit gets the
-	## same number. A dirty tree is a different binary, so it keeps the clock.
+	## It is the commit's time, dirty tree or not, so a rebuild of a commit gets the
+	## same number. The clock only stands in where there is no commit.
 	if (-not $env:SILK_BUILD_MINUTES) {
 		$buildSecs = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
-		$dirtyLines = @(& git status --porcelain --untracked-files=no 2>$null)
-		if ($LASTEXITCODE -eq 0 -and $dirtyLines.Count -eq 0) {
-			$commitSecs = "$(& git log -1 --format=%ct 2>$null)".Trim()
-			if ($commitSecs -match '^\d+$') { $buildSecs = [long]$commitSecs }
-		}
+		$commitSecs = "$(& git log -1 --format=%ct 2>$null)".Trim()
+		if ($commitSecs -match '^\d+$') { $buildSecs = [long]$commitSecs }
 		$env:SILK_BUILD_MINUTES = "$([math]::Floor(($buildSecs - 946684800) / 60))"
 	}
 
@@ -910,16 +945,19 @@ function fMain {
 
 	## Stage 1: format.
 	fSection "1  Format"
+	fSetJobs
 	if ($NoFmt) { fNote "format skipped" }
 	else { fExec -What "format" -File "cargo" -CmdArgs @("fmt"); fEcho "OK: formatted" }
 
 	## Stage 2: debug build.
 	fSection "2  Debug build"
+	fSetJobs
 	fExec -What "debug build" -File "cargo" -CmdArgs @("build")
 	fEcho "OK: debug build"
 
 	## Stage 3: tests + advisory lints.
 	fSection "3  Tests"
+	fSetJobs
 	fExec -What "tests" -File "cargo" -CmdArgs @("test")
 	fEcho "OK: tests passed"
 	fInstallerTests
@@ -950,21 +988,25 @@ function fMain {
 
 	## Stage 5: packages.
 	fSection "5  Packages"
+	fSetJobs
 	if ($NoPackage -or $Quick) { fNote "packages skipped" }
 	else { fBuildPackages -Built $built -Ver $ver }
 
 	## Stage 6: the Linux half.
 	fSection "6  Linux half (WSL2)"
+	fSetJobs
 	if (-not $Wsl) { fNote "not requested (-Wsl builds the Linux artifacts here too)" }
 	else { fWslLinuxHalf }
 
 	## Stage 7: dogfood.
 	fSection "7  Dogfood"
+	fSetJobs
 	if ($NoDogfood) { fNote "dogfood skipped" }
 	else { fDogfood -Built $built }
 
 	## Stage 8: publish.
 	fSection "8  Publish"
+	fSetJobs
 	if ($NoPublish) { fNote "publish skipped" }
 	else { fPublish -Msg $publishMsg }
 
@@ -981,6 +1023,9 @@ try {
 
 
 ##	History:
+##		- 2026-10-26: Jobs per step, a quarter when busy, at BelowNormal, or Idle
+##		  for a hard step. The build number is the commit's time on a dirty tree too.
+##		- 2026-10-25: -NoRemote, passed on to the Linux half.
 ##		- 2026-10-22: -NoLeakcheck and -Leakcheck, passed on to the Linux half.
 ##		- 2026-10-19 JC: The test run folder is made after the prompt, and the
 ##		  ones failed runs kept go once past the newest few.

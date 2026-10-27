@@ -28,6 +28,8 @@ cd "${root}"
 source "${root}/cicd/config.bash"
 # shellcheck source=cicd/utility/include/echo.bash
 source "${here}/include/echo.bash"
+# shellcheck source=cicd/utility/include/jobs.bash
+source "${here}/include/jobs.bash"
 # shellcheck source=cicd/tests/_testdir.bash
 source "${root}/cicd/tests/_testdir.bash"
 
@@ -36,10 +38,8 @@ source "${root}/cicd/tests/_testdir.bash"
 rustup toolchain list 2>/dev/null | grep -q "^${SANITIZER_TOOLCHAIN}" \
 	|| fDie "${SANITIZER_TOOLCHAIN} isn't installed here; cicd.bash runs this in the container image"
 fTestDir_Make || fDie "could not make the test run folder"
-## Half the cores, as cicd.bash caps them. The image run only gets CICD_MAX_JOBS off of it.
-: "${CICD_MAX_JOBS:=$(( $(nproc 2>/dev/null || echo 2) / 2 ))}"
-((CICD_MAX_JOBS >= 1)) || CICD_MAX_JOBS=1
-export CARGO_BUILD_JOBS="${CICD_MAX_JOBS}" RUST_TEST_THREADS="${CICD_MAX_JOBS}"
+## A quarter of the CPUs, the hard step's share, under what the run passed in.
+fJobs_LowPriority; fJobs hard
 
 ## Frames have to be named, or a suppression by function name matches nothing and
 ## a report reads as bare addresses. Debian ships it versioned only.
@@ -92,3 +92,4 @@ fEcho "OK: no ASan or LSan reports (${counts}, $((SECONDS - start))s)"
 
 ##	History:
 ##		- 20261019 JC: Created.
+##		- 20261026 JC: Jobs and priority from include/jobs.bash.

@@ -26,15 +26,25 @@ work="$(mktemp -d "${TMPDIR:-/tmp}/silk-gates.XXXXXX")"
 trap 'rc=$?; rm -rf "${work}"; fTestDir_End "${rc}"' EXIT
 
 ## A run: cicd.bash's logging block lifted out as it stands, then two warnings
-## with a pause between them that the test controls.
+## with a pause between them that the test controls. What the block calls from
+## the rest of cicd.bash is stubbed, or its exit trap stops at the missing one
+## and never finishes the log.
+lifted="$(sed -n '/^fFinishLog(){/,/^fi$/p' "${cicd}/cicd.bash")"
+stubs=(gfs_rotate fTestDir_End fContainerEnd fRunEnd)
+unstubbed=""
+while read -r name; do
+	grep -qE "^${name}\(\)" <<<"${lifted}" && continue
+	[[ " ${stubs[*]} " == *" ${name} "* ]] || unstubbed+=" ${name}"
+done < <(grep -oE 'f[A-Z][A-Za-z_]*' <<<"${lifted}" | sort -u)
+fCheck "the lifted block calls nothing left unstubbed${unstubbed:+ (${unstubbed# })}" test -z "${unstubbed}"
 fMakeRun(){  ## fMakeRun <dir> <exit code>
 	local -r dir="${1}" rc="${2}"
 	mkdir -p "${dir}"
 	{
 		echo 'set -Eeuo pipefail'
 		echo "root='${dir}'; LINT_LOG_DIR=lint; stamp=20260101-000000; _letterbox='****'"
-		echo 'gfs_rotate(){ :; }; fTestDir_End(){ :; }'
-		sed -n '/^fFinishLog(){/,/^fi$/p' "${cicd}/cicd.bash"
+		printf '%s(){ :; }; ' "${stubs[@]}"; echo
+		echo "${lifted}"
 		echo 'echo "warning: unused variable one"'
 		echo "touch '${dir}/ready'"
 		echo "while [[ ! -e '${dir}/go' ]]; do sleep 0.05; done"
@@ -88,3 +98,4 @@ echo "all passed"
 ##	History:
 ##		- 20260917 JC: Created.
 ##		- 20261003: Test names that hold "warning" (ErfQEMd).
+##		- 20261025: Stubs fContainerEnd, and fails by name on a call left unstubbed.

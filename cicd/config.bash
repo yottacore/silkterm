@@ -44,7 +44,8 @@ EXE_NAME="silkterm"
 ## Stage 1: format the source in place before anything is compiled or tested.
 ## Empty it (FMT_CMD=()) when reusing the pipeline in a non-Rust project.
 FMT_CMD=(cargo fmt)
-## Non-mutating variant for the --gate mode (fails on drift instead of rewriting).
+## Non-mutating variant for --backlog-run-quick, --fmt-check and the full runs
+## (fails on drift instead of rewriting).
 FMT_CHECK_CMD=(cargo fmt --check)
 
 ## Pinned helper tools, "name|version|command..." each. The list lives in
@@ -114,6 +115,13 @@ DENY_CMD=(cargo deny check licenses bans sources)
 ## its backlog item's ID. No cargo-deny fails the run as well, since a scan that
 ## can't run has found nothing.
 ADVISORY_CMD=(cargo deny check advisories -D warnings)
+## Run just before it. cargo-deny reads yanks from cargo's cached index entries
+## and never refreshes them, so a crate yanked since a box last resolved looks
+## fine there (2026102518563500). A dry-run update revalidates the entry of every
+## locked crate and writes nothing to the lock. Gating: offline means a yank can't
+## be seen, so it fails, and net.offline=false keeps CARGO_NET_OFFLINE from
+## turning it into a quiet pass.
+INDEX_REFRESH_CMD=(cargo update --dry-run --quiet --config net.offline=false)
 
 ## Stage 3: the test suite again under AddressSanitizer and LeakSanitizer, on every
 ## full run. Sanitizers need a nightly, dated in rust-toolchain.toml, and only the
@@ -170,6 +178,8 @@ SCROLL_HARNESS=(cicd/tests/scroll/run.bash)
 ## Stage 3: graphical scenarios against a real Windows desktop, over ssh. Slow, so
 ## it is skipped under --quick. A box that is off, or whose session is locked, is a
 ## skip and not a failure - both are somebody's machine rather than build hardware.
+## Each scenario runs once, on the first box free for it, and one that needs a
+## real card only on a box tagged gpu (run.bash's header has the rule).
 ## Empty () to disable. Extra scenario names may be listed after run.bash.
 WINGUI_HARNESS=(cicd/tests/wingui/run.bash smoke injchar settingsdlg perfladder pathannounce consolemsg savenotice openwith softrender newwin gbtitle conmap cmdgui conload quiettab wpremote)
 
@@ -274,6 +284,10 @@ CLEANUP_BUILD_DIRS=(debug release "${PROFILE_PROFILE}" lint)
 ## The same for the dirs the pinned nightly builds into, which only a nightly bump
 ## makes stale.
 CLEANUP_NIGHTLY_DIRS=("${ASAN_DIR}" "${TSAN_DIR}")
+## At the end of a run a cache over this many MB is emptied whole: the container's
+## cache volumes, and a Zig cache in the tree. A Zig cache is also emptied when
+## another Zig version filled it. Zig's global cache on this box is never touched.
+CLEANUP_CACHE_CAP_MB=2048
 
 ## Old SVGs are pruned by gfs_rotate (cicd/utility/include/gfs-rotate.bash): keeps
 ## ~30 - first + newest-per-hour/day/week/month/year + last 10. Tune with the
