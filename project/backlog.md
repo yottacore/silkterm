@@ -765,7 +765,8 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - The advisory scan misses a crate yanked since cargo's index cache was filled, and clipboard-win 5.4.1 is yanked
 	- ID: 2026102518563500
 	- Type: Bug
-	- Status: Queued
+	- Status: Waiting on automated testing
+	- Needs local test suite run?: One container full run (`--backlog-run-full`): stage 3's index refresh, the advisory scan and Etr6FuE, against the container's own cache volume.
 	- Severity: Avg
 	- Opened: 20261025-185635
 	- Opened by: CC
@@ -781,6 +782,22 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Reproduced: Yes. The live index marks 5.2.0 to 5.4.1 yanked. `cargo update -p clipboard-win --precise 5.4.3` changes only those 2 lock lines, and then the scan passes on b29w.
 	- Notes:
 		- Two parts: bump the lock, and make the scan refresh the index entries it reads, or fail when it can't. The container's cache volume may be just as stale.
+	- Actual cause: cargo-deny reads yanks from cargo's cached index entries and never fetches them. Its `fetch index` only downloads crates. So a box sees a yank only after some other cargo call refreshed that entry. b23's entry was refreshed on 10-26 by another cargo call, and b23 then failed too.
+	- Actual fix:
+		- Lock: clipboard-win 5.4.1 -> 5.4.3, 2 lines.
+		- Before the scan, both pipelines run `cargo update --dry-run --quiet --config net.offline=false` (`INDEX_REFRESH_CMD` in config.bash, and `fAdvisoryScan` in cicd-win.ps1). It revalidates the entry of every locked crate and writes nothing. If it can't reach the index the run fails, since the scan couldn't see a yank.
+	- Decisions:
+		- 20261026: Refresh through cargo itself, not our own fetch of the index. With the etag blanked on all 357 locked crates' entries, one dry run rewrote all 357. It takes about 3 s, and 0.8 s of CPU.
+		- 20261026: No network fails the scan rather than skipping it, per the issue. `net.offline=false` keeps `CARGO_NET_OFFLINE` from making it a quiet pass. The dry run also fetches the git deps, so the git host has to answer too.
+	- Progress log:
+		- 20261026: Reproduced here with b23's 06-22 clipboard-win entry from a snapshot, in a cargo home of its own: the scan passed on 5.4.1. `cargo update --workspace --dry-run` left the entry stale. The full dry run refreshed it, and the scan then failed on the yank.
+	- Verified:
+		- 20261026: Etr6FuE passes. It failed 2 of 4 with the refresh swapped for `true`.
+		- 20261026: On b29w, `fAdvisoryScan` taken from the edited cicd-win.ps1, run in its dev clone: failed on 5.4.1, passed on 5.4.3, and failed "can't refresh" with no network. The clone's lock was put back after.
+		- 20261026: `--backlog-run-quick clippy scripts`, and clippy `-D warnings` for `x86_64-pc-windows-gnu` with 5.4.3. The real scan passes here.
+	- Swept: every cargo-deny advisories call, in config.bash, cicd.bash and cicd-win.ps1. ci-mac.bash and the hosted workflows don't run it. advscope uses its own db and `--disable-fetch`, and doesn't read yanks.
+	- Test case: Etr6FuE, `cicd/tests/yankfresh/run.bash`, run by stage 3 after advscope. It plants a stale yank in a copied index cache: the scan alone must fail, the refresh must fail with no network, and after the refresh the scan must pass with the lock untouched.
+	- Branch: rnd1026
 
 - Leak checks: Miri sort, settings_ui
 	- ID: 2026102407430381

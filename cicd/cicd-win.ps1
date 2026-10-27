@@ -681,6 +681,10 @@ function fLintAdvisory {
 ## one gates, as in cicd.bash: any report fails the run, a warning too.
 function fAdvisoryScan {
 	if (Get-Command cargo-deny -ErrorAction SilentlyContinue) {
+		## cargo-deny reads yanks from cargo's cached index and never refreshes it,
+		## see INDEX_REFRESH_CMD in config.bash.
+		& cargo update --dry-run --quiet --config net.offline=false
+		if ($LASTEXITCODE -ne 0) { fDie "can't refresh the crates.io index, so the advisory scan can't see a yanked crate (above)" }
 		& cargo deny check advisories -D warnings
 		if ($LASTEXITCODE -ne 0) { fDie "known advisories against the dependencies (above)" }
 		fEcho "OK: no known advisories"

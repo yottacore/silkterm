@@ -1423,9 +1423,13 @@ fBuildTestRelease(){
 	fi
 	if [[ -n "${ADVISORY_CMD+x}" ]] && ((${#ADVISORY_CMD[@]})); then
 		"${DENY_PROBE[@]}" >/dev/null 2>&1 || fDie "advisory scan can't run: ${DENY_PROBE[*]} failed (see cicd/tool-pins.txt)"
+		if [[ -n "${INDEX_REFRESH_CMD+x}" ]] && ((${#INDEX_REFRESH_CMD[@]})); then
+			"${INDEX_REFRESH_CMD[@]}" || fDie "can't refresh the crates.io index, so the advisory scan can't see a yanked crate (above)"
+		fi
 		"${ADVISORY_CMD[@]}" || fDie "known advisories against the dependencies (above)"
 		fEcho "OK: no known advisories"
 		fRunTest_MaySkip cicd/tests/advscope/run.bash "advisory scan scope"
+		fRunTest_MaySkip cicd/tests/yankfresh/run.bash "advisory scan sees new yanks"
 	fi
 	if [[ -n "${DENY_CMD+x}" ]] && ((${#DENY_CMD[@]})); then
 		if "${DENY_PROBE[@]}" >/dev/null 2>&1; then

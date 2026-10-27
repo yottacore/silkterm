@@ -115,6 +115,13 @@ DENY_CMD=(cargo deny check licenses bans sources)
 ## its backlog item's ID. No cargo-deny fails the run as well, since a scan that
 ## can't run has found nothing.
 ADVISORY_CMD=(cargo deny check advisories -D warnings)
+## Run just before it. cargo-deny reads yanks from cargo's cached index entries
+## and never refreshes them, so a crate yanked since a box last resolved looks
+## fine there (2026102518563500). A dry-run update revalidates the entry of every
+## locked crate and writes nothing to the lock. Gating: offline means a yank can't
+## be seen, so it fails, and net.offline=false keeps CARGO_NET_OFFLINE from
+## turning it into a quiet pass.
+INDEX_REFRESH_CMD=(cargo update --dry-run --quiet --config net.offline=false)
 
 ## Stage 3: the test suite again under AddressSanitizer and LeakSanitizer, on every
 ## full run. Sanitizers need a nightly, dated in rust-toolchain.toml, and only the
