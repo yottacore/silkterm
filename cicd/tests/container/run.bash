@@ -258,9 +258,12 @@ FAKE_TAGS="silkterm-cicd:000000000000" fRun tags.log --container -y --no-sync --
 fCheck "with the image there, the older tag still goes" grep -qx 'image rm silkterm-cicd:000000000000' "${work}/tags.log"
 
 fRun gate.log --gate --container
-fCheck "--gate --container runs the gate inside" bash -c '[[ "$(grep "^run " "$1")" == *" $2/cicd/cicd.bash --gate" ]]' _ "${work}/gate.log" "${repo}"
+fCheck "--gate --container runs the backlog quick run inside, every area named" bash -c '[[ "$(grep "^run " "$1")" == *" $2/cicd/cicd.bash --backlog-run-quick fmt clippy tests scripts docs" ]]' _ "${work}/gate.log" "${repo}"
+fCheck "and says --gate is another name for it" grep -qx -- '--gate is another name for --backlog-run-quick' <<<"${out}"
 fCheck "and nothing else" test "${rc}" -eq 0 -a "$(grep -c '^run ' "${work}/gate.log")" -eq 1
 fCheck "with no log tee or plan" fNot grep -q 'Fail-fast' <<<"${out}"
+fRun quickareas.log --backlog-run-quick docs fmt --container
+fCheck "--backlog-run-quick takes the areas named into the container, in order" bash -c '[[ "$(grep "^run " "$1")" == *" $2/cicd/cicd.bash --backlog-run-quick docs fmt" ]]' _ "${work}/quickareas.log" "${repo}"
 
 FAKE_RUN_RC=7 fRun fail.log --container -y --no-sync --no-dogfood --no-publish --no-private --quick
 fCheck "a run inside that fails stops the run here" test "${rc}" -ne 0
@@ -394,3 +397,4 @@ echo "all passed"
 ##		- 20261023 JC: The run inside gets --no-demo.
 ##		- 20261023 JC: The TSan step.
 ##		- 20261025 JC: The render node test and the profiler run here, after the container.
+##		- 20261026: --gate is the backlog quick run, and the areas go in with it.

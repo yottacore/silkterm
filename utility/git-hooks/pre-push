@@ -1,6 +1,7 @@
 #!/bin/sh
 # Local merge gate: before any push that updates main, run the fast verify
-# pass (cicd.bash --gate: fmt --check + clippy -D warnings + tests) against the
+# pass (cicd.bash --backlog-run-quick: fmt --check, clippy, tests, the script
+# lints and the docs checks) against the
 # commit being pushed, in a throwaway worktree.
 # dev and feature branches are not gated. A branch is tested before it merges
 # into dev, and running the whole pass again on the merge only cost time.
@@ -103,7 +104,7 @@ fi
 
 [ "${gated}" = "1" ] || exit 0
 
-echo "pre-push: gating push to main (cicd.bash --gate; --no-verify skips)" >&2
+echo "pre-push: gating push to main (cicd.bash --backlog-run-quick; --no-verify skips)" >&2
 # Gate the commit being pushed, not whatever the working tree holds. Those are
 # routinely different here, and a fix still sitting unstaged used to carry the
 # push - the gate passed on the tree and main got the version without it. A
@@ -120,7 +121,7 @@ git -C "${top}" worktree add --detach -q "${tree}" "${mainLocal}" \
 	|| { echo "pre-push: cannot check out ${mainLocal} to gate it" >&2; exit 1; }
 CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-${top}/target}"
 export CARGO_TARGET_DIR
-"${tree}/cicd/cicd.bash" --gate
+"${tree}/cicd/cicd.bash" --backlog-run-quick
 
 ##	History:
 ##		- 20260711: Created.

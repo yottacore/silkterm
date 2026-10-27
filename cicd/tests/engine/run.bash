@@ -91,10 +91,13 @@ leakOff="$(grep -F 'if ((quick && ! leakAsked)) || ((gate)); then leakcheck=0; f
 fCheck "and one turning the leak checks off under --quick and --gate" test -n "${leakOff}"
 codeqlGate="$(grep -F 'if ((gate && codeql)); then' "${engine}" || true)"
 fCheck "and one refusing --codeql with --gate" test -n "${codeqlGate}"
-parse+=$'\n'"${refusal}"$'\n'"${codeqlGate}"$'\n'"${leakOff}"
+## The backlog runs and the merge gate, settled after the loop.
+runs="$(fLift '^gateAreasAll=' '^if ((fmtCheck ')"
+fCheck "the parser settles the backlog runs and the merge gate after the loop" test -n "${runs}"
+parse+=$'\n'"${refusal}"$'\n'"${codeqlGate}"$'\n'"${leakOff}"$'\n'"${runs}"
 fParse(){  ## fParse <args...>: prints the settings the parser leaves, or exits as it does
 	BUILD_CROSS=1; PROFILE_ENABLE=1; PACKAGE_ENABLE=1; FUZZ_SECS=60
-	FMT_CMD=(cargo fmt); DOGFOOD_DESTS=(x); GIT_PUBLISH=(x); DEMO_ENABLE=1
+	FMT_CMD=(cargo fmt); FMT_CHECK_CMD=(cargo fmt --check); DOGFOOD_DESTS=(x); GIT_PUBLISH=(x); DEMO_ENABLE=1
 	set -- "${@}"
 	eval "${parse}"
 	echo "quick=${quick} cross=${BUILD_CROSS} arm=$((! noArm)) demo=${DEMO_ENABLE} gate=${gate} profile=${PROFILE_ENABLE} package=${PACKAGE_ENABLE} fuzz=${FUZZ_SECS} yes=${assumeYes} sync=${sync} leak=${leakcheck} inner=${innerArgs[*]}"
@@ -156,7 +159,42 @@ fCheck "the dhat test hands on to CodeQL, with the report folder" \
 fCheck "the config names a Rust suite, and the suppressions file is there" \
 	bash -c 'source "$1" && [[ "${CODEQL_SUITE}" == codeql/rust-queries:* && -f "$2/../${CODEQL_SUPPRESSIONS}" ]]' _ "${cicd}/config.bash" "${cicd}"
 fCheck "--no-demo turns the demo off" bash -c '[[ "$1" == *" demo=0 "* ]]' _ "$(fParse --no-demo)"
-fCheck "--gate is the merge gate" bash -c '[[ "$1" == *" gate=1 "* ]]' _ "$(fParse --gate)"
+fCheck "--gate is the backlog quick run" bash -c '[[ "$1" == *" gate=1 "* ]]' _ "$(fParse --gate 2>/dev/null)"
+
+## --backlog-run-quick, --backlog-run-full and --merge-gate. None of them syncs,
+## dogfoods, publishes, rewrites a tracked file or prompts.
+fParseRun(){  ## fParseRun <args...>: what the 3 runs settle, or exits as the parser does
+	BUILD_CROSS=1; PROFILE_ENABLE=1; PACKAGE_ENABLE=1; FUZZ_SECS=60
+	FMT_CMD=(cargo fmt); FMT_CHECK_CMD=(cargo fmt --check); DOGFOOD_DESTS=(x); GIT_PUBLISH=(x); DEMO_ENABLE=1
+	eval "${parse}"
+	echo "gate=${gate} areas=${gateAreas[*]} full=${fullRun} yes=${assumeYes} sync=${sync} fmt=${FMT_CMD[*]} dogfood=${#DOGFOOD_DESTS[@]} publish=${#GIT_PUBLISH[@]} demo=${DEMO_ENABLE} leak=${leakcheck} inner=${innerArgs[*]}"
+}
+fCheck "--backlog-run-quick runs every area with none named" \
+	test "$(fParseRun --backlog-run-quick)" = "gate=1 areas=fmt clippy tests scripts docs full=0 yes=0 sync=1 fmt=cargo fmt dogfood=1 publish=1 demo=1 leak=0 inner="
+fCheck "or only the ones named, in order, up to the next option" \
+	bash -c '[[ "$1" == "gate=1 areas=docs fmt full=0 "*" inner=--no-fuzz" ]]' _ "$(fParseRun --backlog-run-quick docs fmt --no-fuzz)"
+rc=0; out="$(fParseRun --backlog-run-quick fmt parser 2>&1)" || rc=$?
+fCheck "an unknown area stops the run, naming the areas" bash -c '[[ "$1" == 2 && "$2" == *"unknown area: parser (areas: fmt clippy tests scripts docs)"* ]]' _ "${rc}" "${out}"
+rc=0; out="$(fParseRun --gate docs 2>&1)" || rc=$?
+fCheck "--gate takes areas too" bash -c '[[ "$1" == 0 && "$2" == *"gate=1 areas=docs full=0 "* ]]' _ "${rc}" "${out}"
+fCheck "and says in one line what it is another name for" test "$(grep -c -- '--gate is another name for --backlog-run-quick' <<<"${out}")" -eq 1
+for run in --backlog-run-full --merge-gate; do
+	fCheck "${run} turns off sync, dogfood, the demo and publish, checks the format, and asks nothing" \
+		test "$(fParseRun "${run}")" = "gate=0 areas= full=1 yes=1 sync=0 fmt=cargo fmt --check dogfood=0 publish=0 demo=0 leak=1 inner=--fmt-check"
+	fCheck "${run} keeps them off when asked for after it" \
+		bash -c '[[ "$1" == *" sync=0 fmt=cargo fmt --check dogfood=0 publish=0 demo=0 "* ]]' _ "$(fParseRun "${run}" --demo -m hello)"
+	rc=0; out="$(fParseRun "${run}" --quick 2>&1)" || rc=$?
+	fCheck "${run} with --quick stops the run" bash -c '[[ "$1" == 2 && "$2" == *"every check of the default run"* ]]' _ "${rc}" "${out}"
+	rc=0; out="$(fParseRun "${run}" --backlog-run-quick 2>&1)" || rc=$?
+	fCheck "${run} with --backlog-run-quick stops the run" bash -c '[[ "$1" == 2 && "$2" == *"different runs"* ]]' _ "${rc}" "${out}"
+done
+rc=0; out="$(fParseRun --ci 2>&1)" || rc=$?
+fCheck "--ci is the merge gate" bash -c '[[ "$1" == 0 && "$2" == *" full=1 yes=1 sync=0 "* ]]' _ "${rc}" "${out}"
+fCheck "and says so in one line" test "$(grep -c -- '--ci is another name for --merge-gate' <<<"${out}")" -eq 1
+fCheck "--fmt-check checks rather than rewrites, and goes into the container" \
+	bash -c '[[ "$1" == *" fmt=cargo fmt --check "*" inner=--fmt-check" ]]' _ "$(fParseRun --fmt-check)"
+fCheck "--no-fmt still wins over it" bash -c '[[ "$1" == *" fmt= dogfood="* ]]' _ "$(fParseRun --no-fmt --fmt-check)"
+fCheck "the plan names the run" grep -qF 'if ((fullRun)); then fEcho_Clean "Run .................: ${fullRunName}' "${engine}"
 rc=0; out="$(fParse -y --no-such-thing 2>&1)" || rc=$?
 fCheck "an unknown option still stops the run" test "${rc}" -eq 2
 
@@ -340,6 +378,7 @@ if ((failures)); then echo "${failures} failed"; exit 1; fi
 echo "all passed"
 
 ##	History:
+##		- 20261026: --backlog-run-quick, --backlog-run-full, --merge-gate and their other names.
 ##		- 20261025: --no-remote, and the SKIP lines in a step's line and at the end.
 ##		- 20261022: Where CodeQL runs, and --codeql, off by default.
 ##		- 20261022: --no-leakcheck, and the leak checks on with no options.

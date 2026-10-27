@@ -44,7 +44,8 @@ EXE_NAME="silkterm"
 ## Stage 1: format the source in place before anything is compiled or tested.
 ## Empty it (FMT_CMD=()) when reusing the pipeline in a non-Rust project.
 FMT_CMD=(cargo fmt)
-## Non-mutating variant for the --gate mode (fails on drift instead of rewriting).
+## Non-mutating variant for --backlog-run-quick, --fmt-check and the full runs
+## (fails on drift instead of rewriting).
 FMT_CHECK_CMD=(cargo fmt --check)
 
 ## Pinned helper tools, "name|version|command..." each. The list lives in

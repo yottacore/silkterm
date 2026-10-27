@@ -537,6 +537,100 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Overrides: 2026101816103601's decision that `--gate` keeps its name as the merge gate, design.md's merge gate bullet under "Delivery", and the gate and full-run lines in the private notes' "Round settings".
 	- Progress log:
 		- 20261025: `--no-remote` is in, from 2026102507245260, with `-NoRemote` in `cicd-win.ps1`.
+		- 20261026: Split, since it doesn't fit one sitting. Children: 2026102616543933 (the backlog runs and the merge gate), 2026102616543936 (`--long`, and a default run in about an hour), 2026102616543939 (`--keep-temp` and `--list`), 2026102616543943 (the pre-push hook), 2026102616543946 (the same in `cicd-win.ps1`).
+		- 20261026: 2026102616543933 is in: `--backlog-run-quick`, `--backlog-run-full`, `--merge-gate`, and `--gate` and `--ci` as other names.
+
+- CICD reset: the backlog runs and the merge gate
+	- ID: 2026102616543933
+	- Type: Task
+	- Status: Waiting on automated testing
+	- Needs local test suite run?: One `cicd/cicd.bash --merge-gate` from `repo/`, in the container. It can stand in for the round's full run.
+	- Priority: High
+	- Opened: 20261026-165439
+	- Opened by: CC
+	- Parent ID: 2026102416233807
+	- Target OS: All
+	- Requirements:
+		- `--backlog-run-quick [<area>...]`, with its areas in `--help`, `--backlog-run-full` and `--merge-gate`, per the parent.
+		- `--gate` is another name for `--backlog-run-quick`, and `--ci` for `--merge-gate`. Each says so in one line when used.
+		- None of the 3 dogfoods, publishes, commits, pushes, installs, syncs or rewrites a tracked file, and none prompts.
+		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
+	- Progress log:
+		- 20261026: `--backlog-run-quick` runs the old gate's format check, clippy and tests, plus the script lints and the docs checks, each as an area. Named areas run in the order given. An unknown area stops the run and lists them.
+		- 20261026: `--backlog-run-full` and `--merge-gate` are the default run with sync, dogfood, the demo and publish off, the format checked, and no prompt. They refuse `--quick` and `--backlog-run-quick`. The plan has a Run line naming which.
+		- 20261026: New `--fmt-check`, which the full runs hand to the run inside the container.
+		- 20261026: The script lints and the docs checks moved into 2 functions, so stage 3 and the quick run share them.
+		- 20261026: The pre-push hook calls `--backlog-run-quick` by name. It moves to `--merge-gate` with 2026102616543943.
+		- 20261026: The container test's `--gate --container` check expected `cicd.bash --gate` inside, and now expects `cicd.bash --backlog-run-quick fmt clippy tests scripts docs`. The engine test's "--gate is the merge gate" check is renamed "--gate is the backlog quick run", with the same assert.
+	- Decisions:
+		- 20261026: The areas are `fmt`, `clippy`, `tests`, `scripts` and `docs`, by kind of check, not by part of the program. Each maps to one step, and cargo's test filters already cover a narrower test run.
+		- 20261026: `--backlog-run-full` and `--merge-gate` run the same checks. The rules define both as every check of the default run, the other boxes included. They differ only in who calls them.
+		- 20261026: The demo stays off in both, since it rewrites the README gif, a tracked file.
+	- Verified: 20261026. A real `cicd.bash --backlog-run-quick` in the container passed all 5 areas in 207 s at a load of 12 to 20, 1409 tests among them. `--no-container --backlog-run-quick docs scripts` passed in 76 s. The plan for `--merge-gate` and `--backlog-run-full` showed sync, dogfood, the demo and publish off and `cargo fmt --check`. The engine, container and hooks tests, shellcheck and the bash style check pass. The 19 new engine checks failed against the old cicd.bash, and 4 failed against a copy that kept dogfood on.
+		- Swept: every `--gate` and `--ci` caller in the repo: the pre-push hook, the container and engine tests, config.bash and design.md. `cicd-win.ps1 -Gate` is 2026102616543946.
+	- Branch: rnd1026
+	- Test case: `cicd/tests/engine/run.bash` (Er2UgY7), 19 new checks. `cicd/tests/container/run.bash` (EsJg9EF), 3 for the areas going into the container and the `--gate` line.
+
+- CICD reset: `--long`, and a default run in about an hour
+	- ID: 2026102616543936
+	- Type: Task
+	- Status: Queued
+	- Priority: High
+	- Opened: 20261026-165439
+	- Opened by: CC
+	- Parent ID: 2026102416233807
+	- Prereq IDs: 2026102616543933
+	- Target OS: All
+	- Requirements:
+		- `--long`, with `--slow` as another name: everything, the leak checks and benchmarks that take hours included.
+		- The default run fits in about an hour. It takes about 90 minutes now, so a step moves to `--long`. The TSan run is about 28 minutes of it.
+		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
+
+- CICD reset: `--keep-temp` and `--list`
+	- ID: 2026102616543939
+	- Type: Task
+	- Status: Queued
+	- Priority: High
+	- Opened: 20261026-165439
+	- Opened by: CC
+	- Parent ID: 2026102416233807
+	- Prereq IDs: 2026102616543933
+	- Target OS: All
+	- Requirements:
+		- `--keep-temp` keeps the run's temp folder and containers, and prints where they are.
+		- `--list` prints the steps and test IDs the other flags given would run, and runs nothing. It works with the 3 runs from 2026102616543933 too.
+		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
+
+- CICD reset: the pre-push hook runs the merge gate
+	- ID: 2026102616543943
+	- Type: Task
+	- Status: Queued
+	- Priority: High
+	- Opened: 20261026-165439
+	- Opened by: CC
+	- Parent ID: 2026102416233807
+	- Prereq IDs: 2026102616543933
+	- Target OS: All
+	- Requirements:
+		- The pre-push hook runs `--merge-gate` on a push to main, and skips it when the push changes only docs and other files no build reads.
+		- Those paths are listed in one place the hook reads.
+		- design.md's merge gate bullet under "Delivery" says so.
+		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
+
+- CICD reset: the standard flags in `cicd-win.ps1`
+	- ID: 2026102616543946
+	- Type: Task
+	- Status: Queued
+	- Priority: High
+	- Opened: 20261026-165439
+	- Opened by: CC
+	- Parent ID: 2026102416233807
+	- Prereq IDs: 2026102616543933, 2026102616543936
+	- Target OS: Windows
+	- Requirements:
+		- `cicd-win.ps1` takes the same runs as `cicd.bash`, in its own `-PascalCase` form, with `-Gate` as another name for the quick one, saying so in one line.
+		- Its Linux half gets the matching `cicd.bash` flag under `-Wsl`.
+		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
 
 - CICD reset: step output
 	- ID: 2026102416233808

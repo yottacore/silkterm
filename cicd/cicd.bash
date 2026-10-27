@@ -57,7 +57,8 @@
 ##	   --no-asan           skip the test suite under ASan and LSan
 ##	   --no-tsan           skip the test suite under TSan
 ##	   --no-leakcheck      skip the slow leak checks (the heap-growth test under dhat, CodeQL)
-##	   --leakcheck         run the leak checks, under --quick too; not with --gate
+##	   --leakcheck         run the leak checks, under --quick too; not with
+##	                       --backlog-run-quick
 ##	   --codeql            add CodeQL to the leak checks (off by default; slow)
 ##	   --no-profile        skip the profiler stage
 ##	   --no-dogfood        skip the dogfood install
@@ -69,14 +70,26 @@
 ##	                       skips the ARM64 builds, packages, profiling, the fuzz soak,
 ##	                       the ASan and TSan runs, the slow window tests and anything
 ##	                       that needs another box
-##	   --gate              merge gate only: fmt --check + clippy + tests, then exit
-##	                       (fast local stand-in for hosted CI; the pre-push hook runs it)
+##	   --backlog-run-quick [AREA...]
+##	                       the fast checks only, then exit: every area, or the ones
+##	                       named. Areas: fmt (cargo fmt --check), clippy (Linux),
+##	                       tests (cargo test), scripts (shellcheck, the bash style
+##	                       check, the PowerShell and Python lints), docs (markdown
+##	                       spacing, tables of contents, tables, test IDs)
+##	   --gate              another name for --backlog-run-quick
+##	   --backlog-run-full  every check of the default run, the other boxes too, with
+##	                       the format checked, not rewritten; no sync, dogfood, demo
+##	                       or publish, and no prompt
+##	   --merge-gate        the same checks, before a merge to main
+##	   --ci                another name for --merge-gate
+##	   --fmt-check         check the format instead of rewriting it
 ##	   --container         stages 1-6 in the pinned image from cicd/container/Dockerfile,
 ##	                       with its own target dir (target/container); sync, the private
 ##	                       runner, dogfood, the demo and publish stay here, and so do
 ##	                       the steps that need the card: the profiler and the render
-##	                       node test, run here once the container is done. With --gate,
-##	                       the gate runs there. The default whenever docker is here.
+##	                       node test, run here once the container is done. With
+##	                       --backlog-run-quick, that runs there. The default whenever
+##	                       docker is here.
 ##	   --no-container      stages 1-6 on this box instead; the default with no docker
 ##	  With no options every stage runs.
 ## - Reuse: copy the cicd/ directory into another project and edit config.bash.
@@ -117,6 +130,7 @@ source "${here}/utility/include/echo.bash"                        ## fEcho, fEch
 ##  shellcheck source=cicd/utility/built-from.bash
 source "${here}/utility/built-from.bash"                          ## the artifacts' provenance note
 declare -p FMT_CMD &>/dev/null || FMT_CMD=()                      ## tolerate a config without the fmt stage
+declare -p FMT_CHECK_CMD &>/dev/null || FMT_CHECK_CMD=()
 ## Every cross target the config has, before --no-arm or --no-windows drop some,
 ## since a run that skips one still keeps its build dir for the next.
 allCrossTargets=(); declare -p CROSS_TARGETS &>/dev/null && allCrossTargets=("${CROSS_TARGETS[@]}")
@@ -136,11 +150,15 @@ cd "${root}"
 stamp="$(date +%Y%m%d-%H%M%S)"
 
 ## Parse options.
-assumeYes=0; quiet=0; quick=0; noRemote=0; skipLog=""; gate=0; leakcheck=1; leakAsked=0; codeql=0; demoAsked=0; noArm=0; noWindows=0; sync=1; cliMessage=""; container="${useContainer:-0}"; noContainer=0; innerArgs=()
+assumeYes=0; quiet=0; quick=0; noRemote=0; skipLog=""; gate=0; gateAreas=(); fullRun=0; fullRunName=""; fmtCheck=0; leakcheck=1; leakAsked=0; codeql=0; demoAsked=0; noArm=0; noWindows=0; sync=1; cliMessage=""; container="${useContainer:-0}"; noContainer=0; innerArgs=()
 while (($#)); do case "${1}" in
 	-y|--yes)                 assumeYes=1; shift ;;
 	-q|--quiet)               quiet=1; assumeYes=1; shift ;;   ## quiet + unattended; publish runs quiet too
-	--gate)                   gate=1; shift ;;                  ## merge gate only, then exit
+	--backlog-run-quick)      gate=1; shift; while (($#)) && [[ "${1}" != -* ]]; do gateAreas+=("${1}"); shift; done ;;   ## the fast checks only, then exit
+	--gate)                   echo "--gate is another name for --backlog-run-quick" >&2; set -- --backlog-run-quick "${@:2}" ;;
+	--backlog-run-full|--merge-gate) fullRun=1; fullRunName="${1}"; shift ;;   ## every check of the default run, and nothing that writes or prompts
+	--ci)                     echo "--ci is another name for --merge-gate" >&2; set -- --merge-gate "${@:2}" ;;
+	--fmt-check)              fmtCheck=1; innerArgs+=("${1}"); shift ;;
 	--container)              container=1; shift ;;             ## stages 1-6 in the image; innerArgs collects what goes in with them
 	--no-container)           noContainer=1; shift ;;           ## stages 1-6 on this box
 	--no-fmt)                 FMT_CMD=(); innerArgs+=("${1}"); shift ;;
@@ -169,8 +187,17 @@ while (($#)); do case "${1}" in
 	*) echo "unknown option: ${1} (try --help)" >&2; exit 2 ;;
 esac; done
 if ((noContainer)); then container=0; fi
-if ((gate && leakAsked && leakcheck)); then echo "--leakcheck adds to a full run; the gate leaves it out" >&2; exit 2; fi
-if ((gate && codeql)); then echo "--codeql is one of the leak checks, which the gate leaves out" >&2; exit 2; fi
+## The backlog runs and the merge gate never sync, dogfood, publish, rewrite a
+## tracked file or prompt. The demo rewrites the README gif, so it stays off too.
+gateAreasAll="fmt clippy tests scripts docs"
+if ((gate && fullRun)); then echo "--backlog-run-quick and ${fullRunName} are different runs; pick one" >&2; exit 2; fi
+if ((fullRun && quick)); then echo "${fullRunName} runs every check of the default run, so not --quick" >&2; exit 2; fi
+for area in "${gateAreas[@]}"; do case " ${gateAreasAll} " in *" ${area} "*) ;; *) echo "unknown area: ${area} (areas: ${gateAreasAll})" >&2; exit 2 ;; esac; done
+if ((gate && ${#gateAreas[@]} == 0)); then read -r -a gateAreas <<< "${gateAreasAll}"; fi
+if ((fullRun)); then assumeYes=1; sync=0; DOGFOOD_DESTS=(); GIT_PUBLISH=(); DEMO_ENABLE=0; fmtCheck=1; innerArgs+=(--fmt-check); fi
+if ((fmtCheck && ${#FMT_CMD[@]})); then FMT_CMD=("${FMT_CHECK_CMD[@]}"); fi
+if ((gate && leakAsked && leakcheck)); then echo "--leakcheck adds to a full run; the backlog quick run leaves it out" >&2; exit 2; fi
+if ((gate && codeql)); then echo "--codeql is one of the leak checks, which the backlog quick run leaves out" >&2; exit 2; fi
 if ((quick && ! leakAsked)) || ((gate)); then leakcheck=0; fi   ## on by default, like the demo
 
 ## --no-arm: drop the ARM64 cross targets so the run (and its packages) stay
@@ -584,36 +611,106 @@ fi
 # shellcheck source=cicd/tests/_testdir.bash
 source "${root}/cicd/tests/_testdir.bash"
 
-## Gate mode: the local merge gate (what a bare-bones hosted CI would run).
-## fmt --check + clippy -D warnings + tests, fail-fast, nothing mutated, no
-## artifacts/log-tee/publish. Wired as the pre-push hook for main, so nothing
-## reaches the release branch unverified even outside a full run.
+## The script lints and the docs checks, in stage 3 and in --backlog-run-quick.
+fLintScripts(){
+	## First-party shell scripts, at warning level.
+	if command -v shellcheck >/dev/null 2>&1; then
+		mapfile -t shellFiles < <(git -C "${root}" ls-files '*.bash' '*.sh' cicd/utility/n8git_backup-and-publish utility/git-hooks/pre-commit utility/git-hooks/pre-push utility/runterm)
+		(cd "${root}" && shellcheck -S warning "${shellFiles[@]}") || fDie "shellcheck found problems"
+		fEcho "OK: shell scripts clean"
+		styleOut="$("${root}/cicd/utility/bash-style.bash" 2>&1)" || { fEcho_Clean "${styleOut}"; fDie "shell scripts drift from the house style (cicd/utility/bash-style.bash)"; }
+		fEcho "OK: shell scripts in house style"
+	else
+		fEcho "WARNING: shellcheck not installed; shell scripts not linted"
+	fi
+	## First-party PowerShell scripts, at warning level too.
+	if command -v pwsh >/dev/null 2>&1; then
+		psRc=0
+		pwsh -NoProfile -NonInteractive -File "${root}/cicd/utility/ps-lint.ps1" || psRc=$?
+		case "${psRc}" in
+			0) fEcho "OK: PowerShell scripts clean" ;;
+			2) fEcho "WARNING: PSScriptAnalyzer not installed; PowerShell scripts not linted" ;;
+			*) fDie "PSScriptAnalyzer found problems" ;;
+		esac
+	else
+		fEcho "WARNING: pwsh not installed; PowerShell scripts not linted"
+	fi
+	## First-party Python scripts, with the rules in ruff.toml and mypy.ini.
+	pyRc=0
+	python3 "${root}/cicd/utility/py-lint.py" || pyRc=$?
+	case "${pyRc}" in
+		0) fEcho "OK: Python scripts clean" ;;
+		2) fEcho "WARNING: ruff not installed; Python scripts not linted" ;;
+		*) fDie "the Python lint found problems" ;;
+	esac
+}
+fCheckDocs(){
+	## Every table of contents, which no markdown linter regenerates. design.md had
+	## been missing eight of its headings.
+	fRunTest cicd/tests/toc/run.py "tables of contents" "a table of contents is out of date - run cicd/tests/toc/run.py --fix"
+	## Every markdown table, laid out as comparison.md's generated one is. Hand-written
+	## ones had drifted to trailing pipes and ragged columns.
+	fRunTest cicd/tests/tables/run.py "markdown tables" "a markdown table is not canonical - run cicd/tests/tables/run.py --fix"
+	## Blank lines between top-level bullets and around headings, which no markdown
+	## linter here checks. The README and style guide had drifted. Also banner rules
+	## in .rs comments, and plain comments on pub items.
+	if [[ -x "${root}/cicd/tests/docs/run.py" ]]; then
+		fEcho_Clean "markdown spacing, banner rules, doc comments ..."
+		docsOut="$("${root}/cicd/tests/docs/run.py" 2>&1)" || { echo "${docsOut}"; fDie "a markdown file is missing a blank line, or a .rs file has a banner rule or a plain comment on a pub item - see above ($(fTestId cicd/tests/docs/run.py))"; }
+		fEcho "OK: markdown spacing, banner rules, doc comments ($(fTestId cicd/tests/docs/run.py))"
+	fi
+	## Every test carries an ID, and no two share one.
+	if [[ -x "${root}/cicd/utility/test-id.py" ]]; then
+		fEcho_Clean "test IDs ..."
+		testIds="$("${root}/cicd/utility/test-id.py" --check 2>&1)" || { echo "${testIds}"; fDie "a test has no ID or shares one - make IDs with cicd/utility/test-id.py"; }
+		fEcho "OK: test IDs"
+	fi
+}
+
+## --backlog-run-quick: the fast checks to run before a commit,
+## every area or the ones named, fail-fast, nothing mutated, no artifacts,
+## log tee or publish. Each step reads the tree as it is.
 if ((gate)); then
 	fTestDir_Make || fDie "could not make the test run folder"
 	if ((container)); then
-		fSection "Gate in ${containerImage}"
+		fSection "Backlog quick run in ${containerImage}"
 		fContainerBuild "${containerImage}"
-		fContainerRun "${containerImage}" "${root}/cicd/cicd.bash" --gate || fDie "the gate in the container failed (above)"
+		fContainerRun "${containerImage}" "${root}/cicd/cicd.bash" --backlog-run-quick "${gateAreas[@]}" || fDie "the backlog quick run in the container failed (above)"
 		exit 0
 	fi
-	fSection "Gate 1/3  Format check"
-	if declare -p FMT_CHECK_CMD &>/dev/null && ((${#FMT_CHECK_CMD[@]})); then
-		"${FMT_CHECK_CMD[@]}" || fDie "format check failed (run: ${FMT_CMD[*]:-cargo fmt})"
-		fEcho "OK: formatting clean"
-	else
-		fEcho_Clean "format check skipped (no FMT_CHECK_CMD)"
-	fi
-	fSection "Gate 2/3  Lints"
-	if [[ -n "${LINT_CMD+x}" ]] && ((${#LINT_CMD[@]})) && "${LINT_PROBE[@]}" >/dev/null 2>&1; then
-		"${LINT_CMD[@]}"
-		fEcho "OK: lints clean"
-	else
-		fEcho_Clean "lints skipped (clippy unavailable)"
-	fi
-	fSection "Gate 3/3  Tests"
-	fTestLines "${TEST_CMD[@]}"
-	fEcho "OK: tests passed"
-	fSection "${APP_NAME} gate: PASSED."
+	gateStep=0
+	for area in "${gateAreas[@]}"; do
+		gateStep=$((gateStep + 1))
+		case "${area}" in
+			fmt)
+				fSection "Quick ${gateStep}/${#gateAreas[@]}  Format check"
+				if ((${#FMT_CHECK_CMD[@]})); then
+					"${FMT_CHECK_CMD[@]}" || fDie "format check failed (run: ${FMT_CMD[*]:-cargo fmt})"
+					fEcho "OK: formatting clean"
+				else
+					fEcho_Clean "format check skipped (no FMT_CHECK_CMD)"
+				fi ;;
+			clippy)
+				fSection "Quick ${gateStep}/${#gateAreas[@]}  Lints"
+				if [[ -n "${LINT_CMD+x}" ]] && ((${#LINT_CMD[@]})) && "${LINT_PROBE[@]}" >/dev/null 2>&1; then
+					"${LINT_CMD[@]}"
+					fEcho "OK: lints clean"
+				else
+					fEcho "WARNING: lints skipped (clippy unavailable)"
+				fi ;;
+			tests)
+				fSection "Quick ${gateStep}/${#gateAreas[@]}  Tests"
+				fTestLines "${TEST_CMD[@]}"
+				fEcho "OK: tests passed" ;;
+			scripts)
+				fSection "Quick ${gateStep}/${#gateAreas[@]}  Script lints"
+				fLintScripts ;;
+			docs)
+				fSection "Quick ${gateStep}/${#gateAreas[@]}  Docs checks"
+				fCheckDocs ;;
+		esac
+	done
+	fSection "${APP_NAME} backlog quick run (${gateAreas[*]}): PASSED."
 	fEcho_Clean
 	exit 0
 fi
@@ -642,6 +739,7 @@ fEcho_Clean
 fEcho_Clean "Host ................: $(fHostLine)"
 if ((container)); then fEcho_Clean "Container ...........: stages 1-6 in ${containerImage}, target dir ${containerTarget}; the rest here"; fi
 fEcho_Clean "Repo root ...........: ${root}"
+if ((fullRun)); then fEcho_Clean "Run .................: ${fullRunName}, every check of the default run; no sync, dogfood, demo, publish or prompt"; fi
 fEcho_Clean "Remote sync .........: $( ((sync)) && echo 'fetch + fast-forward check' || echo '(skipped)')"
 fEcho_Clean "Format ..............: ${FMT_CMD[*]:-(skipped)}"
 fEcho_Clean "Debug build .........: ${DEBUG_BUILD_CMD[*]}"
@@ -1283,8 +1381,8 @@ fBuildTestRelease(){
 	if ((${#FMT_CMD[@]} == 0)); then
 		fEcho_Clean "format skipped"
 	else
-		"${FMT_CMD[@]}"
-		fEcho "OK: formatted (${FMT_CMD[*]})"
+		"${FMT_CMD[@]}" || fDie "format $( ((fmtCheck)) && echo 'check ')failed (${FMT_CMD[*]})"
+		fEcho "OK: $( ((fmtCheck)) && echo 'formatting clean' || echo 'formatted') (${FMT_CMD[*]})"
 	fi
 
 	## Stage 2: debug build.
@@ -1313,36 +1411,7 @@ fBuildTestRelease(){
 		"${MACLINT_CMD[@]}" || fDie "macOS lints failed"
 		fEcho "OK: macOS lints clean"
 	fi
-	## First-party shell scripts, at warning level.
-	if command -v shellcheck >/dev/null 2>&1; then
-		mapfile -t shellFiles < <(git -C "${root}" ls-files '*.bash' '*.sh' cicd/utility/n8git_backup-and-publish utility/git-hooks/pre-commit utility/git-hooks/pre-push utility/runterm)
-		(cd "${root}" && shellcheck -S warning "${shellFiles[@]}") || fDie "shellcheck found problems"
-		fEcho "OK: shell scripts clean"
-		styleOut="$("${root}/cicd/utility/bash-style.bash" 2>&1)" || { fEcho_Clean "${styleOut}"; fDie "shell scripts drift from the house style (cicd/utility/bash-style.bash)"; }
-		fEcho "OK: shell scripts in house style"
-	else
-		fEcho "WARNING: shellcheck not installed; shell scripts not linted"
-	fi
-	## First-party PowerShell scripts, at warning level too.
-	if command -v pwsh >/dev/null 2>&1; then
-		psRc=0
-		pwsh -NoProfile -NonInteractive -File "${root}/cicd/utility/ps-lint.ps1" || psRc=$?
-		case "${psRc}" in
-			0) fEcho "OK: PowerShell scripts clean" ;;
-			2) fEcho "WARNING: PSScriptAnalyzer not installed; PowerShell scripts not linted" ;;
-			*) fDie "PSScriptAnalyzer found problems" ;;
-		esac
-	else
-		fEcho "WARNING: pwsh not installed; PowerShell scripts not linted"
-	fi
-	## First-party Python scripts, with the rules in ruff.toml and mypy.ini.
-	pyRc=0
-	python3 "${root}/cicd/utility/py-lint.py" || pyRc=$?
-	case "${pyRc}" in
-		0) fEcho "OK: Python scripts clean" ;;
-		2) fEcho "WARNING: ruff not installed; Python scripts not linted" ;;
-		*) fDie "the Python lint found problems" ;;
-	esac
+	fLintScripts
 	fContentScrub
 	## The fuzz soak. Same targets the test run just went through, given a real
 	## budget each. Gating: a case that breaks an invariant reports the seed that
@@ -1478,26 +1547,7 @@ fBuildTestRelease(){
 	fRunTest cicd/tests/win-remote/run.bash "windows runner"
 	## The parts of the Windows pipeline that run anywhere.
 	fRunTest cicd/tests/cicd-win/run.bash "windows pipeline pieces" "windows pipeline test failed"
-	## Every table of contents, which no markdown linter regenerates. design.md had
-	## been missing eight of its headings.
-	fRunTest cicd/tests/toc/run.py "tables of contents" "a table of contents is out of date - run cicd/tests/toc/run.py --fix"
-	## Every markdown table, laid out as comparison.md's generated one is. Hand-written
-	## ones had drifted to trailing pipes and ragged columns.
-	fRunTest cicd/tests/tables/run.py "markdown tables" "a markdown table is not canonical - run cicd/tests/tables/run.py --fix"
-	## Blank lines between top-level bullets and around headings, which no markdown
-	## linter here checks. The README and style guide had drifted. Also banner rules
-	## in .rs comments, and plain comments on pub items.
-	if [[ -x "${root}/cicd/tests/docs/run.py" ]]; then
-		fEcho_Clean "markdown spacing, banner rules, doc comments ..."
-		docsOut="$("${root}/cicd/tests/docs/run.py" 2>&1)" || { echo "${docsOut}"; fDie "a markdown file is missing a blank line, or a .rs file has a banner rule or a plain comment on a pub item - see above ($(fTestId cicd/tests/docs/run.py))"; }
-		fEcho "OK: markdown spacing, banner rules, doc comments ($(fTestId cicd/tests/docs/run.py))"
-	fi
-	## Every test carries an ID, and no two share one.
-	if [[ -x "${root}/cicd/utility/test-id.py" ]]; then
-		fEcho_Clean "test IDs ..."
-		testIds="$("${root}/cicd/utility/test-id.py" --check 2>&1)" || { echo "${testIds}"; fDie "a test has no ID or shares one - make IDs with cicd/utility/test-id.py"; }
-		fEcho "OK: test IDs"
-	fi
+	fCheckDocs
 	## The Windows scenario harness, which once tested whatever the box last built
 	## and stopped every SilkTerm on a shared box.
 	fRunTest cicd/tests/wingui/harness-test.bash "windows scenario harness"
@@ -1770,6 +1820,9 @@ fEcho_Clean
 
 
 ##	History:
+##		- 2026-10-26: --backlog-run-quick with its areas, --backlog-run-full,
+##		              --merge-gate and --fmt-check. --gate and --ci are other
+##		              names for the first and the merge gate.
 ##		- 2026-10-25: --no-remote skips the Windows scenarios and the private
 ##		              runner. What a box that wasn't there left out is a SKIP in
 ##		              its step's line, and listed again at the end of the run.
