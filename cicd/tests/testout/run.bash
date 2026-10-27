@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+#  shellcheck disable=2034  ## 'variable appears unused.' The lifted fRunTest reads listing, and shellcheck cannot see into an eval.
 #  shellcheck disable=2016  ## 'Expressions don't expand in single quotes.' Those are the scratch scripts' own lines.
 
 ##	- Purpose:
@@ -53,6 +54,7 @@ fRun(){
 		eval "$(sed -n '/^fTestId(){/p; /^fTestOut(){/p' "${engine}")"
 		eval "$(sed -n '/^fTestOut_Fail(){/,/^}/p; /^fRunTest(){/,/^}/p; /^fRunTest_MaySkip(){/,/^}/p' "${engine}")"
 		export SILKTERM_TEST_DIR="${work}/run"
+		listing=0
 		"${@}"
 	) >"${log}" 2>&1 || rc=$?
 }

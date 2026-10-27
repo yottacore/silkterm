@@ -363,6 +363,23 @@ fCheck "and stops nothing at the end" fNot grep -qE '^(stop|rm) beef1' "${work}/
 fCheck "nor touches the volumes the kept ones hold" fNot grep -qE '^volume rm' "${work}/keep.log"
 fCheck "and names them" grep -qF "kept the run's containers (--keep-temp): silkterm-x-engine" <<<"${out}"
 fCheck "--keep-temp stays out of the run inside" fNot grep -qE '^run .*cicd\.bash .*--keep-temp' "${work}/keep.log"
+keepTmp="$(sed -n "s/^kept the container's \/tmp (--keep-temp): //p" <<<"${out}")"
+fCheck "it keeps the container's /tmp too, though the run passed, and says where" test -n "${keepTmp}" -a -d "${keepTmp}"
+fCheck "and the run inside keeps its test folder in it" grep -qE '^run .* -e SILKTERM_TEST_DIR=/tmp/test_silkterm_engine ' "${work}/keep.log"
+fCheck "and this run says where its own is" grep -qF "kept the run's temp folder (--keep-temp): ${SILKTERM_TEST_DIR}" <<<"${out}"
+
+## --list prints what the other options would run, and runs none of it.
+fRun list.log --merge-gate --list --container
+fCheck "--list with --merge-gate prints the plan" bash -c '[[ "$1" == 0 && "$2" == *"Run .................: --merge-gate"* ]]' _ "${rc}" "${out}"
+fCheck "and the test IDs" bash -c '[[ "$1" == *"Rust tests (cargo test, "* && "$1" == *"  Er2UgY7  pipeline steps"* && "$1" == *"  EsJg9EF  container run"* ]]' _ "${out}"
+fCheck "and starts and builds nothing" fNot grep -sqE '^(run|build) ' "${work}/list.log"
+fCheck "nor goes past the plan" bash -c '[[ "$1" != *"0/8  Remote sync"* && "$1" != *"CI/CD: done"* ]]' _ "${out}"
+fRun listquick.log --list --quick --container
+fCheck "--quick leaves out what it skips" bash -c '[[ "$1" == *"  EqA7Wki  git hooks"* && "$1" != *"project rename"* ]]' _ "${out}"
+fRun listgate.log --backlog-run-quick docs fmt --list --container
+fCheck "--list with --backlog-run-quick prints its steps in order" bash -c '[[ "$1" == *"  Quick 1/2  Docs checks"*"  Quick 2/2  Format check"* ]]' _ "${out}"
+fCheck "and the docs checks' IDs" bash -c '[[ "$1" == *"  EqRbSy0  tables of contents"* && "$1" == *"  Er2UgYD  markdown spacing"* ]]' _ "${out}"
+fCheck "and starts nothing" bash -c '[[ "$1" == 0 ]] && ! grep -sqE "^(run|build) " "$2"' _ "${rc}" "${work}/listgate.log"
 
 ## Ctrl+C mid-run, to the whole process group as a terminal sends it, and the end
 ## still runs. A background job starts with SIGINT ignored, so it is put back.
@@ -499,3 +516,4 @@ echo "all passed"
 ##		- 20261023 JC: The TSan step.
 ##		- 20261025 JC: The render node test and the profiler run here, after the container.
 ##		- 20261026: --gate is the backlog quick run, and the areas go in with it.
+##		- 20261026: --keep-temp keeps the /tmp folders, and --list starts nothing.

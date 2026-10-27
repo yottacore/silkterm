@@ -611,7 +611,8 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - CICD reset: `--keep-temp` and `--list`
 	- ID: 2026102616543939
 	- Type: Task
-	- Status: Queued
+	- Status: Waiting on automated testing
+	- Needs local test suite run?: The round's full run, `cicd/cicd.bash --backlog-run-full`, since stage 3's test scripts moved into one function.
 	- Priority: High
 	- Opened: 20261026-165439
 	- Opened by: CC
@@ -622,6 +623,19 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- `--keep-temp` keeps the run's temp folder and containers, and prints where they are.
 		- `--list` prints the steps and test IDs the other flags given would run, and runs nothing. It works with the 3 runs from 2026102616543933 too.
 		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
+	- Progress log:
+		- 20261026: `--keep-temp` keeps the test run folder, pass or fail, and the container's /tmp, and prints both paths. The run inside the container keeps its own test folder there too.
+		- 20261026: `--list` prints the plan, then the Rust tests by ID and name, then the test scripts and harnesses by ID, and exits before the prompt. With `--backlog-run-quick` it prints the areas as steps, and the IDs of the tests and docs areas. It starts no container.
+		- 20261026: Stage 3's test scripts moved into `fScriptTests`, and the 2 advisory tests into `fAdvisoryTests`, so `--list` goes through the same calls a run makes. New `test-id.py --list`.
+		- 20261026: The engine and testout tests set `listing=0` for the functions they lift. No assert changed.
+	- Decisions:
+		- 20261026: `--list` lists by walking the run's own test calls, each printing its line instead of running, rather than keeping a second list that could drift.
+		- 20261026: The Rust tests listed are every `#[test]` test-id.py finds, the same set cargo test builds. A test gated by `cfg` for another OS is listed too.
+		- 20261026: The run inside the container gets `SILKTERM_TEST_DIR` set under `--keep-temp`, not the flag, so a folder handed in is kept by the rule it already has. The container test's "--keep-temp stays out of the run inside" check still holds.
+	- Verified: 20261026. EsJg9EF with 12 new checks, 9 of which failed against the old cicd.bash. Er2UgY7, the testout and hooks tests, shellcheck, the bash style check, `test-id.py --check`, and `--backlog-run-quick scripts docs` in the container. A plain `--backlog-run-quick docs --keep-temp` kept its folder and named it. `--list` with no run flag, `--quick`, `--merge-gate`, `--backlog-run-full` and `--backlog-run-quick` all printed and ran nothing.
+		- Swept: every fLift of fRunTest, fRunTest_MaySkip, fWinGuiScenarios and fRenderNodeTest in cicd/tests, and every EXIT trap in cicd.bash. `cicd-win.ps1 -KeepTemp` and `-List` are 2026102616543946.
+	- Branch: rnd1026
+	- Test case: `cicd/tests/container/run.bash` (EsJg9EF), the `--keep-temp` and `--list` checks.
 
 - CICD reset: the pre-push hook runs the merge gate
 	- ID: 2026102616543943

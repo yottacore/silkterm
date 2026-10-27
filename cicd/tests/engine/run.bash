@@ -322,6 +322,7 @@ eval "$(grep '^fSkipCount(){' "${engine}")"
 eval "$(fLift '^fStepDone(){' '^}')"
 eval "$(fLift '^fSkipSummary(){' '^}')"
 eval "$(fLift '^fWinGuiScenarios(){' '^}')"
+listing=0
 fEcho_Clean(){ echo "${*}"; }
 root="${work}/rootw"; mkdir -p "${root}/cicd/tests/wingui" "${work}/priv/cicd"
 ## A harness and a private runner that each skip what STUB_SKIPS names and note
