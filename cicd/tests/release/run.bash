@@ -111,6 +111,7 @@ if [[ -z "${pattern}" ]]; then
 elif [[ -n "${built}" ]]; then
 	got="$("${built}" --version | sed -n "${pattern}")"
 	fCheck "release.bash reads the build number from --version" test -n "${got}"
+	fCheck "and only the build number, with the copyright line under it" bash -c '[[ "$1" =~ ^[0-9a-z]+$ ]]' _ "${got}"
 else
 	echo "  skip reading the build number (no built binary)"
 fi

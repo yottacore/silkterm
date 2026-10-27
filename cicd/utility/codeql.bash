@@ -29,12 +29,12 @@ cd "${root}"
 source "${root}/cicd/config.bash"
 # shellcheck source=cicd/utility/include/echo.bash
 source "${here}/include/echo.bash"
+# shellcheck source=cicd/utility/include/jobs.bash
+source "${here}/include/jobs.bash"
 
 outDir="${1:?out dir}"; stamp="${2:?stamp}"
 command -v codeql >/dev/null 2>&1 || fDie "codeql isn't installed here; cicd.bash runs this in the container image"
-: "${CICD_MAX_JOBS:=$(( $(nproc 2>/dev/null || echo 2) / 2 ))}"
-((CICD_MAX_JOBS >= 1)) || CICD_MAX_JOBS=1
-export CARGO_BUILD_JOBS="${CICD_MAX_JOBS}"
+fJobs_LowPriority; fJobs hard
 target="${CODEQL_TARGET:-x86_64-unknown-linux-gnu}"
 work="${CARGO_TARGET_DIR:-${root}/target}/codeql"
 src="${work}/src"; db="${work}/db"
@@ -122,3 +122,4 @@ fEcho "OK: no new CodeQL results ($((SECONDS - start))s)"
 
 ##	History:
 ##		- 20261022 JC: Created.
+##		- 20261026 JC: Jobs and priority from include/jobs.bash.

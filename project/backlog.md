@@ -507,7 +507,9 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - CICD reset: CPU and priority
 	- ID: 2026102416233806
 	- Type: Task
-	- Status: Queued
+	- Status: Waiting on automated testing
+	- Needs local test suite run?: one container full run, `--backlog-run-full`. Its log should show the `jobs:` lines, a quarter at the ASan, leak check and TSan steps, and EtrCPPO passing.
+	- Needs external testing: `cicd-win.ps1 -Quick` on a Windows box through `win-remote.bash`: the run sits at BelowNormal and prints its `jobs:` line per stage.
 	- Priority: High
 	- Opened: 20261024-162338
 	- Opened by: CC
@@ -522,6 +524,19 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- `cicd-win.ps1` sets `BelowNormal` on its own process at the top, and `Idle` for the hard steps.
 		- Jobs on the other boxes go by that box's CPU count and load.
 		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
+	- Progress log:
+		- 20261026: In. `cicd/utility/include/jobs.bash` works out the count before each stage and hard step, for cicd.bash and the ASan, TSan, CodeQL and repro scripts. The run lowers its own priority at the top, a container gets `--cpus` and `--cpu-shares 256`, and cicd-win.ps1 does the same per stage at BelowNormal.
+		- 20261026: The container test's docker run line now has `--cpus N --cpu-shares 256` in it (EsJg9EF, "the gate's container is named for the step"), since the issue asks for those flags.
+	- Decisions:
+		- 20261026: No Miri or soak test step exists in the pipeline, so the hard steps are ASan, TSan, the leak checks, CodeQL and the fuzz soak. A new one calls `fJobs hard`.
+		- 20261026: Priority goes on the run's own shell with `renice` and `ionice -p`, not a re-exec under `nice`, so arguments and traps stay as they are. Each script in the container lowers itself the same way.
+		- 20261026: A `CICD_MAX_JOBS` set by config.bash or handed down by the outer run is a ceiling. `CICD_CORES` goes into the container too, so a `--cpus` cap isn't counted twice.
+		- 20261026: Windows keeps no load average, so busy there is the CPU load percentage over 50. cicd-win.ps1 has no hard step of its own. Its WSL half is cicd.bash, which lowers itself.
+		- 20261026: `ci-mac.bash` on the hosted runner is left alone, filed as a Check in questions.md. The private runner on b26 lives in silkterm-private.
+	- Verified: 20261026, EtrCPPO (new), EsJg9EF and the backlog quick run, all five areas, passed. The quick run printed `jobs: 8 of 32 CPUs (busy, load 19.63)`. cicd-win.ps1's `fSetJobs`, lifted out and run under pwsh here, gave 8 at BelowNormal, then 4 at Idle for a hard step, and 1 on 2 CPUs.
+	- Swept: every `nproc` and `ProcessorCount` in cicd/ (now only jobs.bash and cicd-win.ps1), both `docker run` sites (the tidy run only reads volume sizes, so it keeps no cap), and the stage sections of both pipelines.
+	- Branch: rnd1026
+	- Test case: EtrCPPO, plus EsJg9EF's container checks.
 
 - CICD reset: standard flags
 	- ID: 2026102416233807
@@ -924,7 +939,8 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - CICD reset: version line
 	- ID: 2026102416233811
 	- Type: Task
-	- Status: Queued
+	- Status: Waiting on automated testing
+	- Needs external testing: the `cliflags` job on a Windows box through `win-remote.bash`: `--version` shows both lines through the joined console. Also cicd-win.ps1's pin on a dirty tree, in the run 2026102416233806 asks for.
 	- Priority: Avg
 	- Opened: 20261024-162338
 	- Opened by: CC
@@ -935,6 +951,16 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Left: a build from a dirty tree takes its number from the clock. The rule takes it from the commit.
 		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
 		- Overrides: the 09-24 call in the private notes that `--version` is one line with no copyright line.
+	- Progress log:
+		- 20261026: In. `--version` prints the version line, then the copyright line. `--about` opens with the same two lines, in place of its "About SilkTerm" and "Version" lines. cicd.bash and cicd-win.ps1 pin the build number to the commit's time, dirty tree or not. The clock stands in only where there is no commit.
+		- 20261026: Er2UgY7's "a dirty tree takes the clock" is now "a dirty tree takes its commit's time too": was the clock, now the commit's minutes. It failed with the old pin and passes with the new one.
+	- Decisions:
+		- 20261026: A plain `cargo build` with no pin still takes the clock in build.rs, since reading git there would need the build script to watch `.git`. Only pipeline builds are numbered from the commit.
+		- 20261026: design.md's Command-line options and Delivery bullets say the same now.
+	- Verified: 20261026, EtrCPPP (new), Eo4auD9, EmrsJ5P, Er2UJeR, Er2UgY7, EpHWVGS (release.bash still reads only the build number), and the backlog quick run, all five areas. A debug build printed both lines for `--version` and `--about`.
+	- Swept: every caller of `version_line` and every reader of `--version` output: release.bash's pattern, the release test, cliflags.ps1, the Help text, which keeps the one line above the usage.
+	- Branch: rnd1026
+	- Test case: EtrCPPP, Er2UgY7, EpHWVGS.
 
 - CICD reset: CICD process gaps
 	- ID: 2026102416233812

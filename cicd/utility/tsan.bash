@@ -29,6 +29,8 @@ cd "${root}"
 source "${root}/cicd/config.bash"
 # shellcheck source=cicd/utility/include/echo.bash
 source "${here}/include/echo.bash"
+# shellcheck source=cicd/utility/include/jobs.bash
+source "${here}/include/jobs.bash"
 # shellcheck source=cicd/tests/_testdir.bash
 source "${root}/cicd/tests/_testdir.bash"
 
@@ -37,9 +39,7 @@ source "${root}/cicd/tests/_testdir.bash"
 rustup toolchain list 2>/dev/null | grep -q "^${SANITIZER_TOOLCHAIN}" \
 	|| fDie "${SANITIZER_TOOLCHAIN} isn't installed here; cicd.bash runs this in the container image"
 fTestDir_Make || fDie "could not make the test run folder"
-: "${CICD_MAX_JOBS:=$(( $(nproc 2>/dev/null || echo 2) / 2 ))}"
-((CICD_MAX_JOBS >= 1)) || CICD_MAX_JOBS=1
-export CARGO_BUILD_JOBS="${CICD_MAX_JOBS}" RUST_TEST_THREADS="${CICD_MAX_JOBS}"
+fJobs_LowPriority; fJobs hard
 
 symbolizer="$(command -v llvm-symbolizer || true)"
 [[ -n "${symbolizer}" ]] || symbolizer="$(compgen -G '/usr/lib/llvm-*/bin/llvm-symbolizer' | sort -V | tail -n 1 || true)"
@@ -88,3 +88,4 @@ fEcho "OK: no TSan reports (${counts}, $((SECONDS - start))s)"
 
 ##	History:
 ##		- 20261023 JC: Created.
+##		- 20261026 JC: Jobs and priority from include/jobs.bash.

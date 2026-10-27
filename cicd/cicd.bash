@@ -136,16 +136,16 @@ declare -p FMT_CHECK_CMD &>/dev/null || FMT_CHECK_CMD=()
 ## since a run that skips one still keeps its build dir for the next.
 allCrossTargets=(); declare -p CROSS_TARGETS &>/dev/null && allCrossTargets=("${CROSS_TARGETS[@]}")
 
-## Cap compile/test parallelism to at most half the cores so a pipeline run
-## doesn't peg every CPU and leaves the machine usable. cargo's jobserver bounds
-## total rustc + codegen parallelism to CARGO_BUILD_JOBS (covers build, test,
-## clippy, and the zigbuild cross-builds); RUST_TEST_THREADS bounds the test run.
-## A project can override CICD_MAX_JOBS in config.bash.
-cores="$(nproc 2>/dev/null || echo 2)"
-: "${CICD_MAX_JOBS:=$(( cores / 2 ))}"
-(( CICD_MAX_JOBS >= 1 )) || CICD_MAX_JOBS=1
-export CARGO_BUILD_JOBS="${CICD_MAX_JOBS}"
-export RUST_TEST_THREADS="${CICD_MAX_JOBS}"
+##  shellcheck source=cicd/utility/include/jobs.bash
+source "${here}/utility/include/jobs.bash"                        ## fJobs, fJobs_LowPriority
+
+## Half the CPUs, or a quarter when the box is busy or the step is a hard one,
+## worked out again before each step. cargo's jobserver bounds rustc and codegen
+## to CARGO_BUILD_JOBS, which covers build, test, clippy and the zigbuild cross
+## builds; RUST_TEST_THREADS bounds the test run. A project can cap
+## CICD_MAX_JOBS in config.bash.
+fJobs_LowPriority
+fJobs
 
 cd "${root}"
 stamp="$(date +%Y%m%d-%H%M%S)"
@@ -633,9 +633,9 @@ fContainerRun(){
 	[[ "${containerTarget}" == "${root}/"* ]] || mounts+=(-v "${containerTarget}:${containerTarget}")
 	gitCommon="$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null || true)"
 	[[ -z "${gitCommon}" || "${gitCommon}" == "${root}/"* ]] || mounts+=(-v "${gitCommon}:${gitCommon}")
-	"${docker}" run "${rmArg[@]}" --init --shm-size 1g --name "${EXE_NAME}-${runName}-${step}" "${labels[@]}" "${mounts[@]}" -w "${root}" \
+	"${docker}" run "${rmArg[@]}" --init --shm-size 1g --cpus "${CICD_MAX_JOBS}" --cpu-shares 256 --name "${EXE_NAME}-${runName}-${step}" "${labels[@]}" "${mounts[@]}" -w "${root}" \
 		-e "USER=${USER:-$(id -un)}" -e "CARGO_TARGET_DIR=${containerTarget}" -e "SILK_BUILD_MINUTES=${SILK_BUILD_MINUTES:-}" -e "SILK_RELEASE=${SILK_RELEASE:-0}" \
-		-e "CICD_MAX_JOBS=${CICD_MAX_JOBS}" -e XDG_RUNTIME_DIR=/tmp/xdg-runtime -e ZIG_GLOBAL_CACHE_DIR=/zig-cache "${zoneArgs[@]}" \
+		-e "CICD_MAX_JOBS=${CICD_MAX_JOBS}" -e "CICD_CORES=${CICD_CORES}" -e XDG_RUNTIME_DIR=/tmp/xdg-runtime -e ZIG_GLOBAL_CACHE_DIR=/zig-cache "${zoneArgs[@]}" \
 		"${image}" bash -c 'echo "${USER}:x:${1}:${2}:${USER}:${HOME}:/bin/bash" >>/etc/passwd && echo "${USER}:x:${2}:" >>/etc/group \
 			&& mkdir -m 700 -p "${XDG_RUNTIME_DIR}" && chown "${1}:${2}" "${XDG_RUNTIME_DIR}" && mkdir -m 1777 -p /tmp/.X11-unix \
 			&& { [[ -s "/zig-cache/${3}" ]] || zig version >"/zig-cache/${3}" || true; } && chown "${1}:${2}" /zig-cache \
@@ -788,6 +788,7 @@ if ((gate)); then
 	gateStep=0
 	for area in "${gateAreas[@]}"; do
 		gateStep=$((gateStep + 1))
+		fJobs
 		case "${area}" in
 			fmt)
 				fSection "Quick ${gateStep}/${#gateAreas[@]}  Format check"
@@ -1039,6 +1040,7 @@ fi
 ## (fast-forward, stash-wrapped for a dirty tree); diverged aborts now rather
 ## than at publish. Offline just warns - a local build shouldn't need the net.
 fSection "0/8  Remote sync"
+fJobs
 if ((! sync)); then
 	fEcho_Clean "remote sync skipped"
 elif ! git rev-parse --abbrev-ref '@{u}' >/dev/null 2>&1; then
@@ -1087,17 +1089,16 @@ builtFromState="$(fSourceState)"
 
 ## Pin the build number for the whole run. build.rs would otherwise read the clock
 ## per target, so the four cross builds of one release would report four different
-## builds, minutes apart, and the release notes could not name one of them. A clean
-## tree takes its commit's time, so a rebuild of a release commit gets the same
-## number. A dirty tree is a different binary, so it keeps the clock. After stage 0,
-## since a fast-forward moves the commit. A value cicd-win hands down is kept.
+## builds, minutes apart, and the release notes could not name one of them. It is
+## the commit's time, dirty tree or not, so a rebuild of a commit gets the same
+## number, per the CICD rules. The clock only stands in where there is no commit.
+## After stage 0, since a fast-forward moves the commit. A value cicd-win hands
+## down is kept.
 fPinBuildMinutes(){
 	[[ -z "${SILK_BUILD_MINUTES:-}" ]] || return 0
 	local buildSecs
-	buildSecs="$(date +%s)"
-	if [[ -z "$(git status --porcelain --untracked-files=no 2>/dev/null || echo dirty)" ]]; then
-		buildSecs="$(git log -1 --format=%ct 2>/dev/null || date +%s)"
-	fi
+	buildSecs="$(git log -1 --format=%ct 2>/dev/null || true)"
+	[[ "${buildSecs}" =~ ^[0-9]+$ ]] || buildSecs="$(date +%s)"
 	export SILK_BUILD_MINUTES=$(( (buildSecs - 946684800) / 60 ))
 }
 fPinBuildMinutes
@@ -1394,6 +1395,7 @@ fRunAsan(){
 	if ((${#ASAN_CMD[@]} == 0)); then fEcho_Clean "ASan run skipped"; return 0; fi
 	if ((quick)); then fEcho_Clean "ASan run skipped (--quick)"; return 0; fi
 	if [[ -n "${asanSkipped}" ]]; then fEcho "WARNING: ASan run skipped: ${asanSkipped}"; return 0; fi
+	fJobs hard
 	if [[ -n "${SILK_CICD_IN_CONTAINER:-}" ]]; then
 		"${here}/utility/asan.bash" || fDie "the test suite under ASan and LSan failed (above)"
 		return 0
@@ -1408,6 +1410,7 @@ fRunTsan(){
 	if ((${#TSAN_CMD[@]} == 0)); then fEcho_Clean "TSan run skipped"; return 0; fi
 	if ((quick)); then fEcho_Clean "TSan run skipped (--quick)"; return 0; fi
 	if [[ -n "${tsanSkipped}" ]]; then fEcho "WARNING: TSan run skipped: ${tsanSkipped}"; return 0; fi
+	fJobs hard
 	if [[ -n "${SILK_CICD_IN_CONTAINER:-}" ]]; then
 		"${here}/utility/tsan.bash" || fDie "the test suite under TSan failed (above)"
 		return 0
@@ -1427,6 +1430,7 @@ fRunLeakcheck(){
 	outDir="${root}/${LEAKCHECK_OUT_DIR}"
 	mkdir -p "${outDir}" || fDie "could not make ${outDir}"
 	report="${outDir}/heap_${stamp}.txt"
+	fJobs hard
 	fEcho_Clean "heap growth under dhat ..."
 	SILK_HEAP_REPORT="${report}" fTestLines "${LEAKCHECK_DHAT_CMD[@]}" || rc=$?
 	if [[ -s "${report}" ]]; then sed 's/^/    /' "${report}"; fi
@@ -1487,6 +1491,7 @@ fBuildTestRelease(){
 	fSweepBuilds
 	## Stage 1: format.
 	fSection "1/8  Format"
+	fJobs
 	if ((${#FMT_CMD[@]} == 0)); then
 		fEcho_Clean "format skipped"
 	else
@@ -1496,11 +1501,13 @@ fBuildTestRelease(){
 
 	## Stage 2: debug build.
 	fSection "2/8  Debug build"
+	fJobs
 	"${DEBUG_BUILD_CMD[@]}"
 	fEcho "OK: debug build"
 
 	## Stage 3: regression tests.
 	fSection "3/8  Regression tests"
+	fJobs
 	corpusBefore=""
 	if [[ -d "${root}/cicd/tests/fuzz-corpus" ]]; then corpusBefore="$(fCorpusHashes)"; fi
 	fTestLines "${TEST_CMD[@]}"
@@ -1527,8 +1534,10 @@ fBuildTestRelease(){
 	## reproduces it.
 	if [[ -n "${FUZZ_CMD+x}" ]] && ((${#FUZZ_CMD[@]})) && ((${FUZZ_SECS:-0} > 0)); then
 		fEcho "Fuzzing, ${FUZZ_SECS}s per target ..."
+		fJobs hard
 		fTestLines env "SILK_FUZZ_SECS=${FUZZ_SECS}" "${FUZZ_CMD[@]}" || fDie "fuzz found something"
 		fEcho "OK: fuzz clean"
+		fJobs
 	fi
 	if [[ -n "${ADVISORY_CMD+x}" ]] && ((${#ADVISORY_CMD[@]})); then
 		"${DENY_PROBE[@]}" >/dev/null 2>&1 || fDie "advisory scan can't run: ${DENY_PROBE[*]} failed (see cicd/tool-pins.txt)"
@@ -1552,6 +1561,7 @@ fBuildTestRelease(){
 	fRunAsan
 	fRunLeakcheck
 	fRunTsan
+	fJobs
 	## A release may only publish what was built from the source being tagged.
 	fRunTest cicd/tests/release/run.bash "release provenance"
 	## The release notes link every download by name, and only those uploaded.
@@ -1652,6 +1662,7 @@ fBuildTestRelease(){
 	fRunTest cicd/tests/rotate/run.bash "log rotation"
 	## One tool pin list for both pipelines, and the docs quoting it.
 	fRunTest cicd/tests/pins/run.bash "tool pins" "tool pin test failed"
+	fRunTest cicd/tests/jobs/run.bash "step jobs and priority" "step jobs test failed"
 	## The PowerShell lint this stage gates on has to fail on a finding.
 	fRunTest cicd/tests/pslint/run.bash "PowerShell lint"
 	## The Python lint, the same way.
@@ -1717,10 +1728,12 @@ fBuildTestRelease(){
 	fEcho "OK: tests passed"
 
 	fSection "4/8  Profiler"
+	fJobs
 	fRunProfiler
 
 	## Stage 5: release builds.
 	fSection "5/8  Release build (native)"
+	fJobs
 	## Panic locations and generated bindings carry the build box's absolute paths, which
 	## put the home folder and account name into every published binary and made builds
 	## differ between boxes. A cfg(all()) entry is joined with the per-target flags in
@@ -1786,6 +1799,7 @@ fBuildTestRelease(){
 	fi
 
 	fSection "6/8  Packages"
+	fJobs
 	if ((quick)); then
 		fEcho_Clean "packages skipped (--quick)"
 	else
@@ -1796,6 +1810,7 @@ fBuildTestRelease(){
 ## Stages 1 to 6 on this box, or in the container with this box taking over after.
 if ((container)); then
 	fSection "Container"
+	fJobs
 	fContainerBuild "${containerImage}"
 	fEcho_Clean "runs cicd.bash ${innerArgs[*]}"
 	fContainerRun "${containerImage}" "${root}/cicd/cicd.bash" "${innerArgs[@]}" || fDie "the run in the container failed (above)"
@@ -1806,6 +1821,7 @@ if ((container)); then
 	fWinGuiScenarios
 	fRenderNodeTest
 	fSection "4/8  Profiler (here)"
+	fJobs
 	fRunProfiler
 else
 	fBuildTestRelease
@@ -1836,6 +1852,7 @@ fi
 ## for the platform it targets; the 'runterm' launcher on each box takes it from
 ## there and keeps its own rotated versions folder.
 fSection "7/8  Dogfood (install release builds to the synced app dirs)"
+fJobs
 dfDid=0
 
 for xd in "${DOGFOOD_DESTS[@]:-}"; do
@@ -1956,6 +1973,9 @@ fEcho_Clean
 ##		              recorded only here, and only when this run asks for it.
 ##		- 2026-10-22: The leak checks run by default. --no-leakcheck drops them,
 ##		              and --leakcheck adds them back under --quick.
+##		- 2026-10-26: Jobs per step, a quarter when busy or for the hard steps, and
+##		  the whole run at low priority, the container capped too. The build
+##		  number is the commit's time on a dirty tree as well.
 ##		- 2026-10-22: CodeQL joins the leak checks, in the image, when --codeql asks.
 ##		- 2026-10-19: Every full run has the test suite again under ASan and LSan,
 ##		              in the container image, which has the nightly it needs.

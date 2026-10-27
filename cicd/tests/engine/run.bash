@@ -245,8 +245,8 @@ fCheck "nor a file whose hard link one process there runs" fNot fInUseFake "${wo
 fCheck "but that link is in use by its own name" fInUseFake "${work}/idlehard"
 fCheck "and 2000 processes cost a few forks, not one each" fFewForks
 
-## The build number: a clean tree takes its commit's time, a dirty one the clock,
-## and a value handed down is kept.
+## The build number: the commit's time, dirty tree or not, the clock only where
+## there is no commit, and a value handed down is kept.
 eval "$(fLift '^fPinBuildMinutes(){' '^}')"
 repo="${work}/repo"
 export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
@@ -262,7 +262,8 @@ fCheck "a clean tree takes its commit's time" test "$(fMinutes "${repo}")" = "${
 echo stray >"${repo}/untracked.txt"
 fCheck "an untracked file leaves it clean" test "$(fMinutes "${repo}")" = "${commitMinutes}"
 echo two >>"${repo}/file.txt"
-fCheck "a dirty tree takes the clock" fNearNow "$(fMinutes "${repo}")"
+## Was "a dirty tree takes the clock" until 2026-10-26; the CICD rules take it from the commit.
+fCheck "a dirty tree takes its commit's time too" test "$(fMinutes "${repo}")" = "${commitMinutes}"
 mkdir -p "${work}/plain"
 fCheck "and so does a folder that is not a repository" fNearNow "$(fMinutes "${work}/plain")"
 fCheck "a value handed down is kept" test "$(cd "${repo}" && SILK_BUILD_MINUTES=12345 && fPinBuildMinutes && echo "${SILK_BUILD_MINUTES}")" = 12345

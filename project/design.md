@@ -453,18 +453,18 @@ What a window costs while in use is planned in [Reducing resources](design_docs/
 
 - Those flags are accepted in any position. The rest of the grammar cares a great deal about order, but answering a request for the help with a complaint about where the flag was written would be absurd.
 
-- Output written for a person is padded with a blank line above and below, so it sits clear of the shell prompts either side of it. `--version` is the exception, and it exists to be captured by a script, so it stays a single flush line. `--ver` and `-v` are the same flag.
+- Output written for a person is padded with a blank line above and below, so it sits clear of the shell prompts either side of it. `--version` is the exception, and it exists to be captured by a script, so it stays flush: the version line, then the copyright line under it. `--ver` and `-v` are the same flag.
 
 - Every build carries a build number, because a version cannot identify one. Two dogfood builds of the same release share a version, so a report of "it still does this on beta3" names something that could be any of a dozen binaries. The number is whole minutes elapsed since 2000 began, written in Crockford base 32 in lowercase: five characters until 2063, it sorts in the order the builds were made, and it decodes back to the minute one was built. Crockford's alphabet leaves out i, l, o and u, so nothing read off a screen and typed into a bug report can come back as a different character.
 	- It appears in `--version`, in `--about`, in Help > About, and in the release notes.
-	- The pipeline pins one number for a whole run, so the four cross builds of a release report the same build rather than four made minutes apart. Without that the release notes could not name one.
+	- The pipeline pins one number for a whole run, so the four cross builds of a release report the same build rather than four made minutes apart. Without that the release notes could not name one. It is the commit's time, from a dirty tree too, so a rebuild of a commit gets the same number.
 	- A non-release build shows ` (YYYY-mm-DD)` after the number. Only the build instant is baked in, and the date is worked out when the number is shown, so it is the viewer's local date. A release build shows the number alone. cicd marks a run as a release when it is on a clean `main`, the only state `release.bash` accepts, through `SILK_RELEASE=1`.
 	- Unchanged sources keep the number they had. The binary did not change, so neither should what it calls itself.
 	- The release notes take the number out of the artifact being published rather than computing it again, so the notes cannot name a build nobody can download.
 
 - Where a shell starts is decided by four things, most deliberate first: `--directory` on the command line, then the directory inherited from the pane a new tab/pane/window came from, then the directory SilkTerm itself was launched from (only when a shell launched it), then the `shell.startup_directory` setting. `--directory` cascades window -> tab -> pane exactly as `--shell` does, so the flag that names a shell and the flag that says where it starts behave alike.
 
-- `--about` reports what a bug report needs: version, build number, which of the cross builds this is, and the GPU the renderer picked. It asks the graphics stack for an adapter but never builds a device, which is the expensive half. A box with no usable adapter loses three lines and still prints the rest.
+- `--about` opens with the same two lines as `--version`, then reports what a bug report needs: version, build number, which of the cross builds this is, and the GPU the renderer picked. It asks the graphics stack for an adapter but never builds a device, which is the expensive half. A box with no usable adapter loses three lines and still prints the rest.
 
 - On Windows a release build owns no console of its own, so printing has to join the one that launched it. This happens only on the paths that print and exit; a terminal window that held a console would die with the shell that started it.
 
@@ -516,6 +516,8 @@ Guiding constraint: GitHub is dumb git hosting plus optional release storage, no
 - Branch flow: feature branches merge `--no-ff` into `dev` (the integration target). `main` is release-only: merging dev into main cuts a release.
 
 - Releases: `cicd/utility/release.bash` tags the merge `v<version>` and can push the tag and attach the artifacts to a GitHub Release as plain uploads. The version comes from `source/Cargo.toml` alone. The tag is read from it and the build stamps from it, so they can never disagree. Version and README badge get bumped on dev before the release merge; nothing is ever committed directly on main. The release notes list the downloads in a table, OS by architecture, built from the files being uploaded (`cicd/utility/release-notes.bash`). There is no macOS row, since macOS is sold through an app store.
+
+- Machine use: a step gets half the CPUs, or a quarter when the 1-minute load is over half the CPU count or the step is hard on the box (the sanitizer runs, the leak checks, CodeQL, the fuzz soak). `cicd/utility/include/jobs.bash` works the count out before each step, for the pipeline and its helper scripts alike. The run goes under `nice -n 19` and `ionice -c 3`, a container gets `--cpus` and `--cpu-shares 256` as well, and `cicd-win.ps1` runs at `BelowNormal`, or `Idle` for a hard step, judging busy by the CPU's load percentage, since Windows keeps no load average.
 
 - Build matrix (buildable from this Linux x86_64 box): Linux x86_64 (native) and, via `cargo-zigbuild` + `zig`, Linux ARM64, Windows x86_64 (mingw), Windows ARM64. macOS and BSD are deferred, since cross-building them needs an Apple SDK (osxcross, license-gated) or a FreeBSD sysroot, neither present here. The debug build is what the tests and profiler run against, and the optimized release builds feed packaging and dogfooding. ARM64 targets are on by default, since zig cross-builds aren't emulated and so are not much slower, and they drop out with `--no-arm`.
 

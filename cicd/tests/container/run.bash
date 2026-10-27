@@ -283,7 +283,7 @@ fCheck "--gate --container runs the backlog quick run inside, every area named" 
 fCheck "and says --gate is another name for it" grep -qx -- '--gate is another name for --backlog-run-quick' <<<"${out}"
 fCheck "and nothing else" test "${rc}" -eq 0 -a "$(grep -c '^run ' "${work}/gate.log")" -eq 1
 fCheck "with no log tee or plan" fNot grep -q 'Fail-fast' <<<"${out}"
-fCheck "the gate's container is named for the step" grep -qE '^run --rm --init --shm-size 1g --name silkterm-[0-9]{8}-[0-9-]+-gate ' "${work}/gate.log"
+fCheck "the gate's container is named for the step" grep -qE '^run --rm --init --shm-size 1g --cpus [0-9]+ --cpu-shares 256 --name silkterm-[0-9]{8}-[0-9-]+-gate ' "${work}/gate.log"
 fCheck "and the gate ends with the same cleanup" grep -q '^builder prune -f --filter until=168h' "${work}/gate.log"
 fRun quickareas.log --backlog-run-quick docs fmt --container
 fCheck "--backlog-run-quick takes the areas named into the container, in order" bash -c '[[ "$(grep "^run " "$1")" == *" $2/cicd/cicd.bash --backlog-run-quick docs fmt" ]]' _ "${work}/quickareas.log" "${repo}"
@@ -403,6 +403,8 @@ fCheck "the content scrub too" bash -c 'sed -n "/^if ((container)); then$/,/^fi$
 fCheck "the run inside writes no second log" grep -q 'LINT_LOG_DIR:-}" && -z "${SILK_CICD_IN_CONTAINER:-}"' "${engine}"
 
 ## The ASan run: in the image from a run on this box, as is inside the container.
+# shellcheck source=cicd/utility/include/jobs.bash
+source "${root}/cicd/utility/include/jobs.bash"
 eval "$(fLift '^fRunAsan(){' '^}')"
 asanStand="${work}/asan"; mkdir -p "${asanStand}/utility"
 printf '#!/bin/sh\necho "asan ran here"\nexit "${FAKE_RC:-0}"\n' >"${asanStand}/utility/asan.bash"; chmod +x "${asanStand}/utility/asan.bash"
@@ -425,6 +427,8 @@ fNoCmd(){ ASAN_CMD=(); }
 fCheck "--no-asan does" grep -q 'ASan run skipped$' <<<"$(fAsan fNoCmd)"
 fNoDocker(){ asanSkipped="no docker"; }
 fCheck "and with no docker it warns" grep -qF 'WARNING: ASan run skipped: no docker' <<<"$(fAsan fNoDocker)"
+fAsanJobs(){ (__jobsCeiling=""; export CICD_CORES=8 CICD_MAX_JOBS=4; fContainerRun(){ echo "jobs=${CICD_MAX_JOBS}"; }; fAsan fNothing); }
+fCheck "the ASan step goes in with a quarter of the CPUs" grep -qx 'jobs=2' <<<"$(fAsanJobs)"
 
 ## The TSan run goes the same way.
 eval "$(fLift '^fRunTsan(){' '^}')"
