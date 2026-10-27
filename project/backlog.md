@@ -636,6 +636,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Swept: every fLift of fRunTest, fRunTest_MaySkip, fWinGuiScenarios and fRenderNodeTest in cicd/tests, and every EXIT trap in cicd.bash. `cicd-win.ps1 -KeepTemp` and `-List` are 2026102616543946.
 	- Branch: rnd1026
 	- Test case: `cicd/tests/container/run.bash` (EsJg9EF), the `--keep-temp` and `--list` checks.
+	- Commit: dd6bdbb
 
 - CICD reset: the pre-push hook runs the merge gate
 	- ID: 2026102616543943
