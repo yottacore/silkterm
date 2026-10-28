@@ -28,6 +28,9 @@
 ##		https://mit-license.org/
 ##	SPDX-License-Identifier: MIT
 
+#  shellcheck source=cicd/utility/include/saferm.bash
+source "$(dirname "${BASH_SOURCE[0]}")/saferm.bash"
+
 ##	The same mark the test run folders get (cicd/tests/_testdir.bash).
 __sweepMark=".test_silkterm_owner"
 declare -i __sweepBytes=0
@@ -56,14 +59,19 @@ fSweep_Count(){
 	__sweepCounts[${1}]=$(( ${__sweepCounts[${1}]:-0} + ${2} ))
 }
 
-##	fSweep_Remove <dir> <what>: removes it and counts it under <what>. The
-##	caller has checked it is ours.
+##	fSweep_Remove <dir> <what> [parent]: removes it through the guard and counts
+##	it under <what>. The caller has checked it is ours. A run folder goes by the
+##	temp guard; anything else names the <parent> it has to be under. The folders
+##	above it are resolved first, since the target dir is often a link.
 fSweep_Remove(){
-	local -r dir="${1}" what="${2}"
-	local kb=""
+	local -r what="${2}" parent="${3:-}"
+	local dir="${1%/}" up="" kb="" err=""
+	[[ "${dir}" == */* ]] || dir="./${dir}"
+	up="$(realpath -e -- "${dir%/*}" 2>/dev/null)" && dir="${up}/${dir##*/}"
 	kb="$(du -sk -- "${dir}" 2>/dev/null)" || true
 	kb="${kb%%[[:space:]]*}"
-	if ! rm -rf -- "${dir}" 2>/dev/null; then echo "cleanup: could not remove ${dir}" >&2; return 1; fi
+	if [[ -n "${parent}" ]]; then err="$(fSafeRm_Under "$(realpath -e -- "${parent}" 2>/dev/null)" "${dir}" 2>&1)"
+	else err="$(fSafeRm "${dir}" 2>&1)"; fi || { echo "cleanup: could not remove ${dir}${err:+: ${err}}" >&2; return 1; }
 	[[ "${kb}" =~ ^[0-9]+$ ]] && __sweepBytes+=$((kb * 1024))
 	fSweep_Count "${what}" 1
 }
@@ -148,7 +156,7 @@ fSweep_Toolchain(){
 	if [[ -n "${old}" ]]; then
 		for dir in "${@}"; do
 			fSweep_IsBuildDir "${dir}" || continue
-			fSweep_Remove "${dir}" "builds from an older toolchain" || failed=1
+			fSweep_Remove "${dir}" "builds from an older toolchain" "${target}" || failed=1
 		done
 	fi
 	((failed)) || printf '%s\n' "${key}" >"${keyFile}"
@@ -175,7 +183,7 @@ fSweep_OldBuildDirs(){
 		[[ -n "${rel}" && "${rel}" != /* && "/${rel}/" != *"/../"* && -z "${now[${rel}]:-}" ]] || continue
 		dir="${target}/${rel}"
 		fSweep_IsBuildDir "${dir}" || continue
-		fSweep_Remove "${dir}" "build dirs no longer built" || { rels+=("${rel}"); continue; }
+		fSweep_Remove "${dir}" "build dirs no longer built" "${target}" || { rels+=("${rel}"); continue; }
 		parent="${dir%/*}"
 		[[ "${parent}" == "${target}" ]] || rmdir -- "${parent}" 2>/dev/null || true
 	done
@@ -206,7 +214,7 @@ fSweep_Incremental(){
 				mtime="${name%%.*}"; name="${name#* }"
 				[[ "${name}" =~ ^[A-Za-z0-9_]+-[0-9a-z]+$ ]] || continue
 				((mtime < cutoff)) || continue
-				fSweep_Remove "${inc}/${name}" "unused incremental caches" || true
+				fSweep_Remove "${inc}/${name}" "unused incremental caches" "${dir}" || true
 			done
 		done < <(find "${dir}" -maxdepth 3 -type d -name incremental -prune 2>/dev/null)
 	done
@@ -223,10 +231,10 @@ fSweep_ZigCache(){
 	local old="" bytes=""
 	[[ -n "${ver}" && -d "${dir}" && ! -L "${dir}" && -O "${dir}" ]] || return 0
 	[[ -f "${stampFile}" && ! -L "${stampFile}" ]] && read -r old <"${stampFile}"
-	if [[ -n "${old}" && "${old}" != "${ver}" ]]; then fSweep_Remove "${dir}" "zig caches"; return; fi
+	if [[ -n "${old}" && "${old}" != "${ver}" ]]; then fSweep_Remove "${dir}" "zig caches" "${dir%/*}"; return; fi
 	bytes="$(du -sb -- "${dir}" 2>/dev/null)" || true
 	bytes="${bytes%%[[:space:]]*}"
-	if [[ "${bytes}" =~ ^[0-9]+$ ]] && ((bytes > capBytes)); then fSweep_Remove "${dir}" "zig caches"; return; fi
+	if [[ "${bytes}" =~ ^[0-9]+$ ]] && ((bytes > capBytes)); then fSweep_Remove "${dir}" "zig caches" "${dir%/*}"; return; fi
 	[[ -n "${old}" ]] || printf '%s\n' "${ver}" >"${stampFile}"
 }
 
@@ -245,3 +253,4 @@ fSweep_Summary(){
 ##		- 20261019 JC: Created.
 ##		- 20261025 JC: Zig caches.
 ##		- 20261026 JC: The Zig cap goes by apparent size.
+##		- 20261028 JC: Removals go through the guard in saferm.bash.

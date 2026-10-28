@@ -96,8 +96,9 @@ The pipeline auto-detects the ARM path and warn-skips it when its toolchain is a
 ### Build
 
 ~~~powershell
-pwsh cicd\cicd-win.ps1 -Quick       # fmt, build, test, lint, release (msvc + gnu)
-pwsh cicd\cicd-win.ps1              # + ARM64 (if set up), installers, dogfood, publish
+pwsh cicd\cicd-win.ps1 -Quick            # fmt, build, test, lint, release (msvc + gnu)
+pwsh cicd\cicd-win.ps1 -BacklogRunQuick  # fmt check, lint, test; cicd.bash's other runs too, as -MergeGate, -Long, -List
+pwsh cicd\cicd-win.ps1                   # + ARM64 (if set up), installers, dogfood, publish
 ~~~
 
 Or a bare build - see [build.md](build.md#windows-native-msvc).
@@ -128,7 +129,7 @@ For the full `cicd/cicd.bash` run (packages, deps check): `cargo install cargo-d
 
 Or skip all of that: with docker installed, `cicd/cicd.bash` runs those stages in a container and needs nothing else. See [build.md](build.md).
 
-A full run needs docker either way, for the test suite under AddressSanitizer and ThreadSanitizer, which runs in that image. `--no-asan` and `--no-tsan` skip them.
+A full run needs docker either way, for the test suite under AddressSanitizer, and under ThreadSanitizer with `--long`, which runs in that image. `--no-asan` and `--no-tsan` skip them.
 
 ## macOS (native)
 

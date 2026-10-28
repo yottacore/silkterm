@@ -138,8 +138,8 @@ LSAN_SUPPRESSIONS="cicd/lsan-suppressions.txt"
 ## Stage 3: the same again under ThreadSanitizer, since the program starts
 ## threads. Same nightly and the same reasons for -Zbuild-std and --target, which
 ## matter more here: an uninstrumented std makes TSan report races that aren't.
-## ASan and TSan can't share a build, so it has a build dir of its own. Skipped
-## under --quick and --no-tsan; empty () disables it.
+## ASan and TSan can't share a build, so it has a build dir of its own. Runs under
+## --long only, and --no-tsan skips it there; empty () disables it.
 TSAN_DIR="tsan-${SANITIZER_TOOLCHAIN#nightly-}"
 TSAN_CMD=(env "CARGO_TARGET_DIR=${TARGET_DIR}/${TSAN_DIR}" "RUSTFLAGS=-Zsanitizer=thread -Cforce-frame-pointers=yes --cfg silk_tsan" cargo "+${SANITIZER_TOOLCHAIN}" test -Zbuild-std --target x86_64-unknown-linux-gnu --tests --no-fail-fast)
 ## Races TSan lets through, each with the backlog item that fixes it.
@@ -160,7 +160,8 @@ LEAKCHECK_OUT_DIR="cicd/artifacts/leakcheck"
 ##    vendored crates a release binary links, in the image, which has the bundle
 ##    pinned. security-and-quality, since these checks are for correctness bugs
 ##    as well as security ones (2026101714015789). A result the backlog already
-##    has goes in CODEQL_SUPPRESSIONS with its item's ID. Off unless --codeql.
+##    has goes in CODEQL_SUPPRESSIONS with its item's ID. Off unless --codeql
+##    or --long.
 CODEQL_SUITE="codeql/rust-queries:codeql-suites/rust-security-and-quality.qls"
 CODEQL_SUPPRESSIONS="cicd/codeql-suppressions.txt"
 

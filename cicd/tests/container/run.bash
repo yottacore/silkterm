@@ -235,11 +235,11 @@ fCheck "the run here went on to the end" grep -q 'CI/CD: done' <<<"${out}"
 fCheck "with the container's stages marked done" grep -q 'OK: stages 1-6 in the container' <<<"${out}"
 fCheck "and the plan named the image" grep -q '^Container .*: stages 1-6 in silkterm-cicd:' <<<"${out}"
 ## The steps that need the card run here once the container is done: the render
-## node test, then the profiler, which --quick turns off.
+## node test, then the profiler, which --quick turns off, so it is no step then.
 fAfter(){ awk -v a="${1}" -v b="${2}" 'index($0, a) && !x {x = NR} index($0, b) && x && !y {y = NR} END {exit !(x && y)}' <<<"${out}"; }
 fCheck "the render node test runs here after the container" fAfter 'OK: stages 1-6 in the container' 'software rendering without shared pixmaps'
-fCheck "and the profiler after it" fAfter 'software rendering without shared pixmaps' '4/8  Profiler (here)'
-fCheck "off under --quick" grep -q 'profiler disabled' <<<"${out}"
+fCheck "in a step of its own" fAfter '; Starting Checks on this box ]' 'software rendering without shared pixmaps'
+fCheck "off under --quick" grep -qxF '    - Profiler (--quick)' <<<"${out}"
 ## Inside, both only say where they run, and the profiler builds nothing.
 eval "$(fLift '^fRenderNodeTest(){' '^}')"
 eval "$(fLift '^fRunProfiler(){' '^}')"
@@ -373,11 +373,15 @@ fRun list.log --merge-gate --list --container
 fCheck "--list with --merge-gate prints the plan" bash -c '[[ "$1" == 0 && "$2" == *"Run .................: --merge-gate"* ]]' _ "${rc}" "${out}"
 fCheck "and the test IDs" bash -c '[[ "$1" == *"Rust tests (cargo test, "* && "$1" == *"  Er2UgY7  pipeline steps"* && "$1" == *"  EsJg9EF  container run"* ]]' _ "${out}"
 fCheck "and starts and builds nothing" fNot grep -sqE '^(run|build) ' "${work}/list.log"
-fCheck "nor goes past the plan" bash -c '[[ "$1" != *"0/8  Remote sync"* && "$1" != *"CI/CD: done"* ]]' _ "${out}"
+fCheck "nor goes past the plan" bash -c '[[ "$1" != *"Starting Remote sync"* && "$1" != *"CI/CD: done"* ]]' _ "${out}"
+fListSteps(){ sed -nE 's/^  Step [0-9]+ of [0-9]+  //p' <<<"${out}" | paste -sd, -; }
+listed="$(fListSteps)"
+fCheck "the steps in order, the profiler after the checks here" bash -c '[[ "$1" == "Container image,Format,Debug build,Regression tests,Release build: native,"*",Packages,Checks on this box,Profiler"* ]]' _ "${listed}"
+fCheck "and the steps --merge-gate turns off, with why" bash -c '[[ "$1" == *"    - Remote sync (--merge-gate)"* && "$1" == *"    - Backup + publish (--merge-gate)"* ]]' _ "${out}"
 fRun listquick.log --list --quick --container
 fCheck "--quick leaves out what it skips" bash -c '[[ "$1" == *"  EqA7Wki  git hooks"* && "$1" != *"project rename"* ]]' _ "${out}"
 fRun listgate.log --backlog-run-quick docs fmt --list --container
-fCheck "--list with --backlog-run-quick prints its steps in order" bash -c '[[ "$1" == *"  Quick 1/2  Docs checks"*"  Quick 2/2  Format check"* ]]' _ "${out}"
+fCheck "--list with --backlog-run-quick prints its steps in order" bash -c '[[ "$1" == *"  Step 1 of 2  Docs checks"*"  Step 2 of 2  Format check"* ]]' _ "${out}"
 fCheck "and the docs checks' IDs" bash -c '[[ "$1" == *"  EqRbSy0  tables of contents"* && "$1" == *"  Er2UgYD  markdown spacing"* ]]' _ "${out}"
 fCheck "and starts nothing" bash -c '[[ "$1" == 0 ]] && ! grep -sqE "^(run|build) " "$2"' _ "${rc}" "${work}/listgate.log"
 
@@ -447,10 +451,10 @@ fCheck "and with no docker it warns" grep -qF 'WARNING: ASan run skipped: no doc
 fAsanJobs(){ (__jobsCeiling=""; export CICD_CORES=8 CICD_MAX_JOBS=4; fContainerRun(){ echo "jobs=${CICD_MAX_JOBS}"; }; fAsan fNothing); }
 fCheck "the ASan step goes in with a quarter of the CPUs" grep -qx 'jobs=2' <<<"$(fAsanJobs)"
 
-## The TSan run goes the same way.
+## The TSan run goes the same way, under --long.
 eval "$(fLift '^fRunTsan(){' '^}')"
 printf '#!/bin/sh\necho "tsan ran here"\nexit "${FAKE_RC:-0}"\n' >"${asanStand}/utility/tsan.bash"; chmod +x "${asanStand}/utility/tsan.bash"
-fTsan(){ (TSAN_CMD=(cargo test); quick=0; tsanSkipped=""; containerImage=img:1; root=/r; here="${asanStand}"; unset SILK_CICD_IN_CONTAINER FAKE_RC; "${@}"; fRunTsan) 2>&1; }
+fTsan(){ (TSAN_CMD=(cargo test); quick=0; long=1; tsanSkipped=""; containerImage=img:1; root=/r; here="${asanStand}"; unset SILK_CICD_IN_CONTAINER FAKE_RC; "${@}"; fRunTsan) 2>&1; }
 out="$(fTsan fNothing)"
 fCheck "a run here does the TSan step in the image" bash -c '[[ "$1" == *"build img:1"* && "$1" == *"run img:1 /r/cicd/utility/tsan.bash"* ]]' _ "${out}"
 rc=0; out="$(fTsan fReport)" || rc=$?
@@ -458,6 +462,8 @@ fCheck "a TSan report there stops the run" test "${rc}" -ne 0
 fCheck "and says so" grep -q '^DIE: the test suite under TSan failed' <<<"${out}"
 fCheck "inside the container it runs tsan.bash as is" bash -c '[[ "$1" == *"tsan ran here"* && "$1" != *"run img"* ]]' _ "$(fTsan fInside)"
 fCheck "--quick skips TSan" grep -q 'TSan run skipped (--quick)' <<<"$(fTsan fQuick)"
+fNoLong(){ long=0; }
+fCheck "without --long it's off" bash -c '[[ "$1" == *"TSan run off (--long adds it)"* && "$1" != *"run img"* ]]' _ "$(fTsan fNoLong)"
 fNoTsan(){ TSAN_CMD=(); }
 fCheck "--no-tsan does" grep -q 'TSan run skipped$' <<<"$(fTsan fNoTsan)"
 fNoDockerT(){ tsanSkipped="no docker"; }
@@ -470,7 +476,9 @@ fCheck "the TSan run follows the leak checks in stage 3" \
 fPlan(){ rc=0; out="$(cd "${repo}" && env -u SILK_CICD_IN_CONTAINER -u CARGO_TARGET_DIR -u CICD_LINUX_HALF "${@}" bash cicd/cicd.bash --no-sync </dev/null 2>&1)" || rc=$?; }
 fPlan
 fCheck "a full run plans the ASan step in the image" grep -qE '^ASan \+ LSan \.+: the tests again on nightly-[0-9-]+, in silkterm-cicd:[0-9a-f]{12}$' <<<"${out}"
-fCheck "and the TSan step" grep -qE '^TSan \.+: the tests again on nightly-[0-9-]+, in silkterm-cicd:[0-9a-f]{12}$' <<<"${out}"
+fCheck "and TSan off, for --long" grep -qE '^TSan \.+: \(off; --long adds it\)$' <<<"${out}"
+rc=0; out="$(cd "${repo}" && env -u SILK_CICD_IN_CONTAINER -u CARGO_TARGET_DIR -u CICD_LINUX_HALF bash cicd/cicd.bash --no-sync --long </dev/null 2>&1)" || rc=$?
+fCheck "--long plans the TSan step in the image" grep -qE '^TSan \.+: the tests again on nightly-[0-9-]+, in silkterm-cicd:[0-9a-f]{12}$' <<<"${out}"
 fCheck "and plans the container as the default" grep -qE '^Container \.+: stages 1-6 in silkterm-cicd:[0-9a-f]{12}' <<<"${out}"
 fPlan SILK_DOCKER="${work}/no-such-docker"
 fCheck "with no docker the run says it builds here" grep -qF 'no docker here, so stages 1-6 run on this box' <<<"${out}"
@@ -478,14 +486,15 @@ rc=0; out="$(cd "${repo}" && env -u SILK_CICD_IN_CONTAINER -u CARGO_TARGET_DIR -
 fCheck "--no-container plans no container, and says nothing about docker" bash -c '[[ "$1" != *"Container ."* && "$1" != *"no docker here"* ]]' _ "${out}"
 fPlan SILK_DOCKER="${work}/no-such-docker"
 fCheck "with no docker a full run plans it skipped and goes on" bash -c '[[ "$1" != *"DIE:"* && "$1" == *"Fail-fast"* ]] && grep -qE "^ASan \+ LSan \.+: \(skipped, no docker" <<<"$1"' _ "${out}"
-fCheck "and TSan too" grep -qE '^TSan \.+: \(skipped, no docker' <<<"${out}"
+rc=0; out="$(cd "${repo}" && env -u SILK_CICD_IN_CONTAINER -u CARGO_TARGET_DIR -u CICD_LINUX_HALF SILK_DOCKER="${work}/no-such-docker" bash cicd/cicd.bash --no-sync --long </dev/null 2>&1)" || rc=$?
+fCheck "and TSan too, under --long" grep -qE '^TSan \.+: \(skipped, no docker' <<<"${out}"
 fPlan SILK_DOCKER="${work}/no-such-docker" CICD_LINUX_HALF=1
 fCheck "and so does the Linux half of a Windows run" grep -qE '^ASan \+ LSan \.+: \(skipped, no docker' <<<"${out}"
 rc=0; out="$(cd "${repo}" && env -u SILK_CICD_IN_CONTAINER -u CARGO_TARGET_DIR SILK_DOCKER="${work}/no-such-docker" bash cicd/cicd.bash --no-sync --no-asan </dev/null 2>&1)" || rc=$?
 fCheck "--no-asan needs no docker" bash -c '[[ "$1" != *"needs docker"* ]] && grep -qE "^ASan \+ LSan \.+: \(skipped\)$" <<<"$1"' _ "${out}"
 rc=0; out="$(cd "${repo}" && env -u SILK_CICD_IN_CONTAINER -u CARGO_TARGET_DIR SILK_DOCKER="${work}/no-such-docker" bash cicd/cicd.bash --no-sync --no-tsan </dev/null 2>&1)" || rc=$?
 fCheck "--no-tsan plans it skipped" grep -qE '^TSan \.+: \(skipped\)$' <<<"${out}"
-rc=0; out="$(cd "${repo}" && env -u SILK_CICD_IN_CONTAINER -u CARGO_TARGET_DIR -u CICD_LINUX_HALF bash cicd/cicd.bash --no-sync --no-container --no-asan </dev/null 2>&1)" || rc=$?
+rc=0; out="$(cd "${repo}" && env -u SILK_CICD_IN_CONTAINER -u CARGO_TARGET_DIR -u CICD_LINUX_HALF bash cicd/cicd.bash --no-sync --no-container --no-asan --long </dev/null 2>&1)" || rc=$?
 fCheck "and a run here with only TSan still takes it into the image" grep -qE '^TSan \.+: the tests again on nightly-[0-9-]+, in silkterm-cicd:[0-9a-f]{12}$' <<<"${out}"
 rc=0; out="$(cd "${repo}" && env -u SILK_CICD_IN_CONTAINER -u CARGO_TARGET_DIR SILK_DOCKER="${work}/no-such-docker" bash cicd/cicd.bash --no-sync --quick </dev/null 2>&1)" || rc=$?
 fCheck "and nor does --quick" bash -c '[[ "$1" != *"needs docker"* ]] && grep -qE "^ASan \+ LSan \.+: \(skipped --quick\)$" <<<"$1"' _ "${out}"
@@ -517,3 +526,5 @@ echo "all passed"
 ##		- 20261025 JC: The render node test and the profiler run here, after the container.
 ##		- 20261026: --gate is the backlog quick run, and the areas go in with it.
 ##		- 20261026: --keep-temp keeps the /tmp folders, and --list starts nothing.
+##		- 20261028: TSan only under --long.
+##		- 20261028: The steps by name, the profiler a step of its own after the checks here.

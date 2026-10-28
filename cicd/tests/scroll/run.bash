@@ -65,7 +65,7 @@ headless="${root}/cicd/utility/gui-headless.bash"
 declare -i _wasLastEchoBlank=0
 fEcho_Clean(){ if [[ -n "${1:-}" ]]; then echo -e "${*}"; _wasLastEchoBlank=0; elif [[ ${_wasLastEchoBlank} -eq 0 ]] && echo; then _wasLastEchoBlank=1; fi; }
 fEcho(){ if [[ -n "${*}" ]]; then fEcho_Clean "[ ${*} ]"; else fEcho_Clean ""; fi; }
-_letterbox="••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••"
+_letterbox="•••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••"
 fSection(){ fEcho_Clean; fEcho_Clean "${_letterbox}"; fEcho "${*}"; }
 fDie(){ { fEcho_Clean; fEcho "FAILED: ${*}"; } >&2; exit 1; }
 ##  shellcheck source=cicd/tests/scroll/verdict.bash
@@ -385,3 +385,4 @@ exit "${rc}"
 ##		- 20261013 JC: clear scene. A scene can read its trace and leave a note.
 ##		- 20261014 JC: prompt scene.
 ##		- 20261016 JC: tmuxclear scene.
+##		- 20261028: The rule is 79 wide, as cicd.bash has it.

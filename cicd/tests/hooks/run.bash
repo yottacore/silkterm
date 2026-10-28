@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+#  shellcheck disable=2034  ## 'appears unused.' skipList is read by fNeedsGate, lifted from pre-push inside an eval.
 
 ##	- Purpose:
 ##		The git hooks act on a commit or a push, where a mistake is awkward to undo.
@@ -186,6 +187,56 @@ fCheck "and the release it leads to is taken after it" git -C "${clone}" push -q
 fRelease 10.0.0-rc1 10.0.0--rc1
 fCheck "but not a pre-release of the version already out" fPushSays "version 10.0.0-rc1 must be greater than 10.0.0"
 
+## The merge gate on main, and docs going there without it. The stub notes the
+## options it was run with, so a push that skips it leaves no note.
+git -C "${clone}" reset -q --hard origin/main
+mark="${work}/gate-ran"
+cat > "${clone}/cicd/cicd.bash" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+[ -z "${GATE_MARK:-}" ] || echo "${*}" > "${GATE_MARK}"
+[ "$(cat "${here}/verdict")" = "good" ]
+EOF
+mkdir -p "${clone}/utility/git-hooks" "${clone}/project"
+cp "${hooks}/no-gate-paths" "${clone}/utility/git-hooks/"
+fRelease 10.0.1 10.0.1
+fPushGate(){ rm -f "${mark}"; GATE_MARK="${mark}" git -C "${clone}" push -q origin main 2>&1; }
+out="$(fPushGate)" || true
+fCheck "a push to main runs --merge-gate" bash -c '[[ "$(cat "$1" 2>/dev/null)" == --merge-gate ]]' _ "${mark}"
+fDocs(){  ## fDocs <path> <text>: commit that change alone, with no version bump
+	mkdir -p "$(dirname "${clone}/${1}")"; printf '%s\n' "${2}" >> "${clone}/${1}"
+	git -C "${clone}" add -A; git -C "${clone}" commit -q --no-verify -m "docs"
+}
+fDocs notes.md "a"; fDocs project/plan.md "b"; fDocs .github/ISSUE_TEMPLATE/bug.md "c"
+out="$(fPushGate)" && rc=0 || rc=$?
+fCheck "a push of docs alone goes to main with no version bump" test "${rc}" -eq 0
+fCheck "and without the gate, saying so" bash -c '[[ ! -e "$1" && "$2" == *"so no merge gate"* ]]' _ "${mark}" "${out}"
+fGatedPush(){  ## fGatedPush <path>: a change to it with docs is held to the version guard
+	fDocs notes.md "d"; fDocs "${1}" "e"
+	out="$(fPushGate)" && rc=0 || rc=$?
+	git -C "${clone}" reset -q --hard origin/main
+	[[ "${rc}" -ne 0 && "${out}" == *"must be greater than 10.0.1"* && ! -e "${mark}" ]]
+}
+fCheck "a doc built into the binary is not docs alone" fGatedPush usage.md
+fCheck "nor is one a test reads" fGatedPush project/design_docs/20260930-145304_scrim.md
+fCheck "nor a source file pushed with docs" fGatedPush source/main.rs
+fCheck "nor a change to the list itself" fGatedPush utility/git-hooks/no-gate-paths
+## The real list, against every file a build reads.
+skipList="$(cat "${hooks}/no-gate-paths")"
+eval "$(sed -n '/^fNeedsGate() {/,/^}/p' "${hooks}/pre-push")"
+fGated(){ local f IFS=$'\n'; set -f; for f in "${@}"; do fNeedsGate "${f}" || { set +f; echo "    not gated: ${f}"; return 1; }; done; set +f; }
+fSkipped(){ local f IFS=$'\n'; set -f; for f in "${@}"; do ! fNeedsGate "${f}" || { set +f; echo "    gated: ${f}"; return 1; }; done; set +f; }
+mapfile -t built < <(cd "${root}" && git grep -o -E 'include_(str|bytes)!\("[^"]+"\)' -- source knobs \
+	| sed -E 's/^([^:]+):include_[a-z]+!\("([^"]+)"\)$/\1 \2/' \
+	| while read -r file inc; do realpath -m --relative-to=. "$(dirname "${file}")/${inc}"; done | sort -u)
+mapfile -t -O "${#built[@]}" built < <(cd "${root}/source" && grep -o -E '"\.\./[^"]+"' Cargo.toml | tr -d '"' | while read -r f; do realpath -m --relative-to=.. "${f}"; done)
+fCheck "the list holds patterns, and a build reads ${#built[@]} files" test "${#built[@]}" -gt 10
+fCheck "and none of them is skipped" fGated "${built[@]}"
+fCheck "nor any doc a test reads" fGated README.md build.md prerequisites.md comparison.md filesystem/home/.config/silkterm/wallpaper-attribution.md \
+	"$(cd "${root}" && git ls-files 'project/design_docs/*_scrim.md')"
+fCheck "while design notes, the backlog and a nested readme are" fSkipped project/design.md project/backlog.md glossary.md knobs/readme.md assets/demo.gif
+
 if ((failures)); then
 	echo "  ${failures} failure(s)"
 	exit 1
@@ -198,3 +249,5 @@ echo "  hooks: ok"
 ##		          pre-push gate read the working tree rather than the commit.
 ##		20260918  A file with mod lines, which the formatter could not commit.
 ##		20260926  The release guard: badge, lower or equal version, pre-releases.
+##		20261028  The merge gate, and docs going to main without it or the version
+##		          guard. Every file a build or test reads stays gated.

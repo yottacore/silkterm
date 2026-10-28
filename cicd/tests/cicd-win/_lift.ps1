@@ -9,8 +9,10 @@
 .DESCRIPTION
 	The pieces: the run log rotation, the path map it hands the release builds,
 	the check for a local path left in a built file, the installer tests,
-	which must leave the pipeline's temp folder as they found it, and the stash
-	taken before a pull, which answers whether it stashed anything.
+	which must leave the pipeline's temp folder as they found it, the stash
+	taken before a pull, which answers whether it stashed anything, and the run
+	options: their other names, the pairs refused, what the Linux half is
+	handed, and -List printing the test scripts rather than running them.
 
 	Prints one ok or FAIL line per check, and the path map's file and the values
 	it should hold as JSON on the last line, for a TOML reader to check.
@@ -33,11 +35,17 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 $ast = [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path -LiteralPath $Pipeline).Path, [ref]$null, [ref]$null)
-foreach ($name in 'fRotateLogs', 'fTargetDir', 'fRemapConfig', 'fHasLocalPaths', 'fExec', 'fInstallerTests', 'fStashIfDirty') {
+foreach ($name in 'fRotateLogs', 'fTargetDir', 'fRemapConfig', 'fHasLocalPaths', 'fExec', 'fScriptTest', 'fInstallerTests', 'fScriptTests', 'fStashIfDirty', 'fRunFlags', 'fWslArgs', 'fQuickRun', 'fStamp', 'fStepLine', 'fStepIf', 'fStepOpen', 'fStepClose', 'fShowSteps', 'fPlanSteps') {
 	$fn = $ast.Find({ param($n) $n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq $name }, $true)
 	if (-not $fn) { throw "$name not found in $Pipeline" }
 	. ([scriptblock]::Create($fn.Extent.Text))
 }
+foreach ($name in '$QuickAreas', '$QuickTitles', '$script:StepsOn', '$script:StepsOff', '$script:Letterbox', '$script:StepNum', '$script:StepName', '$Targets') {
+	$set = $ast.Find({ param($n) $n -is [System.Management.Automation.Language.AssignmentStatementAst] -and $n.Left.Extent.Text -eq $name }, $true)
+	if (-not $set) { throw "$name not found in $Pipeline" }
+	. ([scriptblock]::Create($set.Extent.Text))
+}
+$List = $false
 
 $failures = 0
 function fCheck { param([string]$What, [bool]$Ok)
@@ -146,6 +154,96 @@ try {
 }
 finally { Pop-Location }
 
+##	The run options. Each case starts from none set, as a bare run does, and
+##	notes the refusal, the one-line notices and what the Linux half gets.
+$flagNames = 'Gate', 'Ci', 'BacklogRunQuick', 'BacklogRunFull', 'MergeGate', 'Quick', 'Long', 'Leakcheck', 'NoLeakcheck', 'NoArm', 'NoPackage', 'NoRemote', 'NoContainer', 'KeepTemp', 'List', 'NoSync', 'NoDogfood', 'NoPublish', 'Unattended'
+function fRun { param([hashtable]$Set = @{})
+	foreach ($n in $flagNames) { Set-Variable -Name $n -Value $false -Scope Script }
+	$script:Areas = @()
+	foreach ($k in $Set.Keys) { Set-Variable -Name $k -Value $Set[$k] -Scope Script }
+	$saved = [Console]::Error
+	$err = [System.IO.StringWriter]::new()
+	[Console]::SetError($err)
+	try { $why = fRunFlags } finally { [Console]::SetError($saved) }
+	return [pscustomobject]@{ Why = "$why"; Said = $err.ToString().Trim(); Wsl = (fWslArgs) -join ' ' }
+}
+$plain = '-y --no-sync --no-fmt --no-windows --no-dogfood --no-publish'
+$r = fRun
+fCheck 'a bare run hands the Linux half what it always did' ($r.Why -eq '' -and $r.Wsl -eq $plain -and $r.Said -eq '')
+$r = fRun @{ Gate = $true }
+fCheck '-Gate says in one line that it is another name' ($r.Said -eq '-Gate is another name for -BacklogRunQuick')
+fCheck 'and is the backlog quick run, for the Linux half too' ($BacklogRunQuick -and $r.Why -eq '' -and $r.Wsl -eq '--backlog-run-quick')
+$r = fRun @{ BacklogRunQuick = $true; Areas = @('FMT', 'tests'); NoContainer = $true }
+fCheck '-BacklogRunQuick hands its areas on, in lower case, before the other options' ($r.Why -eq '' -and $r.Wsl -eq '--backlog-run-quick fmt tests --no-container')
+$r = fRun @{ Ci = $true }
+fCheck '-Ci says in one line that it is another name' ($r.Said -eq '-Ci is another name for -MergeGate')
+fCheck 'and is the merge gate, for the Linux half too' ($MergeGate -and $r.Why -eq '' -and $r.Wsl -eq "$plain --merge-gate")
+fCheck 'which never syncs, dogfoods, publishes or prompts, and only checks the format' ($NoSync -and $NoDogfood -and $NoPublish -and $Unattended -and $FmtCheck -and $FullRunName -eq '-MergeGate')
+$r = fRun @{ BacklogRunFull = $true; Long = $true }
+fCheck '-BacklogRunFull -Long hands on both' ($r.Why -eq '' -and $r.Wsl -eq "$plain --backlog-run-full --long" -and $NoPublish -and $FmtCheck)
+$r = fRun @{ Quick = $true }
+fCheck 'a plain run neither checks the format only nor drops publish' ($r.Why -eq '' -and -not $FmtCheck -and -not $NoPublish -and $FullRunName -eq '')
+$r = fRun @{ NoRemote = $true; NoContainer = $true; KeepTemp = $true; List = $true }
+fCheck '-NoRemote, -NoContainer, -KeepTemp and -List each reach the Linux half' ($r.Wsl -eq "$plain --no-remote --no-container --keep-temp --list")
+foreach ($case in @(
+		@{ Set = @{ Long = $true; Quick = $true }; Want = '-Long runs everything, so not -Quick' }
+		@{ Set = @{ Long = $true; Gate = $true }; Want = '-BacklogRunQuick runs the fast checks only, so not -Long' }
+		@{ Set = @{ BacklogRunQuick = $true; MergeGate = $true }; Want = '-BacklogRunQuick and -MergeGate are different runs; pick one' }
+		@{ Set = @{ BacklogRunFull = $true; Quick = $true }; Want = '-BacklogRunFull runs every check of the default run, so not -Quick' }
+		@{ Set = @{ BacklogRunQuick = $true; Leakcheck = $true }; Want = '-Leakcheck adds to a full run; the backlog quick run leaves it out' }
+		@{ Set = @{ Areas = @('-Quik') }; Want = 'unknown option: -quik (try -Help)' }
+		@{ Set = @{ BacklogRunQuick = $true; Areas = @('lint') }; Want = 'unknown area: lint (areas: fmt clippy tests scripts docs)' })) {
+	$r = fRun $case.Set
+	fCheck "refused: $($case.Want)" ($r.Why -eq $case.Want)
+}
+
+##	-List goes through stage 3's own test calls, and prints each script's ID
+##	rather than running it.
+$Root = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '../../..')).Path
+$listed = [System.Collections.Generic.List[string]]::new()
+function fEcho_Clean { param([string]$Msg = ''); $listed.Add($Msg) }
+function fEcho { param([string]$Msg = ''); $listed.Add("[ $Msg ]") }
+function fDie { param([string]$Msg); throw $Msg }
+$List = $true
+fScriptTests
+$List = $false
+$ids = @($listed | ForEach-Object { ($_.Trim() -split '\s+')[0] })
+fCheck '-List names every stage 3 test script by its ID' (($ids -join ',') -eq 'Eq9wAnY,EqBoTW4,Eqq4nMu,Eqq4nMu,ErbiCgJ,EryVaSD,Es2WeWF,Eu0ji27')
+fCheck 'and runs none of them' (-not @($listed | Where-Object { $_ -like '*OK:*' }))
+$listed.Clear()
+$AppName = 'SilkTerm'; $Wsl = $false; $List = $true; $Areas = @('fmt')
+fQuickRun
+$List = $false
+fCheck '-BacklogRunQuick with one area lists it as the one step' ($listed -contains '  Step 1 of 1  Format check')
+fCheck 'and the areas not named as off' ($listed -contains '    - Tests (not named)' -and $listed -contains '    - Linux half (WSL2) (-Wsl adds it)')
+
+##	The steps a full run takes, and the ones it turns off with why.
+function fArmSkipReason { param($Target); return $null }
+function fPlan { param([hashtable]$Set)
+	$vars = @{ NoSync = $false; NoFmt = $false; NoArm = $false; Quick = $false; NoPackage = $false; Wsl = $false; NoDogfood = $false; NoPublish = $false }
+	foreach ($k in $Set.Keys) { $vars[$k] = $Set[$k] }
+	foreach ($k in $vars.Keys) { Set-Variable -Name $k -Value $vars[$k] }
+	$script:FullRunName = if ($Set.ContainsKey('FullRunName')) { $Set.FullRunName } else { '' }
+	fPlanSteps
+}
+fPlan @{}
+fCheck 'a default run takes every step but the Linux half, in order' (($script:StepsOn -join ',') -eq 'Remote sync,Format,Debug build,Tests,Release build: windows-x86_64-msvc,Release build: windows-x86_64-gnu,Release build: windows-arm64-gnullvm,Release artifacts,Packages,Dogfood,Publish')
+fPlan @{ Quick = $true; Wsl = $true }
+fCheck '-Quick turns off the ARM64 build and the packages, and says so' (($script:StepsOff -join ',') -eq 'Release build: windows-arm64-gnullvm (-Quick),Packages (-Quick)')
+fCheck 'and leaves them out of the count' ($script:StepsOn.Count -eq 10)
+fPlan @{ FullRunName = '-MergeGate'; NoSync = $true; NoDogfood = $true; NoPublish = $true }
+fCheck 'a full run names itself as what turned a step off' (($script:StepsOff -join ',') -eq 'Remote sync (-MergeGate),Linux half (WSL2) (-Wsl adds it),Dogfood (-MergeGate),Publish (-MergeGate)')
+$listed.Clear()
+$null = fStepOpen 'Tests'; fEcho 'tested'; fStepClose
+$stamp = '\d{8}-\d{6}\.\d{2}'
+fCheck 'a step opens after a blank and a 79-wide rule' ($listed[0] -eq '' -and $listed[1] -eq ([string][char]0x2022) * 79)
+fCheck 'with its stamp, number and total' ($listed[2] -match "^\[ ${stamp}: Step 3 of 8; Starting Tests \]$")
+fCheck 'and closes with PASS' ($listed[4] -match "^\[ ${stamp}: Step 3 of 8; PASS Tests \]$")
+fCheck 'a step that is off is false, and prints nothing' (-not (fStepOpen 'Dogfood') -and $listed.Count -eq 6)
+$listed.Clear()
+$null = fStepOpen 'Format'; fStepClose FAIL
+fCheck 'one that failed closes with FAIL' ($listed[3] -match "^\[ ${stamp}: Step 1 of 8; FAIL Format \]$")
+
 ##	The path map, from folders whose names hold a backslash and a quote. The
 ##	TOML reader on the other end decides whether they were escaped right.
 $Root = "$Work/sil\k`"term"
@@ -167,3 +265,5 @@ exit 0
 ##		- 20261002 JC: Only the pipeline removes its run folder.
 ##		- 20261006 JC: Help block, StrictMode Latest.
 ##		- 20261006 JC: The stash before a pull.
+##		- 20261028: The run options and -List.
+##		- 20261028: The steps, the ones turned off, and each step's lines.

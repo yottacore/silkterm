@@ -1,8 +1,9 @@
 #!/bin/sh
-# Local merge gate: before any push that updates main, run the fast verify
-# pass (cicd.bash --backlog-run-quick: fmt --check, clippy, tests, the script
-# lints and the docs checks) against the
-# commit being pushed, in a throwaway worktree.
+# shellcheck disable=2254  ## no-gate-paths holds patterns, so they match as globs
+# Local merge gate: before any push that updates main, run cicd.bash
+# --merge-gate, every check of the default run, against the commit being
+# pushed, in a throwaway worktree. A push that changes only docs and art, the
+# paths in no-gate-paths, skips it and the version guard.
 # dev and feature branches are not gated. A branch is tested before it merges
 # into dev, and running the whole pass again on the merge only cost time.
 # Bypass for an emergency: git push --no-verify, or SKIP_GATE=1 git push.
@@ -36,10 +37,43 @@ while read -r _ localSha remoteRef remoteSha; do
 	esac
 done
 
+# fNeedsGate <path>: true unless the last line of skipList matching it skips it.
+# The caller sets IFS to a newline and globbing off.
+fNeedsGate() {
+	needs=1
+	for pat in ${skipList}; do
+		case "${pat}" in
+			'#'*) ;;
+			'!'*) case "${1}" in ${pat#!}) needs=1 ;; esac ;;
+			*) case "${1}" in ${pat}) needs=0 ;; esac ;;
+		esac
+	done
+	[ "${needs}" = 1 ]
+}
+# fDocsOnly: true when main is already there and every path the push changes is
+# in no-gate-paths, as the pushed commit has it.
+fDocsOnly() {
+	case "${mainRemote}" in *[!0]*) ;; *) return 1 ;; esac
+	git cat-file -e "${mainRemote}^{commit}" 2>/dev/null || return 1
+	skipList="$(git show "${mainLocal}:utility/git-hooks/no-gate-paths" 2>/dev/null)" || return 1
+	changed="$(git diff --name-only --no-renames "${mainRemote}" "${mainLocal}")" || return 1
+	[ -n "${changed}" ] || return 1
+	set -f; oldIfs="${IFS}"; IFS='
+'
+	rc=0
+	for f in ${changed}; do
+		if fNeedsGate "${f}"; then rc=1; break; fi
+	done
+	IFS="${oldIfs}"; set +f
+	return "${rc}"
+}
+docsOnly=0
+if [ "${gated}" = "1" ] && fDocsOnly; then docsOnly=1; fi
+
 # Release guard: a push to main must strictly INCREASE the version. main is where
 # releases are cut, so shipping the same-or-lower version is a mistake - block it
 # here (before the slower gate) so a forgotten Cargo.toml bump can't reach main.
-if [ -n "${mainLocal}" ]; then
+if [ -n "${mainLocal}" ] && [ "${docsOnly}" = "0" ]; then
 	manifest=source/Cargo.toml
 	fReadVer() { git show "${1}:${manifest}" 2>/dev/null | sed -n 's/^version *= *"\(.*\)".*/\1/p' | head -1; }
 	# fVerGt A B: exit 0 iff A > B by semver precedence (numeric core fields;
@@ -103,8 +137,12 @@ if [ -x "${scrub}" ]; then
 fi
 
 [ "${gated}" = "1" ] || exit 0
+if [ "${docsOnly}" = "1" ]; then
+	echo "pre-push: only paths in utility/git-hooks/no-gate-paths changed, so no merge gate" >&2
+	exit 0
+fi
 
-echo "pre-push: gating push to main (cicd.bash --backlog-run-quick; --no-verify skips)" >&2
+echo "pre-push: gating push to main (cicd.bash --merge-gate; --no-verify skips)" >&2
 # Gate the commit being pushed, not whatever the working tree holds. Those are
 # routinely different here, and a fix still sitting unstaged used to carry the
 # push - the gate passed on the tree and main got the version without it. A
@@ -119,9 +157,15 @@ fCleanup() {
 trap fCleanup EXIT INT TERM
 git -C "${top}" worktree add --detach -q "${tree}" "${mainLocal}" \
 	|| { echo "pre-push: cannot check out ${mainLocal} to gate it" >&2; exit 1; }
-CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-${top}/target}"
+# With docker here the run builds in the container, into a target dir of its
+# own, as a run from the checkout does.
+if [ -z "${CARGO_TARGET_DIR:-}" ]; then
+	CARGO_TARGET_DIR="${top}/target"
+	if command -v "${SILK_DOCKER:-docker}" >/dev/null 2>&1; then CARGO_TARGET_DIR="${top}/target/container"; fi
+fi
 export CARGO_TARGET_DIR
-"${tree}/cicd/cicd.bash" --backlog-run-quick
+"${tree}/cicd/cicd.bash" --merge-gate
 
 ##	History:
+##		- 20261028: --merge-gate, and docs and art go without it.
 ##		- 20260711: Created.

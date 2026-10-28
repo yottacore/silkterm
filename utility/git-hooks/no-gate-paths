@@ -1,0 +1,26 @@
+# Paths no build or test reads. A push to main that changes only these skips
+# the merge gate and the version guard in pre-push. One shell pattern a line,
+# matched against the whole path, where * crosses folders. The last line that
+# matches wins, and a leading ! keeps a path gated.
+# The hook reads this file from the commit being pushed, and a change to it is
+# always gated.
+
+*.md
+project/*
+assets/demo.gif
+.github/ISSUE_TEMPLATE/*
+.github/FUNDING.yml
+.github/CODEOWNERS
+
+# Built into the binary or the packages.
+!usage.md
+!shell-integration.md
+!license.md
+# Read by tests: the pins, showdown and scrim tests, and the wallpaper gallery
+# check, which reads the pack's attribution too.
+!README.md
+!build.md
+!prerequisites.md
+!comparison.md
+!project/design_docs/*_scrim.md
+!filesystem/*
