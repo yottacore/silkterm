@@ -568,6 +568,33 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
 		- Overrides: 2026092711142900's decision that the scroll harness scenes keep their PASS lines with no IDs, and the base 62 rule in the private notes.
 
+- When two screens return after screen power sleep or off, SilkTerm seems to reposition itself in between them
+	- ID: 2026102807384201
+	- Type: Bug
+	- Status: Queued
+	- Severity: High
+	- Opened: 20261028-073842
+	- Opened by: JC
+	- Incorrect behavior: When two screens return after screen power sleep or off, SilkTerm seems to reposition itself in between them.
+	- Expected behavior: It stays where it was. None of the other ~dozen application windows move, other terminals included.
+	- Notes:
+		- Pre-next-cut.
+		- Work first after the CICD issues.
+
+- Running with `--software-rendering` on vmKt6m still fails with a complaint about no suitable GPU
+	- ID: 2026102807384202
+	- Type: Bug
+	- Status: Queued
+	- Severity: Avg
+	- Opened: 20261028-073842
+	- Opened by: JC
+	- Target OS: macOS
+	- Test environment: vmKt6m
+	- Incorrect behavior: It still fails with a complaint about no suitable GPU.
+	- Related IDs: 2026102209035801
+	- Notes:
+		- Pre-next-cut.
+
 - Over ssh to a host with no alacritty terminfo, full-screen programs fail with "'alacritty': unknown terminal type."
 	- ID: 2026102114411311
 	- Type: Bug
@@ -783,6 +810,16 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
 		- Overrides: design.md's CodeQL and heap growth bullets under "Delivery", which keep CodeQL behind `--codeql` and every leak check out of `--quick`.
 
+- Help|About: "Acceleration" shows as "Unknown"
+	- ID: 2026102807384203
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261028-073842
+	- Opened by: JC
+	- Notes:
+		- Pre-next-cut.
+
 - `the_scroll_record_costs_a_full_screen_program_little` failed once on the Mac runner
 	- ID: 2026102113432602
 	- Type: Bug
@@ -859,6 +896,19 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- The Windows GUI scenarios and the scroll harness turn off only with `--quick`, and dpirand only with `DPIRAND_SECS=0` in config.bash.
 	- Notes:
 		- Not every stage needs its own flag. A few grouped ones may do, such as one for the lints and one for the script tests.
+
+- `--about` should only show the first line of the existing output
+	- ID: 2026102807384204
+	- Type: Enhancement
+	- Status: Queued
+	- Priority: Low
+	- Opened: 20261028-073842
+	- Opened by: JC
+	- Requirements:
+		- `--about` shows only the first line of the existing output.
+		- For that flag only, no blank lines before or after.
+	- Notes:
+		- Pre-next-cut.
 
 - Wayland: must use the Wayland clipboard, and minimize other X11 features
 	- ID: 2026101509024607
