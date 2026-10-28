@@ -127,6 +127,8 @@ esac
 source "${here}/config.bash"
 source "${here}/utility/include/gfs-rotate.bash"                  ## gfs_rotate() for the profiler artifacts
 source "${here}/utility/include/remote-git.bash"                  ## fRemoteGit / fRemoteGh, as the folder's own account
+##  shellcheck source=cicd/utility/include/saferm.bash
+source "${here}/utility/include/saferm.bash"                      ## fSafeRm, fSafeRm_Under: every recursive removal
 ##  shellcheck source=cicd/utility/include/sweep.bash
 source "${here}/utility/include/sweep.bash"                       ## what earlier runs left, once it is stale
 ##  shellcheck source=cicd/utility/include/echo.bash
@@ -666,7 +668,7 @@ fContainerRun(){
 		echo "kept the container's /tmp (--keep-temp): ${runTmp}" >&2
 	else
 		why="$(fSweep_NotOurs "${runTmp}" "${runToken}")"
-		if [[ -z "${why}" ]]; then rm -rf -- "${runTmp}" || true
+		if [[ -z "${why}" ]]; then fSafeRm "${runTmp}" || true
 		else echo "cleanup: left ${runTmp} in place: ${why}" >&2; fi
 	fi
 	return "${rc}"
@@ -926,6 +928,8 @@ fScriptTests(){
 	fRunTest cicd/tests/sync/run.bash "remote sync"
 	## The rotation that prunes run logs and flamegraphs.
 	fRunTest cicd/tests/rotate/run.bash "log rotation"
+	## The guard every recursive removal goes through.
+	fRunTest cicd/tests/saferm/run.bash "safe removal"
 	## One tool pin list for both pipelines, and the docs quoting it.
 	fRunTest cicd/tests/pins/run.bash "tool pins" "tool pin test failed"
 	fRunTest cicd/tests/jobs/run.bash "step jobs and priority" "step jobs test failed"
@@ -1855,7 +1859,11 @@ fBuildTestRelease(){
 		ver="$(sed -n 's/^version *= *"\(.*\)".*/\1/p' "${root}/${VERSION_MANIFEST}" | head -1)"
 		[[ -n "${ver}" ]] || fDie "no version found in ${VERSION_MANIFEST}"
 		artDir="${root}/${RELEASE_ARTIFACT_DIR}"
-		rm -rf "${artDir}"; mkdir -p "${artDir}"
+		## Only ever under the repo's own artifacts folder, whatever the config says.
+		if [[ -e "${artDir}" || -L "${artDir}" ]]; then
+			fSafeRm_Under "$(realpath -e -- "${root}")/cicd/artifacts" "$(realpath -m -- "${root}")/${RELEASE_ARTIFACT_DIR%/}" || fDie "could not clear ${artDir}"
+		fi
+		mkdir -p "${artDir}"
 		sums="${EXE_NAME}-${ver}-sha256sums.txt"
 		for pair in "${builtArts[@]}"; do
 			osarch="${pair%%|*}"; src="${pair#*|}"
@@ -2027,6 +2035,8 @@ fEcho_Clean
 
 
 ##	History:
+##		- 2026-10-28: Recursive removals go through the guard in saferm.bash, and the
+##		              release artifacts folder only under cicd/artifacts.
 ##		- 2026-10-26: --list prints the steps and test IDs a run would take. --keep-temp
 ##		              keeps the temp folders too, the container's /tmp included.
 ##		- 2026-10-26: --backlog-run-quick with its areas, --backlog-run-full,
