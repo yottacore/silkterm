@@ -266,10 +266,10 @@ $MingwBin  = "C:\ProgramData\mingw64\mingw64\bin"
 
 
 #==============================================================================
-# Output helpers (mirror cicd.bash: fEcho / fEcho_Clean / fSection)
+# Output helpers (mirror cicd.bash: fEcho / fEcho_Clean / fSection / steps)
 
 $script:WasLastEchoBlank = $false
-$script:Letterbox = ([string][char]0x2022) * 73
+$script:Letterbox = ([string][char]0x2022) * 79
 
 function fEcho_Clean {
 	param([string]$Msg = "")
@@ -279,6 +279,40 @@ function fEcho_Clean {
 function fEcho     { param([string]$Msg = ""); if ($Msg) { fEcho_Clean "[ $Msg ]" } else { fEcho_Clean } }
 function fSection  { param([string]$Msg);      fEcho_Clean; fEcho_Clean $script:Letterbox; fEcho $Msg }
 function fNote     { param([string]$Msg); fEcho_Clean $Msg }
+
+## The run's steps, in order: StepsOn is what it takes and counts, StepsOff
+## "<name> (<flag or reason>)" what it leaves out, for the plan.
+$script:StepsOn  = [System.Collections.Generic.List[string]]::new()
+$script:StepsOff = [System.Collections.Generic.List[string]]::new()
+$script:StepNum  = 0
+$script:StepName = ''
+function fStamp { (Get-Date).ToString('yyyyMMdd-HHmmss.ff', [System.Globalization.CultureInfo]::InvariantCulture) }
+function fStepLine { param([string]$Msg); fEcho "$(fStamp): Step $($script:StepNum) of $($script:StepsOn.Count); $Msg" }
+function fStepIf {
+	param([Parameter(Mandatory)][string]$Name, [string]$Off = '')
+	if ($Off) { $script:StepsOff.Add("$Name ($Off)") } else { $script:StepsOn.Add($Name) }
+}
+## fStepOpen: the step's Starting line, or false when it's off.
+function fStepOpen {
+	param([Parameter(Mandatory)][string]$Name)
+	$at = $script:StepsOn.IndexOf($Name)
+	if ($at -lt 0) { return $false }
+	if ($script:StepName) { fStepClose }
+	$script:StepNum = $at + 1; $script:StepName = $Name
+	fEcho_Clean; fEcho_Clean $script:Letterbox; fStepLine "Starting $Name"
+	return $true
+}
+function fStepClose {
+	param([ValidateSet('PASS', 'FAIL')][string]$Status = 'PASS')
+	if (-not $script:StepName) { return }
+	fStepLine "$Status $($script:StepName)"; $script:StepName = ''
+	fEcho_Clean
+}
+function fShowSteps {
+	fEcho_Clean "Steps .......: $($script:StepsOn.Count)$(if ($script:StepsOff.Count) { ', and these off:' })"
+	foreach ($off in $script:StepsOff) { fEcho_Clean "    - $off" }
+	if ($List) { for ($i = 0; $i -lt $script:StepsOn.Count; $i++) { fEcho_Clean "  Step $($i + 1) of $($script:StepsOn.Count)  $($script:StepsOn[$i])" } }
+}
 
 ## Windows keeps no load average, so busy is the CPUs over half used, by
 ## Win32_Processor's LoadPercentage. A hard step also drops to Idle.
@@ -302,7 +336,7 @@ function fSetJobs {
 	if ($script:JobsLast -ne $jobs) { fNote "jobs: $jobs of $Cores CPUs$(if ($why) { " ($why)" })"; $script:JobsLast = $jobs }
 }
 function fWarn     { param([string]$Msg); fEcho "WARNING: $Msg" }
-function fDie      { param([string]$Msg); fEcho "FAILED: $Msg"; fTestDir_End 1; exit 1 }
+function fDie      { param([string]$Msg); fEcho "FAILED: $Msg"; fStepClose FAIL; fTestDir_End 1; exit 1 }
 
 
 #==============================================================================
@@ -548,14 +582,8 @@ function fRotateLogs {
 function fBuildTarget {
 	param([Parameter(Mandatory)][pscustomobject]$Target)
 
-	if ($Target.Arm) {
-		if ($NoArm)  { fNote "skip $($Target.OsArch): -NoArm";  return $null }
-		if ($Quick)  { fNote "skip $($Target.OsArch): -Quick";  return $null }
-		$reason = fArmSkipReason $Target
-		if ($reason) { fWarn "$($Target.OsArch) skipped: $reason"; return $null }
-	}
-
-	fSection "4  Release build: $($Target.OsArch)"
+	## The plan decided whether it builds here, and says why not.
+	if (-not (fStepOpen "Release build: $($Target.OsArch)")) { return $null }
 	fSetJobs
 	$exe = Join-Path (fTargetDir) "$($Target.Triple)\release\$ExeName.exe"
 
@@ -570,7 +598,7 @@ function fBuildTarget {
 		## Non-gating: an ARM toolchain hiccup warns and skips, never aborts.
 		& cargo @cargoArgs
 		if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $exe)) {
-			fWarn "$($Target.OsArch) build failed (non-gating)"; return $null
+			fWarn "$($Target.OsArch) build failed (non-gating)"; fStepClose FAIL; return $null
 		}
 	} else {
 		fExec -What "release build ($($Target.OsArch))" -File "cargo" -CmdArgs $cargoArgs
@@ -579,6 +607,7 @@ function fBuildTarget {
 
 	$size = "{0:N1} MB" -f ((Get-Item -LiteralPath $exe).Length / 1MB)
 	fEcho "OK: $($Target.OsArch): $exe ($size)"
+	fStepClose
 	return [pscustomobject]@{ Arch=$Target.Arch; Tk=$Target.Tk; OsArch=$Target.OsArch; Exe=$exe }
 }
 
@@ -960,19 +989,43 @@ function fWslLinuxHalf {
 }
 
 
+## The plan's steps, in the order fMain runs them.
+function fPlanSteps {
+	$script:StepsOn.Clear(); $script:StepsOff.Clear()
+	$by = { param([string]$Flag) if ($script:FullRunName) { $script:FullRunName } else { $Flag } }
+	fStepIf -Name 'Remote sync' -Off $(if ($NoSync) { & $by '-NoSync' })
+	fStepIf -Name 'Format' -Off $(if ($NoFmt) { '-NoFmt' })
+	fStepIf -Name 'Debug build'
+	fStepIf -Name 'Tests'
+	foreach ($t in $Targets) {
+		$off = if (-not $t.Arm) { '' } elseif ($NoArm) { '-NoArm' } elseif ($Quick) { '-Quick' } else { fArmSkipReason $t }
+		fStepIf -Name "Release build: $($t.OsArch)" -Off $off
+	}
+	fStepIf -Name 'Release artifacts'
+	fStepIf -Name 'Packages' -Off $(if ($Quick) { '-Quick' } elseif ($NoPackage) { '-NoPackage' })
+	fStepIf -Name 'Linux half (WSL2)' -Off $(if (-not $Wsl) { '-Wsl adds it' })
+	fStepIf -Name 'Dogfood' -Off $(if ($NoDogfood) { & $by '-NoDogfood' })
+	fStepIf -Name 'Publish' -Off $(if ($NoPublish) { & $by '-NoPublish' })
+}
+
+
 ## -BacklogRunQuick: the fast checks to run before a commit, every area or the
 ## ones named, then exit. Nothing is rewritten, built for release or published.
 function fQuickRun {
 	$run = @(if ($Areas.Count) { $Areas } else { $QuickAreas })
-	$step = 0
+	$script:StepsOn.Clear(); $script:StepsOff.Clear()
+	foreach ($area in $QuickAreas) { fStepIf -Name $QuickTitles[$area] -Off $(if ($run -notcontains $area) { 'not named' }) }
+	fStepIf -Name 'Linux half (WSL2)' -Off $(if (-not $Wsl) { '-Wsl adds it' })
 	if ($List) {
 		fEcho_Clean "$AppName backlog quick run ($($run -join ' ')):"
-		foreach ($area in $run) { $step++; fEcho_Clean "  Quick $step/$($run.Count)  $($QuickTitles[$area])" }
+		fShowSteps
 		if ($run -contains 'tests') { fListRustTests }
 	} else {
+		fEcho_Clean
+		fEcho_Clean "$AppName backlog quick run"
+		fShowSteps
 		foreach ($area in $run) {
-			$step++
-			fSection "Quick $step/$($run.Count)  $($QuickTitles[$area])"
+			$null = fStepOpen $QuickTitles[$area]
 			fSetJobs
 			switch ($area) {
 				'fmt'     { fExec -What "format check" -File "cargo" -CmdArgs @("fmt", "--check"); fEcho "OK: formatting clean" }
@@ -981,12 +1034,15 @@ function fQuickRun {
 				'scripts' { fLintPowerShell }
 				'docs'    { fNote "the docs checks are cicd.bash's$(if ($Wsl) { '; the Linux half runs them' } else { '; -Wsl runs them here' })" }
 			}
+			fStepClose
 		}
 	}
 	if ($Wsl) {
-		fSection "Linux half (WSL2)"
+		## Its own run, with its own plan and steps.
+		if (-not $List) { $null = fStepOpen 'Linux half (WSL2)' }
 		fSetJobs
 		fWslLinuxHalf
+		fStepClose
 	}
 	if (-not $List) { fSection "$AppName backlog quick run: PASSED." }
 	fEcho_Clean
@@ -1042,8 +1098,10 @@ function fMain {
 	if ($NoPublish)          { fEcho_Clean "Publish .....: (skipped)" }
 	elseif ($publishMsg)     { fEcho_Clean "Publish .....: commit + push current branch (hands-off: `"$publishMsg`")" }
 	else                     { fEcho_Clean "Publish .....: commit + push current branch (will prompt; blank = editor)" }
+	fPlanSteps
+	fShowSteps
 	fEcho_Clean
-	fEcho_Clean "Fail-fast: any error aborts before the next stage."
+	fEcho_Clean "Fail-fast: any error aborts before the next step."
 	fEcho_Clean
 
 	## -List: the tests stage 3 runs, then the Linux half's own list, and nothing else.
@@ -1084,11 +1142,7 @@ function fMain {
 	fTestDir_Record -Ledger $testLedger
 	if ($gone) { fNote "cleanup: removed $gone old test run folder(s)" }
 
-	## Stage 0: remote sync.
-	fSection "0  Remote sync"
-	fSetJobs
-	if ($NoSync) { fNote "remote sync skipped" }
-	else { fRemoteSync }
+	if (fStepOpen 'Remote sync') { fSetJobs; fRemoteSync; fStepClose }
 
 	## Pin the build number for the run, as cicd.bash does, and hand it to the WSL half.
 	## It is the commit's time, dirty tree or not, so a rebuild of a commit gets the
@@ -1107,21 +1161,21 @@ function fMain {
 		$env:SILK_RELEASE = if ($branchNow -eq 'main' -and $dirtyNow.Count -eq 0) { '1' } else { '0' }
 	}
 
-	## Stage 1: format.
-	fSection "1  Format"
-	fSetJobs
-	if ($NoFmt) { fNote "format skipped" }
-	elseif ($FmtCheck) { fExec -What "format check" -File "cargo" -CmdArgs @("fmt", "--check"); fEcho "OK: formatting clean" }
-	else { fExec -What "format" -File "cargo" -CmdArgs @("fmt"); fEcho "OK: formatted" }
+	if (fStepOpen 'Format') {
+		fSetJobs
+		if ($FmtCheck) { fExec -What "format check" -File "cargo" -CmdArgs @("fmt", "--check"); fEcho "OK: formatting clean" }
+		else { fExec -What "format" -File "cargo" -CmdArgs @("fmt"); fEcho "OK: formatted" }
+		fStepClose
+	}
 
-	## Stage 2: debug build.
-	fSection "2  Debug build"
+	$null = fStepOpen 'Debug build'
 	fSetJobs
 	fExec -What "debug build" -File "cargo" -CmdArgs @("build")
 	fEcho "OK: debug build"
+	fStepClose
 
-	## Stage 3: tests + advisory lints.
-	fSection "3  Tests"
+	## Tests and the advisory lints.
+	$null = fStepOpen 'Tests'
 	fSetJobs
 	fExec -What "tests" -File "cargo" -CmdArgs @("test")
 	fEcho "OK: tests passed"
@@ -1129,12 +1183,14 @@ function fMain {
 	fLintAdvisory
 	fLintPowerShell
 	fAdvisoryScan
+	fStepClose
 
-	## Stage 4: release builds (x86_64 msvc + gnu always; ARM64 when ready).
+	## Release builds (x86_64 msvc + gnu always; ARM64 when ready).
 	## (No profiler stage here: pprof's SIGPROF sampler is Unix-only - the
 	## profiling feature can't even compile for a Windows target.)
 	$script:RemapConfig = fRemapConfig
 	$built = @(foreach ($t in $Targets) { fBuildTarget -Target $t | Where-Object { $_ } })
+	$null = fStepOpen 'Release artifacts'
 	if (-not $built) { fDie "no release binaries were produced" }
 	foreach ($b in $built) {
 		if (fHasLocalPaths $b.Exe) { fDie "$($b.Exe) still holds a local path ($env:USERPROFILE or $Root)" }
@@ -1142,30 +1198,13 @@ function fMain {
 	fEcho "OK: no local paths in $($built.Count) binary(s)"
 	$ver = fVersion
 	fCollectArtifacts -Built $built -Ver $ver
+	fStepClose
 
-	## Stage 5: packages.
-	fSection "5  Packages"
-	fSetJobs
-	if ($NoPackage -or $Quick) { fNote "packages skipped" }
-	else { fBuildPackages -Built $built -Ver $ver }
-
-	## Stage 6: the Linux half.
-	fSection "6  Linux half (WSL2)"
-	fSetJobs
-	if (-not $Wsl) { fNote "not requested (-Wsl builds the Linux artifacts here too)" }
-	else { fWslLinuxHalf }
-
-	## Stage 7: dogfood.
-	fSection "7  Dogfood"
-	fSetJobs
-	if ($NoDogfood) { fNote "dogfood skipped" }
-	else { fDogfood -Built $built }
-
-	## Stage 8: publish.
-	fSection "8  Publish"
-	fSetJobs
-	if ($NoPublish) { fNote "publish skipped" }
-	else { fPublish -Msg $publishMsg }
+	if (fStepOpen 'Packages') { fSetJobs; fBuildPackages -Built $built -Ver $ver; fStepClose }
+	## The Linux half is a run of its own, with its own plan and steps.
+	if (fStepOpen 'Linux half (WSL2)') { fSetJobs; fWslLinuxHalf; fStepClose }
+	if (fStepOpen 'Dogfood') { fSetJobs; fDogfood -Built $built; fStepClose }
+	if (fStepOpen 'Publish') { fSetJobs; fPublish -Msg $publishMsg; fStepClose }
 
 	## -KeepTemp: the run's test folder stays. A failed run keeps it anyway.
 	if ($KeepTemp -and $script:TestDirOwned) {
@@ -1181,11 +1220,16 @@ try {
 	fMain
 	fTestDir_End 0
 } finally {
+	## A step a thrown error ended.
+	fStepClose FAIL
 	try { Stop-Transcript | Out-Null } catch {}
 }
 
 
 ##	History:
+##		- 2026-10-28: Steps as cicd.bash prints them: a 79-wide rule, then a
+##		  stamped Starting line numbered of the steps this run takes, and a PASS
+##		  or FAIL line. The plan lists the steps turned off and why.
 ##		- 2026-10-28: cicd.bash's runs: -BacklogRunQuick with its areas,
 ##		  -BacklogRunFull, -MergeGate, -Long, -NoContainer, -KeepTemp and -List.
 ##		  -Gate and -Ci are other names, -Slow too. The Linux half gets each.

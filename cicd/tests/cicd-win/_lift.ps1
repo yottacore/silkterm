@@ -35,12 +35,12 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 $ast = [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path -LiteralPath $Pipeline).Path, [ref]$null, [ref]$null)
-foreach ($name in 'fRotateLogs', 'fTargetDir', 'fRemapConfig', 'fHasLocalPaths', 'fExec', 'fScriptTest', 'fInstallerTests', 'fScriptTests', 'fStashIfDirty', 'fRunFlags', 'fWslArgs', 'fQuickRun') {
+foreach ($name in 'fRotateLogs', 'fTargetDir', 'fRemapConfig', 'fHasLocalPaths', 'fExec', 'fScriptTest', 'fInstallerTests', 'fScriptTests', 'fStashIfDirty', 'fRunFlags', 'fWslArgs', 'fQuickRun', 'fStamp', 'fStepLine', 'fStepIf', 'fStepOpen', 'fStepClose', 'fShowSteps', 'fPlanSteps') {
 	$fn = $ast.Find({ param($n) $n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq $name }, $true)
 	if (-not $fn) { throw "$name not found in $Pipeline" }
 	. ([scriptblock]::Create($fn.Extent.Text))
 }
-foreach ($name in '$QuickAreas', '$QuickTitles') {
+foreach ($name in '$QuickAreas', '$QuickTitles', '$script:StepsOn', '$script:StepsOff', '$script:Letterbox', '$script:StepNum', '$script:StepName', '$Targets') {
 	$set = $ast.Find({ param($n) $n -is [System.Management.Automation.Language.AssignmentStatementAst] -and $n.Left.Extent.Text -eq $name }, $true)
 	if (-not $set) { throw "$name not found in $Pipeline" }
 	. ([scriptblock]::Create($set.Extent.Text))
@@ -214,7 +214,35 @@ $listed.Clear()
 $AppName = 'SilkTerm'; $Wsl = $false; $List = $true; $Areas = @('fmt')
 fQuickRun
 $List = $false
-fCheck '-BacklogRunQuick with one area lists it as the one step' ($listed -contains '  Quick 1/1  Format check')
+fCheck '-BacklogRunQuick with one area lists it as the one step' ($listed -contains '  Step 1 of 1  Format check')
+fCheck 'and the areas not named as off' ($listed -contains '    - Tests (not named)' -and $listed -contains '    - Linux half (WSL2) (-Wsl adds it)')
+
+##	The steps a full run takes, and the ones it turns off with why.
+function fArmSkipReason { param($Target); return $null }
+function fPlan { param([hashtable]$Set)
+	$vars = @{ NoSync = $false; NoFmt = $false; NoArm = $false; Quick = $false; NoPackage = $false; Wsl = $false; NoDogfood = $false; NoPublish = $false }
+	foreach ($k in $Set.Keys) { $vars[$k] = $Set[$k] }
+	foreach ($k in $vars.Keys) { Set-Variable -Name $k -Value $vars[$k] }
+	$script:FullRunName = if ($Set.ContainsKey('FullRunName')) { $Set.FullRunName } else { '' }
+	fPlanSteps
+}
+fPlan @{}
+fCheck 'a default run takes every step but the Linux half, in order' (($script:StepsOn -join ',') -eq 'Remote sync,Format,Debug build,Tests,Release build: windows-x86_64-msvc,Release build: windows-x86_64-gnu,Release build: windows-arm64-gnullvm,Release artifacts,Packages,Dogfood,Publish')
+fPlan @{ Quick = $true; Wsl = $true }
+fCheck '-Quick turns off the ARM64 build and the packages, and says so' (($script:StepsOff -join ',') -eq 'Release build: windows-arm64-gnullvm (-Quick),Packages (-Quick)')
+fCheck 'and leaves them out of the count' ($script:StepsOn.Count -eq 10)
+fPlan @{ FullRunName = '-MergeGate'; NoSync = $true; NoDogfood = $true; NoPublish = $true }
+fCheck 'a full run names itself as what turned a step off' (($script:StepsOff -join ',') -eq 'Remote sync (-MergeGate),Linux half (WSL2) (-Wsl adds it),Dogfood (-MergeGate),Publish (-MergeGate)')
+$listed.Clear()
+$null = fStepOpen 'Tests'; fEcho 'tested'; fStepClose
+$stamp = '\d{8}-\d{6}\.\d{2}'
+fCheck 'a step opens after a blank and a 79-wide rule' ($listed[0] -eq '' -and $listed[1] -eq ([string][char]0x2022) * 79)
+fCheck 'with its stamp, number and total' ($listed[2] -match "^\[ ${stamp}: Step 3 of 8; Starting Tests \]$")
+fCheck 'and closes with PASS' ($listed[4] -match "^\[ ${stamp}: Step 3 of 8; PASS Tests \]$")
+fCheck 'a step that is off is false, and prints nothing' (-not (fStepOpen 'Dogfood') -and $listed.Count -eq 6)
+$listed.Clear()
+$null = fStepOpen 'Format'; fStepClose FAIL
+fCheck 'one that failed closes with FAIL' ($listed[3] -match "^\[ ${stamp}: Step 1 of 8; FAIL Format \]$")
 
 ##	The path map, from folders whose names hold a backslash and a quote. The
 ##	TOML reader on the other end decides whether they were escaped right.
@@ -238,3 +266,4 @@ exit 0
 ##		- 20261006 JC: Help block, StrictMode Latest.
 ##		- 20261006 JC: The stash before a pull.
 ##		- 20261028: The run options and -List.
+##		- 20261028: The steps, the ones turned off, and each step's lines.

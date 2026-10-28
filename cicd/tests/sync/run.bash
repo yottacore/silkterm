@@ -27,12 +27,12 @@ trap 'rc=$?; rm -rf "${work}"; fTestDir_End "${rc}"' EXIT
 export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
 unset GIT_DIR GIT_WORK_TREE
 
-stage="$(sed -n '/^fSection "0\/8  Remote sync"$/,/^fi$/p' "${cicd}/cicd.bash")"
+stage="$(sed -n '/^if ! fStepOpen "Remote sync"; then$/,/^fi$/p' "${cicd}/cicd.bash")"
 fCheck "the stage is found in cicd.bash" test -n "${stage}"
 
 ## The helpers the stage calls. fRemoteGit is plain git here, so no account
 ## wrapper decides the result.
-fSection(){ :; }
+fStepOpen(){ ((sync)); }
 fEcho(){ echo "[ ${*} ]"; }
 fEcho_Clean(){ echo "${*}"; }
 fDie(){ echo "DIE: ${*}"; exit 1; }
@@ -95,7 +95,8 @@ fStage "${work}/mine"
 fCheck "a branch with no upstream passes" test "${rc}" -eq 0 -a -n "$(grep -F 'no upstream for local-only' <<<"${out}")"
 git -C "${work}/mine" checkout -q main
 fStage "${work}/mine" 0
-fCheck "--no-sync passes even when diverged" test "${rc}" -eq 0 -a -n "$(grep -F 'remote sync skipped' <<<"${out}")"
+## The step is off then, so it prints nothing; the plan says why.
+fCheck "--no-sync passes even when diverged" test "${rc}" -eq 0 -a -z "${out}"
 
 ## Offline: the fetch fails, the run goes on with the local tree.
 mv "${remote}" "${work}/moved.git"
@@ -107,3 +108,4 @@ echo "all passed"
 
 ##	History:
 ##		- 20260926 JC: Created.
+##		- 20261028: The stage is a step, which --no-sync turns off.

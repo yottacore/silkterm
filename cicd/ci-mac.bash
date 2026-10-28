@@ -26,13 +26,18 @@ if [[ "$(uname -s)" != "Darwin" ]]; then echo "skip: not a Mac"; exit 3; fi
 logDir="${RUNNER_TEMP:-${TMPDIR:-/tmp}}/silkterm-ci-mac.$$"
 mkdir -p "${logDir}"
 
-failed=""
+## Each step's lines as cicd.bash prints them. BSD date has no fractions, and
+## Apple's bash 3.2 no EPOCHREALTIME, so perl gives the hundredths.
+failed=""; stepNum=0; stepTotal=0
+rule="•••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••"
+fStamp(){ perl -MPOSIX=strftime -MTime::HiRes=time -e 'my $t = time; printf "%s.%02d\n", strftime("%Y%m%d-%H%M%S", localtime $t), int(($t - int $t) * 100)'; }
 fStep(){
 	local -r name="${1}"; shift
-	local -r started="${SECONDS}"
-	echo "=== ${name}"
-	if "${@}"; then echo "=== ok: ${name} ($((SECONDS - started)) s)"
-	else echo "=== FAIL: ${name} ($((SECONDS - started)) s)"; failed="${failed} ${name}"; fi
+	stepNum=$((stepNum + 1))
+	echo; echo "${rule}"
+	echo "[ $(fStamp): Step ${stepNum} of ${stepTotal}; Starting ${name} ]"
+	if "${@}"; then echo "[ $(fStamp): Step ${stepNum} of ${stepTotal}; PASS ${name} ]"
+	else echo "[ $(fStamp): Step ${stepNum} of ${stepTotal}; FAIL ${name} ]"; failed="${failed} ${name}"; fi
 }
 
 fMachine(){
@@ -130,19 +135,17 @@ fMeasured(){
 	return 0
 }
 
-fStep "machine" fMachine
-fStep "bash" fBash
-fStep "toolchain" fToolchain
-fStep "build" fBuild
-fStep "clippy" fClippy
-fStep "test" fTest
-fStep "adapter" fAdapter
-fStep "skips" fSkips
-fStep "measured" fMeasured
+steps=("Machine|fMachine" "Bash|fBash" "Toolchain|fToolchain" "Build|fBuild" "Clippy|fClippy" "Test|fTest" "Adapter|fAdapter" "Skips|fSkips" "Measured|fMeasured")
+stepTotal="${#steps[@]}"
+for step in "${steps[@]}"; do fStep "${step%%|*}" "${step#*|}"; done
 
-if [[ -n "${failed}" ]]; then echo "FAILED:${failed}"; exit 1; fi
-echo "all passed"
+echo
+if [[ -n "${failed}" ]]; then echo "[ FAILED:${failed} ]"; echo; exit 1; fi
+echo "[ all passed ]"
+echo
 
 ##	History:
 ##		- 20261021 JC: Created.
 ##		- 20261022 JC: Failure text from the first run, and what timing tests measured.
+##		- 20261028: Each step between a rule and its stamped Starting and closing
+##		            lines, numbered of the total, as cicd.bash prints them.

@@ -667,7 +667,7 @@ fContainerRun(){
 	[[ -z "${gitCommon}" || "${gitCommon}" == "${root}/"* ]] || mounts+=(-v "${gitCommon}:${gitCommon}")
 	"${docker}" run "${rmArg[@]}" --init --shm-size 1g --cpus "${CICD_MAX_JOBS}" --cpu-shares 256 --name "${EXE_NAME}-${runName}-${step}" "${labels[@]}" "${mounts[@]}" -w "${root}" \
 		-e "USER=${USER:-$(id -un)}" -e "CARGO_TARGET_DIR=${containerTarget}" -e "SILK_BUILD_MINUTES=${SILK_BUILD_MINUTES:-}" -e "SILK_RELEASE=${SILK_RELEASE:-0}" \
-		-e "CICD_MAX_JOBS=${CICD_MAX_JOBS}" -e "CICD_CORES=${CICD_CORES}" -e XDG_RUNTIME_DIR=/tmp/xdg-runtime -e ZIG_GLOBAL_CACHE_DIR=/zig-cache "${zoneArgs[@]}" "${keepArgs[@]}" \
+		-e "CICD_MAX_JOBS=${CICD_MAX_JOBS}" -e "CICD_CORES=${CICD_CORES}" -e SILK_CICD_STEP_AT -e SILK_CICD_STEP_TOTAL -e XDG_RUNTIME_DIR=/tmp/xdg-runtime -e ZIG_GLOBAL_CACHE_DIR=/zig-cache "${zoneArgs[@]}" "${keepArgs[@]}" \
 		"${image}" bash -c 'echo "${USER}:x:${1}:${2}:${USER}:${HOME}:/bin/bash" >>/etc/passwd && echo "${USER}:x:${2}:" >>/etc/group \
 			&& mkdir -m 700 -p "${XDG_RUNTIME_DIR}" && chown "${1}:${2}" "${XDG_RUNTIME_DIR}" && mkdir -m 1777 -p /tmp/.X11-unix \
 			&& { [[ -s "/zig-cache/${3}" ]] || zig version >"/zig-cache/${3}" || true; } && chown "${1}:${2}" /zig-cache \
@@ -1040,6 +1040,7 @@ fScriptTests(){
 ## fRunEnd <status>: the EXIT trap's cleanup. --keep-temp keeps the test run
 ## folder, pass or fail, and says where it is.
 fRunEnd(){
+	((! ${1})) || fStep_End FAIL >&2
 	fContainerEnd "${1}"
 	if ((keepTemp)) && [[ -n "${SILKTERM_TEST_DIR:-}" ]]; then
 		__testDirOwned=""
@@ -1049,14 +1050,104 @@ fRunEnd(){
 	fi
 }
 
+## A box or VM that isn't there is a skip, never a failure. A step that reaches
+## another box hands its scripts this run's skip list as SILK_CICD_SKIPS, and each
+## one adds a "SKIP <what>, <why>" line for what it couldn't run. Only those steps
+## get it, so a test of one of those scripts can't add to the real list. skipLog
+## is made with the test run folder.
+fSkipCount(){ if [[ -s "${skipLog}" ]]; then grep -c '^SKIP ' "${skipLog}" || true; else echo 0; fi ;}
+
+## The run's steps, in the order they run. stepsOn is what this run takes and
+## counts, stepsOff "<name>|<flag or reason>" what it leaves out, for the plan. The
+## run in the container takes its part only, numbered from where the run outside
+## put it (SILK_CICD_STEP_AT, of SILK_CICD_STEP_TOTAL).
+stepsOn=(); stepsOff=()
+fStepIf(){ if [[ -z "${2:-}" ]]; then stepsOn+=("${1}"); else stepsOff+=("${1}|${2}"); fi; }
+## fStepOff_Why <flag>: the flag, or the full run that turned it off.
+fStepOff_Why(){ if ((fullRun)); then echo "${fullRunName}"; else echo "${1}"; fi; }
+fPlanSteps(){
+	local t why onHost=1
+	stepsOn=(); stepsOff=()
+	[[ -z "${SILK_CICD_IN_CONTAINER:-}" ]] || onHost=0
+	if ((onHost)); then why=""; ((sync)) || why="$(fStepOff_Why --no-sync)"; fStepIf "Remote sync" "${why}"; fi
+	((! container)) || fStepIf "Container image"
+	why=""; ((${#FMT_CMD[@]})) || why="--no-fmt"; fStepIf "Format" "${why}"
+	fStepIf "Debug build"
+	fStepIf "Regression tests"
+	if ((onHost && ! container)); then why=""; ((PROFILE_ENABLE)) || why="$( ((quick)) && echo --quick || echo --no-profile)"; fStepIf "Profiler" "${why}"; fi
+	fStepIf "Release build: native"
+	for t in "${allCrossTargets[@]}"; do
+		if ! ((BUILD_CROSS)); then why="--no-cross"
+		elif [[ " ${CROSS_TARGETS[*]:-} " == *" ${t} "* ]]; then why=""
+		elif [[ "${t}" == *windows* ]] && ((noWindows)); then why="--no-windows"
+		else why="$( ((quick)) && echo --quick || echo --no-arm)"; fi
+		fStepIf "Release build: ${t%%|*}" "${why}"
+	done
+	fStepIf "Release artifacts"
+	why=""; ((PACKAGE_ENABLE)) || why="$( ((quick)) && echo --quick || echo --no-package)"; fStepIf "Packages" "${why}"
+	if ((! onHost)); then fStepNumbers; return 0; fi
+	if ((container)); then
+		fStepIf "Checks on this box"
+		why=""; ((PROFILE_ENABLE)) || why="$( ((quick)) && echo --quick || echo --no-profile)"; fStepIf "Profiler" "${why}"
+	fi
+	if ((quick)); then why="--quick"; elif ((noRemote)); then why="--no-remote"
+	elif [[ -n "${PRIVATE_RUNNER:-}" && -x "${PRIVATE_RUNNER}" ]]; then why=""
+	else why="--no-private, or not checked out"; fi
+	fStepIf "Private runner" "${why}"
+	why=""; ((${#DOGFOOD_DESTS[@]})) || why="$(fStepOff_Why --no-dogfood)"; fStepIf "Dogfood" "${why}"
+	if ! ((${DEMO_ENABLE:-0})); then why="$(fStepOff_Why --no-demo)"
+	elif ((quick && ! demoAsked)); then why="--quick; --demo adds it"
+	elif [[ ! -f "${root}/cicd/utility/demo-video/demo-video.py" ]]; then why="no recorder in this tree"
+	else why=""; fi
+	fStepIf "Demo video" "${why}"
+	why=""; ((${#GIT_PUBLISH[@]})) || why="$(fStepOff_Why --no-publish)"; fStepIf "Backup + publish" "${why}"
+	fStepNumbers
+}
+## What the run outside handed in, checked, since it ends up in arithmetic.
+stepBase=0
+fStepNumbers(){
+	stepBase=0; _stepTotal="${#stepsOn[@]}"
+	if [[ "${SILK_CICD_STEP_AT:-}" =~ ^[0-9]{1,3}$ && "${SILK_CICD_STEP_TOTAL:-}" =~ ^[0-9]{1,3}$ ]]; then
+		stepBase="${SILK_CICD_STEP_AT}"; _stepTotal="${SILK_CICD_STEP_TOTAL}"
+	fi
+}
+## fStepAt <name>: its number in this run, or nothing when the run doesn't take it.
+fStepAt(){ local -i i; for i in "${!stepsOn[@]}"; do [[ "${stepsOn[i]}" != "${1}" ]] || { echo $((stepBase + i + 1)); return 0; }; done; return 1; }
+## fStepOpen <name>: the step's Starting line, or false when it's off.
+fStepOpen(){
+	local at; at="$(fStepAt "${1}")" || return 1
+	__stepSkips="$(fSkipCount)"
+	fStep_Start "${at}" "${1}"
+}
+## fStepClose: its closing line, SKIP when it left something out for want of a box.
+fStepClose(){
+	local -i n=$(( $(fSkipCount) - ${__stepSkips:-0} ))
+	if ((n > 0)); then fStep_End SKIP "${n} not run, listed at the end"; else fStep_End PASS; fi
+}
+## The plan's lines for the steps.
+fPlanSteps_Show(){
+	local t
+	fEcho_Clean "Steps ...............: ${#stepsOn[@]}$( ((${#stepsOff[@]})) && echo ", and these off:")"
+	for t in "${stepsOff[@]}"; do fEcho_Clean "    - ${t%%|*} (${t#*|})"; done
+	if ((listing)); then for t in "${!stepsOn[@]}"; do fEcho_Clean "  Step $((t + 1)) of ${#stepsOn[@]}  ${stepsOn[t]}"; done; fi
+}
+
 ## --backlog-run-quick: the fast checks to run before a commit,
 ## every area or the ones named, fail-fast, nothing mutated, no artifacts,
 ## log tee or publish. Each step reads the tree as it is.
 declare -A gateTitles=([fmt]="Format check" [clippy]="Lints" [tests]="Tests" [scripts]="Script lints" [docs]="Docs checks")
+## Its steps are the areas named, and the rest are off.
+if ((gate)); then
+	for area in ${gateAreasAll}; do
+		if [[ " ${gateAreas[*]} " == *" ${area} "* ]]; then continue; fi
+		stepsOff+=("${gateTitles[${area}]}|not named")
+	done
+	for area in "${gateAreas[@]}"; do stepsOn+=("${gateTitles[${area}]}"); done
+	fStepNumbers
+fi
 if ((gate && listing)); then
 	fEcho_Clean "${APP_NAME} backlog quick run (${gateAreas[*]})$( ((container)) && echo ", in ${containerImage}"):"
-	gateStep=0
-	for area in "${gateAreas[@]}"; do gateStep=$((gateStep + 1)); fEcho_Clean "  Quick ${gateStep}/${#gateAreas[@]}  ${gateTitles[${area}]}"; done
+	fPlanSteps_Show
 	for area in "${gateAreas[@]}"; do case "${area}" in
 		tests) fListRustTests ;;
 		docs)  fEcho_Clean "Docs checks:"; fCheckDocs ;;
@@ -1073,13 +1164,14 @@ if ((gate)); then
 		fContainerRun "${containerImage}" "${root}/cicd/cicd.bash" --backlog-run-quick "${gateAreas[@]}" || fDie "the backlog quick run in the container failed (above)"
 		exit 0
 	fi
-	gateStep=0
+	fEcho_Clean
+	fEcho_Clean "${APP_NAME} backlog quick run"
+	fPlanSteps_Show
 	for area in "${gateAreas[@]}"; do
-		gateStep=$((gateStep + 1))
+		fStepOpen "${gateTitles[${area}]}"
 		fJobs
 		case "${area}" in
 			fmt)
-				fSection "Quick ${gateStep}/${#gateAreas[@]}  ${gateTitles[fmt]}"
 				if ((${#FMT_CHECK_CMD[@]})); then
 					"${FMT_CHECK_CMD[@]}" || fDie "format check failed (run: ${FMT_CMD[*]:-cargo fmt})"
 					fEcho "OK: formatting clean"
@@ -1087,7 +1179,6 @@ if ((gate)); then
 					fEcho_Clean "format check skipped (no FMT_CHECK_CMD)"
 				fi ;;
 			clippy)
-				fSection "Quick ${gateStep}/${#gateAreas[@]}  ${gateTitles[clippy]}"
 				if [[ -n "${LINT_CMD+x}" ]] && ((${#LINT_CMD[@]})) && "${LINT_PROBE[@]}" >/dev/null 2>&1; then
 					"${LINT_CMD[@]}"
 					fEcho "OK: lints clean"
@@ -1095,16 +1186,14 @@ if ((gate)); then
 					fEcho "WARNING: lints skipped (clippy unavailable)"
 				fi ;;
 			tests)
-				fSection "Quick ${gateStep}/${#gateAreas[@]}  ${gateTitles[tests]}"
 				fTestLines "${TEST_CMD[@]}"
 				fEcho "OK: tests passed" ;;
 			scripts)
-				fSection "Quick ${gateStep}/${#gateAreas[@]}  ${gateTitles[scripts]}"
 				fLintScripts ;;
 			docs)
-				fSection "Quick ${gateStep}/${#gateAreas[@]}  ${gateTitles[docs]}"
 				fCheckDocs ;;
 		esac
+		fStepClose
 	done
 	fSection "${APP_NAME} backlog quick run (${gateAreas[*]}): PASSED."
 	fEcho_Clean
@@ -1261,8 +1350,10 @@ elif [[ -n "${publishMsg}" ]]; then
 else
 	fEcho_Clean "Publish (last) ......: ${GIT_PUBLISH[*]} (will prompt for message; blank = \"${autoMsg}\")"
 fi
+fPlanSteps
+fPlanSteps_Show
 fEcho_Clean
-fEcho_Clean "Fail-fast: any error aborts before the next stage."
+fEcho_Clean "Fail-fast: any error aborts before the next step."
 fEcho_Clean
 if ((listing)); then
 	((! ${#TEST_CMD[@]})) || fListRustTests
@@ -1347,10 +1438,9 @@ fi
 ## built and tested here, not an untested post-build merge. Behind-only is safe
 ## (fast-forward, stash-wrapped for a dirty tree); diverged aborts now rather
 ## than at publish. Offline just warns - a local build shouldn't need the net.
-fSection "0/8  Remote sync"
 fJobs
-if ((! sync)); then
-	fEcho_Clean "remote sync skipped"
+if ! fStepOpen "Remote sync"; then
+	:
 elif ! git rev-parse --abbrev-ref '@{u}' >/dev/null 2>&1; then
 	fEcho_Clean "no upstream for $(git rev-parse --abbrev-ref HEAD); nothing to sync"
 elif ! fRemoteGit fetch --quiet 2>/dev/null; then
@@ -1387,6 +1477,7 @@ else
 		fDie "diverged from upstream (${ahead} ahead, ${behind} behind) - reconcile first, or rerun with --no-sync"
 	fi
 fi
+fStepClose
 
 ## The source everything from here on reads. Taken before the first build, because
 ## the note has to name what the binaries hold: another session committing in this
@@ -1648,12 +1739,6 @@ fContentScrub(){
 	"${root}/../private/hooks/scrub.bash" "${root}" || fDie "content scrub failed"
 	fEcho "OK: content scrub"
 }
-## A box or VM that isn't there is a skip, never a failure. A step that reaches
-## another box hands its scripts this run's skip list as SILK_CICD_SKIPS, and each
-## one adds a "SKIP <what>, <why>" line for what it couldn't run. Only those steps
-## get it, so a test of one of those scripts can't add to the real list. skipLog
-## is made with the test run folder.
-fSkipCount(){ if [[ -s "${skipLog}" ]]; then grep -c '^SKIP ' "${skipLog}" || true; else echo 0; fi ;}
 ## fStepDone <name> <skips before>: the step's own line, SKIP when it left something out.
 fStepDone(){
 	local -r name="${1}" before="${2}"
@@ -1771,24 +1856,20 @@ fSweepBuilds(){
 ## box taking up the steps that need the card, then the private runner.
 fBuildTestRelease(){
 	fSweepBuilds
-	## Stage 1: format.
-	fSection "1/8  Format"
-	fJobs
-	if ((${#FMT_CMD[@]} == 0)); then
-		fEcho_Clean "format skipped"
-	else
+	if fStepOpen "Format"; then
+		fJobs
 		"${FMT_CMD[@]}" || fDie "format $( ((fmtCheck)) && echo 'check ')failed (${FMT_CMD[*]})"
 		fEcho "OK: $( ((fmtCheck)) && echo 'formatting clean' || echo 'formatted') (${FMT_CMD[*]})"
+		fStepClose
 	fi
 
-	## Stage 2: debug build.
-	fSection "2/8  Debug build"
+	fStepOpen "Debug build"
 	fJobs
 	"${DEBUG_BUILD_CMD[@]}"
 	fEcho "OK: debug build"
+	fStepClose
 
-	## Stage 3: regression tests.
-	fSection "3/8  Regression tests"
+	fStepOpen "Regression tests"
 	fJobs
 	corpusBefore=""
 	if [[ -d "${root}/cicd/tests/fuzz-corpus" ]]; then corpusBefore="$(fCorpusHashes)"; fi
@@ -1848,13 +1929,11 @@ fBuildTestRelease(){
 		fDie "a test run wrote through the fuzz corpus - see 'git status cicd/tests/fuzz-corpus'"
 	fi
 	fEcho "OK: tests passed"
+	fStepClose
 
-	fSection "4/8  Profiler"
-	fJobs
-	fRunProfiler
+	if fStepOpen "Profiler"; then fJobs; fRunProfiler; fStepClose; fi
 
-	## Stage 5: release builds.
-	fSection "5/8  Release build (native)"
+	fStepOpen "Release build: native"
 	fJobs
 	## Panic locations and generated bindings carry the build box's absolute paths, which
 	## put the home folder and account name into every published binary and made builds
@@ -1870,17 +1949,21 @@ fBuildTestRelease(){
 	[[ -f "${RELEASE_NATIVE_BIN}" ]] || fDie "native release binary missing: ${RELEASE_NATIVE_BIN}"
 	fEcho "OK: native release: ${RELEASE_NATIVE_BIN} ($(du -h --apparent-size "${RELEASE_NATIVE_BIN}" | cut -f1))"
 	builtArts=("${RELEASE_NATIVE_OSARCH:-native}|${RELEASE_NATIVE_BIN}")
+	fStepClose
 	if ((BUILD_CROSS)) && ((${#CROSS_TARGETS[@]})); then
 		for t in "${CROSS_TARGETS[@]}"; do
 			localLabel="${t%%|*}"; rest="${t#*|}"; osarch="${rest%%|*}"; rest="${rest#*|}"; art="${rest%%|*}"; cmd="${rest#*|}"
-			fSection "5/8  Release build: ${localLabel}"
+			fStepOpen "Release build: ${localLabel}"
+			fJobs
 			fRetryBuild "${localLabel}" eval "${cmd} --config $(printf '%q' "${remapCfg}")"
 			[[ -f "${art}" ]] || fDie "missing artifact for ${localLabel}: ${art}"
 			fEcho "OK: ${localLabel}: ${art} ($(du -h --apparent-size "${art}" | cut -f1))"
 			builtArts+=("${osarch}|${art}")
+			fStepClose
 		done
 	fi
 
+	fStepOpen "Release artifacts"
 	for pair in "${builtArts[@]}"; do
 		if fHasLocalPaths "${pair#*|}"; then fDie "${pair#*|} still holds a local path (${HOME} or ${root})"; fi
 	done
@@ -1924,44 +2007,39 @@ fBuildTestRelease(){
 		((BUILD_CROSS)) || fEcho_Clean "note: cross targets skipped - artifact set is partial (native only)"
 	fi
 	fArmSmoke
+	fStepClose
 
-	fSection "6/8  Packages"
-	fJobs
-	if ((quick)); then
-		fEcho_Clean "packages skipped (--quick)"
-	else
-		fBuildPackages
-	fi
+	if fStepOpen "Packages"; then fJobs; fBuildPackages; fStepClose; fi
 }
 
 ## Stages 1 to 6 on this box, or in the container with this box taking over after.
 if ((container)); then
-	fSection "Container"
+	fStepOpen "Container image"
 	fJobs
 	fContainerBuild "${containerImage}"
+	fEcho "OK: ${containerImage}"
 	fEcho_Clean "runs cicd.bash ${innerArgs[*]}"
-	fContainerRun "${containerImage}" "${root}/cicd/cicd.bash" "${innerArgs[@]}" || fDie "the run in the container failed (above)"
+	fStepClose
+	## The steps inside count on from here, toward this run's total.
+	SILK_CICD_STEP_AT="$(fStepAt "Container image")" SILK_CICD_STEP_TOTAL="${_stepTotal}" \
+		fContainerRun "${containerImage}" "${root}/cicd/cicd.bash" "${innerArgs[@]}" || fDie "the run in the container failed (above)"
 	fEcho "OK: stages 1-6 in the container"
-	fContainerArtifacts
 	## What needs this box's own trees and keys, or the card.
+	fStepOpen "Checks on this box"
+	fContainerArtifacts
 	fContentScrub
 	fWinGuiScenarios
 	fArmSmoke
 	fRenderNodeTest
-	fSection "4/8  Profiler (here)"
-	fJobs
-	fRunProfiler
+	fStepClose
+	if fStepOpen "Profiler"; then fJobs; fRunProfiler; fStepClose; fi
 else
 	fBuildTestRelease
 fi
 
 ## The private runner builds on boxes that are often off or busy, so it skips
 ## those itself and says so. Only a job that ran and failed stops the run.
-if ((quick)); then
-	fEcho_Clean "private runner skipped (--quick)"
-elif ((noRemote)); then
-	fEcho_Clean "private runner skipped (--no-remote)"
-elif [[ -n "${PRIVATE_RUNNER:-}" && -x "${PRIVATE_RUNNER}" ]]; then
+if fStepOpen "Private runner"; then
 	fEcho_Clean "private runner (macOS, Microsoft Store) ..."
 	privStart="$(mktemp)"
 	privSkips="$(fSkipCount)"
@@ -1972,75 +2050,67 @@ elif [[ -n "${PRIVATE_RUNNER:-}" && -x "${PRIVATE_RUNNER}" ]]; then
 	macBin="${PRIVATE_RUNNER%/cicd/*}/dist/${ver}/macos/${EXE_NAME}-${ver}-macos-universal"
 	if [[ -f "${macBin}" && "${macBin}" -nt "${privStart}" ]]; then builtArts+=("macos-universal|${macBin}"); fi
 	rm -f "${privStart}"
-else
-	fEcho_Clean "private runner not checked out; skipped"
+	fStepClose
 fi
 
 ## Stage 7: dogfood. Install each build under a fixed name in the synced app dir
 ## for the platform it targets; the 'runterm' launcher on each box takes it from
 ## there and keeps its own rotated versions folder.
-fSection "7/8  Dogfood (install release builds to the synced app dirs)"
-fJobs
-dfDid=0
+if fStepOpen "Dogfood"; then
+	fJobs
+	for xd in "${DOGFOOD_DESTS[@]}"; do
+		xosarch="${xd%%|*}"; xrest="${xd#*|}"; xname="${xrest%%|*}"; xdirs="${xrest#*|}"
 
-for xd in "${DOGFOOD_DESTS[@]:-}"; do
-	xosarch="${xd%%|*}"; xrest="${xd#*|}"; xname="${xrest%%|*}"; xdirs="${xrest#*|}"
+		xsrc=""
+		for pair in "${builtArts[@]}"; do
+			[[ "${pair%%|*}" == "${xosarch}" ]] && { xsrc="${pair#*|}"; break; }
+		done
+		if [[ -z "${xsrc}" ]]; then
+			fEcho_Clean "no ${xosarch} build this run; dogfood skipped"
+			continue
+		fi
 
-	xsrc=""
-	for pair in "${builtArts[@]}"; do
-		[[ "${pair%%|*}" == "${xosarch}" ]] && { xsrc="${pair#*|}"; break; }
-	done
-	if [[ -z "${xsrc}" ]]; then
-		fEcho_Clean "no ${xosarch} build this run; dogfood skipped"
-		continue
-	fi
-
-	## Make the first candidate when none is there yet, so a fresh box needs no
-	## setup step of its own.
-	xdest="$(fDogfoodDest "${xdirs}")"
-	if [[ -z "${xdest}" ]]; then
-		mkdir -p "${xdirs%%|*}" 2>/dev/null || true
+		## Make the first candidate when none is there yet, so a fresh box needs no
+		## setup step of its own.
 		xdest="$(fDogfoodDest "${xdirs}")"
-	fi
-	if [[ -z "${xdest}" ]]; then
-		fEcho "WARNING: no dogfood dest writable for ${xosarch} (${xdirs//|/, }); skipping"
-		continue
-	fi
+		if [[ -z "${xdest}" ]]; then
+			mkdir -p "${xdirs%%|*}" 2>/dev/null || true
+			xdest="$(fDogfoodDest "${xdirs}")"
+		fi
+		if [[ -z "${xdest}" ]]; then
+			fEcho "WARNING: no dogfood dest writable for ${xosarch} (${xdirs//|/, }); skipping"
+			continue
+		fi
 
-	if [[ -e "${xdest}/${xname}" ]] && fInUse "${xdest}/${xname}"; then
-		fEcho "WARNING: ${xdest}/${xname} is running; dogfood copy skipped"
-		continue
-	fi
+		if [[ -e "${xdest}/${xname}" ]] && fInUse "${xdest}/${xname}"; then
+			fEcho "WARNING: ${xdest}/${xname} is running; dogfood copy skipped"
+			continue
+		fi
 
-	## -p: the launcher dates a build by its mtime, so the copy has to keep it.
-	cp -pf "${xsrc}" "${xdest}/${xname}"
-	chmod +x "${xdest}/${xname}"
+		## -p: the launcher dates a build by its mtime, so the copy has to keep it.
+		cp -pf "${xsrc}" "${xdest}/${xname}"
+		chmod +x "${xdest}/${xname}"
 
-	## A cross-build says nothing about the box that later reads it, so the tag
-	## rides along in a sidecar rather than being guessed at the far end.
-	xtag="${DOGFOOD_TAG-$(fBuildTag "${xosarch}")}"
-	if [[ -n "${xtag}" ]]; then printf '%s\n' "${xtag}" > "${xdest}/${xname}.tag"
-	else rm -f "${xdest}/${xname}.tag"; fi
+		## A cross-build says nothing about the box that later reads it, so the tag
+		## rides along in a sidecar rather than being guessed at the far end.
+		xtag="${DOGFOOD_TAG-$(fBuildTag "${xosarch}")}"
+		if [[ -n "${xtag}" ]]; then printf '%s\n' "${xtag}" > "${xdest}/${xname}.tag"
+		else rm -f "${xdest}/${xname}.tag"; fi
 
-	if [[ -n "${DOGFOOD_ICON:-}" && -f "${root}/${DOGFOOD_ICON}" ]]; then
-		cp -f "${root}/${DOGFOOD_ICON}" "${xdest}/${EXE_NAME}.png"
-	fi
+		if [[ -n "${DOGFOOD_ICON:-}" && -f "${root}/${DOGFOOD_ICON}" ]]; then
+			cp -f "${root}/${DOGFOOD_ICON}" "${xdest}/${EXE_NAME}.png"
+		fi
 
-	fEcho "OK: installed (${xosarch}${xtag:+, ${xtag}}) -> ${xdest}/${xname}"
-	dfDid=1
-done
-
-if ((! dfDid)); then fEcho_Clean "dogfood disabled"; fi
+		fEcho "OK: installed (${xosarch}${xtag:+, ${xtag}}) -> ${xdest}/${xname}"
+	done
+	fStepClose
+fi
 
 ## Re-record the demo video (on by default, skipped under --quick unless --demo
 ## asks for it, never aborts). The video GFS-rotates into
 ## ../private/demo-video/; the README highlight gif goes in assets/demo.gif.
 demoHook="${root}/cicd/utility/demo-video/demo-video.py"
-if ((! ${DEMO_ENABLE:-0})); then
-	fEcho_Clean "demo video disabled"
-elif ((quick && ! demoAsked)); then
-	fEcho_Clean "demo video skipped (--quick)"
-elif [[ -f "${demoHook}" ]]; then
+if fStepOpen "Demo video"; then
 	fEcho_Clean "recording demo video ..."
 	## Absolute: the recorder runs the app from a scratch home of its own, so a
 	## relative path would resolve against the wrong directory.
@@ -2051,22 +2121,20 @@ elif [[ -f "${demoHook}" ]]; then
 	else
 		fEcho "WARNING: demo video hook failed (non-fatal)"
 	fi
+	fStepClose
 fi
 
-## Stage 8: backup + publish.
-fSection "8/8  Backup + publish"
 ## Always run the publisher quiet: cicd already gave the initial prompt, so skip
 ## its redundant continue-prompt. The message was settled before stage 0.
 pubFlags=(--quiet)
-if ((${#GIT_PUBLISH[@]} == 0)); then
-	fEcho_Clean "publish disabled"
-else
+if fStepOpen "Backup + publish"; then
 	## The publisher commits with -m, so no editor opens. GIT_EDITOR is there in
 	## case some other git step ever wants one, so it cannot stall the run.
 	fEcho_Clean "hands-off publish (commit message: \"${publishMsg}\")"
 	GIT_BACKUP_AND_PUBLISH_QUIET=1 GIT_AUTO_MESSAGE="${publishMsg}" \
 		GIT_EDITOR="${here}/utility/git-auto-msg.bash" "${GIT_PUBLISH[@]}" "${pubFlags[@]}"
 	fEcho "OK: published"
+	fStepClose
 fi
 
 ## Zig's caches in the tree, where the builds ran. zig cc keeps to its global
@@ -2086,6 +2154,9 @@ fEcho_Clean
 
 
 ##	History:
+##		- 2026-10-28: Steps: a 79-wide rule, then a stamped Starting line numbered of
+##		              the steps the run takes, and a PASS, SKIP or FAIL line. A step
+##		              turned off isn't counted, and the plan says what turned it off.
 ##		- 2026-10-28: --long, or --slow, for the steps that take hours. TSan moved
 ##		              there from the default run, and CodeQL comes on with it.
 ##		- 2026-10-28: The Linux ARM64 build's --version runs on the arm64 VM.

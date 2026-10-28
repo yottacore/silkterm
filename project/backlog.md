@@ -669,7 +669,9 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - CICD reset: step output
 	- ID: 2026102416233808
 	- Type: Task
-	- Status: Queued
+	- Status: Waiting on automated testing
+	- Needs local test suite run?: `--backlog-run-full`, the container arm, for each step's lines on both sides of the container, numbered on from the image step (Er2UgY7, EsJg9EF).
+	- Needs external testing: `mac.yml` on rnd1028, for `ci-mac.bash`'s step lines. On b29w, `cicd-win.ps1 -BacklogRunQuick fmt scripts` and `-MergeGate -List` (Er2UgYE).
 	- Priority: High
 	- Opened: 20261024-162338
 	- Opened by: CC
@@ -683,6 +685,18 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
 	- Progress log:
 		- 20261025: From 2026102507245260: a step that left something out on another box ends with a `SKIP:` line, through `fStepDone`, and the run lists the `SKIP` lines again at the end. The plan has a Windows scenarios line. The closing-line form here should keep the `SKIP` case.
+		- 20261028: All 3 scripts. Each step opens after a 79-wide rule with a stamped `Starting` line, numbered of the steps the run takes, and closes with `PASS`, `SKIP` or `FAIL`. `fDie`, or an error that ends the run, closes an open step with `FAIL`. The plan says how many steps there are and lists the ones turned off, with the flag or reason. `--list` numbers the steps. The backlog quick run lists the areas not named as off.
+		- 20261028: Test asserts given new values for the new lines. EsJg9EF: `4/8  Profiler (here)` after the render node test is now the render node test inside `Checks on this box`, with the order checked in `--list`; `profiler disabled` is now the plan's `Profiler (--quick)`; `0/8  Remote sync` is `Starting Remote sync`; `Quick 1/2  Docs checks` is `Step 1 of 2  Docs checks`. Er2UgY8: `remote sync skipped` under `--no-sync` is no output at all. Er2UgY7: the private runner's `skipped (--no-remote)` line is no output, and the plan check covers it. Er2UgYE: `Quick 1/1  Format check` is `Step 1 of 1  Format check`.
+	- Decisions:
+		- The steps keep the old stages, with each cross build a step of its own, the container image and the checks here after it steps too, and the release checks and artifacts one step. ASan, TSan, the leak checks and fuzz stay inside the regression tests step, since the plan's own lines already say when they're off.
+		- A step that left something out for want of a box closes with `SKIP` and how many, per the progress log, though the style guide names only `PASS` and `FAIL`.
+		- The run in the container numbers its steps on from the run outside, so one count covers the whole run.
+		- The Windows Linux half is one step, and the `cicd.bash` it runs in WSL2 numbers its own steps inside it.
+		- A non-gating ARM64 build failure on Windows closes its step with `FAIL`, and the run goes on as before.
+	- Verified: 20261028. Er2UgY7 passed with 19 new checks for the plan, the numbering, the lines and `FAIL` on `fDie` or a plain error, and Er2UgYE with 10 for the Windows side. Both sets failed against the old scripts. EsJg9EF and Er2UgY8 pass. `ci-mac.bash` with stand-in steps on Linux printed its lines. `--backlog-run-quick` with all 5 areas passed in the container. The cleanup, testout, jobs, saferm, gates and hooks tests pass.
+		- Swept: every user of the shared rule (`release.bash`, `asan.bash`, `tsan.bash`, `codeql.bash`), the scroll harness's own copy, `cicd-win.ps1` and `ci-mac.bash`. The `•` rules in the Python tools and the benchmark scripts are comments or not pipeline output.
+	- Branch: rnd1028
+	- Test case: `cicd/tests/engine/run.bash` (Er2UgY7), `cicd/tests/container/run.bash` (EsJg9EF), `cicd/tests/sync/run.bash` (Er2UgY8), `cicd/tests/cicd-win/run.bash` (Er2UgYE). `ci-mac.bash` has none, since it runs only on a Mac.
 
 - CICD reset: a test for every Done item
 	- ID: 2026102416233809

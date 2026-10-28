@@ -391,10 +391,13 @@ fCheck "without starting the harness" test ! -s "${STUB_RAN}"
 fCheck "nor putting anything on the list" test ! -s "${skipLog}"
 privStep="$(fLiftF '## The private runner builds on boxes that are often off or busy, so it skips')"
 fCheck "the private runner's step can be lifted" test -n "${privStep}"
+## Whether the step is on is the plan's call, checked with the plan below.
 fPriv(){  ## fPriv <noRemote> <skips>: sets out
 	local quick=0 noRemote="${1}" PRIVATE_RUNNER="${work}/priv/cicd/run.bash" ver=0 EXE_NAME=x builtArts=()
+	fStepOpen(){ ((! noRemote)); }; fStepClose(){ :; }
 	: >"${STUB_RAN}"
 	out="$(STUB_SKIPS="${2}" eval "${privStep}" 2>&1)" || true
+	unset -f fStepOpen fStepClose
 }
 skipLog="${work}/skips.txt"; : >"${skipLog}"
 fPriv 0 ""
@@ -402,7 +405,7 @@ fCheck "with both boxes there, the private runner's line is OK" test "$(tail -1 
 fPriv 0 "mac store"
 fCheck "a job it skipped makes it a SKIP" test "$(tail -1 <<<"${out}")" = "    SKIP: private runner, 2 not run (SKIP lines above)"
 fPriv 1 "mac"
-fCheck "--no-remote leaves it out, and says so" test "${out}" = "private runner skipped (--no-remote)"
+fCheck "--no-remote leaves it out" test -z "${out}"
 fCheck "without starting it" test ! -s "${STUB_RAN}"
 out="$(fSkipSummary)"
 fCheck "the summary at the end lists every SKIP line, in order" \
@@ -413,6 +416,62 @@ skipLog=""
 fCheck "or when the run has no list" test -z "$(fSkipSummary)" -a "$(fSkipCount)" = 0
 fCheck "and the run says it last, after the sweep's line" \
 	bash -c 'grep -A1 -F "fEcho_Clean \"\$(fSweep_Summary)\"" "$1" | grep -qx "fSkipSummary"' _ "${engine}"
+
+## The steps: which a run takes and counts, which it turns off and why, and the
+## lines each one opens and closes with.
+for f in fStepIf fStepOff_Why fPlanSteps fStepNumbers fStepAt fStepOpen fStepClose fPlanSteps_Show; do
+	eval "$(fLift "^${f}(){" '^}')"
+done
+fCheck "the step helpers can be lifted" declare -F fPlanSteps fStepOpen fStepClose fPlanSteps_Show
+fPlan(){  ## fPlan [var=value]...: the plan's steps for the defaults, changed by those
+	local sync=1 container=0 quick=0 noRemote=0 noWindows=0 fullRun=0 fullRunName="" demoAsked=0 BUILD_CROSS=1 PROFILE_ENABLE=1 PACKAGE_ENABLE=1 DEMO_ENABLE=1
+	local PRIVATE_RUNNER="${work}/priv/cicd/run.bash" SILK_CICD_IN_CONTAINER="" root="${work}/rootp"
+	local -a FMT_CMD=(cargo fmt) DOGFOOD_DESTS=(x) GIT_PUBLISH=(x) allCrossTargets=("lw|a" "la|linux-arm64") CROSS_TARGETS=("lw|a" "la|linux-arm64")
+	mkdir -p "${root}/cicd/utility/demo-video"; : >"${root}/cicd/utility/demo-video/demo-video.py"
+	local kv; for kv in "${@}"; do eval "${kv}"; done
+	fPlanSteps
+	printf 'on:%s\n' "${stepsOn[@]}"; printf 'off:%s\n' "${stepsOff[@]}"; echo "base=${stepBase} total=${_stepTotal}"
+}
+plan="$(fPlan)"
+fCheck "a default run takes every step, in order" test "$(grep '^on:' <<<"${plan}" | paste -sd, -)" = "on:Remote sync,on:Format,on:Debug build,on:Regression tests,on:Profiler,on:Release build: native,on:Release build: lw,on:Release build: la,on:Release artifacts,on:Packages,on:Private runner,on:Dogfood,on:Demo video,on:Backup + publish"
+fCheck "and counts them all" grep -qx 'base=0 total=14' <<<"${plan}"
+plan="$(fPlan quick=1 PROFILE_ENABLE=0 PACKAGE_ENABLE=0 'CROSS_TARGETS=("lw|a")')"
+fCheck "--quick turns steps off and says so" bash -c 'for w in "Profiler|--quick" "Packages|--quick" "Private runner|--quick" "Release build: la|--quick" "Demo video|--quick; --demo adds it"; do grep -qxF "off:${w}" <<<"$1" || exit 1; done' _ "${plan}"
+fCheck "and leaves them out of the count" grep -qx 'base=0 total=9' <<<"${plan}"
+plan="$(fPlan fullRun=1 fullRunName=--merge-gate sync=0 DOGFOOD_DESTS=\(\) GIT_PUBLISH=\(\) DEMO_ENABLE=0 noRemote=1)"
+fCheck "a full run names itself as what turned a step off" bash -c 'for w in "Remote sync" Dogfood "Demo video" "Backup + publish"; do grep -qxF "off:${w}|--merge-gate" <<<"$1" || exit 1; done' _ "${plan}"
+fCheck "and --no-remote the private runner" grep -qxF 'off:Private runner|--no-remote' <<<"${plan}"
+plan="$(fPlan container=1)"
+fCheck "with --container, the image is a step and the card's steps follow the container's" test "$(grep '^on:' <<<"${plan}" | sed -n '2p;3p;11p;12p' | paste -sd, -)" = "on:Container image,on:Format,on:Checks on this box,on:Profiler"
+plan="$(export SILK_CICD_STEP_AT=2 SILK_CICD_STEP_TOTAL=16; fPlan SILK_CICD_IN_CONTAINER=1; fStepAt Format; fStepAt Packages; fStepAt Dogfood || echo none)"
+fCheck "inside, only its part, numbered on from where the run outside put it" \
+	test "$(grep -v '^on:\|^off:' <<<"${plan}" | paste -sd, -)" = "base=2 total=16,3,10,none"
+plan="$(export SILK_CICD_STEP_AT='x[$(touch '"${work}"'/pwned)]' SILK_CICD_STEP_TOTAL=16; fPlan SILK_CICD_IN_CONTAINER=1)"
+fCheck "a number handed in that isn't one is ignored, and runs nothing" bash -c '[[ "$1" == *"base=0 total=8"* && ! -e "$2/pwned" ]]' _ "${plan}" "${work}"
+out="$(stepsOn=(A B); stepsOff=("C|--no-c"); listing=1; fPlanSteps_Show)"
+fCheck "the plan counts the steps and lists the ones off with why" test "${out}" = $'Steps ...............: 2, and these off:\n    - C (--no-c)\n  Step 1 of 2  A\n  Step 2 of 2  B'
+## The lines themselves, from the shared helpers.
+fSteps(){ (
+	# shellcheck source=cicd/utility/include/echo.bash
+	source "${cicd}/utility/include/echo.bash"
+	stepsOn=(Format "Debug build"); stepBase=0; _stepTotal=2; skipLog="${work}/stepskips.txt"; : >"${skipLog}"
+	"${@}"
+) 2>&1; }
+stamp='[0-9]{8}-[0-9]{6}\.[0-9]{2}'
+out="$(fSteps eval 'fStepOpen "Debug build"; echo built; fStepClose; fStepOpen Nope || echo off')"
+fCheck "a step opens after a blank and a 79-wide rule" bash -c '[[ "$(sed -n 2p <<<"$1")" == "$2" && -z "$(sed -n 1p <<<"$1")" && ${#2} -eq 79 ]]' _ "${out}" "$(printf '•%.0s' {1..79})"
+fCheck "with its stamp, number and total" bash -c '[[ "$(sed -n 3p <<<"$1")" =~ ^\[\ $2:\ Step\ 2\ of\ 2\;\ Starting\ Debug\ build\ \]$ ]]' _ "${out}" "${stamp}"
+fCheck "and closes with PASS, then a blank" bash -c '[[ "$(sed -n 5p <<<"$1")" =~ ^\[\ $2:\ Step\ 2\ of\ 2\;\ PASS\ Debug\ build\ \]$ && -z "$(sed -n 6p <<<"$1")" ]]' _ "${out}" "${stamp}"
+fCheck "a step that's off prints nothing" test "$(tail -1 <<<"${out}")" = "off"
+out="$(fSteps eval 'fStepOpen Format; echo "SKIP x, no box" >>"${skipLog}"; fStepClose')"
+fCheck "one that left something out for want of a box closes with SKIP" bash -c '[[ "$(tail -1 <<<"$1")" =~ ^\[\ $2:\ Step\ 1\ of\ 2\;\ SKIP\ Format\ \(1\ not\ run,\ listed\ at\ the\ end\)\ \]$ ]]' _ "${out}" "${stamp}"
+rc=0; out="$(fSteps eval 'fStepOpen Format; fDie "it broke"; echo after')" || rc=$?
+fCheck "fDie in a step says why, then closes it with FAIL" bash -c '[[ "$3" == 1 && "$(grep -v "^$" <<<"$1" | tail -2 | head -1)" == "[ FAILED: it broke ]" && "$(grep -v "^$" <<<"$1" | tail -1)" =~ ^\[\ $2:\ Step\ 1\ of\ 2\;\ FAIL\ Format\ \]$ && "$1" != *after* ]]' _ "${out}" "${stamp}" "${rc}"
+eval "$(fLift '^fRunEnd(){' '^}')"
+out="$(fSteps eval 'fContainerEnd(){ :; }; fTestDir_End(){ :; }; keepTemp=0; fStepOpen Format; fRunEnd 2')"
+fCheck "a step a plain error ended closes with FAIL too" bash -c '[[ "$(grep -v "^$" <<<"$1" | tail -1)" =~ ^\[\ $2:\ Step\ 1\ of\ 2\;\ FAIL\ Format\ \]$ ]]' _ "${out}" "${stamp}"
+out="$(fSteps eval 'fContainerEnd(){ :; }; fTestDir_End(){ :; }; keepTemp=0; fRunEnd 0')"
+fCheck "and a run that passed adds no line" test -z "${out}"
 
 ## The ARM64 smoke run: its own line, SKIP when its box wasn't there.
 eval "$(fLift '^fArmSmoke(){' '^}')"
@@ -453,6 +512,8 @@ if ((failures)); then echo "${failures} failed"; exit 1; fi
 echo "all passed"
 
 ##	History:
+##		- 20261028: The steps a run takes, the ones it turns off and why, and each
+##		            step's opening and closing lines.
 ##		- 20261028: --long and --slow, with TSan and CodeQL waiting for them.
 ##		- 20261028: The ARM64 smoke run's step and plan line.
 ##		- 20261026: --backlog-run-quick, --backlog-run-full, --merge-gate and their other names.
