@@ -1104,6 +1104,8 @@ fPlanSteps(){
 	fStepNumbers
 }
 ## What the run outside handed in, checked, since it ends up in arithmetic.
+## Kept from the tests this run starts, which number steps of their own.
+export -n SILK_CICD_STEP_AT SILK_CICD_STEP_TOTAL
 stepBase=0
 fStepNumbers(){
 	stepBase=0; _stepTotal="${#stepsOn[@]}"
