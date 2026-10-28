@@ -1572,6 +1572,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261028: `privrig.conf` takes an `@vmstate <command>` line, as `winrig.conf` does. With it, a job's box is held through the VM state helper, which wakes a VM that's paused or off and puts it back after. A VM that never wakes is a skip. A job's host may list fallbacks, `mac b26,vmKt6m`, tried in order.
 		- 20261028: The box config is outside the repo and still has no `@vmstate` line, so nothing changes until it's added.
 		- 20261028: The batch ran the runner from the wip branch with a stand-in config: `mac nosuchbox,vmKt6m`, the host lock and `@vmstate`, with vmKt6m paused. It passed over the missing box, woke vmKt6m, sent the tree, and paused vmKt6m again after the job. The build itself failed there, since the account the job lands in has no rustup. That is 2026102811082502.
+		- 20261028: `privrig.conf` has the `@vmstate` line and `mac b26,vmKt6m` now. Until 2026102811082502 is fixed, a run with b26 off fails on vmKt6m instead of skipping.
 	- Decisions:
 		- 20261028: Fallback boxes in the job's line, so vmKt6m can stand in when b26 is off, with b26 still first for the timing tests. Without it vmKt6m would only run if named alone.
 		- 20261028: A non-VM box behind the helper is left alone by it, so one code path covers b26 and vmKt6m.
@@ -1598,6 +1599,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261028: `cicd/utility/arm-smoke.bash` copies the Linux ARM64 build to the arm64 box, runs `--version` there, and checks the first line has the native build's name, version and build number. It runs after stage 5, or after the container. `--quick`, `--no-arm` and `--no-remote` leave it out, and the plan has a line for it.
 		- 20261028: The box, lock and VM state helper come from `~/.config/silkterm/armrig.conf`, outside the repo like `winrig.conf`. That file doesn't exist yet. With no config, or the box down, held or never waking, the step is a `SKIP`.
 		- 20261028: In the round's full run at 64f3584 the step was a `SKIP`, since `armrig.conf` isn't there yet. The batch then ran `arm-smoke.bash` on that run's ARM64 build, with a stand-in config through `ARMRIG_CONF`: vmDebARM64, the host lock and the VM state helper. It printed `SilkTerm v1.0.0-beta3 build dej0s (2026-10-28)`, the native build's line, passed, and left the VM running as found, in 9 s.
+		- 20261028: `armrig.conf` is in now, with vmDebARM64, the host lock and the VM state helper. `arm-smoke.bash` with it passed on the round's ARM64 build in 9 s.
 	- Decisions:
 		- 20261028: The expected line comes from the native build's own `--version`, so a stale ARM64 binary fails, without hard-coding the format.
 		- 20261028: A config file of its own, so the lock and helper names stay out of the repo.
@@ -1853,6 +1855,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261026: A `CICD_MAX_JOBS` set by config.bash or handed down by the outer run is a ceiling. `CICD_CORES` goes into the container too, so a `--cpus` cap isn't counted twice.
 		- 20261026: Windows keeps no load average, so busy there is the CPU load percentage over 50. cicd-win.ps1 has no hard step of its own. Its WSL half is cicd.bash, which lowers itself.
 		- 20261026: `ci-mac.bash` on the hosted runner is left alone, filed as a Check in questions.md. The private runner on b26 lives in silkterm-private.
+		- 20261028: Changed. `ci-mac.bash` takes its job count and low priority from `jobs.bash` too, per the rule's "on another host, the same rules apply". On the 3-CPU hosted Mac that's 1 job.
 	- Verified: 20261026, EtrCPPO (new), EsJg9EF and the backlog quick run, all five areas, passed. The quick run printed `jobs: 8 of 32 CPUs (busy, load 19.63)`. cicd-win.ps1's `fSetJobs`, lifted out and run under pwsh here, gave 8 at BelowNormal, then 4 at Idle for a hard step, and 1 on 2 CPUs.
 	- Verified: 20261026. The container full run at fab6815 printed `jobs: 8 of 32 CPUs` at the start and before its steps, at a load of 17, and passed EtrCPPO. The run at eedb469 printed `jobs: 8 of 32 CPUs (hard step)` before ASan and TSan. The leak checks ran at the same 8, so no new line.
 	- Verified: 20261026. On b29w, `cicd-win.ps1 -Quick -NoPublish -NoDogfood -NoSync` at fab6815 passed: 1370 tests, both x86_64 builds. Its process went to BelowNormal within 5 s, and cargo, pwsh and powershell under it were BelowNormal too. It printed `jobs: 8 of 16 CPUs`, then `4 of 16 (busy, CPU at 59%)` at the format stage and 8 again at the debug build. A stage whose count didn't change prints no new line, as on Linux.
@@ -2557,6 +2560,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Progress log:
 		- 20261025: A file converted again with bytes already kept, such as a backup copied back over the config, gets no new copy, and the message names the old one. Filed as a Check in questions.md.
 		- 20261025: Sent back. The first fix at 591a9a8 still left 2 copies in 1 of 3 batch reruns, plain. A launch with the later stamp wrote and looked before the earlier one had written, found nothing earlier, and kept its copy. The earlier one then kept its own too. Now the earliest also drops its later twins.
+		- 20261028: The Check stays as written. A match limited to the last few seconds would bring back the ASan race it fixed, and an older copy with the same bytes is already the backup.
 	- Verified: Both new tests fail without their part of the fix and pass with it. At load 30 to 40, the race test passed 40 of 40 plain, against 15 of 16 for the first fix, whose failure was 2 copies. It passed 3 of 3 alone under ASan. The 227 config tests pass, and `cicd/tests/testdir/run.bash` (ErOj67l) passes. fmt and clippy are clean for Linux and Windows. The first fix's quick gate passed, its 1408 unit tests and `cicd/tests/config-convert/run.bash` (ErgDpjX) included.
 	- Swept: `write_new_file` and `keep_old_format_at` have one caller each outside the tests. The `.bak` copies of the flat conversion and a reset (`backup_copy`, `backup_aside`) take the next free name with no stamp, so the clock cannot split them, and are left as they were.
 	- Branch: rnd1025b
@@ -2584,6 +2588,9 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- vm925w doesn't log anyone on at boot (`AutoAdminLogon` is 0). Woken from off, its console sat at the logon screen, session 1 with no user, for the 5 minutes watched after ssh answered.
 		- The stage took the console user from `quser`, and with nobody there it fell back to the ssh account. The scenario then went to an interactive task for an account with no session, which never runs, so it waited out its 4 minutes.
 	- Actual fix: Nobody on the console is a skip with a reason: `wingui: <box>: nobody is logged on at the console, skipped`. A box set to log a user on by itself gets up to 120 s for it first. A scenario that finds the console empty fails with that reason, rather than "the console is now <ssh account>'s".
+	- Progress log:
+		- 20261028: The 120 s wait was the same for every box. Now it goes by how old the console session is: 3 minutes when it started under 10 minutes ago, as on a VM the run woke, and 10 s on an older one. A box that doesn't log on by itself is still a skip at once.
+	- Verified: 20261028. The harness test's 4 new checks, which fail on the old stage script. On b29w the stage's functions read a console session 10 days old and gave the 10 s wait.
 	- Verified: 20261025. vm925w woken from off through the VM state helper: the stage said the line above in seconds, sent and ran nothing, and vm925w was off again after. The new harness checks fail against the scripts as they were and pass now. shellcheck, the bash style check and the PowerShell lint pass.
 	- Swept: the other place that reads the console user, the scenario launcher in `run.bash`, had the same fallback, fixed. The scenarios' own `fSessionUsable` runs inside the session, so it can't see this.
 	- Test case: `cicd/tests/wingui/harness-test.bash` (EqH4isr), 12 new checks for a box nobody is logged on at, and the console user and wait in `_stage.ps1`.
@@ -3734,6 +3741,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261026: In. `--version` prints the version line, then the copyright line. `--about` opens with the same two lines, in place of its "About SilkTerm" and "Version" lines. cicd.bash and cicd-win.ps1 pin the build number to the commit's time, dirty tree or not. The clock stands in only where there is no commit.
 		- 20261026: Er2UgY7's "a dirty tree takes the clock" is now "a dirty tree takes its commit's time too": was the clock, now the commit's minutes. It failed with the old pin and passes with the new one.
 	- Decisions:
+		- 20261028: `--about` has its "About SilkTerm" heading back, with the version and copyright lines under it. The Check's other option.
 		- 20261026: A plain `cargo build` with no pin still takes the clock in build.rs, since reading git there would need the build script to watch `.git`. Only pipeline builds are numbered from the commit.
 		- 20261026: design.md's Command-line options and Delivery bullets say the same now.
 	- Verified: 20261026, EtrCPPP (new), Eo4auD9, EmrsJ5P, Er2UJeR, Er2UgY7, EpHWVGS (release.bash still reads only the build number), and the backlog quick run, all five areas. A debug build printed both lines for `--version` and `--about`.

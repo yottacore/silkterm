@@ -809,6 +809,7 @@ pub fn padded(body: &str) -> String {
 /// worth having, so that reads as three missing lines rather than a failure.
 pub fn about(info: Option<&wgpu::AdapterInfo>) -> String {
 	let mut lines = vec![
+		format!("About {}", config::APP_NAME),
 		version_line(),
 		COPYRIGHT.to_string(),
 		format!("License: {}", env!("CARGO_PKG_LICENSE")),
@@ -1073,8 +1074,8 @@ mod tests {
 		);
 	}
 
-	// --version and --about both open with the version line and the copyright
-	// line under it, per the CICD rules.
+	// --version opens with the version line and the copyright line under it,
+	// per the CICD rules. --about has the same two lines under its heading.
 	// Test ID: EtrCPPP
 	#[test]
 	fn version_and_about_put_the_copyright_under_the_version_line() {
@@ -1087,7 +1088,11 @@ mod tests {
 			Some(crate::gfx::test_adapter("X", wgpu::DeviceType::Cpu)),
 		] {
 			let about = about(info.as_ref());
-			assert!(about.starts_with(&format!("{text}\n")), "{about}");
+			let heading = format!("About {}", config::APP_NAME);
+			assert!(
+				about.starts_with(&format!("{heading}\n{text}\n")),
+				"{about}"
+			);
 		}
 	}
 

@@ -82,9 +82,12 @@ fCheck "the pipeline lowers its own priority first" grep -qx 'fJobs_LowPriority'
 fCheck "a container gets the step's jobs and a low CPU share" grep -qF -- '--cpus "${CICD_MAX_JOBS}" --cpu-shares 256' "${root}/cicd/cicd.bash"
 fCheck "cicd-win.ps1 sets BelowNormal at the top" grep -qF "(Get-Process -Id \$PID).PriorityClass = 'BelowNormal'" "${root}/cicd/cicd-win.ps1"
 fCheck "and Idle for a hard step" grep -qF "if (\$Hard) { 'Idle' } else { 'BelowNormal' }" "${root}/cicd/cicd-win.ps1"
+fCheck "ci-mac.bash lowers its priority too" grep -qx 'fJobs_LowPriority' "${root}/cicd/ci-mac.bash"
+fCheck "and counts jobs before each step" grep -qxF "$(printf '\tfJobs')" "${root}/cicd/ci-mac.bash"
 
 if ((failures)); then echo "${failures} check(s) failed"; exit 1; fi
 echo "PASS EtrCPPO step jobs and priority"
 
 ##	History:
 ##		- 20261026 JC: Created.
+##		- 20261028: ci-mac.bash takes the same count and priority.
