@@ -850,6 +850,8 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Branch: rnd1022
 	- Test case: `the_scroll_record_costs_a_full_screen_program_little` (EqHIGdO), message only.
 	- 20261026: It failed again on Mac CI run 40263068770 at 0b16ae9, with keeping rows 10% over and pairs from 0.711 to 2.116. It passed when run again alone. Back to Queued, since a 7th failure makes it more than a one-off.
+	- 20261028: Failed again on Mac CI run 40744137399 at e809cca: keeping rows 21% more, pairs from 0.570 to 1.966. It passed run again alone. From ce3d9fb the Mac suite runs at 1 job, so nothing runs beside it, which tests the memory traffic guess.
+	- 20261028: Mac CI run 40750006918 at ce3d9fb, at 1 job, passed it. Median 1.034, pairs from 0.466 to 1.290.
 
 - The rotate test's fork count went over its limit once inside the test run folder test
 	- ID: 2026102518360001
@@ -1856,6 +1858,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261026: Windows keeps no load average, so busy there is the CPU load percentage over 50. cicd-win.ps1 has no hard step of its own. Its WSL half is cicd.bash, which lowers itself.
 		- 20261026: `ci-mac.bash` on the hosted runner is left alone, filed as a Check in questions.md. The private runner on b26 lives in silkterm-private.
 		- 20261028: Changed. `ci-mac.bash` takes its job count and low priority from `jobs.bash` too, per the rule's "on another host, the same rules apply". On the 3-CPU hosted Mac that's 1 job.
+	- Verified: 20261028. Mac CI run 40750006918 at ce3d9fb printed `jobs: 1 of 3 CPUs` and passed in 11.5 min, against 7.2 min for the run before it. Build 3:43 against 1:31, clippy 2:18 against 0:44, tests 5:17 against 4:43. The jobs test's 2 new checks fail on the old `ci-mac.bash`.
 	- Verified: 20261026, EtrCPPO (new), EsJg9EF and the backlog quick run, all five areas, passed. The quick run printed `jobs: 8 of 32 CPUs (busy, load 19.63)`. cicd-win.ps1's `fSetJobs`, lifted out and run under pwsh here, gave 8 at BelowNormal, then 4 at Idle for a hard step, and 1 on 2 CPUs.
 	- Verified: 20261026. The container full run at fab6815 printed `jobs: 8 of 32 CPUs` at the start and before its steps, at a load of 17, and passed EtrCPPO. The run at eedb469 printed `jobs: 8 of 32 CPUs (hard step)` before ASan and TSan. The leak checks ran at the same 8, so no new line.
 	- Verified: 20261026. On b29w, `cicd-win.ps1 -Quick -NoPublish -NoDogfood -NoSync` at fab6815 passed: 1370 tests, both x86_64 builds. Its process went to BelowNormal within 5 s, and cargo, pwsh and powershell under it were BelowNormal too. It printed `jobs: 8 of 16 CPUs`, then `4 of 16 (busy, CPU at 59%)` at the format stage and 8 again at the debug build. A stage whose count didn't change prints no new line, as on Linux.
