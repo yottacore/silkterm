@@ -6,7 +6,8 @@
 ##		box's paths out of release builds and fails on one left behind. The map
 ##		is a TOML file, so a folder name holding a quote or a backslash has to
 ##		come through escaped. The stash it takes before a pull says whether it
-##		stashed anything, and nothing else.
+##		stashed anything, and nothing else. It takes cicd.bash's runs, and hands
+##		each to the Linux half.
 ##	- Test ID: Er2UgYE
 ##	- History: At bottom of file.
 
@@ -47,7 +48,19 @@ fCheck "the path map reads back as the paths it was given" fMapReads
 ## -NoRemote reaches the Linux half, which is the one that goes to the other boxes.
 ps1="${meDir}/../../cicd-win.ps1"
 fCheck "-NoRemote is a parameter" bash -c 'pwsh -NoProfile -NonInteractive -Command "(Get-Command -Name \"$1\").Parameters.ContainsKey(\"NoRemote\")" | grep -qx True' _ "${ps1}"
-fCheck "and goes to the Linux half as --no-remote" grep -qE '^[[:space:]]*if \(\$NoRemote\)[[:space:]]+\{ \$cicdArgs \+= "--no-remote" \}'$'\r''?$' "${ps1}"
+fCheck "and goes to the Linux half as --no-remote" grep -qE '^[[:space:]]*if \(\$NoRemote\)[[:space:]]+\{ \$cicdArgs\.Add\("--no-remote"\) \}'$'\r''?$' "${ps1}"
+
+## cicd.bash's runs, in -PascalCase. What each hands on is checked in _lift.ps1.
+## The path goes in the command text, since -Command runs any argument after it.
+fHasParams(){
+	local out
+	out="$(pwsh -NoProfile -NonInteractive -Command "\$p = (Get-Command -Name '${ps1}').Parameters
+@('BacklogRunQuick', 'Gate', 'BacklogRunFull', 'MergeGate', 'Ci', 'Long', 'NoContainer', 'KeepTemp', 'List', 'Areas') | Where-Object { -not \$p.ContainsKey(\$_) }
+if (-not \$p['Long'].Aliases.Contains('Slow')) { 'Slow' }
+'all there'" 2>&1)"
+	[[ "${out}" == 'all there' ]]
+}
+fCheck "the standard runs are parameters, with -Slow as another name for -Long" fHasParams
 
 if ((failures)); then echo "${failures} failed"; exit 1; fi
 echo "all passed"
@@ -56,3 +69,4 @@ echo "all passed"
 ##		- 20260926 JC: Created.
 ##		- 20261006 JC: The stash before a pull.
 ##		- 20261025: -NoRemote goes to the Linux half.
+##		- 20261028: The standard runs.

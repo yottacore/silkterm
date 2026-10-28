@@ -65,6 +65,65 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- A PowerShell copy of the guard, with the same rules and the one-parent form as the bash one in 2026102807494103. Under `$env:TEMP`'s project folder counts, since the Windows temp folder isn't named tmp.
 		- Every `Remove-Item -Recurse` goes through it, about 35 lines.
 		- A test like Eu0ULVl, run on b29w.
+	- Progress log:
+		- 20261028: Split, since it doesn't fit one sitting. Children: 2026102808471071 (the guard, and `cicd-win.ps1`'s release artifacts folder), 2026102808471076 (the test scripts), 2026102808472645 (`install.ps1`).
+
+- CICD reset: the PowerShell safe removal guard, and `cicd-win.ps1`'s release artifacts
+	- ID: 2026102808471071
+	- Type: Task
+	- Status: Waiting on automated testing
+	- Needs external testing: The same b29w run 2026102616543946 asks for, `cicd-win.ps1 -MergeGate -KeepTemp`. Its stage 3 runs Eu0ji27, and its stage 4 clears `cicd\artifacts\release-win` through the guard.
+	- Priority: Avg
+	- Opened: 20261028-084710
+	- Opened by: CC
+	- Parent ID: 2026102807494139
+	- Target OS: Windows
+	- Requirements:
+		- A PowerShell copy of the guard, with the same rules and the one-parent form as the bash one in 2026102807494103. Under `$env:TEMP`'s project folder counts, since the Windows temp folder isn't named tmp.
+		- `cicd-win.ps1` clears its release artifacts folder through the one-parent form.
+		- A test like Eu0ULVl, run on b29w.
+	- Progress log:
+		- 20261028: `cicd/utility/include/saferm.ps1` has `fSafeRm` and `fSafeRm_Under`, with saferm.bash's rules. `cicd-win.ps1` clears `cicd\artifacts\release-win` through the second, with `cicd\artifacts` as the parent, and stops the run when that's refused. Stage 3 runs the new test.
+		- 20261028: Eu0ULVl runs the new test where pwsh is installed, and fails on a bare `Remove-Item -Recurse` in `cicd-win.ps1`.
+	- Decisions:
+		- 20261028: The guard answers true or false, with one line on stderr, rather than throwing, as the bash one returns 1. The caller decides; `cicd-win.ps1` stops the run.
+		- 20261028: It walks the tree itself, as `_testdir.ps1` does, and removes a link or junction inside it without following it. On Windows a mount point is one too, so it stays on one filesystem there. Under pwsh elsewhere it doesn't look for mounts, and only the tests use it there.
+		- 20261028: On Windows the folder named tmp and the parent compare without case, as the file system does.
+		- 20261028: The temp root isn't resolved through links, as saferm.bash does with realpath. .NET has no call for the whole path, and the Windows temp folder isn't behind one.
+		- 20261028: The test's refusals of a whole folder use paths that aren't there. Where the temp root sits under a tmp folder, as on this box, the project's own folder is fair game for the tmp rule.
+	- Verified: 20261028. Eu0ji27 passed under pwsh here and on b29w, with junctions there. 5 broken copies of the guard each failed it: no link check, no check for a path through a link, a parent check that takes a longer name, no `..` check, and a walk that follows links. Eu0ULVl's new check failed against the old `cicd-win.ps1` line. On b29w the one-parent form took a planted folder under the clone's `cicd\artifacts`. Er2UgYE, the PowerShell lint, `test-id.py --check` and `--backlog-run-quick scripts docs` pass.
+		- Swept: the one `Remove-Item -Recurse` in `cicd-win.ps1`. The test scripts are 2026102808471076, and `install.ps1` is 2026102808472645.
+	- Branch: rnd1028
+	- Test case: `cicd/tests/saferm/win.ps1` (Eu0ji27), run by Eu0ULVl where pwsh is installed and by `cicd-win.ps1`'s stage 3.
+
+- CICD reset: the PowerShell test scripts' recursive removals through the guard
+	- ID: 2026102808471076
+	- Type: Task
+	- Status: Queued
+	- Priority: Avg
+	- Opened: 20261028-084710
+	- Opened by: CC
+	- Parent ID: 2026102807494139
+	- Prereq IDs: 2026102808471071
+	- Target OS: Windows
+	- Requirements:
+		- Every `Remove-Item -Recurse` under `cicd/tests` goes through the guard, about 33 lines: the launcher, install, release, cleanup and wingui scripts.
+		- Their scratch folders sit in the test run folder in TEMP, not under a tmp folder, so they use the one-parent form with the folder they made, until 2026102807494157 moves run folders under `HOST_TEMP`.
+		- Run on b29w, and the wingui ones on vm925w.
+
+- CICD reset: `install.ps1`'s temp folder removal through a guard
+	- ID: 2026102808472645
+	- Type: Task
+	- Status: Queued
+	- Priority: Avg
+	- Opened: 20261028-084710
+	- Opened by: CC
+	- Parent ID: 2026102807494139
+	- Prereq IDs: 2026102808471071
+	- Target OS: Windows
+	- Requirements:
+		- `install.ps1` removes its temp folder through a guard with the same rules. It runs alone, through `irm | iex` too, so it carries its own copy rather than dot-sourcing the repo's.
+		- Its installer tests still pass under both PowerShells.
 
 - CICD reset: the test and utility scripts' recursive removals through the guard
 	- ID: 2026102807494121
@@ -576,7 +635,8 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - CICD reset: the standard flags in `cicd-win.ps1`
 	- ID: 2026102616543946
 	- Type: Task
-	- Status: Queued
+	- Status: Waiting on automated testing
+	- Needs external testing: `cicd-win.ps1 -MergeGate -KeepTemp` on b29w through `win-remote.bash`, since stage 3's test scripts now run through one function. It should pass, with an OK line per test script, no sync, dogfood or publish, `cargo fmt --check`, and a closing line naming the kept test folder, which is then removed.
 	- Priority: High
 	- Opened: 20261026-165439
 	- Opened by: CC
@@ -587,6 +647,24 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- `cicd-win.ps1` takes the same runs as `cicd.bash`, in its own `-PascalCase` form, with `-Gate` as another name for the quick one, saying so in one line.
 		- Its Linux half gets the matching `cicd.bash` flag under `-Wsl`.
 		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
+	- Progress log:
+		- 20261028: New `-BacklogRunQuick [<area>...]`, `-BacklogRunFull`, `-MergeGate`, `-Long` (`-Slow` too), `-NoContainer`, `-KeepTemp` and `-List`. `-Gate` and `-Ci` are other names for the quick run and the merge gate, and each says so in one line. The pairs `cicd.bash` refuses are refused the same way, with exit 2.
+		- 20261028: The quick run takes `cicd.bash`'s five areas. The full runs check the format, and skip sync, dogfood, publish and the prompt.
+		- 20261028: Under `-Wsl` the Linux half gets the matching run, `--long`, `--no-container`, `--keep-temp` and `--list`. The quick run hands it over too, which the old `-Gate` never did.
+		- 20261028: `-List` prints the plan, the Rust tests and stage 3's test scripts by ID, and runs nothing. Stage 3's test scripts moved into one function so `-List` goes through the same calls.
+		- 20261028: prerequisites.md names `-BacklogRunQuick`.
+		- 20261028: Stage 3 also runs the safe removal guard's test, from 2026102808471071.
+		- 20261028: The Windows pipeline test's text check that `-NoRemote` goes to the Linux half now matches the new line, `$cicdArgs.Add("--no-remote")`, where it matched `$cicdArgs += "--no-remote"`. It still checks the same thing.
+	- Decisions:
+		- 20261028: The areas follow `-BacklogRunQuick` as bare words, as in `cicd.bash`, so the script has no positional binding. A mistyped option lands among them and is refused as unknown.
+		- 20261028: `clippy` here is clippy and cargo-deny, advisory as before. `scripts` is the PowerShell lint. `docs` only says that the docs checks are `cicd.bash`'s, and `-Wsl` runs them.
+		- 20261028: `-BacklogRunFull` and `-MergeGate` don't turn on `-Wsl`, since the default run doesn't have it.
+		- 20261028: `-Long` and `-NoContainer` change nothing on the Windows side, which has no step that takes hours and no container. They only reach the Linux half.
+		- 20261028: `-Slow` prints no notice, like `--slow`.
+	- Verified: 20261028. Er2UgYE passed with 21 new checks. They failed against the old `cicd-win.ps1`, and 3 broken copies each failed one. On b29w: `-List`, `-Gate -List`, `-Ci -List`, `-Slow -Quick`, a mistyped option, an unknown area, and a real `-BacklogRunQuick fmt scripts docs` all did what they should. With `-MergeGate -Long -NoContainer -List -Wsl`, the real WSL2 `cicd.bash` printed the merge gate plan. The new lift checks passed there too. The PowerShell lint, `--backlog-run-quick scripts docs`, and the jobs, pins, cleanup and packaging tests pass.
+		- Swept: every reader of `cicd-win.ps1` in the repo, the tests that lift from it, and prerequisites.md. Design.md, install.md and build.md don't name its runs. Every value set from an `if` in `cicd-win.ps1`: only the quick run's list of areas could come back as one bare string, and it's wrapped now.
+	- Branch: rnd1028
+	- Test case: `cicd/tests/cicd-win/run.bash` (Er2UgYE), 21 new checks for the runs, their other names, the refusals, what the Linux half gets, and `-List`.
 
 - CICD reset: step output
 	- ID: 2026102416233808

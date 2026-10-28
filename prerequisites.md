@@ -96,8 +96,9 @@ The pipeline auto-detects the ARM path and warn-skips it when its toolchain is a
 ### Build
 
 ~~~powershell
-pwsh cicd\cicd-win.ps1 -Quick       # fmt, build, test, lint, release (msvc + gnu)
-pwsh cicd\cicd-win.ps1              # + ARM64 (if set up), installers, dogfood, publish
+pwsh cicd\cicd-win.ps1 -Quick            # fmt, build, test, lint, release (msvc + gnu)
+pwsh cicd\cicd-win.ps1 -BacklogRunQuick  # fmt check, lint, test; cicd.bash's other runs too, as -MergeGate, -Long, -List
+pwsh cicd\cicd-win.ps1                   # + ARM64 (if set up), installers, dogfood, publish
 ~~~
 
 Or a bare build - see [build.md](build.md#windows-native-msvc).

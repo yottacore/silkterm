@@ -118,8 +118,18 @@ fBare(){ grep -nE '(^|[;&|{([:space:]])rm +(-[A-Za-z]*[rR]|--recursive)' "${@}" 
 fCheck "no bare recursive rm in cicd.bash or the sweep" test -z "$(fBare "${repoRoot}/cicd/cicd.bash" "${repoRoot}/cicd/utility/include/sweep.bash")"
 fCheck "and one in the guard" test "$(fBare "${lib}" | wc -l)" -eq 1
 
+## The PowerShell copy, which cicd-win.ps1 goes through, and its own test.
+fBareWin(){ grep -niE 'Remove-Item.*-Recurse' "${@}" | grep -vE '^[0-9]+:[[:space:]]*##' || true; }
+fCheck "no bare Remove-Item -Recurse in cicd-win.ps1" test -z "$(fBareWin "${repoRoot}/cicd/cicd-win.ps1")"
+if command -v pwsh >/dev/null 2>&1; then
+	fCheck "the PowerShell guard's test (Eu0ji27) passes" pwsh -NoProfile -NonInteractive -File "${meDir}/win.ps1"
+else
+	echo "  skip the PowerShell guard (no pwsh)"
+fi
+
 if ((failures)); then echo "${failures} failed"; exit 1; fi
 echo "all passed"
 
 ##	History:
 ##		- 20261028 JC: Created.
+##		- 20261028: The PowerShell copy, and cicd-win.ps1 through it.

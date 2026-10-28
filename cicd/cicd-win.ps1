@@ -50,8 +50,26 @@
 	Quiet + unattended (implies -Yes); publish runs quiet too.
 .PARAMETER Quick
 	Skip the slow stages (ARM builds + packages).
+.PARAMETER Long
+	Everything, the steps that take hours too. The Windows half has none, so it
+	matters under -Wsl, which hands --long to the Linux half. -Slow is another
+	name for it. Not with -Quick or -BacklogRunQuick.
+.PARAMETER BacklogRunQuick
+	The fast checks only, then exit: every area, or the ones named after it.
+	Areas: fmt (cargo fmt --check), clippy (clippy and cargo-deny, advisory
+	here), tests (cargo test), scripts (the PowerShell lint), docs (cicd.bash
+	only, so under -Wsl). No sync, dogfood, publish or prompt.
 .PARAMETER Gate
-	Merge gate only: fmt --check + clippy + tests, then exit.
+	Another name for -BacklogRunQuick.
+.PARAMETER BacklogRunFull
+	Every check of the default run, with the format checked, not rewritten; no
+	sync, dogfood or publish, and no prompt.
+.PARAMETER MergeGate
+	The same checks, before a merge to main.
+.PARAMETER Ci
+	Another name for -MergeGate.
+.PARAMETER Areas
+	The areas -BacklogRunQuick runs, named after it: -BacklogRunQuick fmt tests.
 .PARAMETER NoFmt
 	Skip the formatter stage.
 .PARAMETER NoArm
@@ -72,6 +90,15 @@
 .PARAMETER NoRemote
 	-Wsl only: the Linux half skips every other box, the Windows scenarios and
 	the private runner (cicd.bash --no-remote).
+.PARAMETER NoContainer
+	-Wsl only: the Linux half runs on the distro itself, not in its image
+	(cicd.bash --no-container). The Windows half uses none.
+.PARAMETER KeepTemp
+	Keep the run's test folder, and print where it is. Under -Wsl the Linux half
+	keeps its own too (cicd.bash --keep-temp).
+.PARAMETER List
+	Print the steps and test IDs the other options would run, and run nothing.
+	Under -Wsl the Linux half prints its own (cicd.bash --list).
 .PARAMETER Wsl
 	Also run the Linux half in WSL2 (.deb/.rpm, profiler, scroll harness -
 	everything Windows can't do).
@@ -87,12 +114,18 @@
 	History: At bottom of script.
 #>
 
-[CmdletBinding()]
+## No positional binding: the words after -BacklogRunQuick are its areas.
+[CmdletBinding(PositionalBinding = $false)]
 param(
 	[switch]$Yes,
 	[switch]$Quiet,
 	[switch]$Quick,
+	[Alias('Slow')][switch]$Long,
+	[switch]$BacklogRunQuick,
 	[switch]$Gate,
+	[switch]$BacklogRunFull,
+	[switch]$MergeGate,
+	[switch]$Ci,
 	[switch]$NoFmt,
 	[switch]$NoArm,
 	[switch]$NoPackage,
@@ -102,10 +135,14 @@ param(
 	[switch]$NoLeakcheck,
 	[switch]$Leakcheck,
 	[switch]$NoRemote,
+	[switch]$NoContainer,
+	[switch]$KeepTemp,
+	[switch]$List,
 	[switch]$Wsl,
 	[string]$WslDistro = "",
 	[string]$Message = "",
-	[switch]$Help
+	[switch]$Help,
+	[Parameter(ValueFromRemainingArguments)][string[]]$Areas = @()
 )
 
 ## Requires PowerShell 7+ (pwsh): this script uses $IsWindows and PS7 semantics.
@@ -153,6 +190,8 @@ $ExeName = "silkterm"
 ## the installer tests, made once the run is past its prompt. TEMP and TMP stay
 ## put, so builds keep the system temp dir.
 . (Join-Path $Root "cicd\tests\_testdir.ps1")
+## fSafeRm and fSafeRm_Under: every recursive removal goes through them.
+. (Join-Path $Root "cicd\utility\include\saferm.ps1")
 
 ## Test folders that failed runs kept, past the newest this many, go at the start
 ## of the next run. Only ones a run here wrote down, with its token.
@@ -216,6 +255,10 @@ $Cores       = [Environment]::ProcessorCount
 $CicdMaxJobs = [Math]::Max(1, [Math]::Floor($Cores / 2))
 $script:JobsLast = 0
 
+## -BacklogRunQuick's areas, the same as cicd.bash's, in their default order.
+$QuickAreas  = @('fmt', 'clippy', 'tests', 'scripts', 'docs')
+$QuickTitles = @{ fmt = 'Format check'; clippy = 'Lints (advisory)'; tests = 'Tests'; scripts = 'Script lints (advisory)'; docs = 'Docs checks' }
+
 ## Where the toolchains live. cargo/rustup first, then the mingw linker for the
 ## gnu target (matches the memory'd build setup).
 $CargoBin  = Join-Path $env:USERPROFILE ".cargo\bin"
@@ -265,6 +308,30 @@ function fDie      { param([string]$Msg); fEcho "FAILED: $Msg"; fTestDir_End 1; 
 #==============================================================================
 # Functions
 
+## The run options as one set: the other names, what each run implies, and the
+## pairs that make no sense, as cicd.bash has them. Returns why a run is refused,
+## or nothing.
+function fRunFlags {
+	if ($Gate) { [Console]::Error.WriteLine("-Gate is another name for -BacklogRunQuick"); $script:BacklogRunQuick = $true }
+	if ($Ci)   { [Console]::Error.WriteLine("-Ci is another name for -MergeGate");          $script:MergeGate = $true }
+	$script:Areas = @($Areas | ForEach-Object { $_.ToLowerInvariant() })
+	foreach ($area in $script:Areas) {
+		if (-not $BacklogRunQuick)          { return "unknown option: $area (try -Help)" }
+		if ($QuickAreas -notcontains $area) { return "unknown area: $area (areas: $($QuickAreas -join ' '))" }
+	}
+	$script:FullRunName = if ($MergeGate) { '-MergeGate' } elseif ($BacklogRunFull) { '-BacklogRunFull' } else { '' }
+	$script:FmtCheck = [bool]$script:FullRunName
+	if ($BacklogRunQuick -and $script:FullRunName) { return "-BacklogRunQuick and $($script:FullRunName) are different runs; pick one" }
+	if ($script:FullRunName -and $Quick) { return "$($script:FullRunName) runs every check of the default run, so not -Quick" }
+	if ($Long -and $Quick) { return "-Long runs everything, so not -Quick" }
+	if ($Long -and $BacklogRunQuick) { return "-BacklogRunQuick runs the fast checks only, so not -Long" }
+	if ($Leakcheck -and $BacklogRunQuick) { return "-Leakcheck adds to a full run; the backlog quick run leaves it out" }
+	if ($script:FullRunName) {
+		$script:Unattended = $true
+		$script:NoSync = $true; $script:NoDogfood = $true; $script:NoPublish = $true
+	}
+}
+
 ## Run a native command from the repo root; abort (fail-fast) on a non-zero exit.
 function fExec {
 	param(
@@ -276,24 +343,67 @@ function fExec {
 	if ($LASTEXITCODE -ne 0) { fDie "$What failed (exit $LASTEXITCODE): $File $($CmdArgs -join ' ')" }
 }
 
+## One of stage 3's test scripts, in a pwsh of its own, or in this one with
+## -InProcess. Under -List it prints the script's test ID and name instead, so
+## the list is the run's own calls.
+function fScriptTest {
+	param(
+		[Parameter(Mandatory)][string]$What,
+		[Parameter(Mandatory)][string]$Script,
+		[hashtable]$Params = @{},
+		[switch]$InProcess
+	)
+	$path = Join-Path $Root $Script
+	if ($List) {
+		$id = Select-String -LiteralPath $path -Pattern '^##\s+Test ID:\s+(\S+)' | Select-Object -First 1
+		fEcho_Clean ("  {0,-7}  {1}" -f $(if ($id) { $id.Matches[0].Groups[1].Value } else { '-------' }), $What)
+		return
+	}
+	if ($InProcess) { & $path @Params } else { & pwsh -NoProfile -NonInteractive -File $path }
+	if ($LASTEXITCODE -ne 0) { fDie "$What failed (exit $LASTEXITCODE)" }
+	fEcho "OK: $What"
+}
+
 ## The installer tests. They run in this process and point TEMP and TMP at the
 ## test run folder, so both go back afterward for the builds that follow.
 function fInstallerTests {
 	fTestDir_Keep {
 		## install.ps1's signature check, with the OpenSSH that ships on Windows.
-		fExec "installer signing" (Join-Path $Root "cicd\tests\release\verify-sign.ps1")
-		fEcho "OK: installer signing"
+		fScriptTest -What "installer signing" -Script "cicd\tests\release\verify-sign.ps1" -InProcess
 		## ...and its temp folder step, where the shared temp folder is the one it guards against.
-		fExec "installer temp folder" (Join-Path $Root "cicd\tests\install\tempdir.ps1")
-		fEcho "OK: installer temp folder"
-		## ...and a real install, upgrade and repair, under both PowerShells. Called
-		## directly, since fExec's array would reach -Shell as a plain value.
+		fScriptTest -What "installer temp folder" -Script "cicd\tests\install\tempdir.ps1" -InProcess
+		## ...and a real install, upgrade and repair, under both PowerShells.
 		foreach ($shell in @("pwsh", "powershell")) {
-			& (Join-Path $Root "cicd\tests\install\windows.ps1") -Shell $shell
-			if ($LASTEXITCODE -ne 0) { fDie "installer on Windows ($shell) failed" }
+			fScriptTest -What "installer on Windows ($shell)" -Script "cicd\tests\install\windows.ps1" -Params @{ Shell = $shell } -InProcess
 		}
-		fEcho "OK: installer on Windows"
 	}
+}
+
+## Stage 3's test scripts. -List goes through it too.
+function fScriptTests {
+	fInstallerTests
+	## In a process of its own, since fTestDir_Use moves TEMP and TMP for the whole process.
+	fScriptTest -What "test run folder removal" -Script "cicd\tests\testdir\remove.ps1"
+	## The dogfood launcher's Start menu entry, and what a launch with nothing to do asks for.
+	fScriptTest -What "launcher Start menu entry" -Script "cicd\tests\launcher\startmenu.ps1"
+	## The wrapper a shortcut runs, finding PowerShell 7 with it gone from PATH.
+	fScriptTest -What "launcher wrapper" -Script "cicd\tests\launcher\wrapper.ps1"
+	## The guard every recursive removal goes through.
+	fScriptTest -What "safe removal" -Script "cicd\tests\saferm\win.ps1"
+}
+
+## -List: the Rust tests cargo test runs, as ID and name, from the script
+## cicd.bash asks. It needs python.
+function fListRustTests {
+	$lines = @()
+	$py = Get-Command -Name python3, python -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+	if ($py) {
+		$found = & $py.Source (Join-Path $Root "cicd\utility\test-id.py") --list 2>$null
+		if ($LASTEXITCODE -eq 0) { $lines = @($found | Where-Object { $_ }) }
+	}
+	fEcho_Clean "Rust tests (cargo test, $($lines.Count)):"
+	foreach ($line in $lines) { fEcho_Clean "  $line" }
+	if (-not $lines) { fEcho_Clean "  (not listed: no python here)" }
 }
 
 ## First `version = "x"` from the manifest.
@@ -476,7 +586,9 @@ function fBuildTarget {
 ## sha256sums file over them (parallels cicd.bash's fWriteSums).
 function fCollectArtifacts {
 	param([Parameter(Mandatory)][array]$Built, [Parameter(Mandatory)][string]$Ver)
-	if (Test-Path -LiteralPath $ReleaseArtifactDir) { Remove-Item -LiteralPath $ReleaseArtifactDir -Recurse -Force }
+	if ((Test-Path -LiteralPath $ReleaseArtifactDir) -and -not (fSafeRm_Under (Join-Path $Root "cicd\artifacts") $ReleaseArtifactDir)) {
+		fDie "could not clear $ReleaseArtifactDir (above)"
+	}
 	New-Item -ItemType Directory -Path $ReleaseArtifactDir -Force | Out-Null
 	foreach ($b in $Built) {
 		Copy-Item -LiteralPath $b.Exe -Destination (Join-Path $ReleaseArtifactDir "$ExeName-$Ver-$($b.OsArch).exe") -Force
@@ -700,8 +812,6 @@ function fLintAdvisory {
 		if ($LASTEXITCODE -ne 0) { fWarn "cargo-deny reported findings (advisory)" }
 		else { fEcho "OK: deps clean (cargo-deny)" }
 	} else { fNote "cargo-deny skipped (not installed)" }
-
-	fLintPowerShell
 }
 
 ## Known advisories against the locked dependencies. Unlike the lints above this
@@ -777,6 +887,33 @@ function fWslHome {
 	return $homeDir
 }
 
+## What the Linux half's cicd.bash is given: the matching run, and the options
+## that are its alone.
+function fWslArgs {
+	$cicdArgs = [System.Collections.Generic.List[string]]::new()
+	if ($BacklogRunQuick) {
+		$cicdArgs.Add("--backlog-run-quick")
+		foreach ($area in $Areas) { $cicdArgs.Add($area) }
+	} else {
+		## --no-fmt: formatting is the Windows half's job and it has already run. The
+		## rest are stages this side owns or has already done.
+		$cicdArgs.AddRange([string[]]@("-y", "--no-sync", "--no-fmt", "--no-windows", "--no-dogfood", "--no-publish"))
+		if ($MergeGate)          { $cicdArgs.Add("--merge-gate") }
+		elseif ($BacklogRunFull) { $cicdArgs.Add("--backlog-run-full") }
+		if ($Quick)       { $cicdArgs.Add("--quick") }
+		if ($Long)        { $cicdArgs.Add("--long") }
+		if ($NoArm)       { $cicdArgs.Add("--no-arm") }
+		if ($NoPackage)   { $cicdArgs.Add("--no-package") }
+		if ($NoLeakcheck) { $cicdArgs.Add("--no-leakcheck") }
+		elseif ($Leakcheck) { $cicdArgs.Add("--leakcheck") }
+	}
+	if ($NoRemote)    { $cicdArgs.Add("--no-remote") }
+	if ($NoContainer) { $cicdArgs.Add("--no-container") }
+	if ($KeepTemp)    { $cicdArgs.Add("--keep-temp") }
+	if ($List)        { $cicdArgs.Add("--list") }
+	return , $cicdArgs.ToArray()
+}
+
 ## Anything environmental warn-skips (no WSL, no toolchain, tree not visible); an
 ## actual failure of the Linux pipeline aborts the run like any other stage.
 function fWslLinuxHalf {
@@ -809,15 +946,7 @@ function fWslLinuxHalf {
 	## Keyed by app so two projects delegating from one box don't share a dir.
 	$wslTarget = "$wslHome/.cache/$AppName-wsl-target"
 
-	## --no-fmt: formatting is the Windows half's job and it has already run. The
-	## rest are stages this side owns or has already done.
-	$cicdArgs = @("-y", "--no-sync", "--no-fmt", "--no-windows", "--no-dogfood", "--no-publish")
-	if ($Quick)     { $cicdArgs += "--quick" }
-	if ($NoArm)     { $cicdArgs += "--no-arm" }
-	if ($NoPackage) { $cicdArgs += "--no-package" }
-	if ($NoLeakcheck) { $cicdArgs += "--no-leakcheck" }
-	elseif ($Leakcheck) { $cicdArgs += "--leakcheck" }
-	if ($NoRemote)  { $cicdArgs += "--no-remote" }
+	$cicdArgs = fWslArgs
 
 	fNote "distro ......: $distro"
 	fNote "tree ........: $wslRepo (this one, not a second checkout)"
@@ -831,10 +960,46 @@ function fWslLinuxHalf {
 }
 
 
+## -BacklogRunQuick: the fast checks to run before a commit, every area or the
+## ones named, then exit. Nothing is rewritten, built for release or published.
+function fQuickRun {
+	$run = @(if ($Areas.Count) { $Areas } else { $QuickAreas })
+	$step = 0
+	if ($List) {
+		fEcho_Clean "$AppName backlog quick run ($($run -join ' ')):"
+		foreach ($area in $run) { $step++; fEcho_Clean "  Quick $step/$($run.Count)  $($QuickTitles[$area])" }
+		if ($run -contains 'tests') { fListRustTests }
+	} else {
+		foreach ($area in $run) {
+			$step++
+			fSection "Quick $step/$($run.Count)  $($QuickTitles[$area])"
+			fSetJobs
+			switch ($area) {
+				'fmt'     { fExec -What "format check" -File "cargo" -CmdArgs @("fmt", "--check"); fEcho "OK: formatting clean" }
+				'clippy'  { fLintAdvisory }
+				'tests'   { fExec -What "tests" -File "cargo" -CmdArgs @("test"); fEcho "OK: tests passed" }
+				'scripts' { fLintPowerShell }
+				'docs'    { fNote "the docs checks are cicd.bash's$(if ($Wsl) { '; the Linux half runs them' } else { '; -Wsl runs them here' })" }
+			}
+		}
+	}
+	if ($Wsl) {
+		fSection "Linux half (WSL2)"
+		fSetJobs
+		fWslLinuxHalf
+	}
+	if (-not $List) { fSection "$AppName backlog quick run: PASSED." }
+	fEcho_Clean
+}
+
+
 #==============================================================================
 # Entry point
 
 function fMain {
+	$refused = fRunFlags
+	if ($refused) { [Console]::Error.WriteLine($refused); exit 2 }
+
 	## Toolchain PATH: rustup (cross targets, edition 2024) then the mingw linker.
 	$env:PATH = "$CargoBin;$MingwBin;$env:PATH"
 	fSetJobs
@@ -842,27 +1007,10 @@ function fMain {
 	Set-Location -LiteralPath $Root
 	$stamp = Get-Date -Format "yyyyMMdd-HHmmss"
 
-	## Gate mode: fmt --check + clippy (advisory) + tests, then exit. Fast local
-	## stand-in for a hosted CI check; nothing is mutated or published.
-	if ($Gate) {
-		fSection "Gate 1/3  Format check"
-		fSetJobs
-		fExec -What "format check" -File "cargo" -CmdArgs @("fmt", "--check")
-		fEcho "OK: formatting clean"
-		fSection "Gate 2/3  Lints (advisory)"
-		fSetJobs
-		fLintAdvisory
-		fSection "Gate 3/3  Tests"
-		fSetJobs
-		fExec -What "tests" -File "cargo" -CmdArgs @("test")
-		fEcho "OK: tests passed"
-		fSection "$AppName gate: PASSED."
-		fEcho_Clean
-		return
-	}
+	if ($BacklogRunQuick) { fQuickRun; return }
 
 	## Warn (non-gating) on any drifted/missing pinned helper tool.
-	fCheckToolPins
+	if (-not $List) { fCheckToolPins }
 
 	## Resolve the publish commit message: -Message wins, then an auto stamp when
 	## unattended; interactive runs capture it at the preflight prompt below. An
@@ -875,10 +1023,11 @@ function fMain {
 	fEcho_Clean
 	fEcho_Clean "$AppName Windows CI/CD"
 	fEcho_Clean
+	if ($FullRunName) { fEcho_Clean "Run .........: $FullRunName, every check of the default run$(if ($Long) { ' and -Long' }); no sync, dogfood, publish or prompt" }
 	fEcho_Clean "Repo root ...: $Root"
 	fEcho_Clean "Jobs ........: $CicdMaxJobs of $Cores cores"
 	fEcho_Clean "Remote sync .: $(if ($NoSync) { '(skipped)' } else { 'fetch + fast-forward check' })"
-	fEcho_Clean "Format ......: $(if ($NoFmt) { '(skipped)' } else { 'cargo fmt' })"
+	fEcho_Clean "Format ......: $(if ($NoFmt) { '(skipped)' } elseif ($FmtCheck) { 'cargo fmt --check' } else { 'cargo fmt' })"
 	fEcho_Clean "Release .....: x86_64 msvc + gnu$(if ($NoArm -or $Quick) { '' } else { ' + ARM64 (if toolchain present)' })"
 	fEcho_Clean "Packages ....: $(if ($NoPackage -or $Quick) { '(skipped)' } else { 'NSIS installers (if makensis present)' })"
 	if ($Wsl) { fEcho_Clean "Linux half ..: WSL2 (.deb/.rpm, profiler, scroll harness)" }
@@ -888,6 +1037,7 @@ function fMain {
 		if ($wslSeen) { fEcho_Clean "Linux half ..: (not requested - $wslSeen is here, -Wsl adds it)" }
 		else          { fEcho_Clean "Linux half ..: (no WSL2 on this box)" }
 	}
+	if ($Long) { fEcho_Clean "Long steps ..: none on Windows$(if ($Wsl) { '; the Linux half gets --long' } else { '; -Wsl hands --long to the Linux half' })" }
 	fEcho_Clean "Dogfood .....: $(if ($NoDogfood) { '(skipped)' } else { "$DogfoodDir\$DogfoodFixedExe" })"
 	if ($NoPublish)          { fEcho_Clean "Publish .....: (skipped)" }
 	elseif ($publishMsg)     { fEcho_Clean "Publish .....: commit + push current branch (hands-off: `"$publishMsg`")" }
@@ -895,6 +1045,20 @@ function fMain {
 	fEcho_Clean
 	fEcho_Clean "Fail-fast: any error aborts before the next stage."
 	fEcho_Clean
+
+	## -List: the tests stage 3 runs, then the Linux half's own list, and nothing else.
+	if ($List) {
+		fEcho_Clean "Stage 3 tests:"
+		fListRustTests
+		fEcho_Clean "Test scripts:"
+		fScriptTests
+		if ($Wsl) {
+			fSection "Linux half (WSL2)"
+			fWslLinuxHalf
+		}
+		fEcho_Clean
+		return
+	}
 
 	## Capture the commit message up front so the run finishes unattended. This is
 	## the natural place to bail on the common (publish) path - Ctrl+C aborts.
@@ -947,6 +1111,7 @@ function fMain {
 	fSection "1  Format"
 	fSetJobs
 	if ($NoFmt) { fNote "format skipped" }
+	elseif ($FmtCheck) { fExec -What "format check" -File "cargo" -CmdArgs @("fmt", "--check"); fEcho "OK: formatting clean" }
 	else { fExec -What "format" -File "cargo" -CmdArgs @("fmt"); fEcho "OK: formatted" }
 
 	## Stage 2: debug build.
@@ -960,17 +1125,9 @@ function fMain {
 	fSetJobs
 	fExec -What "tests" -File "cargo" -CmdArgs @("test")
 	fEcho "OK: tests passed"
-	fInstallerTests
-	## In a process of its own, since fTestDir_Use moves TEMP and TMP for the whole process.
-	fExec -What "test run folder removal" -File "pwsh" -CmdArgs @("-NoProfile", "-NonInteractive", "-File", (Join-Path $Root "cicd\tests\testdir\remove.ps1"))
-	fEcho "OK: test run folder removal"
-	## The dogfood launcher's Start menu entry, and what a launch with nothing to do asks for.
-	fExec -What "launcher Start menu entry" -File "pwsh" -CmdArgs @("-NoProfile", "-NonInteractive", "-File", (Join-Path $Root "cicd\tests\launcher\startmenu.ps1"))
-	fEcho "OK: launcher Start menu entry"
-	## The wrapper a shortcut runs, finding PowerShell 7 with it gone from PATH.
-	fExec -What "launcher wrapper" -File "pwsh" -CmdArgs @("-NoProfile", "-NonInteractive", "-File", (Join-Path $Root "cicd\tests\launcher\wrapper.ps1"))
-	fEcho "OK: launcher wrapper"
+	fScriptTests
 	fLintAdvisory
+	fLintPowerShell
 	fAdvisoryScan
 
 	## Stage 4: release builds (x86_64 msvc + gnu always; ARM64 when ready).
@@ -1010,6 +1167,12 @@ function fMain {
 	if ($NoPublish) { fNote "publish skipped" }
 	else { fPublish -Msg $publishMsg }
 
+	## -KeepTemp: the run's test folder stays. A failed run keeps it anyway.
+	if ($KeepTemp -and $script:TestDirOwned) {
+		fNote "kept the run's temp folder (-KeepTemp): $($script:TestDirOwned)"
+		$script:TestDirOwned = $null
+	}
+
 	fSection "$AppName Windows CI/CD: done."
 	fEcho_Clean
 }
@@ -1023,6 +1186,10 @@ try {
 
 
 ##	History:
+##		- 2026-10-28: cicd.bash's runs: -BacklogRunQuick with its areas,
+##		  -BacklogRunFull, -MergeGate, -Long, -NoContainer, -KeepTemp and -List.
+##		  -Gate and -Ci are other names, -Slow too. The Linux half gets each.
+##		  The release artifacts folder is cleared through the safe removal guard.
 ##		- 2026-10-26: Jobs per step, a quarter when busy, at BelowNormal, or Idle
 ##		  for a hard step. The build number is the commit's time on a dirty tree too.
 ##		- 2026-10-25: -NoRemote, passed on to the Linux half.
