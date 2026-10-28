@@ -445,7 +445,9 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - CICD reset: vmKt6m put back through the VM state helper
 	- ID: 2026102507245265
 	- Type: Task
-	- Status: Queued
+	- Status: Waiting on automated testing
+		- 20261028: In on `silkterm-private` branch `wip/rnd1028-2026102507245265` (30c64f1), since that repo has only `main` and no round branch. It needs merging there.
+	- Needs external testing: With `@vmstate` and `mac b26,vmKt6m` in `privrig.conf`, b26 off and vmKt6m paused or off: the private runner builds on vmKt6m and leaves it as it found it. Its tests there are unproven, since vmKt6m has no Metal.
 	- Priority: High
 	- Opened: 20261025-072452
 	- Opened by: CC
@@ -454,11 +456,21 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Requirements:
 		- The private runner's Mac part puts vmKt6m back the way it found it, through the VM state helper. The runner is in `silkterm-private`.
 		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
+	- Progress log:
+		- 20261028: `privrig.conf` takes an `@vmstate <command>` line, as `winrig.conf` does. With it, a job's box is held through the VM state helper, which wakes a VM that's paused or off and puts it back after. A VM that never wakes is a skip. A job's host may list fallbacks, `mac b26,vmKt6m`, tried in order.
+		- 20261028: The box config is outside the repo and still has no `@vmstate` line, so nothing changes until it's added.
+	- Decisions:
+		- 20261028: Fallback boxes in the job's line, so vmKt6m can stand in when b26 is off, with b26 still first for the timing tests. Without it vmKt6m would only run if named alone.
+		- 20261028: A non-VM box behind the helper is left alone by it, so one code path covers b26 and vmKt6m.
+	- Verified: 20261028. The new stand-in test (Eu0WzDd), 12 of its 19 checks failing against the old runner and all passing after. shellcheck on both files. The real helper's `status` output matches what the runner reads.
+	- Test case: `silkterm-private` `cicd/tests/hosts/run.bash` (Eu0WzDd).
+	- Branch: `silkterm-private` `wip/rnd1028-2026102507245265`
 
 - CICD reset: a `--version` smoke run of the Linux ARM64 build
 	- ID: 2026102507245270
 	- Type: Task
-	- Status: Queued
+	- Status: Waiting on automated testing
+	- Needs local test suite run?: One container full run, once `armrig.conf` is in place, to see the `arm64 smoke run` step's `OK` line after the container. Without that file the step is a `SKIP`.
 	- Priority: High
 	- Opened: 20261025-072452
 	- Opened by: CC
@@ -467,6 +479,16 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Requirements:
 		- The Linux ARM64 build gets a `--version` smoke run on the arm64 Linux VM, held and put back through the VM state helper. Nothing runs it now.
 		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
+	- Progress log:
+		- 20261028: `cicd/utility/arm-smoke.bash` copies the Linux ARM64 build to the arm64 box, runs `--version` there, and checks the first line has the native build's name, version and build number. It runs after stage 5, or after the container. `--quick`, `--no-arm` and `--no-remote` leave it out, and the plan has a line for it.
+		- 20261028: The box, lock and VM state helper come from `~/.config/silkterm/armrig.conf`, outside the repo like `winrig.conf`. That file doesn't exist yet. With no config, or the box down, held or never waking, the step is a `SKIP`.
+	- Decisions:
+		- 20261028: The expected line comes from the native build's own `--version`, so a stale ARM64 binary fails, without hard-coding the format.
+		- 20261028: A config file of its own, so the lock and helper names stay out of the repo.
+	- Verified: 20261028. On vmDebARM64, paused at the start, with the real helper and the beta3 ARM64 build: resumed, printed `SilkTerm v1.0.0-beta3 build defw9`, passed, and paused again, in 9 s. The stand-in test (Eu0XhGL) and the engine test's new step and plan checks. shellcheck, test ID check, `--backlog-run-quick docs`.
+	- Test case: `cicd/tests/armsmoke/run.bash` (Eu0XhGL), and the arm64 smoke checks in `cicd/tests/engine/run.bash`.
+		- Swept: the other steps that reach a box, the Windows scenarios and the private runner, skip under the same flags and in the container. `--no-remote` help and install.md name the new step.
+	- Branch: rnd1028
 
 - CICD reset: standard flags
 	- ID: 2026102416233807

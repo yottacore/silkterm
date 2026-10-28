@@ -51,8 +51,9 @@
 ##	                       what a Windows box's own pipeline delegates here
 ##	   --no-package        skip the packages stage (.deb/.rpm/installer)
 ##	   --no-private        skip the private runner (macOS, Microsoft Store)
-##	   --no-remote         skip every other box: the Windows scenarios and the
-##	                       private runner's Mac and Microsoft Store jobs
+##	   --no-remote         skip every other box: the Windows scenarios, the ARM64
+##	                       smoke run and the private runner's Mac and Microsoft
+##	                       Store jobs
 ##	   --no-fuzz           skip the fuzz soak (the short one in the test run still runs)
 ##	   --no-asan           skip the test suite under ASan and LSan
 ##	   --no-tsan           skip the test suite under TSan
@@ -827,6 +828,28 @@ fWinGuiScenarios(){
 		fDie "a windows gui scenario failed"
 	fi
 }
+## The Linux ARM64 build's --version on the arm64 VM, held, woken and put back
+## through the VM state helper. Its first line has to match the native build's
+## name, version and build number. A box that isn't there is a skip, with its SKIP
+## line in this run's list. Skipped under --quick, --no-remote and --no-arm, and
+## inside the container, which has no way to the boxes; the run outside takes it up.
+fArmSmoke(){
+	local pair art="" expect="" rc=0
+	if ((quick || listing)); then return 0; fi
+	for pair in "${builtArts[@]}"; do [[ "${pair%%|*}" != linux-arm64 ]] || art="${pair#*|}"; done
+	[[ -n "${art}" ]] || return 0
+	if [[ -n "${SILK_CICD_IN_CONTAINER:-}" ]]; then fEcho_Clean "arm64 smoke run runs outside the container"; return 0; fi
+	if ((noRemote)); then fEcho_Clean "arm64 smoke run skipped (--no-remote)"; return 0; fi
+	fEcho_Clean "arm64 smoke run ..."
+	expect="$(env -u DISPLAY -u WAYLAND_DISPLAY "${RELEASE_NATIVE_BIN}" --version </dev/null | head -1 | cut -d' ' -f1-4)" || true
+	[[ "${expect}" == *" build "* ]] || fDie "the native build's --version gave no build line: '${expect}'"
+	local -ri before="$(fSkipCount)"
+	SILK_CICD_SKIPS="${skipLog}" "${here}/utility/arm-smoke.bash" "${art}" "${expect}" </dev/null || rc=$?
+	case "${rc}" in
+		0|3) fStepDone "arm64 smoke run" "${before}" ;;
+		*) fDie "the Linux ARM64 build's --version failed on the arm64 box" ;;
+	esac
+}
 ## Stage 3's test scripts and harnesses. --list goes through it too, with each
 ## test printing its line rather than running.
 fScriptTests(){
@@ -939,6 +962,8 @@ fScriptTests(){
 	fRunTest cicd/tests/pylint/run.bash "Python lint"
 	## The Windows runner, which steps over a box that is off.
 	fRunTest cicd/tests/win-remote/run.bash "windows runner"
+	## The arm64 smoke run, which wakes the VM and puts it back.
+	fRunTest cicd/tests/armsmoke/run.bash "arm64 smoke runner"
 	## The parts of the Windows pipeline that run anywhere.
 	fRunTest cicd/tests/cicd-win/run.bash "windows pipeline pieces" "windows pipeline test failed"
 	fCheckDocs
@@ -1163,6 +1188,16 @@ if ((BUILD_CROSS)) && ((${#CROSS_TARGETS[@]})); then
 	for t in "${CROSS_TARGETS[@]}"; do fEcho_Clean "    - ${t%%|*}"; done
 else
 	fEcho_Clean "Release (cross) .....: (skipped)"
+fi
+## --quick has no ARM64 build either.
+if ! ((BUILD_CROSS)) || [[ " ${CROSS_TARGETS[*]:-} " != *"|linux-arm64|"* ]]; then
+	fEcho_Clean "ARM64 smoke run .....: (no Linux ARM64 build)"
+elif ((noRemote)); then
+	fEcho_Clean "ARM64 smoke run .....: (skipped --no-remote)"
+elif [[ -n "${SILK_CICD_IN_CONTAINER:-}" ]]; then
+	fEcho_Clean "ARM64 smoke run .....: (run outside the container)"
+else
+	fEcho_Clean "ARM64 smoke run .....: --version on the arm64 box, woken and put back if it's a VM$( ((container)) && echo ', here after the container')"
 fi
 if ((PACKAGE_ENABLE)) && ((! quick)); then
 	## Name only what stage 5 will actually leave behind. The installer wraps a
@@ -1874,6 +1909,7 @@ fBuildTestRelease(){
 		fEcho "OK: ${#builtArts[@]} release artifact(s) + ${sums} -> ${RELEASE_ARTIFACT_DIR}/"
 		((BUILD_CROSS)) || fEcho_Clean "note: cross targets skipped - artifact set is partial (native only)"
 	fi
+	fArmSmoke
 
 	fSection "6/8  Packages"
 	fJobs
@@ -1896,6 +1932,7 @@ if ((container)); then
 	## What needs this box's own trees and keys, or the card.
 	fContentScrub
 	fWinGuiScenarios
+	fArmSmoke
 	fRenderNodeTest
 	fSection "4/8  Profiler (here)"
 	fJobs
@@ -2035,6 +2072,7 @@ fEcho_Clean
 
 
 ##	History:
+##		- 2026-10-28: The Linux ARM64 build's --version runs on the arm64 VM.
 ##		- 2026-10-28: Recursive removals go through the guard in saferm.bash, and the
 ##		              release artifacts folder only under cicd/artifacts.
 ##		- 2026-10-26: --list prints the steps and test IDs a run would take. --keep-temp

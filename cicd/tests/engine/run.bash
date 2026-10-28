@@ -376,10 +376,46 @@ fCheck "or when the run has no list" test -z "$(fSkipSummary)" -a "$(fSkipCount)
 fCheck "and the run says it last, after the sweep's line" \
 	bash -c 'grep -A1 -F "fEcho_Clean \"\$(fSweep_Summary)\"" "$1" | grep -qx "fSkipSummary"' _ "${engine}"
 
+## The ARM64 smoke run: its own line, SKIP when its box wasn't there.
+eval "$(fLift '^fArmSmoke(){' '^}')"
+here="${work}/armhere"; mkdir -p "${here}/utility"
+cat >"${here}/utility/arm-smoke.bash" <<'STUB'
+#!/usr/bin/env bash
+echo "ran ${2}" >>"${STUB_RAN}"
+if [[ -n "${STUB_SKIP:-}" ]]; then echo "SKIP arm64 smoke: box unreachable" >>"${SILK_CICD_SKIPS}"; exit 3; fi
+exit "${STUB_EXIT:-0}"
+STUB
+printf '#!/usr/bin/env bash\necho "SilkTerm v9.9.9 build abcde (2026-10-28)"\necho "Copyright"\n' >"${work}/native"
+chmod +x "${here}/utility/arm-smoke.bash" "${work}/native"
+fArm(){  ## fArm <noRemote> <arts>: sets out; skipLog is a fresh list
+	local quick=0 listing=0 noRemote="${1}" SILK_CICD_IN_CONTAINER="" RELEASE_NATIVE_BIN="${work}/native"
+	local -a builtArts=(); read -ra builtArts <<<"${2}"
+	skipLog="${work}/skips.txt"; : >"${skipLog}"; : >"${STUB_RAN}"
+	out="$(fArmSmoke 2>&1)" || true
+}
+fArm 0 "linux-x86_64|a linux-arm64|b"
+fCheck "the ARM64 build gets a smoke run" test "$(cat "${STUB_RAN}")" = "ran SilkTerm v9.9.9 build abcde"
+fCheck "and its line is OK" test "$(tail -1 <<<"${out}")" = "    OK: arm64 smoke run"
+STUB_SKIP=1 fArm 0 "linux-arm64|b"
+fCheck "with its box not there, the line is a SKIP" test "$(tail -1 <<<"${out}")" = "    SKIP: arm64 smoke run, 1 not run (SKIP lines above)"
+STUB_EXIT=1 fArm 0 "linux-arm64|b"
+fCheck "a smoke run that failed stops the run" test "$(tail -1 <<<"${out}")" = "DIE: the Linux ARM64 build's --version failed on the arm64 box"
+fArm 1 "linux-arm64|b"
+fCheck "--no-remote leaves it out, and says so" test "${out}" = "arm64 smoke run skipped (--no-remote)"
+fCheck "without starting it" test ! -s "${STUB_RAN}"
+fArm 0 "linux-x86_64|a"
+fCheck "with no ARM64 build there's nothing to run" test -z "${out}" -a ! -s "${STUB_RAN}"
+armPlan="$(n="$(grep -m1 -nF '"ARM64 smoke run .....: (no Linux ARM64 build)"' "${engine}" | cut -d: -f1)"; sed -n "$((n - 1)),\$ { p; /^fi\$/q }" "${engine}")"
+fArmPlan(){ local quick=0 noRemote="${1}" container=0 BUILD_CROSS=1 SILK_CICD_IN_CONTAINER=""; local -a CROSS_TARGETS=(); read -ra CROSS_TARGETS <<<"${2}"; eval "${armPlan}"; }
+fCheck "the plan has an ARM64 smoke run line" test "$(fArmPlan 0 "x|linux-arm64|y")" = "ARM64 smoke run .....: --version on the arm64 box, woken and put back if it's a VM"
+fCheck "which says --no-remote left it out" test "$(fArmPlan 1 "x|linux-arm64|y")" = "ARM64 smoke run .....: (skipped --no-remote)"
+fCheck "or that there's no ARM64 build" test "$(fArmPlan 0 "x|linux-x86_64|y")" = "ARM64 smoke run .....: (no Linux ARM64 build)"
+
 if ((failures)); then echo "${failures} failed"; exit 1; fi
 echo "all passed"
 
 ##	History:
+##		- 20261028: The ARM64 smoke run's step and plan line.
 ##		- 20261026: --backlog-run-quick, --backlog-run-full, --merge-gate and their other names.
 ##		- 20261025: --no-remote, and the SKIP lines in a step's line and at the end.
 ##		- 20261022: Where CodeQL runs, and --codeql, off by default.
