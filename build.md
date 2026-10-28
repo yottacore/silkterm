@@ -132,9 +132,9 @@ wgpu uses the Metal backend automatically. No extra system packages are needed b
 
 - The profiler draws on the card through a headless sway with its own Xwayland, on the card's render node, so nothing shows on the desktop. Without sway, Xwayland or a render node it falls back to a private Xvfb, which renders in software, and says so.
 
-- `cicd/cicd.bash --gate` runs the merge gate inside too.
+- `cicd/cicd.bash --backlog-run-quick` runs inside too.
 
-- A full run with `--no-container` still uses the image for two steps. The test suite under AddressSanitizer and again under ThreadSanitizer need the nightly that `rust-toolchain.toml` dates, and only the image has it. `--no-asan` and `--no-tsan` skip those steps, and then the run needs no docker.
+- A full run with `--no-container` still uses the image for two steps. The test suite under AddressSanitizer, and under ThreadSanitizer with `--long`, need the nightly that `rust-toolchain.toml` dates, and only the image has it. `--no-asan` and `--no-tsan` skip those steps, and then the run needs no docker.
 
 ## Formatting
 

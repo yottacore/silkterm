@@ -27,8 +27,8 @@
 ##	   3. regression tests + lints + fuzz soak (clippy for Linux, Windows and macOS
 ##	      and the advisory scan gating, the rest of cargo-deny not; the tests again
 ##	      under ASan and LSan, in the container image; the leak checks, which
-##	      are the heap-growth test under dhat; the tests again under TSan, in the
-##	      image too; scroll harness)
+##	      are the heap-growth test under dhat; under --long, the tests again
+##	      under TSan, in the image too; scroll harness)
 ##	   4. profiler (flamegraph SVG; non-gating artifact - see failure policy), on
 ##	      the card through a headless sway, and always on this box
 ##	   5. release build (native + cross targets; optimized, for packaging + dogfood),
@@ -56,11 +56,15 @@
 ##	                       Store jobs
 ##	   --no-fuzz           skip the fuzz soak (the short one in the test run still runs)
 ##	   --no-asan           skip the test suite under ASan and LSan
-##	   --no-tsan           skip the test suite under TSan
+##	   --no-tsan           skip the test suite under TSan, under --long
 ##	   --no-leakcheck      skip the slow leak checks (the heap-growth test under dhat, CodeQL)
 ##	   --leakcheck         run the leak checks, under --quick too; not with
 ##	                       --backlog-run-quick
 ##	   --codeql            add CodeQL to the leak checks (off by default; slow)
+##	   --long              everything, the steps that take hours too: the test
+##	                       suite under TSan and CodeQL. Not with --quick or
+##	                       --backlog-run-quick
+##	   --slow              another name for --long
 ##	   --no-profile        skip the profiler stage
 ##	   --no-dogfood        skip the dogfood install
 ##	   --no-publish        skip the git backup + publish stage
@@ -96,7 +100,7 @@
 ##	                       and print where they are
 ##	   --list              print the steps and test IDs the other options would run,
 ##	                       and run nothing
-##	  With no options every stage runs.
+##	  With no options every stage runs, in about an hour; --long adds the rest.
 ## - Reuse: copy the cicd/ directory into another project and edit config.bash.
 
 ##	History: At bottom of script.
@@ -157,7 +161,7 @@ cd "${root}"
 stamp="$(date +%Y%m%d-%H%M%S)"
 
 ## Parse options.
-assumeYes=0; quiet=0; quick=0; noRemote=0; skipLog=""; gate=0; gateAreas=(); fullRun=0; fullRunName=""; fmtCheck=0; leakcheck=1; leakAsked=0; codeql=0; demoAsked=0; noArm=0; noWindows=0; sync=1; cliMessage=""; container="${useContainer:-0}"; noContainer=0; keepTemp=0; listing=0; innerArgs=()
+assumeYes=0; quiet=0; quick=0; long=0; noRemote=0; skipLog=""; gate=0; gateAreas=(); fullRun=0; fullRunName=""; fmtCheck=0; leakcheck=1; leakAsked=0; codeql=0; demoAsked=0; noArm=0; noWindows=0; sync=1; cliMessage=""; container="${useContainer:-0}"; noContainer=0; keepTemp=0; listing=0; innerArgs=()
 while (($#)); do case "${1}" in
 	-y|--yes)                 assumeYes=1; shift ;;
 	-q|--quiet)               quiet=1; assumeYes=1; shift ;;   ## quiet + unattended; publish runs quiet too
@@ -184,6 +188,7 @@ while (($#)); do case "${1}" in
 	--demo)                   DEMO_ENABLE=1; demoAsked=1; shift ;;
 	--no-demo)                DEMO_ENABLE=0; shift ;;
 	--quick)                  quick=1; noArm=1; PROFILE_ENABLE=0; PACKAGE_ENABLE=0; FUZZ_SECS=0; innerArgs+=("${1}"); shift ;;   ## skip the slow stages
+	--long|--slow)            long=1; innerArgs+=(--long); shift ;;   ## the steps that take hours too
 	--no-fuzz)                FUZZ_SECS=0; innerArgs+=("${1}"); shift ;;
 	--no-asan)                ASAN_CMD=(); innerArgs+=("${1}"); shift ;;
 	--no-tsan)                TSAN_CMD=(); innerArgs+=("${1}"); shift ;;
@@ -201,6 +206,11 @@ if ((noContainer)); then container=0; fi
 gateAreasAll="fmt clippy tests scripts docs"
 if ((gate && fullRun)); then echo "--backlog-run-quick and ${fullRunName} are different runs; pick one" >&2; exit 2; fi
 if ((fullRun && quick)); then echo "${fullRunName} runs every check of the default run, so not --quick" >&2; exit 2; fi
+if ((long && quick)); then echo "--long runs everything, so not --quick" >&2; exit 2; fi
+if ((long && gate)); then echo "--backlog-run-quick runs the fast checks only, so not --long" >&2; exit 2; fi
+## TSan and CodeQL take about half an hour each, so they wait for --long, which
+## keeps the default run to about an hour.
+if ((long)); then codeql=1; fi
 for area in "${gateAreas[@]}"; do case " ${gateAreasAll} " in *" ${area} "*) ;; *) echo "unknown area: ${area} (areas: ${gateAreasAll})" >&2; exit 2 ;; esac; done
 if ((gate && ${#gateAreas[@]} == 0)); then read -r -a gateAreas <<< "${gateAreasAll}"; fi
 if ((fullRun)); then assumeYes=1; sync=0; DOGFOOD_DESTS=(); GIT_PUBLISH=(); DEMO_ENABLE=0; fmtCheck=1; innerArgs+=(--fmt-check); fi
@@ -706,14 +716,15 @@ if ((! container && ! gate && ! quick)) && ((${#ASAN_CMD[@]})) && [[ -z "${SILK_
 	if command -v "${docker}" >/dev/null 2>&1; then asanInImage=1
 	else asanSkipped="no docker here for the image with the nightly"; fi
 fi
-## The TSan run the same way, on the same nightly.
+## The TSan run the same way, on the same nightly, under --long.
 tsanInImage=0; tsanSkipped=""
-if ((! container && ! gate && ! quick)) && ((${#TSAN_CMD[@]})) && [[ -z "${SILK_CICD_IN_CONTAINER:-}" ]]; then
+if ((! container && ! gate && ! quick && long)) && ((${#TSAN_CMD[@]})) && [[ -z "${SILK_CICD_IN_CONTAINER:-}" ]]; then
 	if command -v "${docker}" >/dev/null 2>&1; then tsanInImage=1
 	else tsanSkipped="no docker here for the image with the nightly"; fi
 fi
 ## CodeQL, one of the leak checks, is in the image only too. Off unless --codeql
-## asks, since a run takes over half an hour and 19 GB here (2026102211462005).
+## or --long asks, since a run takes over half an hour and 19 GB here
+## (2026102211462005).
 codeqlInImage=0; codeqlSkipped=""
 if ((! container && leakcheck && codeql)) && [[ -n "${CODEQL_SUITE:-}" && -z "${SILK_CICD_IN_CONTAINER:-}" ]]; then
 	if command -v "${docker}" >/dev/null 2>&1; then codeqlInImage=1
@@ -1124,7 +1135,7 @@ fEcho_Clean
 fEcho_Clean "Host ................: $(fHostLine)"
 if ((container)); then fEcho_Clean "Container ...........: stages 1-6 in ${containerImage}, target dir ${containerTarget}; the rest here"; fi
 fEcho_Clean "Repo root ...........: ${root}"
-if ((fullRun)); then fEcho_Clean "Run .................: ${fullRunName}, every check of the default run; no sync, dogfood, demo, publish or prompt"; fi
+if ((fullRun)); then fEcho_Clean "Run .................: ${fullRunName}, every check of the default run$( ((long)) && echo ' and --long'); no sync, dogfood, demo, publish or prompt"; fi
 fEcho_Clean "Remote sync .........: $( ((sync)) && echo 'fetch + fast-forward check' || echo '(skipped)')"
 fEcho_Clean "Format ..............: ${FMT_CMD[*]:-(skipped)}"
 fEcho_Clean "Debug build .........: ${DEBUG_BUILD_CMD[*]}"
@@ -1144,7 +1155,7 @@ else
 	fEcho_Clean "ASan + LSan .........: the tests again on ${SANITIZER_TOOLCHAIN}, in ${containerImage:-this container}"
 fi
 if ((leakcheck)); then
-	if ((! codeql)); then codeqlLine="CodeQL (off; --codeql adds it)"
+	if ((! codeql)); then codeqlLine="CodeQL (off; --codeql or --long adds it)"
 	elif [[ -n "${codeqlSkipped}" ]]; then codeqlLine="CodeQL (skipped, ${codeqlSkipped})"
 	else codeqlLine="CodeQL"; fi
 	fEcho_Clean "Leak checks .........: heap growth under dhat, ${codeqlLine}, reports to ${LEAKCHECK_OUT_DIR}"
@@ -1157,6 +1168,8 @@ if ((${#TSAN_CMD[@]} == 0)); then
 	fEcho_Clean "TSan ................: (skipped)"
 elif ((quick)); then
 	fEcho_Clean "TSan ................: (skipped --quick)"
+elif ((! long)); then
+	fEcho_Clean "TSan ................: (off; --long adds it)"
 elif [[ -n "${tsanSkipped}" ]]; then
 	fEcho_Clean "TSan ................: (skipped, ${tsanSkipped})"
 else
@@ -1673,10 +1686,11 @@ fRunAsan(){
 }
 
 ## Stage 3's test suite under TSan (cicd/utility/tsan.bash), after the leak
-## checks, in the image like the ASan run.
+## checks, in the image like the ASan run. About 28 minutes, so only under --long.
 fRunTsan(){
 	if ((${#TSAN_CMD[@]} == 0)); then fEcho_Clean "TSan run skipped"; return 0; fi
 	if ((quick)); then fEcho_Clean "TSan run skipped (--quick)"; return 0; fi
+	if ((! long)); then fEcho_Clean "TSan run off (--long adds it)"; return 0; fi
 	if [[ -n "${tsanSkipped}" ]]; then fEcho "WARNING: TSan run skipped: ${tsanSkipped}"; return 0; fi
 	fJobs hard
 	if [[ -n "${SILK_CICD_IN_CONTAINER:-}" ]]; then
@@ -1713,7 +1727,7 @@ fRunLeakcheck(){
 ## binary links (cicd/utility/codeql.bash), in the image like the ASan run.
 fRunCodeql(){
 	local -r outDir="${1}" why="CodeQL found something new, or couldn't run (above)"
-	if ((! codeql)); then fEcho_Clean "CodeQL off (--codeql adds it)"; return 0; fi
+	if ((! codeql)); then fEcho_Clean "CodeQL off (--codeql or --long adds it)"; return 0; fi
 	if [[ -z "${CODEQL_SUITE:-}" ]]; then fEcho_Clean "CodeQL skipped"; return 0; fi
 	if [[ -n "${codeqlSkipped}" ]]; then fEcho "WARNING: CodeQL skipped: ${codeqlSkipped}"; return 0; fi
 	if [[ -n "${SILK_CICD_IN_CONTAINER:-}" ]]; then
@@ -2072,6 +2086,8 @@ fEcho_Clean
 
 
 ##	History:
+##		- 2026-10-28: --long, or --slow, for the steps that take hours. TSan moved
+##		              there from the default run, and CodeQL comes on with it.
 ##		- 2026-10-28: The Linux ARM64 build's --version runs on the arm64 VM.
 ##		- 2026-10-28: Recursive removals go through the guard in saferm.bash, and the
 ##		              release artifacts folder only under cicd/artifacts.

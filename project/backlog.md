@@ -516,7 +516,8 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - CICD reset: `--long`, and a default run in about an hour
 	- ID: 2026102616543936
 	- Type: Task
-	- Status: Queued
+	- Status: Waiting on automated testing
+	- Needs local test suite run?: One `cicd/cicd.bash --merge-gate` from `repo/`, in the container, run the way the pre-push hook runs it: from a detached worktree of the round branch, with `CARGO_TARGET_DIR` set to the main checkout's `target/container`. Time it end to end. It should take about an hour, and it can stand in for the round's full run. 2026102616543943 needs the same run.
 	- Priority: High
 	- Opened: 20261026-165439
 	- Opened by: CC
@@ -527,11 +528,25 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- `--long`, with `--slow` as another name: everything, the leak checks and benchmarks that take hours included.
 		- The default run fits in about an hour. It takes about 90 minutes now, so a step moves to `--long`. The TSan run is about 28 minutes of it.
 		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
+	- Progress log:
+		- 20261028: `--long`, with `--slow` as another name, adds the TSan run and CodeQL. The default run, `--backlog-run-full` and `--merge-gate` leave them out, and the last two take `--long`. `--long` with `--quick` or `--backlog-run-quick` stops the run.
+		- 20261028: The plan says "(off; --long adds it)" for both, and a full run's Run line names `--long` when given. design.md, install.md, build.md and prerequisites.md say so.
+		- 20261028: The container test's TSan checks moved: the default plan's "and the TSan step" now expects TSan off, and a new check finds it under `--long`. The no-docker and only-TSan plan checks run with `--long`, and the step checks with it on.
+	- Decisions:
+		- 20261028: TSan moves, as the item suggests. Full runs took about 56 to 60 minutes before it, and about 90 with it.
+		- 20261028: `--long` turns CodeQL on too, since it takes over half an hour and `--long` is everything. `--codeql` still adds it alone. Nothing else slow is opt-in yet; Miri is 2026102416233812's.
+		- 20261028: `--backlog-run-full` and `--merge-gate` stay every check of the default run, so they leave TSan out too.
+		- 20261028: `--slow` gives no one-line notice, unlike `--gate` and `--ci`, since its meaning didn't change.
+	- Verified: 20261028. The engine test passed, 148 checks, and 10 of the new ones failed against the old cicd.bash. The container test passed, 170 checks. The plan showed TSan and CodeQL off for the default run and `--merge-gate`, and on for `--long` and `--merge-gate --slow`. `cicd/cicd.bash --backlog-run-quick`, all five areas in the container, passed in 174 s at load 9, with 1410 tests. Shellcheck is clean.
+		- Swept: every reader of TSan's place in the run: the container and engine tests, config.bash, design.md, build.md, prerequisites.md and install.md. `cicd-win.ps1`, `ci-mac.bash` and `mac.yml` don't name it. `cicd-win.ps1 -Long` is 2026102616543946.
+	- Branch: rnd1028
+	- Test case: `cicd/tests/engine/run.bash` (Er2UgY7), 16 new checks for `--long`, `--slow`, TSan and CodeQL. `cicd/tests/container/run.bash` (EsJg9EF), 2 new TSan checks and 3 moved.
 
 - CICD reset: the pre-push hook runs the merge gate
 	- ID: 2026102616543943
 	- Type: Task
-	- Status: Queued
+	- Status: Waiting on automated testing
+	- Needs local test suite run?: The same run as 2026102616543936's, the merge gate the way the hook runs it.
 	- Priority: High
 	- Opened: 20261026-165439
 	- Opened by: CC
@@ -543,6 +558,20 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Those paths are listed in one place the hook reads.
 		- design.md's merge gate bullet under "Delivery" says so.
 		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
+	- Progress log:
+		- 20261028: The hook runs `cicd.bash --merge-gate` on a push to main, from the throwaway worktree as before. Its target dir is `target/container` when docker is here, as a run from the checkout has it.
+		- 20261028: `utility/git-hooks/no-gate-paths` lists the paths no build or test reads, as shell patterns with `!` exceptions. The hook reads it from the pushed commit. A push to main that changes only those skips the gate and the version guard, and says so in one line. A change to the list is always gated.
+		- 20261028: design.md's merge gate and version guard bullets say so. install.md and build.md no longer call `--gate` the hook's run.
+	- Decisions:
+		- 20261028: The version guard skips a docs-only push too, or docs could never go straight to main. Filed as a `Check:` in questions.md.
+		- 20261028: `*.md`, `project/`, the demo gif and the GitHub issue templates and metadata skip. Docs built into the binary or the packages stay gated: `usage.md`, `shell-integration.md` and `license.md`. So do those tests read: `README.md`, `build.md`, `prerequisites.md`, `comparison.md`, the scrim design doc and `filesystem/`. `docs/` and the contact sheet aren't listed, since the wallpaper gallery check reads them.
+		- 20261028: The docs checks are part of the gate, so a docs-only push skips them too. The rule lets docs go without the gate, and `--backlog-run-quick docs` runs them in about a minute.
+		- 20261028: The list is read from the pushed commit, like the gate. A push that makes main, or whose old main isn't here, is always gated.
+	- Verified: 20261028. The hooks test passed, 29 checks, 13 of them new, with a stand-in pipeline in a scratch repo. A push to main runs `--merge-gate`. A docs-only push goes with no version bump and no gate. `usage.md`, the scrim doc, a source file and the list itself each keep a push gated. 5 new checks failed against the old hook, and 3 failed with `!usage.md` and `!README.md` taken out of the list. Shellcheck is clean, and the hook parses under dash.
+		- Swept: every place that named the hook's run: design.md, install.md, build.md and the hooks test.
+		- Not checked: a real `--merge-gate` from the hook, which needs a push to main.
+	- Branch: rnd1028
+	- Test case: `cicd/tests/hooks/run.bash` (EqA7Wki), 13 new checks.
 
 - CICD reset: the standard flags in `cicd-win.ps1`
 	- ID: 2026102616543946

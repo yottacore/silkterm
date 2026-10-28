@@ -150,7 +150,7 @@ fCheck "--codeql adds it, and goes into the container with the run" \
 rc=0; out="$(fParse --gate --codeql 2>&1)" || rc=$?
 fCheck "--codeql with --gate stops the run" test "${rc}" -eq 2
 fCodeqlPlan(){ local codeql="${1}" codeqlSkipped="${2:-}"; eval "$(fLift '^	if ((! codeql)); then codeqlLine=' '^	else codeqlLine="CodeQL"; fi$')"; echo "${codeqlLine}"; }
-fCheck "the plan says how to turn it on" test "$(fCodeqlPlan 0)" = "CodeQL (off; --codeql adds it)"
+fCheck "the plan says how to turn it on" test "$(fCodeqlPlan 0)" = "CodeQL (off; --codeql or --long adds it)"
 fCheck "and names it when on" bash -c '[[ "$1" == CodeQL && "$2" == "CodeQL (skipped, no docker"* ]]' _ "$(fCodeqlPlan 1)" "$(fCodeqlPlan 1 'no docker here')"
 fCheck "the step itself stays off without --codeql" \
 	bash -c 'sed -n "/^fRunCodeql(){/,/^}/p" "$1" | grep -qF "if ((! codeql)); then"' _ "${engine}"
@@ -158,6 +158,44 @@ fCheck "the dhat test hands on to CodeQL, with the report folder" \
 	bash -c 'sed -n "/^fRunLeakcheck(){/,/^}/p" "$1" | grep -q "^[[:space:]]*fRunCodeql \"\${outDir}\"$"' _ "${engine}"
 fCheck "the config names a Rust suite, and the suppressions file is there" \
 	bash -c 'source "$1" && [[ "${CODEQL_SUITE}" == codeql/rust-queries:* && -f "$2/../${CODEQL_SUPPRESSIONS}" ]]' _ "${cicd}/config.bash" "${cicd}"
+## --long, or --slow: the steps that take hours. TSan and CodeQL wait for it, so
+## the default run stays near an hour.
+fParseLong(){ fParse "${@}" >/dev/null; eval "${parse}"; echo "long=${long} codeql=${codeql} leak=${leakcheck} inner=${innerArgs[*]}"; }
+fCheck "a run with no options leaves --long off" test "$(fParseLong)" = "long=0 codeql=0 leak=1 inner="
+fCheck "--long turns on CodeQL, and goes into the container" test "$(fParseLong --long)" = "long=1 codeql=1 leak=1 inner=--long"
+fCheck "--slow is the same" test "$(fParseLong --slow)" = "long=1 codeql=1 leak=1 inner=--long"
+fCheck "--no-leakcheck still drops the leak checks" bash -c '[[ "$1" == *" leak=0 "* ]]' _ "$(fParseLong --long --no-leakcheck)"
+fCheck "--backlog-run-full takes --long" \
+	bash -c '[[ "$1" == "long=1 codeql=1 leak=1 inner=--long --fmt-check" ]]' _ "$(fParseLong --backlog-run-full --long)"
+for pair in "--long --quick" "--quick --long" "--slow --backlog-run-quick" "--backlog-run-quick --long"; do
+	read -r -a args <<<"${pair}"
+	rc=0; out="$(fParse "${args[@]}" 2>&1)" || rc=$?
+	fCheck "${pair} stops the run" bash -c '[[ "$1" == 2 && "$2" == *"--long"* ]]' _ "${rc}" "${out}"
+done
+fTsanWhere(){
+	local container="${1}" long="${2}" docker="${3}" SILK_CICD_IN_CONTAINER="${4:-}" gate=0 quick=0 TSAN_CMD=(x)
+	eval "$(fLift '^tsanInImage=0' '^fi$')"
+	echo "${tsanInImage}|${tsanSkipped}"
+}
+fCheck "a run here takes TSan to the image under --long" test "$(fTsanWhere 0 1 bash)" = "1|"
+fCheck "and says so with no docker" bash -c '[[ "$1" == "0|no docker here"* ]]' _ "$(fTsanWhere 0 1 no-such-docker-here)"
+fCheck "but not without --long, docker or not" \
+	bash -c '[[ "$1" == "0|" && "$2" == "0|" ]]' _ "$(fTsanWhere 0 0 bash)" "$(fTsanWhere 0 0 no-such-docker-here)"
+fTsanStep(){
+	local long="${1}" quick=0 tsanSkipped="no docker here" TSAN_CMD=(x)
+	fEcho_Clean(){ echo "${*}"; }; fJobs(){ :; }
+	eval "$(fLift '^fRunTsan(){' '^}')"
+	fRunTsan
+}
+fCheck "the TSan step is off without --long" test "$(fTsanStep 0)" = "TSan run off (--long adds it)"
+fCheck "and runs with it" bash -c '[[ "$1" == *"TSan run skipped: no docker here" ]]' _ "$(fTsanStep 1)"
+fTsanPlan(){
+	local long="${1}" quick=0 tsanSkipped="" TSAN_CMD=(x) SANITIZER_TOOLCHAIN=nightly containerImage=img
+	fEcho_Clean(){ echo "${*}"; }
+	eval "$(fLift 'TSAN_CMD\[@\]} == 0)); then$' '^fi$')"
+}
+fCheck "the plan says how to turn TSan on" test "$(fTsanPlan 0)" = "TSan ................: (off; --long adds it)"
+fCheck "and names it when on" test "$(fTsanPlan 1)" = "TSan ................: the tests again on nightly, in img"
 fCheck "--no-demo turns the demo off" bash -c '[[ "$1" == *" demo=0 "* ]]' _ "$(fParse --no-demo)"
 fCheck "--gate is the backlog quick run" bash -c '[[ "$1" == *" gate=1 "* ]]' _ "$(fParse --gate 2>/dev/null)"
 
@@ -415,6 +453,7 @@ if ((failures)); then echo "${failures} failed"; exit 1; fi
 echo "all passed"
 
 ##	History:
+##		- 20261028: --long and --slow, with TSan and CodeQL waiting for them.
 ##		- 20261028: The ARM64 smoke run's step and plan line.
 ##		- 20261026: --backlog-run-quick, --backlog-run-full, --merge-gate and their other names.
 ##		- 20261025: --no-remote, and the SKIP lines in a step's line and at the end.
