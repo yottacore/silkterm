@@ -250,6 +250,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- A rough edge, for shcl to look at. It is why a launch message about a bad line can name a line two short once the rating writes (2026100115322366).
 		- Stalled until a shcl beta has it.
 		- 20261007: Still present. Run against shcl dev d7903b73, not inferred: the step above with `set_string("performance.profile", "low")` writes `profile: low` as a new line above the commented one, and keeps the lines (5 in, 6 out). Nothing in shcl's changelog or log since b10c2009 is for it. No 3.0 beta is published; crates.io still has 2.0.0.
+	- Held for a shcl beta that fills in a commented default in place.
 
 - shcl: `migrate_unstamped` cannot say a migration did not finish
 	- ID: 2026100315553545
@@ -270,6 +271,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Stalled until a shcl beta has it.
 		- 20261007: Still present. Run against shcl dev d7903b73, not inferred: the step above still returns `current: false`, `ambiguous: 0`, `lost: 0`, and the stamped `migrate` still shows it only by leaving the Format line off. `Migration` has no new field. shcl's CLI `migrate` now refuses such a file with exit 7, by the same Format line check. No 3.0 beta is published; crates.io still has 2.0.0.
 		- API at the swap: shcl dev now has `upgrade()` and `upgrade_file()`, which convert a whole file with a timestamped backup, and close the open raw block and stamp it. The CLI backup is now `config_backup_<time>_format-v2.shcl`, not `config_old_v2.shcl`.
+	- Held for a shcl beta whose Migration says when it couldn't finish.
 
 - ttf-parser is unmaintained, and the advisory scan ignores that until the crates that pull it in move off it
 	- ID: 2026101715240000
@@ -285,6 +287,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Progress log:
 		- 20261019: Still stuck upstream. `cargo update --dry-run` moves none of fontdb, cosmic-text, ab_glyph, sctk-adwaita, glyphon or winit, and ttf-parser 0.25.1 still comes in both ways. On crates.io, fontdb 0.24.0 drops it, but the newest cosmic-text, 0.19.0, still asks for fontdb 0.23. sctk-adwaita 0.12.0 still pulls in ab_glyph. Even glyphon 0.12, a breaking bump, still brings cosmic-text 0.19.
 		- Stalled until a cosmic-text release takes fontdb 0.24 or later, and winit's sctk-adwaita drops ab_glyph.
+	- Held for a cosmic-text release on fontdb 0.24 or later, and an sctk-adwaita without ab_glyph.
 
 - Leak checks: CodeQL under `--leakcheck`, from a pinned CLI on a vendored tree
 	- ID: 2026101913360695
@@ -358,6 +361,19 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Swept: the 145 tests above. A test elsewhere that starts a process or opens a device turns up in the rest of the run.
 	- Test case: None new. The ignores are test attributes, checked by the runs above.
 	- Branch: rnd1023
+
+- When two screens return after screen power sleep or off, SilkTerm seems to reposition itself in between them
+	- ID: 2026102807384201
+	- Type: Bug
+	- Status: Queued
+	- Severity: High
+	- Opened: 20261028-073842
+	- Opened by: JC
+	- Incorrect behavior: When two screens return after screen power sleep or off, SilkTerm seems to reposition itself in between them.
+	- Expected behavior: It stays where it was. None of the other ~dozen application windows move, other terminals included.
+	- Notes:
+		- Pre-next-cut.
+		- Work first after the CICD issues.
 
 - CICD reset: container cleanup
 	- ID: 2026102416233805
@@ -567,19 +583,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Every regression and fuzz test prints one line, such as `PASS decp8 <name>`, with `FAIL` or `SKIP` in place of `PASS`. The scroll harness scenes and the fuzz cases have no IDs of their own yet.
 		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
 		- Overrides: 2026092711142900's decision that the scroll harness scenes keep their PASS lines with no IDs, and the base 62 rule in the private notes.
-
-- When two screens return after screen power sleep or off, SilkTerm seems to reposition itself in between them
-	- ID: 2026102807384201
-	- Type: Bug
-	- Status: Queued
-	- Severity: High
-	- Opened: 20261028-073842
-	- Opened by: JC
-	- Incorrect behavior: When two screens return after screen power sleep or off, SilkTerm seems to reposition itself in between them.
-	- Expected behavior: It stays where it was. None of the other ~dozen application windows move, other terminals included.
-	- Notes:
-		- Pre-next-cut.
-		- Work first after the CICD issues.
 
 - Running with `--software-rendering` on vmKt6m still fails with a complaint about no suitable GPU
 	- ID: 2026102807384202
