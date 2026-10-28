@@ -21,16 +21,16 @@
 ##	Resolved once, since macOS's temp folder sits behind the /var link.
 __safeRmOwn="$(realpath -m -- "${HOST_TEMP:-${TMPDIR:-/tmp}}" 2>/dev/null)/${EXE_NAME:-silkterm}"
 
-fSafeRm(){ __fSafeRm "" "${@}"; }
+fSafeRm(){ fSafeRm_Do "" "${@}"; }
 
 fSafeRm_Under(){
 	local -r parent="${1:-}"
 	if [[ -z "${parent}" || "${parent}" != /?* ]]; then printf 'safe-rm: refused, no parent: "%s"\n' "${parent}" >&2; return 1; fi
 	shift
-	__fSafeRm "${parent%/}" "${@}"
+	fSafeRm_Do "${parent%/}" "${@}"
 }
 
-__fSafeRm(){
+fSafeRm_Do(){
 	local -r parent="${1}"
 	shift
 	local p="${1:-}" real=""
