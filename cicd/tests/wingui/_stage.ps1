@@ -37,12 +37,16 @@ function fConsoleUserIn([string[]] $Lines, [uint32] $ConsoleId) {
 ##	started. This used to fall back to the ssh account, and a task for a user
 ##	with no session never runs, so the scenario waited out its 4 minutes.
 function fConsoleUser {
+	fConsoleUserIn @(quser 2>$null) (fConsoleId)
+}
+
+function fConsoleId {
 	if (-not ('Con.W' -as [type])) {
 		Add-Type -Namespace Con -Name W -MemberDefinition @"
 [DllImport("kernel32.dll")] public static extern uint WTSGetActiveConsoleSessionId();
 "@
 	}
-	fConsoleUserIn @(quser 2>$null) ([Con.W]::WTSGetActiveConsoleSessionId())
+	[Con.W]::WTSGetActiveConsoleSessionId()
 }
 
 function fLogsOnByItself {
@@ -50,9 +54,28 @@ function fLogsOnByItself {
 	catch { $false }
 }
 
+##	Seconds since the console session started, from its winlogon. That's new
+##	after any boot, Fast Startup included, where LastBootUpTime stays old. A
+##	paused VM resumed keeps its old one.
+function fConsoleAge {
+	try {
+		$id = fConsoleId
+		$p = Get-CimInstance Win32_Process -Filter "Name = 'winlogon.exe' AND SessionId = $id" -ErrorAction Stop | Select-Object -First 1
+		if ($p) { return [int]([DateTime]::Now - $p.CreationDate).TotalSeconds }
+	} catch { }
+	[int]::MaxValue
+}
+
+##	A console session under 10 minutes old, as on a VM the run woke, can still
+##	be logging its user on, so it gets 3 minutes. An older one has its user by
+##	now or won't, so it gets 10 s.
+function fConsoleWait([int] $Age) {
+	if ($Age -lt 600) { 180 } else { 10 }
+}
+
 ##	A box that logs a user on by itself gets time to, since ssh can answer
 ##	before that's done. One that doesn't would only wait for nothing.
-function fWaitConsoleUser([int] $Seconds = 120, [int] $Poll = 5) {
+function fWaitConsoleUser([int] $Seconds, [int] $Poll = 5) {
 	$who = fConsoleUser
 	if ($who -or -not (fLogsOnByItself)) { return $who }
 	$until = [DateTime]::UtcNow.AddSeconds($Seconds)
@@ -65,9 +88,10 @@ function fWaitConsoleUser([int] $Seconds = 120, [int] $Poll = 5) {
 
 function fStage {
 	$ErrorActionPreference = "Stop"
-	$who = fWaitConsoleUser
+	$wait = fConsoleWait (fConsoleAge)
+	$who = fWaitConsoleUser $wait
 	if (-not $who) {
-		if (fLogsOnByItself) { "NOSESSION nobody logged on at the console within 120 s" }
+		if (fLogsOnByItself) { "NOSESSION nobody logged on at the console within $wait s" }
 		else { "NOSESSION nobody is logged on at the console" }
 		return
 	}
@@ -97,3 +121,5 @@ fStage
 ##		- 20261006 JC: Help block, StrictMode Latest.
 ##		- 20261025: NOSESSION when nobody is logged on at the console, after a
 ##		  wait on a box that logs on by itself.
+##		- 20261028: The wait is 3 minutes on a box that just booted, 10 s on one
+##		  up longer.

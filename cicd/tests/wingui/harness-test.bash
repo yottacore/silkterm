@@ -272,11 +272,12 @@ else
 fi
 
 ## Who holds the console: nobody at a logon screen, never the ssh account. A box
-## that logs on by itself is waited for, and one that doesn't isn't.
+## that logs on by itself is waited for, and one that doesn't isn't. The wait is
+## long on a session that just started and short on an older one.
 if command -v pwsh >/dev/null 2>&1; then
 	cat > "${work}/console.ps1" <<PS
 \$ast = [System.Management.Automation.Language.Parser]::ParseFile("${meDir}/_stage.ps1", [ref]\$null, [ref]\$null)
-foreach (\$name in 'fConsoleUserIn', 'fWaitConsoleUser') {
+foreach (\$name in 'fConsoleUserIn', 'fWaitConsoleUser', 'fConsoleWait') {
 	\$fn = \$ast.Find({ param(\$n) \$n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and \$n.Name -eq \$name }, \$true)
 	Invoke-Expression \$fn.Extent.Text
 }
@@ -296,6 +297,8 @@ function fLogsOnByItself { \$true }
 function fConsoleUser { }
 \$t = [DateTime]::UtcNow
 "gaveup:" + (fWaitConsoleUser 1 0) + ":" + [int]([DateTime]::UtcNow - \$t).TotalSeconds
+"fresh:" + (fConsoleWait 30) + ":" + (fConsoleWait 599)
+"older:" + (fConsoleWait 600) + ":" + (fConsoleWait ([int]::MaxValue))
 PS
 	mapfile -t con < <(pwsh -NoProfile -File "${work}/console.ps1" 2>&1)
 	fCheck "the console user is read from the console's own session" test "${con[0]:-}" = 'in:wintest'
@@ -304,6 +307,10 @@ PS
 	fCheck "a box that doesn't log on by itself isn't waited for" test "${con[3]:-}" = 'nowait::1'
 	fCheck "one that does is waited for until someone's on" test "${con[4]:-}" = 'waited:wintest:3'
 	fCheck "for a while, and then it's nobody" test "${con[5]:-}" = 'gaveup::1'
+	fCheck "a console session under 10 minutes old gets 3 minutes" test "${con[6]:-}" = 'fresh:180:180'
+	fCheck "an older one, or one whose age can't be read, gets 10 s" test "${con[7]:-}" = 'older:10:10'
+	fCheck "the stage waits by the session's age" grep -qxF "$(printf '\t$wait = fConsoleWait (fConsoleAge)')" "${meDir}/_stage.ps1"
+	fCheck "and the age is read after the console id's type is loaded" grep -qxF "$(printf '\t\t$id = fConsoleId')" "${meDir}/_stage.ps1"
 	fCheck "the stage says NOSESSION rather than make a folder for nobody" grep -qE $'^\t\tif \\(fLogsOnByItself\\) \\{ "NOSESSION ' "${meDir}/_stage.ps1"
 else
 	echo "  skip the console user half: pwsh not found"
@@ -368,3 +375,4 @@ echo "all passed"
 ##		- 20261025: Which box each scenario runs on.
 ##		- 20261025: The SKIP lines on the run's skip list.
 ##		- 20261025: The 'Box: gpu' line with CRLF ends.
+##		- 20261028: The console wait goes by how old the session is.

@@ -23,6 +23,12 @@ cd "${root}" || exit 1
 
 if [[ "$(uname -s)" != "Darwin" ]]; then echo "skip: not a Mac"; exit 3; fi
 
+## Same CPU share and priority as every other run, per Machine use in the CICD
+## rules, even on a hosted runner nobody else shares.
+# shellcheck source=cicd/utility/include/jobs.bash
+source "${root}/cicd/utility/include/jobs.bash"
+fJobs_LowPriority
+
 logDir="${RUNNER_TEMP:-${TMPDIR:-/tmp}}/silkterm-ci-mac.$$"
 mkdir -p "${logDir}"
 
@@ -36,6 +42,7 @@ fStep(){
 	stepNum=$((stepNum + 1))
 	echo; echo "${rule}"
 	echo "[ $(fStamp): Step ${stepNum} of ${stepTotal}; Starting ${name} ]"
+	fJobs
 	if "${@}"; then echo "[ $(fStamp): Step ${stepNum} of ${stepTotal}; PASS ${name} ]"
 	else echo "[ $(fStamp): Step ${stepNum} of ${stepTotal}; FAIL ${name} ]"; failed="${failed} ${name}"; fi
 }
@@ -149,3 +156,4 @@ echo
 ##		- 20261022 JC: Failure text from the first run, and what timing tests measured.
 ##		- 20261028: Each step between a rule and its stamped Starting and closing
 ##		            lines, numbered of the total, as cicd.bash prints them.
+##		- 20261028: Job count and low priority from jobs.bash, as the other runs.
