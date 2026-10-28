@@ -309,8 +309,8 @@ PS
 	fCheck "for a while, and then it's nobody" test "${con[5]:-}" = 'gaveup::1'
 	fCheck "a console session under 10 minutes old gets 3 minutes" test "${con[6]:-}" = 'fresh:180:180'
 	fCheck "an older one, or one whose age can't be read, gets 10 s" test "${con[7]:-}" = 'older:10:10'
-	fCheck "the stage waits by the session's age" grep -qxF "$(printf '\t$wait = fConsoleWait (fConsoleAge)')" "${meDir}/_stage.ps1"
-	fCheck "and the age is read after the console id's type is loaded" grep -qxF "$(printf '\t\t$id = fConsoleId')" "${meDir}/_stage.ps1"
+	fCheck "the stage waits by the session's age" grep -qE $'^\t\\$wait = fConsoleWait \\(fConsoleAge\\)\r?$' "${meDir}/_stage.ps1"
+	fCheck "and the age is read after the console id's type is loaded" grep -qE $'^\t\t\\$id = fConsoleId\r?$' "${meDir}/_stage.ps1"
 	fCheck "the stage says NOSESSION rather than make a folder for nobody" grep -qE $'^\t\tif \\(fLogsOnByItself\\) \\{ "NOSESSION ' "${meDir}/_stage.ps1"
 else
 	echo "  skip the console user half: pwsh not found"
