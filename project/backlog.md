@@ -148,20 +148,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Branch: rnd1029
 	- Test case: dejjp `cicd/tests/testid/run.py`, and dcry4's check that a test named for a warning is not one.
 
-- CICD reset: a test for each old-format Done feature, part 1 of 6
-	- ID: 2026102819193525
-	- Type: Task
-	- Status: Queued
-	- Priority: High
-	- Opened: 20261028-191935
-	- Opened by: CC
-	- Parent ID: 2026102416233809
-	- Target OS: All
-	- Requirements:
-		- The old-format Done features from "Two more settings of the same class as the light mode calibration" to "Run the interface checks on Windows from here as well", 40 items.
-		- Each names its test ID beside the test it names, or says in a few words why it has none. A test is added where one could exist and doesn't, and is watched to fail with the fix taken out.
-		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
-
 - CICD reset: a test for each old-format Done feature, part 2 of 6
 	- ID: 2026102819193540
 	- Type: Task
@@ -1120,6 +1106,32 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- For that flag only, no blank lines before or after.
 	- Notes:
 		- Pre-next-cut.
+
+- CICD reset: a test for each old-format Done feature, part 1 of 6
+	- ID: 2026102819193525
+	- Type: Task
+	- Status: Done
+	- Priority: High
+	- Opened: 20261028-191935
+	- Opened by: CC
+	- Parent ID: 2026102416233809
+	- Target OS: All
+	- Requirements:
+		- The old-format Done features from "Two more settings of the same class as the light mode calibration" to "Run the interface checks on Windows from here as well", 40 items.
+		- Each names its test ID beside the test it names, or says in a few words why it has none. A test is added where one could exist and doesn't, and is watched to fail with the fix taken out.
+		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
+	- Progress log:
+		- 20261028: Each test the 40 items name, by a name a test still has, now has its ID beside it.
+		- 20261028: Tests named in words also have their IDs now: the visibility, picker and theme tests, the profile ladder test, the graying test, the fuzz targets and the three fuzz defect tests, and the second mention of the Windows install test.
+		- 20261028: Tests renamed or dropped since name the tests that took over: the two governed row tests, the graying test, and the light mode tests that went with the calibration.
+		- 20261028: The rest say why they have no ID: docs, demo and wallpaper pack edits, a tag deleted, measurements, Windows account setup, and pipeline settings. No test was missing where one could exist, so none was added.
+	- Decisions:
+		- 20261028: As in the bug parts, a test renamed since keeps its old name, with "now" and the test that took over.
+	- Verified: 20261028. Every test ID added in part 1 is one the tree has. `--backlog-run-quick docs` passed, `test-id.py --check` passes, and the markdown check finds nothing new.
+		- Swept: every name in backticks and test script path in the 40 items, and every "Pinned by", "Test" or "No test" written in words.
+	- Branch: rnd1029
+	- Test case: each of the 40 items names its own, or why it has none.
+	- Closed: 20261028-205617
 
 - CICD reset: a test for each old-format Done bug, part 4 of 4
 	- ID: 2026102819193512
@@ -10353,11 +10365,11 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Window transparency. At the same `transparency.opacity` a light terminal over a dark desktop shows far less of it than a dark terminal over a light one. There is no reference to calibrate against, since what is behind the window is not ours to measure. Off by default, so nobody meets it unasked.
 	- The block cursor's plate. It is drawn at a fixed 55%, so in light mode it is a pale plate and in dark mode a dark one, which is the same asymmetry the scrim had. The contrast floor already keeps the text on it legible in both modes, so what is left is how loud it looks.
 	- Fixed: 20260928, window transparency. The fill was encoded to sRGB after it was premultiplied, so a light fill at 80% came out as 91% of itself and covered most of the desktop. Black was not affected. A light fill now lets through exactly as much as a dark one.
-	- Test: `a_light_fill_is_as_see_through_as_a_dark_one`, which fails on the old code.
+	- Test: dd879 `a_light_fill_is_as_see_through_as_a_dark_one`, which fails on the old code.
 	- Note: 20260928, the cursor plate is placed by the contrast floor, not by its alpha. Every built-in theme's plate already sits right at the floor from the text, in both modes. Light text is at Oklab 0.32 to 0.37 and the background at 0.94 to 0.97, so the plate can only get 0.12 to 0.20 away from the background. Dark mode gets 0.20 to 0.42. A stronger alpha would push the plate into the text, so the theme cursor colors would have to get lighter to compensate, and the plate would end up where it is now. Only darker light-mode text makes more room.
 	- Note: 20260928, the built-in light-mode text gets darker, so the plate has room to be louder.
 	- Fixed: 20260929, the cursor plate. The built-in light themes have darker text, and over a light background the plate is drawn at 80% instead of 55%, as far as the text on it still clears the floor. Darker text alone was not enough, since at 55% even a black cursor could not take the plate much past 0.2 from a light background. Their plates now sit 0.25 to 0.28 from the background, where they were 0.12 to 0.20. Dark mode is unchanged. A saved theme keeps about the plate it had.
-	- Test: `a_light_cursor_plate_stands_off_the_background_like_a_dark_one`, which fails on the old colors, and `a_light_plate_stops_where_its_text_would_sink` for a saved theme.
+	- Test: dd9ny `a_light_cursor_plate_stands_off_the_background_like_a_dark_one`, which fails on the old colors, and dd9pd `a_light_plate_stops_where_its_text_would_sink` for a saved theme.
 	- Note: 20260930, both halves are fixed now, the window transparency on 20260928 and the cursor plate on 20260929. The title is out of date. What is left is the look on screen.
 	- Note: 20261005, looked at. The light-mode text is still not dark enough, and the light-mode scrim is still much too strong next to dark mode. Filed as 2026100513581810 and 2026100513581811.
 	- Note: 20261005, both are done: darker, more saturated light text (2026100513581810) and a light scrim matched to dark mode's (2026100513581811).
@@ -10376,15 +10388,15 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - ✅ Check the README's install and build version claims in the pipeline.
 	- The Rust 1.89 badge, bash 3.2 for `install.bash` and PowerShell 5.1 for `install.ps1` hold today, and nothing builds or runs with those versions.
 	- Decision: 20260928, no old bash is built for this. `install.bash` is written for 3.2, and the README now says it is tested on 5 only.
-	- Note: 20260928, the Windows pipeline already runs the installer under PowerShell 5.1 (`cicd/tests/install/windows.ps1`).
+	- Note: 20260928, the Windows pipeline already runs the installer under PowerShell 5.1 (dd2n3 `cicd/tests/install/windows.ps1`).
 	- Decision: 20260928, the Rust badge says 1.96, the pinned toolchain everything is built and tested on. `rust-version` says 1.96 too, since the code does not build on 1.94.
-	- Test: PowerShell 5.1 by `cicd/tests/install/windows.ps1`. No test for bash or Rust, which now claim only the versions the pipeline runs.
+	- Test: PowerShell 5.1 by dd2n3 `cicd/tests/install/windows.ps1`. No test for bash or Rust, which now claim only the versions the pipeline runs.
 	- Opened: 20260914-124200
 
 - ✅ Say when a color typed into the settings file is read as empty because it was not quoted.
 	- `background: #112233` reads as nothing, since `#` starts a comment, and the theme's color is used with no message.
 	- Done: the launch names the setting and its line, and shows the color in quotes. Like the other complaints about the file, it goes to the console.
-	- Test: `an_unquoted_color_is_named`. It fails with the message taken out.
+	- Test: dd824 `an_unquoted_color_is_named`. It fails with the message taken out.
 	- Opened: 20260914-124200
 	- Closed: 20260928-135555
 
@@ -10393,7 +10405,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Changed: Settings, the shell list, the window size and the rating all save through shcl's line-keeping save. Quotes, indents and dotted lines nobody changed stay as they were.
 	- Note: where shcl cannot keep the lines, as with a block written twice, it still writes the whole file the old way. The save and rating checks now cover both.
 	- Note: unchanged by this build: a tab-indented line that steps back to a depth nothing uses is still dropped, and a save still refuses over it.
-	- Pinned by: `a_save_writes_only_the_lines_it_changed` and the kept-quotes case in `a_rating_is_refused_where_a_launch_step_reads_the_layout`, both watched red with the old save put back.
+	- Pinned by: dd444 `a_save_writes_only_the_lines_it_changed` and the kept-quotes case in dcfp4 `a_rating_is_refused_where_a_launch_step_reads_the_layout`, both watched red with the old save put back.
 	- Opened: 20260925-181500
 	- Closed: 20260925-183900
 
@@ -10403,14 +10415,14 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Changed: the footer links the `v3.0.0-beta1` spec. A footer with the old `v3.0.0` link, which never existed, is replaced at launch.
 	- Changed: the one-time rewrite of a 2.x file uses shcl's own call for leaving the stamp off, in place of trimming it after.
 	- Note: unchanged by this build: a save still tidies quotes, there is still no save that edits single lines, and the short-file growth under Bugs still happens.
-	- Pinned by: `a_save_keeps_a_space_indented_stray`, watched red with the new message taken out.
+	- Pinned by: dd3fc `a_save_keeps_a_space_indented_stray`, watched red with the new message taken out.
 	- Opened: 20260925-073415
 	- Closed: 20260925-073415
 
 - ✅ Other tables still use trailing pipes and unpadded columns: the rest of `README.md`, `cicd/tests/scroll/README.md`, `utility/include/showdown-readme.md`, and `wallpaper-attribution.md`, which `wallpaper-gallery.bash` writes.
 	- Done: all nine reformatted through the same writer as the README's generated table, and two more in the backlog's own Done section.
 	- Note: `wallpaper-gallery.bash` reads the attribution file rather than writing it. It reads the same 111 rows as before.
-	- Pinned by: `cicd/tests/tables/run.py`, run by cicd over every `.md`, with `--fix` to rewrite. It failed on all eleven before the fix.
+	- Pinned by: dd2s9 `cicd/tests/tables/run.py`, run by cicd over every `.md`, with `--fix` to rewrite. It failed on all eleven before the fix.
 	- Opened: 20260924-175940
 	- Closed: 20260924-194939
 
@@ -10419,7 +10431,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Reproduced: the Linux builds matched, but both Windows builds differed in the link time the linker writes into the PE header.
 		- Fixed: the Windows linkers leave the link time out. `cicd/utility/repro-check.bash` builds a commit in two folders and compares.
 		- Verified: identical for Linux x86_64 and ARM64 and Windows x86_64 and ARM64. The README says so, and that another system or linker can still differ.
-		- Pinned by: `cicd/tests/packaging/run.bash`.
+		- Pinned by: dcrrh `cicd/tests/packaging/run.bash`.
 		- Opened: 20260924-115032
 		- Closed: 20260924-185501
 	- ✅ Package icons. The setup `.exe` has the stock NSIS icon and no version details. The `.deb` and `.rpm` launcher uses a generic terminal icon.
@@ -10427,46 +10439,46 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Decision: 20260924, packages do not include the wallpaper pack.
 		- Done: the setup `.exe` has the program's icon and a version block like the program's. The `.deb` and `.rpm` install the program's icon in seven sizes, and the launcher names it.
 		- Verified: the packaging test checks the installer's icon and version and that the Linux icons match `icon.ico`, and fails on the old template. The installer was also built by `cicd-win.ps1` on vm925w, where Properties shows the version and copyright.
-		- Pinned by: `cicd/tests/packaging/run.bash`.
+		- Pinned by: dcrrh `cicd/tests/packaging/run.bash`.
 		- Opened: 20260924-115032
 		- Closed: 20260924-180638
 	- ✅ Route remote `git` and `gh` calls in the pipeline through `gitsby raw`, with plain `git` and `gh` where it is missing.
 		- Done: the remote sync in both pipelines, the Windows publish, and the push and release in `release.bash`. On Windows only `gitsby.exe` is used, since the script form does not pass arguments through intact.
 		- Left alone: `n8git_backup-and-publish`, which is copied between projects. Its pull and push stay plain `git`.
 		- Verified: a release test with stand-ins checks both routes, and `gitsby raw git` passes arguments and exit codes through on b23 and on vm925w.
-		- Pinned by: `cicd/tests/release/run.bash`.
+		- Pinned by: dcbe0 `cicd/tests/release/run.bash`.
 		- Opened: 20260924-115032
 		- Closed: 20260924-180638
 	- ✅ The showdown table generators write trailing pipes, `---` rows and unpadded columns.
 		- Done: both writers lay the table out through one shared module. Number columns stay right-aligned, and the README table was laid out again once.
 		- Verified: the showdown test checks the layout after each writer, and fails on the old ones.
-		- Pinned by: `cicd/tests/showdown/run.py`.
+		- Pinned by: dcrz2 `cicd/tests/showdown/run.py`.
 		- Opened: 20260924-115032
 		- Closed: 20260924-175940
 	- ✅ `--version` prints `SilkTerm 1.0.0-beta3 (build xxxxx)`. Make it `SilkTerm v1.0.0-beta3 build xxxxx` with the copyright line under it.
 		- Note: `release.bash` and anything else that reads the second field has to follow.
 		- Decision: 20260924, no copyright line. `--version` prints the name, version and build on one line, with no blank lines around it.
 		- Done: `release.bash` reads the build number the new way, and a release test checks it against a real binary.
-		- Pinned by: `version_names_the_build_as_well_as_the_release` and `cicd/tests/release/run.bash`.
+		- Pinned by: dbsdk `version_names_the_build_as_well_as_the_release` and dcbe0 `cicd/tests/release/run.bash`.
 		- Opened: 20260924-115032
 		- Closed: 20260924-175734
 	- ✅ One tool-pin list read by both `cicd.bash` and `cicd-win.ps1`.
 		- Done: `cicd/tool-pins.txt`, where each tool is marked linux, windows or both.
 		- Verified: both pipelines read the same list, and on vm925w a wrong pin and a missing tool each warn.
-		- Pinned by: `cicd/tests/pins/run.bash`.
+		- Pinned by: dd5ns `cicd/tests/pins/run.bash`.
 		- Opened: 20260924-115032
 		- Closed: 20260924-175509
 	- ✅ Lint the PowerShell scripts in the pipeline too.
 		- Done: PSScriptAnalyzer at warning level. `cicd.bash` fails on a finding and `cicd-win.ps1` reports it. The rules left out are listed with reasons in `cicd/PSScriptAnalyzerSettings.psd1`, since every hit under them was a false one.
 		- Verified: clean on all 30 scripts, and an injected finding fails the run.
 		- Note: vm925w has no PSScriptAnalyzer, so the Windows half skips it there.
-		- Pinned by: `cicd/tests/pslint/run.bash`.
+		- Pinned by: dd5nt `cicd/tests/pslint/run.bash`.
 		- Opened: 20260924-115032
 		- Closed: 20260924-175509
 	- ✅ The installers take the first release the API lists. Sort by version instead, with `1.0.0-alpha.2` below `1.0.0`, and skip drafts.
 		- Done: semver order, drafts skipped. A trailing number compares as a number, so beta10 is above beta3.
 		- Verified: on Linux for both installers, and live against the real release list.
-		- Pinned by: `cicd/tests/install/run.bash`.
+		- Pinned by: dcbdz `cicd/tests/install/run.bash`.
 		- Opened: 20260924-115032
 		- Closed: 20260924-172529
 	- ✅ Give the two installers matching names for the same settings, and the same spacing between sections.
@@ -10479,7 +10491,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Next wallpaper
 	- Shows only when the rotation folder has another image to go to. A wallpaper given on the command line hides it, since that lasts for the session.
 	- The rotation timer starts over from the new pick.
-	- Pinned by: `next_wallpaper_shows_only_with_somewhere_to_go` and `a_rotation_tick_moves_the_timer_off_now`.
+	- Pinned by: dd2hn `next_wallpaper_shows_only_with_somewhere_to_go` and dcbcw `a_rotation_tick_moves_the_timer_off_now`.
 	- Opened: 20260924
 	- Closed: 20260924-154526
 
@@ -10503,7 +10515,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Fixed: a config shcl 2.x wrote is rewritten once at launch so it reads the same under 3.0. 2.x wrote a Windows path with bare backslashes, which 3.0 would read doubled. The footer is now shcl's own and has the format version.
 	- Fixed: adding missing settings gave up on a file with two settings typed too deep, since 3.0 skips a line written under a bad one.
 	- Note: the commented-out section bug and the Windows failed-save bug are fixed in shcl. The dotted-line growth and the line-by-line save are not.
-	- Pinned by: `a_file_shcl2_wrote_reads_the_same`, watched red with the rewrite taken out.
+	- Pinned by: dd2f0 `a_file_shcl2_wrote_reads_the_same`, watched red with the rewrite taken out.
 	- Opened: 20260921-130145
 	- Closed: 20260924-141949
 
@@ -10529,13 +10541,13 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- `Fixed:` Settings reads the file each time it opens. The file gets only what was edited in the dialog, and OK or Apply puts everything that differs from what the window runs live, another window's changes included. Opening Settings changes nothing on screen, and Cancel changes nothing.
 	- `Note:` the session's own choices are folded in first, as Reload config does: command-line font and colors, a session wallpaper, the Remote profile.
 	- `Left alone:` shells found at launch while the file was open elsewhere are kept only in memory, so an OK then drops them until the next launch.
-	- `Pinned by:` `settings_opens_on_the_file_as_it_is_now`, watched red against a dialog that opens on the live copy.
+	- `Pinned by:` dczr2 `settings_opens_on_the_file_as_it_is_now`, watched red against a dialog that opens on the live copy.
 	- Opened: 20260922-154740
 	- Closed: 20260922-155824
 
 - ✅ Tab tooltip: If user left the mouse over the tooltip, close the tooltip after being on for 30 seconds (tunable in config file). To show it again, the mouse has to first move off the tab, then back on.
 	- `Fixed:` the tab tip goes away after `window.tab_tip_max_s` seconds, 30 by default, 0 for never. Moving about on the same tab does not bring it back, and moving to another tab counts as leaving. Config file only, with no row in Settings.
-	- `Pinned by:` `a_tip_goes_down_after_its_limit_until_the_pointer_comes_back`, watched red.
+	- `Pinned by:` dczr3 `a_tip_goes_down_after_its_limit_until_the_pointer_comes_back`, watched red.
 	- Opened: 20260922-154740
 	- Closed: 20260922-155824
 
@@ -10548,22 +10560,23 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- `Dark mode:` unchanged, at two visibilities and with a split.
 	- `Cost:` a mix needs the background color, which a hardware blend cannot supply, so the pass writes the pane fill itself and is clipped to the pane. The divider slits between panes keep their own color rather than taking a faint tint from the picture. Six `pow` per pixel on one full-screen quad, against two bisections a frame on the processor that are now gone. Not measured on a real GPU; dark mode cannot have moved, since its path is the same instructions.
 	- `Pinned by:` nine tests in visibility.rs and one in autotheme.rs, each watched red against its own mutation.
+		- Test IDs: dcx6h, dcx6j, dcx6k, dcx6m, dcx6n, dcx41, dcx42 and dcx43 in visibility.rs, and dcx40 in autotheme.rs. The ninth, `dark_mode_gets_back_exactly_what_it_handed_over`, is now dcx75 `dark_mode_still_draws_the_blend_it_always_has`.
 	- Opened: 20260920-204921
 	- Closed: 20260920-204921
 
 - ✅ Wallpaper: Need a way to detect maximum and average brightness of background image - or some heuristic of "perceived brightness", and apply a variable ramp to background image visibility, so that it gets darker quicker, as the % goes down.
 	- ✅ Really what I'm after, is this resulting effect. The implimentation is up to research:
 		- ✅ At 100% background image visibility, it's just the image as-is.
-			- Pinned by: `a_full_slider_always_draws_the_picture_as_it_is`.
+			- Pinned by: dcx7a `a_full_slider_always_draws_the_picture_as_it_is`.
 		- ✅ But below that, the opacity % scales with perception.
 			- ✅ In other words, at say 90%, it is actually scaled to some average of ([perceived brightness], [brightest pixel]).
-				- Pinned by: `a_dark_picture_with_a_bright_area_is_not_a_dark_picture`.
+				- Pinned by: dcx79 `a_dark_picture_with_a_bright_area_is_not_a_dark_picture`.
 			- ✅ As an example, 50% for a very bright image, may be significantly darker than 50% for a very dark image.
-				- Pinned by: `a_glaring_picture_is_held_back_and_a_faint_one_lifted`.
+				- Pinned by: dcx77 `a_glaring_picture_is_held_back_and_a_faint_one_lifted`.
 		- ✅ And the inverse, for light-mode themes.
-			- Pinned by: `light_mode_tones_down_the_picture_that_stands_out_there_instead`.
+			- Pinned by: dcx78 `light_mode_tones_down_the_picture_that_stands_out_there_instead`.
 		- ✅ Need a config file name and a default value for the resulting strength of this calculation.
-			- Pinned by: `the_strength_setting_turns_the_ramp_off`.
+			- Pinned by: dcx7b `the_strength_setting_turns_the_ramp_off`.
 	- Opened: 20260703-100322
 	- `Fixed:` `wallpaper.even_visibility`, 0 to 1, default 1. A picture further from the background color than the bundled pack's median is drawn at less than the slider says, and one closer at more, so the setting means the same thing whatever rotates in next.
 	- `How bright a picture reads:` its overall level and its bright end together, half each, taken in the mix's own curve. The bright end is half the answer because glare comes from there - a night sky with a sun in it is not a dark picture to look at. `Summary` has both, measured on the same grid the derived text colors use.
@@ -10572,7 +10585,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- `Measured:` at a 10% slider in dark mode, the pack's brightest picture went from a mean of 58.8 to 48.3 and its darkest from 0.8 to 2.6. In light mode the same two went from 26 and 93 sRGB levels of displacement to 63 and 52.
 	- `Note:` a setting of 0 gives exactly the old look.
 	- `Note:` this is the one part that deliberately changes dark mode, which the light mode entry above forbade. The two entries disagreed and this one is older and more specific. `even_visibility: 0` is the way back.
-	- `Pinned by:` seven tests in visibility.rs, each watched red against its own mutation. Dropping the bright end from the brightness statistic left every other test green, so a test for a dark picture with a bright area was added.
+	- `Pinned by:` seven tests in visibility.rs, dcx76, dcx77, dcx78, dcx79, dcx7a, dcx7b and dcx7c, each watched red against its own mutation. Dropping the bright end from the brightness statistic left every other test green, so a test for a dark picture with a bright area was added.
 	- Opened: 20260703-100322. Closed: 20260920
 
 - ✅ Dark mode is just about perfect, so don't make ANY changes that affect dark mode. But light mode is badly miscalibrated. Various settings may need to work differently in light mode. (Either different defaults, and/or different ways of calculating them depending on dark or light mode.) For example:
@@ -10583,7 +10596,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- `Decision:` "as much picture" has two readings and they disagree. Matching how far the composite sits from the background asks for 30% behind a 10% slider and leaves the picture flat. Matching how much of its own texture survives asks for 70% and turns the background mid-gray. The default is halfway, 50%, which is where a side-by-side against dark mode stops reading as a different feature. `PRESENCE` in lightmode.rs moves it.
 	- `Measured:` at the default 10%, light mode's background went from 10 sRGB levels away from the theme's own to 58, against dark mode's 19, and the picture's own texture from 0.6 to 3.2 against dark mode's 6.4. The halo moved 43% of the pixels around a screenful of text by an average of 10 levels, and the text still read clearly.
 	- `Dark mode:` unchanged. The same scene with the whole module disabled matches exactly.
-	- `Pinned by:` eight tests in lightmode.rs and one in autotheme.rs, each watched red against its own mutation. The renderer and the scrim uniform cannot be reached by a test, since nothing in the tree builds a window.
+	- `Pinned by:` eight tests in lightmode.rs and one in autotheme.rs, each watched red against its own mutation. Of those, the three halo tests are now dcx41, dcx42 and dcx43 in visibility.rs, and the autotheme one is dcx40. The other five went with the calibration. The renderer and the scrim uniform cannot be reached by a test, since nothing in the tree builds a window.
 	- `Filed, not fixed:` two more of the same class, at the end of the features - window transparency, and the block cursor's plate.
 	- ✅ `Update, same day:` the mechanism here is superseded. Matching one reading or blending two did not fix it, since light mode needed a different blend. See the two entries above, which drop `PRESENCE` and the whole calibration with it.
 		- No test: the old way was replaced, and its replacement is pinned above.
@@ -10593,7 +10606,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- `Fixed:` the collapsed Theme box says `[unsaved]` while any palette color disagrees with the theme. `dd_closed_label` in settings_ui.rs is the one place that decides, so no other dropdown is affected.
 	- `Decision:` display only. The Save button already answers the same question from the colors themselves, and storing a second copy of it would be the flag the design deliberately does not keep.
 	- `Decision:` `[unsaved]` on its own rather than the theme's name beside it. The list is unchanged and still highlights the theme the edits started from, so one click shows what they started from - and picking it again is how to discard them.
-	- `Pinned by:` `an_edited_theme_reads_as_unsaved_in_the_box` in settings_ui.rs. Two mutations watched red: never saying it, and saying it on every dropdown.
+	- `Pinned by:` dcx27 `an_edited_theme_reads_as_unsaved_in_the_box` in settings_ui.rs. Two mutations watched red: never saying it, and saying it on every dropdown.
 	- `Measured:` With a background override in the file the box reads `[unsaved]` and Save is live; the open list highlights SilkTerm with its check mark, and Mode still reads Dark.
 	- Opened: 20260920-174824
 	- Closed: 20260920-181145
@@ -10606,7 +10619,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- `Decision:` the square mixes toward the hue in sRGB, not in linear light, which is the one place in the program that does. Mixing toward white in linear gives a square nobody would recognize as a color picker.
 	- `Decision:` no hue box among the six. The strip is the hue control and the other values can already name any color. Percents rather than 0 to 255, since every other fraction in the dialog is shown as a whole percent.
 	- `Fixed:` a color row has two focus stops now, the chip then the hex field. Space or Enter on the chip opens the picker, and the arrows adjust whatever holds focus inside it - the square, the strip, or a number - so nothing in the box is reachable only by pointer.
-	- `Pinned by:` nine tests in pick.rs over the color model and the box's geometry, and ten in settings_ui.rs over the wiring: that the box swallows every input path, that Cancel and OK do what they say, that Tab opens each value box selected, and that the value boxes are never mistaken for the shells grid's. Eleven mutations watched red, one per rule.
+	- `Pinned by:` nine tests in pick.rs over the color model and the box's geometry, dcx0a, dcx0b, dcx0c, dcx0d, dcx0e, dcx0f, dcx0g, dcx0h and dcx0j, and ten in settings_ui.rs over the wiring, dcx0k, dcx0m, dcx0n, dcx0p, dcx0q, dcx0r, dcx0s, dcx0t and dcx0v among them: that the box swallows every input path, that Cancel and OK do what they say, that Tab opens each value box selected, and that the value boxes are never mistaken for the shells grid's. Eleven mutations watched red, one per rule.
 	- `Measured:` at scale 1 and 2. The pixel under the square's marker is the hex value exactly, the strip runs red through magenta back to red, and dragging, typing, arrow-stepping, Cancel and OK each set the row behind as expected.
 	- `Note:` nothing here runs WGSL, so the two shader modes are held against the Rust model by their own text. What that catches is a square painted from a different formula, which would put the marker where the color is not.
 	- `Left alone:` no preview chip in the box. The marker's own center is the color, and the chip behind follows every change.
@@ -10621,7 +10634,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- `Decision:` on by default. The switch is there for a shell that retitles on every prompt, which turns a strip of labels into a row of the same `user@host` text.
 	- `Fixed:` the tab reads the title through the same filter the window title uses, so a Windows console naming the program it started still says nothing.
 	- `Fixed:` the tab's flyover has a "Program title" line when there is one, whatever the switch says.
-	- `Pinned by:` `a_program_title_heads_the_tabs_forms` and `a_tab_passes_over_a_title_that_only_names_a_program`, both watched red three ways - the title dropped, the switch ignored, and the filter taken out.
+	- `Pinned by:` dcwyz `a_program_title_heads_the_tabs_forms` and dcwz0 `a_tab_passes_over_a_title_that_only_names_a_program`, both watched red three ways - the title dropped, the switch ignored, and the filter taken out.
 	- `Measured:` two tabs, one of them setting its own title. On: the tab reads "build - release" and the other its shell and path. Off: both read their shell and path. The flyover line was not looked at on screen.
 	- Opened: 20260628-083740
 	- Closed: 20260920-162710
@@ -10630,14 +10643,14 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- `Fixed:` Pastel, dark and light, as the backlog described it - soft cream text on a dark gray with a faint blue tint, which is the complement of the text. The light variant turns it around: the same hues deepened, on cream paper.
 	- `Decision:` Pastel over Solarized. The entry named it first and described what it wanted; Solarized was listed as the other candidate.
 	- `Decision:` every ANSI color at the same low saturation, with the bright row a step lighter rather than a step more vivid, so no one color jumps out of the set.
-	- `Pinned by:` the six existing theme tests, which is what the palette structure was built for: shared chrome, a recessed gutter, the two attention colors 120 apart, the foreground clearing the contrast floor, ANSI black not clearing it, and the cursor plate keeping its text legible. The cursor and the light foreground were both picked against that last one rather than by eye.
+	- `Pinned by:` the six existing theme tests, which is what the palette structure was built for: shared chrome, a recessed gutter, the two attention colors 120 apart, the foreground clearing the contrast floor, ANSI black not clearing it, and the cursor plate keeping its text legible. Those rules are in d9ch7 `chrome_defaults_shared_across_themes`, dava3 `the_two_attention_colors_stay_apart`, dbzct `a_theme_fg_clears_the_floor_and_ansi_black_does_not` and dcrcs `text_on_the_cursor_plate_clears_the_floor`. The cursor and the light foreground were both picked against that last one rather than by eye.
 	- `Measured:` both variants, against colored `ls` output and the two ANSI rows.
 	- Opened: 20260628-083740
 	- Closed: 20260920-132052
 
 - ✅ Settings dialog: a hex field should select its contents when it takes focus.
 	- `Note:` no code. Keyboard focus landing on a Text, Color or Slider row has opened the field with the value selected since 20260917, and a click on the swatch has always done it. Nothing in the dialog ever empties a field.
-	- `Pinned by:` a hex case added to `keyboard_focus_opens_a_text_field_with_the_value_selected`, which had covered the text and slider fields only. Watched red with the color arm opening unselected.
+	- `Pinned by:` a hex case added to dcrps `keyboard_focus_opens_a_text_field_with_the_value_selected`, which had covered the text and slider fields only. Watched red with the color arm opening unselected.
 	- Opened: 20260628-083740
 	- Closed: 20260920-132052
 
@@ -10646,7 +10659,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- `Fixed:` the cheaper profiles keep the same share of the radius they always had, 5 px against the default 8, so they still look like the same halo built with fewer taps. Standard terminal and Remote have no halo at all and are left alone.
 	- `Fixed:` Low drew a two-pixel outline. It draws one now, which is the default, so no built-in profile is above it.
 	- `Note:` the two outgoing defaults are in `SUPERSEDED_DEFAULTS`, so an existing config's commented lines are refreshed and a hand-set value is left alone. 20% comes off that list, since it is current again.
-	- `Pinned by:` `changed_defaults` for the two values, and a new loop in the profile ladder test that walks every profile and refuses an outline over a pixel.
+	- `Pinned by:` d97z3 `changed_defaults` for the two values, and a new loop in the profile ladder test, dc57q `each_profile_costs_less_than_the_one_above`, that walks every profile and refuses an outline over a pixel.
 	- `Measured:` seen over the built-in wallpaper - text readable at the new values.
 	- Opened: 20260920-132052
 	- Closed: 20260920-132052
@@ -10655,7 +10668,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- `Fixed:` an `Uptime:` line at the end of the Info block, formatted by `tabtitle::elapsed` the way the tab flyover's "Open" line is. `config::mark_launch` at the top of main sets the clock and `config::uptime` reads it.
 	- `Decision:` read as the box opens rather than ticking while it is up. A dialog redrawing once a second to move a number nobody is watching costs a wake a second, and the answer only matters to the nearest minute.
 	- `Decision:` the clock is marked in main rather than started on first read, or the figure would say how long the About box had been reachable.
-	- `Pinned by:` `a_session_uptime_runs_from_the_launch_mark`. One mutation red; a second mark cannot restart the clock by construction, since it is a `OnceLock`.
+	- `Pinned by:` dcwrh `a_session_uptime_runs_from_the_launch_mark`. One mutation red; a second mark cannot restart the clock by construction, since it is a `OnceLock`.
 	- `Measured:` release build, About opened about 80 seconds after launch and read "Uptime:  1m 20s".
 	- Opened: 20260920-122444
 	- Closed: 20260920-130105
@@ -10665,7 +10678,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- `Decision:` nemo's "the tabs behind take the same step as each other" was left out. Its ladders are all path forms, so one rung number means the same thing on every tab; a SilkTerm label is shell plus task plus path, and rung 3 on one tab is nothing like rung 3 on the next. Each tab drops to whatever rung of its own ladder fits instead.
 	- `Note:` a deep path never reaches the initials rung any more - the ellipsis has already beaten it. Initials still win on a one-directory path, where the ellipsis costs more than the name it covers.
 	- `Note:` with the default 10% regular width, a tab in front with a long path can leave the others saying only their shell's name. That is the formula working; raising `window.tab_regular_width_pct` is what buys them a path back.
-	- `Pinned by:` `a_path_loses_its_middle_before_its_names`, `the_tab_in_front_takes_what_the_row_can_spare`, `the_tab_in_front_asks_for_no_more_than_its_label_wants`. Three mutations red.
+	- `Pinned by:` dcwr7 `a_path_loses_its_middle_before_its_names`, dcwr8 `the_tab_in_front_takes_what_the_row_can_spare`, dcwr9 `the_tab_in_front_asks_for_no_more_than_its_label_wants`. Three mutations red.
 	- `Measured:` release build, four tabs in the repo directory at a 1071 px window. The tab in front drew the whole path at about 750 px and the other three sat at 107 px saying "Dash"; clicking the first tab moved it, and the strip redrew the other way round.
 	- Opened: 20260920-122444
 	- Closed: 20260920-125157
@@ -10679,7 +10692,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- `Decision:` the values kept are the ones the profile was showing, not the older ones underneath it. The edit was made against what could be seen. Picking Custom from the dropdown is still the other way in, and that one does bring the older values back.
 	- `Decision:` Remote (temporary) is no exception. It governs, so an edit under it drops the session override and the stored profile with it, or the new value would be covered up by one or the other.
 	- `Note:` a row showing a profile's value still offers no revert arrow, since what it shows is not a value the user set. Its flyover says it is showing the profile's value and what changing it does.
-	- `Pinned by:` `changing_a_governed_row_takes_the_profile_to_custom` walks every governed row and checks the other governed rows keep what they showed; `changing_a_governed_row_under_remote_drops_the_override`. Three mutations red.
+	- `Pinned by:` `changing_a_governed_row_takes_the_profile_to_custom` walks every governed row and checks the other governed rows keep what they showed; `changing_a_governed_row_under_remote_drops_the_override`. Three mutations red. Since the settings moved to the knobs model they are dcwqw `changing_a_profile_s_row_marks_it_and_leaves_custom_alone` and dcwqx `changing_a_row_under_remote_ends_it`.
 	- `Measured:` release build, with `automatic: true` in a scratch config. The machine rated Low; switching off Smooth scrolling put Profile at Custom, cleared the switch, grayed "Check for hardware change" and left every other value where it was. Apply wrote `automatic: false`, `profile: custom`, `outline: 2` and `ease_in_ms: 41`.
 	- Opened: 20260919-155433 by JC
 	- Closed: 20260920-123828
@@ -10688,7 +10701,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- `Note:` no code. The default has been 1.0 since 2026-08-04 and the template's commented line says so.
 	- `Cause:` the config on b23 has an explicit `outline: 2.0` from before that. Only a commented default line is refreshed at launch; a written value is kept, since there is no way to tell one typed on purpose from one left over. Commenting it out or deleting it lets the new default take over.
 	- `Left alone:` refreshing a written value that happens to equal an old default. It would overwrite a deliberate setting for everyone who had chosen the same number.
-	- Pinned by: `changed_defaults`.
+	- Pinned by: d97z3 `changed_defaults`.
 	- Opened: 20260919-155433 by JC
 	- Closed: 20260920-112403
 
@@ -10700,7 +10713,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- `Note:` the four settings are `window.tab_shows_shell`, `window.tab_shows_program`, `window.tab_shows_directory` and `window.title_shows_tab`, in a "Tab text" group and a "Window title" group on the Window tab. The label says Directory rather than Path, per the interface style guide.
 	- `Decision:` a part that is off is dropped before the ladder of shortenings is built, so a tab with the directory off has no path rung to give up. Switching all three off leaves the tab naming its shell - a tab with no text cannot be told from the one beside it. The tab's flyover still names all three.
 	- `Decision:` the window title's switch drops the name typed on the tab as well as the text the tab works out, since both are the tab talking. A program's own title still comes through and `--title` is untouched. See design.md.
-	- `Pinned by:` `a_tab_says_only_the_parts_that_are_switched_on` and `a_window_title_can_stop_naming_its_tab`, six mutations between them, all red.
+	- `Pinned by:` dcwj7 `a_tab_says_only_the_parts_that_are_switched_on` and dcwj8 `a_window_title_can_stop_naming_its_tab`, six mutations between them, all red.
 	- `Note:` checked at each setting. Shell off gives `/usr/share/doc/`, directory off gives `Dash`, all three off gives `Dash`, and the title switch off leaves the title bar reading `SilkTerm` alone. The dialog rows draw on the Window tab with the panel width unchanged.
 	- Opened: 20260920. Closed: 20260920
 
@@ -10709,7 +10722,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Fixed: both main-window tips now fill with the menu background lifted by the step the strip puts between an inactive and an active tab, then warmed, since every tab color leans faintly blue. The border and the text come off the same two colors. By default that is a box at `0x605855` with a `0x827a77` edge and `0xf5f0ed` text.
 	- Decision: derived shades, not two more colors on the Themes tab. Twelve colors are editable and each has one job, and the chrome already answers this with shades - hover, border and separator are all taken off the menu color, so a custom menu color stays coherent. The reasoning is in design.md.
 	- Left alone: the Settings and About tips, which already stand off their panel. The benchmark banner, which draws in the same pass but is a modal notice rather than flyover help.
-	- Pinned by: `a_tip_sits_off_every_tab_color`, `a_tip_is_not_painted_in_the_menu_colors`, `a_tip_follows_a_custom_menu_color_either_way` and `tip_text_clears_the_floor_on_its_own_box`. Each watched failing with its own rule taken out.
+	- Pinned by: dcwfk `a_tip_sits_off_every_tab_color`, dcwfm `a_tip_is_not_painted_in_the_menu_colors`, dcwfn `a_tip_follows_a_custom_menu_color_either_way` and dcwfp `tip_text_clears_the_floor_on_its_own_box`. Each watched failing with its own rule taken out.
 	- Note: what the renderer hands to the quads cannot be reached by a test, since nothing constructs a window. Checked in a window instead: the box, its border and its glyphs show the three colors, against an active tab above them.
 	- Opened: n/a
 	- Closed: 20260920-083000
@@ -10717,7 +10730,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - ✅ Make text scrim falloff "Exponential" more agressive. E.g., increase the exponent.
 	- Fixed: the exponent doubled, from 3 to 6. A quarter of the way out to the halo's edge the scrim is at 22 percent of full rather than 44, and halfway out under 5 rather than 18.
 	- Left alone: the other four curves, and the halo's width. The curve still reaches exactly zero at the edge, which it has to: past that the distance passes saturate and whatever it returns there is the alpha of every pixel in the pane.
-	- Pinned by: `the_exponential_falloff_drops_away_hard`, watched failing with the old exponent put back.
+	- Pinned by: dcvp0 `the_exponential_falloff_drops_away_hard`, watched failing with the old exponent put back.
 	- To confirm: how it looks. The curve is pinned by number, not by eye.
 	- Opened: 20260905-183423
 	- Closed: 20260919-190000
@@ -10731,14 +10744,14 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Decision: not a rebuild. Reopening was the one thing that worked, and would have been a few lines, but a reopen keeps only the tab and the scroll - so every unapplied edit would have gone the moment the window crossed a monitor edge.
 	- Fixed: the size kept for the rest of the session is in the scale-free unit now, so a reopen on another monitor is the same apparent size.
 	- Left alone: About and the notice box, which are laid out once at open into fixed positions and cannot be resized. Filed below.
-	- Pinned by: `a_scale_change_moves_the_boundary_and_leaves_the_rest`, watched failing three ways - the factor left alone, the chrome not re-measured, and the values reset the way a rebuild would.
+	- Pinned by: dcvf7 `a_scale_change_moves_the_boundary_and_leaves_the_rest`, watched failing three ways - the factor left alone, the chrome not re-measured, and the values reset the way a rebuild would.
 	- Closed: 20260919-153000
 
 - ✅ Settings | Silk: Allow "Profile" to be selected even when "Choose automatically" is enabled.
 	- If user changes it, deselect "Choose automatically".
 	- Exception: If user chooses "Remote (temporary)", don't change state of "Choose automatically".
 	- Fixed: the dropdown is live whatever the switch says, and naming a profile switches "Choose automatically" off. Remote (temporary) leaves it alone.
-	- Pinned by: `naming_a_profile_switches_off_the_automatic_choice_except_remote`, watched failing both ways, and the graying test, watched failing with the old gate put back.
+	- Pinned by: dcvf8 `naming_a_profile_switches_off_the_automatic_choice_except_remote`, watched failing both ways, and the graying test, `a_profile_shows_its_values_and_locks_its_rows` (now dcwqv `a_profile_shows_its_values_in_its_rows`), watched failing with the old gate put back.
 	- Opened: 20260906-084810
 	- Closed: 20260919-153000
 
@@ -10747,7 +10760,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Restoring: "[regular title] (restoring resources …)"
 	- Restored: "[regular title] (resources restored)"
 		- Show for 5 seconds after restoration
-	- Pinned by: `the_title_note_follows_the_device_out_and_back` and `a_note_follows_the_whole_title_even_a_custom_one`.
+	- Pinned by: dcsvt `the_title_note_follows_the_device_out_and_back` and dcsvv `a_note_follows_the_whole_title_even_a_custom_one`.
 	- Opened: 20260918-112508
 	- Done: restoring lasts until the wallpaper is back. Shown for any rebuild, a VT switch included, and after a custom title too.
 	- Closed: 20260918-113450
@@ -10757,7 +10770,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Tab or an arrow onto a text, color or number box opens it with the value selected, so typing replaces it. That already happened on a click, on Space, and on the first character typed; the field sat shut and blank until then.
 	- A slider's number box was held back at first, on the grounds that its arrows step the value. Only Left and Right do that once the box is open - Up and Down go on stepping either way, which is how a number field behaves elsewhere - so it opens with the rest.
 	- Decision: Esc from inside a field is the dialog's Cancel now, in one press. Closing the field was all it used to do, and a typed value applies as it is typed, so there was nothing to take back - and with fields opening on the way past, Esc would have been eaten on every one.
-	- Pinned by: `enter_in_a_field_is_the_dialogs_ok`, `keyboard_focus_opens_a_text_field_with_the_value_selected` and `escape_from_inside_a_field_cancels_the_dialog`, all watched failing against the old behavior.
+	- Pinned by: dcrpv `enter_in_a_field_is_the_dialogs_ok`, dcrps `keyboard_focus_opens_a_text_field_with_the_value_selected` and dcrpt `escape_from_inside_a_field_cancels_the_dialog`, all watched failing against the old behavior.
 	- Opened: 20260917-145958
 	- Closed: 20260917-154849
 
@@ -10779,7 +10792,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Measured on the Linux box under software GL: about 3 ms to let go, about 25 ms to take back, no CPU while released. Not yet measured under the NVIDIA driver, on Wayland or on Windows.
 	- Found on the way and fixed: glibc kept each wallpaper decode's buffers resident in the worker's arena, about 50 MB per window from the first decode alone. The mmap threshold is pinned now, which cut launch memory by about 60 MB with a wallpaper. And every Vulkan instance destroyed on NVIDIA left two file descriptors open, so the warm dialog context keeps its instance across a release.
 	- Rows on the Window tab: "Free resources when idle", "Minutes when hidden" (30), "Minutes otherwise" (240). Config keys `window.idle_release`, `window.idle_release_hidden_min`, `window.idle_release_min`.
-	- Pinned by: `the_idle_release_waits_on_the_window_and_only_an_unwatched_one` and `output_into_a_hidden_window_does_not_keep_its_device`.
+	- Pinned by: dcr6f `the_idle_release_waits_on_the_window_and_only_an_unwatched_one` and dcrvv `output_into_a_hidden_window_does_not_keep_its_device`.
 	- Note: 20260930, the planning bullets above were answered by the Done bullets: nothing is disabled under transparency, and the label is "Free resources when idle". The design is in the [releasing resources design doc](design_docs/20260930-151334_releasing-resources.md).
 	- Note: 20261004, the open point "figure out a way to reduce CPU and memory usage" moved to the [reducing resources design doc](design_docs/20261004-182255_reduce-resources.md).
 	- Note: 20261003, on by default now, per 2026100312470540.
@@ -10792,7 +10805,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Fixed: the style guide has its disable block and a table of contents, and the glossary has one as well. Both TOCs are generated from the headings, so the glossary's 45 entries cannot drift.
 	- Note: the style guide's block names three rules rather than the five the other docs have, because those three are all its content breaks. Line length is left complaining everywhere, since nothing here hard-wraps.
 	- Left alone: the bold lines used as headings under "Support SilkTerm", and the prose wording the check flags. Neither one is spacing.
-	- Pinned by: `cicd/tests/docs/run.py`.
+	- Pinned by: dd5nv `cicd/tests/docs/run.py`.
 	- Opened: 20260909-212000
 	- Closed: 20260916-122130
 
@@ -10801,23 +10814,23 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- The word cannot be matched in every language. Closing this properly means matching the title against the path of the program the pane is running, which would also cover the plain case without knowing any words.
 	- Done: a word in front of a Windows path to the pane's own program comes off, whatever the language. Only the file name is compared. A word holding a path separator, or in front of another program, stays.
 	- Not run on a Windows box in another language.
-	- Pinned by: `a_foreign_elevated_marker_goes_with_the_program_it_names` and `a_word_in_front_of_another_program_survives`.
+	- Pinned by: dcnwn `a_foreign_elevated_marker_goes_with_the_program_it_names` and dcnwp `a_word_in_front_of_another_program_survives`.
 	- Opened: 20260909-143000
 	- Closed: 20260915-154444
 
 - ✅ Adversarial fuzz and security testing, over library code as well as our own, in the pipeline.
 	- ✅ Ten targets, each sitting beside the code it hammers: the escape-sequence stream, the config file twice (as a config and as arbitrary bytes), hyperlink detection, the shape a double-click grabs, matched pairs, a paste payload, a window title, a reported directory, and a wallpaper's own tags.
-		- Pinned by: `a_program_cannot_make_the_terminal_type`.
+		- Pinned by: dcdjk `a_program_cannot_make_the_terminal_type`, and the other nine targets, dcdj4, dcdj5, dcdj7, dcdjc, dcdjd, dcdje, dcdjf, dcdjh and dcdjm.
 	- ✅ They are ordinary tests, so a plain `cargo test` runs every one at a fraction of a second. The pipeline gives each a real budget and gates on it; `--quick` and `--no-fuzz` skip the long run.
 		- No test: pipeline settings only. Every fuzz run goes through them.
 	- ✅ Library code is covered where it matters most. The escape-sequence target drives a real terminal from the engine crate rather than only our code around it, and the config target goes through the config-format crate the same way.
-		- Pinned by: `a_program_cannot_make_the_terminal_type`.
+		- Pinned by: dcdjk `a_program_cannot_make_the_terminal_type`.
 	- ✅ A corpus of realistic inputs under `cicd/tests/fuzz-corpus/`, replayed on every run and used as parents for byte-level mutation. Anything a run breaks belongs there afterwards.
-		- Pinned by: `the_corpus_is_where_the_targets_look_for_it`.
+		- Pinned by: dcdjn `the_corpus_is_where_the_targets_look_for_it`.
 	- Every case is a pure function of one seed, so a failure reports the seed and nothing has to be saved to reproduce it.
 	- Generated by grammar rather than guided by coverage. Every input here has a grammar, and coverage-guided fuzzing would also need a nightly toolchain and sanitizers, so it would run on one platform out of four and not in the ordinary test run at all.
 	- What the security half asserts is written up in design.md: the terminal must not type on a program's behalf, a link must have a scheme from the list, a paste must not step outside its brackets, a title is text and nothing else, and a reported directory is not automatically a directory.
-	- Three defects came out of building it, each fixed and each left with a plain unit test as well: a program could put control characters into the window title, a reported directory could too, and a relative reported directory would have started a pane wherever the terminal itself was started.
+	- Three defects came out of building it, each fixed and each left with a plain unit test as well: a program could put control characters into the window title, a reported directory could too, and a relative reported directory would have started a pane wherever the terminal itself was started. Those tests are dcdjg `a_title_arrives_as_plain_text`, dcdj6 `a_reported_directory_with_a_control_character_is_refused` and dcdjj `a_pane_only_ever_starts_in_an_absolute_directory`.
 	- Two things were left on purpose. A right-to-left override in a title survives, since refusing it would also refuse the joiners that hold an emoji together, and any file name can ask for the same reordering. And a program setting the clipboard is a privacy question rather than an injection one, so it is recorded rather than tested.
 	- Run on both Windows machines as well as b23, and a test checks that the corpus path can be found - a tree laid out differently would find nothing and every target would still pass.
 	- Opened: 20260909-180000
@@ -10825,11 +10838,11 @@ Going forward, new issues in the new template at the bottom of this file, will g
 
 - ✅ A terminal running with administrator or root rights says so in its window title.
 	- ✅ The title starts with "Administrator: " on Windows and "Root: " elsewhere. Windows spells its own elevated console title bars that way, so that word is kept rather than invented.
-		- Pinned by: `a_privileged_window_says_so_before_anything_else`.
+		- Pinned by: dcday `a_privileged_window_says_so_before_anything_else`.
 	- ✅ No flag turns it off, `--title` included, since the absence of the word has to mean something. It goes on the window title only, not on tab titles.
-		- Pinned by: `a_privileged_window_says_so_before_anything_else`.
+		- Pinned by: dcday `a_privileged_window_says_so_before_anything_else`.
 	- ✅ An elevated Windows console writes the same word in front of the first title it sends, measured over a pseudoconsole on both machines, so that copy is taken back off. Without it the word hides the program name behind it and the whole path is shown. A title the program sets afterwards is not decorated, so the word cannot arrive twice from a console.
-		- Pinned by: `an_elevated_console_marker_is_not_repeated` and `a_marker_the_console_did_not_write_survives`.
+		- Pinned by: dcdas `an_elevated_console_marker_is_not_repeated` and dcdat `a_marker_the_console_did_not_write_survives`.
 	- The rights are the terminal's own. A pane that elevates itself afterwards is not covered.
 	- Left: a console speaking another language writes another word, which is not recognized. Filed as its own item.
 	- Seen at a real effective user id of zero: the marker on a plain title, on a program title that falls back to the tab label, and on a title given on the command line. A title that already starts with the word is not given a second one.
@@ -10839,9 +10852,9 @@ Going forward, new issues in the new template at the bottom of this file, will g
 
 - ✅ Run the interface checks on Windows from here as well.
 	- ✅ Scenarios run against a real desktop and bring back a verdict and screenshots. Windows, capture and typing all work; a machine that is off, or whose session is locked, is reported and stepped over rather than failing the build.
-		- Pinned by: `cicd/tests/wingui/harness-test.bash`.
+		- Pinned by: dct7r `cicd/tests/wingui/harness-test.bash`.
 	- ✅ Three scenarios so far: the window comes up and takes what is typed, the Settings dialog opens and changes tabs and closes, and the performance ladder rates the machine and is believed on the next launch.
-		- Pinned by: `cicd/tests/wingui/smoke.ps1`.
+		- Pinned by: dcbsy `cicd/tests/wingui/smoke.ps1`.
 	- ✅ The performance ladder has now rated real hardware for the first time. A discrete card at 3440x1440 answers the top rung.
 		- No test: a measurement on real Windows hardware.
 	- The premise in the original note was wrong, and it is what had blocked this. A second session is not needed at all: the work goes to the session already logged on. What blocked every earlier attempt was that a job arriving over the network has no desktop to draw on, which looks exactly like a permissions problem and is not one.
