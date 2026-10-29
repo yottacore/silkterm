@@ -148,20 +148,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Branch: rnd1029
 	- Test case: dejjp `cicd/tests/testid/run.py`, and dcry4's check that a test named for a warning is not one.
 
-- CICD reset: a test for each old-format Done bug, part 3 of 4
-	- ID: 2026102819193498
-	- Type: Task
-	- Status: Queued
-	- Priority: High
-	- Opened: 20261028-191934
-	- Opened by: CC
-	- Parent ID: 2026102416233809
-	- Target OS: All
-	- Requirements:
-		- The old-format Done bugs from "Bug: Residual 1-line smooth scroll-up on alt-screen enter and exit" to "Windows: no smooth-scrolling in full-screen / scroll-region apps", 40 items.
-		- Each names its test ID beside the test it names, or says in a few words why it has none. A test is added where one could exist and doesn't, and is watched to fail with the fix taken out.
-		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
-
 - CICD reset: a test for each old-format Done bug, part 4 of 4
 	- ID: 2026102819193512
 	- Type: Task
@@ -1148,6 +1134,32 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- For that flag only, no blank lines before or after.
 	- Notes:
 		- Pre-next-cut.
+
+- CICD reset: a test for each old-format Done bug, part 3 of 4
+	- ID: 2026102819193498
+	- Type: Task
+	- Status: Done
+	- Priority: High
+	- Opened: 20261028-191934
+	- Opened by: CC
+	- Parent ID: 2026102416233809
+	- Target OS: All
+	- Requirements:
+		- The old-format Done bugs from "Bug: Residual 1-line smooth scroll-up on alt-screen enter and exit" to "Windows: no smooth-scrolling in full-screen / scroll-region apps", 40 items.
+		- Each names its test ID beside the test it names, or says in a few words why it has none. A test is added where one could exist and doesn't, and is watched to fail with the fix taken out.
+		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
+	- Progress log:
+		- 20261028: Each test the 40 items name, by a name a test still has, now has its ID beside it. So do the Settings warm-up tests and the Windows flood test they name in words.
+		- 20261028: Two tests named were commented out since, the font order and system font switch ones. Each now names the tests that took over.
+		- 20261028: The DPI item names the scale change test and the per-monitor harness, which drive the same handler on Linux.
+		- 20261028: The rest say why they have no ID: a measurement, an experiment not kept, a speed change with no stable threshold, a failed attempt, and frame pacing and window style that need a Windows desktop. No test was missing where one could exist, so none was added.
+	- Decisions:
+		- 20261028: As in part 2, a test commented out since keeps its old name, with "now" and the test that took over.
+	- Verified: 20261028. Every test ID added in part 3 is one the tree has. `--backlog-run-quick docs` passed, `test-id.py --check` passes, and the markdown check finds nothing new.
+		- Swept: every name in backticks and test script path in the 40 items, and every "Pinned by" or "No test" written in words.
+	- Branch: rnd1029
+	- Test case: each of the 40 items names its own, or why it has none.
+	- Closed: 20261028-204110
 
 - CICD reset: a test for each old-format Done bug, part 2 of 4
 	- ID: 2026102819193485
@@ -9409,26 +9421,26 @@ Going forward, new issues in the new template at the bottom of this file, will g
 
 - ✅ Bug: Residual 1-line smooth scroll-up on alt-screen enter and exit (`smooth_scroll_apps`). The enter/exit hard-cut fixed the big jiggle and scroll-in, but a slight single-line ease still rides the transition. Livable, deferred. Likely the output-ease firing one frame after the transition. A candidate fix is to rebaseline the history baseline and suppress the nudge one frame past the transition.
 	- Gone with the nano wobble fix. The ease never sits past the grid now, so there is nothing left to ride the transition.
-	- Pinned by: `an_alt_screen_entry_puts_a_running_ease_at_rest` and `the_ease_floor_is_capped_by_the_history`.
+	- Pinned by: dbtpf `an_alt_screen_entry_puts_a_running_ease_at_rest` and dbtpg `the_ease_floor_is_capped_by_the_history`.
 	- Opened: 20260706-101054
 	- Closed: 20260827-073521
 
 - ✅ A wheel gesture can end up moving backwards about one line.
 	- Confirmed in the code: the rest position was rounded to the nearest whole line, so a gesture ending nine tenths past a boundary went all the way forward and then hopped back onto the one behind. It moves less than a line, but it is a visible reversal against the gesture.
 	- A wheel now rests on the line ahead of where it stopped, in the direction it was already going. A scrollbar drag or a track click has no direction of its own and still rounds to nearest, which is what direct manipulation wants.
-	- Pinned by: `a_wheel_settles_on_the_line_it_was_heading_for`.
+	- Pinned by: dbsyc `a_wheel_settles_on_the_line_it_was_heading_for`.
 	- Opened: 20260813-091542
 	- Closed: 20260826-184319
 
 - ✅ In a narrow window the "Copy on: select / output" checkboxes overlap the menu titles. Hide the section when there is no room for it.
 	- The cluster sheds parts now instead of crossing the titles: the "Copy on:" lead-in goes first, then the two words, then the whole thing. The checkboxes are the last to go, since they show the state and the words only name it. It comes back on its own as the window widens.
-	- Pinned by: `the_copy_cluster_sheds_parts_before_it_reaches_the_menu_titles`.
+	- Pinned by: dbsya `the_copy_cluster_sheds_parts_before_it_reaches_the_menu_titles`.
 	- Opened: 20260818-181932
 	- Closed: 20260826-184319
 
 - ✅ The menu titles and the "Copy on" section do not sit on the same baseline.
 	- Everything on the menu bar centers the same way now, so the two runs share one baseline. The copy labels lost the full-ink centering that read better on its own but sat half a descent above the titles beside it.
-	- Pinned by: `the_bar_titles_and_the_copy_labels_share_a_baseline`.
+	- Pinned by: dd5qp `the_bar_titles_and_the_copy_labels_share_a_baseline`.
 	- Opened: 20260818-183416
 	- Closed: 20260826-184319
 
@@ -9436,7 +9448,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Fixed: the startup directory follows the calling directory, so "Open in terminal" from a file manager starts in that folder. The setting still applies where the inherited directory was a launcher's default - home, a filesystem root, or beside the executable - so the two coexist and the setting stays.
 	- Fixed: closing the last tab closes the window.
 	- Note: a crash on closing a second tab came in on the same report and is still open under Bugs.
-	- Pinned by: `an_inherited_directory_is_a_choice_unless_a_launcher_picked_it` and `close_pane_on_a_pane_that_is_gone_closes_nothing`.
+	- Pinned by: dbsxm `an_inherited_directory_is_a_choice_unless_a_launcher_picked_it` and dcq6n `close_pane_on_a_pane_that_is_gone_closes_nothing`.
 	- Opened: 20260826-123553
 	- Closed: 20260826-183724
 
@@ -9444,7 +9456,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Fixed: a double-click looks for a path or URL it can name before it falls back to the word rules: a URL or file URI, a drive path, a UNC path, an absolute posix path, a `~/` path. What it recognizes it takes whole, so brackets inside a wiki URL and spaces inside a folder name no longer cut it short, and a trailing `:120:5` line number is left behind.
 	- A space is crossed only when a path separator turns up within the next forty characters, which is what separates "Program Files\app.exe" from a path followed by a sentence.
 	- Note: the missing drive letter came in on the same report and is still open under Bugs.
-	- Pinned by: `a_folder_name_may_have_spaces_in_it`, `a_space_with_no_separator_after_it_ends_the_path`, `a_line_number_after_the_extension_is_not_part_of_the_name` and `a_url_wins_over_everything_else`.
+	- Pinned by: dbsy2 `a_folder_name_may_have_spaces_in_it`, dbsy3 `a_space_with_no_separator_after_it_ends_the_path`, dbsy4 `a_line_number_after_the_extension_is_not_part_of_the_name` and dbsy5 `a_url_wins_over_everything_else`.
 	- Note: 20260930, the drive letter item is closed now, as not reproduced on Linux.
 	- Opened: 20260826-123553
 	- Closed: 20260826-183724
@@ -9455,14 +9467,14 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- A pane's shell now gets those few variables back as a freshly launched program would see them, read from the machine at startup so it stays right wherever PowerShell happens to be installed. Everything the user exported themselves is still inherited, which is the whole point of opening a terminal from a shell.
 	- The same treatment covers the execution-policy variable that PowerShell hands down to everything it starts, so a pane can no longer end up running under a policy nobody chose for it.
 	- The same list applies on Linux and macOS, where PowerShell runs too and two installs side by side collide the same way, and where the launching shell's own `cd -` target was being handed to panes that open somewhere else entirely.
-	- Pinned by: `a_shell_private_variable_is_put_back_to_the_session_value`, `only_the_named_variables_are_touched` and `a_variable_the_session_never_set_is_dropped`.
+	- Pinned by: dbjjh `a_shell_private_variable_is_put_back_to_the_session_value`, dbjjm `only_the_named_variables_are_touched` and dbjjj `a_variable_the_session_never_set_is_dropped`.
 	- Opened: n/a
 	- Closed: 20260821-130149
 
 - ✅ A second cursor showed up in the far bottom-right corner, flickering against the real one at the prompt.
 	- A program that redraws its whole display hides the cursor first, redraws, then puts it back where it belongs and shows it again. The request to hide it was being ignored, so a cursor was drawn wherever the redraw had left it - on Windows that is the bottom-right corner - and it alternated with the one at the prompt once per redraw, which is faster than a cursor blinks.
 	- Hiding the cursor and choosing its shape are two separate things, and only the shape was being read. Both are asked now, so a hidden cursor is not drawn at all - and, while hidden, costs no frames either.
-	- Pinned by: `a_hidden_cursor_is_not_drawn_where_the_app_parked_it`.
+	- Pinned by: dbfjh `a_hidden_cursor_is_not_drawn_where_the_app_parked_it`.
 	- Opened: n/a
 	- Closed: 20260819-094936
 
@@ -9471,7 +9483,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Fixed by letting one notice stand until the window takes delivery of it. Nothing is lost: the notice has no content, so the window always reads the grid as it stands.
 	- Result: process CPU down about a third and the window thread down more than half, with throughput unchanged.
 	- Fell out of it: a `SILK_PERF` counter set that reports where a burst of output went - notices, loop passes, frames, and the time inside each part of a frame, plus this thread's CPU against the whole process. It is what turned "the window feels busy" into a number.
-	- Pinned by: `one_notice_stands_until_the_window_takes_it`.
+	- Pinned by: dbekc `one_notice_stands_until_the_window_takes_it`.
 	- Opened: n/a
 	- Closed: 20260818-171236
 
@@ -9503,7 +9515,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Kept locally in the meantime: the workspace pins the released engine plus that one change, so our builds are fixed now rather than waiting. Cargo records the exact commit, so a build is still reproducible.
 	- Follow-up when a release includes it: drop the pin from the workspace file (it says so in place) and delete the branch it points at.
 	- No test: the fix is in the engine fork's Windows PTY code, and its tests run only there.
-	- Note: 20260930, out of date on two points. The engine is kept on the fork branch `scroll-ledger-0.26.0` with several patches, not a one-change pin, and the fix is pinned by a fork test and a SilkTerm Windows flood test. alacritty/alacritty#9026 was closed unmerged, so the change stays on the fork.
+	- Note: 20260930, out of date on two points. The engine is kept on the fork branch `scroll-ledger-0.26.0` with several patches, not a one-change pin, and the fix is pinned by a fork test and a SilkTerm Windows flood test, dct7y `a_pane_under_a_flood_keeps_saying_there_is_more`. alacritty/alacritty#9026 was closed unmerged, so the change stays on the fork.
 	- Opened: 20260814-140609
 	- Closed: 20260816-103257
 
@@ -9522,7 +9534,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- A replayed key is now treated as a report of what is held down, and is never sent to the shell. The same guard covers the Settings and About windows, where a replayed Enter could have closed the dialog.
 	- Keys arriving while the window doesn't have focus are also no longer typed, which closes the other way the same chord can reach us. One line rolls that half back if it ever misfires.
 	- `SILK_KEYDBG=1` prints every key event with its focus and modifier state, for the next time something like this needs settling.
-	- Pinned by: `a_replayed_key_is_not_typing`.
+	- Pinned by: db6zv `a_replayed_key_is_not_typing`.
 	- Opened: n/a
 	- Closed: 20260813-101940
 
@@ -9530,7 +9542,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- A host that resolves but is off left a single check of the remote path sitting for 21 seconds before it gave up, and the copy that follows had no limit at all. From a shortcut, that reads as nothing happening.
 	- Each network step now has its own limit, well under the one the operating system would eventually apply: the host is probed first (a couple of seconds settles a host that is off), then the check, then the copy - which gets the most room, since a slow link is not the same thing as a dead one. Everything local is untouched.
 	- A copy is now written under a temporary name and renamed once complete, so one that is given up on - or that a dropped link kills - can't leave a half-written build behind for a later run to launch. Any leftover is swept.
-	- Pinned by: `cicd/tests/launcher/run.ps1`.
+	- Pinned by: dcbdd `cicd/tests/launcher/run.ps1`.
 	- Opened: n/a
 	- Closed: 20260806-162538
 
@@ -9539,7 +9551,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- That put an unchecked box beside a revert arrow reporting the row as already at its default, when the default is on. The two disagreed about the same setting.
 	- They now show what is stored, both ways, and graying alone gives the message. The field they override stays editable exactly as before, since that follows the effective state rather than the switch.
 	- Showed up as a failing check on Windows: it reads every row back through the dialog, so on the one platform where the masking bites it could not see the value it had just saved. That row is covered there now, where before it could not be checked at all.
-	- Pinned by: `system_font_toggle_inert_without_an_os_family`.
+	- Pinned by: `system_font_toggle_inert_without_an_os_family` (now ddqa9 `a_switch_s_row_follows_its_rule_and_keeps_a_value_set_by_hand`).
 	- Opened: n/a
 	- Closed: 20260806-161419
 
@@ -9548,7 +9560,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Every settings change made during a scene had quietly stopped happening. The scenes rewrite a setting and reload, matching the line by name - but the app rewrites that file into nested sections the first time it saves, so the name stopped matching anything partway through the run. The cursor never changed shape and the split-screen scene never stilled its cursors. Lines are now found by their full setting path, and a change that finds no line stops the recording instead of passing silently.
 	- The wallpaper was on screen from the first frame, so the scene that introduces it changed nothing. Rotation adopts a wallpaper folder sitting beside the configuration on its own, and the folder with that very image is one. Rotation is now off for the recording, which still leaves the scene free to name the file outright.
 	- Recorded again at 50 frames a second: 63 seconds, 8.0 MiB.
-	- Pinned by: `cicd/tests/demo/run.py`.
+	- Pinned by: dcrxy `cicd/tests/demo/run.py`.
 	- Opened: n/a
 	- Closed: 20260805-030622
 
@@ -9559,7 +9571,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Now 86 ms, and the window renders identically either way, including on the fallback path taken when the warm-up cannot be used.
 	- Startup is untouched: the warm-up only begins once the terminal window is up, and time to a visible terminal is unchanged.
 	- What is left is roughly 50 ms of per-window setup that cannot be done in advance because it needs the window itself, and about 20 ms of font setup that is currently repeated per dialog.
-	- No test: a speed change with no stable threshold. The kept context is pinned by the warm-up tests in `gfx.rs`.
+	- No test: a speed change with no stable threshold. The kept context is pinned by the warm-up tests in `gfx.rs`, dc7mx `a_settled_context_survives_being_settled_again` and dc7my `a_failed_warm_up_stays_failed`.
 	- Opened: n/a
 	- Closed: 20260804-230904
 
@@ -9569,7 +9581,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- The focus ring stays warm. It marks which pane is live rather than where the caret is, so it wants an identity of its own rather than an echo of the cursor.
 	- New defaults alongside it: text scrim strength 15 (was 20) and text outline 1 (was 2), so slightly more of the background shows through around each character.
 	- All three reach an existing config only where its line is still the default one. A value already changed, or a line annotated by hand, is left alone.
-	- Pinned by: `text_on_the_cursor_plate_clears_the_floor` and `migrate_refreshes_a_superseded_commented_default`.
+	- Pinned by: dcrcs `text_on_the_cursor_plate_clears_the_floor` and datef `migrate_refreshes_a_superseded_commented_default`.
 	- Opened: n/a
 	- Closed: 20260804-214514
 
@@ -9578,7 +9590,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Fixed: a character now rides the shared row layout only when the font's own width for it agrees with the number of columns the terminal gave it. Anything that disagrees is drawn on its own, fitted to its real box - the same path characters missing from the font already took.
 	- Side effect, and an improvement: those emoji now render in color rather than as small monochrome outlines, since they reach the color path for the first time. Single-width symbols (arrows, checkmarks, stars, box drawing) are unaffected and stay monochrome, which is what a terminal wants.
 	- ✅ A trailing marker after such an emoji used to sit exactly one column left of the same marker on an all-text row, and now lines up. CJK, box drawing, fullwidth Latin and single-width symbols are unchanged.
-		- Pinned by: `a_char_the_face_draws_one_cell_wide_is_not_taken_for_two`.
+		- Pinned by: dd5qm `a_char_the_face_draws_one_cell_wide_is_not_taken_for_two`.
 	- Opened: 20260802-002500
 	- Closed: 20260802-005013
 
@@ -9590,7 +9602,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Builds now also ask the compiler for a larger working stack. That is the compiler's own suggestion when it faults this way, and it reserves address space only, so it costs nothing and changes no output. It is a guess at the cause rather than a demonstrated fix, which is why the retries stand on their own.
 	- Repeated faults at different points on identical input mean something varies between runs, which is either a latent defect in the optimizer or marginal hardware.
 	- Memory is ruled out. It has been tested clean, and this machine encrypts memory: a single stray stored bit becomes most of a block once decrypted, so corruption at that scale would have brought the system down long before it showed up as an occasional compiler crash. That leaves a defect in the optimizer as the explanation, which is why the retry count is a setting rather than a fix - it rides out something the project cannot correct.
-	- Pinned by: `cicd/tests/engine/run.bash`.
+	- Pinned by: dd5nn `cicd/tests/engine/run.bash`.
 	- Opened: n/a
 	- Closed: 20260804-080652
 
@@ -9599,7 +9611,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Fixed: the depth is now sampled once per read of the program's output rather than once per drawn frame, which is the only point where the emptying is still visible, and a drop is read for what it can only mean - the scrollback was cleared, so everything left in it arrived afterwards and is new. Repeats now scroll exactly like the first run.
 	- Sampling gives up immediately rather than wait its turn, so it can never hold up output; a skipped sample is picked up by the next one, and if every sample is skipped the previous behavior applies unchanged. Switching a full-screen program in or out, and resizing the window, both reset the measurement, since each moves the depth without anything having scrolled.
 	- Note: the first run and every repeat now arm the same amount and glide through it identically, where before only the first did. Heavy output drains no slower than before.
-	- Pinned by: `a_scrollback_clear_reads_as_everything_that_refilled_it` and `missed_samples_are_recovered_not_lost`.
+	- Pinned by: dase9 `a_scrollback_clear_reads_as_everything_that_refilled_it` and dasea `missed_samples_are_recovered_not_lost`.
 	- Opened: n/a
 	- Closed: 20260803-160516
 
@@ -9607,7 +9619,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Steps to reproduce: open muffer, let the conversation grow past one screen, then wheel back. The indicator that appears at the bottom of the transcript ("1 new message", or "Jump to bottom" when nothing new has arrived) is drawn twice and rides the scroll instead of holding still.
 	- Cause: a smooth slide keeps the fixed parts of an application's screen still and moves only the scrolling middle, and it worked out which rows were fixed by asking which ones had not changed. That misses a fixed element whose text changes while it sits still. The indicator is painted over the last row of the transcript rather than below it, so that row differs on every step, the search for unchanging rows stopped short of it, and the indicator was treated as scrolling content - the same class of fault as the title bar that used to ghost in nano.
 	- Fixed: the fixed rows are now also derived from what the detected scroll itself accounts for. A row a real scroll owns either moves cleanly or is one of the rows the step newly reveals; anything else is fixed furniture and is held still. The two measures are combined by taking whichever holds more rows still, so the previous behavior is a floor and no row that used to move can start behaving differently. Because the span is anchored on the rows that moved, it can only ever be widened outward, so an element stranded in the middle of the scrolling area can never hand the rows past it to the fixed set.
-	- Pinned by: `a_live_bottom_overlay_is_pinned_not_slid` and `bands_only_ever_grow_against_the_unchanged_walk`.
+	- Pinned by: dasck `a_live_bottom_overlay_is_pinned_not_slid` and dascp `bands_only_ever_grow_against_the_unchanged_walk`.
 	- Opened: n/a
 	- Closed: 20260803-151138
 
@@ -9616,7 +9628,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- The stage now rebuilds once before giving up, so a one-off compiler crash no longer takes down an entire run, and the failure message no longer blames the application for something that is not its fault. A genuine compile error still fails both attempts and aborts as before, and shows up within seconds since the earlier debug stage has already compiled everything bar the profiler hooks.
 	- Corrected: this was first read as specific to the profiler build, on the grounds that it is the only one pairing whole-program optimization with full debug information. That was the wrong axis - the exposure is whole-program optimization by itself, which every release build uses - so the release builds went uncovered until a later run crashed in one of them.
 	- Superseded: the single rebuild was extended to every whole-program build, and then to three attempts. See the 20260804 entry at the top of this section.
-	- Pinned by: `cicd/tests/engine/run.bash`.
+	- Pinned by: dd5nn `cicd/tests/engine/run.bash`.
 	- Opened: n/a
 	- Closed: 20260802-145725
 
@@ -9625,7 +9637,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Other terminals show the same fonts in color because their text rasterizer reads COLRv1.
 	- Fixed: color glyphs are now painted directly - the paint graph is walked and rendered through a small 2D back end (transforms, clip and layer stacks, solid/linear/radial/sweep fills, Porter-Duff and blend compositing), then handed to the renderer's color atlas as a per-cell image fitted to the cell box. Chars with no color glyph are untouched and still take the monochrome fallback path.
 	- `color_emoji` (default true) turns it off, which restores the monochrome outlines.
-	- Pinned by: `colr_v1_emoji_rasterizes_in_color`.
+	- Pinned by: daerd `colr_v1_emoji_rasterizes_in_color`.
 	- Note: 20260930, the key is `text.color_emoji` now.
 	- Opened: n/a
 	- Closed: 20260727-014507
@@ -9636,7 +9648,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Bulk data splits off on Windows only: the wallpaper folder and its history live under `%LOCALAPPDATA%`, since settings are worth roaming between machines and a 60 MiB wallpaper pack is not. A pack already sitting beside the config is still found, so nothing has to be moved.
 	- Existing configs: a config left at the old `~/.config` location is moved across on first run, but only when the new location has nothing. Where both exist the new one is used and the old one is left exactly where it is, with a line on startup saying so - picking between two real configs is not a call the program should make.
 	- Confirmed on this box both ways: launched from Git Bash it now reports the Roaming config and says the `~/.config` one is being ignored, and that file is untouched; with only a legacy config in place, the file moved and its settings survived the move and the backfill.
-	- Pinned by: `each_platform_keeps_its_config_where_that_platform_keeps_settings`, `an_explicit_xdg_config_home_wins_on_every_platform` and `each_platform_keeps_its_wallpaper_where_it_keeps_bulk_data`.
+	- Pinned by: dbfgz `each_platform_keeps_its_config_where_that_platform_keeps_settings`, dbfh0 `an_explicit_xdg_config_home_wins_on_every_platform` and dd5gb `each_platform_keeps_its_wallpaper_where_it_keeps_bulk_data`.
 	- Opened: n/a
 	- Closed: 20260819-085950
 
@@ -9645,7 +9657,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Fixed: one helper decides what goes on the wire. Unbracketed, every flavor of line break reduces to a single CR; bracketed, the text passes through as the application asked for it except that ESC is dropped.
 	- Steps to reproduce: paste several lines into a shell that has not enabled bracketed paste. Before the fix each line was followed by a continuation prompt.
 	- Confirmed before and after with a pasted five-line block in PowerShell 7.6: the old build ran the first line and then left a continuation prompt after every one of the rest, with the last line never running at all; the new build runs each in turn and leaves the final line sitting on the prompt awaiting Enter, which is what it should do when the clipboard has no trailing newline. cmd.exe was correct before and is unchanged.
-	- Pinned by: `a_pasted_line_break_arrives_the_way_enter_delivers_one`, `a_bracketed_paste_cannot_be_closed_from_inside` and `a_paste_can_never_step_outside_its_brackets`.
+	- Pinned by: dbff5 `a_pasted_line_break_arrives_the_way_enter_delivers_one`, dbff6 `a_bracketed_paste_cannot_be_closed_from_inside` and dcdjd `a_paste_can_never_step_outside_its_brackets`.
 	- Opened: n/a
 	- Closed: 20260819-080132
 
@@ -9654,7 +9666,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Fixed: the scan now accepts only the formats that decode. Adding the other decoders was the alternative, but each one grows the binary for a format nothing in the collection uses.
 	- Expected behavior: either narrow the accepted extensions to the ones that load, or add the missing decoders. Extra decoders grow the binary, so narrowing the list is the cheaper fix unless those formats are wanted.
 	- Steps to reproduce: put a `.webp` in the wallpaper folder and let rotation reach it.
-	- Pinned by: `image_scan_only_accepts_what_the_decoder_has`.
+	- Pinned by: dapye `image_scan_only_accepts_what_the_decoder_has`.
 	- Opened: 20260801-212731
 	- Closed: 20260801-213032
 
@@ -9671,7 +9683,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 				- The new shell prompt materializes several blank lines down.
 				- The ls listing smooth-scrolls apparently "out from underneath" the shell prompt above, *down*, then decelerates and settles, finally where it should be.
 			- Conclusion: The final result is visually correct, but how it got there is very wrong.
-	- Pinned by: `repeated_output_on_a_half_empty_screen_is_not_a_scroll`.
+	- Pinned by: danab `repeated_output_on_a_half_empty_screen_is_not_a_scroll`.
 	- Opened: n/a
 	- Closed: 20260731-174303
 
@@ -9683,7 +9695,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Also fixed: the size half was inert on Windows even though Windows does report a system font size, so that checkbox is now live there too. A config with no explicit `font_size` is unaffected, since that value was already seeded from the same OS size.
 	- Existing configs kept whatever `font_family` they were first written with, because backfill only ever adds a missing key. A stack that still matches a superseded default exactly is now refreshed on launch; anything edited, or commented out, is left as written.
 	- 🔘 Confirm on Windows: the size checkbox is now live there and can't be exercised from this box.
-	- Pinned by: `mono_candidates_keep_one_order_on_every_platform`, `migrate_refreshes_a_superseded_default_font_stack` and `system_font_toggle_inert_without_an_os_family`.
+	- Pinned by: `mono_candidates_keep_one_order_on_every_platform` (now ddq9d `mono_candidates_put_the_family_first_and_the_built_in_stack_last` and ddwhq `the_desktop_s_font_leads_the_built_in_list`), daf5e `migrate_refreshes_a_superseded_default_font_stack` and `system_font_toggle_inert_without_an_os_family` (now ddqa9 `a_switch_s_row_follows_its_rule_and_keeps_a_value_set_by_hand`).
 	- Opened: 20260727-014507
 	- Closed: 20260727-084240
 
@@ -9691,7 +9703,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Only happened once the scrollback was full, which is the steady state for a terminal that has been open a while. Past that point the line count stops growing, so the advance has to be inferred from how the on-screen rows moved.
 	- `top` repaints its whole screen in place without scrolling, and almost every row changes each refresh, so no shift matched. The remaining test was whether the top line changed - and `top` keeps a clock up there, so it always had. That read as "the screen turned over in one fast burst" and reported the largest possible advance, kicking the view up a screenful and easing it back once per refresh.
 	- Inferring the advance now also requires that a line scrolled off. A repaint in place pushes nothing into the scrollback, while a real burst pushes plenty, which separates the two cases at the mechanism rather than by guessing from the content. Fast output at a full scrollback still eases exactly as before.
-	- Pinned by: `signed_shift_detects_both_directions_and_hard_cuts_the_rest`.
+	- Pinned by: d9dzy `signed_shift_detects_both_directions_and_hard_cuts_the_rest`.
 	- Opened: n/a
 	- Closed: 20260726-112630
 
@@ -9700,7 +9712,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Outside quotes a backslash now only escapes whitespace and quotes, and is kept as-is before anything else, so plain Windows and UNC paths survive. Escaping a space or a quote still works, and inside double quotes the usual escapes are unchanged (that path already handled Windows paths correctly).
 	- Same parser serves `default_shell` and `command_line` in the config, so those are fixed too.
 	- Found while getting the Windows build to run under wine.
-	- Pinned by: `shell_keeps_unquoted_backslashes` and `shell_still_escapes_whitespace_and_quotes`.
+	- Pinned by: dact6 `shell_keeps_unquoted_backslashes` and dact7 `shell_still_escapes_whitespace_and_quotes`.
 	- Opened: 20260725-161114
 	- Closed: 20260725-163429
 
@@ -9710,7 +9722,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Second (the persistent sliver): a pixel-delta wheel (touchpad, hi-res wheel) accumulates fractional scroll amounts, and the ease settled wherever the target ended up - a pane could rest between lines forever. Every row then rendered shifted by a sub-cell fraction and the top scanlines of the first clipped row peeked out at the pane's content bottom, right against the divider - on any scrolled pane, focused or not. The scroll now glides to the nearest whole line at rest.
 	- Also: per-cell fallback glyphs clipped to the pane rect instead of the content rect, so an edge row's glyph could paint into the margin; now clipped like all other text.
 	- Third cause (the one that survived the first two fixes): with transparency off, the 1px divider gap was still see-through - the frame cleared fully transparent whenever the see-through-capable backend was in use, regardless of the setting, and only the wallpaper's low opacity reached the gap pixels. The window always has an alpha channel on X11, so the compositor blended the desktop through the divider slits: whatever was behind the window showed as bright speckles along the split lines. Only a live compositor shows it, since it is the desktop blending through. The clear is now opaque unless transparency is enabled; with it on, the gap still shows the desktop as intended.
-	- Pinned by: `fractional_wheel_rests_on_a_whole_line`.
+	- Pinned by: dabej `fractional_wheel_rests_on_a_whole_line`.
 	- Opened: 20260724-080316
 	- Closed: 20260724-131129
 
@@ -9718,7 +9730,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Cause: color glyph images are cached per glyph and pixel size, and that cache emptied itself completely whenever it filled up. A screenful of emoji is far more distinct glyphs than it held, so the moment it filled part-way through drawing a frame it threw away images that frame was still using, and the renderer stops dead when an image it was promised goes missing.
 	- Only reachable with a lot of *different* emoji on screen at once. Repeating the same few never fills the cache, which is why ordinary use never ran into it.
 	- Fixed: the cache now only discards images that no recent frame has touched, and keeps far more before it tries. If everything in it is still in use it grows, which is bounded by what fits on screen.
-	- Pinned by: `overflow_keeps_every_raster_the_current_frame_warmed` and `overflow_drops_rasters_no_recent_frame_touched`.
+	- Pinned by: daggh `overflow_keeps_every_raster_the_current_frame_warmed` and daggj `overflow_drops_rasters_no_recent_frame_touched`.
 	- Opened: n/a
 	- Closed: 20260728-074118
 
@@ -9727,14 +9739,14 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- But only if the text filling the terminal is from flatpak. If it's from other programs and flatpak only adds a few lines, there's no problem.
 	- Cause: once a pane's scrollback is full, how far the view is behind can no longer be read from scrollback growth, so it is inferred by matching this frame's rows against the last frame's. That match demanded that nearly the whole retained region line up exactly - at most three rows off. flatpak keeps a multi-row live progress area pinned at the bottom and rewrites all of it every tick, so an ordinary one-line advance always left more than three rows differing, no shift matched, and the inference fell through to its last-resort guess: assume the screen turned over completely and report the maximum catch-up distance. Every line of output therefore kicked the view up the full backlog cap and eased it back down. That also explains why it only showed when flatpak's own output filled the screen - a few flatpak lines among other text leave the progress area too small to break the tolerance.
 	- Fixed: the inference now scores every candidate shift by how much of the retained region it explains and takes the best one, instead of insisting nearly all of it lines up. The true shift always explains the most, and a coincidental match further down has less overlap to win with, so the real one-line advance is reported even while a large live region churns. The guard that a static or blank field must not read as a scroll is unchanged, and a genuine full-screen turnover still reports the catch-up distance. Same tolerance the alt-screen detector has used all along - a live progress area is a static band in all but name.
-	- Pinned by: `a_status_bar_is_held_still_at_a_full_scrollback_too`.
+	- Pinned by: dct9d `a_status_bar_is_held_still_at_a_full_scrollback_too`.
 	- Opened: 20260723-135701
 	- Closed: 20260723-141732
 
 - ✅ Copy on output is still copying the prompt that appears after command output.
 	- Cause: the multi-line-prompt strip matched prompt rows by exact content, so any prompt row with dynamic content (cwd, git branch, clock, right-aligned segments) never matched between commands and its rows stayed in the copy.
 	- Fixed: prompt rows are now matched by structure - runs of letters/digits and of spaces collapse before hashing, so content can change while the punctuation/box-drawing layout still has to match exactly.
-	- Pinned by: `capture_strips_dynamic_prompt_rows` and `skeleton_hash_collapses_dynamic_runs`.
+	- Pinned by: da8s6 `capture_strips_dynamic_prompt_rows` and da8s7 `skeleton_hash_collapses_dynamic_runs`.
 	- Opened: 20260722-100516
 	- Closed: 20260722-194629
 
@@ -9753,7 +9765,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Attempt 3: still black. Even the wallpaper's own pixels read back intact across a switch that blacked the window, so texture *contents* are never lost as far as readback can see; the driver restores whatever a readback touches while the copies the render path samples stay garbage. Readback detection is a dead end.
 		- Attempt 4: detect the switch instead of the damage. The active console is directly observable (`/sys/class/tty/tty0/active`); a watcher notes the console the window started on and, when the value returns to it after being elsewhere, rebuilds the sampled textures unconditionally - every window, focused or not, within about half a second of returning. The readback probes stay in the log as evidence.
 	- ✅ Windows recover after a real VT switch. Attempt 4, which watches the console and rebuilds on return, is the fix that stuck.
-		- Pinned by: `only_a_return_to_this_console_is_signalled`.
+		- Pinned by: dd5pg `only_a_return_to_this_console_is_signalled`.
 	- Opened: 20260722-100516
 	- Closed: 20260722-190211
 
@@ -9763,11 +9775,11 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Font is auto/unset there; regular is fine, only bold falls proportional. So the pinned mono family isn't guaranteeing a mono *bold* face.
 		- Fixed: terminal bold now requests the boldest weight the pinned mono family includes (like chrome already did), so it can't escape into a proportional bold fallback. Not yet confirmed on the affected host.
 		- Second half: with the font auto/unset, Windows picked the mono family by a font-db lottery (it has no system monospace setting), which could pick a family with no bold at all - then "boldest available" = regular and bold renders flat. The fallback-stack item below fixes the pick.
-		- Pinned by: `mono_bold_stays_in_pinned_family`.
+		- Pinned by: da724 `mono_bold_stays_in_pinned_family`.
 	- ✅ Font fallback: one cross-platform stack (Monaspace Argon, Fira Code, JetBrains Mono, Cascadia Mono, Consolas, Ubuntu Mono, SF Mono, Menlo, Courier New) is now the font_family default and the resolver's last resort everywhere. Windows always resolves through it ("use system font" is inert there - no OS monospace setting exists), so the family always has a real bold face.
 		- The Settings "Use system font" checkbox is disabled and grayed on Windows, with a flyover explaining why. Font family/size stay editable there regardless of the config value.
 		- Superseded by the per-platform divergence fix in Bugs: the order is now one list everywhere and the graying keys on what the OS reports, so only the family half is inert on Windows - the size half is live there.
-		- Pinned by: `mono_candidates_keep_one_order_on_every_platform` and `system_font_toggle_inert_without_an_os_family`.
+		- Pinned by: `mono_candidates_keep_one_order_on_every_platform` (now ddq9d `mono_candidates_put_the_family_first_and_the_built_in_stack_last` and ddwhq `the_desktop_s_font_leads_the_built_in_list`) and `system_font_toggle_inert_without_an_os_family` (now ddqa9 `a_switch_s_row_follows_its_rule_and_keeps_a_value_set_by_hand`).
 	- ✅ Scrolling in muffer, and `less`, is juddery. Up-and-down motion, while making progress in the intended direction.
 		- Reproduces on this host, with plain scrolled output as well as full-screen apps, so it's the frame/output pacing and not only the alt-screen slide detector.
 		- Fixed: on Windows, one queued present frame instead of two, so the per-frame dt stays steady (two let the CPU race ahead then stall, jittering the ease). Not yet confirmed on this host.
@@ -9787,7 +9799,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Mouse scrolling seem unaffected. It's smooth.
 	- Cause: the normal-screen repaint-slide detector (added for ConPTY smooth scroll, default-on) only refreshed its frame snapshot on frames it could slide on. A plain output line arrives in a scrollback-growth frame - animated by the output ease - which skipped the refresh, so the prompt redraw one frame later diffed against pre-scroll rows, read the already-eased scroll as a fresh repaint shift, and slid it a second time on top of the ease: down one, up two. A burst (ls) re-slid the whole accumulated shift at once, worse. Wheel scrollback never enters that path, so it stayed smooth.
 	- Fixed: the snapshot refreshes on every content frame; only true repaint frames (no scrollback growth) may read the diff as a scroll. Pager slides are unaffected.
-	- Pinned by: `output_frame_refreshes_snapshot_so_repaint_probe_cannot_reslide`.
+	- Pinned by: da88k `output_frame_refreshes_snapshot_so_repaint_probe_cannot_reslide`.
 	- Opened: 20260722-100516
 	- Closed: 20260722-105522
 
@@ -9796,7 +9808,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Note: not a compiler thing - DPI awareness is a runtime/manifest property, identical between the mingw-gnu and msvc builds. The gnu exe has no manifest overriding it, and winit already enables per-monitor-v2 awareness at startup.
 	- Fixed: added a scale-factor-changed handler that re-scales the text context (cell metrics, chrome, pane buffers) for the new factor and relayouts; the window's follow-up resize reconfigures the surface. Shares the same rebuild path as a Settings font change.
 	- ✅ This Windows box is at 125% (an earlier "100%" reading was a DPI-unaware shell being fed a virtualized 96 DPI). At 125% the cell width is ~11.3px and the row pitch ~23px, both exactly 1.25x their 100% values, with sharp anti-aliasing rather than an upscaled 100% render. So the app reads and applies the scale correctly.
-		- No test: a check of the DPI Windows reports.
+		- No test: a check of the DPI Windows reports. The scale change handler is the same on every platform, and ddyr1 `a_scale_change_lays_out_for_the_size_on_its_way` and the per-monitor harness ddydf `cicd/tests/dpirand/run.py` drive it.
 	- Opened: 20260714-205419
 	- Closed: 20260724-080316
 
@@ -9810,7 +9822,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Plain output still uses the ordinary output ease, and a static redraw in place yields no clean shift, so it stays put and does not bounce.
 		- One setting, `smooth_scroll_apps`, now covers both the alt-screen apps and the normal-screen repainting ones.
 	- Made default-on: `smooth_scroll_apps` now defaults `true` (was false), so nano and muffer both slide out of the box; explicit `= false` still opts out.
-	- Pinned by: `fingerprint_runs_only_where_the_engine_recorded_nothing`.
+	- Pinned by: dc55k `fingerprint_runs_only_where_the_engine_recorded_nothing`.
 	- Opened: n/a
 	- Closed: 20260719-191037
 
