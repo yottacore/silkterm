@@ -172,42 +172,11 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Branch: rnd1024
 	- Test case: ddkre's drag figure, under Verified. The limit stays 360, since the saving is about 5% and the 2026102321230038 margin was set by load.
 
-- CICD reset: IDs for the scroll scenes and fuzz cases
-	- ID: 2026102819265312
-	- Type: Task
-	- Status: Waiting on automated testing
-	- Needs local test suite run?: The round's full run, `cicd/cicd.bash --backlog-run-full`, for each scroll scene's own line with its ID in both arms, `--list` with the scenes under each harness arm, and dcbdt and dejjp in stage 3. An arm of the harness that can't start prints a `SKIP` line per scene now, not a warning, so an arm that skips in the container counts one warning fewer.
-	- Priority: High
-	- Opened: 20261028-192653
-	- Opened by: CC
-	- Parent ID: 2026102416233810
-	- Prereq IDs: 2026102819265198
-	- Target OS: All
-	- Requirements:
-		- Each scroll harness scene and each fuzz case gets an ID of its own, and prints its own PASS, FAIL or SKIP line.
-		- The ID check sees them, so it refuses a missing or shared one.
-		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
-		- Overrides: 2026092711142900's decision that the scroll harness scenes keep their PASS lines with no IDs.
-	- Progress log:
-		- 20261028: The 14 scroll scenes have IDs, d9j4s to de19r, from when each was added. Each prints `PASS`, `FAIL` or `SKIP`, its ID, its name with the engine, and what the check found. A run that can't start prints a `SKIP` line per scene with the reason, or `FAIL` under `--strict`, in place of its warning line. `run.bash --list` and `cicd.bash --list` list the scenes.
-		- 20261028: The ID check reads the scene IDs from the harness's scene table, and refuses a missing or shared one, or a table it can't find.
-		- 20261028: Each fuzz target was already a test of its own, with its own ID and its own line, in the test run and the soak. The ID check now refuses 2 targets in one test, or a target outside a test.
-	- Decisions:
-		- 20261028: A scene's ID is the first word of its row in a table in `run.bash`, which the check reads, so the ID and the scene can't drift apart. A table rather than a comment per scene, since most scenes share one script.
-		- 20261028: The same scene keeps one ID under X11 and Wayland, and its name says which. It is one test on 2 engines, like a Rust test on Linux and Windows.
-		- 20261028: Scene times come from git where it has them (clear, prompt, tmuxclear), and otherwise from the harness history and the backlog item that added the scene. The first 5 take the minutes after the harness's own ID.
-		- 20261028: A fuzz case is read as a fuzz target, each a test that soaks one input over many seeds. A seed is a pure function of its number and has no time of its own, and a corpus file is input a target replays, not a test. So no new IDs there.
-	- Verified: 20261028. dcbdt passes with 7 new checks, and 3 of them failed against the old harness, the row count among them. dejjp passes with 8 new checks, and 7 of them failed against the old tool. `test-id.py --check` finds 1558 IDs, all unique, and no fuzz target sharing a test. The harness ran `less` on X11 and `tmux` on Wayland, each with its `PASS` line and ID. `cicd.bash --list` lists the 14 scenes under each arm. The engine (dd5nn), gates (dcry4) and testout (ddp9p) tests pass. `--backlog-run-quick` with all five areas passed. shellcheck, the bash style check and the Python lint pass.
-		- Swept: every place that runs the scenes or prints their result, `run.bash`'s skip paths and `cicd.bash`'s run and `--list` of the harness. The analyze lines' only reader was `run.bash`. The fuzz targets, every `fuzz::soak` call under `source/`. The Windows pipeline has no scroll harness.
-	- Branch: rnd1029
-	- Test case: dcbdt `cicd/tests/scroll/verdict-test.bash` (each scene's line and ID, and `--list`), dejjp `cicd/tests/testid/run.py` (the check on scene IDs and fuzz targets), and the 14 scenes' own IDs in the full run.
-
 - CICD reset: one PASS, FAIL or SKIP line per test
 	- ID: 2026102819265198
 	- Type: Task
 	- Status: Waiting on automated testing
-	- Needs local test suite run?: The round's full run, `cicd/cicd.bash --backlog-run-full`, for the stage 3 script tests' PASS and SKIP lines, the ASan canary's line, the scroll harness lines, and the warning count. The 3 Wayland tests that skip in the container are SKIP lines now, not warnings, so a container run should count 3 fewer than before.
-	- Needs external testing: `cicd-win.ps1 -BacklogRunQuick tests` on b29w, for cargo test's PASS lines through the Windows python, and the PASS lines of the Windows test scripts in a default or full run.
+	- Needs external testing: A default or full `cicd-win.ps1` run on b29w, such as `-Quick -NoPublish -NoDogfood -NoSync`, for the `PASS` lines of stage 3's Windows test scripts: the installer tests, test run folder removal, the launcher tests and safe removal. Cargo test's lines on b29w passed (see the progress log).
 	- Priority: High
 	- Opened: 20261028-192651
 	- Opened by: CC
@@ -225,6 +194,8 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261028: The Windows pipeline runs cargo test through the ID tool's new `--run`, which keeps cargo's exit status, and falls back to plain cargo test with no working python. Its test scripts print `PASS` or `FAIL` lines.
 		- 20261028: The warning count skips `PASS`, `FAIL` and `SKIP` lines, and no longer the old forms.
 		- 20261028: The full run at 852e213 failed in ddazx, on the engine (dd5nn) and rotate (dd5nq) tests run alone. Neither came from this item. Both are fork counts, which in the container counted every fork on the box, so a busy box pushed them over. Fixed under 2026102518360001. The engine test's failing line isn't in the log, but its fork check is the one that fails that way, and the test passed 2 of 2 alone in the image without the load.
+		- 20261028: The full run at 9eded41 printed a `PASS` or `SKIP` line for each stage 3 script test, each scroll scene and each Rust test, and the run at 852e213 printed the ASan canary's `PASS de5f0`. Its warning count is 29, 3 fewer than the 32 before, since the 3 Wayland skips are `SKIP` lines now.
+		- 20261028: On b29w, `cicd-win.ps1 -BacklogRunQuick tests` at 9eded41 passed, with each of its 1371 Rust tests on a `PASS` or `SKIP` line with its ID, through the Windows python.
 	- Decisions:
 		- 20261028: A test that skips is a `SKIP` line with its reason, not a warning. Rust tests that were ignored never counted as warnings either, and the line still says why. It doesn't go on the end-of-run list either, since that list is for boxes that weren't there.
 		- 20261028: The reason goes after a comma, as in the shared rules' example. The old annotate put it in brackets.
@@ -234,35 +205,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Swept: every place in cicd.bash, cicd-win.ps1, asan.bash and tsan.bash that printed a test's result with its ID, the fuzz soak and the dhat run, which go through the same filter, and the tests that lift fRunTest, fScriptTest or the warning filter. No doc described the old lines.
 	- Branch: rnd1029
 	- Test case: ddp9p `cicd/tests/testout/run.bash`, dcry4 `cicd/tests/gates/run.bash` (ddf08's check), dejjp `cicd/tests/testid/run.py`, dd5nw `cicd/tests/cicd-win/run.bash`.
-
-- CICD reset: test IDs in the new form
-	- ID: 2026102819264421
-	- Type: Task
-	- Status: Waiting on automated testing
-	- Needs local test suite run?: The round's full run, `cicd/cicd.bash --backlog-run-full`, for dejjp in stage 3 and the new IDs at every step. After it the warning count should be back to its usual 31, since the last full run's log still has the old IDs.
-	- Priority: High
-	- Opened: 20261028-192644
-	- Opened by: CC
-	- Parent ID: 2026102416233810
-	- Target OS: All
-	- Requirements:
-		- The ID tool makes, reads and checks IDs as whole minutes since 2000-01-01 00:00 UTC, in lowercase Crockford base 32, like `decp8`. The check stage refuses a missing, malformed or shared one.
-		- Every existing ID is converted once, from the time it stands for, in code, tests, docs and the backlog, the IDs of tests that are gone included. When 2 land on one minute, the newer takes the next free one.
-		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
-	- Progress log:
-		- 20261028: The ID tool makes, reads and checks IDs in the new form. The check refuses a missing, malformed, old base 62, future or shared ID.
-		- 20261028: All 1543 test IDs were converted, and 34 more that the backlog and code comments name for tests that are gone, 1577 in all, in the 161 files that name them. 1038 of them took a later minute, up to 104 minutes on, where many tests were made in one minute.
-		- 20261028: The warning filter, `--list` and `-List` take the 5-character form.
-		- 20261028: silkterm-private's tests keep their old IDs for now. The one this backlog names is dehx0 here, and that repo needs the same change.
-	- Decisions:
-		- 20261028: One pass in time order over the live IDs and those of gone tests together, so each takes the minute it would have taken when it was made.
-		- 20261028: The IDs of gone tests are converted too, so a closed item's test ID still reads as its time, and none can be handed out again.
-		- 20261028: Code, tests and the backlog changed in one commit, so the check never has to take both forms. The conversion was one-off and stays out of the ID tool, since an ID never changes once given.
-		- 20261028: testout (ddp9p)'s made-up ID went from `Zz00000` to `zzzzz`, for the new form. Nothing else in it changed.
-	- Verified: 20261028. dejjp's 18 checks pass, and 12 of them failed against the old tool. The startup gate test (dcry4) failed on the converted IDs before the warning filter changed, and passes after. `test-id.py --check` finds 1544 IDs, all unique. The engine (dd5nn), testout (ddp9p), cicd-win (dd5nw) and Python lint (ddgkn) tests pass. `--backlog-run-quick fmt clippy tests scripts docs` passed, with every Rust test line showing an ID in the new form.
-		- Swept: every place that reads or prints an ID's shape: the warning filter, `cicd.bash --list`, `cicd-win.ps1 -List`, the gate test's lines and testout's made-up ID. No doc outside the backlog described the old form.
-	- Branch: rnd1029
-	- Test case: dejjp `cicd/tests/testid/run.py`, and dcry4's check that a test named for a warning is not one.
 
 - Always use automatic remote mode when detected.
 	- ID: 2026101914251764
@@ -297,6 +239,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261025: Not run in the second batch either. It needs an RDP session on a box, and a woken vm925w sits at the logon screen (2026102510420001).
 		- 20261026: Both new tests passed again at fab6815 (de9n8, de9n7). `wpremote` skipped on b29w again, its console session locked. vm925w was off and held by another session.
 		- 20261028: Both new tests passed again at 64f3584 (de9n8, de9n7). `wpremote` skipped on b29w again, its console session locked, and vm925w was off.
+		- 20261028: `wpremote` skipped again in the full run at 9eded41, b29w's console session locked. vm925w never started, since vmKt6m held its SPICE port. It still needs a real RDP session on a box.
 	- Branch: rnd1022
 	- Test case: `a_remote_screen_is_ignored_when_turned_off` (rating.rs, fails with the check reordered so detection runs first) and `a_remote_screen_takes_remote_unless_turned_off` (config.rs).
 
@@ -999,33 +942,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- 20261028: Failed again on Mac CI run 40744137399 at e809cca: keeping rows 21% more, pairs from 0.570 to 1.966. It passed run again alone. From ce3d9fb the Mac suite runs at 1 job, so nothing runs beside it, which tests the memory traffic guess.
 	- 20261028: Mac CI run 40750006918 at ce3d9fb, at 1 job, passed it. Median 1.034, pairs from 0.466 to 1.290.
 
-- The rotate test's fork count went over its limit once inside the test run folder test
-	- ID: 2026102518360001
-	- Type: Bug
-	- Status: Waiting on automated testing
-	- Needs local test suite run?: The round's full run, `cicd/cicd.bash --backlog-run-full`, in the container, for ddazx's runs of the rotate and engine tests.
-	- Severity: Low
-	- Opened: 20261025-183600
-	- Opened by: CC
-	- Related IDs: 2026102416233803, 2026102819265198
-	- Target OS: Linux
-	- Test environment: b23, the full run in the container at 591a9a8 on `rnd1025b`, box load about 20
-	- Steps to reproduce:
-		- Run the full pipeline in the container on a busy box. The test run folder test (ddazx) runs `rotate/run.bash` with the temp dir read-only.
-	- Incorrect behavior: "rotating 200 files costs a few forks beyond the files it changes" counted 366 forks beyond the files changed, limit 300, and the full run stopped there.
-	- Expected behavior: The fork count stays under its limit however busy the box is, or the check counts only forks the rotate script makes.
-	- Reproduced: No. `rotate/run.bash` alone passed 3 of 3 with 18 forks, limit 30, and `testdir/run.bash` passed its rotate check 3 of 3 on the host.
-		- 20261028: Again in the full run at 852e213, 311 forks beyond the files changed, limit 300, with the engine test's fork check failing beside it. Alone on the host it passed 3 of 3, 18 forks, limit 30.
-		- 20261028: Yes, in the image with a loop of short processes on the box: 1601 forks beyond the files changed, and 145 in the engine test, limit 100.
-	- Actual cause: In the container `unshare` can't make a PID namespace, so `fForkCount` fell back to the kernel's fork total in `/proc/stat`, which counts every fork on the box, even best of 5.
-	- Decisions:
-		- 20261028: Count in the container's own PID namespace, rather than let the container make one, such as through a looser seccomp profile, which would widen what every step in it may do.
-	- Actual fix: The fallback reads the last PID of the namespace it runs in, `/proc/sys/kernel/ns_last_pid`, so in the container it counts only the container's forks. On a box where no namespace can be made it counts the box's, as before. `/proc/stat` is left for a kernel without the file.
-	- Verified: 20261028. In the image under the same load, the old helper failed both checks and the new one passed both at the exact counts, 18 and 4. `rotate/run.bash` alone on the host passed 3 of 3. shellcheck, the bash style check, and `--backlog-run-quick` with all five areas pass.
-		- Swept: both callers of `fForkCount`, the rotate and engine tests. No other test counts forks.
-	- Branch: rnd1029
-	- Test case: The fork checks in dd5nq `cicd/tests/rotate/run.bash` and dd5nn `cicd/tests/engine/run.bash`, which ddazx runs in the container.
-
 - Wayland: a copy a program sends while no SilkTerm window has focus is dropped
 	- ID: 2026101607585700
 	- Type: Enhancement
@@ -1713,6 +1629,70 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Verified: seed 30 alone, the native unit tests (1058 passed), the fuzz soak at 60 seconds a target (23 targets, all clean), and native and Windows-target clippy.
 	- Acceptance signoff: JC, 20261003.
 	- Closed: 20261003-193000
+
+- CICD reset: IDs for the scroll scenes and fuzz cases
+	- ID: 2026102819265312
+	- Type: Task
+	- Status: Done
+	- Needs local test suite run?: The round's full run, `cicd/cicd.bash --backlog-run-full`, for each scroll scene's own line with its ID in both arms, `--list` with the scenes under each harness arm, and dcbdt and dejjp in stage 3. An arm of the harness that can't start prints a `SKIP` line per scene now, not a warning, so an arm that skips in the container counts one warning fewer.
+	- Priority: High
+	- Opened: 20261028-192653
+	- Opened by: CC
+	- Parent ID: 2026102416233810
+	- Prereq IDs: 2026102819265198
+	- Target OS: All
+	- Requirements:
+		- Each scroll harness scene and each fuzz case gets an ID of its own, and prints its own PASS, FAIL or SKIP line.
+		- The ID check sees them, so it refuses a missing or shared one.
+		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
+		- Overrides: 2026092711142900's decision that the scroll harness scenes keep their PASS lines with no IDs.
+	- Progress log:
+		- 20261028: The 14 scroll scenes have IDs, d9j4s to de19r, from when each was added. Each prints `PASS`, `FAIL` or `SKIP`, its ID, its name with the engine, and what the check found. A run that can't start prints a `SKIP` line per scene with the reason, or `FAIL` under `--strict`, in place of its warning line. `run.bash --list` and `cicd.bash --list` list the scenes.
+		- 20261028: The ID check reads the scene IDs from the harness's scene table, and refuses a missing or shared one, or a table it can't find.
+		- 20261028: Each fuzz target was already a test of its own, with its own ID and its own line, in the test run and the soak. The ID check now refuses 2 targets in one test, or a target outside a test.
+	- Decisions:
+		- 20261028: A scene's ID is the first word of its row in a table in `run.bash`, which the check reads, so the ID and the scene can't drift apart. A table rather than a comment per scene, since most scenes share one script.
+		- 20261028: The same scene keeps one ID under X11 and Wayland, and its name says which. It is one test on 2 engines, like a Rust test on Linux and Windows.
+		- 20261028: Scene times come from git where it has them (clear, prompt, tmuxclear), and otherwise from the harness history and the backlog item that added the scene. The first 5 take the minutes after the harness's own ID.
+		- 20261028: A fuzz case is read as a fuzz target, each a test that soaks one input over many seeds. A seed is a pure function of its number and has no time of its own, and a corpus file is input a target replays, not a test. So no new IDs there.
+	- Verified: 20261028. dcbdt passes with 7 new checks, and 3 of them failed against the old harness, the row count among them. dejjp passes with 8 new checks, and 7 of them failed against the old tool. `test-id.py --check` finds 1558 IDs, all unique, and no fuzz target sharing a test. The harness ran `less` on X11 and `tmux` on Wayland, each with its `PASS` line and ID. `cicd.bash --list` lists the 14 scenes under each arm. The engine (dd5nn), gates (dcry4) and testout (ddp9p) tests pass. `--backlog-run-quick` with all five areas passed. shellcheck, the bash style check and the Python lint pass.
+		- Swept: every place that runs the scenes or prints their result, `run.bash`'s skip paths and `cicd.bash`'s run and `--list` of the harness. The analyze lines' only reader was `run.bash`. The fuzz targets, every `fuzz::soak` call under `source/`. The Windows pipeline has no scroll harness.
+		- 20261028: The full run at 9eded41, in the container, printed each of the 14 scenes on its own `PASS` line with its ID, under X11 and Wayland, and dcbdt and dejjp passed in stage 3. `cicd.bash --list` lists the 14 scenes under each arm.
+	- Branch: rnd1029
+	- Test case: dcbdt `cicd/tests/scroll/verdict-test.bash` (each scene's line and ID, and `--list`), dejjp `cicd/tests/testid/run.py` (the check on scene IDs and fuzz targets), and the 14 scenes' own IDs in the full run.
+	- Closed: 20261028-223038
+
+- CICD reset: test IDs in the new form
+	- ID: 2026102819264421
+	- Type: Task
+	- Status: Done
+	- Needs local test suite run?: The round's full run, `cicd/cicd.bash --backlog-run-full`, for dejjp in stage 3 and the new IDs at every step. After it the warning count should be back to its usual 31, since the last full run's log still has the old IDs.
+	- Priority: High
+	- Opened: 20261028-192644
+	- Opened by: CC
+	- Parent ID: 2026102416233810
+	- Target OS: All
+	- Requirements:
+		- The ID tool makes, reads and checks IDs as whole minutes since 2000-01-01 00:00 UTC, in lowercase Crockford base 32, like `decp8`. The check stage refuses a missing, malformed or shared one.
+		- Every existing ID is converted once, from the time it stands for, in code, tests, docs and the backlog, the IDs of tests that are gone included. When 2 land on one minute, the newer takes the next free one.
+		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
+	- Progress log:
+		- 20261028: The ID tool makes, reads and checks IDs in the new form. The check refuses a missing, malformed, old base 62, future or shared ID.
+		- 20261028: All 1543 test IDs were converted, and 34 more that the backlog and code comments name for tests that are gone, 1577 in all, in the 161 files that name them. 1038 of them took a later minute, up to 104 minutes on, where many tests were made in one minute.
+		- 20261028: The warning filter, `--list` and `-List` take the 5-character form.
+		- 20261028: silkterm-private's tests keep their old IDs for now. The one this backlog names is dehx0 here, and that repo needs the same change.
+	- Decisions:
+		- 20261028: One pass in time order over the live IDs and those of gone tests together, so each takes the minute it would have taken when it was made.
+		- 20261028: The IDs of gone tests are converted too, so a closed item's test ID still reads as its time, and none can be handed out again.
+		- 20261028: Code, tests and the backlog changed in one commit, so the check never has to take both forms. The conversion was one-off and stays out of the ID tool, since an ID never changes once given.
+		- 20261028: testout (ddp9p)'s made-up ID went from `Zz00000` to `zzzzz`, for the new form. Nothing else in it changed.
+		- 20261028: The count came back at 29, not 31. The 3 Wayland tests that skip in the container are `SKIP` lines now, under 2026102819265198, so 29 is the new usual count.
+	- Verified: 20261028. dejjp's 18 checks pass, and 12 of them failed against the old tool. The startup gate test (dcry4) failed on the converted IDs before the warning filter changed, and passes after. `test-id.py --check` finds 1544 IDs, all unique. The engine (dd5nn), testout (ddp9p), cicd-win (dd5nw) and Python lint (ddgkn) tests pass. `--backlog-run-quick fmt clippy tests scripts docs` passed, with every Rust test line showing an ID in the new form.
+		- Swept: every place that reads or prints an ID's shape: the warning filter, `cicd.bash --list`, `cicd-win.ps1 -List`, the gate test's lines and testout's made-up ID. No doc outside the backlog described the old form.
+		- 20261028: The full run at 9eded41 passed dejjp in stage 3, and all 1523 test lines in it carry an ID in the new form, none in the old. Its warning count is 29, all from the usual set.
+	- Branch: rnd1029
+	- Test case: dejjp `cicd/tests/testid/run.py`, and dcry4's check that a test named for a warning is not one.
+	- Closed: 20261028-223038
 
 - CICD reset: other hosts and VMs
 	- ID: 2026102416233802
@@ -6113,6 +6093,35 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Branch: testlines
 	- Test case: No test. Output only. The gate and a quick run showed all 942 Rust tests with an ID, and a made-up name showed the dashes and the warning.
 	- Closed: 20260928-111812
+
+- The rotate test's fork count went over its limit once inside the test run folder test
+	- ID: 2026102518360001
+	- Type: Bug
+	- Status: Done
+	- Needs local test suite run?: The round's full run, `cicd/cicd.bash --backlog-run-full`, in the container, for ddazx's runs of the rotate and engine tests.
+	- Severity: Low
+	- Opened: 20261025-183600
+	- Opened by: CC
+	- Related IDs: 2026102416233803, 2026102819265198
+	- Target OS: Linux
+	- Test environment: b23, the full run in the container at 591a9a8 on `rnd1025b`, box load about 20
+	- Steps to reproduce:
+		- Run the full pipeline in the container on a busy box. The test run folder test (ddazx) runs `rotate/run.bash` with the temp dir read-only.
+	- Incorrect behavior: "rotating 200 files costs a few forks beyond the files it changes" counted 366 forks beyond the files changed, limit 300, and the full run stopped there.
+	- Expected behavior: The fork count stays under its limit however busy the box is, or the check counts only forks the rotate script makes.
+	- Reproduced: No. `rotate/run.bash` alone passed 3 of 3 with 18 forks, limit 30, and `testdir/run.bash` passed its rotate check 3 of 3 on the host.
+		- 20261028: Again in the full run at 852e213, 311 forks beyond the files changed, limit 300, with the engine test's fork check failing beside it. Alone on the host it passed 3 of 3, 18 forks, limit 30.
+		- 20261028: Yes, in the image with a loop of short processes on the box: 1601 forks beyond the files changed, and 145 in the engine test, limit 100.
+	- Actual cause: In the container `unshare` can't make a PID namespace, so `fForkCount` fell back to the kernel's fork total in `/proc/stat`, which counts every fork on the box, even best of 5.
+	- Decisions:
+		- 20261028: Count in the container's own PID namespace, rather than let the container make one, such as through a looser seccomp profile, which would widen what every step in it may do.
+	- Actual fix: The fallback reads the last PID of the namespace it runs in, `/proc/sys/kernel/ns_last_pid`, so in the container it counts only the container's forks. On a box where no namespace can be made it counts the box's, as before. `/proc/stat` is left for a kernel without the file.
+	- Verified: 20261028. In the image under the same load, the old helper failed both checks and the new one passed both at the exact counts, 18 and 4. `rotate/run.bash` alone on the host passed 3 of 3. shellcheck, the bash style check, and `--backlog-run-quick` with all five areas pass.
+		- Swept: both callers of `fForkCount`, the rotate and engine tests. No other test counts forks.
+		- 20261028: The full run at 9eded41, in the container, passed ddazx with the rotate and engine fork checks in it. The run at 852e213 before the fix failed there.
+	- Branch: rnd1029
+	- Test case: The fork checks in dd5nq `cicd/tests/rotate/run.bash` and dd5nn `cicd/tests/engine/run.bash`, which ddazx runs in the container.
+	- Closed: 20261028-223038
 
 - Over ssh, the step rule from `cicd-win.ps1` comes out as 79 bell characters
 	- ID: 2026102811082453
