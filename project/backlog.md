@@ -148,20 +148,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Branch: rnd1029
 	- Test case: dejjp `cicd/tests/testid/run.py`, and dcry4's check that a test named for a warning is not one.
 
-- CICD reset: a test for each old-format Done bug, part 4 of 4
-	- ID: 2026102819193512
-	- Type: Task
-	- Status: Queued
-	- Priority: High
-	- Opened: 20261028-191935
-	- Opened by: CC
-	- Parent ID: 2026102416233809
-	- Target OS: All
-	- Requirements:
-		- The old-format Done bugs from "Config file rewriting is proving problematic" to "Installer script(s):", the end of the list, 44 items.
-		- Each names its test ID beside the test it names, or says in a few words why it has none. A test is added where one could exist and doesn't, and is watched to fail with the fix taken out.
-		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
-
 - CICD reset: a test for each old-format Done feature, part 1 of 6
 	- ID: 2026102819193525
 	- Type: Task
@@ -1134,6 +1120,32 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- For that flag only, no blank lines before or after.
 	- Notes:
 		- Pre-next-cut.
+
+- CICD reset: a test for each old-format Done bug, part 4 of 4
+	- ID: 2026102819193512
+	- Type: Task
+	- Status: Done
+	- Priority: High
+	- Opened: 20261028-191935
+	- Opened by: CC
+	- Parent ID: 2026102416233809
+	- Target OS: All
+	- Requirements:
+		- The old-format Done bugs from "Config file rewriting is proving problematic" to "Installer script(s):", the end of the list, 44 items.
+		- Each names its test ID beside the test it names, or says in a few words why it has none. A test is added where one could exist and doesn't, and is watched to fail with the fix taken out.
+		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
+	- Progress log:
+		- 20261028: Each test the 44 items name, by a name a test still has, now has its ID beside it, the second mention of the pane counter test included.
+		- 20261028: Two tests named were renamed or commented out since, the clear at a full scrollback and the font order ones. Each now names the tests that took over.
+		- 20261028: The installer item said a download that fails its checksum installs nothing, and no test checked it. The install test (dcbdz) does now, for both installers, and the item also names the Windows install test (dd2n3).
+		- 20261028: The rest say why they have no ID: Windows window placement, focus and creation order, speed changes, a bug never reproduced, a one-line formula, and GPU, GL or compositor work.
+	- Decisions:
+		- 20261028: The checksum case goes in the install test's shared cases, so bash and PowerShell both get it from one place.
+	- Verified: 20261028. dcbdz passes, and its 6 new checks fail with the checksum comparison taken out of install.bash and install.ps1. Every test ID added in part 4 is one the tree has. `--backlog-run-quick scripts docs` passed, `test-id.py --check` passes, and the markdown check finds nothing new.
+		- Swept: every name in backticks and test script path in the 44 items, and every "Pinned by" or "No test" written in words.
+	- Branch: rnd1029
+	- Test case: each of the 44 items names its own, or why it has none. New here: dcbdz `cicd/tests/install/run.bash`, its checksum mismatch checks.
+	- Closed: 20261028-204521
 
 - CICD reset: a test for each old-format Done bug, part 3 of 4
 	- ID: 2026102819193498
@@ -9836,7 +9848,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- If something does hold it, a launch-time write is skipped with a plain note, and the Settings dialog stays open on OK rather than closing over an unsaved change. The values still apply for the session either way.
 	- Follow-up: make the "config is open elsewhere, not saved" signal visible IN the Settings dialog (a small banner), not just a stderr FYI + the dialog staying open.
 	- Note: the open-elsewhere check only catches editors that hold the file descriptor open; an editor that opens/closes per save won't trip it, but in that case a write is harmless (backfill only appends).
-	- Pinned by: `config_open_elsewhere_sees_a_holder`, `backfill_changes_nothing_that_loaded` and `migrate_config_noop_when_current`.
+	- Pinned by: d9vt3 `config_open_elsewhere_sees_a_holder`, dcfp9 `backfill_changes_nothing_that_loaded` and d9ahq `migrate_config_noop_when_current`.
 	- Opened: 20260712-102914
 	- Closed: 20260713-142351
 
@@ -9879,14 +9891,14 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - ✅ Windows: text scrim wider per-line than the text behind it, starting wherever bold appears (not seen on Linux).
 	- Cause: the "blur bold at regular weight" option shapes a parallel de-bolded buffer for the scrim halo. Both it and the display buffer ask for a fixed cell pitch, but some fonts (Windows default faces) ignore that request and shape at their natural advance, where bold and regular differ - so the scrim (regular) and the text (bold) drift apart along the line.
 	- Fixed: only de-bold the scrim when a bold run shapes to the same pitch as regular for the loaded font; otherwise draw the scrim from the display buffer (perfectly aligned, at the cost of a slightly heavier bold halo).
-	- Pinned by: `bold_is_stripped_for_the_glow_only_where_it_keeps_the_pitch`.
+	- Pinned by: dd5qk `bold_is_stripped_for_the_glow_only_where_it_keeps_the_pitch`.
 	- Opened: n/a
 	- Closed: 20260715-163532
 
 - ✅ Settings dialog changes not remembered after relaunch (reported as "Scrim falloff not saving"). The change showed live in the running app, then reverted on the next launch.
 	- Cause: `persist` (and `revert_keys`) parsed config.toml with strict TOML, while the loader tolerates a bare-decimal float (`.1` with no leading zero). Any such value in the file made every save bail early and silently write nothing - so no dialog change stuck. Not falloff-specific.
 	- Fixed: both now read through the same lenient pass the loader uses, so a save no longer aborts on a file the app reads fine. A malformed float is normalized in place on the next save.
-	- Pinned by: `persist_survives_bare_decimal_float`.
+	- Pinned by: d9rw2 `persist_survives_bare_decimal_float`.
 	- Opened: n/a
 	- Closed: 20260711-121712
 
@@ -9897,7 +9909,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- The result is a flickering appearance, especially on fast output.
 	- Cause: once the scrollback buffer is full, the output-ease infers how far the view advanced by matching row fingerprints against the last frame. That matcher demanded a pixel-clean translate of the whole retained region, so a single off cell - a redrawn prompt or spinner, a rewrapped line, or a multi-frame gap when a fast burst held the terminal lock - made it give up and report the full backlog cap instead of the true small advance. The cap snapped the view up about a screenful and eased it back; on fast, speed-varying output it misfired every few frames, so the view bounced far down and scrolled back up over and over.
 	- Fixed: the matcher now tolerates a few off cells and picks the shift that best explains the frame, so a small advance reads as small. In-place redraws and static/blank fields still report no scroll, and a genuine full turnover still ramps to catch up.
-	- Pinned by: `a_status_bar_is_held_still_at_a_full_scrollback_too` and `a_clear_eases_the_same_at_a_full_scrollback`.
+	- Pinned by: dct9d `a_status_bar_is_held_still_at_a_full_scrollback_too` and `a_clear_eases_the_same_at_a_full_scrollback` (now dct9e `a_clear_is_instant_at_a_full_scrollback_too`).
 	- Note: 20260930, superseded. The matcher became best-coverage scoring in the `flatpak update` item, and later the engine's own count replaced it at a full scrollback.
 	- Opened: n/a
 	- Closed: 20260713-085150
@@ -9906,7 +9918,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Change the wallpaper of the current window.
 	- Reload settings for the current window
 	- Done: `--wallpaper [PATH]` (no value = none) and `--reload-settings`, run from a shell inside a window. Each window exports a control socket to its shells (`SILKTERM_SOCKET`); the flags send a command to that window and exit. Wallpaper change is live-only (window-scoped, not saved to config); reload is the same as Menu > Reload config. Linux/Unix only for now (Windows has no such socket; the flags report that).
-	- Pinned by: `control_flags`, `wallpaper_never_eats_the_next_option`, `parse_commands` and `socket_exit_child`.
+	- Pinned by: `control_flags`, da708 `wallpaper_never_eats_the_next_option`, `parse_commands` and dcq7j `socket_exit_child`.
 	- Opened: n/a
 	- Closed: 20260712-102914
 
@@ -9939,11 +9951,11 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- ✅ A bad config value could kill the whole terminal. Setting `output_ease_lines` above 16 aborted on the first scrolling output, every launch.
 		- Cause: the value was never range-checked at load. The scroll code uses it as the lower bound of a clamp, and a lower bound above the cap makes that clamp abort.
 		- Fixed: the value is clamped at load. The scroll code also guards itself now.
-		- Pinned by: `output_ease_lines_clamps_to_backlog_cap`.
+		- Pinned by: d9kcc `output_ease_lines_clamps_to_backlog_cap`.
 	- ✅ "Copy output" copied the wrong text once scrollback was full. The first lines of a command's output were silently missing from the clipboard.
 		- Cause: the capture start was saved as a line index counted from the oldest line in the buffer. At the scrollback cap every new line evicts the oldest, so the index drifts while the command runs.
 		- Fixed: the capture now remembers the prompt line's content and re-finds it when the command settles. The saved index is only a fallback.
-		- Pinned by: `capture_finds_output_start_at_full_scrollback`.
+		- Pinned by: d9kcd `capture_finds_output_start_at_full_scrollback`.
 	- ✅ Moving the mouse over a full-screen app that tracks the mouse re-rendered everything.
 		- Cause: each motion report also flagged a full redraw, so every pane re-shaped its text once per cell the pointer crossed.
 		- Fixed: motion reports go to the app only. Nothing local changes, so nothing redraws.
@@ -9953,26 +9965,26 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- No test: a shaping cache, speed only.
 	- ✅ `--background-image` with no value swallowed the next option as its path.
 		- Fixed: a bare flag now means "no image" and a following option is left alone. Both `=path` and a separate path still work.
-		- Pinned by: `wallpaper_never_eats_the_next_option`.
+		- Pinned by: da708 `wallpaper_never_eats_the_next_option`.
 	- ✅ Launching with only `--config` ignored that config's `command_line`.
 		- Cause: any argument at all disabled the fallback. But `--config` picks which config to read and says nothing about layout.
 		- Fixed: the fallback still applies when the only arguments are `--config`.
-		- Pinned by: `only_config_args_detects_layoutless_launches`.
+		- Pinned by: d9kcb `only_config_args_detects_layoutless_launches`.
 	- ✅ "Copy output" could silently skip a command.
 		- Cause: arming the capture at Enter gave up if the terminal was briefly busy, with no retry.
 		- Fixed: arming now waits the moment out instead of giving up.
-		- Pinned by: `arming_a_copy_waits_for_the_term_instead_of_giving_up`.
+		- Pinned by: dd5q6 `arming_a_copy_waits_for_the_term_instead_of_giving_up`.
 	- ✅ Releasing a different mouse button than the one held confused mouse-tracking apps.
 		- Cause: any button release was treated as the release of the held one. That cleared its state and sent the app a release it never saw pressed.
 		- Fixed: only the matching button's release is reported. Other buttons keep their normal handling.
-		- Pinned by: `a_release_is_reported_only_for_the_button_held`.
+		- Pinned by: dd5p3 `a_release_is_reported_only_for_the_button_held`.
 	- Opened: n/a
 	- Closed: 20260707-143123
 
 - ✅ Choosing "Tabs|New Tab" the first time, opens a second tab. Doing it again, changes to the first tab, rather than opening a third tab.
 	- Cause: a dropdown opens flush under the menu bar, so its top item ("New Tab") sits in the tab-bar band. The mouse handler checked the tab-bar hit before the open-menu hit, so once more than one tab existed (tab bar shown) the tab bar stole the click and selected a tab instead of firing the item. The first New Tab worked only because there was no tab bar yet.
 	- Fixed: skip the tab-bar click handler while a dropdown is open, so the click reaches the menu.
-	- Pinned by: `an_open_dropdown_keeps_a_press_in_the_tab_bar_band`.
+	- Pinned by: dd5p4 `an_open_dropdown_keeps_a_press_in_the_tab_bar_band`.
 	- Opened: 20260703-211333
 	- Closed: 20260707-033348
 
@@ -10004,7 +10016,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 			- At the same time and synchronized with, visually identical copies of the normal text in 'BILLY THE BOTTOM AREA' also bounce up into 'THE EDIT AREA'. Together they seem to exhibit the same movement behavior as 'TIMMYS TEXT SHADOW', except flipped vertically.
 	- Cause: the sliding draw is the whole frame translated by the eased offset, clipped only at the band boundaries - so the top bar's row translated down (and the bottom area's rows translated up) fell inside the scroll-region clip and rendered as translated text copies riding the ease. Text and its glow only (cell backgrounds are placed per row), which is why it reads as a text shadow at the top and as text copies at the bottom. (20260708)
 	- Fixed: the region clip now welds to the shifted content's own edge; the strip fills the gap on the far side of the weld, and translated band rows can no longer enter. (20260708)
-	- Pinned by: `region_clip_welds_to_the_content_edge`.
+	- Pinned by: d9mf3 `region_clip_welds_to_the_content_edge`.
 	- Opened: n/a
 	- Closed: 20260708-163910
 
@@ -10012,14 +10024,14 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Steps to reproduce: The specific command was `zpool status`. Trying to double-click on a member by label (e.g. "zfs-…"), or "ONLINE", results in something else being selected. It appears to actually select something to the right. But if you can guess correctly on your aim, then hit the copy hotkey, it does correctly copy the text. (Just not the text that's highlighted.)
 	- Cause: `zpool status` indents its config section with a literal tab. The raw tab was passed through to the shaper, which expands it to a full 8-column stop. That shifted the row's visible text several columns right of the grid the selection uses. The highlight and copy stayed correct but no longer lined up with the on-screen text, so clicking a visible word selected a cell several columns away. Only tab-indented output was affected.
 	- Fixed: render any control character in a cell as a plain one-cell space, so the tab cell advances one column and the row stays grid-aligned.
-	- Pinned by: `render_char_maps_controls_to_space`.
+	- Pinned by: d9jqj `render_char_maps_controls_to_space`.
 	- Opened: 20260706-170614
 	- Closed: 20260707-032643
 
 - ✅ Inverted text (e.g. Nano headers) is thin and hard-to-read.
 	- Cause: this was the actual nano complaint (the "shadow jump" language was describing it). Reverse video (dark on light) renders visually thinner than the same-weight light-on-dark text, an inherent effect that other terminals also show. The glow only boosts light-on-dark text, so inverse text got no readability help.
 	- Fixed: a new `embolden_inverse` config bool (default true) renders reverse-video runs bold so they read as strongly as normal text. The difference is modest with the default font; if it reads as too subtle, the next step is faux-bold (stroke dilation).
-	- Pinned by: `inverse_video_is_drawn_bold_unless_turned_off`.
+	- Pinned by: dd5q1 `inverse_video_is_drawn_bold_unless_turned_off`.
 	- Note: 20260930, the nano "shadow jump" was also a real motion bug, fixed separately in "The Notorious "Bouncing Shadow in Wobbly Nano" bug".
 	- Opened: 20260703-211333
 	- Closed: 20260706-112748
@@ -10057,14 +10069,14 @@ Going forward, new issues in the new template at the bottom of this file, will g
 			- Cause of the residual: filling the reveal from one retained frame is structural bounce. The fill could trail the ease by a few lines - a bare, un-glowed band whose height varied step to step, the pulsing shadow under the title over a background image - and the fill repositioned at every re-capture.
 			- Fixed: each frame the styled rows are snapshotted, and the rows a detected step pushes out of the region are kept in a small strip, drawn welded to the content edge and riding the same eased offset. The gap is always exactly filled, nothing repositions, and the strip has its own cell backgrounds and glow. Band bleed is impossible by construction (only region rows are ever captured), so the old glow guards went away.
 			- Fixed alongside: sliding rows' background rects and the cursor now clamp to the scroll region, so an inverse-video or colored row can't poke into the title/status bands mid-slide.
-			- Pinned by: `off_strip_accumulates_in_visual_order`, `off_strip_direction_flip_discards_and_cap_trims_oldest` and `nano_slides_with_top_band`.
+			- Pinned by: d9kmm `off_strip_accumulates_in_visual_order`, d9kmn `off_strip_direction_flip_discards_and_cap_trims_oldest` and d9kmh `nano_slides_with_top_band`.
 	- Opened: 20260707-182523
 	- Closed: 20260708-090308
 
 - ✅ "Right-click bug" clarification.
 	- Cause: a mouse-tracking app (muffer/vim/tmux) grabs the mouse, so the right-click was forwarded to it (muffer pastes on right-click) instead of opening our menu; and a click meant for an open menu was being reported to the app underneath, so menu items did nothing. `nano`/`less` don't grab the mouse, hence unaffected.
 	- ✅ Fixed: right-click is now reserved for our own context menu and never forwarded to the app; and while any menu is open a click operates/dismisses the menu instead of going to the app. Left/middle/wheel still forward, so apps keep normal mouse use.
-		- Pinned by: `right_click_and_a_click_on_an_open_menu_stay_local`.
+		- Pinned by: dd5p5 `right_click_and_a_click_on_an_open_menu_stay_local`.
 	- Not yet confirmed on hardware: right-click in muffer should open our menu without pasting, and menu items should work.
 	- Steps to reproduce:
 		- Open terminal.
@@ -10089,7 +10101,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Cause: SilkTerm implemented no mouse reporting at all - clicks, motion, and wheel were only handled locally, never encoded to the PTY. So when an app turns on mouse tracking (DECSET 1000/1002/1003, e.g. Muffer enabling it to receive wheel events), it got nothing and its scroll did nothing; the wheel only drove SilkTerm's own scrollback.
 	- Done: standard mouse reporting, in the modern form and the legacy one. When the focused pane has tracking on, the wheel, clicks, releases, drags and motion all report to the program. Holding Shift overrides that and keeps the local actions - select, paste, the menu and the scrollback.
 	- The wheel sends one event per line, capped, and repeated motion within a cell is not reported twice.
-	- Pinned by: `mouse_sgr_and_x10` and `mouse_report_needs_tracking`.
+	- Pinned by: d9dqj `mouse_sgr_and_x10` and d9dqk `mouse_report_needs_tracking`.
 	- Opened: n/a
 	- Closed: 20260703-140632
 
@@ -10098,7 +10110,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Done: both bars center the text on its real visible box using the UI face's actual ascent/descent, instead of the old hand-tuned padding that left titles riding high.
 		- Note: tab bar padding dropped to match the menu bar now that centering handles descender clearance.
 		- Later: a tab title is a path, so it is centered on its whole ink box rather than ascender-to-baseline, and it centers in the tab button rather than in the bar. The menu bar keeps the original rule, which suits its curated labels.
-		- Pinned by: `chrome_text_visible_box_centers_in_bar` and `chrome_ink_box_centers_in_bar`.
+		- Pinned by: d9dfz `chrome_text_visible_box_centers_in_bar` and dbza1 `chrome_ink_box_centers_in_bar`.
 	- Opened: 20260703-091342
 	- Closed: 20260703-100322
 
@@ -10112,7 +10124,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 			- ✅ Not fixed: Still using system *sans serif*, rather than just system font generally. (Which on my system is a *serif* font.)
 				- Fixed: chrome now follows the desktop interface font - family, size, weight, slant, serif or not. It's read natively per platform, and the whole chrome sizes from the real rendered text, so a large or wide font grows the chrome instead of truncating.
 				- Note: terminal text is unaffected.
-				- Pinned by: `the_desktop_decides_which_font_store_answers_first`.
+				- Pinned by: dcrcr `the_desktop_decides_which_font_store_answers_first`.
 		- ✅ Menu bar height adjusts based on menu font.
 			- Done: the bar heights equal the menu font's line height plus padding, so a larger menu font grows the bars.
 			- No test: the same one-line formula as above.
@@ -10120,7 +10132,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 			- Cause: cosmic-text only uses the requested family when a face matches the requested weight exactly, and GentiumAlt includes no Bold face. So asking for bold silently ejected the family and a bold sans rendered instead - which is why bold and size took but the family didn't.
 			- Fixed: pin the font db's canonical family spelling and snap the requested weight and slant to a face the family has, so family wins over weight. A shaping test guards it.
 			- Note: the menu bar and Settings render the serif family at its closest weight; cosmic-text does not synthesize bold.
-			- Pinned by: `ui_attrs_shape_in_pinned_family`.
+			- Pinned by: d9b6e `ui_attrs_shape_in_pinned_family`.
 	- Opened: 20260629-103857
 	- Closed: 20260701-122853
 
@@ -10139,21 +10151,21 @@ Going forward, new issues in the new template at the bottom of this file, will g
 			- Type "exit" in the anything but the last tab, it closes all tabs except one. Sometimes, the program becomes unresponsive then and has to be killed.
 			- Type "exit" in the last tab, it closes the program.
 			- With four tabs open, and type "exit" from the third, closes the first two tabs (and not the third).
-			- Pinned by: `pane_ids_come_from_one_counter_for_the_whole_program`.
+			- Pinned by: dd5q7 `pane_ids_come_from_one_counter_for_the_whole_program`.
 		- ✅ Actual cause (20260630): pane numbers collided across tabs. Each tab counted its own panes from one, so a shell-exit event, which has only the number, resolved to the wrong tab - the first one holding that number - and closed it. Dropping that tab's terminal fired another exit, and the cascade closed all but one tab and sometimes hung, exactly as reported.
 			- The earlier fix, finding the owning tab and cascading, was right, but the lookup itself was ambiguous.
 			- Fixed: one counter for the whole program, so every pane number is unique everywhere.
-			- Pinned by: `pane_ids_come_from_one_counter_for_the_whole_program`.
+			- Pinned by: dd5q7 `pane_ids_come_from_one_counter_for_the_whole_program`.
 	- Opened: 20260629-110720
 	- Closed: 20260629-214404
 
 - ✅ Cursor: slides as you type, and fades instead of blinking.
 	- ✅ Smooth-scroll (when moving to the right).
 		- Done: the cursor slides to its target column as you type, snapping on a newline. Idles at 0% CPU.
-		- Pinned by: `cursor_slide_catches_up_faster_when_farther` and `cursor_slide_never_trails_past_the_cap`.
+		- Pinned by: d9vtm `cursor_slide_catches_up_faster_when_farther` and d9vtn `cursor_slide_never_trails_past_the_cap`.
 	- ✅ Blink at the same rate, but "phase" between of and on, not just on or off.
 		- Done: a smooth cosine fade, on by default. A render refactor skips re-shaping text on cursor-only frames, so blinking no longer pegs the CPU. The cursor_blink config disables it.
-		- Pinned by: `the_phase_blink_fades_instead_of_switching`.
+		- Pinned by: dd5q8 `the_phase_blink_fades_instead_of_switching`.
 	- Opened: n/a
 	- Closed: 20260629-230245
 
@@ -10161,7 +10173,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- ✅ Setting Bg image fit to "Zoom", then Apply works. But back to "Stretch", then Apply, doesn't.
 		- Cause: the dialog's baseline was captured when it opened and never refreshed, so a second Apply diffed against the open-time snapshot and re-selecting the original value read as no change.
 		- Fixed: reset the baseline after each Apply. This fixes every setting, not just fit.
-		- Pinned by: `a_second_apply_diffs_against_the_first`.
+		- Pinned by: dd5qq `a_second_apply_diffs_against_the_first`.
 	- Opened: n/a
 	- Closed: 20260629-230748
 
@@ -10170,14 +10182,14 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Smooth output scrolling therefore died after a while, and sooner under fast output, which fills the buffer quicker. Scrolling back by hand was unaffected, which is why it looked as though only the output side had quit.
 	- Fixed: scrollback growth stays the main signal, so the feel below the cap is untouched. At the cap it falls back to working out how far the view moved by matching this frame's rows against the last one's. A bottom row redrawn in place, such as a progress line with no newline, shifts nothing and so still triggers no motion. A full-screen burst reports the whole backlog and the ease ramps up to catch it.
 	- Note: smooth-scroll feel past the cap is best judged in normal use.
-	- Pinned by: `a_status_bar_is_held_still_at_a_full_scrollback_too`.
+	- Pinned by: dct9d `a_status_bar_is_held_still_at_a_full_scrollback_too`.
 	- Opened: 20260628-083740
 	- Closed: 20260629-214404
 
 - ✅ Mouse wheel doesn't scroll back through the `stdout`/`stderr` buffer. It should do so, smoothly, and in proportion to how fast the mouse wheel is moved. But currently it moves the command history back. (20260626-104542)
 	- Cause: alternate-scroll mode is on by default in the terminal engine, and the wheel handler treated either that flag or the alt screen as reason to send cursor keys. On the normal screen the always-on flag therefore turned the wheel into up and down arrows, which recalls shell history instead of scrolling the buffer.
 	- Fixed: cursor keys now need the alt screen as well as alternate-scroll, and no mouse mode. The normal screen always goes to the smooth scrollback, which was already proportional to the notches turned. Alt-screen programs such as `less`, `nano` and `vim` keep their cursor-key wheel.
-	- Pinned by: `the_wheel_scrolls_back_on_the_primary_screen` and `shift_keeps_the_wheel_local_over_a_tracking_app`.
+	- Pinned by: dd5p6 `the_wheel_scrolls_back_on_the_primary_screen` and dd5p7 `shift_keeps_the_wheel_local_over_a_tracking_app`.
 	- Opened: 20260628-083740
 	- Closed: 20260629-214404
 
@@ -10199,14 +10211,14 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Cause: the fix for the apt "bug". That fix made output easing snap whenever new lines arrived closer than 0.12s apart, to stop apt's status bar bouncing. But a command's output arrives from the PTY in one sub-millisecond burst, so almost all multi-line output (the core demo) snapped instead of easing, and smooth scrolling was gone. Any burst threshold above a frame breaks the feature.
 	- Fixed: the burst-snap was reverted entirely, so output always eases while the view is following the bottom.
 	- Note: smooth output scrolling is restored. The apt status-line bounce is reopened below as its own item; it needs a non-destructive approach.
-	- Pinned by: `output_backlog_settles_to_bottom` and `a_burst_leaves_rest_slowly_with_the_ramp_still_ahead`.
+	- Pinned by: d9b22 `output_backlog_settles_to_bottom` and dar9v `a_burst_leaves_rest_slowly_with_the_ramp_still_ahead`.
 	- Opened: 20260628-083740
 	- Closed: 20260629-214404
 
 - ✅ "Close pane" menu items don't work.
 	- Cause: the action worked with more than one pane. The dead case was the last one: the menu item was gated on there being a pane to fall back to, so on a single pane, which is what a fresh window has and where anyone would first try it, nothing happened.
 	- Fixed: Now Close Pane on the last pane closes the tab (if >1 tab), else the window.
-	- Pinned by: `close_pane_on_a_pane_that_is_gone_closes_nothing`.
+	- Pinned by: dcq6n `close_pane_on_a_pane_that_is_gone_closes_nothing`.
 	- Opened: 20260628-083740
 	- Closed: 20260629-214404
 
@@ -10221,14 +10233,14 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Cause: the dialog vertically centered text with a baked-in 18px text height, so on fonts whose line height differs the labels/values didn't line up with their controls (and it used the mono font).
 	- Fixed, as part of the Settings work: every label, value, hex field and button centers against the real rendered line height, and they are drawn in the proportional interface font.
 	- Note: not going with egui.
-	- Pinned by: `a_label_centers_on_its_row_at_any_line_height`.
+	- Pinned by: dd5qr `a_label_centers_on_its_row_at_any_line_height`.
 	- Opened: 20260628-083740
 	- Closed: 20260629-214404
 
 - ✅ If the window isn't just the right hight, the last line of text is invisible. Not as in, below the visible line - but actually invisible. If you type, you can see that output happens, it's just not visible. Once it scrolls up even a single line though, it becomes visible. Adjust the hieght of the window just a tad, it "fixes" the problem. But at the default dimensions, the problem is apparent.
 	- Cause: a pane lays out one row more than it shows, the extra one sitting just above the viewport, which puts the bottom row exactly at the height the text buffer was given. When the window height made the content an exact multiple of the cell height, which the default size does, that row sat on the limit and the text layout dropped it. Cell backgrounds and the cursor are drawn by a different renderer, so they still showed, which is why typing appeared to do nothing while the cursor moved. Scrolling or resizing shifted it back into range and appeared to fix it.
 	- Fixed: the pane's text buffer is given a couple of rows of slack beyond the content height, while the drawing is still clipped to the pane itself.
-	- Pinned by: `the_bottom_row_survives_an_exact_multiple_height`.
+	- Pinned by: dd5qh `the_bottom_row_survives_an_exact_multiple_height`.
 	- Opened: 20260628-083740
 	- Closed: 20260629-214404
 
@@ -10237,7 +10249,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- The text stack only snaps to a fixed advance when the font declares one, which a system font often does not, so text renders at its natural advance and the two disagree.
 	- Fixed: the cell width now measures the real rendered pitch and is not rounded, so it matches the text and residual drift is sub-pixel. Per-cell fallback glyphs are fit to their cell box, scaled and centered so an over-wide fallback can't spill onto its neighbor.
 	- Superseded: an earlier partial fix pinned the monospace advance on the text buffer, and pulled glyphs the main face lacks out of it to draw them one cell at a time. The extraction is still in place; the pinned advance is kept but does little for a system font.
-	- Pinned by: `the_cell_width_is_the_texts_real_pitch`.
+	- Pinned by: dd5qj `the_cell_width_is_the_texts_real_pitch`.
 	- Opened: 20260628-083740
 	- Closed: 20260629-214404
 
@@ -10251,7 +10263,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - ✅ Config file values don't work without a leading 0.
 	- Cause: `.25` is invalid TOML, so the whole file failed to parse and every value reverted to default (hence "all values").
 	- Fixed: a value written without its leading zero is filled in before parsing, so `.25` reads as `0.25` and `-.5` as `-0.5`.
-	- Pinned by: `persist_survives_bare_decimal_float`.
+	- Pinned by: d9rw2 `persist_survives_bare_decimal_float`.
 	- Opened: 20260628-083740
 	- Closed: 20260629-214404
 
@@ -10261,27 +10273,27 @@ Going forward, new issues in the new template at the bottom of this file, will g
 			- Fixed: Commented it out so detection applies.
 		2. "Use system monospace" had only ever meant the text stack's generic monospace, not the family the OS is set to, so even at a matching point size the glyphs looked different.
 			- Fixed: the system-font lookup returns the configured family name as well as the size, and that family is pinned when it is installed. Otherwise it falls back to generic monospace.
-	- Pinned by: `the_desktop_decides_which_font_store_answers_first` and `mono_candidates_keep_one_order_on_every_platform`.
+	- Pinned by: dcrcr `the_desktop_decides_which_font_store_answers_first` and `mono_candidates_keep_one_order_on_every_platform` (now ddq9d `mono_candidates_put_the_family_first_and_the_built_in_stack_last` and ddwhq `the_desktop_s_font_leads_the_built_in_list`).
 	- Opened: 20260628-083740
 	- Closed: 20260629-214404
 
 - ✅ Text sometimes renders in a different font (e.g. when running `source x9ps1-git; export X9PS1_STANDARD=1`). It seems that some color control codes causes the font change.
 	- Cause: the prompt asks for bold, and a generic monospace request is answered face by face, so the bold run came back in a different family from the regular one.
 	- Fixed: the monospace family name is resolved once at startup and pinned for every weight, so bold and italic stay in it.
-	- Pinned by: `mono_bold_stays_in_pinned_family`.
+	- Pinned by: da724 `mono_bold_stays_in_pinned_family`.
 	- Opened: 20260628-083740
 	- Closed: 20260629-214404
 
 - ✅ Text size is smaller than system default monospace.
 	- Fixed: the default font size follows the OS's own fixed-pitch size rather than a hard-coded one, read natively on each platform and converted from points. `font_size` is commented out in a fresh config, meaning follow the system; setting it pins a size. There is a fallback for when nothing can be read.
 	- Note: the macOS path is unconfirmed (no mac target).
-	- Pinned by: `system_font_size_split_inference` and `the_desktop_decides_which_font_store_answers_first`.
+	- Pinned by: da8sg `system_font_size_split_inference` and dcrcr `the_desktop_decides_which_font_store_answers_first`.
 	- Opened: 20260628-083740
 	- Closed: 20260629-214404
 
 - ✅ Native keybindings for `less` don't work.
 	- Fixed: `less` enables application-cursor-keys mode (DECCKM); arrow / Home / End are now encoded as `ESC O x` instead of `ESC [ x` when that mode is active. The mouse wheel also now drives full-screen apps: when the alternate screen / alternate-scroll mode is active it sends cursor-key presses instead of moving the (nonexistent) scrollback.
-	- Pinned by: `arrows_follow_decckm`.
+	- Pinned by: d9b1m `arrows_follow_decckm`.
 	- Note: 20260930, the wheel rule here was narrowed later. Cursor keys go only on the alt screen with alternate-scroll on and no mouse mode.
 	- Opened: 20260628-083740
 	- Closed: 20260629-214404
@@ -10331,7 +10343,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		| BSD     | /usr/local/PROG/        | /usr/local/share/applications/PROG.desktop                   | ~/.local/share/PROG/          | ~/.local/share/applications/PROG.desktop
 		| Windows | C:\Program Files\PROG\  | %ProgramData%\Microsoft\Windows\Start Menu\Programs\PROG.lnk | %LOCALAPPDATA%\Programs\PROG\ | %APPDATA%\Microsoft\Windows\Start Menu\Programs\PROG.lnk
 		| macOS   | /Applications/PROG.app/ | *The .app bundle is the launcher*                            | ~/Applications/PROG.app/      | *.app bundle*
-	- Pinned by: `cicd/tests/install/run.bash`.
+	- Pinned by: dcbdz `cicd/tests/install/run.bash`, which since 20261028 also checks that a download failing its checksum installs nothing, and dd2n3 `cicd/tests/install/windows.ps1` for a real Windows install.
 	- Opened: 20260723-135701
 	- Closed: 20260723-190021
 
