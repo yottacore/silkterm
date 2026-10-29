@@ -201,6 +201,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Opened by: CC
 	- Parent ID: 2026102416233810
 	- Prereq IDs: 2026102819264421
+	- Related IDs: 2026102518360001
 	- Target OS: All
 	- Requirements:
 		- Every regression and fuzz test the run takes prints one line, such as `PASS decp8 <name>`, with `FAIL` or `SKIP` in place of `PASS`. That covers the Rust tests and the test scripts, here and in the Windows pipeline.
@@ -211,6 +212,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261028: Each test script prints its own `PASS`, `FAIL` or `SKIP` line in place of the old OK or warning line. A skip gives the last reason the script printed. The docs check, the scroll and launcher harnesses and the ASan and TSan canaries print the same lines.
 		- 20261028: The Windows pipeline runs cargo test through the ID tool's new `--run`, which keeps cargo's exit status, and falls back to plain cargo test with no working python. Its test scripts print `PASS` or `FAIL` lines.
 		- 20261028: The warning count skips `PASS`, `FAIL` and `SKIP` lines, and no longer the old forms.
+		- 20261028: The full run at 852e213 failed in ddazx, on the engine (dd5nn) and rotate (dd5nq) tests run alone. Neither came from this item. Both are fork counts, which in the container counted every fork on the box, so a busy box pushed them over. Fixed under 2026102518360001. The engine test's failing line isn't in the log, but its fork check is the one that fails that way, and the test passed 2 of 2 alone in the image without the load.
 	- Decisions:
 		- 20261028: A test that skips is a `SKIP` line with its reason, not a warning. Rust tests that were ignored never counted as warnings either, and the line still says why. It doesn't go on the end-of-run list either, since that list is for boxes that weren't there.
 		- 20261028: The reason goes after a comma, as in the shared rules' example. The old annotate put it in brackets.
@@ -988,11 +990,12 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - The rotate test's fork count went over its limit once inside the test run folder test
 	- ID: 2026102518360001
 	- Type: Bug
-	- Status: Queued
+	- Status: Waiting on automated testing
+	- Needs local test suite run?: The round's full run, `cicd/cicd.bash --backlog-run-full`, in the container, for ddazx's runs of the rotate and engine tests.
 	- Severity: Low
 	- Opened: 20261025-183600
 	- Opened by: CC
-	- Related IDs: 2026102416233803
+	- Related IDs: 2026102416233803, 2026102819265198
 	- Target OS: Linux
 	- Test environment: b23, the full run in the container at 591a9a8 on `rnd1025b`, box load about 20
 	- Steps to reproduce:
@@ -1000,6 +1003,16 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Incorrect behavior: "rotating 200 files costs a few forks beyond the files it changes" counted 366 forks beyond the files changed, limit 300, and the full run stopped there.
 	- Expected behavior: The fork count stays under its limit however busy the box is, or the check counts only forks the rotate script makes.
 	- Reproduced: No. `rotate/run.bash` alone passed 3 of 3 with 18 forks, limit 30, and `testdir/run.bash` passed its rotate check 3 of 3 on the host.
+		- 20261028: Again in the full run at 852e213, 311 forks beyond the files changed, limit 300, with the engine test's fork check failing beside it. Alone on the host it passed 3 of 3, 18 forks, limit 30.
+		- 20261028: Yes, in the image with a loop of short processes on the box: 1601 forks beyond the files changed, and 145 in the engine test, limit 100.
+	- Actual cause: In the container `unshare` can't make a PID namespace, so `fForkCount` fell back to the kernel's fork total in `/proc/stat`, which counts every fork on the box, even best of 5.
+	- Decisions:
+		- 20261028: Count in the container's own PID namespace, rather than let the container make one, such as through a looser seccomp profile, which would widen what every step in it may do.
+	- Actual fix: The fallback reads the last PID of the namespace it runs in, `/proc/sys/kernel/ns_last_pid`, so in the container it counts only the container's forks. On a box where no namespace can be made it counts the box's, as before. `/proc/stat` is left for a kernel without the file.
+	- Verified: 20261028. In the image under the same load, the old helper failed both checks and the new one passed both at the exact counts, 18 and 4. `rotate/run.bash` alone on the host passed 3 of 3. shellcheck, the bash style check, and `--backlog-run-quick` with all five areas pass.
+		- Swept: both callers of `fForkCount`, the rotate and engine tests. No other test counts forks.
+	- Branch: rnd1029
+	- Test case: The fork checks in dd5nq `cicd/tests/rotate/run.bash` and dd5nn `cicd/tests/engine/run.bash`, which ddazx runs in the container.
 
 - Wayland: a copy a program sends while no SilkTerm window has focus is dropped
 	- ID: 2026101607585700

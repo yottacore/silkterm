@@ -8,9 +8,11 @@
 ##			fForkCount <var> <setup> <measured>
 ##		Both scripts run in a fresh bash, setup first and not counted. var is set to
 ##		the count, and forkCountExact to 1 when it came from a PID namespace of its
-##		own, where every PID is ours. Where one cannot be made it is 0, and the count
-##		is the kernel's total, best of five, which the rest of the box adds to; give
-##		that case a looser limit. The measured script must be safe to run five times.
+##		own, where every PID is ours. Where one cannot be made, as in a container, it
+##		is 0, and the count is the last PID of the namespace bash is in, best of five.
+##		In a container that is the container's, which the rest of the run adds to; on
+##		a box it is the box's. Give that case a looser limit. The measured script must
+##		be safe to run five times.
 ##	- History: At bottom of file.
 
 ##	Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
@@ -30,7 +32,11 @@ fForkCount(){
 	forkCountExact=0
 	for _ in 1 2 3 4 5; do
 		got="$(bash -c "${setup}"'
-			fTotal(){ local k v; while read -r k v; do if [[ "${k}" == processes ]]; then printf -v "${1}" "%s" "${v}"; return 0; fi; done </proc/stat; }
+			fTotal(){
+				local k v
+				if read -r v </proc/sys/kernel/ns_last_pid; then printf -v "${1}" "%s" "${v}"; return 0; fi 2>/dev/null
+				while read -r k v; do if [[ "${k}" == processes ]]; then printf -v "${1}" "%s" "${v}"; return 0; fi; done </proc/stat
+			}
 			fTotal forkA
 			{ '"${measured}"'
 			} >/dev/null 2>&1 || true
@@ -43,3 +49,4 @@ fForkCount(){
 
 ##	History:
 ##		- 20261004 JC: Created.
+##		- 20261028 JC: The fallback reads its own PID namespace's last PID, not the box's fork total, so a container counts only its own.
