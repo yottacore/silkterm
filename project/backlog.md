@@ -34,6 +34,146 @@ Going forward, new issues in the new template at the bottom of this file, will g
 
 ## Issues
 
+- CICD reset: a test for each old-format Done bug, part 1 of 4
+	- ID: 2026102819193471
+	- Type: Task
+	- Status: Queued
+	- Priority: High
+	- Opened: 20261028-191934
+	- Opened by: CC
+	- Parent ID: 2026102416233809
+	- Target OS: All
+	- Requirements:
+		- The old-format Done bugs from "Check the display-scale fixes on two monitors at different scales" to "nano:" (holding the cursor key to scroll), 40 items.
+		- Each names its test ID beside the test it names, or says in a few words why it has none. A test is added where one could exist and doesn't, and is watched to fail with the fix taken out.
+		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
+
+- CICD reset: a test for each old-format Done bug, part 2 of 4
+	- ID: 2026102819193485
+	- Type: Task
+	- Status: Queued
+	- Priority: High
+	- Opened: 20261028-191934
+	- Opened by: CC
+	- Parent ID: 2026102416233809
+	- Target OS: All
+	- Requirements:
+		- The old-format Done bugs from "Cursor blink doesn't seem to pause after in inactivity timeout" to "Bug: Alt-screen enter/exit animated like a scroll", 40 items.
+		- Each names its test ID beside the test it names, or says in a few words why it has none. A test is added where one could exist and doesn't, and is watched to fail with the fix taken out.
+		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
+
+- CICD reset: a test for each old-format Done bug, part 3 of 4
+	- ID: 2026102819193498
+	- Type: Task
+	- Status: Queued
+	- Priority: High
+	- Opened: 20261028-191934
+	- Opened by: CC
+	- Parent ID: 2026102416233809
+	- Target OS: All
+	- Requirements:
+		- The old-format Done bugs from "Bug: Residual 1-line smooth scroll-up on alt-screen enter and exit" to "Windows: no smooth-scrolling in full-screen / scroll-region apps", 40 items.
+		- Each names its test ID beside the test it names, or says in a few words why it has none. A test is added where one could exist and doesn't, and is watched to fail with the fix taken out.
+		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
+
+- CICD reset: a test for each old-format Done bug, part 4 of 4
+	- ID: 2026102819193512
+	- Type: Task
+	- Status: Queued
+	- Priority: High
+	- Opened: 20261028-191935
+	- Opened by: CC
+	- Parent ID: 2026102416233809
+	- Target OS: All
+	- Requirements:
+		- The old-format Done bugs from "Config file rewriting is proving problematic" to "Installer script(s):", the end of the list, 44 items.
+		- Each names its test ID beside the test it names, or says in a few words why it has none. A test is added where one could exist and doesn't, and is watched to fail with the fix taken out.
+		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
+
+- CICD reset: a test for each old-format Done feature, part 1 of 6
+	- ID: 2026102819193525
+	- Type: Task
+	- Status: Queued
+	- Priority: High
+	- Opened: 20261028-191935
+	- Opened by: CC
+	- Parent ID: 2026102416233809
+	- Target OS: All
+	- Requirements:
+		- The old-format Done features from "Two more settings of the same class as the light mode calibration" to "Run the interface checks on Windows from here as well", 40 items.
+		- Each names its test ID beside the test it names, or says in a few words why it has none. A test is added where one could exist and doesn't, and is watched to fail with the fix taken out.
+		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
+
+- CICD reset: a test for each old-format Done feature, part 2 of 6
+	- ID: 2026102819193540
+	- Type: Task
+	- Status: Queued
+	- Priority: High
+	- Opened: 20261028-191935
+	- Opened by: CC
+	- Parent ID: 2026102416233809
+	- Target OS: All
+	- Requirements:
+		- The old-format Done features from "Code review 20260908, the enhancement half" to "Config file: reorganized to follow the Settings dialog", 40 items.
+		- Each names its test ID beside the test it names, or says in a few words why it has none. A test is added where one could exist and doesn't, and is watched to fail with the fix taken out.
+		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
+
+- CICD reset: a test for each old-format Done feature, part 3 of 6
+	- ID: 2026102819193554
+	- Type: Task
+	- Status: Queued
+	- Priority: High
+	- Opened: 20261028-191935
+	- Opened by: CC
+	- Parent ID: 2026102416233809
+	- Target OS: All
+	- Requirements:
+		- The old-format Done features from "Menu enhancements: shells in the Tabs and Panes menus" to "Wallpaper settings renamed, and given two master switches", 40 items.
+		- Each names its test ID beside the test it names, or says in a few words why it has none. A test is added where one could exist and doesn't, and is watched to fail with the fix taken out.
+		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
+
+- CICD reset: a test for each old-format Done feature, part 4 of 6
+	- ID: 2026102819193569
+	- Type: Task
+	- Status: Queued
+	- Priority: High
+	- Opened: 20261028-191935
+	- Opened by: CC
+	- Parent ID: 2026102416233809
+	- Target OS: All
+	- Requirements:
+		- The old-format Done features from "A wallpaper can say how it wants to be laid out" to "Donations model:", 40 items.
+		- Each names its test ID beside the test it names, or says in a few words why it has none. A test is added where one could exist and doesn't, and is watched to fail with the fix taken out.
+		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
+
+- CICD reset: a test for each old-format Done feature, part 5 of 6
+	- ID: 2026102819193582
+	- Type: Task
+	- Status: Queued
+	- Priority: High
+	- Opened: 20261028-191935
+	- Opened by: CC
+	- Parent ID: 2026102416233809
+	- Target OS: All
+	- Requirements:
+		- The old-format Done features from "Cursor animation immediately resets and starts over on keypresses" to "Background image:", 40 items.
+		- Each names its test ID beside the test it names, or says in a few words why it has none. A test is added where one could exist and doesn't, and is watched to fail with the fix taken out.
+		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
+
+- CICD reset: a test for each old-format Done feature, part 6 of 6
+	- ID: 2026102819193596
+	- Type: Task
+	- Status: Queued
+	- Priority: High
+	- Opened: 20261028-191935
+	- Opened by: CC
+	- Parent ID: 2026102416233809
+	- Target OS: All
+	- Requirements:
+		- The old-format Done features from "Text readability glow:" to "Application name ideas", the end of the list, 43 items.
+		- Each names its test ID beside the test it names, or says in a few words why it has none. A test is added where one could exist and doesn't, and is watched to fail with the fix taken out.
+		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
+
 - The window doesn't paint while the GPU is busy or short on memory, and stays blank after the load ends
 	- ID: 2026100312470535
 	- Type: Bug
@@ -441,6 +581,12 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Per the regression bullet in `Testing` in the shared CICD rules. Every Done item has a regression test in CI where one could exist, and names its test ID, or says in a few words why it has none.
 		- Most Done items in the new format name one. Left: 4 there that don't, and the Done items in the old format, which name none.
 		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
+	- Progress log:
+		- 20261028: Split in 11, too big for one sitting. The old format has 407 Done items, 164 bugs and 243 features, and most name a test without its ID. 2026102819193456 takes the 4 new-format items, 2026102819193471 to 2026102819193512 the old-format bugs in 4 parts, and 2026102819193525 to 2026102819193596 the features in 6. This item closes when they do.
+	- Decisions:
+		- 20261028: Parts of about 40 items, in the list's own order, so each fits one sitting and none needs a call on where an item belongs.
+		- 20261028: An old-format item gets the ID beside the test name it already gives, rather than a new row.
+		- 20261028: No wait on 2026102416233810 (test IDs). Its change of form has to sweep every ID the backlog names anyway.
 
 - CICD reset: test IDs
 	- ID: 2026102416233810
@@ -913,6 +1059,30 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- For that flag only, no blank lines before or after.
 	- Notes:
 		- Pre-next-cut.
+
+- CICD reset: a test for each new-format Done item still without one
+	- ID: 2026102819193456
+	- Type: Task
+	- Status: Done
+	- Priority: High
+	- Opened: 20261028-191934
+	- Opened by: CC
+	- Parent ID: 2026102416233809
+	- Target OS: All
+	- Requirements:
+		- The 4 new-format Done items with no `Test case:` row: 2026102320591323 (where the Miri step runs), 2026101611321635 (the README line on memory), 2026101008023943 (Settings dialog tabs down the side, and tabs in a tab), and 2026100307115829 (copy on select on by default, and remembered).
+		- Each gets a `Test case:` row naming its test IDs, or why it has none. A test is added where one could exist and doesn't.
+		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
+	- Progress log:
+		- 20261028: 2026102320591323 and 2026101611321635 have no test, and say why. The Settings tabs item names the 5 tests it already had. Copy on select had tests for the default and the old config, and gets one for the menu's choice lasting to the next launch.
+	- Decisions:
+		- 20261028: The menu's save of copy on select is a function of its own now, so a test can drive it without a window. What it saves is unchanged.
+		- 20261028: The Miri item only settled a question, so the step's own tests, on 2026102320591318, are its tests.
+	- Verified: 20261028. Eu3HyI6 failed with the menu's save turned off, and passes with it. The 4 copy on select tests pass. `--backlog-run-quick fmt clippy tests docs` passed.
+		- Swept: every new-format Done item has a `Test case:` row now.
+	- Branch: rnd1029
+	- Test case: Eu3HyI6 `the_menu_s_copy_on_select_choice_lasts_to_the_next_launch`. The other 3 items name theirs, or why there is none.
+	- Closed: 20261028-192335
 
 - Over ssh, the step rule from `cicd-win.ps1` comes out as 79 bell characters
 	- ID: 2026102811082453
@@ -4052,6 +4222,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Notes:
 		- It measures far too slow (see 2026101714445004). The leak checks are on in a default full run since 10-22, so `--leakcheck` alone no longer keeps it out.
 		- 20261024: Answer: mostly the fast part (C), but behind `--leakcheck`, with a warning that it's very slow. Even a warning someone has to Ctrl+C out of is fine, no Y/N needed. The quick leak checks still run in a run with no flags.
+	- Test case: None of its own, since it settled where the Miri step runs. The step, with its engine and container cases, is 2026102320591318's.
 	- Closed: 20261024-064004
 
 - Leak checks: the test suite under ThreadSanitizer on every full run
@@ -4395,6 +4566,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261017: Answer (JC): remove the claim about memory. The README line now ends at the speed.
 	- Branch: persist
 	- Commit: 4745671
+	- Test case: None: a README wording change.
 	- Acceptance signoff: JC, 20261017.
 	- Closed: 20261017-081034
 
@@ -4792,6 +4964,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Tabs take no focus. A click changes tab and nothing else.
 	- Progress log:
 		- 20261010: Done on `tabside`. `tabs_side: top|left` and `A/B` paths in `settings_ui.shcl`, with the design doc and style guide updated. SilkTerm stays on top with flat tabs; both looks were checked on a build with its tabs nested.
+	- Test case: EsJDUK4 (a tab under another is a path), EsJDU1P (sub-tabs across the top), EsJDU6y (the tab walk), EsJDUBS (down the side), EsJDUFr (tabs take no focus).
 
 - Settings, Cursor: a "Blink" switch as a subsection heading over the blink rate
 	- ID: 2026100907341817
@@ -5564,6 +5737,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261003: Turning Copy on select on or off from a menu saves it as the setting. New tabs and the next launch start with it. Other panes already open keep their own.
 		- 20261003: Unit tests pass. The menu toggle still needs a look in a real window.
 	- Branch: copysel
+	- Test case: EkrTZxY (on by default), EreA6Db (an old config's default line goes to on), Eu3HyI6 (the menu's choice lasts to the next launch).
 
 - Transparency setting: a warning that it depends on the desktop, and a place at the end of its tab
 	- ID: 2026100220292617

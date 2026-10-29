@@ -221,20 +221,24 @@ impl State {
 		};
 		let now = !p.copy_enabled(kind);
 		p.set_copy(kind, now);
-		// the last choice is what the next launch and new tabs start with.
-		// Other panes keep their own, which is why this skips apply_new_settings.
 		if kind == CopyKind::Select {
-			save_live(|live| {
-				let changed = live.copy_on_select != now;
-				let on = knobs::Value::Bool(now);
-				crate::fields::set(live, crate::ui_spec::Key::CopyOnSelect, &on, None);
-				changed
-			});
+			remember_copy_select(now);
 		}
 		if self.tabs.cur().panes.contains_key(&target) {
 			self.tabs.cur_mut().focused = target;
 		}
 	}
+}
+
+// The last choice is what the next launch and new tabs start with. Other panes
+// keep their own, which is why this skips apply_new_settings.
+fn remember_copy_select(now: bool) {
+	save_live(|live| {
+		let changed = live.copy_on_select != now;
+		let on = knobs::Value::Bool(now);
+		crate::fields::set(live, crate::ui_spec::Key::CopyOnSelect, &on, None);
+		changed
+	});
 }
 
 #[cfg(test)]
@@ -245,6 +249,36 @@ mod tests {
 		menubar_text_slot,
 	};
 	use crate::text::TextCtx;
+
+	// Copy on select turned on or off from a menu is saved as the setting, so
+	// the next launch starts with the last choice.
+	// Test ID: Eu3HyI6
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn the_menu_s_copy_on_select_choice_lasts_to_the_next_launch() {
+		let _guard = crate::config::test_config_lock();
+		let saved = crate::config::settings();
+		let _store = crate::config::test_store_lock();
+		let dir =
+			crate::testdir::run_dir().join(format!("silkterm_copysel_{}", std::process::id()));
+		let _ = std::fs::remove_dir_all(&dir);
+		std::fs::create_dir_all(&dir).unwrap();
+		let path = dir.join("config.shcl");
+		std::fs::write(&path, "").unwrap();
+		crate::config::set_config_override(path.clone());
+		crate::config::update(crate::config::reload_from_disk());
+		for on in [false, true, false] {
+			super::remember_copy_select(on);
+			assert_eq!(
+				crate::config::reload_from_disk().copy_on_select,
+				on,
+				"the next launch reads {on}"
+			);
+		}
+		crate::config::update((*saved).clone());
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
 	// The chrome shares a coordinate space with the terminal grid, so nothing
 	// A narrow window used to draw "Copy on:" straight over "Panes" and "Help" -
 	// both there, neither readable. The cluster sheds parts instead, and the
