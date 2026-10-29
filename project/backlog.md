@@ -812,22 +812,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Possible cause: `fSize` in silkterm-private `macos/build.bash` calls `stat -f%z`, the BSD form. The `stat` first on PATH there is GNU, which wants `-c%s`.
 	- Severity: Low
 
-- Over ssh, the step rule from `cicd-win.ps1` comes out as 79 bell characters
-	- ID: 2026102811082453
-	- Type: Bug
-	- Status: Queued
-	- Opened: 20261028-110824
-	- Opened by: CC
-	- Related IDs: 2026102416233808
-	- Target OS: Windows
-	- Test environment: b29w, through `win-remote.bash`
-	- Steps to reproduce: Run `cicd-win.ps1 -BacklogRunQuick fmt` on b29w through `win-remote.bash run`, and keep the output in a file.
-	- Incorrect behavior: Each rule above a step line is 79 BEL bytes (0x07), not the dot rule. A terminal beeps 79 times per step.
-	- Expected behavior: The same 79-wide rule as `cicd.bash` prints, or a plain ASCII one where the output encoding has no dot.
-	- Reproduced: 20261028, in the test batch at 64f3584. The rule was 73 wide before the round and did the same.
-	- Possible cause: The rule is `[char]0x2022`. Over ssh, pwsh writes through the OEM code page, 437, where the dot is byte 0x07.
-	- Severity: Low
-
 - Help|About: "Acceleration" shows as "Unknown"
 	- ID: 2026102807384203
 	- Type: Bug
@@ -929,6 +913,33 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- For that flag only, no blank lines before or after.
 	- Notes:
 		- Pre-next-cut.
+
+- Over ssh, the step rule from `cicd-win.ps1` comes out as 79 bell characters
+	- ID: 2026102811082453
+	- Type: Bug
+	- Status: Done
+	- Opened: 20261028-110824
+	- Opened by: CC
+	- Related IDs: 2026102416233808
+	- Target OS: Windows
+	- Test environment: b29w, through `win-remote.bash`
+	- Steps to reproduce: Run `cicd-win.ps1 -BacklogRunQuick fmt` on b29w through `win-remote.bash run`, and keep the output in a file.
+	- Incorrect behavior: Each rule above a step line is 79 BEL bytes (0x07), not the dot rule. A terminal beeps 79 times per step.
+	- Expected behavior: The same 79-wide rule as `cicd.bash` prints, or a plain ASCII one where the output encoding has no dot.
+	- Reproduced: 20261028, in the test batch at 64f3584. The rule was 73 wide before the round and did the same.
+	- Possible cause: The rule is `[char]0x2022`. Over ssh, pwsh writes through the OEM code page, 437, where the dot is byte 0x07.
+	- Severity: Low
+	- Actual cause: Over ssh, or into a file, pwsh encodes what it writes in the console's code page, 437 on b29w. .NET maps the dot there to 0x07, the bell. Write-Host settles its encoding at its first write.
+	- Actual fix: Before any output, `cicd-win.ps1` switches output to UTF-8 when it isn't going to a console, and puts the code page back at the end, since the shell that started it shares the console. Where the switch fails and the dot can't be written, the rule is 79 dashes.
+	- Decisions:
+		- Only redirected output switches. A console window draws the dot already, through the wide-character call, whatever the code page.
+		- UTF-8 rather than the ASCII rule as the main fix, so a log from ssh matches `cicd.bash` and native tools' UTF-8 output reads back whole.
+	- Verified: 20261028. b29w through `win-remote.bash run`, `-BacklogRunQuick fmt`: the old script wrote 158 bell bytes and no dots, the new one 158 dots and no bell byte, and the code page read 437 again after. The new Er2UgYE checks fail with the switch stubbed out and pass with it. `--backlog-run-quick` with all 5 areas passed.
+		- The dash fallback is unverified, since the switch never failed on b29w.
+		- Swept: `cicd-win.ps1` has no other non-ASCII output. `install.ps1` and the test scripts print no rule.
+	- Branch: rnd1029
+	- Test case: `cicd/tests/cicd-win/run.bash` (Er2UgYE), "a rule written to a pipe is 79 dots in UTF-8".
+	- Closed: 20261028-191249
 
 - Wayland: must use the Wayland clipboard, and minimize other X11 features
 	- ID: 2026101509024607

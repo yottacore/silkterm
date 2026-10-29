@@ -280,6 +280,24 @@ function fEcho     { param([string]$Msg = ""); if ($Msg) { fEcho_Clean "[ $Msg ]
 function fSection  { param([string]$Msg);      fEcho_Clean; fEcho_Clean $script:Letterbox; fEcho $Msg }
 function fNote     { param([string]$Msg); fEcho_Clean $Msg }
 
+## Over ssh, or into a file, pwsh writes in the console's code page, 437 by
+## default, where the rule's dot is the bell byte. Write UTF-8 there instead, as
+## cicd.bash does. Write-Host keeps the encoding of its first write, so this has
+## to run before any output. Where the dot still can't be written, the rule is
+## ASCII. Returns the encoding to put back, or $null when nothing changed.
+function fUtf8Output {
+	if (-not [Console]::IsOutputRedirected) { return $null }
+	$was = [Console]::OutputEncoding
+	if ($was.CodePage -ne 65001) {
+		try { [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false) }
+		catch { Write-Verbose "output stays in code page $($was.CodePage): $_" }
+	}
+	$now = [Console]::OutputEncoding
+	if ($now.GetString($now.GetBytes($script:Letterbox)) -ne $script:Letterbox) { $script:Letterbox = '-' * 79 }
+	if ($now.CodePage -eq $was.CodePage) { return $null }
+	return $was
+}
+
 ## The run's steps, in order: StepsOn is what it takes and counts, StepsOff
 ## "<name> (<flag or reason>)" what it leaves out, for the plan.
 $script:StepsOn  = [System.Collections.Generic.List[string]]::new()
@@ -1216,17 +1234,23 @@ function fMain {
 	fEcho_Clean
 }
 
+$script:OutputWas = $null
 try {
+	$script:OutputWas = fUtf8Output
 	fMain
 	fTestDir_End 0
 } finally {
 	## A step a thrown error ended.
 	fStepClose FAIL
 	try { Stop-Transcript | Out-Null } catch {}
+	## The console's code page is shared with the shell that started this.
+	if ($script:OutputWas) { try { [Console]::OutputEncoding = $script:OutputWas } catch { Write-Verbose "code page not put back: $_" } }
 }
 
 
 ##	History:
+##		- 2026-10-28: Output sent over ssh or into a file is UTF-8, so the rule
+##		  is dots rather than bell bytes, or ASCII where UTF-8 can't be set.
 ##		- 2026-10-28: Steps as cicd.bash prints them: a 79-wide rule, then a
 ##		  stamped Starting line numbered of the steps this run takes, and a PASS
 ##		  or FAIL line. The plan lists the steps turned off and why.
