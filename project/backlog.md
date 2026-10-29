@@ -34,176 +34,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 
 ## Issues
 
-- A backlog line names a path under the private notes folder
-	- ID: 2026102819390403
-	- Type: Bug
-	- Status: Queued
-	- Priority: Low
-	- Opened: 20261028-193904
-	- Opened by: CC
-	- Target OS: All
-	- Requirements:
-		- One line in the public backlog names `lsan_some_tests.bash` under the private notes folder. Public docs shouldn't name it. Say what the script does, or move the note to the private notes.
-
-- CICD reset: the private runner's tests still use old base 62 test IDs
-	- ID: 2026102819390388
-	- Type: Task
-	- Status: Queued
-	- Priority: Avg
-	- Opened: 20261028-193903
-	- Opened by: CC
-	- Related IDs: 2026102819264421
-	- Target OS: All
-	- Requirements:
-		- The private repo's tests weren't part of the 10-28 conversion. Its one ID this backlog names, Eu0WzDd, became dehx0 here, so the private repo's own test should use that.
-		- Convert with the same old-to-new map the 10-28 conversion used, and its ID check should refuse the old form too.
-
-- CICD reset: IDs for the scroll scenes and fuzz cases
-	- ID: 2026102819265312
-	- Type: Task
-	- Status: Waiting on automated testing
-	- Needs local test suite run?: The round's full run, `cicd/cicd.bash --backlog-run-full`, for each scroll scene's own line with its ID in both arms, `--list` with the scenes under each harness arm, and dcbdt and dejjp in stage 3. An arm of the harness that can't start prints a `SKIP` line per scene now, not a warning, so an arm that skips in the container counts one warning fewer.
-	- Priority: High
-	- Opened: 20261028-192653
-	- Opened by: CC
-	- Parent ID: 2026102416233810
-	- Prereq IDs: 2026102819265198
-	- Target OS: All
-	- Requirements:
-		- Each scroll harness scene and each fuzz case gets an ID of its own, and prints its own PASS, FAIL or SKIP line.
-		- The ID check sees them, so it refuses a missing or shared one.
-		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
-		- Overrides: 2026092711142900's decision that the scroll harness scenes keep their PASS lines with no IDs.
-	- Progress log:
-		- 20261028: The 14 scroll scenes have IDs, d9j4s to de19r, from when each was added. Each prints `PASS`, `FAIL` or `SKIP`, its ID, its name with the engine, and what the check found. A run that can't start prints a `SKIP` line per scene with the reason, or `FAIL` under `--strict`, in place of its warning line. `run.bash --list` and `cicd.bash --list` list the scenes.
-		- 20261028: The ID check reads the scene IDs from the harness's scene table, and refuses a missing or shared one, or a table it can't find.
-		- 20261028: Each fuzz target was already a test of its own, with its own ID and its own line, in the test run and the soak. The ID check now refuses 2 targets in one test, or a target outside a test.
-	- Decisions:
-		- 20261028: A scene's ID is the first word of its row in a table in `run.bash`, which the check reads, so the ID and the scene can't drift apart. A table rather than a comment per scene, since most scenes share one script.
-		- 20261028: The same scene keeps one ID under X11 and Wayland, and its name says which. It is one test on 2 engines, like a Rust test on Linux and Windows.
-		- 20261028: Scene times come from git where it has them (clear, prompt, tmuxclear), and otherwise from the harness history and the backlog item that added the scene. The first 5 take the minutes after the harness's own ID.
-		- 20261028: A fuzz case is read as a fuzz target, each a test that soaks one input over many seeds. A seed is a pure function of its number and has no time of its own, and a corpus file is input a target replays, not a test. So no new IDs there.
-	- Verified: 20261028. dcbdt passes with 7 new checks, and 3 of them failed against the old harness, the row count among them. dejjp passes with 8 new checks, and 7 of them failed against the old tool. `test-id.py --check` finds 1558 IDs, all unique, and no fuzz target sharing a test. The harness ran `less` on X11 and `tmux` on Wayland, each with its `PASS` line and ID. `cicd.bash --list` lists the 14 scenes under each arm. The engine (dd5nn), gates (dcry4) and testout (ddp9p) tests pass. `--backlog-run-quick` with all five areas passed. shellcheck, the bash style check and the Python lint pass.
-		- Swept: every place that runs the scenes or prints their result, `run.bash`'s skip paths and `cicd.bash`'s run and `--list` of the harness. The analyze lines' only reader was `run.bash`. The fuzz targets, every `fuzz::soak` call under `source/`. The Windows pipeline has no scroll harness.
-	- Branch: rnd1029
-	- Test case: dcbdt `cicd/tests/scroll/verdict-test.bash` (each scene's line and ID, and `--list`), dejjp `cicd/tests/testid/run.py` (the check on scene IDs and fuzz targets), and the 14 scenes' own IDs in the full run.
-
-- CICD reset: one PASS, FAIL or SKIP line per test
-	- ID: 2026102819265198
-	- Type: Task
-	- Status: Waiting on automated testing
-	- Needs local test suite run?: The round's full run, `cicd/cicd.bash --backlog-run-full`, for the stage 3 script tests' PASS and SKIP lines, the ASan canary's line, the scroll harness lines, and the warning count. The 3 Wayland tests that skip in the container are SKIP lines now, not warnings, so a container run should count 3 fewer than before.
-	- Needs external testing: `cicd-win.ps1 -BacklogRunQuick tests` on b29w, for cargo test's PASS lines through the Windows python, and the PASS lines of the Windows test scripts in a default or full run.
-	- Priority: High
-	- Opened: 20261028-192651
-	- Opened by: CC
-	- Parent ID: 2026102416233810
-	- Prereq IDs: 2026102819264421
-	- Target OS: All
-	- Requirements:
-		- Every regression and fuzz test the run takes prints one line, such as `PASS decp8 <name>`, with `FAIL` or `SKIP` in place of `PASS`. That covers the Rust tests and the test scripts, here and in the Windows pipeline.
-		- The warning count and the gate tests that read those lines follow the new form.
-		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
-	- Progress log:
-		- 20261028: Rust test results, the fuzz soak's included, print as `PASS`, `FAIL` or `SKIP`, the ID and the name, and an ignored test's reason after a comma. A status the filter doesn't know, and a line that isn't UTF-8, go through untouched.
-		- 20261028: Each test script prints its own `PASS`, `FAIL` or `SKIP` line in place of the old OK or warning line. A skip gives the last reason the script printed. The docs check, the scroll and launcher harnesses and the ASan and TSan canaries print the same lines.
-		- 20261028: The Windows pipeline runs cargo test through the ID tool's new `--run`, which keeps cargo's exit status, and falls back to plain cargo test with no working python. Its test scripts print `PASS` or `FAIL` lines.
-		- 20261028: The warning count skips `PASS`, `FAIL` and `SKIP` lines, and no longer the old forms.
-	- Decisions:
-		- 20261028: A test that skips is a `SKIP` line with its reason, not a warning. Rust tests that were ignored never counted as warnings either, and the line still says why. It doesn't go on the end-of-run list either, since that list is for boxes that weren't there.
-		- 20261028: The reason goes after a comma, as in the shared rules' example. The old annotate put it in brackets.
-		- 20261028: A new `--run` in the ID tool, rather than piping in PowerShell, which loses the exit status of the first command in a pipe.
-		- 20261028: Step and check lines that aren't tests, such as the lints, the test ID check and the advisory scan, keep their OK and warning lines. The scroll scenes and fuzz cases have no IDs yet, and are 2026102819265312.
-	- Verified: 20261028. The testout (ddp9p), gates (dcry4), testid (dejjp) and cicd-win (dd5nw) tests pass, and 19 of their new checks failed against the old code. The cicd-win one failed outright there, without the new functions. The engine (dd5nn) and container (ddrp2) tests pass. `--backlog-run-quick` with all five areas passed, with 1439 Rust tests and the 3 docs checks each on a `PASS` or `SKIP` line. shellcheck, the bash style check, the Python and PowerShell lints and `test-id.py --check` pass.
-		- Swept: every place in cicd.bash, cicd-win.ps1, asan.bash and tsan.bash that printed a test's result with its ID, the fuzz soak and the dhat run, which go through the same filter, and the tests that lift fRunTest, fScriptTest or the warning filter. No doc described the old lines.
-	- Branch: rnd1029
-	- Test case: ddp9p `cicd/tests/testout/run.bash`, dcry4 `cicd/tests/gates/run.bash` (ddf08's check), dejjp `cicd/tests/testid/run.py`, dd5nw `cicd/tests/cicd-win/run.bash`.
-
-- CICD reset: test IDs in the new form
-	- ID: 2026102819264421
-	- Type: Task
-	- Status: Waiting on automated testing
-	- Needs local test suite run?: The round's full run, `cicd/cicd.bash --backlog-run-full`, for dejjp in stage 3 and the new IDs at every step. After it the warning count should be back to its usual 31, since the last full run's log still has the old IDs.
-	- Priority: High
-	- Opened: 20261028-192644
-	- Opened by: CC
-	- Parent ID: 2026102416233810
-	- Target OS: All
-	- Requirements:
-		- The ID tool makes, reads and checks IDs as whole minutes since 2000-01-01 00:00 UTC, in lowercase Crockford base 32, like `decp8`. The check stage refuses a missing, malformed or shared one.
-		- Every existing ID is converted once, from the time it stands for, in code, tests, docs and the backlog, the IDs of tests that are gone included. When 2 land on one minute, the newer takes the next free one.
-		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
-	- Progress log:
-		- 20261028: The ID tool makes, reads and checks IDs in the new form. The check refuses a missing, malformed, old base 62, future or shared ID.
-		- 20261028: All 1543 test IDs were converted, and 34 more that the backlog and code comments name for tests that are gone, 1577 in all, in the 161 files that name them. 1038 of them took a later minute, up to 104 minutes on, where many tests were made in one minute.
-		- 20261028: The warning filter, `--list` and `-List` take the 5-character form.
-		- 20261028: silkterm-private's tests keep their old IDs for now. The one this backlog names is dehx0 here, and that repo needs the same change.
-	- Decisions:
-		- 20261028: One pass in time order over the live IDs and those of gone tests together, so each takes the minute it would have taken when it was made.
-		- 20261028: The IDs of gone tests are converted too, so a closed item's test ID still reads as its time, and none can be handed out again.
-		- 20261028: Code, tests and the backlog changed in one commit, so the check never has to take both forms. The conversion was one-off and stays out of the ID tool, since an ID never changes once given.
-		- 20261028: testout (ddp9p)'s made-up ID went from `Zz00000` to `zzzzz`, for the new form. Nothing else in it changed.
-	- Verified: 20261028. dejjp's 18 checks pass, and 12 of them failed against the old tool. The startup gate test (dcry4) failed on the converted IDs before the warning filter changed, and passes after. `test-id.py --check` finds 1544 IDs, all unique. The engine (dd5nn), testout (ddp9p), cicd-win (dd5nw) and Python lint (ddgkn) tests pass. `--backlog-run-quick fmt clippy tests scripts docs` passed, with every Rust test line showing an ID in the new form.
-		- Swept: every place that reads or prints an ID's shape: the warning filter, `cicd.bash --list`, `cicd-win.ps1 -List`, the gate test's lines and testout's made-up ID. No doc outside the backlog described the old form.
-	- Branch: rnd1029
-	- Test case: dejjp `cicd/tests/testid/run.py`, and dcry4's check that a test named for a warning is not one.
-
-- CICD reset: a test for each old-format Done feature, part 3 of 6
-	- ID: 2026102819193554
-	- Type: Task
-	- Status: Queued
-	- Priority: High
-	- Opened: 20261028-191935
-	- Opened by: CC
-	- Parent ID: 2026102416233809
-	- Target OS: All
-	- Requirements:
-		- The old-format Done features from "Menu enhancements: shells in the Tabs and Panes menus" to "Wallpaper settings renamed, and given two master switches", 40 items.
-		- Each names its test ID beside the test it names, or says in a few words why it has none. A test is added where one could exist and doesn't, and is watched to fail with the fix taken out.
-		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
-
-- CICD reset: a test for each old-format Done feature, part 4 of 6
-	- ID: 2026102819193569
-	- Type: Task
-	- Status: Queued
-	- Priority: High
-	- Opened: 20261028-191935
-	- Opened by: CC
-	- Parent ID: 2026102416233809
-	- Target OS: All
-	- Requirements:
-		- The old-format Done features from "A wallpaper can say how it wants to be laid out" to "Donations model:", 40 items.
-		- Each names its test ID beside the test it names, or says in a few words why it has none. A test is added where one could exist and doesn't, and is watched to fail with the fix taken out.
-		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
-
-- CICD reset: a test for each old-format Done feature, part 5 of 6
-	- ID: 2026102819193582
-	- Type: Task
-	- Status: Queued
-	- Priority: High
-	- Opened: 20261028-191935
-	- Opened by: CC
-	- Parent ID: 2026102416233809
-	- Target OS: All
-	- Requirements:
-		- The old-format Done features from "Cursor animation immediately resets and starts over on keypresses" to "Background image:", 40 items.
-		- Each names its test ID beside the test it names, or says in a few words why it has none. A test is added where one could exist and doesn't, and is watched to fail with the fix taken out.
-		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
-
-- CICD reset: a test for each old-format Done feature, part 6 of 6
-	- ID: 2026102819193596
-	- Type: Task
-	- Status: Queued
-	- Priority: High
-	- Opened: 20261028-191935
-	- Opened by: CC
-	- Parent ID: 2026102416233809
-	- Target OS: All
-	- Requirements:
-		- The old-format Done features from "Text readability glow:" to "Application name ideas", the end of the list, 43 items.
-		- Each names its test ID beside the test it names, or says in a few words why it has none. A test is added where one could exist and doesn't, and is watched to fail with the fix taken out.
-		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
-
 - The window doesn't paint while the GPU is busy or short on memory, and stays blank after the load ends
 	- ID: 2026100312470535
 	- Type: Bug
@@ -329,6 +159,96 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Swept: every `state.dirty` set on a pointer move. The thumb and map drags move the view, and a divider drag and a pane drag change the layout, so they still compose. The menu, tab and bar hovers don't touch a pane. The wake after a frame looks at the new flag too.
 	- Branch: rnd1024
 	- Test case: ddkre's drag figure, under Verified. The limit stays 360, since the saving is about 5% and the 2026102321230038 margin was set by load.
+
+- CICD reset: IDs for the scroll scenes and fuzz cases
+	- ID: 2026102819265312
+	- Type: Task
+	- Status: Waiting on automated testing
+	- Needs local test suite run?: The round's full run, `cicd/cicd.bash --backlog-run-full`, for each scroll scene's own line with its ID in both arms, `--list` with the scenes under each harness arm, and dcbdt and dejjp in stage 3. An arm of the harness that can't start prints a `SKIP` line per scene now, not a warning, so an arm that skips in the container counts one warning fewer.
+	- Priority: High
+	- Opened: 20261028-192653
+	- Opened by: CC
+	- Parent ID: 2026102416233810
+	- Prereq IDs: 2026102819265198
+	- Target OS: All
+	- Requirements:
+		- Each scroll harness scene and each fuzz case gets an ID of its own, and prints its own PASS, FAIL or SKIP line.
+		- The ID check sees them, so it refuses a missing or shared one.
+		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
+		- Overrides: 2026092711142900's decision that the scroll harness scenes keep their PASS lines with no IDs.
+	- Progress log:
+		- 20261028: The 14 scroll scenes have IDs, d9j4s to de19r, from when each was added. Each prints `PASS`, `FAIL` or `SKIP`, its ID, its name with the engine, and what the check found. A run that can't start prints a `SKIP` line per scene with the reason, or `FAIL` under `--strict`, in place of its warning line. `run.bash --list` and `cicd.bash --list` list the scenes.
+		- 20261028: The ID check reads the scene IDs from the harness's scene table, and refuses a missing or shared one, or a table it can't find.
+		- 20261028: Each fuzz target was already a test of its own, with its own ID and its own line, in the test run and the soak. The ID check now refuses 2 targets in one test, or a target outside a test.
+	- Decisions:
+		- 20261028: A scene's ID is the first word of its row in a table in `run.bash`, which the check reads, so the ID and the scene can't drift apart. A table rather than a comment per scene, since most scenes share one script.
+		- 20261028: The same scene keeps one ID under X11 and Wayland, and its name says which. It is one test on 2 engines, like a Rust test on Linux and Windows.
+		- 20261028: Scene times come from git where it has them (clear, prompt, tmuxclear), and otherwise from the harness history and the backlog item that added the scene. The first 5 take the minutes after the harness's own ID.
+		- 20261028: A fuzz case is read as a fuzz target, each a test that soaks one input over many seeds. A seed is a pure function of its number and has no time of its own, and a corpus file is input a target replays, not a test. So no new IDs there.
+	- Verified: 20261028. dcbdt passes with 7 new checks, and 3 of them failed against the old harness, the row count among them. dejjp passes with 8 new checks, and 7 of them failed against the old tool. `test-id.py --check` finds 1558 IDs, all unique, and no fuzz target sharing a test. The harness ran `less` on X11 and `tmux` on Wayland, each with its `PASS` line and ID. `cicd.bash --list` lists the 14 scenes under each arm. The engine (dd5nn), gates (dcry4) and testout (ddp9p) tests pass. `--backlog-run-quick` with all five areas passed. shellcheck, the bash style check and the Python lint pass.
+		- Swept: every place that runs the scenes or prints their result, `run.bash`'s skip paths and `cicd.bash`'s run and `--list` of the harness. The analyze lines' only reader was `run.bash`. The fuzz targets, every `fuzz::soak` call under `source/`. The Windows pipeline has no scroll harness.
+	- Branch: rnd1029
+	- Test case: dcbdt `cicd/tests/scroll/verdict-test.bash` (each scene's line and ID, and `--list`), dejjp `cicd/tests/testid/run.py` (the check on scene IDs and fuzz targets), and the 14 scenes' own IDs in the full run.
+
+- CICD reset: one PASS, FAIL or SKIP line per test
+	- ID: 2026102819265198
+	- Type: Task
+	- Status: Waiting on automated testing
+	- Needs local test suite run?: The round's full run, `cicd/cicd.bash --backlog-run-full`, for the stage 3 script tests' PASS and SKIP lines, the ASan canary's line, the scroll harness lines, and the warning count. The 3 Wayland tests that skip in the container are SKIP lines now, not warnings, so a container run should count 3 fewer than before.
+	- Needs external testing: `cicd-win.ps1 -BacklogRunQuick tests` on b29w, for cargo test's PASS lines through the Windows python, and the PASS lines of the Windows test scripts in a default or full run.
+	- Priority: High
+	- Opened: 20261028-192651
+	- Opened by: CC
+	- Parent ID: 2026102416233810
+	- Prereq IDs: 2026102819264421
+	- Target OS: All
+	- Requirements:
+		- Every regression and fuzz test the run takes prints one line, such as `PASS decp8 <name>`, with `FAIL` or `SKIP` in place of `PASS`. That covers the Rust tests and the test scripts, here and in the Windows pipeline.
+		- The warning count and the gate tests that read those lines follow the new form.
+		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
+	- Progress log:
+		- 20261028: Rust test results, the fuzz soak's included, print as `PASS`, `FAIL` or `SKIP`, the ID and the name, and an ignored test's reason after a comma. A status the filter doesn't know, and a line that isn't UTF-8, go through untouched.
+		- 20261028: Each test script prints its own `PASS`, `FAIL` or `SKIP` line in place of the old OK or warning line. A skip gives the last reason the script printed. The docs check, the scroll and launcher harnesses and the ASan and TSan canaries print the same lines.
+		- 20261028: The Windows pipeline runs cargo test through the ID tool's new `--run`, which keeps cargo's exit status, and falls back to plain cargo test with no working python. Its test scripts print `PASS` or `FAIL` lines.
+		- 20261028: The warning count skips `PASS`, `FAIL` and `SKIP` lines, and no longer the old forms.
+	- Decisions:
+		- 20261028: A test that skips is a `SKIP` line with its reason, not a warning. Rust tests that were ignored never counted as warnings either, and the line still says why. It doesn't go on the end-of-run list either, since that list is for boxes that weren't there.
+		- 20261028: The reason goes after a comma, as in the shared rules' example. The old annotate put it in brackets.
+		- 20261028: A new `--run` in the ID tool, rather than piping in PowerShell, which loses the exit status of the first command in a pipe.
+		- 20261028: Step and check lines that aren't tests, such as the lints, the test ID check and the advisory scan, keep their OK and warning lines. The scroll scenes and fuzz cases have no IDs yet, and are 2026102819265312.
+	- Verified: 20261028. The testout (ddp9p), gates (dcry4), testid (dejjp) and cicd-win (dd5nw) tests pass, and 19 of their new checks failed against the old code. The cicd-win one failed outright there, without the new functions. The engine (dd5nn) and container (ddrp2) tests pass. `--backlog-run-quick` with all five areas passed, with 1439 Rust tests and the 3 docs checks each on a `PASS` or `SKIP` line. shellcheck, the bash style check, the Python and PowerShell lints and `test-id.py --check` pass.
+		- Swept: every place in cicd.bash, cicd-win.ps1, asan.bash and tsan.bash that printed a test's result with its ID, the fuzz soak and the dhat run, which go through the same filter, and the tests that lift fRunTest, fScriptTest or the warning filter. No doc described the old lines.
+	- Branch: rnd1029
+	- Test case: ddp9p `cicd/tests/testout/run.bash`, dcry4 `cicd/tests/gates/run.bash` (ddf08's check), dejjp `cicd/tests/testid/run.py`, dd5nw `cicd/tests/cicd-win/run.bash`.
+
+- CICD reset: test IDs in the new form
+	- ID: 2026102819264421
+	- Type: Task
+	- Status: Waiting on automated testing
+	- Needs local test suite run?: The round's full run, `cicd/cicd.bash --backlog-run-full`, for dejjp in stage 3 and the new IDs at every step. After it the warning count should be back to its usual 31, since the last full run's log still has the old IDs.
+	- Priority: High
+	- Opened: 20261028-192644
+	- Opened by: CC
+	- Parent ID: 2026102416233810
+	- Target OS: All
+	- Requirements:
+		- The ID tool makes, reads and checks IDs as whole minutes since 2000-01-01 00:00 UTC, in lowercase Crockford base 32, like `decp8`. The check stage refuses a missing, malformed or shared one.
+		- Every existing ID is converted once, from the time it stands for, in code, tests, docs and the backlog, the IDs of tests that are gone included. When 2 land on one minute, the newer takes the next free one.
+		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
+	- Progress log:
+		- 20261028: The ID tool makes, reads and checks IDs in the new form. The check refuses a missing, malformed, old base 62, future or shared ID.
+		- 20261028: All 1543 test IDs were converted, and 34 more that the backlog and code comments name for tests that are gone, 1577 in all, in the 161 files that name them. 1038 of them took a later minute, up to 104 minutes on, where many tests were made in one minute.
+		- 20261028: The warning filter, `--list` and `-List` take the 5-character form.
+		- 20261028: silkterm-private's tests keep their old IDs for now. The one this backlog names is dehx0 here, and that repo needs the same change.
+	- Decisions:
+		- 20261028: One pass in time order over the live IDs and those of gone tests together, so each takes the minute it would have taken when it was made.
+		- 20261028: The IDs of gone tests are converted too, so a closed item's test ID still reads as its time, and none can be handed out again.
+		- 20261028: Code, tests and the backlog changed in one commit, so the check never has to take both forms. The conversion was one-off and stays out of the ID tool, since an ID never changes once given.
+		- 20261028: testout (ddp9p)'s made-up ID went from `Zz00000` to `zzzzz`, for the new form. Nothing else in it changed.
+	- Verified: 20261028. dejjp's 18 checks pass, and 12 of them failed against the old tool. The startup gate test (dcry4) failed on the converted IDs before the warning filter changed, and passes after. `test-id.py --check` finds 1544 IDs, all unique. The engine (dd5nn), testout (ddp9p), cicd-win (dd5nw) and Python lint (ddgkn) tests pass. `--backlog-run-quick fmt clippy tests scripts docs` passed, with every Rust test line showing an ID in the new form.
+		- Swept: every place that reads or prints an ID's shape: the warning filter, `cicd.bash --list`, `cicd-win.ps1 -List`, the gate test's lines and testout's made-up ID. No doc outside the backlog described the old form.
+	- Branch: rnd1029
+	- Test case: dejjp `cicd/tests/testid/run.py`, and dcry4's check that a test named for a warning is not one.
 
 - Always use automatic remote mode when detected.
 	- ID: 2026101914251764
@@ -550,54 +470,61 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Pre-next-cut.
 		- Work first after the CICD issues.
 
-- CICD reset: other hosts and VMs
-	- ID: 2026102416233802
+- CICD reset: a test for each old-format Done feature, part 3 of 6
+	- ID: 2026102819193554
 	- Type: Task
-	- Status: Done
+	- Status: Queued
 	- Priority: High
-	- Opened: 20261024-162338
+	- Opened: 20261028-191935
 	- Opened by: CC
+	- Parent ID: 2026102416233809
 	- Target OS: All
 	- Requirements:
-		- Per `Other hosts and VMs` in the shared CICD rules. The Windows runs already hold the boxes through the shared host lock's `wrap`, and a box that's off is a skip.
-		- A VM is put back the way it was found, through the VM state helper, for vm925w and vmKt6m.
-		- `--no-remote` skips every other box: the Windows scenarios, the Windows runner tests, and the private runner's Mac and store parts.
-		- The Windows scenarios favor b29w. The GPU and timed ones, such as `perfladder`, run on vm925w only, since b29w's GPU is integrated. Every scenario runs on both boxes now.
-		- Windows testing names `b29w` only. The boxes' host config outside the repo still lists `b29w-wif` as a second address for it. Drop it, since the hosts file points `b29w` at the link that works.
-		- A skipped box shows as `SKIP` in its step's line and in the summary at the end.
-		- The Linux ARM64 build gets a `--version` smoke run on the arm64 Linux VM. Nothing runs it now.
+		- The old-format Done features from "Menu enhancements: shells in the Tabs and Panes menus" to "Wallpaper settings renamed, and given two master switches", 40 items.
+		- Each names its test ID beside the test it names, or says in a few words why it has none. A test is added where one could exist and doesn't, and is watched to fail with the fix taken out.
 		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
-	- Progress log:
-		- 20261025: Split in 4, since it's too big for one go: 2026102507245255 (the Windows boxes), 2026102507245260 (`--no-remote` and `SKIP`), 2026102507245265 (vmKt6m in the private runner) and 2026102507245270 (the ARM64 smoke run). This one closes with the last of them.
-	- Test case: The children's tests: dd5nr, dct7r, dd5nn, dehx0 in `silkterm-private`, and dehx3.
-	- Acceptance signoff: Self-closed: all 4 children are Done with their tests.
-	- Closed: 20261028-190205
 
-- CICD reset: standard flags
-	- ID: 2026102416233807
+- CICD reset: a test for each old-format Done feature, part 4 of 6
+	- ID: 2026102819193569
 	- Type: Task
-	- Status: Done
+	- Status: Queued
 	- Priority: High
-	- Opened: 20261024-162338
+	- Opened: 20261028-191935
 	- Opened by: CC
-	- Related IDs: 2026101816103601, 2026102319535661
+	- Parent ID: 2026102416233809
 	- Target OS: All
 	- Requirements:
-		- Per the flags in `CICD style guide` and `Merge gate` in the shared CICD rules. `--quick`, `--leakcheck`, `--no-leakcheck`, `--no-container`, `--no-sync`, `-q` and `-m` are in.
-		- Add `--long`, with `--slow` as another name, `--backlog-run-quick [<area>...]` with its areas in `--help`, `--backlog-run-full`, `--merge-gate`, `--no-remote`, `--keep-temp` and `--list`.
-		- `--gate` becomes another name for `--backlog-run-quick`, and `--ci` for `--merge-gate`. Each says so in one line when used.
-		- The backlog runs and the merge gate never dogfood, publish, commit, push, install, sync or rewrite a tracked file, and never prompt.
-		- The default run fits in about an hour. It takes about 90 minutes now, so a step moves to `--long`.
-		- The pre-push hook runs `--merge-gate` on a push to main, and skips it when the push changes only docs and other files no build reads. Those paths are listed in one place the hook reads.
+		- The old-format Done features from "A wallpaper can say how it wants to be laid out" to "Donations model:", 40 items.
+		- Each names its test ID beside the test it names, or says in a few words why it has none. A test is added where one could exist and doesn't, and is watched to fail with the fix taken out.
 		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
-		- Overrides: 2026101816103601's decision that `--gate` keeps its name as the merge gate, design.md's merge gate bullet under "Delivery", and the gate and full-run lines in the private notes' "Round settings".
-	- Progress log:
-		- 20261025: `--no-remote` is in, from 2026102507245260, with `-NoRemote` in `cicd-win.ps1`.
-		- 20261026: Split, since it doesn't fit one sitting. Children: 2026102616543933 (the backlog runs and the merge gate), 2026102616543936 (`--long`, and a default run in about an hour), 2026102616543939 (`--keep-temp` and `--list`), 2026102616543943 (the pre-push hook), 2026102616543946 (the same in `cicd-win.ps1`).
-		- 20261026: 2026102616543933 is in: `--backlog-run-quick`, `--backlog-run-full`, `--merge-gate`, and `--gate` and `--ci` as other names.
-	- Test case: The children's tests: dd5nn, ddrp2, dcrj6, and dd5nw.
-	- Acceptance signoff: Self-closed: all 5 children are Done with their tests.
-	- Closed: 20261028-190205
+
+- CICD reset: a test for each old-format Done feature, part 5 of 6
+	- ID: 2026102819193582
+	- Type: Task
+	- Status: Queued
+	- Priority: High
+	- Opened: 20261028-191935
+	- Opened by: CC
+	- Parent ID: 2026102416233809
+	- Target OS: All
+	- Requirements:
+		- The old-format Done features from "Cursor animation immediately resets and starts over on keypresses" to "Background image:", 40 items.
+		- Each names its test ID beside the test it names, or says in a few words why it has none. A test is added where one could exist and doesn't, and is watched to fail with the fix taken out.
+		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
+
+- CICD reset: a test for each old-format Done feature, part 6 of 6
+	- ID: 2026102819193596
+	- Type: Task
+	- Status: Queued
+	- Priority: High
+	- Opened: 20261028-191935
+	- Opened by: CC
+	- Parent ID: 2026102416233809
+	- Target OS: All
+	- Requirements:
+		- The old-format Done features from "Text readability glow:" to "Application name ideas", the end of the list, 43 items.
+		- Each names its test ID beside the test it names, or says in a few words why it has none. A test is added where one could exist and doesn't, and is watched to fail with the fix taken out.
+		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
 
 - CICD reset: a test for every Done item
 	- ID: 2026102416233809
@@ -732,6 +659,19 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Incorrect behavior: No underline under any of them. The drawing code reads no underline flag from the engine, so plain, double, curly, dotted and dashed underlines all show as plain text. The link hover underline is SilkTerm's own and works.
 	- Expected behavior: Each underline style a program sets is drawn, in the underline color it sets, or the text color.
 	- Reproduced: Not run in a window. Found in the code while answering 2026102114411311.
+
+- CICD reset: the private runner's tests still use old base 62 test IDs
+	- ID: 2026102819390388
+	- Type: Task
+	- Status: Queued
+	- Priority: Avg
+	- Opened: 20261028-193903
+	- Opened by: CC
+	- Related IDs: 2026102819264421
+	- Target OS: All
+	- Requirements:
+		- The private repo's tests weren't part of the 10-28 conversion. Its one ID this backlog names, Eu0WzDd, became dehx0 here, so the private repo's own test should use that.
+		- Convert with the same old-to-new map the 10-28 conversion used, and its ID check should refuse the old form too.
 
 - CICD reset: run folders under HOST_TEMP, removed at the end
 	- ID: 2026102807494157
@@ -976,6 +916,17 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Notes:
 		- Pre-next-cut.
 
+- A backlog line names a path under the private notes folder
+	- ID: 2026102819390403
+	- Type: Bug
+	- Status: Queued
+	- Priority: Low
+	- Opened: 20261028-193904
+	- Opened by: CC
+	- Target OS: All
+	- Requirements:
+		- One line in the public backlog names `lsan_some_tests.bash` under the private notes folder. Public docs shouldn't name it. Say what the script does, or move the note to the private notes.
+
 - The private Mac build prints empty sizes and five `stat` errors on b26
 	- ID: 2026102811082478
 	- Type: Bug
@@ -1092,214 +1043,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- For that flag only, no blank lines before or after.
 	- Notes:
 		- Pre-next-cut.
-
-- CICD reset: a test for each old-format Done feature, part 2 of 6
-	- ID: 2026102819193540
-	- Type: Task
-	- Status: Done
-	- Priority: High
-	- Opened: 20261028-191935
-	- Opened by: CC
-	- Parent ID: 2026102416233809
-	- Target OS: All
-	- Requirements:
-		- The old-format Done features from "Code review 20260908, the enhancement half" to "Config file: reorganized to follow the Settings dialog", 40 items.
-		- Each names its test ID beside the test it names, or says in a few words why it has none. A test is added where one could exist and doesn't, and is watched to fail with the fix taken out.
-		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
-	- Progress log:
-		- 20261028: Each test the 40 items name, by a name a test still has, now has its ID beside it, every later mention in the same item included.
-		- 20261028: Four tests named were renamed since, the remote override, profile mask, remembered size and sub-group indent ones. Each now names the test that took over.
-		- 20261028: Tests named in words also have their IDs now, the percentile test and the Copy on select placement test.
-		- 20261028: The rest say why they have no ID: comment, label, glossary and style guide text, Windows installer pages and registry, and one-time dogfood and config steps. No test was missing where one could exist, so none was added.
-	- Decisions:
-		- 20261028: As in part 1, a test renamed since keeps its old name, with "now" and the test that took over.
-	- Verified: 20261028. Every test ID added in part 2 is one the tree has, and each sits beside the name of its own test. `--backlog-run-quick docs` passed, `test-id.py --check` passes, and the markdown check finds nothing new.
-		- Swept: every name in backticks and test script path in the 40 items, every ticked sub-item for an ID or a "No test", and every "Pinned by" or "No test" written in words.
-	- Branch: rnd1029
-	- Test case: each of the 40 items names its own, or why it has none.
-	- Closed: 20261028-205827
-
-- CICD reset: a test for each old-format Done feature, part 1 of 6
-	- ID: 2026102819193525
-	- Type: Task
-	- Status: Done
-	- Priority: High
-	- Opened: 20261028-191935
-	- Opened by: CC
-	- Parent ID: 2026102416233809
-	- Target OS: All
-	- Requirements:
-		- The old-format Done features from "Two more settings of the same class as the light mode calibration" to "Run the interface checks on Windows from here as well", 40 items.
-		- Each names its test ID beside the test it names, or says in a few words why it has none. A test is added where one could exist and doesn't, and is watched to fail with the fix taken out.
-		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
-	- Progress log:
-		- 20261028: Each test the 40 items name, by a name a test still has, now has its ID beside it.
-		- 20261028: Tests named in words also have their IDs now: the visibility, picker and theme tests, the profile ladder test, the graying test, the fuzz targets and the three fuzz defect tests, and the second mention of the Windows install test.
-		- 20261028: Tests renamed or dropped since name the tests that took over: the two governed row tests, the graying test, and the light mode tests that went with the calibration.
-		- 20261028: The rest say why they have no ID: docs, demo and wallpaper pack edits, a tag deleted, measurements, Windows account setup, and pipeline settings. No test was missing where one could exist, so none was added.
-	- Decisions:
-		- 20261028: As in the bug parts, a test renamed since keeps its old name, with "now" and the test that took over.
-	- Verified: 20261028. Every test ID added in part 1 is one the tree has. `--backlog-run-quick docs` passed, `test-id.py --check` passes, and the markdown check finds nothing new.
-		- Swept: every name in backticks and test script path in the 40 items, and every "Pinned by", "Test" or "No test" written in words.
-	- Branch: rnd1029
-	- Test case: each of the 40 items names its own, or why it has none.
-	- Closed: 20261028-205617
-
-- CICD reset: a test for each old-format Done bug, part 4 of 4
-	- ID: 2026102819193512
-	- Type: Task
-	- Status: Done
-	- Priority: High
-	- Opened: 20261028-191935
-	- Opened by: CC
-	- Parent ID: 2026102416233809
-	- Target OS: All
-	- Requirements:
-		- The old-format Done bugs from "Config file rewriting is proving problematic" to "Installer script(s):", the end of the list, 44 items.
-		- Each names its test ID beside the test it names, or says in a few words why it has none. A test is added where one could exist and doesn't, and is watched to fail with the fix taken out.
-		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
-	- Progress log:
-		- 20261028: Each test the 44 items name, by a name a test still has, now has its ID beside it, the second mention of the pane counter test included.
-		- 20261028: Two tests named were renamed or commented out since, the clear at a full scrollback and the font order ones. Each now names the tests that took over.
-		- 20261028: The installer item said a download that fails its checksum installs nothing, and no test checked it. The install test (dcbdz) does now, for both installers, and the item also names the Windows install test (dd2n3).
-		- 20261028: The rest say why they have no ID: Windows window placement, focus and creation order, speed changes, a bug never reproduced, a one-line formula, and GPU, GL or compositor work.
-	- Decisions:
-		- 20261028: The checksum case goes in the install test's shared cases, so bash and PowerShell both get it from one place.
-	- Verified: 20261028. dcbdz passes, and its 6 new checks fail with the checksum comparison taken out of install.bash and install.ps1. Every test ID added in part 4 is one the tree has. `--backlog-run-quick scripts docs` passed, `test-id.py --check` passes, and the markdown check finds nothing new.
-		- Swept: every name in backticks and test script path in the 44 items, and every "Pinned by" or "No test" written in words.
-	- Branch: rnd1029
-	- Test case: each of the 44 items names its own, or why it has none. New here: dcbdz `cicd/tests/install/run.bash`, its checksum mismatch checks.
-	- Closed: 20261028-204521
-
-- CICD reset: a test for each old-format Done bug, part 3 of 4
-	- ID: 2026102819193498
-	- Type: Task
-	- Status: Done
-	- Priority: High
-	- Opened: 20261028-191934
-	- Opened by: CC
-	- Parent ID: 2026102416233809
-	- Target OS: All
-	- Requirements:
-		- The old-format Done bugs from "Bug: Residual 1-line smooth scroll-up on alt-screen enter and exit" to "Windows: no smooth-scrolling in full-screen / scroll-region apps", 40 items.
-		- Each names its test ID beside the test it names, or says in a few words why it has none. A test is added where one could exist and doesn't, and is watched to fail with the fix taken out.
-		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
-	- Progress log:
-		- 20261028: Each test the 40 items name, by a name a test still has, now has its ID beside it. So do the Settings warm-up tests and the Windows flood test they name in words.
-		- 20261028: Two tests named were commented out since, the font order and system font switch ones. Each now names the tests that took over.
-		- 20261028: The DPI item names the scale change test and the per-monitor harness, which drive the same handler on Linux.
-		- 20261028: The rest say why they have no ID: a measurement, an experiment not kept, a speed change with no stable threshold, a failed attempt, and frame pacing and window style that need a Windows desktop. No test was missing where one could exist, so none was added.
-	- Decisions:
-		- 20261028: As in part 2, a test commented out since keeps its old name, with "now" and the test that took over.
-	- Verified: 20261028. Every test ID added in part 3 is one the tree has. `--backlog-run-quick docs` passed, `test-id.py --check` passes, and the markdown check finds nothing new.
-		- Swept: every name in backticks and test script path in the 40 items, and every "Pinned by" or "No test" written in words.
-	- Branch: rnd1029
-	- Test case: each of the 40 items names its own, or why it has none.
-	- Closed: 20261028-204110
-
-- CICD reset: a test for each old-format Done bug, part 2 of 4
-	- ID: 2026102819193485
-	- Type: Task
-	- Status: Done
-	- Priority: High
-	- Opened: 20261028-191934
-	- Opened by: CC
-	- Parent ID: 2026102416233809
-	- Target OS: All
-	- Requirements:
-		- The old-format Done bugs from "Cursor blink doesn't seem to pause after in inactivity timeout" to "Bug: Alt-screen enter/exit animated like a scroll", 40 items.
-		- Each names its test ID beside the test it names, or says in a few words why it has none. A test is added where one could exist and doesn't, and is watched to fail with the fix taken out.
-		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
-	- Progress log:
-		- 20261028: Each test the 40 items name, by a name a test still has, now has its ID beside it. So do the test scripts, scenes and Rust tests the code reviews name in words.
-		- 20261028: Four tests named were renamed, merged or commented out since. Each item now names the test that took over, or says why there is none.
-		- 20261028: The pipeline's check that the fuzz corpus is left alone had no test. The engine test (dd5nn) checks it now.
-		- 20261028: The rest say why they have no ID: tests that live in the engine fork, the gallery check, a spacing value, a crash never reproduced, and DX12 composition on a real Windows window.
-	- Decisions:
-		- 20261028: A test renamed or merged since keeps its old name, with "now" and the test that took over, so the item still reads as it did when it closed.
-		- 20261028: The fuzz corpus check is tested in dd5nn, beside the release path checks from part 1.
-	- Verified: 20261028. dd5nn's 3 new checks pass, and fail with the corpus hash or its comparison taken out. Every test ID added in parts 1 and 2 is one the tree has. `--backlog-run-quick scripts docs` passed, `test-id.py --check` passes, and the markdown check finds nothing new.
-		- Swept: every name in backticks and test script path in the 40 items, and every "Pinned by" written in words.
-	- Branch: rnd1029
-	- Test case: each of the 40 items names its own, or why it has none. New here: dd5nn `cicd/tests/engine/run.bash`, its fuzz corpus checks.
-	- Closed: 20261028-203604
-
-- CICD reset: a test for each old-format Done bug, part 1 of 4
-	- ID: 2026102819193471
-	- Type: Task
-	- Status: Done
-	- Priority: High
-	- Opened: 20261028-191934
-	- Opened by: CC
-	- Parent ID: 2026102416233809
-	- Target OS: All
-	- Requirements:
-		- The old-format Done bugs from "Check the display-scale fixes on two monitors at different scales" to "nano:" (holding the cursor key to scroll), 40 items.
-		- Each names its test ID beside the test it names, or says in a few words why it has none. A test is added where one could exist and doesn't, and is watched to fail with the fix taken out.
-		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
-	- Progress log:
-		- 20261028: Each test the 40 items name, by a name a test still has, now has its ID beside it. So do the harness scenes, Windows scenarios and test scripts they name in words.
-		- 20261028: The release stage's check for a local path in a binary had no test. The engine test (dd5nn) checks it now.
-		- 20261028: The rest say why they have no ID: a check by hand on two monitors, a repaint bug never reproduced, the private scrub, the shellcheck step, and tests that live in the engine and clipboard forks or were replaced.
-	- Decisions:
-		- 20261028: The release stage's path check is tested in dd5nn, which already lifts cicd.bash's pieces, rather than in a new script.
-		- 20261028: A test since replaced keeps its old name without an ID, where the item already names the one that replaced it.
-	- Verified: 20261028. dd5nn's 4 new checks pass, alone and in the cicd image, and fail with the path check or its call taken out. `--backlog-run-quick scripts docs` passed, `test-id.py --check` passes, and the markdown check finds nothing new.
-		- Swept: every name in backticks and test script path in the 40 items, and the harness scenes and Windows scenarios they name in words.
-	- Branch: rnd1029
-	- Test case: each of the 40 items names its own, or why it has none. New here: dd5nn `cicd/tests/engine/run.bash`, its release path checks.
-	- Closed: 20261028-203110
-
-- CICD reset: a test for each new-format Done item still without one
-	- ID: 2026102819193456
-	- Type: Task
-	- Status: Done
-	- Priority: High
-	- Opened: 20261028-191934
-	- Opened by: CC
-	- Parent ID: 2026102416233809
-	- Target OS: All
-	- Requirements:
-		- The 4 new-format Done items with no `Test case:` row: 2026102320591323 (where the Miri step runs), 2026101611321635 (the README line on memory), 2026101008023943 (Settings dialog tabs down the side, and tabs in a tab), and 2026100307115829 (copy on select on by default, and remembered).
-		- Each gets a `Test case:` row naming its test IDs, or why it has none. A test is added where one could exist and doesn't.
-		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
-	- Progress log:
-		- 20261028: 2026102320591323 and 2026101611321635 have no test, and say why. The Settings tabs item names the 5 tests it already had. Copy on select had tests for the default and the old config, and gets one for the menu's choice lasting to the next launch.
-	- Decisions:
-		- 20261028: The menu's save of copy on select is a function of its own now, so a test can drive it without a window. What it saves is unchanged.
-		- 20261028: The Miri item only settled a question, so the step's own tests, on 2026102320591318, are its tests.
-	- Verified: 20261028. dejj7 failed with the menu's save turned off, and passes with it. The 4 copy on select tests pass. `--backlog-run-quick fmt clippy tests docs` passed.
-		- Swept: every new-format Done item has a `Test case:` row now.
-	- Branch: rnd1029
-	- Test case: dejj7 `the_menu_s_copy_on_select_choice_lasts_to_the_next_launch`. The other 3 items name theirs, or why there is none.
-	- Closed: 20261028-192335
-
-- Over ssh, the step rule from `cicd-win.ps1` comes out as 79 bell characters
-	- ID: 2026102811082453
-	- Type: Bug
-	- Status: Done
-	- Opened: 20261028-110824
-	- Opened by: CC
-	- Related IDs: 2026102416233808
-	- Target OS: Windows
-	- Test environment: b29w, through `win-remote.bash`
-	- Steps to reproduce: Run `cicd-win.ps1 -BacklogRunQuick fmt` on b29w through `win-remote.bash run`, and keep the output in a file.
-	- Incorrect behavior: Each rule above a step line is 79 BEL bytes (0x07), not the dot rule. A terminal beeps 79 times per step.
-	- Expected behavior: The same 79-wide rule as `cicd.bash` prints, or a plain ASCII one where the output encoding has no dot.
-	- Reproduced: 20261028, in the test batch at 64f3584. The rule was 73 wide before the round and did the same.
-	- Possible cause: The rule is `[char]0x2022`. Over ssh, pwsh writes through the OEM code page, 437, where the dot is byte 0x07.
-	- Severity: Low
-	- Actual cause: Over ssh, or into a file, pwsh encodes what it writes in the console's code page, 437 on b29w. .NET maps the dot there to 0x07, the bell. Write-Host settles its encoding at its first write.
-	- Actual fix: Before any output, `cicd-win.ps1` switches output to UTF-8 when it isn't going to a console, and puts the code page back at the end, since the shell that started it shares the console. Where the switch fails and the dot can't be written, the rule is 79 dashes.
-	- Decisions:
-		- Only redirected output switches. A console window draws the dot already, through the wide-character call, whatever the code page.
-		- UTF-8 rather than the ASCII rule as the main fix, so a log from ssh matches `cicd.bash` and native tools' UTF-8 output reads back whole.
-	- Verified: 20261028. b29w through `win-remote.bash run`, `-BacklogRunQuick fmt`: the old script wrote 158 bell bytes and no dots, the new one 158 dots and no bell byte, and the code page read 437 again after. The new dd5nw checks fail with the switch stubbed out and pass with it. `--backlog-run-quick` with all 5 areas passed.
-		- The dash fallback is unverified, since the switch never failed on b29w.
-		- Swept: `cicd-win.ps1` has no other non-ASCII output. `install.ps1` and the test scripts print no rule.
-	- Branch: rnd1029
-	- Test case: `cicd/tests/cicd-win/run.bash` (dd5nw), "a rule written to a pipe is 79 dots in UTF-8".
-	- Closed: 20261028-191249
 
 - Wayland: must use the Wayland clipboard, and minimize other X11 features
 	- ID: 2026101509024607
@@ -1945,6 +1688,236 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Verified: seed 30 alone, the native unit tests (1058 passed), the fuzz soak at 60 seconds a target (23 targets, all clean), and native and Windows-target clippy.
 	- Acceptance signoff: JC, 20261003.
 	- Closed: 20261003-193000
+
+- CICD reset: other hosts and VMs
+	- ID: 2026102416233802
+	- Type: Task
+	- Status: Done
+	- Priority: High
+	- Opened: 20261024-162338
+	- Opened by: CC
+	- Target OS: All
+	- Requirements:
+		- Per `Other hosts and VMs` in the shared CICD rules. The Windows runs already hold the boxes through the shared host lock's `wrap`, and a box that's off is a skip.
+		- A VM is put back the way it was found, through the VM state helper, for vm925w and vmKt6m.
+		- `--no-remote` skips every other box: the Windows scenarios, the Windows runner tests, and the private runner's Mac and store parts.
+		- The Windows scenarios favor b29w. The GPU and timed ones, such as `perfladder`, run on vm925w only, since b29w's GPU is integrated. Every scenario runs on both boxes now.
+		- Windows testing names `b29w` only. The boxes' host config outside the repo still lists `b29w-wif` as a second address for it. Drop it, since the hosts file points `b29w` at the link that works.
+		- A skipped box shows as `SKIP` in its step's line and in the summary at the end.
+		- The Linux ARM64 build gets a `--version` smoke run on the arm64 Linux VM. Nothing runs it now.
+		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
+	- Progress log:
+		- 20261025: Split in 4, since it's too big for one go: 2026102507245255 (the Windows boxes), 2026102507245260 (`--no-remote` and `SKIP`), 2026102507245265 (vmKt6m in the private runner) and 2026102507245270 (the ARM64 smoke run). This one closes with the last of them.
+	- Test case: The children's tests: dd5nr, dct7r, dd5nn, dehx0 in `silkterm-private`, and dehx3.
+	- Acceptance signoff: Self-closed: all 4 children are Done with their tests.
+	- Closed: 20261028-190205
+
+- CICD reset: standard flags
+	- ID: 2026102416233807
+	- Type: Task
+	- Status: Done
+	- Priority: High
+	- Opened: 20261024-162338
+	- Opened by: CC
+	- Related IDs: 2026101816103601, 2026102319535661
+	- Target OS: All
+	- Requirements:
+		- Per the flags in `CICD style guide` and `Merge gate` in the shared CICD rules. `--quick`, `--leakcheck`, `--no-leakcheck`, `--no-container`, `--no-sync`, `-q` and `-m` are in.
+		- Add `--long`, with `--slow` as another name, `--backlog-run-quick [<area>...]` with its areas in `--help`, `--backlog-run-full`, `--merge-gate`, `--no-remote`, `--keep-temp` and `--list`.
+		- `--gate` becomes another name for `--backlog-run-quick`, and `--ci` for `--merge-gate`. Each says so in one line when used.
+		- The backlog runs and the merge gate never dogfood, publish, commit, push, install, sync or rewrite a tracked file, and never prompt.
+		- The default run fits in about an hour. It takes about 90 minutes now, so a step moves to `--long`.
+		- The pre-push hook runs `--merge-gate` on a push to main, and skips it when the push changes only docs and other files no build reads. Those paths are listed in one place the hook reads.
+		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
+		- Overrides: 2026101816103601's decision that `--gate` keeps its name as the merge gate, design.md's merge gate bullet under "Delivery", and the gate and full-run lines in the private notes' "Round settings".
+	- Progress log:
+		- 20261025: `--no-remote` is in, from 2026102507245260, with `-NoRemote` in `cicd-win.ps1`.
+		- 20261026: Split, since it doesn't fit one sitting. Children: 2026102616543933 (the backlog runs and the merge gate), 2026102616543936 (`--long`, and a default run in about an hour), 2026102616543939 (`--keep-temp` and `--list`), 2026102616543943 (the pre-push hook), 2026102616543946 (the same in `cicd-win.ps1`).
+		- 20261026: 2026102616543933 is in: `--backlog-run-quick`, `--backlog-run-full`, `--merge-gate`, and `--gate` and `--ci` as other names.
+	- Test case: The children's tests: dd5nn, ddrp2, dcrj6, and dd5nw.
+	- Acceptance signoff: Self-closed: all 5 children are Done with their tests.
+	- Closed: 20261028-190205
+
+- CICD reset: a test for each old-format Done feature, part 2 of 6
+	- ID: 2026102819193540
+	- Type: Task
+	- Status: Done
+	- Priority: High
+	- Opened: 20261028-191935
+	- Opened by: CC
+	- Parent ID: 2026102416233809
+	- Target OS: All
+	- Requirements:
+		- The old-format Done features from "Code review 20260908, the enhancement half" to "Config file: reorganized to follow the Settings dialog", 40 items.
+		- Each names its test ID beside the test it names, or says in a few words why it has none. A test is added where one could exist and doesn't, and is watched to fail with the fix taken out.
+		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
+	- Progress log:
+		- 20261028: Each test the 40 items name, by a name a test still has, now has its ID beside it, every later mention in the same item included.
+		- 20261028: Four tests named were renamed since, the remote override, profile mask, remembered size and sub-group indent ones. Each now names the test that took over.
+		- 20261028: Tests named in words also have their IDs now, the percentile test and the Copy on select placement test.
+		- 20261028: The rest say why they have no ID: comment, label, glossary and style guide text, Windows installer pages and registry, and one-time dogfood and config steps. No test was missing where one could exist, so none was added.
+	- Decisions:
+		- 20261028: As in part 1, a test renamed since keeps its old name, with "now" and the test that took over.
+	- Verified: 20261028. Every test ID added in part 2 is one the tree has, and each sits beside the name of its own test. `--backlog-run-quick docs` passed, `test-id.py --check` passes, and the markdown check finds nothing new.
+		- Swept: every name in backticks and test script path in the 40 items, every ticked sub-item for an ID or a "No test", and every "Pinned by" or "No test" written in words.
+	- Branch: rnd1029
+	- Test case: each of the 40 items names its own, or why it has none.
+	- Closed: 20261028-205827
+
+- CICD reset: a test for each old-format Done feature, part 1 of 6
+	- ID: 2026102819193525
+	- Type: Task
+	- Status: Done
+	- Priority: High
+	- Opened: 20261028-191935
+	- Opened by: CC
+	- Parent ID: 2026102416233809
+	- Target OS: All
+	- Requirements:
+		- The old-format Done features from "Two more settings of the same class as the light mode calibration" to "Run the interface checks on Windows from here as well", 40 items.
+		- Each names its test ID beside the test it names, or says in a few words why it has none. A test is added where one could exist and doesn't, and is watched to fail with the fix taken out.
+		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
+	- Progress log:
+		- 20261028: Each test the 40 items name, by a name a test still has, now has its ID beside it.
+		- 20261028: Tests named in words also have their IDs now: the visibility, picker and theme tests, the profile ladder test, the graying test, the fuzz targets and the three fuzz defect tests, and the second mention of the Windows install test.
+		- 20261028: Tests renamed or dropped since name the tests that took over: the two governed row tests, the graying test, and the light mode tests that went with the calibration.
+		- 20261028: The rest say why they have no ID: docs, demo and wallpaper pack edits, a tag deleted, measurements, Windows account setup, and pipeline settings. No test was missing where one could exist, so none was added.
+	- Decisions:
+		- 20261028: As in the bug parts, a test renamed since keeps its old name, with "now" and the test that took over.
+	- Verified: 20261028. Every test ID added in part 1 is one the tree has. `--backlog-run-quick docs` passed, `test-id.py --check` passes, and the markdown check finds nothing new.
+		- Swept: every name in backticks and test script path in the 40 items, and every "Pinned by", "Test" or "No test" written in words.
+	- Branch: rnd1029
+	- Test case: each of the 40 items names its own, or why it has none.
+	- Closed: 20261028-205617
+
+- CICD reset: a test for each old-format Done bug, part 4 of 4
+	- ID: 2026102819193512
+	- Type: Task
+	- Status: Done
+	- Priority: High
+	- Opened: 20261028-191935
+	- Opened by: CC
+	- Parent ID: 2026102416233809
+	- Target OS: All
+	- Requirements:
+		- The old-format Done bugs from "Config file rewriting is proving problematic" to "Installer script(s):", the end of the list, 44 items.
+		- Each names its test ID beside the test it names, or says in a few words why it has none. A test is added where one could exist and doesn't, and is watched to fail with the fix taken out.
+		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
+	- Progress log:
+		- 20261028: Each test the 44 items name, by a name a test still has, now has its ID beside it, the second mention of the pane counter test included.
+		- 20261028: Two tests named were renamed or commented out since, the clear at a full scrollback and the font order ones. Each now names the tests that took over.
+		- 20261028: The installer item said a download that fails its checksum installs nothing, and no test checked it. The install test (dcbdz) does now, for both installers, and the item also names the Windows install test (dd2n3).
+		- 20261028: The rest say why they have no ID: Windows window placement, focus and creation order, speed changes, a bug never reproduced, a one-line formula, and GPU, GL or compositor work.
+	- Decisions:
+		- 20261028: The checksum case goes in the install test's shared cases, so bash and PowerShell both get it from one place.
+	- Verified: 20261028. dcbdz passes, and its 6 new checks fail with the checksum comparison taken out of install.bash and install.ps1. Every test ID added in part 4 is one the tree has. `--backlog-run-quick scripts docs` passed, `test-id.py --check` passes, and the markdown check finds nothing new.
+		- Swept: every name in backticks and test script path in the 44 items, and every "Pinned by" or "No test" written in words.
+	- Branch: rnd1029
+	- Test case: each of the 44 items names its own, or why it has none. New here: dcbdz `cicd/tests/install/run.bash`, its checksum mismatch checks.
+	- Closed: 20261028-204521
+
+- CICD reset: a test for each old-format Done bug, part 3 of 4
+	- ID: 2026102819193498
+	- Type: Task
+	- Status: Done
+	- Priority: High
+	- Opened: 20261028-191934
+	- Opened by: CC
+	- Parent ID: 2026102416233809
+	- Target OS: All
+	- Requirements:
+		- The old-format Done bugs from "Bug: Residual 1-line smooth scroll-up on alt-screen enter and exit" to "Windows: no smooth-scrolling in full-screen / scroll-region apps", 40 items.
+		- Each names its test ID beside the test it names, or says in a few words why it has none. A test is added where one could exist and doesn't, and is watched to fail with the fix taken out.
+		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
+	- Progress log:
+		- 20261028: Each test the 40 items name, by a name a test still has, now has its ID beside it. So do the Settings warm-up tests and the Windows flood test they name in words.
+		- 20261028: Two tests named were commented out since, the font order and system font switch ones. Each now names the tests that took over.
+		- 20261028: The DPI item names the scale change test and the per-monitor harness, which drive the same handler on Linux.
+		- 20261028: The rest say why they have no ID: a measurement, an experiment not kept, a speed change with no stable threshold, a failed attempt, and frame pacing and window style that need a Windows desktop. No test was missing where one could exist, so none was added.
+	- Decisions:
+		- 20261028: As in part 2, a test commented out since keeps its old name, with "now" and the test that took over.
+	- Verified: 20261028. Every test ID added in part 3 is one the tree has. `--backlog-run-quick docs` passed, `test-id.py --check` passes, and the markdown check finds nothing new.
+		- Swept: every name in backticks and test script path in the 40 items, and every "Pinned by" or "No test" written in words.
+	- Branch: rnd1029
+	- Test case: each of the 40 items names its own, or why it has none.
+	- Closed: 20261028-204110
+
+- CICD reset: a test for each old-format Done bug, part 2 of 4
+	- ID: 2026102819193485
+	- Type: Task
+	- Status: Done
+	- Priority: High
+	- Opened: 20261028-191934
+	- Opened by: CC
+	- Parent ID: 2026102416233809
+	- Target OS: All
+	- Requirements:
+		- The old-format Done bugs from "Cursor blink doesn't seem to pause after in inactivity timeout" to "Bug: Alt-screen enter/exit animated like a scroll", 40 items.
+		- Each names its test ID beside the test it names, or says in a few words why it has none. A test is added where one could exist and doesn't, and is watched to fail with the fix taken out.
+		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
+	- Progress log:
+		- 20261028: Each test the 40 items name, by a name a test still has, now has its ID beside it. So do the test scripts, scenes and Rust tests the code reviews name in words.
+		- 20261028: Four tests named were renamed, merged or commented out since. Each item now names the test that took over, or says why there is none.
+		- 20261028: The pipeline's check that the fuzz corpus is left alone had no test. The engine test (dd5nn) checks it now.
+		- 20261028: The rest say why they have no ID: tests that live in the engine fork, the gallery check, a spacing value, a crash never reproduced, and DX12 composition on a real Windows window.
+	- Decisions:
+		- 20261028: A test renamed or merged since keeps its old name, with "now" and the test that took over, so the item still reads as it did when it closed.
+		- 20261028: The fuzz corpus check is tested in dd5nn, beside the release path checks from part 1.
+	- Verified: 20261028. dd5nn's 3 new checks pass, and fail with the corpus hash or its comparison taken out. Every test ID added in parts 1 and 2 is one the tree has. `--backlog-run-quick scripts docs` passed, `test-id.py --check` passes, and the markdown check finds nothing new.
+		- Swept: every name in backticks and test script path in the 40 items, and every "Pinned by" written in words.
+	- Branch: rnd1029
+	- Test case: each of the 40 items names its own, or why it has none. New here: dd5nn `cicd/tests/engine/run.bash`, its fuzz corpus checks.
+	- Closed: 20261028-203604
+
+- CICD reset: a test for each old-format Done bug, part 1 of 4
+	- ID: 2026102819193471
+	- Type: Task
+	- Status: Done
+	- Priority: High
+	- Opened: 20261028-191934
+	- Opened by: CC
+	- Parent ID: 2026102416233809
+	- Target OS: All
+	- Requirements:
+		- The old-format Done bugs from "Check the display-scale fixes on two monitors at different scales" to "nano:" (holding the cursor key to scroll), 40 items.
+		- Each names its test ID beside the test it names, or says in a few words why it has none. A test is added where one could exist and doesn't, and is watched to fail with the fix taken out.
+		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
+	- Progress log:
+		- 20261028: Each test the 40 items name, by a name a test still has, now has its ID beside it. So do the harness scenes, Windows scenarios and test scripts they name in words.
+		- 20261028: The release stage's check for a local path in a binary had no test. The engine test (dd5nn) checks it now.
+		- 20261028: The rest say why they have no ID: a check by hand on two monitors, a repaint bug never reproduced, the private scrub, the shellcheck step, and tests that live in the engine and clipboard forks or were replaced.
+	- Decisions:
+		- 20261028: The release stage's path check is tested in dd5nn, which already lifts cicd.bash's pieces, rather than in a new script.
+		- 20261028: A test since replaced keeps its old name without an ID, where the item already names the one that replaced it.
+	- Verified: 20261028. dd5nn's 4 new checks pass, alone and in the cicd image, and fail with the path check or its call taken out. `--backlog-run-quick scripts docs` passed, `test-id.py --check` passes, and the markdown check finds nothing new.
+		- Swept: every name in backticks and test script path in the 40 items, and the harness scenes and Windows scenarios they name in words.
+	- Branch: rnd1029
+	- Test case: each of the 40 items names its own, or why it has none. New here: dd5nn `cicd/tests/engine/run.bash`, its release path checks.
+	- Closed: 20261028-203110
+
+- CICD reset: a test for each new-format Done item still without one
+	- ID: 2026102819193456
+	- Type: Task
+	- Status: Done
+	- Priority: High
+	- Opened: 20261028-191934
+	- Opened by: CC
+	- Parent ID: 2026102416233809
+	- Target OS: All
+	- Requirements:
+		- The 4 new-format Done items with no `Test case:` row: 2026102320591323 (where the Miri step runs), 2026101611321635 (the README line on memory), 2026101008023943 (Settings dialog tabs down the side, and tabs in a tab), and 2026100307115829 (copy on select on by default, and remembered).
+		- Each gets a `Test case:` row naming its test IDs, or why it has none. A test is added where one could exist and doesn't.
+		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
+	- Progress log:
+		- 20261028: 2026102320591323 and 2026101611321635 have no test, and say why. The Settings tabs item names the 5 tests it already had. Copy on select had tests for the default and the old config, and gets one for the menu's choice lasting to the next launch.
+	- Decisions:
+		- 20261028: The menu's save of copy on select is a function of its own now, so a test can drive it without a window. What it saves is unchanged.
+		- 20261028: The Miri item only settled a question, so the step's own tests, on 2026102320591318, are its tests.
+	- Verified: 20261028. dejj7 failed with the menu's save turned off, and passes with it. The 4 copy on select tests pass. `--backlog-run-quick fmt clippy tests docs` passed.
+		- Swept: every new-format Done item has a `Test case:` row now.
+	- Branch: rnd1029
+	- Test case: dejj7 `the_menu_s_copy_on_select_choice_lasts_to_the_next_launch`. The other 3 items name theirs, or why there is none.
+	- Closed: 20261028-192335
 
 - CICD reset: vmKt6m put back through the VM state helper
 	- ID: 2026102507245265
@@ -6115,6 +6088,33 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Branch: testlines
 	- Test case: No test. Output only. The gate and a quick run showed all 942 Rust tests with an ID, and a made-up name showed the dashes and the warning.
 	- Closed: 20260928-111812
+
+- Over ssh, the step rule from `cicd-win.ps1` comes out as 79 bell characters
+	- ID: 2026102811082453
+	- Type: Bug
+	- Status: Done
+	- Opened: 20261028-110824
+	- Opened by: CC
+	- Related IDs: 2026102416233808
+	- Target OS: Windows
+	- Test environment: b29w, through `win-remote.bash`
+	- Steps to reproduce: Run `cicd-win.ps1 -BacklogRunQuick fmt` on b29w through `win-remote.bash run`, and keep the output in a file.
+	- Incorrect behavior: Each rule above a step line is 79 BEL bytes (0x07), not the dot rule. A terminal beeps 79 times per step.
+	- Expected behavior: The same 79-wide rule as `cicd.bash` prints, or a plain ASCII one where the output encoding has no dot.
+	- Reproduced: 20261028, in the test batch at 64f3584. The rule was 73 wide before the round and did the same.
+	- Possible cause: The rule is `[char]0x2022`. Over ssh, pwsh writes through the OEM code page, 437, where the dot is byte 0x07.
+	- Severity: Low
+	- Actual cause: Over ssh, or into a file, pwsh encodes what it writes in the console's code page, 437 on b29w. .NET maps the dot there to 0x07, the bell. Write-Host settles its encoding at its first write.
+	- Actual fix: Before any output, `cicd-win.ps1` switches output to UTF-8 when it isn't going to a console, and puts the code page back at the end, since the shell that started it shares the console. Where the switch fails and the dot can't be written, the rule is 79 dashes.
+	- Decisions:
+		- Only redirected output switches. A console window draws the dot already, through the wide-character call, whatever the code page.
+		- UTF-8 rather than the ASCII rule as the main fix, so a log from ssh matches `cicd.bash` and native tools' UTF-8 output reads back whole.
+	- Verified: 20261028. b29w through `win-remote.bash run`, `-BacklogRunQuick fmt`: the old script wrote 158 bell bytes and no dots, the new one 158 dots and no bell byte, and the code page read 437 again after. The new dd5nw checks fail with the switch stubbed out and pass with it. `--backlog-run-quick` with all 5 areas passed.
+		- The dash fallback is unverified, since the switch never failed on b29w.
+		- Swept: `cicd-win.ps1` has no other non-ASCII output. `install.ps1` and the test scripts print no rule.
+	- Branch: rnd1029
+	- Test case: `cicd/tests/cicd-win/run.bash` (dd5nw), "a rule written to a pipe is 79 dots in UTF-8".
+	- Closed: 20261028-191249
 
 - `cicd/tests/cleanup/win.ps1` fails when run on its own
 	- ID: 2026102518564647
