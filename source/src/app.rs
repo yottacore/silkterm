@@ -5929,7 +5929,7 @@ mod tests {
 
 	// A program is told on a pane or tab switch as well as the window's, as kitty,
 	// wezterm and tmux do, and the one leaving hears first.
-	// Test ID: Ese7iTi
+	// Test ID: ddxke
 	#[test]
 	fn focus_goes_out_of_one_pane_and_into_the_next() {
 		assert_eq!(focus_moves(None, Some(1)), (None, Some(1)), "window in");
@@ -5946,7 +5946,7 @@ mod tests {
 	// Each debug switch keeps its own cached answer. SILK_IDLEDBG used to share
 	// SILK_DLGDBG's, so whichever was read first answered for both. Run in a
 	// child copy of this test binary, since the answers are cached per process.
-	// Test ID: Erg4k2j
+	// Test ID: ddf59
 	#[test]
 	#[cfg_attr(miri, ignore = "Miri can't start a process")]
 	fn each_debug_switch_reads_its_own_variable() {
@@ -5971,7 +5971,7 @@ mod tests {
 		}
 	}
 
-	// Test ID: Erg4kMG
+	// Test ID: ddf5a
 	#[test]
 	fn debug_switch_child() {
 		use super::{EnvFlag, env_flag};
@@ -5994,7 +5994,7 @@ mod tests {
 	// The strength scale went from 10% to 20% per doubling in August and design.md
 	// kept the old numbers for weeks, with nothing to catch it. Both places that
 	// quote the number are held against the code now.
-	// Test ID: EqSDfqy
+	// Test ID: dcwxg
 	#[test]
 	fn the_docs_quote_the_scrim_strength_scale_the_code_uses() {
 		let pct = SCRIM_PCT_PER_DOUBLING;
@@ -6032,7 +6032,7 @@ mod tests {
 	// the tab can go with it. Close pane then found no such pane in the current tab
 	// and fell through to closing the tab, or the window, with another tab's shells
 	// still running.
-	// Test ID: Eq4SnxI
+	// Test ID: dcq6n
 	#[test]
 	fn close_pane_on_a_pane_that_is_gone_closes_nothing() {
 		assert_eq!(close_scope(false, 1, 1), CloseScope::Nothing);
@@ -6045,7 +6045,7 @@ mod tests {
 
 	// A frame the surface refused under GPU load was dropped, and with the pass
 	// that asked for it already done, nothing drew again until the desktop asked.
-	// Test ID: Erfy7et
+	// Test ID: ddf4e
 	#[test]
 	fn a_refused_frame_is_drawn_again_on_a_backoff() {
 		let now = Instant::now();
@@ -6080,7 +6080,7 @@ mod tests {
 
 	// The window starts hidden and is shown once a frame is drawn. Metal will not
 	// hand a hidden window a frame, so waiting for one hung the Mac build.
-	// Test ID: ErUBJ18
+	// Test ID: ddc9r
 	#[test]
 	fn a_hidden_window_that_cannot_draw_is_shown_anyway() {
 		assert!(reveal_due(false, false, true));
@@ -6094,7 +6094,7 @@ mod tests {
 	// cursor keys were not, so one notch sent arrow keys to the job the pane said
 	// it was protecting. Everything user-driven goes through `write_input` now,
 	// and the only direct write left is the reply the terminal owes the program.
-	// Test ID: EpHQ61Q
+	// Test ID: dcbd7
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_read_only_pane_takes_nothing_the_user_sent() {
@@ -6133,7 +6133,7 @@ mod tests {
 	// scales at its own use site, and a piece that misses out is exactly the
 	// defect this pass fixed (chrome thinning out as the display's DPI rises).
 	// So: the same geometry at 2x must come out at twice the size, everywhere.
-	// Test ID: EnLuU52
+	// Test ID: dbenf
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_chrome_doubles_when_the_display_does() {
@@ -6164,7 +6164,7 @@ mod tests {
 	// and winit replays every held key as a synthetic press on the way back in -
 	// before it re-reads the modifiers. Taking that replay as typing is what put
 	// a bare arrow into the shell, so only a real press may count.
-	// Test ID: EmpzjSS
+	// Test ID: db6zv
 	#[test]
 	fn a_replayed_key_is_not_typing() {
 		assert!(key_is_typed(ElementState::Pressed, false));
@@ -6175,7 +6175,7 @@ mod tests {
 
 	// The copy chord skips the unfocused-key gate, so it must never match what
 	// that gate is for: a key passed through a WM grab with the modifiers zeroed.
-	// Test ID: EpyCuGe
+	// Test ID: dcnpg
 	#[test]
 	fn only_a_held_ctrl_shift_c_is_the_copy_chord() {
 		use winit::keyboard::{Key, ModifiersState, NamedKey};
@@ -6206,7 +6206,7 @@ mod tests {
 	// worse than none: it would wander off the sampling grid instead of sitting
 	// on it. Each frame's deadline therefore has to come from the LAST DEADLINE,
 	// never from "now" - which is the whole of what this pins.
-	// Test ID: EmptHsG
+	// Test ID: db6z2
 	#[test]
 	fn a_pinned_frame_rate_does_not_drift() {
 		let ivl = Duration::from_millis(20);
@@ -6249,7 +6249,7 @@ mod tests {
 	// A cursor that parks in a frame sets its resume time in that frame. The
 	// loop read the cursor's wake only before drawing, so the resume waited for
 	// some other event. Every kind of pane wake is read after the frame now.
-	// Test ID: ErJF0fr
+	// Test ID: dd9nh
 	#[test]
 	fn a_wake_set_while_drawing_is_kept() {
 		let now = Instant::now();
@@ -6293,7 +6293,7 @@ mod tests {
 
 	// Every wake the loop folds in goes through one merge. A wait takes the
 	// earliest, a poll stays a poll, and no wake leaves the flow alone.
-	// Test ID: ErzM4AJ
+	// Test ID: ddksn
 	#[test]
 	fn a_wake_folds_into_the_flow_by_the_earliest() {
 		let now = Instant::now();
@@ -6337,7 +6337,7 @@ mod tests {
 		}
 	}
 
-	// Test ID: Er2UvPw
+	// Test ID: dd5pz
 	#[test]
 	fn the_wallpaper_pushes_a_wait_back_but_never_starts_one_again() {
 		let now = Instant::now();
@@ -6360,7 +6360,7 @@ mod tests {
 	}
 
 	// The default shell is the first entry switched on, not the first entry.
-	// Test ID: Er2VLed
+	// Test ID: dd5qn
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_default_shell_is_the_first_active_entry() {
@@ -6387,7 +6387,7 @@ mod tests {
 		config::update((*saved).clone());
 	}
 
-	// Test ID: Er2UiYX
+	// Test ID: dd5pj
 	#[test]
 	fn leaving_a_bare_window_puts_back_only_what_was_on() {
 		use super::bare_chrome;

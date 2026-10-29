@@ -208,7 +208,7 @@ $List = $true
 fScriptTests
 $List = $false
 $ids = @($listed | ForEach-Object { ($_.Trim() -split '\s+')[0] })
-fCheck '-List names every stage 3 test script by its ID' (($ids -join ',') -eq 'Eq9wAnY,EqBoTW4,Eqq4nMu,Eqq4nMu,ErbiCgJ,EryVaSD,Es2WeWF,Eu0ji27')
+fCheck '-List names every stage 3 test script by its ID' (($ids -join ',') -eq 'dcrgs,dcrz7,dd2n3,dd2n3,dde3v,ddkk4,ddmj2,dehyk')
 fCheck 'and runs none of them' (-not @($listed | Where-Object { $_ -like '*OK:*' }))
 $listed.Clear()
 $AppName = 'SilkTerm'; $Wsl = $false; $List = $true; $Areas = @('fmt')

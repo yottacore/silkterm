@@ -426,7 +426,7 @@ pub fn send(_cmd: &str) -> anyhow::Result<()> {
 mod tests {
 	use super::*;
 
-	// Test ID: EjpedZh
+	// Test ID: d9t5t
 	#[test]
 	fn parse_commands() {
 		let parse = |line| parse(line, Some("k"));
@@ -446,7 +446,7 @@ mod tests {
 	}
 
 	// A save is heard only from a window on the same settings file.
-	// Test ID: EsaCcC4
+	// Test ID: ddwnb
 	#[test]
 	fn a_save_on_another_file_is_not_heard() {
 		assert!(matches!(
@@ -463,7 +463,7 @@ mod tests {
 	// (`poke_child` below) started inside the folder, which binds and pokes by
 	// bare name: a full path under the run folder can pass the limit on a Unix
 	// socket path, 103 bytes on a Mac and 107 on Linux.
-	// Test ID: EsaCcC5
+	// Test ID: ddwnc
 	#[cfg(unix)]
 	#[test]
 	#[cfg_attr(miri, ignore = "Miri can't start a process")]
@@ -490,7 +490,7 @@ mod tests {
 		let _ = std::fs::remove_dir_all(&dir);
 	}
 
-	// Test ID: EsaxrEv
+	// Test ID: ddwv3
 	#[cfg(unix)]
 	#[test]
 	fn poke_child() {
@@ -535,7 +535,7 @@ mod tests {
 	// A command from a shell gets its reply over a window's pipe. The window
 	// disconnects once the reply is read, and reading on past it once made
 	// every command fail with exit 2 after the window had done it.
-	// Test ID: Esc2EAG
+	// Test ID: ddx3b
 	#[cfg(windows)]
 	#[test]
 	fn a_command_gets_its_reply_over_the_pipe() {
@@ -563,7 +563,7 @@ mod tests {
 
 	// Each way out a window can take, driven in a child copy of this test binary
 	// (`socket_exit_child` below), which binds a socket and then leaves.
-	// Test ID: Eq4Yrbg
+	// Test ID: dcq7h
 	#[cfg(unix)]
 	#[test]
 	#[cfg_attr(miri, ignore = "Miri can't start a process")]
@@ -599,7 +599,7 @@ mod tests {
 		let _ = std::fs::remove_dir_all(&dir);
 	}
 
-	// Test ID: Eq4Yrbh
+	// Test ID: dcq7j
 	#[cfg(unix)]
 	#[test]
 	fn socket_exit_child() {

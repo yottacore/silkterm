@@ -7,7 +7,7 @@
 ##		terminal and the measuring faked out, against a scratch copy. It also
 ##		checks the rigs find the build where CARGO_TARGET_DIR puts it, and that
 ##		the payloads repeat and the score counts weighted cells.
-##	- Test ID: EqBnA5g
+##	- Test ID: dcrz2
 ##	- History: At bottom of file.
 
 ##	Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]

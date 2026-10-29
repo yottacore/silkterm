@@ -66,7 +66,7 @@ if ((rc == 0)) || ! grep -q 'WARNING: ThreadSanitizer: data race' "${canaryOut}"
 	tail -n 80 "${canaryOut}"
 	fDie "the canary's race was not reported by name, so a race in the suite could pass too (output in ${canaryOut})"
 fi
-fEcho "OK: TSan canary caught (EtaER2K)"
+fEcho "OK: TSan canary caught (debjk)"
 
 suiteOut="${SILKTERM_TEST_DIR}/tsan_suite.txt"
 fEcho_Clean "test suite under TSan (${SANITIZER_TOOLCHAIN}) ..."

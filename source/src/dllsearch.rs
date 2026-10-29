@@ -91,7 +91,7 @@ mod tests {
 
 	// A DLL Windows doesn't have was taken from PATH or the working folder,
 	// which is how WezTerm's conpty.dll got into SilkTerm.
-	// Test ID: EshQYN6
+	// Test ID: ddycv
 	#[test]
 	fn a_dll_on_path_or_in_the_working_folder_is_not_loaded() {
 		let base = crate::testdir::run_dir().join("dllsearch");
@@ -111,7 +111,7 @@ mod tests {
 	// The engine loaded conpty.dll by bare name. The fix is in the engine fork,
 	// so an engine update is what would bring this back. The rule above would
 	// hide it in the program, so this one runs without it.
-	// Test ID: EshQYPc
+	// Test ID: ddycw
 	#[test]
 	fn the_engine_takes_no_conpty_dll_from_path_or_the_working_folder() {
 		let base = crate::testdir::run_dir().join("dllsearch_engine");
@@ -136,7 +136,7 @@ mod tests {
 		}
 	}
 
-	// Test ID: EshQYRz
+	// Test ID: ddycx
 	#[test]
 	fn dll_probe_child() {
 		let Some(what) = std::env::var_os("SILK_DLL_PROBE") else {

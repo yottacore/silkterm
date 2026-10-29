@@ -408,7 +408,7 @@ function fScriptTest {
 	$path = Join-Path $Root $Script
 	if ($List) {
 		$id = Select-String -LiteralPath $path -Pattern '^##\s+Test ID:\s+(\S+)' | Select-Object -First 1
-		fEcho_Clean ("  {0,-7}  {1}" -f $(if ($id) { $id.Matches[0].Groups[1].Value } else { '-------' }), $What)
+		fEcho_Clean ("  {0,-5}  {1}" -f $(if ($id) { $id.Matches[0].Groups[1].Value } else { '-----' }), $What)
 		return
 	}
 	if ($InProcess) { & $path @Params } else { & pwsh -NoProfile -NonInteractive -File $path }
@@ -1249,6 +1249,7 @@ try {
 
 
 ##	History:
+##		- 2026-10-28: -List takes test IDs in the new 5-character form.
 ##		- 2026-10-28: Output sent over ssh or into a file is UTF-8, so the rule
 ##		  is dots rather than bell bytes, or ASCII where UTF-8 can't be set.
 ##		- 2026-10-28: Steps as cicd.bash prints them: a 79-wide rule, then a

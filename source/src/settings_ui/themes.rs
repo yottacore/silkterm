@@ -282,7 +282,7 @@ mod tests {
 	// Nothing anywhere records "this theme has unsaved changes" - a color that
 	// disagrees with the theme IS the record, and it lives in the config file, so
 	// the answer is the same after a restart.
-	// Test ID: Em3lZEu
+	// Test ID: davcp
 	#[test]
 	fn an_edited_color_is_what_makes_the_theme_dirty() {
 		let mut d = on_theme("Matrix");
@@ -302,7 +302,7 @@ mod tests {
 
 	// Saving folds the edits into the theme itself, so the per-color overrides
 	// have nothing left to say and are queued to be commented back out.
-	// Test ID: Em3lZEv
+	// Test ID: davcq
 	#[test]
 	fn saving_folds_the_edits_into_the_theme() {
 		let mut d = on_theme("Matrix");
@@ -334,7 +334,7 @@ mod tests {
 
 	// The text colors a picture picked follow the picture, so a saved theme
 	// takes the ones under them: the theme's, with any change made by hand.
-	// Test ID: Esa59zb
+	// Test ID: ddwma
 	#[test]
 	fn a_saved_theme_never_takes_the_wallpaper_s_text_colors() {
 		use knobs::Value;
@@ -383,7 +383,7 @@ mod tests {
 	// Saving grays Save out, so the control the keyboard was on drops out of the
 	// Tab ring. Focus has to carry on to the next button rather than snapping
 	// back to the first control on the tab.
-	// Test ID: Em430PA
+	// Test ID: davev
 	#[test]
 	fn focus_stays_when_the_control_under_it_grays_out() {
 		let mut d = on_theme("Matrix");
@@ -403,7 +403,7 @@ mod tests {
 
 	// A theme may take a built-in's name and stand in for it; deleting it puts the
 	// built-in back rather than leaving the name pointing at nothing.
-	// Test ID: Em3lZEw
+	// Test ID: davcr
 	#[test]
 	fn a_saved_theme_shadows_a_builtin_and_delete_uncovers_it() {
 		let mut d = on_theme("Matrix");
@@ -426,7 +426,7 @@ mod tests {
 	// The colors on screen are no longer the theme the box names, so the box stops
 	// naming it. The popup still highlights the theme the edits started from, and
 	// picking it back adopts its colors and the box says its name again.
-	// Test ID: EqSprxY
+	// Test ID: dcx27
 	#[test]
 	fn an_edited_theme_reads_as_unsaved_in_the_box() {
 		let mut d = on_theme("Matrix");
@@ -463,7 +463,7 @@ mod tests {
 
 	// Picking a theme takes on its colors. Keeping the old theme's tweaks would
 	// make the picker look broken on every color that had been edited.
-	// Test ID: Em3lZEx
+	// Test ID: davcs
 	#[test]
 	fn picking_a_theme_adopts_its_colors() {
 		let mut d = on_theme("SilkTerm");
@@ -487,7 +487,7 @@ mod tests {
 
 	// Picking a theme drops the changes made under the one before, so nothing of
 	// the old palette is saved over the new one.
-	// Test ID: Em430PB
+	// Test ID: davew
 	#[test]
 	fn picking_a_theme_drops_the_changes_under_the_last() {
 		let mut d = on_theme("SilkTerm");
@@ -508,7 +508,7 @@ mod tests {
 
 	// Renaming moves the name and the selection together; the slug behind it does
 	// not move, so the config subtree stays where it is.
-	// Test ID: Eq4Gng8
+	// Test ID: dcq55
 	#[test]
 	fn a_theme_can_be_renamed_to_its_own_name_or_a_different_case() {
 		let mut d = on_theme("Matrix");
@@ -537,7 +537,7 @@ mod tests {
 		);
 	}
 
-	// Test ID: Em3lZEy
+	// Test ID: davct
 	#[test]
 	fn a_rename_moves_the_name_and_the_selection() {
 		let mut d = on_theme("Matrix");
@@ -573,7 +573,7 @@ mod tests {
 	}
 
 	// A saved theme has to come back after a restart, or saving it meant nothing.
-	// Test ID: Em3lZF1
+	// Test ID: davcx
 	#[test]
 	fn a_saved_theme_survives_a_relaunch() {
 		let _guard = config::test_config_lock();
@@ -670,7 +670,7 @@ mod tests {
 
 	// A saved theme keeps the font on screen beside its colors, whether or not
 	// fonts follow themes, since a theme is stored whole.
-	// Test ID: Esa0nnU
+	// Test ID: ddwkt
 	#[test]
 	fn saving_a_theme_keeps_the_font_on_screen() {
 		let mut d = on_theme("Matrix");
@@ -690,7 +690,7 @@ mod tests {
 
 	// Picking a theme leaves the font alone until fonts follow themes. Then a
 	// saved theme brings its font, and a built-in, which has none, changes none.
-	// Test ID: Esa0ns8
+	// Test ID: ddwkv
 	#[test]
 	fn a_theme_pick_takes_its_font_only_once_fonts_follow_themes() {
 		let mut d = on_theme("Matrix");
@@ -723,7 +723,7 @@ mod tests {
 
 	// A theme that sets a font wins over the system font, the way a font typed
 	// in does: the switch for each value it changes turns off.
-	// Test ID: Esa0nwo
+	// Test ID: ddwkw
 	#[test]
 	fn a_theme_font_wins_over_the_system_font() {
 		use knobs::Value;
@@ -747,7 +747,7 @@ mod tests {
 
 	// Saving picks the theme again, and its font is the one showing, so no
 	// system font switch is turned off by it.
-	// Test ID: Esa0o1c
+	// Test ID: ddwkx
 	#[test]
 	fn saving_a_theme_turns_no_font_switch_off() {
 		let mut d = on_theme("Matrix");
@@ -763,7 +763,7 @@ mod tests {
 	// While fonts follow themes, a font that differs from the saved theme's is a
 	// change to it like a color: the box says `*`, Save wakes up, the tip names
 	// the row, and Save keeps it. While fonts ignore themes it is none of that.
-	// Test ID: Esa0o6M
+	// Test ID: ddwky
 	#[test]
 	fn a_changed_font_reads_as_a_change_once_fonts_follow_themes() {
 		let mut d = on_theme("Matrix");
@@ -789,7 +789,7 @@ mod tests {
 
 	// The font goes to the file with the theme and comes back, and the switch
 	// with it.
-	// Test ID: Esa0oBV
+	// Test ID: ddwkz
 	#[test]
 	fn a_theme_font_survives_a_relaunch() {
 		let _guard = config::test_config_lock();
@@ -830,7 +830,7 @@ mod tests {
 
 	// Rename opens on the theme's own name, all of it selected, so typing
 	// replaces it.
-	// Test ID: Er2X6Eq
+	// Test ID: dd5qy
 	#[test]
 	fn rename_opens_on_the_name_selected() {
 		let mut d = on_theme("Matrix");

@@ -12,7 +12,7 @@
 ##		--report prints the figures and checks no limit.
 ##	- Exit: 0 passed, 1 a check failed, 3 nothing ran (no debug binary,
 ##	  display, window manager or xdotool).
-##	- Test ID: ErzCQC2
+##	- Test ID: ddkre
 ##	- History: At bottom of file.
 
 ##	Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]

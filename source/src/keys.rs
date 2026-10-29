@@ -648,7 +648,7 @@ mod tests {
 
 	// Every default in the table reads back, on both platforms, and no chord is
 	// given to two hotkeys, since only one of them could ever answer to it.
-	// Test ID: EreU3sR
+	// Test ID: ddes1
 	#[test]
 	fn every_default_chord_reads_and_none_is_shared() {
 		for mac in [false, true] {
@@ -674,7 +674,7 @@ mod tests {
 
 	// The spellings the template comment promises: any order, any case, the
 	// Mac's names for the keys held, and the named keys as words.
-	// Test ID: EreU3sS
+	// Test ID: ddes2
 	#[test]
 	fn a_chord_reads_in_any_order_and_case() {
 		let t = chord("Ctrl+Shift+T");
@@ -701,7 +701,7 @@ mod tests {
 
 	// A bad value names what is wrong with it, and a key that would stop
 	// typing at the shell is refused.
-	// Test ID: EreU3sT
+	// Test ID: ddes3
 	#[test]
 	fn a_bad_chord_says_what_is_wrong() {
 		for (text, says) in [
@@ -723,7 +723,7 @@ mod tests {
 
 	// Alt+Shift+Plus is Alt+Shift+= on a US layout, which names the key "+";
 	// Alt+Shift+Minus names it "_". Plain Alt+= is not the chord.
-	// Test ID: EreU3sU
+	// Test ID: ddes4
 	#[test]
 	fn plus_and_minus_take_what_shift_makes_of_them() {
 		let b = Bindings::defaults(false);
@@ -750,7 +750,7 @@ mod tests {
 	// A chord set in the file wins over a default that has it, and the default
 	// stops showing it on its menu row. Two set the same way leave it with the
 	// first, and both are reported.
-	// Test ID: EreU3sV
+	// Test ID: ddes5
 	#[test]
 	fn a_chord_set_in_the_file_takes_it_from_a_default() {
 		let ctrl_shift = ModifiersState::CONTROL.union(ModifiersState::SHIFT);
@@ -791,7 +791,7 @@ mod tests {
 
 	// The macOS menu bar is rebuilt when a hash of `in_force` changes, so it
 	// has to give every hotkey's chords, the same as asking for each one.
-	// Test ID: ErgPg5v
+	// Test ID: ddf7z
 	#[test]
 	fn the_bindings_in_force_give_every_hotkey() {
 		for mac in [false, true] {
@@ -807,7 +807,7 @@ mod tests {
 
 	// A bad value is reported with its line and leaves the default in place,
 	// rather than being dropped in silence.
-	// Test ID: EreU3sW
+	// Test ID: ddes6
 	#[test]
 	fn a_bad_value_is_reported_with_its_line() {
 		let file = |path: &str| match path {
@@ -826,7 +826,7 @@ mod tests {
 		assert!(said[0].contains("Plsu is not a key name"), "{said:?}");
 	}
 
-	// Test ID: EreU3sX
+	// Test ID: ddes7
 	#[test]
 	fn a_named_key_ignores_nothing_held() {
 		let b = Bindings::defaults(false);
@@ -846,7 +846,7 @@ mod tests {
 
 	// A chord set in Settings by pressing it is one that same press answers to
 	// afterwards, on either platform, and reads back from the file as written.
-	// Test ID: ErejaW7
+	// Test ID: ddety
 	#[test]
 	fn a_pressed_chord_is_the_one_the_press_matches() {
 		let ctrl = ModifiersState::CONTROL;
@@ -919,7 +919,7 @@ mod tests {
 	// What the file set is kept apart from what each hotkey answers to, so a
 	// save can write the one without the other, and a chord lost to another
 	// hotkey is known to both sides.
-	// Test ID: Erejaj5
+	// Test ID: ddetz
 	#[test]
 	fn the_files_own_values_are_kept_apart_from_the_result() {
 		let base = Bindings::defaults(false);

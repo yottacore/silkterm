@@ -1243,7 +1243,7 @@ mod tests {
 	// `window.rows: 1000` in the config, or --rows 1000, asked for a window taller
 	// than the device's largest texture. The GL path's offscreen is made at the
 	// window's size, and wgpu treats the refusal as fatal, so the launch died.
-	// Test ID: Eq4SnxJ
+	// Test ID: dcq6p
 	#[test]
 	fn a_window_is_never_bigger_than_the_device_allows() {
 		let (w, h) = window_px(1000, 1000, 8.0, 17.0, 4.0, 30.0);
@@ -1255,7 +1255,7 @@ mod tests {
 	// A requested row count is the shell's rows, so the tab strip counts against
 	// the window's height while it shows. Left out of the sum, a window asked for
 	// 24 rows gave its shell 22.
-	// Test ID: Eq4SnxK
+	// Test ID: dcq6q
 	#[test]
 	fn the_tab_strip_counts_against_a_requested_row_count() {
 		let shown = window_px(80, 24, 8.0, 17.0, 4.0, 20.0 + 24.0);
@@ -1269,7 +1269,7 @@ mod tests {
 	// cell size, or the grid drifts a cell per change. Cells here are the odd
 	// fractions a font gives at 125%, 150% and 200%, and a small font with a
 	// margin wider than its cell.
-	// Test ID: Esiq2QP
+	// Test ID: ddyqp
 	#[test]
 	fn a_grid_reads_back_from_the_window_it_asked_for() {
 		for (cell_w, cell_h, margin, chrome) in [
@@ -1298,7 +1298,7 @@ mod tests {
 	// it straddled is saved for that one, not for the one it entered first.
 	// A window that entered another output since has moved, and keeps the
 	// output it named as the size was set.
-	// Test ID: Estwjm9
+	// Test ID: de1d6
 	#[test]
 	fn a_resize_off_one_of_two_outputs_counts_the_one_left() {
 		let tall = (740, 0, 1080, 1920);
@@ -1316,7 +1316,7 @@ mod tests {
 	// grace, and counted as a move: the look took the other output's size,
 	// which moved the window back. The first scale change after a take is the
 	// take's, unless the person was back at the window in between.
-	// Test ID: EsuGv93
+	// Test ID: de1fp
 	#[test]
 	fn the_scale_a_take_brings_is_no_move() {
 		let heard = Instant::now();
@@ -1341,7 +1341,7 @@ mod tests {
 	// A key move onto an output at another scale, 4 s after a take, counted
 	// as the take's own scale and brought no look. The take's scale leaves
 	// the window on the output it took for; a move can take it off.
-	// Test ID: Esztfvw
+	// Test ID: de2tz
 	#[test]
 	fn a_scale_off_the_output_taken_for_is_a_move() {
 		let left = (0, 0, 1280, 800);
@@ -1357,7 +1357,7 @@ mod tests {
 	// Panes laid out for the old size in the new cells told the shell a grid
 	// half or twice the size until the resize came. Laid out for this size, a
 	// window left to the system is told its new grid once.
-	// Test ID: Esisgw4
+	// Test ID: ddyr1
 	#[test]
 	fn a_scale_change_lays_out_for_the_size_on_its_way() {
 		// Wayland and macOS: the same size on the desktop, already at 1.5
@@ -1380,7 +1380,7 @@ mod tests {
 	// --fullscreen asks for fullscreen before the first frame, and the window
 	// manager's resize arrives after it, so a one-off fullscreen launch stored the
 	// whole screen as the size to open at next time.
-	// Test ID: Eq4SnxL
+	// Test ID: dcq6r
 	#[test]
 	fn a_fullscreen_or_maximized_size_is_not_remembered() {
 		assert!(remember_resize(true, false, false));
@@ -1393,7 +1393,7 @@ mod tests {
 	// The order a Mac launch delivered: the creation size's resize after the
 	// first frame, with the window already at its launch size, then the launch
 	// size inside the scale change's grace. Only the window's own size counts.
-	// Test ID: ErsO6GB
+	// Test ID: ddj41
 	#[test]
 	fn a_resize_the_window_has_moved_past_is_not_saved() {
 		let created = (2000, 1280);
@@ -1407,7 +1407,7 @@ mod tests {
 	// A request winit answers with nothing still counts when the window already
 	// has a new size, so the first frame is drawn at it. The numbers are a b26
 	// launch: created at 2000x1280, asked for 1988x1269, took 1988x1270.
-	// Test ID: ErwgxDd
+	// Test ID: ddk55
 	#[test]
 	fn a_size_the_window_took_without_saying_is_drawn_at() {
 		let px = winit::dpi::PhysicalSize::new;
@@ -1431,7 +1431,7 @@ mod tests {
 	// A settled move to another monitor takes that monitor's size, unless the
 	// user sized the window after the move began. A size set before the move
 	// is saved for the monitor it was set on, and the new one's is taken.
-	// Test ID: EreYcuU
+	// Test ID: ddesv
 	#[test]
 	fn a_move_takes_the_new_monitors_size_but_never_undoes_the_user() {
 		let t0 = Instant::now();
@@ -1468,7 +1468,7 @@ mod tests {
 	// the window is put back. That move fell in the grace after the window's own
 	// resize and was dropped, so it stayed at the landscape size. The portrait
 	// monitor also read back to the cm, which named a monitor with another size.
-	// Test ID: EsDZDNJ
+	// Test ID: ddq74
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_window_herded_off_a_monitor_and_back_takes_its_size_again() {
@@ -1524,7 +1524,7 @@ mod tests {
 
 	// A Wayland window shown with its first frame still being drawn is on no
 	// output yet. It looks again until it is, and only for a while.
-	// Test ID: EshcYxg
+	// Test ID: ddyea
 	#[test]
 	fn a_wayland_window_on_no_output_yet_looks_again() {
 		let t0 = Instant::now();
@@ -1541,7 +1541,7 @@ mod tests {
 	// still in a drag over it, before the drop. It waits for the pointer back
 	// over it, a key or focus. One that can see them goes by them. A window
 	// herded off a monitor that went dark waited for nobody.
-	// Test ID: EsjYipm
+	// Test ID: ddyx8
 	#[test]
 	fn a_drag_held_still_is_not_taken_for_a_drop() {
 		use super::{Drag, drag_state};
@@ -1564,7 +1564,7 @@ mod tests {
 	// Under Xwayland the press on the compositor's title bar told the window
 	// the pointer entered, at a spot it had left long before, so the drag
 	// counted as over. A pointer moved there moves again.
-	// Test ID: Esjcgsw
+	// Test ID: ddyxq
 	#[test]
 	fn a_stale_enter_is_not_the_pointer_back() {
 		use super::{Pointer, pointer_moved};
@@ -1588,7 +1588,7 @@ mod tests {
 	// resizes. The way back was saved as the user's size, over the one kept
 	// for the monitor, and a zoom saved alone while fullscreen made an entry
 	// for a monitor nobody sized.
-	// Test ID: EsjoVV7
+	// Test ID: ddyz6
 	#[test]
 	fn fullscreen_and_back_saves_nothing() {
 		use super::{Noted, what_to_keep};
@@ -1651,7 +1651,7 @@ mod tests {
 	// sway sends a scale as a window leaves fullscreen. The way back fell in
 	// the grace after it, wasn't noted, and the user's next resize was taken
 	// for the way back and saved nothing.
-	// Test ID: EsuVDs3
+	// Test ID: de1hf
 	#[test]
 	fn the_way_back_from_fullscreen_counts_in_a_grace() {
 		use super::{Noted, resize_counts};
@@ -1672,7 +1672,7 @@ mod tests {
 	// the same columns and rows, far larger and wider than the monitor. It's
 	// kept in columns and rows when they'd fit the screen at the normal font,
 	// and else as the size the window is now.
-	// Test ID: EsjoVZu
+	// Test ID: ddyz7
 	#[test]
 	fn a_size_set_at_a_font_from_the_command_line_fits_at_the_normal_font() {
 		use super::grid_in_font;
@@ -1712,7 +1712,7 @@ mod tests {
 	// font from the command line, much larger or smaller than it was kept,
 	// and could be wider than the monitor. It keeps its columns and rows where
 	// they fit the screen at that font, and else the kept window's size.
-	// Test ID: Eso2weD
+	// Test ID: ddzzt
 	#[test]
 	fn a_size_kept_at_the_normal_font_fits_at_a_font_from_the_command_line() {
 		use super::grid_from_font;
@@ -1745,7 +1745,7 @@ mod tests {
 	// size the user set, and a launch without them opened at it in another
 	// font. Such a window saves nothing until each of those is changed in
 	// Settings, unless --persist asks for the usual saves.
-	// Test ID: EsthbIT
+	// Test ID: de1ba
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_size_or_font_from_the_command_line_saves_nothing_until_changed_in_settings() {
@@ -1824,7 +1824,7 @@ mod tests {
 
 	// A window left maximized opens maximized, unless the setting is off or the
 	// command line asked for a size or fullscreen of its own.
-	// Test ID: ErPSaVM
+	// Test ID: ddb5d
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_window_left_maximized_opens_maximized() {
@@ -1875,7 +1875,7 @@ mod tests {
 	// them the grid gets smaller. Zooming back out gives the whole grid back.
 	// The minimap is fixed in pixels, so keeping the window's own grid would
 	// have given the shell more columns at each step in.
-	// Test ID: EtAYf9n
+	// Test ID: de5d1
 	#[test]
 	fn a_zoom_grows_the_window_only_to_the_work_area_edge() {
 		use super::{fits, least_px, whole_cells, zoom_room};
@@ -1932,7 +1932,7 @@ mod tests {
 	}
 
 	// X11's work area spans both monitors; the window gets the part on its own.
-	// Test ID: EtAYfEC
+	// Test ID: de5d2
 	#[test]
 	fn a_zoom_keeps_to_its_own_monitor_and_its_grid() {
 		use super::{ZoomKept, overlap};

@@ -591,7 +591,7 @@ mod tests {
 	// The shells grid is one spec row carrying two editable fields per entry, and
 	// the right-click handler walked spec rows - so those two were the only fields
 	// in the dialog with no menu, while the Menu key worked on them.
-	// Test ID: EpHbI5g
+	// Test ID: dcbek
 	#[test]
 	fn the_shells_grid_fields_have_a_right_click_menu() {
 		let mut m = |s: &str| s.chars().count() as f32;
@@ -659,7 +659,7 @@ mod tests {
 	// exactly one of them - the encoding both the focus ring and the hit tests
 	// read, so a mistake here would put the ring on one control and the click on
 	// another.
-	// Test ID: EnQUIKr
+	// Test ID: dbfrv
 	#[test]
 	fn a_part_index_names_one_control_on_one_line() {
 		let (d, i) = mk_shell_dialog(3);
@@ -684,7 +684,7 @@ mod tests {
 	// Reordering left the keyboard when the arrows did, so the grip must not be a
 	// stop - a ring sitting on a control that Space cannot work is worse than no
 	// ring at all. Nothing in the grid is grayed any more either.
-	// Test ID: EnRWor4
+	// Test ID: dbg0s
 	#[test]
 	fn the_grip_is_a_gesture_and_not_a_keyboard_stop() {
 		let (d, i) = mk_shell_dialog(3);
@@ -708,7 +708,7 @@ mod tests {
 	// The grip's whole job. Dragging is live - the list reorders under the
 	// pointer rather than on release - so each step of the gesture is asserted,
 	// not just where it ended up.
-	// Test ID: EnRWor5
+	// Test ID: dbg0t
 	#[test]
 	fn a_grip_drag_reorders_the_list() {
 		let (mut d, i) = mk_shell_dialog(3);
@@ -745,7 +745,7 @@ mod tests {
 	// Dragged the other way, and off the top: the first line is as far as it
 	// goes. The arithmetic is in f32 and ends on a usize, so this is the test
 	// that says the saturating cast is being RELIED on rather than tolerated.
-	// Test ID: EnRWor6
+	// Test ID: dbg0v
 	#[test]
 	fn a_line_dragged_off_the_top_ends_up_first() {
 		let (mut d, i) = mk_shell_dialog(3);
@@ -763,7 +763,7 @@ mod tests {
 	// The command is REQUIRED: emptying the field cannot be what stores an entry
 	// that names nothing to run. The stored value stands and the box shows it
 	// again, which is the whole rule at the field.
-	// Test ID: EnQUIKs
+	// Test ID: dbfrw
 	#[test]
 	fn a_blank_command_cannot_replace_a_stored_one() {
 		let (mut d, _) = mk_shell_dialog(2);
@@ -784,7 +784,7 @@ mod tests {
 	// A name edit applies to the entry it was opened for, not on the row index -
 	// the two are different numbers here, which is the whole point of the
 	// pseudo-row scheme.
-	// Test ID: EnQUIKt
+	// Test ID: dbfrx
 	#[test]
 	fn a_field_edit_goes_to_its_own_entry() {
 		let (mut d, _) = mk_shell_dialog(3);
@@ -798,7 +798,7 @@ mod tests {
 
 	// Add creates an entry with no command and puts the caret straight in it - the
 	// one field that has to be filled before the entry means anything.
-	// Test ID: EnQUIKu
+	// Test ID: dbfry
 	#[test]
 	fn adding_a_shell_opens_the_field_it_needs() {
 		let (mut d, i) = mk_shell_dialog(1);
@@ -820,7 +820,7 @@ mod tests {
 
 	// Removing is the one grid action doing the opposite cannot undo, so it asks
 	// first - and asking must not remove anything by itself.
-	// Test ID: EnQUIKv
+	// Test ID: dbfrz
 	#[test]
 	fn removing_a_shell_asks_before_it_happens() {
 		let (mut d, _) = mk_shell_dialog(3);
@@ -844,7 +844,7 @@ mod tests {
 	// so the one thing that can go wrong is them meeting in the middle. The
 	// order asserted here is the order asked for: remove sits between the
 	// command and the date, where it is hard to press by accident.
-	// Test ID: EnQUIKw
+	// Test ID: dbfs0
 	#[test]
 	fn the_grid_columns_stay_inside_the_panel_in_order() {
 		let (d, i) = mk_shell_dialog(2);
@@ -884,7 +884,7 @@ mod tests {
 	// the old arrows. Three things: the grip is three bars and not a button, the
 	// remove mark is drawn in the danger colour and not the text colour, and no
 	// arrow survives anywhere in the grid.
-	// Test ID: EnRaGh6
+	// Test ID: dbg14
 	#[test]
 	fn the_grip_reads_as_bars_and_the_remove_mark_reads_as_red() {
 		let (mut d, i) = mk_shell_dialog(2);
@@ -952,7 +952,7 @@ mod tests {
 	// The draw path has no other cover, and it is where a new control kind fails
 	// silently: a grid that renders nothing at all still passes every geometry
 	// test above. So this walks what would actually be handed to the renderer.
-	// Test ID: EnQWzbk
+	// Test ID: dbfs7
 	#[test]
 	fn the_grid_draws_a_line_for_every_shell() {
 		let (d, i) = mk_shell_dialog(3);
@@ -1001,7 +1001,7 @@ mod tests {
 
 	// An entry being edited shows the BUFFER, not the stored value - the field
 	// would otherwise look inert while it is typed into.
-	// Test ID: EnQWzbl
+	// Test ID: dbfs8
 	#[test]
 	fn a_grid_field_being_edited_shows_what_is_typed() {
 		let (mut d, _) = mk_shell_dialog(2);
@@ -1018,7 +1018,7 @@ mod tests {
 	// A scan that arrives while the dialog is open moves BOTH copies, so it does not
 	// read as an edit the user made - and it folds into what they have already
 	// done rather than replacing it.
-	// Test ID: EnQUIKx
+	// Test ID: dbfs1
 	#[test]
 	fn a_scan_that_arrives_mid_edit_is_not_mistaken_for_an_edit() {
 		let (mut d, _) = mk_shell_dialog(1);
@@ -1038,7 +1038,7 @@ mod tests {
 	// the real UI font at 1x and 2x, and at 2.2 times its size, which is about
 	// 24 pt from the 11 pt default. A name that fits its box at the base size
 	// fits at the large one too.
-	// Test ID: EsDinMD
+	// Test ID: ddq87
 	#[test]
 	fn the_shells_grid_columns_fit_their_text_at_a_large_interface_font() {
 		use super::{ACTIVE_TITLE, NEVER_SEEN, SEEN_TITLE};
@@ -1139,7 +1139,7 @@ mod tests {
 
 	// The Active box on a shell's line is a checkbox like any other: square, and
 	// centered on its line with the fields beside it.
-	// Test ID: Er2X6Et
+	// Test ID: dd5r1
 	#[test]
 	fn a_shells_active_box_is_square_and_centered_on_its_line() {
 		let (d, i) = mk_shell_dialog(2);

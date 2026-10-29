@@ -399,7 +399,7 @@ pub fn resolve(name: &str, mode: Mode, system_dark: bool) -> Palette {
 mod tests {
 	use super::*;
 
-	// Test ID: EiMPv8L
+	// Test ID: d947n
 	#[test]
 	fn resolve_picks_theme_and_mode() {
 		use crate::config::Choice;
@@ -423,7 +423,7 @@ mod tests {
 		assert_eq!(resolve(" matrix ", dark, true).fg, find("Matrix").dark.fg);
 	}
 
-	// Test ID: EiuvVez
+	// Test ID: d9ch7
 	#[test]
 	fn chrome_defaults_shared_across_themes() {
 		// every built-in theme uses the same neutral menu colors (both modes)
@@ -442,7 +442,7 @@ mod tests {
 	// The pair only works if the two read as different signals. A theme that let
 	// them converge would draw the focused control and everything merely
 	// highlighted in the same color, which is the whole point of splitting them.
-	// Test ID: Em3Pif6
+	// Test ID: dava3
 	#[test]
 	fn the_two_attention_colors_stay_apart() {
 		for (name, t) in THEMES {
@@ -459,7 +459,7 @@ mod tests {
 	// own foreground needed lifting, the floor would be repainting the thing it is
 	// measured against. ANSI black is the other end of the same check: it is
 	// invisible on a dark ground by definition, which is the case the floor is for.
-	// Test ID: EoTQgug
+	// Test ID: dbzct
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_theme_fg_clears_the_floor_and_ansi_black_does_not() {
@@ -484,7 +484,7 @@ mod tests {
 	// the menu's own text. The gap is still wide at the shipped colors, but a
 	// theme that overrode the menu pair could land somewhere the lift makes
 	// unreadable, and nothing repaints chrome at run time.
-	// Test ID: EqQPotH
+	// Test ID: dcwfp
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn tip_text_clears_the_floor_on_its_own_box() {
@@ -510,7 +510,7 @@ mod tests {
 
 	// Light mode holds text a little further off its background than the
 	// setting says, dark mode exactly at it, and off stays off.
-	// Test ID: ErwdARW
+	// Test ID: ddk4p
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_light_theme_keeps_text_a_little_further_off() {
@@ -539,7 +539,7 @@ mod tests {
 	// The block cursor is a plate under the glyph, and the glyph keeps its own
 	// color. So the plate is a second background the text has to clear the floor
 	// on, and a cursor at the fg's own brightness fails it.
-	// Test ID: Eq9PYAL
+	// Test ID: dcrcs
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn text_on_the_cursor_plate_clears_the_floor() {
@@ -559,7 +559,7 @@ mod tests {
 	// A light theme's plate used to sit 0.12 to 0.20 Oklab L off its background,
 	// against 0.20 to 0.42 in dark mode, because pale text left it no room. The
 	// light text is darker now and the plate stronger, and this holds the room.
-	// Test ID: ErJIAXF
+	// Test ID: dd9ny
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_light_cursor_plate_stands_off_the_background_like_a_dark_one() {
@@ -578,7 +578,7 @@ mod tests {
 	// contrast floor held most of it up, and darkening a color alone turns it
 	// into a dark gray. So each colored slot has to clear the light floor on its
 	// own and keep enough chroma, for its lightness, to still read as its color.
-	// Test ID: Ers4tYC
+	// Test ID: ddj1s
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn light_text_is_dark_and_still_a_color() {
@@ -616,7 +616,7 @@ mod tests {
 
 	// The three the project started with. Matrix and Retro Amber are monochrome,
 	// and a color that wandered off the hue would break that in either mode.
-	// Test ID: Er2UJeJ
+	// Test ID: dd5my
 	#[test]
 	fn the_first_three_built_ins_keep_their_names_and_hues() {
 		let first: Vec<&str> = names().take(3).collect();
@@ -638,7 +638,7 @@ mod tests {
 
 	// Dark mode is light on dark for the terminal and the dialogs alike, light
 	// mode the reverse, and the dialog panel never matches the terminal behind it.
-	// Test ID: Er2UJeK
+	// Test ID: dd5mz
 	#[test]
 	fn dark_mode_is_light_on_dark_and_light_mode_the_reverse() {
 		for (name, t) in THEMES {

@@ -31,7 +31,7 @@ mod tests {
 
 	// A holder that panicked leaves its last whole write behind, and the next
 	// taker gets it rather than a second panic.
-	// Test ID: Erm4AZ1
+	// Test ID: ddgkc
 	#[test]
 	fn a_poisoned_lock_is_taken_as_it_stands() {
 		let mutex = Mutex::new(1);

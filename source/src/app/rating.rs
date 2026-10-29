@@ -371,7 +371,7 @@ mod tests {
 	use crate::config;
 	// Only a focused window's own eased frame is evidence; every other pass
 	// pauses the watch, so an idle gap is never read as a period.
-	// Test ID: EpWnbLc
+	// Test ID: dcf3j
 	#[test]
 	fn only_a_focused_eased_unpinned_frame_is_counted() {
 		use super::RatingStep;
@@ -396,7 +396,7 @@ mod tests {
 
 	// A bench rung and the bench's answer are both measured, so a step the
 	// display watch took goes, and the stored profile is the user's own values.
-	// Test ID: EpWow4e
+	// Test ID: dcf3r
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_measured_profile_replaces_a_session_step() {
@@ -417,7 +417,7 @@ mod tests {
 
 	// The watch's step is session state. Stored in the profile or written out,
 	// one stall became every later launch's profile and took the wallpaper.
-	// Test ID: EpX5Wgq
+	// Test ID: dcf5t
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_watch_step_never_reaches_the_stored_profile_or_the_file() {
@@ -496,7 +496,7 @@ mod tests {
 	// in it changed, so the decision itself provably did not.
 	// Software on a machine with a card steps the session to Low and writes
 	// nothing; the card drawing again takes off only a step made that way.
-	// Test ID: ErnMaCH
+	// Test ID: ddgxe
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_software_device_steps_the_session_and_the_card_takes_it_back() {
@@ -549,7 +549,7 @@ mod tests {
 
 	// Detection is right but unwanted: turned off, a remote screen keeps the
 	// stored profile, and nothing asks the system whether it is remote.
-	// Test ID: EtSG1KO
+	// Test ID: de9n8
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_remote_screen_is_ignored_when_turned_off() {
@@ -568,7 +568,7 @@ mod tests {
 		assert!(!asked.get(), "detection ran with the setting off");
 	}
 
-	// Test ID: EpXN9p2
+	// Test ID: dcf80
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn rating_due_matches_the_launch_rules() {
@@ -638,7 +638,7 @@ mod tests {
 	// A rating that did not reach the file was a test at every launch. Each file
 	// here is one that used to lose it or read it back as nothing: a clean one, one
 	// with a line the parse cannot place, and one with the key twice.
-	// Test ID: EpXN9p3
+	// Test ID: dcf81
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_rating_survives_to_the_next_launch_whatever_else_is_in_the_file() {
@@ -733,7 +733,7 @@ mod tests {
 
 	// A failed save used to leave the banner saying the test was running and then
 	// run it again next launch. It says why now, for the seconds it stays up.
-	// Test ID: EpXN9p4
+	// Test ID: dcf82
 	#[test]
 	fn the_banner_says_why_a_rating_was_not_kept() {
 		const AGAIN: &str = "The test runs again at the next launch.";

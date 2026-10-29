@@ -1734,7 +1734,7 @@ mod tests {
 	// A window moved to a monitor at another scale, or zoomed, can keep its
 	// grid with a new cell size. The shell is told the size in pixels as well,
 	// and kept the old one.
-	// Test ID: Eshfsvc
+	// Test ID: ddyeq
 	#[test]
 	fn a_new_cell_size_is_told_to_the_shell_even_on_the_same_grid() {
 		let was = (80, 24, (9, 18));
@@ -1749,7 +1749,7 @@ mod tests {
 	// A frame drawn just before a quiet command starts kept "nothing running",
 	// and with no output and no blink nothing asked again. The looks after a
 	// stir come whatever the frames did, and stop.
-	// Test ID: EshVvnf
+	// Test ID: ddydg
 	#[test]
 	fn a_quiet_command_is_looked_for_again_after_the_last_stir() {
 		use super::{TASK_LOOKS, next_task_look};
@@ -1796,7 +1796,7 @@ mod tests {
 	// OSC 52, and whether the engine passes a store on is its config's call. A
 	// default that moved would quietly break copying again, or start answering
 	// reads.
-	// Test ID: EpyJWG0
+	// Test ID: dcnqb
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_program_can_set_the_clipboard_but_never_read_it() {
@@ -1837,7 +1837,7 @@ mod tests {
 	}
 
 	// fish, vim and muffer ask for focus changes, and got nothing.
-	// Test ID: Ese7i9o
+	// Test ID: ddxkd
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_program_that_asks_for_focus_changes_is_told() {
@@ -1866,7 +1866,7 @@ mod tests {
 	}
 
 	// The configured word separators are what the engine splits words on.
-	// Test ID: Er2UFeT
+	// Test ID: dd5ms
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_engine_splits_words_on_the_configured_separators() {
@@ -1883,7 +1883,7 @@ mod tests {
 	// A program could set a title of any size and push it thousands of times onto
 	// the title stack, and each copy was kept. A megabyte title grew the whole
 	// program by about 4 GiB.
-	// Test ID: EqBcj6m
+	// Test ID: dcrxr
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_program_title_is_held_to_a_size() {
@@ -1934,7 +1934,7 @@ mod tests {
 	// A pane narrowed below two cells asked the engine for one column, where a
 	// wide character panicked and wide text already on screen reflowed until
 	// memory ran out.
-	// Test ID: EqBQjc0
+	// Test ID: dcrw9
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_pane_too_narrow_for_a_wide_character_still_takes_one() {
@@ -1957,7 +1957,7 @@ mod tests {
 
 	// Closing a pane whose shell ignores the hang-up signal froze the whole
 	// window until that shell ended, since the close waited on it.
-	// Test ID: EqBSso5
+	// Test ID: dcrwj
 	#[test]
 	fn closing_a_pane_does_not_wait_on_a_shell_that_stays() {
 		use std::time::{Duration, Instant};
@@ -1981,7 +1981,7 @@ mod tests {
 	// at a whole core until it exited. The engine read EIO, went round again, and
 	// found the PTY still readable. The fix is in the engine fork, so an engine
 	// update is what would bring this back.
-	// Test ID: EqBacFs
+	// Test ID: dcrxg
 	#[cfg(target_os = "linux")]
 	#[test]
 	#[cfg_attr(miri, ignore = "Miri can't start a process")]
@@ -2015,7 +2015,7 @@ mod tests {
 		assert!(ended < 1000, "the pane ended {ended} ms after its program");
 	}
 
-	// Test ID: EqBacFt
+	// Test ID: dcrxh
 	#[cfg(target_os = "linux")]
 	#[test]
 	fn hung_up_child() {
@@ -2088,7 +2088,7 @@ mod tests {
 	// ssh hands TERM to the far side as-is, and a host with no alacritty entry
 	// refused nano. A TERM set in the config has to reach the program itself,
 	// and an empty one has to leave the engine's pick alone.
-	// Test ID: EtS3GO0
+	// Test ID: de9kn
 	#[cfg(unix)]
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
@@ -2141,7 +2141,7 @@ mod tests {
 	// A program that asks what color the background is (neovim, delta, termbg on
 	// every start) used to get nothing back and wait out its timeout. The three
 	// named slots and the whole palette answer now; anything else does not.
-	// Test ID: EpHUIAS
+	// Test ID: dcbdr
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_color_query_gets_an_answer() {
@@ -2196,7 +2196,7 @@ mod tests {
 
 	// tmux renames its client, so /proc/pid/comm reads "tmux: client" and a plain
 	// name comparison never matched it.
-	// Test ID: EoqHGQz
+	// Test ID: dc4wc
 	#[cfg(unix)]
 	#[test]
 	fn a_renamed_process_still_reports_its_program() {
@@ -2206,7 +2206,7 @@ mod tests {
 		assert_eq!(program_name(""), "");
 	}
 
-	// Test ID: Eolpl0a
+	// Test ID: dc3t4
 	#[test]
 	fn wsl_is_handed_the_directory_ahead_of_its_own_command() {
 		let dir = std::path::Path::new("/home/jim");
@@ -2225,7 +2225,7 @@ mod tests {
 		);
 	}
 
-	// Test ID: Eolpl0b
+	// Test ID: dc3t5
 	#[test]
 	fn nothing_else_gets_a_cd_argument() {
 		let dir = std::path::Path::new("/home/jim");
@@ -2236,7 +2236,7 @@ mod tests {
 		assert!(wsl_cd(&argv("wsl.exe --cd ~ -d DebianWSL2"), dir).is_none());
 	}
 
-	// Test ID: EpQN0oR
+	// Test ID: dcdjj
 	#[test]
 	fn a_pane_only_ever_starts_in_an_absolute_directory() {
 		let keep = |s: &str| usable_cwd(Some(std::path::PathBuf::from(s))).is_some();
@@ -2261,7 +2261,7 @@ mod tests {
 
 	// The --keep-open line reads this out to the user, so it has to say the same
 	// thing on every platform.
-	// Test ID: EoSKhlp
+	// Test ID: dbz43
 	#[cfg(unix)]
 	#[test]
 	fn an_exit_status_reads_the_same_on_every_platform() {
@@ -2274,7 +2274,7 @@ mod tests {
 
 	// Folding the notices may never LOSE one: the window clears the gate before
 	// it looks at the grid, so a read cycle that arrives mid-handling posts again.
-	// Test ID: EnLddKq
+	// Test ID: dbekc
 	#[test]
 	fn one_notice_stands_until_the_window_takes_it() {
 		let gate = WakeGate::default();
@@ -2285,7 +2285,7 @@ mod tests {
 		assert!(gate.post());
 	}
 
-	// Test ID: EqH4isw
+	// Test ID: dct7x
 	#[cfg(windows)]
 	#[test]
 	fn a_pane_hands_its_program_and_arguments_down_whole() {
@@ -2306,7 +2306,7 @@ mod tests {
 	// without finding it empty leaves the pipe's waker unarmed, so the engine's
 	// reader thread has to say when it fills again. The fix is in the engine
 	// fork, and this is what fails if an engine update leaves it behind.
-	// Test ID: EqH4isx
+	// Test ID: dct7y
 	#[cfg(windows)]
 	#[test]
 	fn a_pane_under_a_flood_keeps_saying_there_is_more() {
@@ -2365,7 +2365,7 @@ mod tests {
 	// in NOW. A process that never moves must read back where it was started
 	// (that half is deterministic), and one that calls SetCurrentDirectory - as
 	// cmd.exe's `cd` does - must read back the new place, not the old one.
-	// Test ID: EnWyJ9U
+	// Test ID: dbhak
 	#[cfg(windows)]
 	#[test]
 	fn a_windows_shell_reports_where_it_is_now_not_where_it_started() {
@@ -2441,7 +2441,7 @@ mod tests {
 
 	// cmd doesn't wait for a program with no console, so a tab kept naming one
 	// after it ended: nothing was printed to say so. The wait on it says so.
-	// Test ID: Esgn52X
+	// Test ID: ddy7y
 	#[cfg(windows)]
 	#[test]
 	fn a_watched_command_says_when_it_ends() {
@@ -2478,7 +2478,7 @@ mod tests {
 	// Git Bash's bin\bash.exe starts the real bash as its child and waits, so a
 	// pane that read the pid it started saw the launch folder after every `cd`,
 	// and a command that never ended. Both now come from the real shell.
-	// Test ID: Es2dAll
+	// Test ID: ddmjv
 	#[cfg(windows)]
 	#[test]
 	fn a_git_bash_pane_is_read_past_its_launcher() {
@@ -2553,7 +2553,7 @@ mod tests {
 
 	// Only Git for Windows' layout is a launcher. MSYS2's bash sits in usr\bin
 	// and Cygwin's in bin, with no usr\bin\bash.exe a level up from either.
-	// Test ID: Es2dB6L
+	// Test ID: ddmjw
 	#[test]
 	fn only_the_git_for_windows_layout_is_a_launcher() {
 		use super::launcher_target;
@@ -2584,7 +2584,7 @@ mod tests {
 	// are, so a split or new tab from one inherits only what the OS can say -
 	// and a Mac, with no /proc, said nothing, so the new pane opened outside the
 	// project it was meant to be in.
-	// Test ID: ErkhGGP
+	// Test ID: ddg8v
 	#[cfg(unix)]
 	#[test]
 	#[cfg_attr(miri, ignore = "Miri can't start a process")]
@@ -2647,7 +2647,7 @@ mod tests {
 	// which is not there, so no tab ever named anything. Started by full path:
 	// a Mac names the file a link points to, and a `sleep` found on PATH can be
 	// a link to GNU's `gsleep`.
-	// Test ID: ErkjAN1
+	// Test ID: ddg92
 	#[cfg(unix)]
 	#[test]
 	#[cfg_attr(miri, ignore = "Miri can't start a process")]
@@ -2686,7 +2686,7 @@ mod tests {
 	// A recycled pid is the failure this guard exists for: the row claims the
 	// shell as its parent but started before the shell did, so it belongs to
 	// whoever held that pid before.
-	// Test ID: EnL1S0f
+	// Test ID: dbeen
 	#[test]
 	fn a_child_that_predates_the_shell_is_not_its_command() {
 		assert!(is_command_child(Some(200), 100));
@@ -2707,7 +2707,7 @@ mod tests {
 	// pwsh 7 prepends its own module directories to PSModulePath in its process,
 	// so a Windows PowerShell 5.1 pane opened below one finds pwsh's PSReadLine
 	// ahead of its own, cannot load it, and starts with no line editing.
-	// Test ID: EncA4gS
+	// Test ID: dbjjh
 	#[test]
 	fn a_shell_private_variable_is_put_back_to_the_session_value() {
 		let session = vars(&[(
@@ -2730,7 +2730,7 @@ mod tests {
 	// pwsh's -ExecutionPolicy sets this and every descendant inherits it. The
 	// session never sets it, so neither should a pane - and that means DROPPING
 	// it, not handing the shell an empty one to read.
-	// Test ID: EncA4gT
+	// Test ID: dbjjj
 	#[test]
 	fn a_variable_the_session_never_set_is_dropped() {
 		let session = vars(&[("PATH", r"C:\bin")]);
@@ -2744,7 +2744,7 @@ mod tests {
 	// Launched from the desktop rather than from a shell, the inherited
 	// environment already IS the session one. That is the ordinary case and it
 	// must write nothing at all.
-	// Test ID: EncA4gU
+	// Test ID: dbjjk
 	#[test]
 	fn an_environment_that_already_matches_needs_no_fixups() {
 		let session = vars(&[("PSModulePath", "one;two")]);
@@ -2754,7 +2754,7 @@ mod tests {
 
 	// Everything the user exported themselves is the reason a pane inherits at
 	// all, so a variable off the list is left alone however far it has drifted.
-	// Test ID: EncA4gV
+	// Test ID: dbjjm
 	#[test]
 	fn only_the_named_variables_are_touched() {
 		let session = vars(&[("VIRTUAL_ENV", ""), ("PSModulePath", "one")]);
@@ -2765,7 +2765,7 @@ mod tests {
 	// Windows environment names are case-insensitive and a block keeps whichever
 	// spelling set it first, so the two sides can differ by case alone - which is
 	// not a difference and must not read as one.
-	// Test ID: EncA4gW
+	// Test ID: dbjjn
 	#[test]
 	fn a_name_that_differs_only_in_case_is_the_same_variable() {
 		let session = vars(&[("PSModulePath", "one")]);
@@ -2776,7 +2776,7 @@ mod tests {
 	// The block is NUL-separated NAME=VALUE closed by a second NUL, and it also
 	// carries the hidden per-drive entries Windows keeps, whose NAME begins with
 	// '=' - so the separator can never be the first character.
-	// Test ID: EncA4gX
+	// Test ID: dbjjp
 	#[test]
 	fn an_environment_block_splits_names_from_values() {
 		let mut block: Vec<u16> = Vec::new();
@@ -2799,7 +2799,7 @@ mod tests {
 	// spelled with its references intact. A shell given that raw would search a
 	// directory that does not exist - and an unknown name has to survive rather
 	// than collapse to nothing, which would silently shorten a search path.
-	// Test ID: EncA4gY
+	// Test ID: dbjjq
 	#[test]
 	fn a_stored_reference_expands_and_an_unknown_one_survives() {
 		let vars = vars(&[("ProgramFiles", r"C:\Program Files")]);
@@ -2815,7 +2815,7 @@ mod tests {
 	// it answers with the empty set and every listed variable is DROPPED. That is
 	// only honest because nothing on the list is a variable a session sets - and it
 	// is the same path Windows takes for a variable its session block lacks.
-	// Test ID: EncBmYy
+	// Test ID: dbjjr
 	#[test]
 	fn an_empty_session_drops_every_private_variable() {
 		let inherited = vars(&[
@@ -2939,7 +2939,7 @@ mod tests {
 			);
 		}
 
-		// Test ID: EpQN0oS
+		// Test ID: dcdjk
 		#[test]
 		#[cfg_attr(miri, ignore = "too slow under Miri")]
 		fn a_program_cannot_make_the_terminal_type() {

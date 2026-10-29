@@ -615,7 +615,7 @@ mod tests {
 		}
 	}
 
-	// Test ID: Ep17Tqy
+	// Test ID: dc7fs
 	#[test]
 	fn a_missing_card_is_picked_for_rather_than_timed() {
 		let card = adapter("NVIDIA GeForce RTX 3060 Ti", wgpu::DeviceType::DiscreteGpu);
@@ -646,7 +646,7 @@ mod tests {
 		)));
 	}
 
-	// Test ID: EowvGeu
+	// Test ID: dc6ff
 	#[cfg(not(windows))]
 	#[test]
 	fn a_display_naming_another_host_is_a_remote_screen() {
@@ -665,7 +665,7 @@ mod tests {
 		}
 	}
 
-	// Test ID: EtAPzex
+	// Test ID: de5bz
 	#[test]
 	fn only_an_rdp_station_reads_as_remote() {
 		for name in ["RDP-Tcp#0", "rdp-tcp#12"] {
@@ -679,7 +679,7 @@ mod tests {
 	// An RDP logon moved to the console keeps the Explorer it started with, and
 	// that Explorer hands RDP-Tcp#N down to everything launched from it. Read as
 	// a remote screen, that took the wallpaper off every launch.
-	// Test ID: EtAPzMB
+	// Test ID: de5by
 	#[cfg(windows)]
 	#[test]
 	fn a_stale_rdp_session_name_is_not_a_remote_screen() {
@@ -730,7 +730,7 @@ mod tests {
 		panic!("the run never answered");
 	}
 
-	// Test ID: EowvGev
+	// Test ID: dc6fg
 	#[test]
 	fn the_run_stops_at_the_first_rung_that_keeps_the_rate() {
 		let budget = budget_ms(60.0);
@@ -769,7 +769,7 @@ mod tests {
 	// drawn. The run used to read that as a hopeless machine and save Standard,
 	// which has no wallpaper, for every launch after. A stall that Standard does
 	// not cure says nothing about the machine, so the run gives no answer.
-	// Test ID: EqHVWh6
+	// Test ID: dctb1
 	#[test]
 	fn a_display_that_is_not_drawing_gives_no_rating() {
 		let budget = budget_ms(60.0);
@@ -826,7 +826,7 @@ mod tests {
 		s
 	}
 
-	// Test ID: EorkTk1
+	// Test ID: dc57p
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_profile_shows_its_values_and_custom_puts_back_the_own() {
@@ -844,7 +844,7 @@ mod tests {
 		assert!(!s.wallpaper_enabled);
 	}
 
-	// Test ID: EorkTk3
+	// Test ID: dc57q
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn each_profile_costs_less_than_the_one_above() {
@@ -882,7 +882,7 @@ mod tests {
 
 	// Remote is never in the file: it sits over the pick and lifts off without
 	// touching it.
-	// Test ID: Ep17Tqz
+	// Test ID: dc7ft
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_remote_profile_sits_over_the_stored_one() {
@@ -908,7 +908,7 @@ mod tests {
 
 	// The display watch's step is session state over the machine's pick: it never
 	// makes a profile heavier, and a pick by hand is left alone.
-	// Test ID: EpWow4h
+	// Test ID: dcf3v
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_session_step_sits_over_the_tested_profile() {
@@ -942,7 +942,7 @@ mod tests {
 	// A rating written before the version was part of the id reads as another
 	// machine's, once, so a profile an older build's step-down wrote is measured
 	// again rather than kept.
-	// Test ID: EpWpSam
+	// Test ID: dcf3y
 	#[test]
 	#[cfg_attr(miri, ignore = "Miri can't ask how much memory the machine has")]
 	fn a_rating_from_before_the_version_is_stale() {
@@ -965,7 +965,7 @@ mod tests {
 		);
 	}
 
-	// Test ID: EpWow4i
+	// Test ID: dcf3w
 	#[test]
 	fn watched_lower_stops_at_low() {
 		assert_eq!(Profile::Max.watched_lower(), Some(Profile::High));
@@ -980,7 +980,7 @@ mod tests {
 		}
 	}
 
-	// Test ID: EorkTk4
+	// Test ID: dc57r
 	#[test]
 	fn the_ladder_ends_at_standard_and_custom_is_off_it() {
 		assert_eq!(Profile::Max.lower(), Some(Profile::High));
@@ -998,7 +998,7 @@ mod tests {
 		}
 	}
 
-	// Test ID: EorkTk5
+	// Test ID: dc57s
 	#[test]
 	fn a_window_of_stretched_frames_is_a_miss_and_a_pause_breaks_the_chain() {
 		let budget = budget_ms(60.0);
@@ -1031,7 +1031,7 @@ mod tests {
 	// A monitor asleep under the NVIDIA driver paces a GL client at 1 fps. That
 	// is forty times a 60 Hz budget, and it stepped a desktop down to Standard
 	// overnight.
-	// Test ID: EpWnbLd
+	// Test ID: dcf3k
 	#[test]
 	fn a_capped_display_is_not_a_slow_one() {
 		let budget = budget_ms(60.0);
@@ -1047,7 +1047,7 @@ mod tests {
 
 	// The budget was read once at launch. A window opened on 144 Hz and dragged
 	// to 60 Hz timed every frame against 10.4 ms and stepped the profile down.
-	// Test ID: EqFz3m4
+	// Test ID: dcsza
 	#[test]
 	fn the_budget_follows_the_monitor_the_window_is_on() {
 		let mut t = Instant::now();
@@ -1071,7 +1071,7 @@ mod tests {
 
 	// Moved the other way, periods paced at 60 Hz would read as misses against a
 	// 144 Hz budget, so a new budget starts the window over.
-	// Test ID: EqFz3m5
+	// Test ID: dcszb
 	#[test]
 	fn frames_paced_by_another_monitor_are_not_counted_against_this_one() {
 		let slow = budget_ms(60.0);
@@ -1086,7 +1086,7 @@ mod tests {
 		assert_eq!(r.verdict(fast), Some(false));
 	}
 
-	// Test ID: EpWnbLe
+	// Test ID: dcf3m
 	#[test]
 	fn a_stall_throws_away_the_window_around_it() {
 		let budget = budget_ms(60.0);
@@ -1101,7 +1101,7 @@ mod tests {
 		assert_eq!(r.verdict(budget), Some(true), "a slow display still is");
 	}
 
-	// Test ID: EpWnbLf
+	// Test ID: dcf3n
 	#[test]
 	fn a_window_does_not_span_a_long_pause() {
 		let budget = budget_ms(60.0);

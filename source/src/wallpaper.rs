@@ -1127,7 +1127,7 @@ mod tests {
 	// Nothing sat between the file and a linear f32 buffer at sixteen bytes a
 	// pixel, so an ordinary large photo wanted gigabytes and an image past the
 	// GPU's texture limit aborted the upload.
-	// Test ID: EpHe9lo
+	// Test ID: dcbez
 	#[test]
 	fn a_large_wallpaper_is_cut_down_before_any_of_the_work() {
 		use super::{MAX_EDGE, fit_within};
@@ -1154,7 +1154,7 @@ mod tests {
 
 	// The whole image, up to 4096 a side, used to be held and blurred, and the
 	// GPU scaled it to the window every frame.
-	// Test ID: ErqyRJF
+	// Test ID: ddhs5
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_wallpaper_is_held_at_the_size_it_is_drawn_at() {
@@ -1191,7 +1191,7 @@ mod tests {
 	// Held at window size, the picture is shrunk before the blur instead of
 	// after it, so the blur and the contrast mask are scaled to match. Drawn at
 	// the same size, it should look the same as the whole image did.
-	// Test ID: ErqyRUK
+	// Test ID: ddhs6
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_held_wallpaper_looks_like_the_whole_one_drawn_at_its_size() {
@@ -1245,7 +1245,7 @@ mod tests {
 	// Detail finer than the blur is gone, so a blurred picture is held where
 	// its sigma comes to a few held pixels, by the profile, and never smaller
 	// than the window for a light blur.
-	// Test ID: Erym5o5
+	// Test ID: ddkn6
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_blurred_wallpaper_is_held_by_its_blur() {
@@ -1326,7 +1326,7 @@ mod tests {
 	// one held at window size, edge included. The shader reads the inner part
 	// and blends into the border at the edge; without the border the outer
 	// half of each edge texel came out flat.
-	// Test ID: Erym5q4
+	// Test ID: ddkn7
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_bordered_wallpaper_looks_like_the_window_size_one() {
@@ -1416,7 +1416,7 @@ mod tests {
 
 	// A resize prepares the same picture again, and the colors derived from it
 	// stay where they were.
-	// Test ID: ErqyUlS
+	// Test ID: ddhs7
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_resize_keeps_the_pictures_summary() {
@@ -1441,7 +1441,7 @@ mod tests {
 		assert_eq!(kept.summary, first.summary);
 	}
 
-	// Test ID: EjwZbJA
+	// Test ID: d9vv1
 	#[test]
 	fn wallpaper_order_wraps() {
 		assert_eq!(next_wallpaper_index(3, 0), 1);
@@ -1450,7 +1450,7 @@ mod tests {
 		assert_eq!(next_wallpaper_index(0, 0), 0); // empty: safe
 	}
 
-	// Test ID: Eld70rY
+	// Test ID: damzj
 	#[test]
 	fn shuffle_never_repeats_a_recent_image() {
 		// whatever the entropy, the pick avoids the held-back window and stays in range
@@ -1471,7 +1471,7 @@ mod tests {
 		}
 	}
 
-	// Test ID: Eld70rZ
+	// Test ID: damzk
 	#[test]
 	fn shuffle_survives_tiny_folders() {
 		// two images alternate; one (or none) has nowhere else to go
@@ -1483,7 +1483,7 @@ mod tests {
 		}
 	}
 
-	// Test ID: Eld70ra
+	// Test ID: damzm
 	#[test]
 	fn shuffle_still_reaches_every_image() {
 		// holding back recent picks must not strand any image permanently
@@ -1498,7 +1498,7 @@ mod tests {
 		assert_eq!(seen.len(), 6, "some image was never picked");
 	}
 
-	// Test ID: EjwZbJB
+	// Test ID: d9vv2
 	#[test]
 	fn folder_scan_filters_and_sorts() {
 		let dir =
@@ -1523,7 +1523,7 @@ mod tests {
 	// The path is no longer stat'd before the worker sees it (that check used to
 	// run on the startup thread), so an unreadable one must end on the built-in
 	// rather than on nothing.
-	// Test ID: ElvpdEu
+	// Test ID: dasfm
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn an_unreadable_image_still_falls_back_to_the_builtin() {
@@ -1541,7 +1541,7 @@ mod tests {
 	// The blur asserts on a sigma that is not a normal float, and a subnormal one
 	// passed both the config's range and the tag reader, so the worker panicked
 	// and took the terminal with it.
-	// Test ID: Eq8KqtE
+	// Test ID: dcr4f
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_subnormal_blur_is_no_blur() {
@@ -1610,7 +1610,7 @@ mod tests {
 	// a float copy at full width before the cut, gigabytes from a few hundred KB.
 	// Measured in a child copy of this test binary so no other test's memory
 	// counts.
-	// Test ID: Eq8KqtF
+	// Test ID: dcr4g
 	#[cfg(target_os = "linux")]
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
@@ -1654,7 +1654,7 @@ mod tests {
 		assert!(grew < 200 << 10, "peak grew {} MiB", grew >> 10);
 	}
 
-	// Test ID: Eq8KqtG
+	// Test ID: dcr4h
 	#[cfg(target_os = "linux")]
 	#[test]
 	fn huge_image_child() {
@@ -1685,7 +1685,7 @@ mod tests {
 	// a gigabyte or so each for a 4K image, and a rotation faster than the
 	// preparation kept several going at once. The worker asks between stages
 	// now, and every stage boundary is a place it gives up.
-	// Test ID: Eq9J5HU
+	// Test ID: dcrby
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_superseded_request_stops_before_its_next_stage() {
@@ -1741,7 +1741,7 @@ mod tests {
 	// retired the one before it, so the picture never changed, and the retired
 	// workers piled up. One preparation at a time now, and the picture changes
 	// no later than one preparation after a tick.
-	// Test ID: Eq9J5HV
+	// Test ID: dcrbz
 	#[test]
 	fn rotation_keeps_going_when_preparing_outlasts_the_interval() {
 		const IVL: u32 = 2;
@@ -1802,7 +1802,7 @@ mod tests {
 	// An empty rotation folder reports no rotation, and the built-in fills in -
 	// the folder's emptiness used to be tested during config resolve, so the
 	// suppression has to key on what the scan found, not on the folder existing.
-	// Test ID: ElvpdEv
+	// Test ID: dasfn
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn an_empty_rotation_folder_falls_back_to_the_builtin() {
@@ -1821,7 +1821,7 @@ mod tests {
 	// The image's own tags win over the configured default, and are read from the
 	// file the pixels actually came from (which for rotation is the picked image,
 	// not whatever `wallpaper` happened to name).
-	// Test ID: ElvpdEw
+	// Test ID: dasfp
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_builtin_keeps_the_configured_fit() {
@@ -1836,7 +1836,7 @@ mod tests {
 		assert_eq!(anchor, [0.5, 0.5]);
 	}
 
-	// Test ID: Er2UJeL
+	// Test ID: dd5n0
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_master_switch_turns_the_wallpaper_off() {
@@ -1863,7 +1863,7 @@ mod tests {
 	// until this one was prepared again from the file, which is seconds for a
 	// large photo. It now keeps a small copy through the release. The point of
 	// letting go is the memory, so the copy has to stay small.
-	// Test ID: Ersiipp
+	// Test ID: ddj6k
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn every_picture_comes_with_a_small_standin() {
@@ -1902,7 +1902,7 @@ mod tests {
 	// The sampler filters an sRGB texture in linear light, so the stand-in is
 	// averaged the same way. In sRGB values half black and half white would be
 	// 128; the eye, and the real picture drawn small, say 188.
-	// Test ID: ErsiiuM
+	// Test ID: ddj6m
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_standin_is_averaged_in_linear_light() {
@@ -1938,7 +1938,7 @@ mod tests {
 
 	// Rotation off leaves the folder in the settings, so switching it back on
 	// picks up where it was.
-	// Test ID: Er2UJeM
+	// Test ID: dd5n1
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn rotation_off_stops_rotating_and_keeps_the_folder() {
@@ -1980,7 +1980,7 @@ mod tests {
 		path
 	}
 
-	// Test ID: Er2UJeN
+	// Test ID: dd5n2
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn an_images_layout_tags_win_until_honor_tags_is_off() {
@@ -2003,7 +2003,7 @@ mod tests {
 		let _ = std::fs::remove_file(&path);
 	}
 
-	// Test ID: Er2UJeO
+	// Test ID: dd5n3
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn an_images_look_tags_win_until_honor_look_tags_is_off() {
@@ -2023,7 +2023,7 @@ mod tests {
 
 	// A blur done on the sRGB bytes darkens an edge: black beside white met at
 	// about 128 there, where half the light is sRGB 188.
-	// Test ID: Er2UJeP
+	// Test ID: dd5n4
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_blur_mixes_in_linear_light() {
@@ -2049,7 +2049,7 @@ mod tests {
 
 	// A bare flag means no picture, whether or not a rotation folder is there.
 	// Without the folder this used to show the built-in.
-	// Test ID: Eq4Yrbi
+	// Test ID: dcq7k
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_cleared_wallpaper_shows_nothing_with_or_without_a_folder() {
@@ -2087,7 +2087,7 @@ mod tests {
 
 	// A kept copy stands for the original only while nothing that changes its
 	// pixels has moved. What only changes how it is drawn stays out of the key.
-	// Test ID: EryHI98
+	// Test ID: ddkhg
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_kept_copy_is_keyed_on_everything_that_changes_its_pixels() {
@@ -2229,7 +2229,7 @@ mod tests {
 
 	// A prepared picture is kept after its result goes out, and the next
 	// request for it, or for a size within 5% of the pixels, reads the copy.
-	// Test ID: EryHICk
+	// Test ID: ddkhh
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_prepared_wallpaper_is_kept_and_read_back() {
@@ -2326,7 +2326,7 @@ mod tests {
 	// BC7 goes by the profile, the same split as the blur's hold, and the
 	// config file's word beats the profile. Either way a change prepares the
 	// picture again.
-	// Test ID: Es1erXj
+	// Test ID: ddmbe
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_profile_picks_bc1_or_bc7_unless_the_file_says() {
@@ -2389,7 +2389,7 @@ mod tests {
 
 	// A kept copy is BC1 or BC7 blocks, and a window never gets the other
 	// kind: each keeps its own copy and reads back only that one.
-	// Test ID: Es1erXk
+	// Test ID: ddmbf
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_bc7_window_never_takes_a_bc1_copy() {
@@ -2459,7 +2459,7 @@ mod tests {
 	// A picture held by its blur is kept with its border and read back with
 	// it. One held by the window a little smaller has no border, so it never
 	// takes that copy, near as the size is.
-	// Test ID: Erym5s3
+	// Test ID: ddkn8
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_bordered_copy_is_kept_apart() {

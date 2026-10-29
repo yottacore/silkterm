@@ -537,7 +537,7 @@ mod tests {
 
 	// The shared block readback copies rows unpadded, so the probe compares
 	// against `probe_ref` as is.
-	// Test ID: Es1upe4
+	// Test ID: ddmdb
 	#[test]
 	fn the_wallpaper_probe_block_is_copy_aligned() {
 		assert_eq!((PROBE_SIDE * 4) % wgpu::COPY_BYTES_PER_ROW_ALIGNMENT, 0);
@@ -546,7 +546,7 @@ mod tests {
 
 	// A shader edit that does not compile only shows up at pipeline creation,
 	// in a window.
-	// Test ID: ErsiiyG
+	// Test ID: ddj6n
 	#[test]
 	fn the_wallpaper_shader_compiles() {
 		use wgpu::naga;
@@ -567,7 +567,7 @@ mod tests {
 
 	// Every ordinary frame draws what it always has. Only a stand-in, there for
 	// the moment after an idle wake, takes the cubic sampling.
-	// Test ID: Ersij2D
+	// Test ID: ddj6p
 	#[test]
 	fn only_a_standin_is_smoothed() {
 		let fs = BG_WGSL.split("fn fs(").nth(1).expect("the fragment shader");
@@ -579,7 +579,7 @@ mod tests {
 	}
 
 	// A texture with no border is sampled exactly as before.
-	// Test ID: ErymwsR
+	// Test ID: ddkn9
 	#[test]
 	fn only_a_bordered_texture_is_remapped() {
 		let fs = BG_WGSL.split("fn fs(").nth(1).expect("the fragment shader");

@@ -9,7 +9,7 @@
 ##		half the CPUs, a quarter when the box is busy or the step is hard on it,
 ##		never under 1, under any cap handed down. The run goes at low priority,
 ##		and no helper script counts the CPUs on its own any more.
-##	- Test ID: EtrCPPO
+##	- Test ID: defn6
 ##	- History: At bottom of file.
 
 ##	Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
@@ -86,7 +86,7 @@ fCheck "ci-mac.bash lowers its priority too" grep -qx 'fJobs_LowPriority' "${roo
 fCheck "and counts jobs before each step" grep -qxF "$(printf '\tfJobs')" "${root}/cicd/ci-mac.bash"
 
 if ((failures)); then echo "${failures} check(s) failed"; exit 1; fi
-echo "PASS EtrCPPO step jobs and priority"
+echo "PASS defn6 step jobs and priority"
 
 ##	History:
 ##		- 20261026 JC: Created.

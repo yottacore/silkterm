@@ -7,7 +7,7 @@
 ##		folders, links and odd paths beside each other and checks only the ones
 ##		it may take go. The cases outside a tmp folder run under the target dir,
 ##		whose real path has none.
-##	- Test ID: Eu0ULVl
+##	- Test ID: dehwp
 ##	- History: At bottom of file.
 
 ##	Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
@@ -122,7 +122,7 @@ fCheck "and one in the guard" test "$(fBare "${lib}" | wc -l)" -eq 1
 fBareWin(){ grep -niE 'Remove-Item.*-Recurse' "${@}" | grep -vE '^[0-9]+:[[:space:]]*##' || true; }
 fCheck "no bare Remove-Item -Recurse in cicd-win.ps1" test -z "$(fBareWin "${repoRoot}/cicd/cicd-win.ps1")"
 if command -v pwsh >/dev/null 2>&1; then
-	fCheck "the PowerShell guard's test (Eu0ji27) passes" pwsh -NoProfile -NonInteractive -File "${meDir}/win.ps1"
+	fCheck "the PowerShell guard's test (dehyk) passes" pwsh -NoProfile -NonInteractive -File "${meDir}/win.ps1"
 else
 	echo "  skip the PowerShell guard (no pwsh)"
 fi

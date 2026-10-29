@@ -301,7 +301,7 @@ fRunTest_MaySkip(){
 	esac
 }
 ## fListTest <script> <label>: a test's line under --list.
-fListTest(){ local id; id="$(fTestId "${1}")"; printf '  %-7s  %s\n' "${id:--------}" "${2}"; }
+fListTest(){ local id; id="$(fTestId "${1}")"; printf '  %-5s  %s\n' "${id:------}" "${2}"; }
 ## --list: the Rust tests cargo test runs, as ID and name.
 fListRustTests(){
 	local found=""
@@ -895,6 +895,8 @@ fScriptTests(){
 	fRunTest cicd/tests/showdown/rigs.py "showdown rig entries" "showdown rig entry test failed"
 	## The startup gates, which once marked a run as seen while it was being written.
 	fRunTest cicd/tests/gates/run.bash "startup gates" "startup gate test failed"
+	## The test ID tool makes IDs in the new form and the check refuses any other.
+	fRunTest cicd/tests/testid/run.py "test IDs" "test ID test failed"
 	## Old config files converted by the program just built: in place where shcl
 	## can migrate them, written new where it cannot, the old file kept either way.
 	## Exit 3 means there was no binary to run, which is a skip and never an OK.
@@ -2156,6 +2158,7 @@ fEcho_Clean
 
 
 ##	History:
+##		- 2026-10-28: --list takes test IDs in the new 5-character form.
 ##		- 2026-10-28: Steps: a 79-wide rule, then a stamped Starting line numbered of
 ##		              the steps the run takes, and a PASS, SKIP or FAIL line. A step
 ##		              turned off isn't counted, and the plan says what turned it off.

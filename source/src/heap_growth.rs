@@ -252,7 +252,7 @@ fn report_path() -> PathBuf {
 
 // The growth past the warm-up, one action at a time, so a report names the
 // action that grew.
-// Test ID: EtBDWu8
+// Test ID: de5j3
 #[test]
 #[cfg_attr(
 	not(feature = "dhat-heap"),

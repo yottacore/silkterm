@@ -378,7 +378,7 @@ mod tests {
 	// Dark mode never takes the other blend, whatever the picture. The visibility
 	// ramp does reach it - that is the point of the ramp - so the exact identity
 	// only holds with the ramp off, which is what the second half checks.
-	// Test ID: EqTTXtg
+	// Test ID: dcx75
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn dark_mode_still_draws_the_blend_it_always_has() {
@@ -415,7 +415,7 @@ mod tests {
 	// The whole reason the mix is a pure power curve rather than sRGB's own. Over
 	// a black background the two are the same arithmetic, so a dark theme could
 	// take either path and draw the same pixels.
-	// Test ID: EqTOWF6
+	// Test ID: dcx6h
 	#[test]
 	fn over_black_the_mix_is_the_blend_it_replaces() {
 		for v in SLIDERS {
@@ -440,7 +440,7 @@ mod tests {
 		config::from_linear(mix.field(HI, bg)) - config::from_linear(mix.field(LO, bg))
 	}
 
-	// Test ID: EqTOWF7
+	// Test ID: dcx6j
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn light_mode_shows_the_contrast_dark_mode_shows() {
@@ -466,7 +466,7 @@ mod tests {
 		}
 	}
 
-	// Test ID: EqTOWF8
+	// Test ID: dcx6k
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_default_asks_for_the_scale_black_would_have_given() {
@@ -482,7 +482,7 @@ mod tests {
 
 	// A dark theme whose background is not black already shows less picture, so
 	// its light mode shows less too. Self-consistent rather than uniform.
-	// Test ID: EqTOWF9
+	// Test ID: dcx6m
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_theme_with_a_lifted_dark_background_asks_for_less() {
@@ -492,7 +492,7 @@ mod tests {
 		assert!(pastel < silk - 0.05, "silk {silk}, pastel {pastel}");
 	}
 
-	// Test ID: EqTOWFA
+	// Test ID: dcx6n
 	#[test]
 	fn the_scale_runs_end_to_end_and_only_upward() {
 		for name in crate::theme::names() {
@@ -556,7 +556,7 @@ mod tests {
 			.collect()
 	}
 
-	// Test ID: EqT4HIf
+	// Test ID: dcx41
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_halo_is_quietened_wherever_a_picture_is_up() {
@@ -573,7 +573,7 @@ mod tests {
 	// was: matched at half the halo only, through one gain, over one average
 	// picture. It now has to hold at every alpha and over the whole picture, since
 	// the tail and the dark parts are where the old gain left light mode loud.
-	// Test ID: EqT4HIg
+	// Test ID: dcx42
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_halo_covers_the_same_ground_in_both_modes() {
@@ -610,7 +610,7 @@ mod tests {
 	// light mode too, rather than the one an ordinary picture would get. Light
 	// mode draws a dark picture much further from its paper than dark mode
 	// draws it from black, so without this its halo was the loudest of all.
-	// Test ID: Ers4sAg
+	// Test ID: ddj1n
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_halo_follows_the_picture_it_sits_on() {
@@ -630,7 +630,7 @@ mod tests {
 		);
 	}
 
-	// Test ID: Ers4sWJ
+	// Test ID: ddj1p
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_matched_halo_only_ever_grows_with_what_was_asked() {
@@ -653,7 +653,7 @@ mod tests {
 
 	// The memo answers what a fresh solve would, and solves again when anything
 	// it is keyed on moves.
-	// Test ID: Ers4ttU
+	// Test ID: ddj1t
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_memo_never_hands_back_a_stale_halo() {
@@ -691,7 +691,7 @@ mod tests {
 	const BRIGHT: (f32, f32) = (0.45, 0.80);
 	const ORDINARY: (f32, f32) = (REF_MEAN, REF_HI);
 
-	// Test ID: EqTTXth
+	// Test ID: dcx76
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn an_ordinary_picture_is_drawn_at_what_the_slider_says() {
@@ -710,7 +710,7 @@ mod tests {
 		}
 	}
 
-	// Test ID: EqTTXti
+	// Test ID: dcx77
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_glaring_picture_is_held_back_and_a_faint_one_lifted() {
@@ -727,7 +727,7 @@ mod tests {
 
 	// The same rule read from the other side, which is what the backlog asked
 	// for: over a light background it is the DARK picture that stands out.
-	// Test ID: EqTTXtj
+	// Test ID: dcx78
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn light_mode_tones_down_the_picture_that_stands_out_there_instead() {
@@ -758,7 +758,7 @@ mod tests {
 	// Glare comes from a picture's bright end, not from its average. A night sky
 	// with a sun in it has the same overall level as a flat dark picture and is
 	// nothing like it to look at, so the ramp has to tell them apart.
-	// Test ID: EqTTXtk
+	// Test ID: dcx79
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_dark_picture_with_a_bright_area_is_not_a_dark_picture() {
@@ -772,7 +772,7 @@ mod tests {
 		}
 	}
 
-	// Test ID: EqTTXtl
+	// Test ID: dcx7a
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_full_slider_always_draws_the_picture_as_it_is() {
@@ -793,7 +793,7 @@ mod tests {
 		}
 	}
 
-	// Test ID: EqTTXtm
+	// Test ID: dcx7b
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_strength_setting_turns_the_ramp_off() {
@@ -810,7 +810,7 @@ mod tests {
 		}
 	}
 
-	// Test ID: EqTTXtn
+	// Test ID: dcx7c
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_ramp_never_takes_the_slider_backwards() {
@@ -830,7 +830,7 @@ mod tests {
 		}
 	}
 
-	// Test ID: EqT4HIh
+	// Test ID: dcx43
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn no_picture_leaves_the_halo_alone() {

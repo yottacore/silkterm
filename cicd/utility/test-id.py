@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
 
 ##	Purpose:
-##		Test IDs. An ID is the time a test was written, as milliseconds since
-##		2000-01-01 00:00 UTC, in base 62 (0-9, A-Z, a-z). A Rust test carries it
+##		Test IDs. An ID is the time a test was written, as whole minutes since
+##		2000-01-01 00:00 UTC, in lowercase Crockford base 32, such as "decp8"
+##		for 2026-10-24 22:00 UTC. Tests made in one minute take the next free
+##		minutes, and an ID never changes once given. A Rust test carries it
 ##		on a "// Test ID:" line just above its attributes; a test script carries
 ##		it on a "Test ID:" line in its header comment.
 ##	Syntax:
 ##		test-id.py [N]            print N new IDs for now (default 1)
-##		test-id.py --at WHEN [N]  the same for a past time, "YYYY-MM-DD HH:MM[:SS]" local
+##		test-id.py --at WHEN [N]  the same for a past time, "YYYY-MM-DD HH:MM" local
 ##		test-id.py --decode ID    the time an ID stands for
 ##		test-id.py --check        every test has a well-formed ID and no two share one
 ##		test-id.py --annotate     copy cargo test output, each result line as status, ID, name
@@ -29,7 +31,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import cast
 
-DIGITS = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+DIGITS = "0123456789abcdefghjkmnpqrstvwxyz"
+ID_FORM = re.compile(f"[{DIGITS}]+")
+NO_ID = "-----"
 EPOCH = datetime(2000, 1, 1, tzinfo=timezone.utc)
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -52,28 +56,28 @@ NOT_TESTS = {
 NOT_TEST_DIRS = {"fuzz-corpus", "scenes", "target", "__pycache__"}
 
 
-def encode(ms: int) -> str:
+def encode(minutes: int) -> str:
 	out = ""
 	while True:
-		ms, r = divmod(ms, 62)
+		minutes, r = divmod(minutes, 32)
 		out = DIGITS[r] + out
-		if not ms:
+		if not minutes:
 			return out
 
 
 def decode(tid: str) -> int:
-	ms = 0
+	minutes = 0
 	for c in tid:
-		ms = ms * 62 + DIGITS.index(c)
-	return ms
+		minutes = minutes * 32 + DIGITS.index(c)
+	return minutes
 
 
-def to_ms(when: datetime) -> int:
-	return int(round((when - EPOCH).total_seconds() * 1000))
+def to_minutes(when: datetime) -> int:
+	return int((when - EPOCH).total_seconds() // 60)
 
 
-def from_ms(ms: int) -> datetime:
-	return datetime.fromtimestamp(EPOCH.timestamp() + ms / 1000, timezone.utc).astimezone()
+def from_minutes(minutes: int) -> datetime:
+	return datetime.fromtimestamp(EPOCH.timestamp() + minutes * 60, timezone.utc).astimezone()
 
 
 def rust_files() -> Iterator[Path]:
@@ -149,7 +153,7 @@ def annotate() -> int:
 		tid = ids.get(name)
 		missing += tid is None
 		status, _, why = status.partition(", ")
-		print(f"{status:<7} {tid or '-------':<7}  {name}{'  (' + why + ')' if why else ''}", flush=True)
+		print(f"{status:<7} {tid or NO_ID:<5}  {name}{'  (' + why + ')' if why else ''}", flush=True)
 	if missing:
 		print(f"WARNING: {missing} test(s) above have no ID found for them", flush=True)
 	return 0
@@ -157,19 +161,19 @@ def annotate() -> int:
 
 def list_rust() -> int:
 	for _, tid, name in rust_tests():
-		print(f"{tid or '-------':<7}  {name}")
+		print(f"{tid or NO_ID:<5}  {name}")
 	return 0
 
 
 def check() -> int:
-	now = to_ms(datetime.now(timezone.utc)) + 86_400_000
-	first = to_ms(datetime(2026, 1, 1, tzinfo=timezone.utc))
+	now = to_minutes(datetime.now(timezone.utc)) + 1440
+	first = to_minutes(datetime(2026, 1, 1, tzinfo=timezone.utc))
 	seen: dict[str, str] = {}
 	bad = 0
 	for where, tid in find_ids():
 		if tid is None:
 			print(f"no test ID: {where}")
-		elif not re.fullmatch(r"[0-9A-Za-z]+", tid) or not first <= decode(tid) <= now:
+		elif not ID_FORM.fullmatch(tid) or not first <= decode(tid) <= now:
 			print(f"test ID {tid} is not a plausible time: {where}")
 		elif tid in seen:
 			print(f"test ID {tid} is also at {seen[tid]}: {where}")
@@ -201,9 +205,9 @@ def main() -> int:
 	if args.list:
 		return list_rust()
 	if args.decode:
-		if not re.fullmatch(r"[0-9A-Za-z]+", args.decode):
-			ap.error(f"not base 62: {args.decode}")
-		print(from_ms(decode(args.decode)).isoformat(timespec="milliseconds"))
+		if not ID_FORM.fullmatch(args.decode):
+			ap.error(f"not a test ID: {args.decode}")
+		print(from_minutes(decode(args.decode)).isoformat(timespec="minutes"))
 		return 0
 
 	if args.at:
@@ -213,14 +217,14 @@ def main() -> int:
 			ap.error(f"cannot read the time: {args.at}")
 	else:
 		when = datetime.now(timezone.utc)
-	##	Several tests made at once get one millisecond each, past any already taken.
+	##	Several tests made at once get one minute each, past any already taken.
 	taken = {tid for _, tid in find_ids() if tid}
-	ms = to_ms(when)
+	minutes = to_minutes(when)
 	for _ in range(args.count):
-		while encode(ms) in taken:
-			ms += 1
-		taken.add(encode(ms))
-		print(encode(ms))
+		while encode(minutes) in taken:
+			minutes += 1
+		taken.add(encode(minutes))
+		print(encode(minutes))
 	return 0
 
 
@@ -234,3 +238,5 @@ if __name__ == "__main__":
 ##		- 20261005: PEP 8 names and type hints.
 ##		- 20261006: Module paths take the folder for a file under src/<module>/.
 ##		- 20261026: --list, for cicd.bash --list.
+##		- 20261028: IDs in whole minutes, in Crockford base 32. The base 62
+##		  millisecond IDs were converted once, from the times they stood for.

@@ -2545,7 +2545,7 @@ mod tests {
 
 	// `fs` picks a mode by `params.x > N`, top down. Each mode's number has to
 	// reach the branch that calls what draws it, and a quad gives its mode back.
-	// Test ID: Erstb2f
+	// Test ID: ddj83
 	#[test]
 	fn each_quad_mode_reaches_its_own_branch_of_the_shader() {
 		let body = RECT_WGSL
@@ -2597,7 +2597,7 @@ mod tests {
 
 	// A light fill has to let as much of the desktop through as a dark one at the
 	// same opacity. Before, white at 80% showed under half of what black did.
-	// Test ID: ErDEQFR
+	// Test ID: dd879
 	#[test]
 	fn a_light_fill_is_as_see_through_as_a_dark_one() {
 		for a in [0.3f32, 0.5, 0.8, 0.95] {
@@ -2622,7 +2622,7 @@ mod tests {
 	// What each platform's surface offers, and what the window must ask for.
 	// Metal lists Opaque first and never PreMultiplied, which left a Mac window
 	// opaque. The other rows are what Linux and Windows already picked.
-	// Test ID: ErUlBTl
+	// Test ID: ddce6
 	#[test]
 	fn each_platform_picks_a_see_through_alpha_mode_where_it_has_one() {
 		use wgpu::Backend;
@@ -2650,7 +2650,7 @@ mod tests {
 
 	// Numbers from the NVIDIA box where a stray GLX error used to kill the
 	// window at its next focus change: GLX 152 with errors from 158, NV-GLX 156.
-	// Test ID: EqFRbdI
+	// Test ID: dcsv5
 	#[cfg(target_os = "linux")]
 	#[test]
 	fn gl_errors_are_claimed_and_others_are_not() {
@@ -2678,7 +2678,7 @@ mod tests {
 	// was taken unconditionally to join the worker and only put back on the
 	// Building arm, so the second dialog open dropped the context and every open
 	// after that paid for a cold one.
-	// Test ID: Ep1mr9M
+	// Test ID: dc7mx
 	#[test]
 	fn a_settled_context_survives_being_settled_again() {
 		let mut w = Warm::Building(std::thread::spawn(|| Some(7)));
@@ -2690,7 +2690,7 @@ mod tests {
 
 	// A worker that came back empty stays Failed rather than falling back to
 	// Idle, which would let `start` spawn another probe on the next pass.
-	// Test ID: Ep1mr9N
+	// Test ID: dc7my
 	#[test]
 	fn a_failed_warm_up_stays_failed() {
 		let mut w = Warm::Building(std::thread::spawn(|| Option::<u32>::None));
@@ -2702,7 +2702,7 @@ mod tests {
 
 	// The sentinel only detects loss if its pattern can't be mistaken for
 	// trashed VRAM: right size, deterministic, and not a trivial fill.
-	// Test ID: Ekm1rM0
+	// Test ID: da871
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn sentinel_pattern_is_deterministic_and_varied() {
@@ -2719,7 +2719,7 @@ mod tests {
 		assert_ne!(a, vec![0u8; SENTINEL_BYTES]);
 	}
 
-	// Test ID: Ekm1rM1
+	// Test ID: da872
 	#[test]
 	fn sentinel_row_is_copy_aligned() {
 		// stride == unpadded row, so the readback compares without de-padding
@@ -2728,7 +2728,7 @@ mod tests {
 		assert_eq!(SENTINEL_BYTES as u64 % wgpu::COPY_BUFFER_ALIGNMENT, 0);
 	}
 
-	// Test ID: ErnMa3y
+	// Test ID: ddgxc
 	#[test]
 	fn a_device_is_named_by_what_drew_it_and_why() {
 		let card = test_adapter("RTX", wgpu::DeviceType::DiscreteGpu);
@@ -2747,7 +2747,7 @@ mod tests {
 	// A card that refuses a device hands over to software once, rather than
 	// ending the launch, and software asked for comes first. Built the way the
 	// dialogs' warm-up builds, on this thread. Skips without a software adapter.
-	// Test ID: ErnMa8F
+	// Test ID: ddgxd
 	#[test]
 	#[cfg_attr(miri, ignore = "Miri can't load the graphics driver")]
 	fn a_card_that_refuses_a_device_falls_back_to_software() {
@@ -2794,7 +2794,7 @@ mod tests {
 		}
 	}
 
-	// Test ID: Er2UJeQ
+	// Test ID: dd5n5
 	#[test]
 	fn every_gpu_is_hardware_and_only_the_cpu_is_software() {
 		use wgpu::DeviceType;
@@ -2813,7 +2813,7 @@ mod tests {
 	// wgpu's default memory hint, in every process. Built the way the warm-up
 	// builds it. Skips where there is no adapter, or no allocator report (GL,
 	// Metal).
-	// Test ID: Ern7Y1J
+	// Test ID: ddgvg
 	#[test]
 	#[cfg_attr(miri, ignore = "Miri can't load the graphics driver")]
 	fn a_new_device_reserves_little_graphics_memory() {
@@ -2851,7 +2851,7 @@ mod tests {
 	// to whole blocks and with a border too, and a device without BC gets it
 	// plain. BC7 goes through the device's own decoder here, so a block laid
 	// out wrong in bc7.rs shows even where its own decode agrees with it.
-	// Test ID: Erz0m6t
+	// Test ID: ddkq0
 	#[test]
 	#[cfg_attr(miri, ignore = "Miri can't load the graphics driver")]
 	fn a_bc1_wallpaper_draws_like_the_plain_one() {
@@ -3078,7 +3078,7 @@ mod tests {
 
 	// Every dialog open takes the one kept context. Building one per open cost
 	// about 230 ms each time on b23, against about 21 MiB to keep it.
-	// Test ID: ErqRBp6
+	// Test ID: ddhn1
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn every_dialog_open_takes_the_kept_context() {
@@ -3112,7 +3112,7 @@ mod tests {
 
 	// A server with no shared pixmaps gets Mesa's noshm, added to whatever the
 	// variable already says. One that has them is left alone.
-	// Test ID: ErxxHvN
+	// Test ID: ddkew
 	#[test]
 	fn no_shared_pixmaps_turns_mesa_shm_off() {
 		assert_eq!(wsi_debug_for(None, false).as_deref(), Some("noshm"));
@@ -3133,7 +3133,7 @@ mod tests {
 	// still changing. Each pass here holds the loader as a winit callback does.
 	// Fresh warm-ups, since a kept seed skips the instance. Skips without a
 	// software adapter.
-	// Test ID: Es9NHfD
+	// Test ID: ddp6r
 	#[test]
 	#[cfg_attr(miri, ignore = "Miri can't load the graphics driver")]
 	fn a_warm_up_never_overlaps_what_the_window_draws() {
@@ -3174,7 +3174,7 @@ mod tests {
 	// A window on GL, DX12 or Metal never makes a loader call between builds,
 	// so it must not wait out the warm-up: about 150 ms on b23's card, every
 	// launch. Only a window on Vulkan holds through its callbacks.
-	// Test ID: Es9Pm5d
+	// Test ID: ddp72
 	#[test]
 	fn only_a_window_on_vulkan_holds_the_loader_through_its_callbacks() {
 		assert!(hold_for_windows().is_none());
@@ -3190,7 +3190,7 @@ mod tests {
 
 	// A hold nests, and a wait inside one lets another thread have the loader.
 	// Joining the warm-up from a winit callback deadlocked otherwise.
-	// Test ID: Es9NHtj
+	// Test ID: ddp6s
 	#[test]
 	fn a_loader_hold_nests_and_lets_go_for_a_wait() {
 		let _outer = hold_loader();

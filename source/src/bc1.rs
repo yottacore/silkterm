@@ -419,7 +419,7 @@ mod tests {
 
 	// Rounding a flat color to 5:6:5 was up to 4 levels off. Through the
 	// tables every byte value comes back within one.
-	// Test ID: Erz0m8u
+	// Test ID: ddkq1
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_flat_color_comes_back_within_a_level() {
@@ -441,7 +441,7 @@ mod tests {
 
 	// A slow sky gradient, where BC1 bands if anywhere: each block a level or
 	// two of change, and it comes back within two.
-	// Test ID: Erz0mAu
+	// Test ID: ddkq2
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_slow_gradient_comes_back_within_two_levels() {
@@ -457,7 +457,7 @@ mod tests {
 		assert!(worst(&rgba, &back) <= 2, "{}", worst(&rgba, &back));
 	}
 
-	// Test ID: Erz0mCs
+	// Test ID: ddkq3
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn sizes_round_up_to_whole_blocks() {

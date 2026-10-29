@@ -288,7 +288,7 @@ mod platform {
 
 		// gsettings answers on an Xfce box too, with GNOME's defaults for keys
 		// nobody set, so the desktop decides which store is asked first.
-		// Test ID: Eq9PYAK
+		// Test ID: dcrcr
 		#[test]
 		fn the_desktop_decides_which_font_store_answers_first() {
 			let gnome = || Some("'Cantarell 11'".to_string());
@@ -504,7 +504,7 @@ mod tests {
 	// macOS reports 13 pt for the interface and about 11 pt for fixed pitch, and
 	// both are already logical pixels there. Taking them as 1/72 inch made every
 	// font on a Mac a third too big.
-	// Test ID: ErUj5E3
+	// Test ID: ddcdy
 	#[test]
 	fn a_mac_point_is_already_a_logical_pixel() {
 		assert_eq!(px_from_pt_for(13.0, PointUnit::MacLogical), 13.0);

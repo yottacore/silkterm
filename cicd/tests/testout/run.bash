@@ -7,7 +7,7 @@
 ##		names the file that keeps it. A passing or skipped test stays quiet. Lifts
 ##		fRunTest and its helpers out of cicd.bash as they stand and feeds them
 ##		scratch scripts that pass, fail and skip.
-##	- Test ID: Es9knL6
+##	- Test ID: ddp9p
 ##	- History: At bottom of file.
 
 ##	Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
@@ -34,7 +34,7 @@ root="${work}/repo"
 mkdir -p "${root}/t" "${work}/run"
 fScript(){  ## fScript <name> <body...>
 	local -r f="${root}/t/${1}"; shift
-	printf '%s\n' '#!/usr/bin/env bash' '##	- Test ID: Zz00000' "${@}" >"${f}"
+	printf '%s\n' '#!/usr/bin/env bash' '##	- Test ID: zzzzz' "${@}" >"${f}"
 	chmod +x "${f}"
 }
 fScript pass.bash  'echo "pass-chatter"'
@@ -63,7 +63,7 @@ fNamed(){ grep -oE 'output kept in [^ ]+' "${1}" | sed 's/^output kept in //'; }
 fRun "${work}/fail.log" fRunTest t/fail.bash "failing one"
 fCheck "a failed test stops the run" test "${rc}" -ne 0
 fCheck "and its output is in the log" grep -q '^fail-clue-two$' "${work}/fail.log"
-fCheck "the failure line keeps its text and test ID" grep -q 'FAILED: failing one test failed (Zz00000)' "${work}/fail.log"
+fCheck "the failure line keeps its text and test ID" grep -q 'FAILED: failing one test failed (zzzzz)' "${work}/fail.log"
 kept="$(fNamed "${work}/fail.log" || true)"
 fCheck "and names a file" test -n "${kept}"
 fCheck "which holds the output" grep -q '^fail-clue-one$' "${kept:-/nonexistent}"
@@ -71,7 +71,7 @@ fCheck "inside the test run folder" test "${kept%/*}" = "${work}/run"
 
 fRun "${work}/pass.log" fRunTest t/pass.bash "passing one"
 fCheck "a passing test goes on" test "${rc}" -eq 0
-fCheck "with its OK line" grep -qxF '[ OK: passing one (Zz00000) ]' "${work}/pass.log"
+fCheck "with its OK line" grep -qxF '[ OK: passing one (zzzzz) ]' "${work}/pass.log"
 fCheck "and nothing it printed" fNot grep -q 'pass-chatter' "${work}/pass.log"
 fCheck "and leaves no output file" test -z "$(find "${work}/run" -name '*pass*')"
 

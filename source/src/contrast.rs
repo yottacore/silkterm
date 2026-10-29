@@ -207,7 +207,7 @@ mod tests {
 		c
 	}
 
-	// Test ID: Ek1QlWa
+	// Test ID: d9x0d
 	#[test]
 	fn size_maps_to_half_the_longest_side() {
 		assert_eq!(size_to_radius(1.0, 100), 50);
@@ -215,7 +215,7 @@ mod tests {
 		assert_eq!(size_to_radius(0.0, 100), 0);
 	}
 
-	// Test ID: Ek1QlWb
+	// Test ID: d9x0e
 	#[test]
 	fn blend_is_manual_at_zero_auto_at_one() {
 		assert_eq!(blend(0.2, 0.8, 0.0), 0.2);
@@ -223,7 +223,7 @@ mod tests {
 		assert!((blend(0.2, 0.8, 0.5) - 0.5).abs() < 1e-6);
 	}
 
-	// Test ID: Ek1QlWc
+	// Test ID: d9x0f
 	#[test]
 	fn flat_image_has_zero_busyness_checkerboard_high() {
 		let flat = vec![[0.5, 0.5, 0.5]; 64];
@@ -231,7 +231,7 @@ mod tests {
 		assert!(busyness(&checker8(), 8, 8, 1.0) > 0.5);
 	}
 
-	// Test ID: Ek1QlWd
+	// Test ID: d9x0g
 	#[test]
 	fn auto_flattens_busy_more_than_smooth() {
 		let (ss, sst) = auto_params(0.0);
@@ -240,14 +240,14 @@ mod tests {
 		assert!(bst > sst); // busy -> more strength
 	}
 
-	// Test ID: Ek1QlWe
+	// Test ID: d9x0h
 	#[test]
 	fn box_mean_radius_zero_is_identity() {
 		let src = vec![[0.1, 0.2, 0.3], [0.9, 0.8, 0.7]];
 		assert_eq!(box_mean(&src, 2, 1, 0), src);
 	}
 
-	// Test ID: Ek1QlWf
+	// Test ID: d9x0j
 	#[test]
 	fn box_mean_large_radius_approaches_global_average() {
 		let src = vec![[0.0; 3], [0.0; 3], [1.0; 3], [1.0; 3]];
@@ -259,7 +259,7 @@ mod tests {
 		}
 	}
 
-	// Test ID: Ek1QlWg
+	// Test ID: d9x0k
 	#[test]
 	fn full_strength_large_size_collapses_variance() {
 		let checker = checker8();
@@ -270,7 +270,7 @@ mod tests {
 		assert!(variance(&after_px) < before * 0.05);
 	}
 
-	// Test ID: Ek1QlWh
+	// Test ID: d9x0m
 	#[test]
 	fn zero_strength_is_a_noop() {
 		let src = vec![

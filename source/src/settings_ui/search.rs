@@ -807,7 +807,7 @@ mod tests {
 
 	// Label matches first, alias ones next, loose ones last, and within a tier
 	// in the order the dialog shows them.
-	// Test ID: EsoZk3m
+	// Test ID: de03v
 	#[test]
 	fn label_matches_come_before_alias_ones_and_loose_ones_last() {
 		let hits = rank(&ui().specs, "opacity");
@@ -852,7 +852,7 @@ mod tests {
 
 	// Inside a tier, the whole label beats its start, which beats a word's
 	// start, which beats the middle of a word.
-	// Test ID: EsoZk9K
+	// Test ID: de03w
 	#[test]
 	fn a_whole_label_beats_a_word_start_beats_the_middle_of_one() {
 		let hits = rank(&ui().specs, "cursor");
@@ -876,7 +876,7 @@ mod tests {
 
 	// Two letters loosely would match half the dialog, so they find only
 	// what has them together.
-	// Test ID: EsoZkED
+	// Test ID: de03x
 	#[test]
 	fn a_short_query_matches_only_as_typed() {
 		for q in ["ot", "zq"] {
@@ -895,7 +895,7 @@ mod tests {
 	// The line a result shows: the tabs it is under, its heading where that
 	// isn't the tab's title, the label, and the alias that found it, with the
 	// marks over the matched text.
-	// Test ID: EsoZkJ4
+	// Test ID: de03y
 	#[test]
 	fn a_result_reads_tab_then_heading_then_setting() {
 		let sep = ui().icons.search_sep;
@@ -942,7 +942,7 @@ mod tests {
 	}
 
 	// No two results read the same, or picking between them is a guess.
-	// Test ID: EsoZkOJ
+	// Test ID: de03z
 	#[test]
 	fn no_two_results_read_the_same() {
 		let specs = &ui().specs;
@@ -958,7 +958,7 @@ mod tests {
 
 	// Every alias is on a row the list can show, says something its label
 	// doesn't, and finds that row by itself.
-	// Test ID: EsoZkTE
+	// Test ID: de040
 	#[test]
 	fn every_alias_finds_the_row_it_is_on() {
 		let specs = &ui().specs;
@@ -998,7 +998,7 @@ mod tests {
 	// Typing in the box lists matches over the page; Enter goes to the one
 	// picked, on its tab, in view and with the keyboard on it, and empties
 	// the box. Escape empties it first and cancels only once it's empty.
-	// Test ID: EsoZkY3
+	// Test ID: de041
 	#[test]
 	fn enter_goes_to_the_pick_and_escape_empties_the_box_first() {
 		let mut d = mk_dialog(420.0);
@@ -1067,7 +1067,7 @@ mod tests {
 
 	// While the list is up the rows behind it take no clicks and no keys, and
 	// a click on a result goes there.
-	// Test ID: EsoZkdO
+	// Test ID: de042
 	#[test]
 	fn the_list_covers_the_rows_behind_it() {
 		let mut d = mk_dialog(900.0);
@@ -1116,7 +1116,7 @@ mod tests {
 
 	// The box is the dialog's one open edit at a row index no row has. Every
 	// place that reads the rows by that index has to know it.
-	// Test ID: EsoZneH
+	// Test ID: de044
 	#[test]
 	fn the_search_box_is_no_rows_field() {
 		let mut d = mk_dialog(900.0);
@@ -1148,7 +1148,7 @@ mod tests {
 	// With nothing typed the box is outside the Tab walk, as the tabs are, so
 	// Tab from nothing still lands on the tab's first control. From the box,
 	// Tab goes on to that control and Shift+Tab back to OK.
-	// Test ID: Esob8XZ
+	// Test ID: de045
 	#[test]
 	fn tab_from_the_empty_box_goes_on_to_the_first_control() {
 		let mut d = mk_dialog(900.0);
@@ -1170,7 +1170,7 @@ mod tests {
 
 	// The box takes a band over the rows on every tab, and the rows start
 	// under it, so nothing on a tab moves relative to the others.
-	// Test ID: EsoZkiQ
+	// Test ID: de043
 	#[test]
 	fn the_search_box_sits_over_the_rows_and_clear_of_them() {
 		let d = mk_dialog(900.0);

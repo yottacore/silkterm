@@ -471,7 +471,7 @@ mod tests {
 	use std::time::{Duration, Instant};
 	// Clearing the box is how a renamed tab goes back to naming itself, so a
 	// blank title must not be stored as one.
-	// Test ID: EoTYmjQ
+	// Test ID: dbzdg
 	#[test]
 	fn a_cleared_tab_title_is_no_title_at_all() {
 		assert_eq!(typed_title(String::new(), "bash"), None);
@@ -486,7 +486,7 @@ mod tests {
 	// A tab title is renamed by byte offset over text that need not be ASCII, so
 	// every move and every erase has to fall on a character boundary or the
 	// string operations panic.
-	// Test ID: EoSiOoS
+	// Test ID: dbz70
 	#[test]
 	fn renaming_a_tab_stays_on_character_boundaries() {
 		let mut edit = TabEdit::new(0, "naïve".to_string());
@@ -521,7 +521,7 @@ mod tests {
 	// A tab rename reads keys as a Settings text box does: Ctrl for the
 	// shortcuts and the words elsewhere, and on a Mac Command for the shortcuts
 	// and either end, Option for the words. Option plus a letter types on a Mac.
-	// Test ID: ErbKd5c
+	// Test ID: dde0s
 	#[test]
 	fn a_tab_rename_takes_the_text_box_keys() {
 		use crate::input::edit_keys;
@@ -637,7 +637,7 @@ mod tests {
 	// The name edits as a Settings box does: one press places the caret, two
 	// take a word, three the whole name, Shift extends and a held press drags.
 	// A paste is one line.
-	// Test ID: ErbKd9K
+	// Test ID: dde0t
 	#[test]
 	fn a_tab_rename_edits_like_a_text_box() {
 		let start = Instant::now();
@@ -690,7 +690,7 @@ mod tests {
 	// Copy, Paste and Paste Selection from any menu go to a tab being renamed,
 	// and so do the rename's own rows. Anything else ends the rename. Its own
 	// menu leaves out rows with nothing to act on.
-	// Test ID: ErbKdDM
+	// Test ID: dde0v
 	#[test]
 	fn menus_reach_a_tab_rename() {
 		for action in [

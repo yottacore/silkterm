@@ -6,7 +6,7 @@
 ##		runner has to try each address, step over a box that is down, and fail
 ##		only when nothing answers and the caller did not say that was fine. Run
 ##		against a stand-in ssh and scp on PATH and a host list of its own.
-##	- Test ID: Er2UgYA
+##	- Test ID: dd5nr
 ##	- History: At bottom of file.
 
 ##	Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]

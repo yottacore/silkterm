@@ -18,7 +18,7 @@
 	History: At bottom of file.
 #>
 
-##	Test ID: EqH4iss
+##	Test ID: dct7s
 
 
 if (-not (fSessionUsable)) { fSkip "console session is locked - the Run box cannot be typed into" }

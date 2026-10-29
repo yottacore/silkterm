@@ -274,7 +274,7 @@ mod tests {
 	};
 	use crate::config;
 	use crate::pane::Rect;
-	// Test ID: Er2UvPv
+	// Test ID: dd5py
 	#[test]
 	fn a_split_with_no_direction_goes_along_the_longer_side() {
 		use crate::cli::Dir4;
@@ -293,7 +293,7 @@ mod tests {
 	}
 
 	// --new-pane=a --down --new-pane --splits=a stacks the second pane below too.
-	// Test ID: ErCAz8d
+	// Test ID: dd7z7
 	#[test]
 	fn a_pane_splits_the_way_the_pane_it_splits_was_split() {
 		use crate::cli::Dir4;
@@ -305,7 +305,7 @@ mod tests {
 		assert_eq!(pane_split_dir(None, None), None, "left to the longer side");
 	}
 
-	// Test ID: Er2UvPx
+	// Test ID: dd5q0
 	#[test]
 	fn a_pane_takes_the_most_specific_shell_it_was_given() {
 		let argv = |s: &str| vec![s.to_string()];
@@ -329,7 +329,7 @@ mod tests {
 	// Ctrl+Shift+N used to start the program with nothing but a working
 	// directory, so a window opened with --config got the default file, and a
 	// pane sitting in home looked like a desktop launch and took the setting.
-	// Test ID: Eq4Yrbc
+	// Test ID: dcq7d
 	#[test]
 	fn a_new_window_keeps_the_settings_file_and_the_panes_directory() {
 		let exe = std::path::Path::new("/opt/silkterm/silkterm");
@@ -371,7 +371,7 @@ mod tests {
 
 	// Reload config dropped the font and colors given on the command line, while
 	// a value the command line did not name has to come from the file.
-	// Test ID: Eq4Yrbd
+	// Test ID: dcq7e
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_reload_keeps_the_launch_options_over_the_file() {

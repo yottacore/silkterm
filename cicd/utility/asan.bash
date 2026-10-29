@@ -70,7 +70,7 @@ if ((rc == 0)) || ! grep -q 'ERROR: LeakSanitizer: detected memory leaks' "${can
 	tail -n 80 "${canaryOut}"
 	fDie "the canary's leak was not reported by name, so a leak in the suite could pass too (output in ${canaryOut})"
 fi
-fEcho "OK: ASan canary caught (EtAocf6)"
+fEcho "OK: ASan canary caught (de5f0)"
 
 suiteOut="${SILKTERM_TEST_DIR}/asan_suite.txt"
 fEcho_Clean "test suite under ASan and LSan (${SANITIZER_TOOLCHAIN}) ..."

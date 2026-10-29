@@ -504,7 +504,7 @@ mod tests {
 		})
 	}
 
-	// Test ID: ErUnDN8
+	// Test ID: ddcef
 	#[test]
 	fn the_mac_menu_bar_has_the_app_menu_first_then_the_window_menus() {
 		let menus = layout(window_menus(), &Bindings::defaults(true));
@@ -570,7 +570,7 @@ mod tests {
 	// `the_mac_menu_bar_shows_the_command_chords` covers it.
 	// // Command+, is Settings, and only the standard app menu rows take a key, so
 	// // the bar adds no other chord.
-	// // Test ID: ErUnDRE
+	// // Test ID: ddceg
 	// #[test]
 	// fn command_comma_is_settings_and_the_bar_binds_nothing_else() {
 	// 	let menus = layout(&window_menus());
@@ -620,7 +620,7 @@ mod tests {
 	// `the_mac_menu_bar_reaches_every_window_row_but_its_toggle` covers it.
 	// // The in-window bar starts hidden on a Mac, which is only fair while the
 	// // menu bar reaches every one of its rows.
-	// // Test ID: ErUnDUL
+	// // Test ID: ddceh
 	// #[test]
 	// fn the_mac_menu_bar_reaches_every_row_of_the_window_menus() {
 	// 	fn entry_actions(entries: &[Entry], out: &mut Vec<MenuAction>) {
@@ -677,7 +677,7 @@ mod tests {
 	// A shell whose name ends in parentheses keeps them. The bar used to cut
 	// anything in a trailing pair as though it were a shortcut, so "Bash (no
 	// rc)" read as "Bash", twice over beside the ordinary one.
-	// Test ID: ErkT4M3
+	// Test ID: ddg72
 	#[test]
 	fn a_shell_name_in_the_mac_menu_bar_keeps_its_parentheses() {
 		fn titles(items: &[BarItem], out: &mut Vec<String>) {
@@ -708,7 +708,7 @@ mod tests {
 	// Each row with an Apple standard shortcut shows its Command chord, drawn by
 	// the menu bar beside a plain label. Every chord the key bindings answer to
 	// is on a row, and no row carries a chord they do not.
-	// Test ID: ErZrSlO
+	// Test ID: dddnj
 	#[test]
 	fn the_mac_menu_bar_shows_the_command_chords() {
 		fn labels(items: &[BarItem]) {
@@ -783,7 +783,7 @@ mod tests {
 	// in-window menus but the toggle that would bring that bar back. The copy
 	// modes, shown at the right of the in-window bar elsewhere, are check rows on
 	// Edit that follow the focused pane.
-	// Test ID: ErZrT4e
+	// Test ID: dddnk
 	#[test]
 	fn the_mac_menu_bar_reaches_every_window_row_but_its_toggle() {
 		fn entry_actions(entries: &[Entry], out: &mut Vec<MenuAction>) {
@@ -855,7 +855,7 @@ mod tests {
 	// A chord moved in the config file goes with it to the menu bar row, and one
 	// without Command stays off the bar, since AppKit would take the press from
 	// the shell.
-	// Test ID: EreU3sf
+	// Test ID: ddesf
 	#[test]
 	fn the_mac_menu_bar_follows_the_bindings() {
 		use crate::input::Hotkey;
@@ -894,7 +894,7 @@ mod tests {
 	// its window tabs, and comes last so the window list goes in it. A
 	// Command+Shift chord on a bracket is handed over as the shifted
 	// character, the form AppKit matches.
-	// Test ID: ErbGPNM
+	// Test ID: dde0c
 	#[test]
 	fn the_mac_window_menu_minimizes_zooms_and_walks_the_tabs() {
 		let menus = layout(window_menus(), &Bindings::defaults(true));

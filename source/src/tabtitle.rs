@@ -1046,7 +1046,7 @@ mod tests {
 	// The tip is a table, so a value carries quotes only where its own edges are
 	// in doubt. Quoting everything would put them round every friendly shell name
 	// and every clock reading in the box.
-	// Test ID: EncVe5t
+	// Test ID: dbjnc
 	#[test]
 	fn a_tip_value_is_quoted_only_where_its_edges_are_in_doubt() {
 		assert_eq!(tip_value("Bash"), "Bash");
@@ -1065,7 +1065,7 @@ mod tests {
 
 	// The keys are padded so the values line up; a value is never padded, so a
 	// long path widens the box instead of moving the column.
-	// Test ID: EncVe5u
+	// Test ID: dbjnd
 	#[test]
 	fn tip_keys_pad_so_every_value_starts_in_one_column() {
 		let lines = tip_lines(&[
@@ -1092,7 +1092,7 @@ mod tests {
 
 	// The anchor and the trailing separator are what tell a reader this is a
 	// place and not a command, so no shortening may cost either of them.
-	// Test ID: EnbYT00
+	// Test ID: dbje0
 	#[test]
 	fn every_form_keeps_its_anchor_and_its_trailing_slash() {
 		let windows = path_forms(r"C:\Users\jim\data\prs\dev", None, Style::Windows);
@@ -1108,7 +1108,7 @@ mod tests {
 		}
 	}
 
-	// Test ID: EnbYT01
+	// Test ID: dbje1
 	#[test]
 	fn a_home_directory_reads_as_a_tilde_on_posix_only() {
 		let home = Some("/home/jim");
@@ -1129,7 +1129,7 @@ mod tests {
 	// The ellipsis eats the middle first, so what is left of the path keeps its
 	// real names. Initials only get a look in on a shallow path, where an
 	// ellipsis costs more than the one directory it would cover.
-	// Test ID: EqRXMHg
+	// Test ID: dcwr7
 	#[test]
 	fn a_path_loses_its_middle_before_its_names() {
 		let forms = path_forms(r"C:\Users\jim\data\prs\dev", None, Style::Windows);
@@ -1156,7 +1156,7 @@ mod tests {
 
 	// An ellipsis only earns its place where it is shorter than what it covers -
 	// four columns against a whole directory name.
-	// Test ID: EnbYT02
+	// Test ID: dbje2
 	#[test]
 	fn an_ellipsis_only_appears_where_it_shortens() {
 		let forms = path_forms(r"C:\a\b\c\d\e\project", None, Style::Windows);
@@ -1176,7 +1176,7 @@ mod tests {
 		assert_eq!(shallow, vec![r"C:\a\project\", r"C:\...\"]);
 	}
 
-	// Test ID: EnbYT03
+	// Test ID: dbje3
 	#[test]
 	fn the_forms_only_ever_get_shorter() {
 		for raw in [
@@ -1196,7 +1196,7 @@ mod tests {
 		}
 	}
 
-	// Test ID: EnbYT04
+	// Test ID: dbje4
 	#[test]
 	fn a_unc_share_anchors_on_the_share_not_the_server() {
 		let forms = path_forms(r"\\box\share\team\docs", None, Style::Windows);
@@ -1206,7 +1206,7 @@ mod tests {
 		}
 	}
 
-	// Test ID: EnbYT05
+	// Test ID: dbje5
 	#[test]
 	fn a_path_reported_with_forward_slashes_still_reads_as_windows() {
 		// OSC 7 carries a URL, so a Windows shell reporting through it sends
@@ -1219,7 +1219,7 @@ mod tests {
 
 	// A shipped name is shortened the way a person would write it; "Cmd" is not
 	// something a rule gets to from "Windows Cmd".
-	// Test ID: EnoacsS
+	// Test ID: dbnj6
 	#[test]
 	fn a_known_shell_name_has_hand_picked_short_forms() {
 		assert_eq!(shell_forms("Windows Cmd"), ["Windows Cmd", "Cmd", "C"]);
@@ -1230,7 +1230,7 @@ mod tests {
 
 	// Rename a shell and the table no longer knows it, so the forms are derived.
 	// A name short enough to keep whole yields one shorter rung, not two.
-	// Test ID: EnoacsT
+	// Test ID: dbnj7
 	#[test]
 	fn a_renamed_shell_falls_back_to_derived_forms() {
 		assert_eq!(shell_forms("Bash"), ["Bash", "B"]);
@@ -1250,7 +1250,7 @@ mod tests {
 
 	// Which command is running matters more than the tail of its name, so the
 	// marker stays and the name is what gets cut.
-	// Test ID: EnoacsU
+	// Test ID: dbnj8
 	#[test]
 	fn a_task_is_cut_from_its_tail_and_keeps_its_marker() {
 		assert_eq!(
@@ -1270,7 +1270,7 @@ mod tests {
 	// The whole ladder, in the order the parts give way: the name shortens, then
 	// the path abbreviates, then the task goes, then the path, and the last rung
 	// is the name alone at its shortest.
-	// Test ID: EnoacsV
+	// Test ID: dbnj9
 	#[test]
 	fn a_tab_says_the_shell_the_task_and_the_path_and_gives_them_up_in_order() {
 		let forms = label_forms(
@@ -1298,7 +1298,7 @@ mod tests {
 
 	// An idle tab keeps the dash, since there is no bracket to separate the name
 	// from the path.
-	// Test ID: EnoacsW
+	// Test ID: dbnja
 	#[test]
 	fn a_tab_with_nothing_running_still_says_where_it_is() {
 		let idle = label_forms(
@@ -1329,7 +1329,7 @@ mod tests {
 
 	// Each of the three parts can be switched off on its own, and the rungs are
 	// built out of what is left rather than shortened out of the full label.
-	// Test ID: EqQl1vU
+	// Test ID: dcwj7
 	#[test]
 	fn a_tab_says_only_the_parts_that_are_switched_on() {
 		let label = |parts: Parts| {
@@ -1398,7 +1398,7 @@ mod tests {
 
 	// A program that sets its own title names the tab, and the tab's own ladder
 	// is still under it for when there is no room.
-	// Test ID: EqSPXXs
+	// Test ID: dcwyz
 	#[test]
 	fn a_program_title_heads_the_tabs_forms() {
 		let forms = |parts| {
@@ -1439,7 +1439,7 @@ mod tests {
 	// The tab reads a program's title through the same filter the window title
 	// does, so a Windows console naming the program it started says nothing on
 	// either of them.
-	// Test ID: EqSPXXt
+	// Test ID: dcwz0
 	#[test]
 	fn a_tab_passes_over_a_title_that_only_names_a_program() {
 		let rights = Rights::default();
@@ -1474,7 +1474,7 @@ mod tests {
 	// The window title stops naming the tab, and that means both of the tab's
 	// answers: the name typed on it and the text it works out for itself. What
 	// the running program asked for still comes through.
-	// Test ID: EqQl1vV
+	// Test ID: dcwj8
 	#[test]
 	fn a_window_title_can_stop_naming_its_tab() {
 		let rights = Rights::default();
@@ -1519,7 +1519,7 @@ mod tests {
 		);
 	}
 
-	// Test ID: EnoacsX
+	// Test ID: dbnjb
 	#[test]
 	fn the_forms_of_a_label_only_ever_get_shorter() {
 		let forms = label_forms(
@@ -1544,7 +1544,7 @@ mod tests {
 
 	// The regular width is a target, not a share: three tabs on a wide bar sit
 	// at it and leave the rest of the bar empty.
-	// Test ID: EnoacsY
+	// Test ID: dbnjc
 	#[test]
 	fn a_tab_with_nothing_pressing_it_sits_at_the_regular_width() {
 		let demands = vec![
@@ -1562,7 +1562,7 @@ mod tests {
 
 	// A label that wants more gets more, and only after every other tab has its
 	// regular width - a long path may not cost another tab its ordinary size.
-	// Test ID: EnoacsZ
+	// Test ID: dbnjd
 	#[test]
 	fn a_long_label_grows_its_own_tab_and_no_other() {
 		let demands = [
@@ -1583,7 +1583,7 @@ mod tests {
 	// The tab in front is the one being read, so it spells its label out with
 	// whatever the row can spare: past the maximum, and ahead of any other tab
 	// growing beyond its ordinary width.
-	// Test ID: EqRXMHh
+	// Test ID: dcwr8
 	#[test]
 	fn the_tab_in_front_takes_what_the_row_can_spare() {
 		let demands = [
@@ -1620,7 +1620,7 @@ mod tests {
 
 	// Being in front buys nothing the label does not ask for, and nothing the
 	// row has not got.
-	// Test ID: EqRXMHi
+	// Test ID: dcwr9
 	#[test]
 	fn the_tab_in_front_asks_for_no_more_than_its_label_wants() {
 		let demands = vec![
@@ -1655,7 +1655,7 @@ mod tests {
 
 	// A crowded bar pushes every tab back below the regular width by the same
 	// fraction, down to the floor - and no further, which is why the strip pages.
-	// Test ID: Enoacsa
+	// Test ID: dbnje
 	#[test]
 	fn a_crowded_bar_shrinks_every_tab_alike_and_stops_at_the_floor() {
 		let demands = vec![
@@ -1678,7 +1678,7 @@ mod tests {
 
 	// Switching tabs has to bring the new one onto the page, or Ctrl+Tab could
 	// never reach the far end.
-	// Test ID: EnbYT06
+	// Test ID: dbje6
 	#[test]
 	fn switching_tabs_brings_the_new_one_onto_the_page() {
 		let floors = vec![100.0; 12];
@@ -1702,7 +1702,7 @@ mod tests {
 	// ...but browsing must not be yanked back. A strip that always held the
 	// active tab could never be paged away from it, which is the whole point of
 	// being able to page at all.
-	// Test ID: EnbYT07
+	// Test ID: dbje7
 	#[test]
 	fn the_page_can_be_moved_away_from_the_active_tab() {
 		let floors = vec![100.0; 12];
@@ -1716,7 +1716,7 @@ mod tests {
 	// Drawing and hit-testing have to be the same answer read two ways, now that
 	// the tabs on a page are no longer one width apiece - otherwise a click
 	// selects a tab other than the one under the pointer.
-	// Test ID: EnbYT08
+	// Test ID: dbje8
 	#[test]
 	fn a_click_picks_the_tab_it_is_over() {
 		let widths = [91.0, 140.0, 60.0, 200.0];
@@ -1735,7 +1735,7 @@ mod tests {
 		assert_eq!(slot_at_x(&[], 10.0), None);
 	}
 
-	// Test ID: EnbYT09
+	// Test ID: dbje9
 	#[test]
 	fn the_two_percentages_are_read_as_a_range_either_way_round() {
 		let demands = vec![
@@ -1751,7 +1751,7 @@ mod tests {
 		);
 	}
 
-	// Test ID: EnbYT0A
+	// Test ID: dbjea
 	#[test]
 	fn a_bar_with_no_width_still_answers() {
 		let demands = [Demand {
@@ -1763,7 +1763,7 @@ mod tests {
 		assert!(widths(100.0, &[], 12.0, 26.0, None).is_empty());
 	}
 
-	// Test ID: EnbYT0B
+	// Test ID: dbjeb
 	#[test]
 	fn elapsed_time_reads_at_two_units() {
 		assert_eq!(elapsed(0), "0s");
@@ -1776,7 +1776,7 @@ mod tests {
 		assert_eq!(elapsed(200_000), "2d 07h");
 	}
 
-	// Test ID: EpOk0qG
+	// Test ID: dcd5j
 	#[test]
 	fn a_console_title_that_only_names_a_program_is_dropped() {
 		assert_eq!(
@@ -1794,7 +1794,7 @@ mod tests {
 		assert_eq!(says("   "), None);
 	}
 
-	// Test ID: EpOeLuC
+	// Test ID: dcd4w
 	#[test]
 	fn a_title_that_says_something_survives() {
 		let kept = |title| assert_eq!(says(title), Some(title));
@@ -1809,7 +1809,7 @@ mod tests {
 		assert_eq!(says(" vim foo.rs "), Some("vim foo.rs"));
 	}
 
-	// Test ID: EpOk0qH
+	// Test ID: dcd5k
 	#[test]
 	fn a_hostname_or_a_directory_is_not_a_program() {
 		// `.com` is a top-level domain far more often than it is a program, and
@@ -1820,7 +1820,7 @@ mod tests {
 		kept("C:\\www\\example.com");
 	}
 
-	// Test ID: EpOk0qI
+	// Test ID: dcd5m
 	#[test]
 	fn a_console_that_names_the_command_it_is_running_keeps_the_command() {
 		assert_eq!(
@@ -1842,7 +1842,7 @@ mod tests {
 		assert_eq!(says("foo - bar"), Some("foo - bar"));
 	}
 
-	// Test ID: EpOoN8K
+	// Test ID: dcd63
 	#[test]
 	fn an_editor_naming_the_file_it_has_open_keeps_the_file() {
 		// vim's default title is "<file> - VIM", and a bare file name on the left
@@ -1853,7 +1853,7 @@ mod tests {
 		kept("run.cmd (~/src) - VIM");
 	}
 
-	// Test ID: EpOk0qJ
+	// Test ID: dcd5n
 	#[test]
 	fn either_spelling_of_a_program_path_reads_the_same() {
 		// Only a Windows console writes one of these, but the test does not have to
@@ -1868,7 +1868,7 @@ mod tests {
 		);
 	}
 
-	// Test ID: EpOk0qK
+	// Test ID: dcd5p
 	#[test]
 	fn an_extension_has_to_be_the_whole_of_the_last_part() {
 		assert_eq!(says("foo."), Some("foo."));
@@ -1879,7 +1879,7 @@ mod tests {
 		assert_eq!(says("caf\u{e9}"), Some("caf\u{e9}"));
 	}
 
-	// Test ID: EpOeLuD
+	// Test ID: dcd4x
 	#[test]
 	fn the_window_title_takes_the_typed_name_then_the_program_then_the_tab() {
 		let suffix = |typed, program| {
@@ -1907,7 +1907,7 @@ mod tests {
 		assert_eq!(suffix(Some(" build "), None).as_deref(), Some(" build "));
 	}
 
-	// Test ID: EpOoN8L
+	// Test ID: dcd64
 	#[test]
 	fn the_tab_label_is_only_worked_out_when_it_is_needed() {
 		let asked = std::cell::Cell::new(0);
@@ -1925,7 +1925,7 @@ mod tests {
 		assert_eq!(asked.get(), 1);
 	}
 
-	// Test ID: EpOeLuE
+	// Test ID: dcd4y
 	#[test]
 	fn a_program_naming_only_itself_falls_through_to_the_tab() {
 		let exe = Some("C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe");
@@ -1941,7 +1941,7 @@ mod tests {
 	// A console in another language writes another word in front of the first
 	// title, and the word alone cannot be told from a real one. The path after it
 	// names the program the pane was started with, and that can be matched.
-	// Test ID: Epz0UfY
+	// Test ID: dcnwn
 	#[test]
 	fn a_foreign_elevated_marker_goes_with_the_program_it_names() {
 		let admin = Rights {
@@ -1987,7 +1987,7 @@ mod tests {
 
 	// Only the program this pane was started with counts, and only where a console
 	// decorates a title at all. Anything else is somebody's real title.
-	// Test ID: Epz0UfZ
+	// Test ID: dcnwp
 	#[test]
 	fn a_word_in_front_of_another_program_survives() {
 		let title = "Administrador: C:\\Windows\\System32\\cmd.exe";
@@ -2023,7 +2023,7 @@ mod tests {
 		);
 	}
 
-	// Test ID: EpOk0qL
+	// Test ID: dcd5q
 	#[test]
 	fn a_title_on_the_command_line_is_the_whole_answer() {
 		assert_eq!(
@@ -2049,7 +2049,7 @@ mod tests {
 		);
 	}
 
-	// Test ID: EpOoN8M
+	// Test ID: dcd65
 	#[test]
 	fn nothing_the_title_rules_answer_is_blank() {
 		// A blank answer would draw "SilkTerm - " with nothing after it.
@@ -2071,7 +2071,7 @@ mod tests {
 	// No console writes the separator with nothing after it, so such a title is
 	// not taken apart. Recorded because the rule above only asks whether the
 	// answer is blank, and this is what it is instead.
-	// Test ID: EpPPU7d
+	// Test ID: dcdar
 	#[test]
 	fn a_title_ending_on_the_separator_is_shown_whole() {
 		assert_eq!(
@@ -2090,7 +2090,7 @@ mod tests {
 	// Measured on both Windows machines: an elevated console puts its own rights
 	// in front of every title it sends over a pseudoconsole, so the marker arrives
 	// glued to the path the program-name rule was written to drop.
-	// Test ID: EpPPU7e
+	// Test ID: dcdas
 	#[test]
 	fn an_elevated_console_marker_is_not_repeated() {
 		let elevated = |title| program_says(title, Some("Administrator"));
@@ -2115,7 +2115,7 @@ mod tests {
 
 	// The word is matched exactly, and only where a console would have written
 	// it. Anything else is somebody's real title.
-	// Test ID: EpPPU7f
+	// Test ID: dcdat
 	#[test]
 	fn a_marker_the_console_did_not_write_survives() {
 		let elevated = |title| program_says(title, Some("Administrator"));
@@ -2138,7 +2138,7 @@ mod tests {
 
 	// Nothing on unix writes a marker into a title, so running as root must not
 	// start taking one off - there would be nothing to remove but real text.
-	// Test ID: EpPPU7g
+	// Test ID: dcdav
 	#[test]
 	fn root_alone_does_not_strip_anything() {
 		let rights = Rights {
@@ -2155,7 +2155,7 @@ mod tests {
 
 	// Only the word that is about to be put back is taken off. Anything else is
 	// somebody's real title and has to survive.
-	// Test ID: EpPPU7h
+	// Test ID: dcdaw
 	#[test]
 	fn a_marker_that_was_never_added_is_left_alone() {
 		assert_eq!(
@@ -2174,7 +2174,7 @@ mod tests {
 
 	// A word to take off that nothing would put back could only lose text, so the
 	// two are one answer rather than two fields to keep in step.
-	// Test ID: EpPPU7i
+	// Test ID: dcdax
 	#[test]
 	fn only_a_decorated_console_leaves_a_word_to_take_off() {
 		let marker = |say, decorated| Rights { say, decorated }.console_marker();
@@ -2184,7 +2184,7 @@ mod tests {
 		assert_eq!(marker(None, true), None);
 	}
 
-	// Test ID: EpPPU7j
+	// Test ID: dcday
 	#[test]
 	fn a_privileged_window_says_so_before_anything_else() {
 		let root = Rights {
@@ -2222,7 +2222,7 @@ mod tests {
 		assert_eq!(window_title(root, Some("   "), "SilkTerm", None), "Root");
 	}
 
-	// Test ID: EqFWtPt
+	// Test ID: dcsvv
 	#[test]
 	fn a_note_follows_the_whole_title_even_a_custom_one() {
 		let root = Rights {
@@ -2241,7 +2241,7 @@ mod tests {
 	// A title is drawn by the desktop as text, so a program must not be able to
 	// put anything else in one. This is the concrete case; the fuzz target below
 	// is what says there is no other spelling of it.
-	// Test ID: EpQN0oP
+	// Test ID: dcdjg
 	#[test]
 	fn a_title_arrives_as_plain_text() {
 		assert_eq!(plain("build \u{1b}[2J\u{7f}ok"), "build [2Jok");
@@ -2258,7 +2258,7 @@ mod tests {
 	// A program's title is not the only untrusted text on a tab. Any program can
 	// rename itself, and a directory name arrives in an archive or a checkout,
 	// so the name and the path reach the label and the window title as they are.
-	// Test ID: Eq4EFVg
+	// Test ID: dcq4v
 	#[test]
 	fn a_program_name_or_a_directory_cannot_put_control_characters_in_a_label() {
 		let forms = label_forms(
@@ -2296,7 +2296,7 @@ mod tests {
 		);
 	}
 
-	// Test ID: Et0TY7u
+	// Test ID: de2zj
 	#[test]
 	fn the_shipped_tab_text_reads() {
 		assert!(tab_template(DEFAULT_TAB_TEXT).is_ok());
@@ -2316,7 +2316,7 @@ mod tests {
 	// The shipped template says exactly what the four check boxes said with all
 	// of them on, and the template an older config's boxes become says what
 	// those boxes said, over every mix of them and every kind of tab.
-	// Test ID: Et0TY7v
+	// Test ID: de2zk
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_template_says_what_the_check_boxes_said() {
@@ -2409,7 +2409,7 @@ mod tests {
 
 	// The template says what goes on the tab, and the ladder still decides how
 	// short each part gets when there is no room.
-	// Test ID: Et0TY7w
+	// Test ID: de2zm
 	#[test]
 	fn a_template_says_what_the_tab_says_and_the_ladder_how_short() {
 		let facts = Facts {
@@ -2454,7 +2454,7 @@ mod tests {
 
 	// A template that can't be read is not shown as the mistake. The tab says
 	// what the shipped one says, and so does a blank one.
-	// Test ID: Et0TY7x
+	// Test ID: de2zn
 	#[test]
 	fn a_malformed_or_blank_tab_text_reads_as_the_shipped_one() {
 		let shipped = tab_template(DEFAULT_TAB_TEXT).expect("shipped");
@@ -2698,7 +2698,7 @@ mod tests {
 			}
 		}
 
-		// Test ID: EpQN0oQ
+		// Test ID: dcdjh
 		#[test]
 		fn a_program_cannot_put_control_characters_in_the_window_title() {
 			let corpus = fuzz::corpus("title");

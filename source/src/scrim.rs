@@ -1120,7 +1120,7 @@ mod tests {
 
 	// The shader tells the curves apart by `ramp < N`, and each branch names its
 	// curve in a comment. Every curve's number has to land in its own branch.
-	// Test ID: Erstarj
+	// Test ID: ddj81
 	#[test]
 	fn each_ramp_code_reaches_the_shader_branch_for_that_curve() {
 		let body = WGSL
@@ -1169,7 +1169,7 @@ mod tests {
 
 	// The composite takes the legacy blur at `function >= 2.5` and hardens dt's
 	// glow at `function >= 1.5`, in that order.
-	// Test ID: Erstaxm
+	// Test ID: ddj82
 	#[test]
 	fn each_function_code_takes_its_own_path_in_the_composite() {
 		let gates: Vec<f32> = WGSL
@@ -1232,7 +1232,7 @@ mod tests {
 	// exist for.
 	// The outline's eight taps are three texture samples each, on every pixel of
 	// every frame, and the result was multiplied by zero when the outline was off.
-	// Test ID: EpHbxSC
+	// Test ID: dcbep
 	#[test]
 	fn the_outline_taps_only_run_when_there_is_an_outline() {
 		let comp = WGSL
@@ -1258,7 +1258,7 @@ mod tests {
 	// by the extent it was given, so every pixel came out at full halo - a flat
 	// plate of background color over every pane. The slider cannot reach it; the
 	// config file can.
-	// Test ID: EpHXu9Y
+	// Test ID: dcbe6
 	#[test]
 	fn a_halo_wider_than_the_taps_is_held_to_them() {
 		// the shader owns the tap window; this is the other half of that number
@@ -1278,7 +1278,7 @@ mod tests {
 	// to be well under a straight line rather than near it. It still has to
 	// reach zero at the edge: the distance paths saturate there, so whatever it
 	// returns at 1 is the alpha of every pixel in the pane.
-	// Test ID: EqN5SfI
+	// Test ID: dcvp0
 	#[test]
 	#[cfg_attr(miri, ignore = "Miri's exp is inexact on purpose")]
 	fn the_exponential_falloff_drops_away_hard() {
@@ -1302,7 +1302,7 @@ mod tests {
 
 	// A shader edit that does not compile only shows up at pipeline creation, in
 	// a window. This catches it here, with no GPU.
-	// Test ID: Ers4srl
+	// Test ID: ddj1q
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_scrim_shader_compiles() {
@@ -1319,7 +1319,7 @@ mod tests {
 	// Dark mode is the reference and must draw what it always has, so the light
 	// mode match runs only behind its own flag, and the flag is only set when
 	// visibility.rs hands over a match.
-	// Test ID: Ers4tCw
+	// Test ID: ddj1r
 	#[test]
 	fn only_a_matched_halo_is_redrawn() {
 		let comp = WGSL
@@ -1340,7 +1340,7 @@ mod tests {
 		);
 	}
 
-	// Test ID: EpHXO9g
+	// Test ID: dcbe4
 	#[test]
 	fn nothing_drawing_costs_no_memory() {
 		let uhd = (3840, 2160);
@@ -1358,7 +1358,7 @@ mod tests {
 
 	// Five Rgba16Float layers were 40 bytes a pixel, 150 MiB of a 268 MiB window
 	// at 2560x1440. Each layer keeps only the channels and precision read back.
-	// Test ID: ErnU09H
+	// Test ID: ddgy9
 	#[test]
 	fn the_scrim_costs_at_most_13_bytes_a_pixel() {
 		let qhd = (2560, 1440);
@@ -1378,7 +1378,7 @@ mod tests {
 	// The color map is drawn from cell colors that started as sRGB bytes, and
 	// it stores them encoded in 8 bits, so it hands back every one of them
 	// exactly. Stored linear in 8 bits, the dark end would collapse.
-	// Test ID: ErnU0UJ
+	// Test ID: ddgya
 	#[test]
 	fn the_color_map_keeps_every_byte_color_exactly() {
 		assert_eq!(texel(BG_FMT), 4);

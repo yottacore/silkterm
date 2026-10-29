@@ -425,7 +425,7 @@ mod tests {
 		to_oklab(c).0
 	}
 
-	// Test ID: EqRxesS
+	// Test ID: dcwvg
 	#[test]
 	fn a_flat_gray_reports_its_own_luma_at_both_ends() {
 		let sum = summarize(&plain([128, 128, 128], 64, 64), 1.0);
@@ -440,7 +440,7 @@ mod tests {
 	// bright strip that most of the picture disagrees with - a sky over a dark
 	// landscape is the ordinary case. A middle reading would call this image dark
 	// and put the text where the strip swallows it.
-	// Test ID: EqRxesT
+	// Test ID: dcwvh
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_bright_end_finds_a_strip_most_of_the_picture_disagrees_with() {
@@ -459,7 +459,7 @@ mod tests {
 
 	// A mean color cannot answer this: red and cyan in equal measure average to
 	// gray, and the mean hue is then whichever way the rounding fell.
-	// Test ID: EqRxesU
+	// Test ID: dcwvj
 	#[test]
 	fn the_dominant_hue_survives_a_second_color_that_would_cancel_a_mean() {
 		let red: [u8; 3] = [0xd0, 0x30, 0x30];
@@ -480,7 +480,7 @@ mod tests {
 	// And the weight is chroma, not a count of cells. A wide near-gray field with
 	// the faintest tint covers more of the picture than a vivid patch does, and
 	// the vivid patch is what anybody looking at it would call its color.
-	// Test ID: EqRxesV
+	// Test ID: dcwvk
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_hue_weight_is_chroma_rather_than_how_many_cells_have_it() {
@@ -504,7 +504,7 @@ mod tests {
 		);
 	}
 
-	// Test ID: EqRxesW
+	// Test ID: dcwvm
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_dark_theme_keeps_light_text_and_a_light_theme_keeps_dark_text() {
@@ -522,7 +522,7 @@ mod tests {
 	// further away, and it is measured against the bright end. The theme here has
 	// a mid-gray foreground on purpose - a shipped one sits high enough that the
 	// "never dimmer than the theme" floor would swallow the range being measured.
-	// Test ID: EqRxesX
+	// Test ID: dcwvn
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_brighter_image_pushes_the_text_further_away() {
@@ -543,7 +543,7 @@ mod tests {
 	// A dark image must not make the text dimmer than the theme's own. Without
 	// the floor at the theme's foreground, a near-black wallpaper would answer
 	// mid-gray text and read as the wallpaper spoiling the theme.
-	// Test ID: EqRxesY
+	// Test ID: dcwvp
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_dark_image_never_dims_the_text_below_the_themes_own() {
@@ -558,7 +558,7 @@ mod tests {
 
 	// The hue half. A blue picture has to answer warm text, whatever the theme's
 	// own foreground was.
-	// Test ID: EqRxesZ
+	// Test ID: dcwvq
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_blue_image_gives_warm_text_and_a_warm_image_gives_cool_text() {
@@ -571,7 +571,7 @@ mod tests {
 
 	// Six of the shipped pack have no hue worth complementing. Inventing one from
 	// that little chroma would swing the text about between two gray images.
-	// Test ID: EqRxesa
+	// Test ID: dcwvr
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_gray_image_keeps_the_themes_own_hue() {
@@ -585,7 +585,7 @@ mod tests {
 
 	// The tint cap. Matrix's foreground is chroma 0.25, and carrying that to a
 	// complementary hue is what made a green theme answer pure yellow.
-	// Test ID: EqRxesb
+	// Test ID: dcwvs
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_vivid_theme_foreground_comes_back_as_a_tint() {
@@ -608,7 +608,7 @@ mod tests {
 	// Same colours, same picture, same slider - only the mode moves. A dark
 	// picture turned well up, because below that the field stays bright enough
 	// that the theme's own foreground wins either way.
-	// Test ID: EqT4HIe
+	// Test ID: dcx40
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn light_mode_places_the_text_against_the_alpha_it_will_be_drawn_at() {
@@ -645,7 +645,7 @@ mod tests {
 
 	// The cursor rule every built-in theme is already held to: the plate is a
 	// second background, so the text on it must clear the floor too.
-	// Test ID: EqRxesc
+	// Test ID: dcwvt
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn text_on_the_derived_cursor_plate_clears_the_floor() {
@@ -687,7 +687,7 @@ mod tests {
 	// `cursor_for` takes the field behind the plate as a neutral, because the
 	// summary is a luma statistic. A strongly tinted field of the same luma has to
 	// give nearly the same plate, or the simplification is buying the wrong thing.
-	// Test ID: EqRxesd
+	// Test ID: dcwvv
 	#[test]
 	fn the_neutral_field_model_stays_inside_a_tolerance() {
 		let alpha = crate::pane::CURSOR_ALPHA;
@@ -714,7 +714,7 @@ mod tests {
 
 	// The shipped config turns this on, and the wallpaper is on too, so a fresh
 	// install re-colors its text without anyone visiting the Themes tab.
-	// Test ID: EqSm2Rk
+	// Test ID: dcx1r
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_defaults_take_the_text_color_from_the_wallpaper() {
@@ -728,7 +728,7 @@ mod tests {
 		assert!(s.model.values.own.is_empty(), "nothing derived is stored");
 	}
 
-	// Test ID: EqRxese
+	// Test ID: dcwvw
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_wallpaper_colors_need_the_switch_the_wallpaper_and_a_picture() {
@@ -760,7 +760,7 @@ mod tests {
 	// The colors are worked out from the theme's, never from the last answer,
 	// so filling again changes nothing and turning the switch off gives the
 	// theme's back.
-	// Test ID: EqRxesf
+	// Test ID: dcwvx
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_wallpaper_colors_come_from_the_theme_s_every_time() {
@@ -777,7 +777,7 @@ mod tests {
 
 	// A summary is six numbers so that a theme change can re-derive with no
 	// decode. That only works if the background is read live.
-	// Test ID: EqRxesg
+	// Test ID: dcwvy
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_same_image_answers_differently_under_a_different_background() {
@@ -794,7 +794,7 @@ mod tests {
 
 	// With the floor off there is no gap to work with, so the lightness half has
 	// nothing to say and the theme's own brightness stands.
-	// Test ID: EqRxesh
+	// Test ID: dcwvz
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_floor_of_zero_leaves_the_lightness_alone() {
@@ -810,7 +810,7 @@ mod tests {
 
 	// An image too bright for any foreground is the case the scrim covers. What
 	// must not happen is a panic or a color outside the cube.
-	// Test ID: EqRxesi
+	// Test ID: dcww0
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn an_image_brighter_than_the_floor_allows_goes_to_the_limit() {
@@ -819,7 +819,7 @@ mod tests {
 		assert!(lightness(out.fg) > 0.95, "{:?}", out.fg);
 	}
 
-	// Test ID: EqRxesj
+	// Test ID: dcww1
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn an_empty_image_is_answered_rather_than_panicking() {
@@ -831,7 +831,7 @@ mod tests {
 
 	// A transparent image lets the background through, so the field is the
 	// background and the text should sit where the theme put it.
-	// Test ID: EqRxesk
+	// Test ID: dcww2
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_fully_transparent_image_leaves_the_field_as_the_background() {

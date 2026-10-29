@@ -146,7 +146,7 @@ pub fn reach_right(s: &str, i: usize, reach: Reach) -> usize {
 mod tests {
 	use super::*;
 
-	// Test ID: EitjFLH
+	// Test ID: d9c82
 	#[test]
 	fn caret_from_click_picks_nearest() {
 		let mut m = |s: &str| s.chars().count() as f32; // 1 unit per ascii char
@@ -156,7 +156,7 @@ mod tests {
 		assert_eq!(caret_from_click("hello", 100.0, &mut m), 5);
 	}
 
-	// Test ID: EkI1Txg
+	// Test ID: da103
 	#[test]
 	fn word_motion_and_word_at() {
 		let s = "foo bar_baz/qux.png";
@@ -170,7 +170,7 @@ mod tests {
 		assert_eq!(word_at(s, s.len()), (16, 19)); // clamps to last word (png)
 	}
 
-	// Test ID: ErbKd1H
+	// Test ID: dde0r
 	#[test]
 	fn each_reach_stops_where_its_keys_say() {
 		let s = "naïve foo";

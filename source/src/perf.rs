@@ -480,7 +480,7 @@ mod tests {
 
 	// The allocs window test reads these words to tell a frame at rest from one
 	// still drawing output, so their spelling is part of its contract.
-	// Test ID: EtcxfWd
+	// Test ID: dec7m
 	#[test]
 	fn a_frame_cause_prints_the_words_the_window_test_reads() {
 		let cursor = FrameCause {
@@ -501,7 +501,7 @@ mod tests {
 
 	// One sample is the whole distribution, and 95% of one still has to fall on
 	// it rather than one past the end.
-	// Test ID: EoTIJ8i
+	// Test ID: dbzbe
 	#[test]
 	fn percentiles_never_step_past_the_last_sample() {
 		assert_eq!(percentiles(&[7]), (7, 7));

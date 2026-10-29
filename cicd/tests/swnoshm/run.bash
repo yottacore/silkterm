@@ -12,7 +12,7 @@
 ##	- Syntax: run.bash [--bin PATH]   (default: the debug build, then release)
 ##	- Exit: 0 passed, 1 a check failed, 3 nothing ran (no binary, sway,
 ##	  Xwayland with DRI3, render node, python-xlib, xdotool, xwd or ImageMagick).
-##	- Test ID: ErxxHzT
+##	- Test ID: ddkex
 ##	- History: At bottom of file.
 
 ##	Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]

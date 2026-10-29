@@ -6,7 +6,7 @@
 ##		Pieces of cicd.bash that decide what a run does, lifted out of the file as
 ##		they stand and run on their own: the build retry, the dogfood tag, the
 ##		option parser, the running-copy check, the build number and the host line.
-##	- Test ID: Er2UgY7
+##	- Test ID: dd5nn
 ##	- History: At bottom of file.
 
 ##	Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]

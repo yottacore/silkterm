@@ -393,7 +393,7 @@ mod tests {
 
 	// Every byte value comes back as it was but 0, which odd ends cannot
 	// reach, and the alpha stays opaque.
-	// Test ID: Es1eEgS
+	// Test ID: ddmb9
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_flat_color_comes_back_exact() {
@@ -416,7 +416,7 @@ mod tests {
 	// The sky gradient BC1 comes back within 2 levels of, with its steps at
 	// the block edges. This is what BC7 is for: within a level, and well
 	// under BC1 on average.
-	// Test ID: Es1eEgT
+	// Test ID: ddmba
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_slow_gradient_comes_back_within_a_level() {
@@ -436,7 +436,7 @@ mod tests {
 	}
 
 	// Noise is the worst case for one line a block. Still closer than BC1.
-	// Test ID: Es1eEgU
+	// Test ID: ddmbb
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn busy_detail_is_no_worse_than_bc1() {
@@ -458,7 +458,7 @@ mod tests {
 
 	// Mode 6's ends are odd, so black came back a level up all over a dark
 	// sky. A block that touches 0 may take mode 5, where black is black.
-	// Test ID: Es1gYa7
+	// Test ID: ddmbk
 	#[test]
 	fn black_stays_black() {
 		let mode = |blocks: &[u8]| match blocks[0] & 0x7f {
@@ -499,7 +499,7 @@ mod tests {
 		}
 	}
 
-	// Test ID: Es1eEgV
+	// Test ID: ddmbc
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn sizes_round_up_to_whole_blocks_and_only_mode_6_reads() {
