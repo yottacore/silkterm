@@ -6,7 +6,10 @@
 ##		for 2026-10-24 22:00 UTC. Tests made in one minute take the next free
 ##		minutes, and an ID never changes once given. A Rust test carries it
 ##		on a "// Test ID:" line just above its attributes; a test script carries
-##		it on a "Test ID:" line in its header comment.
+##		it on a "Test ID:" line in its header comment. A script that runs cases
+##		of its own, such as the scroll harness's scenes, gives each its ID as
+##		the first word of its row in a case table, listed in CASE_TABLES. Each
+##		fuzz target is a Rust test of its own, so it has its own ID.
 ##	Syntax:
 ##		test-id.py [N]            print N new IDs for now (default 1)
 ##		test-id.py --at WHEN [N]  the same for a past time, "YYYY-MM-DD HH:MM" local
@@ -44,6 +47,8 @@ ATTR_RE = re.compile(r"^\s*#\[.*\]\s*$")
 MOD_RE = re.compile(r"^(\t*)(?:pub(?:\([^)]*\))?\s+)?mod\s+(\w+)\s*\{")
 FN_RE = re.compile(r"\bfn\s+(\w+)")
 RESULT_RE = re.compile(r"^test (\S+) \.\.\. (.*)$")
+SOAK_RE = re.compile(r"\bfuzz::soak\(\s*\"([^\"]*)\"")
+FN_LINE_RE = re.compile(r"^(\t*)(?:pub(?:\([^)]*\))?\s+)?fn\s")
 STATUS = {"ok": "PASS", "FAILED": "FAIL", "ignored": "SKIP"}
 SCRIPT_EXTS = {".bash", ".py", ".ps1"}
 
@@ -56,6 +61,13 @@ NOT_TESTS = {
 	"wingui/run.bash",
 }
 NOT_TEST_DIRS = {"fuzz-corpus", "scenes", "target", "__pycache__"}
+
+## Script tests that run cases of their own, each case with its own ID: the
+## script under cicd/tests, and the bash array whose rows are the cases, one
+## per line as "<ID> <name> ...".
+CASE_TABLES = {
+	"scroll/run.bash": "scenes",
+}
 
 
 def encode(minutes: int) -> str:
@@ -129,14 +141,83 @@ def rust_tests() -> Iterator[tuple[str, str | None, str]]:
 			yield f"{path.relative_to(ROOT)}:{n + 1}", m.group(1) if m else None, name
 
 
+def table_cases(path: Path, table: str) -> list[tuple[str, str]] | None:
+	##	A case table's rows as (where, first word), or None when the script has
+	##	no such table, so a renamed one can't leave its cases unchecked.
+	lines = path.read_text(encoding="utf-8").splitlines()
+	try:
+		start = lines.index(f"{table}=(")
+	except ValueError:
+		return None
+	rows: list[tuple[str, str]] = []
+	for n in range(start + 1, len(lines)):
+		row = lines[n].strip()
+		if row == ")":
+			return rows
+		if row and not row.startswith("#"):
+			words = row.strip("\"'").split()
+			name = words[1] if len(words) > 1 else "?"
+			rows.append((f"{path.relative_to(ROOT)}:{n + 1} ({name})", words[0] if words else ""))
+	return None
+
+
 def find_ids() -> list[tuple[str, str | None]]:
-	##	Every test as (where, id or None).
+	##	Every test as (where, id or None), the cases in a case table included.
 	found = [(where, tid) for where, tid, _ in rust_tests()]
 	for path in script_tests():
 		head = path.read_text(encoding="utf-8").splitlines()[:60]
 		ids = [m.group(1) for m in map(ID_RE.match, head) if m]
 		found.append((str(path.relative_to(ROOT)), ids[0] if ids else None))
+		table = CASE_TABLES.get(path.relative_to(ROOT / "cicd" / "tests").as_posix())
+		for where, tid in (table_cases(path, table) or []) if table else []:
+			found.append((where, tid or None))
 	return found
+
+
+def table_problems() -> list[str]:
+	##	A case table the check was told about and can't find.
+	problems = []
+	for rel, table in CASE_TABLES.items():
+		path = ROOT / "cicd" / "tests" / rel
+		if path.is_file() and table_cases(path, table) is None:
+			problems.append(f"no case table {table}=( ... ) in cicd/tests/{rel}")
+	return problems
+
+
+def fuzz_problems() -> list[str]:
+	##	Each fuzz target has to be the body of a Rust test of its own, or its
+	##	result and ID would be another target's. A target is a fuzz::soak call.
+	problems = []
+	for path in rust_files():
+		if path.name == "fuzz.rs":
+			continue
+		lines = path.read_text(encoding="utf-8").splitlines()
+		bodies: list[tuple[int, int, str]] = []
+		for n, line in enumerate(lines):
+			if not TEST_ATTR_RE.match(line):
+				continue
+			at = next((k for k in range(n + 1, min(n + 20, len(lines))) if FN_LINE_RE.match(lines[k])), None)
+			head = FN_LINE_RE.match(lines[at]) if at is not None else None
+			if at is None or head is None:
+				continue
+			indent = head.group(1)
+			end = next((k for k in range(at + 1, len(lines)) if lines[k] == indent + "}"), len(lines))
+			fn = FN_RE.search(lines[at])
+			bodies.append((at, end, fn.group(1) if fn else "?"))
+		owner: dict[int, str] = {}
+		for n, line in enumerate(lines):
+			m = SOAK_RE.search(line)
+			if not m:
+				continue
+			where = f"{path.relative_to(ROOT)}:{n + 1}"
+			body = next((b for b in bodies if b[0] < n < b[1]), None)
+			if body is None:
+				problems.append(f"fuzz target {m.group(1)} is not in a test of its own: {where}")
+			elif body[0] in owner:
+				problems.append(f"fuzz target {m.group(1)} shares test {body[2]} with {owner[body[0]]}: {where}")
+			else:
+				owner[body[0]] = m.group(1)
+	return problems
 
 
 def annotate(lines: Iterator[bytes], out: BinaryIO) -> None:
@@ -200,6 +281,9 @@ def check() -> int:
 		else:
 			seen[tid] = where
 			continue
+		bad += 1
+	for problem in table_problems() + fuzz_problems():
+		print(problem)
 		bad += 1
 	if bad:
 		print(f"{bad} test ID problem(s); make new IDs with cicd/utility/test-id.py")
@@ -268,3 +352,5 @@ if __name__ == "__main__":
 ##		  millisecond IDs were converted once, from the times they stood for.
 ##		- 20261028: --annotate prints PASS, FAIL or SKIP lines. --run, for
 ##		  cicd-win.ps1.
+##		- 20261028: --check takes the scroll harness's scenes, each with an
+##		  ID of its own, and refuses 2 fuzz targets in one test.

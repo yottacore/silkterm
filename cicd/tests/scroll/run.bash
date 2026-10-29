@@ -38,8 +38,12 @@
 ##		   --keep          leave the Xvfb up and keep the trace files
 ##		   --strict        treat environment skips as failures
 ##		   --only <label>  run one deterministic scene, e.g. tmux
+##		   --list          print each scene's test ID and name, and run nothing
 ##		   -v, --verbose   show per-scene frame counts
 ##		   -h, --help
+##	- Output: one line per scene, "PASS|FAIL|SKIP <ID> scroll scene <label>
+##		(<engine>), <what the check found>". Each scene's ID is the first word of
+##		its row in the scenes table below.
 ##	- Exit: 0 all pass (a skipped scene beside passes is still 0), 1 a regression
 ##		was measured, 3 nothing ran (no binary, python3, display or cage).
 ##	- Notes: uses cicd/utility/gui-headless.bash (:98, never :0). Kills only the
@@ -75,7 +79,7 @@ trap 'rc=$?; [[ $rc -ne 0 && $rc -ne 1 ]] && printf "\n[ scroll harness ABORTED 
 
 ## Options.
 bin=""; display="${CICD_HEADLESS_DISPLAY:-${RPD_HEADLESS_DISPLAY:-:98}}"
-settle=13; capture=16; step=0.15; doReal=0; keep=0; strict=0; verbose=0; wayland=0; only=""
+settle=13; capture=16; step=0.15; doReal=0; keep=0; strict=0; verbose=0; wayland=0; only=""; listing=0
 while (($#)); do case "${1}" in
 	--bin)      bin="${2-}"; shift 2 ;;
 	--display)  display="${2-}"; shift 2 ;;
@@ -87,10 +91,74 @@ while (($#)); do case "${1}" in
 	--keep)     keep=1; shift ;;
 	--strict)   strict=1; shift ;;
 	--only)     only="${2-}"; shift 2 ;;
+	--list)     listing=1; shift ;;
 	-v|--verbose) verbose=1; shift ;;
 	-h|--help)  sed -n '/^##	- Purpose:/,/^##	History:/p' "${BASH_SOURCE[0]}" | sed '$d; s/^##	\{0,1\}//'; exit 0 ;;
 	*) echo "unknown option: ${1} (try --help)" >&2; exit 2 ;;
 esac; done
+## The deterministic scenes, one row each: test ID, label, shape, mode,
+## expect_st and expect_sb when there is one. test-id.py --check reads the IDs
+## from here.
+scenes=(
+	"d9j4s less less slide 0"
+	"d9j4t vim vim slide 0"
+	"d9j4v nano nano slide 1"
+	"d9j4w muffer muffer slide 2"
+	## A real region scroll (tmux, less): the engine's own record drives the slide, and
+	## the one row outside the region is the only band.
+	"d9j4x tmux tmux slide 0 1"
+	## A pill repainted over the last row of a recorded region (muffer scrolling
+	## back): held with the two rows under the region.
+	"dcnv6 pill pill slide 2 3"
+	## A burst still easing when the alt screen takes over (git commit opening nano):
+	## no scrollback behind it, so the view must be at rest - frac 0 on every frame.
+	"dcg0w altenter altenter still -1"
+	## muffer's shape: new transcript lines ease in above a block it redraws in
+	## place, which must hold still (three block rows plus the blank cursor row).
+	"dcg3w chrome chrome pinned -1 4"
+	## apt's progress bar with the scrollback full: the lines above the bar still ease,
+	## and the bar's row is held.
+	"dcswm aptbar aptbar pinned -1 1"
+	## An input box growing on a half-empty screen, repainted and then with
+	## insert-line: the new lines pop in rather than sliding down from behind the
+	## rows above.
+	"dcvbd paste paste popin -1"
+	"dcvbe pasteil pasteil popin -1"
+	## A shell under ble.sh: its prompt comes back after each command, drawn with
+	## insert- and delete-line under the cursor, and is redrawn in place now and
+	## then. It shows where it lands rather than sliding out from under the output.
+	"ddyq6 prompt prompt popin -1"
+	## clear, tput clear, Ctrl+L and a reset over a full screen, with the scrollback
+	## full and then nearly empty: each shows at once, with nothing easing.
+	"ddx70 clear clear instant -1"
+	## The same inside tmux, which draws a clear as its pane scrolled away, as it
+	## does a burst. The bursts still slide.
+	"de19r tmuxclear tmuxclear wipe -1"
+)
+
+## A scene's result line. The same scene under both engines keeps its one ID,
+## and the name says which engine it ran under.
+engineName="X11"; ((wayland)) && engineName="Wayland"
+## fSceneLine <PASS|FAIL|SKIP> <id> <label> [what the check found]
+fSceneLine(){ printf '%s %s scroll scene %s (%s)%s\n' "${1}" "${2}" "${3}" "${engineName}" "${4:+, ${4}}"; }
+## fSceneLines <PASS|FAIL|SKIP> <why>: the same line for every scene the run takes,
+## for a run that can't start. printf only, since a test runs this with a bare PATH.
+fSceneLines(){
+	local row; local -a f
+	for row in "${scenes[@]}"; do
+		read -r -a f <<<"${row}"
+		[[ -z "${only}" || "${only}" == "${f[1]}" ]] && fSceneLine "${1}" "${f[0]}" "${f[1]}" "${2}"
+	done
+	return 0
+}
+if ((listing)); then
+	for row in "${scenes[@]}"; do
+		read -r -a f <<<"${row}"
+		[[ -z "${only}" || "${only}" == "${f[1]}" ]] && printf '  %-5s  scroll scene %s (%s)\n' "${f[0]}" "${f[1]}" "${engineName}"
+	done
+	exit 0
+fi
+
 ## gui-headless.bash reads its display from here and defaults to :99 without it.
 ## cicd only exported this from the profiler stage, so a run that reached here
 ## without that started Xvfb on :99, ran SilkTerm on :98, and every scene skipped.
@@ -122,8 +190,8 @@ else
 	[[ -z "${skip}" ]] && [[ ! -x "${headless}" ]] && skip="gui-headless.bash missing: ${headless}"
 fi
 if [[ -n "${skip}" ]]; then
-	((strict)) && fDie "scroll harness: ${skip}"
-	fEcho "WARNING: skipped: ${skip}"; exit 3
+	((strict)) && { fSceneLines FAIL "${skip}"; fDie "scroll harness: ${skip}"; }
+	fSceneLines SKIP "${skip}"; exit 3
 fi
 fEcho_Clean "binary ....: ${bin}"
 if ((wayland)); then
@@ -165,8 +233,8 @@ startedHeadless=0
 if ! ((wayland)) && "${headless}" status 2>/dev/null | grep -q 'no Xvfb'; then
 	if "${headless}" start --wm >/dev/null 2>&1; then startedHeadless=1
 	else
-		((strict)) && fDie "headless display failed to start"
-		fEcho "WARNING: skipped: headless display failed to start"; exit 3
+		((strict)) && { fSceneLines FAIL "headless display failed to start"; fDie "headless display failed to start"; }
+		fSceneLines SKIP "headless display failed to start"; exit 3
 	fi
 fi
 
@@ -237,9 +305,10 @@ fStopSilk(){
 
 pass=0; fail=0; miss=0; spawnedPid=0
 
-## Run one deterministic scene and judge its trace. shape|mode|expect_st|[expect_sb].
+## Run one deterministic scene and judge its trace, with its one result line.
+## fRunScene <id> <label> <shape> <mode> <expect_st> [expect_sb]
 fRunScene(){
-	local label="${1}" shape="${2}" mode="${3}" est="${4}" esb="${5:--1}"
+	local id="${1}" label="${2}" shape="${3}" mode="${4}" est="${5}" esb="${6:--1}"
 	[[ -z "${only}" || "${only}" == "${label}" ]] || return 0
 	local trace="${work}/${label}.trace"
 	## a scene with a script of its own runs that; scene.bash has no case for it
@@ -292,52 +361,20 @@ fRunScene(){
 	wait "${pid}" 2>/dev/null || true
 
 	((verbose)) && fEcho_Clean "  ${label}: $(fTraceFrames "${trace}") trace frames"
-	local rc=0
-	python3 "${meDir}/analyze.py" --mode "${mode}" --expect-st "${est}" --expect-sb "${esb}" --label "${label}" --skip-frames "${lead}" --note "${work}/${label}.note" <"${trace}" \
-		| sed 's/^/  /' || rc=$?
+	local rc=0 said
+	said="$(python3 "${meDir}/analyze.py" --mode "${mode}" --expect-st "${est}" --expect-sb "${esb}" --label "${label}" --skip-frames "${lead}" --note "${work}/${label}.note" <"${trace}")" || rc=$?
+	## analyze.py says "[ PASS <label>: <what it found> ]"; the line keeps the what.
+	said="${said##*$'\n'}"; said="${said#\[ * "${label}": }"; said="${said% \]}"
 	case "${rc}" in
-		0) pass=$((pass + 1)) ;;
-		1) fail=$((fail + 1)) ;;
-		*) miss=$((miss + 1)) ;;
+		0) pass=$((pass + 1)); fSceneLine PASS "${id}" "${label}" "${said}" ;;
+		1) fail=$((fail + 1)); fSceneLine FAIL "${id}" "${label}" "${said}" ;;
+		*) miss=$((miss + 1)); fSceneLine SKIP "${id}" "${label}" "${said:-analyze.py exited ${rc}}" ;;
 	esac
 }
 
 fSection "Deterministic scenes"
-fRunScene less   less   slide 0
-fRunScene vim    vim    slide 0
-fRunScene nano   nano   slide 1
-fRunScene muffer muffer slide 2
-## A real region scroll (tmux, less): the engine's own record drives the slide, and
-## the one row outside the region is the only band.
-fRunScene tmux   tmux   slide 0 1
-## A pill repainted over the last row of a recorded region (muffer scrolling
-## back): held with the two rows under the region.
-fRunScene pill   pill   slide 2 3
-## A burst still easing when the alt screen takes over (git commit opening nano):
-## no scrollback behind it, so the view must be at rest - frac 0 on every frame.
-fRunScene altenter altenter still -1
-## muffer's shape: new transcript lines ease in above a block it redraws in
-## place, which must hold still (three block rows plus the blank cursor row).
-fRunScene chrome chrome pinned -1 4
-## apt's progress bar with the scrollback full: the lines above the bar still ease,
-## and the bar's row is held.
-fRunScene aptbar aptbar pinned -1 1
-## An input box growing on a half-empty screen, repainted and then with
-## insert-line: the new lines pop in rather than sliding down from behind the
-## rows above.
-fRunScene paste   paste   popin -1
-fRunScene pasteil pasteil popin -1
-## A shell under ble.sh: its prompt comes back after each command, drawn with
-## insert- and delete-line under the cursor, and is redrawn in place now and
-## then. It shows where it lands rather than sliding out from under the output.
-fRunScene prompt  prompt  popin -1
+for row in "${scenes[@]}"; do fRunScene ${row}; done
 
-## clear, tput clear, Ctrl+L and a reset over a full screen, with the scrollback
-## full and then nearly empty: each shows at once, with nothing easing.
-fRunScene clear   clear   instant -1
-## The same inside tmux, which draws a clear as its pane scrolled away, as it
-## does a burst. The bursts still slide.
-fRunScene tmuxclear tmuxclear wipe -1
 ## Best-effort real-app smoke (never fails the suite): prove the real apps render
 ## under SilkTerm (enter alt-screen, no hang) - regresses e.g. the cosmic-text hang
 ## and the alt-screen enter/exit hard-cut. No key injection, so it does not assert
@@ -386,3 +423,4 @@ exit "${rc}"
 ##		- 20261014 JC: prompt scene.
 ##		- 20261016 JC: tmuxclear scene.
 ##		- 20261028: The rule is 79 wide, as cicd.bash has it.
+##		- 20261028: Each scene has a test ID and one PASS, FAIL or SKIP line. --list.

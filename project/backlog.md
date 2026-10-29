@@ -61,7 +61,8 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - CICD reset: IDs for the scroll scenes and fuzz cases
 	- ID: 2026102819265312
 	- Type: Task
-	- Status: Queued
+	- Status: Waiting on automated testing
+	- Needs local test suite run?: The round's full run, `cicd/cicd.bash --backlog-run-full`, for each scroll scene's own line with its ID in both arms, `--list` with the scenes under each harness arm, and dcbdt and dejjp in stage 3. An arm of the harness that can't start prints a `SKIP` line per scene now, not a warning, so an arm that skips in the container counts one warning fewer.
 	- Priority: High
 	- Opened: 20261028-192653
 	- Opened by: CC
@@ -73,6 +74,19 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- The ID check sees them, so it refuses a missing or shared one.
 		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
 		- Overrides: 2026092711142900's decision that the scroll harness scenes keep their PASS lines with no IDs.
+	- Progress log:
+		- 20261028: The 14 scroll scenes have IDs, d9j4s to de19r, from when each was added. Each prints `PASS`, `FAIL` or `SKIP`, its ID, its name with the engine, and what the check found. A run that can't start prints a `SKIP` line per scene with the reason, or `FAIL` under `--strict`, in place of its warning line. `run.bash --list` and `cicd.bash --list` list the scenes.
+		- 20261028: The ID check reads the scene IDs from the harness's scene table, and refuses a missing or shared one, or a table it can't find.
+		- 20261028: Each fuzz target was already a test of its own, with its own ID and its own line, in the test run and the soak. The ID check now refuses 2 targets in one test, or a target outside a test.
+	- Decisions:
+		- 20261028: A scene's ID is the first word of its row in a table in `run.bash`, which the check reads, so the ID and the scene can't drift apart. A table rather than a comment per scene, since most scenes share one script.
+		- 20261028: The same scene keeps one ID under X11 and Wayland, and its name says which. It is one test on 2 engines, like a Rust test on Linux and Windows.
+		- 20261028: Scene times come from git where it has them (clear, prompt, tmuxclear), and otherwise from the harness history and the backlog item that added the scene. The first 5 take the minutes after the harness's own ID.
+		- 20261028: A fuzz case is read as a fuzz target, each a test that soaks one input over many seeds. A seed is a pure function of its number and has no time of its own, and a corpus file is input a target replays, not a test. So no new IDs there.
+	- Verified: 20261028. dcbdt passes with 7 new checks, and 3 of them failed against the old harness, the row count among them. dejjp passes with 8 new checks, and 7 of them failed against the old tool. `test-id.py --check` finds 1558 IDs, all unique, and no fuzz target sharing a test. The harness ran `less` on X11 and `tmux` on Wayland, each with its `PASS` line and ID. `cicd.bash --list` lists the 14 scenes under each arm. The engine (dd5nn), gates (dcry4) and testout (ddp9p) tests pass. `--backlog-run-quick` with all five areas passed. shellcheck, the bash style check and the Python lint pass.
+		- Swept: every place that runs the scenes or prints their result, `run.bash`'s skip paths and `cicd.bash`'s run and `--list` of the harness. The analyze lines' only reader was `run.bash`. The fuzz targets, every `fuzz::soak` call under `source/`. The Windows pipeline has no scroll harness.
+	- Branch: rnd1029
+	- Test case: dcbdt `cicd/tests/scroll/verdict-test.bash` (each scene's line and ID, and `--list`), dejjp `cicd/tests/testid/run.py` (the check on scene IDs and fuzz targets), and the 14 scenes' own IDs in the full run.
 
 - CICD reset: one PASS, FAIL or SKIP line per test
 	- ID: 2026102819265198

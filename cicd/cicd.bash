@@ -1005,7 +1005,11 @@ fScriptTests(){
 	## binary), which is a SKIP line for that arm and never a PASS.
 	if ((! quick)) && [[ -n "${SCROLL_HARNESS+x}" ]] && ((${#SCROLL_HARNESS[@]})) && ((listing)); then
 		fListTest "${SCROLL_HARNESS[0]}" "scroll harness (X11)"
-		[[ "${SCROLL_HARNESS_WAYLAND:-0}" != 1 ]] || fListTest "${SCROLL_HARNESS[0]}" "scroll harness (Wayland)"
+		"${root}/${SCROLL_HARNESS[0]}" "${SCROLL_HARNESS[@]:1}" --list
+		if [[ "${SCROLL_HARNESS_WAYLAND:-0}" == 1 ]]; then
+			fListTest "${SCROLL_HARNESS[0]}" "scroll harness (Wayland)"
+			"${root}/${SCROLL_HARNESS[0]}" "${SCROLL_HARNESS[@]:1}" --wayland --list
+		fi
 	elif ((! quick)) && [[ -n "${SCROLL_HARNESS+x}" ]] && ((${#SCROLL_HARNESS[@]})); then
 		fEcho_Clean "scroll regression harness (headless, X11) ..."
 		scrollRc=0; "${root}/${SCROLL_HARNESS[0]}" "${SCROLL_HARNESS[@]:1}" || scrollRc=$?
@@ -2163,6 +2167,7 @@ fEcho_Clean
 
 
 ##	History:
+##		- 2026-10-28: --list takes the scroll harness's scenes, each with its own ID.
 ##		- 2026-10-28: One PASS, FAIL or SKIP line per test, with its ID and name. A
 ##		              test script that can't run says why on its SKIP line.
 ##		- 2026-10-28: --list takes test IDs in the new 5-character form.

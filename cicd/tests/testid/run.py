@@ -4,7 +4,8 @@
 ##		The test ID tool, run on a made-up tree: IDs in whole minutes in
 ##		Crockford base 32, the next free minute for tests made together, and a
 ##		check that refuses a missing, malformed, old base 62, future or shared ID.
-##		Test result lines as PASS, FAIL or SKIP, ID and name.
+##		Test result lines as PASS, FAIL or SKIP, ID and name. The scroll
+##		harness's scenes and the fuzz targets each with an ID of their own.
 ##	Syntax: run.py
 ##	Exit: 0 all passed, 1 a check failed.
 ##	Test ID: dejjp
@@ -52,6 +53,20 @@ def rust(ids: list[str | None]) -> str:
 	return out + "}\n"
 
 
+def scenes(ids: list[str]) -> str:
+	rows = "".join(f'\t"{tid} scene{n} scene{n} slide 0"\n' for n, tid in enumerate(ids))
+	return f"#!/bin/bash\n##	Test ID: decp3\nscenes=(\n\t## a comment row\n{rows})\n"
+
+
+def fuzzed(body: str) -> str:
+	return "#[cfg(test)]\nmod tests {\n\tmod fuzz {\n" + body + "\t}\n}\n"
+
+
+def target(tid: str, name: str, *soaks: str) -> str:
+	calls = "".join(f'\t\t\tfuzz::soak("{s}", |_| {{}});\n' for s in soaks)
+	return f"\t\t// Test ID: {tid}\n\t\t#[test]\n\t\tfn {name}() {{\n{calls}\t\t}}\n"
+
+
 def tree(ids: list[str | None], script_id: str = "decp2") -> Path:
 	root = Path(tempfile.mkdtemp(dir=scratch))
 	(root / "cicd" / "utility").mkdir(parents=True)
@@ -91,6 +106,36 @@ for what, ids, script, says in cases:
 	rc, out = run(tree(ids, script), "--check")
 	check(f"the check refuses {what}", rc == 1 and says in out, out.strip())
 
+def with_scenes(text: str) -> Path:
+	root = tree(["decp8"])
+	(root / "cicd" / "tests" / "scroll").mkdir()
+	(root / "cicd" / "tests" / "scroll" / "run.bash").write_text(text)
+	return root
+
+rc, out = run(with_scenes(scenes(["decpa", "decpb"])), "--check")
+check("each scroll scene's ID is checked", rc == 0 and "5 test IDs, all unique" in out, out.strip())
+scene_cases: list[tuple[str, str, str]] = [
+	("a scene with no ID", scenes(["decpa"]).replace('"decpa ', '"'), "test ID scene0 is not a plausible time: cicd/tests/scroll/run.bash:5 (scene0)"),
+	("2 scenes sharing an ID", scenes(["decpa", "decpa"]), "test ID decpa is also at cicd/tests/scroll/run.bash:5 (scene0): cicd/tests/scroll/run.bash:6 (scene1)"),
+	("a scene sharing a Rust test's ID", scenes(["decp8"]), "test ID decp8 is also at source/src/main.rs"),
+	("a scene table it can't find", scenes(["decpa"]).replace("scenes=(", "scene_list=("), "no case table scenes=( ... ) in cicd/tests/scroll/run.bash"),
+]
+for what, text, says in scene_cases:
+	rc, out = run(with_scenes(text), "--check")
+	check(f"the check refuses {what}", rc == 1 and says in out, out.strip())
+
+def with_fuzz(body: str) -> Path:
+	root = tree(["decp8"])
+	(root / "source" / "src" / "vt.rs").write_text(fuzzed(body))
+	return root
+
+rc, out = run(with_fuzz(target("decpa", "one", "vt") + target("decpb", "two", "vt-bytes")), "--check")
+check("fuzz targets each in a test of their own pass", rc == 0 and "4 test IDs, all unique" in out, out.strip())
+rc, out = run(with_fuzz(target("decpa", "one", "vt", "vt-bytes")), "--check")
+check("the check refuses 2 fuzz targets in one test", rc == 1 and "fuzz target vt-bytes shares test one with vt: source/src/vt.rs:" in out, out.strip())
+rc, out = run(with_fuzz('\t\tfn helper() {\n\t\t\tfuzz::soak("vt", |_| {});\n\t\t}\n'), "--check")
+check("and a fuzz target outside any test", rc == 1 and "fuzz target vt is not in a test of its own: source/src/vt.rs:5" in out, out.strip())
+
 results = "test tests::case_0 ... ok\ntest tests::gone ... FAILED\ntest tests::case_1 ... ignored, needs b29w\ntest tests::case_0 ... bench\nrunning 2 tests\n"
 rc, out = run(tree(["decp8", "decp9"]), "--annotate", stdin=results)
 lines = out.splitlines()
@@ -128,3 +173,4 @@ print("all passed")
 ##	History:
 ##		- 20261028: Created.
 ##		- 20261028: PASS, FAIL and SKIP lines, and --run.
+##		- 20261028: The scroll scenes' IDs, and a fuzz target per test.
