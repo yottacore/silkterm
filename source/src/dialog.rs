@@ -2810,7 +2810,7 @@ mod tests {
 
 	// What a conversion that left settings behind says: which file, how many,
 	// and the name of the copy beside it.
-	// Test ID: Erf0Qkx
+	// Test ID: ddex3
 	#[test]
 	fn a_conversion_notice_says_how_many_and_where_the_copy_is() {
 		let said = |lost: usize, backup: Option<&str>| {
@@ -2845,7 +2845,7 @@ mod tests {
 
 	// A file that could not be converted in place was written new, and its
 	// notice says so, with what was left behind and the copy that still has it.
-	// Test ID: ErgDpOZ
+	// Test ID: ddf6h
 	#[test]
 	fn a_rewritten_file_notice_says_it_was_written_new() {
 		let said = |lost: usize| {
@@ -2877,7 +2877,7 @@ mod tests {
 	}
 
 	// What a refused save says: which file, which lines, and what that costs.
-	// Test ID: EqGnMOw
+	// Test ID: dct5m
 	#[test]
 	fn a_refused_save_names_the_file_and_the_lines() {
 		let said = |lines: &[usize], lost: usize| {
@@ -2920,7 +2920,7 @@ mod tests {
 	// the notice now.
 	// // Lines that are not UTF-8 look fine in some editors, so the notice says
 	// // what is wrong with them.
-	// // Test ID: ErgK2Vb
+	// // Test ID: ddf77
 	// #[test]
 	// fn a_notice_for_lines_that_are_not_utf8_says_so() {
 	// 	let said = |lines: &[usize]| {
@@ -2946,7 +2946,7 @@ mod tests {
 	// A file written again without lines that are not UTF-8 says which lines
 	// went and where the copy that has them is. One that had to start from the
 	// template also says what it could not carry.
-	// Test ID: ErgZJw3
+	// Test ID: ddf92
 	#[test]
 	fn a_notice_for_dropped_lines_names_them_and_the_copy() {
 		let said = |lines: &[usize], lost: usize, rewrite: config::Rewrite| {
@@ -2996,7 +2996,7 @@ mod tests {
 	// strip or a menu does. Drawing it needs a GPU, so what is pinned here is the
 	// decision render asks for: whether there is a tip to draw, and when to come
 	// back for one.
-	// Test ID: Eq4Llx2
+	// Test ID: dcq5s
 	#[test]
 	fn a_dialog_tip_waits_for_the_pointer_to_rest() {
 		let mut dwell = crate::tip::Dwell::default();
@@ -3028,7 +3028,7 @@ mod tests {
 	// The defect this was written for: a 1080p screen at 150% with a taskbar
 	// leaves 1008 usable, and the dialog was being sized against the full 1080 -
 	// so its footer buttons sat behind the taskbar with no way to reach OK.
-	// Test ID: EpOQNMO
+	// Test ID: dcd34
 	#[test]
 	fn the_height_cap_comes_off_the_usable_screen_not_the_monitor() {
 		let scale = 1.5;
@@ -3047,7 +3047,7 @@ mod tests {
 
 	// Before the window is mapped there is no frame to measure, so the allowance
 	// stands in for one - and it is a DIP figure, so it grows with the scale.
-	// Test ID: EpOQNMP
+	// Test ID: dcd35
 	#[test]
 	fn an_unmapped_window_falls_back_to_the_dip_allowance() {
 		for scale in [1.0, 1.5, 2.0] {
@@ -3059,7 +3059,7 @@ mod tests {
 		}
 	}
 
-	// Test ID: EpOQNMQ
+	// Test ID: dcd36
 	#[test]
 	fn a_screen_that_answers_nothing_still_yields_a_usable_cap() {
 		let (w, h) = caps_from(usable_screen(None, None), (0.0, 0.0), 1.0);
@@ -3073,7 +3073,7 @@ mod tests {
 	// bar was taller than what lies below the menu bar, so macOS pushed it down
 	// until the buttons were off the bottom. Off the visible frame it fits, and
 	// placed over a terminal near the top it still clears the menu bar.
-	// Test ID: ErUj5Ic
+	// Test ID: ddcdz
 	#[test]
 	fn a_mac_dialog_fits_between_the_menu_bar_and_the_dock() {
 		let scale = 2.0;
@@ -3097,7 +3097,7 @@ mod tests {
 
 	// A second monitor above or left of the primary has negative coordinates,
 	// and a dialog on it stays there rather than jumping to the primary.
-	// Test ID: ErUj5MS
+	// Test ID: ddce0
 	#[test]
 	fn a_dialog_stays_on_a_monitor_left_of_the_primary() {
 		let work = flip_cocoa_rect((-1920.0, 0.0), (1920.0, 1055.0), 1080.0, 1.0);
@@ -3115,7 +3115,7 @@ mod tests {
 		);
 	}
 
-	// Test ID: EpOQNMR
+	// Test ID: dcd37
 	#[test]
 	fn a_resize_settles_on_the_natural_size_and_lets_go_past_the_snap() {
 		let want = 648.0;
@@ -3134,7 +3134,7 @@ mod tests {
 	// A scale change leaves the window at the pixels it already had, and the
 	// screen holds fewer DIP at the higher scale. Nothing else pulls the window
 	// back onto it.
-	// Test ID: EqQh9oO
+	// Test ID: dcwhr
 	#[test]
 	fn a_window_is_capped_to_what_the_screen_can_fit_at_the_new_scale() {
 		// inside the caps: left exactly as it is, no resize asked for
@@ -3154,7 +3154,7 @@ mod tests {
 
 	// A notice is whatever was laid out from a notice's paragraphs. Nothing else
 	// says so, so the box's title, focus and OK all follow its source.
-	// Test ID: ErstbFF
+	// Test ID: ddj86
 	#[test]
 	fn only_a_notice_source_is_a_notice() {
 		assert!(!AboutSource::About(Box::new(adapter())).is_notice());
@@ -3168,7 +3168,7 @@ mod tests {
 
 	// The Support button opens the donation page and shows its address as a
 	// flyover, and the box is wide enough that the flyover is not cut off.
-	// Test ID: Er2UJeZ
+	// Test ID: dd5ne
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_about_box_has_a_support_button_with_room_for_its_address() {
@@ -3184,7 +3184,7 @@ mod tests {
 		assert!(box_w >= tip + pad * 2.0, "{box_w} clips a {tip} flyover");
 	}
 
-	// Test ID: Er2UJea
+	// Test ID: dd5nf
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_about_box_names_the_version_copyright_license_and_build() {
@@ -3206,7 +3206,7 @@ mod tests {
 		assert!(said.contains(&"Acceleration:  Software (CPU)"), "{said:?}");
 	}
 
-	// Test ID: Er2UJeb
+	// Test ID: dd5ng
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_about_box_leads_with_a_bold_title_and_links_the_repository() {
@@ -3240,7 +3240,7 @@ mod tests {
 
 	// Both boxes are laid out again from their source when the display scale
 	// changes, and what comes back has to be measured at the new scale.
-	// Test ID: Er2UJec
+	// Test ID: dd5nh
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn about_and_the_notice_lay_out_again_at_twice_the_size() {
@@ -3354,7 +3354,7 @@ mod tests {
 	// A pointer move used to draw the dialog again, and every frame made and
 	// shaped a new buffer for every piece of text on it. A frame that shows what
 	// the last one did shapes nothing, on every tab.
-	// Test ID: ErlkwlW
+	// Test ID: ddgh1
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_dialog_frame_shapes_nothing_the_last_one_did() {
@@ -3384,7 +3384,7 @@ mod tests {
 	// What a frame shapes is exactly the text the last frame did not have, as
 	// tabs, values, scrolling and the window's width change under it. A move or
 	// a new clip is the same text somewhere else.
-	// Test ID: Erlkwox
+	// Test ID: ddgh2
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_dialog_frame_shapes_only_text_that_changed() {
@@ -3466,7 +3466,7 @@ mod tests {
 	// A search result's matched text is a step larger and in its own color, on
 	// the same line box as an unmarked line, so the row it sits in doesn't move.
 	// Other marks on the same text are another buffer.
-	// Test ID: EsodoYf
+	// Test ID: de04b
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn marked_text_is_larger_and_colored_on_the_same_line_box() {
@@ -3525,7 +3525,7 @@ mod tests {
 	// font or line box shapes again, and so does a new text context, which is
 	// what a font, size or scale change makes. A new width lays the kept shape
 	// out again, the same as a fresh one.
-	// Test ID: ErlkwsK
+	// Test ID: ddgh3
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_kept_buffer_is_shaped_again_when_what_shaping_reads_changes() {
@@ -3662,7 +3662,7 @@ mod tests {
 	// A tip draws over everything a dialog shows: an open dropdown's list, a
 	// field menu, the color picker and the About text alike. The list's text once
 	// shared the tip's pass and landed on top of its box (2026100913394952).
-	// Test ID: EsZp4RG
+	// Test ID: ddwjb
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_tip_draws_over_everything_else_in_a_dialog() {
@@ -3730,7 +3730,7 @@ mod tests {
 
 	// A dialog in the background draws no tip: one that was up goes, and a
 	// pointer resting or moving there starts no clock (2026101009220760).
-	// Test ID: EsZp4ah
+	// Test ID: ddwjd
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_dialog_without_the_focus_draws_no_tip() {
@@ -3788,7 +3788,7 @@ mod tests {
 
 	// A frame used to look up the tip under the pointer twice, once to time it
 	// and once to draw it.
-	// Test ID: Erlkwvi
+	// Test ID: ddgh4
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_dialog_frame_looks_up_the_tip_once() {
@@ -3828,7 +3828,7 @@ mod tests {
 	// lit button, or a tip going away. A tip coming due is owed its frame by
 	// the clock, not by the next move, and it is owed it even once the dwell's
 	// wake has passed, since the wake stops answering then.
-	// Test ID: Erlkwz5
+	// Test ID: ddgh5
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_pointer_move_that_changes_nothing_drawn_needs_no_frame() {

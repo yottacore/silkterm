@@ -12,7 +12,7 @@
 	History: At bottom of file.
 #>
 
-##	Test ID: EpPhAdU
+##	Test ID: dcdcx
 
 
 if (-not (fSessionUsable)) { fSkip "console session is locked - nothing can be typed" }

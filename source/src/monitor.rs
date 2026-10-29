@@ -895,7 +895,7 @@ pub fn snapped(_window: &Window) -> bool {
 mod tests {
 	use super::*;
 
-	// Test ID: EreYcuM
+	// Test ID: ddesk
 	#[test]
 	fn a_monitor_key_is_a_bare_shcl_name_and_reads_plainly() {
 		let known = MonitorId::new(2560, 1440, 1.25, Some((597, 336))).unwrap();
@@ -915,7 +915,7 @@ mod tests {
 		}
 	}
 
-	// Test ID: EreYcuN
+	// Test ID: ddesm
 	#[test]
 	fn a_size_that_is_no_size_is_left_out_and_a_turned_one_is_turned_back() {
 		assert_eq!(
@@ -937,7 +937,7 @@ mod tests {
 		assert!(MonitorId::new(1920, 1080, f64::NAN, None).is_none());
 	}
 
-	// Test ID: EreYcuO
+	// Test ID: ddesn
 	#[test]
 	fn the_edid_size_comes_from_the_timing_and_falls_back_to_centimeters() {
 		let mut edid = [0u8; 128];
@@ -961,7 +961,7 @@ mod tests {
 		assert_eq!(edid_mm(&edid[..100]), None, "too short");
 	}
 
-	// Test ID: EreYcuV
+	// Test ID: ddesw
 	#[test]
 	fn the_monitor_a_window_overlaps_most_wins() {
 		let left = (0, 0, 1920, 1080);
@@ -976,7 +976,7 @@ mod tests {
 		);
 	}
 
-	// Test ID: ErkYUyK
+	// Test ID: ddg7r
 	#[test]
 	fn a_window_not_shown_yet_opens_on_the_monitor_under_the_pointer() {
 		let monitors = [(0, 0, 1920, 1080), (1920, 0, 1280, 1024)];
@@ -1006,7 +1006,7 @@ mod tests {
 	// A Wayland window dropped mostly on a 200% output with a sliver left on a
 	// 100% one is drawn at 2, while winit's current monitor is still the 100%
 	// one it entered first. The key read 1920x1080_200pct, which no monitor is.
-	// Test ID: EshSMlf
+	// Test ID: ddyd2
 	#[test]
 	fn a_window_astride_two_outputs_is_named_for_the_one_it_is_drawn_for() {
 		let placed = |at, px, scale| Placed { at, px, scale };
@@ -1059,7 +1059,7 @@ mod tests {
 	// astride two of them was named for one at the other's scale, a monitor
 	// that isn't there (2026101411554909). The outputs it is on, with their
 	// sizes in the layout, tell them apart.
-	// Test ID: EsoIP9H
+	// Test ID: de01p
 	#[test]
 	fn a_wayland_window_astride_outputs_that_round_alike_is_named_for_its_own() {
 		let laid = |at: (f64, f64), px: (f64, f64), scale: f64| Laid {
@@ -1120,7 +1120,7 @@ mod tests {
 
 	// The outputs a Wayland window is on are read from winit's toolkit, which
 	// works only while it is the toolkit release named here.
-	// Test ID: EsoIPE8
+	// Test ID: de01q
 	#[cfg(target_os = "linux")]
 	#[test]
 	fn winit_links_the_wayland_crates_monitor_reads_its_state_with() {
@@ -1153,7 +1153,7 @@ mod tests {
 		assert_eq!(ours, winit);
 	}
 
-	// Test ID: EsDZDBp
+	// Test ID: ddq71
 	#[test]
 	fn a_monitor_read_again_to_the_cm_is_the_same_monitor() {
 		for key in [
@@ -1187,7 +1187,7 @@ mod tests {
 
 	// The monitor a window was on went dark and the window was left where it
 	// was. Counting it on the first monitor gave it that one's size.
-	// Test ID: EsDZDFu
+	// Test ID: ddq72
 	#[test]
 	fn a_shown_window_on_no_monitor_is_on_none() {
 		// b23 with the portrait monitor at the top left gone dark
@@ -1207,7 +1207,7 @@ mod tests {
 		);
 	}
 
-	// Test ID: EreYcuP
+	// Test ID: ddesp
 	#[test]
 	fn the_monitor_interface_name_points_at_its_edid_key() {
 		assert_eq!(
@@ -1362,7 +1362,7 @@ mod tests {
 
 		// A window astride outputs at other scales is named for the output most
 		// of it is on, which its scale is from, or for none. Never another one.
-		// Test ID: EshXuye
+		// Test ID: ddydr
 		#[test]
 		fn a_wayland_window_is_named_for_the_output_its_scale_is_from() {
 			fuzz::soak("wlpick", check);
@@ -1427,13 +1427,13 @@ mod tests {
 		// Read from the outputs the window is on, a window astride any two is
 		// named for the one most of it is on, or for none when more than one
 		// at its scale could be. Never another.
-		// Test ID: EsoIPIT
+		// Test ID: de01r
 		#[test]
 		fn a_wayland_window_on_outputs_whose_sizes_are_known_is_named_for_its_own() {
 			fuzz::soak("wllaid", laid_check);
 		}
 
-		// Test ID: EsoIPMq
+		// Test ID: de01s
 		#[test]
 		fn the_laid_generator_reaches_every_branch() {
 			let (mut first, mut found, mut unsure, mut rounded) = (0, 0, 0, 0);
@@ -1457,7 +1457,7 @@ mod tests {
 		}
 
 		// The generator still reaches each way of naming one.
-		// Test ID: EshXv10
+		// Test ID: ddyds
 		#[test]
 		fn the_layout_generator_reaches_every_branch() {
 			let (mut first, mut found, mut unsure) = (0, 0, 0);

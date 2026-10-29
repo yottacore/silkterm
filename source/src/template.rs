@@ -367,7 +367,7 @@ mod tests {
 		}
 	}
 
-	// Test ID: Et0TY7y
+	// Test ID: de2zp
 	#[test]
 	fn a_macro_is_replaced_by_its_value_whatever_case_it_is_written_in() {
 		assert_eq!(run("%A%", ["x", "", ""]), "x");
@@ -379,7 +379,7 @@ mod tests {
 		assert_eq!(run("%A%", ["  x  y ", "", ""]), "  x  y ");
 	}
 
-	// Test ID: Et0TY7z
+	// Test ID: de2zq
 	#[test]
 	fn plain_text_has_its_spaces_tidied_and_nothing_else() {
 		assert_eq!(run("hello", ["", "", ""]), "hello");
@@ -394,7 +394,7 @@ mod tests {
 		assert_eq!(run("end\\", ["", "", ""]), "end\\");
 	}
 
-	// Test ID: Et0TY80
+	// Test ID: de2zr
 	#[test]
 	fn braces_group_without_printing_and_brackets_print() {
 		assert_eq!(run("{ %A% }", ["x", "", ""]), "x");
@@ -404,7 +404,7 @@ mod tests {
 		assert_eq!(run("{}", ["", "", ""]), "");
 	}
 
-	// Test ID: Et0TY81
+	// Test ID: de2zs
 	#[test]
 	fn a_group_whose_macros_are_all_empty_goes_with_its_text() {
 		assert_eq!(run("{ at %A% }", ["", "", ""]), "");
@@ -418,7 +418,7 @@ mod tests {
 		assert_eq!(run("[%A%]", [" ", "", ""]), "");
 	}
 
-	// Test ID: Et0TY82
+	// Test ID: de2zt
 	#[test]
 	fn a_fallback_takes_the_first_choice_that_is_not_empty() {
 		assert_eq!(run("%A% || %B% || %C%", ["a", "b", "c"]), "a");
@@ -438,7 +438,7 @@ mod tests {
 	}
 
 	// The rule that puts the dash in "Bash - ~/" only while no program is named.
-	// Test ID: Et0TY83
+	// Test ID: de2zv
 	#[test]
 	fn text_between_two_parts_shows_only_when_both_sides_do() {
 		let dash = "%A% {[%B%] || -} %C%";
@@ -459,7 +459,7 @@ mod tests {
 		assert_eq!(run("{%A% || idle} - %B%", ["", "~/", ""]), "idle - ~/");
 	}
 
-	// Test ID: Et0TY84
+	// Test ID: de2zw
 	#[test]
 	fn a_malformed_template_says_what_is_wrong_and_where() {
 		assert_eq!(err("ab %A"), Error::UnclosedMacro { at: 4 });
@@ -521,7 +521,7 @@ mod tests {
 			);
 		}
 
-		// Test ID: Et0TY85
+		// Test ID: de2zx
 		#[test]
 		fn any_template_reads_and_fills_in_without_a_panic() {
 			let corpus = fuzz::corpus("template");

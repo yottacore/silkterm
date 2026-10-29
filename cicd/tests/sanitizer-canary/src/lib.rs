@@ -7,7 +7,7 @@
 
 #[cfg(test)]
 mod tests {
-	// Test ID: EtAocf6
+	// Test ID: de5f0
 	#[test]
 	#[allow(clippy::mem_forget, reason = "the leak is the point")]
 	fn leaks_on_purpose() {
@@ -15,7 +15,7 @@ mod tests {
 		std::mem::forget(lost);
 	}
 
-	// Test ID: EtaER2K
+	// Test ID: debjk
 	#[test]
 	fn races_on_purpose() {
 		static mut SHARED: u64 = 0;

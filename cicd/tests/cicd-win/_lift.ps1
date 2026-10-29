@@ -35,7 +35,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 $ast = [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path -LiteralPath $Pipeline).Path, [ref]$null, [ref]$null)
-foreach ($name in 'fRotateLogs', 'fTargetDir', 'fRemapConfig', 'fHasLocalPaths', 'fExec', 'fScriptTest', 'fInstallerTests', 'fScriptTests', 'fStashIfDirty', 'fRunFlags', 'fWslArgs', 'fQuickRun', 'fStamp', 'fStepLine', 'fStepIf', 'fStepOpen', 'fStepClose', 'fShowSteps', 'fPlanSteps') {
+foreach ($name in 'fRotateLogs', 'fTargetDir', 'fRemapConfig', 'fHasLocalPaths', 'fExec', 'fScriptTest', 'fPython', 'fCargoTest', 'fInstallerTests', 'fScriptTests', 'fStashIfDirty', 'fRunFlags', 'fWslArgs', 'fQuickRun', 'fStamp', 'fStepLine', 'fStepIf', 'fStepOpen', 'fStepClose', 'fShowSteps', 'fPlanSteps') {
 	$fn = $ast.Find({ param($n) $n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq $name }, $true)
 	if (-not $fn) { throw "$name not found in $Pipeline" }
 	. ([scriptblock]::Create($fn.Extent.Text))
@@ -96,6 +96,7 @@ fCheck 'nor is a longer name that starts the same' (-not (fHas 'C:\Users\somebod
 ##	cicd-win.ps1 makes it, and only the pipeline's own fTestDir_End removes it.
 . (Join-Path $PSScriptRoot '../_testdir.ps1')
 function fEcho { }
+function fEcho_Clean { }
 function fDie { param([string]$Msg); throw $Msg }
 $Root = Join-Path $Work 'root'
 $seen = Join-Path $Work 'seen.txt'
@@ -208,8 +209,48 @@ $List = $true
 fScriptTests
 $List = $false
 $ids = @($listed | ForEach-Object { ($_.Trim() -split '\s+')[0] })
-fCheck '-List names every stage 3 test script by its ID' (($ids -join ',') -eq 'Eq9wAnY,EqBoTW4,Eqq4nMu,Eqq4nMu,ErbiCgJ,EryVaSD,Es2WeWF,Eu0ji27')
-fCheck 'and runs none of them' (-not @($listed | Where-Object { $_ -like '*OK:*' }))
+fCheck '-List names every stage 3 test script by its ID' (($ids -join ',') -eq 'dcrgs,dcrz7,dd2n3,dd2n3,dde3v,ddkk4,ddmj2,dehyk')
+fCheck 'and runs none of them' (-not @($listed | Where-Object { $_ -match '^(\[ OK:|PASS |FAIL )' }))
+
+##	A run prints one PASS or FAIL line per script, with its ID and name.
+$repoRoot = $Root
+$Root = Join-Path $Work 'lines'
+New-Item -ItemType Directory -Path $Root -Force | Out-Null
+Set-Content -LiteralPath (Join-Path $Root 'pass.ps1') -Value "##`tTest ID: zzzzz", 'exit 0'
+Set-Content -LiteralPath (Join-Path $Root 'fail.ps1') -Value "##`tTest ID: zzzzz", 'exit 1'
+Set-Content -LiteralPath (Join-Path $Root 'noid.ps1') -Value 'exit 0'
+$listed.Clear()
+fScriptTest -What 'passing one' -Script 'pass.ps1' -InProcess
+fCheck 'a script that passes prints its PASS line' (($listed -join '|') -eq 'PASS zzzzz passing one')
+$listed.Clear()
+fScriptTest -What 'no ID' -Script 'noid.ps1' -InProcess
+fCheck 'with dashes for an ID it lacks' (($listed -join '|') -eq 'PASS ----- no ID')
+$listed.Clear()
+$threw = ''
+try { fScriptTest -What 'failing one' -Script 'fail.ps1' -InProcess } catch { $threw = "$_" }
+fCheck 'one that fails prints its FAIL line, then stops the run' (($listed -join '|') -eq 'FAIL zzzzz failing one' -and $threw -eq 'failing one failed (exit 1)')
+$Root = $repoRoot
+
+##	cargo test's lines go through test-id.py, and its exit status still counts.
+##	A stand-in cargo prints one result line of a real test.
+if (-not $IsWindows) {
+	$bin = Join-Path $Work 'bin'
+	New-Item -ItemType Directory -Path $bin -Force | Out-Null
+	$fake = Join-Path $bin 'cargo'
+	Set-Content -LiteralPath $fake -Value '#!/bin/sh', 'echo "test app::closing::tests::dont_ask_stores_the_answer_given ... ok"', 'exit "${FAKE_CARGO_RC:-0}"'
+	& chmod +x $fake
+	$pathWas = $env:PATH
+	$env:PATH = "$bin$([IO.Path]::PathSeparator)$pathWas"
+	function fNote { }
+	$got = @(fCargoTest)
+	fCheck 'cargo test prints a PASS line with the test''s ID' ($got -contains 'PASS de30g app::closing::tests::dont_ask_stores_the_answer_given')
+	$env:FAKE_CARGO_RC = '101'
+	$threw = ''
+	try { $null = fCargoTest } catch { $threw = "$_" }
+	fCheck 'and a failed cargo test still stops the run' ($threw -like 'tests failed (exit 101)*')
+	$env:FAKE_CARGO_RC = $null
+	$env:PATH = $pathWas
+}
 $listed.Clear()
 $AppName = 'SilkTerm'; $Wsl = $false; $List = $true; $Areas = @('fmt')
 fQuickRun
@@ -267,3 +308,4 @@ exit 0
 ##		- 20261006 JC: The stash before a pull.
 ##		- 20261028: The run options and -List.
 ##		- 20261028: The steps, the ones turned off, and each step's lines.
+##		- 20261028: The PASS and FAIL lines of a test script.

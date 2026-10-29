@@ -247,7 +247,7 @@ mod tests {
 
 	// Another folder picks again; the same folder, or a setting beside it, keeps
 	// the picture on screen. Rotation turned back on picks too.
-	// Test ID: EsaCcCA
+	// Test ID: ddwnh
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn only_a_new_folder_picks_a_new_picture() {
@@ -270,7 +270,7 @@ mod tests {
 	// Switching the wallpaper off and on again drops the rotation pick, and a
 	// request that does not re-read the folder then answers with nothing at all:
 	// the folder suppresses the built-in, and there is no pick to fall back on.
-	// Test ID: Ep1Y6Tg
+	// Test ID: dc7k2
 	#[test]
 	fn a_rotation_folder_with_nothing_showing_is_read_again() {
 		let pick = std::path::PathBuf::from("/w/a.jpg");
@@ -285,7 +285,7 @@ mod tests {
 
 	// A tick that leaves the timer where it was fires again on the next pass, and
 	// each of those starts another decode thread.
-	// Test ID: EpHNMfQ
+	// Test ID: dcbcw
 	#[test]
 	fn a_rotation_tick_moves_the_timer_off_now() {
 		let now = Instant::now();

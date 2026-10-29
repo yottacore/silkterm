@@ -249,7 +249,7 @@ impl App {
 mod tests {
 	use super::*;
 
-	// Test ID: Et0ZjvK
+	// Test ID: de30f
 	#[test]
 	fn the_setting_decides_only_where_tmux_sessions_would_go() {
 		for on_close in [OnClose::Detach, OnClose::End, OnClose::Prompt] {
@@ -262,7 +262,7 @@ mod tests {
 
 	// The box stores the answer given, so the next close does it without
 	// asking, and a stored answer never asks again.
-	// Test ID: Et0ZjyN
+	// Test ID: de30g
 	#[test]
 	fn dont_ask_stores_the_answer_given() {
 		assert_eq!(remembered(true), OnClose::End);
@@ -273,7 +273,7 @@ mod tests {
 		assert_eq!(close_plan(remembered(true), true), Plan::EndThenClose);
 	}
 
-	// Test ID: Et0Zk1A
+	// Test ID: de30h
 	#[test]
 	fn the_question_names_what_closes_and_each_session() {
 		let one = ["20261017-17332704".to_string()];

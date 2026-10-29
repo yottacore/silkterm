@@ -14,7 +14,7 @@
 	History: At bottom of file.
 #>
 
-##	Test ID: ErqPAvG
+##	Test ID: ddhmw
 
 
 if (-not (fSessionUsable)) { fSkip "console session is locked - nothing can be typed or grabbed" }

@@ -138,7 +138,7 @@ mod tests {
 	// A return to this console is healed at once and once more when the X
 	// server has settled, since a purge after the first rebuild spoiled it
 	// (20260917: text gone and a gray background after a switch to VT 1).
-	// Test ID: EqBP7iS
+	// Test ID: dcrw2
 	#[test]
 	fn a_return_to_this_console_is_healed_again_once_settled() {
 		let back = Instant::now();
@@ -156,7 +156,7 @@ mod tests {
 		assert!(heal.due(back + VT_SETTLE + VT_SETTLE / 2));
 	}
 
-	// Test ID: Er2UiYV
+	// Test ID: dd5pg
 	#[test]
 	fn only_a_return_to_this_console_is_signalled() {
 		let mut watch = super::VtWatch::new("tty7".into());

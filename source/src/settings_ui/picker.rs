@@ -432,7 +432,7 @@ mod tests {
 		(d, i)
 	}
 
-	// Test ID: EqSaSRl
+	// Test ID: dcx0k
 	#[test]
 	fn a_chip_opens_the_picker_and_cancel_puts_the_color_back() {
 		let (mut d, _) = mk_picker();
@@ -463,7 +463,7 @@ mod tests {
 
 	// A drag across the square keeps adjusting, and the strip beside it moves
 	// the hue without disturbing what the square set.
-	// Test ID: EqSaSRm
+	// Test ID: dcx0m
 	#[test]
 	fn a_drag_across_the_square_moves_the_color_with_it() {
 		let (mut d, _) = mk_picker();
@@ -506,7 +506,7 @@ mod tests {
 
 	// Every way in must reach the box rather than the panel under it. The panel
 	// is still there, still has a focused row, and would take the keystroke.
-	// Test ID: EqSaSRn
+	// Test ID: dcx0n
 	#[test]
 	fn the_picker_swallows_every_input_path() {
 		let (mut d, i) = mk_picker();
@@ -544,7 +544,7 @@ mod tests {
 	// The box's six value boxes borrow row indices no row can have, at the far
 	// end from the ones the shells grid borrows. Either range reading the other's
 	// would edit a shell that is not there.
-	// Test ID: EqSaSRo
+	// Test ID: dcx0p
 	#[test]
 	fn a_value_box_is_never_mistaken_for_a_shells_field() {
 		for f in super::super::pick::Field::ALL {
@@ -573,7 +573,7 @@ mod tests {
 
 	// Tab walks the box, a value box opens with its number selected on the way
 	// past, and what is typed into it reaches the row behind.
-	// Test ID: EqSaSRp
+	// Test ID: dcx0q
 	#[test]
 	fn walking_the_box_opens_each_value_box_selected() {
 		let (mut d, _) = mk_picker();
@@ -609,7 +609,7 @@ mod tests {
 		);
 	}
 
-	// Test ID: EqSaSRq
+	// Test ID: dcx0r
 	#[test]
 	fn a_typed_value_box_reaches_the_row_behind_the_box() {
 		let (mut d, _) = mk_picker();
@@ -641,7 +641,7 @@ mod tests {
 
 	// Arrows adjust whatever the keyboard is on, so nothing in the box is
 	// reachable only by pointer.
-	// Test ID: EqSaSRr
+	// Test ID: dcx0s
 	#[test]
 	fn the_arrows_work_the_square_the_strip_and_the_boxes() {
 		let (mut d, _) = mk_picker();
@@ -685,7 +685,7 @@ mod tests {
 
 	// The keyboard reaches the chip, and walking onto it neither opens a field
 	// nor opens the picker by itself.
-	// Test ID: EqSaSRs
+	// Test ID: dcx0t
 	#[test]
 	fn the_chip_is_a_focus_stop_of_its_own() {
 		let mut d = mk_dialog(4000.0);
@@ -712,7 +712,7 @@ mod tests {
 
 	// The box draws. It used to be possible to leave a sentinel row index where
 	// the row list gets read with it.
-	// Test ID: EqSaSRt
+	// Test ID: dcx0v
 	#[test]
 	fn the_box_draws_without_reading_a_row_that_is_not_there() {
 		let (mut d, _) = mk_picker();

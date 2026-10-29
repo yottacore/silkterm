@@ -560,7 +560,7 @@ mod tests {
 		encode_key(&Key::Named(named), None, mods, app_cursor)
 	}
 
-	// Test ID: EiokAEK
+	// Test ID: d9b1m
 	#[test]
 	fn arrows_follow_decckm() {
 		assert_eq!(enc(NamedKey::ArrowUp, NONE, false).unwrap(), b"\x1b[A");
@@ -568,7 +568,7 @@ mod tests {
 		assert_eq!(enc(NamedKey::End, NONE, false).unwrap(), b"\x1b[F");
 	}
 
-	// Test ID: EiokAEL
+	// Test ID: d9b1n
 	#[test]
 	fn modified_arrows_use_csi_mod_form() {
 		// Ctrl+Right = word skip in readline/most TUIs
@@ -593,7 +593,7 @@ mod tests {
 		);
 	}
 
-	// Test ID: EiokAEM
+	// Test ID: d9b1p
 	#[test]
 	fn function_keys() {
 		assert_eq!(enc(NamedKey::F1, NONE, false).unwrap(), b"\x1bOP");
@@ -611,7 +611,7 @@ mod tests {
 		);
 	}
 
-	// Test ID: EiokAEN
+	// Test ID: d9b1q
 	#[test]
 	fn editing_keys() {
 		let ctrl = ModifiersState::CONTROL;
@@ -626,7 +626,7 @@ mod tests {
 		);
 	}
 
-	// Test ID: Eizuc4W
+	// Test ID: d9dqj
 	#[test]
 	fn mouse_sgr_and_x10() {
 		let sgr = TermMode::MOUSE_REPORT_CLICK | TermMode::SGR_MOUSE;
@@ -674,7 +674,7 @@ mod tests {
 		);
 	}
 
-	// Test ID: Eizuc4X
+	// Test ID: d9dqk
 	#[test]
 	fn mouse_report_needs_tracking() {
 		// no tracking mode set -> nothing to report
@@ -688,7 +688,7 @@ mod tests {
 	// winit calls the spacebar a named key, so Ctrl+Space never reached the
 	// control-code path and sent a plain space. Emacs and readline set-mark, and
 	// tmux begin-selection, all want NUL.
-	// Test ID: EpHUQUa
+	// Test ID: dcbds
 	#[test]
 	fn ctrl_space_is_nul() {
 		let ctrl = ModifiersState::CONTROL;
@@ -703,7 +703,7 @@ mod tests {
 
 	// A character handed to the window instead of typed at it arrives as a key
 	// the layout cannot name. It used to reach nothing at all.
-	// Test ID: EpPhAdV
+	// Test ID: dcdcy
 	#[test]
 	fn an_unnamed_key_is_read_as_its_text() {
 		let injected = Key::Unidentified(NativeKey::Windows(0xe7));
@@ -723,7 +723,7 @@ mod tests {
 		);
 	}
 
-	// Test ID: EpPhAdW
+	// Test ID: dcdcz
 	#[test]
 	fn a_key_with_no_text_stays_unnamed() {
 		let injected = Key::Unidentified(NativeKey::Windows(0xe7));
@@ -734,7 +734,7 @@ mod tests {
 	// Only an unnamed key is filled in from its text. A named key already says
 	// what it is, and its text is a representation of that rather than typing -
 	// Enter carries "\r", and reading it as a character would lose the key.
-	// Test ID: EpPhAdX
+	// Test ID: dcdd0
 	#[test]
 	fn a_key_the_layout_named_is_left_alone() {
 		assert_eq!(typed_key(&Key::Named(NamedKey::Enter), Some("\r")), None);
@@ -743,7 +743,7 @@ mod tests {
 		assert_eq!(typed_key(&Key::Dead(Some('\u{301}')), Some("a")), None);
 	}
 
-	// Test ID: EiokAEO
+	// Test ID: d9b1r
 	#[test]
 	fn ctrl_chars_and_alt_prefix() {
 		let ctrl = ModifiersState::CONTROL;
@@ -771,7 +771,7 @@ mod tests {
 		hotkey_on(&Key::Named(key), mods, true, false)
 	}
 
-	// Test ID: Er2UiYC
+	// Test ID: dd5nx
 	#[test]
 	fn a_new_tab_takes_shift_so_plain_ctrl_t_reaches_the_shell() {
 		assert_eq!(chord("T", CTRL_SHIFT), Some(Hotkey::NewTab));
@@ -779,7 +779,7 @@ mod tests {
 		assert_eq!(chord("t", CTRL), None);
 	}
 
-	// Test ID: Er2UiYD
+	// Test ID: dd5ny
 	#[test]
 	fn ctrl_page_keys_change_tab() {
 		assert_eq!(named(NamedKey::PageUp, CTRL), Some(Hotkey::PrevTab));
@@ -787,7 +787,7 @@ mod tests {
 		assert_eq!(named(NamedKey::PageUp, NONE), None);
 	}
 
-	// Test ID: Er2UiYE
+	// Test ID: dd5nz
 	#[test]
 	fn ctrl_shift_page_keys_move_the_tab() {
 		assert_eq!(
@@ -800,7 +800,7 @@ mod tests {
 		);
 	}
 
-	// Test ID: Er2UiYF
+	// Test ID: dd5p0
 	#[test]
 	fn both_close_tab_chords_close_but_plain_ctrl_w_reaches_the_shell() {
 		assert_eq!(chord("W", CTRL_SHIFT), Some(Hotkey::CloseTab));
@@ -809,7 +809,7 @@ mod tests {
 		assert_eq!(named(NamedKey::F4, NONE), None);
 	}
 
-	// Test ID: Er2UiYG
+	// Test ID: dd5p1
 	#[test]
 	fn the_menu_key_settings_and_fullscreen_are_hotkeys() {
 		assert_eq!(
@@ -828,7 +828,7 @@ mod tests {
 	// `command_comma_is_the_only_settings_chord_on_macos` covers it.
 	// // Command+, is Settings on macOS and nowhere else. Ctrl+, stays on every
 	// // platform, and Command with anything more is not the chord.
-	// // Test ID: ErUnDJY
+	// // Test ID: ddcee
 	// #[test]
 	// fn command_comma_opens_settings_on_macos_only() {
 	// 	const COMMAND: ModifiersState = ModifiersState::SUPER;
@@ -853,7 +853,7 @@ mod tests {
 	// // On a Mac each action with an Apple standard shortcut answers to it, and
 	// // nothing else held with Command does. Off a Mac, Super chords stay free. No
 	// // Ctrl chord moves either way.
-	// // Test ID: ErZrRVm
+	// // Test ID: dddne
 	// #[test]
 	// fn the_command_chords_work_on_macos_and_leave_ctrl_alone() {
 	// 	const COMMAND: ModifiersState = ModifiersState::SUPER;
@@ -972,7 +972,7 @@ mod tests {
 
 	// Command+, is Settings on a Mac, and Ctrl+, goes to the shell there.
 	// Elsewhere Ctrl+, is Settings and Super+, is not.
-	// Test ID: ErbGP9B
+	// Test ID: dde08
 	#[test]
 	fn command_comma_is_the_only_settings_chord_on_macos() {
 		let on = |mods, mac| hotkey_on(&Key::Character(",".into()), mods, true, mac);
@@ -989,7 +989,7 @@ mod tests {
 	// On a Mac the program answers to the Command chords and to nothing typed
 	// with Ctrl, which all goes to the shell. Off a Mac, Super chords stay free
 	// and the Ctrl chords are the program's.
-	// Test ID: ErbGPD5
+	// Test ID: dde09
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_command_chords_are_the_only_program_chords_on_macos() {
@@ -1072,7 +1072,7 @@ mod tests {
 	// Command+Shift+[ and ] walk the tabs on a Mac, which reports the press by
 	// the shifted character. The page keys walk and carry tabs with Command,
 	// as they do with Ctrl elsewhere.
-	// Test ID: ErbGPGY
+	// Test ID: dde0a
 	#[test]
 	fn command_shift_brackets_walk_the_tabs_on_macos() {
 		let shifted = COMMAND.union(ModifiersState::SHIFT);
@@ -1108,7 +1108,7 @@ mod tests {
 	// The key for the program's own shortcuts, and for a text box's, is Command
 	// on a Mac and Ctrl elsewhere. A Mac moves by words with Option, and goes
 	// to either end with Command.
-	// Test ID: ErbGPK5
+	// Test ID: dde0b
 	#[test]
 	fn the_shortcut_key_is_command_on_macos_and_ctrl_elsewhere() {
 		assert!(shortcut_held(COMMAND, true));
@@ -1150,7 +1150,7 @@ mod tests {
 
 	// Ctrl decides alone, whatever else is held. Linux and Windows keep
 	// Ctrl+click for links and block selection.
-	// Test ID: ErbblFg
+	// Test ID: dde2x
 	#[test]
 	fn ctrl_click_is_the_right_click_on_macos_only() {
 		let buttons = [
@@ -1193,7 +1193,7 @@ mod tests {
 	// Option plus a letter types on a Mac, often a character the layout has
 	// nowhere else, such as "{" on a German one. Only elsewhere is Alt a
 	// dialog's accelerator key.
-	// Test ID: ErbKdHM
+	// Test ID: dde0w
 	#[test]
 	fn option_types_on_a_mac_and_alt_is_an_accelerator_elsewhere() {
 		let option = ModifiersState::ALT;
@@ -1205,7 +1205,7 @@ mod tests {
 
 	// Nothing typed with Command held reaches the shell on a Mac. Elsewhere a
 	// Super chord goes on as it always has.
-	// Test ID: ErZrRpZ
+	// Test ID: dddnf
 	#[test]
 	fn command_never_reaches_the_shell_on_macos() {
 		const COMMAND: ModifiersState = ModifiersState::SUPER;
@@ -1223,7 +1223,7 @@ mod tests {
 	// `alt_shift_chords_split_and_close_panes_and_alt_arrows_move`.
 	// // Pane split, close and focus cycling are menu-only, so every other chord
 	// // goes to the shell.
-	// // Test ID: Er2UiYH
+	// // Test ID: dd5p2
 	// #[test]
 	// fn no_chord_splits_closes_or_cycles_panes() {
 	// 	for c in 'a'..='z' {
@@ -1249,7 +1249,7 @@ mod tests {
 	// Alt+Shift+Minus splits down, Alt+Shift+W closes the pane and Alt+arrows
 	// move between panes. Alt+letter still opens a menu, and no Ctrl or
 	// Ctrl+Shift chord was taken for panes.
-	// Test ID: EreU3sZ
+	// Test ID: ddes9
 	#[test]
 	fn alt_shift_chords_split_and_close_panes_and_alt_arrows_move() {
 		const ALT: ModifiersState = ModifiersState::ALT;
@@ -1293,7 +1293,7 @@ mod tests {
 	// Only Alt alone makes a letter a menu title. Shift, Super or Ctrl held
 	// with it is some other chord (AltGr arrives as Ctrl+Alt on Windows), so it
 	// goes on to the shell.
-	// Test ID: Erf6miU
+	// Test ID: ddexv
 	#[test]
 	fn a_letter_opens_a_menu_title_only_with_alt_alone() {
 		const ALT: ModifiersState = ModifiersState::ALT;
@@ -1326,7 +1326,7 @@ mod tests {
 	// Command+Shift+D splits down and Command+Option+arrows move. Command+W
 	// closes the tab, so Option+Command+W closes the pane. Option+arrows and
 	// the Alt+Shift chords go to the shell there.
-	// Test ID: EreU3sa
+	// Test ID: ddesa
 	#[test]
 	fn command_d_splits_and_command_option_arrows_move_on_macos() {
 		const OPTION: ModifiersState = ModifiersState::ALT;
@@ -1369,7 +1369,7 @@ mod tests {
 		}
 	}
 
-	// Test ID: Er2UiYI
+	// Test ID: dd5p3
 	#[test]
 	fn a_release_is_reported_only_for_the_button_held() {
 		let left = Some(MouseBtn::Left);
@@ -1381,7 +1381,7 @@ mod tests {
 	}
 
 	// A dropdown opens flush under the menu bar, over the tab-bar band.
-	// Test ID: Er2UiYJ
+	// Test ID: dd5p4
 	#[test]
 	fn an_open_dropdown_keeps_a_press_in_the_tab_bar_band() {
 		let (top, h) = (24.0, 30.0);
@@ -1392,7 +1392,7 @@ mod tests {
 		assert!(!tab_bar_takes_press(false, true, top - 1.0, top, h));
 	}
 
-	// Test ID: Er2UiYK
+	// Test ID: dd5p5
 	#[test]
 	fn right_click_and_a_click_on_an_open_menu_stay_local() {
 		assert!(press_is_reported(MouseBtn::Left, false, false));
@@ -1405,7 +1405,7 @@ mod tests {
 
 	// Alternate scroll is on by default, so the primary screen with it set is
 	// the ordinary case, and it has to scroll the buffer.
-	// Test ID: Er2UiYL
+	// Test ID: dd5p6
 	#[test]
 	fn the_wheel_scrolls_back_on_the_primary_screen() {
 		let alt_scroll = TermMode::ALTERNATE_SCROLL;
@@ -1434,7 +1434,7 @@ mod tests {
 		}
 	}
 
-	// Test ID: Er2UiYM
+	// Test ID: dd5p7
 	#[test]
 	fn shift_keeps_the_wheel_local_over_a_tracking_app() {
 		let tracking = TermMode::MOUSE_REPORT_CLICK;
@@ -1451,7 +1451,7 @@ mod tests {
 		assert_eq!(wheel_route(alt_screen, true), WheelRoute::CursorKeys);
 	}
 
-	// Test ID: Er2UiYN
+	// Test ID: dd5p8
 	#[test]
 	fn an_armed_tab_close_fires_only_on_its_own_box() {
 		let close_x = Some(100.0);
@@ -1466,7 +1466,7 @@ mod tests {
 		assert!(!close_on_release(2, 110.0, true, None, None));
 	}
 
-	// Test ID: Er2UiYO
+	// Test ID: dd5p9
 	#[test]
 	fn clicks_count_to_three_on_one_spot_then_start_over() {
 		let cell = (8.0, 16.0);
@@ -1488,7 +1488,7 @@ mod tests {
 		);
 	}
 
-	// Test ID: Er2UiYP
+	// Test ID: dd5pa
 	#[test]
 	fn ctrl_selects_a_block_but_only_on_a_single_click() {
 		assert_eq!(click_select(1, false), ClickSelect::Run);
@@ -1501,7 +1501,7 @@ mod tests {
 
 	// Both regressed by waiting on the window-focus flag, which can lag the
 	// window manager.
-	// Test ID: Er2UiYQ
+	// Test ID: dd5pb
 	#[test]
 	fn a_copy_the_user_drives_does_not_wait_on_window_focus() {
 		for from in [CopyFrom::Chord, CopyFrom::Select] {
@@ -1510,7 +1510,7 @@ mod tests {
 		}
 	}
 
-	// Test ID: Er2UiYR
+	// Test ID: dd5pc
 	#[test]
 	fn a_program_sets_the_clipboard_only_from_the_pane_in_use() {
 		assert!(copy_allowed(CopyFrom::Program, true, true));
@@ -1520,7 +1520,7 @@ mod tests {
 
 	// A capture that is not allowed is disarmed, so output that finished while
 	// the user was elsewhere never copies on the way back.
-	// Test ID: Er2UiYS
+	// Test ID: dd5pd
 	#[test]
 	fn output_copies_only_from_the_pane_in_use_of_a_focused_window() {
 		assert!(copy_allowed(CopyFrom::Output, true, true));

@@ -328,7 +328,7 @@ pub const VT_PROBES: &[u8] = b"\x1b[6n\x1b[0c\x1b[>0c\x1b[5n\x1b[14t\x1b[16t\x1b
 mod tests {
 	use super::*;
 
-	// Test ID: EpQN0oH
+	// Test ID: dcdj8
 	#[test]
 	fn a_seed_always_gives_the_same_case() {
 		let run = |seed| {
@@ -339,7 +339,7 @@ mod tests {
 		assert_ne!(run(0), run(1));
 	}
 
-	// Test ID: EpQN0oI
+	// Test ID: dcdj9
 	#[test]
 	fn a_mutation_stays_within_the_size_cap() {
 		let mut rng = Rng::new(7);
@@ -350,7 +350,7 @@ mod tests {
 		}
 	}
 
-	// Test ID: EpQN0oJ
+	// Test ID: dcdja
 	#[test]
 	fn a_missing_corpus_directory_is_empty_rather_than_an_error() {
 		assert!(corpus("no-such-target").is_empty());
@@ -359,7 +359,7 @@ mod tests {
 	// The path to the corpus is built from the manifest directory, so a tree laid
 	// out differently - or a platform that spells the separator the other way -
 	// would find nothing and every target would still pass.
-	// Test ID: EpQNtRI
+	// Test ID: dcdjn
 	#[test]
 	fn the_corpus_is_where_the_targets_look_for_it() {
 		for target in [

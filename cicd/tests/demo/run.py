@@ -7,7 +7,7 @@
 ##		the window manager, and checks where the recorder finds its run folder and
 ##		its binary. Also the environment the app gets, and the settings changes
 ##		made mid-scene. Nothing here needs a display.
-##	- Test ID: EqBe4cC
+##	- Test ID: dcrxy
 ##	- History: At bottom of file.
 
 ##	Copyright (c) 2026 Bubbles

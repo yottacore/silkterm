@@ -471,7 +471,7 @@ mod tests {
 		find(dir, key, want).map(|kept| kept.rgba.dimensions())
 	}
 
-	// Test ID: EryHHuh
+	// Test ID: ddkhc
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_kept_copy_reads_back_as_stored() {
@@ -507,7 +507,7 @@ mod tests {
 	// BC1 blocks are kept as they are, so a copy uploads exactly what the
 	// window was first given. A spoiled block is caught by the hash, since
 	// any 8 bytes unpack to something.
-	// Test ID: Erz0mF1
+	// Test ID: ddkq4
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_bc1_copy_comes_back_block_for_block() {
@@ -515,7 +515,7 @@ mod tests {
 	}
 
 	// The same for BC7, and the copy says which it is.
-	// Test ID: Es1eZ5s
+	// Test ID: ddmbd
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_bc7_copy_comes_back_block_for_block() {
@@ -558,7 +558,7 @@ mod tests {
 
 	// A copy from before BC1, JPEG only under the old magic, is never read,
 	// and the next prune takes it however recent, under the limit or not.
-	// Test ID: Erz0mH0
+	// Test ID: ddkq5
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_copy_in_the_old_format_is_pruned() {
@@ -584,7 +584,7 @@ mod tests {
 		let _ = std::fs::remove_dir_all(&dir);
 	}
 
-	// Test ID: EryHHyF
+	// Test ID: ddkhd
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_nearest_copy_within_five_percent_of_the_pixels_is_used() {
@@ -608,7 +608,7 @@ mod tests {
 		let _ = std::fs::remove_dir_all(&dir);
 	}
 
-	// Test ID: EryHI1u
+	// Test ID: ddkhe
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_cache_prunes_the_least_recently_used_first() {
@@ -672,7 +672,7 @@ mod tests {
 		let _ = std::fs::remove_dir_all(&dir);
 	}
 
-	// Test ID: EryHI5c
+	// Test ID: ddkhf
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_broken_copy_is_ignored_and_replaced() {

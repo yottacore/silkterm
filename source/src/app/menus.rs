@@ -1362,7 +1362,7 @@ mod tests {
 	// A letter picks the first row carrying it, so a menu that spends one twice
 	// does not read as ambiguous - it quietly makes the later row unreachable.
 	// Every menu is checked for this where it is built.
-	// Test ID: EnMAGUK
+	// Test ID: dbeqq
 	#[test]
 	fn one_menu_never_spends_an_accelerator_twice() {
 		let rows = vec![
@@ -1382,7 +1382,7 @@ mod tests {
 	// what ACTIVATING it does is different. Treating it as a separator instead
 	// (which is what the old two-arm matches did) leaves it unhoverable and
 	// unreachable, i.e. an item nothing can ever pick.
-	// Test ID: EnM97jE
+	// Test ID: dbeq9
 	#[test]
 	fn a_submenu_row_hit_tests_and_steps_like_an_item() {
 		let menu = test_menu(
@@ -1413,7 +1413,7 @@ mod tests {
 	// the whole of what keeps the pointer rule simple, since "inside the submenu"
 	// and "on a parent row" can then never both be true. A submenu that overlaps
 	// would close itself the moment the pointer entered it.
-	// Test ID: EnM97jF
+	// Test ID: dbeqa
 	#[test]
 	fn a_submenu_stands_clear_of_the_rows_it_came_from() {
 		let parent = test_menu(0.0, 200.0, vec![test_item("One"), test_item("Two")]);
@@ -1432,7 +1432,7 @@ mod tests {
 	// A click inside an open submenu is a click on the menu, so the chrome that
 	// stands aside for a popup (the menu bar, the tab bar) has to stand aside for
 	// it too - otherwise a submenu overlapping either band loses its clicks to it.
-	// Test ID: EnM97jG
+	// Test ID: dbeqb
 	#[test]
 	fn a_click_in_the_submenu_still_counts_as_a_click_on_the_menu() {
 		let mut parent = test_menu(0.0, 200.0, vec![entry_sub(Some('w'), "With Shell", vec![])]);
@@ -1450,7 +1450,7 @@ mod tests {
 	// numbers. Whatever the display does to them, `item_at` and `row_top` have to
 	// keep agreeing - a menu whose rows are drawn one place and clicked another
 	// is the failure this guards.
-	// Test ID: EnLuU53
+	// Test ID: dbeng
 	#[test]
 	fn a_dropdown_scales_whole_and_its_rows_still_hit_test() {
 		let menu_at = |scale: f32| {
@@ -1513,7 +1513,7 @@ mod tests {
 	// while that thing is on, so a reader can take the whole column one way. A
 	// "Hide ..." caption checked when the thing is GONE reads backwards next to
 	// its neighbours, which is what this stops coming back.
-	// Test ID: EolQiSW
+	// Test ID: dc3q1
 	#[test]
 	fn every_view_toggle_is_checked_while_its_subject_is_on() {
 		let all_on = ViewState {
@@ -1575,7 +1575,7 @@ mod tests {
 		}
 	}
 
-	// Test ID: EolQiSX
+	// Test ID: dc3q2
 	#[test]
 	fn the_view_menu_spends_no_accelerator_twice() {
 		let off = ViewState {
@@ -1592,7 +1592,7 @@ mod tests {
 		assert_eq!(accel_clash(&view_menu_items(off)), None);
 	}
 
-	// Test ID: EqpdApU
+	// Test ID: dd2hn
 	#[test]
 	fn next_wallpaper_shows_only_with_somewhere_to_go() {
 		let state = |next_wallpaper| ViewState {
@@ -1715,7 +1715,7 @@ mod tests {
 
 	// Build time only checks a menu's letters in a debug build, and only when
 	// that menu is opened. This holds every one of them to it.
-	// Test ID: Er2UvPk
+	// Test ID: dd5pk
 	#[test]
 	fn no_menu_spends_an_accelerator_twice() {
 		for shells in [three_shells(), Vec::new()] {
@@ -1727,7 +1727,7 @@ mod tests {
 
 	// Keys are spelled as words, so "Ctrl+=" or "Ctrl++" cannot come back.
 	// Ctrl+, keeps its comma: the style guide spells it that way too.
-	// Test ID: Er2UvPl
+	// Test ID: dd5pm
 	#[test]
 	fn every_shortcut_in_a_menu_is_written_one_way() {
 		for (name, items) in every_menu(&three_shells()) {
@@ -1762,7 +1762,7 @@ mod tests {
 
 	// A row that opens a prompt or a dialog ends in the one ellipsis character,
 	// never three dots.
-	// Test ID: Er2UvPm
+	// Test ID: dd5pn
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_row_that_asks_for_more_ends_in_a_real_ellipsis() {
@@ -1788,7 +1788,7 @@ mod tests {
 	// Sentence case: past the first letter, a capital is either the row's
 	// accelerator ("Paste Selection") or part of the shortcut. Shell titles in a
 	// flyout are names and keep theirs.
-	// Test ID: Er2UvPn
+	// Test ID: dd5pp
 	#[test]
 	fn every_menu_row_is_in_sentence_case() {
 		for (name, items) in every_menu(&three_shells()) {
@@ -1808,7 +1808,7 @@ mod tests {
 		}
 	}
 
-	// Test ID: Er2UvPo
+	// Test ID: dd5pq
 	#[test]
 	fn the_right_click_menu_rules_off_the_tab_rows_from_the_pane_rows() {
 		let ctx = CtxState {
@@ -1847,7 +1847,7 @@ mod tests {
 	// covers it.
 	// // macOS has the system menu bar, so the in-window one starts hidden there
 	// // unless --hide-menu says otherwise. Elsewhere nothing changes.
-	// // Test ID: ErUnxsD
+	// // Test ID: ddcej
 	// #[test]
 	// fn the_in_window_menu_bar_starts_hidden_on_macos_only() {
 	// 	use super::menu_bar_at_launch;
@@ -1862,7 +1862,7 @@ mod tests {
 	// The system menu bar is the only one on a Mac: `--hide-menu` is taken and
 	// ignored there, and no menu row offers the in-window bar. Elsewhere nothing
 	// changes.
-	// Test ID: ErZrS8g
+	// Test ID: dddng
 	#[test]
 	fn there_is_no_in_window_menu_bar_on_macos() {
 		use super::super::menubar::menu_bar_at_launch;
@@ -1902,7 +1902,7 @@ mod tests {
 	// Bare window sits under Menu bar on the right-click menu, since with the
 	// bar hidden there is no View menu to leave a bare window from. A Mac keeps
 	// it, less the Menu bar row.
-	// Test ID: Esdy2n3
+	// Test ID: ddxj9
 	#[test]
 	fn bare_window_is_on_the_right_click_menu_under_menu_bar() {
 		use super::mac_entries;
@@ -1943,7 +1943,7 @@ mod tests {
 
 	// A new window opens with the menu bar as last saved, and --hide-menu
 	// outranks that either way.
-	// Test ID: Esdy2rb
+	// Test ID: ddxja
 	#[test]
 	fn a_new_window_opens_with_the_saved_menu_bar() {
 		use super::super::menubar::menu_bar_at_launch;
@@ -1957,7 +1957,7 @@ mod tests {
 	// from the bindings in force: the pane rows show the pane chords, a chord
 	// moved in the config file shows where it went, and a hotkey turned off
 	// shows nothing.
-	// Test ID: EreU3se
+	// Test ID: ddese
 	#[test]
 	fn a_menu_row_shows_the_chord_its_hotkey_answers_to() {
 		use crate::input::Hotkey;
@@ -2038,7 +2038,7 @@ mod tests {
 
 	// The right-click menu on a Mac names the Command chord for each row that has
 	// one, never a Ctrl one, and keeps its accelerator letters.
-	// Test ID: ErZrSS3
+	// Test ID: dddnh
 	#[test]
 	fn the_mac_right_click_menu_shows_command_chords() {
 		use super::mac_entries;
@@ -2093,7 +2093,7 @@ mod tests {
 		assert_eq!(accel_clash(&mac), None);
 	}
 
-	// Test ID: Er2UvPp
+	// Test ID: dd5pr
 	#[test]
 	fn the_bar_reads_file_to_help_and_file_has_no_tab_or_pane_action() {
 		assert_eq!(MENU_BAR, ["File", "Edit", "View", "Tabs", "Panes", "Help"]);
@@ -2111,7 +2111,7 @@ mod tests {
 		}
 	}
 
-	// Test ID: Er2UvPq
+	// Test ID: dd5ps
 	#[test]
 	fn the_right_click_menu_has_the_pane_actions_and_their_checkmarks() {
 		for on in [false, true] {
@@ -2160,7 +2160,7 @@ mod tests {
 		}
 	}
 
-	// Test ID: Er2UvPr
+	// Test ID: dd5pt
 	#[test]
 	fn a_new_tab_shell_row_lists_the_active_shells_or_is_not_there() {
 		let ctx = CtxState {
@@ -2200,7 +2200,7 @@ mod tests {
 		}
 	}
 
-	// Test ID: Et0Zjs5
+	// Test ID: de30e
 	#[test]
 	fn new_tab_in_tmux_sits_between_new_tab_and_the_shells_where_tmux_runs() {
 		let shells = three_shells();
@@ -2224,7 +2224,7 @@ mod tests {
 		assert!(position_of(&without, |a| matches!(a, MenuAction::NewTabTmux)).is_none());
 	}
 
-	// Test ID: Er2UvPs
+	// Test ID: dd5pv
 	#[test]
 	fn both_split_shell_rows_offer_the_same_shells_by_their_place_in_the_list() {
 		let shells = three_shells();
@@ -2264,7 +2264,7 @@ mod tests {
 		assert!(split_shells(&[]).is_empty());
 	}
 
-	// Test ID: EkrYObg
+	// Test ID: da9hh
 	#[test]
 	fn accel_prefers_exact_case_then_falls_back() {
 		// 'S' must pick "Selection", not the 's' in "Paste"

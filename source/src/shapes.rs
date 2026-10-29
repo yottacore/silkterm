@@ -312,7 +312,7 @@ mod tests {
 		span_at(&text, hit).map(|(s, e)| text[s..e].iter().collect())
 	}
 
-	// Test ID: Eo6l7kW
+	// Test ID: dbsy1
 	#[test]
 	fn a_drive_path_keeps_its_drive_letter() {
 		assert_eq!(
@@ -327,7 +327,7 @@ mod tests {
 
 	// The case word selection cannot do at all: the space ends the word, so a
 	// double-click used to give back "Files\app.exe".
-	// Test ID: Eo6l7kX
+	// Test ID: dbsy2
 	#[test]
 	fn a_folder_name_may_have_spaces_in_it() {
 		assert_eq!(
@@ -341,7 +341,7 @@ mod tests {
 	}
 
 	// Prose after a path is prose, not more path - there is no separator in it.
-	// Test ID: Eo6l7kY
+	// Test ID: dbsy3
 	#[test]
 	fn a_space_with_no_separator_after_it_ends_the_path() {
 		assert_eq!(
@@ -354,7 +354,7 @@ mod tests {
 		);
 	}
 
-	// Test ID: Eo6l7kZ
+	// Test ID: dbsy4
 	#[test]
 	fn a_line_number_after_the_extension_is_not_part_of_the_name() {
 		assert_eq!(
@@ -367,7 +367,7 @@ mod tests {
 		);
 	}
 
-	// Test ID: Eo6l7ka
+	// Test ID: dbsy5
 	#[test]
 	fn a_url_wins_over_everything_else() {
 		assert_eq!(
@@ -384,7 +384,7 @@ mod tests {
 		);
 	}
 
-	// Test ID: Eo6l7kb
+	// Test ID: dbsy6
 	#[test]
 	fn a_unc_path_and_a_home_path_are_shapes_too() {
 		assert_eq!(
@@ -394,7 +394,7 @@ mod tests {
 		assert_eq!(at("~/bin/tool.sh", "bin").as_deref(), Some("~/bin/tool.sh"));
 	}
 
-	// Test ID: Eo6l7kc
+	// Test ID: dbsy7
 	#[test]
 	fn ordinary_text_is_left_to_the_word_rules() {
 		assert_eq!(at("this and/or that", "and"), None);
@@ -403,7 +403,7 @@ mod tests {
 		assert_eq!(at("xC:\\notapath here", "notapath"), None);
 	}
 
-	// Test ID: Eo6l7kd
+	// Test ID: dbsy8
 	#[test]
 	fn a_quoted_or_bracketed_path_sheds_the_wrapper() {
 		assert_eq!(
@@ -418,7 +418,7 @@ mod tests {
 
 	// A git prompt puts the remote in brackets beside its status marks, and the
 	// pair rule would otherwise hand back the marks with it.
-	// Test ID: EofxyNU
+	// Test ID: dc2cz
 	#[test]
 	fn a_git_remote_is_a_shape() {
 		assert_eq!(
@@ -445,7 +445,7 @@ mod tests {
 		);
 	}
 
-	// Test ID: EofxyNV
+	// Test ID: dc2d0
 	#[test]
 	fn a_colon_after_a_word_is_not_a_remote() {
 		assert_eq!(at("see notes.txt:12/34 there", "notes"), None);
@@ -454,7 +454,7 @@ mod tests {
 		assert_eq!(at("host.com:noslash here", "noslash"), None);
 	}
 
-	// Test ID: EstXrUS
+	// Test ID: de1a3
 	#[test]
 	fn a_path_may_have_letters_from_any_script() {
 		assert_eq!(
@@ -487,7 +487,7 @@ mod tests {
 
 	// A prompt writes its status marks right after the path, sometimes with no
 	// space between.
-	// Test ID: EstXrbq
+	// Test ID: de1a4
 	#[test]
 	fn symbols_after_a_path_are_left_out() {
 		assert_eq!(
@@ -510,7 +510,7 @@ mod tests {
 		);
 	}
 
-	// Test ID: Eo6l7ke
+	// Test ID: dbsy9
 	#[test]
 	fn a_click_past_the_end_of_the_row_finds_nothing() {
 		let text: Vec<char> = "/etc/hosts".chars().collect();
@@ -532,7 +532,7 @@ mod tests {
 			" ", "(", ")", "\u{4e2d}", "\u{1f600}",
 		];
 
-		// Test ID: EpQN0oO
+		// Test ID: dcdjf
 		#[test]
 		#[cfg_attr(miri, ignore = "too slow under Miri")]
 		fn a_shape_span_never_runs_past_the_row_it_was_found_in() {

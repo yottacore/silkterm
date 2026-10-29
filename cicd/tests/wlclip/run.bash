@@ -15,7 +15,7 @@
 ##	- Syntax: run.bash [--bin PATH]   (default: the debug build, then release)
 ##	- Exit: 0 passed, 1 a check failed, 3 nothing ran (no binary, sway,
 ##	  wtype, python3 or software Vulkan).
-##	- Test ID: EsnbWa2
+##	- Test ID: ddzwc
 ##	- History: At bottom of file.
 
 ##	Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]

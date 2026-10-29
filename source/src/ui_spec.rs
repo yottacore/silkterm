@@ -973,7 +973,7 @@ mod tests {
 	// The one check no parser strictness can make: a setting the code knows but
 	// the document never mentions is a perfectly valid document, and a setting
 	// silently missing from the dialog is exactly the failure worth catching.
-	// Test ID: Em2iOem
+	// Test ID: dav4k
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_declarations_are_complete_and_well_formed() {
@@ -1022,7 +1022,7 @@ mod tests {
 		}
 	}
 
-	// Test ID: Em2iOen
+	// Test ID: dav4m
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn every_tab_has_rows_and_every_row_a_tab() {
@@ -1040,7 +1040,7 @@ mod tests {
 
 	// Sanity clamps rather than validation: every layout number is a floor that
 	// content can outgrow, so the only real mistake is a negative or absurd one.
-	// Test ID: Em2iOeo
+	// Test ID: dav4n
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_layout_numbers_are_sane() {
@@ -1064,7 +1064,7 @@ mod tests {
 		}
 	}
 
-	// Test ID: Em2iOep
+	// Test ID: dav4p
 	#[test]
 	fn a_bad_document_is_reported_rather_than_half_read() {
 		let bad = "tabs: \"Only\"\nrows:\n\tNotASetting:\n\t\tlabel: x\n\t\tkind: toggle\n";
@@ -1078,7 +1078,7 @@ mod tests {
 	}
 
 	// The macOS build leaves out software rendering and nothing else.
-	// Test ID: ErycRzO
+	// Test ID: ddkm1
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn only_software_rendering_leaves_the_macos_build() {
@@ -1101,7 +1101,7 @@ mod tests {
 
 	// Everywhere but Windows the file-type group is gone, heading and all, and
 	// nothing else goes with it.
-	// Test ID: ErNFx0g
+	// Test ID: ddamq
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_windows_rows_leave_every_other_build() {
@@ -1130,7 +1130,7 @@ mod tests {
 
 	// A warning mark sits after a label in the label column, so a row with no
 	// label there cannot carry one.
-	// Test ID: EreHnyt
+	// Test ID: ddeqk
 	#[test]
 	fn a_warning_needs_a_label_of_its_own() {
 		let head =
@@ -1163,7 +1163,7 @@ mod tests {
 	// Transparency's mark adds that it keeps a window from giving its memory
 	// back, in the Windows build only, since only there is a window in view
 	// with Transparency on never let go. No other row's mark differs.
-	// Test ID: EryD9zK
+	// Test ID: ddkgy
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn only_the_windows_build_warns_that_transparency_keeps_memory() {
@@ -1202,7 +1202,7 @@ mod tests {
 	// "Carry" read as "has" or "keeps" is a word to avoid in what people read,
 	// and it had crept into 2 tips (2026100812334384). Every string declared
 	// for the dialog, both platforms' marks included.
-	// Test ID: Es9Vugt
+	// Test ID: ddp7x
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn no_dialog_text_says_carry() {
@@ -1239,7 +1239,7 @@ mod tests {
 		}
 	}
 
-	// Test ID: ErNFx0h
+	// Test ID: ddamr
 	#[test]
 	fn a_windows_group_cannot_contain_a_row_for_everyone() {
 		let bad = "tabs: \"Only\"\nrows:\n\tHead:\n\t\tkind: heading\n\t\tlabel: Head\n\t\ttab: Only\n\t\twindows: true\n\tMargin:\n\t\tlabel: x\n\t\tkind: slider\n\t\trange: 0, 1\n\t\tsetting: margin\n";
@@ -1256,7 +1256,7 @@ mod tests {
 
 	// A slider's scale and typed cap are refused when they cannot mean anything,
 	// rather than quietly read as linear or as no cap.
-	// Test ID: Es9fvg9
+	// Test ID: ddp93
 	#[test]
 	fn a_slider_scale_or_cap_that_means_nothing_is_refused() {
 		for (extra, want) in [
@@ -1280,7 +1280,7 @@ mod tests {
 	// Every hotkey the config file can bind has one row on the Keys tab, and a
 	// row naming a path that binds nothing is refused. A hotkey added to the
 	// table with no row would otherwise be settable only by hand.
-	// Test ID: ErektRs
+	// Test ID: ddev6
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn every_hotkey_has_one_row_on_the_keys_tab() {
@@ -1319,7 +1319,7 @@ mod tests {
 	}
 
 	// "A/B" is B under A. Rows go on the leaves, which a heading names by path.
-	// Test ID: EsJDUK4
+	// Test ID: ddrjm
 	#[test]
 	fn a_tab_under_another_is_a_path_and_rows_go_on_the_leaves() {
 		let (nodes, leaves) = tab_tree(&["A", "B", "B/C", "B/D", "E"]).unwrap();

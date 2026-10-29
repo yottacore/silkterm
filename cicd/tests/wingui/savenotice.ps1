@@ -13,7 +13,7 @@
 	History: At bottom of file.
 #>
 
-##	Test ID: EqH8w4O
+##	Test ID: dct88
 
 
 if (-not (fSessionUsable)) { fSkip "console session is locked - the box cannot be grabbed" }

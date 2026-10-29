@@ -1820,7 +1820,7 @@ mod tests {
 	// gap drawn between lines beats against the pixel grid, and at these
 	// pitches the beat is slow enough to read as broad bands running down the
 	// column that are not in the text at all.
-	// Test ID: EqRBEHA
+	// Test ID: dcwng
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_page_of_one_line_composes_evenly() {
@@ -1872,7 +1872,7 @@ mod tests {
 	// The same across the column. Cells do not line up with pixels either, and
 	// a filter no wider than one pixel leaves the cell grid beating against
 	// them - a comb down the column that is not in the text.
-	// Test ID: EqRBEHB
+	// Test ID: dcwnh
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_repeating_line_composes_without_a_comb() {
@@ -1914,7 +1914,7 @@ mod tests {
 		);
 	}
 
-	// Test ID: EopeF4y
+	// Test ID: dc4qg
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_full_screen_program_takes_the_column_unless_it_is_named() {
@@ -1939,7 +1939,7 @@ mod tests {
 
 	// On their own screen the map has nothing but that screen to show, so by
 	// default nothing keeps the column there.
-	// Test ID: EshLdeY
+	// Test ID: ddyc7
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn by_default_less_tmux_and_screen_take_the_column_too() {
@@ -1950,7 +1950,7 @@ mod tests {
 		}
 	}
 
-	// Test ID: EscYyBa
+	// Test ID: ddx7d
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_program_redrawing_the_main_screen_takes_the_column_too() {
@@ -1991,7 +1991,7 @@ mod tests {
 
 	// What Windows' own console host sends as a pane starts, before the shell
 	// prints anything, seen on Windows 11 26200. The focus ask is its own.
-	// Test ID: EsgiG0N
+	// Test ID: ddy7d
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_plain_command_keeps_the_column_under_the_windows_console_host() {
@@ -2024,7 +2024,7 @@ mod tests {
 	// A nested fish, or one at the far end of an ssh, is the program running,
 	// and its prompt has to leave the column alone. fish 4.2 asks for focus
 	// reports only inside tmux, where the outer terminal never sees them.
-	// Test ID: EsdlZZz
+	// Test ID: ddxgp
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_nested_fish_prompt_keeps_the_column() {
@@ -2051,7 +2051,7 @@ mod tests {
 		assert!(!wanted(&s, own(b"\x1b[?1000h\x1b[?1006h"), Some("ssh")));
 	}
 
-	// Test ID: Esca2GW
+	// Test ID: ddx7h
 	#[test]
 	fn a_program_that_toggles_as_it_starts_moves_the_column_once() {
 		let t0 = Instant::now();
@@ -2081,7 +2081,7 @@ mod tests {
 		assert_eq!(hold.wake(), None);
 	}
 
-	// Test ID: EoXOeuW
+	// Test ID: dc0b1
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn off_costs_the_pane_nothing() {
@@ -2096,7 +2096,7 @@ mod tests {
 		assert_eq!(column_w(&cfg(false, 100.0), full.w, 1.0, true), 0.0);
 	}
 
-	// Test ID: EpyCuGf
+	// Test ID: dcnph
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_column_takes_its_width_and_no_more() {
@@ -2111,7 +2111,7 @@ mod tests {
 		assert_eq!(text_rect(full, &s, 1.0, true).w, 700.0);
 	}
 
-	// Test ID: EoXOeuX
+	// Test ID: dc0b2
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_narrow_pane_gives_up_the_column() {
@@ -2121,7 +2121,7 @@ mod tests {
 		assert_eq!(column_w(&cfg(true, 100.0), 120.0, 1.0, true), 60.0);
 	}
 
-	// Test ID: EoXOeuY
+	// Test ID: dc0b3
 	#[test]
 	fn a_short_buffer_does_not_stretch_to_fill() {
 		// 50 lines in a 600px column: capped, so well short of the 600
@@ -2132,7 +2132,7 @@ mod tests {
 		assert!(line_px(600.0, 10_000, 1.0) < 0.1);
 	}
 
-	// Test ID: EoXOeuZ
+	// Test ID: dc0b4
 	#[test]
 	fn the_handle_rides_the_scroll_position() {
 		let (top_y, _) = handle_span(600.0, 1000, 1000, 40, 960.0, 1.0);
@@ -2146,7 +2146,7 @@ mod tests {
 	// used to read the marker's drawn top back through the inverse of where it
 	// was drawn; the height floor makes that reading approximate, so the drag
 	// works from the grab instead.
-	// Test ID: EoXOeua
+	// Test ID: dc0b5
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_drag_round_trips_through_the_mapping() {
@@ -2177,7 +2177,7 @@ mod tests {
 	// the column landing off center (F148). Where the height floor makes the
 	// marker taller than the rows it stands for, it grows from their middle,
 	// so the slack is half that excess and no more.
-	// Test ID: EqR4Ye0
+	// Test ID: dcwmn
 	#[test]
 	fn the_marker_sits_over_the_lines_it_stands_for() {
 		let track = 900.0;
@@ -2213,7 +2213,7 @@ mod tests {
 	// drag event feeds the same pointer back, so it has to come out unmoved.
 	// Where it does not, a press and one pixel of movement scrolls the view on
 	// its own.
-	// Test ID: EqMZXTc
+	// Test ID: dcvj1
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_marker_reads_back_the_position_it_was_drawn_at() {
@@ -2278,14 +2278,14 @@ mod tests {
 		.unwrap()
 	}
 
-	// Test ID: EoXOeub
+	// Test ID: dc0b6
 	#[test]
 	fn the_handle_stays_grabbable_on_a_deep_buffer() {
 		let (_, h) = handle_span(600.0, 100_000, 100_000, 40, 0.0, 1.0);
 		assert!(h >= MIN_HANDLE);
 	}
 
-	// Test ID: EoXOeuc
+	// Test ID: dc0b7
 	#[test]
 	fn a_line_composes_where_the_mapping_puts_it() {
 		// 100 lines in a 200px column, line 40 the only red one
@@ -2307,7 +2307,7 @@ mod tests {
 		assert_eq!(map.pixel(6, red)[3], 0);
 	}
 
-	// Test ID: EoXOeud
+	// Test ID: dc0b8
 	#[test]
 	fn a_short_buffer_leaves_the_bottom_of_the_column_empty() {
 		let width = 4;
@@ -2322,7 +2322,7 @@ mod tests {
 		assert_eq!(map.pixel(0, used + 1)[3], 0);
 	}
 
-	// Test ID: EoXOeue
+	// Test ID: dc0b9
 	#[test]
 	fn one_inked_line_among_many_still_shows() {
 		// 5,000 lines into 500px: 10 lines to a pixel row, and the single red one
@@ -2340,7 +2340,7 @@ mod tests {
 
 	// What the map is for is reading density from a distance, so a stretch of
 	// mostly blank lines has to look different from a solid page.
-	// Test ID: Eolyf2O
+	// Test ID: dc3v8
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_sparse_stretch_reads_dimmer_than_a_full_one() {
@@ -2366,7 +2366,7 @@ mod tests {
 	// the build that folds them in holds the term lock the PTY reader waits on.
 	// So a build that does not compose rasterizes nothing, and a compose does no
 	// more than the history and the screen, however much output went by.
-	// Test ID: EqLtc6K
+	// Test ID: dcvct
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_flood_rasterizes_only_what_a_compose_shows() {
@@ -2426,7 +2426,7 @@ mod tests {
 	// A compose holds the term lock, and how long it takes grows with the
 	// scrollback. So the wait after one grows with it, keeping the map to a
 	// small share of the time at any depth.
-	// Test ID: EqLtc6L
+	// Test ID: dcvcv
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_slow_compose_waits_its_share_out() {
@@ -2472,7 +2472,7 @@ mod tests {
 
 	// A 445 ms whole redraw at 30,000 lines held the next 22 ms one back for
 	// nearly nine seconds.
-	// Test ID: ErCaBEG
+	// Test ID: dd829
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_whole_redraw_does_not_set_the_wait() {
@@ -2517,7 +2517,7 @@ mod tests {
 	// line of a rebuilt or flooded scrollback and composing all of it. Here a
 	// compose reads no more than its budget, and a whole image goes to a
 	// thread of its own while the builds carry on.
-	// Test ID: ErEKIJ0
+	// Test ID: dd8fq
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_deep_redraw_reads_only_its_budget_here() {
@@ -2591,7 +2591,7 @@ mod tests {
 	// a cache with no budget makes. The composes that replace them redo only
 	// the pixel rows they touch, so this also holds that to a whole compose,
 	// under both filters.
-	// Test ID: ErEKIcQ
+	// Test ID: dd8fr
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn stand_ins_give_way_to_the_lines_they_stand_for() {
@@ -2654,7 +2654,7 @@ mod tests {
 	// The column's width can change between composes, and the image is still
 	// the one composed at the old width. A caller that took the new width made
 	// a texture the pixels could not fill, and wgpu killed the window.
-	// Test ID: EqLzJNY
+	// Test ID: dcvdh
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_map_reports_the_size_its_pixels_have() {
@@ -2754,7 +2754,7 @@ mod tests {
 		out
 	}
 
-	// Test ID: EqLzJNZ
+	// Test ID: dcvdj
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_rasterized_line_matches_a_plain_per_cell_pass() {
@@ -2797,7 +2797,7 @@ mod tests {
 	// A character is not a flat block. A period inks a fraction of its cell and
 	// a hash most of it, and that difference is what stops a run of text
 	// reading as one bar.
-	// Test ID: EqMTH4y
+	// Test ID: dcvh8
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_glyphs_weight_follows_how_much_it_inks() {
@@ -2851,7 +2851,7 @@ mod tests {
 	// At the capped height a line's ink is a band narrower than a pixel, so it
 	// falls across two pixel rows at part strength rather than filling one.
 	// That is what a page of text looks like from across the room.
-	// Test ID: EqMTH4z
+	// Test ID: dcvh9
 	#[test]
 	fn a_line_at_the_cap_is_softer_than_a_solid_row() {
 		let width = 4;
@@ -2877,7 +2877,7 @@ mod tests {
 	// Under a flood the eased view sits behind the newest output. The map stops
 	// where the view has reached, so the column shows nothing the text has not.
 	// With the ease at rest it draws the whole buffer again.
-	// Test ID: EqN59w0
+	// Test ID: dcvny
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_map_stops_where_the_eased_text_has_reached() {
@@ -2970,7 +2970,7 @@ mod tests {
 	// and is out again (SR1): the map used to stop at the last screen row with
 	// ink, so the blank rows under a short prompt took no track. They are part
 	// of the buffer, and the marker reaches over them.
-	// Test ID: EqQ3t6m
+	// Test ID: dcwcw
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn blank_rows_under_a_prompt_are_part_of_the_map() {
@@ -3045,7 +3045,7 @@ mod tests {
 
 	// The ease drains whether or not more output arrives, so a map that came
 	// out short has to ask for another compose or it stays short.
-	// Test ID: EqN59w1
+	// Test ID: dcvnz
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_trimmed_compose_needs_another() {
@@ -3083,7 +3083,7 @@ mod tests {
 	// can draw anything new. Owing one anyway had `wake()` asking app.rs for a
 	// frame and a full recompose about eleven times a second for as long as the
 	// pane sat there, with no output and nobody touching it.
-	// Test ID: EqQ9f4K
+	// Test ID: dcwdk
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_parked_view_stops_asking_for_composes() {
@@ -3161,7 +3161,7 @@ mod tests {
 	// apart: each one's compose frame rebuilt the other inside its gap, which
 	// owed a compose, which woke the window, which rebuilt the first inside
 	// its gap. Every frame had both panes shaped again, at rest, for good.
-	// Test ID: EsJ8TzU
+	// Test ID: ddrhw
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_build_inside_the_gap_owes_nothing_new() {
@@ -3206,7 +3206,7 @@ mod tests {
 		assert!(fed.wake().is_some(), "folded output asks for no frame");
 	}
 
-	// Test ID: EqLzJNa
+	// Test ID: dcvdk
 	#[test]
 	fn a_pixel_takes_the_nearest_byte() {
 		assert_eq!(to_u8(0.4), 0);
@@ -3217,7 +3217,7 @@ mod tests {
 
 	// Rasterizing late must not change what is drawn: every compose matches the
 	// one a fresh cache makes from the same grid, whatever went by in between.
-	// Test ID: EqLtc6M
+	// Test ID: dcvcw
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_late_raster_composes_the_image_a_fresh_one_would() {
@@ -3301,7 +3301,7 @@ mod tests {
 
 	// Below a pixel a line has no room for a gap, so it is taken whole and a
 	// full page is as bright as it ever was.
-	// Test ID: Eolyf2P
+	// Test ID: dc3v9
 	#[test]
 	fn a_line_under_a_pixel_keeps_its_whole_height() {
 		assert_eq!(Minimap::band(0.4), (0.0, 0.4));
@@ -3317,7 +3317,7 @@ mod tests {
 
 	// SILK_MEMDBG's minimap figure, which the reducing resources doc quotes,
 	// counts every stored row.
-	// Test ID: Ern2oTz
+	// Test ID: ddgtx
 	#[test]
 	fn the_memory_count_covers_every_stored_row() {
 		let width = 100;

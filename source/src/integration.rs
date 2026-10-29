@@ -558,7 +558,7 @@ mod tests {
 
 	// sh may well be dash, and a shell named by a full path is the ordinary case
 	// on Windows - so both have to answer the way a bare `bash` does.
-	// Test ID: EoTbwMS
+	// Test ID: dbzdw
 	#[test]
 	fn only_bash_is_offered_the_bash_prompt() {
 		assert!(is_bash("bash"));
@@ -571,7 +571,7 @@ mod tests {
 
 	// A profile that cannot be read is named first, then the reason, which is
 	// the source error kept under it.
-	// Test ID: ErzSLrd
+	// Test ID: ddkte
 	#[test]
 	fn an_unreadable_profile_names_the_file_then_why() {
 		let dir =
@@ -587,7 +587,7 @@ mod tests {
 	// Windows answers in the console's code page, so a path is only believed as
 	// the hex the query asks for. An empty profile gives an empty first line, and
 	// the policy that then comes first is not hex.
-	// Test ID: Eq4upT6
+	// Test ID: dcqa4
 	#[test]
 	fn a_profile_path_is_read_from_its_hex_and_nothing_else() {
 		let jose =
@@ -614,7 +614,7 @@ mod tests {
 
 	// The same through each real PowerShell installed. On Windows this is the
 	// case that failed, in both 5.1 and 7; elsewhere it checks the query parses.
-	// Test ID: Eq4upT7
+	// Test ID: dcqa5
 	#[test]
 	#[cfg_attr(miri, ignore = "Miri can't start a process")]
 	fn a_powershell_names_a_profile_outside_ascii() {
@@ -639,7 +639,7 @@ mod tests {
 
 	// It replaces a PS1 set in .bashrc, and Debian's own files set one, so it is
 	// on only for somebody who asked for it.
-	// Test ID: Eq4uQkq
+	// Test ID: dcqa3
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_bash_prompt_is_off_until_asked_for() {
@@ -650,8 +650,8 @@ mod tests {
 	// arrive as something bash reads rather than as a run of escapes.
 	// Commented out 20261006: it pinned the old `PS1=$("$BASH" path)` form, which
 	// started a bash every prompt. The pane now sources the script once
-	// (2026100314050019); EryR5kj checks the same paths in the new form.
-	// // Test ID: EoTbwMT
+	// (2026100314050019); ddkjj checks the same paths in the new form.
+	// // Test ID: dbzdx
 	// #[test]
 	// fn a_prompt_command_survives_a_windows_path() {
 	// 	let win = prompt_command(std::path::Path::new("C:\\Users\\me\\x9ps1-git"));
@@ -663,7 +663,7 @@ mod tests {
 	// 	);
 	// }
 
-	// Test ID: EryR5kj
+	// Test ID: ddkjj
 	#[test]
 	fn a_prompt_command_sources_a_windows_path_as_bash_reads_it() {
 		let win = prompt_command(std::path::Path::new("C:\\Users\\me\\x9ps1-git"));
@@ -682,8 +682,8 @@ mod tests {
 	// truncated or mangled vendoring should not reach anybody's prompt.
 	// Commented out 20261006: `fMain` was renamed, since the script is now
 	// sourced into the pane's shell and a bare name could clobber the user's
-	// own (2026100314050019). EryR5oo checks for the function the pane calls.
-	// // Test ID: EoTbwMU
+	// own (2026100314050019). ddkjk checks for the function the pane calls.
+	// // Test ID: dbzdy
 	// #[test]
 	// fn the_bash_prompt_script_is_a_whole_script() {
 	// 	assert!(BASH_PROMPT.starts_with("#!/bin/bash"));
@@ -691,7 +691,7 @@ mod tests {
 	// 	assert!(BASH_PROMPT.contains("fMain"));
 	// }
 
-	// Test ID: EryR5oo
+	// Test ID: ddkjk
 	#[test]
 	fn the_bash_prompt_script_is_whole_and_defines_what_the_pane_calls() {
 		assert!(BASH_PROMPT.starts_with("#!/bin/bash"));
@@ -734,7 +734,7 @@ mod tests {
 	// Anyone who publishes a repository picks its branch names, and bash expands
 	// the prompt text at every prompt. A branch named `$(cmd)` ran cmd in any
 	// bash pane opened in a clone.
-	// Test ID: EpxrTRY
+	// Test ID: dcnkv
 	#[cfg(unix)]
 	#[test]
 	#[cfg_attr(miri, ignore = "Miri can't start a process")]
@@ -812,7 +812,7 @@ mod tests {
 
 	// The git part used to need a remote named origin, and read its marks from
 	// git's English status text, so it never showed a count.
-	// Test ID: EqBmHyq
+	// Test ID: dcryy
 	#[cfg(unix)]
 	#[test]
 	#[cfg_attr(miri, ignore = "Miri can't start a process")]
@@ -931,7 +931,7 @@ mod tests {
 	// and nothing more; inside one it runs git twice. The old form started 5 and
 	// 13. Counted as the difference between 2 prompts and 12, so the shell's own
 	// start is left out. Needs strace, so it is skipped where that cannot run.
-	// Test ID: EryR5sU
+	// Test ID: ddkjm
 	#[cfg(unix)]
 	#[test]
 	#[cfg_attr(miri, ignore = "Miri can't start a process")]
@@ -1000,7 +1000,7 @@ mod tests {
 
 	// The same PROMPT_COMMAND shows the git part from deep in a working tree,
 	// and none outside one.
-	// Test ID: EryR5wI
+	// Test ID: ddkjn
 	#[cfg(unix)]
 	#[test]
 	#[cfg_attr(miri, ignore = "Miri can't start a process")]
@@ -1045,7 +1045,7 @@ mod tests {
 	// No font a Mac ships has U+1F846, so the second line in a repository
 	// started with an empty box there. bash takes OSTYPE from the environment
 	// when it is set, which lets either side run anywhere.
-	// Test ID: Es2nCJ6
+	// Test ID: ddmm3
 	#[cfg(unix)]
 	#[test]
 	#[cfg_attr(miri, ignore = "Miri can't start a process")]
@@ -1094,7 +1094,7 @@ mod tests {
 	// A profile is a script run at every shell start, and it often holds tokens.
 	// The write used to replace a linked profile with a copy at the umask's mode,
 	// and wrote through a link left at its temp or backup name.
-	// Test ID: Eq4qaCX
+	// Test ID: dcq9n
 	#[cfg(unix)]
 	#[test]
 	#[cfg_attr(miri, ignore = "Miri can't set a file's owner")]
@@ -1166,7 +1166,7 @@ mod tests {
 
 	// Builds before the record existed, beta3 included, put the block in without
 	// noting it. Deleting such a block put it straight back at the next launch.
-	// Test ID: Eq4qaCY
+	// Test ID: dcq9p
 	#[test]
 	#[cfg_attr(miri, ignore = "Miri can't set a file's owner")]
 	fn a_block_already_there_is_noted_so_deleting_it_sticks() {
@@ -1195,7 +1195,7 @@ mod tests {
 
 	// The block's own comment used to invite a host color added inside the
 	// markers, which the next refresh deleted with no copy kept.
-	// Test ID: Eq4qaCZ
+	// Test ID: dcq9q
 	#[test]
 	fn a_host_color_is_set_where_a_refresh_leaves_it() {
 		assert!(!SNIPPET.contains("Add your own"));
@@ -1219,7 +1219,7 @@ mod tests {
 	// hook holds a delegate that `&` cannot call, so an earlier handler broke every
 	// directory change, and a second load wrapped its own wrapper. Both arms are
 	// run: the 5.1 one by forcing the test that picks it.
-	// Test ID: Eq4qaCa
+	// Test ID: dcq9r
 	#[test]
 	#[cfg_attr(miri, ignore = "Miri can't start a process")]
 	fn the_block_keeps_an_earlier_hook_and_survives_loading_twice() {
@@ -1278,7 +1278,7 @@ Write-Host \"COLOR=$global:__SilkTermHostColor\"",
 
 	// The PowerShell prompt is a port of the bash one and should read the same.
 	// It named only an origin remote and showed no count, a day after bash got both.
-	// Test ID: EqFy7VA
+	// Test ID: dcsz6
 	#[test]
 	#[cfg_attr(miri, ignore = "Miri can't start a process")]
 	fn the_powershell_prompt_shows_any_repository_and_how_far_it_is_from_upstream() {
@@ -1404,7 +1404,7 @@ Write-Host \"COLOR=$global:__SilkTermHostColor\"",
 	// A profile that already reports is not ours to edit, whoever set it up -
 	// and this is also what makes a second launch a no-op rather than a second
 	// copy of the block.
-	// Test ID: EnalvtQ
+	// Test ID: dbj7v
 	#[test]
 	fn a_profile_that_already_reports_is_left_alone() {
 		assert!(already_reports(&with_block("", "\n")), "our own block");
@@ -1424,7 +1424,7 @@ Write-Host \"COLOR=$global:__SilkTermHostColor\"",
 
 	// What is there is followed, never rewritten - so a prompt the profile sets
 	// up further down is the one this block wraps.
-	// Test ID: EnalvtR
+	// Test ID: dbj7w
 	#[test]
 	fn the_block_goes_at_the_end_and_keeps_what_was_there() {
 		let before = "Import-Module Cows\r\nSet-Alias ll Get-ChildItem\r\n";
@@ -1442,7 +1442,7 @@ Write-Host \"COLOR=$global:__SilkTermHostColor\"",
 	// PowerShell 5.1 writes UTF-16 by default, so a profile that does not decode
 	// as UTF-8 is an ordinary one. It used to read back as an empty string, which
 	// skipped the backup and replaced the file with the block alone.
-	// Test ID: EpHO1lo
+	// Test ID: dcbcz
 	#[test]
 	fn a_profile_that_is_not_utf8_is_left_alone() {
 		let dir = crate::testdir::run_dir().join(format!("silkterm_int16_{}", std::process::id()));
@@ -1475,7 +1475,7 @@ Write-Host \"COLOR=$global:__SilkTermHostColor\"",
 	// Deleting the block is documented as how to switch this off, in four places
 	// including the block's own first line. It was not: with the block gone there
 	// was no marker to match and the next launch put it straight back.
-	// Test ID: EpHWuEq
+	// Test ID: dcbe2
 	#[test]
 	#[cfg_attr(miri, ignore = "Miri can't set a file's owner")]
 	fn a_deleted_block_stays_deleted() {
@@ -1514,7 +1514,7 @@ Write-Host \"COLOR=$global:__SilkTermHostColor\"",
 
 	// The whole of what a launch does to a file that is not ours: keep a copy,
 	// follow what is there, and never do it twice.
-	// Test ID: EnalvtS
+	// Test ID: dbj7x
 	#[test]
 	#[cfg_attr(miri, ignore = "Miri can't set a file's owner")]
 	fn a_profile_is_backed_up_once_and_added_to_once() {
@@ -1568,7 +1568,7 @@ Write-Host \"COLOR=$global:__SilkTermHostColor\"",
 	// A block in a profile the shell will not run is worse than no block: it is
 	// an execution-policy error on every launch, which is what a first cut of
 	// this did to Windows PowerShell 5.1 on the box it was written on.
-	// Test ID: EnalvtT
+	// Test ID: dbj7y
 	#[test]
 	fn a_shell_that_will_not_run_scripts_keeps_its_profile() {
 		for allowed in ["RemoteSigned", "Unrestricted", "Bypass", " bypass "] {
@@ -1581,7 +1581,7 @@ Write-Host \"COLOR=$global:__SilkTermHostColor\"",
 
 	// Only PowerShell needs this: every other shell moves its own process, so
 	// the OS can be asked. A full path answers the same as a bare name.
-	// Test ID: EnalvtU
+	// Test ID: dbj7z
 	#[test]
 	fn only_the_powershells_are_offered_a_profile() {
 		assert!(is_powershell("pwsh"));
@@ -1610,7 +1610,7 @@ Write-Host \"COLOR=$global:__SilkTermHostColor\"",
 
 	// The block gains things over time, so an install that only ever appended
 	// would leave anyone who already has it on whatever version they first got.
-	// Test ID: EnbYSzy
+	// Test ID: dbjdy
 	#[test]
 	fn an_existing_block_is_brought_up_to_date_in_place() {
 		let stale = format!(
@@ -1631,7 +1631,7 @@ Write-Host \"COLOR=$global:__SilkTermHostColor\"",
 		assert_eq!(refreshed_block(&updated, LF), None);
 	}
 
-	// Test ID: EnbYSzz
+	// Test ID: dbjdz
 	#[test]
 	fn a_profile_with_no_block_of_ours_is_not_rewritten() {
 		assert_eq!(refreshed_block("# just my own profile\n", LF), None);
@@ -1644,7 +1644,7 @@ Write-Host \"COLOR=$global:__SilkTermHostColor\"",
 	// A profile with no byte-order mark is read as ANSI by Windows PowerShell
 	// 5.1, so a single accented character or box-drawing glyph in here arrives
 	// mangled on the one version that cannot be told otherwise.
-	// Test ID: EoTnK8W
+	// Test ID: dbzfa
 	#[test]
 	fn the_block_is_plain_ascii() {
 		let stray: String = SNIPPET.chars().filter(|c| !c.is_ascii()).collect();
@@ -1653,7 +1653,7 @@ Write-Host \"COLOR=$global:__SilkTermHostColor\"",
 
 	// The prompt is part of the block rather than a script beside it, and both
 	// halves of the version split have to reach it.
-	// Test ID: EoTnK8X
+	// Test ID: dbzfb
 	#[test]
 	fn the_block_has_the_prompt() {
 		assert!(SNIPPET.contains("function global:__SilkTermPrompt"));
@@ -1664,7 +1664,7 @@ Write-Host \"COLOR=$global:__SilkTermHostColor\"",
 
 	// A light check beside a heavy cross looked mismatched in the prompt. The
 	// light pair is the same weight, and neither is one an emoji face takes.
-	// Test ID: Er2UJef
+	// Test ID: dd5nm
 	#[test]
 	fn the_prompt_marks_are_the_light_pair() {
 		let glyphs = SNIPPET
@@ -1678,7 +1678,7 @@ Write-Host \"COLOR=$global:__SilkTermHostColor\"",
 
 	// The block people are told to paste in by hand has to be the block that
 	// gets installed, or one of the two quietly stops being true.
-	// Test ID: EnalvtV
+	// Test ID: dbj80
 	#[test]
 	fn the_documented_snippet_is_the_one_that_is_installed() {
 		let doc = include_str!("../../shell-integration.md").replace("\r\n", "\n");
@@ -1691,7 +1691,7 @@ Write-Host \"COLOR=$global:__SilkTermHostColor\"",
 
 	// Both prompts go into other people's shells, so a host color table may only
 	// show an example. A real machine name in a live line would ship with them.
-	// Test ID: Erftpx4
+	// Test ID: ddf3x
 	#[test]
 	fn the_bundled_prompts_color_no_named_machine() {
 		let live = |text: &'static str| {

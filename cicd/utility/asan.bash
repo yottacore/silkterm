@@ -68,9 +68,10 @@ fEcho_Clean "ASan canary (a planted leak) ..."
 rc=0; "${ASAN_CMD[@]}" --manifest-path cicd/tests/sanitizer-canary/Cargo.toml >"${canaryOut}" 2>&1 || rc=$?
 if ((rc == 0)) || ! grep -q 'ERROR: LeakSanitizer: detected memory leaks' "${canaryOut}" || ! grep -q 'leaks_on_purpose' "${canaryOut}"; then
 	tail -n 80 "${canaryOut}"
+	fEcho_Clean "FAIL de5f0 ASan canary caught"
 	fDie "the canary's leak was not reported by name, so a leak in the suite could pass too (output in ${canaryOut})"
 fi
-fEcho "OK: ASan canary caught (EtAocf6)"
+fEcho_Clean "PASS de5f0 ASan canary caught"
 
 suiteOut="${SILKTERM_TEST_DIR}/asan_suite.txt"
 fEcho_Clean "test suite under ASan and LSan (${SANITIZER_TOOLCHAIN}) ..."
@@ -93,3 +94,4 @@ fEcho "OK: no ASan or LSan reports (${counts}, $((SECONDS - start))s)"
 ##	History:
 ##		- 20261019 JC: Created.
 ##		- 20261026 JC: Jobs and priority from include/jobs.bash.
+##		- 20261028: The canary has a PASS or FAIL line.

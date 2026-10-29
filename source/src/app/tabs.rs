@@ -924,7 +924,7 @@ mod tests {
 
 	// The strip used to build and measure every tab's label on every frame,
 	// with nothing on screen changing.
-	// Test ID: Erlb8mF
+	// Test ID: ddgfs
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn idle_frames_build_no_tab_labels() {
@@ -946,7 +946,7 @@ mod tests {
 	// title, task, folder, rename or own title. The settings and the font make
 	// every tab build. A move the strip missed would show a stale label until
 	// something else happened.
-	// Test ID: Erlb98Q
+	// Test ID: ddgft
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_tab_label_builds_again_when_what_it_shows_moves() {
@@ -1017,7 +1017,7 @@ mod tests {
 	// A new tab goes just right of the active one and becomes active, or at
 	// the end with the setting off. Every tab past it moves along one, so a
 	// label kept by position has to follow its tab, not stay in the slot.
-	// Test ID: ErsV4PO
+	// Test ID: ddj50
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_new_tab_goes_next_to_the_current_one() {
@@ -1064,7 +1064,7 @@ mod tests {
 
 	// The tip's lines are a table in the terminal font, measured line by line.
 	// That used to happen on every frame the tip was up.
-	// Test ID: Erlb9TL
+	// Test ID: ddgfv
 	#[test]
 	fn the_tab_tip_is_measured_once_per_set_of_lines() {
 		let mut tip = super::TabTip {
@@ -1098,7 +1098,7 @@ mod tests {
 	// the same number by construction - shorten a path to a width the tab does not
 	// then give it and the last component is clipped anyway, which is the whole
 	// thing the shortening exists to avoid.
-	// Test ID: EnbYSzw
+	// Test ID: dbjdw
 	#[test]
 	fn a_title_is_fitted_to_the_width_it_is_given() {
 		for scale in [1.0, 1.5, 2.0] {
@@ -1124,7 +1124,7 @@ mod tests {
 	// at spawn, so an unresolved one means nothing was switched on and the engine
 	// chose for itself - and a guess from the list is exactly what had a pane
 	// running PowerShell labelled Command Prompt.
-	// Test ID: EnbYSzx
+	// Test ID: dbjdx
 	#[test]
 	fn a_tab_names_only_the_shell_it_can_see() {
 		assert_eq!(tab_command_line(None), "");
@@ -1137,7 +1137,7 @@ mod tests {
 		);
 	}
 
-	// Test ID: Er2UiYT
+	// Test ID: dd5pe
 	#[test]
 	fn changing_tab_wraps_at_both_ends() {
 		use super::tab_step;
@@ -1149,7 +1149,7 @@ mod tests {
 		assert_eq!(tab_step(0, 1, false), 0);
 	}
 
-	// Test ID: Er2UiYU
+	// Test ID: dd5pf
 	#[test]
 	fn a_moved_tab_trades_places_with_its_neighbour_and_stays_active() {
 		use super::move_tab;

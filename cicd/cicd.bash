@@ -260,48 +260,53 @@ fTestId(){ sed -n '/Test ID:/{s/.*Test ID:[[:space:]]*//;s/[[:space:]].*//;p;q;}
 ## Where a test script's stdout goes while it runs. The test run folder outlives
 ## a failed run, so a failed test's file is still there afterward.
 fTestOut(){ local name="${1//\//_}"; echo "${SILKTERM_TEST_DIR:-${TMPDIR:-/tmp}}/output_${name%.*}.txt"; }
-## fTestOut_Fail <out> <failure>: the end of a failed test's output into the log,
-## then the failure line, naming the file, aborts the run.
+## fTestLine <PASS|FAIL|SKIP> <script> <label> [why]: a test's one result line.
+fTestLine(){ local id; id="$(fTestId "${2}")"; fEcho_Clean "${1} ${id:------} ${3}${4:+, ${4}}"; }
+## fTestOut_Fail <out> <script> <label> <failure>: the end of a failed test's
+## output into the log, its FAIL line, then the failure line, naming the file,
+## aborts the run.
 fTestOut_Fail(){
-	local -r out="${1}" failure="${2}"
+	local -r out="${1}" script="${2}" label="${3}" failure="${4}"
 	local -i lines=0
 	[[ -f "${out}" ]] && lines="$(wc -l <"${out}")"
 	if ((lines > 200)); then fEcho_Clean "last 200 of ${lines} lines of output:"; tail -n 200 "${out}"
 	elif ((lines)); then cat "${out}"; fi
-	fDie "${failure}, output kept in ${out}"
+	fTestLine FAIL "${script}" "${label}"
+	fDie "${failure} ($(fTestId "${script}")), output kept in ${out}"
 }
 ## fRunTest <script> <label> [failure]: runs a test script under the repo root,
-## if it is there. OK and its test ID on a pass, with its output dropped. The
-## failure text, by default "<label> test failed", aborts the run, after the
-## test's output.
+## if it is there. Its PASS line on a pass, with its output dropped. The failure
+## text, by default "<label> test failed", aborts the run, after the test's
+## output and its FAIL line.
 fRunTest(){
 	local -r script="${1}" label="${2}" failure="${3:-${2} test failed}"
 	[[ -x "${root}/${script}" ]] || return 0
 	if ((listing)); then fListTest "${script}" "${label}"; return 0; fi
 	fEcho_Clean "${label} ..."
 	local out; out="$(fTestOut "${script}")"
-	"${root}/${script}" >"${out}" || fTestOut_Fail "${out}" "${failure} ($(fTestId "${script}"))"
+	"${root}/${script}" >"${out}" || fTestOut_Fail "${out}" "${script}" "${label}" "${failure}"
 	rm -f "${out}"
-	fEcho "OK: ${label} ($(fTestId "${script}"))"
+	fTestLine PASS "${script}" "${label}"
 }
-## fRunTest_MaySkip <script> <label> [skipped]: the same, for a test whose exit 3
-## means it could not run. That is a warning, by default "<label> skipped", and
-## never an OK.
+## fRunTest_MaySkip <script> <label> [why]: the same, for a test whose exit 3
+## means it could not run. That is a SKIP line, with the last "skip: <why>" the
+## test printed, or else the why given.
 fRunTest_MaySkip(){
-	local -r script="${1}" label="${2}" skipped="${3:-${2} skipped}"
+	local -r script="${1}" label="${2}" why="${3:-could not run}"
 	[[ -x "${root}/${script}" ]] || return 0
 	if ((listing)); then fListTest "${script}" "${label}"; return 0; fi
 	fEcho_Clean "${label} ..."
-	local rc=0 out; out="$(fTestOut "${script}")"
+	local rc=0 out said; out="$(fTestOut "${script}")"
 	"${root}/${script}" >"${out}" || rc=$?
 	case "${rc}" in
-		0) rm -f "${out}"; fEcho "OK: ${label} ($(fTestId "${script}"))" ;;
-		3) rm -f "${out}"; fEcho "WARNING: ${skipped}" ;;
-		*) fTestOut_Fail "${out}" "${label} test failed ($(fTestId "${script}"))" ;;
+		0) rm -f "${out}"; fTestLine PASS "${script}" "${label}" ;;
+		3) said="$(sed -n 's/^[[:space:]]*skip: //p' "${out}" | tail -n 1)"; rm -f "${out}"
+		   fTestLine SKIP "${script}" "${label}" "${said:-${why}}" ;;
+		*) fTestOut_Fail "${out}" "${script}" "${label}" "${label} test failed" ;;
 	esac
 }
 ## fListTest <script> <label>: a test's line under --list.
-fListTest(){ local id; id="$(fTestId "${1}")"; printf '  %-7s  %s\n' "${id:--------}" "${2}"; }
+fListTest(){ local id; id="$(fTestId "${1}")"; printf '  %-5s  %s\n' "${id:------}" "${2}"; }
 ## --list: the Rust tests cargo test runs, as ID and name.
 fListRustTests(){
 	local found=""
@@ -797,8 +802,8 @@ fCheckDocs(){
 	## in .rs comments, and plain comments on pub items.
 	if [[ -x "${root}/cicd/tests/docs/run.py" ]]; then
 		fEcho_Clean "markdown spacing, banner rules, doc comments ..."
-		docsOut="$("${root}/cicd/tests/docs/run.py" 2>&1)" || { echo "${docsOut}"; fDie "a markdown file is missing a blank line, or a .rs file has a banner rule or a plain comment on a pub item - see above ($(fTestId cicd/tests/docs/run.py))"; }
-		fEcho "OK: markdown spacing, banner rules, doc comments ($(fTestId cicd/tests/docs/run.py))"
+		docsOut="$("${root}/cicd/tests/docs/run.py" 2>&1)" || { echo "${docsOut}"; fTestLine FAIL cicd/tests/docs/run.py "markdown spacing, banner rules, doc comments"; fDie "a markdown file is missing a blank line, or a .rs file has a banner rule or a plain comment on a pub item - see above ($(fTestId cicd/tests/docs/run.py))"; }
+		fTestLine PASS cicd/tests/docs/run.py "markdown spacing, banner rules, doc comments"
 	fi
 	## Every test carries an ID, and no two share one.
 	if [[ -x "${root}/cicd/utility/test-id.py" ]]; then
@@ -895,10 +900,12 @@ fScriptTests(){
 	fRunTest cicd/tests/showdown/rigs.py "showdown rig entries" "showdown rig entry test failed"
 	## The startup gates, which once marked a run as seen while it was being written.
 	fRunTest cicd/tests/gates/run.bash "startup gates" "startup gate test failed"
+	## The test ID tool makes IDs in the new form and the check refuses any other.
+	fRunTest cicd/tests/testid/run.py "test IDs" "test ID test failed"
 	## Old config files converted by the program just built: in place where shcl
 	## can migrate them, written new where it cannot, the old file kept either way.
-	## Exit 3 means there was no binary to run, which is a skip and never an OK.
-	fRunTest_MaySkip cicd/tests/config-convert/run.bash "config conversion" "config conversion skipped, no binary to run"
+	## Exit 3 means there was no binary to run, which is a SKIP line and never a PASS.
+	fRunTest_MaySkip cicd/tests/config-convert/run.bash "config conversion" "no binary to run"
 	## --quick skips the window tests below that take 30 s to 2 min each. The
 	## rest take 25 s or less.
 	## The window shows at the size it keeps, maximized and fullscreen too, with
@@ -995,25 +1002,29 @@ fScriptTests(){
 	fWinGuiScenarios
 	## Headless scroll regression harness (slow; skipped under --quick). A measured
 	## regression aborts here. Exit 3 means it could not run at all (no Xvfb, cage or
-	## binary), which is a skip for that arm and never an OK.
+	## binary), which is a SKIP line for that arm and never a PASS.
 	if ((! quick)) && [[ -n "${SCROLL_HARNESS+x}" ]] && ((${#SCROLL_HARNESS[@]})) && ((listing)); then
 		fListTest "${SCROLL_HARNESS[0]}" "scroll harness (X11)"
-		[[ "${SCROLL_HARNESS_WAYLAND:-0}" != 1 ]] || fListTest "${SCROLL_HARNESS[0]}" "scroll harness (Wayland)"
+		"${root}/${SCROLL_HARNESS[0]}" "${SCROLL_HARNESS[@]:1}" --list
+		if [[ "${SCROLL_HARNESS_WAYLAND:-0}" == 1 ]]; then
+			fListTest "${SCROLL_HARNESS[0]}" "scroll harness (Wayland)"
+			"${root}/${SCROLL_HARNESS[0]}" "${SCROLL_HARNESS[@]:1}" --wayland --list
+		fi
 	elif ((! quick)) && [[ -n "${SCROLL_HARNESS+x}" ]] && ((${#SCROLL_HARNESS[@]})); then
 		fEcho_Clean "scroll regression harness (headless, X11) ..."
 		scrollRc=0; "${root}/${SCROLL_HARNESS[0]}" "${SCROLL_HARNESS[@]:1}" || scrollRc=$?
 		case "${scrollRc}" in
-			0) fEcho "OK: scroll harness (X11) ($(fTestId "${SCROLL_HARNESS[0]}"))" ;;
-			3) fEcho "WARNING: scroll harness (X11) skipped, nothing was measured" ;;
-			*) fDie "scroll regression harness reported a regression (X11)" ;;
+			0) fTestLine PASS "${SCROLL_HARNESS[0]}" "scroll harness (X11)" ;;
+			3) fTestLine SKIP "${SCROLL_HARNESS[0]}" "scroll harness (X11)" "nothing was measured" ;;
+			*) fTestLine FAIL "${SCROLL_HARNESS[0]}" "scroll harness (X11)"; fDie "scroll regression harness reported a regression (X11)" ;;
 		esac
 		if [[ "${SCROLL_HARNESS_WAYLAND:-0}" == 1 ]]; then
 			fEcho_Clean "scroll regression harness (headless, Wayland) ..."
 			scrollRc=0; "${root}/${SCROLL_HARNESS[0]}" "${SCROLL_HARNESS[@]:1}" --wayland || scrollRc=$?
 			case "${scrollRc}" in
-				0) fEcho "OK: scroll harness (Wayland) ($(fTestId "${SCROLL_HARNESS[0]}"))" ;;
-				3) fEcho "WARNING: scroll harness (Wayland) skipped, nothing was measured" ;;
-				*) fDie "scroll regression harness reported a regression (Wayland)" ;;
+				0) fTestLine PASS "${SCROLL_HARNESS[0]}" "scroll harness (Wayland)" ;;
+				3) fTestLine SKIP "${SCROLL_HARNESS[0]}" "scroll harness (Wayland)" "nothing was measured" ;;
+				*) fTestLine FAIL "${SCROLL_HARNESS[0]}" "scroll harness (Wayland)"; fDie "scroll regression harness reported a regression (Wayland)" ;;
 			esac
 		fi
 	elif ((quick && ! listing)); then
@@ -1027,12 +1038,12 @@ fScriptTests(){
 		if command -v pwsh >/dev/null 2>&1; then
 			fEcho_Clean "dogfood launcher harness ..."
 			if pwsh -NoProfile -File "${root}/${LAUNCHER_HARNESS[0]}" "${LAUNCHER_HARNESS[@]:1}"; then
-				fEcho "OK: launcher harness ($(fTestId "${LAUNCHER_HARNESS[0]}"))"
+				fTestLine PASS "${LAUNCHER_HARNESS[0]}" "launcher harness"
 			else
-				fDie "dogfood launcher harness failed"
+				fTestLine FAIL "${LAUNCHER_HARNESS[0]}" "launcher harness"; fDie "dogfood launcher harness failed"
 			fi
 		else
-			fEcho "WARNING: launcher harness skipped: pwsh not found"
+			fTestLine SKIP "${LAUNCHER_HARNESS[0]}" "launcher harness" "pwsh not found"
 		fi
 	fi
 }
@@ -2156,6 +2167,10 @@ fEcho_Clean
 
 
 ##	History:
+##		- 2026-10-28: --list takes the scroll harness's scenes, each with its own ID.
+##		- 2026-10-28: One PASS, FAIL or SKIP line per test, with its ID and name. A
+##		              test script that can't run says why on its SKIP line.
+##		- 2026-10-28: --list takes test IDs in the new 5-character form.
 ##		- 2026-10-28: Steps: a 79-wide rule, then a stamped Starting line numbered of
 ##		              the steps the run takes, and a PASS, SKIP or FAIL line. A step
 ##		              turned off isn't counted, and the plan says what turned it off.

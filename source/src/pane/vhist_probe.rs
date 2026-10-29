@@ -506,7 +506,7 @@ fn transcript_scene(lines: usize, repaint: bool) -> (Vec<Vec<u8>>, usize) {
 	(chunks.into_iter().map(String::into_bytes).collect(), newest)
 }
 
-// Test ID: Ese21WF
+// Test ID: ddxjp
 #[test]
 #[cfg_attr(miri, ignore = "too slow under Miri")]
 fn a_transcript_scrolled_by_region_is_rebuilt_whole() {
@@ -531,7 +531,7 @@ fn a_transcript_scrolled_by_region_is_rebuilt_whole() {
 	}
 }
 
-// Test ID: Ese21WG
+// Test ID: ddxjq
 #[test]
 #[cfg_attr(miri, ignore = "too slow under Miri")]
 fn a_burst_past_a_screenful_between_frames_loses_nothing() {
@@ -550,7 +550,7 @@ fn a_burst_past_a_screenful_between_frames_loses_nothing() {
 
 // Recordings made by cicd/utility/vhist/record.py, one `<app>.rec` per program in
 // the folder named by SILK_VHIST_REC, 100 columns by 30 rows. Prints a table.
-// Test ID: Ese21WH
+// Test ID: ddxjr
 #[test]
 #[ignore = "needs recordings; run by hand with SILK_VHIST_REC"]
 fn recorded_programs_rebuild_what_they_showed() {

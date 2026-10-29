@@ -8,7 +8,7 @@
 ##		options reach the run inside while the host options stay out, the binaries
 ##		that run made are picked up here, and a stand-in docker sees the engine
 ##		start the container the right way and stop when it fails.
-##	- Test ID: EsJg9EF
+##	- Test ID: ddrp2
 ##	- History: At bottom of file.
 
 ##	Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
@@ -371,7 +371,7 @@ fCheck "and this run says where its own is" grep -qF "kept the run's temp folder
 ## --list prints what the other options would run, and runs none of it.
 fRun list.log --merge-gate --list --container
 fCheck "--list with --merge-gate prints the plan" bash -c '[[ "$1" == 0 && "$2" == *"Run .................: --merge-gate"* ]]' _ "${rc}" "${out}"
-fCheck "and the test IDs" bash -c '[[ "$1" == *"Rust tests (cargo test, "* && "$1" == *"  Er2UgY7  pipeline steps"* && "$1" == *"  EsJg9EF  container run"* ]]' _ "${out}"
+fCheck "and the test IDs" bash -c '[[ "$1" == *"Rust tests (cargo test, "* && "$1" == *"  dd5nn  pipeline steps"* && "$1" == *"  ddrp2  container run"* ]]' _ "${out}"
 fCheck "and starts and builds nothing" fNot grep -sqE '^(run|build) ' "${work}/list.log"
 fCheck "nor goes past the plan" bash -c '[[ "$1" != *"Starting Remote sync"* && "$1" != *"CI/CD: done"* ]]' _ "${out}"
 fListSteps(){ sed -nE 's/^  Step [0-9]+ of [0-9]+  //p' <<<"${out}" | paste -sd, -; }
@@ -379,10 +379,10 @@ listed="$(fListSteps)"
 fCheck "the steps in order, the profiler after the checks here" bash -c '[[ "$1" == "Container image,Format,Debug build,Regression tests,Release build: native,"*",Packages,Checks on this box,Profiler"* ]]' _ "${listed}"
 fCheck "and the steps --merge-gate turns off, with why" bash -c '[[ "$1" == *"    - Remote sync (--merge-gate)"* && "$1" == *"    - Backup + publish (--merge-gate)"* ]]' _ "${out}"
 fRun listquick.log --list --quick --container
-fCheck "--quick leaves out what it skips" bash -c '[[ "$1" == *"  EqA7Wki  git hooks"* && "$1" != *"project rename"* ]]' _ "${out}"
+fCheck "--quick leaves out what it skips" bash -c '[[ "$1" == *"  dcrj6  git hooks"* && "$1" != *"project rename"* ]]' _ "${out}"
 fRun listgate.log --backlog-run-quick docs fmt --list --container
 fCheck "--list with --backlog-run-quick prints its steps in order" bash -c '[[ "$1" == *"  Step 1 of 2  Docs checks"*"  Step 2 of 2  Format check"* ]]' _ "${out}"
-fCheck "and the docs checks' IDs" bash -c '[[ "$1" == *"  EqRbSy0  tables of contents"* && "$1" == *"  Er2UgYD  markdown spacing"* ]]' _ "${out}"
+fCheck "and the docs checks' IDs" bash -c '[[ "$1" == *"  dcwrr  tables of contents"* && "$1" == *"  dd5nv  markdown spacing"* ]]' _ "${out}"
 fCheck "and starts nothing" bash -c '[[ "$1" == 0 ]] && ! grep -sqE "^(run|build) " "$2"' _ "${rc}" "${work}/listgate.log"
 
 ## Ctrl+C mid-run, to the whole process group as a terminal sends it, and the end

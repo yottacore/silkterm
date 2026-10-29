@@ -15,7 +15,7 @@
 	History: At bottom of file.
 #>
 
-##	Test ID: EsgiFgO
+##	Test ID: ddy7c
 
 
 if (-not (fSessionUsable)) { fSkip "console session is locked - nothing can be typed" }

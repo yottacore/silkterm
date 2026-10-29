@@ -293,7 +293,7 @@ mod tests {
 	// The box is modal by gate, and the gate is a list every input path has to be
 	// on. These four were missed once: the accelerators applied and closed the
 	// dialog through the box, and typing edited the row sitting behind it.
-	// Test ID: Em430PC
+	// Test ID: davex
 	#[test]
 	fn the_prompt_swallows_every_input_path() {
 		let mut m = |s: &str| s.chars().count() as f32;
@@ -337,7 +337,7 @@ mod tests {
 	// The prompt is not a row. Clicking its field used to put the prompt's own
 	// sentinel index into the focus ring, and the next frame read the row list
 	// with it.
-	// Test ID: EpHNgxU
+	// Test ID: dcbcx
 	#[test]
 	fn clicking_the_prompt_field_leaves_the_focus_ring_on_a_real_row() {
 		let mut m = |s: &str| s.chars().count() as f32;
@@ -358,7 +358,7 @@ mod tests {
 
 	// The prompt box takes the keyboard while it is up, and Esc leaves the theme
 	// exactly as it was.
-	// Test ID: Em3lZEz
+	// Test ID: davcv
 	#[test]
 	fn the_prompt_box_owns_the_keyboard_until_it_closes() {
 		let mut d = on_theme("Matrix");
@@ -393,7 +393,7 @@ mod tests {
 
 	// A name OK cannot take keeps the box open and says why, instead of closing
 	// and quietly doing nothing.
-	// Test ID: Em3lZF0
+	// Test ID: davcw
 	#[test]
 	fn a_name_it_cannot_take_keeps_the_box_open() {
 		let mut d = on_theme("Matrix");

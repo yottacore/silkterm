@@ -379,7 +379,7 @@ mod tests {
 	// The box holds HSV and the row holds bytes, so every drag and every
 	// keystroke crosses this both ways. A color that shifted on the way through
 	// would creep every time the box opened.
-	// Test ID: EqSaSRc
+	// Test ID: dcx0a
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_color_survives_the_trip_through_hue_saturation_and_brightness() {
@@ -400,7 +400,7 @@ mod tests {
 	// A gray says nothing about hue and black says nothing about saturation
 	// either. Reading them off the bytes would send both markers home the moment
 	// a drag reached an edge, or Brightness was typed to 0.
-	// Test ID: EqSaSRd
+	// Test ID: dcx0b
 	#[test]
 	fn a_colorless_color_keeps_the_hue_and_saturation_it_had() {
 		let held = hsv(0.6, 0.8, 0.4);
@@ -412,7 +412,7 @@ mod tests {
 		assert_eq!(black.v, 0.0);
 	}
 
-	// Test ID: EqSaSRe
+	// Test ID: dcx0c
 	#[test]
 	fn the_hue_ramp_hits_the_six_primaries() {
 		let want = [
@@ -435,7 +435,7 @@ mod tests {
 	// the shader's own text against the model the markers are placed with. The
 	// two painting different colors is the failure that has no other symptom:
 	// the marker would sit where the color is not.
-	// Test ID: EqSaSRf
+	// Test ID: dcx0d
 	#[test]
 	fn the_shader_paints_what_the_model_says() {
 		let wgsl = crate::gfx::RECT_WGSL;
@@ -465,7 +465,7 @@ mod tests {
 
 	// A press reads back as the color drawn under it, and the marker goes back
 	// where the press was. Without that a click moves the color slightly.
-	// Test ID: EqSaSRg
+	// Test ID: dcx0e
 	#[test]
 	fn the_square_and_the_strip_read_back_where_the_marker_is() {
 		let g = geom(panel(), &metrics());
@@ -495,7 +495,7 @@ mod tests {
 		assert_eq!((far.s, far.v), (0.0, 0.0));
 	}
 
-	// Test ID: EqSaSRh
+	// Test ID: dcx0f
 	#[test]
 	fn every_piece_of_the_box_sits_inside_it() {
 		for panel_w in [280.0, 400.0, 560.0, 1400.0] {
@@ -540,7 +540,7 @@ mod tests {
 		}
 	}
 
-	// Test ID: EqSaSRi
+	// Test ID: dcx0g
 	#[test]
 	fn a_typed_percent_reaches_the_channel_it_names() {
 		let start = from_rgb([10, 20, 30], hsv(0.0, 0.0, 0.0));
@@ -561,7 +561,7 @@ mod tests {
 		assert_eq!(Field::Saturation.text(hsv(0.5, 0.42, 1.0)), "42");
 	}
 
-	// Test ID: EqSaSRj
+	// Test ID: dcx0h
 	#[test]
 	fn a_value_box_takes_only_what_it_can_mean() {
 		assert!(Field::Red.accepts('7', 2, false));
@@ -576,7 +576,7 @@ mod tests {
 
 	// Arrows step a value box by the same hundredth of its range every other
 	// number box in the dialog takes.
-	// Test ID: EqSaSRk
+	// Test ID: dcx0j
 	#[test]
 	fn an_arrow_steps_a_value_box_by_a_hundredth() {
 		let c = hsv(0.5, 0.5, 0.5);

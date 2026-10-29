@@ -221,20 +221,24 @@ impl State {
 		};
 		let now = !p.copy_enabled(kind);
 		p.set_copy(kind, now);
-		// the last choice is what the next launch and new tabs start with.
-		// Other panes keep their own, which is why this skips apply_new_settings.
 		if kind == CopyKind::Select {
-			save_live(|live| {
-				let changed = live.copy_on_select != now;
-				let on = knobs::Value::Bool(now);
-				crate::fields::set(live, crate::ui_spec::Key::CopyOnSelect, &on, None);
-				changed
-			});
+			remember_copy_select(now);
 		}
 		if self.tabs.cur().panes.contains_key(&target) {
 			self.tabs.cur_mut().focused = target;
 		}
 	}
+}
+
+// The last choice is what the next launch and new tabs start with. Other panes
+// keep their own, which is why this skips apply_new_settings.
+fn remember_copy_select(now: bool) {
+	save_live(|live| {
+		let changed = live.copy_on_select != now;
+		let on = knobs::Value::Bool(now);
+		crate::fields::set(live, crate::ui_spec::Key::CopyOnSelect, &on, None);
+		changed
+	});
 }
 
 #[cfg(test)]
@@ -245,11 +249,41 @@ mod tests {
 		menubar_text_slot,
 	};
 	use crate::text::TextCtx;
+
+	// Copy on select turned on or off from a menu is saved as the setting, so
+	// the next launch starts with the last choice.
+	// Test ID: dejj7
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn the_menu_s_copy_on_select_choice_lasts_to_the_next_launch() {
+		let _guard = crate::config::test_config_lock();
+		let saved = crate::config::settings();
+		let _store = crate::config::test_store_lock();
+		let dir =
+			crate::testdir::run_dir().join(format!("silkterm_copysel_{}", std::process::id()));
+		let _ = std::fs::remove_dir_all(&dir);
+		std::fs::create_dir_all(&dir).unwrap();
+		let path = dir.join("config.shcl");
+		std::fs::write(&path, "").unwrap();
+		crate::config::set_config_override(path.clone());
+		crate::config::update(crate::config::reload_from_disk());
+		for on in [false, true, false] {
+			super::remember_copy_select(on);
+			assert_eq!(
+				crate::config::reload_from_disk().copy_on_select,
+				on,
+				"the next launch reads {on}"
+			);
+		}
+		crate::config::update((*saved).clone());
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
 	// The chrome shares a coordinate space with the terminal grid, so nothing
 	// A narrow window used to draw "Copy on:" straight over "Panes" and "Help" -
 	// both there, neither readable. The cluster sheds parts instead, and the
 	// checkboxes are the last thing to go because they carry the state.
-	// Test ID: Eo6mi5I
+	// Test ID: dbsya
 	#[test]
 	fn the_copy_cluster_sheds_parts_before_it_reaches_the_menu_titles() {
 		let metrics = |right: f32| CopyMetrics {
@@ -275,7 +309,7 @@ mod tests {
 
 	// A word that is not drawn cannot be aimed at, so the box has to answer for
 	// itself - otherwise the narrow arrangement has a dead checkbox.
-	// Test ID: Eo6mi5J
+	// Test ID: dbsyb
 	#[test]
 	fn a_checkbox_with_no_word_is_still_clickable() {
 		let metrics = CopyMetrics {
@@ -302,7 +336,7 @@ mod tests {
 		);
 	}
 
-	// Test ID: Er2UvPt
+	// Test ID: dd5pw
 	#[test]
 	fn alt_and_a_title_letter_opens_that_menu() {
 		for (i, ch) in "fevtph".chars().enumerate() {
@@ -316,7 +350,7 @@ mod tests {
 		assert_eq!(firsts.len(), MENU_BAR.len(), "two titles share a letter");
 	}
 
-	// Test ID: Er2UvPu
+	// Test ID: dd5px
 	#[test]
 	fn the_bar_titles_are_underlined_only_while_alt_is_held_and_nothing_is_open() {
 		assert!(bar_title_underlines(false, None, &MENU_BAR).is_empty());
@@ -334,7 +368,7 @@ mod tests {
 	// The titles and the copy labels beside them are one row of text, so they
 	// sit on one baseline. The labels once centered their whole ink box instead
 	// and rode half a descent higher.
-	// Test ID: Er2VLee
+	// Test ID: dd5qp
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_bar_titles_and_the_copy_labels_share_a_baseline() {

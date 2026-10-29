@@ -7,7 +7,7 @@
 ##		launcher that still works from a path holding a space.
 ##		The last two run install.bash for real, against a stand-in release served
 ##		by a curl on PATH, in a scratch home and temp folder.
-##	- Test ID: EpHW9fk
+##	- Test ID: dcbdz
 ##	- History: At bottom of file.
 
 ##	Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
@@ -229,6 +229,17 @@ fCases() {
 	fCheck "${kind}: a rate-limited API call stops the install" test "${rc}" -ne 0
 	fCheck "${kind}: and gives the rate limit hint" fSaid "${h}" "rate limit is exhausted"
 
+	## A download that doesn't match its checksum installs nothing.
+	caseDir="${work}/${kind}-rel-badsum"
+	fRelease "${caseDir}" 9.9.9
+	printf '#tampered\n' >> "${caseDir}/silkterm-9.9.9-linux-x86_64"
+	cp "${relDir}/releases.json" "${caseDir}/"
+	h="${work}/${kind}-badsum"
+	rc=0; STUB_DIR="${caseDir}" fInstall "${h}" || rc=$?
+	fCheck "${kind}: a checksum mismatch stops the install" test "${rc}" -ne 0
+	fCheck "${kind}: and says so" fSaid "${h}" "checksum mismatch - NOT installing"
+	fCheck "${kind}: and installs nothing" test ! -e "${h}/.local/bin/silkterm"
+
 	## A re-run with the program current puts back a launcher that went missing,
 	## and leaves the program alone.
 	h="${work}/${kind}-rerun"
@@ -390,3 +401,4 @@ echo "all passed"
 ##		               puts back a missing launcher.
 ##		- 20260926 JC: A release list as one object, an option with no value, and
 ##		               install.ps1 without -Yes where it cannot ask.
+##		- 20261028 JC: A download that fails its checksum installs nothing.

@@ -686,7 +686,7 @@ mod tests {
 		.map(|v| v.text)
 	}
 
-	// Test ID: ErNFYUb
+	// Test ID: ddamd
 	#[test]
 	fn put_back_leaves_the_registry_as_it_was() {
 		for assoc in Assoc::ALL {
@@ -708,7 +708,7 @@ mod tests {
 		}
 	}
 
-	// Test ID: ErNFYUc
+	// Test ID: ddame
 	#[test]
 	fn a_double_click_runs_silkterm_with_the_file() {
 		let mut m = stock();
@@ -735,7 +735,7 @@ mod tests {
 		assert!(command(&m, "VBSFile").is_none());
 	}
 
-	// Test ID: ErNFYUd
+	// Test ID: ddamf
 	#[test]
 	fn put_back_restores_a_value_that_was_there_and_its_type() {
 		let mut m = stock();
@@ -751,7 +751,7 @@ mod tests {
 		assert_eq!(m.get(key, ""), Some(theirs));
 	}
 
-	// Test ID: ErNFYUe
+	// Test ID: ddamg
 	#[test]
 	fn put_back_leaves_a_value_somebody_changed_since() {
 		let mut m = stock();
@@ -769,7 +769,7 @@ mod tests {
 		);
 	}
 
-	// Test ID: ErNFYUf
+	// Test ID: ddamh
 	#[test]
 	fn registering_again_keeps_what_was_there_first() {
 		let mut m = stock();
@@ -783,7 +783,7 @@ mod tests {
 		assert_eq!(m.get(key, "").map(|v| v.text).as_deref(), Some("first.exe"));
 	}
 
-	// Test ID: ErNFYUg
+	// Test ID: ddamj
 	#[test]
 	fn the_folder_entry_opens_the_folder() {
 		let mut m = stock();
@@ -805,7 +805,7 @@ mod tests {
 		}
 	}
 
-	// Test ID: ErNFYUh
+	// Test ID: ddamk
 	#[test]
 	fn a_type_the_user_picked_an_app_for_is_reported() {
 		let mut m = stock();
@@ -826,7 +826,7 @@ mod tests {
 		assert!(overridden(Assoc::PowerShell, &m).is_empty());
 	}
 
-	// Test ID: ErNFYUi
+	// Test ID: ddamm
 	#[test]
 	fn a_dogfood_build_registers_the_link_beside_its_versions_folder() {
 		let versioned = PathBuf::from("/l/Programs/silkterm_versions/silkterm_newest.exe");
@@ -837,7 +837,7 @@ mod tests {
 		assert_eq!(exe_to_register(&installed, &|_| true), installed);
 	}
 
-	// Test ID: ErNFYUj
+	// Test ID: ddamn
 	#[test]
 	fn open_picks_the_host_by_file_type() {
 		let args = vec!["a b".to_string()];
@@ -867,7 +867,7 @@ mod tests {
 	// The real registry, on a key of its own that it removes again. Types go
 	// through unchanged, an empty REG_NONE marker included, and prune takes only
 	// an empty key.
-	// Test ID: ErNHwGL
+	// Test ID: ddamx
 	#[cfg(windows)]
 	#[test]
 	fn the_registry_store_round_trips() {

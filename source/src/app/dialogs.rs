@@ -611,7 +611,7 @@ mod tests {
 
 	// A Mac with no Metal device ended the launch with a line on stderr only,
 	// which a launch from Finder never shows.
-	// Test ID: EtS63vE
+	// Test ID: de9m1
 	#[test]
 	fn no_device_on_macos_says_why_and_that_nothing_can_stand_in() {
 		let (headline, detail) = super::no_device_words(true, "No suitable graphics adapter found");
@@ -632,7 +632,7 @@ mod tests {
 	// A save nobody asked for can be refused at every resize, so it is said once
 	// a session for each file. An OK in Settings that could not save is said
 	// every time, or the button would seem to do nothing.
-	// Test ID: EqGnMOu
+	// Test ID: dct5j
 	#[test]
 	fn a_refused_save_is_said_once_unless_it_was_asked_for() {
 		let mut told = Vec::new();

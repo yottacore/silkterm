@@ -1222,7 +1222,7 @@ mod tests {
 
 	// A family resolved again, as on every font change and new window, comes
 	// back as the copy already kept rather than one more leaked string.
-	// Test ID: EtAv8Lw
+	// Test ID: de5ft
 	#[test]
 	fn a_name_resolved_again_is_kept_once() {
 		let first = intern(String::from("Interned Sans Test"));
@@ -1237,7 +1237,7 @@ mod tests {
 
 	// Only dark-on-light gets the correction. Applying it the other way would
 	// thin text that linear blending has already made heavy enough.
-	// Test ID: EqWXhBB
+	// Test ID: dcxys
 	#[test]
 	fn only_text_darker_than_its_background_is_corrected() {
 		let (black, white) = ([0, 0, 0], [255, 255, 255]);
@@ -1267,7 +1267,7 @@ mod tests {
 	// The pair the curve is built from spans the real pair's own brightness, and
 	// the shader divides by the gap between the two - so a dark-on-light pair has
 	// to come back the darker one first.
-	// Test ID: EqWXhBC
+	// Test ID: dcxyt
 	#[test]
 	fn the_pair_reaches_the_shader_as_grays_of_its_own_brightness() {
 		let (fg, bg, _) = text_blend([0, 0, 0], [255, 255, 255], 1.0);
@@ -1311,7 +1311,7 @@ mod tests {
 	// Light mode's text has to look as heavy as dark mode's, every built-in
 	// theme. With the sRGB match alone it put down about three quarters of the
 	// ink, which is what read as thin.
-	// Test ID: ErwcyUJ
+	// Test ID: ddk4n
 	#[test]
 	fn light_text_puts_down_the_ink_dark_text_does() {
 		for (name, t) in crate::theme::THEMES {
@@ -1335,7 +1335,7 @@ mod tests {
 	// single advance (Monaspace Argon does it for 53 of them, emoji included).
 	// Whole cells is what the row buffer lays out in, so the rounding has to
 	// report that honestly rather than call anything close enough.
-	// Test ID: Elm5uB6
+	// Test ID: daq4p
 	#[test]
 	fn a_single_advance_never_reads_as_two_cells() {
 		let unit = 1240.0; // Monaspace Argon's own ASCII advance, in font units
@@ -1354,7 +1354,7 @@ mod tests {
 	// The family is one list on every platform: `font.family` first, which leads
 	// with the desktop's monospace while automatic, then the desktop's monospace,
 	// then the built-in stack, each name once.
-	// Test ID: EsDsIof
+	// Test ID: ddq9d
 	#[test]
 	fn mono_candidates_put_the_family_first_and_the_built_in_stack_last() {
 		let builtin: Vec<String> = config::DEFAULT_FONT_STACK
@@ -1380,12 +1380,12 @@ mod tests {
 	// Commented out by 2026100907341818. "Use system font" is back, but on it
 	// makes the family itself the desktop's font ahead of the built-in list,
 	// with a list set by hand set aside, so there is no order left to pick.
-	// The test above and EsZk4LL replace it.
+	// The test above and ddwhq replace it.
 	// // The search order is one list on every platform. `use_system_font` only
 	// // decides where the OS family sits in it - it must never drop the configured
 	// // stack, which is what made Linux and Windows resolve the same config
 	// // differently, and the built-in stack always backs both up.
-	// // Test ID: ElEvh0U
+	// // Test ID: daf5g
 	// #[test]
 	// fn mono_candidates_keep_one_order_on_every_platform() {
 	// 	let configured = Some("Alpha, Beta");
@@ -1421,7 +1421,7 @@ mod tests {
 	// A pinned mono family falls back to a color emoji face that rasterizes to
 	// nothing, which drew every emoji as an empty cell. The generic-monospace
 	// retry must find a face that actually paints.
-	// Test ID: ElBP6CG
+	// Test ID: daeaa
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn emoji_falls_back_to_a_face_that_rasterizes() {
@@ -1444,7 +1444,7 @@ mod tests {
 	// A chrome line placed by ui_visible_center_top must sit with its visible
 	// (ascender-top..baseline) box centered in the bar, for any bar height and
 	// metrics - so a font/size change stays balanced without hand-tuned padding.
-	// Test ID: EiyvOXw
+	// Test ID: d9dfz
 	#[test]
 	fn chrome_text_visible_box_centers_in_bar() {
 		let vmetrics = (13.6f32, 3.4f32); // ascent, descent px
@@ -1463,7 +1463,7 @@ mod tests {
 
 	// A tab title placed by ui_ink_center_top sits with ascender-top to
 	// descender-bottom centered, so descenders don't crowd the button's edge.
-	// Test ID: EoT6qwS
+	// Test ID: dbza1
 	#[test]
 	fn chrome_ink_box_centers_in_bar() {
 		let vmetrics = (14.6f32, 4.7f32);
@@ -1480,7 +1480,7 @@ mod tests {
 		}
 	}
 
-	// Test ID: Eip4OOO
+	// Test ID: d9b44
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn ui_font_resolves_to_concrete_family() {
@@ -1490,7 +1490,7 @@ mod tests {
 		assert!(fam.is_some(), "no concrete UI family resolved for chrome");
 	}
 
-	// Test ID: EipMwEi
+	// Test ID: d9b6e
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn ui_attrs_shape_in_pinned_family() {
@@ -1526,7 +1526,7 @@ mod tests {
 	// proportional bold fallback (advances set_monospace_width can't snap), which
 	// skews space-based alignment. mono_bold_weight() requests the family's
 	// boldest available face instead, so bold never leaves the family.
-	// Test ID: EkhEfku
+	// Test ID: da724
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn mono_bold_stays_in_pinned_family() {
@@ -1574,7 +1574,7 @@ mod tests {
 	// the grid - cursor, cell backgrounds, fallback glyphs - sits at column times
 	// cell width, so a rounded width drifted further off the text the longer the
 	// line, and the cursor sat visibly past the end of it.
-	// Test ID: Er2VGXK
+	// Test ID: dd5qj
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_cell_width_is_the_texts_real_pitch() {
@@ -1609,7 +1609,7 @@ mod tests {
 	// shapes wider than the cell (some Windows faces ignore the fixed pitch),
 	// that copy drifts from the text along the line, so it is used only when a
 	// bold run lands on the cell pitch exactly.
-	// Test ID: Er2VGXL
+	// Test ID: dd5qk
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn bold_is_stripped_for_the_glow_only_where_it_keeps_the_pitch() {
@@ -1628,7 +1628,7 @@ mod tests {
 	// A size set at a font from the command line is saved for the font the
 	// next launch has, measured here, so the two must agree for the font in
 	// use or a grid saved at it would drift.
-	// Test ID: EsjoVeF
+	// Test ID: ddyz8
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_cell_measured_for_a_font_size_is_the_cell_that_font_gets() {
@@ -1644,7 +1644,7 @@ mod tests {
 	// Laid out in the shared row buffer it takes one column where the grid gave
 	// it two, and everything after it on the row sits a cell to the left. Only a
 	// char whose advance matches the grid's cell count may ride the row buffer.
-	// Test ID: Er2VGXM
+	// Test ID: dd5qm
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_char_the_face_draws_one_cell_wide_is_not_taken_for_two() {
@@ -1676,7 +1676,7 @@ mod tests {
 	// and default weights, so a test that took them first measured dialog text in
 	// a fallback face while the layout used the desktop's. Checked in a child copy
 	// of this test binary, where no other test has built a context yet.
-	// Test ID: Esa77JI
+	// Test ID: ddwmh
 	#[test]
 	#[cfg_attr(miri, ignore = "Miri can't start a process")]
 	fn attrs_read_before_the_first_context_match_the_context() {
@@ -1701,7 +1701,7 @@ mod tests {
 		);
 	}
 
-	// Test ID: Esa77dv
+	// Test ID: ddwmj
 	#[test]
 	fn attrs_before_context_child() {
 		if std::env::var_os("SILK_ATTRS_FIRST").is_none() {

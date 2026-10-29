@@ -571,7 +571,7 @@ mod tests {
 		let _ = child.wait();
 	}
 
-	// Test ID: EsdqcVY
+	// Test ID: ddxh9
 	#[test]
 	#[cfg_attr(miri, ignore = "Miri can't start a process")]
 	fn a_pipeline_whose_first_stage_exited_is_named_for_the_last() {
@@ -592,7 +592,7 @@ mod tests {
 		assert_eq!(found, Some(last.id()));
 	}
 
-	// Test ID: Esdqcbw
+	// Test ID: ddxha
 	#[test]
 	#[cfg_attr(miri, ignore = "Miri can't start a process")]
 	fn a_program_s_own_children_are_not_stages() {
@@ -616,7 +616,7 @@ mod tests {
 		assert_eq!(found, Some(pgid));
 	}
 
-	// Test ID: Esdqchj
+	// Test ID: ddxhb
 	#[test]
 	fn a_stat_line_parses_past_a_name_with_parens() {
 		let line =
@@ -631,7 +631,7 @@ mod tests {
 		assert!(parse_stat(&zombie).unwrap().gone);
 	}
 
-	// Test ID: Esdqcm7
+	// Test ID: ddxhc
 	#[test]
 	fn tmux_socket_options_are_read_like_its_getopt() {
 		let args = |line: &str| -> Vec<String> {
@@ -653,7 +653,7 @@ mod tests {
 		assert!(args("tmux -- -L x").is_empty());
 	}
 
-	// Test ID: Esdqcqe
+	// Test ID: ddxhd
 	#[test]
 	fn the_answer_is_our_client_s_line() {
 		let out = "100 7 1 0\n200 8 0 1\n";
@@ -691,7 +691,7 @@ mod tests {
 		buf
 	}
 
-	// Test ID: EsgscfK
+	// Test ID: ddy8m
 	#[test]
 	fn sysctl_process_args_split_into_argv_and_environment() {
 		let buf = procargs_block(
@@ -712,7 +712,7 @@ mod tests {
 		assert!(procargs(b"\x01\0").is_none());
 	}
 
-	// Test ID: Esgscji
+	// Test ID: ddy8n
 	#[test]
 	fn a_client_s_socket_and_tmux_settings_come_from_how_it_was_launched() {
 		let buf = procargs_block(
@@ -756,7 +756,7 @@ mod mac_tests {
 		seen
 	}
 
-	// Test ID: EsgtJUn
+	// Test ID: ddy8q
 	#[test]
 	#[ignore = "needs tmux; run by hand on a Mac"]
 	fn a_live_tmux_says_what_its_client_shows() {

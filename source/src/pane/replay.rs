@@ -322,7 +322,7 @@ fn run(r: &mut Replay, cmd: &str, out: &str) -> (Frame, Frame) {
 	(first, second)
 }
 
-// Test ID: Esib1t0
+// Test ID: ddynt
 #[test]
 #[cfg_attr(miri, ignore = "too slow under Miri")]
 fn a_prompt_coming_back_under_blesh_pops_in() {
@@ -362,7 +362,7 @@ fn a_prompt_coming_back_under_blesh_pops_in() {
 	}
 }
 
-// Test ID: Esib1y3
+// Test ID: ddynv
 #[test]
 #[cfg_attr(miri, ignore = "too slow under Miri")]
 fn blesh_redrawing_its_prompt_pops_in() {
@@ -402,7 +402,7 @@ fn blesh_redrawing_its_prompt_pops_in() {
 	}
 }
 
-// Test ID: Esib22C
+// Test ID: ddynw
 #[test]
 #[cfg_attr(miri, ignore = "too slow under Miri")]
 fn a_listing_repeated_under_a_plain_prompt_pops_in() {
@@ -421,7 +421,7 @@ fn a_listing_repeated_under_a_plain_prompt_pops_in() {
 	assert!(r.slides.is_empty(), "slid {:?}", r.slides);
 }
 
-// Test ID: Esib26L
+// Test ID: ddynx
 #[test]
 #[cfg_attr(miri, ignore = "too slow under Miri")]
 fn a_table_redraw_snaps_and_a_prompt_still_eases() {
@@ -463,7 +463,7 @@ fn a_table_redraw_snaps_and_a_prompt_still_eases() {
 	}
 }
 
-// Test ID: Esib2AU
+// Test ID: ddyny
 #[test]
 #[cfg_attr(miri, ignore = "too slow under Miri")]
 fn a_burst_still_easing_is_at_rest_on_the_alt_screen() {
@@ -490,7 +490,7 @@ fn a_burst_still_easing_is_at_rest_on_the_alt_screen() {
 	}
 }
 
-// Test ID: EsiiYQ2
+// Test ID: ddypr
 #[test]
 #[cfg_attr(miri, ignore = "too slow under Miri")]
 fn a_prompt_drawn_across_two_reads_pops_in() {
@@ -524,7 +524,7 @@ fn a_prompt_drawn_across_two_reads_pops_in() {
 	}
 }
 
-// Test ID: Esiikpm
+// Test ID: ddyps
 #[test]
 #[cfg_attr(miri, ignore = "too slow under Miri")]
 fn a_prompt_redrawn_right_after_a_resize_pops_in() {
@@ -603,7 +603,7 @@ fn tmux_clear(lines: usize, how: &str) -> String {
 	}
 }
 
-// Test ID: EstO7ww
+// Test ID: de18w
 #[test]
 #[cfg_attr(miri, ignore = "too slow under Miri")]
 fn a_clear_inside_tmux_shows_at_once() {
@@ -652,7 +652,7 @@ fn a_clear_inside_tmux_shows_at_once() {
 	}
 }
 
-// Test ID: EstO8Ff
+// Test ID: de18x
 #[test]
 #[cfg_attr(miri, ignore = "too slow under Miri")]
 fn output_inside_tmux_still_slides() {
@@ -717,7 +717,7 @@ fn chunks(dir: &str) -> Vec<Vec<u8>> {
 // SILK_REPLAY=<dir with out.bin and timing.txt>, SILK_REPLAY_SIZE=120x42 (the
 // size the session ran at), SILK_REPLAY_SB (scrollback), SILK_REPLAY_EVERY=n
 // (a frame per n reads). Prints each frame that slid on the normal screen.
-// Test ID: Esib2EY
+// Test ID: ddynz
 #[test]
 #[ignore = "needs a recording"]
 fn replay_a_recorded_session() {

@@ -8338,7 +8338,7 @@ mod tests {
 	// reads runs from the mark main sets rather than from whatever first asked.
 	// A second mark must not restart it, or a later caller would reset the
 	// session's own clock.
-	// Test ID: EqRZeqO
+	// Test ID: dcwrh
 	#[test]
 	fn a_session_uptime_runs_from_the_launch_mark() {
 		mark_launch();
@@ -8359,7 +8359,7 @@ mod tests {
 	// turning into a different surface. The lightness floor and ceiling are the
 	// strip's own inactive-to-active step either side, so "slightly lighter"
 	// means what the strip already means by it.
-	// Test ID: EqQPotE
+	// Test ID: dcwfk
 	#[test]
 	fn a_tip_sits_off_every_tab_color() {
 		let l = |c: [u8; 3]| crate::palette::to_oklab(c).0;
@@ -8392,7 +8392,7 @@ mod tests {
 
 	// The three tip colors are the point of the item, so none of them may come
 	// back as the menu color it is derived from.
-	// Test ID: EqQPotF
+	// Test ID: dcwfm
 	#[test]
 	fn a_tip_is_not_painted_in_the_menu_colors() {
 		let (bg, fg) = (crate::theme::MENU_BG_DEF, crate::theme::MENU_FG_DEF);
@@ -8406,7 +8406,7 @@ mod tests {
 	// these are shades rather than two more colors on the Themes tab. shade()
 	// picks its direction from luminance, so a light menu color has to send the
 	// tip the other way rather than off the top end.
-	// Test ID: EqQPotG
+	// Test ID: dcwfn
 	#[test]
 	fn a_tip_follows_a_custom_menu_color_either_way() {
 		let l = |c: [u8; 3]| crate::palette::to_oklab(c).0;
@@ -8429,7 +8429,7 @@ mod tests {
 	// so. Without it the whole thing can be cut with nothing to notice. It only
 	// bites when the suite is run holding those rights, which on unix needs no
 	// privilege at all: `unshare -Ur cargo test`.
-	// Test ID: EpPPU7c
+	// Test ID: dcdaq
 	#[test]
 	fn the_title_reports_the_rights_this_process_has() {
 		assert_eq!(rights().say, privilege_word());
@@ -8440,7 +8440,7 @@ mod tests {
 	// caused it unfixable from the terminal it killed. Both halves cut a string
 	// at a fixed byte offset: a hex color, and the `env:` in front of a variable
 	// name.
-	// Test ID: EpHOAM4
+	// Test ID: dcbd0
 	#[test]
 	fn a_config_value_cannot_abort_the_launch_on_a_byte_slice() {
 		// six bytes, three characters
@@ -8458,7 +8458,7 @@ mod tests {
 	// The case that keeps coming up is a file manager's "Open in terminal": no
 	// tty, but a directory that was very much chosen. Only the three directories
 	// a launcher leaves us in by default may fall through to the setting.
-	// Test ID: Eo6i2no
+	// Test ID: dbsxm
 	#[test]
 	fn an_inherited_directory_is_a_choice_unless_a_launcher_picked_it() {
 		let home = PathBuf::from("/home/u");
@@ -8479,7 +8479,7 @@ mod tests {
 	// An MSIX package's Start-menu entry has no working directory, so Windows
 	// starts it in System32. That is where the launcher left us, not a folder
 	// anybody picked, so the first shell goes to the setting instead.
-	// Test ID: ErC7NYR
+	// Test ID: dd7yq
 	#[test]
 	fn a_start_in_the_windows_system_folder_is_not_a_choice() {
 		let home = PathBuf::from("C:/Users/u");
@@ -8524,7 +8524,7 @@ mod tests {
 	// it pins the macOS answer from a box that has no macOS, and the Windows one
 	// from Linux. Reading cfg! at each use site instead would leave two thirds of
 	// this unrunnable wherever it happens to be run.
-	// Test ID: EnPU6SG
+	// Test ID: dbfgz
 	#[test]
 	fn each_platform_keeps_its_config_where_that_platform_keeps_settings() {
 		let home = PathBuf::from("/home/u");
@@ -8549,7 +8549,7 @@ mod tests {
 		);
 	}
 
-	// Test ID: EnPU6SH
+	// Test ID: dbfh0
 	#[test]
 	fn an_explicit_xdg_config_home_wins_on_every_platform() {
 		// Setting it is a deliberate act, so it outranks the platform default
@@ -8566,7 +8566,7 @@ mod tests {
 		}
 	}
 
-	// Test ID: EnPU6SI
+	// Test ID: dbfh1
 	#[test]
 	fn a_missing_native_base_falls_back_rather_than_leaving_no_config() {
 		// A stripped environment (a service, a bare shell) can carry no APPDATA.
@@ -8585,7 +8585,7 @@ mod tests {
 	// size on any display, so it doubles when the scale factor does. The floor is
 	// the other half - a hairline the author asked to be visible must never round
 	// down to nothing, which is what a 1 DIP rule does on a display below 1x.
-	// Test ID: EnLuU54
+	// Test ID: dbenh
 	#[test]
 	fn a_chrome_measurement_scales_and_a_hairline_survives() {
 		assert_eq!(dip(10.0, 1.0), 10.0);
@@ -8626,7 +8626,7 @@ mod tests {
 	// of each day. It used to drop the entry's subtree and put it back at the end
 	// of the block, which loses its comments and moves it - and the first entry in
 	// the file is the default shell.
-	// Test ID: EpHPcsy
+	// Test ID: dcbd5
 	#[test]
 	fn a_daily_stamp_leaves_a_shell_where_it_is() {
 		let text = "shells:\n\n\t## the one I use\n\tbash:\n\t\ttitle: \"bash\"\n\t\tcommand: \"/bin/bash\"\n\t\tactive: true\n\n\tzsh:\n\t\ttitle: \"zsh\"\n\t\tcommand: \"/bin/zsh\"\n\t\tactive: true\n";
@@ -8654,7 +8654,7 @@ mod tests {
 	// File order IS the list's order - it decides what the menu offers first and
 	// therefore which shell is the default - and a reorder changes no entry, so
 	// the per-entry write path would have written nothing at all and lost it.
-	// Test ID: EnQUIKm
+	// Test ID: dbfrp
 	#[test]
 	fn a_reorder_is_written_even_though_no_entry_changed() {
 		let list = vec![
@@ -8677,7 +8677,7 @@ mod tests {
 
 	// A first launch writes the scan's list into a brand-new file, and the file's
 	// order is the menu's and names the default shell.
-	// Test ID: Er1q5Y8
+	// Test ID: dd5fm
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_fresh_file_keeps_the_order_the_scan_found() {
@@ -8710,7 +8710,7 @@ mod tests {
 	// and its folder, exactly as they were: no launch refresh, conversion, backup
 	// or rewrite, no save, no rating, no reset. A file in a folder of its own
 	// stands in for the box's, so the real one is never at risk here.
-	// Test ID: Erl5E2U
+	// Test ID: ddgbt
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_test_run_never_writes_the_boxs_own_config() {
@@ -8816,7 +8816,7 @@ mod tests {
 	// new find. Its own scan finds the same program and saves. It used to take out
 	// only the entries it had loaded and rewrite them, so the find it never
 	// loaded stayed above them all and a REPL became the default shell.
-	// Test ID: Er1q5Y9
+	// Test ID: dd5fn
 	#[test]
 	fn a_stale_window_cannot_put_another_windows_find_on_top() {
 		let loaded = vec![
@@ -8838,7 +8838,7 @@ mod tests {
 
 	// The same window with an older list, doing something else to it. Every save
 	// keeps what the other window did, unless this window changed that entry.
-	// Test ID: Er1q5YA
+	// Test ID: dd5fp
 	#[test]
 	fn a_stale_window_keeps_what_another_window_saved() {
 		let loaded = vec![
@@ -8912,7 +8912,7 @@ mod tests {
 		);
 	}
 
-	// Test ID: EnQUIKn
+	// Test ID: dbfrq
 	#[test]
 	fn the_date_a_shell_was_last_seen_round_trips() {
 		let mut entry = shell_entry("bash", "/bin/bash");
@@ -8928,7 +8928,7 @@ mod tests {
 
 	// The list names the default now (its top active entry), so an old
 	// `shell.default` has to become the top of the list rather than be dropped.
-	// Test ID: EnQUIKo
+	// Test ID: dbfrr
 	#[test]
 	fn an_old_default_shell_becomes_the_top_of_the_list() {
 		let list = vec![
@@ -8953,7 +8953,7 @@ mod tests {
 	// saved. A line shcl cannot read is written back as it was, so the save goes
 	// through beside one. Where the save cannot keep the lines it would delete the
 	// line instead, so it is refused and the choice has to wait.
-	// Test ID: EpyvpeC
+	// Test ID: dcnw3
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn an_old_default_shell_waits_for_a_save_that_can_happen() {
@@ -9012,7 +9012,7 @@ mod tests {
 
 	// ':' must NOT be a word separator, else a double-click on C:\... drops the
 	// drive prefix (the alacritty default splits on ':'). Regression guard.
-	// Test ID: EkVfEUC
+	// Test ID: da493
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn default_word_separators_keep_drive_colon() {
@@ -9027,7 +9027,7 @@ mod tests {
 	}
 
 	// Word separators are read from the file, not only defaulted.
-	// Test ID: Er2UFeR
+	// Test ID: dd5mq
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn word_separators_come_from_the_file() {
@@ -9043,7 +9043,7 @@ mod tests {
 
 	// Pairs are two characters each, in precedence order; a lone character is
 	// not a pair and is dropped.
-	// Test ID: Er2UFeS
+	// Test ID: dd5mr
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn selection_pairs_parse_in_order_and_come_from_the_file() {
@@ -9078,7 +9078,7 @@ mod tests {
 	// A profile's values ride on top of the live settings, and a write that
 	// starts from a live copy (the minimap toggle, the remembered size) must
 	// not carry them into the file - or Custom would have nothing to put back.
-	// Test ID: EorkTk0
+	// Test ID: dc57n
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_file_keeps_the_users_values_under_a_profile() {
@@ -9123,7 +9123,7 @@ mod tests {
 	// A text color the wallpaper picked is session state, the same as a display
 	// step. Written down, every rotation would rewrite the file, and the colors
 	// would outlive the picture they came from.
-	// Test ID: EqRxesl
+	// Test ID: dcww3
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_text_color_taken_from_the_wallpaper_never_reaches_the_file() {
@@ -9187,7 +9187,7 @@ mod tests {
 	// 2026100910295901: an old file with "Text colors from wallpaper" off keeps
 	// the theme's text colors with a picture up. The switch is stored, so no
 	// color line has to be written for it, and one written by hand stays.
-	// Test ID: Esa43ID
+	// Test ID: ddwm5
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_file_with_the_wallpaper_colors_off_keeps_the_theme_s() {
@@ -9252,7 +9252,7 @@ mod tests {
 	// A step the display watch took lasts the session. Written down, one stall
 	// became every later launch's profile, with no way back while automatic was
 	// on - that took a desktop to Standard terminal and its wallpaper with it.
-	// Test ID: EpWow4f
+	// Test ID: dcf3s
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_session_step_down_never_reaches_the_file() {
@@ -9303,7 +9303,7 @@ mod tests {
 
 	// "Reload config" re-reads the file, which never holds the session's own
 	// state, so a reload must not lift a remote profile or a watch step.
-	// Test ID: EpWow4g
+	// Test ID: dcf3t
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_reload_keeps_what_the_file_never_held() {
@@ -9324,7 +9324,7 @@ mod tests {
 	// An Apply from a dialog opened earlier keeps a remote switch or a watch step
 	// taken since, and the dialog's own pick, revert or automatic switch still
 	// lifts them.
-	// Test ID: EpX7AvY
+	// Test ID: dcf60
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn an_apply_keeps_the_session_state_the_dialog_did_not_touch() {
@@ -9381,7 +9381,7 @@ mod tests {
 	// said ok and showed nothing. Naming one turns the switch on, the way
 	// `--wallpaper-file` does at launch, and a profile that turns the wallpaper
 	// off still wins for both.
-	// Test ID: Eq4Yrbf
+	// Test ID: dcq7g
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn naming_a_wallpaper_turns_it_on_unless_the_profile_says_off() {
@@ -9418,7 +9418,7 @@ mod tests {
 
 	// A wallpaper given on the command line lasts the session: a reload keeps it
 	// over the file, and an Apply keeps it unless the dialog picked another.
-	// Test ID: Epytxce
+	// Test ID: dcnvv
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_command_line_wallpaper_outlasts_a_reload_and_an_apply() {
@@ -9495,7 +9495,7 @@ mod tests {
 
 	// Every launch-time rewrite used to truncate the file before writing it, so a
 	// crash or a full disk during one left nothing where the config was.
-	// Test ID: EpHaZLU
+	// Test ID: dcbeh
 	#[test]
 	#[cfg_attr(miri, ignore = "Miri can't set a file's owner")]
 	fn a_launch_time_rewrite_never_truncates_the_config() {
@@ -9532,7 +9532,7 @@ mod tests {
 
 	// On Windows nothing said a file with a line it cannot read could no longer
 	// be saved. Only the window can say so, so a refused write leaves word of it.
-	// Test ID: EqGnMOv
+	// Test ID: dct5k
 	#[test]
 	#[cfg_attr(miri, ignore = "Miri can't sync a folder")]
 	fn a_refused_save_leaves_word_for_the_window() {
@@ -9566,7 +9566,7 @@ mod tests {
 	// A failed save used to present to the dialog as a clean one, so it closed as
 	// if it had written. shcl refusing a lossy round trip is the case that makes
 	// this permanent.
-	// Test ID: EpHOR0K
+	// Test ID: dcbd1
 	#[test]
 	#[cfg_attr(miri, ignore = "Miri can't sync a folder")]
 	fn a_save_that_failed_is_not_reported_as_a_save() {
@@ -9614,7 +9614,7 @@ mod tests {
 	// shcl deletes its temp copy after a replace that took the old file fails, so
 	// the settings are written at the empty name instead of lost, keeping the
 	// file's mode and leaving nothing beside it.
-	// Test ID: Epa8S0e
+	// Test ID: dcfx8
 	#[test]
 	fn a_write_that_took_the_file_writes_it_again() {
 		let took: RestorePublish = |file, _| {
@@ -9651,7 +9651,7 @@ mod tests {
 
 	// The real file is found before the write, since a link to a file the replace
 	// took no longer resolves. The link stays and the real file keeps its mode.
-	// Test ID: Epa8S0f
+	// Test ID: dcfx9
 	#[cfg(unix)]
 	#[test]
 	fn a_restore_keeps_a_linked_private_settings_file() {
@@ -9692,7 +9692,7 @@ mod tests {
 
 	// The ordinary failure (read-only, held open) leaves the old file in place, so
 	// nothing is written over it and nothing waits.
-	// Test ID: Epa8S0g
+	// Test ID: dcfxa
 	#[test]
 	fn a_failed_write_that_left_the_file_changes_nothing() {
 		let refuse: RestorePublish = |_, _| Err("refused".to_string());
@@ -9718,7 +9718,7 @@ mod tests {
 
 	// Something can take the empty name before the restore does. A link left
 	// there is never written through, even one whose target does not exist.
-	// Test ID: Epa8S0h
+	// Test ID: dcfxb
 	#[cfg(unix)]
 	#[test]
 	fn a_restore_never_writes_through_a_name_taken_meanwhile() {
@@ -9748,7 +9748,7 @@ mod tests {
 
 	// A restore that cannot write stops within its bound and says the file is gone,
 	// rather than retrying forever or reporting the replace's error alone.
-	// Test ID: Epa8S0i
+	// Test ID: dcfxc
 	#[cfg(unix)]
 	#[test]
 	fn a_restore_that_cannot_write_gives_up_and_says_so() {
@@ -9858,7 +9858,7 @@ mod tests {
 
 	// Error 5 alone cannot tell a pending delete from a file this process may not
 	// open, so every look-alike is checked beside the real one.
-	// Test ID: EpaOYRs
+	// Test ID: dcfz8
 	#[cfg(windows)]
 	#[test]
 	fn only_a_delete_in_progress_reads_as_pending() {
@@ -9930,7 +9930,7 @@ mod tests {
 
 	// A replace that fails can leave the old name waiting on a scanner's handle.
 	// The restore waits that out within its bound and writes the text there.
-	// Test ID: EpaOYRt
+	// Test ID: dcfz9
 	#[cfg(windows)]
 	#[test]
 	fn a_restore_waits_for_a_name_still_being_deleted() {
@@ -9966,7 +9966,7 @@ mod tests {
 
 	// A name still pending when the tries run out gets the give-up error, and
 	// nothing is written at it or beside it.
-	// Test ID: EpaOYRu
+	// Test ID: dcfza
 	#[cfg(windows)]
 	#[test]
 	fn a_restore_gives_up_on_a_delete_that_stays_pending() {
@@ -10005,7 +10005,7 @@ mod tests {
 
 	// shcl's own save has no seam and no restore, so every settings write goes
 	// through write_config_atomic instead.
-	// Test ID: Epa8S0j
+	// Test ID: dcfxd
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn every_settings_write_goes_through_the_restore() {
@@ -10036,7 +10036,7 @@ mod tests {
 	// A hotkey set in the file is what loads. A bad one keeps its default and
 	// is reported at launch with its line, rather than dropped in silence, and
 	// so is a chord taken from another hotkey's default.
-	// Test ID: EreU3sb
+	// Test ID: ddesb
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_hotkey_set_in_the_file_loads_and_a_bad_one_is_reported() {
@@ -10093,7 +10093,7 @@ mod tests {
 	// A changed hotkey goes back into the file under its own name, by the
 	// platform's spelling, and the next load reads the same bindings. The
 	// Settings dialog's Keys tab is to save through this.
-	// Test ID: EreU3sc
+	// Test ID: ddesc
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_changed_hotkey_is_written_back_by_its_name() {
@@ -10137,7 +10137,7 @@ mod tests {
 	// The revert has to find the value, not the comment, and leave the file as
 	// it shipped rather than with a second copy of the commented line. A row's
 	// arrow is a save of the default, and a hotkey is taken out by name.
-	// Test ID: Erekiyk
+	// Test ID: ddev5
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_revert_takes_out_a_value_saved_beside_its_default() {
@@ -10186,7 +10186,7 @@ mod tests {
 
 	// A file from before hotkeys gets the whole keys block at its next launch,
 	// every line commented at its default, and loads the same bindings.
-	// Test ID: EreU3sd
+	// Test ID: ddesd
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn an_older_file_gains_the_keys_block_commented() {
@@ -10205,7 +10205,7 @@ mod tests {
 		assert_eq!(backfilled_text(&after), Ok(None), "settles in one launch");
 	}
 
-	// Test ID: Eq4SnxO
+	// Test ID: dcq6v
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn persist_writes_nothing_for_a_nan_on_both_sides() {
@@ -10243,7 +10243,7 @@ mod tests {
 		let _ = std::fs::remove_dir_all(&dir);
 	}
 
-	// Test ID: EjkEYAK
+	// Test ID: d9rw2
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn persist_survives_bare_decimal_float() {
@@ -10303,7 +10303,7 @@ mod tests {
 	// The /proc-based busy check: a child process holding the file open is seen as
 	// busy; once it exits the file reads as free again. Linux only (the check is a
 	// no-op elsewhere).
-	// Test ID: EjwSEES
+	// Test ID: d9vt3
 	#[cfg(target_os = "linux")]
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
@@ -10337,7 +10337,7 @@ mod tests {
 	}
 
 	// Where a rating's line goes, and that nothing else in the file moves.
-	// Test ID: EpXN9p5
+	// Test ID: dcf83
 	#[test]
 	fn rating_lines_replace_insert_and_collapse() {
 		let clear = RatingLines {
@@ -10409,7 +10409,7 @@ mod tests {
 
 	// The template is a save fixed point (G69), and a rating written into it must
 	// not be the thing that makes the next save rewrite it.
-	// Test ID: EpXN9p6
+	// Test ID: dcf84
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_rating_leaves_a_canonical_file_canonical() {
@@ -10426,7 +10426,7 @@ mod tests {
 
 	// A line placed in a block that already drops one can change which line the
 	// parse drops. The count does not grow, and another setting loads differently.
-	// Test ID: EpXeZQW
+	// Test ID: dcfa5
 	#[test]
 	fn a_rating_changes_no_other_setting() {
 		let clear = RatingLines {
@@ -10555,7 +10555,7 @@ mod tests {
 	// answered that it had a line that could not be read, so the test ran at
 	// every launch. The value written is the one the template does not have, so
 	// a reload shows the write.
-	// Test ID: EpXiS3s
+	// Test ID: dcfam
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_rating_reaches_a_clean_file_wherever_its_lines_sit() {
@@ -10581,7 +10581,7 @@ mod tests {
 
 	// On those files the line goes in on its own: every line already there stays,
 	// byte for byte and in order, apart from the cleared value that gets one.
-	// Test ID: EpXiS3t
+	// Test ID: dcfan
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_rating_in_a_clean_file_moves_no_other_line() {
@@ -10605,7 +10605,7 @@ mod tests {
 	// that line takes the rating. Beside a line the parse drops there is no save's
 	// text to fall back on, so a second line for the key leaves the rating unread
 	// and the test runs at every launch.
-	// Test ID: EpYWC5Y
+	// Test ID: dcfgt
 	#[test]
 	fn a_value_cleared_by_hand_takes_the_rating_on_its_own_line() {
 		let lines = RatingLines {
@@ -10643,7 +10643,7 @@ mod tests {
 	// written key before and is not read at all after, so no setting reads
 	// differently, and only the lost-line count stops a file the next Settings
 	// save refuses whole.
-	// Test ID: EpYhM4m
+	// Test ID: dcfj6
 	#[test]
 	fn a_rating_loses_no_line_the_file_did_not_already_lose() {
 		let lines = RatingLines {
@@ -10694,7 +10694,7 @@ mod tests {
 
 	// The dialog's save was how a rating was written before, so the files it kept
 	// one in are the floor: the rating writer keeps one in each of them too.
-	// Test ID: EpXiS3u
+	// Test ID: dcfap
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_rating_is_kept_wherever_the_dialogs_save_kept_it() {
@@ -10737,7 +10737,7 @@ mod tests {
 
 	// "A line that cannot be read" is said only of a file that has one. A clean
 	// file the writer still cannot place gets a reason that is true of it.
-	// Test ID: EpXiS3v
+	// Test ID: dcfaq
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_clean_file_is_never_called_unreadable() {
@@ -10774,7 +10774,7 @@ mod tests {
 	// the quotes off one that reads as a number, bool or date. The rating check
 	// leaves the quoted flag out because of this. The quote character itself is
 	// read by the launch's migration, and the check compares migrated text for that.
-	// Test ID: EpXyGI4
+	// Test ID: dcfck
 	#[test]
 	fn a_save_that_requotes_a_value_changes_no_read() {
 		const PATH: &str = "blk.k";
@@ -10854,7 +10854,7 @@ mod tests {
 	// reads the difference. Each file is
 	// written again just before the rating, since a load adds the block and the
 	// line writer would then never reach the save's text.
-	// Test ID: EpXyGI5
+	// Test ID: dcfcm
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_rating_is_kept_where_a_save_only_requotes() {
@@ -10925,7 +10925,7 @@ mod tests {
 	// heading deeper than its block becomes the parent of the setting under it.
 	// The save's text moves both without changing a value. Each file is written
 	// again before the rating, as a launch that found it busy leaves it.
-	// Test ID: EpYDF0i
+	// Test ID: dcfef
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_rating_changes_nothing_the_next_launch_migrates() {
@@ -10966,7 +10966,7 @@ mod tests {
 	// converted first, and the conversion copies a font list with its quotes, which
 	// the refresh after it reads. A save spells them the other way, so the rating
 	// check has to look through the conversion as well.
-	// Test ID: EqHPuMK
+	// Test ID: dctab
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_rating_changes_nothing_the_next_launch_converts() {
@@ -11002,7 +11002,7 @@ mod tests {
 	// commented-out settings of the group added just before it, so `font:` went
 	// in under `contrast_mask:` and the later groups split each other. Their
 	// settings read as missing at the next launch and were added again.
-	// Test ID: EquUFK4
+	// Test ID: dd3q1
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn backfill_puts_each_group_in_its_own_section() {
@@ -11049,7 +11049,7 @@ mod tests {
 	// `stray` steps back to a depth nothing under `window:` uses, so shcl drops
 	// it. The window settings backfill would add at one tab give that depth a
 	// block, and the stray started being read as a window setting.
-	// Test ID: ErCHjkM
+	// Test ID: dd801
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn backfill_leaves_a_dropped_line_dropped() {
@@ -11072,7 +11072,7 @@ mod tests {
 
 	// shcl reads `Window:` as `window:`, so a launch must too. Backfill added a
 	// second `window:` block under one typed with a capital.
-	// Test ID: ErwTlu9
+	// Test ID: ddk3h
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_name_typed_in_capitals_is_the_same_setting() {
@@ -11087,7 +11087,7 @@ mod tests {
 
 	// A backfill that would stop a setting reading says which at launch, in the
 	// same words it always did.
-	// Test ID: ErzSLtc
+	// Test ID: ddktf
 	#[test]
 	fn a_backfill_that_would_bury_a_setting_names_it() {
 		let named = |buried: Buried| buried.to_string();
@@ -11099,7 +11099,7 @@ mod tests {
 		assert_eq!(named(Buried::Unnamed), "a setting");
 	}
 
-	// Test ID: EpZCS12
+	// Test ID: dcfp3
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn backfill_keeps_a_setting_that_is_indented_too_deep() {
@@ -11145,7 +11145,7 @@ mod tests {
 		}
 	}
 
-	// Test ID: EpZCS13
+	// Test ID: dcfp4
 	#[test]
 	fn a_rating_is_refused_where_a_launch_step_reads_the_layout() {
 		fn reads_quotes(text: &str) -> Option<String> {
@@ -11246,7 +11246,7 @@ mod tests {
 	// save, so the test ran at every launch. The rating goes in beside it now, and
 	// so does the dialog's save, with the line kept as it was. The line sits in a
 	// theme, where the reload's backfill adds nothing that could give it a level.
-	// Test ID: EpXN9p7
+	// Test ID: dcf85
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_rating_is_kept_beside_an_unreadable_line() {
@@ -11292,7 +11292,7 @@ mod tests {
 
 	// Every launch-time write defers to a holder, and so does a rating, which then
 	// has to say so rather than report a write.
-	// Test ID: EpXN9p8
+	// Test ID: dcf86
 	#[cfg(target_os = "linux")]
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
@@ -11341,7 +11341,7 @@ mod tests {
 	// config and does not rewrite it. A config held open in another program, an
 	// editor most likely, held up the size as well, which is the program's own.
 	// A change to the config itself still waits for it.
-	// Test ID: EsGVpEO
+	// Test ID: ddqxp
 	#[cfg(target_os = "linux")]
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
@@ -11396,7 +11396,7 @@ mod tests {
 	// A rename publishes a new file, so a rating written that way replaced a linked
 	// settings file with a plain copy and reset a private one's mode. The dialog's
 	// save never did either.
-	// Test ID: EpXatHM
+	// Test ID: dcf9p
 	#[cfg(unix)]
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
@@ -11437,7 +11437,7 @@ mod tests {
 
 	// Adding missing settings at launch had the same faults the rating write had,
 	// and so did the template write and the renames beside it.
-	// Test ID: EpyTXE0
+	// Test ID: dcnrj
 	#[cfg(unix)]
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
@@ -11469,7 +11469,7 @@ mod tests {
 		let _ = std::fs::remove_dir_all(&dir);
 	}
 
-	// Test ID: EpyTXE1
+	// Test ID: dcnrk
 	#[cfg(unix)]
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
@@ -11511,7 +11511,7 @@ mod tests {
 
 	// The temp file's name is predictable, so something already sitting there must
 	// never be written through: a link to another file would get the settings text.
-	// Test ID: EpXatHN
+	// Test ID: dcf9q
 	#[cfg(unix)]
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
@@ -11559,7 +11559,7 @@ mod tests {
 	// One unusable line must cost only its own setting, never the whole file. This
 	// used to need a hand-rolled retry loop (blank the offending line, reparse);
 	// the parser is forgiving now, so the guarantee has to be re-proven here.
-	// Test ID: ElcTgW8
+	// Test ID: damtn
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_bad_line_drops_only_its_own_setting() {
@@ -11582,7 +11582,7 @@ mod tests {
 
 	// Every setting knobs keeps has a field that takes back what it gives, and
 	// a line in the shipped template.
-	// Test ID: EsDxpmD
+	// Test ID: ddqa3
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn every_setting_knobs_keeps_has_a_field_and_a_template_line() {
@@ -11610,7 +11610,7 @@ mod tests {
 	// A setting under a switch follows its rule while the switch is on. Set by
 	// hand it turns the switch off, and turning the switch back on sets the
 	// value aside rather than dropping it.
-	// Test ID: EsDxpmE
+	// Test ID: ddqa4
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_switch_s_rule_gives_the_value_and_one_set_by_hand_comes_back() {
@@ -11668,7 +11668,7 @@ mod tests {
 	// turning the switch off keeps and saves that list. It kept the desktop's
 	// one name, which on a desktop set to Monaspace Argon read as the list cut
 	// to its first font (2026100913394946).
-	// Test ID: EsZk42X
+	// Test ID: ddwhp
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_family_keeps_the_whole_list_when_the_switch_goes_off() {
@@ -11690,7 +11690,7 @@ mod tests {
 		);
 	}
 
-	// Test ID: EsZk4LL
+	// Test ID: ddwhq
 	#[test]
 	fn the_desktop_s_font_leads_the_built_in_list() {
 		assert_eq!(desktop_font_stack("Monaspace Argon"), DEFAULT_FONT_STACK);
@@ -11714,7 +11714,7 @@ mod tests {
 	// The theme's colors come from the theme in force, in the mode in force. A
 	// color changed under it stays through a mode change, and Custom is the
 	// file's own lines.
-	// Test ID: EsEAijd
+	// Test ID: ddqbp
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_theme_colors_follow_the_theme_and_a_change_stays() {
@@ -11754,7 +11754,7 @@ mod tests {
 	// The open command, File or folder and its folder have a rule that gives the
 	// default. Empty text and the usual folder written out read as no line, the
 	// way an older build's file meant them.
-	// Test ID: EsG6IFN
+	// Test ID: ddqth
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_open_command_and_the_wallpaper_default_to_their_rules() {
@@ -11783,7 +11783,7 @@ mod tests {
 
 	// Set by hand, a color, the open command and the folder each write their
 	// line. The reset arrow takes it out, and the next launch reads the default.
-	// Test ID: EsEAitK
+	// Test ID: ddqbr
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_value_writes_its_line_and_the_arrow_takes_it_out() {
@@ -11835,7 +11835,7 @@ mod tests {
 
 	// The switches are stored, so a relaunch reads them back as they were, and a
 	// value set aside under one comes back with it.
-	// Test ID: EsDxpmG
+	// Test ID: ddqa5
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_switch_and_what_it_set_aside_read_the_same_after_a_relaunch() {
@@ -11888,7 +11888,7 @@ mod tests {
 
 	// The size remembered can change while the program runs. With Remember last
 	// size on, Columns and Rows follow it, and with it off they stay.
-	// Test ID: EsDxpmH
+	// Test ID: ddqa6
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_remembered_size_follows_the_window_and_one_set_by_hand_stays() {
@@ -11908,7 +11908,7 @@ mod tests {
 
 	// The switches came back under their old names, so a file from before they
 	// went loads with no conversion.
-	// Test ID: EsDxpmI
+	// Test ID: ddqa7
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn an_old_file_s_switches_are_read_as_they_are() {
@@ -11940,7 +11940,7 @@ mod tests {
 	// Reverting used to remove the node, and shcl takes a node's leading comments
 	// with it - so a scrim setting destroyed seven lines of documentation, and a
 	// note written above a value went the same way.
-	// Test ID: EpHPcsz
+	// Test ID: dcbd6
 	#[test]
 	fn reverting_a_setting_keeps_the_comments_above_it() {
 		let text = "text:\n\n\t## A blurred patch of background color behind each letter, so text stays\n\t## readable over a wallpaper.\n\tscrim:\n\t\t## mine: I like it stronger\n\t\tstrength: 40\n";
@@ -11971,7 +11971,7 @@ mod tests {
 	// launch on a texture limit while a large scrollback grew until the process
 	// was killed. `1e400` is here because shcl reads it as infinity and reports
 	// it good, and infinity survives a clamp.
-	// Test ID: EpHOzrc
+	// Test ID: dcbd3
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn every_numeric_setting_has_a_floor_and_a_ceiling() {
@@ -12047,7 +12047,7 @@ mod tests {
 	// A number the dialog lets through past its slider is one the file reads
 	// back as written and says nothing about. The dialog's own test saves and
 	// reloads it; this one reads it from a file written by hand.
-	// Test ID: Es9f11y
+	// Test ID: ddp92
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_number_typed_past_a_slider_reads_back_without_a_word() {
@@ -12082,7 +12082,7 @@ mod tests {
 	// setting does nothing. The first one also stops every future save.
 	// An unquoted color was read as empty and the theme's color used, with no word
 	// of it anywhere.
-	// Test ID: ErCYi4K
+	// Test ID: dd824
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn an_unquoted_color_is_named() {
@@ -12103,7 +12103,7 @@ mod tests {
 		assert_eq!(unquoted_color("x:"), None);
 	}
 
-	// Test ID: EpHb2Tw
+	// Test ID: dcbej
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_config_says_what_is_wrong_with_it() {
@@ -12155,7 +12155,7 @@ mod tests {
 
 	// Saved themes are written and read under `themes.`, so a file holding one has
 	// nothing in it to complain about. A real typo beside it still gets a line.
-	// Test ID: Epz2LOS
+	// Test ID: dcnwx
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_saved_theme_is_not_taken_for_a_typo() {
@@ -12188,7 +12188,7 @@ mod tests {
 
 	// A color changed under a theme, or given on the command line, stays put when
 	// the system switches between dark and light.
-	// Test ID: Epz2LOT
+	// Test ID: dcnwy
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_color_override_survives_the_system_switching_modes() {
@@ -12225,7 +12225,7 @@ mod tests {
 	// A key written twice cannot resolve to one value, so the default takes
 	// effect. That is the right outcome, but it has to be SAID - the setting is
 	// there in the file, plainly set, and doing nothing.
-	// Test ID: Em2JGe0
+	// Test ID: dav1f
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_setting_written_twice_falls_back_and_is_reported() {
@@ -12250,7 +12250,7 @@ mod tests {
 		assert_eq!(line_list(&[0]), "", "an uncitable node adds nothing");
 	}
 
-	// Test ID: ElcTgW9
+	// Test ID: damtp
 	#[test]
 	fn default_config_is_valid_shcl() {
 		let doc = shcl::Document::parse(default_config());
@@ -12270,7 +12270,7 @@ mod tests {
 	// a commented default with no active sibling - the shape that shcl used to
 	// re-pad to the block header's depth - so this is now the guard on the writer
 	// itself, and a bump that reintroduced the reflow would fail here.
-	// Test ID: ElcTgWA
+	// Test ID: damtq
 	#[test]
 	fn default_config_survives_a_save_unchanged() {
 		let doc = shcl::Document::parse(default_config());
@@ -12286,7 +12286,7 @@ mod tests {
 	// state file and makes those colors the theme's "*" changes, so nothing on
 	// screen changes, and the next launch changes nothing. A newer file's colors
 	// under a theme are Custom's, and stay that way.
-	// Test ID: EsGMVgc
+	// Test ID: ddqwh
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn an_old_file_moves_its_state_out_and_shows_the_same() {
@@ -12379,7 +12379,7 @@ mod tests {
 
 		// Commented out: this file has no Format line, so it is from before 10-09
 		// or written by hand, and its colors are over Matrix (2026101304551668).
-		// A file this build wrote is checked in EscrdlY instead.
+		// A file this build wrote is checked in ddx9q instead.
 		// // no state lines, so a file this build wrote: Custom's colors stay Custom's
 		// let new = "theme: Matrix\ncolors:\n\tbackground: \"#123456\"\n";
 		// std::fs::write(&path, new).unwrap();
@@ -12396,7 +12396,7 @@ mod tests {
 	// file from the old template with only the commented state line is old as
 	// well. Both get the move a file with state lines gets, once. A file this
 	// build wrote keeps Custom's colors as Custom's, however many launches.
-	// Test ID: EscrdlY
+	// Test ID: ddx9q
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn an_old_file_with_no_state_lines_still_shows_its_colors_over_the_theme() {
@@ -12472,7 +12472,7 @@ mod tests {
 
 	// The remembered size is kept in the state file, so the template has no line
 	// for it and a resize never rewrites the config.
-	// Test ID: Er2UFeN
+	// Test ID: dd5mk
 	#[test]
 	fn the_template_has_no_remembered_size() {
 		for path in [
@@ -12494,7 +12494,7 @@ mod tests {
 	// Opening on a monitor with none of its own takes the last anywhere.
 	// b23's portrait monitor read as 400x640 mm one day and 401x641 the next,
 	// after a power save, and so came up as a monitor with another size.
-	// Test ID: EsDZDJd
+	// Test ID: ddq73
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_monitor_read_to_the_cm_finds_and_keeps_its_own_entry() {
@@ -12530,7 +12530,7 @@ mod tests {
 		assert_eq!(remembered_window(&s, Some(mm)).columns, 143);
 	}
 
-	// Test ID: EreYcuQ
+	// Test ID: ddesq
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_size_set_by_hand_is_kept_for_its_monitor_and_found_again_there() {
@@ -12597,7 +12597,7 @@ mod tests {
 	// The per-monitor sizes read back from the file as written, and a write
 	// touches only the numbers this window changed, so another window's entry,
 	// or its change to a shared one, stays.
-	// Test ID: EreYcuR
+	// Test ID: ddesr
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn monitor_sizes_round_trip_and_leave_another_windows_alone() {
@@ -12642,7 +12642,7 @@ mod tests {
 	}
 
 	// What another window kept is read back the way a launch reads it.
-	// Test ID: EreYcuT
+	// Test ID: ddest
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_window_reads_back_the_sizes_another_window_kept() {
@@ -12672,7 +12672,7 @@ mod tests {
 
 	// A file from before remember_per_monitor gets it as its own paragraph,
 	// comment and all, under the size it follows and above remember_maximized.
-	// Test ID: EreYcuS
+	// Test ID: ddess
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn an_older_file_gets_the_per_monitor_switch_beside_the_size_it_follows() {
@@ -12696,7 +12696,7 @@ mod tests {
 	// Cursor, Movement, Window, Shell. The Silk tab borrows rows from the others,
 	// so its performance block leads and the rest keep their home tab's place.
 	// The hotkeys sit before Shell, though their tab comes after it.
-	// Test ID: Er2UFeO
+	// Test ID: dd5mm
 	#[test]
 	fn the_template_blocks_follow_the_dialog() {
 		let mut roots: Vec<&str> = Vec::new();
@@ -12737,7 +12737,7 @@ mod tests {
 	// its default, so removing the '# ' must change nothing. Seven lines named
 	// an example instead, and uncommenting any of them quietly changed what
 	// loaded. This reads the template, so a line added later is checked too.
-	// Test ID: Eq4CjrE
+	// Test ID: dcq4n
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn every_commented_default_line_loads_as_the_default() {
@@ -12820,7 +12820,7 @@ mod tests {
 
 	// A new config file is read by people, comments and all, and "carry" for
 	// "has" had crept into one of them (2026100812334384).
-	// Test ID: Es9WIpt
+	// Test ID: ddp7y
 	#[test]
 	fn no_template_comment_says_carry() {
 		for line in default_config().lines() {
@@ -12836,7 +12836,7 @@ mod tests {
 
 	// The template is where the footer actually reaches a new file; the const is
 	// what puts it back on an old one. Nothing else keeps the two in step.
-	// Test ID: Ep6mucC
+	// Test ID: dc8vd
 	#[test]
 	fn the_template_ends_with_the_banner() {
 		assert!(default_config().ends_with(SHCL_BANNER));
@@ -12846,7 +12846,7 @@ mod tests {
 		);
 	}
 
-	// Test ID: Ep6mucD
+	// Test ID: dc8ve
 	#[test]
 	fn the_banner_is_retrofitted_and_kept_last() {
 		let plain = "font:\n\tsize: 13.0\n";
@@ -12885,7 +12885,7 @@ mod tests {
 	}
 
 	// Someone who rewrote the footer gets to keep their wording.
-	// Test ID: Ep6mucE
+	// Test ID: dc8vf
 	#[test]
 	fn an_edited_banner_is_left_alone() {
 		let mine = "font:\n\tsize: 13.0\n\n## This config file format is SHCL. Go read the spec.\n";
@@ -12894,7 +12894,7 @@ mod tests {
 
 	// These are the lines shcl 2.0.0 wrote for a UNC path, a drive path and a
 	// tab. Read as they stand, 3.0 doubles the backslashes in the first.
-	// Test ID: EqpHg6S
+	// Test ID: dd2f0
 	#[test]
 	fn a_file_shcl2_wrote_reads_the_same() {
 		let body =
@@ -12985,7 +12985,7 @@ mod tests {
 	// The launch that converts a 2.x file keeps it, byte for byte, as
 	// `config_backup_<time>_format-v2.shcl`, and reads the settings it had. The
 	// next launch has nothing to convert and leaves the copy alone.
-	// Test ID: EreLZJY
+	// Test ID: ddeqz
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_launch_keeps_the_2x_file_beside_the_converted_one() {
@@ -13034,7 +13034,7 @@ mod tests {
 
 	// Every older version is kept. A second conversion makes a second copy and
 	// leaves the first as it was, and a current file gets no copy at all.
-	// Test ID: EreLZMm
+	// Test ID: dder0
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_second_conversion_keeps_a_second_copy() {
@@ -13084,7 +13084,7 @@ mod tests {
 	// Two conversions in the same second never share a name: the second takes
 	// `_2`, and a name already holding something else is passed over untouched.
 	// The same bytes again are the same copy.
-	// Test ID: Erf0QeH
+	// Test ID: ddex1
 	#[test]
 	fn copies_made_in_one_second_never_replace_each_other() {
 		let dir = format_test_dir("fmtcopy_second");
@@ -13130,7 +13130,7 @@ mod tests {
 	// The later copy holds the same bytes as the earlier one, so it is dropped
 	// and the earlier one named. A copy with other bytes, or of another format,
 	// is its own copy and is left alone.
-	// Test ID: Etl0u6f
+	// Test ID: dee5k
 	#[test]
 	fn a_copy_stamped_a_second_later_with_the_same_bytes_is_the_earlier_one() {
 		let dir = format_test_dir("fmtcopy_tick");
@@ -13193,7 +13193,7 @@ mod tests {
 	// The launch with the later stamp can write and look before the earlier one
 	// has written, and find nothing earlier. The earlier one, writing after it,
 	// still settles on its own copy and drops the later twin, so one is left.
-	// Test ID: EtlUJPD
+	// Test ID: dee97
 	#[test]
 	fn a_later_copy_written_first_gives_way_to_the_earlier_one() {
 		let dir = format_test_dir("fmtcopy_order");
@@ -13226,7 +13226,7 @@ mod tests {
 	// Several windows can launch at once, and each converts the file it read.
 	// Every copy that comes of it is whole, they leave one copy however long the
 	// conversions take, and no temp file is left.
-	// Test ID: EreLZQQ
+	// Test ID: dder1
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn launches_converting_at_once_leave_one_whole_copy() {
@@ -13298,7 +13298,7 @@ mod tests {
 
 	// No file moves to a newer format without its copy: a file that cannot be
 	// read to keep is not written over.
-	// Test ID: EreLZTl
+	// Test ID: dder2
 	#[cfg(unix)]
 	#[test]
 	fn a_write_that_cannot_keep_the_old_file_is_refused() {
@@ -13322,7 +13322,7 @@ mod tests {
 	// The footer's Format line marks a file converted, so it must not go onto one
 	// whose conversion was put off. Its backslashes would then read the 3.0 way
 	// and nothing would convert it again.
-	// Test ID: EreLZX8
+	// Test ID: dder3
 	#[test]
 	fn the_footer_never_stamps_a_2x_file() {
 		let dir = format_test_dir("fmtcopy_footer");
@@ -13336,7 +13336,7 @@ mod tests {
 
 	// A line 2.x gave a bracketed list binds nothing after the conversion, and
 	// the launch says so, naming the copy that still has it.
-	// Test ID: EreLZaX
+	// Test ID: dder4
 	#[test]
 	fn a_setting_the_conversion_cannot_keep_is_reported() {
 		let path = std::path::Path::new("/cfg/config.shcl");
@@ -13363,7 +13363,7 @@ mod tests {
 
 	// The launch that loses a setting leaves word for the window, with the count
 	// and the copy it really made. A launch that loses nothing leaves none.
-	// Test ID: Erf0Qhu
+	// Test ID: ddex2
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_launch_that_loses_a_setting_leaves_a_notice_for_the_window() {
@@ -13393,7 +13393,7 @@ mod tests {
 	// A Settings save that converts a file a busy launch left alone says what it
 	// lost as the launch does, once, with the count and the copy. A save that
 	// converts without losing anything still keeps a copy and says nothing.
-	// Test ID: ErfTRqP
+	// Test ID: ddf0n
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_save_that_loses_a_setting_converting_leaves_a_notice_for_the_window() {
@@ -13434,7 +13434,7 @@ mod tests {
 	// A file shcl can migrate is converted where it stands. One it cannot, here
 	// a raw block that never closes, is written new from the template with the
 	// settings that still read, and every line it could not carry is counted.
-	// Test ID: ErgDo2H
+	// Test ID: ddf6d
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_file_shcl_cannot_migrate_is_written_new() {
@@ -13465,7 +13465,7 @@ mod tests {
 	// it is kept byte for byte and written new, with the settings that still
 	// read, and the launch says what it could not carry, as for any conversion.
 	// The next launch has nothing to do.
-	// Test ID: ErgDoNP
+	// Test ID: ddf6e
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_file_shcl_cannot_read_is_written_new() {
@@ -13513,7 +13513,7 @@ mod tests {
 	// lines (2026100315581313), where it was left alone.
 	// `a_current_file_that_is_not_utf8_drops_only_those_lines` covers `upgrade`.
 	// // A current file that is not UTF-8 is no upgrade, so it is left as it was.
-	// // Test ID: ErgDoiP
+	// // Test ID: ddf6f
 	// #[test]
 	// fn a_current_file_shcl_cannot_read_is_left_alone() {
 	// 	let body = [
@@ -13532,7 +13532,7 @@ mod tests {
 
 	// A Settings save that finds an old file shcl cannot read writes it new and
 	// keeps the old one, and says what it could not carry as a launch would.
-	// Test ID: ErgDp3N
+	// Test ID: ddf6g
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_save_on_a_file_shcl_cannot_read_writes_it_new() {
@@ -13579,7 +13579,7 @@ mod tests {
 	// `a_launch_writes_a_current_file_that_is_not_utf8_again` covers it now.
 	// // A current file that is not UTF-8 used to load as all defaults with no
 	// // word. It is still left as it was, but every line that decodes is read.
-	// // Test ID: ErgK1sy
+	// // Test ID: ddf75
 	// #[test]
 	// fn a_current_file_that_is_not_utf8_loads_what_reads() {
 	// 	let _guard = test_config_lock();
@@ -13621,7 +13621,7 @@ mod tests {
 	// // A save on that file used to say it saved and write nothing. Writing it
 	// // would drop the line that does not decode, so it is refused, and the
 	// // window hears of it as for any refused save.
-	// // Test ID: ErgK2CS
+	// // Test ID: ddf76
 	// #[test]
 	// fn a_save_on_a_current_file_that_is_not_utf8_is_refused() {
 	// 	let _guard = test_config_lock();
@@ -13666,7 +13666,7 @@ mod tests {
 	// A heading that does not decode would hand its block to the one above, so
 	// that file gets the template with what reads, and so does one where nothing
 	// reads, which is the defaults.
-	// Test ID: ErgZK0Q
+	// Test ID: ddf93
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_current_file_that_is_not_utf8_drops_only_those_lines() {
@@ -13744,7 +13744,7 @@ mod tests {
 	// rather than out, and is not one of the lines said to be left out. A file
 	// whose only such line is there is written again all the same, since it is
 	// still not UTF-8, and says so on the terminal only.
-	// Test ID: ErgZKCc
+	// Test ID: ddf96
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_footer_line_that_is_not_utf8_goes_back_to_the_original() {
@@ -13808,7 +13808,7 @@ mod tests {
 	// under the format's backup name. It says which line went, on the terminal
 	// and in the notice, once: the next launch has nothing to do, and a save
 	// after it writes as usual.
-	// Test ID: ErgZK4X
+	// Test ID: ddf94
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_launch_writes_a_current_file_that_is_not_utf8_again() {
@@ -13875,7 +13875,7 @@ mod tests {
 	// A launch that found the file busy left it as it was, so the first write
 	// after it does what the launch would have: a Settings save, or the rating.
 	// Each keeps the old bytes and says what went, and neither is refused.
-	// Test ID: ErgZK8b
+	// Test ID: ddf95
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_save_on_a_current_file_that_is_not_utf8_writes_it_again() {
@@ -13971,7 +13971,7 @@ mod tests {
 	// saved. Both a Settings OK and a window size save write it new from the
 	// template, with what the file held and the save's own change, and nothing
 	// that only lasts the session.
-	// Test ID: ErkRECv
+	// Test ID: ddg6v
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_save_on_a_deleted_file_writes_it_new() {
@@ -14013,7 +14013,7 @@ mod tests {
 
 	// A launch writes a shell profile through the settings file's writer, after
 	// it has read the settings file.
-	// Test ID: ErqPAI7
+	// Test ID: ddhmt
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_save_on_a_deleted_file_keeps_it_after_a_profile_write() {
@@ -14036,7 +14036,7 @@ mod tests {
 
 	// The shell list save is three-way against the file (G117), and a deleted
 	// file must not read as another window having removed every entry.
-	// Test ID: ErkREXH
+	// Test ID: ddg6w
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_save_on_a_deleted_file_keeps_the_shell_list() {
@@ -14083,7 +14083,7 @@ mod tests {
 
 	// shcl 2.0.0 wrote `# enabled: true` above `# rotate:` and indented under
 	// `opacity`, so the lines read wrong once uncommented. The save is shcl's.
-	// Test ID: EqpHg6T
+	// Test ID: dd2f1
 	#[test]
 	fn a_save_keeps_a_commented_block_in_order() {
 		let text = "wallpaper:\n\topacity: 0.2\n\t# rotate:\n\t\t# enabled: true\n\tblur: 3\n";
@@ -14093,7 +14093,7 @@ mod tests {
 	}
 
 	// Quotes, a space indent and a dotted line nobody changed stay as typed.
-	// Test ID: EqwBj7o
+	// Test ID: dd444
 	#[test]
 	#[cfg_attr(miri, ignore = "Miri can't set a file's owner")]
 	fn a_save_writes_only_the_lines_it_changed() {
@@ -14119,7 +14119,7 @@ mod tests {
 
 	// #136 convention: explanatory comments use '## '; commented-out (disabled)
 	// settings use a single '# '.
-	// Test ID: Eibw0CG
+	// Test ID: d97z1
 	#[test]
 	fn default_config_comment_style() {
 		// The file header is verbatim prose in single-'#' form and is exempt.
@@ -14145,7 +14145,7 @@ mod tests {
 	}
 
 	// #142: the default values.
-	// Test ID: EibwbOi
+	// Test ID: d97z3
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn changed_defaults() {
@@ -14193,7 +14193,7 @@ mod tests {
 	// defaults (sdf / exponential). The falloff's two renamed curves keep parsing
 	// under their old spellings, so a config written before the rename still reads
 	// as the same curve rather than silently falling back to the default.
-	// Test ID: EjYS5vM
+	// Test ID: d9p1c
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn scrim_function_and_ramp_resolve() {
@@ -14228,7 +14228,7 @@ mod tests {
 	// seconds of a whole cycle, so every old value still blinks exactly as fast,
 	// the template's commented default turns into the new template line, and a
 	// note or a value that is not a number stays as written.
-	// Test ID: EsDSBQ8
+	// Test ID: ddq65
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn an_old_blink_rate_in_ms_becomes_the_same_cycle_in_seconds() {
@@ -14287,7 +14287,7 @@ mod tests {
 	// `cursor.animation: none` was how a file said no blink. A launch turns it
 	// into `blink: false`, and where the file sets the switch itself the word
 	// still reads as off, so no file starts blinking that did not before.
-	// Test ID: EsDSBUl
+	// Test ID: ddq66
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn animation_none_becomes_blink_off() {
@@ -14323,7 +14323,7 @@ mod tests {
 	// The four check boxes a tab's text used to be made of become one template
 	// that says the same, at the first box's line, and the rest of them go. A
 	// file whose boxes said what shipped gets no line, only the commented one.
-	// Test ID: Et0TY7q
+	// Test ID: de2ze
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_old_tab_check_boxes_become_a_template_that_says_the_same() {
@@ -14411,7 +14411,7 @@ mod tests {
 	// A config written by a build with the check boxes, untouched since, becomes
 	// the one this build writes: the paragraph over the boxes gives way to the
 	// one for the template, and the template's commented line comes in.
-	// Test ID: Et0TY7r
+	// Test ID: de2zf
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_config_from_before_the_tab_text_template_upgrades_to_the_current_one() {
@@ -14443,7 +14443,7 @@ mod tests {
 
 	// A template that can't be read is kept, so what was typed is still there to
 	// fix, and the launch says why the tabs don't follow it.
-	// Test ID: Et0TY7s
+	// Test ID: de2zg
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_tab_text_that_cannot_be_read_is_kept_and_said() {
@@ -14463,7 +14463,7 @@ mod tests {
 
 	// Turning the blink on in Settings has to clear a "none" the file still has,
 	// or the next launch reads it as off again.
-	// Test ID: EsDSBYd
+	// Test ID: ddq67
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn turning_the_blink_on_replaces_an_old_none() {
@@ -14498,7 +14498,7 @@ mod tests {
 	// The words the file uses, written out here rather than read back from
 	// `key`, so a changed spelling, or a type whose dialog order moved, fails
 	// here and not in somebody's config.
-	// Test ID: ErstaMt
+	// Test ID: ddj7y
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn every_fixed_choice_reads_and_writes_its_own_word() {
@@ -14573,7 +14573,7 @@ mod tests {
 	// A word the file holds is never respelled by a save that did not change it,
 	// a word it does not know is kept as written and read as the default, and a
 	// save that does change one writes the word above.
-	// Test ID: Erstagk
+	// Test ID: ddj7z
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_config_with_each_fixed_choice_loads_and_saves_byte_identical() {
@@ -14735,7 +14735,7 @@ mod tests {
 	// Each zoom step is a pixel on the configured size. Stepping past the floor
 	// banks nothing, so the first step back up leaves it at once. The zoom is
 	// process-wide, hence the store lock.
-	// Test ID: Er2UFeP
+	// Test ID: dd5mn
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn font_zoom_steps_a_pixel_and_stops_at_the_floor() {
@@ -14764,7 +14764,7 @@ mod tests {
 	// absent = follow the face toggle, except an explicit font_size (which the old
 	// single toggle silently ignored) reads as intent and turns the size follow off.
 	// A family of its own with no face line turns the face off the same way.
-	// Test ID: EkoQjqK
+	// Test ID: da8sg
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn system_font_size_split_inference() {
@@ -14793,7 +14793,7 @@ mod tests {
 	// a directory at all. Both platforms' spellings everywhere: a config file gets
 	// carried between machines, and a `$HOME` left standing as a literal folder
 	// name on Windows would be a very quiet way to fail.
-	// Test ID: EnRWor2
+	// Test ID: dbg0q
 	#[test]
 	fn a_home_token_expands_however_it_is_written() {
 		let home = super::home_string();
@@ -14824,7 +14824,7 @@ mod tests {
 	// The shipped default is the home variable spelled the way somebody on this
 	// platform would type it, and the template's commented line has to say the
 	// same thing or the first save rewrites the file we just wrote (G69, G72).
-	// Test ID: Eq3hq92
+	// Test ID: dcq0v
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_default_startup_directory_is_this_platforms_home_variable() {
@@ -14848,7 +14848,7 @@ mod tests {
 	// The other pairs that mean one thing under two spellings. Only the one the
 	// running platform sets is checked against a value; the point is that the
 	// other spelling answers too rather than expanding to nothing.
-	// Test ID: EoSvoUy
+	// Test ID: dbz8n
 	#[test]
 	fn the_other_platforms_spelling_of_a_name_still_answers() {
 		for (ours, theirs) in [("USER", "USERNAME"), ("TMPDIR", "TEMP")] {
@@ -14869,7 +14869,7 @@ mod tests {
 	// reads those words and they mean something to it: a cmd prompt string, a
 	// bash `-c` script, a percent that is just a percent. Splitting happens
 	// first, which keeps a variable holding a path with a space in it whole.
-	// Test ID: Eq3cPFw
+	// Test ID: dcq05
 	#[test]
 	fn a_config_command_expands_the_program_and_nothing_after_it() {
 		let home = super::home_string();
@@ -14913,7 +14913,7 @@ mod tests {
 	// A directory named on the command line is checked before anything spawns, so
 	// a path that is not there reads as one line naming the flag rather than as a
 	// shell that failed to start - and it expands the same tokens the setting does.
-	// Test ID: EnWOVqj
+	// Test ID: dbh66
 	#[test]
 	fn a_named_directory_is_expanded_and_checked() {
 		let home = super::home_string();
@@ -14933,7 +14933,7 @@ mod tests {
 	// the same file, so a STRING compare promoted a second copy of the user's
 	// default shell to the top of their own list - where the top is what "default
 	// shell" now means, so the duplicate became the default.
-	// Test ID: EnRWor3
+	// Test ID: dbg0r
 	#[test]
 	fn a_default_shell_already_in_the_list_moves_instead_of_doubling() {
 		let entry = |slug: &str, command: &str| crate::shells::ShellEntry {
@@ -14967,7 +14967,7 @@ mod tests {
 		assert_eq!(out[0].command, "fish");
 	}
 
-	// Test ID: EkrTZxY
+	// Test ID: da9gy
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn copy_on_select_key_parses_and_defaults_on() {
@@ -14976,7 +14976,7 @@ mod tests {
 		assert!(!resolve(read_raw("shell.copy_on_select: false\n", p).0).copy_on_select);
 	}
 
-	// Test ID: Erg8fz0
+	// Test ID: ddf5r
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn idle_release_defaults_on() {
@@ -14995,7 +14995,7 @@ mod tests {
 
 	// The tmux settings, off and asking by default, read nested or dotted. A
 	// word or name the file can't use reads as the default.
-	// Test ID: Et0dflx
+	// Test ID: de30p
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_tmux_settings_read_from_the_file_and_default_off() {
@@ -15051,7 +15051,7 @@ mod tests {
 
 	// Empty leaves TERM to the engine; anything else is one word, and a value
 	// with a space in it can't be a TERM, so it reads as the default.
-	// Test ID: EtS3GhL
+	// Test ID: de9kp
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn shell_term_reads_one_word_and_defaults_empty() {
@@ -15073,7 +15073,7 @@ mod tests {
 		assert_eq!(read_text("shell:\n\tterm: vt220\n").term, "vt220");
 	}
 
-	// Test ID: ErnMaKh
+	// Test ID: ddgxg
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn software_rendering_defaults_off() {
@@ -15098,7 +15098,7 @@ mod tests {
 	// // The minimized wait came after the other two, so a file written before
 	// // it has the idle paragraph without it. It goes in beside them, first of
 	// // the waits, and the paragraph is not written twice.
-	// // Test ID: ErmrbFB
+	// // Test ID: ddgsg
 	// #[test]
 	// fn an_existing_config_learns_the_minimized_wait() {
 	// 	let p = std::path::Path::new("test.shcl");
@@ -15136,7 +15136,7 @@ mod tests {
 	// The minimized wait had its own line for about a day. It leaves a file
 	// whether set or not, and the hidden wait's old commented 30 becomes the
 	// new 1. A hidden wait the user set stays as set.
-	// Test ID: ErsV4Ak
+	// Test ID: ddj4x
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn an_existing_config_loses_the_minimized_wait() {
@@ -15177,7 +15177,7 @@ mod tests {
 		assert_eq!(resolve(read_raw(&out, p).0).idle_release_hidden_min, 30);
 	}
 
-	// Test ID: ErsV4Fc
+	// Test ID: ddj4y
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn new_tabs_go_next_to_current_unless_turned_off() {
@@ -15194,7 +15194,7 @@ mod tests {
 		assert!(!resolve(read_raw(off, p).0).new_tab_beside);
 	}
 
-	// Test ID: EtSG10m
+	// Test ID: de9n7
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_remote_screen_takes_remote_unless_turned_off() {
@@ -15214,7 +15214,7 @@ mod tests {
 		assert!(!resolve(read_raw(off, p).0).performance_detect_remote);
 	}
 
-	// Test ID: EtAYfIz
+	// Test ID: de5d3
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_zoom_resizes_the_window_only_when_turned_on() {
@@ -15231,7 +15231,7 @@ mod tests {
 		assert!(resolve(read_raw(on, p).0).resize_on_zoom);
 	}
 
-	// Test ID: Esa0ndg
+	// Test ID: ddwkr
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_theme_pick_leaves_the_font_alone_unless_turned_off() {
@@ -15254,7 +15254,7 @@ mod tests {
 	// A saved theme keeps a font beside its colors. One saved before themes had
 	// fonts has no font lines and still loads whole, and picking it changes no
 	// font even with fonts following themes.
-	// Test ID: Esa0nip
+	// Test ID: ddwks
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_saved_theme_keeps_its_font_and_an_old_one_still_loads() {
@@ -15303,7 +15303,7 @@ mod tests {
 		);
 	}
 
-	// Test ID: Em1S9yq
+	// Test ID: dattw
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn hyperlink_keys_parse_in_their_block() {
@@ -15320,7 +15320,7 @@ mod tests {
 
 	// An over-range output_ease_lines must clamp: scroll's backlog clamp uses it
 	// as a lower bound and panics (aborts, in release) when it exceeds the cap.
-	// Test ID: EjNOyIT
+	// Test ID: d9kcc
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn output_ease_lines_clamps_to_backlog_cap() {
@@ -15341,7 +15341,7 @@ mod tests {
 	}
 
 	// One syntax-broken line must not sink the valid settings around it.
-	// Test ID: Eij9gBE
+	// Test ID: d99pk
 	#[test]
 	fn parse_lenient_drops_only_the_bad_line() {
 		let text = "transparency.opacity: 0.7\ncursor_blink: enable\nwindow.margin: 12.0\n";
@@ -15350,7 +15350,7 @@ mod tests {
 		assert_eq!(raw.margin, Some(12.0)); // after the bad line
 	}
 
-	// Test ID: EiuvVey
+	// Test ID: d9ch6
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn chrome_colors_default_and_override() {
@@ -15375,7 +15375,7 @@ mod tests {
 	// themes.* user data survives, and the original file is kept as a .bak.
 	// When both an old alias and its newer flat spelling are present, the newer
 	// one wins.
-	// Test ID: ElmIYG0
+	// Test ID: daq68
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn legacy_config_converts_with_values_kept() {
@@ -15471,7 +15471,7 @@ mod tests {
 
 	// The glow settings were renamed to scrim, and the glow border to the text
 	// outline. A flat file from before that keeps every value.
-	// Test ID: Er2UFeQ
+	// Test ID: dd5mp
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_old_glow_names_convert_to_scrim_and_outline() {
@@ -15491,7 +15491,7 @@ mod tests {
 	// shcl drops a line that steps back to a depth nothing uses, so it sets
 	// nothing. Called `margin`, it used to send the whole file to `.bak` as an
 	// old flat one.
-	// Test ID: ErCHjg8
+	// Test ID: dd800
 	#[test]
 	fn a_line_that_sets_nothing_never_converts_the_file() {
 		let text = "\t\twindow:\n\t\t\tcolumns: 100\n\tmargin: 4\n";
@@ -15504,7 +15504,7 @@ mod tests {
 	}
 
 	// The shipped template itself must never read as legacy.
-	// Test ID: ElmIYG1
+	// Test ID: daq69
 	#[test]
 	fn a_new_format_config_never_converts() {
 		let dir =
@@ -15523,7 +15523,7 @@ mod tests {
 
 	// A current file with one flat key at the margin still converts, and its shell
 	// list is the user's own: every entry carries, in order, with all its fields.
-	// Test ID: EpyvpeD
+	// Test ID: dcnw4
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_converted_file_keeps_its_shell_list() {
@@ -15571,7 +15571,7 @@ mod tests {
 	// A flat `wallpaper:` held the image. It reaches `wallpaper.image`, never the
 	// block heading, whatever order the carried values are placed in, and a save
 	// from Settings then loads every carried value the same.
-	// Test ID: EpZcBUO
+	// Test ID: dcfs8
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_flat_wallpaper_converts_to_the_image_and_survives_a_save() {
@@ -15647,7 +15647,7 @@ mod tests {
 
 	// Every block name, not only `wallpaper`: an old flat line named like a block
 	// is either carried to a setting or dropped, and the block keeps its heading.
-	// Test ID: EpZcBUP
+	// Test ID: dcfs9
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_flat_key_named_like_a_block_never_ends_up_on_its_heading() {
@@ -15685,7 +15685,7 @@ mod tests {
 	// gets it back under `image:`, in place. No backup is taken, so a folder that
 	// already holds every backup name is repaired too, and the next launch neither
 	// converts the file nor changes it again.
-	// Test ID: EpZefUm
+	// Test ID: dcfsj
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn an_image_left_on_the_wallpaper_heading_moves_to_image() {
@@ -15785,7 +15785,7 @@ mod tests {
 
 	// The repair rewrites a settings file at launch, so every shape that is not
 	// the one an earlier conversion wrote is left alone.
-	// Test ID: EpZefUn
+	// Test ID: dcfsk
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn only_a_heading_holding_a_value_is_repaired() {
@@ -15856,7 +15856,7 @@ mod tests {
 
 	// A launch that finds the settings file open in another program leaves it as it
 	// is, and the next launch that does not repairs it.
-	// Test ID: EpZtWPY
+	// Test ID: dcfvd
 	#[cfg(target_os = "linux")]
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
@@ -15922,7 +15922,7 @@ mod tests {
 
 	// The repair rewrites the settings file at launch, so a linked file stays
 	// linked to the same file, and a private one stays private.
-	// Test ID: EpZts0G
+	// Test ID: dcfve
 	#[cfg(unix)]
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
@@ -15970,7 +15970,7 @@ mod tests {
 	// The conversion rewrites the settings file where it is: a link stays a link
 	// to the same file, a private file stays private, its backup is as private,
 	// and a link sitting at a backup name is never written through.
-	// Test ID: EpZfVmi
+	// Test ID: dcfsn
 	#[cfg(unix)]
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
@@ -16029,7 +16029,7 @@ mod tests {
 
 	// A conversion that cannot write leaves the file as it was and keeps no
 	// backup of it, or a file that stays unwritable gains one at every launch.
-	// Test ID: EpZfVmj
+	// Test ID: dcfsp
 	#[cfg(unix)]
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
@@ -16070,7 +16070,7 @@ mod tests {
 	// A failed write is not proof the file is as it was. ReplaceFile can fail after
 	// the file it replaces is gone, and then the backup is the only copy left. So a
 	// failed conversion drops its backup only when the file reads back whole.
-	// Test ID: EpZszNA
+	// Test ID: dcfvb
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_failed_conversion_keeps_the_backup_unless_the_file_is_whole() {
@@ -16118,7 +16118,7 @@ mod tests {
 
 	// A hand-edited config is where a home-relative path gets typed, so `~` has
 	// to expand. `~user` has nothing to resolve against and stays literal.
-	// Test ID: Ellevxg
+	// Test ID: daq1b
 	#[test]
 	fn tilde_expands_to_home_but_only_for_this_user() {
 		let home = super::home_string();
@@ -16139,7 +16139,7 @@ mod tests {
 	// the active/commented state, and the indentation that says which block it
 	// belongs to. Renames may not cross blocks - the machinery rewrites lines, it
 	// does not move them - so this one stays inside `scroll:`.
-	// Test ID: ElpQBii
+	// Test ID: daqy9
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_renamed_setting_keeps_its_value_and_its_block() {
@@ -16164,7 +16164,7 @@ mod tests {
 
 	// Renames nest: this one sits two blocks deep, so the machinery has to match
 	// on the whole path rather than the leaf.
-	// Test ID: EoqHGQy
+	// Test ID: dc4wb
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_renamed_setting_two_blocks_deep_is_found() {
@@ -16188,7 +16188,7 @@ mod tests {
 	// Once both spellings are in the file the old line must be left exactly
 	// where it is: it is no longer stale, it is the new setting's own line, and
 	// dropping or re-renaming it would delete a user's color on every launch.
-	// Test ID: Em3Pif2
+	// Test ID: dav9z
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_renamed_key_frees_its_old_name_for_a_new_setting() {
@@ -16229,7 +16229,7 @@ mod tests {
 	// successor, and ease_in changed units (fraction -> milliseconds), so its
 	// old value must not be carried into the new key. Active and stale
 	// commented lines both go; the settings around them stay put.
-	// Test ID: Elqv6O0
+	// Test ID: dar9t
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn retired_scroll_knobs_are_removed_not_kept() {
@@ -16245,7 +16245,7 @@ mod tests {
 	}
 
 	// A config with nothing to migrate is left untouched (no needless rewrite).
-	// Test ID: Eimg8fI
+	// Test ID: d9ahq
 	#[test]
 	fn migrate_config_noop_when_current() {
 		assert!(
@@ -16259,7 +16259,7 @@ mod tests {
 	// stack was the default kept that stack forever. Migration refreshes exactly
 	// the shipped defaults and nothing the user chose themselves - now keyed on
 	// the nested font.family path.
-	// Test ID: ElEvh0S
+	// Test ID: daf5e
 	#[test]
 	fn migrate_refreshes_a_superseded_default_font_stack() {
 		let stale = SUPERSEDED_FONT_STACKS[0];
@@ -16302,7 +16302,7 @@ mod tests {
 	// An active line's path is the one shcl reads, whatever comments sit above it.
 	// A save moves a comment to the depth of the setting below it, so a path taken
 	// from the comment changed at the first save.
-	// Test ID: EpZCRku
+	// Test ID: dcfp2
 	#[test]
 	fn an_active_line_takes_no_path_from_a_comment() {
 		let setting = |text: &str, at: usize| {
@@ -16364,7 +16364,7 @@ mod tests {
 	// `a_commented_new_name_counts_where_the_save_that_runs_puts_it` covers it.
 	// // Whether a rename's new name is already present is judged where a save puts
 	// // a commented line, or the first save turns the rename on or off.
-	// // Test ID: EpZCS14
+	// // Test ID: dcfp5
 	// #[test]
 	// fn a_commented_new_name_counts_where_a_save_puts_it() {
 	// 	let saved = |t: &str| shcl::Document::parse(t).to_canonical();
@@ -16409,7 +16409,7 @@ mod tests {
 	// // A rename's new name counts where the save that actually runs leaves a
 	// // commented line. A save that keeps the lines leaves a column-0 comment at
 	// // column 0, so it never blocks the rename, before a save or after one.
-	// // Test ID: ErUrgUh
+	// // Test ID: ddcf1
 	// #[test]
 	// fn a_commented_new_name_counts_where_the_save_that_runs_puts_it() {
 	// 	let load = |t: &str| {
@@ -16451,7 +16451,7 @@ mod tests {
 	// file can get either, and the canonical form moves a column-0 comment into
 	// the block. Here a font size save keeps the lines, and a window size save
 	// falls back past the space-indented comment that closes `window:`.
-	// Test ID: ErfAH9f
+	// Test ID: ddey8
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_commented_new_name_counts_the_same_whichever_save_runs() {
@@ -16495,7 +16495,7 @@ mod tests {
 
 	// A Settings save may tidy quotes and indentation, and the launch after it
 	// must load every value as the launch before it did.
-	// Test ID: EpZCS15
+	// Test ID: dcfp6
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_settings_save_moves_no_value_at_the_next_launch() {
@@ -16644,7 +16644,7 @@ mod tests {
 	// template's current one; an active line, or one the user annotated, is theirs.
 	// Every entry refreshes, including a second one for a path whose default has
 	// been retuned twice - the lookup must not stop at the first match.
-	// Test ID: Elzq5VQ
+	// Test ID: datef
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn migrate_refreshes_a_superseded_commented_default() {
@@ -16692,7 +16692,7 @@ mod tests {
 	// The shipped folder names the usual place in this platform's spelling, and
 	// the template's commented line has to say the same, or the first save
 	// rewrites the file just written (G69, G72).
-	// Test ID: Er1vmpM
+	// Test ID: dd5ga
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_default_wallpaper_folder_is_this_platforms_usual_place() {
@@ -16726,7 +16726,7 @@ mod tests {
 	// Where the usual place is: the data dir, which on Windows is Local, since a
 	// pack is bulk and has no business roaming. `--config` and XDG_CONFIG_HOME
 	// keep everything in one tree.
-	// Test ID: Er1vmpN
+	// Test ID: dd5gb
 	#[test]
 	fn each_platform_keeps_its_wallpaper_where_it_keeps_bulk_data() {
 		let config = PathBuf::from("/c/silkterm");
@@ -16756,7 +16756,7 @@ mod tests {
 	// Kept copies go where each platform keeps a cache, never in the roaming
 	// settings. A `--config` keeps them beside that config, and so does an
 	// explicit XDG_CONFIG_HOME unless XDG_CACHE_HOME says otherwise.
-	// Test ID: EryHHqn
+	// Test ID: ddkhb
 	#[test]
 	fn each_platform_keeps_its_cache_where_that_platform_keeps_caches() {
 		let config = PathBuf::from("/c/silkterm");
@@ -16819,7 +16819,7 @@ mod tests {
 	// found with the value at its default, commented, uncommented or emptied, and
 	// under the older spellings. A named image outranks it, and a named folder
 	// outranks the image.
-	// Test ID: Er1vmpO
+	// Test ID: dd5gc
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_default_wallpaper_folder_is_found_in_the_usual_place() {
@@ -16887,7 +16887,7 @@ mod tests {
 	// With no image named and nothing rotating, a wallpaper in one of the usual
 	// places is found, the current spelling first. A relative name is taken from
 	// the config's own folder.
-	// Test ID: Er2UFeU
+	// Test ID: dd5mt
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_wallpaper_in_the_usual_place_is_found() {
@@ -16920,7 +16920,7 @@ mod tests {
 
 	// --reset-config moves the file aside and never overwrites an earlier
 	// backup; with no file left there is nothing to do.
-	// Test ID: Er2UFeV
+	// Test ID: dd5mv
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_reset_keeps_every_earlier_config() {
@@ -16949,7 +16949,7 @@ mod tests {
 
 	// Hiding a lone tab is off by default and is not a dialog row, so only the
 	// View menu's save reaches the file.
-	// Test ID: Er2UFeW
+	// Test ID: dd5mw
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn hide_single_tab_is_off_and_survives_a_save() {
@@ -16975,7 +16975,7 @@ mod tests {
 
 	// The menu bar is on by default and is not a dialog row: the View and
 	// right-click menus save it, and the next window opens with it.
-	// Test ID: Esdy2iX
+	// Test ID: ddxj8
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_menu_bar_is_on_and_survives_a_save() {
@@ -17010,7 +17010,7 @@ mod tests {
 
 	// An existing config's commented line names the old empty default, and is
 	// refreshed to the place it meant.
-	// Test ID: Er1vmpP
+	// Test ID: dd5gd
 	#[test]
 	fn an_existing_config_learns_where_the_wallpaper_folder_is() {
 		let out = migrate_config_text("wallpaper:\n\trotate:\n\t\t# folder: \"\"  ## Default\n")
@@ -17026,7 +17026,7 @@ mod tests {
 
 	// The table above is kept by hand, so nothing can catch an entry that was
 	// simply never added. This names the one default that changed most recently.
-	// Test ID: Erg8g2c
+	// Test ID: ddf5s
 	#[test]
 	fn an_existing_config_learns_that_the_idle_release_defaults_on() {
 		let out = migrate_config_text("window:\n\t# idle_release: false  ## Default\n")
@@ -17036,7 +17036,7 @@ mod tests {
 		assert!(migrate_config_text("window:\n\tidle_release: false\n").is_none());
 	}
 
-	// Test ID: EreA6Db
+	// Test ID: ddeph
 	#[test]
 	fn an_existing_config_learns_that_copy_on_select_defaults_on() {
 		let out = migrate_config_text("shell:\n\t# copy_on_select: false  ## Default\n")
@@ -17047,7 +17047,7 @@ mod tests {
 		);
 	}
 
-	// Test ID: EqSm2Rl
+	// Test ID: dcx1s
 	#[test]
 	fn an_existing_config_learns_that_wallpaper_text_colors_default_on() {
 		let out = migrate_config_text("colors:\n\t# from_wallpaper: false  ## Default\n")
@@ -17061,7 +17061,7 @@ mod tests {
 	// The coverage exponent is gone and its number means nothing as an amount,
 	// so the line goes rather than carrying a value over. An active one has to
 	// go too: left in place it would read as a setting nothing answers for.
-	// Test ID: EqWXhBA
+	// Test ID: dcxyr
 	#[test]
 	fn an_existing_config_loses_the_coverage_exponent() {
 		for line in [
@@ -17077,7 +17077,7 @@ mod tests {
 
 	// The walker is what gives every line its full nested path - the whole
 	// line-oriented machinery keys on it.
-	// Test ID: ElmIYG2
+	// Test ID: daq6a
 	#[test]
 	fn walker_resolves_nested_paths() {
 		let text = "top: 1\nwallpaper:\n\t# enabled: true\n\trotate:\n\t\t# folder: \"x\"\n\t\tinterval_s: 2.0\n\t# opacity: 0.5\ncolors.focus: \"#123456\"\n";
@@ -17107,7 +17107,7 @@ mod tests {
 	// The whole-file diff is the strong form of that - a save may only ever add
 	// the lines it was asked to add - and the spot checks below say WHICH shapes
 	// are being relied on, so a failure names the one that moved.
-	// Test ID: ElmIYG3
+	// Test ID: daq6b
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_save_keeps_nested_comment_layout() {
@@ -17155,7 +17155,7 @@ mod tests {
 	// A line whose indentation matches no level is dropped by the parse, and a
 	// save would then delete it. The write refuses instead: a hand-written line
 	// is worth more than the one setting the save was carrying.
-	// Test ID: EoGez3w
+	// Test ID: dbwa7
 	#[test]
 	fn a_save_that_would_drop_a_line_is_refused() {
 		let _guard = super::test_config_lock();
@@ -17183,7 +17183,7 @@ mod tests {
 	// The launch names a line it cannot read, and the rating then writes two
 	// lines above it once the window is up. The last word on the console has to
 	// name the line where the file has it after that.
-	// Test ID: ErUrgB9
+	// Test ID: ddcf0
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_rating_write_restates_the_lines_the_launch_named() {
@@ -17234,7 +17234,7 @@ mod tests {
 	// A stray indented with spaces used to be dropped too, and every save of
 	// the file refused. shcl 3.0 keeps it as written, so the save goes through
 	// and the line is still there, still reported, and still sets nothing.
-	// Test ID: EqtUcp6
+	// Test ID: dd3fc
 	#[test]
 	#[cfg_attr(miri, ignore = "Miri can't set a file's owner")]
 	fn a_save_keeps_a_space_indented_stray() {
@@ -17269,7 +17269,7 @@ mod tests {
 	// its siblings INSIDE their block, at the right depth, NOT be appended with
 	// a second copy of the group's comment block - that paragraph is already in
 	// the file, attached to the siblings.
-	// Test ID: EllvVHE
+	// Test ID: daq3c
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_straggler_goes_beside_its_siblings_not_with_a_second_paragraph() {
@@ -17329,7 +17329,7 @@ mod tests {
 	// The real on-disk load pipeline (convert -> migrate -> backfill) on a
 	// pre-nesting config: values end at their nested paths, the original file
 	// is kept as .bak, missing keys arrive, and the chain is stable.
-	// Test ID: ElmIYG4
+	// Test ID: daq6c
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn pipeline_convert_migrate_backfill_on_disk() {
@@ -17390,7 +17390,7 @@ mod tests {
 
 	// The scan must not offer the loader a file it can't decode: `image` is built
 	// with only png + jpeg, so a wider list picks a wallpaper that then fails.
-	// Test ID: EllHdNA
+	// Test ID: dapye
 	#[test]
 	fn image_scan_only_accepts_what_the_decoder_has() {
 		use std::path::Path;
@@ -17408,7 +17408,7 @@ mod tests {
 	// A grid saved under --font-name was kept in that font, and a launch
 	// without it opened the same columns and rows at the normal font. The
 	// font a grid is kept for is the one a launch without the options has.
-	// Test ID: Eso2wHz
+	// Test ID: ddzzs
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_font_a_launch_without_the_font_options_has() {
@@ -17648,7 +17648,7 @@ mod tests {
 			}
 		}
 
-		// Test ID: EpZCS16
+		// Test ID: dcfp7
 		#[test]
 		#[cfg_attr(miri, ignore = "too slow under Miri")]
 		fn a_settings_save_moves_no_value_at_the_next_launch() {
@@ -17672,7 +17672,7 @@ mod tests {
 
 		// A generator that stops making the shapes that moved a value passes
 		// forever, so each is looked for by name.
-		// Test ID: EpZCS17
+		// Test ID: dcfp8
 		#[test]
 		#[cfg_attr(miri, ignore = "too slow under Miri")]
 		fn the_save_generator_reaches_every_shape() {
@@ -17816,7 +17816,7 @@ mod tests {
 
 		// A generator that quietly stops generating passes forever. This is what
 		// says the template is still being read.
-		// Test ID: EpQN0oC
+		// Test ID: dcdj3
 		#[test]
 		fn the_generator_still_finds_the_settings_it_draws_from() {
 			assert!(
@@ -17843,7 +17843,7 @@ mod tests {
 			);
 		}
 
-		// Test ID: EpQN0oD
+		// Test ID: dcdj4
 		#[test]
 		#[cfg_attr(miri, ignore = "too slow under Miri")]
 		fn no_config_file_can_take_the_program_down() {
@@ -17860,7 +17860,7 @@ mod tests {
 		// Free-form bytes, with no config shape imposed at all. The generator
 		// above never emits a lone `:` at depth four or a value that is only a
 		// byte-order mark, and the parser has to hold up under those too.
-		// Test ID: EpQN0oE
+		// Test ID: dcdj5
 		#[test]
 		#[cfg_attr(miri, ignore = "too slow under Miri")]
 		fn arbitrary_bytes_parse_without_panicking() {
@@ -17884,7 +17884,7 @@ mod tests {
 		// A flat file of old names, the newest spelling winning, converts with each
 		// value readable at its new path, every block heading still a heading, and
 		// no second conversion.
-		// Test ID: EpZcBUQ
+		// Test ID: dcfsa
 		#[test]
 		#[cfg_attr(miri, ignore = "too slow under Miri")]
 		fn a_flat_file_moves_every_value_to_its_path() {
@@ -17988,7 +17988,7 @@ mod tests {
 		// loaded before it loads the same after, or nothing is written. Settings
 		// are re-indented at random here, since a line indented deeper than its
 		// block needs is what an added line can take over.
-		// Test ID: EpZCS18
+		// Test ID: dcfp9
 		#[test]
 		#[cfg_attr(miri, ignore = "too slow under Miri")]
 		fn backfill_changes_nothing_that_loaded() {
@@ -18030,7 +18030,7 @@ mod tests {
 
 		// Whatever backfill adds is where the next launch looks for it, so a
 		// second pass finds nothing missing.
-		// Test ID: EquUFK5
+		// Test ID: dd3q2
 		#[test]
 		#[cfg_attr(miri, ignore = "too slow under Miri")]
 		fn backfill_settles_in_one_pass() {
@@ -18053,7 +18053,7 @@ mod tests {
 		// launch converts nothing, and a file written new has no line shcl cannot
 		// read. Bytes that are not UTF-8 and a raw block that never closes are the
 		// files shcl's own migration gives up on.
-		// Test ID: ErgHEfO
+		// Test ID: ddf6t
 		#[test]
 		#[cfg_attr(miri, ignore = "too slow under Miri")]
 		fn an_upgrade_settles_in_one_pass() {
@@ -18115,7 +18115,7 @@ mod tests {
 		// what is written is UTF-8 and current, so the next launch does nothing.
 		// Kept in its own layout it only loses lines, bar the footer going back as
 		// shipped, and written from the template it has no line shcl cannot read.
-		// Test ID: ErgZKGo
+		// Test ID: ddf97
 		#[test]
 		#[cfg_attr(miri, ignore = "too slow under Miri")]
 		fn a_rewrite_for_lines_that_are_not_utf8_settles() {
@@ -18192,7 +18192,7 @@ mod tests {
 		// The launch-time repair of a wallpaper heading, over the shapes around it:
 		// it settles in one pass, touches only the heading and the line it adds, and
 		// every other setting loads as before.
-		// Test ID: EpZefUo
+		// Test ID: dcfsm
 		#[test]
 		#[cfg_attr(miri, ignore = "too slow under Miri")]
 		fn a_wallpaper_repair_changes_nothing_else() {
@@ -18201,7 +18201,7 @@ mod tests {
 
 		// Seed 107671 writes `wallpaper.rotate` three times over two blocks, and the
 		// repair folds that to two. A plain test run's soak stops short of it.
-		// Test ID: ErCFlaa
+		// Test ID: dd7zr
 		#[test]
 		#[cfg_attr(miri, ignore = "too slow under Miri")]
 		fn a_key_written_three_times_survives_the_wallpaper_repair() {
@@ -18576,7 +18576,7 @@ mod tests {
 			assert_eq!(now, then, "another setting loads differently\n{shown}");
 		}
 
-		// Test ID: EpXeZQX
+		// Test ID: dcfa6
 		#[test]
 		#[cfg_attr(miri, ignore = "too slow under Miri")]
 		fn a_rating_changes_nothing_else_in_any_file() {
@@ -18623,7 +18623,7 @@ mod peer_tests {
 
 	// Every window saves what it changed over what it loaded, at the same
 	// moment as the others, and each change is in the file after.
-	// Test ID: EsaCcC6
+	// Test ID: ddwnd
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn saves_at_the_same_moment_keep_each_others_change() {
@@ -18666,7 +18666,7 @@ mod peer_tests {
 
 	// The others hear of a write to the settings file, and never of the state
 	// file, which holds this window's size.
-	// Test ID: EsaCcC7
+	// Test ID: ddwne
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn only_a_settings_write_is_news() {
@@ -18694,7 +18694,7 @@ mod peer_tests {
 	// What another window's save leaves of this one: its size and the state
 	// file's lines, and the picture rotation chose, until the save names
 	// another picture or folder.
-	// Test ID: EsaCcC8
+	// Test ID: ddwnf
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_reload_for_another_window_keeps_this_windows_own() {
@@ -18732,7 +18732,7 @@ mod peer_tests {
 
 	// Another window's save of a view switch is for new windows. This one
 	// keeps what it shows, both ways, and still takes the rest of the save.
-	// Test ID: Esdy2dz
+	// Test ID: ddxj7
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn another_windows_save_leaves_this_windows_view() {
@@ -18760,14 +18760,14 @@ mod peer_tests {
 		assert_eq!(fresh.margin, 22.0);
 	}
 
-	// Test ID: EtZoAXH
+	// Test ID: debfb
 	#[test]
 	fn a_release_build_shows_the_number_alone() {
 		let label = build_label_for("3x7k2", true, 0, |_| panic!("a release has no date"));
 		assert_eq!(label, "3x7k2");
 	}
 
-	// Test ID: EtZoAsL
+	// Test ID: debfc
 	#[test]
 	fn a_non_release_build_shows_the_local_date_after_the_number() {
 		let label = build_label_for("3x7k2", false, 1_000, |at| format!("date-of-{at}"));
@@ -18780,7 +18780,7 @@ mod peer_tests {
 		assert!(shown.bytes().all(|b| b.is_ascii_digit() || b == b'-'));
 	}
 
-	// Test ID: EtZoB0q
+	// Test ID: debfd
 	#[test]
 	#[cfg_attr(miri, ignore = "Miri can't reread the time zone")]
 	fn the_build_date_follows_the_viewers_zone() {

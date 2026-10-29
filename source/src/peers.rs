@@ -259,7 +259,7 @@ mod tests {
 		dir
 	}
 
-	// Test ID: EsaCcC0
+	// Test ID: ddwn7
 	#[test]
 	fn one_file_is_one_key_however_it_is_named() {
 		let dir = scratch("key");
@@ -280,7 +280,7 @@ mod tests {
 
 	// A marker nobody answers for goes; one that answers stays; this process's
 	// own is never told.
-	// Test ID: EsaCcC1
+	// Test ID: ddwn8
 	#[test]
 	fn a_save_reaches_the_others_and_clears_the_dead() {
 		let dir = scratch("tell");
@@ -308,7 +308,7 @@ mod tests {
 		assert!(dir.join("10").exists() && dir.join("lock").exists());
 	}
 
-	// Test ID: EsaCcC2
+	// Test ID: ddwn9
 	#[test]
 	fn a_marker_goes_with_its_window() {
 		let dir = scratch("marker");
@@ -321,7 +321,7 @@ mod tests {
 
 	// The second taker waits for the first, here a thread standing in for the
 	// other window, and a take inside a held one does not wait on itself.
-	// Test ID: EsaCcC3
+	// Test ID: ddwna
 	#[test]
 	#[cfg_attr(miri, ignore = "Miri gives a made-up user id")]
 	fn a_second_save_waits_for_the_first() {

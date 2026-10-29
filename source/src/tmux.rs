@@ -303,7 +303,7 @@ const NO_SOCKET: &str = "/dev/null/no-tmux";
 mod tests {
 	use super::*;
 
-	// Test ID: Et0ZjTq
+	// Test ID: de306
 	#[test]
 	fn the_default_name_is_the_date_and_the_time_to_a_hundredth() {
 		assert_eq!(
@@ -323,7 +323,7 @@ mod tests {
 
 	// tmux would turn these into something else, and the name kept for ending
 	// the session has to be the one tmux made.
-	// Test ID: Et0ZjXB
+	// Test ID: de307
 	#[test]
 	fn a_name_tmux_would_change_is_changed_the_same_way_first() {
 		assert_eq!(clean_name("a.b:c#d"), "a_b_c_d");
@@ -335,7 +335,7 @@ mod tests {
 		assert_eq!(clean_name("naïve"), "naïve");
 	}
 
-	// Test ID: Et0ZjaW
+	// Test ID: de308
 	#[test]
 	fn a_template_that_cant_be_read_or_comes_out_empty_gives_the_default_name() {
 		let default = session_name(DEFAULT_SESSION_NAME, "20261017", "173327", 50);
@@ -348,7 +348,7 @@ mod tests {
 		assert_eq!(session_name("...", "20261017", "173327", 50), "___");
 	}
 
-	// Test ID: Et0ZjdR
+	// Test ID: de309
 	#[test]
 	fn a_taken_name_gets_a_number() {
 		let taken = ["work", "work-2"];
@@ -363,7 +363,7 @@ mod tests {
 		}
 	}
 
-	// Test ID: Et0Zjfy
+	// Test ID: de30a
 	#[test]
 	fn the_pane_runs_tmux_with_the_shell_after_its_own_options() {
 		let shell = ["/bin/bash".to_string(), "-l".to_string()];
@@ -393,7 +393,7 @@ mod tests {
 
 	// tmux hands a lone word to its default-shell as `-c` text, which splits a
 	// path with a space in it.
-	// Test ID: Et0Zjid
+	// Test ID: de30b
 	#[test]
 	fn a_shell_named_alone_is_run_as_it_is_not_as_shell_text() {
 		let shell = ["/opt/my shells/zsh".to_string()];
@@ -404,7 +404,7 @@ mod tests {
 		);
 	}
 
-	// Test ID: Et0Zjlv
+	// Test ID: de30c
 	#[test]
 	fn the_close_setting_reads_its_three_words() {
 		assert_eq!(OnClose::parse("Detach"), Some(OnClose::Detach));
@@ -418,7 +418,7 @@ mod tests {
 	}
 
 	// Without -S it would ask the user's own server, which has sessions.
-	// Test ID: Et9OGdk
+	// Test ID: de541
 	#[cfg(unix)]
 	#[test]
 	#[cfg_attr(miri, ignore = "Miri can't start a process")]
@@ -478,7 +478,7 @@ mod tests {
 	// Against a real tmux on a server of the test's own. Ending goes by the
 	// name SilkTerm gave, so a session with a longer name that starts the same
 	// way, and one the user made, both stay.
-	// Test ID: Et0Zjp0
+	// Test ID: de30d
 	#[cfg(unix)]
 	#[test]
 	#[cfg_attr(miri, ignore = "Miri can't start a process")]

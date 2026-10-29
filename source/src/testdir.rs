@@ -219,7 +219,7 @@ mod tests {
 		base
 	}
 
-	// Test ID: ErOj5oB
+	// Test ID: ddazr
 	#[test]
 	fn a_run_folder_is_made_fresh_under_the_temp_base() {
 		let base = base_for("fresh");
@@ -237,7 +237,7 @@ mod tests {
 		std::fs::remove_dir_all(&base).unwrap();
 	}
 
-	// Test ID: ErOj5oC
+	// Test ID: ddazs
 	#[test]
 	fn a_run_folder_already_there_is_never_adopted() {
 		let base = base_for("planted");
@@ -290,7 +290,7 @@ mod tests {
 		std::fs::remove_dir_all(&base).unwrap();
 	}
 
-	// Test ID: ErOj5oD
+	// Test ID: ddazt
 	#[test]
 	fn a_run_folder_gives_up_when_every_name_is_taken() {
 		let base = base_for("taken");
@@ -311,7 +311,7 @@ mod tests {
 		std::fs::remove_dir_all(&base).unwrap();
 	}
 
-	// Test ID: ErOj5oE
+	// Test ID: ddazv
 	#[test]
 	fn a_run_folder_the_runner_gives_is_used() {
 		let base = base_for("given");
@@ -339,7 +339,7 @@ mod tests {
 		String::from_utf8(out.stdout).unwrap().trim().to_string()
 	}
 
-	// Test ID: ErOj5oF
+	// Test ID: ddazw
 	#[test]
 	#[cfg_attr(miri, ignore = "Miri can't start a process")]
 	fn a_run_folder_is_stamped_in_local_time() {
@@ -392,7 +392,7 @@ mod tests {
 		}
 	}
 
-	// Test ID: ErbiCgE
+	// Test ID: dde3p
 	#[test]
 	fn a_marked_run_folder_is_removed() {
 		let (base, dir, token) = marked_folder("removed");
@@ -409,7 +409,7 @@ mod tests {
 		std::fs::remove_dir_all(&base).unwrap();
 	}
 
-	// Test ID: ErbiCgF
+	// Test ID: dde3q
 	#[test]
 	fn a_run_folder_without_this_runs_mark_is_left() {
 		let (base, dir, token) = marked_folder("unmarked");
@@ -425,7 +425,7 @@ mod tests {
 		std::fs::remove_dir_all(&base).unwrap();
 	}
 
-	// Test ID: ErbiCgG
+	// Test ID: dde3r
 	#[test]
 	#[cfg_attr(miri, ignore = "Miri can't copy a file")]
 	fn a_link_in_place_of_the_run_folder_is_left() {
@@ -443,7 +443,7 @@ mod tests {
 		std::fs::remove_dir_all(&base).unwrap();
 	}
 
-	// Test ID: ErbiCgH
+	// Test ID: dde3s
 	#[test]
 	fn a_link_inside_the_run_folder_is_not_followed() {
 		let (base, dir, token) = marked_folder("inner_link");
@@ -459,7 +459,7 @@ mod tests {
 
 	// Started on its own by cicd/tests/testdir/run.bash, which checks the folder
 	// is kept and named. Does nothing in a normal run.
-	// Test ID: ErbiCgI
+	// Test ID: dde3t
 	#[test]
 	fn a_run_that_fails_keeps_its_folder() {
 		if std::env::var_os("SILKTERM_TEST_FAIL_ON_PURPOSE").is_none() {
@@ -471,7 +471,7 @@ mod tests {
 
 	// A real panic elsewhere at the same moment fails this too, but that run
 	// has failed anyway.
-	// Test ID: Erneqjm
+	// Test ID: ddgzm
 	#[test]
 	fn a_panic_a_test_expects_does_not_keep_the_folder() {
 		run_dir();
@@ -489,7 +489,7 @@ mod tests {
 
 	// Every panic a passing test makes on purpose goes through
 	// catch_expected_panic. fuzz.rs catches only to name the seed, then fails.
-	// Test ID: Erner3A
+	// Test ID: ddgzn
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn no_test_catches_a_panic_behind_the_run_folders_back() {

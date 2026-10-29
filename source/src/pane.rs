@@ -5456,7 +5456,7 @@ mod tests {
 	// `glyphs` holds this frame's keys into `glyph_cache`, and a font-size change
 	// while the reader holds the term lease empties the cache with the keys still
 	// in hand. Indexing there aborts the process; the draw skips instead.
-	// Test ID: EpHSLij
+	// Test ID: dcbdh
 	#[test]
 	fn a_glyph_whose_raster_went_away_is_skipped_not_indexed() {
 		let body = include_str!("pane.rs")
@@ -5470,7 +5470,7 @@ mod tests {
 		assert!(body.contains("glyph_cache.get(&"), "the draw asks instead");
 	}
 
-	// Test ID: EpHQNBw
+	// Test ID: dcbd8
 	#[test]
 	fn a_command_that_prints_nothing_does_not_spin_the_loop() {
 		let settle = std::time::Duration::from_millis(300);
@@ -5485,7 +5485,7 @@ mod tests {
 		assert_eq!(next_capture_poll(now, settle, long_ago), now + settle);
 	}
 
-	// Test ID: EloGKCm
+	// Test ID: daqnc
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn no_scrollbar_without_scrollback_or_on_the_alt_screen() {
@@ -5508,7 +5508,7 @@ mod tests {
 
 	// Dragging maps thumb position -> scroll position; the two must be inverses,
 	// or the thumb creeps away from the pointer over a long drag.
-	// Test ID: EloGKCn
+	// Test ID: daqnd
 	#[test]
 	fn thumb_position_round_trips_through_a_drag() {
 		let (track_h, thickness, rows, max) = (400.0, 16.0, 40.0, 1000.0);
@@ -5530,7 +5530,7 @@ mod tests {
 	// Dragging either handle has to pin the other to it. The thumb and the marker
 	// say the same thing, so one riding the pointer while the other chased the
 	// ease read as the second one lagging.
-	// Test ID: EqReddY
+	// Test ID: dcws4
 	#[test]
 	fn dragging_either_handle_pins_both_to_the_pointer() {
 		assert!(handle_is_dragged(true, false), "bar drag pins the marker");
@@ -5541,7 +5541,7 @@ mod tests {
 
 	// Letting a handle go must not hand it back to the text before the text has
 	// arrived, or it springs back the way it came and then eases in again.
-	// Test ID: EqSDfqz
+	// Test ID: dcwxh
 	#[test]
 	fn a_dropped_handle_waits_where_it_was_let_go() {
 		// dropped at line 600, text still back at 480
@@ -5552,7 +5552,7 @@ mod tests {
 		assert_eq!(handle_pos(false, false, 600.0, 480.0), 480.0);
 	}
 
-	// Test ID: EqSDfr0
+	// Test ID: dcwxj
 	#[test]
 	fn a_drop_hold_ends_when_the_text_arrives_or_the_target_moves() {
 		assert!(!drop_hold_over(true, 600.0, 600.0), "text still travelling");
@@ -5566,7 +5566,7 @@ mod tests {
 	}
 
 	// A huge scrollback would grind the thumb down to an ungrabbable sliver.
-	// Test ID: EloGKCo
+	// Test ID: daqne
 	#[test]
 	fn thumb_never_shrinks_below_the_grab_minimum() {
 		let thickness = 16.0;
@@ -5578,7 +5578,7 @@ mod tests {
 		assert!(y >= 0.0);
 	}
 
-	// Test ID: EjwWLhA
+	// Test ID: d9vtm
 	#[test]
 	fn cursor_slide_catches_up_faster_when_farther() {
 		let dt = 1.0 / 60.0;
@@ -5597,7 +5597,7 @@ mod tests {
 		);
 	}
 
-	// Test ID: EjwWLhB
+	// Test ID: d9vtn
 	#[test]
 	fn cursor_slide_never_trails_past_the_cap() {
 		// A tiny dt (high refresh) closes little of a big gap per step, so the clamp
@@ -5622,7 +5622,7 @@ mod tests {
 	// position gets a cursor drawn on it, alternating with the real one at repaint
 	// rate, which is faster than any blink. Visibility is a MODE; the shape carries
 	// nothing about it, so asking the shape alone can never answer this.
-	// Test ID: EnPgdFY
+	// Test ID: dbfjh
 	#[test]
 	fn a_hidden_cursor_is_not_drawn_where_the_app_parked_it() {
 		let shape = |t: &Term<VoidListener>| shown_cursor_shape(*t.mode(), t.cursor_style().shape);
@@ -5662,7 +5662,7 @@ mod tests {
 	// Combining marks all go on the one cell before them, and nothing that trims
 	// the scrollback ever trims a cell. The 0.26.0 engine kept every one, so a
 	// program printing them in a loop grew the terminal until it was killed.
-	// Test ID: Epxtj8q
+	// Test ID: dcnm4
 	#[test]
 	fn combining_marks_on_one_cell_are_capped() {
 		let flood = format!("a{}", "\u{301}".repeat(10_000));
@@ -5682,7 +5682,7 @@ mod tests {
 
 	// A double-click on an unmatched bracket had the engine look through the
 	// whole scrollback for its partner, under the lock and on every rebuild.
-	// Test ID: EqBSso4
+	// Test ID: dcrwh
 	#[test]
 	fn a_bracket_looks_for_its_partner_only_so_far() {
 		let text = "x (a\r\nb) c )\r\n";
@@ -5720,7 +5720,7 @@ mod tests {
 	// The second half of a wide character holds a space in the grid, so a path
 	// with CJK in it stopped at its first wide character, or crossed it only when
 	// another separator came soon after.
-	// Test ID: EstXrin
+	// Test ID: de1a5
 	#[test]
 	fn a_path_with_wide_characters_is_taken_whole() {
 		let term = term_fed(40, 3, 0, "ls ~/文档/报告.txt end\r\n");
@@ -5817,7 +5817,7 @@ mod tests {
 	//   +---+---+---+
 	//   |     5     |
 	//   +-----------+
-	// Test ID: EreU3sY
+	// Test ID: ddes8
 	#[test]
 	fn a_focus_move_goes_to_the_pane_beside_it() {
 		use super::{Toward, neighbor_toward};
@@ -5896,7 +5896,7 @@ mod tests {
 	// weight as the display's DPI rises instead of thinning to a hairline that
 	// disappears - and the tolerance for grabbing it has to widen with it, or the
 	// divider becomes progressively harder to catch on a high-DPI screen.
-	// Test ID: EnLuU55
+	// Test ID: dbenj
 	#[test]
 	fn the_pane_gap_and_its_grab_zone_scale_with_the_display() {
 		let area = Rect {
@@ -5940,7 +5940,7 @@ mod tests {
 		);
 	}
 
-	// Test ID: EjKleO0
+	// Test ID: d9jr2
 	#[test]
 	fn logical_line_bounds_spans_wrapped_rows() {
 		// rows 2 and 3 each wrap into the next, so 2..=4 is one logical line
@@ -5957,7 +5957,7 @@ mod tests {
 		assert_eq!(logical_line_bounds(0, 0, 9, |_| true), (0, 9));
 	}
 
-	// Test ID: EjN7Pqa
+	// Test ID: d9ka5
 	#[test]
 	fn glide_to_full_runs_at_normal_speed_and_flags_arrival() {
 		let period = 1.0;
@@ -5986,7 +5986,7 @@ mod tests {
 		assert!((p / period).fract().abs() < 1e-6 || ((p / period).fract() - 1.0).abs() < 1e-6);
 	}
 
-	// Test ID: EjN7Pqb
+	// Test ID: d9ka6
 	#[test]
 	fn pause_state_glides_holds_then_resumes_from_full() {
 		let period = 1.0;
@@ -6041,7 +6041,7 @@ mod tests {
 		assert!((t2 - (t + 0.01)).abs() < 1e-6);
 	}
 
-	// Test ID: EjN7Pqc
+	// Test ID: d9ka7
 	#[test]
 	fn pause_state_hold_needs_both_idle_and_hold_timeouts() {
 		let period = 1.0;
@@ -6067,7 +6067,7 @@ mod tests {
 		assert!(st.active && ((t / period).fract() - 0.5).abs() < 1e-6);
 	}
 
-	// Test ID: ElclCcq
+	// Test ID: damwv
 	#[test]
 	fn pause_state_long_idle_parks_at_full_and_resumes_on_activity() {
 		let period = 1.0;
@@ -6132,7 +6132,7 @@ mod tests {
 	// every few seconds while the user is not there. That kept resetting the
 	// cursor's idle clock, so the long stop never arrived and the animation ran
 	// for as long as the program did.
-	// Test ID: EqA5qAq
+	// Test ID: dcrj0
 	#[test]
 	fn pause_state_long_idle_stops_although_a_program_keeps_moving_the_cursor() {
 		let period = 1.0;
@@ -6168,7 +6168,7 @@ mod tests {
 		);
 	}
 
-	// Test ID: ElcxMmu
+	// Test ID: damyb
 	#[test]
 	fn pause_state_blocked_parks_at_full_until_unblocked() {
 		let period = 1.0;
@@ -6218,7 +6218,7 @@ mod tests {
 
 	// A refocus ends the park at once - it must not sit out the resume delay the
 	// way input does - and still resumes from the cursor's full size.
-	// Test ID: EldrZxY
+	// Test ID: dan5b
 	#[test]
 	fn pause_state_resume_skips_the_delay() {
 		let period = 1.0;
@@ -6263,7 +6263,7 @@ mod tests {
 	// The rate is the time from one peak of the blink to the next, for every
 	// animation. It used to be half that, so 500 ms blinked once a second. The
 	// shipped rate keeps that same one second cycle.
-	// Test ID: EsDSBcQ
+	// Test ID: ddq68
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_blink_rate_is_one_whole_cycle_peak_to_peak() {
@@ -6306,7 +6306,7 @@ mod tests {
 
 	// The pause and the refocus resume must agree on where "full size" is: mid
 	// cycle for the pulses, phase 0 for the fade.
-	// Test ID: EldrZxZ
+	// Test ID: dan5c
 	#[test]
 	fn cursor_cycle_full_phase_matches_the_animation() {
 		assert_eq!(
@@ -6318,7 +6318,7 @@ mod tests {
 		assert_eq!(cursor_cycle(CursorAnimation::Phase, 0.0).0, 0.05); // period never reaches zero
 	}
 
-	// Test ID: EleFUn2
+	// Test ID: dan8a
 	#[test]
 	fn only_a_keystrokes_echo_counts_as_input() {
 		use std::time::{Duration, Instant};
@@ -6331,7 +6331,7 @@ mod tests {
 		assert!(!move_is_input(Some(ago(800)), now));
 	}
 
-	// Test ID: EleFUn3
+	// Test ID: dan8b
 	#[test]
 	fn output_gives_the_cursor_straight_back() {
 		// typing holds the configured delay; output holds only long enough not to
@@ -6375,7 +6375,7 @@ mod tests {
 		);
 	}
 
-	// Test ID: EjNOyIU
+	// Test ID: d9kcd
 	#[test]
 	fn capture_finds_output_start_at_full_scrollback() {
 		// 3 rows, scrollback cap 4 - the command's output fills the buffer to cap
@@ -6405,7 +6405,7 @@ mod tests {
 		assert_eq!(capture_start(&term, cmd_start, Some(1), end), cmd_start);
 	}
 
-	// Test ID: EjtKjM0
+	// Test ID: d9v23
 	#[test]
 	fn capture_strips_multiline_prompt_rows() {
 		// two-line prompt: the decoration row the prompt paints above its input
@@ -6424,7 +6424,7 @@ mod tests {
 		assert_eq!(prompt_strip(&term, cmd_start, end, &[123]), end);
 	}
 
-	// Test ID: EkoOBPk
+	// Test ID: da8s6
 	#[test]
 	fn capture_strips_dynamic_prompt_rows() {
 		// the decoration row's content changes per command (cwd, clock) but its
@@ -6450,7 +6450,7 @@ mod tests {
 		);
 	}
 
-	// Test ID: EnL1S0e
+	// Test ID: dbeem
 	#[test]
 	fn a_plain_row_is_too_thin_to_learn_as_a_prompt() {
 		// the skeleton cannot tell one one-word row from another - by design, so a
@@ -6465,7 +6465,7 @@ mod tests {
 		assert!(fnv_row_skel("==info==            ".chars()).1 >= PROMPT_SKEL_MIN);
 	}
 
-	// Test ID: EnPFQSu
+	// Test ID: dbff5
 	#[test]
 	fn a_pasted_line_break_arrives_the_way_enter_delivers_one() {
 		// Unbracketed, the application cannot tell the paste from typing, so every
@@ -6487,7 +6487,7 @@ mod tests {
 		assert!(!paste_payload("a\r\nb\nc", false).contains('\n'));
 	}
 
-	// Test ID: EnPFQSv
+	// Test ID: dbff6
 	#[test]
 	fn a_bracketed_paste_cannot_be_closed_from_inside() {
 		// The application is watching for ESC[201~, so an ESC carried in the payload
@@ -6505,7 +6505,7 @@ mod tests {
 		assert_eq!(paste_payload("one\r\ntwo", true), "one\r\ntwo");
 	}
 
-	// Test ID: EkoOBPl
+	// Test ID: da8s7
 	#[test]
 	fn skeleton_hash_collapses_dynamic_runs() {
 		// same punctuation structure, different-length words/digits/spacing = same
@@ -6524,7 +6524,7 @@ mod tests {
 		);
 	}
 
-	// Test ID: EjNOyIV
+	// Test ID: d9kce
 	#[test]
 	fn capture_below_scrollback_cap_matches_either_way() {
 		// plenty of scrollback: no eviction, so the stale-index and anchor paths
@@ -6541,7 +6541,7 @@ mod tests {
 		assert_eq!(capture_grid_text(&term, start, end), "A\nB\n");
 	}
 
-	// Test ID: EjKhdge
+	// Test ID: d9jqj
 	#[test]
 	fn render_char_maps_controls_to_space() {
 		// a tab (or any control) left in a cell must shape as a 1-cell space, else
@@ -6554,7 +6554,7 @@ mod tests {
 		assert_eq!(render_char('世'), '世');
 	}
 
-	// Test ID: EivUOFc
+	// Test ID: d9cnh
 	#[test]
 	fn equalize_three_in_a_row() {
 		// split A vertically then split the new pane again: 50/25/25 -> equalize
@@ -6572,7 +6572,7 @@ mod tests {
 		}
 	}
 
-	// Test ID: EivUOFd
+	// Test ID: d9cnj
 	#[test]
 	fn equalize_four_in_a_row() {
 		let mut root = split(
@@ -6597,7 +6597,7 @@ mod tests {
 
 	// The command line evens out a run of splits with no size, the same as the
 	// keyboard does, and keeps a size it was given.
-	// Test ID: ErCAz1p
+	// Test ID: dd7z5
 	#[test]
 	fn a_run_of_command_line_splits_with_no_size_comes_out_even() {
 		let mut root = leaf(1);
@@ -6612,7 +6612,7 @@ mod tests {
 		}
 	}
 
-	// Test ID: ErCAz5H
+	// Test ID: dd7z6
 	#[test]
 	fn a_command_line_split_with_a_size_keeps_it() {
 		let mut root = leaf(1);
@@ -6648,7 +6648,7 @@ mod tests {
 		assert!((ws[1].1 - 250.0).abs() <= 3.0, "{ws:?}");
 	}
 
-	// Test ID: EivUOFe
+	// Test ID: d9cnk
 	#[test]
 	fn manual_divider_stops_equalization() {
 		// the outer divider was hand-dragged (manual): a later split must not
@@ -6667,7 +6667,7 @@ mod tests {
 		assert_eq!(*ratio, 0.7, "manual run must keep its sizes");
 	}
 
-	// Test ID: EivUOFf
+	// Test ID: d9cnm
 	#[test]
 	fn different_direction_counts_as_one_unit() {
 		// a vertical run whose second member is a horizontal split: 2 units -> 50/50,
@@ -6705,7 +6705,7 @@ mod tests {
 		s.chars().collect()
 	}
 
-	// Test ID: Ei9srC4
+	// Test ID: d9175
 	#[test]
 	fn distinct_innermost() {
 		let r = row("a (b [c] d) e");
@@ -6714,7 +6714,7 @@ mod tests {
 		assert_eq!(distinct_pair(&r, 6, '(', ')'), Some((2, 10)));
 	}
 
-	// Test ID: Ei9srC5
+	// Test ID: d9176
 	#[test]
 	fn precedence_paren_over_bracket() {
 		let r = row("a (b [c] d) e");
@@ -6724,14 +6724,14 @@ mod tests {
 		assert_eq!(r[3..=9].iter().collect::<String>(), "b [c] d");
 	}
 
-	// Test ID: Ei9srC6
+	// Test ID: d9177
 	#[test]
 	fn bracket_only() {
 		let r = row("x [y] z");
 		assert_eq!(pair_inside(&r, 3, PAIRS), Some((3, 3))); // just "y"
 	}
 
-	// Test ID: Ei9srC7
+	// Test ID: d9178
 	#[test]
 	fn quotes_pair_left_to_right() {
 		let r = row(r#"say "hello world" now"#);
@@ -6743,7 +6743,7 @@ mod tests {
 
 	// Python prints bytes as b'...', and the b' read as an opening quote, so a
 	// double-click on the last word took everything back to the link.
-	// Test ID: Es2aZeI
+	// Test ID: ddmjh
 	#[test]
 	fn an_apostrophe_is_not_a_quote() {
 		let text = |line: &str, word: &str| {
@@ -6770,7 +6770,7 @@ mod tests {
 		assert_eq!(text("'x' and 'y z'", "z").as_deref(), Some("y z"));
 	}
 
-	// Test ID: Ei9srC8
+	// Test ID: d9179
 	#[test]
 	fn quote_beats_paren() {
 		let r = row(r#"(a "b" c)"#);
@@ -6779,14 +6779,14 @@ mod tests {
 		assert_eq!(r[s..=e].iter().collect::<String>(), "b");
 	}
 
-	// Test ID: Ei9srC9
+	// Test ID: d917a
 	#[test]
 	fn outside_any_pair() {
 		let r = row("just words here");
 		assert_eq!(pair_inside(&r, 5, PAIRS), None);
 	}
 
-	// Test ID: Ei9srCA
+	// Test ID: d917b
 	#[test]
 	fn empty_pair_skipped() {
 		// click between empty () - nothing inside, so no pair selection
@@ -6794,7 +6794,7 @@ mod tests {
 		assert_eq!(pair_inside(&r, 2, PAIRS), None);
 	}
 
-	// Test ID: EiEcYLo
+	// Test ID: d92bm
 	#[test]
 	fn pair_trims_adjacent_spaces() {
 		// spaces directly inside the delimiters are excluded; interior spaces kept
@@ -6811,7 +6811,7 @@ mod tests {
 		assert_eq!(r3[s..=e].iter().collect::<String>(), "   ");
 	}
 
-	// Test ID: Ei9srCB
+	// Test ID: d917c
 	#[test]
 	fn on_open_char_uses_outer() {
 		let r = row("(a [b] c)");
@@ -6820,7 +6820,7 @@ mod tests {
 		assert_eq!(r[s..=e].iter().collect::<String>(), "a [b] c");
 	}
 
-	// Test ID: EorTe2K
+	// Test ID: dc55j
 	#[test]
 	fn ledger_step_follows_the_engine_not_a_guess() {
 		// alt screen: every recorded scroll slides, whatever its size - a burst
@@ -6839,7 +6839,7 @@ mod tests {
 		assert_eq!(ledger_step(false, false, 0, false, 1), None);
 	}
 
-	// Test ID: EorTe2L
+	// Test ID: dc55k
 	#[test]
 	fn fingerprint_runs_only_where_the_engine_recorded_nothing() {
 		assert!(fingerprint_frame(true, true, 0, 0));
@@ -6849,7 +6849,7 @@ mod tests {
 		assert!(!fingerprint_frame(false, false, 0, 0));
 	}
 
-	// Test ID: Ej1072G
+	// Test ID: d9dzy
 	#[test]
 	fn signed_shift_detects_both_directions_and_hard_cuts_the_rest() {
 		let last = [10u64, 20, 30, 40, 50];
@@ -6872,7 +6872,7 @@ mod tests {
 		assert_eq!(scroll_shift_signed(&cur_s, &last_s, 8), 1);
 	}
 
-	// Test ID: Ej4R4TA
+	// Test ID: d9etc
 	#[test]
 	fn signed_shift_tolerates_static_top_band_and_rejects_static_fields() {
 		// nano/muffer shape: a static title bar at the TOP and a status band at the
@@ -6892,7 +6892,7 @@ mod tests {
 		assert_eq!(scroll_shift_signed(&bl_cur, &bl_last, 8), 0);
 	}
 
-	// Test ID: EleVq3c
+	// Test ID: danab
 	#[test]
 	fn repeated_output_on_a_half_empty_screen_is_not_a_scroll() {
 		// A cleared screen, then the same short command run twice: the second
@@ -6938,7 +6938,7 @@ mod tests {
 		(small, big)
 	}
 
-	// Test ID: EliKD6W
+	// Test ID: dap7n
 	#[test]
 	fn list_relayout_description_height_change_is_not_a_scroll() {
 		let (small, big) = list_relayout_frames();
@@ -6948,7 +6948,7 @@ mod tests {
 		assert_eq!(scroll_shift_signed(&small, &big, APP_SCROLL_MAX), 0);
 	}
 
-	// Test ID: EjFiQFc
+	// Test ID: d9hh6
 	#[test]
 	fn static_bands_measures_title_and_status() {
 		// nano shape: static title (rows 0..2), scroll region (2..6), status band (6..8)
@@ -6965,7 +6965,7 @@ mod tests {
 		assert_eq!(static_bands(&a, &last), (0, 0));
 	}
 
-	// Test ID: ElvenXk
+	// Test ID: dase9
 	#[test]
 	fn a_scrollback_clear_reads_as_everything_that_refilled_it() {
 		// ordinary growth
@@ -6983,7 +6983,7 @@ mod tests {
 		assert_eq!(pushed_since(0, 500), 0);
 	}
 
-	// Test ID: ElvenXl
+	// Test ID: dasea
 	#[test]
 	fn missed_samples_are_recovered_not_lost() {
 		// The sampler gives up rather than contend with the reader, so a busy pane
@@ -7007,7 +7007,7 @@ mod tests {
 	// the grid, so a line pushed between them is banked by the first and found
 	// already counted by the second. Two baselines counted it twice, and a
 	// settled view hopped down a line and eased back.
-	// Test ID: EoAik9o
+	// Test ID: dbtwg
 	#[test]
 	fn a_build_that_beats_the_wakeup_counts_a_line_once() {
 		let mut depth = DepthSampler::default();
@@ -7052,7 +7052,7 @@ mod tests {
 		(cur, last)
 	}
 
-	// Test ID: ElvRIOW
+	// Test ID: dasck
 	#[test]
 	fn a_live_bottom_overlay_is_pinned_not_slid() {
 		// the pill's text changes every step (it is composited over scrolling content)
@@ -7069,7 +7069,7 @@ mod tests {
 		assert_eq!(slide_bands(&cur, &last, shift), (0, 6));
 	}
 
-	// Test ID: ElvRIOX
+	// Test ID: dascm
 	#[test]
 	fn pinning_the_overlay_keeps_it_out_of_the_strip() {
 		// the rows a step retires must come from the region, never from the pinned
@@ -7089,7 +7089,7 @@ mod tests {
 		assert!(vanished_range(-1, ost, osb, 30).contains(&24));
 	}
 
-	// Test ID: ElvRIOY
+	// Test ID: dascn
 	#[test]
 	fn a_band_never_swallows_a_row_that_scrolled() {
 		// the safety property: an overlay stranded MID-region (muffer also floats a
@@ -7142,7 +7142,7 @@ mod tests {
 		(cur, last)
 	}
 
-	// Test ID: Eqj2FoO
+	// Test ID: dd0yx
 	#[test]
 	fn an_entered_message_slides_whole() {
 		let (cur, last) = muffer_enter_frames();
@@ -7163,7 +7163,7 @@ mod tests {
 		assert_eq!(slide_bands(&rc, &rl, -3), (8, 0));
 	}
 
-	// Test ID: Eqj2FoP
+	// Test ID: dd0yy
 	#[test]
 	fn a_row_that_moved_less_or_nowhere_stays_band() {
 		let (mut cur, mut last) = muffer_enter_frames();
@@ -7182,7 +7182,7 @@ mod tests {
 		assert_eq!(slide_bands(&cur, &last, 3), (0, 10));
 	}
 
-	// Test ID: ElvRIOZ
+	// Test ID: dascp
 	#[test]
 	fn bands_only_ever_grow_against_the_unchanged_walk() {
 		// combining by MAX is what keeps this from regressing the settled shapes: for
@@ -7202,7 +7202,7 @@ mod tests {
 		}
 	}
 
-	// Test ID: EpyCuGg
+	// Test ID: dcnpj
 	#[test]
 	fn a_recorded_scroll_pins_an_overlay_repainted_at_its_strip_edge() {
 		// the same pill, with the engine's record saying rows 0..25 scrolled: the rows
@@ -7215,7 +7215,7 @@ mod tests {
 		assert_eq!(repainted_edge(&cur, &last, &(0..25), -1), 0);
 	}
 
-	// Test ID: EpyCuGh
+	// Test ID: dcnpk
 	#[test]
 	fn an_overlay_over_the_top_edge_is_held_scrolling_forward() {
 		let last: Vec<u64> = (0..24).map(|i| 100 + i).collect();
@@ -7227,7 +7227,7 @@ mod tests {
 		assert_eq!(repainted_edge(&cur, &last, &(1..21), 2), 1);
 	}
 
-	// Test ID: EpyCuGi
+	// Test ID: dcnpm
 	#[test]
 	fn a_frame_repainted_wholesale_pins_nothing() {
 		let last: Vec<u64> = (0..30).map(|i| 100 + i).collect();
@@ -7273,7 +7273,7 @@ mod tests {
 		SLIDE_TOP_BAND_APPS || top_band == 0
 	}
 
-	// Test ID: EjICKOW
+	// Test ID: d9j49
 	#[test]
 	fn less_slides_no_top_band() {
 		// less fills from the top and keeps only a bottom status line, so there's no
@@ -7286,7 +7286,7 @@ mod tests {
 		assert!(slide_engages(st), "less must slide smoothly");
 	}
 
-	// Test ID: EjICKOX
+	// Test ID: d9j4a
 	#[test]
 	fn vim_slides_no_top_band() {
 		// vim/vim.tiny paints text from row 0 with a status + command line at the
@@ -7299,7 +7299,7 @@ mod tests {
 		assert!(slide_engages(st), "vim must slide smoothly");
 	}
 
-	// Test ID: EjOT3qq
+	// Test ID: d9kmh
 	#[test]
 	fn nano_slides_with_top_band() {
 		// nano keeps a title bar at the top and a two-row help band at the bottom, so
@@ -7319,7 +7319,7 @@ mod tests {
 		);
 	}
 
-	// Test ID: EjOT3qr
+	// Test ID: d9kmj
 	#[test]
 	fn muffer_slides_with_top_band() {
 		// muffer (the TUI) keeps a static header, so like nano it has a top band and
@@ -7335,7 +7335,7 @@ mod tests {
 		);
 	}
 
-	// Test ID: EjICKOY
+	// Test ID: d9j4b
 	#[test]
 	fn app_wheel_multi_line_jump_still_detected() {
 		// a wheel notch in a mouse-tracking app repaints a several-line jump, not one
@@ -7348,7 +7348,7 @@ mod tests {
 		assert_eq!(scroll_shift_signed(&cur2, &last2, APP_SCROLL_MAX), 0);
 	}
 
-	// Test ID: EorTe2M
+	// Test ID: dc55m
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn strip_rows_style_the_rows_the_engine_kept() {
@@ -7400,7 +7400,7 @@ mod tests {
 		);
 	}
 
-	// Test ID: EqAQm2a
+	// Test ID: dcrmk
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_slide_survives_nanos_odd_region_step() {
@@ -7485,7 +7485,7 @@ mod tests {
 		)
 	}
 
-	// Test ID: EqLbxfU
+	// Test ID: dcvam
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_box_growing_into_blank_rows_by_insert_line_pops_in() {
@@ -7583,7 +7583,7 @@ mod tests {
 		);
 	}
 
-	// Test ID: EqLgrmK
+	// Test ID: dcvb8
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_pager_scrolling_back_is_not_room() {
@@ -7638,7 +7638,7 @@ mod tests {
 		assert!(!ledger_makes_room(-1, &region, lines, &last, &chunk));
 	}
 
-	// Test ID: EqLbxfV
+	// Test ID: dcvan
 	#[test]
 	fn a_repainted_box_growing_into_blank_rows_pops_in() {
 		// The same box redrawn in place, the way muffer paints: nothing scrolls the
@@ -7703,7 +7703,7 @@ mod tests {
 		fnv_row(std::iter::repeat_n(' ', cols))
 	}
 
-	// Test ID: EpaxTdo
+	// Test ID: dcg3k
 	#[test]
 	fn a_progress_line_redrawn_under_new_output_is_held_still() {
 		let (cols, lines) = (30usize, 8usize);
@@ -7735,7 +7735,7 @@ mod tests {
 		assert_eq!(output_band(&cur, &last, 1, 0, blank_row(cols)), 0);
 	}
 
-	// Test ID: EpaxTdp
+	// Test ID: dcg3m
 	#[test]
 	fn a_live_block_under_a_transcript_is_held_still() {
 		let (cols, lines) = (24usize, 12usize);
@@ -7756,7 +7756,7 @@ mod tests {
 		assert_eq!(output_band(&cur, &last, k, 0, blank_row(cols)), 4);
 	}
 
-	// Test ID: EpaxTdq
+	// Test ID: dcg3n
 	#[test]
 	fn a_prompt_that_scrolls_up_is_not_held() {
 		let (cols, lines) = (20usize, 8usize);
@@ -7780,7 +7780,7 @@ mod tests {
 		}
 	}
 
-	// Test ID: EpaxTdr
+	// Test ID: dcg3p
 	#[test]
 	fn a_line_finished_across_two_reads_is_not_held() {
 		let (cols, lines) = (20usize, 8usize);
@@ -7799,7 +7799,7 @@ mod tests {
 		assert_eq!(output_band(&cur, &last, k, 0, blank_row(cols)), 0);
 	}
 
-	// Test ID: EpaxTds
+	// Test ID: dcg3q
 	#[test]
 	fn output_band_never_pins_plain_output() {
 		let blank = 0u64;
@@ -7820,7 +7820,7 @@ mod tests {
 		assert_eq!(output_band(&cur, &last, 1, 0, blank), 0);
 	}
 
-	// Test ID: EpaxTdt
+	// Test ID: dcg3r
 	#[test]
 	fn a_status_bar_below_the_scroll_region_is_held_still() {
 		// apt: a region over all but the last row, its bar redrawn on that row
@@ -7882,7 +7882,7 @@ mod tests {
 		)
 	}
 
-	// Test ID: EqHIGdM
+	// Test ID: dct9d
 	#[test]
 	fn a_status_bar_is_held_still_at_a_full_scrollback_too() {
 		// The same apt stream with the scrollback full, which is where a long
@@ -7923,7 +7923,7 @@ mod tests {
 	// eased. It is inverted, since a clear now shows at once (2026101310563297).
 	// The engine still counts the clear's push at both depths, and the ease
 	// still does not take it as a slide.
-	// Test ID: EqHIGdN
+	// Test ID: dct9e
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_clear_is_instant_at_a_full_scrollback_too() {
@@ -8018,7 +8018,7 @@ mod tests {
 	// up and away. Output after a clear that fits on the screen shows in place,
 	// and output that scrolls eases by what went up after the clear, the same
 	// on every run.
-	// Test ID: EscSd2Y
+	// Test ID: ddx6k
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_clear_shows_at_once_and_only_what_follows_it_eases() {
@@ -8075,7 +8075,7 @@ mod tests {
 
 	// The output ease's floor would reach back past a short scroll after a
 	// clear, into the screen the clear took away.
-	// Test ID: EscSd7l
+	// Test ID: ddx6m
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_ease_floor_does_not_reach_back_past_a_clear() {
@@ -8111,7 +8111,7 @@ mod tests {
 		(echo, clear, redraw)
 	}
 
-	// Test ID: EsdYO1M
+	// Test ID: ddxf1
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_prompt_ble_redraws_after_a_clear_shows_at_once() {
@@ -8150,7 +8150,7 @@ mod tests {
 	// Blank lines sent up while the screen shows something still move what it
 	// shows, and blank lines sent up from a blank screen while an ease is
 	// under way are part of that ease.
-	// Test ID: EsdYO5h
+	// Test ID: ddxf2
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn blank_lines_that_move_ink_still_ease() {
@@ -8208,7 +8208,7 @@ mod tests {
 		(band_rows(term, lines, cols), skel)
 	}
 
-	// Test ID: EscGnYG
+	// Test ID: ddx54
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_flatpak_table_taller_than_the_screen_is_not_eased() {
@@ -8298,7 +8298,7 @@ mod tests {
 		}
 	}
 
-	// Test ID: EscGnmw
+	// Test ID: ddx55
 	#[test]
 	fn output_that_moved_the_old_screen_up_is_not_a_repaint() {
 		let (cols, lines) = (20usize, 8usize);
@@ -8364,7 +8364,7 @@ mod tests {
 		);
 	}
 
-	// Test ID: EscGnqt
+	// Test ID: ddx56
 	#[test]
 	fn the_depth_sampler_says_when_a_clear_fell_in_its_span() {
 		let mut depth = DepthSampler::default();
@@ -8407,7 +8407,7 @@ mod tests {
 		cycles
 	}
 
-	// Test ID: EqHIGdO
+	// Test ID: dct9f
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	#[cfg_attr(
@@ -8483,7 +8483,7 @@ mod tests {
 		);
 	}
 
-	// Test ID: EpaxTdu
+	// Test ID: dcg3s
 	#[test]
 	fn the_output_band_grows_while_easing_and_is_taken_fresh_at_rest() {
 		assert_eq!(adopt_band(0, 3, false), 3);
@@ -8492,7 +8492,7 @@ mod tests {
 		assert_eq!(adopt_band(4, 0, true), 4, "never shrinks mid-ease");
 	}
 
-	// Test ID: EpaxTdv
+	// Test ID: dcg3t
 	#[test]
 	fn band_rows_draw_the_live_grid_and_the_rest_the_scrolled_view() {
 		assert_eq!(band_row_line(3, 2, 6, 2), 1);
@@ -8502,7 +8502,7 @@ mod tests {
 		assert_eq!(band_row_line(7, 2, 6, 0), 5, "no band");
 	}
 
-	// Test ID: Ep3UXRI
+	// Test ID: dc821
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_scroll_of_blank_rows_is_not_slid() {
@@ -8587,7 +8587,7 @@ mod tests {
 		assert!(slide_is_visible(-3, &region, &[], &chunk, |_, _| true));
 	}
 
-	// Test ID: Ep3UXRJ
+	// Test ID: dc822
 	#[test]
 	fn the_output_ease_keeps_its_count_through_a_prompt_redraw() {
 		// With the scrollback full the growth reads 0 and the whole-screen count
@@ -8617,7 +8617,7 @@ mod tests {
 		);
 	}
 
-	// Test ID: EkmETLs
+	// Test ID: da88k
 	#[test]
 	fn output_frame_refreshes_snapshot_so_repaint_probe_cannot_reslide() {
 		// One shell "enter", as frames: the scroll arrives in a grew=1 frame (animated
@@ -8669,7 +8669,7 @@ mod tests {
 		s.rows.iter().map(|r| r[0].c).collect()
 	}
 
-	// Test ID: EjOT3qs
+	// Test ID: d9kmk
 	#[test]
 	fn vanished_range_picks_the_rows_a_step_pushed_off() {
 		// 10 lines, title 1 row, status 2 rows -> region rows 1..8
@@ -8685,7 +8685,7 @@ mod tests {
 		assert_eq!(vanished_range(-50, 1, 2, 10), 1..8);
 	}
 
-	// Test ID: EjRuzdg
+	// Test ID: d9mf3
 	#[test]
 	fn region_clip_welds_to_the_content_edge() {
 		// down-slide (voff +2 cells, cell_h 20): bands at y=20 (title) / y=160
@@ -8704,7 +8704,7 @@ mod tests {
 		);
 	}
 
-	// Test ID: EjOT3qt
+	// Test ID: d9kmm
 	#[test]
 	fn off_strip_accumulates_in_visual_order() {
 		// up-scroll: each step's rows leave off the region's top, newest nearest the
@@ -8726,7 +8726,7 @@ mod tests {
 		assert_eq!(d.visible(-1.2), 0..3);
 	}
 
-	// Test ID: EjOT3qu
+	// Test ID: d9kmn
 	#[test]
 	fn off_strip_direction_flip_discards_and_cap_trims_oldest() {
 		let mut s = OffStrip::new();
@@ -8804,7 +8804,7 @@ mod tests {
 		)
 	}
 
-	// Test ID: Em1S9yw
+	// Test ID: datv2
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_url_in_the_grid_maps_back_to_the_cells_it_occupies() {
@@ -8823,7 +8823,7 @@ mod tests {
 	// A URL that runs past the right edge is ONE logical line, so the scan has to
 	// span the wrap - otherwise hovering the tail half finds a fragment, or
 	// nothing, depending on where the break fell.
-	// Test ID: Em1S9yx
+	// Test ID: datv3
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_wrapped_url_is_found_whole_from_either_half() {
@@ -8840,7 +8840,7 @@ mod tests {
 	// point_at CLAMPS a stray pixel onto the nearest cell, which is right for
 	// dragging a selection and wrong here: the margin is over no cell at all, and
 	// clamping there would underline a link the pointer is not on.
-	// Test ID: Em1S9yy
+	// Test ID: datv4
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_margin_is_over_no_link() {
@@ -8873,7 +8873,7 @@ mod tests {
 		);
 	}
 
-	// Test ID: EieUsc4
+	// Test ID: d98jr
 	#[test]
 	fn bell_brighten_lightens_and_is_identity_at_zero() {
 		let c = [100, 120, 140];
@@ -8907,7 +8907,7 @@ mod tests {
 			out.into_bytes()
 		}
 
-		// Test ID: EpQN0oM
+		// Test ID: dcdjd
 		#[test]
 		fn a_paste_can_never_step_outside_its_brackets() {
 			let corpus = fuzz::corpus("paste");
@@ -8937,7 +8937,7 @@ mod tests {
 
 		// A double-click asks about pairs before it falls back to words, and the
 		// span it comes back with indexes straight into the row.
-		// Test ID: EpQN0oN
+		// Test ID: dcdje
 		#[test]
 		#[cfg_attr(miri, ignore = "too slow under Miri")]
 		fn a_selected_pair_stays_inside_its_row() {
@@ -8972,7 +8972,7 @@ mod tests {
 
 	// A drag-selection held past the top or bottom of the pane has to keep the
 	// view moving, and a pointer inside must never move it.
-	// Test ID: EqQXsMy
+	// Test ID: dcwgk
 	#[test]
 	fn a_drag_past_an_edge_scrolls_and_one_inside_does_not() {
 		let (top, bottom, cell) = (100.0, 500.0, 20.0);
@@ -9000,7 +9000,7 @@ mod tests {
 	// A maximized window has its top edge against the top of the screen, so the
 	// pointer can barely get past it. Holding there has to build speed anyway, or
 	// that window could only ever creep.
-	// Test ID: EqQXsMz
+	// Test ID: dcwgm
 	#[test]
 	fn holding_at_an_edge_with_no_room_still_builds_speed() {
 		let (top, bottom, cell) = (0.0, 500.0, 20.0);
@@ -9017,7 +9017,7 @@ mod tests {
 
 	// Reverse video renders thinner than the same weight the right way round, so
 	// nano's title and status bars are drawn bold - unless the setting says not.
-	// Test ID: Er2VGX3
+	// Test ID: dd5q1
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn inverse_video_is_drawn_bold_unless_turned_off() {
@@ -9045,7 +9045,7 @@ mod tests {
 	// A block cursor is any shape the two size settings describe: width from the
 	// left, height from the bottom. An app's beam or underline, and the block a
 	// full-screen app owns, ignore them.
-	// Test ID: Er2VGX4
+	// Test ID: dd5q2
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_block_cursor_takes_its_size_from_the_settings() {
@@ -9071,7 +9071,7 @@ mod tests {
 
 	// One pulse: grow from nothing, hold at full, shrink, then gone for a moment
 	// before the next. Each pulse style moves only its own axes, from the center.
-	// Test ID: Er2VGX5
+	// Test ID: dd5q3
 	#[test]
 	fn a_pulse_grows_holds_shrinks_then_disappears() {
 		assert_eq!(pulse_env(0.0), 0.0);
@@ -9124,7 +9124,7 @@ mod tests {
 
 	// Dragging a divider sets its split's ratio from the pointer, and marks the
 	// run as hand-sized. Neither side can be squeezed away.
-	// Test ID: Er2VGX6
+	// Test ID: dd5q4
 	#[test]
 	fn dragging_a_divider_sets_its_ratio_from_the_pointer() {
 		fn ratio(node: &Node) -> (f32, bool) {
@@ -9166,7 +9166,7 @@ mod tests {
 
 	// A drag-and-drop swap trades the two panes' places and keeps every split's
 	// size as it was.
-	// Test ID: Er2VGX7
+	// Test ID: dd5q5
 	#[test]
 	fn swapping_two_panes_trades_their_places_and_nothing_else() {
 		fn splits(node: &Node, out: &mut Vec<(f32, bool)>) {
@@ -9214,7 +9214,7 @@ mod tests {
 	// reader held it, so a command that raced a burst was never copied. Waiting
 	// is bounded by one read cycle. The race needs real PTY timing, so the lock
 	// call itself is what is pinned.
-	// Test ID: Er2VGX8
+	// Test ID: dd5q6
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn arming_a_copy_waits_for_the_term_instead_of_giving_up() {
@@ -9233,7 +9233,7 @@ mod tests {
 	// Each tab is its own PaneManager, and a shell-exit event carries only the
 	// pane's id, so a per-tab count closed the wrong tab and cascaded. Every pane
 	// takes its id from the one counter for the whole program.
-	// Test ID: Er2VGX9
+	// Test ID: dd5q7
 	#[test]
 	fn pane_ids_come_from_one_counter_for_the_whole_program() {
 		let body = include_str!("pane.rs")
@@ -9266,7 +9266,7 @@ mod tests {
 	// A cursor picked for the old 55% plate, which is what a saved light theme
 	// carries, gets only as much of it as the floor allows, and dark text on a
 	// light ground is the only case that gets any.
-	// Test ID: ErJLuvI
+	// Test ID: dd9pd
 	#[test]
 	fn a_light_plate_stops_where_its_text_would_sink() {
 		let floor = 0.45;
@@ -9287,7 +9287,7 @@ mod tests {
 
 	// The phase blink fades on a cosine: full at the start of the cycle, gone at
 	// its middle, and partway between them. An on/off blink has no partway.
-	// Test ID: Er2VGXA
+	// Test ID: dd5q8
 	#[test]
 	fn the_phase_blink_fades_instead_of_switching() {
 		let alpha = |phase: f32| {
@@ -9313,7 +9313,7 @@ mod tests {
 
 	// No blink leaves the cursor exactly as configured at every point of the cycle,
 	// and "phase" only ever touches its alpha, never its size.
-	// Test ID: Er2VGXB
+	// Test ID: dd5q9
 	#[test]
 	fn no_animation_leaves_the_cursor_alone_and_phase_only_fades_it() {
 		let geom = (0.4, 0.6);
@@ -9334,7 +9334,7 @@ mod tests {
 	// Leaving the alt screen hands the normal screen's scrollback back in one
 	// frame. That depth is not new output, so the frame cuts rather than easing
 	// the old screen in from below. Ordinary output after it still eases.
-	// Test ID: Er2VGXC
+	// Test ID: dd5qa
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn an_alt_screen_exit_hands_back_its_depth_without_easing() {
@@ -9362,7 +9362,7 @@ mod tests {
 	// switch back hard-cuts (`hard_cut` snaps, and the next build is a cut frame),
 	// so it arrives at the bottom with no motion, and whatever ease was in flight
 	// when it was hidden is gone too.
-	// Test ID: Er2VGXD
+	// Test ID: dd5qb
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_frozen_pane_catches_up_without_motion() {
@@ -9385,7 +9385,7 @@ mod tests {
 	// the moment it lets go, so a frame that only ever tries can lose for
 	// seconds. After a couple of misses the frame queues on the fair lock and
 	// gets in at the end of the cycle.
-	// Test ID: Er2VGXE
+	// Test ID: dd5qc
 	#[test]
 	fn a_frame_waits_its_turn_once_trying_keeps_losing() {
 		use alacritty_terminal::sync::FairMutex;
@@ -9419,7 +9419,7 @@ mod tests {
 
 	// Only a pause for input schedules its own wake. A long-idle stop and a pane
 	// that is not the active one draw no frames and wait for activity or focus.
-	// Test ID: Er2VGXF
+	// Test ID: dd5qd
 	#[test]
 	fn only_an_input_pause_schedules_its_own_wake() {
 		assert_eq!(cursor_wake_after(false, false, false, 0.5, 0.1, 0.1), None);
@@ -9437,7 +9437,7 @@ mod tests {
 
 	// One scrollbar, at the far right of the pane's whole area: past the minimap
 	// column when there is one, which used to carry a bar of its own.
-	// Test ID: Er2VGXG
+	// Test ID: dd5qe
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_scrollbar_sits_at_the_far_edge_past_the_minimap() {
@@ -9475,7 +9475,7 @@ mod tests {
 	// Bold ink is wider, so its glow reads heavier than its neighbors'. The glow
 	// is shaped from the same spans with the weight taken out and everything
 	// else kept, while the text drawn on top keeps its bold.
-	// Test ID: Er2VGXH
+	// Test ID: dd5qf
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_glow_source_loses_bold_and_nothing_else() {
@@ -9503,7 +9503,7 @@ mod tests {
 	// A pixel becomes a grid point and the half of the cell it fell in, which is
 	// where a selection starts and ends. Outside the pane it is pulled to the
 	// nearest edge cell, and a view scrolled back points into history.
-	// Test ID: Er2VGXI
+	// Test ID: dd5qg
 	#[test]
 	fn a_pixel_maps_to_a_cell_half_and_clamps_at_the_edges() {
 		let rect = Rect {
@@ -9531,7 +9531,7 @@ mod tests {
 	// content height is an exact multiple of the cell height that last row sits
 	// right at the buffer's edge, and at the old exact height the layout dropped
 	// it: the bottom line went invisible while the cursor still moved.
-	// Test ID: Er2VGXJ
+	// Test ID: dd5qh
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_bottom_row_survives_an_exact_multiple_height() {

@@ -218,7 +218,7 @@ mod tests {
 	// anything, and expands percent variables before any escaping is processed.
 	// Nothing escapes a URL for that, so nothing tries: every platform hands the
 	// URL to its own opener as one plain argument.
-	// Test ID: EpHYLCy
+	// Test ID: dcbe8
 	#[test]
 	fn a_url_reaches_the_opener_exactly_as_it_was_printed() {
 		let nasty = "https://example.com/?a=%USERPROFILE%&b=x^y|z<>()\"'`$ q";
@@ -240,7 +240,7 @@ mod tests {
 		find_at(&text, hit).map(|(_, _, url)| url)
 	}
 
-	// Test ID: Em1S9yr
+	// Test ID: dattx
 	#[test]
 	fn a_plain_url_is_found_anywhere_inside_it() {
 		let line = "see https://example.com/a?b=1&c=2 for more";
@@ -260,7 +260,7 @@ mod tests {
 		assert_eq!(find_at(&text, end), None, "the space after is not one");
 	}
 
-	// Test ID: Em1S9ys
+	// Test ID: datty
 	#[test]
 	fn sentence_punctuation_and_brackets_come_off_the_end() {
 		assert_eq!(
@@ -284,7 +284,7 @@ mod tests {
 
 	// The allowlist is the security boundary, not a convenience: a scheme that
 	// isn't listed must never become clickable.
-	// Test ID: Em1S9yt
+	// Test ID: dattz
 	#[test]
 	fn only_allowlisted_schemes_are_links() {
 		assert_eq!(at("javascript:alert(1)", "javascript"), None);
@@ -296,7 +296,7 @@ mod tests {
 		);
 	}
 
-	// Test ID: Em1S9yu
+	// Test ID: datv0
 	#[test]
 	fn ordinary_text_with_a_colon_is_not_a_link() {
 		assert_eq!(at("aspect ratio 3:4 here", "3:4"), None);
@@ -307,7 +307,7 @@ mod tests {
 		assert_eq!(at("https://", "https"), None, "no body");
 	}
 
-	// Test ID: Em1S9yv
+	// Test ID: datv1
 	#[test]
 	fn the_scheme_is_case_insensitive_and_several_links_coexist() {
 		assert_eq!(
@@ -324,7 +324,7 @@ mod tests {
 	// directed test as well as the fuzz below. These are the ones that turn a
 	// printed line into code: two of them run script in a browser, one runs it in
 	// the Windows shell, and the rest reach a handler no terminal should offer.
-	// Test ID: EpQN0oK
+	// Test ID: dcdjb
 	#[test]
 	fn a_hostile_scheme_never_becomes_a_link() {
 		#[rustfmt::skip]
@@ -416,7 +416,7 @@ mod tests {
 			}
 		}
 
-		// Test ID: EpQN0oL
+		// Test ID: dcdjc
 		#[test]
 		#[cfg_attr(miri, ignore = "too slow under Miri")]
 		fn only_an_allowlisted_url_is_ever_offered_to_the_opener() {

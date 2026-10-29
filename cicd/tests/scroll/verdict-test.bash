@@ -5,7 +5,7 @@
 ##		at all, and stayed that way through a release. This holds its exit code to
 ##		what actually happened, and the trace checks to what they are there to
 ##		catch. Nothing here needs a display.
-##	- Test ID: EpHUoAK
+##	- Test ID: dcbdt
 ##	- History: At bottom of file.
 
 ##	Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
@@ -138,6 +138,38 @@ fRun "no binary, strict"         1 --bin /nonexistent/silkterm --strict
 fRun "no Xvfb"                   3 --bin /bin/true
 fRun "no cage"                   3 --bin /bin/true --wayland
 
+## Each scene has its own ID and its own line, also when the run can't start.
+## The IDs come from the scenes table, so --list is checked against it.
+fLines(){
+	local -r what="${1}" want="${2}"; shift 2
+	local got
+	## the result lines only, and all of --list
+	got="$(PATH="${fakeBin}" "${BASH}" "${meDir}/run.bash" "${@}" 2>/dev/null | grep -E '^(PASS |FAIL |SKIP |  [0-9a-z]{5}  )')" || true
+	if [[ "${got}" == "${want}" ]]; then
+		echo "  ok   ${what}"
+	else
+		echo "  FAIL ${what}: wanted"$'\n'"${want}"$'\n'"  got"$'\n'"${got}"
+		failures=$((failures + 1))
+	fi
+}
+mapfile -t sceneRows < <(sed -n '/^scenes=(/,/^)/{s/^\t"\([^"]*\)"$/\1/p}' "${meDir}/run.bash")
+listWant="" skipWant="" failWant=""
+for row in "${sceneRows[@]}"; do
+	read -r -a f <<<"${row}"
+	listWant+="$(printf '  %-5s  scroll scene %s (X11)' "${f[0]}" "${f[1]}")"$'\n'
+	skipWant+="SKIP ${f[0]} scroll scene ${f[1]} (X11), no SilkTerm binary (build it first, or pass --bin)"$'\n'
+	failWant+="FAIL ${f[0]} scroll scene ${f[1]} (X11), no SilkTerm binary (build it first, or pass --bin)"$'\n'
+done
+fExpect "the scenes table has 14 rows" 14 "${#sceneRows[@]}" "${#sceneRows[@]} rows"
+ids="$(printf '%s\n' "${sceneRows[@]}" | cut -d' ' -f1 | sort | uniq -d)"
+fExpect "and no two scenes share an ID" "" "${ids}" "shared: ${ids}"
+fLines "--list gives each scene's ID and name"  "${listWant%$'\n'}" --list
+fLines "--list --only names the one scene"      "  d9j4x  scroll scene tmux (Wayland)" --list --only tmux --wayland
+fLines "no binary: a SKIP line for every scene" "${skipWant%$'\n'}" --bin /nonexistent/silkterm
+fLines "and under --strict a FAIL line"         "${failWant%$'\n'}" --bin /nonexistent/silkterm --strict
+fLines "no cage: the reason on the one scene asked for" \
+	"SKIP d9j4x scroll scene tmux (Wayland), cage not found (no headless Wayland compositor)" --bin /bin/true --wayland --only tmux
+
 if ((failures)); then echo "${failures} failed"; exit 1; fi
 echo "all passed"
 
@@ -146,3 +178,4 @@ echo "all passed"
 ##		- 20260915 JC: Trace checks and the skips before any scene runs.
 ##		- 20260917 JC: Frame counts.
 ##		- 20261013 JC: altenter's note.
+##		- 20261028: Each scene's ID and its line, and --list.

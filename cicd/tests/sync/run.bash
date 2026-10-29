@@ -7,7 +7,7 @@
 ##		fast-forward, dirty tree or not; diverged stops the run before the build.
 ##		The stage is lifted out of cicd.bash as it stands and run against a
 ##		scratch remote and clones.
-##	- Test ID: Er2UgY8
+##	- Test ID: dd5np
 ##	- History: At bottom of file.
 
 ##	Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]

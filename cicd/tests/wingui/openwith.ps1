@@ -17,7 +17,7 @@
 	History: At bottom of file.
 #>
 
-##	Test ID: ErNJ7tr
+##	Test ID: ddamy
 
 
 if (-not (fSessionUsable)) { fSkip "console session is locked - nothing opened would be seen" }

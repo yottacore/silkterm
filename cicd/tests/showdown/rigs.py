@@ -10,7 +10,7 @@
 ##		that starts a terminal when the terminal itself will not give one. XTerm's
 ##		speed row came from X11, so the speed rig has to run it on an X server of
 ##		its own, and note 9 in comparison.md has to say so.
-##	- Test ID: ErE7yrA
+##	- Test ID: dd8e6
 ##	- History: At bottom of file.
 
 ##	Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]

@@ -42,6 +42,10 @@ Title-bar apps (nano, muffer) slide again: `SLIDE_TOP_BAND_APPS = true` in `pane
 
 The repaint scenes exercise the fingerprint detector; the `tmux` scene exercises the other path, where the engine records the scroll itself (count, region, and the rows that left) and nothing is inferred. Plain shell-output scrolling (`ls -lA`, a command finishing on the last line, a fast burst) is covered by the library tests in `cargo test` (`pane.rs`/`scroll.rs`): the advance comes from scrollback growth, or from that same engine count once the scrollback is full, and the easing-monotonicity checks there guard the rest.
 
+## Result lines
+
+Each scene prints one line, `PASS`, `FAIL` or `SKIP`, then its test ID, its name with the engine it ran under, and what the check found. A scene's ID is the first word of its row in the `scenes` table in `run.bash`, and the same scene keeps that ID under both engines. A run that can't start prints a `SKIP` line for every scene, with the reason. `run.bash --list` prints each scene's ID and name and runs nothing.
+
 ## Exit codes
 
 `0` all pass, `1` a real regression was measured, `3` nothing ran because something is missing (the binary, `python3`, the display or `cage`). cicd reports a `3` as skipped for that arm, never as OK.

@@ -59,7 +59,7 @@ mod tests {
 		crockford32(minutes_since_2000(unix_secs))
 	}
 
-	// Test ID: Eo4auD2
+	// Test ID: dbsdc
 	#[test]
 	fn the_alphabet_is_crockfords_with_the_ambiguous_letters_left_out() {
 		let alphabet = std::str::from_utf8(CROCKFORD_LOWER).unwrap();
@@ -70,7 +70,7 @@ mod tests {
 		assert_eq!(alphabet.len(), 32);
 	}
 
-	// Test ID: Eo4auD3
+	// Test ID: dbsdd
 	#[test]
 	fn small_values_encode_digit_by_digit() {
 		assert_eq!(crockford32(0), "0");
@@ -85,7 +85,7 @@ mod tests {
 		assert_eq!(crockford32(1024), "100");
 	}
 
-	// Test ID: Eo4auD4
+	// Test ID: dbsde
 	#[test]
 	fn a_build_number_decodes_back_to_the_minute_it_was_built() {
 		// Round-trip every digit position through a hand-rolled decode, so an
@@ -101,7 +101,7 @@ mod tests {
 		}
 	}
 
-	// Test ID: Eo4auD5
+	// Test ID: dbsdf
 	#[test]
 	fn the_epoch_is_the_start_of_2000_and_the_count_is_whole_minutes() {
 		assert_eq!(minutes_since_2000(EPOCH_2000_UNIX), 0);
@@ -113,7 +113,7 @@ mod tests {
 		assert_eq!(minutes_since_2000(EPOCH_2000_UNIX + 365 * 86_400), 525_600);
 	}
 
-	// Test ID: Eo4auD6
+	// Test ID: dbsdg
 	#[test]
 	fn a_clock_behind_the_epoch_gives_zero_rather_than_wrapping() {
 		assert_eq!(minutes_since_2000(0), 0);
@@ -121,7 +121,7 @@ mod tests {
 		assert_eq!(build_number_at(0), "0");
 	}
 
-	// Test ID: Eo4auD7
+	// Test ID: dbsdh
 	#[test]
 	fn a_later_build_always_sorts_after_an_earlier_one() {
 		// Same length means plain string order works; the length only grows, so
@@ -133,7 +133,7 @@ mod tests {
 		assert!(build_number_at(EPOCH_2000_UNIX) < build_number_at(EPOCH_2000_UNIX + 60));
 	}
 
-	// Test ID: Eo4auD8
+	// Test ID: dbsdj
 	#[test]
 	fn the_number_stays_five_characters_for_the_life_of_this_program() {
 		// 32^5 minutes past 2000 is partway through 2063; anything sooner is five
@@ -146,7 +146,7 @@ mod tests {
 
 	// Every file the code pulls in with include_bytes! or include_str! sits under
 	// one of the inputs, and so do the lock file and both manifests.
-	// Test ID: Eq4Yrbe
+	// Test ID: dcq7f
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_build_inputs_cover_every_included_file_and_the_lock() {
@@ -217,7 +217,7 @@ mod tests {
 
 	// Every source file names the license the crate is published under, as the
 	// manifest does.
-	// Test ID: Er2UFeX
+	// Test ID: dd5mx
 	#[test]
 	fn every_source_file_has_the_license_header() {
 		let crate_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
@@ -253,7 +253,7 @@ mod tests {
 	// Every pub struct and enum derives Debug or has its own impl. Read from the
 	// source because rustc's missing_debug_implementations only looks at types
 	// reachable from outside the crate, and a binary exports none.
-	// Test ID: ErlrvUZ
+	// Test ID: ddghv
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn every_public_type_has_debug() {
@@ -465,7 +465,7 @@ mod tests {
 	// History at the bottom of the file, not in the header. A .rs file takes
 	// its crate's license, and only an MIT one may be in the Bubbles form.
 	// Tracked files only, so a scratch file in a working tree is never judged.
-	// Test ID: ErloT4L
+	// Test ID: ddghe
 	#[test]
 	#[cfg_attr(miri, ignore = "Miri can't start a process")]
 	fn every_script_has_the_license_header_with_history_at_the_bottom() {

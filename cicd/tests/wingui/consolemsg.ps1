@@ -11,7 +11,7 @@
 	History: At bottom of file.
 #>
 
-##	Test ID: EqH4isq
+##	Test ID: dct7q
 
 
 $said = Join-Path $OutDir "consolemsg.txt"

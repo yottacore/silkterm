@@ -7,8 +7,9 @@
 ##		is a TOML file, so a folder name holding a quote or a backslash has to
 ##		come through escaped. The stash it takes before a pull says whether it
 ##		stashed anything, and nothing else. It takes cicd.bash's runs, and hands
-##		each to the Linux half.
-##	- Test ID: Er2UgYE
+##		each to the Linux half. A rule it writes to a pipe is UTF-8, not code page
+##		437, where the dot is the bell byte.
+##	- Test ID: dd5nw
 ##	- History: At bottom of file.
 
 ##	Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
@@ -62,6 +63,28 @@ if (-not \$p['Long'].Aliases.Contains('Slow')) { 'Slow' }
 }
 fCheck "the standard runs are parameters, with -Slow as another name for -Long" fHasParams
 
+## Over ssh pwsh writes in code page 437, where the rule's dot is the bell byte.
+## A fresh pwsh starts in 437 here, takes the switch, then prints a step's rule.
+fRuleOut(){ cat > "${work}/rule.ps1" <<'PS'
+param([string]$Pipeline)
+[Console]::OutputEncoding = [System.Text.Encoding]::GetEncoding(437)
+$ast = [System.Management.Automation.Language.Parser]::ParseFile($Pipeline, [ref]$null, [ref]$null)
+foreach ($name in 'fEcho_Clean', 'fUtf8Output') {
+	. ([scriptblock]::Create($ast.Find({ param($n) $n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq $name }, $true).Extent.Text))
+}
+. ([scriptblock]::Create($ast.Find({ param($n) $n -is [System.Management.Automation.Language.AssignmentStatementAst] -and $n.Left.Extent.Text -eq '$script:Letterbox' }, $true).Extent.Text))
+$script:WasLastEchoBlank = $false
+$was = fUtf8Output
+fEcho_Clean $script:Letterbox
+[Console]::Error.WriteLine("was=$(if ($was) { $was.CodePage })")
+PS
+	pwsh -NoProfile -NonInteractive -File "${work}/rule.ps1" "${ps1}" > "${work}/rule.out" 2> "${work}/rule.err" || true
+}
+fRuleOut
+rule="$(printf '•%.0s' {1..79})"
+fCheck "a rule written to a pipe is 79 dots in UTF-8, with no bell byte" bash -c '[[ "$(cat "$1")" == "$2" ]] && ! LC_ALL=C grep -q $'"'"'\a'"'"' "$1"' _ "${work}/rule.out" "${rule}"
+fCheck "and the switch hands back 437 to put back at the end" grep -qx 'was=437' "${work}/rule.err"
+
 if ((failures)); then echo "${failures} failed"; exit 1; fi
 echo "all passed"
 
@@ -70,3 +93,4 @@ echo "all passed"
 ##		- 20261006 JC: The stash before a pull.
 ##		- 20261025: -NoRemote goes to the Linux half.
 ##		- 20261028: The standard runs.
+##		- 20261028: A rule written to a pipe is UTF-8 dots, not bell bytes.

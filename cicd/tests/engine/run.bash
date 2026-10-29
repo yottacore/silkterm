@@ -6,7 +6,7 @@
 ##		Pieces of cicd.bash that decide what a run does, lifted out of the file as
 ##		they stand and run on their own: the build retry, the dogfood tag, the
 ##		option parser, the running-copy check, the build number and the host line.
-##	- Test ID: Er2UgY7
+##	- Test ID: dd5nn
 ##	- History: At bottom of file.
 
 ##	Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
@@ -508,10 +508,35 @@ fCheck "the plan has an ARM64 smoke run line" test "$(fArmPlan 0 "x|linux-arm64|
 fCheck "which says --no-remote left it out" test "$(fArmPlan 1 "x|linux-arm64|y")" = "ARM64 smoke run .....: (skipped --no-remote)"
 fCheck "or that there's no ARM64 build" test "$(fArmPlan 0 "x|linux-x86_64|y")" = "ARM64 smoke run .....: (no Linux ARM64 build)"
 
+## The release stage's check for this box's paths. Every published binary once
+## held the home folder and account name, from panic locations.
+eval "$(grep '^fHasLocalPaths(){' "${engine}")"
+fPaths(){ local HOME="${work}/home/someone" root="${work}/src/silkterm"; fHasLocalPaths "${1}"; }
+printf 'x\0panicked at %s/src/silkterm/source/src/main.rs\0' "${work}" >"${work}/bin-root"
+printf 'x\0%s/home/someone/.cargo/registry/src/a.rs\0' "${work}" >"${work}/bin-home"
+printf 'x\0/silkterm/source/src/main.rs\0/cargo/registry/src/a.rs\0' >"${work}/bin-clean"
+fCheck "a binary naming the checkout holds a local path" fPaths "${work}/bin-root"
+fCheck "and so does one naming the home folder" fPaths "${work}/bin-home"
+fCheck "one with the paths mapped away does not" fNot fPaths "${work}/bin-clean"
+fCheck "the release stage checks every built binary" grep -qF 'if fHasLocalPaths "${pair#*|}"; then fDie ' "${engine}"
+
+## The fuzz corpus is hashed either side of the tests. A run once rewrote a seed
+## in place, and nothing said so.
+eval "$(grep '^fCorpusHashes(){' "${engine}")"
+mkdir -p "${work}/corpus-root/cicd/tests/fuzz-corpus/config"
+printf 'window:\n\tcolumns: 100\n' >"${work}/corpus-root/cicd/tests/fuzz-corpus/config/seed.shcl"
+corpusBefore="$(root="${work}/corpus-root" fCorpusHashes)"
+fCheck "an untouched corpus hashes the same twice" test "$(root="${work}/corpus-root" fCorpusHashes)" = "${corpusBefore}"
+printf '## a banner a launch refreshed\n' >>"${work}/corpus-root/cicd/tests/fuzz-corpus/config/seed.shcl"
+fCheck "a seed written through hashes differently" test "$(root="${work}/corpus-root" fCorpusHashes)" != "${corpusBefore}"
+fCheck "and the test stage fails on a difference" grep -qF '[[ "$(fCorpusHashes)" != "${corpusBefore}" ]]; then' "${engine}"
+
 if ((failures)); then echo "${failures} failed"; exit 1; fi
 echo "all passed"
 
 ##	History:
+##		- 20261028: The release stage's check for local paths in a binary, and the
+##		            fuzz corpus hashes either side of the tests.
 ##		- 20261028: The steps a run takes, the ones it turns off and why, and each
 ##		            step's opening and closing lines.
 ##		- 20261028: --long and --slow, with TSan and CodeQL waiting for them.

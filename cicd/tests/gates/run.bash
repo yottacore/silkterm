@@ -5,7 +5,7 @@
 ##		taken while a run was still writing them recorded the part written so far,
 ##		and every later look said SEEN. This runs cicd.bash's own logging block
 ##		and checks the gates only ever see a finished file.
-##	- Test ID: EqBfc5Y
+##	- Test ID: dcry4
 ##	- History: At bottom of file.
 
 ##	Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
@@ -79,17 +79,22 @@ out="$(python3 "${flameGate}" --check --dir "${fdir}" 2>&1 || true)"
 fCheck "the flame gate does not read a part file" bash -c '[[ "$1" != NEW* ]]' _ "${out}"
 fCheck "and records nothing" test ! -e "${fdir}/.flame-seen"
 
-## Test result lines are not warnings, whatever the test is named (ErfQEMd).
+## Test result lines are not warnings, whatever the test is named (ddf08).
 ldir="${work}/names"; mkdir -p "${ldir}"
 {
-	echo 'ok      EreHnyt  ui_spec::tests::a_warning_needs_a_label_of_its_own'
-	echo 'FAILED  -------  ui_spec::tests::warning_two'
-	echo 'ignored EreHnyt  ui_spec::tests::warning_three  (slow)'
-	echo '[ OK: warning gate (EqBfc5Y) ]'
+	echo 'PASS ddeqk ui_spec::tests::a_warning_needs_a_label_of_its_own'
+	echo 'FAIL ----- ui_spec::tests::warning_two'
+	echo 'SKIP ddeqk ui_spec::tests::warning_three, slow'
+	echo 'PASS dcry4 warning gate'
+	echo 'SKIP ddp9p yanked crate check, no warnings to read'
+	echo 'test ui_spec::tests::warning_four ... ok'
 	echo 'warning: unused variable x'
+	echo 'PASS warning: a word, not an ID'
+	echo '[ OK: warning gate (dcry4) ]'
 } >"${ldir}/run_20260101-000000.log"
 out="$("${lintGate}" --dir "${ldir}" 2>&1 || true)"
-fCheck "a test named for a warning is not one, a real warning is (ErfQEMd)" grep -q '^FLAG.*(1 warning' <<<"${out}"
+fCheck "a test named for a warning is not one, a real warning is (ddf08)" grep -q '^FLAG.*(3 warning' <<<"${out}"
+fCheck "and the real ones are the three not in a test's line" bash -c '[[ "$(grep -c "^[0-9]*:" <<<"$1")" == 3 && "$1" == *"warning: unused variable x"* && "$1" == *"PASS warning: a word"* && "$1" == *"[ OK: warning gate (dcry4) ]"* ]]' _ "${out}"
 fCheck "and a plain look records nothing" test ! -e "${ldir}/.lint-seen"
 
 if ((failures)); then echo "${failures} failed"; exit 1; fi
@@ -97,5 +102,6 @@ echo "all passed"
 
 ##	History:
 ##		- 20260917 JC: Created.
-##		- 20261003: Test names that hold "warning" (ErfQEMd).
+##		- 20261003: Test names that hold "warning" (ddf08).
 ##		- 20261025: Stubs fContainerEnd, and fails by name on a call left unstubbed.
+##		- 20261028: Test lines as PASS, FAIL or SKIP, ID and name.

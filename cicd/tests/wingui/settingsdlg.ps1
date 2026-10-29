@@ -10,7 +10,7 @@
 	History: At bottom of file.
 #>
 
-##	Test ID: EpJAgKe
+##	Test ID: dcbtp
 
 
 if (-not (fSessionUsable)) { fSkip "console session is locked - the dialog cannot be grabbed" }

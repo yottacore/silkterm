@@ -531,7 +531,7 @@ mod tests {
 	// SILK_IDLE_SECS is read once per process. The idle rule is asked twice on
 	// every loop pass, and it went to the environment each time. Run in a child
 	// copy of this test binary, since the answer is cached per process.
-	// Test ID: ErgPfvU
+	// Test ID: ddf7w
 	#[test]
 	#[cfg_attr(miri, ignore = "Miri can't start a process")]
 	fn the_idle_wait_switch_is_read_once() {
@@ -554,7 +554,7 @@ mod tests {
 		assert!(text.contains("idle wait checked"), "{text}");
 	}
 
-	// Test ID: ErgPfzH
+	// Test ID: ddf7x
 	#[test]
 	fn idle_wait_child() {
 		if std::env::var_os("SILK_IDLE_WAIT_CHILD").is_none() {
@@ -583,7 +583,7 @@ mod tests {
 	// frame rate asked it every time. A second at 60 passes now asks at most
 	// once per MINIMIZED_RECHECK, and an event that forgets the answer gets a
 	// fresh one on the next pass.
-	// Test ID: ErgPg2b
+	// Test ID: ddf7y
 	#[test]
 	fn the_minimized_state_is_asked_at_most_once_per_recheck() {
 		use super::{MINIMIZED_RECHECK, MinimizedProbe};
@@ -630,7 +630,7 @@ mod tests {
 	// screen, and a covered window waits the shorter of the two times. Everything
 	// that vetoes it is a None, since a deadline that then had to be checked
 	// again elsewhere is how a veto gets forgotten.
-	// Test ID: Eq8b2Gu
+	// Test ID: dcr6f
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_idle_release_waits_on_the_window_and_only_an_unwatched_one() {
@@ -697,7 +697,7 @@ mod tests {
 	// bitmap, so nothing is left on screen once its device goes: one let go in
 	// view went black and stayed black until typed into. It waits until it is
 	// out of sight, and only then for the hidden wait.
-	// Test ID: ErksiLn
+	// Test ID: ddga8
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_window_that_would_go_blank_is_never_let_go_in_view() {
@@ -733,7 +733,7 @@ mod tests {
 	// // A minimized window lets go after its own wait, a minute by default,
 	// // rather than the half hour a covered one waits. Whatever else the desktop
 	// // says of it, and on Windows a window with no area, is minimized.
-	// // Test ID: ErmpLNm
+	// // Test ID: ddgs7
 	// #[test]
 	// fn a_minimized_window_waits_its_own_time() {
 	// 	let since = Instant::now();
@@ -799,7 +799,7 @@ mod tests {
 	// A minimized window is out of sight like a covered one and takes the same
 	// wait, a minute by default, whatever else holds the window. Whether the
 	// desktop calls it covered as well makes no difference.
-	// Test ID: ErsV4Jy
+	// Test ID: ddj4z
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_minimized_window_takes_the_hidden_wait() {
@@ -836,7 +836,7 @@ mod tests {
 	// comes back. A rebuild in that gap read the 0x0 client area, took 1x1 as
 	// the window's size, and the grid went to two columns; the console host's
 	// reflow then left only the prompt's last character on screen.
-	// Test ID: Erksiin
+	// Test ID: ddga9
 	#[test]
 	fn a_window_with_no_area_is_hidden_whatever_the_minimized_answer() {
 		assert!(window_hidden(true, false, true, || false));
@@ -849,7 +849,7 @@ mod tests {
 	// A program printing in a minimized window held its device for good, since
 	// every output started the idle clock over. Output nobody can see leaves the
 	// clock alone, but a released window is still owed its device for the reveal.
-	// Test ID: EqBNCpU
+	// Test ID: dcrvv
 	#[test]
 	fn output_into_a_hidden_window_does_not_keep_its_device() {
 		let long_ago = Instant::now()
@@ -881,7 +881,7 @@ mod tests {
 
 	// A device the GPU refused on the way back from the idle release used to
 	// wait for input, so a window nobody touched stayed blank after the load.
-	// Test ID: Erfy7yk
+	// Test ID: ddf4f
 	#[test]
 	fn a_refused_rebuild_stays_pending_and_is_tried_again() {
 		let now = Instant::now();
@@ -913,7 +913,7 @@ mod tests {
 		assert_eq!(clock.retry, Retry::default());
 	}
 
-	// Test ID: EqFWtPs
+	// Test ID: dcsvt
 	#[test]
 	fn the_title_note_follows_the_device_out_and_back() {
 		let now = Instant::now();
@@ -944,7 +944,7 @@ mod tests {
 
 	// A frame drawn while hidden banks the backlog into the ease, and the reveal
 	// then plays it back as if it had just arrived.
-	// Test ID: Er2UiYW
+	// Test ID: dd5ph
 	#[test]
 	fn a_hidden_window_draws_nothing_and_its_return_is_one_cut() {
 		use super::{Frame, freeze_frame};
