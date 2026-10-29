@@ -520,11 +520,23 @@ fCheck "and so does one naming the home folder" fPaths "${work}/bin-home"
 fCheck "one with the paths mapped away does not" fNot fPaths "${work}/bin-clean"
 fCheck "the release stage checks every built binary" grep -qF 'if fHasLocalPaths "${pair#*|}"; then fDie ' "${engine}"
 
+## The fuzz corpus is hashed either side of the tests. A run once rewrote a seed
+## in place, and nothing said so.
+eval "$(grep '^fCorpusHashes(){' "${engine}")"
+mkdir -p "${work}/corpus-root/cicd/tests/fuzz-corpus/config"
+printf 'window:\n\tcolumns: 100\n' >"${work}/corpus-root/cicd/tests/fuzz-corpus/config/seed.shcl"
+corpusBefore="$(root="${work}/corpus-root" fCorpusHashes)"
+fCheck "an untouched corpus hashes the same twice" test "$(root="${work}/corpus-root" fCorpusHashes)" = "${corpusBefore}"
+printf '## a banner a launch refreshed\n' >>"${work}/corpus-root/cicd/tests/fuzz-corpus/config/seed.shcl"
+fCheck "a seed written through hashes differently" test "$(root="${work}/corpus-root" fCorpusHashes)" != "${corpusBefore}"
+fCheck "and the test stage fails on a difference" grep -qF '[[ "$(fCorpusHashes)" != "${corpusBefore}" ]]; then' "${engine}"
+
 if ((failures)); then echo "${failures} failed"; exit 1; fi
 echo "all passed"
 
 ##	History:
-##		- 20261028: The release stage's check for local paths in a binary.
+##		- 20261028: The release stage's check for local paths in a binary, and the
+##		            fuzz corpus hashes either side of the tests.
 ##		- 20261028: The steps a run takes, the ones it turns off and why, and each
 ##		            step's opening and closing lines.
 ##		- 20261028: --long and --slow, with TSan and CodeQL waiting for them.
