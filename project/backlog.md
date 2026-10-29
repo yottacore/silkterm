@@ -34,6 +34,18 @@ Going forward, new issues in the new template at the bottom of this file, will g
 
 ## Issues
 
+- The Mac CI doesn't name a test that failed when its output splits the result line
+	- ID: 2026102822262458
+	- Type: Bug
+	- Status: Queued
+	- Priority: Avg
+	- Opened: 20261028-222624
+	- Opened by: CC
+	- Target OS: macOS
+	- Requirements:
+		- Hosted run 40818838314 at 9eded41 printed a lone `FAILED` line and `1 failed`, but no test name, panic text or rerun. With `--nocapture`, a test's own output can land between `test <name> ...` and `FAILED`, so the pattern in `ci-mac.bash` that looks for both on one line finds nothing.
+		- Take the names from cargo's `failures:` list at the end, or run without `--nocapture` for the names.
+
 - The window doesn't paint while the GPU is busy or short on memory, and stays blank after the load ends
 	- ID: 2026100312470535
 	- Type: Bug
