@@ -383,7 +383,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - CICD reset: other hosts and VMs
 	- ID: 2026102416233802
 	- Type: Task
-	- Status: Queued
+	- Status: Done
 	- Priority: High
 	- Opened: 20261024-162338
 	- Opened by: CC
@@ -399,11 +399,14 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
 	- Progress log:
 		- 20261025: Split in 4, since it's too big for one go: 2026102507245255 (the Windows boxes), 2026102507245260 (`--no-remote` and `SKIP`), 2026102507245265 (vmKt6m in the private runner) and 2026102507245270 (the ARM64 smoke run). This one closes with the last of them.
+	- Test case: The children's tests: Er2UgYA, EqH4isr, Er2UgY7, Eu0WzDd in `silkterm-private`, and Eu0XhGL.
+	- Acceptance signoff: Self-closed: all 4 children are Done with their tests.
+	- Closed: 20261028-190205
 
 - CICD reset: standard flags
 	- ID: 2026102416233807
 	- Type: Task
-	- Status: Queued
+	- Status: Done
 	- Priority: High
 	- Opened: 20261024-162338
 	- Opened by: CC
@@ -422,6 +425,9 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261025: `--no-remote` is in, from 2026102507245260, with `-NoRemote` in `cicd-win.ps1`.
 		- 20261026: Split, since it doesn't fit one sitting. Children: 2026102616543933 (the backlog runs and the merge gate), 2026102616543936 (`--long`, and a default run in about an hour), 2026102616543939 (`--keep-temp` and `--list`), 2026102616543943 (the pre-push hook), 2026102616543946 (the same in `cicd-win.ps1`).
 		- 20261026: 2026102616543933 is in: `--backlog-run-quick`, `--backlog-run-full`, `--merge-gate`, and `--gate` and `--ci` as other names.
+	- Test case: The children's tests: Er2UgY7, EsJg9EF, EqA7Wki, and Er2UgYE.
+	- Acceptance signoff: Self-closed: all 5 children are Done with their tests.
+	- Closed: 20261028-190205
 
 - CICD reset: a test for every Done item
 	- ID: 2026102416233809
