@@ -396,8 +396,8 @@ function fExec {
 }
 
 ## One of stage 3's test scripts, in a pwsh of its own, or in this one with
-## -InProcess. Under -List it prints the script's test ID and name instead, so
-## the list is the run's own calls.
+## -InProcess, and its PASS or FAIL line. Under -List it prints the script's
+## test ID and name instead, so the list is the run's own calls.
 function fScriptTest {
 	param(
 		[Parameter(Mandatory)][string]$What,
@@ -406,14 +406,33 @@ function fScriptTest {
 		[switch]$InProcess
 	)
 	$path = Join-Path $Root $Script
+	$found = Select-String -LiteralPath $path -Pattern '^##\s+Test ID:\s+(\S+)' | Select-Object -First 1
+	$id = if ($found) { $found.Matches[0].Groups[1].Value } else { '-----' }
 	if ($List) {
-		$id = Select-String -LiteralPath $path -Pattern '^##\s+Test ID:\s+(\S+)' | Select-Object -First 1
-		fEcho_Clean ("  {0,-5}  {1}" -f $(if ($id) { $id.Matches[0].Groups[1].Value } else { '-----' }), $What)
+		fEcho_Clean ("  {0,-5}  {1}" -f $id, $What)
 		return
 	}
 	if ($InProcess) { & $path @Params } else { & pwsh -NoProfile -NonInteractive -File $path }
-	if ($LASTEXITCODE -ne 0) { fDie "$What failed (exit $LASTEXITCODE)" }
-	fEcho "OK: $What"
+	if ($LASTEXITCODE -ne 0) { fEcho_Clean "FAIL $id $What"; fDie "$What failed (exit $LASTEXITCODE)" }
+	fEcho_Clean "PASS $id $What"
+}
+
+## A python that runs, or nothing. The one on PATH can be the store's stand-in,
+## which runs nothing.
+function fPython {
+	$py = Get-Command -Name python3, python -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+	if (-not $py) { return $null }
+	& $py.Source -c 'import sys' 2>$null
+	if ($LASTEXITCODE -ne 0) { return $null }
+	return $py.Source
+}
+
+## cargo test, with each result line as PASS, FAIL or SKIP, test ID and name.
+## With no python here it runs as is.
+function fCargoTest {
+	$py = fPython
+	if ($py) { fExec -What "tests" -File $py -CmdArgs @((Join-Path $Root "cicd\utility\test-id.py"), "--run", "cargo", "test") }
+	else { fNote "no python here, so the test lines have no IDs"; fExec -What "tests" -File "cargo" -CmdArgs @("test") }
 }
 
 ## The installer tests. They run in this process and point TEMP and TMP at the
@@ -448,9 +467,9 @@ function fScriptTests {
 ## cicd.bash asks. It needs python.
 function fListRustTests {
 	$lines = @()
-	$py = Get-Command -Name python3, python -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+	$py = fPython
 	if ($py) {
-		$found = & $py.Source (Join-Path $Root "cicd\utility\test-id.py") --list 2>$null
+		$found = & $py (Join-Path $Root "cicd\utility\test-id.py") --list 2>$null
 		if ($LASTEXITCODE -eq 0) { $lines = @($found | Where-Object { $_ }) }
 	}
 	fEcho_Clean "Rust tests (cargo test, $($lines.Count)):"
@@ -1048,7 +1067,7 @@ function fQuickRun {
 			switch ($area) {
 				'fmt'     { fExec -What "format check" -File "cargo" -CmdArgs @("fmt", "--check"); fEcho "OK: formatting clean" }
 				'clippy'  { fLintAdvisory }
-				'tests'   { fExec -What "tests" -File "cargo" -CmdArgs @("test"); fEcho "OK: tests passed" }
+				'tests'   { fCargoTest; fEcho "OK: tests passed" }
 				'scripts' { fLintPowerShell }
 				'docs'    { fNote "the docs checks are cicd.bash's$(if ($Wsl) { '; the Linux half runs them' } else { '; -Wsl runs them here' })" }
 			}
@@ -1195,7 +1214,7 @@ function fMain {
 	## Tests and the advisory lints.
 	$null = fStepOpen 'Tests'
 	fSetJobs
-	fExec -What "tests" -File "cargo" -CmdArgs @("test")
+	fCargoTest
 	fEcho "OK: tests passed"
 	fScriptTests
 	fLintAdvisory
@@ -1249,6 +1268,8 @@ try {
 
 
 ##	History:
+##		- 2026-10-28: One PASS or FAIL line per test, with its ID and name. cargo
+##		  test's lines go through test-id.py when there's a python.
 ##		- 2026-10-28: -List takes test IDs in the new 5-character form.
 ##		- 2026-10-28: Output sent over ssh or into a file is UTF-8, so the rule
 ##		  is dots rather than bell bytes, or ASCII where UTF-8 can't be set.

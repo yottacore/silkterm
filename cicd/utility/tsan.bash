@@ -64,9 +64,10 @@ fEcho_Clean "TSan canary (a planted race) ..."
 rc=0; "${TSAN_CMD[@]}" --manifest-path cicd/tests/sanitizer-canary/Cargo.toml >"${canaryOut}" 2>&1 || rc=$?
 if ((rc == 0)) || ! grep -q 'WARNING: ThreadSanitizer: data race' "${canaryOut}" || ! grep -q 'races_on_purpose' "${canaryOut}"; then
 	tail -n 80 "${canaryOut}"
+	fEcho_Clean "FAIL debjk TSan canary caught"
 	fDie "the canary's race was not reported by name, so a race in the suite could pass too (output in ${canaryOut})"
 fi
-fEcho "OK: TSan canary caught (debjk)"
+fEcho_Clean "PASS debjk TSan canary caught"
 
 suiteOut="${SILKTERM_TEST_DIR}/tsan_suite.txt"
 fEcho_Clean "test suite under TSan (${SANITIZER_TOOLCHAIN}) ..."
@@ -89,3 +90,4 @@ fEcho "OK: no TSan reports (${counts}, $((SECONDS - start))s)"
 ##	History:
 ##		- 20261023 JC: Created.
 ##		- 20261026 JC: Jobs and priority from include/jobs.bash.
+##		- 20261028: The canary has a PASS or FAIL line.

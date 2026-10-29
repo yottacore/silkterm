@@ -4,6 +4,7 @@
 ##		The test ID tool, run on a made-up tree: IDs in whole minutes in
 ##		Crockford base 32, the next free minute for tests made together, and a
 ##		check that refuses a missing, malformed, old base 62, future or shared ID.
+##		Test result lines as PASS, FAIL or SKIP, ID and name.
 ##	Syntax: run.py
 ##	Exit: 0 all passed, 1 a check failed.
 ##	Test ID: dejjp
@@ -90,11 +91,27 @@ for what, ids, script, says in cases:
 	rc, out = run(tree(ids, script), "--check")
 	check(f"the check refuses {what}", rc == 1 and says in out, out.strip())
 
-rc, out = run(tree(["decp8"]), "--annotate", stdin="test tests::case_0 ... ok\ntest tests::gone ... FAILED\nrunning 2 tests\n")
+results = "test tests::case_0 ... ok\ntest tests::gone ... FAILED\ntest tests::case_1 ... ignored, needs b29w\ntest tests::case_0 ... bench\nrunning 2 tests\n"
+rc, out = run(tree(["decp8", "decp9"]), "--annotate", stdin=results)
 lines = out.splitlines()
-check("a result line gets its ID", lines[:1] == ["ok      decp8  tests::case_0"], repr(lines[:1]))
-check("one with no ID gets dashes as wide as an ID", lines[1:2] == ["FAILED  -----  tests::gone"], repr(lines[1:2]))
+check("a passing test is a PASS line with its ID and name", lines[:1] == ["PASS decp8 tests::case_0"], repr(lines[:1]))
+check("a failed one is FAIL, with dashes as wide as an ID when it has none", lines[1:2] == ["FAIL ----- tests::gone"], repr(lines[1:2]))
+check("an ignored one is SKIP, with its why", lines[2:3] == ["SKIP decp9 tests::case_1, needs b29w"], repr(lines[2:3]))
+check("a status it doesn't know goes through as is", lines[3:4] == ["test tests::case_0 ... bench"], repr(lines[3:4]))
 check("and every other line goes through", "running 2 tests" in lines, out)
+check("and the missing ID is counted", lines[-1:] == ["WARNING: 1 test(s) above have no ID found for them"], repr(lines[-1:]))
+p = subprocess.run([sys.executable, str(tree(["decp8"]) / "cicd" / "utility" / "test-id.py"), "--annotate"],
+	input=b"\xff\xfe not text\r\ntest tests::case_0 ... ok\r\n", capture_output=True, env=ENV, check=False)
+check("a line that isn't UTF-8 goes through byte for byte", p.stdout.startswith(b"\xff\xfe not text\r\n"), repr(p.stdout[:40]))
+check("and a CRLF result line still gets its ID", b"PASS decp8 tests::case_0\n" in p.stdout, repr(p.stdout))
+cmd = "import sys; print('test tests::case_0 ... ok'); print('to stderr', file=sys.stderr); sys.exit(7)"
+rc, out = run(tree(["decp8"]), "--run", sys.executable, "-c", cmd)
+check("--run annotates a command's output", "PASS decp8 tests::case_0" in out.splitlines(), out.strip())
+check("and exits with its status", rc == 7, str(rc))
+rc, out = run(tree(["decp8"]), "--run", sys.executable, "-c", "pass")
+check("which is 0 when it passed", rc == 0, f"{rc}: {out.strip()}")
+rc, out = run(tree(["decp8"]), "--run", str(scratch / "no-such-command"))
+check("a command that isn't there fails", rc != 0 and "cannot run" in out, f"{rc}: {out.strip()}")
 rc, out = run(tree(["decp8"]), "--list")
 check("the list gives ID and name", out.splitlines() == ["decp8  tests::case_0"], out.strip())
 
@@ -110,3 +127,4 @@ print("all passed")
 
 ##	History:
 ##		- 20261028: Created.
+##		- 20261028: PASS, FAIL and SKIP lines, and --run.

@@ -83,12 +83,12 @@ fi
 ##	Distil warnings/advisories. rustc/clippy/cargo-deny all say "warning"; deny adds
 ##	RUSTSEC ids + vulnerable/unmaintained/yanked. Hard errors only appear in a failed
 ##	run's log (a passing run aborts on the first error). Drop the "0 warnings" noise,
-##	and test result lines, whose test names can hold any of these words: cargo test's
-##	"<status> <ID> <name>" (test-id.py --annotate), a script's "[ OK: <what> (<ID>) ]",
-##	and plain libtest's "test <name> ... ok" from the b26 runner.
+##	and test result lines, whose test names can hold any of these words: each test's
+##	"PASS|FAIL|SKIP <ID> <name>", and plain libtest's "test <name> ... ok" from the
+##	b26 runner. A skip is a test that could not run, not a warning.
 warns="$(grep -inE 'warning|rustsec-|vulnerab|unmaintained|yanked|error\[' "${log}" 2>/dev/null \
 	| grep -viE 'generated 0 warnings|: 0 warnings|no warnings|0 warnings emitted' \
-	| grep -vE '^[0-9]+:((ok|FAILED|ignored) +([0-9a-hjkmnp-tv-z]{5}|-----)  [^ ]|\[ OK: .* \([0-9a-hjkmnp-tv-z]{5}\) \]$|test [A-Za-z0-9_:]+ \.\.\. (ok|ignored)$)' || true)"
+	| grep -vE '^[0-9]+:((PASS|FAIL|SKIP) ([0-9a-hjkmnp-tv-z]{5}|-----) [^ ]|test [A-Za-z0-9_:]+ \.\.\. (ok|ignored)$)' || true)"
 if [[ -n "${warns}" ]]; then n=$(printf '%s\n' "${warns}" | grep -c .); else n=0; fi
 
 tag="FLAG"; ((check)) && tag="NEW"
@@ -105,3 +105,4 @@ fi
 ##		- 20260709: Created.
 ##		- 20261003: Test result lines no longer count as warnings.
 ##		- 20261028: Test IDs in the new 5-character form.
+##		- 20261028: One PASS, FAIL or SKIP line per test.

@@ -12,7 +12,8 @@
 ##		test-id.py --at WHEN [N]  the same for a past time, "YYYY-MM-DD HH:MM" local
 ##		test-id.py --decode ID    the time an ID stands for
 ##		test-id.py --check        every test has a well-formed ID and no two share one
-##		test-id.py --annotate     copy cargo test output, each result line as status, ID, name
+##		test-id.py --annotate     copy cargo test output, each result line as PASS, FAIL or SKIP, ID, name
+##		test-id.py --run CMD...   the same over CMD's output, exiting with its status
 ##		test-id.py --list         every Rust test, as ID and name
 ##	Exit: 0 fine, 1 --check found a problem, 2 bad arguments.
 ##	History: At bottom of script.
@@ -23,13 +24,13 @@
 ##	SPDX-License-Identifier: MIT
 
 import argparse
-import io
 import re
+import subprocess
 import sys
 from collections.abc import Iterator
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import cast
+from typing import BinaryIO
 
 DIGITS = "0123456789abcdefghjkmnpqrstvwxyz"
 ID_FORM = re.compile(f"[{DIGITS}]+")
@@ -43,6 +44,7 @@ ATTR_RE = re.compile(r"^\s*#\[.*\]\s*$")
 MOD_RE = re.compile(r"^(\t*)(?:pub(?:\([^)]*\))?\s+)?mod\s+(\w+)\s*\{")
 FN_RE = re.compile(r"\bfn\s+(\w+)")
 RESULT_RE = re.compile(r"^test (\S+) \.\.\. (.*)$")
+STATUS = {"ok": "PASS", "FAILED": "FAIL", "ignored": "SKIP"}
 SCRIPT_EXTS = {".bash", ".py", ".ps1"}
 
 ## Scripts under cicd/tests that are not tests themselves: drivers, fixtures
@@ -137,26 +139,44 @@ def find_ids() -> list[tuple[str, str | None]]:
 	return found
 
 
-def annotate() -> int:
-	##	A filter on cargo test's stdout, so every other line goes through as is.
-	##	It reads to the end, so cargo never sees a closed pipe.
+def annotate(lines: Iterator[bytes], out: BinaryIO) -> None:
+	##	Each result line as "PASS|FAIL|SKIP <ID> <name>[, why]", and every other
+	##	line as it came, byte for byte. It reads to the end, so cargo never sees
+	##	a closed pipe.
 	ids = {name: tid for _, tid, name in rust_tests()}
-	cast(io.TextIOWrapper, sys.stdin).reconfigure(errors="surrogateescape")
-	cast(io.TextIOWrapper, sys.stdout).reconfigure(errors="surrogateescape")
 	missing = 0
-	for line in sys.stdin:
-		m = RESULT_RE.match(line.rstrip("\n"))
-		if not m:
-			print(line, end="", flush=True)
+	for raw in lines:
+		m = RESULT_RE.match(raw.decode("utf-8", "replace").rstrip("\r\n"))
+		status, _, why = m.group(2).partition(", ") if m else ("", "", "")
+		if m is None or status not in STATUS:
+			out.write(raw)
+			out.flush()
 			continue
-		name, status = m.groups()
+		name = m.group(1)
 		tid = ids.get(name)
 		missing += tid is None
-		status, _, why = status.partition(", ")
-		print(f"{status:<7} {tid or NO_ID:<5}  {name}{'  (' + why + ')' if why else ''}", flush=True)
+		out.write(f"{STATUS[status]} {tid or NO_ID} {name}{', ' + why if why else ''}\n".encode())
+		out.flush()
 	if missing:
-		print(f"WARNING: {missing} test(s) above have no ID found for them", flush=True)
-	return 0
+		out.write(f"WARNING: {missing} test(s) above have no ID found for them\n".encode())
+		out.flush()
+
+
+def run_annotated(cmd: list[str]) -> int:
+	##	The same over a command's stdout, keeping its exit status, for a shell
+	##	with no pipefail (cicd-win.ps1). Its stderr goes straight through.
+	try:
+		proc = subprocess.Popen(cmd, stdout=subprocess.PIPE)
+	except OSError as e:
+		print(f"cannot run {cmd[0]}: {e}", file=sys.stderr)
+		return 127
+	assert proc.stdout is not None
+	try:
+		annotate(iter(proc.stdout.readline, b""), sys.stdout.buffer)
+	except KeyboardInterrupt:
+		proc.wait()
+		raise
+	return proc.wait()
 
 
 def list_rust() -> int:
@@ -196,12 +216,18 @@ def main() -> int:
 	ap.add_argument("--check", action="store_true")
 	ap.add_argument("--annotate", action="store_true")
 	ap.add_argument("--list", action="store_true")
+	ap.add_argument("--run", nargs=argparse.REMAINDER, metavar="CMD")
 	args = ap.parse_args()
 
 	if args.check:
 		return check()
+	if args.run is not None:
+		if not args.run:
+			ap.error("--run needs a command")
+		return run_annotated(args.run)
 	if args.annotate:
-		return annotate()
+		annotate(iter(sys.stdin.buffer.readline, b""), sys.stdout.buffer)
+		return 0
 	if args.list:
 		return list_rust()
 	if args.decode:
@@ -240,3 +266,5 @@ if __name__ == "__main__":
 ##		- 20261026: --list, for cicd.bash --list.
 ##		- 20261028: IDs in whole minutes, in Crockford base 32. The base 62
 ##		  millisecond IDs were converted once, from the times they stood for.
+##		- 20261028: --annotate prints PASS, FAIL or SKIP lines. --run, for
+##		  cicd-win.ps1.

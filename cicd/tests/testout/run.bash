@@ -3,8 +3,9 @@
 #  shellcheck disable=2016  ## 'Expressions don't expand in single quotes.' Those are the scratch scripts' own lines.
 
 ##	- Purpose:
-##		A failed test script's output reaches the run log, and the failure line
-##		names the file that keeps it. A passing or skipped test stays quiet. Lifts
+##		A failed test script's output reaches the run log, then its FAIL line, and
+##		the failure line names the file that keeps it. A passing or skipped test
+##		stays quiet but for its PASS or SKIP line, which says why it skipped. Lifts
 ##		fRunTest and its helpers out of cicd.bash as they stand and feeds them
 ##		scratch scripts that pass, fail and skip.
 ##	- Test ID: ddp9p
@@ -40,6 +41,7 @@ fScript(){  ## fScript <name> <body...>
 fScript pass.bash  'echo "pass-chatter"'
 fScript fail.bash  'echo "fail-clue-one"' 'echo "fail-clue-two"' 'exit 1'
 fScript skip.bash  'echo "skip-chatter"' 'exit 3'
+fScript skipwhy.bash  'echo "  skip: no frobnicator"' 'echo "skip-chatter"' 'echo "  skip: no widget either"' 'exit 3'
 fScript long.bash  'for ((i = 1; i <= 250; i++)); do echo "long-line-${i}"; done' 'exit 1'
 
 ## fRun <log> <function> <script>: one call in a subshell, as cicd would make
@@ -51,7 +53,7 @@ fRun(){
 		set -Eeuo pipefail
 		# shellcheck source=cicd/utility/include/echo.bash
 		source "${cicd}/utility/include/echo.bash"
-		eval "$(sed -n '/^fTestId(){/p; /^fTestOut(){/p' "${engine}")"
+		eval "$(sed -n '/^fTestId(){/p; /^fTestOut(){/p; /^fTestLine(){/p' "${engine}")"
 		eval "$(sed -n '/^fTestOut_Fail(){/,/^}/p; /^fRunTest(){/,/^}/p; /^fRunTest_MaySkip(){/,/^}/p' "${engine}")"
 		export SILKTERM_TEST_DIR="${work}/run"
 		listing=0
@@ -64,6 +66,8 @@ fRun "${work}/fail.log" fRunTest t/fail.bash "failing one"
 fCheck "a failed test stops the run" test "${rc}" -ne 0
 fCheck "and its output is in the log" grep -q '^fail-clue-two$' "${work}/fail.log"
 fCheck "the failure line keeps its text and test ID" grep -q 'FAILED: failing one test failed (zzzzz)' "${work}/fail.log"
+fCheck "after a FAIL line with its ID and name" grep -qxF 'FAIL zzzzz failing one' "${work}/fail.log"
+fCheck "which comes after the output" bash -c '[[ "$(grep -nxF "FAIL zzzzz failing one" "$1" | cut -d: -f1)" -gt "$(grep -nx "fail-clue-two" "$1" | cut -d: -f1)" ]]' _ "${work}/fail.log"
 kept="$(fNamed "${work}/fail.log" || true)"
 fCheck "and names a file" test -n "${kept}"
 fCheck "which holds the output" grep -q '^fail-clue-one$' "${kept:-/nonexistent}"
@@ -71,7 +75,7 @@ fCheck "inside the test run folder" test "${kept%/*}" = "${work}/run"
 
 fRun "${work}/pass.log" fRunTest t/pass.bash "passing one"
 fCheck "a passing test goes on" test "${rc}" -eq 0
-fCheck "with its OK line" grep -qxF '[ OK: passing one (zzzzz) ]' "${work}/pass.log"
+fCheck "with its PASS line" grep -qxF 'PASS zzzzz passing one' "${work}/pass.log"
 fCheck "and nothing it printed" fNot grep -q 'pass-chatter' "${work}/pass.log"
 fCheck "and leaves no output file" test -z "$(find "${work}/run" -name '*pass*')"
 
@@ -79,12 +83,20 @@ fRun "${work}/mfail.log" fRunTest_MaySkip t/fail.bash "skippable one"
 fCheck "a skippable test that fails stops the run" test "${rc}" -ne 0
 fCheck "with its output in the log" grep -q '^fail-clue-one$' "${work}/mfail.log"
 fCheck "and the file named" test -n "$(fNamed "${work}/mfail.log" || true)"
+fCheck "and a FAIL line" grep -qxF 'FAIL zzzzz skippable one' "${work}/mfail.log"
 
 fRun "${work}/skip.log" fRunTest_MaySkip t/skip.bash "skipped one"
 fCheck "a skip goes on" test "${rc}" -eq 0
-fCheck "with a warning" grep -qxF '[ WARNING: skipped one skipped ]' "${work}/skip.log"
+fCheck "with a SKIP line" grep -qxF 'SKIP zzzzz skipped one, could not run' "${work}/skip.log"
+fCheck "and no warning" fNot grep -qi 'warning' "${work}/skip.log"
 fCheck "and nothing it printed" fNot grep -q 'skip-chatter' "${work}/skip.log"
 fCheck "and leaves no output file" test -z "$(find "${work}/run" -name '*skip*')"
+
+fRun "${work}/skipwhy.log" fRunTest_MaySkip t/skipwhy.bash "skipped two"
+fCheck "a skip says the last why the test gave" grep -qxF 'SKIP zzzzz skipped two, no widget either' "${work}/skipwhy.log"
+fCheck "and is the only line" test "$(grep -c . "${work}/skipwhy.log")" -eq 2
+fRun "${work}/skipgiven.log" fRunTest_MaySkip t/skip.bash "skipped three" "no thing to run"
+fCheck "with no why from the test, the one given" grep -qxF 'SKIP zzzzz skipped three, no thing to run' "${work}/skipgiven.log"
 
 fRun "${work}/long.log" fRunTest t/long.bash "long one"
 fCheck "a long output shows its end" grep -q '^long-line-250$' "${work}/long.log"
@@ -97,3 +109,4 @@ echo "all passed"
 
 ##	History:
 ##		- 20261008 JC: Created.
+##		- 20261028: PASS, FAIL and SKIP lines, and the why of a skip.

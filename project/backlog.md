@@ -77,7 +77,9 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - CICD reset: one PASS, FAIL or SKIP line per test
 	- ID: 2026102819265198
 	- Type: Task
-	- Status: Queued
+	- Status: Waiting on automated testing
+	- Needs local test suite run?: The round's full run, `cicd/cicd.bash --backlog-run-full`, for the stage 3 script tests' PASS and SKIP lines, the ASan canary's line, the scroll harness lines, and the warning count. The 3 Wayland tests that skip in the container are SKIP lines now, not warnings, so a container run should count 3 fewer than before.
+	- Needs external testing: `cicd-win.ps1 -BacklogRunQuick tests` on b29w, for cargo test's PASS lines through the Windows python, and the PASS lines of the Windows test scripts in a default or full run.
 	- Priority: High
 	- Opened: 20261028-192651
 	- Opened by: CC
@@ -88,6 +90,20 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Every regression and fuzz test the run takes prints one line, such as `PASS decp8 <name>`, with `FAIL` or `SKIP` in place of `PASS`. That covers the Rust tests and the test scripts, here and in the Windows pipeline.
 		- The warning count and the gate tests that read those lines follow the new form.
 		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
+	- Progress log:
+		- 20261028: Rust test results, the fuzz soak's included, print as `PASS`, `FAIL` or `SKIP`, the ID and the name, and an ignored test's reason after a comma. A status the filter doesn't know, and a line that isn't UTF-8, go through untouched.
+		- 20261028: Each test script prints its own `PASS`, `FAIL` or `SKIP` line in place of the old OK or warning line. A skip gives the last reason the script printed. The docs check, the scroll and launcher harnesses and the ASan and TSan canaries print the same lines.
+		- 20261028: The Windows pipeline runs cargo test through the ID tool's new `--run`, which keeps cargo's exit status, and falls back to plain cargo test with no working python. Its test scripts print `PASS` or `FAIL` lines.
+		- 20261028: The warning count skips `PASS`, `FAIL` and `SKIP` lines, and no longer the old forms.
+	- Decisions:
+		- 20261028: A test that skips is a `SKIP` line with its reason, not a warning. Rust tests that were ignored never counted as warnings either, and the line still says why. It doesn't go on the end-of-run list either, since that list is for boxes that weren't there.
+		- 20261028: The reason goes after a comma, as in the shared rules' example. The old annotate put it in brackets.
+		- 20261028: A new `--run` in the ID tool, rather than piping in PowerShell, which loses the exit status of the first command in a pipe.
+		- 20261028: Step and check lines that aren't tests, such as the lints, the test ID check and the advisory scan, keep their OK and warning lines. The scroll scenes and fuzz cases have no IDs yet, and are 2026102819265312.
+	- Verified: 20261028. The testout (ddp9p), gates (dcry4), testid (dejjp) and cicd-win (dd5nw) tests pass, and 19 of their new checks failed against the old code. The cicd-win one failed outright there, without the new functions. The engine (dd5nn) and container (ddrp2) tests pass. `--backlog-run-quick` with all five areas passed, with 1439 Rust tests and the 3 docs checks each on a `PASS` or `SKIP` line. shellcheck, the bash style check, the Python and PowerShell lints and `test-id.py --check` pass.
+		- Swept: every place in cicd.bash, cicd-win.ps1, asan.bash and tsan.bash that printed a test's result with its ID, the fuzz soak and the dhat run, which go through the same filter, and the tests that lift fRunTest, fScriptTest or the warning filter. No doc described the old lines.
+	- Branch: rnd1029
+	- Test case: ddp9p `cicd/tests/testout/run.bash`, dcry4 `cicd/tests/gates/run.bash` (ddf08's check), dejjp `cicd/tests/testid/run.py`, dd5nw `cicd/tests/cicd-win/run.bash`.
 
 - CICD reset: test IDs in the new form
 	- ID: 2026102819264421
