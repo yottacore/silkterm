@@ -912,6 +912,18 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Notes:
 		- Pre-next-cut.
 
+- Make sure shcl files from v1.0.0-beta3 are accurately converted to the latest shcl spec
+	- ID: 2026102818080401
+	- Type: Enhancement
+	- Status: Queued
+	- Opened: 20261028-180804
+	- Opened by: JC
+	- Requirements:
+		- Files from v1.0.0-beta3 are accurately converted to the latest shcl spec.
+		- The latest spec is listed as v2 but is actually working toward v3 beta.
+	- Notes:
+		- Pre-next-cut.
+
 - Wayland: must use the Wayland clipboard, and minimize other X11 features
 	- ID: 2026101509024607
 	- Type: Bug
