@@ -148,20 +148,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Branch: rnd1029
 	- Test case: dejjp `cicd/tests/testid/run.py`, and dcry4's check that a test named for a warning is not one.
 
-- CICD reset: a test for each old-format Done feature, part 2 of 6
-	- ID: 2026102819193540
-	- Type: Task
-	- Status: Queued
-	- Priority: High
-	- Opened: 20261028-191935
-	- Opened by: CC
-	- Parent ID: 2026102416233809
-	- Target OS: All
-	- Requirements:
-		- The old-format Done features from "Code review 20260908, the enhancement half" to "Config file: reorganized to follow the Settings dialog", 40 items.
-		- Each names its test ID beside the test it names, or says in a few words why it has none. A test is added where one could exist and doesn't, and is watched to fail with the fix taken out.
-		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
-
 - CICD reset: a test for each old-format Done feature, part 3 of 6
 	- ID: 2026102819193554
 	- Type: Task
@@ -1106,6 +1092,32 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- For that flag only, no blank lines before or after.
 	- Notes:
 		- Pre-next-cut.
+
+- CICD reset: a test for each old-format Done feature, part 2 of 6
+	- ID: 2026102819193540
+	- Type: Task
+	- Status: Done
+	- Priority: High
+	- Opened: 20261028-191935
+	- Opened by: CC
+	- Parent ID: 2026102416233809
+	- Target OS: All
+	- Requirements:
+		- The old-format Done features from "Code review 20260908, the enhancement half" to "Config file: reorganized to follow the Settings dialog", 40 items.
+		- Each names its test ID beside the test it names, or says in a few words why it has none. A test is added where one could exist and doesn't, and is watched to fail with the fix taken out.
+		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
+	- Progress log:
+		- 20261028: Each test the 40 items name, by a name a test still has, now has its ID beside it, every later mention in the same item included.
+		- 20261028: Four tests named were renamed since, the remote override, profile mask, remembered size and sub-group indent ones. Each now names the test that took over.
+		- 20261028: Tests named in words also have their IDs now, the percentile test and the Copy on select placement test.
+		- 20261028: The rest say why they have no ID: comment, label, glossary and style guide text, Windows installer pages and registry, and one-time dogfood and config steps. No test was missing where one could exist, so none was added.
+	- Decisions:
+		- 20261028: As in part 1, a test renamed since keeps its old name, with "now" and the test that took over.
+	- Verified: 20261028. Every test ID added in part 2 is one the tree has, and each sits beside the name of its own test. `--backlog-run-quick docs` passed, `test-id.py --check` passes, and the markdown check finds nothing new.
+		- Swept: every name in backticks and test script path in the 40 items, every ticked sub-item for an ID or a "No test", and every "Pinned by" or "No test" written in words.
+	- Branch: rnd1029
+	- Test case: each of the 40 items names its own, or why it has none.
+	- Closed: 20261028-205827
 
 - CICD reset: a test for each old-format Done feature, part 1 of 6
 	- ID: 2026102819193525
@@ -10866,21 +10878,21 @@ Going forward, new issues in the new template at the bottom of this file, will g
 
 - ✅ Code review 20260908, the enhancement half.
 	- ✅ Releases are signed. One signature over the checksums file covers every artifact; both installers refuse a release whose signature does not verify against the key pinned in them. Inert until a key is generated - the commands are in the pipeline config, and until then a release says out loud that it is unsigned.
-		- Pinned by: `cicd/tests/release/run.bash`.
+		- Pinned by: dcbe0 `cicd/tests/release/run.bash`.
 	- ✅ One table gives every numeric setting a floor and a ceiling, and a value that is not a number falls back to its default. This is what closed defect 6 for the whole table.
-		- Pinned by: `every_numeric_setting_has_a_floor_and_a_ceiling`.
+		- Pinned by: dcbd3 `every_numeric_setting_has_a_floor_and_a_ceiling`.
 	- ✅ A config file now says what is wrong with it: lines that could not be read (which also stop it saving), a key set twice, and a key nothing reads. All three were silent.
-		- Pinned by: `a_config_says_what_is_wrong_with_it`.
+		- Pinned by: dcbej `a_config_says_what_is_wrong_with_it`.
 	- ✅ Flyover help has no quota. The rule is whether the tip says anything the label does not, and a dialog of rendering settings will have one on most of its rows. The interface guide says that now, and a test checks every tip against it.
-		- Pinned by: `no_flyover_merely_restates_its_label`.
+		- Pinned by: dcbf1 `no_flyover_merely_restates_its_label`.
 	- ✅ The shells grid's Name and Command fields take a right-click menu, like every other field in the dialog.
-		- Pinned by: `the_shells_grid_fields_have_a_right_click_menu`.
+		- Pinned by: dcbek `the_shells_grid_fields_have_a_right_click_menu`.
 	- ✅ A wallpaper is cut down to a size worth drawing before it is decoded and blurred. Measured on a 45 megapixel photo: a little over two gigabytes down to under one, and an image past the graphics card's limit no longer aborts.
-		- Pinned by: `a_large_wallpaper_is_cut_down_before_any_of_the_work` and `a_huge_image_costs_its_decode_and_no_more`.
+		- Pinned by: dcbez `a_large_wallpaper_is_cut_down_before_any_of_the_work` and dcr4g `a_huge_image_costs_its_decode_and_no_more`.
 	- ✅ The scrim's outline taps and its cursor sample only run when there is an outline and a cursor scrim to draw.
-		- Pinned by: `the_outline_taps_only_run_when_there_is_an_outline`.
+		- Pinned by: dcbep `the_outline_taps_only_run_when_there_is_an_outline`.
 	- ✅ Every launch-time config rewrite renames into place instead of truncating the file first.
-		- Pinned by: `a_launch_time_rewrite_never_truncates_the_config` and `every_settings_write_goes_through_the_restore`.
+		- Pinned by: dcbeh `a_launch_time_rewrite_never_truncates_the_config` and dcfxd `every_settings_write_goes_through_the_restore`.
 	- Opened: 20260908-041002
 	- Closed: 20260908-071500
 
@@ -10891,7 +10903,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Both machines keep the current build in a versions folder behind a symlink, with the icon beside it. Every menu and taskbar entry runs the wrapper, starts minimized, and takes its icon from the symlink, so none of them pins a build.
 	- Stray copies of the program and of the retired launcher went to the recycle bin.
 	- The launcher used to add a menu entry of its own name every run, next to whichever one had already been filed by hand, so each machine had grown three or four that all did the same thing. It adopts an existing entry now, wherever it sits. Both are down to one, beside the other terminals, plus the taskbar item.
-	- Pinned by: `cicd/tests/launcher/run.ps1`.
+	- Pinned by: dcbdd `cicd/tests/launcher/run.ps1`.
 	- Opened: 20260908-023000
 	- Closed: 20260908-030500
 
@@ -10902,7 +10914,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- A box that is switched off, or that has moved between wired and wireless, is skipped with a warning. Only an unreachable set, or a job that ran and failed, is an error.
 	- Machine names sit in a config file outside the repo, the same way no script stores an account name.
 	- The unit tests and clippy both pass against the native Windows toolchain, which the cross-build here does not exercise.
-	- Pinned by: `cicd/tests/win-remote/run.bash`.
+	- Pinned by: dd5nr `cicd/tests/win-remote/run.bash`.
 	- Opened: 20260908-010000
 	- Closed: 20260908-020000
 
@@ -10913,13 +10925,13 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- The folder GFS-rotates on every run: newest and oldest always, then the last few, then a widening spread of day, week, month and year. At most ten, at least five, and it stops at 1 GB in between. A copy that is running is never deleted.
 	- cicd installs each build under a fixed name in the app dir for the platform it targets, with the icon and a sidecar naming the build beside it. The old fixed-name and rotating dogfood destinations are gone.
 	- The menu entry runs the wrapper rather than the terminal, and takes its icon from beside the symlink, so neither pins a build.
-	- Pinned by: `cicd/tests/launcher/run.ps1`.
+	- Pinned by: dcbdd `cicd/tests/launcher/run.ps1`.
 	- Opened: 20260907-224500
 	- Closed: 20260908-001500
 
 - ✅ The config file has the SHCL format footer.
 	- Done. It sits at the bottom, naming the format and pointing at the spec and its license, in the file's own '##' comment style. A config written before it existed gets it on the next launch, and it is moved back to the bottom if a new section is added under it. A footer that has been reworded is left as it stands.
-	- Pinned by: `the_banner_is_retrofitted_and_kept_last`, `an_edited_banner_is_left_alone` and `the_template_ends_with_the_banner`.
+	- Pinned by: dc8ve `the_banner_is_retrofitted_and_kept_last`, dc8vf `an_edited_banner_is_left_alone` and dc8vd `the_template_ends_with_the_banner`.
 	- Opened: 20260906-100000
 	- Closed: 20260906-100000
 
@@ -10947,7 +10959,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- At next run, returns to previous settings (unless still in remote session).
 	- A menu item under "Bare window" (with a separator), "Temporary remote display mode", checked and unchecked automatically, and by hand.
 	- Done. The override is a flag beside the live settings and never reaches the file, so the stored profile is what the next launch comes back to. It shows in the Profile dropdown as well, with the flyover saying it lasts the session, and picking it there raises the same flag. A remote session is no longer rated at all, and the remote flag is out of the hardware hash since nothing is written for it any more.
-	- Pinned by: `the_remote_override_sits_over_the_stored_profile`, `picking_remote_never_reaches_the_stored_profile`, `rating_due_matches_the_launch_rules` and `a_display_naming_another_host_is_a_remote_screen`.
+	- Pinned by: `the_remote_override_sits_over_the_stored_profile` (now dc7ft `the_remote_profile_sits_over_the_stored_one`), dc7fw `picking_remote_never_reaches_the_stored_profile`, dcf80 `rating_due_matches_the_launch_rules` and dc6ff `a_display_naming_another_host_is_a_remote_screen`.
 	- Opened: 20260905-094509
 	- Closed: 20260905-094509
 
@@ -10956,7 +10968,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Move "Check for hardware change" to the last item under "Performance", unindented.
 	- Add a new indented checkmark below that, "Check again next program run", that gets cleared after checking next program run.
 	- Done. Both check rows are grayed while the profile is not chosen automatically, since neither does anything then. The one-shot check clears itself as the launch starts the rating, not when the rating answers, so a window closed mid-run has still spent it. The new row's label is shorter than the item's wording, because the full wording was the widest label on any tab and widened the whole dialog; the flyover says the rest.
-	- Pinned by: `each_profile_costs_less_than_the_one_above` and `rating_due_matches_the_launch_rules`.
+	- Pinned by: dc57q `each_profile_costs_less_than_the_one_above` and dcf80 `rating_due_matches_the_launch_rules`.
 	- Note: 20260930, Low draws a 1 px outline now, from "Retune the scrim defaults for the steeper exponential falloff", and the check row is "Re-test next run".
 	- Opened: 20260905-094509
 	- Closed: 20260905-094509
@@ -10967,7 +10979,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- The section heading is "Scrolling" rather than "Smooth scrolling", because the master toggle directly under it is already called that.
 	- The two scrollbar colors moved to the Themes tab, at the end of the palette. They are still not part of a theme, and their row says so.
 	- Provisional. Easy to put back if it reads worse in use.
-	- Pinned by: `the_silk_tab_has_performance_readability_and_scrolling`.
+	- Pinned by: dd5qs `the_silk_tab_has_performance_readability_and_scrolling`.
 	- Opened: 20260904-082000
 	- Closed: 20260904-090000
 
@@ -10988,7 +11000,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Done. The profile is applied on top of the stored settings when they go live, and the user's values stay in the file, so Custom puts everything back. The dialog grays the rows a profile sets, shows the profile's values, dims their revert arrows, and the flyover says which tab to go to.
 	- Seen on Linux under software rendering: a fresh config came up Low, stepped down to Standard terminal during one burst of output, and a pick of Max silk in the dialog put the wallpaper on screen while the file kept the wallpaper switched off underneath.
 	- Not yet seen: Windows, a real GPU, and a display that is not 60 Hz.
-	- Pinned by: `a_profile_masks_the_stored_values_and_custom_puts_them_back`, `a_window_of_stretched_frames_is_a_miss_and_a_pause_breaks_the_chain`, `watched_lower_stops_at_low` and `a_missing_card_is_picked_for_rather_than_timed`.
+	- Pinned by: `a_profile_masks_the_stored_values_and_custom_puts_them_back` (now dc57p `a_profile_shows_its_values_and_custom_puts_back_the_own`), dc57s `a_window_of_stretched_frames_is_a_miss_and_a_pause_breaks_the_chain`, dcf3w `watched_lower_stops_at_low` and dc7fs `a_missing_card_is_picked_for_rather_than_timed`.
 	- Note: 20260930, superseded in parts. Low keeps the wallpaper, governed rows and the dropdown stay live, the first pick is timed rather than starting at Max silk, and a step is never written. See the [performance profiles design doc](design_docs/20260930-151204_performance-profiles.md).
 	- Opened: n/a
 	- Closed: 20260903-213000
@@ -11003,7 +11015,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- ✅ Under it, one shortcut per discovered shell (but with silkterm icon), named "SilkTerm - <shell name>", starting in %USERPROFILE%.
 		- The installer looks for each shell on PATH and writes a shortcut only for the ones it finds. Same names and same order the Tabs menu uses. The icon comes free, since every shortcut targets silkterm.exe.
 		- The working directory is stored as the unexpanded `%USERPROFILE%`, so an all-users install does not bake the installing account's home directory into everyone's shortcuts.
-		- Pinned by: `the_installer_offers_the_shells_a_windows_scan_would`.
+		- Pinned by: dd5nk `the_installer_offers_the_shells_a_windows_scan_would`.
 	- ✅ Plus a plain SilkTerm shortcut with no shell argument, also starting in %USERPROFILE%.
 		- No test: needs a Windows install.
 	- ✅ Installed on Windows for the first time, which found two defects. An all-users install left no uninstall entry anywhere a 64-bit reader looks, so it would not have appeared in Add/Remove Programs and an upgrade over it could not have found it. Cause: NSIS builds a 32-bit installer, and a 32-bit process writing HKLM\Software goes in WOW6432Node. HKCU\Software is not redirected, which is why the per-user half worked and only that half.
@@ -11021,7 +11033,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- A third thing came out of it and is fixed with them. A character Unicode presents as text was being painted by an emoji face whenever one happened to have it, which drew it in the font's own colors and ignored the color the cell was set in. The heavy check mark came out purple; so did the multiplication cross and the ballot boxes, and the copyright and registered signs were at risk of it. Real emoji are unaffected.
 	- Not fixed, and it cannot be from here: the two marks still come from different fonts when the terminal font has one and not the other, so their weights can differ a little. Which fonts are involved depends on the machine.
 	- The bash prompt is left alone. It is vendored from its own repository and reads correctly on Linux, and on Windows it benefits from the emoji fix anyway.
-	- Pinned by: `the_prompt_marks_are_the_light_pair`.
+	- Pinned by: dd5nm `the_prompt_marks_are_the_light_pair`.
 	- Opened: n/a
 	- Closed: 20260903-031500
 
@@ -11030,7 +11042,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Fixed: a git remote is a shape now, the way a path or a URL already is, and a shape outranks the pair rule. `git@github.com:owner/repo.git` and the userless spelling a prompt shows both select whole, and so does an scp target like `jim@host.local:/srv/data/a.txt`.
 	- The branch a prompt writes after the remote (`repo.git:dev`) is part of the run, so a click on it selects the same field rather than falling back to the brackets. That is the one place a remote parts company with a filename, where `.git` would end the name and a `:120:5` after it would be a line number.
 	- A host needs two labels and an alphabetic last one, and the first path segment has to have a letter, so `build:release/x` and `notes.txt:12/34` stay ordinary text.
-	- Pinned by: `a_git_remote_is_a_shape` and `a_colon_after_a_word_is_not_a_remote`.
+	- Pinned by: dc2cz `a_git_remote_is_a_shape` and dc2d0 `a_colon_after_a_word_is_not_a_remote`.
 	- Opened: 20260901-183000
 	- Closed: 20260901-184335
 
@@ -11045,7 +11057,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- "Save as…" and "Rename" on the Themes tab now end in a real ellipsis, the way Settings and About already did.
 		- The three font-size items on the View menu read "Ctrl+Plus", "Ctrl+Minus" and "Ctrl+0", so every shortcut in every menu is spelled one way. Both were looked at on screen.
 		- Two differences are deliberate and stay listed rather than fixed: the capital S in "Paste Selection", which is what its accelerator has to take, and "Copy on select" sitting on the Cursor tab, which is intended and is pinned by a test.
-		- Pinned by: `every_shortcut_in_a_menu_is_written_one_way` and `a_row_that_asks_for_more_ends_in_a_real_ellipsis`.
+		- Pinned by: dd5pm `every_shortcut_in_a_menu_is_written_one_way` and dd5pn `a_row_that_asks_for_more_ends_in_a_real_ellipsis`.
 	- Opened: 20260719-085918
 	- Closed: 20260830-204500
 
@@ -11063,7 +11075,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- The keyboard section lists the shortcuts that exist rather than a sample, and no longer claims every mouse action has a keyboard twin. Dragging and in-place renaming do not.
 		- The menu bar's auto-copy checkboxes were missing from the guide entirely.
 	- Known deviations rewritten. Paste Selection and Copy on select still stand; three new ones recorded, including "Gaussian [ugly]", which is intended.
-	- Pinned by: `every_view_toggle_is_checked_while_its_subject_is_on`.
+	- Pinned by: dc3q1 `every_view_toggle_is_checked_while_its_subject_is_on`.
 	- Opened: 20260902-171500
 	- Closed: 20260902-173100
 
@@ -11085,29 +11097,29 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Done: menus have one now, on the rows that need one. A tip stands beside the menu rather than under the row, so the choices stay readable, and it works the same in a submenu.
 		- Done: the reusable part. How long the pointer has to rest, how the text is broken to fit, and where the box goes are written once and read by all four places a tip comes up. Each still draws in its own font, which is the part that should differ.
 		- Rows that say what they do get no tip. A tip on every row is noise a reader learns to skip past.
-		- Pinned by: `a_tip_wraps_on_words_and_never_splits_one`, `a_tip_with_no_room_below_goes_above`, `a_menu_tip_never_lies_over_its_own_menu` and `a_dialog_tip_waits_for_the_pointer_to_rest`.
+		- Pinned by: dbzej `a_tip_wraps_on_words_and_never_splits_one`, dbzek `a_tip_with_no_room_below_goes_above`, dbzen `a_menu_tip_never_lies_over_its_own_menu` and dcq5s `a_dialog_tip_waits_for_the_pointer_to_rest`.
 	- ✅ Size: A boolean setting to "Remember last size".
 		- Done: a stored size plus a dialog toggle. On launch it uses the remembered columns and rows, and the pair updates on every manual window resize. Startup and programmatic resizes are skipped so they cannot clobber it.
 		- Overrides an explicit numeric size, and grays out the Columns and Rows fields while it is on.
 		- The remembered values live in the config file only, never in the dialog, so the toggle can be turned off and the previous numeric size comes back. They track the last manual resize whether the toggle is on or not.
 			- ✅ "Remembered" values always active, never commented out. But only valid if 'remember_size' is true.
 				- Done: a new config file has the pair as live lines. An existing file already has them from the first resize.
-				- Pinned by: `the_template_has_the_remembered_size_as_live_lines`.
+				- Pinned by: `the_template_has_the_remembered_size_as_live_lines`, now dd5mk `the_template_has_no_remembered_size`, since the size moved out of the file.
 	- ✅ All values, including slider numbers, should also have directly editable fields (that are part of the tab order).
 		- Done: each slider has a numeric field that can be clicked or typed into, with the value clamped to the slider's range. The field joins the Tab order along with the rest of the dialog.
-		- Pinned by: `slider_numeric_field_edits_and_clamps` and `keyboard_focus_walks_controls_then_buttons`.
+		- Pinned by: d9cgw `slider_numeric_field_edits_and_clamps` and d9c8b `keyboard_focus_walks_controls_then_buttons`.
 	- ✅ Should be able to use tab key to cycle among settings, and dialog buttons, in a loop.
 		- Done: the Tab ring runs the active tab's controls and then the three footer buttons, and wraps, in both directions. Shift+Tab and the arrow keys do the same. A focused button shows the accent ring and fires on Space or Enter.
-		- Pinned by: `keyboard_focus_walks_controls_then_buttons`.
+		- Pinned by: d9c8b `keyboard_focus_walks_controls_then_buttons`.
 	- ✅ A radio button for background image, to stretch or zoom.
 		- Done: a reusable radio control, with an indicator box per option and click to pick. The row is bound to the image fit setting, Stretch is the default, and the choice persists and re-fits the image on Apply.
-		- Pinned by: `arrows_adjust_slider_and_radio` and `the_builtin_keeps_the_configured_fit`.
+		- Pinned by: d9c81 `arrows_adjust_slider_and_radio` and dasfp `the_builtin_keeps_the_configured_fit`.
 	- ✅ "Default shell": A command line to launch by default for new windows, tabs, and panes, if nothing else specified. Leave blank to use system default.
 		- Superseded: the shells list names the default now - its first switched-on entry, which the Shell tab lets you drag to the top. The separate setting and its text field are gone, and a config that had one has that entry moved to the top once, then the line removed. An initial population is led by the shell the user logs in with, so the default is right without their saying anything.
-		- Pinned by: `an_old_default_shell_becomes_the_top_of_the_list` and `a_default_shell_already_in_the_list_moves_instead_of_doubling`.
+		- Pinned by: dbfrr `an_old_default_shell_becomes_the_top_of_the_list` and dbg0r `a_default_shell_already_in_the_list_moves_instead_of_doubling`.
 	- ✅ A little more vertical space between the section headings, and the corresponding horizontal line.
 		- Done: a taller heading row, with the heading text at the top and the rule near the bottom. The two used to overlap.
-		- Pinned by: `a_heading_never_runs_into_its_rule`.
+		- Pinned by: dd5qt `a_heading_never_runs_into_its_rule`.
 	- Opened: 20260628-083740
 	- Closed: 20260830-172000
 
@@ -11119,27 +11131,27 @@ Going forward, new issues in the new template at the bottom of this file, will g
 			- "Apply": "Apply changes now, without closing Settings."
 			- "OK": "Apply changes and close Settings."
 			- Cancel got one too, for symmetry: "Discard every change and close Settings."
-			- Pinned by: `every_footer_button_has_its_own_tip`.
+			- Pinned by: dd5qv `every_footer_button_has_its_own_tip`.
 	- ✅ Tabs:
 		- ✅ Make buttons shaped more like tabs at the top of the dialog.
 			- ✅ Takes up less vertical space.
-				- Pinned by: `the_tabs_stand_on_the_line_that_closes_their_strip`.
+				- Pinned by: dava0 `the_tabs_stand_on_the_line_that_closes_their_strip`.
 			- ✅ Closer to the top but not touching.
-				- Pinned by: `the_tabs_stand_on_the_line_that_closes_their_strip`.
+				- Pinned by: dava0 `the_tabs_stand_on_the_line_that_closes_their_strip`.
 		- ✅ The tabs should sit on a darker (in dark mode) colored background, and directly on top of a line that separates that background (as a new named themable element), from the rest of the dialog below (like most tabbed interfaces).
-			- Pinned by: `the_tabs_stand_on_the_line_that_closes_their_strip`.
+			- Pinned by: dava0 `the_tabs_stand_on_the_line_that_closes_their_strip`.
 		- ✅ No "title" section for each tab, that mirrors the tab name. Just remove it.
 			- The heading stays in the declarations, because a heading is also what assigns the rows under it to a tab. It takes no space and draws nothing.
-			- Pinned by: `a_heading_that_repeats_its_tab_takes_no_room`.
+			- Pinned by: dava1 `a_heading_that_repeats_its_tab_takes_no_room`.
 		- ✅ The currently selected tab should be a lighter gray, rather than "selected" color.
 			- No test: a color choice, checked by eye.
 		- ✅ Tabs navigable via CTRL+[PgUp|PgDn], and CTRL+[Tab|Shift+Tab].
 			- These already worked, and the plain keys still reach the terminal rather than being stolen.
-			- Pinned by: `ctrl_tab_and_ctrl_page_walk_the_tabs_both_ways`.
+			- Pinned by: dava2 `ctrl_tab_and_ctrl_page_walk_the_tabs_both_ways`.
 		- Between the shorter strip and the dropped heading the dialog is 58px shorter.
 	- ✅ Express all slider values that range from 0.0 to 1.0, as an integer % from 0% to 100%. (But store as original decimal value in config though.)
 		- Six sliders read 0-100 in whole steps now; the file still keeps the decimal. Reverting one goes exactly on its own default rather than a hair off it, and a percent field takes no decimal point.
-		- Pinned by: `a_fraction_reads_as_a_whole_percent_and_stores_as_a_decimal`.
+		- Pinned by: davbe `a_fraction_reads_as_a_whole_percent_and_stores_as_a_decimal`.
 	- Found and fixed on the way: both scrollbar colors had rows in the dialog but were never written to the file, so an edit lasted only until the next launch. Every row now writes what it edits.
 	- ✅ Tabs and grouping (settings content and tab reorg):
 		- ✅ "Groups" are organized, titled sections within a dialog tab page. Differentiated by a title, and with adequate spacing between groups so that they are visually separate.
@@ -11148,9 +11160,9 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- ✅ There is now the concept of "Sub-groups" within groups, distinguished through indentation of the leading text labels (but not the controls themselves).
 			- A sub-group is not declared anywhere. It is a row followed by rows at a greater indent, so the leader and its members cannot disagree about who belongs to what. Only labels move; every control keeps its column.
 			- ✅ Sub-groups (and their style) can exist without Groups.
-				- Pinned by: `a_sub_group_stands_without_a_heading`.
+				- Pinned by: dd5qw `a_sub_group_stands_without_a_heading`.
 			- ✅ Unlike a Group, a Sub-group begins with an actual control. (Its text label is not indented, while everything below it in the sub-group is.)
-				- Pinned by: `a_sub_group_indents_labels_and_nothing_else` and `a_sub_group_leader_gets_the_gap_and_its_members_do_not`.
+				- Pinned by: `a_sub_group_indents_labels_and_nothing_else` (now ddmkf `a_sub_group_indents_labels_and_nothing_else_off_a_packed_line`) and davbc `a_sub_group_leader_gets_the_gap_and_its_members_do_not`.
 		- ✅ Tab: "Background"
 			- Sub-group: "Transparency" checkbox
 				- "Opacity" (%)
@@ -11183,7 +11195,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 				- "Strength" (Formerly "Mask strength". 0% to 100%)
 				- "Automask mix" (Formerly "Mask auto". 0% to 100%)
 			- Three sub-groups as listed. Renames done: Background image -> File or folder, Bg image opacity -> Visibility, Bg image blur -> Blur, Mask size/strength/auto -> Size/Strength/Automask mix.
-			- Pinned by: `each_tab_has_its_designed_sub_groups`.
+			- Pinned by: dd5qx `each_tab_has_its_designed_sub_groups`.
 		- ✅ Tab: "Text"
 			- Group "Font"
 				- Use system font    [ ] Face   [ ] Size
@@ -11202,7 +11214,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 					- Function
 					- Falloff
 			- ✅ Done as specified, with Strength first under the switch, since the others depend on it. The default font stack already read exactly as listed, so nothing changed there.
-				- Pinned by: `each_tab_has_its_designed_sub_groups`.
+				- Pinned by: dd5qx `each_tab_has_its_designed_sub_groups`.
 		- ✅ Tab: "Cursor"
 			- "Blink rate" slider
 			- "Shape"
@@ -11214,28 +11226,28 @@ Going forward, new issues in the new template at the bottom of this file, will g
 				- "Inactivity timer" 100 ms to 1m
 			- "Visibility"    [ ] Scrim   [ ] Outline
 			- Blink rate, Height, Width, Animation and the Scrim/Outline pair (now "Visibility"), plus Inactivity timer as a sub-group under Animation. All were config-only settings before; none is new.
-			- Pinned by: `each_tab_has_its_designed_sub_groups`.
+			- Pinned by: dd5qx `each_tab_has_its_designed_sub_groups`.
 		- ✅ Tab: "Movement" (formerly "Scrolling")
 			- Sub-groups:
 				- Scrolling
 				- Cursor
 			- Done as two sub-groups: Smooth scrolling (the five feel sliders) and Scrollbar (width, hide-when-idle, and its two colors). There is no Cursor sub-group, since cursor movement has no settings behind it, only source constants.
-			- Pinned by: `each_tab_has_its_designed_sub_groups`.
+			- Pinned by: dd5qx `each_tab_has_its_designed_sub_groups`.
 		- ✅ Tab: "Themes"
 			- ✅ Group: "Themes"
 				- ✅ "Theme" (drop-down of selectable themes).
-					- Pinned by: `picking_a_theme_adopts_its_colors` and `an_edited_theme_reads_as_unsaved_in_the_box`.
+					- Pinned by: davcs `picking_a_theme_adopts_its_colors` and dcx27 `an_edited_theme_reads_as_unsaved_in_the_box`.
 				- ✅ Buttons aligned underneath theme dropdown box, arranged in one horizontal row:
 					- [Save]  [Save as …]  [Rename]  [Delete]
 					- Behavior:
 						- ✅ [Save] is only enabled, if the user has unsaved changes to current theme. Even across sessions.
-							- Pinned by: `an_edited_color_is_what_makes_the_theme_dirty` and `focus_stays_when_the_control_under_it_grays_out`.
+							- Pinned by: davcp `an_edited_color_is_what_makes_the_theme_dirty` and davev `focus_stays_when_the_control_under_it_grays_out`.
 						- ✅ [Save as …] pops up a small dialog with the text "Enter a new theme name", and below that, an empty textbox. buttons at bottom-right "Cancel|OK" (OK default)
-							- Pinned by: `the_prompt_box_owns_the_keyboard_until_it_closes`.
+							- Pinned by: davcv `the_prompt_box_owns_the_keyboard_until_it_closes`.
 						- ✅ [Rename] pops up a small dialog to edit existing name (all text selected by default), with buttons "Cancel|OK" (OK default).
-							- Pinned by: `rename_opens_on_the_name_selected`.
+							- Pinned by: dd5qy `rename_opens_on_the_name_selected`.
 						- ✅ [Delete] pops up a confirmation Cancel|OK dialog (defaul Yes), and 'Really delete theme "<them name>"?'
-							- Pinned by: `the_prompt_swallows_every_input_path` and `a_saved_theme_shadows_a_builtin_and_delete_uncovers_it`.
+							- Pinned by: davex `the_prompt_swallows_every_input_path` and davcr `a_saved_theme_shadows_a_builtin_and_delete_uncovers_it`.
 					- Nothing records "unsaved changes" separately. A color that disagrees with the theme is the record, and it lives in the config file, so the answer is the same after a restart.
 					- A saved theme is written whole (both variants, the ANSI set included) under its own name, so it stands on its own and can be handed to someone else. Saving folds the per-color tweaks into it and drops them as overrides.
 					- A saved theme may take a built-in's name and stand in for it; deleting it puts the built-in back. Only a saved theme can be renamed or deleted.
@@ -11246,23 +11258,23 @@ Going forward, new issues in the new template at the bottom of this file, will g
 					- ✅ Sub-group: "Terminal background" (formerly labeled "Background")
 						- "Foreground"
 						- "Cursor"
-						- Pinned by: `each_tab_has_its_designed_sub_groups`.
+						- Pinned by: dd5qx `each_tab_has_its_designed_sub_groups`.
 					- ✅ Sub-group: "Dialog and menu background"
 						- ✅ "Gutter" (a new color defining small areas with no interactive elements, e.g. behind the top tabs).
-							- Pinned by: `chrome_defaults_shared_across_themes` and `every_row_survives_a_save_and_a_relaunch`.
+							- Pinned by: d9ch7 `chrome_defaults_shared_across_themes` and davbd `every_row_survives_a_save_and_a_relaunch`.
 						- ✅ "Highlights" (formerly "Focus ring"; same color but with expanded meaning as noted above)
-							- Pinned by: `a_renamed_key_frees_its_old_name_for_a_new_setting`.
+							- Pinned by: dav9z `a_renamed_key_frees_its_old_name_for_a_new_setting`.
 						- ✅ "Focus" (a new color category that used to be part of "Focus ring", but now applies only to focused element)
-							- Pinned by: `the_two_attention_colors_stay_apart` and `a_renamed_key_frees_its_old_name_for_a_new_setting`.
+							- Pinned by: dava3 `the_two_attention_colors_stay_apart` and dav9z `a_renamed_key_frees_its_old_name_for_a_new_setting`.
 						- Done: all three are themable and live on the Colors tab. The sub-group headings above wait on the grouping work; the rows are in place.
 						- ✅ Both sub-groups are in place now. The dialog and menu backgrounds and their two text colors picked up rows at the same time. They were themable but not editable, and showing only part of the set looked like an omission.
-							- Pinned by: `each_tab_has_its_designed_sub_groups`.
+							- Pinned by: dd5qx `each_tab_has_its_designed_sub_groups`.
 		- ✅ Tab: "Window":
 			- Sub-group: "Remember last size" checkbox
 				- Columns
 				- Rows
 			- Margin px
-			- Pinned by: `each_tab_has_its_designed_sub_groups`.
+			- Pinned by: dd5qx `each_tab_has_its_designed_sub_groups`.
 		- ✅ Tab: "Shell"
 			- UI:
 				- A grid, one line per stored shell, every field edited in place: "Name", "Command", "Last seen", "Active"
@@ -11270,11 +11282,11 @@ Going forward, new issues in the new template at the bottom of this file, will g
 					- "Active" is a checkbox. When it is on, the shell's name appears under "Tabs/New tab with shell … ->".
 					- The command is required: emptying the field leaves the stored one standing, and an entry that never got one is dropped rather than saved.
 				- ✅ A grip at the left of each line reorders it by dragging. This supersedes the four move icons this item first listed ("Move to top", "Move up", "Move down", "Move to bottom"), which are gone; reordering is mouse-only now.
-					- Pinned by: `a_grip_drag_reorders_the_list`, `the_grip_is_a_gesture_and_not_a_keyboard_stop` and `a_line_dragged_off_the_top_ends_up_first`.
+					- Pinned by: dbg0t `a_grip_drag_reorders_the_list`, dbg0s `the_grip_is_a_gesture_and_not_a_keyboard_stop` and dbg0v `a_line_dragged_off_the_top_ends_up_first`.
 				- ✅ "Remove" sits between "Command" and "Last seen" rather than at the end of the line, so it is harder to press by accident, and its X is red. It still asks first, the way the theme delete does.
-					- Pinned by: `the_grid_columns_stay_inside_the_panel_in_order`, `the_grip_reads_as_bars_and_the_remove_mark_reads_as_red` and `removing_a_shell_asks_before_it_happens`.
+					- Pinned by: dbfs0 `the_grid_columns_stay_inside_the_panel_in_order`, dbg14 `the_grip_reads_as_bars_and_the_remove_mark_reads_as_red` and dbfrz `removing_a_shell_asks_before_it_happens`.
 				- ✅ Below the grid, a "Default startup directory" section. It's the literal `$HOME` / `%USERPROFILE%`, understands `~` and either platform's variable spellings, and is the lowest of three precedences - a new tab, pane or window inherits from the pane it came from, and a SilkTerm launched from a shell keeps that shell's directory.
-					- Pinned by: `the_default_startup_directory_is_this_platforms_home_variable`, `a_home_token_expands_however_it_is_written`, `an_inherited_directory_is_a_choice_unless_a_launcher_picked_it` and `the_shells_grid_has_a_tab_to_itself`.
+					- Pinned by: dcq0v `the_default_startup_directory_is_this_platforms_home_variable`, dbg0q `a_home_token_expands_however_it_is_written`, dbsxm `an_inherited_directory_is_a_choice_unless_a_launcher_picked_it` and dbfrs `the_shells_grid_has_a_tab_to_itself`.
 				- An "Add" button below the grid, for a shell the scan cannot find. It adds a new line and puts the caret straight in its command field.
 				- The first switched-on shell in the list is the default for new windows, tabs and panes. The old `shell.default` setting is retired: a config that had one has that entry moved to the top of the list, once, and the line removed.
 				- Done: the whole tab. The grip and the remove mark are drawn in the shader rather than set as glyphs, since no interface font can be relied on to have either one.
@@ -11302,7 +11314,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 				- If a new shell exe is found that doesn't already exist in the stored list, add it. (User can disable it later.)
 				- If an existing already defined shell exe name isn't found by explicit path, or in the environment path variable, disable it (don't delete it).
 			- ✅ All of the behavior above is built and running. See the auto-detect item under "Features and enhancements".
-				- Pinned by: `a_shell_that_is_gone_is_switched_off_and_kept`, `a_shell_already_stored_is_not_added_twice`, `a_scan_never_switches_a_shell_back_on`, `the_login_shell_leads_and_its_twin_stays_under_it` and `a_fresh_unix_list_arrives_in_the_designed_order`.
+				- Pinned by: dbeqc `a_shell_that_is_gone_is_switched_off_and_kept`, dbeqe `a_shell_already_stored_is_not_added_twice`, dbeqd `a_scan_never_switches_a_shell_back_on`, dbjn9 `the_login_shell_leads_and_its_twin_stays_under_it` and dd5fq `a_fresh_unix_list_arrives_in_the_designed_order`.
 	- Note: a color picker, the wallpaper randomize sub-group, and a few other rows are still open under Features and enhancements.
 	- Note: 20260930, the tab layouts here are out of date. The Silk tab gathered Performance, Text readability and Scrolling, and the color picker is done. The dialog as it stands is in the [Settings dialog design doc](design_docs/20260930-145721_settings-dialog.md).
 	- Opened: 20260719-085918
@@ -11310,7 +11322,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 
 - ✅ Clearing text from tab, should reset it to default behavior - as if it had never been edited.
 	- Emptying the rename box now drops the custom title, so the tab goes back to naming its own shell and directory. A title of nothing but spaces counts as empty.
-	- Pinned by: `a_cleared_tab_title_is_no_title_at_all`.
+	- Pinned by: dbzdg `a_cleared_tab_title_is_no_title_at_all`.
 	- Opened: n/a
 	- Closed: 20260830-163000
 
@@ -11319,7 +11331,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Measured against the cell's background color rather than per-pixel. See design.md for why, and for the choice of Oklab over a WCAG ratio.
 	- Text set to exactly the background color stays hidden, since that is deliberate.
 	- Note: the nano case has not been reproduced on the Linux box, where its comments come out cyan. Still needs a check of where it shows, in case the color is coming from somewhere this does not reach.
-	- Pinned by: `dark_text_on_a_dark_background_is_lifted`, `pale_text_on_a_light_background_is_darkened`, `the_hue_survives_a_lift` and `text_hidden_in_the_background_color_stays_hidden`.
+	- Pinned by: dbzch `dark_text_on_a_dark_background_is_lifted`, dbzcj `pale_text_on_a_light_background_is_darkened`, dbzcq `the_hue_survives_a_lift` and dbzcm `text_hidden_in_the_background_color_stays_hidden`.
 	- Opened: 20260826-123553
 	- Closed: 20260830-154024
 
@@ -11329,7 +11341,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Only the first and third parts are this program's. They are split because a single total cannot say whether to attack the renderer or something else.
 	- What it cannot see is everything after the frame is handed over: the compositor and the display itself. So a figure is a floor rather than the whole wait, and it belongs at a settled prompt, since output nobody typed for is indistinguishable from an echo.
 	- It has found one thing so far. Typing marks the window dirty so the cursor can respond, and the shell's reply then arrives while that frame is still being drawn, which puts a whole frame of the wait in the middle leg rather than the last. On a slow renderer that doubles the total. Still needs a look when the render path is next opened up.
-	- No test: it times real keystrokes. The percentile math is pinned in `perf.rs`.
+	- No test: it times real keystrokes. The percentile math is pinned in `perf.rs`, by dbzbe `percentiles_never_step_past_the_last_sample`.
 	- Opened: 20260826-123553
 	- Closed: 20260830-152000
 
@@ -11337,8 +11349,8 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Verified at 16pt against the usual 13. The menu bar, a dropdown, and all seven Settings tabs were looked at. Everything sizes off the interface font and stays put: titles and the copy cluster keep their margin, dropdowns fit their content, rows center, and the Shell grid holds its columns. The panel gets wider, as it should.
 	- Fixed on the way: the panel's scrollbar sat one pixel from the Shell tab's last column, which read as touching it. It hugs the panel edge now, so there is clear space either side.
 	- Fixed: Blur px, Scrim radius px and Outline px read 10.00, 5.00 and 1.00 beside whole percentages. All three step in whole pixels now, the way Scrollbar width px already did. Line height keeps its decimals, which it needs.
-	- Checked and left alone: "Copy on select" looks out of place at the bottom of the Cursor tab, but that placement is intended, and a test pins it there.
-	- Pinned by: `every_slider_names_its_unit_and_pixels_step_whole`.
+	- Checked and left alone: "Copy on select" looks out of place at the bottom of the Cursor tab, but that placement is intended, and a test pins it there, dbfrt `copy_on_select_is_the_last_thing_on_the_cursor_tab`.
+	- Pinned by: dd5qz `every_slider_names_its_unit_and_pixels_step_whole`.
 	- Opened: 20260703-100322
 	- Closed: 20260830-151809
 
@@ -11350,7 +11362,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Note: narrowed 20260916 by F37, but only for a command. Its arguments are handed to the program as written now, and only the program name is expanded. A setting that names a path still reads all three spellings on either platform, as below. The startup directory defaults to the home variable in the platform's own spelling.
 	- Reaches the startup directory and `--directory` as before, and now the wallpaper image, the rotation folder, the link opener, and every shell command in the list. A command is split into arguments first, so a variable holding a path with a space in it stays one argument.
 	- A `~` with no home directory to put there is left standing rather than turned into an absolute path meaning something else.
-	- Pinned by: `a_home_token_expands_however_it_is_written`, `the_other_platforms_spelling_of_a_name_still_answers`, `a_config_command_expands_the_program_and_nothing_after_it` and `tilde_expands_to_home_but_only_for_this_user`.
+	- Pinned by: dbg0q `a_home_token_expands_however_it_is_written`, dbz8n `the_other_platforms_spelling_of_a_name_still_answers`, dcq05 `a_config_command_expands_the_program_and_nothing_after_it` and daq1b `tilde_expands_to_home_but_only_for_this_user`.
 	- Opened: 20260826-123553
 	- Closed: 20260830-133718
 
@@ -11359,7 +11371,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- The color chip beside a hex field grew to match the field, so the pair reads as one control.
 	- Dialog text now centers on the text itself rather than on its line box, which is what left it riding high. The main window's chrome already worked this way.
 	- Controls center in the row they are in, rather than in the row floor. At a large interface font the two are far apart and everything sat high.
-	- Pinned by: `a_field_has_room_for_its_text_and_centers_in_its_row`.
+	- Pinned by: dd5r0 `a_field_has_room_for_its_text_and_centers_in_its_row`.
 	- Opened: n/a
 	- Closed: 20260830-160000
 
@@ -11377,7 +11389,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Titles do not have to be unique.
 	- Typing back the name the tab would have had on its own puts it back to naming the shell, which is the way out of a hand-typed title.
 	- Opening or closing a tab ends an edit in progress, since the edit is keyed by the tab's position.
-	- Pinned by: `renaming_a_tab_stays_on_character_boundaries` and `a_cleared_tab_title_is_no_title_at_all`.
+	- Pinned by: dbz70 `renaming_a_tab_stays_on_character_boundaries` and dbzdg `a_cleared_tab_title_is_no_title_at_all`.
 	- Opened: n/a
 	- Closed: 20260830-143000
 
@@ -11387,7 +11399,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- After that comes, in order: a title typed on the tab, else the title the running program set, else what the tab says about the shell. So a program that renames the window reaches the title bar without touching the tab, and a typed tab title outranks it.
 	- A tab deliberately blanked lets the program's title through; with neither, the title is only the application name.
 	- A `--title` on the command line is still the whole answer, verbatim.
-	- Pinned by: `the_window_title_takes_the_typed_name_then_the_program_then_the_tab`, `a_title_on_the_command_line_is_the_whole_answer` and `a_program_naming_only_itself_falls_through_to_the_tab`.
+	- Pinned by: dcd4x `the_window_title_takes_the_typed_name_then_the_program_then_the_tab`, dcd5q `a_title_on_the_command_line_is_the_whole_answer` and dcd4y `a_program_naming_only_itself_falls_through_to_the_tab`.
 	- Opened: 20260628-083740
 	- Closed: 20260830-143000
 
@@ -11415,46 +11427,46 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- `--option[=| ]value` | `-o value`
 		- `--unary-flag` | `--unary-flag[=| ]\(true|t|yes|y|Y|1|false|f|no|n|N|0\)` | `-u` | …etc.
 		- In other words, even unary flags can be treated as options, and important options have single unique "short" versions.
-		- Pinned by: `window_opts`, `a_directory_cascades_the_way_a_shell_does` and `wallpaper_never_eats_the_next_option`.
+		- Pinned by: d913y `window_opts`, dbh65 `a_directory_cascades_the_way_a_shell_does` and da708 `wallpaper_never_eats_the_next_option`.
 	- ✅ `--config[=| ]"alternate config file location"`
 		- Done. Settings saves to the alternate while it is in force. The per-window notes below wait on multi-window, which does not exist yet.
 		- When active per-session, settings dialog should save to defined alternate.
 		- All launches without this flag should default to existing config.
 		- Configs are per-window, not per-tab.
 		- Multiple windows can all have different configs specified and active. When a tab is undocked and moved to a different existing window, it automatically changes to that Window's config.
-		- Pinned by: `config_names_the_file_in_either_form_and_only_for_the_window`.
+		- Pinned by: dd5n7 `config_names_the_file_in_either_form_and_only_for_the_window`.
 	- Window-level options (all options only apply to a single window per launch):
 		- General:
 			- Specifying window-level options after any tab/pane marker (`--new-tab`, `--tab`, `--new-pane`, `--pane`) should exit with an error.
 		- ✅ `--columns[=| ]<n>`
 			- Primary way to specify window width
-			- Pinned by: `window_opts` and `a_number_is_held_to_its_settings_range`.
+			- Pinned by: d913y `window_opts` and dcq6t `a_number_is_held_to_its_settings_range`.
 		- ✅ `--rows[=| ]<n>`
 			- Primary way to specify window height
-			- Pinned by: `window_opts` and `a_number_is_held_to_its_settings_range`.
+			- Pinned by: d913y `window_opts` and dcq6t `a_number_is_held_to_its_settings_range`.
 		- ✅ `--pixel-width[=| ]<n>`
 			- Alternate way to specify window width
-			- Pinned by: `pixel_width_and_height_take_a_whole_number_before_any_tab`.
+			- Pinned by: dd5n8 `pixel_width_and_height_take_a_whole_number_before_any_tab`.
 		- ✅ `--pixel-height[=| ]<n>`
 			- Alternate way to specify window height
-			- Pinned by: `pixel_width_and_height_take_a_whole_number_before_any_tab`.
+			- Pinned by: dd5n8 `pixel_width_and_height_take_a_whole_number_before_any_tab`.
 		- ✅ `--background-opacity[=| ]<n>`
-			- Pinned by: `a_number_is_held_to_its_settings_range` and `a_non_finite_number_is_refused`.
+			- Pinned by: dcq6t `a_number_is_held_to_its_settings_range` and dcq6s `a_non_finite_number_is_refused`.
 		- ✅ `--hide-windowframe[[=| ]bool]`
-			- Pinned by: `hide_windowframe_is_a_window_bool`.
+			- Pinned by: dd5n9 `hide_windowframe_is_a_window_bool`.
 		- ✅ `--hide-menu[[=| ]bool]`
-			- Pinned by: `window_opts`.
+			- Pinned by: d913y `window_opts`.
 		- ✅ `--fullscreen[[=| ]bool]`
-			- Pinned by: `window_opts`.
+			- Pinned by: d913y `window_opts`.
 		- ✅ `--help` | `-h`
 			- Shows program name, version and build# in its header, and lists the options. Copyright and license live in `--about` rather than being repeated here.
-			- Pinned by: `cli_only_flags_are_taken_anywhere`, `usage_lists_every_cli_only_flag` and `version_names_the_build_as_well_as_the_release`.
+			- Pinned by: db7ea `cli_only_flags_are_taken_anywhere`, db7ef `usage_lists_every_cli_only_flag` and dbsdk `version_names_the_build_as_well_as_the_release`.
 		- ✅ `--syntax`
 			- Similar to `--help` but just list options and meaning.
-			- Pinned by: `cli_only_flags_are_taken_anywhere` and `usage_lists_every_cli_only_flag`.
+			- Pinned by: db7ea `cli_only_flags_are_taken_anywhere` and db7ef `usage_lists_every_cli_only_flag`.
 		- ✅ `--version`
 			- Shows program name, version, and build#. One flush line, so a script can still read the version as the second field.
-			- Pinned by: `version_names_the_build_as_well_as_the_release` and `the_three_version_spellings_are_one_flag`.
+			- Pinned by: dbsdk `version_names_the_build_as_well_as_the_release` and db7eb `the_three_version_spellings_are_one_flag`.
 	- Hierarchical options:
 		- General notes:
 			- There is always an implicit first tab and first pane, each addressable by ID "0" or "main"; a window can never have zero tabs, nor a tab zero panes.
@@ -11465,86 +11477,86 @@ Going forward, new issues in the new template at the bottom of this file, will g
 			- Order matters: options apply to the current tab/pane at the point they appear. You may re-select an earlier entity (e.g. `--tab=0`) later in the same command line to add panes to it or change its settings.
 		- ✅ `--new-tab[[=| ]<handle>]`
 			- Create a new tab and make it current. Optional handle names it (unique within the window) for later `--tab=<handle>`. The implicit first tab (ID "0"/"main") always exists, so N `--new-tab`s => N+1 tabs.
-			- Pinned by: `tabs_and_panes`.
+			- Pinned by: d9140 `tabs_and_panes`.
 		- ✅ `--tab[=| ]<id>`
 			- Select an existing tab (ID "0"/"main" or a handle) and make it current - to add panes or change its settings. ID required; selecting a nonexistent tab errors.
-			- Pinned by: `tab_selects_by_handle_or_first_and_later_options_go_there`.
+			- Pinned by: dd5na `tab_selects_by_handle_or_first_and_later_options_go_there`.
 		- ✅ `--new-pane[[=| ]<handle>]`
 			- Create a new pane (splitting `--splits`, default = the current pane) and make it current. Optional handle names it (unique within the tab) for later `--pane=<handle>` / `--splits=<handle>`. The implicit first pane (ID "0"/"main") always exists and is never created by `--new-pane`.
-			- Pinned by: `tabs_and_panes`.
+			- Pinned by: d9140 `tabs_and_panes`.
 		- ✅ `--pane[=| ]<id>`
 			- Select an existing pane (ID "0"/"main" or a handle, within the current tab) and make it current. ID required; selecting a nonexistent pane errors.
-			- Pinned by: `pane_selects_by_handle_and_a_split_can_name_it`.
+			- Pinned by: dd5nb `pane_selects_by_handle_and_a_split_can_name_it`.
 		- ✅ `--title[=| ]<"Display title">`
 			- Before any tab/pane marker: replaces the default window title. After a tab marker (`--new-tab`/`--tab`): replaces that tab's calculated title. After a pane marker: ignored (reserved for a possible future per-pane use; not an error).
 			- Display only; not a handle, not inheritable.
-			- Pinned by: `a_title_names_the_window_or_the_tab_it_follows`.
+			- Pinned by: dd5nc `a_title_names_the_window_or_the_tab_it_follows`.
 		- ✅ `--splits[=| ]<pane id to split>` (alias `--splits-pane`)
 			- Only valid with `--new-pane`; error otherwise.
 			- Optional. Default = the current pane in the current tab (resets to "0"/"main" after every tab create/select). Splitting the implicit first pane is fine - that's the first split.
-			- Pinned by: `tabs_and_panes` and `first_pane_rejects_split`.
+			- Pinned by: d9140 `tabs_and_panes` and d9141 `first_pane_rejects_split`.
 		- ✅ `--down` | `--up` | `--right` | `--left` `[[=| ]bool]`
 			- Where the new pane goes relative to the pane it splits: `--down`/`--up` stack it below/above; `--right`/`--left` place it to the right/left.
 			- Only valid with `--new-pane`; error otherwise.
 			- Inheritable along the split chain: a later pane that splits this one reuses this direction unless it sets its own (handy for stacking a run of panes the same way).
-			- Pinned by: `tabs_and_panes`.
+			- Pinned by: d9140 `tabs_and_panes`.
 		- ✅ Default direction when a `--new-pane` gives none and has nothing to inherit: "right" or "down", whichever has more space. ("Save layout" always emits an explicit direction rather than relying on this.)
-			- Pinned by: `a_split_with_no_direction_goes_along_the_longer_side`.
+			- Pinned by: dd5py `a_split_with_no_direction_goes_along_the_longer_side`.
 		- ✅ `--size[=| ]<(n columns or rows | n%) of the split (parent) space in the split direction>`
 			- Defaults to 50%.
 				- Exception: a run of same-direction splits with no explicit size redistributes those adjacent undefined-size panes to ~equal in that direction.
 			- Only valid with `--new-pane`; error otherwise. Not inheritable.
-			- Pinned by: `size_and_colors`, `a_number_is_held_to_its_settings_range` and `equalize_three_in_a_row`.
+			- Pinned by: d9146 `size_and_colors`, dcq6t `a_number_is_held_to_its_settings_range` and d9cnh `equalize_three_in_a_row`.
 		- ✅ `--shell[=| ]"command"`
 			- Can contain escaped single and/or double quotes, as logically required by whatever quotes are used around the whole command.
 			- Inheritable unless overridden (for panes, to any pane declaring this pane as its `--splits`).
-			- Pinned by: `shell_splitting`, `shell_quotes`, `shell_keeps_unquoted_backslashes` and `style_cascade_scope`.
+			- Pinned by: d9143 `shell_splitting`, d9144 `shell_quotes`, dact6 `shell_keeps_unquoted_backslashes` and d9145 `style_cascade_scope`.
 		- ✅ `--directory[=| ]"path"` (alias `--dir`)
 			- Where the shell starts. Beats every other source: an inherited directory, the directory SilkTerm was launched from, and the `shell.startup_directory` setting.
 			- `~` and either platform's variable spellings are understood, and are expanded at spawn time rather than at parse - so a directory written into the config's own command line means the same thing there.
 			- A path that is not a directory is reported once, naming the flag, and that scope falls back to what it would have used without it.
 			- Inheritable unless overridden (for panes, to any pane declaring this pane as its `--splits`).
-			- Pinned by: `a_directory_cascades_the_way_a_shell_does`, `a_named_directory_is_expanded_and_checked` and `an_inherited_directory_is_a_choice_unless_a_launcher_picked_it`.
+			- Pinned by: dbh65 `a_directory_cascades_the_way_a_shell_does`, dbh66 `a_named_directory_is_expanded_and_checked` and dbsxm `an_inherited_directory_is_a_choice_unless_a_launcher_picked_it`.
 		- ✅ `--keep-open[=| ]bool`
 			- Keep pane|tab|window open after shell command exits, showing exit value.
 			- Inheritable unless overridden (for panes, to any pane declaring this pane as its `--splits`).
 			- Done: the pane stays where it is, adds a line saying how the shell ended, hides the cursor and takes no more typing. Any key that would have gone to the shell closes it, and the pane, tab and window then close in the usual order.
 			- A pane that is not the focused one waits until it is clicked, since a keystroke goes where the focus is.
-			- Pinned by: `keep_open_is_read_at_every_level` and `an_exit_status_reads_the_same_on_every_platform`.
+			- Pinned by: dbz42 `keep_open_is_read_at_every_level` and dbz43 `an_exit_status_reads_the_same_on_every_platform`.
 		- ✅ `--font-name[=| ]"string"`
 			- Note: window-level applied, per-pane deferred.
 			- Inheritable unless overridden (for panes, to any pane declaring this pane as its `--splits`).
-			- Pinned by: `window_style_folds_into_settings`.
+			- Pinned by: d974f `window_style_folds_into_settings`.
 		- ✅ `--font-size[=| ]<n>`
 			- Note: window-level applied, per-pane deferred.
 			- Inheritable unless overridden (for panes, to any pane declaring this pane as its `--splits`).
-			- Pinned by: `window_style_folds_into_settings` and `a_number_is_held_to_its_settings_range`.
+			- Pinned by: d974f `window_style_folds_into_settings` and dcq6t `a_number_is_held_to_its_settings_range`.
 		- ✅ `--background-color[=| ]<hex>`
 			- Note: window-level applied, per-pane deferred.
 			- Inheritable unless overridden (for panes, to any pane declaring this pane as its `--splits`).
-			- Pinned by: `window_style_folds_into_settings` and `size_and_colors`.
+			- Pinned by: d974f `window_style_folds_into_settings` and d9146 `size_and_colors`.
 		- ✅ `--foreground-color[=| ]<hex>`
 			- Note: window-level applied, per-pane deferred.
 			- Inheritable unless overridden (for panes, to any pane declaring this pane as its `--splits`).
-			- Pinned by: `window_style_folds_into_settings`.
+			- Pinned by: d974f `window_style_folds_into_settings`.
 		- ✅ `--background-image[=| ]"path"`
 			- Note: window-level applied, per-pane deferred.
 			- No value = no background image.
 			- Option not included = fall back to config value.
 			- Inheritable unless overridden (for panes, to any pane declaring this pane as its `--splits`).
-			- Pinned by: `window_style_folds_into_settings`, `wallpaper_never_eats_the_next_option` and `window_style_noop_leaves_defaults`.
+			- Pinned by: d974f `window_style_folds_into_settings`, da708 `wallpaper_never_eats_the_next_option` and d974g `window_style_noop_leaves_defaults`.
 		- ✅ `--background-image-stretch[[=| ]bool]`
 			- Note: window-level applied, per-pane deferred.
 			- Inheritable unless overridden (for panes, to any pane declaring this pane as its `--splits`).
-			- Pinned by: `stretch_is_taken_in_both_spellings_and_reaches_the_settings`.
+			- Pinned by: dd5nd `stretch_is_taken_in_both_spellings_and_reaches_the_settings`.
 		- ✅ `--background-image-zoom[[=| ]bool]`
 			- Note: window-level applied, per-pane deferred.
 			- Inheritable unless overridden (for panes, to any pane declaring this pane as its `--splits`).
-			- Pinned by: `wallpaper_never_eats_the_next_option` and `window_style_folds_into_settings`.
+			- Pinned by: da708 `wallpaper_never_eats_the_next_option` and d974f `window_style_folds_into_settings`.
 		- ✅ `--background-image-opacity[=| ]<n>`
 			- Note: window-level applied, per-pane deferred.
 			- Inheritable unless overridden (for panes, to any pane declaring this pane as its `--splits`).
-			- Pinned by: `window_style_folds_into_settings` and `a_number_is_held_to_its_settings_range`.
+			- Pinned by: d974f `window_style_folds_into_settings` and dcq6t `a_number_is_held_to_its_settings_range`.
 	- Note: per-pane scope and a few smaller pieces are still open under Features and enhancements.
 	- Opened: 20260628-083740
 	- Closed: 20260830-110900
@@ -11552,7 +11564,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - ✅ These values in Settings should be expressed in % (in labels), and displayed as integers.
 	- Done: transparency opacity, wallpaper visibility, the three contrast mask sliders, text scrim strength and softness, cursor height and width, and the five smooth-scrolling sliders all have a % on the label. Every one of them already ran in whole steps, so nothing needed rounding.
 	- The five scrolling sliders are a relative 1 to 100 scale rather than a percentage of any measured thing, so the % there reads as percent of the fastest setting.
-	- Pinned by: `a_fraction_reads_as_a_whole_percent_and_stores_as_a_decimal`.
+	- Pinned by: davbe `a_fraction_reads_as_a_whole_percent_and_stores_as_a_decimal`.
 	- Opened: n/a
 	- Closed: 20260830-105645
 
@@ -11560,7 +11572,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Done: wallpaper blur and scrollbar width now say px, cursor blink rate says ms, the cursor animation inactivity timer says s. Scrim radius picked up px too, since it sits next to the outline, which already had it.
 	- The window margin and the scrollbar width are both in logical pixels, so px was already the right word for the margin and nothing changed there.
 	- The blink rate and inactivity timer help lines no longer repeat the unit now that the label has it.
-	- Pinned by: `every_slider_names_its_unit_and_pixels_step_whole`.
+	- Pinned by: dd5qz `every_slider_names_its_unit_and_pixels_step_whole`.
 	- Opened: n/a
 	- Closed: 20260830-105645
 
@@ -11576,12 +11588,12 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- ✅ The Linux pipeline installs its Windows cross-build beside its own binary, so the Windows box picks up a Linux-made build without anyone copying it by hand.
 		- No test: a copy step. Each run's dogfood pool shows it worked.
 	- ✅ Both launchers work the same way now: check this clone's release build, the network host, and the dogfood location, take whichever is newer than what is already kept, then run the newest. Each step says what it did, on screen and in a log beside the pool.
-		- Pinned by: `cicd/tests/launcher/run.ps1`.
+		- Pinned by: dcbdd `cicd/tests/launcher/run.ps1`.
 	- ✅ A copy is named for the build's own date rather than the date it was copied, so the same build arriving two ways is only kept once.
 		- Cause: the rotating install dated its copy from when the pipeline run started, about eight minutes off the build, and a synced copy can be restamped on the way through Dropbox. Three copies of one binary, three dates. So the launchers kept re-taking a build they already had, and which one looked newest came down to who wrote last.
 		- Fixed: the rotating install dates and names its copy from the build. Both launchers compare the bytes when a source looks newer, and a match only takes the newer date, so a build is kept once whatever the dates say. Neither launcher will prune the newest copy any more, however old it is. A quiet week used to empty the pool and drop the launch to a fallback terminal.
 		- Fixed: every build has a build number now, so two dogfood builds of one release are no longer indistinguishable. The launcher still ranks copies by date, which is right for choosing what to run; the number is what settles which build a report is about.
-		- Pinned by: `cicd/tests/launcher/run.ps1`.
+		- Pinned by: dcbdd `cicd/tests/launcher/run.ps1`.
 	- ✅ The bash launcher used to run whatever it found, in place. It has the same sources, the same pruning and the same reporting as the Windows one now.
 		- No test: that launcher was replaced by the PowerShell one.
 	- ✅ Both launchers have been run on their own box. Verified on Linux with the network host reachable: it copies in a newer build, declines one it already has, and runs the newest. A copy that is old but still running is left alone when the pool is pruned; an idle one of the same age goes.
@@ -11594,7 +11606,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 
 - ✅ Checkboxes to dis/enable shells should be square (and vertically centered in row), not rectagular
 	- Done: the Active box in the Shell tab was as tall as the fields beside it. It is square now, the same size as every other checkbox, and centered on its line.
-	- Pinned by: `a_shells_active_box_is_square_and_centered_on_its_line`.
+	- Pinned by: dd5r1 `a_shells_active_box_is_square_and_centered_on_its_line`.
 	- Opened: n/a
 	- Closed: 20260829-082748
 
@@ -11603,7 +11615,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Two of its additions are in use. A save goes through a temp file and a rename, so a crash mid-save cannot leave a truncated config, and it is refused when the load had to drop a line the save would delete. A setting the writer cannot place is now reported rather than silently skipped.
 	- ✅ Reorganize the config file into a more logical order while in there.
 		- The template now follows the Settings dialog: background and transparency, font, text, cursor, selection, scrolling, theme and colors, window, hyperlinks, shell. An existing config keeps its own order; only a new file gets this one.
-		- Pinned by: `the_template_blocks_follow_the_dialog`.
+		- Pinned by: dd5mm `the_template_blocks_follow_the_dialog`.
 	- ✅ Delete the existing old config files and start over.
 		- The Windows config and the old toml beside it are gone. The Linux box's config was left, since it could not be reached.
 		- No test: a one-time delete of old config files.
@@ -11612,7 +11624,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 
 - ✅ One View menu item, also on the context menu, that temporarily hides the tab strip, the menu bar and the window decoration together. Working name "windowless mode", but can probably think of a better name/phrase.
 	- Done as "Bare window", a checkmark row at the end of the View menu and beside "Menu bar" in the right-click menu. Nothing is written to the config. Turning it off puts back whichever of the frame and menu bar were on before; one switched on in the meantime stays on. The name is a first pick and easy to change.
-	- Pinned by: `leaving_a_bare_window_puts_back_only_what_was_on`.
+	- Pinned by: dd5pj `leaving_a_bare_window_puts_back_only_what_was_on`.
 	- Opened: 20260826-123553
 	- Closed: 20260828-110214
 
@@ -11623,21 +11635,21 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Done: every image in the pack and in the masters has 10% opacity and blur 10, the code defaults.
 	- Add a checkbox in Settings for whether to honor them, if populated and valid values. (Default yes.)
 		- Done: "Honor look tags", under the Blur slider, on by default. A tag that is missing or does not parse leaves the setting alone.
-	- Pinned by: `an_images_look_tags_win_until_honor_look_tags_is_off`.
+	- Pinned by: dd5n3 `an_images_look_tags_win_until_honor_look_tags_is_off`.
 	- Opened: 20260826-123553
 	- Closed: 20260830-091855
 
 - ✅ The CICD pipeline does not say which combination host environments it is running on. Print it in the plan header, since the skips differ depending on that.
 	- The Windows plan header names the Linux half, or says WSL2 is here and unused, or that there is none.
 	- `cicd.bash` now opens its header with a Host line: plain Linux with the distribution and arch, WSL or WSL2 with the distribution and whether it is the Linux half of a Windows run or running on its own, or a Windows shell with a pointer to the right pipeline.
-	- Pinned by: `cicd/tests/engine/run.bash`.
+	- Pinned by: dd5nn `cicd/tests/engine/run.bash`.
 	- Opened: 20260824-123142
 	- Closed: 20260828-105722
 
 - ✅ Config file: reorganized to follow the Settings dialog.
 	- ✅ Reorganize the whole thing more logically, similar to how the Settings dialog is organized.
 		- Done under the SHCL pickup above: a new file follows the dialog's tab order. An existing file keeps its own order.
-		- Pinned by: `the_template_blocks_follow_the_dialog`.
+		- Pinned by: dd5mm `the_template_blocks_follow_the_dialog`.
 	- Opened: 20260719-085918
 	- Closed: 20260828
 
