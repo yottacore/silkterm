@@ -34,6 +34,30 @@ Going forward, new issues in the new template at the bottom of this file, will g
 
 ## Issues
 
+- A backlog line names a path under the private notes folder
+	- ID: 2026102819390403
+	- Type: Bug
+	- Status: Queued
+	- Priority: Low
+	- Opened: 20261028-193904
+	- Opened by: CC
+	- Target OS: All
+	- Requirements:
+		- One line in the public backlog names `lsan_some_tests.bash` under the private notes folder. Public docs shouldn't name it. Say what the script does, or move the note to the private notes.
+
+- CICD reset: the private runner's tests still use old base 62 test IDs
+	- ID: 2026102819390388
+	- Type: Task
+	- Status: Queued
+	- Priority: Avg
+	- Opened: 20261028-193903
+	- Opened by: CC
+	- Related IDs: 2026102819264421
+	- Target OS: All
+	- Requirements:
+		- The private repo's tests weren't part of the 10-28 conversion. Its one ID this backlog names, Eu0WzDd, became dehx0 here, so the private repo's own test should use that.
+		- Convert with the same old-to-new map the 10-28 conversion used, and its ID check should refuse the old form too.
+
 - CICD reset: IDs for the scroll scenes and fuzz cases
 	- ID: 2026102819265312
 	- Type: Task
