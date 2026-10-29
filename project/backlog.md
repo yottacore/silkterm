@@ -779,6 +779,18 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
 		- Overrides: design.md's CodeQL and heap growth bullets under "Delivery", which keep CodeQL behind `--codeql` and every leak check out of `--quick`.
 
+- Make sure shcl files from v1.0.0-beta3 are accurately converted to the latest shcl spec
+	- ID: 2026102818080401
+	- Type: Enhancement
+	- Status: Queued
+	- Opened: 20261028-180804
+	- Opened by: JC
+	- Requirements:
+		- Files from v1.0.0-beta3 are accurately converted to the latest shcl spec.
+		- The latest spec is listed as v2 but is actually working toward v3 beta.
+	- Notes:
+		- Pre-next-cut.
+
 - The private Mac build prints empty sizes and five `stat` errors on b26
 	- ID: 2026102811082478
 	- Type: Bug
@@ -909,18 +921,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Requirements:
 		- `--about` shows only the first line of the existing output.
 		- For that flag only, no blank lines before or after.
-	- Notes:
-		- Pre-next-cut.
-
-- Make sure shcl files from v1.0.0-beta3 are accurately converted to the latest shcl spec
-	- ID: 2026102818080401
-	- Type: Enhancement
-	- Status: Queued
-	- Opened: 20261028-180804
-	- Opened by: JC
-	- Requirements:
-		- Files from v1.0.0-beta3 are accurately converted to the latest shcl spec.
-		- The latest spec is listed as v2 but is actually working toward v3 beta.
 	- Notes:
 		- Pre-next-cut.
 
