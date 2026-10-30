@@ -415,6 +415,47 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Pre-next-cut.
 		- Work first after the CICD issues.
 
+- Regression: "Conserve resources", "Minutes otherwise" isn't working
+	- ID: 2026103010083401
+	- Type: Bug
+	- Status: Queued
+	- Opened: 20261030-100834
+	- Opened by: JC
+	- Assigned to: CC
+	- Target OS: All
+	- Notes:
+		- Pre-next-cut.
+		- Need a test case for this to make sure it doesn't keep coming back.
+
+- Regression: On Linux, the settings dialog is detached from the main window, and is its own alt+tab target
+	- ID: 2026103010083402
+	- Type: Bug
+	- Status: Queued
+	- Opened: 20261030-100834
+	- Opened by: JC
+	- Assigned to: CC
+	- Target OS: Linux
+	- Expected behavior:
+		- Settings should always be on top of the main window, never able to be behind it.
+			- Most Linux DEs purposely allow moving a window that has a modal dialog over it, even though the modal still stays over it. That's fine.
+		- There should only be one window pager target, and only one taskbar button, when Settings is open.
+	- Notes:
+		- Pre-next-cut.
+		- Need a test case for this to make sure it doesn't keep coming back.
+
+- The unscrollable search and buttons areas should be lighter than the scrollable content
+	- ID: 2026103010083403
+	- Type: Enhancement
+	- Status: Queued
+	- Opened: 20261030-100834
+	- Opened by: JC
+	- Assigned to: CC
+	- Requirements:
+		- The unscrollable search and buttons areas should be lighter than the scrollable content.
+		- The scrollable content needs to be darker (in dark mode at least).
+	- Notes:
+		- Pre-next-cut.
+
 - CICD reset: a test for each old-format Done feature, part 3 of 6
 	- ID: 2026102819193554
 	- Type: Task
