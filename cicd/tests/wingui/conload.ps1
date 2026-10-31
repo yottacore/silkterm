@@ -21,7 +21,7 @@
 
 
 $dir = Join-Path $OutDir "conload"
-Remove-Item $dir -Recurse -ErrorAction SilentlyContinue
+fClearOut $dir
 $onPath = Join-Path $dir "onpath"
 $here = Join-Path $dir "here"
 $elsewhere = Join-Path $dir "elsewhere"

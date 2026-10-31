@@ -21,6 +21,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $helper = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '../_testdir.ps1')).Path
 . $helper; fTestDir_Use
+. (Join-Path $PSScriptRoot '../../utility/include/saferm.ps1')
 $failures = 0
 function fCheck([string]$What, [bool]$Ok) {
 	if ($Ok) { Write-Output "  ok   $What" } else { Write-Output "  FAIL $What"; $script:failures++ }
@@ -41,7 +42,7 @@ foreach ($n in 1..6) {
 	[System.IO.File]::AppendAllText($ledger, "$(fDir $n)`ttok-$n`n")
 }
 Set-Content -LiteralPath (Join-Path (fDir 2) '.test_silkterm_owner') -Value 'tok-other'
-Remove-Item -LiteralPath (fDir 3) -Recurse -Force
+if (-not (fSafeRm_Under $base (fDir 3))) { throw "could not remove $(fDir 3)" }
 $elsewhere = Join-Path $work 'four'
 Move-Item -LiteralPath (fDir 4) -Destination $elsewhere
 $null = New-Item -ItemType $link -Path (fDir 4) -Target $elsewhere

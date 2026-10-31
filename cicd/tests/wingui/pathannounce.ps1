@@ -78,7 +78,7 @@ try {
 	$key.DeleteValue($marker, $false)
 	$key.Close()
 	if (Get-Command fAnnounceEnvironment -ErrorAction SilentlyContinue) { fAnnounceEnvironment }
-	Remove-Item -Recurse -Force -LiteralPath $dir -ErrorAction SilentlyContinue
+	$null = fSafeRm_Under $env:TEMP $dir
 }
 
 ##	History:

@@ -777,7 +777,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - CICD reset: the PowerShell test scripts' recursive removals through the guard
 	- ID: 2026102808471076
 	- Type: Task
-	- Status: Queued
+	- Status: Testing
 	- Priority: Avg
 	- Opened: 20261028-084710
 	- Opened by: CC
@@ -788,11 +788,23 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Every `Remove-Item -Recurse` under `cicd/tests` goes through the guard, about 33 lines: the launcher, install, release, cleanup and wingui scripts.
 		- Their scratch folders sit in the test run folder in TEMP, not under a tmp folder, so they use the one-parent form with the folder they made, until 2026102807494157 moves run folders under `HOST_TEMP`.
 		- Run on b29w, and the wingui ones on vm925w.
+	- Progress log:
+		- 20261031: All 33 lines go through `fSafeRm_Under`, 31 in the test scripts and one in the launcher `wingui/run.bash` writes, plus install.ps1's in 2026102808472645. The parent is the folder each path was built from: the temp folder, which the test run folder stands in for, the scenario's out folder, or the box's run folder.
+		- 20261031: The Windows scenarios get the guard in their bundle, and `_lib.ps1` loads it, with a new `fClearOut` for a scenario's own folder. The launcher carries its own copy, since it clears the old `wingui` folder before it unpacks.
+		- 20261031: openwith's registry keys go through `DeleteSubKeyTree`, since they aren't folders.
+	- Decisions:
+		- 20261031: A refused removal at the end of a test prints the guard's line and doesn't fail the test, as before, since the test run folder's own removal takes what's left. A refused clear before a scenario runs fails it, since it would run on old files.
+		- 20261031: The parent is named from where the path was made, never worked out from the path itself.
+		- 20261031: dehwp checks every tracked .ps1 and the launcher, for `Remove-Item` with `-Recurse` or `-r`, its short names, and a recursive .NET delete.
+	- Verified: 20261031. dehwp passes, and its new check names all 33 lines in the old tree. dcbdd, dcrz7, the desktop entry, signature and cleanup tests pass under pwsh here, and with the test run folder kept, none left a scratch folder. The scenario harness test, dd5nw, the PowerShell lint and `--backlog-run-quick scripts` pass.
+		- Swept: `git grep` for `-Recurse`, the short names and `Delete(..., $true)` over every tracked script. The rest are comments, `Get-ChildItem`, and the guards' own walks.
+	- Branch: rnd1031
+	- Test case: `cicd/tests/saferm/run.bash` (dehwp), its check for a bare recursive removal in any PowerShell script.
 
 - CICD reset: `install.ps1`'s temp folder removal through a guard
 	- ID: 2026102808472645
 	- Type: Task
-	- Status: Queued
+	- Status: Testing
 	- Priority: Avg
 	- Opened: 20261028-084710
 	- Opened by: CC
@@ -802,6 +814,16 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Requirements:
 		- `install.ps1` removes its temp folder through a guard with the same rules. It runs alone, through `irm | iex` too, so it carries its own copy rather than dot-sourcing the repo's.
 		- Its installer tests still pass under both PowerShells.
+	- Progress log:
+		- 20261031: install.ps1 has its own `fSafeRm_Under`, and removes its download folder through it, with the system temp folder as the parent. It runs on 5.1, which has no `IsPathFullyQualified`.
+	- Decisions:
+		- 20261031: Only the one-parent form, since the folder is always in the system temp folder, which isn't named tmp on Windows or macOS.
+		- 20261031: It looks for links only below the parent. macOS's temp folder sits behind `/var`, so the repo's rule would leave every download folder there.
+		- 20261031: Same name, arguments, answers and messages as the repo's, so a script that loads both gets the same guard.
+		- 20261031: A refusal prints the guard's line and the install goes on, as a failed removal did before. The installer's version stays 1.3.0, since nothing a user sees changed.
+	- Verified: 20261031. dehyk runs its one-parent cases against both copies, and a parent behind a link, which the repo's refuses and this one takes. 5 broken copies each failed it: no `..` check, no link check, a parent check that takes a longer name, no check below the parent, and a walk that follows links. dcbdz's new check passes, and failed with the guard call taken out. dcrz7, the desktop entry and signature tests pass under pwsh here.
+	- Branch: rnd1031
+	- Test case: `cicd/tests/saferm/win.ps1` (dehyk), install.ps1's copy. dcbdz "ps1: no run leaves its download folder", and the same check in dd2n3.
 
 - CICD reset: the test and utility scripts' recursive removals through the guard
 	- ID: 2026102807494121

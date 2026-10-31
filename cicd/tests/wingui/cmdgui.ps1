@@ -32,7 +32,7 @@ function fTitle([IntPtr]$H) {
 }
 
 $dir = Join-Path $OutDir "cmdgui"
-Remove-Item $dir -Recurse -ErrorAction SilentlyContinue
+fClearOut $dir
 [void](New-Item -ItemType Directory -Path $dir -Force)
 ##	csc ships with the .NET Framework that every Windows 10 and 11 has.
 $csc = Join-Path $env:WINDIR "Microsoft.NET\Framework64\v4.0.30319\csc.exe"

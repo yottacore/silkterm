@@ -30,6 +30,7 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot '../_testdir.ps1'); fTestDir_Use
+. (Join-Path $PSScriptRoot '../../utility/include/saferm.ps1')
 
 $sshKeygen = Get-Command ssh-keygen -ErrorAction SilentlyContinue
 if (-not $sshKeygen) { Write-Host '  skip installer signing (no ssh-keygen)'; fTestDir_End 0; exit 0 }
@@ -142,7 +143,7 @@ try {
 
 	if ($failures) { Write-Host "$failures failed" } else { $rc = 0 }
 } finally {
-	Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue
+	$null = fSafeRm_Under ([System.IO.Path]::GetTempPath()) $work
 }
 fTestDir_End $rc
 exit $rc

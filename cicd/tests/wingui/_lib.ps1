@@ -12,6 +12,16 @@
 #>
 
 Add-Type -AssemblyName System.Windows.Forms, System.Drawing
+
+##	run.bash sends the guard along beside this file; in the clone it's in utility.
+$saferm = Join-Path $PSScriptRoot 'saferm.ps1'
+if (-not (Test-Path -LiteralPath $saferm)) { $saferm = Join-Path $PSScriptRoot '..\..\utility\include\saferm.ps1' }
+. $saferm
+
+##	What an earlier run of the scenario left in $Dir, a folder in $OutDir.
+function fClearOut([string]$Dir) {
+	if ((Test-Path -LiteralPath $Dir) -and -not (fSafeRm_Under $OutDir $Dir)) { throw "could not clear $Dir" }
+}
 Add-Type -Namespace Silk -Name Win -MemberDefinition @'
 [DllImport("user32.dll")] public static extern bool SetProcessDpiAwarenessContext(IntPtr c);
 [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h);

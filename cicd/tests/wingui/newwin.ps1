@@ -21,7 +21,7 @@ if (-not (fSessionUsable)) { fSkip "console session is locked - nothing can be t
 ##	A folder of its own, since the state file sits beside the config. The
 ##	launch moves the size there.
 $dir = Join-Path $OutDir "newwin"
-Remove-Item $dir -Recurse -ErrorAction SilentlyContinue
+fClearOut $dir
 [void](New-Item -ItemType Directory -Path $dir -Force)
 $cfg = Join-Path $dir "config.shcl"
 $state = Join-Path $dir "state.shcl"

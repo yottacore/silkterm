@@ -24,7 +24,7 @@ if (-not (fSessionUsable)) { fSkip "console session is locked - nothing can be t
 if ([Silk.Win]::GetSystemMetrics(0x1000) -ne 0) { fSkip "this is a real remote session, where Remote is right" }
 
 $dir = Join-Path $OutDir "wpremote"
-Remove-Item $dir -Recurse -ErrorAction SilentlyContinue
+fClearOut $dir
 [void](New-Item -ItemType Directory -Path $dir -Force)
 
 ##	A pale picture at full opacity, so a window showing it is mostly lit and one

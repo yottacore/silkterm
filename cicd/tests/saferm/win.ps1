@@ -120,19 +120,68 @@ fFile (Join-Path $plain 'f.txt')
 $r = fTry { fSafeRm $plain }
 fCheck 'a folder in the project folder goes' ($r.Ok -and -not (Test-Path -LiteralPath $plain))
 
-##	The one-parent form.
-$parent = fDir (Join-Path $work 'parent')
-$kid = fDir (Join-Path $parent "kid${sep}deeper")
-$sib = fDir (Join-Path $work 'parent-other')
-fFile (Join-Path $sib 'keep.txt')
-fCheck 'the parent itself is refused'     (fRefused { fSafeRm_Under $parent $parent } 'not under')
-fCheck 'a name that only starts the same is refused' (fRefused { fSafeRm_Under $parent $sib } 'not under')
-fCheck 'no parent is refused'             (fRefused { fSafeRm_Under } 'no parent')
-fCheck 'a relative parent is refused'     (fRefused { fSafeRm_Under 'parent' $kid } 'no parent')
-fCheck 'a path through a link is refused there too' (fRefused { fSafeRm_Under $tmp (Join-Path $link 'keep.txt') } 'goes through a link')
-$r = fTry { fSafeRm_Under $parent (Split-Path $kid) }
-fCheck 'a folder under the parent goes'   ($r.Ok -and -not (Test-Path -LiteralPath (Split-Path $kid)) -and (Test-Path -LiteralPath $parent))
-fCheck 'and its sibling stays'            (Test-Path -LiteralPath (Join-Path $sib 'keep.txt'))
+##	The one-parent form, here and in install.ps1's own copy. $Who names the copy.
+function fOneParent { param([string]$Who)
+	$base = fDir (Join-Path $work ('one-' + [System.IO.Path]::GetRandomFileName()))
+	$parent = fDir (Join-Path $base 'parent')
+	$kid = fDir (Join-Path $parent "kid${sep}deeper")
+	$sib = fDir (Join-Path $base 'parent-other')
+	fFile (Join-Path $sib 'keep.txt')
+	$inLink = Join-Path $parent 'link'
+	fLink $inLink $victim
+	fCheck "${Who}the parent itself is refused"     (fRefused { fSafeRm_Under $parent $parent } 'not under')
+	fCheck "${Who}a name that only starts the same is refused" (fRefused { fSafeRm_Under $parent $sib } 'not under')
+	fCheck "${Who}no parent is refused"             (fRefused { fSafeRm_Under } 'no parent')
+	fCheck "${Who}a relative parent is refused"     (fRefused { fSafeRm_Under 'parent' $kid } 'no parent')
+	fCheck "${Who}no path is refused"               (fRefused { fSafeRm_Under $parent } 'bad path')
+	fCheck "${Who}two paths are refused"            (fRefused { $three = @($parent, $kid, $kid); fSafeRm_Under @three } 'bad path')
+	fCheck "${Who}a relative path is refused"       (fRefused { fSafeRm_Under $parent 'kid' } 'bad path')
+	fCheck "${Who}a path with .. is refused"        (fRefused { fSafeRm_Under $parent "$parent${sep}kid${sep}..${sep}..${sep}parent-other" } 'bad path')
+	fCheck "${Who}a doubled separator is refused"   (fRefused { fSafeRm_Under $parent "$parent${sep}${sep}kid" } 'bad path')
+	fCheck "${Who}a newline is refused"             (fRefused { fSafeRm_Under $parent "$parent${sep}kid`nx" } 'bad path')
+	fCheck "${Who}a path that is not there is refused" (fRefused { fSafeRm_Under $parent (Join-Path $parent 'missing') } 'not there')
+	fCheck "${Who}a link is refused"                (fRefused { fSafeRm_Under $parent $inLink } 'a link')
+	fCheck "${Who}a path through a link is refused there too" (fRefused { fSafeRm_Under $parent (Join-Path $inLink 'keep.txt') } 'goes through a link')
+	if ($win) { [System.IO.Directory]::Delete($inLink, $false) } else { [System.IO.File]::Delete($inLink) }
+	##	A tree with a read-only file, a hidden one, and a link out to the victim.
+	$tree = fDir (Join-Path $parent 'tree')
+	fFile (Join-Path (fDir (Join-Path $tree "a${sep}b")) 'f.txt')
+	$ro = Join-Path $tree 'ro.txt'; fFile $ro
+	(Get-Item -LiteralPath $ro).Attributes = 'ReadOnly'
+	$hid = Join-Path $tree '.hidden'; fFile $hid
+	if ($win) { (Get-Item -LiteralPath $hid -Force).Attributes = 'Hidden' }
+	fLink (Join-Path $tree "a${sep}out") $victim
+	$r = fTry { fSafeRm_Under $parent $tree }
+	fCheck "${Who}a tree under the parent goes, read-only and hidden files too" ($r.Ok -and $r.Said -eq '' -and -not (Test-Path -LiteralPath $tree))
+	fCheck "${Who}and the link in it went without being followed" ((Test-Path -LiteralPath (Join-Path $victim 'keep.txt')) -and @(Get-ChildItem -LiteralPath $victim).Count -eq 1)
+	$r = fTry { fSafeRm_Under $parent "$(Split-Path $kid)$sep" }
+	fCheck "${Who}a folder under the parent goes, a trailing separator too" ($r.Ok -and -not (Test-Path -LiteralPath (Split-Path $kid)) -and (Test-Path -LiteralPath $parent))
+	fCheck "${Who}and its sibling stays"            (Test-Path -LiteralPath (Join-Path $sib 'keep.txt'))
+	return $base
+}
+$base = fOneParent 'one parent: '
+$behind = Join-Path $tmp 'behind'
+fLink $behind $base
+$gone = fDir (Join-Path $base "parent${sep}gone")
+fCheck 'a parent behind a link is refused' (fRefused { fSafeRm_Under (Join-Path $behind 'parent') (Join-Path $behind "parent${sep}gone") } 'goes through a link')
+
+##	install.ps1 runs alone, by irm | iex too, so it carries a copy, on 5.1 as
+##	well. The temp folder the system hands it can sit behind a link, as macOS's
+##	/var does, so that copy looks for links only below the parent.
+$installer = Join-Path $PSScriptRoot '../../../install.ps1'
+$ast = [System.Management.Automation.Language.Parser]::ParseFile($installer, [ref]$null, [ref]$null)
+$def = $ast.Find({ param($n) $n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq 'fSafeRm_Under' }, $false)
+fCheck 'install.ps1 has its own copy' ($null -ne $def)
+if ($def) {
+	& {
+		$onWindows = $win
+		. ([scriptblock]::Create($def.Extent.Text))
+		$null = fOneParent 'install.ps1: '
+		$r = fTry { fSafeRm_Under (Join-Path $behind 'parent') (Join-Path $behind "parent${sep}gone") }
+		fCheck 'install.ps1: but takes it' ($r.Ok -and -not (Test-Path -LiteralPath $gone))
+	}
+}
+if ($win) { [System.IO.Directory]::Delete($behind, $false) } else { [System.IO.File]::Delete($behind) }
 
 ##	The link goes first, so the cleanup cannot reach the victim through it.
 if ($win) { [System.IO.Directory]::Delete($link, $false) } else { [System.IO.File]::Delete($link) }
@@ -145,3 +194,4 @@ exit 0
 
 ##	History:
 ##		- 20261028: Created.
+##		- 20261031: install.ps1's own copy takes the one-parent cases too.

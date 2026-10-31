@@ -31,7 +31,7 @@ function fTitle([IntPtr]$H) {
 }
 
 $dir = Join-Path $OutDir "quiettab"
-Remove-Item $dir -Recurse -ErrorAction SilentlyContinue
+fClearOut $dir
 [void](New-Item -ItemType Directory -Path $dir -Force)
 
 $cfg = Join-Path $dir "config.shcl"

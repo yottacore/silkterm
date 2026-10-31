@@ -28,6 +28,7 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot '../_testdir.ps1'); fTestDir_Use
+. (Join-Path $PSScriptRoot '../../utility/include/saferm.ps1')
 
 $text = [System.IO.File]::ReadAllText((Resolve-Path -LiteralPath $Installer).Path)
 
@@ -89,7 +90,7 @@ try {
 		fCheck "and it starts the program it names" (Test-Path -LiteralPath "$work/ran.txt")
 	} else { Write-Host '  skip gio launch (not installed)' }
 } finally {
-	Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue
+	$null = fSafeRm_Under ([System.IO.Path]::GetTempPath()) $work
 }
 
 if ($failures -gt 0) { fTestDir_End 1; exit 1 }

@@ -97,7 +97,7 @@ try {
 }
 finally {
 	foreach ($k in ($made | Sort-Object Length)) {
-		if (Test-Path "$classes\$k") { Remove-Item "$classes\$k" -Recurse -Force }
+		[Microsoft.Win32.Registry]::CurrentUser.DeleteSubKeyTree("Software\Classes\$k", $false)
 	}
 }
 

@@ -119,8 +119,21 @@ fCheck "no bare recursive rm in cicd.bash or the sweep" test -z "$(fBare "${repo
 fCheck "and one in the guard" test "$(fBare "${lib}" | wc -l)" -eq 1
 
 ## The PowerShell copy, which cicd-win.ps1 goes through, and its own test.
-fBareWin(){ grep -niE 'Remove-Item.*-Recurse' "${@}" | grep -vE '^[0-9]+:[[:space:]]*##' || true; }
+fBareWin(){ grep -HniE 'Remove-Item.*-Recurse' "${@}" | grep -vE '^[^:]+:[0-9]+:[[:space:]]*##' || true; }
 fCheck "no bare Remove-Item -Recurse in cicd-win.ps1" test -z "$(fBareWin "${repoRoot}/cicd/cicd-win.ps1")"
+## Nor in any other script: the test scripts, install.ps1, and the launcher the
+## Windows scenarios get. A short name or a recursive .NET delete counts too.
+## The tracked ones, as the PowerShell lint takes them.
+mapfile -t psFiles < <(git -C "${repoRoot}" ls-files '*.ps1' | sed "s|^|${repoRoot}/|")
+fCheck "the PowerShell scripts are found" test "${#psFiles[@]}" -gt 20
+psFiles+=(/dev/null)
+fBareAny(){
+	grep -HniE '\b(remove-item|ri|rm|del|erase|rd|rmdir)\b[^#]*[[:space:]]-r(ecurse)?\b|\]::Delete\([^)]*,[[:space:]]*\$true' "${@}" \
+		| grep -vE '^[^:]+:[0-9]+:[[:space:]]*##' || true
+}
+said="$(fBareWin "${psFiles[@]}" "${repoRoot}/cicd/tests/wingui/run.bash"; fBareAny "${psFiles[@]}")"
+fCheck "or in the other PowerShell scripts" test -z "${said}"
+[[ -z "${said}" ]] || printf '    %s\n' "${said//$'\n'/$'\n'    }"
 if command -v pwsh >/dev/null 2>&1; then
 	fCheck "the PowerShell guard's test (dehyk) passes" pwsh -NoProfile -NonInteractive -File "${meDir}/win.ps1"
 else
@@ -133,3 +146,4 @@ echo "all passed"
 ##	History:
 ##		- 20261028 JC: Created.
 ##		- 20261028: The PowerShell copy, and cicd-win.ps1 through it.
+##		- 20261031: Every PowerShell script, the test scripts and install.ps1 too.

@@ -272,6 +272,8 @@ fCases() {
 fCases bash
 if command -v pwsh >/dev/null 2>&1; then
 	fCases ps1
+	## Each run's download folder goes through its guard, failed runs' too.
+	fCheck "ps1: no run leaves its download folder" test -z "$(find "${work}" -path '*/.tmp/silkterm-install-*' -prune -print)"
 else
 	echo "  skip install.ps1 cases (no pwsh)"
 fi

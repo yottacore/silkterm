@@ -30,6 +30,7 @@
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 . (Join-Path $PSScriptRoot '../_testdir.ps1'); fTestDir_Use
+. (Join-Path $PSScriptRoot '../../utility/include/saferm.ps1')
 
 $Launcher = Join-Path (Split-Path $PSScriptRoot -Parent | Split-Path -Parent | Split-Path -Parent) "utility/n8runterm.ps1"
 if (-not (Test-Path -LiteralPath $Launcher)) { throw "no launcher at $Launcher" }
@@ -42,6 +43,8 @@ function fCheck { param([string]$What, [bool]$Ok)
 	if ($Ok) { Write-Host "  ok   $What" }
 	else     { Write-Host "  FAIL $What"; $script:Failures++ }
 }
+
+function fDropSandbox([string]$Root) { $null = fSafeRm_Under ([System.IO.Path]::GetTempPath()) $Root }
 
 ## A sandbox home with nothing in it.
 function fBareSandbox {
@@ -188,14 +191,14 @@ try {
 	fCheck "every folder the launcher writes to is in the sandbox" ((& $inside $env:HOME) -and (& $inside $env:USERPROFILE) -and (& $inside $env:LOCALAPPDATA) -and (& $inside $env:APPDATA))
 	fCheck "the installed build is still there" (Test-Path -LiteralPath $installed)
 	fCheck "and is still itself" ((Get-Content -LiteralPath $installed -Raw) -eq "a release build somebody installed")
-	Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction SilentlyContinue
+	fDropSandbox $root
 
 	Write-Host "nothing installed at the symlink path"
 	$root = fSandbox
 	fRun $root
 	$link = Join-Path (fBin $root) "silkterm"
 	fCheck "the launcher put its own silkterm there" (Test-Path -LiteralPath $link)
-	Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction SilentlyContinue
+	fDropSandbox $root
 
 	## Start-Process joins an argument list with spaces and escapes nothing, so a
 	## quote used to cut an argument in two, an empty one vanished, and a trailing
@@ -221,7 +224,7 @@ try {
 		Write-Host "    got   : $($got  | ForEach-Object { "[$_]" })"
 	}
 	fCheck "the title names the build's tag and date ($title)" ($title -ceq "--title=SilkTerm [dogfood gnulli $stamp]")
-	Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction SilentlyContinue
+	fDropSandbox $root
 
 	## A build from before cicd wrote the sidecar still runs, and the title says
 	## what the launcher could see instead.
@@ -235,7 +238,7 @@ try {
 	fCheck "still launches" ($got.Count -ge 1)
 	fCheck "with a title naming what it could see ($got)" ($got.Count -ge 1 -and
 		$got[0] -cmatch '^--title=SilkTerm \[dogfood gnux[lmw][ia] \d{8}-\d{6}\]$')
-	Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction SilentlyContinue
+	fDropSandbox $root
 
 	## The held stamp is a name in whole seconds. Compared against a source mtime
 	## carrying a fraction, it always read as older, so every launch hashed the
@@ -247,7 +250,7 @@ try {
 	$null = fRunSaying $root @('--install-only')
 	$second = fRunSaying $root @('--install-only')
 	fCheck "the second launch says it is already current" ($second -match 'already current')
-	Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction SilentlyContinue
+	fDropSandbox $root
 
 	Write-Host "a newer build is copied in, an older one declined, and the log says which"
 	$root = fSandbox
@@ -263,7 +266,7 @@ try {
 	fRun $root
 	fCheck "an older source is declined" (@(fHeldStamps $root).Count -eq 2)
 	fCheck "and the log says why" ((fRunLog $root) -match "already current \(held $(fStamp $built), source $(fStamp $built.AddDays(-3))\)")
-	Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction SilentlyContinue
+	fDropSandbox $root
 
 	## cicd dates its copy and Dropbox restamps what it syncs, so one build turns up
 	## with more than one date.
@@ -279,7 +282,7 @@ try {
 	fCheck "the same bytes with a later date are not copied again" (@(fHeldStamps $root).Count -eq 1)
 	fCheck "the one copy takes the later date" ((fHeldStamps $root) -join ' ' -eq (fStamp $built.AddMinutes(8)))
 	fCheck "and the log says it is the same build" ((fRunLog $root) -match 'same build as')
-	Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction SilentlyContinue
+	fDropSandbox $root
 
 	## A quiet stretch used to age every copy out, and the launch fell back to
 	## another terminal.
@@ -291,7 +294,7 @@ try {
 	$newest = fStamp $now.AddYears(-3)
 	fCheck "the newest copy is kept" ((fHeldStamps $root) -contains $newest)
 	fCheck "and the symlink points at it" ("$(fLinkTarget $root)" -like "*slktrmdf_${newest}_*")
-	Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction SilentlyContinue
+	fDropSandbox $root
 
 	Write-Host "the pool keeps a spread of builds, and never one that is running"
 	$root = fBareSandbox
@@ -320,7 +323,7 @@ try {
 	fCheck "the newest is one of them" ($stamps -contains (fStamp $now.AddMinutes(-10)))
 	fCheck "and so is the oldest" ($stamps -contains (fStamp $now.AddDays(-400).AddMinutes(-10)))
 	if ($runner) { fCheck "the running copy is kept" ($stamps -contains $runningStamp) }
-	Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction SilentlyContinue
+	fDropSandbox $root
 
 	## Every process's path is the slow part of a rotation, and only a copy
 	## about to be deleted needs it.
@@ -334,7 +337,7 @@ try {
 	$reads = fProcessListsRead $root
 	fCheck "one with copies to delete reads it once ($reads)" ($reads -eq 1)
 	fCheck "and deletes them ($(@(fHeld $root).Count) left)" (@(fHeld $root).Count -le 10)
-	Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction SilentlyContinue
+	fDropSandbox $root
 
 	Write-Host "the pool stops at 1 GB once it holds five"
 	$root = fBareSandbox
@@ -346,7 +349,7 @@ try {
 	## Five are kept whatever they weigh; at 150 MB a sixth still fits and a seventh does not.
 	fCheck "six of ten are kept ($($held.Count))" ($held.Count -eq 6)
 	fCheck "within 1 GB" ($bytes -le 1GB)
-	Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction SilentlyContinue
+	fDropSandbox $root
 
 	## '.partial' is what a copy is written under until it is whole.
 	Write-Host "the leftover of a cut-off copy is swept, never launched"
@@ -360,7 +363,7 @@ try {
 	$target = fLinkTarget $root
 	fCheck "and the symlink points at the whole build" ($target -and $target -notlike '*.partial' -and
 		(Test-Path -LiteralPath $target) -and (Get-Content -LiteralPath $target -Raw) -eq "dogfood build")
-	Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction SilentlyContinue
+	fDropSandbox $root
 
 	## On Windows 'synced' is a junction that reads as an empty folder, so the
 	## build is only found under the Dropbox spelling.
@@ -376,7 +379,7 @@ try {
 	$held = @(fHeld $root)
 	fCheck "it is copied in" ($held.Count -eq 1 -and (Get-Content -LiteralPath $held[0].FullName -Raw) -eq "dogfood build via Dropbox")
 	fCheck "and the symlink points at it" ($held.Count -eq 1 -and (fLinkTarget $root) -eq $held[0].FullName)
-	Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction SilentlyContinue
+	fDropSandbox $root
 
 	## PATH holds nothing but a stand-in terminal that records what it was handed.
 	if (-not $IsWindows) {
@@ -392,7 +395,7 @@ try {
 		$ran = fWaitFor (Join-Path $root "fallback.txt")
 		fCheck "the terminal is started" $ran
 		fCheck "with none of SilkTerm's arguments" ($ran -and (Get-Content -LiteralPath (Join-Path $root "fallback.txt") -Raw).Trim() -eq "0")
-		Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction SilentlyContinue
+		fDropSandbox $root
 	}
 } finally {
 	$env:HOME = $realHome
