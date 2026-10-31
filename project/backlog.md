@@ -770,7 +770,8 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - CICD reset: run folders under HOST_TEMP, removed at the end
 	- ID: 2026102807494157
 	- Type: Task
-	- Status: Queued
+	- Status: Waiting on automated testing
+	- Needs local test suite run?: The round's full run, `cicd/cicd.bash --backlog-run-full`, in the container, for the builds, packaging and stage 3's tests with `TMPDIR` in the run's folder, and its end removing it.
 	- Priority: Avg
 	- Opened: 20261028-074941
 	- Opened by: CC
@@ -783,6 +784,53 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- A run removes its own folder at the end, on failure and Ctrl+C too, and `--keep-temp` keeps it and prints where. Now a failed run keeps it, and the newest 5 of those stay.
 		- Stale folders go after 2 days, when no process from the folder's `run.pid` is left.
 		- The container's labels and names take the new folder's name.
+	- Progress log:
+		- 20261031: Split, since it doesn't fit one sitting. This item keeps the Linux pipeline, `cicd.bash`, and its container. Children: 2026103115564575 (the test helpers' own folders, when a test runs alone), 2026103115564581 (the Windows pipeline and the test boxes' run folders).
+		- 20261031: `cicd.bash` makes its run's folder at `${HOST_TEMP}/silkterm/<YYYYmmDD-HHMMSS>_<NNN>/`, falling back to `TMPDIR` or `/tmp`, with this run's PID in `run.pid`, and points `TMPDIR`, `TEMP` and `TMP` at it. It's the tests' folder too, unless one is handed in. The container's `/tmp` is a folder in it, and the labels and container names take its name.
+		- 20261031: The folder goes at the end, on a pass, a failure or Ctrl+C. A failed run says `--keep-temp` keeps it. `--keep-temp` keeps it and prints where.
+		- 20261031: A full run removes run folders over 2 days old whose `run.pid` names no process still there, in place of the newest 5. It empties the old ledgers of test run folders and container `/tmp` folders once, the ones right in HOST_TEMP each under its own parent, and then removes the ledgers.
+		- 20261031: The end's messages wait until the cleanup is done, since a write to the log tee after Ctrl+C ended a full run before its folder went.
+	- Decisions:
+		- 20261031: The stale sweep takes only a folder with a `run.pid`, named as a run folder, so a temp folder made by hand in `${HOST_TEMP}/silkterm` stays. A folder's age is its mtime.
+		- 20261031: The stale sweep stays in the full run, as the rest of the cleanup does. The gate does none of it.
+		- 20261031: A process is still there when `ps -p` finds its PID, since `kill -0` fails on another user's. A reused PID only keeps a folder longer.
+		- 20261031: A test folder handed in through `SILKTERM_TEST_DIR` stays the tests' folder, as before, so the run in the container under `--keep-temp` still keeps its tests' files. The run's own folder is still made, for `TMPDIR`.
+		- 20261031: A passed container step still removes its `/tmp` right away, rather than waiting for the run's end.
+		- 20261031: Test changes. In ddazx, "and leaves TMPDIR as it was", "and keeps the run folder" and its "and says where" are commented out, since this item reverses them. In ddrp2, the `/tmp` under the target dir, its ledger, the kept failed `/tmp` and the newest five are commented out for the same reason. ddrp2's run name patterns now take the `_NNN` part, and its `--keep-temp` line names the run's folder, not the test folder.
+	- Verified: 20261031. ddazx's gate cases, run alone, failed 7 against the old `cicd.bash` and pass. de5e9 passes with its new run folder, counter, stale sweep and old ledger checks. ddrp2 passes, its Ctrl+C in a full run case included, which failed before the end's messages were held. A Ctrl+C in a host gate and a host full run removed the run's folder. ddazx's A to E pass, the engine and gates tests, dehwp, shellcheck and the bash style check pass. `--backlog-run-quick scripts docs` passed in the container, and left no run folder.
+		- Not run here: ddazx's G cases, which this item doesn't change.
+		- Swept: every caller of `fRunName`, `fRunEnd`, `fTestDir_Owned` and `CLEANUP_KEEP_RUNS`, and every test that runs `cicd.bash` (container, cleanup, testdir, engine, gates). Only `cicd.bash` used `fTestDir_Owned`. `cicd-win.ps1` is 2026103115564581.
+	- Branch: rnd1031
+	- Test case: ddazx `cicd/tests/testdir/run.bash` (its gate cases), de5e9 `cicd/tests/cleanup/run.bash` (R), ddrp2 `cicd/tests/container/run.bash`.
+
+- CICD reset: the test helpers' own run folders under HOST_TEMP
+	- ID: 2026103115564575
+	- Type: Task
+	- Status: Queued
+	- Priority: Avg
+	- Opened: 20261031-155645
+	- Opened by: CC
+	- Parent ID: 2026102807494157
+	- Target OS: All
+	- Requirements:
+		- A test run alone, with no folder handed down, makes its folder the way the pipeline does, `${HOST_TEMP}/silkterm/<YYYYmmDD-HHMMSS>_<NNN>/` with a `run.pid`, in `_testdir.bash`, `_testdir.py`, `_testdir.ps1` and `source/src/testdir.rs`. Now it's `<temp>/test_silkterm_<stamp>`.
+		- Settle whether a lone run that fails still keeps its folder, since a failing Rust test's files are its record, and record the call.
+		- ddazx, de5e9 and the PowerShell remove test follow the new name.
+
+- CICD reset: the Windows pipeline's run folders under HOST_TEMP
+	- ID: 2026103115564581
+	- Type: Task
+	- Status: Queued
+	- Priority: Avg
+	- Opened: 20261031-155645
+	- Opened by: CC
+	- Parent ID: 2026102807494157
+	- Prereq IDs: 2026103115564575
+	- Target OS: Windows
+	- Requirements:
+		- `cicd-win.ps1` and the test boxes' runs take the same run folder as `cicd.bash`, `${HOST_TEMP}/silkterm/<YYYYmmDD-HHMMSS>_<NNN>/`, with `HOST_TEMP` falling back to `%TEMP%`, and `TEMP` and `TMP` pointed at it.
+		- Removed at the end, on failure too. `-KeepTemp` keeps it and prints where. Stale ones go after 2 days, when no process from `run.pid` is left, in place of the ledger and the newest few.
+		- Run on b29w through the host lock.
 
 - CICD reset: the PowerShell recursive removals through a guard
 	- ID: 2026102807494139

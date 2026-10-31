@@ -200,8 +200,10 @@ fRun(){  ## fRun <log name> <options...>: the engine from the copy; sets rc and 
 	local -r log="${work}/${1}"; shift
 	rm -f "${log}" "${log}.df"; export FAKE_LOG="${log}"
 	## Unset: inside the container both are set, and this is a run from outside.
-	rc=0; out="$(cd "${repo}" && env -u SILK_CICD_IN_CONTAINER -u CARGO_TARGET_DIR bash cicd/cicd.bash "${@}" 2>&1)" || rc=$?
+	rc=0; out="$(cd "${repo}" && env -u SILK_CICD_IN_CONTAINER -u CARGO_TARGET_DIR -u HOST_TEMP bash cicd/cicd.bash "${@}" 2>&1)" || rc=$?
 }
+## Where the runs put their folders, with HOST_TEMP unset.
+runBase="$(realpath -m "${TMPDIR}")/silkterm"; runRe='[0-9]{8}-[0-9]{6}_[0-9]{3}'
 fRun full.log --container -y --no-sync --no-dogfood --no-publish --no-private --quick --no-fuzz
 fCheck "a run with --container passes with the stand-in" test "${rc}" -eq 0
 runLine="$(grep '^run ' "${work}/full.log" || true)"
@@ -212,10 +214,13 @@ fCheck "the cache volume" bash -c '[[ "$1" == *" -v silkterm-cicd-cache:/cache "
 ## Commented out 20261019: /tmp is now a new folder under target/container/tmp each
 ## run, so a killed run's locks and sockets are never the next one's. Checked below.
 # fCheck "its /tmp under the target dir" bash -c '[[ "$1" == *" -v $2/target/container/tmp:/tmp "* ]]' _ "${runLine}" "${repo}"
-fCheck "its /tmp a new folder under the target dir" bash -c '[[ "$1" =~ \ -v\ $2/target/container/tmp/run_[0-9]{8}-[0-9]{8}:/tmp\  ]]' _ "${runLine}" "${repo}"
-fCheck "which goes once the run passes" test -z "$(find "${repo}/target/container/tmp" -mindepth 1 -maxdepth 1 2>/dev/null)"
-fCheck "and is written down, for a run that does not get that far" grep -qE "^${repo}/target/container/tmp/run_[0-9]{8}-[0-9]{8}"$'\t'"[0-9]+-[0-9]+$" "${repo}/target/container/.cicd-container-tmp"
-fCheck "the container is named for the run and labeled as the pipeline's" bash -c '[[ "$1" =~ \ --name\ silkterm-([0-9]{8}-[0-9-]+)-engine\ --label\ dev\.project=silkterm\ --label\ dev\.run=([0-9-]+)\  && "${BASH_REMATCH[1]}" == "${BASH_REMATCH[2]}" ]]' _ "${runLine}"
+## Commented out 20261031: /tmp is a folder in the run's folder in HOST_TEMP now,
+## which goes with it, failed or not, so nothing is written down (2026102807494157).
+# fCheck "its /tmp a new folder under the target dir" bash -c '[[ "$1" =~ \ -v\ $2/target/container/tmp/run_[0-9]{8}-[0-9]{8}:/tmp\  ]]' _ "${runLine}" "${repo}"
+# fCheck "and is written down, for a run that does not get that far" grep -qE "^${repo}/target/container/tmp/run_[0-9]{8}-[0-9]{8}"$'\t'"[0-9]+-[0-9]+$" "${repo}/target/container/.cicd-container-tmp"
+fCheck "its /tmp a new folder in the run's folder" bash -c '[[ "$1" =~ \ -v\ $2/$3/container-engine_[0-9]{8}-[0-9]{8}:/tmp\  ]]' _ "${runLine}" "${runBase}" "${runRe}"
+fCheck "which goes with it once the run passes" test -z "$(find "${runBase}" -mindepth 1 -maxdepth 1 2>/dev/null)"
+fCheck "the container is named for the run's folder and labeled as the pipeline's" bash -c '[[ "$1" =~ \ --name\ silkterm-('"${runRe}"')-engine\ --label\ dev\.project=silkterm\ --label\ dev\.run=('"${runRe}"')\  && "${BASH_REMATCH[1]}" == "${BASH_REMATCH[2]}" && "$1" == *" -v $2/${BASH_REMATCH[1]}/container-engine_"* ]]' _ "${runLine}" "${runBase}"
 fCheck "with --rm" bash -c '[[ "$1" == "run --rm --init "* ]]' _ "${runLine}"
 fCheck "zig's cache on a volume of its own" bash -c '[[ "$1" == *" -v silkterm-zig-cache:/zig-cache "* && "$1" == *" -e ZIG_GLOBAL_CACHE_DIR=/zig-cache "* ]]' _ "${runLine}"
 fCheck "stamped with the zig that filled it" bash -c '[[ "$1" == *"zig version >\"/zig-cache/\${3}\""* && "$1" == *" _ $(id -u) $(id -g) .cicd-zig-version "* ]]' _ "${runLine}"
@@ -269,9 +274,9 @@ fCheck "tagged as the plan named it" bash -c '[[ "$1" == "build -t silkterm-cicd
 fCheck "with the toolchain and its targets" bash -c '[[ "$1" == *" --build-arg VER_rust=1.96.0 "* && "$1" == *" --build-arg RUST_TARGETS=x86_64-pc-windows-gnu aarch64-unknown-linux-gnu aarch64-pc-windows-gnullvm x86_64-apple-darwin "* ]]' _ "${buildLine}"
 fCheck "the pins" bash -c '[[ "$1" == *" --build-arg VER_zig=0.16.0 "* && "$1" == *" --build-arg VER_cargo_deny="* ]]' _ "${buildLine}"
 fCheck "and the job cap" bash -c '[[ "$1" == *" --build-arg JOBS="[0-9]* ]]' _ "${buildLine}"
-fCheck "labeled as the pipeline's" bash -c '[[ "$1" =~ \ --label\ dev\.project=silkterm\ --label\ dev\.run=[0-9]{8}-[0-9-]+\  ]]' _ "${buildLine}"
+fCheck "labeled as the pipeline's" bash -c '[[ "$1" =~ \ --label\ dev\.project=silkterm\ --label\ dev\.run=[0-9]{8}-[0-9_-]+\  ]]' _ "${buildLine}"
 FAKE_VOLUME_MISSING=1 fRun vol.log --container -y --no-sync --no-dogfood --no-publish --no-private --quick
-fCheck "a volume not there yet is made with the labels" bash -c 'grep -qE "^volume create --label dev\.project=silkterm --label dev\.run=[0-9-]+ silkterm-zig-cache$" "$1" && grep -qE "^volume create .* silkterm-cicd-cache$" "$1"' _ "${work}/vol.log"
+fCheck "a volume not there yet is made with the labels" bash -c 'grep -qE "^volume create --label dev\.project=silkterm --label dev\.run=[0-9_-]+ silkterm-zig-cache$" "$1" && grep -qE "^volume create .* silkterm-cicd-cache$" "$1"' _ "${work}/vol.log"
 fCheck "before the container starts" bash -c 'awk "/^volume create/ {v = NR} /^run --rm --init/ {r = NR} END {exit !(v && r && v < r)}" "$1"' _ "${work}/vol.log"
 
 ## What earlier runs and builds left in docker.
@@ -293,7 +298,7 @@ fCheck "--gate --container runs the backlog quick run inside, every area named" 
 fCheck "and says --gate is another name for it" grep -qx -- '--gate is another name for --backlog-run-quick' <<<"${out}"
 fCheck "and nothing else" test "${rc}" -eq 0 -a "$(grep -c '^run ' "${work}/gate.log")" -eq 1
 fCheck "with no log tee or plan" fNot grep -q 'Fail-fast' <<<"${out}"
-fCheck "the gate's container is named for the step" grep -qE '^run --rm --init --shm-size 1g --cpus [0-9]+ --cpu-shares 256 --name silkterm-[0-9]{8}-[0-9-]+-gate ' "${work}/gate.log"
+fCheck "the gate's container is named for the step" grep -qE '^run --rm --init --shm-size 1g --cpus [0-9]+ --cpu-shares 256 --name silkterm-'"${runRe}"'-gate ' "${work}/gate.log"
 fCheck "and the gate ends with the same cleanup" grep -q '^builder prune -f --filter until=168h' "${work}/gate.log"
 fRun quickareas.log --backlog-run-quick docs fmt --container
 fCheck "--backlog-run-quick takes the areas named into the container, in order" bash -c '[[ "$(grep "^run " "$1")" == *" $2/cicd/cicd.bash --backlog-run-quick docs fmt" ]]' _ "${work}/quickareas.log" "${repo}"
@@ -301,27 +306,45 @@ fCheck "--backlog-run-quick takes the areas named into the container, in order" 
 FAKE_RUN_RC=7 fRun fail.log --container -y --no-sync --no-dogfood --no-publish --no-private --quick
 fCheck "a run inside that fails stops the run here" test "${rc}" -ne 0
 fCheck "and says where" grep -q 'the run in the container failed' <<<"${out}"
-failTmp="$(sed -n 's/^the container.s \/tmp is kept in //p' <<<"${out}")"
-fCheck "keeping its /tmp, and saying where" test -n "${failTmp}" -a -f "${failTmp}/.test_silkterm_owner"
+## Commented out 20261031: a failed run removes its folder, /tmp and all, unless
+## --keep-temp (2026102807494157).
+# failTmp="$(sed -n 's/^the container.s \/tmp is kept in //p' <<<"${out}")"
+# fCheck "keeping its /tmp, and saying where" test -n "${failTmp}" -a -f "${failTmp}/.test_silkterm_owner"
+failDir="$(sed -nE "s/^removed the run's temp folder (.*); --keep-temp keeps it$/\1/p" <<<"${out}")"
+fCheck "removing the run's folder, its /tmp with it, and saying --keep-temp keeps it" bash -c '[[ "$1" == "$2"/* && ! -e "$1" ]]' _ "${failDir}" "${runBase}"
 
-## Later runs keep the newest few kept /tmp folders, five by the config, and
-## remove the rest. Six written down after the failed one, and one nobody wrote
-## down.
+## Commented out 20261031: later runs no longer keep the newest few kept /tmp
+## folders, since a run removes its own, failed or not. What the old ledger
+## names goes whole, below (2026102807494157).
+# fCheck "a later run removes the failed run's /tmp past the newest five" test -n "${failTmp}" -a ! -e "${failTmp}"
+# fCheck "and the oldest planted one" test ! -e "${planted[0]}"
+# fCheck "and keeps the newest five" bash -c 'for d in "${@}"; do [[ -d "${d}" ]] || exit 1; done' _ "${planted[@]:1}"
+## What the old ledger of the container's /tmp folders names goes, and the ledger
+## with it. One nobody wrote down stays. So does a run folder a killed run left
+## that is under two days old, or whose run.pid names a process still there,
+## while one older than that goes.
 # shellcheck source=cicd/utility/include/sweep.bash
 source "${root}/cicd/utility/include/sweep.bash"
 declare -a planted=()
-for _ in 1 2 3 4 5 6; do
+for _ in 1 2 3; do
 	fSweep_MakeDir "${repo}/target/container/tmp" run made token
 	fSweep_Record "${repo}/target/container/.cicd-container-tmp" "${made}" "${token}"
 	planted+=("${made}")
 done
 mkdir "${repo}/target/container/tmp/run_nobody"
+sh -c 'exit 0' & deadPid=$!; wait "${deadPid}" || true
+fStale(){ mkdir -p "${runBase}/${1}"; echo "${2}" >"${runBase}/${1}/run.pid"; touch -d "${3}" "${runBase}/${1}"; }
+fStale 20261001-000000_001 "${deadPid}" "3 days ago"
+fStale 20261001-000000_002 "$$" "3 days ago"
+fStale 20261001-000000_003 "${deadPid}" "1 day ago"
 fRun sweep.log --container -y --no-sync --no-dogfood --no-publish --no-private --quick
-fCheck "a later run removes the failed run's /tmp past the newest five" test -n "${failTmp}" -a ! -e "${failTmp}"
-fCheck "and the oldest planted one" test ! -e "${planted[0]}"
-fCheck "and keeps the newest five" bash -c 'for d in "${@}"; do [[ -d "${d}" ]] || exit 1; done' _ "${planted[@]:1}"
+fCheck "a later run removes what the old ledger names" bash -c 'for d in "${@}"; do [[ ! -e "${d}" ]] || exit 1; done' _ "${planted[@]}"
+fCheck "and the ledger" test ! -e "${repo}/target/container/.cicd-container-tmp"
 fCheck "and one nobody wrote down" test -d "${repo}/target/container/tmp/run_nobody"
-fCheck "and says what went" grep -qE '^cleanup: removed 2 old container /tmp folders' <<<"${out}"
+fCheck "and says what went" grep -qE '^cleanup: removed 1 stale run folders, 3 old container /tmp folders' <<<"${out}"
+fCheck "a run folder over two days old, its process gone, goes" test ! -e "${runBase}/20261001-000000_001"
+fCheck "one whose process is still there stays" test -d "${runBase}/20261001-000000_002"
+fCheck "and so does a younger one" test -d "${runBase}/20261001-000000_003"
 fCheck "with none of the run's containers left, says nothing of them" fNot grep -q "of the run's containers" <<<"${out}"
 
 ## At the start a stopped container of ours goes. At the end, failed or not, the
@@ -332,7 +355,7 @@ oldTags="2026-10-03T07:00|silkterm-cicd:000000000003 2026-10-01T07:00|silkterm-c
 FAKE_TAGS="${oldTags}" FAKE_UNTAGGED="sha256:feedface" FAKE_STOPPED="c0ffee" FAKE_RUN_IDS="beef1 beef2" FAKE_PRUNED="1.2GB" \
 	FAKE_IMAGE_MISSING=1 fRun tidy.log --container -y --no-sync --no-dogfood --no-publish --no-private --quick
 fCheck "a stopped container the pipeline labeled goes" bash -c 'grep -qx "ps -aq --filter label=dev.project=silkterm --filter status=exited --filter status=created --filter status=dead" "$1" && grep -qx "rm c0ffee" "$1"' _ "${work}/tidy.log"
-fCheck "the run's containers are stopped and removed by its label" bash -c 'grep -qE "^ps -aq --filter label=dev\.run=[0-9]{8}-[0-9-]+ --filter label=dev\.project=silkterm$" "$1" && grep -qx "stop -t 10 beef1 beef2" "$1" && grep -qx "rm beef1 beef2" "$1"' _ "${work}/tidy.log"
+fCheck "the run's containers are stopped and removed by its label" bash -c 'grep -qE "^ps -aq --filter label=dev\.run=[0-9]{8}-[0-9_-]+ --filter label=dev\.project=silkterm$" "$1" && grep -qx "stop -t 10 beef1 beef2" "$1" && grep -qx "rm beef1 beef2" "$1"' _ "${work}/tidy.log"
 fCheck "and the run says so" grep -qF 'cleanup: stopped and removed 2 of the run' <<<"${out}"
 fCheck "an untagged image the pipeline labeled goes" bash -c 'grep -qx "image ls -q --filter dangling=true --filter label=dev.project=silkterm" "$1" && grep -qx "image rm sha256:feedface" "$1"' _ "${work}/tidy.log"
 fCheck "the older tags are only the pipeline's" grep -qE '^image ls silkterm-cicd --filter label=dev\.project=silkterm --format' "${work}/tidy.log"
@@ -352,8 +375,8 @@ fCheck "but still prunes and removes its containers" bash -c 'grep -q "^builder 
 FAKE_VOLUMES="silkterm-cicd-cache silkterm-zig-cache silkterm-other" FAKE_TIDY="silkterm-cicd-cache|2147483649||0.16.0 silkterm-zig-cache|1000|0.15.1|0.16.0" \
 	fRun volgo.log --container -y --no-sync --no-dogfood --no-publish --no-private --quick
 fCheck "the volumes are only the pipeline's" grep -qx 'volume ls -q --filter label=dev.project=silkterm' "${work}/volgo.log"
-fCheck "read by a labeled container of the run's, read only" bash -c 'grep -qE "^run --label dev\.project=silkterm --label dev\.run=[0-9-]+ --name silkterm-[0-9-]+-tidy -v silkterm-cicd-cache:/v/silkterm-cicd-cache:ro -v silkterm-zig-cache:/v/silkterm-zig-cache:ro silkterm-cicd:" "$1"' _ "${work}/volgo.log"
-fCheck "and removed before any volume is" bash -c 'awk "/^rm silkterm-[0-9-]+-tidy$/ {t = NR} /^volume rm/ && !v {v = NR} END {exit !(t && v && t < v)}" "$1"' _ "${work}/volgo.log"
+fCheck "read by a labeled container of the run's, read only" bash -c 'grep -qE "^run --label dev\.project=silkterm --label dev\.run=[0-9_-]+ --name silkterm-[0-9_-]+-tidy -v silkterm-cicd-cache:/v/silkterm-cicd-cache:ro -v silkterm-zig-cache:/v/silkterm-zig-cache:ro silkterm-cicd:" "$1"' _ "${work}/volgo.log"
+fCheck "and removed before any volume is" bash -c 'awk "/^rm silkterm-[0-9_-]+-tidy$/ {t = NR} /^volume rm/ && !v {v = NR} END {exit !(t && v && t < v)}" "$1"' _ "${work}/volgo.log"
 fCheck "one over 2 GB goes" grep -qx 'volume rm silkterm-cicd-cache' "${work}/volgo.log"
 fCheck "the zig one another zig filled goes" grep -qx 'volume rm silkterm-zig-cache' "${work}/volgo.log"
 fCheck "and the run says why" bash -c 'grep -qF "removed the volume silkterm-cicd-cache, over 2048 MB" <<<"$1" && grep -qF "removed the volume silkterm-zig-cache, filled by zig 0.15.1" <<<"$1"' _ "${out}"
@@ -376,7 +399,8 @@ fCheck "--keep-temp stays out of the run inside" fNot grep -qE '^run .*cicd\.bas
 keepTmp="$(sed -n "s/^kept the container's \/tmp (--keep-temp): //p" <<<"${out}")"
 fCheck "it keeps the container's /tmp too, though the run passed, and says where" test -n "${keepTmp}" -a -d "${keepTmp}"
 fCheck "and the run inside keeps its test folder in it" grep -qE '^run .* -e SILKTERM_TEST_DIR=/tmp/test_silkterm_engine ' "${work}/keep.log"
-fCheck "and this run says where its own is" grep -qF "kept the run's temp folder (--keep-temp): ${SILKTERM_TEST_DIR}" <<<"${out}"
+## Changed 20261031: its own is the run's folder in HOST_TEMP, not the test folder (2026102807494157).
+fCheck "and this run says where its own is" grep -qE "^kept the run's temp folder \(--keep-temp\): ${runBase}/${runRe}$" <<<"${out}"
 
 ## --list prints what the other options would run, and runs none of it.
 fRun list.log --merge-gate --list --container
@@ -398,17 +422,21 @@ fCheck "and starts nothing" bash -c '[[ "$1" == 0 ]] && ! grep -sqE "^(run|build
 ## Ctrl+C mid-run, to the whole process group as a terminal sends it, and the end
 ## still runs. A background job starts with SIGINT ignored, so it is put back.
 rm -f "${work}/int.log" "${work}/int.log.df"
-( cd "${repo}" && exec env -u SILK_CICD_IN_CONTAINER -u CARGO_TARGET_DIR FAKE_LOG="${work}/int.log" FAKE_RUN_IDS="beef9" FAKE_RUN_SLEEP=30 \
+fRunDirs(){ ls -A "${runBase}" 2>/dev/null || true; }
+runsBefore="$(fRunDirs)"
+( cd "${repo}" && exec env -u SILK_CICD_IN_CONTAINER -u CARGO_TARGET_DIR -u HOST_TEMP FAKE_LOG="${work}/int.log" FAKE_RUN_IDS="beef9" FAKE_RUN_SLEEP=30 \
 	setsid python3 -c 'import os, signal, sys; signal.signal(signal.SIGINT, signal.SIG_DFL); os.execvp(sys.argv[1], sys.argv[1:])' \
 	bash cicd/cicd.bash --gate --container >"${work}/int.out" 2>&1 ) &
 intPid=$!
 for _ in $(seq 1 100); do grep -q '^run --rm' "${work}/int.log" 2>/dev/null && break; sleep 0.1; done
 sleep 0.5; kill -INT -- "-${intPid}" 2>/dev/null || true; wait "${intPid}" 2>/dev/null || true
 fCheck "on Ctrl+C the run's containers still go" bash -c 'grep -qx "stop -t 10 beef9" "$1" && grep -q "^builder prune" "$1"' _ "${work}/int.log"
+fCheck "and so does the run's folder" test "$(fRunDirs)" == "${runsBefore}"
 ## The same in a full run, whose output goes through the log tee, which Ctrl+C
 ## takes down too, so the end must not write before it is done.
 rm -f "${work}/intfull.log" "${work}/intfull.log.df"
-( cd "${repo}" && exec env -u SILK_CICD_IN_CONTAINER -u CARGO_TARGET_DIR FAKE_LOG="${work}/intfull.log" FAKE_RUN_IDS="beef8" FAKE_RUN_SLEEP=30 \
+runsBefore="$(fRunDirs)"
+( cd "${repo}" && exec env -u SILK_CICD_IN_CONTAINER -u CARGO_TARGET_DIR -u HOST_TEMP FAKE_LOG="${work}/intfull.log" FAKE_RUN_IDS="beef8" FAKE_RUN_SLEEP=30 \
 	FAKE_VOLUMES="silkterm-cicd-cache" FAKE_TIDY="silkterm-cicd-cache|9999999999||0.16.0" \
 	setsid python3 -c 'import os, signal, sys; signal.signal(signal.SIGINT, signal.SIG_DFL); os.execvp(sys.argv[1], sys.argv[1:])' \
 	bash cicd/cicd.bash --container -y --no-sync --no-dogfood --no-publish --no-private --quick >"${work}/intfull.out" 2>&1 ) &
@@ -417,6 +445,7 @@ for _ in $(seq 1 200); do grep -q '^run --rm' "${work}/intfull.log" 2>/dev/null 
 sleep 0.5; kill -INT -- "-${intPid}" 2>/dev/null || true; wait "${intPid}" 2>/dev/null || true
 fCheck "and in a full run, through the log tee, all of the end runs" \
 	bash -c 'grep -qx "stop -t 10 beef8" "$1" && grep -qx "volume rm silkterm-cicd-cache" "$1" && grep -q "^builder prune" "$1" && grep -q "^system df" <(tail -1 "$1")' _ "${work}/intfull.log"
+fCheck "the run's folder with it" test "$(fRunDirs)" == "${runsBefore}"
 
 rc=0; out="$(cd "${repo}" && SILK_CICD_IN_CONTAINER=1 FAKE_LOG="${work}/nested.log" bash cicd/cicd.bash --container -y 2>&1)" || rc=$?
 fCheck "inside the container, --container is refused" test "${rc}" -ne 0
@@ -539,3 +568,4 @@ echo "all passed"
 ##		- 20261028: TSan only under --long.
 ##		- 20261028: The steps by name, the profiler a step of its own after the checks here.
 ##		- 20261031: The private repo's test scripts go in read only.
+##		- 20261031: /tmp in the run's folder in HOST_TEMP, gone with it, failed or not.

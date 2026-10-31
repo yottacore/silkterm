@@ -8,8 +8,9 @@
 ##		<temp>/test_silkterm_YYYYmmDD-HHMMSSNN. This runs the Rust suite and a set
 ##		of script tests with the temp dir read-only, so a write anywhere but the
 ##		run folder fails. It also checks that the Bash, Python and PowerShell
-##		helpers make the same folder, that cicd.bash makes one and leaves TMPDIR
-##		alone, and guards the sites it cannot run from here. A run removes the
+##		helpers make the same folder, that cicd.bash makes its own in
+##		HOST_TEMP/silkterm with TMPDIR pointed at it and removes it at the end,
+##		and guards the sites it cannot run from here. A run removes the
 ##		folder it made when it passes, keeps it when it fails, and never removes
 ##		one it was handed, one without its mark, or anything a link points to.
 ##	- Test ID: ddazx
@@ -204,37 +205,58 @@ fCheck "no Rust code but the run folder and the control socket asks for the temp
 boxSpecific="$(git -C "${root}" grep -n '/m''nt/' -- cicd source utility || true)"
 fCheck "nothing box-specific is in the repo" test -z "${boxSpecific}"
 
-##	F: cicd.bash makes the run folder before its gate, leaves TMPDIR alone, and
-##	removes the folder once the gate passes. A stand-in cargo records what the
-##	test step is handed, and whether the folder was there then.
+##	F: cicd.bash makes its run folder before its gate, in HOST_TEMP/silkterm,
+##	points TMPDIR, TEMP and TMP at it, and removes it at the end, failed or not.
+##	A stand-in cargo records what the test step is handed, whether the folder
+##	was there then, and its run.pid. HOST_TEMP is unset, so TMPDIR stands in.
 home="${work}/f/home"; mkdir -p "${home}/.cargo/bin" "${work}/f/base"
+runRe='^[0-9]{8}-[0-9]{6}_[0-9]{3}$'
 printf '%s\n' '#!/usr/bin/env bash' \
 	'if [[ "${1:-}" == test ]]; then' \
 	'	there=""; [[ -d "${SILKTERM_TEST_DIR:-}" ]] && there=there' \
-	'	printf "%s\n%s\n%s\n" "${SILKTERM_TEST_DIR:-}" "${TMPDIR:-}" "${there}" >"${STUB_RECORD}"' \
+	'	pid=""; read -r pid <"${SILKTERM_TEST_DIR}/run.pid" || true' \
+	'	printf "%s\n%s\n%s\n%s\n%s\n" "${SILKTERM_TEST_DIR:-}" "${TMPDIR:-}" "${there}" "${TEMP:-}|${TMP:-}" "${pid}" >"${STUB_RECORD}"' \
 	'	exit "${STUB_TEST_RC:-0}"' \
 	'fi' \
 	'exit 0' >"${home}/.cargo/bin/cargo"
 chmod +x "${home}/.cargo/bin/cargo"
-rc=0; env -u SILKTERM_TEST_DIR TMPDIR="${work}/f/base" HOME="${home}" STUB_RECORD="${work}/f/record" \
-	bash "${root}/cicd/cicd.bash" --gate --no-container >"${work}/f.log" 2>&1 || rc=$?
+fGate(){  ## fGate <name> [env...] -- [options...]: the gate, from a base of its own; sets rc and given
+	local -r name="${1}"; shift
+	local -a envs=()
+	while [[ "${1}" != -- ]]; do envs+=("${1}"); shift; done; shift
+	mkdir -p "${work}/f/${name}"
+	rc=0; env -u SILKTERM_TEST_DIR -u HOST_TEMP TMPDIR="${work}/f/${name}" HOME="${home}" STUB_RECORD="${work}/f/${name}.record" "${envs[@]}" \
+		bash "${root}/cicd/cicd.bash" --gate --no-container "${@}" >"${work}/f/${name}.log" 2>&1 || rc=$?
+	given="$(sed -n 1p "${work}/f/${name}.record" 2>/dev/null || true)"
+}
+fRec(){ sed -n "${2}p" "${work}/f/${1}.record" 2>/dev/null || true; }
+fGate base --
 fCheck "the gate runs with a stand-in cargo" test "${rc}" -eq 0
-((rc == 0)) || fShowTail "${work}/f.log"
-given="$(sed -n 1p "${work}/f/record" 2>/dev/null || true)"
-fCheck "and hands its tests a run folder it made in the temp dir" \
-	test "$(dirname "${given}")" == "${work}/f/base" -a "$(sed -n 3p "${work}/f/record" 2>/dev/null || true)" == there
-fCheck "named for the time" fStamped "${given}"
-fCheck "and leaves TMPDIR as it was" test "$(sed -n 2p "${work}/f/record" 2>/dev/null || true)" == "${work}/f/base"
+((rc == 0)) || fShowTail "${work}/f/base.log"
+fCheck "and hands its tests a run folder it made in the project's folder in the temp dir" \
+	test "$(dirname "${given}")" == "$(realpath -m "${work}/f/base")/silkterm" -a "$(fRec base 3)" == there
+fCheck "named for the time, with a counter" bash -c '[[ "$(basename "$1")" =~ $2 ]]' _ "${given}" "${runRe}"
+fCheck "with the run's PID in its run.pid" bash -c '[[ "$1" =~ ^[0-9]+$ ]]' _ "$(fRec base 5)"
+## Commented out 20261031: the run folder is the temp folder now (2026102807494157).
+# fCheck "and leaves TMPDIR as it was" test "$(sed -n 2p "${work}/f/record" 2>/dev/null || true)" == "${work}/f/base"
+fCheck "and points TMPDIR, TEMP and TMP at it" test -n "${given}" -a "$(fRec base 2)" == "${given}" -a "$(fRec base 4)" == "${given}|${given}"
 fCheck "and removes the folder once the gate passes" test -n "${given}" -a ! -e "${given}"
 
-##	F2: a gate whose tests fail keeps the folder, and says where.
-mkdir "${work}/f/base2"
-rc=0; env -u SILKTERM_TEST_DIR TMPDIR="${work}/f/base2" HOME="${home}" STUB_RECORD="${work}/f/record2" STUB_TEST_RC=1 \
-	bash "${root}/cicd/cicd.bash" --gate --no-container >"${work}/f2.log" 2>&1 || rc=$?
-given="$(sed -n 1p "${work}/f/record2" 2>/dev/null || true)"
+##	F2: a gate whose tests fail removes it too, and says --keep-temp keeps it.
+fGate base2 STUB_TEST_RC=1 --
 fCheck "a gate whose tests fail fails" test "${rc}" -ne 0
-fCheck "and keeps the run folder" test -n "${given}" -a -d "${given}"
-fCheck "and says where" grep -qxF "test files kept in ${given}" "${work}/f2.log"
+## Commented out 20261031: a failed run removes its folder now (2026102807494157).
+# fCheck "and keeps the run folder" test -n "${given}" -a -d "${given}"
+# fCheck "and says where" grep -qxF "test files kept in ${given}" "${work}/f2.log"
+fCheck "and removes the run folder" test -n "${given}" -a ! -e "${given}"
+fCheck "and says --keep-temp keeps it" grep -qxF "removed the run's temp folder ${given}; --keep-temp keeps it" "${work}/f/base2.log"
+fCheck "leaving the project's folder" test -d "$(dirname "${given}")"
+
+##	F3: --keep-temp keeps it, failed or not, and says where.
+fGate base3 STUB_TEST_RC=1 -- --keep-temp
+fCheck "--keep-temp keeps the run folder of a gate that failed" test "${rc}" -ne 0 -a -n "${given}" -a -f "${given}/run.pid"
+fCheck "and says where" grep -qxF "kept the run's temp folder (--keep-temp): ${given}" "${work}/f/base3.log"
+
 
 ##	G: each helper on its own. A pass removes the folder it made, a failure
 ##	keeps it and says so, and a folder it was handed, one without its mark, or
@@ -311,3 +333,4 @@ echo "all passed"
 ##		- 20260930 JC: Created.
 ##		- 20261002 JC: A run removes the folder it made when it passes.
 ##		- 20261025 JC: A script that binds sockets under its run folder keeps them short.
+##		- 20261031: cicd.bash's run folder is in HOST_TEMP/silkterm, and goes failed or not.

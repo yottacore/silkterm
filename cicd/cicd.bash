@@ -482,9 +482,12 @@ trap 'rc=$?; printf "\n[ CICD ABORTED (exit %s) at line %s: %s ]\n\n" "$rc" "$LI
 docker="${SILK_DOCKER:-docker}"
 ## Every container, image and volume the pipeline makes carries the project and
 ## the run, so a cleanup takes only its own from a shared docker. runName is the
-## run folder's name, set once that folder is made (fRunName).
+## run folder's name, set once that folder is made (fRunDir_Make).
 projectLabel="dev.project=${EXE_NAME}"
 runName=""; dockerUsed=0; dockerDfBefore=""
+## The run's folder goes under this, resolved now, before TMPDIR points into it,
+## and since a container mount needs the real path.
+runBase="$(realpath -m -- "${HOST_TEMP:-${TMPDIR:-/tmp}}")/${EXE_NAME}"; runDir=""
 cacheVolume="${EXE_NAME}-cicd-cache"; zigVolume="${EXE_NAME}-zig-cache"
 zigStamp=".cicd-zig-version"
 fLabels(){ printf '%s\n' --label "${projectLabel}" --label "dev.run=${runName:?}"; }
@@ -502,14 +505,31 @@ fContainerArgs(){
 	done
 }
 fContainerImage(){ printf '%s-cicd:%s' "${EXE_NAME}" "$({ cat "${containerRecipe}"; fContainerArgs; } | sha256sum | cut -c1-12)"; }
-## fRunName: the run folder's name, for the labels and container names. The test
-## run folder is the run's folder for now; one handed in from outside can be
-## shared, so then the stamp and pid stand in.
-fRunName(){
-	local owned=""
-	owned="$(fTestDir_Owned)"; owned="${owned%%$'\t'*}"
-	if [[ -n "${owned}" ]]; then runName="${owned##*/}"; runName="${runName#test_"${EXE_NAME}"_}"
-	else runName="${stamp}-$$"; fi
+## fRunDir_Make: the run's folder, HOST_TEMP/silkterm/YYYYmmDD-HHMMSS_NNN, with
+## TMPDIR, TEMP and TMP pointed at it, so what the tools write goes there and
+## goes with it. It's the tests' folder too, unless one was handed in. Its name
+## names the run in the labels and container names.
+fRunDir_Make(){
+	fSweep_RunDir "${runBase}" runDir || return 1
+	export TMPDIR="${runDir}" TEMP="${runDir}" TMP="${runDir}"
+	[[ -n "${SILKTERM_TEST_DIR:-}" ]] || export SILKTERM_TEST_DIR="${runDir}"
+	fTestDir_Make || return 1
+	runName="${runDir##*/}"
+}
+## fRunDir_End <status>: removes the run's folder, failed or not. --keep-temp
+## keeps it and says where.
+fRunDir_End(){
+	local -r dir="${runDir}"
+	local why="" err=""
+	[[ -n "${dir}" ]] || return 0
+	runDir=""
+	if ((keepTemp)); then echo "kept the run's temp folder (--keep-temp): ${dir}" >&2; return 0; fi
+	why="$(fSweep_RunDirNotOurs "${dir}")"
+	if [[ -n "${why}" ]]; then echo "cleanup: left ${dir} in place: ${why}" >&2; return 0; fi
+	## Out of it first, should a step have left the shell there.
+	[[ "${PWD}" != "${dir}" && "${PWD}" != "${dir}"/* ]] || cd / || true
+	err="$(fSafeRm "${dir}" 2>&1)" || { echo "cleanup: could not remove ${dir}${err:+: ${err}}" >&2; return 0; }
+	((! ${1:-0})) || echo "removed the run's temp folder ${dir}; --keep-temp keeps it" >&2
 }
 ## fDockerStart: notes what docker holds, once, for the end line.
 fDockerStart(){
@@ -637,11 +657,10 @@ fContainerEnd_Work(){
 	[[ -z "${line}" ]] || fEcho_Clean "docker: ${line}"
 }
 ## fContainerRun <image> <script> <options...>: a pipeline script in the container,
-## the engine or the ASan run, against this tree. Its /tmp is a new folder under
-## the target dir each run, so a failed test's files are still there afterward,
-## the X sockets inside never meet this box's, and no lock or socket a killed run
-## left is there for the next. A run that passes removes it; a later run removes
-## the ones failed runs kept. The container starts as root only long enough to
+## the engine or the ASan run, against this tree. Its /tmp is a new folder in the
+## run's folder, so the X sockets inside never meet this box's, and no lock or
+## socket a killed run left is there for the next. It goes with the run's folder,
+## or as soon as the step passes. The container starts as root only long enough to
 ## give this uid a passwd entry, since the terminal looks its user up (a bare
 ## --user has none), and the X socket folder, then drops to it. The run gets a
 ## session bus of its own, which xfwm4 needs, and this box's time zone, so a name
@@ -658,8 +677,7 @@ fContainerRun(){
 	fDockerStart
 	mapfile -t labels < <(fLabels)
 	fContainerVolume "${cacheVolume}"; fContainerVolume "${zigVolume}"
-	fSweep_MakeDir "${containerTarget}/tmp" run runTmp runToken || return 1
-	fSweep_Record "${containerTmpLedger}" "${runTmp}" "${runToken}" || true
+	fSweep_MakeDir "${runDir:?}" "container-${step}" runTmp runToken || return 1
 	## Zig's global cache on a volume of its own, stamped with the Zig that filled it.
 	local -a mounts=(-v "${root}:${root}" -v "${cacheVolume}:/cache" -v "${zigVolume}:/zig-cache" -v "${runTmp}:/tmp") zoneArgs=()
 	if [[ -z "${zone}" ]]; then
@@ -682,11 +700,9 @@ fContainerRun(){
 			&& { [[ -s "/zig-cache/${3}" ]] || zig version >"/zig-cache/${3}" || true; } && chown "${1}:${2}" /zig-cache \
 			&& exec setpriv --reuid="${1}" --regid="${2}" --init-groups -- dbus-run-session -- bash "${@:4}"' _ "$(id -u)" "$(id -g)" "${zigStamp}" "${script}" "${@}" \
 		|| rc=$?
-	if ((rc)); then
-		echo "the container's /tmp is kept in ${runTmp}" >&2
-	elif ((keepTemp)); then
+	if ((keepTemp)); then
 		echo "kept the container's /tmp (--keep-temp): ${runTmp}" >&2
-	else
+	elif ((! rc)); then
 		why="$(fSweep_NotOurs "${runTmp}" "${runToken}")"
 		if [[ -z "${why}" ]]; then fSafeRm "${runTmp}" || true
 		else echo "cleanup: left ${runTmp} in place: ${why}" >&2; fi
@@ -755,8 +771,7 @@ fi
 
 ## One folder for every file the tests write, made before the gate, or once a full
 ## run is past its prompt, so every test shares it. Not before the prompt: a run
-## stopped there would keep an empty one. TMPDIR stays put, so builds and packaging
-## keep the system temp dir.
+## stopped there would make one for nothing.
 # shellcheck source=cicd/tests/_testdir.bash
 source "${root}/cicd/tests/_testdir.bash"
 
@@ -1052,17 +1067,15 @@ fScriptTests(){
 	fi
 }
 
-## fRunEnd <status>: the EXIT trap's cleanup. --keep-temp keeps the test run
-## folder, pass or fail, and says where it is.
+## fRunEnd <status>: the EXIT trap's cleanup. --keep-temp keeps the run's
+## folder, pass or fail, and says where it is. What it says waits until all of
+## it is done, since Ctrl+C takes the log tee down, and a write to it then ends
+## the run before the run's folder goes.
 fRunEnd(){
+	local said=""
 	((! ${1})) || fStep_End FAIL >&2
-	fContainerEnd "${1}"
-	if ((keepTemp)) && [[ -n "${SILKTERM_TEST_DIR:-}" ]]; then
-		__testDirOwned=""
-		echo "kept the run's temp folder (--keep-temp): ${SILKTERM_TEST_DIR}" >&2
-	else
-		fTestDir_End "${1}"
-	fi
+	said="$({ fContainerEnd "${1}"; fTestDir_End "${1}"; fRunDir_End "${1}"; } 2>&1)" || true
+	[[ -z "${said}" ]] || printf '%s\n' "${said}"
 }
 
 ## A box or VM that isn't there is a skip, never a failure. A step that reaches
@@ -1172,8 +1185,7 @@ if ((gate && listing)); then
 	exit 0
 fi
 if ((gate)); then
-	fTestDir_Make || fDie "could not make the test run folder"
-	fRunName
+	fRunDir_Make || fDie "could not make the run's folder"
 	trap 'rc=$?; fRunEnd "${rc}"' EXIT
 	if ((container)); then
 		fSection "Backlog quick run in ${containerImage}"
@@ -1358,7 +1370,7 @@ else
 	fEcho_Clean "Demo video ..........: re-record, README gif to assets/demo.gif"
 fi
 if declare -p CLEANUP_BUILD_DIRS &>/dev/null; then
-	fEcho_Clean "Cleanup .............: test folders$( [[ -n "${containerTmpLedger}" ]] && echo ' and container /tmp') past the newest ${CLEANUP_KEEP_RUNS:-5}, stale build dirs$( [[ -n "${containerTmpLedger}" ]] && echo ', stopped containers and old images')"
+	fEcho_Clean "Cleanup .............: run folders over ${CLEANUP_STALE_DAYS:-2} days old, stale build dirs$( [[ -n "${containerTmpLedger}" ]] && echo ', stopped containers and old images')"
 fi
 if ((${#GIT_PUBLISH[@]} == 0)); then
 	fEcho_Clean "Publish (last) ......: (disabled)"
@@ -1392,10 +1404,9 @@ if ((! assumeYes)); then
 	fi
 fi
 
-fTestDir_Make || fDie "could not make the test run folder"
-fRunName
+fRunDir_Make || fDie "could not make the run's folder"
 trap 'rc=$?; fRunEnd "${rc}"' EXIT
-skipLog="${SILKTERM_TEST_DIR}/skips.txt"; : >"${skipLog}"
+skipLog="${runDir}/skips.txt"; : >"${skipLog}"
 
 ## Tee the rest of the run (all stages) to a gitignored log so warnings from any
 ## stage can be reviewed after the fact. Rotate the prior (closed) logs first.
@@ -1435,17 +1446,21 @@ if [[ -n "${LINT_LOG_DIR:-}" && -z "${SILK_CICD_IN_CONTAINER:-}" ]] && mkdir -p 
 	trap 'rc=$?; fRunEnd "${rc}"; fFinishLog; exit $rc' EXIT
 fi
 
-## What earlier runs left: the test run folders failed runs kept, past the newest
-## few, then this run's own goes on the list. Inside the container /tmp is new
-## each run, and the run outside sees to it. The build dirs are swept where the
-## builds run, at the start of fBuildTestRelease.
+## What earlier runs left: run folders a killed run left, a few days old, and
+## what the ledgers of the old test run folders and container /tmp folders still
+## name. Inside the container /tmp is new each run, and the run outside sees to
+## it. The build dirs are swept where the builds run, at the start of
+## fBuildTestRelease.
+fOldLedger(){  ## fOldLedger <ledger> <what> [own]: empties it, then it goes.
+	fSweep_Ledger "${1}" 0 "${2}" "${3:-}"
+	[[ ! -f "${1}" || -s "${1}" ]] || rm -f -- "${1}"
+}
 if [[ -z "${SILK_CICD_IN_CONTAINER:-}" ]]; then
-	testLedger="${TARGET_DIR}/.cicd-test-folders"
-	fSweep_Ledger "${testLedger}" "${CLEANUP_KEEP_RUNS:-5}" "old test run folders"
-	ownedLine="$(fTestDir_Owned)"
-	if [[ -n "${ownedLine}" ]]; then fSweep_Record "${testLedger}" "${ownedLine%%$'\t'*}" "${ownedLine#*$'\t'}" || true; fi
+	fSweep_StaleRuns "${runBase}" "${CLEANUP_STALE_DAYS:-2}" "stale run folders"
+	fOldLedger "${TARGET_DIR}/.cicd-test-folders" "old test run folders" own
 	if [[ -n "${containerTmpLedger}" ]]; then
-		fSweep_Ledger "${containerTmpLedger}" "${CLEANUP_KEEP_RUNS:-5}" "old container /tmp folders"
+		fOldLedger "${containerTmpLedger}" "old container /tmp folders"
+		rmdir -- "${containerTarget}/tmp" 2>/dev/null || true
 		fContainerStopped
 	fi
 fi
@@ -2171,6 +2186,9 @@ fEcho_Clean
 
 
 ##	History:
+##		- 2026-10-31: The run's folder is HOST_TEMP/silkterm/YYYYmmDD-HHMMSS_NNN, with
+##		              TMPDIR, TEMP and TMP pointed at it, and goes at the end, failed
+##		              or not. A stale one goes after 2 days, once its run.pid is gone.
 ##		- 2026-10-31: The container gets the private repo's test scripts, read only,
 ##		              for the test ID check.
 ##		- 2026-10-28: --list takes the scroll harness's scenes, each with its own ID.
