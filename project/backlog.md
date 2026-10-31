@@ -37,8 +37,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - CICD reset: the bash guard doesn't refuse HOST_TEMP itself or a project's whole folder under it
 	- ID: 2026103115170424
 	- Type: Bug
-	- Status: Waiting on automated testing
-	- Needs external testing: dehyk on b29w, for the Windows side of the PowerShell guard's new check (case and separators).
+	- Status: Done
 	- Priority: High
 	- Opened: 20261031-151704
 	- Opened by:
@@ -56,8 +55,11 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261031: With TMPDIR set to HOST_TEMP, a failed run's kept test folder sits right under HOST_TEMP, so the stale sweep now refuses it and says so. A passing run still removes its own folder. 2026102807494157 moves run folders under the project's folder, where the sweep takes them.
 	- Verified: 20261031. dehwp passes, and its new checks failed 9 times against the old `saferm.bash`. dehyk passes under pwsh here, and its new checks failed 15 times with the new check taken out of `saferm.ps1`. The cleanup test passes.
 		- Swept: every copy of the guard: `saferm.bash`, `saferm.ps1`, install.ps1's `fSafeRm_Under`, and the new `saferm.py`. Every `fSafeRm` caller, for a path right under HOST_TEMP: the socket folders and `install`'s run folders are in `/tmp`, and the container's /tmp is in the target dir.
+	- Verified: 20261031 on b29w, with this tree sent along. dehyk passed, its new checks in another case included, and so did the installer, cleanup, signature, Start menu and wrapper tests, and dd2n3 under both PowerShells.
 	- Test case: `cicd/tests/saferm/run.bash` (dehwp) and `cicd/tests/saferm/win.ps1` (dehyk), their HOST_TEMP checks.
 	- Branch: rnd1031
+	- Acceptance signoff: Self-closed: a written rule, and its test fails against the old code.
+	- Closed: 20261031-155500
 
 - The window doesn't paint while the GPU is busy or short on memory, and stays blank after the load ends
 	- ID: 2026100312470535
