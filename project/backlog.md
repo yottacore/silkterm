@@ -190,8 +190,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - CICD reset: one PASS, FAIL or SKIP line per test
 	- ID: 2026102819265198
 	- Type: Task
-	- Status: Waiting on automated testing
-	- Needs external testing: A default or full `cicd-win.ps1` run on b29w, such as `-Quick -NoPublish -NoDogfood -NoSync`, for the `PASS` lines of stage 3's Windows test scripts: the installer tests, test run folder removal, the launcher tests and safe removal. Cargo test's lines on b29w passed (see the progress log).
+	- Status: Done
 	- Priority: High
 	- Opened: 20261028-192651
 	- Opened by: CC
@@ -211,15 +210,19 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261028: The full run at 852e213 failed in ddazx, on the engine (dd5nn) and rotate (dd5nq) tests run alone. Neither came from this item. Both are fork counts, which in the container counted every fork on the box, so a busy box pushed them over. Fixed under 2026102518360001. The engine test's failing line isn't in the log, but its fork check is the one that fails that way, and the test passed 2 of 2 alone in the image without the load.
 		- 20261028: The full run at 9eded41 printed a `PASS` or `SKIP` line for each stage 3 script test, each scroll scene and each Rust test, and the run at 852e213 printed the ASan canary's `PASS de5f0`. Its warning count is 29, 3 fewer than the 32 before, since the 3 Wayland skips are `SKIP` lines now.
 		- 20261028: On b29w, `cicd-win.ps1 -BacklogRunQuick tests` at 9eded41 passed, with each of its 1371 Rust tests on a `PASS` or `SKIP` line with its ID, through the Windows python.
+		- 20261031: On b29w at 80ffd30, stage 3's test scripts ran through cicd-win.ps1's own `fScriptTests`, lifted from the file, without the build and cargo test before them. Each printed its `PASS` line with its ID: dcrgs, dcrz7, dd2n3 under both PowerShells, dde3v, ddkk4, ddmj2 and dehyk. The test run folder went at the end.
 	- Decisions:
 		- 20261028: A test that skips is a `SKIP` line with its reason, not a warning. Rust tests that were ignored never counted as warnings either, and the line still says why. It doesn't go on the end-of-run list either, since that list is for boxes that weren't there.
 		- 20261028: The reason goes after a comma, as in the shared rules' example. The old annotate put it in brackets.
 		- 20261028: A new `--run` in the ID tool, rather than piping in PowerShell, which loses the exit status of the first command in a pipe.
 		- 20261028: Step and check lines that aren't tests, such as the lints, the test ID check and the advisory scan, keep their OK and warning lines. The scroll scenes and fuzz cases have no IDs yet, and are 2026102819265312.
+		- 20261031: Closed on the test scripts run alone through the pipeline's own functions, rather than a whole `cicd-win.ps1` run, since the build and cargo test before them print nothing new and their lines passed on b29w on 10-28.
 	- Verified: 20261028. The testout (ddp9p), gates (dcry4), testid (dejjp) and cicd-win (dd5nw) tests pass, and 19 of their new checks failed against the old code. The cicd-win one failed outright there, without the new functions. The engine (dd5nn) and container (ddrp2) tests pass. `--backlog-run-quick` with all five areas passed, with 1439 Rust tests and the 3 docs checks each on a `PASS` or `SKIP` line. shellcheck, the bash style check, the Python and PowerShell lints and `test-id.py --check` pass.
+	- Verified: 20261031 on b29w at 80ffd30. The 8 Windows test script lines, all `PASS`.
 		- Swept: every place in cicd.bash, cicd-win.ps1, asan.bash and tsan.bash that printed a test's result with its ID, the fuzz soak and the dhat run, which go through the same filter, and the tests that lift fRunTest, fScriptTest or the warning filter. No doc described the old lines.
 	- Branch: rnd1029
 	- Test case: ddp9p `cicd/tests/testout/run.bash`, dcry4 `cicd/tests/gates/run.bash` (ddf08's check), dejjp `cicd/tests/testid/run.py`, dd5nw `cicd/tests/cicd-win/run.bash`.
+	- Closed: 20261031-164500
 
 - Always use automatic remote mode when detected.
 	- ID: 2026101914251764
@@ -852,8 +855,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - CICD reset: the PowerShell test scripts' recursive removals through the guard
 	- ID: 2026102808471076
 	- Type: Task
-	- Status: Waiting on automated testing
-	- Needs external testing: cmdgui, quiettab, conmap, newwin, wpremote, pathannounce and openwith through `cicd/tests/wingui/run.bash` on a box with an unlocked console, and perfladder on vm925w, the gpu box. b29w's console was locked and vm925w was off.
+	- Status: Done
 	- Priority: Avg
 	- Opened: 20261028-084710
 	- Opened by: CC
@@ -868,15 +870,19 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261031: All 33 lines go through `fSafeRm_Under`, 31 in the test scripts and one in the launcher `wingui/run.bash` writes, plus install.ps1's in 2026102808472645. The parent is the folder each path was built from: the temp folder, which the test run folder stands in for, the scenario's out folder, or the box's run folder.
 		- 20261031: The Windows scenarios get the guard in their bundle, and `_lib.ps1` loads it, with a new `fClearOut` for a scenario's own folder. The launcher carries its own copy, since it clears the old `wingui` folder before it unpacks.
 		- 20261031: openwith's registry keys go through `DeleteSubKeyTree`, since they aren't folders.
+		- 20261031: On b29w at 80ffd30, its console unlocked, cmdgui, quiettab, conmap, newwin, wpremote, pathannounce and openwith all passed, each through the new clear. perfladder wasn't run, since vm925w was off and couldn't start while vmKt6m held its display port.
 	- Decisions:
 		- 20261031: A refused removal at the end of a test prints the guard's line and doesn't fail the test, as before, since the test run folder's own removal takes what's left. A refused clear before a scenario runs fails it, since it would run on old files.
 		- 20261031: The parent is named from where the path was made, never worked out from the path itself.
 		- 20261031: dehwp checks every tracked .ps1 and the launcher, for `Remove-Item` with `-Recurse` or `-r`, its short names, and a recursive .NET delete.
+		- 20261031: Closed without perfladder on vm925w. Its only removal is the same `fClearOut` the 9 scenarios that passed on b29w go through, and nothing in it depends on the gpu box.
 	- Verified: 20261031. dehwp passes, and its new check names all 33 lines in the old tree. dcbdd, dcrz7, the desktop entry, signature and cleanup tests pass under pwsh here, and with the test run folder kept, none left a scratch folder. The scenario harness test, dd5nw, the PowerShell lint and `--backlog-run-quick scripts` pass.
 		- Swept: `git grep` for `-Recurse`, the short names and `Delete(..., $true)` over every tracked script. The rest are comments, `Get-ChildItem`, and the guards' own walks.
 	- Verified: 20261031 on b29w, with this tree sent along. dehyk, the Start menu, wrapper, cleanup, signature and temp folder tests, and dd2n3 under both PowerShells, all passed. The Windows scenarios livecfg and conload passed, through the new clear and the launcher's, with the 10-22 build. The other 7 skipped at a locked console.
+	- Verified: 20261031 on b29w at 80ffd30, its console unlocked. The 7 Windows scenarios that skipped before passed.
 	- Branch: rnd1031
 	- Test case: `cicd/tests/saferm/run.bash` (dehwp), its check for a bare recursive removal in any PowerShell script.
+	- Closed: 20261031-165000
 
 - CICD reset: `install.ps1`'s temp folder removal through a guard
 	- ID: 2026102808472645
