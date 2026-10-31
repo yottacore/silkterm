@@ -34,6 +34,18 @@ Going forward, new issues in the new template at the bottom of this file, will g
 
 ## Issues
 
+- CICD reset: the bash guard doesn't refuse HOST_TEMP itself or a project's whole folder under it
+	- ID: 2026103115170424
+	- Type: Bug
+	- Status: Queued
+	- Priority: High
+	- Opened: 20261031-151704
+	- Opened by:
+	- Parent ID: 2026102416233803
+	- Target OS: All
+	- Progress log:
+		- 20261031: Found by the worker on 2026102807494121. The shared Safe removal rule has asked for both refusals since 10-28. Check the PowerShell copies too.
+
 - The window doesn't paint while the GPU is busy or short on memory, and stays blank after the load ends
 	- ID: 2026100312470535
 	- Type: Bug
