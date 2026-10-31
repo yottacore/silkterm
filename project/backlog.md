@@ -539,7 +539,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - CICD reset: a test for each old-format Done feature, part 6 of 6
 	- ID: 2026102819193596
 	- Type: Task
-	- Status: Queued
+	- Status: Done
 	- Priority: High
 	- Opened: 20261028-191935
 	- Opened by: CC
@@ -549,6 +549,19 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- The old-format Done features from "Text readability glow:" to "Application name ideas", the end of the list, 43 items.
 		- Each names its test ID beside the test it names, or says in a few words why it has none. A test is added where one could exist and doesn't, and is watched to fail with the fix taken out.
 		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
+	- Progress log:
+		- 20261031: Each test the 43 items name, by a name a test still has, now has its ID beside it, every later mention in the same item included.
+		- 20261031: Three tests named were commented out since, the system font toggle, pane chord and font order ones. Each now names the tests that took over.
+		- 20261031: `changed_defaults` (d97z3) has its ID too, in the three items that name it, and so do the `paste_payload` tests the middle-click item names in words.
+		- 20261031: The window menu item names the menu bar test (dd5pr) for its titles. It still says why the hit test has none.
+		- 20261031: The rest say why they have no ID: GPU and compositor effects, fonts and spacing checked by eye, real OS windows, build targets, the X11 selection, a hotkey reversed later, an umbrella item and a naming decision. No test was missing where one could exist, so none was added.
+	- Decisions:
+		- 20261031: As in parts 1 to 5, a test renamed or commented out since keeps its old name, with "now" and the tests that took over.
+	- Verified: 20261031. Every test ID added in part 6 is one the tree has, and each sits beside the name of its own test. `--backlog-run-quick docs` passed, `test-id.py --check` passes, and the markdown check finds nothing new.
+		- Swept: every name in backticks and test script path in the 43 items, every ticked sub-item for an ID or a "No test", and every "Pinned by" or "No test" written in words.
+	- Branch: rnd1031
+	- Test case: each of the 43 items names its own, or why it has none.
+	- Closed: 20261031-140554
 
 - CICD reset: a test for every Done item
 	- ID: 2026102416233809
@@ -13348,10 +13361,10 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- ✅ Expose config value in settings dialog:
 		- ✅ Blur radius: Boolean to enable, slider + number field to adjust.
 			- A "Text glow" toggle and a "Glow radius" slider on the Appearance tab. The radius grays out and does nothing while the toggle is off, the same way the Opacity slider does.
-			- Pinned by: `the_outline_stands_without_the_scrim`.
+			- Pinned by: dc7fv `the_outline_stands_without_the_scrim`.
 		- ✅ Softness or intensity control. Maybe "Softness" as the name.
 			- Done: a softness setting and a matching slider, grayed out while the glow is off. Low values give a bold dark halo, high values a gentle faint one.
-			- Pinned by: `the_outline_stands_without_the_scrim`.
+			- Pinned by: dc7fv `the_outline_stands_without_the_scrim`.
 	- ✅ Visual bug: When background glow is applied to characters that have a per-character(s)-box different background, and the foreground color is similar to the global background for that character(s), then the character is a blurry mess. (E.g. the global background is dark, but some characters are rendered one-off with dark text and light background, then it's not readable.)
 		- ✅ The solution is, if a character has a different background color than global, use that one-off background color as the glow color for that character. - Done: the glow is now colored by a per-pixel "bgcolor" texture (cleared to the global bg, with the per-cell bg rects drawn over it) instead of a single global tint; the composite multiplies the blurred glyph coverage by that local color. So a glyph on a colored cell gets a halo matching its own cell bg (harmless), while global-bg cells keep their readability halo.
 			- No test: a GPU texture effect, checked by eye.
@@ -13362,7 +13375,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - ✅ Config file: When reading a value from the config file, if the entry doesn't exist, insert the setting into the file using hard-coded defaults, in an approprite section. (While not overwriting other existing values, comments, space formatting, etc.) Make this a reusable feature.
 	- Done: on load, any setting the default template defines and the file lacks is inserted using the template's own line. A key meant to follow the system stays commented out, and an active key gets its default value.
 		- Keys go in the right section, and nothing already in the file is touched - values, comments and formatting all survive, since this only ever inserts.
-	- Pinned by: `backfill_puts_each_group_in_its_own_section` and `backfill_changes_nothing_that_loaded`.
+	- Pinned by: dd3q1 `backfill_puts_each_group_in_its_own_section` and dcfp9 `backfill_changes_nothing_that_loaded`.
 	- Opened: 20260628-083740
 	- Closed: 20260629-214404
 
@@ -13370,16 +13383,16 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Done: a double-click first asks whether the click sits inside a matched pair. If it does, the contents are selected; otherwise it falls back to the normal word select. One line only - a pair spanning lines is not handled.
 	- ✅ But if the double-click happened outside such consisten parings, then ignore that logic (and the selection might include such characters depending on defined delimiters).
 		- Falls back to `Semantic`.
-		- Pinned by: `outside_any_pair`.
+		- Pinned by: d917a `outside_any_pair`.
 	- ✅ The order of pair inclusion precedence: ``, "", '', {}, (), [], <>.
 		- Done: the first enclosing pair in that order wins, so inside () selects the () contents even when [] is nested within.
-		- Pinned by: `precedence_paren_over_bracket` and `quote_beats_paren`.
+		- Pinned by: d9176 `precedence_paren_over_bracket` and d9179 `quote_beats_paren`.
 	- ✅ List of delimiters should also be read from config file.
 		- Done: `word_separators` (config) feeds alacritty's `semantic_escape_chars`; backfilled if missing.
-		- Pinned by: `word_separators_come_from_the_file` and `the_engine_splits_words_on_the_configured_separators`.
+		- Pinned by: dd5mq `word_separators_come_from_the_file` and dd5ms `the_engine_splits_words_on_the_configured_separators`.
 	- ✅ The list of selection inclusion pairs should be read from the config file.
 		- Done: a `selection_pairs` setting, defaulting to the usual quote and bracket pairs. It is backfilled into an existing config, commented out, and is not in the Settings dialog.
-		- Pinned by: `selection_pairs_parse_in_order_and_come_from_the_file`.
+		- Pinned by: dd5mr `selection_pairs_parse_in_order_and_come_from_the_file`.
 	- Note: 20260930, a double-click asks for a shape first now, such as a path or URL, then the pair, then the word. The keys are `selection.word_separators` and `selection.pairs`.
 	- Opened: 20260628-083740
 	- Closed: 20260629-214404
@@ -13422,7 +13435,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- No test: one fixed indent in the draw pass.
 	- ✅ Group items logically, and use faint horizontal lines and extra space to separate the logical groupings, as has been standard for menus since early Macintosh and Windows.
 		- Done: a menu entry is either an item or a separator, and a separator draws as a faint hairline with a little room around it. The right-click menu groups: clipboard, read-only, tab and split and close, the window toggles, then config and settings.
-		- Pinned by: `a_submenu_row_hit_tests_and_steps_like_an_item` and `a_dropdown_scales_whole_and_its_rows_still_hit_test`.
+		- Pinned by: dbeq9 `a_submenu_row_hit_tests_and_steps_like_an_item` and dbeng `a_dropdown_scales_whole_and_its_rows_still_hit_test`.
 	- Opened: 20260628-083740
 	- Closed: 20260629-214404
 
@@ -13435,13 +13448,13 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- No test: spacing, checked by eye.
 	- ✅ Put system info under an "Info" heading.
 		- Done. "Info" heading with Renderer / Backend / Acceleration indented under it.
-		- Pinned by: `about_names_the_renderer_and_whether_it_is_accelerated`.
+		- Pinned by: dd5n6 `about_names_the_renderer_and_whether_it_is_accelerated`.
 	- ✅ In addition to GPU info, note if using GPU acelleration or not.
 		- Done. "Acceleration:" line from `adapter_info.device_type`: Hardware (discrete/integrated/virtual GPU) vs Software (CPU).
-		- Pinned by: `every_gpu_is_hardware_and_only_the_cpu_is_software`.
+		- Pinned by: dd5n5 `every_gpu_is_hardware_and_only_the_cpu_is_software`.
 	- ✅ Add clickable github URL.
 		- Done: the repository address is drawn in the link color and underlined, and clicking it opens the platform's browser.
-		- Pinned by: `the_about_box_leads_with_a_bold_title_and_links_the_repository`.
+		- Pinned by: dd5ng `the_about_box_leads_with_a_bold_title_and_links_the_repository`.
 	- ✅ Separate modal window rather than an embedded widget.
 		- Done: About is a real pop-out OS window sized to its content, built on the new multi-window foundation. Escape or the close box dismisses it, and the repository link is clickable. The old drawn-in-the-terminal version is gone.
 		- No test: a real OS window, which needs a display.
@@ -13456,10 +13469,10 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- No test: a font choice, checked by eye.
 	- ✅ Allow selection of terminal background image (or none).
 		- Done: a "Background image" text field. Type or paste a path; leaving it empty shows "(none)" and clears the image. Apply reloads it. There is no native file picker available here, so it is a path field.
-		- Pinned by: `the_wallpaper_box_follows_the_rotate_switch`.
+		- Pinned by: dd5ge `the_wallpaper_box_follows_the_rotate_switch`.
 	- ✅ Allow setting font and size to "System default".
 		- Done: a single "Use system font" checkbox. Turning it on adopts the detected family and size straight away, and Apply drops both from the config so later launches follow the OS. Dragging the Font size slider turns it back off.
-		- Pinned by: `system_font_toggle_inert_without_an_os_family` and `system_font_size_split_inference`.
+		- Pinned by: `system_font_toggle_inert_without_an_os_family` (now ddqa9 `a_switch_s_row_follows_its_rule_and_keeps_a_value_set_by_hand`) and da8sg `system_font_size_split_inference`.
 	- ✅ Make settings dialog a separate modal window rather than an embedded widget.
 		- Done: Settings is a pop-out OS window, sized to its content and not resizable, so the whole dialog is visible whatever size the main window is - which was the requirement.
 			- Everything works in the window: sliders by drag or click, text and hex fields, color swatches, and Cancel, Apply and OK plus Escape. Apply and OK reach the main window straight away and write the config.
@@ -13474,7 +13487,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - ✅ Allow common menu accelerators (e.g. Alt+F for File menu).
 	- Done: Alt plus a menu's first letter opens that menu, when the menu bar is shown.
 		- Note: this deliberately shadows the shell's own Meta shortcuts on those letters. It is the usual menu-bar tradeoff, and GNOME Terminal does the same.
-	- Pinned by: `alt_and_a_title_letter_opens_that_menu`.
+	- Pinned by: dd5pw `alt_and_a_title_letter_opens_that_menu`.
 	- Opened: 20260628-083740
 	- Closed: 20260629-214404
 
@@ -13488,14 +13501,14 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Done: a pane keeps hold of its terminal and its shell's process id at spawn, and the tab title asks which program is in the foreground. A program other than the shell reads "shell [program]", and is remembered, so once it exits the tab reads "shell [last: program]", or just the shell name if none has run.
 		- The check runs when the tab bar is built. Unix only at this point; elsewhere the tab falls back to the application name.
 		- Note: tab titles also use the proportional font now.
-	- Pinned by: `a_tab_says_the_shell_the_task_and_the_path_and_gives_them_up_in_order` and `a_task_is_cut_from_its_tail_and_keeps_its_marker`.
+	- Pinned by: dbnj9 `a_tab_says_the_shell_the_task_and_the_path_and_gives_them_up_in_order` and dbnj8 `a_task_is_cut_from_its_tail_and_keeps_its_marker`.
 	- Opened: 20260628-083740
 	- Closed: 20260629-214404
 
 - ✅ No hotkeys for pane management except. Minimal hotkeys overall, except for window, tab, menu, and clipboard managent.
 	- Done: the pane hotkeys are gone - split, close pane, and cycle focus. Pane management is the Panes menu and the right-click menu now, and focus follows a click.
 		- What is left: fullscreen on the window, the tab keys for new, change and move, the menu keys, and the clipboard pair.
-	- Pinned by: `no_chord_splits_closes_or_cycles_panes`.
+	- Pinned by: `no_chord_splits_closes_or_cycles_panes` (now ddes9 `alt_shift_chords_split_and_close_panes_and_alt_arrows_move`, which kept its Ctrl and Ctrl+Shift checks when panes got Alt+Shift hotkeys).
 	- Opened: 20260628-083740
 	- Closed: 20260629-214404
 
@@ -13507,13 +13520,13 @@ Going forward, new issues in the new template at the bottom of this file, will g
 
 - ✅ Menu keyboard key should activate right-click menu on active pane.
 	- Done: the Menu key opens the context menu, anchored near the top left of the focused pane.
-	- Pinned by: `the_menu_key_settings_and_fullscreen_are_hotkeys` and `no_chord_splits_closes_or_cycles_panes`.
+	- Pinned by: dd5p1 `the_menu_key_settings_and_fullscreen_are_hotkeys` and `no_chord_splits_closes_or_cycles_panes` (now ddes9 `alt_shift_chords_split_and_close_panes_and_alt_arrows_move`, which kept its Ctrl and Ctrl+Shift checks when panes got Alt+Shift hotkeys).
 	- Opened: 20260628-083740
 	- Closed: 20260629-214404
 
 - ✅ Group Settings items into logical sections.
 	- Done: section headers, bold with a faint rule under them - Appearance, Font, Window, Scrolling, Colors. Row positions are summed per row now, since a header is taller than a setting.
-	- Pinned by: `every_tab_has_rows_and_every_row_a_tab` and `keyboard_skips_headers_and_disabled`.
+	- Pinned by: dav4m `every_tab_has_rows_and_every_row_a_tab` and d9c7z `keyboard_skips_headers_and_disabled`.
 	- Note: 20260930, superseded by tabs, with groups and sub-groups on each.
 	- Opened: 20260628-083740
 	- Closed: 20260629-214404
@@ -13521,72 +13534,72 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - ✅ Need a way to specify the font in the Settings dialog.
 	- Done: a "Font family" text field, empty meaning the system default. The pinned family is re-resolved whenever the text context is rebuilt, so the field and the "Use system font" checkbox take effect on Apply rather than on the next launch.
 		- Fixed on the way: the spacebar arrives as a named key rather than a character, so a font name or path with spaces in it now types correctly into a dialog field.
-	- Pinned by: `space_types_into_an_open_field`.
+	- Pinned by: dd5r7 `space_types_into_an_open_field`.
 	- Note: 20260930, superseded. An empty family no longer means the system default. "Use system font" does that, and the family is a fallback list.
 	- Opened: 20260628-083740
 	- Closed: 20260629-214404
 
 - ✅ Add window dimensions to Settings dialog.
 	- Done: Columns (20-400) and Rows (6-120) sliders in the new "Window" section. On Apply, if they changed, the window is resized to the new cell grid (`request_inner_size` from `cols*cell_w` / `rows*cell_h` + margins + menu bar). Persisted.
-	- Pinned by: `a_window_is_never_bigger_than_the_device_allows` and `the_tab_strip_counts_against_a_requested_row_count`.
+	- Pinned by: dcq6p `a_window_is_never_bigger_than_the_device_allows` and dcq6q `the_tab_strip_counts_against_a_requested_row_count`.
 	- Opened: 20260628-083740
 	- Closed: 20260629-214404
 
 - ✅ Make "Settings" title on dialog more prominent. (Bigger bolder font. Same with "About" dialog - but give it a title first.)
 	- Done: a dialog line can be bold and can have its own scale. The "Settings" title is bold and half again the body size, and the About box leads with a bold title of its own, which it did not have before.
-	- Pinned by: `the_about_box_leads_with_a_bold_title_and_links_the_repository`.
+	- Pinned by: dd5ng `the_about_box_leads_with_a_bold_title_and_links_the_repository`.
 	- Opened: 20260628-083740
 	- Closed: 20260629-214404
 
 - ✅ Menu content change: No tab or pane setting under the "File" menu. "Panes" can be it's own top-level menu item, between "Tabs" and "Help".
 	- Done. Menu bar is now File / Edit / View / Tabs / Panes / Help. File = Reload Config, Settings…, Quit (no tab/pane items). Tabs = New/Next/Previous/Close Tab. Panes (new, between Tabs and Help) = Split Vertical, Split Horizontal, Close Pane (moved out of View). View = Fullscreen, Hide window frame, Menu bar.
-	- Pinned by: `the_bar_reads_file_to_help_and_file_has_no_tab_or_pane_action`.
+	- Pinned by: dd5pr `the_bar_reads_file_to_help_and_file_has_no_tab_or_pane_action`.
 	- Opened: 20260628-083740
 	- Closed: 20260629-214404
 
 - ✅ Right-click menu options (with logical grouping):
 	- ✅ Copy; selection -> CLIPBOARD
-		- Pinned by: `the_right_click_menu_has_the_pane_actions_and_their_checkmarks`.
+		- Pinned by: dd5ps `the_right_click_menu_has_the_pane_actions_and_their_checkmarks`.
 	- ✅ Paste; CLIPBOARD -> pane (bracketed-aware)
-		- Pinned by: `a_bracketed_paste_cannot_be_closed_from_inside` and `a_pasted_line_break_arrives_the_way_enter_delivers_one`.
+		- Pinned by: dbff6 `a_bracketed_paste_cannot_be_closed_from_inside` and dbff5 `a_pasted_line_break_arrives_the_way_enter_delivers_one`.
 	- ✅ Paste selection; PRIMARY -> pane
-		- Pinned by: `the_right_click_menu_has_the_pane_actions_and_their_checkmarks`.
+		- Pinned by: dd5ps `the_right_click_menu_has_the_pane_actions_and_their_checkmarks`.
 	- ✅ Read-only (accept no input or interruption, but mouse selection and copy still work; toggle with checkmark)
-		- Pinned by: `a_read_only_pane_takes_nothing_the_user_sent`.
+		- Pinned by: dcbd7 `a_read_only_pane_takes_nothing_the_user_sent`.
 	- ✅ New tab
 		- Done: "New Tab" on the right-click menu, the same action as the hotkey.
-		- Pinned by: `the_right_click_menu_has_the_pane_actions_and_their_checkmarks`.
+		- Pinned by: dd5ps `the_right_click_menu_has_the_pane_actions_and_their_checkmarks`.
 	- ✅ Split vertical (already exists)
-		- Pinned by: `the_right_click_menu_has_the_pane_actions_and_their_checkmarks`.
+		- Pinned by: dd5ps `the_right_click_menu_has_the_pane_actions_and_their_checkmarks`.
 	- ✅ Split horizontal (already exists)
-		- Pinned by: `the_right_click_menu_has_the_pane_actions_and_their_checkmarks`.
+		- Pinned by: dd5ps `the_right_click_menu_has_the_pane_actions_and_their_checkmarks`.
 	- ✅ Hide menu (toggle with checkmark)
 		- Done: View > "Menu bar" and the right-click menu both toggle it. Hidden, the content runs to the top edge, and the right-click menu brings it back.
-		- Pinned by: `every_view_toggle_is_checked_while_its_subject_is_on`.
+		- Pinned by: dc3q1 `every_view_toggle_is_checked_while_its_subject_is_on`.
 	- ✅ Hide window frame (toggle with checkmark)
 		- Done. `window.set_decorations`; frame extents go 39px -> 0. Also the route to content-only transparency (bug 1).
-		- Pinned by: `every_view_toggle_is_checked_while_its_subject_is_on`.
+		- Pinned by: dc3q1 `every_view_toggle_is_checked_while_its_subject_is_on`.
 	- 🚫 Hide scrollbar (toggle with checkmark)
 		- Canceled. No scrollbar exists for smooth-scroll.
 		- Note: 20260930, a scrollbar exists now. Its switch is in Settings, not this menu.
 	- ✅ Fullscreen (toggle with checkmark)
 		- Done. `window.set_fullscreen(Borderless)` + F11. Compiz on this box doesn't honor the request (environment, like the F11 grab); it works on a compliant WM.
-		- Pinned by: `every_view_toggle_is_checked_while_its_subject_is_on`.
+		- Pinned by: dc3q1 `every_view_toggle_is_checked_while_its_subject_is_on`.
 	- ✅ Settings
 		- Done: "Settings…" on the right-click menu opens the dialog, as does Ctrl+Comma. "Reload Config" beside it applies edits made to the file by hand.
-		- Pinned by: `the_right_click_menu_has_the_pane_actions_and_their_checkmarks`.
+		- Pinned by: dd5ps `the_right_click_menu_has_the_pane_actions_and_their_checkmarks`.
 	- Opened: 20260628-083740
 	- Closed: 20260629-214404
 
 - ✅ Some way to auto-apply settings after editing config file, without watching it. Maybe an internal command.
 	- Done: "Reload Config" on the right-click menu re-reads the config from disk and applies it live, through the same rebuild path the Settings dialog uses. There is no file watcher, and since the file is the source, nothing is written back.
-	- Pinned by: `a_reload_keeps_the_launch_options_over_the_file` and `a_reload_keeps_what_the_file_never_held`.
+	- Pinned by: dcq7e `a_reload_keeps_the_launch_options_over_the_file` and dcf3t `a_reload_keeps_what_the_file_never_held`.
 	- Opened: 20260628-083740
 	- Closed: 20260629-214404
 
 - ✅ Change default columns = 160. Default margin = 8.
 	- Done: the defaults and the default template both have the new values. An existing config keeps its own, since a default only ever seeds a fresh file.
-	- Pinned by: `changed_defaults`.
+	- Pinned by: d97z3 `changed_defaults`.
 	- Opened: 20260628-083740
 	- Closed: 20260629-214404
 
@@ -13595,7 +13608,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Contents: File (new and close tab, close pane, reload config, settings, quit), Edit (copy, paste, paste selection, read-only), View (split vertical and horizontal, fullscreen, hide window frame, menu bar), Tabs (new, next, previous, close), Help (about).
 		- Help > About opens the About dialog. It started as a box drawn over the terminal and was later reworked into a pop-out window - see the Help and About item.
 		- The initial window height grows by the bar's height, so the default row count still fits.
-	- No test: a hit test over the title widths, and a test would only repeat it.
+	- Pinned by: dd5pr `the_bar_reads_file_to_help_and_file_has_no_tab_or_pane_action`, for the titles, with Panes added since. The hit test over the title widths has no test, since a test would only repeat it.
 	- Opened: 20260628-083740
 	- Closed: 20260629-214404
 
@@ -13608,21 +13621,21 @@ Going forward, new issues in the new template at the bottom of this file, will g
 
 - ✅ Add adjustable background image opacity to config file, and make default about 33%. This is independent of "see-through" opacity. The "opacity" should be relative to the background color. 0% = all background color, 100% = all image.
 	- Done. `background_opacity` already provided this (0 = all bg color, 1 = all image); changed the default to 0.33. Independent of `opacity` (see-through).
-	- Pinned by: `a_full_slider_always_draws_the_picture_as_it_is` and `changed_defaults`.
+	- Pinned by: dcx7a `a_full_slider_always_draws_the_picture_as_it_is` and d97z3 `changed_defaults`.
 	- Note: 20260930, superseded. This is the Visibility slider now, 10% by default, drawn by the rule in the [wallpaper design doc](design_docs/20260930-150052_wallpaper.md).
 	- Opened: 20260628-083740
 	- Closed: 20260629-214404
 
 - ✅ CTRL+shift+C and CTRL+shift+V should work as clipboard commands.
 	- Done. Ctrl+Shift+C copies the focused pane selection to the CLIPBOARD; Ctrl+Shift+V pastes it (`handle_hotkey`).
-	- Pinned by: `only_a_held_ctrl_shift_c_is_the_copy_chord`.
+	- Pinned by: dcnpg `only_a_held_ctrl_shift_c_is_the_copy_chord`.
 	- Opened: 20260628-083740
 	- Closed: 20260629-214404
 
 - ✅ Double-clicking selects a word up to user-tweakable delimiters (sane defaults; full paths stay whole).
 	- Done: a double-click, meaning two clicks in the same cell within the usual interval, selects a word. A `word_separators` setting names the delimiters, and the default keeps the characters that hold a path together.
 	- Refined: dropped ':' from the default delimiters, so a Windows drive path (`C:\…`) selects whole (was splitting off the drive); URLs and namespaced idents come along too. Override by adding ':' back to `word_separators`.
-	- Pinned by: `default_word_separators_keep_drive_colon`.
+	- Pinned by: da493 `default_word_separators_keep_drive_colon`.
 	- Opened: 20260628-083740
 	- Closed: 20260629-214404
 
@@ -13633,45 +13646,45 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Live apply: opacity re-sets the window opacity, colors re-render, and a font or metric change rebuilds the text context and relays out. The config is written in place, changed keys only, comments kept.
 		- Foundation: the live settings can be swapped as a whole at run time, which is what lets a dialog apply without a restart.
 		- Not yet exposed (the field table is trivially extensible): font_family, scrollback, alt/output scroll lines, background_fit, columns/rows, word_separators.
-	- Pinned by: `buttons_fire_on_release_over_button`, `space_or_enter_activates_focused_button`, `escape_from_inside_a_field_cancels_the_dialog`, `enter_in_a_field_is_the_dialogs_ok` and `a_save_writes_only_the_lines_it_changed`.
+	- Pinned by: d9chh `buttons_fire_on_release_over_button`, d9c8c `space_or_enter_activates_focused_button`, dcrpt `escape_from_inside_a_field_cancels_the_dialog`, dcrpv `enter_in_a_field_is_the_dialogs_ok` and dd444 `a_save_writes_only_the_lines_it_changed`.
 	- Note: 20260930, superseded. Settings is a pop-out window now, not a modal over the terminal, and font family, columns and rows are exposed.
 	- Opened: 20260628-083740
 	- Closed: 20260629-214404
 
 - ✅ If hardware acceleration is not available, use software rendering. Also need a way to tell which the application is using. Maybe in "help/about".
 	- Done: startup asks for a GPU and falls back to a software renderer if there is none. Which one came back is logged at startup, and Help > About names the renderer, the backend, and whether it is accelerated.
-	- Pinned by: `about_names_the_renderer_and_whether_it_is_accelerated`.
+	- Pinned by: dd5n6 `about_names_the_renderer_and_whether_it_is_accelerated`.
 	- Opened: 20260628-083740
 	- Closed: 20260629-214404
 
 - ✅ Make it easy to change the program name, in project and code files
 	- Done: the display name lives in one place, and `utility/rename.bash NewName` rewrites the name and its lowercase form across the build file, the sources and the docs in one go. It is not a runtime setting.
-	- Pinned by: `cicd/tests/rename/run.bash`.
+	- Pinned by: dcrrk `cicd/tests/rename/run.bash`.
 	- Opened: 20260628-083740
 	- Closed: 20260629-214404
 
 - ✅ Local config file with tunables, somewhere under ~/.config
 	- Done: `$XDG_CONFIG_HOME/silkterm/config.toml` (-> `~/.config/…`), auto-created with commented defaults on first run. Tunables: font, size, line height, margin, scrollback, scroll feel, colors (`#rrggbb`). Malformed/unknown entries fall back to defaults.
-	- Pinned by: `each_platform_keeps_its_config_where_that_platform_keeps_settings`, `an_explicit_xdg_config_home_wins_on_every_platform`, `a_bad_line_drops_only_its_own_setting` and `default_config_is_valid_shcl`.
+	- Pinned by: dbfgz `each_platform_keeps_its_config_where_that_platform_keeps_settings`, dbfh0 `an_explicit_xdg_config_home_wins_on_every_platform`, damtn `a_bad_line_drops_only_its_own_setting` and damtp `default_config_is_valid_shcl`.
 	- Opened: 20260628-083740
 	- Closed: 20260629-214404
 
 - ✅ Use system monospace font by default
 	- Done: the default font is the monospace family the OS is set to, when that family is installed, and generic monospace otherwise. `font_family` in the config overrides it by name.
-	- Pinned by: `mono_candidates_keep_one_order_on_every_platform`.
+	- Pinned by: `mono_candidates_keep_one_order_on_every_platform` (now ddq9d `mono_candidates_put_the_family_first_and_the_built_in_stack_last` and ddwhq `the_desktop_s_font_leads_the_built_in_list`).
 	- Note: 20260930, superseded. The font comes from one search order now, with a built-in list, from "The font fallback stack is only partly implemented".
 	- Opened: 20260628-083740
 	- Closed: 20260629-214404
 
 - ✅ Slightly More (and user-adjustable) margin between output and window border.
 	- Done: `margin` config option (logical px, default 4), DPI-scaled, inset on all sides of each pane's content.
-	- Pinned by: `the_margin_is_over_no_link`.
+	- Pinned by: datv4 `the_margin_is_over_no_link`.
 	- Opened: 20260628-083740
 	- Closed: 20260629-214404
 
 - ✅ Default to all black background, and 152 columns by 48 rows
 	- Solution: Default `background` is now `#000000`. New `columns`/`rows` config options (default 152x48) size the initial window: after cell metrics are known the window requests `cols*cell_w + 2*margin` x `rows*cell_h + 2*margin` px, so `content_dims` floors to exactly the requested grid. Existing config files keep their own colors (defaults only apply to freshly generated configs).
-	- Pinned by: `changed_defaults`.
+	- Pinned by: d97z3 `changed_defaults`.
 	- Opened: 20260628-083740
 	- Closed: 20260629-214404
 
@@ -13679,37 +13692,37 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Solution: pane text is shaped with per-glyph font fallback rather than the plain path, so CJK, emoji, math symbols and right-to-left scripts draw instead of coming out as empty boxes, while the monospace alignment stays. It uses whatever fonts are installed and has no setting.
 		- The plain path had been chosen because an earlier version of the text library hung on real output here. The version now in use has a bounded fallback loop and was stress-tested.
 		- A glyph no installed font claims still falls back to whatever does claim it. Installing the relevant font is the answer, as it is in any terminal.
-	- Pinned by: `emoji_falls_back_to_a_face_that_rasterizes`.
+	- Pinned by: daeaa `emoji_falls_back_to_a_face_that_rasterizes`.
 	- Opened: 20260628-083740
 	- Closed: 20260629-214404
 
 - ✅ Ability to select text by partial lines, with left mouse button.
 	- Solution: a left press turns the pixel into a grid position and starts a selection, a drag extends it, and the release copies the text to the primary selection. Selected cells are highlighted. A click with no drag clears the selection.
-	- Pinned by: `a_pixel_maps_to_a_cell_half_and_clamps_at_the_edges`.
+	- Pinned by: dd5qg `a_pixel_maps_to_a_cell_half_and_clamps_at_the_edges`.
 	- Opened: 20260628-083740
 	- Closed: 20260629-214404
 
 - ✅ Ability to select text with in a grid-aligned rectangle, with CTRL+left mouse button.
 	- Solution: the same path as an ordinary selection, in block mode, when Ctrl is held at the press.
-	- Pinned by: `clicks_count_to_three_on_one_spot_then_start_over` and `ctrl_selects_a_block_but_only_on_a_single_click`.
+	- Pinned by: dd5p9 `clicks_count_to_three_on_one_spot_then_start_over` and dd5pa `ctrl_selects_a_block_but_only_on_a_single_click`.
 	- Opened: 20260628-083740
 	- Closed: 20260629-214404
 
 - ✅ Copy & paste selected text to current cursor location, via middle mouse button.
 	- Solution: copy-on-select writes to the primary selection, held for the app's lifetime. Middle-click reads the primary selection and writes it to the pane under the cursor, wrapped in bracketed-paste when the app enabled it.
-	- No test: it needs the real X11 selection. Paste formatting is pinned by the `paste_payload` tests.
+	- No test: it needs the real X11 selection. Paste formatting is pinned by the `paste_payload` tests, dbff5, dbff6 and dcdjd.
 	- Opened: 20260628-083740
 	- Closed: 20260629-214404
 
 - ✅ Use mouse to resize panes by grabbing on to separater line.
 	- Solution: every split already had a ratio, so the work was hit-testing the gap between panes, with a few pixels of grab room either side, and setting that ratio from the cursor as it drags. It is clamped so neither side can be squeezed away. A left press on a divider starts a resize rather than a selection, and hovering one shows the resize pointer.
-	- Pinned by: `dragging_a_divider_sets_its_ratio_from_the_pointer`.
+	- Pinned by: dd5q4 `dragging_a_divider_sets_its_ratio_from_the_pointer`.
 	- Opened: 20260628-083740
 	- Closed: 20260629-214404
 
 - ✅ Ability to re-order panes with drag-n-drop mouse (possibly "grabbing" via shift-primary mouse button - and drop targets highlight themselves under mouse).
 	- Solution: Shift and a left press grab the pane under the cursor, and the pointer changes to say so. The pane currently under the cursor is tinted as the drop target, and releasing swaps the two.
-	- Pinned by: `swapping_two_panes_trades_their_places_and_nothing_else`.
+	- Pinned by: dd5q5 `swapping_two_panes_trades_their_places_and_nothing_else`.
 	- Opened: 20260628-083740
 	- Closed: 20260629-214404
 
@@ -13723,7 +13736,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Solution: the image is drawn across the whole window, over the pane fill and under the text, and composes with the window opacity. `background_image` takes an absolute path or a filename beside the config, and failing that a `background.png` or `.jpg` beside the config is picked up on its own. `background_opacity` and `background_fit` control how it looks.
 	- ✅ Render options: Stretch-to-fit, Zoom-to-fit.
 		- Done. `background_fit` = "stretch" | "zoom"; default zoom/cover.
-		- Pinned by: `a_flat_wallpaper_converts_to_the_image_and_survives_a_save`.
+		- Pinned by: dcfs8 `a_flat_wallpaper_converts_to_the_image_and_survives_a_save`.
 	- Note: 20260930, the `background_*` keys are nested `wallpaper.*` keys now, and the default fit is Stretch.
 	- Opened: 20260628-083740
 	- Closed: 20260629-214404
