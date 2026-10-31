@@ -195,7 +195,7 @@ check("the list gives ID and name", out.splitlines() == ["decp8  tests::case_0"]
 real = subprocess.run([sys.executable, str(TOOL), "--check"], capture_output=True, text=True, check=False)
 check("every test in this tree has an ID in the new form, and no two share one", real.returncode == 0, real.stdout.strip()[-300:])
 
-shutil.rmtree(scratch, ignore_errors=True)
+_testdir.rm(scratch)
 _testdir.end(1 if failures else 0)
 if failures:
 	print(f"{failures} failed")

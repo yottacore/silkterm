@@ -94,6 +94,33 @@ else
 	fCheck "and all of them stay" test -f "${out}/keep/f" -a -d "${out}/keepnot/x" -a -d "${out}/tmp/r2"
 fi
 
+## HOST_TEMP itself and a whole project folder in it, here under a tmp folder,
+## where the tmp rule alone would take them. Real folders, since a path that
+## isn't there gets refused anyway.
+ht="${work}/tmp/ht"
+mkdir -p "${ht}/silkterm/r1" "${ht}/other/r1" "${ht}/loose" "${ht}/sock"
+ln -s "${ht}" "${work}/tmp/htl"
+fHt(){ HOST_TEMP="${ht}" bash -c 'source "$1"; shift; "$@"' _ "${lib}" "${@}"; }
+fHtLink(){ HOST_TEMP="${work}/tmp/htl/" bash -c 'source "$1"; shift; "$@"' _ "${lib}" "${@}"; }
+fNoHt(){ env -u HOST_TEMP TMPDIR="${ht}" bash -c 'source "$1"; shift; "$@"' _ "${lib}" "${@}"; }
+fCheck "HOST_TEMP itself is refused" fRefused fHt fSafeRm "${ht}"
+fCheck "so is this project's folder in it" fRefused fHt fSafeRm "${ht}/silkterm"
+fCheck "and another project's" fRefused fHt fSafeRm "${ht}/other"
+fCheck "with a trailing slash too" fRefused fHt fSafeRm "${ht}/other/"
+fCheck "and it says why" grep -qF "refused, a whole project temp folder: ${ht}/other" <<<"$(fHt fSafeRm "${ht}/other" 2>&1)"
+fCheck "a HOST_TEMP behind a link is resolved first" fRefused fHtLink fSafeRm "${ht}/other"
+fCheck "and all of them stay" test -d "${ht}/silkterm/r1" -a -d "${ht}/other/r1"
+fCheck "a run folder in another project's folder goes" fHt fSafeRm "${ht}/other/r1"
+fCheck "and one in this project's" fHt fSafeRm "${ht}/silkterm/r1"
+fCheck "and only those" test ! -e "${ht}/other/r1" -a ! -e "${ht}/silkterm/r1" -a -d "${ht}/other" -a -d "${ht}/silkterm"
+fCheck "the one-parent form won't take HOST_TEMP" fRefused fHt fSafeRm_Under "${work}/tmp" "${ht}"
+fCheck "or this project's folder" fRefused fHt fSafeRm_Under "${ht}" "${ht}/silkterm"
+fCheck "but takes a folder made right in it, as the test run folders are" fHt fSafeRm_Under "${ht}" "${ht}/loose"
+fCheck "with no HOST_TEMP, TMPDIR stands in" fRefused fNoHt fSafeRm "${ht}"
+fCheck "and this project's folder in it is refused" fRefused fNoHt fSafeRm "${ht}/silkterm"
+fCheck "while a folder right in it goes, as the socket folders in /tmp do" fNoHt fSafeRm "${ht}/sock"
+fCheck "and HOST_TEMP's folders are still there" test -d "${ht}/silkterm" -a -d "${ht}/other" -a ! -e "${ht}/loose" -a ! -e "${ht}/sock"
+
 ## The release artifacts folder, cleared by cicd.bash's own lines, only under
 ## cicd/artifacts in the repo it was given.
 clear="$(sed -n '/^\t\tif \[\[ -e "\${artDir}" || -L "\${artDir}" \]\]; then$/,/^\t\tfi$/p' "${repoRoot}/cicd/cicd.bash")"
@@ -130,6 +157,19 @@ fCheck "and one in the guard" test "$(fBare "${lib}" | wc -l)" -eq 1
 ## Built from r, so this file's own lines don't match.
 r="rm"
 fCheck "the check finds the forms it looks for" test "$(fBare <(printf '%s\n' "${r} -rf a" "x; ${r} -f -r a" "trap '${r} -Rf a' EXIT" "\\${r} --recursive a" "command ${r} -fr a" "## ${r} -rf a" "docker run --${r} a" "${r} -f a") | wc -l)" -eq 5
+
+## The same for every tracked Python file in cicd/, by name or first line, and
+## the Python copy of the guard and its own test.
+fBarePy(){ grep -HnE '\brmtree\b' "${@}" /dev/null | grep -vE '^[^:]+:[0-9]+:[[:space:]]*#' || true; }
+mapfile -t pyFiles < <(cd "${repoRoot}" && git ls-files -z cicd | xargs -0 awk -v root="${repoRoot}/" \
+	'FNR == 1 { if (FILENAME ~ /\.py$/ || $0 ~ /^#!.*[\/ ]python[0-9.]*([ \t]|$)/) print root FILENAME; nextfile }')
+fCheck "the Python files are found" test "${#pyFiles[@]}" -gt 20
+said="$(fBarePy "${pyFiles[@]}")"
+fCheck "no bare rmtree in any of them" test -z "${said}"
+[[ -z "${said}" ]] || printf '    %s\n' "${said//$'\n'/$'\n'    }"
+r="rmtree"
+fCheck "the Python check finds the forms it looks for" test "$(fBarePy <(printf '%s\n' "shutil.${r}(a)" "from shutil import ${r}" "	${r}(a, ignore_errors=True)" "## ${r}(a)" "	# ${r}(a)" "x.${r}s(a)") | wc -l)" -eq 3
+fCheck "the Python guard's test (depj1) passes" python3 -I "${meDir}/run.py"
 
 ## A test's own folders, through fTestDir_Rm, under the run's test folder only.
 mkdir -p "${work}/td/run/w1/sub" "${work}/td/other"; echo k >"${work}/td/other/f"
@@ -180,3 +220,5 @@ echo "all passed"
 ##		- 20261028: The PowerShell copy, and cicd-win.ps1 through it.
 ##		- 20261031: Every PowerShell script, the test scripts and install.ps1 too.
 ##		- 20261031: Every bash file in cicd/, and the tests' own fTestDir_Rm.
+##		- 20261031: HOST_TEMP itself and a whole project folder in it.
+##		- 20261031: The Python copy, and every Python file in cicd/ through it.

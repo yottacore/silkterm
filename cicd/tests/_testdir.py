@@ -4,19 +4,22 @@
 ##		empty is the folder, made if missing, and never removed; otherwise a fresh
 ##		0700 one is made and exported, so every test the caller starts shares it.
 ##		A script that made one calls end(<exit status>) right before it exits,
-##		which removes the folder on 0 and keeps it otherwise.
+##		which removes the folder on 0 and keeps it otherwise. rm(<path>) removes a
+##		folder tree inside it, as fTestDir_Rm does.
 ##	- History: At bottom of file.
 
 ##	Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
 ##	SPDX-License-Identifier: GPL-2.0-or-later
 
 import os
-import shutil
 import sys
 import tempfile
 import time
 from datetime import datetime
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "utility" / "include"))
+import saferm  # noqa: E402
 
 _MARKER = ".test_silkterm_owner"
 ## Kept out of the environment, so a child never thinks the folder is its own.
@@ -80,11 +83,32 @@ def end(status: int) -> None:
 	if reason:
 		print(f"test run folder: left {folder} in place: {reason}", file=sys.stderr)
 		return
-	## rmtree removes a link inside as a link and never follows it.
+	## Under the temp folder it was made in, resolved, since that can sit behind a link.
+	up = os.path.realpath(folder.parent)
+	if not saferm.rm_under(up, f"{up}/{folder.name}"):
+		print(f"test run folder: could not remove {folder}", file=sys.stderr)
+
+
+def rm(path: "str | os.PathLike[str]") -> bool:
+	## A folder tree inside this run's test folder, through the guard with that
+	## folder as the one parent. A path that isn't there is left alone, as
+	## rmtree(ignore_errors=True) did. False, with the reason on stderr, when the
+	## guard refuses.
+	p = os.fspath(path)
+	if not os.path.lexists(p):
+		return True
+	given = os.environ.get("SILKTERM_TEST_DIR", "")
 	try:
-		shutil.rmtree(folder)
-	except OSError as e:
-		print(f"test run folder: could not remove {folder}: {e}", file=sys.stderr)
+		root = os.path.realpath(given, strict=True) if given else ""
+	except OSError:
+		root = ""
+	if not root:
+		print(f"test run folder: no folder to remove {p} from", file=sys.stderr)
+		return False
+	## A path built on the folder's name before it was resolved, as TMPDIR is.
+	if p.startswith(given + "/"):
+		p = root + p[len(given):]
+	return saferm.rm_under(root, p)
 
 
 def use() -> Path:
@@ -99,3 +123,4 @@ def use() -> Path:
 ##	History:
 ##		- 20260930 JC: Created.
 ##		- 20261002 JC: A run removes the folder it made when it passes.
+##		- 20261031: Removals go through the safe removal guard, and rm() for a test's own folders.

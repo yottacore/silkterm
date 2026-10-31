@@ -120,6 +120,40 @@ fFile (Join-Path $plain 'f.txt')
 $r = fTry { fSafeRm $plain }
 fCheck 'a folder in the project folder goes' ($r.Ok -and -not (Test-Path -LiteralPath $plain))
 
+##	HOST_TEMP itself and a whole project folder in it, here under a tmp folder,
+##	where the tmp rule alone would take them. Real folders, since a path that
+##	isn't there gets refused anyway.
+$ht = fDir (Join-Path $tmp 'ht')
+foreach ($d in 'silkterm', 'other', 'loose', 'sock') { $null = fDir (Join-Path $ht "$d${sep}r1") }
+function fHt([string]$Name) { Join-Path $ht $Name }
+$whole = 'a whole project temp folder'
+$saved = $script:SafeRmHost, $script:SafeRmOwn, $script:SafeRmHostSet
+$script:SafeRmHost = $ht; $script:SafeRmOwn = fHt 'silkterm'; $script:SafeRmHostSet = $true
+fCheck 'HOST_TEMP itself is refused'      (fRefused { fSafeRm $ht } $whole)
+fCheck 'so is this project''s folder in it' (fRefused { fSafeRm (fHt 'silkterm') } $whole)
+fCheck 'and another project''s'           (fRefused { fSafeRm (fHt 'other') } $whole)
+fCheck 'with a trailing separator too'    (fRefused { fSafeRm "$(fHt 'other')$sep" } $whole)
+if ($win) { fCheck 'and in another case' (fRefused { fSafeRm (fHt 'OTHER') } $whole) }
+fCheck 'a run folder in another project''s folder goes' (fTry { fSafeRm (fHt "other${sep}r1") }).Ok
+fCheck 'and one in this project''s'       (fTry { fSafeRm (fHt "silkterm${sep}r1") }).Ok
+fCheck 'and only those' ((Test-Path -LiteralPath (fHt 'other')) -and (Test-Path -LiteralPath (fHt 'silkterm')) -and -not (Test-Path -LiteralPath (fHt "other${sep}r1")))
+fCheck 'the one-parent form won''t take HOST_TEMP' (fRefused { fSafeRm_Under $tmp $ht } $whole)
+fCheck 'or this project''s folder'        (fRefused { fSafeRm_Under $ht (fHt 'silkterm') } $whole)
+fCheck 'but takes a folder made right in it, as the test scripts make theirs' (fTry { fSafeRm_Under $ht (fHt 'loose') }).Ok
+$script:SafeRmHostSet = $false
+fCheck 'with no HOST_TEMP, the fallback itself is refused' (fRefused { fSafeRm $ht } $whole)
+fCheck 'and this project''s folder in it' (fRefused { fSafeRm (fHt 'silkterm') } $whole)
+fCheck 'while a folder right in it goes'  (fTry { fSafeRm (fHt 'sock') }).Ok
+##	And as the guard reads it at load, from the environment.
+$envWas = $env:HOST_TEMP
+try {
+	$env:HOST_TEMP = "$ht$sep"
+	. (Join-Path $PSScriptRoot '../../utility/include/saferm.ps1')
+	fCheck 'HOST_TEMP from the environment counts' (fRefused { fSafeRm (fHt 'other') } $whole)
+} finally { $env:HOST_TEMP = $envWas }
+$script:SafeRmHost, $script:SafeRmOwn, $script:SafeRmHostSet = $saved
+fCheck 'and HOST_TEMP''s folders are still there' ((Test-Path -LiteralPath (fHt 'other')) -and (Test-Path -LiteralPath (fHt 'silkterm')) -and -not (Test-Path -LiteralPath (fHt 'sock')))
+
 ##	The one-parent form, here and in install.ps1's own copy. $Who names the copy.
 function fOneParent { param([string]$Who)
 	$base = fDir (Join-Path $work ('one-' + [System.IO.Path]::GetRandomFileName()))
@@ -195,3 +229,4 @@ exit 0
 ##	History:
 ##		- 20261028: Created.
 ##		- 20261031: install.ps1's own copy takes the one-parent cases too.
+##		- 20261031: HOST_TEMP itself and a whole project folder in it.

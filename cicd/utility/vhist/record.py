@@ -33,6 +33,9 @@ import termios
 import time
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'include'))
+import saferm  # noqa: E402
+
 CTRL = {c: chr(ord(c) - 96) for c in 'bdefuy'}
 
 ## (keys, count, seconds between). Each step scrolls a known way, so a replay
@@ -80,7 +83,8 @@ def main() -> int:
 	ap.add_argument('--lines', type=int, default=600)
 	args = ap.parse_args()
 
-	work = tempfile.mkdtemp(prefix='vhist_')
+	tmp_root = os.path.realpath(tempfile.gettempdir())
+	work = tempfile.mkdtemp(prefix='vhist_', dir=tmp_root)
 	path = str(Path(work) / 'numbered.txt')
 	with Path(path).open('w', encoding='ascii') as f:
 		for n in range(1, args.lines + 1):
@@ -123,7 +127,7 @@ def main() -> int:
 	except ProcessLookupError:
 		pass
 	os.waitpid(pid, 0)
-	shutil.rmtree(work)
+	saferm.rm_under(tmp_root, work)
 
 	with Path(args.out).open('wb') as f:
 		for at, c in chunks:

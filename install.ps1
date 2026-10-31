@@ -385,7 +385,8 @@ function fPathNote {
 ##	<parent>, and nothing else. The repo's cicd/utility/include/saferm.ps1 with
 ##	the same rules, carried here since this file runs alone, by `irm | iex` too,
 ##	and on 5.1. Links are looked for only below the parent, since the temp
-##	folder the system hands out can sit behind one, as macOS's /var does.
+##	folder the system hands out can sit behind one, as macOS's /var does. It
+##	skips the HOST_TEMP checks, since a user's box has no HOST_TEMP.
 ##	$true when removed; otherwise one line on stderr, and $false.
 function fSafeRm_Under {
 	$rooted = if ($onWindows) { '^[A-Za-z]:[\\/]' } else { '^/' }

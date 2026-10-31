@@ -13,10 +13,14 @@
 	fSafeRm <path>: only somewhere under a folder named tmp, never that folder
 	itself, or under this project's own folder in HOST_TEMP, since the Windows
 	temp folder isn't named tmp. HOST_TEMP falls back to TEMP on Windows, and
-	TMPDIR or /tmp elsewhere.
+	TMPDIR or /tmp elsewhere. With HOST_TEMP set, never a whole folder right
+	under it either, where other runs and sessions keep theirs.
 
 	fSafeRm_Under <parent> <path>: only somewhere under the one parent named, for
 	a folder outside a temp root, such as the release artifacts.
+
+	Neither takes HOST_TEMP itself, or its fallback, or this project's folder
+	in it.
 
 	Both take one absolute path and refuse an empty one, "..", a doubled
 	separator, a newline, a link, a path through a link, or one that isn't
@@ -34,10 +38,13 @@
 
 function fSafeRm_OnWindows { if (Test-Path variable:IsWindows) { $IsWindows } else { $true } }
 
-$script:SafeRmOwn = $(
+$script:SafeRmHost = $(
 	$tempRoot = if ($env:HOST_TEMP) { $env:HOST_TEMP } elseif (fSafeRm_OnWindows) { $env:TEMP } elseif ($env:TMPDIR) { $env:TMPDIR } else { '/tmp' }
-	if ($tempRoot) { [System.IO.Path]::Combine([System.IO.Path]::GetFullPath($tempRoot), 'silkterm') }
+	if ($tempRoot) { [System.IO.Path]::TrimEndingDirectorySeparator([System.IO.Path]::GetFullPath($tempRoot)) }
 )
+$script:SafeRmOwn = if ($script:SafeRmHost) { [System.IO.Path]::Combine($script:SafeRmHost, 'silkterm') }
+##	Without HOST_TEMP the root is /tmp or TEMP, which hold far more than project folders.
+$script:SafeRmHostSet = [bool]$env:HOST_TEMP
 
 function fSafeRm { fSafeRm_Do '' $args }
 
@@ -68,6 +75,17 @@ function fSafeRm_Do([string]$Parent, [object[]]$Paths) {
 		$inOwn = $own -and $p.Length -gt $own.Length + 1 -and $p.StartsWith($own, $case) -and $p[$own.Length] -match $sep
 		if (-not ($inTmp -or $inOwn)) { return (fSafeRm_Refuse "not under a tmp folder: $p") }
 	}
+	##	Compared without trailing separators, so a root such as / or C:\ matches too.
+	$trim = { param([string]$s) $s = $s.TrimEnd('\', '/'); if ($win) { $s.Replace('/', '\') } else { $s } }
+	if ($script:SafeRmHost) {
+		$hostDir = & $trim $script:SafeRmHost
+		$ownDir = & $trim $script:SafeRmOwn
+		$here = & $trim $p
+		$up = & $trim $p.Substring(0, [Math]::Max(0, $p.LastIndexOfAny([char[]]'\/')))
+		if ($here.Equals($hostDir, $case) -or $here.Equals($ownDir, $case) -or (-not $Parent -and $script:SafeRmHostSet -and $up.Equals($hostDir, $case))) {
+			return (fSafeRm_Refuse "a whole project temp folder: $p")
+		}
+	}
 	$item = Get-Item -LiteralPath $p -Force -ErrorAction SilentlyContinue
 	if ($item -and ($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint)) { return (fSafeRm_Refuse "a link: $p") }
 	if (-not $item) { return (fSafeRm_Refuse "not there: $p") }
@@ -97,3 +115,4 @@ function fSafeRm_Walk([System.IO.FileSystemInfo]$Entry) {
 
 ##	History:
 ##		- 20261028: Created.
+##		- 20261031: HOST_TEMP itself and a whole project folder in it are refused.

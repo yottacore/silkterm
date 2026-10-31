@@ -82,6 +82,9 @@ from typing import Any, TypedDict
 import numpy as np
 from scipy import signal as spsig
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "include"))
+import saferm  # noqa: E402
+
 ME_DIR   = Path(__file__).resolve().parent
 REPO     = ME_DIR.parents[2]                  # github/cicd/utility/demo-video -> github
 PRIVATE  = REPO.parent / "private" / "demo-video"
@@ -216,7 +219,8 @@ class Rec:
 		self.num      = self.display.lstrip(":")
 		self.auth     = f"/tmp/cicd-gui-headless-{run_user()}/Xauthority-{self.num}"
 		self.bin      = os.environ.get("SILK_BIN") or str(target_dir() / "release/silkterm")
-		self.work     = Path(tempfile.mkdtemp(prefix="silk-demo-"))
+		self.work_in  = os.path.realpath(tempfile.gettempdir())    # resolved once, since the guard takes nothing behind a link
+		self.work     = Path(tempfile.mkdtemp(prefix="silk-demo-", dir=self.work_in))
 		self.home     = self.work / "home"
 		self.wmhome   = self.work / "wmhome"    # the WM's HOME: theme + its own xfconf
 		self.keep     = args.keep_work
@@ -520,7 +524,7 @@ class Rec:
 		self.kill_app()
 		self.stop_display()
 		if not self.keep and self.work.exists():
-			shutil.rmtree(self.work, ignore_errors=True)
+			saferm.rm_under(self.work_in, self.work)
 
 
 ##•••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••

@@ -352,7 +352,7 @@ else:
 	check("and nothing was added beside it", not (account / ".config/powershell").exists())
 	## --keep leaves the work folder for the checks above. Without it the rig removes it.
 	for left in work.iterdir():
-		shutil.rmtree(left, ignore_errors=True)
+		_testdir.rm(left)
 	bash('"$1" --term silkterm --no-save --reps 1', speed)
 	check("the speed rig removes what it made", not any(work.iterdir()), str(list(work.iterdir())))
 
@@ -376,7 +376,7 @@ kept = candy.parents[2] if candy.is_file() else None
 check("the size rig keeps its folder under the temp dir it was given",
 	kept is not None and kept.parent == work, str(kept))
 if kept and kept.name.startswith("sizebench.") and kept.parent == work:
-	shutil.rmtree(kept, ignore_errors=True)
+	_testdir.rm(kept)
 
 ## Note 9 in comparison.md names the rig behind each group of columns. Each has
 ## to be the rig its script really is. A missing note fails both checks.
@@ -390,7 +390,7 @@ check("note 9 says the size rig is an X server drawing in software at its grid",
 	"private X server drawing in software, at a 100x30 grid" in note9
 	and "Xvfb" in size_rig_text and 'grid="100x30"' in size_rig_text)
 
-shutil.rmtree(scratch, ignore_errors=True)
+_testdir.rm(scratch)
 _testdir.end(1 if failures else 0)
 if failures:
 	print(f"{failures} failed")

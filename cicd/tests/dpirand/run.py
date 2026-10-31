@@ -60,6 +60,7 @@ HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[2]
 sys.path.insert(0, str(HERE.parent))
 import _testdir  # noqa: E402
+import saferm  # noqa: E402  ## on the path _testdir set
 
 LVP = Path("/usr/share/vulkan/icd.d/lvp_icd.json")
 VPOINTER = HERE.parent / "monwl" / "_vpointer.py"
@@ -522,7 +523,7 @@ class Rig:
 			except subprocess.TimeoutExpired:
 				proc.kill()
 		if self.short_run and self.short_run.name.startswith("silkdpi."):
-			shutil.rmtree(self.short_run, ignore_errors=True)
+			saferm.rm(self.short_run)
 
 	def msg(self, *args: str, kind: str = "") -> object:
 		cmd = ["swaymsg", "-r"] + (["-t", kind] if kind else []) + list(args)
@@ -1648,7 +1649,7 @@ def run_case(seed: int, arm: str | None, binary: Path, folder: Path, keep: bool)
 	finally:
 		case.rig.close()
 	if ok and not keep:
-		shutil.rmtree(work, ignore_errors=True)
+		_testdir.rm(work)
 	else:
 		case.note(f"  kept {work}")
 	return ok, case

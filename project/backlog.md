@@ -37,14 +37,27 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - CICD reset: the bash guard doesn't refuse HOST_TEMP itself or a project's whole folder under it
 	- ID: 2026103115170424
 	- Type: Bug
-	- Status: Queued
+	- Status: Waiting on automated testing
+	- Needs external testing: dehyk on b29w, for the Windows side of the PowerShell guard's new check (case and separators).
 	- Priority: High
 	- Opened: 20261031-151704
 	- Opened by:
 	- Parent ID: 2026102416233803
+	- Related IDs: 2026103115085852
 	- Target OS: All
 	- Progress log:
 		- 20261031: Found by the worker on 2026102807494121. The shared Safe removal rule has asked for both refusals since 10-28. Check the PowerShell copies too.
+		- 20261031: `saferm.bash`'s `fSafeRm` refuses HOST_TEMP itself, and with HOST_TEMP set, any whole folder right under it. Both forms refuse HOST_TEMP and this project's folder in it. `saferm.ps1` has the same, and so does the new Python copy in 2026103115085852.
+	- Decisions:
+		- 20261031: A whole folder right under the temp root is refused only when HOST_TEMP is set, as the shared `safe-rm.bash` does. Without it the root is `/tmp`, where the short socket folders sit. The root itself and this project's folder are refused either way.
+		- 20261031: The one-parent form still takes another folder right under HOST_TEMP. The test run folders and the utilities' own folders are made right in TMPDIR, which can be HOST_TEMP, until 2026102807494157 moves them.
+		- 20261031: The repo copies read HOST_TEMP from the environment only. The shared guard's fallback to the login config is for this box, and a fresh clone has none.
+		- 20261031: install.ps1's copy is left as is. It has only the one-parent form, its parent is the system temp folder, which it already refuses, and it runs on users' boxes, which have no HOST_TEMP.
+		- 20261031: With TMPDIR set to HOST_TEMP, a failed run's kept test folder sits right under HOST_TEMP, so the stale sweep now refuses it and says so. A passing run still removes its own folder. 2026102807494157 moves run folders under the project's folder, where the sweep takes them.
+	- Verified: 20261031. dehwp passes, and its new checks failed 9 times against the old `saferm.bash`. dehyk passes under pwsh here, and its new checks failed 15 times with the new check taken out of `saferm.ps1`. The cleanup test passes.
+		- Swept: every copy of the guard: `saferm.bash`, `saferm.ps1`, install.ps1's `fSafeRm_Under`, and the new `saferm.py`. Every `fSafeRm` caller, for a path right under HOST_TEMP: the socket folders and `install`'s run folders are in `/tmp`, and the container's /tmp is in the target dir.
+	- Test case: `cicd/tests/saferm/run.bash` (dehwp) and `cicd/tests/saferm/win.ps1` (dehyk), their HOST_TEMP checks.
+	- Branch: rnd1031
 
 - The window doesn't paint while the GPU is busy or short on memory, and stays blank after the load ends
 	- ID: 2026100312470535
@@ -879,16 +892,32 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - CICD reset: the Python test and utility scripts' recursive removals through a guard
 	- ID: 2026103115085852
 	- Type: Task
-	- Status: Queued
+	- Status: Done
 	- Priority: Avg
 	- Opened: 20261031-150858
 	- Opened by: CC
 	- Parent ID: 2026102416233803
+	- Related IDs: 2026103115170424
 	- Target OS: All
 	- Requirements:
 		- A Python copy of the guard, with the rules and the one-parent form of `saferm.bash`, and a test like dehwp.
 		- Every `shutil.rmtree` in `cicd/` goes through it, 13 lines in 8 files, `_testdir.py` included.
 			- The short socket folder in `dpirand`, moved here from 2026102807494121.
+	- Progress log:
+		- 20261031: `cicd/utility/include/saferm.py` has `rm` and `rm_under`, with `saferm.bash`'s rules and the HOST_TEMP refusals from 2026103115170424. It walks the tree itself and stays on one filesystem.
+		- 20261031: `_testdir.py` loads it and has a new `rm()`, as `fTestDir_Rm`. Its own run folder goes through the one-parent form, under the temp folder it was made in.
+		- 20261031: The tests' own folders go through `_testdir.rm()`. `dpirand`'s short socket folder in `/tmp` goes through `rm`. `demo-video.py` and the vhist recorder remove through `rm_under`, under the temp folder they made theirs in, resolved once.
+		- 20261031: dehwp runs the new test, depj1, and fails on a bare `rmtree` in any tracked Python file in `cicd/`.
+	- Decisions:
+		- 20261031: The guard returns True or False, with one line on stderr, as the PowerShell one does. A refusal at a test's end is printed and the test's result stands.
+		- 20261031: POSIX paths only. No Python script in `cicd/` removes anything on Windows.
+	- Verified: 20261031. depj1 passes, and broken copies of the guard failed it: without the HOST_TEMP check (12 checks), without the link check (2), and with a walk that crosses filesystems (1). dehwp's new check names the 13 lines in the old files. The test ID, showdown table, showdown rig, demo recorder and cleanup tests pass. dpirand passed a case with its socket folder in `/tmp`, and left none. The vhist recorder ran under `less` and left no folder.
+		- Not verified here: `demo-video.py`'s own cleanup, which needs the recording rig.
+		- Swept: `rmtree` in every tracked Python file in `cicd/`. `os.removedirs` and `shutil.rmtree` outside `cicd/` aren't used.
+	- Test case: `cicd/tests/saferm/run.py` (depj1), run by `cicd/tests/saferm/run.bash` (dehwp), with its check for a bare `rmtree`.
+	- Branch: rnd1031
+	- Acceptance signoff: Self-closed: a written rule, and its test fails against the old code.
+	- Closed: 20261031-153900
 
 - Leak checks: Miri sort, settings_ui
 	- ID: 2026102407430381
