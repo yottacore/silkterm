@@ -566,7 +566,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - CICD reset: a test for every Done item
 	- ID: 2026102416233809
 	- Type: Task
-	- Status: Queued
+	- Status: Done
 	- Priority: High
 	- Opened: 20261024-162338
 	- Opened by: CC
@@ -577,10 +577,14 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
 	- Progress log:
 		- 20261028: Split in 11, too big for one sitting. The old format has 407 Done items, 164 bugs and 243 features, and most name a test without its ID. 2026102819193456 takes the 4 new-format items, 2026102819193471 to 2026102819193512 the old-format bugs in 4 parts, and 2026102819193525 to 2026102819193596 the features in 6. This item closes when they do.
+		- 20261031: Closed with its last child, part 6 (027c102).
 	- Decisions:
 		- 20261028: Parts of about 40 items, in the list's own order, so each fits one sitting and none needs a call on where an item belongs.
 		- 20261028: An old-format item gets the ID beside the test name it already gives, rather than a new row.
 		- 20261028: No wait on 2026102416233810 (test IDs). Its change of form has to sweep every ID the backlog names anyway.
+	- Test case: each child's items name their own test ID, or say why they have none; test-id.py --check
+	- Acceptance signoff: Self-closed: all 11 children are Done, the last 3 in rnd1031
+	- Closed: 20261031-140732
 
 - CICD reset: test IDs
 	- ID: 2026102416233810
