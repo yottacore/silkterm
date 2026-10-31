@@ -459,7 +459,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - CICD reset: a test for each old-format Done feature, part 3 of 6
 	- ID: 2026102819193554
 	- Type: Task
-	- Status: Queued
+	- Status: Done
 	- Priority: High
 	- Opened: 20261028-191935
 	- Opened by: CC
@@ -469,6 +469,18 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- The old-format Done features from "Menu enhancements: shells in the Tabs and Panes menus" to "Wallpaper settings renamed, and given two master switches", 40 items.
 		- Each names its test ID beside the test it names, or says in a few words why it has none. A test is added where one could exist and doesn't, and is watched to fail with the fix taken out.
 		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
+	- Progress log:
+		- 20261031: Each test the 40 items name, by a name a test still has, now has its ID beside it, every later mention in the same item included.
+		- 20261031: One test named was renamed since, the theme pick one. It now names the test that took over.
+		- 20261031: The `pause_state_` tests named as a family list their six IDs.
+		- 20261031: The rest say why they have no ID: comment and template text, an icon, a web gallery, demo pacing, measurements, host setup, GPU caches, and a removed feature. No test was missing where one could exist, so none was added.
+	- Decisions:
+		- 20261031: As in parts 1 and 2, a test renamed since keeps its old name, with "now" and the test that took over.
+	- Verified: 20261031. Every test ID added in part 3 is one the tree has, and each sits beside the name of its own test. `--backlog-run-quick docs` passed, `test-id.py --check` passes, and the markdown check finds nothing new.
+		- Swept: every name in backticks and test script path in the 40 items, every ticked sub-item for an ID or a "No test", and every "Pinned by" or "No test" written in words.
+	- Branch: rnd1031
+	- Test case: each of the 40 items names its own, or why it has none.
+	- Closed: 20261031-135805
 
 - CICD reset: a test for each old-format Done feature, part 4 of 6
 	- ID: 2026102819193569
@@ -11735,15 +11747,15 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- The row is absent entirely while there is no shell to put under it, rather than opening an empty flyout.
 		- A new tab started this way still inherits the current directory, since picking a shell says nothing about where to start.
 		- Menus gained submenus for it: a flyout opens on hover and on click, keyboard Right enters it and Left and Escape back out one level, and its arrow is drawn rather than set in a font. No interface font can be relied on for one, which is also why the tab close mark is drawn.
-		- Pinned by: `a_new_tab_shell_row_lists_the_active_shells_or_is_not_there`.
+		- Pinned by: dd5pt `a_new_tab_shell_row_lists_the_active_shells_or_is_not_there`.
 	- ✅ Add "Split vertical with shell ->" and "Split horizontal with shell ->".
 		- Done: both sit under the two plain splits in the Panes menu and the right-click menu, and list the same shells the tab row does. The new pane starts where the source pane's shell is.
-		- Pinned by: `both_split_shell_rows_offer_the_same_shells_by_their_place_in_the_list`.
+		- Pinned by: dd5pv `both_split_shell_rows_offer_the_same_shells_by_their_place_in_the_list`.
 	- ✅ Sentence case for every item, except where a letter is an Alt accelerator.
 		- Done. The one label that kept its capital is "Paste Selection": lowercased, the S accelerator would have found the s in "Paste" first. Every other accelerator still finds its letter, so the underline marks it.
-		- Pinned by: `every_menu_row_is_in_sentence_case`.
+		- Pinned by: dd5pp `every_menu_row_is_in_sentence_case`.
 	- ✅ Context menu: a visible separator between the tab operations and the pane operations.
-		- Pinned by: `the_right_click_menu_rules_off_the_tab_rows_from_the_pane_rows`.
+		- Pinned by: dd5pq `the_right_click_menu_rules_off_the_tab_rows_from_the_pane_rows`.
 	- Note: the three items above were added 20260826, done 20260828.
 	- Opened: 20260719-085918
 	- Closed: 20260828
@@ -11755,7 +11767,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 			- Done: new tabs and the startup pane use the default shell.
 			- ✅ By priority: Global command shell override, non-empty shell specified in config file, or system default shell.
 				- Done: order is the window --shell, then config default_shell, then system. A new pane also inherits from the pane it forked, its tab, then the window first.
-				- Pinned by: `a_pane_takes_the_most_specific_shell_it_was_given` and `the_default_shell_is_the_first_active_entry`.
+				- Pinned by: dd5q0 `a_pane_takes_the_most_specific_shell_it_was_given` and dd5qn `the_default_shell_is_the_first_active_entry`.
 		- ✅ By default, new pane launches same shell as the pane the new one was forked off of.
 			- Done: a pane stores its launch command, and interactive splits inherit it.
 			- No test: the split hands the command down from a live pane, which needs a PTY.
@@ -11764,7 +11776,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- ✅ The "Tab" and "Pane" menus (both on the main menu and popup menu sections) should both have dedicated sections to select the shell, both pulling from the same list of shells in the config. (With "[SilkTerm default]" always the first if one is defined in the config, and "[system default]" always the last no matter what).
 			- Done: the list itself, and the Tab half of it - "New Tab with Shell" is in the Tabs menu and in the right-click menu, off the stored `shells.*` list.
 			- ✅ The same for a new pane: both split rows have their shell flyout now, see the menu item above.
-				- Pinned by: `both_split_shell_rows_offer_the_same_shells_by_their_place_in_the_list`.
+				- Pinned by: dd5pv `both_split_shell_rows_offer_the_same_shells_by_their_place_in_the_list`.
 			- 🚫 The two bracketed rows. The list itself settles both: its first active entry is the default, and the system shell is on the list wherever the scan found it, so a bracketed row would only repeat a row already there.
 	- Opened: 20260628-083740
 	- Closed: 20260829
@@ -11773,40 +11785,40 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Done: a new tab or split starts in the source pane's current directory and runs the same shell it was launched with. Same for a new window (Ctrl+Shift+N), and the same shell inheritance applies to all three.
 	- ✅ Windows: reading the source shell's current directory works now. Windows has no /proc and no API that reports another process's directory, so it is read out of the shell's own process memory, where SetCurrentDirectory keeps it, and checked for still being a directory before it is used.
 		- Verified in the running app: a pane whose shell moved to another directory reports the new one, and reports nothing once the shell has exited (callers then fall back, as before).
-		- Pinned by: `a_windows_shell_reports_where_it_is_now_not_where_it_started`, which runs on Windows only.
+		- Pinned by: dbhak `a_windows_shell_reports_where_it_is_now_not_where_it_started`, which runs on Windows only.
 	- ✅ Shell integration, so a shell that keeps its own idea of where it is can say so. Both spellings are read: OSC 7 (the `file://` URL the unix shells emit) and OSC 9;9 (the ConEmu spelling Windows Terminal documents, so a PowerShell profile already set up for that terminal works here unchanged).
 		- What the shell reports beats what the OS can see, since a shell reporting is answering the question directly while the OS only ever sees where the process sits. A report that no longer names a directory here is dropped and the OS answer stands. That is also what rejects a directory reported from the far side of an ssh, along with an OSC 7 URL naming another machine.
 		- No fork was needed after all. The feared cost was a second fork of the VT parser, which handles neither sequence, but it is the terminal itself that gets wrapped: the engine is generic over it, so the tap sits in front and scans what it reads. The bytes reach the parser exactly as they arrived.
 		- Costs 47ms per 32 MiB of output on this box (714 MB/s, measured over a stream with color and title sequences), against a Windows delivery ceiling of about 1.45s for the same 32 MiB. Nothing but the two sequences is ever collected, so a clipboard write with a whole paste is skipped rather than buffered.
 		- The snippets live in `shell-integration.md`, linked from the README: PowerShell, bash, zsh, fish, and the two cases that need nothing (cmd.exe, and fish, which already emits it).
-		- Pinned by: `an_osc7_url_names_the_directory_it_encodes`, `the_conemu_spelling_is_read_too`, `a_directory_on_another_machine_is_not_ours` and `nothing_but_the_two_sequences_is_collected`.
+		- Pinned by: dbhew `an_osc7_url_names_the_directory_it_encodes`, dbhey `the_conemu_spelling_is_read_too`, dbhex `a_directory_on_another_machine_is_not_ours` and dbhf0 `nothing_but_the_two_sequences_is_collected`.
 	- ✅ The PowerShells are offered with `-NoLogo`, so a new tab opens on a prompt rather than a copyright banner. A flag that only changes how a shell looks is deliberately left out of what makes it that shell, or the next scan would add a second PowerShell beside every stored one.
-		- Pinned by: `a_fresh_unix_list_arrives_in_the_designed_order`.
+		- Pinned by: dd5fq `a_fresh_unix_list_arrives_in_the_designed_order`.
 	- ✅ A "Windows PowerShell 5 (relaxed)" entry is offered, switched off, with `-ExecutionPolicy RemoteSigned`. The 5.1 that installs with Windows refuses to run script files, so it loads no profile and cannot report where it is. Per-session only; nothing is written anywhere, and it arrives off because it is a security setting rather than a default.
-		- Pinned by: `the_relaxed_windows_powershell_is_offered_switched_off`.
+		- Pinned by: dd5nj `the_relaxed_windows_powershell_is_offered_switched_off`.
 	- ✅ The PowerShell block is installed for you, a few seconds after launch, into each PowerShell profile that reports nothing.
 		- It appends, after saving a copy of the profile beside it, and never rewrites what is there. A marker makes a second launch do nothing, and deleting the block switches it off for good.
 		- The prompt is wrapped rather than replaced, and on PowerShell 6 and later it is not touched at all, which leaves oh-my-posh and starship alone.
 		- A shell whose execution policy would refuse to load the profile is left alone with a line saying which and why - found the hard way on this box, where writing a profile for Windows PowerShell 5.1 turned every launch into a red execution-policy error.
 		- `shell.integration` (Settings > Shell > "PowerShell profiles") switches it off before it runs.
-		- Pinned by: `a_profile_is_backed_up_once_and_added_to_once`, `a_deleted_block_stays_deleted`, `a_shell_that_will_not_run_scripts_keeps_its_profile` and `a_profile_that_already_reports_is_left_alone`.
+		- Pinned by: dbj7x `a_profile_is_backed_up_once_and_added_to_once`, dcbe2 `a_deleted_block_stays_deleted`, dbj7y `a_shell_that_will_not_run_scripts_keeps_its_profile` and dbj7v `a_profile_that_already_reports_is_left_alone`.
 	- Opened: 20260722-100516
 	- Closed: 20260722-200952
 
 - ✅ Consolidate UI (e.g. settings) declarations into one or more source shcl file(s) that get compiled or transpiled into code.
 	- Measurements specified in CSS px or DIP that renders "correctly" at any DPI.
 	- ✅ Settings dialog: rows, order, sections, tabs, the config path behind each row, the graying rules and the whole geometry now live in `source/src/settings_ui.shcl`, compiled in. The hand-written tables it replaces are gone. The file and the settings the code knows are kept in step both ways: a row naming a setting that does not exist, and a setting with no row.
-		- Pinned by: `the_declarations_are_complete_and_well_formed` and `a_bad_document_is_reported_rather_than_half_read`.
+		- Pinned by: dav4k `the_declarations_are_complete_and_well_formed` and dav4p `a_bad_document_is_reported_rather_than_half_read`.
 	- ✅ Settings dialog measurements are DIP. The layout is solved in that space and the display's scale factor is applied only where it meets the window, so the dialog keeps its proportions at any DPI. At 2x the old build kept 20px checkboxes and truncated its value fields; it is now twice the size.
-		- Pinned by: `the_scale_factor_only_multiplies_the_layout`.
+		- Pinned by: dav40 `the_scale_factor_only_multiplies_the_layout`.
 	- ✅ The main window's own chrome is DIP now too: menu bar, tab bar, tab buttons and their close marks, the dropdown and right-click menus, the copy-mode checkboxes, the focus ring, the pane gap and its grab zone, and the scrollbar. Each measurement scales where it is used rather than at a boundary, since chrome shares a coordinate space with the terminal grid. Measured on a real display: at twice the scale factor the menu bar and the tab button come out at exactly twice their size, where the old build was short by a fifth and an eighth, since the padding had stayed frozen at its 1x size while the text doubled. At 1x the whole window draws the same as the old build.
 		- The About panel and the Settings window's own height cap went with it, so nothing on screen is measured in raw pixels any more.
 		- `SILK_SCALE` overrides the scale factor the display reports, which is what makes any of this checkable: chrome written in raw pixels looks perfect at 1x and only thins out as the factor rises, and outside X11 there is no other way to ask for a high-DPI layout.
-		- Pinned by: `the_chrome_doubles_when_the_display_does`, `a_dropdown_scales_whole_and_its_rows_still_hit_test` and `the_pane_gap_and_its_grab_zone_scale_with_the_display`.
+		- Pinned by: dbenf `the_chrome_doubles_when_the_display_does`, dbeng `a_dropdown_scales_whole_and_its_rows_still_hit_test` and dbenj `the_pane_gap_and_its_grab_zone_scale_with_the_display`.
 	- ✅ The Settings dialog's tab titles sat too far right at high DPI, and overflowed their buttons above 2x. (20260821)
 		- Cause: the dialog's tab, label and button widths are a text measurement (real pixels) plus a clear-space constant (DIP), added together and then divided at the dialog's boundary, which shrank the constant by the scale factor. A tab's box ended up with half the clear space at 2x, and a third of it at 3x, while the title still started at half of it from the left edge.
 		- The constant now converts where it is used, the way the main window's chrome already did, through one rule the four sites share. At 2x every title used to touch or cross its own right border, and each is now centered with equal space either side.
-		- Pinned by: `a_tab_title_keeps_its_clear_space_at_every_scale`.
+		- Pinned by: dbjn7 `a_tab_title_keeps_its_clear_space_at_every_scale`.
 	- Opened: 20260802-203840
 	- Closed: 20260827-071421
 
@@ -11814,7 +11826,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- ✅ The gif was sampled at 50fps from a source that paints 60, so one source frame in six was dropped and every fifth stored frame had two frames of travel. Measured on the old gif that is an exact doubling, on a strict period, at every speed and in both directions. It is a regular hitch that scroll tuning could not remove, and it is worst right after a clear, where a command dumps its output fastest.
 		- No test: a diagnosis. The fix below is pinned.
 	- ✅ Fixed at the source rather than by slowing the gif down: the app's own frame rate is now pinned to the rate the recording samples at, so the two cannot disagree. The 60 was the recording machine's refresh rate arriving through vblank, which also means the same script on a differently-timed display would have beaten against both the gif and the video, with nothing to show for it in the script. The gif stays at 50fps, which is the smoothest a gif can be.
-		- Pinned by: `cicd/tests/demo/run.py`.
+		- Pinned by: dcrxy `cicd/tests/demo/run.py`.
 	- ✅ The demo now has a plain-language script, `cicd/utility/demo-video/script.txt`: formats, the set, every scene in order, the typed lines, and why each beat is the length it is. It is meant to be edited directly, and it is kept in step with any change to the demo.
 		- No test: a plain-text document.
 	- ✅ The compile scene is paced in five movements rather than at random, so the speed leaves rest, ramps, tops out, brakes and comes to rest. Output arriving at one rate only ever shows one point on that curve; the long silence in the middle is what makes the wind-down visible, since the view is still traveling when the output stops.
@@ -11827,7 +11839,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Setting DISPLAY does not move the app onto the recorder's own X display. Winit prefers Wayland whenever it sees one, so on any Wayland session the window opened on the real desktop and the recorder waited for a window that was never going to appear. Same trap in `gui-headless.bash` and in the profiler stage, both fixed.
 		- The listing colors were coming from whoever's shell started the recorder. Without LS_COLORS set, ls colors directories and nothing else, so the same script rendered differently on two boxes. The wrapper asks dircolors for the stock database now.
 		- The window decoration needs the Material-Black-Pistachio xfwm4 theme installed, or the recorder falls back to a light stock theme and says so in one line that is easy to miss.
-		- Pinned by: `cicd/tests/demo/run.py`.
+		- Pinned by: dcrxy `cicd/tests/demo/run.py`.
 	- The gif budget is now enforced at 12 MiB rather than 28: over that, the README copy is left alone and the run says so. At 50fps the projection is around 10 MiB, so it fits, but not by much. The levers, in order, are the length of the wheel scene, the width of the rows in motion, and only then the frame rate.
 	- Opened: 20260813-091542
 	- Closed: 20260824-120050
@@ -11850,7 +11862,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- A tab now shows its path alongside whatever it is running, where before a tab running something said only that.
 	- When a tab runs out of room, the parts give way in order: shell name shortens, then the command's name is truncated, then the path abbreviates, then the command goes, then the path, leaving the shortest form of the shell's name. That last form is the floor a tab cannot shrink past. The tabs beyond it become a page.
 	- Short shell names are hand-picked for the shells SilkTerm comes with ("Windows Cmd" reads "Cmd", "PowerShell 7" reads "PS 7") and derived for anything renamed.
-	- Pinned by: `a_tab_with_nothing_pressing_it_sits_at_the_regular_width`, `a_long_label_grows_its_own_tab_and_no_other`, `a_crowded_bar_shrinks_every_tab_alike_and_stops_at_the_floor`, `a_tab_says_the_shell_the_task_and_the_path_and_gives_them_up_in_order` and `a_known_shell_name_has_hand_picked_short_forms`.
+	- Pinned by: dbnjc `a_tab_with_nothing_pressing_it_sits_at_the_regular_width`, dbnjd `a_long_label_grows_its_own_tab_and_no_other`, dbnje `a_crowded_bar_shrinks_every_tab_alike_and_stops_at_the_floor`, dbnj9 `a_tab_says_the_shell_the_task_and_the_path_and_gives_them_up_in_order` and dbnj6 `a_known_shell_name_has_hand_picked_short_forms`.
 	- Opened: n/a
 	- Closed: 20260823-160233
 
@@ -11864,7 +11876,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- ✅ The tip reads as a table: one `key: value` per line, with every value starting in the same column, plus a line for whatever is running right now. (20260821)
 		- It is drawn in the terminal font rather than the interface one, since the column is made of spaces, and spaces align nothing in a proportional face. It is the only piece of chrome that is.
 		- A value with a space or a quote in it is quoted so its edges are unambiguous, picking the quote the value does not already contain: a Windows command line full of double quotes reads inside single ones. The clock reading and the "no directory reported" note stay bare, since quoting them would say they were data.
-		- Pinned by: `tip_keys_pad_so_every_value_starts_in_one_column` and `a_tip_value_is_quoted_only_where_its_edges_are_in_doubt`.
+		- Pinned by: dbjnd `tip_keys_pad_so_every_value_starts_in_one_column` and dbjnc `a_tip_value_is_quoted_only_where_its_edges_are_in_doubt`.
 	- PowerShell's prompt now shows which PowerShell it is (`[PS 7.6] C:\some\path\>`), on 5.1 and 7 and on every OS 7 runs on - but only when the prompt is still the stock one, so oh-my-posh, starship and a hand-written prompt are untouched.
 		- Superseded 20260830: that prompt is git-aware now and reads like the bash one. The stock-prompt rule is unchanged.
 	- Opened: n/a
@@ -11898,11 +11910,11 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Renames that came with it: "Command Prompt" -> "Windows Cmd", "Git Bash" -> "Bash (Git's mini)", "MSYS2 Bash" -> "Bash (MSYS2's full)", "Cygwin Bash" -> "Bash (Cygwin)", and "WSL: x" -> "WSL2; x" or "WSL1; x".
 		- The twin now arrives switched off, and only the top default shell gets one. It is there for debugging the shell's own rc file, and stays out of the menu otherwise.
 		- Note: this reaches a fresh config and nobody's existing one. A scan may only add and switch off, and it never rewrites a stored title or a stored order - that order is the user's. So an existing list keeps its own names and sequence until somebody edits or resets it. The live config on this box was brought over by hand, with a backup beside it, which also cleared two stale duplicates a pre-`-NoLogo` dogfood build had appended.
-		- Pinned by: `a_fresh_unix_list_arrives_in_the_designed_order`, `the_offered_order_groups_first_and_sorts_inside_a_group` and `the_login_shell_leads_and_its_twin_stays_under_it`.
+		- Pinned by: dd5fq `a_fresh_unix_list_arrives_in_the_designed_order`, dbjn8 `the_offered_order_groups_first_and_sorts_inside_a_group` and dbjn9 `the_login_shell_leads_and_its_twin_stays_under_it`.
 	- ✅ The scan now waits for the wallpaper to be on screen as well as the window. (20260821)
 		- Both are off-thread and both are slow the same way, so overlapping them put a stall in the one moment anyone is looking - the gap between the window appearing and the picture arriving in it.
 		- A wallpaper that never answers cannot hold the scan off forever: past a deadline it runs anyway, since a terminal with no shells in its menu is worse than one with no picture behind its text.
-		- Pinned by: `the_wallpaper_pushes_a_wait_back_but_never_starts_one_again`.
+		- Pinned by: dd5pz `the_wallpaper_pushes_a_wait_back_but_never_starts_one_again`.
 	- Opened: 20260704-130231
 	- Closed: 20260818-191741
 
@@ -11923,7 +11935,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- ✅ WSL2 only works, and a full eight-stage run passes there: tests, lints, deps check, both scroll-harness arms, profiler, all four release targets and all six packages. It needs `cage` and `nsis` from the distro, the four pinned cargo tools, and zig. Nothing in the pipeline needed changing to get there beyond the display fixes below.
 		- No test: a host setup, used by every pipeline run there.
 	- ✅ Three display bugs that blocked any Wayland-session host, WSL2 included. Setting DISPLAY does not move the app onto another X display, because winit prefers Wayland whenever it sees one, so the window opened on the real desktop and whatever was waiting for it waited forever. Fixed in the recorder, in `gui-headless.bash` and in the profiler stage.
-		- Pinned by: `cicd/tests/demo/run.py`.
+		- Pinned by: dcrxy `cicd/tests/demo/run.py`.
 	- ✅ Windows plus WSL2 is built. `-Wsl` on the Windows pipeline runs the Linux one (`cicd.bash --no-windows`) inside WSL2, so one box produces the whole matrix. Off by default, since it roughly doubles a run; the plan header says when WSL2 is present but unused.
 		- It builds the same working tree over `/mnt` rather than a second checkout, so there is nothing to keep in sync. Reading the source over 9p was measured first and costs almost nothing: 1m26s for a debug build against 1m35s fully native.
 		- `CARGO_TARGET_DIR` has to point somewhere native, for correctness. Left alone, the Linux build goes in the same `target/` the Windows build used, and the two evict each other every run.
@@ -11932,7 +11944,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- The two pipelines already wrote to separate artifact directories, so a combined run leaves both sets intact with no change needed.
 		- Interop is off in this WSL's `wsl.conf`, so WSL cannot launch a `.exe`. The delegation runs from Windows inwards, which works regardless.
 		- Nineteen tracked scripts declared `eol=lf` were CRLF in this clone, so the first delegated run died at exit 127 on a stray carriage return. Git applies those attributes at checkout and never renormalizes what is already there, and `git status` stays clean throughout. Fixed, and the delegation refuses to start when it finds any.
-		- Pinned by: `cicd/tests/packaging/run.bash`.
+		- Pinned by: dcrrh `cicd/tests/packaging/run.bash`.
 	- Opened: 20260824-123142
 	- Closed: 20260824-132429
 
@@ -11944,27 +11956,27 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- `--donate` is the short version of DONATE.md: the address only.
 	- Found on the way and fixed: on Windows, none of these printed anything at all when run from a terminal, and that had been true of `--help` and `--version` since they were written. A release build owns no console, so it now joins the one that launched it. Redirecting to a file or a pipe always worked, which is why nothing caught it.
 	- Still true on Windows, and unavoidable: the shell doesn't wait for a windowed program, so the prompt comes back before the text does.
-	- Pinned by: `cli_only_flags_are_taken_anywhere`, `the_three_version_spellings_are_one_flag`, `padding_puts_one_blank_line_either_side`, `about_survives_having_no_adapter` and `donate_names_the_address`.
+	- Pinned by: db7ea `cli_only_flags_are_taken_anywhere`, db7eb `the_three_version_spellings_are_one_flag`, db7ec `padding_puts_one_blank_line_either_side`, db7ed `about_survives_having_no_adapter` and db7ee `donate_names_the_address`.
 	- Opened: n/a
 	- Closed: 20260813-180243
 
 - ✅ Themes: a set of themes, each with a dark and a light variant, plus a system mode.
 	- Note: anything settled later in the Settings dialog work overrides contradictions here.
 	- ✅ Theme foundation and terminal palette. A palette (background, foreground, cursor, focus, and the sixteen ANSI colors) times a theme, which is a dark and light pair. The theme and mode settings pick the active palette, and the individual color settings still override per color.
-		- Pinned by: `resolve_picks_theme_and_mode` and `a_color_override_survives_the_system_switching_modes`.
+		- Pinned by: d947n `resolve_picks_theme_and_mode` and dcnwy `a_color_override_survives_the_system_switching_modes`.
 	- ✅ Three built-ins, each dark and light: SilkTerm, Matrix, Retro Amber.
 		- Matrix is green on black, ANSI included. Retro Amber is orange on black. Both light variants are dark text on light gray.
 		- SilkTerm light is dark on light.
-		- Pinned by: `the_first_three_built_ins_keep_their_names_and_hues`.
+		- Pinned by: dd5my `the_first_three_built_ins_keep_their_names_and_hues`.
 	- ✅ Dark mode means a dark background and light text, for the terminal and for dialogs alike, with the dialog background a different shade from the terminal's. Light mode is the reverse. System follows whatever the desktop is set to.
 		- System mode reads the OS at startup and on a theme change, and falls back to dark where the OS reports no preference, which is what X11 does.
-		- Pinned by: `dark_mode_is_light_on_dark_and_light_mode_the_reverse`.
+		- Pinned by: dd5mz `dark_mode_is_light_on_dark_and_light_mode_the_reverse`.
 	- ✅ Chrome and dialog theming. Settings and About follow dark and light.
-		- No test: the drawing needs a window. The colors are pinned by `chrome_defaults_shared_across_themes`.
+		- No test: the drawing needs a window. The colors are pinned by d9ch7 `chrome_defaults_shared_across_themes`.
 	- ✅ The Themes tab, with the theme dropdown and the save, rename and delete buttons. Picking a theme takes on its colors wholesale, so per-color tweaks belonging to the theme being left behind are dropped.
-		- Pinned by: `picking_a_theme_adopts_its_colors`, `adopting_a_theme_clears_the_color_overrides` and `a_saved_theme_shadows_a_builtin_and_delete_uncovers_it`.
+		- Pinned by: davcs `picking_a_theme_adopts_its_colors`, `adopting_a_theme_clears_the_color_overrides` (now davew `picking_a_theme_drops_the_changes_under_the_last`) and davcr `a_saved_theme_shadows_a_builtin_and_delete_uncovers_it`.
 	- ✅ A theme can be added or edited in the config file, and the dropdown picks it up. A saved theme is written whole under its own name, so it stands on its own and can be handed to someone else.
-		- Pinned by: `a_saved_theme_survives_a_relaunch` and `saving_folds_the_edits_into_the_theme`.
+		- Pinned by: davcx `a_saved_theme_survives_a_relaunch` and davcq `saving_folds_the_edits_into_the_theme`.
 	- Note: a fourth theme and a per-theme menu color are still open under Features and enhancements.
 	- Note: 20260930, out of date. There are four built-ins now, with Pastel, and the light variants' text was darkened to leave room for the cursor plate. See the [themes design doc](design_docs/20260930-150458_themes.md).
 	- Opened: 20260628-083740
@@ -11976,15 +11988,15 @@ Going forward, new issues in the new template at the bottom of this file, will g
 			- Example: Slider controls, default button outline, "OK" button, and clickable "reset" icons.
 			- Existing color is OK for this
 			- Done: it keeps its value and is called "Highlights" now. It also drives the dialog's own accents, which were a fixed blue before and so ignored the theme entirely.
-			- Pinned by: `a_renamed_key_frees_its_old_name_for_a_new_setting`.
+			- Pinned by: dav9z `a_renamed_key_frees_its_old_name_for_a_new_setting`.
 		- ✅ Second highlight color should be a different, complimentary color that is also more vivid and saturated. That's for the current focus.
 			- Every theme sets its own, and the two are always far enough apart that they cannot read as the same signal.
-			- Pinned by: `the_two_attention_colors_stay_apart`.
+			- Pinned by: dava3 `the_two_attention_colors_stay_apart`.
 		- ✅ When text fields have focus highlight, there should only be one visible outline (rather than two - the highlight and the textbox outline).
 			- The ring goes on the field's own outline and the field stands its border down. The old build drew two rules with a gap of panel between them; there is now a single rule.
-			- Pinned by: `a_focused_field_draws_one_outline`.
+			- Pinned by: dd5r2 `a_focused_field_draws_one_outline`.
 		- ✅ The "OK" button should be the only one with the dimmer first highlight. The others buttons should have a gray outline like the "tabs".
-			- Pinned by: `only_the_default_button_is_outlined_in_the_highlight`.
+			- Pinned by: dd5r3 `only_the_default_button_is_outlined_in_the_highlight`.
 	- Note: an existing config's `colors.focus` moves over to `colors.highlight` on the next launch, and the freed name is now the new focus color.
 	- UAT.
 	- Note: 20260930, "Highlights" was renamed "Highlight".
@@ -12001,7 +12013,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Found and fixed alongside: a right-click menu too tall to fit opens against the top of the window, where the menu bar was taking the clicks meant for its first items.
 	- The underline is drawn above the text scrim, alongside the cursor. Below it, the scrim's halo shaded the rule in the pattern of the letters sitting on it, so it came out streaked rather than solid - only visible with the scrim on, since the halo takes the background color and shows only where something brighter is drawn under it. The rule is now one flat color end to end.
 	- 🔘 UAT
-	- Pinned by: `only_allowlisted_schemes_are_links`, `sentence_punctuation_and_brackets_come_off_the_end`, `ordinary_text_with_a_colon_is_not_a_link`, `a_wrapped_url_is_found_whole_from_either_half` and `hyperlink_keys_parse_in_their_block`.
+	- Pinned by: dattz `only_allowlisted_schemes_are_links`, datty `sentence_punctuation_and_brackets_come_off_the_end`, datv0 `ordinary_text_with_a_colon_is_not_a_link`, datv3 `a_wrapped_url_is_found_whole_from_either_half` and dattw `hyperlink_keys_parse_in_their_block`.
 	- Opened: n/a
 	- Closed: 20260804-155242
 
@@ -12010,7 +12022,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- The default template, a real config, a config with settings turned on, and a deliberately awkward one each come back exactly as they went in, where before they came back with 14 to 178 lines re-laid out. Saving a change still touches only the lines that changed, and a setting turned on for the first time goes inside its section at the right depth.
 	- A setting written twice is now reported instead of quietly doing nothing. The language will not guess which one was meant, so the built-in default is what takes effect; the message names both lines.
 	- 🔘 UAT
-	- Pinned by: `default_config_survives_a_save_unchanged`, `a_save_writes_only_the_lines_it_changed` and `a_setting_written_twice_falls_back_and_is_reported`.
+	- Pinned by: damtq `default_config_survives_a_save_unchanged`, dd444 `a_save_writes_only_the_lines_it_changed` and dav1f `a_setting_written_twice_falls_back_and_is_reported`.
 	- Opened: n/a
 	- Closed: 20260804-192339
 
@@ -12020,7 +12032,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- A section written as single dotted lines still becomes a real nested section when saved, but it now stays where it is instead of moving to the top of the file and dragging the file's header comments in with it.
 	- A complaint about a setting whose value can't be used now names the line it is on.
 	- A save leaves everything except the changed value exactly as it was, in an existing config file and in the default template alike.
-	- Pinned by: `a_save_keeps_nested_comment_layout`, `a_save_writes_only_the_lines_it_changed` and `a_config_says_what_is_wrong_with_it`.
+	- Pinned by: daq6b `a_save_keeps_nested_comment_layout`, dd444 `a_save_writes_only_the_lines_it_changed` and dcbej `a_config_says_what_is_wrong_with_it`.
 	- Opened: n/a
 	- Closed: 20260804-134813
 
@@ -12032,7 +12044,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- The commented lines in the config file that name the foreground and cursor had never tracked the theme; they had a gray and a steel blue from before themes existed. They now show the real defaults, and an existing file is brought forward for those and for the focus ring.
 	- On disk: a fresh file writes the new lines, a file that still has an old one is brought forward, and a value written or annotated there is left as it stands.
 	- The light variant of the theme is untouched; its foreground is a near-black and this item was about the default dark scheme.
-	- Pinned by: `every_commented_default_line_loads_as_the_default` and `migrate_refreshes_a_superseded_commented_default`.
+	- Pinned by: dcq4n `every_commented_default_line_loads_as_the_default` and datef `migrate_refreshes_a_superseded_commented_default`.
 	- Note: 20260930, "neither can clash" was wrong. A channel swap gives the two the same brightness, so text under the cursor could not be read. The cursor is a deep violet now, from "Bug: Text sitting under the cursor is hard to read".
 	- Opened: n/a
 	- Closed: 20260804-112336
@@ -12041,7 +12053,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- One doubling of the halo's opacity instead of one and a half - a lighter backing, still clearly there.
 	- Reaches an existing config file only where its line is still the default commented one, and a file with either of the two earlier values moves to this one.
 	- A fresh file writes 20, a file that still has the old default line is brought forward, and a value written or annotated there is left as it stands.
-	- Pinned by: `changed_defaults` and `migrate_refreshes_a_superseded_commented_default`.
+	- Pinned by: d97z3 `changed_defaults` and datef `migrate_refreshes_a_superseded_commented_default`.
 	- Opened: n/a
 	- Closed: 20260804-103003
 
@@ -12051,7 +12063,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Default 30, which on the new scale is exactly what 15 was on the old one - a visible backing hugging each glyph rather than a halo that has to be found and switched on. Superseded by the entry above: it defaults to 20 now.
 	- Default falloff curve is now Exponential, replacing Half-normal.
 	- Both changed defaults reach an existing config file only where its line is still the default commented one; a value written or edited there is left alone. A file that has been through both curve changes ends on the current one either way.
-	- Pinned by: `changed_defaults` and `the_docs_quote_the_scrim_strength_scale_the_code_uses`.
+	- Pinned by: d97z3 `changed_defaults` and dcwxg `the_docs_quote_the_scrim_strength_scale_the_code_uses`.
 	- Opened: n/a
 	- Closed: 20260804-100117
 
@@ -12061,7 +12073,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Superseded by the entry above: the row moved to the top of the group, each 20% is now a doubling, and it defaults to 30 rather than 0.
 	- Because the doubled value is capped, the halo's dense middle fills in first and the solid part spreads outward, so a faint halo thickens into a plate that still stops where the radius says it does.
 	- The half-normal curve was left standing at about 1% of its opacity at the outer edge, where the other four reach zero. Invisible on its own, but Strength multiplied it into a wash over the whole pane, so it is now brought to zero like the rest - a change of less than one shade of 255 at any strength setting.
-	- Pinned by: `scrim_function_and_ramp_resolve`.
+	- Pinned by: d9p1c `scrim_function_and_ramp_resolve`.
 	- Opened: n/a
 	- Closed: 20260804-091512
 
@@ -12070,7 +12082,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Applies to every way of closing it - Cancel, OK, Esc, and the window's own close button.
 	- Only the view is remembered. Values still come from the current settings, and edits abandoned with Cancel stay abandoned.
 	- A remembered position is clamped to what the reopened window can show, so a font or screen change between the two can't leave it scrolled past the end.
-	- Pinned by: `a_restored_view_never_outruns_the_new_dialog`.
+	- Pinned by: datde `a_restored_view_never_outruns_the_new_dialog`.
 	- Opened: n/a
 	- Closed: 20260804-084202
 
@@ -12083,7 +12095,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Two side effects: an empty rotation folder now falls back to the built-in wallpaper instead of leaving the background blank, and a wallpaper file that can't be opened is reported rather than silently ignored.
 	- Reloading settings while rotating used to blank the wallpaper until the next rotation; it now keeps what is on screen.
 	- The config file itself still loads up front - window size, font and theme all come from it, and the window waits to open at its final size.
-	- Pinned by: `an_empty_rotation_folder_falls_back_to_the_builtin`, `an_unreadable_image_still_falls_back_to_the_builtin` and `a_superseded_request_stops_before_its_next_stage`.
+	- Pinned by: dasfn `an_empty_rotation_folder_falls_back_to_the_builtin`, dasfm `an_unreadable_image_still_falls_back_to_the_builtin` and dcrby `a_superseded_request_stops_before_its_next_stage`.
 	- Opened: n/a
 	- Closed: 20260803-164818
 
@@ -12095,17 +12107,17 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Of the curve models considered, the straight and exponential segments adjusted by time were chosen. The unbounded ramp accelerates exponentially until it keeps up, which the specification allowed.
 	- "Initial scroll speed" is gone (it fed four mechanisms at once and fought the rest); its config key is removed from existing files. Ease-in is now a duration (`scroll.ease_in_ms`), replacing the old fraction. Wheel/scrollback navigation keeps a fixed internal ease, unchanged feel.
 	- ✅ Slider direction (20260803): Ease-in and Ease-out ran opposite to the other three (higher = slower). Flipped so all five sliders read higher = faster. Stored config values unchanged (milliseconds); Ease-out's default now reads 50 on the dialog scale instead of 51.
-		- Pinned by: `the_scrolling_feel_sliders_round_trip_and_run_the_right_way`.
+		- Pinned by: daqyf `the_scrolling_feel_sliders_round_trip_and_run_the_right_way`.
 	- ✅ New speed defaults (20260803): the five now default to 50 / 75 / 75 / 75 / 40 in watch order - a much harder ramp-up, roughly double the single-screen top speed, a quicker wind-down, and a gentler stop. Ease-in is unchanged in feel.
 		- An existing config has these five as its own values, so it keeps the old ones until those lines are edited or the config is reset. Only a new config picks the new defaults up.
-		- Pinned by: `the_scrolling_feel_sliders_read_where_their_defaults_claim`.
+		- Pinned by: daqye `the_scrolling_feel_sliders_read_where_their_defaults_claim`.
 	- The design moved to the [smooth scrolling design doc](design_docs/20260930-144720_smooth-scrolling.md), under "The curve, as specified".
 	- Opened: n/a
 	- Closed: 20260804-084202
 
 - ✅ A single boolean option to disable/enable smooth scrolling, without changing other settings (but disabling their controls).
 	- New "Smooth scrolling" switch at the top of the Scrolling tab (config: `scroll.smooth`, default on). Off = wheel, output and full-screen-app scrolling all jump instantly, and the two speed sliders gray out. Wheel lines, scrollbar and the rest stay active since they apply either way.
-	- Pinned by: `smooth_off_finishes_every_scroll_instantly` and `smooth_off_leaves_nothing_unshown`.
+	- Pinned by: daqtv `smooth_off_finishes_every_scroll_instantly` and dcwd0 `smooth_off_leaves_nothing_unshown`.
 	- Note: 20260930, there are five speed sliders now, not two. All five gray out.
 	- Opened: n/a
 	- Closed: 20260802-123859
@@ -12119,9 +12131,9 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - ✅ Scroll-on-output enhancement: One additional setting: (20260629)
 	- ✅ In-view fast output scroll speed. (E.g. for a short directory listing that doesn't exceed a single pane height.)
 		- Faster than initial scroll speed, but ramps up slower, and top speed is slower than current.
-		- Pinned by: `a_single_screen_burst_eases_gentler_than_an_overflowed_one` and `a_burst_ends_at_rest_and_the_next_starts_in_view`.
+		- Pinned by: daqya `a_single_screen_burst_eases_gentler_than_an_overflowed_one` and daqpv `a_burst_ends_at_rest_and_the_next_starts_in_view`.
 	- ✅ Once the top line of new output scrolls above and off the screen, then scroll speed ramps up as fast as necessary to fully keep up.
-		- Pinned by: `a_single_screen_burst_eases_gentler_than_an_overflowed_one` and `burst_ramps_faster_than_trickle`.
+		- Pinned by: daqya `a_single_screen_burst_eases_gentler_than_an_overflowed_one` and d9b23 `burst_ramps_faster_than_trickle`.
 	- Done: output easing now picks a speed profile per burst. While a burst's own first line is still on screen (a short listing), catch-up tops out at the new "In-view output speed" - faster than the initial speed, but building more slowly and never reaching the full chase. Once a burst has scrolled a screenful, the full ramp takes over exactly as before. A burst ends when the view settles at the bottom, so sporadic output keeps the plain initial ease.
 	- The one setting is `scroll.inview_tau_ms` (default 60 ms), with an "In-view output speed" slider next to "Initial scroll speed" in Settings on the same 1..100 scale.
 	- A burst that starts high on a fresh screen (right after a clear) counts as in-view up to a screenful longer than strictly needed - the switch assumes the burst began at the bottom row. The error direction is gentle, never bouncy.
@@ -12136,7 +12148,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Drag the handle to scroll, or click the track above or below it to page that way. A dragged handle follows the pointer exactly while the text eases in behind it, so the grab never drifts.
 	- Full-screen apps (less, vim) keep no scrollback of their own, so they get no scrollbar - one pinned full-height could only report a fiction.
 	- Settings has the on/off switch, the width, and the hide-when-idle switch; the handle and track colors are there too, defaulting to a neutral gray in every theme the way the rest of the chrome does. The dependent rows stay listed but gray out while the scrollbar is off.
-	- Pinned by: `no_scrollbar_without_scrollback_or_on_the_alt_screen`, `thumb_position_round_trips_through_a_drag`, `dragging_either_handle_pins_both_to_the_pointer` and `thumb_never_shrinks_below_the_grab_minimum`.
+	- Pinned by: daqnc `no_scrollbar_without_scrollback_or_on_the_alt_screen`, daqnd `thumb_position_round_trips_through_a_drag`, dcws4 `dragging_either_handle_pins_both_to_the_pointer` and daqne `thumb_never_shrinks_below_the_grab_minimum`.
 	- Opened: 20260731-115810
 	- Closed: 20260802-094409
 
@@ -12156,7 +12168,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 			- No test: an idle CPU measurement.
 	- Tier 2 - need fewer frames.
 		- ✅ 2.1 Stop animating when the window is unfocused. Done by 6.2 - an unfocused window's panes all park, so no frames flow.
-			- Pinned by: `pause_state_blocked_parks_at_full_until_unblocked`.
+			- Pinned by: damyb `pause_state_blocked_parks_at_full_until_unblocked`.
 		- ✅ 2.2 Stop rendering while the window is occluded. The signal is already available and currently only used for the video-memory probe.
 			- Done: a fully hidden window waits instead of drawing, and catches up in one frame when it comes back. Not every window manager reports this, so nothing else depends on it.
 			- No test: it needs the window manager to report the window covered.
@@ -12176,20 +12188,20 @@ Going forward, new issues in the new template at the bottom of this file, will g
 			- Cause: to avoid stalling the display we only ever *tried* for the terminal and gave up immediately if the reader had it. But the reader holds it across a whole read cycle and grabs it again the instant it lets go, so that polite try could lose forever. On a large `cat`, 98% of frames showed a stale picture, the worst run lasting 2.1 seconds.
 			- Fixed: still try first, but after two frames in a row of getting nowhere, wait properly. Waiting takes a numbered ticket, which puts us at the end of the current read cycle and makes the reader queue behind us - so the wait is bounded (under 5ms) where the polite try was not.
 			- Worst stale run 2083ms -> 52ms, at an unchanged frame rate. Idle and ordinary output cost are unchanged - this only engages when something is contending.
-			- Pinned by: `a_frame_waits_its_turn_once_trying_keeps_losing`.
+			- Pinned by: dd5qc `a_frame_waits_its_turn_once_trying_keeps_losing`.
 	- Tier 5 - cursor animation: pause is the only mode, and it really stops now.
 		- ✅ 5.1 Removed the 'cursor_animation_input' option. Behavior is always "pause".
 			- A source const (CURSOR_ANIM_CONTINUOUS, pane.rs) brings the old always-on mode back if ever wanted.
 			- The old key is stripped from existing configs automatically.
-			- No test: the option was removed. Pausing itself is pinned by the `pause_state_` tests.
+			- No test: the option was removed. Pausing itself is pinned by the `pause_state_` tests, damyb, d9ka6, d9ka7, damwv, dcrj0 and dan5b.
 		- ✅ 5.2 Longer wait before the animation resumes after typing. New setting 'cursor_animation_resume_s', default 2.
-			- Pinned by: `pause_state_glides_holds_then_resumes_from_full`, `pause_state_hold_needs_both_idle_and_hold_timeouts` and `changed_defaults`.
+			- Pinned by: d9ka6 `pause_state_glides_holds_then_resumes_from_full`, d9ka7 `pause_state_hold_needs_both_idle_and_hold_timeouts` and d97z3 `changed_defaults`.
 		- ✅ 5.3 After 60s with no input the animation stops entirely, parked at full size. New setting 'cursor_animation_idle_stop_s', 0 = never.
 			- Typing, or refocusing the window, tab, or pane, brings it back.
-			- Pinned by: `pause_state_long_idle_parks_at_full_and_resumes_on_activity`.
+			- Pinned by: damwv `pause_state_long_idle_parks_at_full_and_resumes_on_activity`.
 		- ✅ 5.4 A parked cursor draws no frames. Before this, "pause" still ran 30fps just to show a static cursor.
 			- Parked idle is ~0.2% of a core, against ~14% with the pulse running.
-			- Pinned by: `only_an_input_pause_schedules_its_own_wake`.
+			- Pinned by: dd5qd `only_an_input_pause_schedules_its_own_wake`.
 		- Regression risk to watch: pausing must always wait for the cursor's largest point in the cycle, and resuming must always start from that same point.
 			- This took several attempts to get right.
 			- The machine is PauseState in pane.rs.
@@ -12199,11 +12211,11 @@ Going forward, new issues in the new template at the bottom of this file, will g
 			- Minimized: no frames at all. With busy output: ~83% of a core visible, ~0% minimized, full rate again on restore.
 			- Hidden tabs were already frozen by design; the missing half was the catch-up.
 			- Unfreeze hard-cuts (rebaselines the scroll detectors), never eases - or the bounce class comes back. A switch into a tab that took 2000 lines while hidden arrives at the bottom with no motion.
-			- Pinned by: `a_frozen_pane_catches_up_without_motion`.
+			- Pinned by: dd5qb `a_frozen_pane_catches_up_without_motion`.
 		- ✅ 6.2 Pause cursor blinking in every pane except the focused pane of the active window.
 			- Same largest-point pause/resume rules as Tier 5, through the same machinery.
 			- Idle pulse is ~6% of a core focused, ~0% unfocused; it resumes after the usual delay on refocus.
-			- Pinned by: `pause_state_blocked_parks_at_full_until_unblocked`.
+			- Pinned by: damyb `pause_state_blocked_parks_at_full_until_unblocked`.
 		- ✅ 6.3 Idle panes touch no memory per frame, so the OS can page them out. Fell out of 6.1/6.2 - frozen and parked panes run zero frames.
 			- No test: memory paging is up to the OS.
 		- Each freeze is behind its own source const (FREEZE_MINIMIZED in app.rs, FREEZE_UNFOCUSED_BLINK in pane.rs), so a surprise side-effect rolls back one line.
@@ -12221,7 +12233,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- An old flat-style config converts in one launch: the file moves aside to config.shcl.bak and a fresh nested file is written with every active value moved to its new place, so settings survive. A setting can also still be written as a single dotted line ('wallpaper.opacity: 0.1') and reads the same.
 	- Saving keeps the nested layout intact: comments keep their indentation and the blank-line grouping survives a settings save.
 	- A fresh file matches the default template byte for byte, and a relaunch never rewrites it.
-	- Pinned by: `legacy_config_converts_with_values_kept`, `walker_resolves_nested_paths`, `a_save_keeps_nested_comment_layout` and `default_config_survives_a_save_unchanged`.
+	- Pinned by: daq68 `legacy_config_converts_with_values_kept`, daq6a `walker_resolves_nested_paths`, daq6b `a_save_keeps_nested_comment_layout` and damtq `default_config_survives_a_save_unchanged`.
 	- Opened: 20260802-002500
 	- Closed: 20260802-014027
 
@@ -12236,7 +12248,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Measures throughput under flood - how fast a terminal swallows output and keeps up - not glyph drawing rate. Only a screenful is ever visible, so most of a stream is consumed and scrolled past without being drawn. That is what the "why does it bog down when something dumps a lot of text" question is about.
 	- At 160x42: SilkTerm 75.1, xfce4-terminal 58.5, XTerm 24.5 million cells/s. SilkTerm leads every width class except plain ASCII, where xfce4-terminal is about a tenth faster.
 	- Install size and memory are measured too, by a second script at a smaller fixed grid, with the graphics driver split out so the table measures the terminal rather than the stack every accelerated program shares.
-	- Pinned by: `cicd/tests/showdown/run.py`.
+	- Pinned by: dcrz2 `cicd/tests/showdown/run.py`.
 	- Opened: n/a
 	- Closed: 20260728-074118
 
@@ -12259,10 +12271,10 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- No migration path: existing `config.toml` files are not read. A fresh `config.shcl` is written with defaults, so any customized settings need re-entering once.
 		- Saving keeps comments and blank-line grouping. It may tidy layout - indentation, and quotes it does not need - but never rewrites a value.
 		- Colors have to be quoted now (`colors.foreground: "#88fff0"`), since `#` starts a comment.
-		- Pinned by: `parse_lenient_drops_only_the_bad_line`, `a_bad_line_drops_only_its_own_setting` and `persist_survives_bare_decimal_float`.
+		- Pinned by: d99pk `parse_lenient_drops_only_the_bad_line`, damtn `a_bad_line_drops_only_its_own_setting` and d9rw2 `persist_survives_bare_decimal_float`.
 	- ✅ Convert already implicitly hierarchical config names, to actual nested hierarchical.
 		- Done as part of the nesting item above.
-		- Pinned by: `walker_resolves_nested_paths` and `legacy_config_converts_with_values_kept`.
+		- Pinned by: daq6a `walker_resolves_nested_paths` and daq68 `legacy_config_converts_with_values_kept`.
 	- ✅ Each setting gets it's own newline-delimited (above and below) section, with helpful comments directly above the setting without newlines.
 		- No test: replaced by the later template layout.
 	- ✅ Common comment format, use what's appropriate for each setting:
@@ -12277,7 +12289,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		## Default value
 		# setting: value  ## Default
 		~~~
-		- Pinned by: `default_config_comment_style` and `every_commented_default_line_loads_as_the_default`.
+		- Pinned by: d97z1 `default_config_comment_style` and dcq4n `every_commented_default_line_loads_as_the_default`.
 
 	- ✅ Use flowerboxing to divide sections, similar to how Settings dialog is divided (the future version, defined in "Refactor settings dialog" below):
 		- The bullet-rule style is in; section names still follow the current dialog until the dialog refactor is done.
@@ -12299,7 +12311,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Ctrl+Minus reduces the size; Ctrl+Plus and Ctrl+Equals increase it. The View menu has the same three actions and lists their keys.
 	- Done: each press steps the size by a pixel, on top of the system size as well as a configured one, and Ctrl+0 goes back to the configured or system size.
 	- ✋ Per-pane scoping is deferred: all panes in a window share one set of text metrics, so a per-pane size needs the same per-pane renderer the per-pane style options need.
-	- Pinned by: `font_zoom_steps_a_pixel_and_stops_at_the_floor`.
+	- Pinned by: dd5mn `font_zoom_steps_a_pixel_and_stops_at_the_floor`.
 	- Opened: 20260722-100516
 	- Closed: 20260724-085317
 
@@ -12313,23 +12325,23 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - ✅ A new setting no longer duplicates its neighbors' comment block.
 	- Description: adding a setting to a group that an existing config already had part of appended the group's whole comment paragraph a second time at the end of the file, alongside the one already in place.
 	- Fixed: a setting whose group is already partly present is put back beside its siblings, in the order the template lists them, with no comment block - those comments are already there. A group the file has never seen still arrives whole.
-	- Pinned by: `a_straggler_goes_beside_its_siblings_not_with_a_second_paragraph`.
+	- Pinned by: daq3c `a_straggler_goes_beside_its_siblings_not_with_a_second_paragraph`.
 	- Opened: n/a
 	- Closed: 20260802-000854
 
 - ✅ Wallpaper settings renamed, and given two master switches.
 	- ✅ `wallpaper_enabled` turns the whole feature off in one line; `wallpaper_rotate_enabled` turns folder rotation off without disturbing the folder. Both default on, both in Settings as "Wallpaper" and "Rotate folder".
-		- Pinned by: `the_master_switch_turns_the_wallpaper_off` and `rotation_off_stops_rotating_and_keeps_the_folder`.
+		- Pinned by: dd5n0 `the_master_switch_turns_the_wallpaper_off` and dd5n1 `rotation_off_stops_rotating_and_keeps_the_folder`.
 	- ✅ Switching the master off grays out every wallpaper row under it, the way the contrast-mask rows already followed their own checkbox.
-		- Pinned by: `a_profile_shows_its_values_in_its_rows`.
+		- Pinned by: dcwqv `a_profile_shows_its_values_in_its_rows`.
 	- ✅ `wallpaper_default` is now `wallpaper_fallback_builtin` and `wallpaper_fit` is now `wallpaper_default_fit`, matching what the Settings dialog calls them. Existing configs are renamed on the next launch.
-		- Pinned by: `legacy_config_converts_with_values_kept`.
+		- Pinned by: daq68 `legacy_config_converts_with_values_kept`.
 	- ✅ The wallpaper folder is `wallpaper/` beside the config now, not `wallpapers/`. The older spellings still work.
-		- Pinned by: `the_default_wallpaper_folder_is_found_in_the_usual_place`.
+		- Pinned by: dd5gc `the_default_wallpaper_folder_is_found_in_the_usual_place`.
 	- ✅ A path in the config can start with `~`.
-		- Pinned by: `tilde_expands_to_home_but_only_for_this_user`.
+		- Pinned by: daq1b `tilde_expands_to_home_but_only_for_this_user`.
 	- ✅ A wallpaper named on the command line still shows even when the config has the feature switched off - naming one is a choice for that run.
-		- Pinned by: `naming_a_wallpaper_turns_it_on_unless_the_profile_says_off` and `a_command_line_wallpaper_outlasts_a_reload_and_an_apply`.
+		- Pinned by: dcq7g `naming_a_wallpaper_turns_it_on_unless_the_profile_says_off` and dcnvv `a_command_line_wallpaper_outlasts_a_reload_and_an_apply`.
 	- Note: 20260930, the keys here are the flat spellings. They are nested now (`wallpaper.enabled`, `wallpaper.fallback_builtin`, `wallpaper.default_fit`).
 	- Opened: n/a
 	- Closed: 20260801-230305
