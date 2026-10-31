@@ -777,7 +777,8 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - CICD reset: the PowerShell test scripts' recursive removals through the guard
 	- ID: 2026102808471076
 	- Type: Task
-	- Status: Testing
+	- Status: Waiting on automated testing
+	- Needs external testing: cmdgui, quiettab, conmap, newwin, wpremote, pathannounce and openwith through `cicd/tests/wingui/run.bash` on a box with an unlocked console, and perfladder on vm925w, the gpu box. b29w's console was locked and vm925w was off.
 	- Priority: Avg
 	- Opened: 20261028-084710
 	- Opened by: CC
@@ -798,13 +799,14 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261031: dehwp checks every tracked .ps1 and the launcher, for `Remove-Item` with `-Recurse` or `-r`, its short names, and a recursive .NET delete.
 	- Verified: 20261031. dehwp passes, and its new check names all 33 lines in the old tree. dcbdd, dcrz7, the desktop entry, signature and cleanup tests pass under pwsh here, and with the test run folder kept, none left a scratch folder. The scenario harness test, dd5nw, the PowerShell lint and `--backlog-run-quick scripts` pass.
 		- Swept: `git grep` for `-Recurse`, the short names and `Delete(..., $true)` over every tracked script. The rest are comments, `Get-ChildItem`, and the guards' own walks.
+	- Verified: 20261031 on b29w, with this tree sent along. dehyk, the Start menu, wrapper, cleanup, signature and temp folder tests, and dd2n3 under both PowerShells, all passed. The Windows scenarios livecfg and conload passed, through the new clear and the launcher's, with the 10-22 build. The other 7 skipped at a locked console.
 	- Branch: rnd1031
 	- Test case: `cicd/tests/saferm/run.bash` (dehwp), its check for a bare recursive removal in any PowerShell script.
 
 - CICD reset: `install.ps1`'s temp folder removal through a guard
 	- ID: 2026102808472645
 	- Type: Task
-	- Status: Testing
+	- Status: Done
 	- Priority: Avg
 	- Opened: 20261028-084710
 	- Opened by: CC
@@ -822,8 +824,11 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261031: Same name, arguments, answers and messages as the repo's, so a script that loads both gets the same guard.
 		- 20261031: A refusal prints the guard's line and the install goes on, as a failed removal did before. The installer's version stays 1.3.0, since nothing a user sees changed.
 	- Verified: 20261031. dehyk runs its one-parent cases against both copies, and a parent behind a link, which the repo's refuses and this one takes. 5 broken copies each failed it: no `..` check, no link check, a parent check that takes a longer name, no check below the parent, and a walk that follows links. dcbdz's new check passes, and failed with the guard call taken out. dcrz7, the desktop entry and signature tests pass under pwsh here.
+	- Verified: 20261031 on b29w, with this tree sent along. dd2n3 passed under pwsh and Windows PowerShell 5.1, its new check included, and dehyk passed with junctions. Under 5.1 the installer's copy took a tree with a junction out of it and left what the junction pointed at, and refused a junction and a path through one.
 	- Branch: rnd1031
 	- Test case: `cicd/tests/saferm/win.ps1` (dehyk), install.ps1's copy. dcbdz "ps1: no run leaves its download folder", and the same check in dd2n3.
+	- Acceptance signoff: Self-closed: a written rule, and dehyk fails against the old installer, which had no copy.
+	- Closed: 20261031-144944
 
 - CICD reset: the test and utility scripts' recursive removals through the guard
 	- ID: 2026102807494121
