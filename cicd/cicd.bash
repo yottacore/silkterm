@@ -648,9 +648,9 @@ fContainerEnd_Work(){
 ## stamped inside sorts with the ones made here.
 fContainerRun(){
 	local -r image="${1}" script="${2}"; shift 2
-	local gitCommon zone="${TZ:-}" runTmp="" runToken="" why="" step="${script##*/}"
+	local gitCommon privTests zone="${TZ:-}" runTmp="" runToken="" why="" step="${script##*/}"
 	local -i rc=0
-	local -a labels=() rmArg=(--rm) keepArgs=()
+	local -a labels=() rmArg=(--rm) keepArgs=() privArgs=()
 	step="${step%.bash}"; [[ "${1:-}" != --backlog-run-quick ]] || step=gate; [[ "${step}" != cicd ]] || step=engine
 	## --keep-temp: a test folder handed in is never removed, so the run inside
 	## keeps its own too.
@@ -670,7 +670,11 @@ fContainerRun(){
 	[[ "${containerTarget}" == "${root}/"* ]] || mounts+=(-v "${containerTarget}:${containerTarget}")
 	gitCommon="$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null || true)"
 	[[ -z "${gitCommon}" || "${gitCommon}" == "${root}/"* ]] || mounts+=(-v "${gitCommon}:${gitCommon}")
-	"${docker}" run "${rmArg[@]}" --init --shm-size 1g --cpus "${CICD_MAX_JOBS}" --cpu-shares 256 --name "${EXE_NAME}-${runName}-${step}" "${labels[@]}" "${mounts[@]}" -w "${root}" \
+	## The private repo's test scripts, read only, so the test ID check inside
+	## sees them as it does here. Its runner stays out, as stage 6 is this side's.
+	privTests="${PRIVATE_RUNNER:+${PRIVATE_RUNNER%/cicd/*}/cicd/tests}"
+	[[ -z "${privTests}" || ! -d "${privTests}" ]] || privArgs=(-v "${privTests}:${privTests}:ro" -e "SILK_PRIVATE_RUNNER=${PRIVATE_RUNNER}")
+	"${docker}" run "${rmArg[@]}" --init --shm-size 1g --cpus "${CICD_MAX_JOBS}" --cpu-shares 256 --name "${EXE_NAME}-${runName}-${step}" "${labels[@]}" "${mounts[@]}" "${privArgs[@]}" -w "${root}" \
 		-e "USER=${USER:-$(id -un)}" -e "CARGO_TARGET_DIR=${containerTarget}" -e "SILK_BUILD_MINUTES=${SILK_BUILD_MINUTES:-}" -e "SILK_RELEASE=${SILK_RELEASE:-0}" \
 		-e "CICD_MAX_JOBS=${CICD_MAX_JOBS}" -e "CICD_CORES=${CICD_CORES}" -e SILK_CICD_STEP_AT -e SILK_CICD_STEP_TOTAL -e XDG_RUNTIME_DIR=/tmp/xdg-runtime -e ZIG_GLOBAL_CACHE_DIR=/zig-cache "${zoneArgs[@]}" "${keepArgs[@]}" \
 		"${image}" bash -c 'echo "${USER}:x:${1}:${2}:${USER}:${HOME}:/bin/bash" >>/etc/passwd && echo "${USER}:x:${2}:" >>/etc/group \
@@ -2167,6 +2171,8 @@ fEcho_Clean
 
 
 ##	History:
+##		- 2026-10-31: The container gets the private repo's test scripts, read only,
+##		              for the test ID check.
 ##		- 2026-10-28: --list takes the scroll harness's scenes, each with its own ID.
 ##		- 2026-10-28: One PASS, FAIL or SKIP line per test, with its ID and name. A
 ##		              test script that can't run says why on its SKIP line.

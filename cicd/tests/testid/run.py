@@ -6,6 +6,7 @@
 ##		check that refuses a missing, malformed, old base 62, future or shared ID.
 ##		Test result lines as PASS, FAIL or SKIP, ID and name. The scroll
 ##		harness's scenes and the fuzz targets each with an ID of their own.
+##		The private repo's test scripts, checked in the same set.
 ##	Syntax: run.py
 ##	Exit: 0 all passed, 1 a check failed.
 ##	Test ID: dejjp
@@ -28,7 +29,8 @@ _testdir.use()
 
 REPO = Path(__file__).resolve().parents[3]
 TOOL = REPO / "cicd" / "utility" / "test-id.py"
-ENV = {**os.environ, "TZ": "UTC"}
+## A made-up tree never sees the real private repo.
+ENV = {**os.environ, "TZ": "UTC", "SILK_PRIVATE_RUNNER": ""}
 
 failures = 0
 def check(what: str, ok: object, detail: str = "") -> None:
@@ -40,9 +42,9 @@ def check(what: str, ok: object, detail: str = "") -> None:
 		print(f"  FAIL {what}{': ' + detail if detail else ''}")
 
 
-def run(root: Path, *args: str, stdin: str = "") -> tuple[int, str]:
+def run(root: Path, *args: str, stdin: str = "", env: dict[str, str] | None = None) -> tuple[int, str]:
 	p = subprocess.run([sys.executable, str(root / "cicd" / "utility" / "test-id.py"), *args],
-		input=stdin, capture_output=True, text=True, env=ENV, check=False)
+		input=stdin, capture_output=True, text=True, env=env or ENV, check=False)
 	return p.returncode, p.stdout + p.stderr
 
 
@@ -67,8 +69,8 @@ def target(tid: str, name: str, *soaks: str) -> str:
 	return f"\t\t// Test ID: {tid}\n\t\t#[test]\n\t\tfn {name}() {{\n{calls}\t\t}}\n"
 
 
-def tree(ids: list[str | None], script_id: str = "decp2") -> Path:
-	root = Path(tempfile.mkdtemp(dir=scratch))
+def tree(ids: list[str | None], script_id: str = "decp2", root: Path | None = None) -> Path:
+	root = root or Path(tempfile.mkdtemp(dir=scratch))
 	(root / "cicd" / "utility").mkdir(parents=True)
 	shutil.copy(TOOL, root / "cicd" / "utility" / "test-id.py")
 	(root / "source" / "src").mkdir(parents=True)
@@ -136,6 +138,36 @@ check("the check refuses 2 fuzz targets in one test", rc == 1 and "fuzz target v
 rc, out = run(with_fuzz('\t\tfn helper() {\n\t\t\tfuzz::soak("vt", |_| {});\n\t\t}\n'), "--check")
 check("and a fuzz target outside any test", rc == 1 and "fuzz target vt is not in a test of its own: source/src/vt.rs:5" in out, out.strip())
 
+def private(tid: str | None, root: Path | None = None) -> Path:
+	root = root or Path(tempfile.mkdtemp(dir=scratch)) / "repo"
+	(root / "cicd" / "tests" / "hosts").mkdir(parents=True)
+	(root / "cicd" / "tests" / "hosts" / "run.bash").write_text(f"#!/bin/bash\n##	- Test ID: {tid}\n" if tid else "#!/bin/bash\n")
+	return root
+
+def beside(tid: str | None) -> dict[str, str]:
+	return {**ENV, "SILK_PRIVATE_RUNNER": str(private(tid) / "cicd" / "run.bash")}
+
+rc, out = run(tree(["decp8"]), "--check", env=beside("dehx0"))
+check("the private repo's test script is checked with the rest", rc == 0 and "3 test IDs, all unique" in out, out.strip())
+private_cases: list[tuple[str, str | None, str]] = [
+	("an old base 62 ID", "Eu0WzDd", "test ID Eu0WzDd is not a plausible time: silkterm-private/cicd/tests/hosts/run.bash"),
+	("a missing ID", None, "no test ID: silkterm-private/cicd/tests/hosts/run.bash"),
+	("an ID this repo's test has", "decp8", "test ID decp8 is also at source/src/main.rs:"),
+]
+for what, tid, says in private_cases:
+	rc, out = run(tree(["decp8"]), "--check", env=beside(tid))
+	check(f"the check refuses {what} in the private repo", rc == 1 and says in out, out.strip())
+rc, out = run(tree(["decp8"]), "--at", "2026-10-24 22:00", "2", env=beside("decp9"))
+check("a new ID skips one the private repo has", out.split() == ["decpa", "decpb"], out.strip())
+pair = Path(tempfile.mkdtemp(dir=scratch))
+public = tree(["decp8"], root=pair / "silkterm-floss" / "repo")
+private("Eu0WzDd", pair / "silkterm-private" / "repo")
+unset = {k: v for k, v in ENV.items() if k != "SILK_PRIVATE_RUNNER"}
+rc, out = run(public, "--check", env=unset)
+check("the private repo is found beside this one, as the pipeline finds it", rc == 1 and "test ID Eu0WzDd" in out, out.strip())
+rc, out = run(public, "--check")
+check("and an empty SILK_PRIVATE_RUNNER leaves it out", rc == 0 and "2 test IDs, all unique" in out, out.strip())
+
 results = "test tests::case_0 ... ok\ntest tests::gone ... FAILED\ntest tests::case_1 ... ignored, needs b29w\ntest tests::case_0 ... bench\nrunning 2 tests\n"
 rc, out = run(tree(["decp8", "decp9"]), "--annotate", stdin=results)
 lines = out.splitlines()
@@ -174,3 +206,4 @@ print("all passed")
 ##		- 20261028: Created.
 ##		- 20261028: PASS, FAIL and SKIP lines, and --run.
 ##		- 20261028: The scroll scenes' IDs, and a fuzz target per test.
+##		- 20261031: The private repo's test scripts.

@@ -717,7 +717,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - CICD reset: the private runner's tests still use old base 62 test IDs
 	- ID: 2026102819390388
 	- Type: Task
-	- Status: Queued
+	- Status: Done
 	- Priority: Avg
 	- Opened: 20261028-193903
 	- Opened by: CC
@@ -726,6 +726,19 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Requirements:
 		- The private repo's tests weren't part of the 10-28 conversion. Its one ID this backlog names, Eu0WzDd, became dehx0 here, so the private repo's own test should use that.
 		- Convert with the same old-to-new map the 10-28 conversion used, and its ID check should refuse the old form too.
+	- Progress log:
+		- 20261031: silkterm-private's host test is dehx0 now. Its backlog's 112 mentions of this repo's old IDs went through the same map. No old ID was left there that the map doesn't have.
+		- 20261031: `test-id.py --check` takes silkterm-private's test scripts too, when it's beside this repo, found the way `config.bash` finds the private runner. They share one set of IDs, so the check refuses an old, missing or shared ID there, and a new ID skips one the private repo has. An empty `SILK_PRIVATE_RUNNER` leaves it out.
+		- 20261031: The container gets the private repo's `cicd/tests` read only, so the check inside sees it too. `--no-private` leaves it out.
+	- Decisions:
+		- 20261031: The check stays in this repo's ID tool rather than a copy in the private repo. The private repo has no check of its own, and one tool over both trees keeps the IDs unique across them.
+		- 20261031: Only the tests folder goes into the container, not the private runner, since stage 6 runs on this side.
+	- Verified: 20261031. dejjp passes, and 6 of its 7 new checks failed against the old tool. The 7th, an empty `SILK_PRIVATE_RUNNER`, passes on both by design. ddrp2 passes, and 3 of its 4 new checks failed against the old `cicd.bash`. With the old ID put back in the private host test, `test-id.py --check` and `--backlog-run-quick docs` in the container both refused it, and both pass on dehx0. The private host test (dehx0) passes. `--backlog-run-quick scripts docs` passed.
+		- Swept: every place that reads test IDs from files, which is only `find_ids` in `test-id.py`, used by `--check` and new IDs. `--list` and `--annotate` read Rust tests only, and the private repo has none. No doc describes what the check covers.
+	- Branch: rnd1031
+	- Commit: silkterm-private f867b51
+	- Test case: dejjp `cicd/tests/testid/run.py`, ddrp2 `cicd/tests/container/run.bash`.
+	- Closed: 20261031-141601
 
 - CICD reset: run folders under HOST_TEMP, removed at the end
 	- ID: 2026102807494157

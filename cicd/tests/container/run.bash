@@ -230,6 +230,16 @@ fCheck "and nothing else of this box" test "$(grep -o ' -v ' <<<"${runLine}" | w
 ## made here.
 (export TZ=Pacific/Chatham; fRun tz.log --container -y --no-sync --no-dogfood --no-publish --no-private --quick --no-fuzz)
 fCheck "this box's time zone goes in" grep -q -- ' -e TZ=Pacific/Chatham ' "${work}/tz.log"
+## The private repo's test scripts go in read only, for the test ID check, and
+## its runner stays here.
+priv="${work}/private/repo"; mkdir -p "${priv}/cicd/tests/hosts"
+(export SILK_PRIVATE_RUNNER="${priv}/cicd/run.bash"; fRun priv.log --container -y --no-sync --no-dogfood --no-publish --quick --no-fuzz)
+privLine="$(grep '^run ' "${work}/priv.log" || true)"
+fCheck "the private repo's test scripts go in read only" bash -c '[[ "$1" == *" -v $2:$2:ro "* ]]' _ "${privLine}" "${priv}/cicd/tests"
+fCheck "with the path the test ID check finds them by" bash -c '[[ "$1" == *" -e SILK_PRIVATE_RUNNER=$2 "* ]]' _ "${privLine}" "${priv}/cicd/run.bash"
+fCheck "and nothing else of it" test "$(grep -o ' -v ' <<<"${privLine}" | wc -l)" -eq 5
+(export SILK_PRIVATE_RUNNER="${priv}/cicd/run.bash"; fRun privoff.log --container -y --no-sync --no-dogfood --no-publish --no-private --quick --no-fuzz)
+fCheck "--no-private leaves them out" fNot grep -q -- "${priv}" "${work}/privoff.log"
 fCheck "the image was there, so nothing was built" fNot grep -q '^build ' "${work}/full.log"
 fCheck "the run here went on to the end" grep -q 'CI/CD: done' <<<"${out}"
 fCheck "with the container's stages marked done" grep -q 'OK: stages 1-6 in the container' <<<"${out}"
@@ -528,3 +538,4 @@ echo "all passed"
 ##		- 20261026: --keep-temp keeps the /tmp folders, and --list starts nothing.
 ##		- 20261028: TSan only under --long.
 ##		- 20261028: The steps by name, the profiler a step of its own after the checks here.
+##		- 20261031: The private repo's test scripts go in read only.
