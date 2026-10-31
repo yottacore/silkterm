@@ -29,7 +29,7 @@ if ! command -v rustfmt >/dev/null 2>&1; then
 fi
 
 work="$(mktemp -d "${TMPDIR:-/tmp}/silk-hooks.XXXXXX")"
-fEnd(){ local -r rc=$?; rm -rf "${work}"; fTestDir_End "${rc}"; }
+fEnd(){ local -r rc=$?; fTestDir_Rm "${work}" || true; fTestDir_End "${rc}"; }
 trap fEnd EXIT
 
 ## A repository of our own, so nothing here can reach the real one. The identity

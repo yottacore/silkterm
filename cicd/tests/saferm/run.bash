@@ -113,10 +113,42 @@ fCheck "and stays" test -f "${work}/repo/art/f"
 fCheck "so does cicd/artifacts itself" fRefused fClear "${work}/repo" cicd/artifacts
 fCheck "and it stays" test -f "${work}/repo/cicd/artifacts/lint"
 
-## The pipeline's own removals all go through it.
-fBare(){ grep -nE '(^|[;&|{([:space:]])rm +(-[A-Za-z]*[rR]|--recursive)' "${@}" | grep -vE '^[0-9]+:[[:space:]]*##?' || true; }
-fCheck "no bare recursive rm in cicd.bash or the sweep" test -z "$(fBare "${repoRoot}/cicd/cicd.bash" "${repoRoot}/cicd/utility/include/sweep.bash")"
+## Every recursive removal in a bash file in cicd/ goes through it: the
+## pipeline, the tests and the utilities. A bash file is a .bash or .sh, or one
+## whose first line names bash or sh. The tracked ones, as the lint takes them.
+fBare(){
+	grep -HnE "(^|[;&|{(\`'\"[:space:]])(command +|\\\\)?rm( +-[A-Za-z]+)* +(-[A-Za-z]*[rR]|--recursive)" "${@}" /dev/null \
+		| grep -vE '^[^:]+:[0-9]+:[[:space:]]*#' || true
+}
+mapfile -t shFiles < <(cd "${repoRoot}" && git ls-files -z cicd | xargs -0 awk -v root="${repoRoot}/" \
+	'FNR == 1 { if (FILENAME ~ /\.(bash|sh)$/ || $0 ~ /^#!.*[\/ ](ba)?sh([ \t]|$)/) print root FILENAME; nextfile }')
+fCheck "the bash files are found" test "${#shFiles[@]}" -gt 60
+said="$(fBare "${shFiles[@]}" | grep -vF "${lib}:" || true)"
+fCheck "no bare recursive rm in any of them" test -z "${said}"
+[[ -z "${said}" ]] || printf '    %s\n' "${said//$'\n'/$'\n'    }"
 fCheck "and one in the guard" test "$(fBare "${lib}" | wc -l)" -eq 1
+## Built from r, so this file's own lines don't match.
+r="rm"
+fCheck "the check finds the forms it looks for" test "$(fBare <(printf '%s\n' "${r} -rf a" "x; ${r} -f -r a" "trap '${r} -Rf a' EXIT" "\\${r} --recursive a" "command ${r} -fr a" "## ${r} -rf a" "docker run --${r} a" "${r} -f a") | wc -l)" -eq 5
+
+## A test's own folders, through fTestDir_Rm, under the run's test folder only.
+mkdir -p "${work}/td/run/w1/sub" "${work}/td/other"; echo k >"${work}/td/other/f"
+ln -s "${work}/td/run" "${work}/td/via"
+fTdRm(){ ( SILKTERM_TEST_DIR="${work}/td/${1}"; fTestDir_Rm "${2}" ); }
+fCheck "a folder in the test folder goes" fTdRm run "${work}/td/run/w1"
+fCheck "and only that" test ! -e "${work}/td/run/w1" -a -d "${work}/td/run"
+mkdir -p "${work}/td/run/w2"
+fCheck "so does one named by a test folder behind a link" fTdRm via "${work}/td/via/w2"
+fCheck "and it's gone" test ! -e "${work}/td/run/w2"
+fCheck "a path that isn't there is left alone" fTdRm run "${work}/td/run/nope"
+fCheck "the test folder itself is refused" fRefused fTdRm run "${work}/td/run"
+fCheck "one outside it is refused" fRefused fTdRm run "${work}/td/other"
+fCheck "and stays" test -f "${work}/td/other/f"
+ln -s "${work}/td/other" "${work}/td/run/lnk"
+fCheck "a link in it is refused" fRefused fTdRm run "${work}/td/run/lnk"
+fCheck "and what it points at stays" test -f "${work}/td/other/f"
+fCheck "with no test folder it's refused" fRefused bash -c 'unset SILKTERM_TEST_DIR; source "$1"; fTestDir_Rm "$2"' _ "${meDir}/../_testdir.bash" "${work}/td/other"
+fCheck "and still stays" test -f "${work}/td/other/f"
 
 ## The PowerShell copy, which cicd-win.ps1 goes through, and its own test.
 fBareWin(){ grep -HniE 'Remove-Item.*-Recurse' "${@}" | grep -vE '^[^:]+:[0-9]+:[[:space:]]*##' || true; }
@@ -147,3 +179,4 @@ echo "all passed"
 ##		- 20261028 JC: Created.
 ##		- 20261028: The PowerShell copy, and cicd-win.ps1 through it.
 ##		- 20261031: Every PowerShell script, the test scripts and install.ps1 too.
+##		- 20261031: Every bash file in cicd/, and the tests' own fTestDir_Rm.

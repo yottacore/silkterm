@@ -26,7 +26,7 @@ failures=0
 fCheck(){ local -r what="${1}"; shift; if "${@}"; then echo "  ok   ${what}"; else echo "  FAIL ${what}"; failures=$((failures + 1)); fi; }
 
 work="$(mktemp -d "${TMPDIR:-/tmp}/silk-rotate.XXXXXX")"
-fEnd(){ local -r rc=$?; rm -rf "${work}"; fTestDir_End "${rc}"; }
+fEnd(){ local -r rc=$?; fTestDir_Rm "${work}" || true; fTestDir_End "${rc}"; }
 trap fEnd EXIT
 unset GFS_KEEP_FREQUENT GFS_KEEP_HOURLY GFS_KEEP_DAILY GFS_KEEP_WEEKLY GFS_KEEP_MONTHLY GFS_KEEP_YEARLY
 export TZ=UTC
@@ -80,10 +80,10 @@ fCheck "names are read and stamps written the way date does it" fSameAsDate
 fFewForks(){
 	local n lines=0 limit _
 	fForkCount n "source $(printf '%q' "${cicd}/utility/include/gfs-rotate.bash")
-		rm -rf $(printf '%q' "${work}/forks"); cp -a $(printf '%q' "${dir}") $(printf '%q' "${work}/forks")" \
+		source $(printf '%q' "${cicd}/tests/_testdir.bash"); fTestDir_Rm $(printf '%q' "${work}/forks"); cp -a $(printf '%q' "${dir}") $(printf '%q' "${work}/forks")" \
 		"gfs_rotate $(printf '%q' "${work}/forks") run log >$(printf '%q' "${work}/forks.out")"
 	while read -r _; do lines=$((lines + 1)); done <"${work}/forks.out"
-	rm -rf "${work}/forks"
+	fTestDir_Rm "${work}/forks"
 	limit=$((forkCountExact ? 30 : 300)); echo "    $((n - lines)) forks beyond the files changed, limit ${limit}"; ((n - lines <= limit))
 }
 fCheck "rotating 200 files costs a few forks beyond the files it changes" fFewForks

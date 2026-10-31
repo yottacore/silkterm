@@ -31,12 +31,16 @@ source "${root}/cicd/config.bash"
 source "${here}/include/echo.bash"
 # shellcheck source=cicd/utility/include/jobs.bash
 source "${here}/include/jobs.bash"
+# shellcheck source=cicd/utility/include/saferm.bash
+source "${here}/include/saferm.bash"
 
 outDir="${1:?out dir}"; stamp="${2:?stamp}"
 command -v codeql >/dev/null 2>&1 || fDie "codeql isn't installed here; cicd.bash runs this in the container image"
 fJobs_LowPriority; fJobs hard
 target="${CODEQL_TARGET:-x86_64-unknown-linux-gnu}"
-work="${CARGO_TARGET_DIR:-${root}/target}/codeql"
+## Resolved, since the target dir can be a link, and the guard won't go through one.
+tgt="$(realpath -m -- "${CARGO_TARGET_DIR:-${root}/target}")"
+work="${tgt}/codeql"
 src="${work}/src"; db="${work}/db"
 raw="${work}/results.sarif"; sarif="${outDir}/codeql_${stamp}.sarif"
 mkdir -p "${outDir}" || fDie "could not make ${outDir}"
@@ -45,7 +49,7 @@ mkdir -p "${outDir}" || fDie "could not make ${outDir}"
 ## Only a folder this script marked as its own.
 if [[ -e "${work}" ]]; then
 	[[ -f "${work}/.silkterm-codeql" ]] || fDie "${work} is there but not ours; leaving it"
-	rm -rf -- "${work}"
+	fSafeRm_Under "${tgt}" "${work}" || fDie "could not clear ${work}"
 fi
 mkdir -p "${src}" && : >"${work}/.silkterm-codeql"
 cp -a Cargo.toml Cargo.lock rust-toolchain.toml .cargo source knobs "${src}/"

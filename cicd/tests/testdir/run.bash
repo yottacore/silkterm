@@ -32,7 +32,7 @@ fShowTail(){ tail -n 25 "${1}" | sed 's/^/      /'; }
 
 work="$(mktemp -d)"
 declare -a locked=()
-fEnd(){ local -r rc=$?; local dir; for dir in "${locked[@]}"; do chmod 755 "${dir}"; rm -rf "${dir}"; done; rm -rf "${work}"; fTestDir_End "${rc}"; }
+fEnd(){ local -r rc=$?; local dir; for dir in "${locked[@]}"; do chmod 755 "${dir}"; fTestDir_Rm "${dir}" || true; done; fTestDir_Rm "${work}" || true; fTestDir_End "${rc}"; }
 trap fEnd EXIT
 
 stampRe='^test_silkterm_[0-9]{8}-[0-9]{8}$'
@@ -259,7 +259,7 @@ declare -A gCode=(
 	[python/pass]='open(d + "/file", "w").write("x"); _testdir.end(0)'
 	[bash/fail]='echo x >"${d}/file"; exit 1'
 	[python/fail]='open(d + "/file", "w").write("x"); _testdir.end(1); sys.exit(1)'
-	[bash/trap]='work="$(mktemp -d)"; trap '"'"'rc=$?; rm -rf "${work}"; fTestDir_End "${rc}"'"'"' EXIT; exit 0'
+	[bash/trap]='work="$(mktemp -d)"; trap '"'"'rc=$?; fTestDir_Rm "${work}" || true; fTestDir_End "${rc}"'"'"' EXIT; exit 0'
 	[bash/marker]='echo other >"${d}/.test_silkterm_owner"; exit 0'
 	[python/marker]='open(d + "/.test_silkterm_owner", "w").write("other\n"); _testdir.end(0)'
 	[bash/swapped]='mv "${d}" "${d}-aside"; ln -s "${d}-aside" "${d}"; exit 0'

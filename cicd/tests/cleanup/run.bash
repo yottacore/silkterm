@@ -27,7 +27,7 @@ fCheck(){ local -r what="${1}"; shift; if "${@}"; then echo "  ok   ${what}"; el
 fNot(){ ! "${@}"; }
 
 work="$(mktemp -d "${TMPDIR:-/tmp}/silk-cleanup.XXXXXX")"
-fEnd(){ local -r rc=$?; rm -rf "${work}"; fTestDir_End "${rc}"; }
+fEnd(){ local -r rc=$?; fTestDir_Rm "${work}" || true; fTestDir_End "${rc}"; }
 trap fEnd EXIT
 
 ## A: the test run folders failed runs kept. Eight written down, oldest first.
@@ -38,7 +38,7 @@ fPlant(){ local -r dir="${base}/test_silkterm_2026101${1}-00000000"; mkdir -m 70
 for n in 1 2 3 4 5 6 7 8; do fPlant "${n}"; done
 fDir(){ echo "${base}/test_silkterm_2026101${1}-00000000"; }
 echo "tok-other" >"$(fDir 2)/.test_silkterm_owner"
-rm -rf "$(fDir 3)"
+fTestDir_Rm "$(fDir 3)"
 mv "$(fDir 4)" "${work}/elsewhere/four"; ln -s "${work}/elsewhere/four" "$(fDir 4)"
 mkdir "${base}/test_silkterm_20261099-00000000"; echo tok-99 >"${base}/test_silkterm_20261099-00000000/.test_silkterm_owner"
 ## Not in a subshell, so the counts reach the summary.

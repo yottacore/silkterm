@@ -67,7 +67,7 @@ fCleanup(){
 	if ((startedDisplay)); then "${headless}" stop >/dev/null 2>&1 || true; fi
 	if [[ -n "${tmuxBin}" && -S "${work}/sock" ]]; then "${tmuxBin}" -S "${work}/sock" kill-server >/dev/null 2>&1 || true; fi
 	local pid; for pid in $(fLeftovers); do kill "${pid}" 2>/dev/null || true; done
-	if [[ "${rc}" == 0 ]]; then rm -rf "${work}"; fi
+	if [[ "${rc}" == 0 ]]; then fTestDir_Rm "${work}" || true; fi
 	fTestDir_End "${rc}"
 }
 trap 'fCleanup $?' EXIT

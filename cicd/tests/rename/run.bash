@@ -29,7 +29,7 @@ fCheck(){ local -r what="${1}"; shift; if "${@}"; then echo "  ok   ${what}"; el
 ##	fails when the temp dir is on another filesystem. rename.bash only moves
 ##	and rewrites tracked files and writes no objects, so the source is untouched.
 clone="$(mktemp -d)/clone"
-fEnd(){ local -r rc=$?; rm -rf "${clone%/clone}"; fTestDir_End "${rc}"; }
+fEnd(){ local -r rc=$?; fTestDir_Rm "${clone%/clone}" || true; fTestDir_End "${rc}"; }
 trap fEnd EXIT
 git -C "${root}" clone --quiet --shared . "${clone}"
 

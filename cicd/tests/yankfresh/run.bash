@@ -29,7 +29,7 @@ failures=0
 fCheck(){ local -r what="${1}"; shift; if "${@}"; then echo "  ok   ${what}"; else echo "  FAIL ${what}"; failures=$((failures + 1)); fi; }
 
 work="$(mktemp -d "${TMPDIR:-/tmp}/silk-yankfresh.XXXXXX")"
-fEnd(){ local -r rc=$?; [[ "${work}" == "${TMPDIR:-/tmp}"/silk-yankfresh.* && ! -L "${work}" ]] && rm -rf -- "${work}"; fTestDir_End "${rc}"; }
+fEnd(){ local -r rc=$?; [[ "${work}" == "${TMPDIR:-/tmp}"/silk-yankfresh.* && ! -L "${work}" ]] && { fTestDir_Rm "${work}" || true; }; fTestDir_End "${rc}"; }
 trap fEnd EXIT
 
 ## A cargo home of our own: a copy of the index cache, which gets planted on,

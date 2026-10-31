@@ -61,7 +61,7 @@ fCleanup(){
 	local -r rc="${1}"
 	if [[ -n "${appPid}" ]]; then fStopOurs "${appPid}"; fi
 	if ((startedDisplay)); then "${headless}" stop >/dev/null 2>&1 || true; fi
-	if [[ "${rc}" == 0 ]]; then rm -rf "${work}"; fi
+	if [[ "${rc}" == 0 ]]; then fTestDir_Rm "${work}" || true; fi
 	fTestDir_End "${rc}"
 }
 trap 'fCleanup $?' EXIT

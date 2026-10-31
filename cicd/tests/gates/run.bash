@@ -23,7 +23,7 @@ failures=0
 fCheck(){ local -r what="${1}"; shift; if "${@}"; then echo "  ok   ${what}"; else echo "  FAIL ${what}"; failures=$((failures + 1)); fi; }
 
 work="$(mktemp -d "${TMPDIR:-/tmp}/silk-gates.XXXXXX")"
-trap 'rc=$?; rm -rf "${work}"; fTestDir_End "${rc}"' EXIT
+trap 'rc=$?; fTestDir_Rm "${work}" || true; fTestDir_End "${rc}"' EXIT
 
 ## A run: cicd.bash's logging block lifted out as it stands, then two warnings
 ## with a pause between them that the test controls. What the block calls from

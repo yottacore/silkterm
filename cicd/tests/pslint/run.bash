@@ -27,7 +27,7 @@ if ! command -v pwsh >/dev/null 2>&1; then
 fi
 
 work="$(mktemp -d "${TMPDIR:-/tmp}/silk-pslint.XXXXXX")"
-trap 'rc=$?; rm -rf "${work}"; fTestDir_End "${rc}"' EXIT
+trap 'rc=$?; fTestDir_Rm "${work}" || true; fTestDir_End "${rc}"' EXIT
 
 ## An alias, which the settings keep at warning level.
 printf 'gci\n' >"${work}/finding.ps1"

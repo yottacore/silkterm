@@ -57,7 +57,7 @@ fCleanup(){
 	local -r rc="${1}"
 	if [[ -n "${noticePid}" ]]; then fStopOurs "${noticePid}"; fi
 	if ((startedDisplay)); then "${headless}" stop >/dev/null 2>&1 || true; fi
-	rm -rf "${work}"
+	fTestDir_Rm "${work}" || true
 	fTestDir_End "${rc}"
 }
 trap 'fCleanup $?' EXIT

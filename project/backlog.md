@@ -833,17 +833,50 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - CICD reset: the test and utility scripts' recursive removals through the guard
 	- ID: 2026102807494121
 	- Type: Task
-	- Status: Queued
+	- Status: Done
 	- Priority: Avg
 	- Opened: 20261028-074941
 	- Opened by: CC
 	- Parent ID: 2026102416233803
 	- Prereq IDs: 2026102807494103
+	- Related IDs: 2026103115085852
 	- Target OS: Linux
 	- Requirements:
 		- Every recursive `rm` in `cicd/tests/` and `cicd/utility/` goes through the guard from 2026102807494103, about 58 lines in 45 files, `_testdir.bash` included.
 			- Add the short socket folder cleanups in `swnoshm` and `livecfg` from 2026102507092877, and their siblings in `wlclip`, `monwl`, `monwake` and `dpirand`.
 		- dehwp's check for a bare recursive rm covers every bash file in `cicd/`.
+	- Progress log:
+		- 20261031: `_testdir.bash` loads the guard and has a new `fTestDir_Rm`, which removes a folder inside the run's test folder with that folder as the one parent. The run folder itself goes through the guard too, under the temp folder it was made in.
+		- 20261031: Every test script's own folders go through `fTestDir_Rm`. The short socket folders in `/tmp` in `swnoshm`, `livecfg`, `wlclip`, `monwl` and `monwake`, and `install`'s run folders in `/tmp`, go through `fSafeRm`.
+		- 20261031: `codeql.bash`, `repro-check.bash`, `wallpaper-gallery.bash` and `mem-per-window` remove through `fSafeRm_Under`, each under the folder it made its own in.
+		- 20261031: dehwp's check reads every tracked bash file in `cicd/`, by name or by its first line, and also catches a removal in quotes, `-f -r`, `\rm` and `command rm`. It checks `fTestDir_Rm` too.
+		- 20261031: `dpirand`'s socket folder is Python, which has no guard yet. It and the other 12 Python removals are 2026103115085852.
+	- Decisions:
+		- 20261031: A test's folders go by the one-parent form under the run's test folder, not the tmp rule, since `TMPDIR` can be anything, such as macOS's. The test folder is resolved once, so one behind a link still works, and the guard checks the rest of the path.
+		- 20261031: `fTestDir_Rm` leaves a path that isn't there alone, as rm -rf did, since a trap can run before the folder is made.
+		- 20261031: In an exit trap a refusal is printed and the trap goes on, so the test's own result stands. In a test's body it stops the test.
+		- 20261031: The utility scripts resolve the folder they make theirs in once, since the target dir is a link on this box.
+		- 20261031: `dpirand`'s socket folder moved to 2026103115085852, since it's Python, and Python has no guard to go through yet.
+	- Verified: 20261031. dehwp passes, and its new check failed with the old `wallpaper-gallery.bash` put back. Over the old files it finds 56 lines. The testdir (ddazx), cleanup, rotate, rename, pins, testout, hooks, gates, release, advscope, publish, sync, pylint, pslint, win-remote, cicd-win, jobs, packaging, container, engine, install, wingui harness, delcfg, config-convert, yankfresh, wakepic and wpkept tests pass. monwl, monwake and swnoshm pass with their socket folders in `/tmp`, and leave none. The gallery script's folder goes under a `TMPDIR` behind a link. `--backlog-run-quick scripts docs` passes.
+		- Not verified here: livecfg, wlclip, quiettab, mapfollow, allocs and scroll failed on their own checks against a 10-26 debug build, before their cleanup, and printed no refusal. `codeql.bash`, `repro-check.bash` and `mem-per-window` weren't run.
+		- Swept: every `rm` with `-r` or `--recursive` in a tracked bash file in `cicd/`, `-delete` and `git clean` (one, in `win-remote.bash`'s PowerShell for the box's clone), and `shutil.rmtree` in Python, which is 2026103115085852.
+	- Test case: `cicd/tests/saferm/run.bash` (dehwp).
+	- Branch: rnd1031
+	- Closed: 20261031-151619
+
+- CICD reset: the Python test and utility scripts' recursive removals through a guard
+	- ID: 2026103115085852
+	- Type: Task
+	- Status: Queued
+	- Priority: Avg
+	- Opened: 20261031-150858
+	- Opened by: CC
+	- Parent ID: 2026102416233803
+	- Target OS: All
+	- Requirements:
+		- A Python copy of the guard, with the rules and the one-parent form of `saferm.bash`, and a test like dehwp.
+		- Every `shutil.rmtree` in `cicd/` goes through it, 13 lines in 8 files, `_testdir.py` included.
+			- The short socket folder in `dpirand`, moved here from 2026102807494121.
 
 - Leak checks: Miri sort, settings_ui
 	- ID: 2026102407430381

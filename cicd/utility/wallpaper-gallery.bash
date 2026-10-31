@@ -41,6 +41,8 @@ set -Eeuo pipefail
 
 meDir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 repoDir="${meDir}/../.."                      ## this script lives in cicd/utility
+#  shellcheck source=cicd/utility/include/saferm.bash
+source "${meDir}/include/saferm.bash"
 src="${repoDir}/filesystem/home/.config/silkterm/wallpaper"
 attrib="${repoDir}/filesystem/home/.config/silkterm/wallpaper-attribution.md"
 out="${repoDir}/assets/wallpaper-gallery.jpg"
@@ -154,8 +156,10 @@ fEcho_Clean "  Images   ${count}"
 ((doPage))  && fEcho_Clean "  Page     thumbnails of ${thumbW}x${thumbH} -> ${docs}/wallpapers/"
 fEcho_Clean
 
-tmpDir="$(mktemp -d)"
-trap 'rm -rf "$tmpDir"' EXIT
+## Resolved, so the guard can name it as the one parent.
+tmpBase="$(realpath -e -- "${TMPDIR:-/tmp}")"
+tmpDir="$(mktemp -d "${tmpBase}/silk-gallery.XXXXXX")"
+trap 'fSafeRm_Under "${tmpBase}" "${tmpDir}"' EXIT
 
 
 ##	The README contact sheet

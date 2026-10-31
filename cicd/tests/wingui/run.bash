@@ -107,7 +107,7 @@ scripts="$(mktemp -d)"
 tar czf "${bundle}" -C "${meDir}" --exclude=run.bash --exclude=harness-test.bash --exclude=_stage.ps1 . -C "${root}" install.ps1 -C "${root}/cicd/utility/include" saferm.ps1
 fEnd(){
 	local -r rc=$?
-	rm -f "${bundle}"; rm -rf "${scripts}"
+	rm -f "${bundle}"; fTestDir_Rm "${scripts}" || true
 	if ((ownRan)); then fSkipsLeft; rm -f "${WINGUI_RAN}"; fi
 	fTestDir_End "${rc}"
 }

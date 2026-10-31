@@ -3,7 +3,8 @@
 ##	- Purpose:
 ##		The run's test folder, <temp>/test_silkterm_YYYYmmDD-HHMMSSNN, that every
 ##		file a test writes goes under. Sourced; it defines fTestDir_Make,
-##		fTestDir_Use, fTestDir_Owned and fTestDir_End and runs nothing. The Rust tests
+##		fTestDir_Use, fTestDir_Owned, fTestDir_Rm and fTestDir_End, plus the safe
+##		removal guard's fSafeRm and fSafeRm_Under, and runs nothing. The Rust tests
 ##		(source/src/testdir.rs), _testdir.py and _testdir.ps1 keep the same contract:
 ##			- SILKTERM_TEST_DIR set and not empty: that is the folder, made if missing,
 ##			  and never removed.
@@ -13,13 +14,16 @@
 ##		fTestDir_Make sets an EXIT trap that calls fTestDir_End. A caller that sets
 ##		its own EXIT trap afterward replaces it, so that trap takes $? first and
 ##		calls fTestDir_End "${rc}" last:
-##			trap 'rc=$?; rm -rf "${work}"; fTestDir_End "${rc}"' EXIT
+##			trap 'rc=$?; fTestDir_Rm "${work}" || true; fTestDir_End "${rc}"' EXIT
 ##	- History: At bottom of file.
 
 ##	Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
 ##	SPDX-License-Identifier: GPL-2.0-or-later
 
 __testDirMarker=".test_silkterm_owner"
+__testDirHere="${BASH_SOURCE[0]%/*}"; [[ "${__testDirHere}" != "${BASH_SOURCE[0]}" ]] || __testDirHere="."
+##  shellcheck source=cicd/utility/include/saferm.bash
+source "${__testDirHere}/../utility/include/saferm.bash"
 
 fTestDir_Make(){
 	##	Sets and exports SILKTERM_TEST_DIR. Returns 1, with the reason on stderr, when it cannot.
@@ -68,8 +72,24 @@ fTestDir_End(){
 		[[ "${line}" == "${__testDirToken}" ]] || reason="another run's owner mark"
 	fi
 	if [[ -n "${reason}" ]]; then echo "test run folder: left ${dir} in place: ${reason}" >&2; return 0; fi
-	err="$(rm -rf -- "${dir}" 2>&1)" || echo "test run folder: could not remove ${dir}: ${err}" >&2
+	## Under the temp folder it was made in, resolved, since that can sit behind a link.
+	local up=""
+	up="$(realpath -e -- "${dir%/*}" 2>/dev/null)" && err="$(fSafeRm_Under "${up}" "${up}/${dir##*/}" 2>&1)" \
+		|| echo "test run folder: could not remove ${dir}${err:+: ${err}}" >&2
 	return 0
+}
+
+fTestDir_Rm(){
+	##	fTestDir_Rm <path>: removes a folder tree inside this run's test folder,
+	##	through the safe removal guard with that folder as the one parent. Leaves
+	##	a path that isn't there alone, as rm -rf does. Returns 1, with the reason
+	##	on stderr, when the guard refuses.
+	local p="${1:-}" root=""
+	[[ -e "${p}" || -L "${p}" ]] || return 0
+	root="$(realpath -e -- "${SILKTERM_TEST_DIR:-}" 2>/dev/null)" || { echo "test run folder: no folder to remove ${p} from" >&2; return 1; }
+	## A path built on the folder's name before it was resolved, as TMPDIR is.
+	[[ "${p}" != "${SILKTERM_TEST_DIR}"/* ]] || p="${root}/${p#"${SILKTERM_TEST_DIR}"/}"
+	fSafeRm_Under "${root}" "${p}"
 }
 
 fTestDir_Owned(){
@@ -91,3 +111,4 @@ fTestDir_Use(){
 ##		- 20260930 JC: Created.
 ##		- 20261002 JC: A run removes the folder it made when it passes.
 ##		- 20261019 JC: fTestDir_Owned, for the pipeline's record of its folders.
+##		- 20261031: fTestDir_Rm, and the folder goes through the safe removal guard.

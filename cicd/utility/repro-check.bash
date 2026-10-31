@@ -36,6 +36,8 @@ commit="$(git -C "${root}" rev-parse --verify "${commit}^{commit}")" || exit 2
 source "${root}/cicd/config.bash"
 # shellcheck source=cicd/utility/include/jobs.bash
 source "${here}/include/jobs.bash"
+# shellcheck source=cicd/utility/include/saferm.bash
+source "${here}/include/saferm.bash"
 buildCmd="${RELEASE_NATIVE_CMD[*]}"
 if [[ -n "${triple}" ]]; then
 	buildCmd=""
@@ -52,8 +54,10 @@ export SILK_BUILD_MINUTES
 export SILK_RELEASE=1
 
 mkdir -p "${root}/target"
-work="$(mktemp -d "${root}/target/repro.XXXXXX")"
-fCleanup(){ if ((keep)); then echo "kept: ${work}"; else rm -rf "${work}"; fi; }
+## Resolved, since the target dir can be a link, and the guard won't go through one.
+tgt="$(realpath -e -- "${root}/target")"
+work="$(mktemp -d "${tgt}/repro.XXXXXX")"
+fCleanup(){ if ((keep)); then echo "kept: ${work}"; else fSafeRm_Under "${tgt}" "${work}"; fi; }
 trap fCleanup EXIT
 
 ## Two folders of different depth and length, so a path that leaks in shows as a
