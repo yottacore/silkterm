@@ -487,7 +487,8 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - Regression: "Conserve resources", "Minutes otherwise" isn't working
 	- ID: 2026103010083401
 	- Type: Bug
-	- Status: Queued
+	- Status: Waiting for answers
+		- Waits on the question in questions.md: which box, build and setup it failed on.
 	- Opened: 20261030-100834
 	- Opened by: JC
 	- Assigned to: CC
@@ -495,6 +496,14 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Notes:
 		- Pre-next-cut.
 		- Need a test case for this to make sure it doesn't keep coming back.
+	- Reproduced: No. On Linux X11 at 79d25ae, an unfocused window on screen with "Minutes otherwise" at 1 and "Minutes when hidden" at 60 let go at 60 to 62 s. Tried with dash and with bash in it, with the performance settings pinned and automatic, and with xfwm4 and with no window manager.
+	- Possible cause:
+		- Windows with Transparency on: a window on screen is never let go there, by design since 7687c4e (2026100319134501). The help says so.
+		- A program that prints now and then in any tab of the window. Output from any pane restarts the wait while the window shows, even from a tab not in front.
+	- Progress log:
+		- 20261101: No change in the log breaks it. The release decision and its inputs are as they were at 75ebca3 (10-05), apart from test attributes. The config, dialog and save paths for the setting are pinned by davbd and ddp90.
+		- 20261101: New test, so it can't come back unseen on Linux: the window is launched unfocused on screen with the waits read from its file, and has to let go after the minute and not well before it. Verified: it fails with "Minutes otherwise" pointed at the hidden wait, and passes at 79d25ae.
+	- Test case: `cicd/tests/idleother/run.bash` (deqy2), in the full run.
 
 - Regression: On Linux, the settings dialog is detached from the main window, and is its own alt+tab target
 	- ID: 2026103010083402

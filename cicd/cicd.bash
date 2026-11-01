@@ -991,6 +991,10 @@ fScriptTests(){
 	## A tab names a command that prints nothing, with the cursor not blinking.
 	## Exit 3 is a skip: no binary, display, dash, xdotool or xprop.
 	fRunTest_MaySkip cicd/tests/quiettab/run.bash "tab names a quiet command"
+	## An unfocused window on screen lets its device go after "Minutes
+	## otherwise", read from the file. About a minute. Exit 3 is a skip: no
+	## binary, display, dash, xdotool or xprop.
+	((quick)) || fRunTest_MaySkip cicd/tests/idleother/run.bash "idle release after Minutes otherwise"
 	## Heap allocations per frame at rest and in a drag select, against a limit.
 	## Exit 3 is a skip: no debug binary, display, window manager or xdotool.
 	fRunTest_MaySkip cicd/tests/allocs/run.bash "allocations per frame"
