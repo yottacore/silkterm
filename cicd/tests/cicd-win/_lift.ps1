@@ -114,6 +114,7 @@ $sys = Join-Path $Work 'sys'
 New-Item -ItemType Directory -Path $sys -Force | Out-Null
 $env:TEMP = $sys; $env:TMPDIR = $sys; Remove-Item env:TMP -ErrorAction SilentlyContinue
 Remove-Item env:SILKTERM_TEST_DIR -ErrorAction SilentlyContinue
+Remove-Item env:HOST_TEMP -ErrorAction SilentlyContinue
 fTestDir_Make
 $run = $env:SILKTERM_TEST_DIR
 fInstallerTests
@@ -125,7 +126,7 @@ $lines = @(Get-Content -LiteralPath $seen)
 $inRun = @($lines | Where-Object { $_.Split('|')[0].StartsWith($env:SILKTERM_TEST_DIR) })
 fCheck 'while each installer test had the run folder as its temp folder' ($lines.Count -eq 4 -and $inRun.Count -eq 4)
 fCheck 'with TEMP and TMP there too in the one that takes the Windows branch' ($lines.Count -eq 4 -and $lines[1].EndsWith("|$($env:SILKTERM_TEST_DIR)|$($env:SILKTERM_TEST_DIR)"))
-fCheck 'the pipeline made its run folder in the system temp folder' ((Split-Path $run) -eq $sys.TrimEnd('/', '\'))
+fCheck 'the pipeline made its run folder in the project''s folder in the system temp folder' ((Split-Path $run) -eq (Join-Path $sys.TrimEnd('/', '\') 'silkterm'))
 fCheck 'and none of the installer tests removed it' (Test-Path -LiteralPath $run)
 fTestDir_End 0
 fCheck 'while the pipeline''s own fTestDir_End 0 does' (-not (Test-Path -LiteralPath $run))
@@ -309,3 +310,4 @@ exit 0
 ##		- 20261028: The run options and -List.
 ##		- 20261028: The steps, the ones turned off, and each step's lines.
 ##		- 20261028: The PASS and FAIL lines of a test script.
+##		- 20261101: The run folder goes in the project's folder, and HOST_TEMP is unset for it.
