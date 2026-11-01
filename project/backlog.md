@@ -37,8 +37,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - CICD process gaps: the cleanup line in cicd-win.ps1
 	- ID: 2026110112581983
 	- Type: Task
-	- Status: Waiting on automated testing
-	- Needs external testing: `cicd-win.ps1 -MergeGate` on b29w at the round branch, through the host lock, with 2026103115564581's run. It ends with one "cleanup: removed ...; ... freed" line, the run's temp folder in it, just before the "done" section, and no "old run folder(s)" line near the start.
+	- Status: Done
 	- Priority: Avg
 	- Opened: 20261101-125819
 	- Opened by: CC
@@ -58,9 +57,11 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261101: The `cicd.bash` that `-Wsl` runs prints its own line inside the Linux half's step, as the run in the container does for `cicd.bash`.
 		- 20261101: dd5nw's text check that the run sweeps right after `fRunDirMake` now looks for the two `fCleanupCount` lines, was `$gone = (fSweepStaleRuns ...) + (fOldLedger ...`. It still checks the same order.
 	- Verified: 20261101. dd5nw passed, with 14 new checks for the line, its counts and sizes, hidden files and links, once only, none without a run folder, and its place before "done" and in the `finally` block. Against the old `cicd-win.ps1` the lift stopped at the first missing function. A copy with no line in the `finally` block failed 1 check, one with no size from the stale sweep 1, and one with .NET's default file listing 3. On b29w every check up to the path map passed, the new ones included. The path map part uses folder names Windows refuses, so it runs only here. `--backlog-run-quick scripts` passed.
+		- 20261101, b29w at ce9d872: `cicd-win.ps1 -MergeGate` passed all 8 steps, through the host lock. It printed no "old run folder(s)" line near the start, and one line just before the "done" section: "cleanup: removed 1 old test run folders, the run's temp folder; under 1 MB freed".
 		- Swept: every place `cicd-win.ps1` removes something: `fRunDirEnd`, `fSweepStaleRuns`, `fOldLedger`, and the release artifacts folder, which is cleared for the next build rather than freed, and old run logs past the newest few, which `cicd.bash` doesn't count either, so neither is counted. `cicd-win.ps1` has no stale build output sweep to count. `_testdir.ps1`'s own removals are its tests' folders, not the run's. `cicd.bash`'s line is 2026110112424508.
 	- Branch: rnd1101
 	- Test case: `cicd/tests/cicd-win/run.bash` (dd5nw), its `_lift.ps1`, 14 new checks and 1 changed.
+	- Closed: 20261101-142930
 
 - CICD process gaps: one cleanup line at the end, with what it freed
 	- ID: 2026110112424508
@@ -433,8 +434,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - When two screens return after screen power sleep or off, SilkTerm seems to reposition itself in between them
 	- ID: 2026102807384201
 	- Type: Bug
-	- Status: Waiting on UAT
-		- Fixed and pinned by a test under xfwm4 with two outputs. A real wake on b23's two monitors is left.
+	- Status: Done
 	- Needs hand testing: On b23 under xfwm4, with the window on each monitor in turn: let both screens sleep, wake them, and see the window back where it was, at its size.
 	- Severity: High
 	- Opened: 20261028-073842
@@ -459,6 +459,8 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Verified: 20261101. The new xfwm4 test fails both cases on the old build and passes on the fix. monwake passes on the fix, and fails only its changed check on the old build. The unit tests, clippy, fmt, script lints, docs and test IDs pass.
 	- Branch: rnd1101
 	- Test case: `cicd/tests/herdback/run.bash` (deqx1), the window back where it was under xfwm4. `a_window_herded_off_a_dark_monitor_takes_no_size` (deqwx). `monwake` (ddq75) and ddq74, changed.
+	- Acceptance signoff: Self-closed: deqx1 passed at ce9d872. A copy that turns both outputs off in turn and back on in either order, 1 s and 4 s apart, put the window back where it was, at its size, all 4 times. Not run on b23's real monitors.
+	- Closed: 20261101-141641
 
 - CICD reset: test IDs
 	- ID: 2026102416233810
@@ -674,8 +676,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - CICD reset: the Windows pipeline's run folders under HOST_TEMP
 	- ID: 2026103115564581
 	- Type: Task
-	- Status: Waiting on automated testing
-	- Needs external testing: `cicd-win.ps1 -MergeGate` on b29w at the round branch, through the host lock. After it, `%TEMP%\silkterm` holds no run folder and `.cicd-test-folders` is gone from the target dir.
+	- Status: Done
 	- Priority: Avg
 	- Opened: 20261031-155645
 	- Opened by: CC
@@ -699,10 +700,11 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261101: wingui's `runs.txt` stays. It removes a killed run's box folder by its token on the next run, which is sooner than 2 days.
 		- 20261101: The b29w run was of the helper and the pipeline's run folder functions, sent as files, since the box's clone takes only a pushed branch. A whole `cicd-win.ps1` run on b29w is left for the batch.
 	- Verified: 20261101. dd5nw's lift test passes here and on b29w, with new checks for the run's folder, `run.pid`, `TEMP` and `TMP`, `HOST_TEMP`, a handed-in test folder, the end on a pass, a failure and `-KeepTemp`, the stale sweep, the old ledger, and that the `finally` block and `fDie` reach the end. On b29w a link is a junction. Broken copies of `cicd-win.ps1` failed it: no PID check (2 checks), a failed run kept (2), `TEMP` not moved (2), no end in `finally` (1). With no link check in the sweep, the guard still refused the link. de5e9, de5ea, dde3v, the PowerShell lint and `--backlog-run-quick scripts docs` pass.
-		- Not run: a whole `cicd-win.ps1` run on b29w.
+		- 20261101, b29w at ce9d872: `cicd-win.ps1 -MergeGate` passed all 8 steps, through the host lock. Before it, the target dir's `.cicd-test-folders` named 2 old folders. After it, `%TEMP%\silkterm` held no run folder and `.cicd-test-folders` was gone.
 		- Swept: every caller of `fTestDir_Record`, `fTestDir_Sweep`, `$TestFolderKeep`, `.cicd-test-folders` and `fTestDir_End` in `cicd-win.ps1`, and the wingui box scripts that make or use a run folder.
 	- Test case: dd5nw (`cicd/tests/cicd-win/run.bash`, its `_lift.ps1`), de5ea (`cicd/tests/cleanup/win.ps1`).
 	- Branch: rnd1101
+	- Closed: 20261101-142930
 
 - CICD reset: the PowerShell recursive removals through a guard
 	- ID: 2026102807494139
