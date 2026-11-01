@@ -796,6 +796,8 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261031: The folder goes at the end, on a pass, a failure or Ctrl+C. A failed run says `--keep-temp` keeps it. `--keep-temp` keeps it and prints where.
 		- 20261031: A full run removes run folders over 2 days old whose `run.pid` names no process still there, in place of the newest 5. It empties the old ledgers of test run folders and container `/tmp` folders once, the ones right in HOST_TEMP each under its own parent, and then removes the ledgers.
 		- 20261031: The end's messages wait until the cleanup is done, since a write to the log tee after Ctrl+C ended a full run before its folder went.
+		- 20261031: The full run at 80ffd30 failed in stage 3, in ddazx's case A, on the Rust test dbz8n (`the_other_platforms_spelling_of_a_name_still_answers`). The run now exports `TEMP` as well, and case A points only `TMPDIR` at its read-only folder, so `$TMPDIR` and `%TEMP%` differ. The test fails the same way alone with the two set apart, and passes with them equal or `TEMP` unset. Stages after it weren't reached.
+			- Fix: ddazx's cases that set `TMPDIR` set `TEMP` and `TMP` with it, or unset them.
 	- Decisions:
 		- 20261031: The stale sweep takes only a folder with a `run.pid`, named as a run folder, so a temp folder made by hand in `${HOST_TEMP}/silkterm` stays. A folder's age is its mtime.
 		- 20261031: The stale sweep stays in the full run, as the rest of the cleanup does. The gate does none of it.
