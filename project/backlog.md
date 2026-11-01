@@ -777,8 +777,8 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - CICD reset: run folders under HOST_TEMP, removed at the end
 	- ID: 2026102807494157
 	- Type: Task
-	- Status: Waiting on automated testing
-	- Needs local test suite run?: The round's full run, `cicd/cicd.bash --backlog-run-full`, in the container, for the builds, packaging and stage 3's tests with `TMPDIR` in the run's folder, and its end removing it.
+	- Status: Done
+	- Needs local test suite run?: No
 	- Priority: Avg
 	- Opened: 20261028-074941
 	- Opened by: CC
@@ -801,6 +801,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 			- Fix: ddazx's cases that set `TMPDIR` set `TEMP` and `TMP` with it, or unset them.
 		- 20261031: Every ddazx case that sets `TMPDIR` sets `TEMP` and `TMP` to the same folder. The test helpers' `fTestDir_Use` and `use()` point all three at the test folder too, as `_testdir.ps1` already did on Windows, so a test handed a folder other than the run's sees one temp folder.
 		- 20261031: A failed test's line said "output kept in" a path inside the container, in a run folder the run's end then removed. It now names the file only when the file outlives the run, under `--keep-temp` or in a test folder handed in, and otherwise says `--keep-temp` keeps its output.
+		- 20261101: Verified: full run cicd/cicd.bash --backlog-run-full at f721f35 passed all 13 steps, perfladder a SKIP with vm925w off; no run folder or container was left after it. Children 2026103115564575 and 2026103115564581 stay open.
 	- Decisions:
 		- 20261031: The stale sweep takes only a folder with a `run.pid`, named as a run folder, so a temp folder made by hand in `${HOST_TEMP}/silkterm` stays. A folder's age is its mtime.
 		- 20261031: The stale sweep stays in the full run, as the rest of the cleanup does. The gate does none of it.
@@ -817,6 +818,8 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Swept: every caller of `fRunName`, `fRunEnd`, `fTestDir_Owned` and `CLEANUP_KEEP_RUNS`, and every test that runs `cicd.bash` (container, cleanup, testdir, engine, gates). Only `cicd.bash` used `fTestDir_Owned`. `cicd-win.ps1` is 2026103115564581.
 	- Branch: rnd1031
 	- Test case: ddazx `cicd/tests/testdir/run.bash` (its gate cases and case A), de5e9 `cicd/tests/cleanup/run.bash` (R), ddrp2 `cicd/tests/container/run.bash`, ddp9p `cicd/tests/testout/run.bash`.
+	- Acceptance signoff: Self-closed: the round's full run in the container passed every stage, and its end removed its run folder
+	- Closed: 20261031-184228
 
 - CICD reset: the test helpers' own run folders under HOST_TEMP
 	- ID: 2026103115564575
