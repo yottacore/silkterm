@@ -34,34 +34,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 
 ## Issues
 
-- CICD reset: the bash guard doesn't refuse HOST_TEMP itself or a project's whole folder under it
-	- ID: 2026103115170424
-	- Type: Bug
-	- Status: Done
-	- Priority: High
-	- Opened: 20261031-151704
-	- Opened by:
-	- Parent ID: 2026102416233803
-	- Related IDs: 2026103115085852
-	- Target OS: All
-	- Progress log:
-		- 20261031: Found by the worker on 2026102807494121. The shared Safe removal rule has asked for both refusals since 10-28. Check the PowerShell copies too.
-		- 20261031: `saferm.bash`'s `fSafeRm` refuses HOST_TEMP itself, and with HOST_TEMP set, any whole folder right under it. Both forms refuse HOST_TEMP and this project's folder in it. `saferm.ps1` has the same, and so does the new Python copy in 2026103115085852.
-		- 20261031: The round's second full run failed dcbdt, the scroll verdict test: saferm.bash called realpath at load, and that test's PATH has none, so sourcing it ended the harness with 127. Load now goes on with no host root, and fSafeRm still refuses there. dcbdt and dehwp pass.
-	- Decisions:
-		- 20261031: A whole folder right under the temp root is refused only when HOST_TEMP is set, as the shared `safe-rm.bash` does. Without it the root is `/tmp`, where the short socket folders sit. The root itself and this project's folder are refused either way.
-		- 20261031: The one-parent form still takes another folder right under HOST_TEMP. The test run folders and the utilities' own folders are made right in TMPDIR, which can be HOST_TEMP, until 2026102807494157 moves them.
-		- 20261031: The repo copies read HOST_TEMP from the environment only. The shared guard's fallback to the login config is for this box, and a fresh clone has none.
-		- 20261031: install.ps1's copy is left as is. It has only the one-parent form, its parent is the system temp folder, which it already refuses, and it runs on users' boxes, which have no HOST_TEMP.
-		- 20261031: With TMPDIR set to HOST_TEMP, a failed run's kept test folder sits right under HOST_TEMP, so the stale sweep now refuses it and says so. A passing run still removes its own folder. 2026102807494157 moves run folders under the project's folder, where the sweep takes them.
-	- Verified: 20261031. dehwp passes, and its new checks failed 9 times against the old `saferm.bash`. dehyk passes under pwsh here, and its new checks failed 15 times with the new check taken out of `saferm.ps1`. The cleanup test passes.
-		- Swept: every copy of the guard: `saferm.bash`, `saferm.ps1`, install.ps1's `fSafeRm_Under`, and the new `saferm.py`. Every `fSafeRm` caller, for a path right under HOST_TEMP: the socket folders and `install`'s run folders are in `/tmp`, and the container's /tmp is in the target dir.
-	- Verified: 20261031 on b29w, with this tree sent along. dehyk passed, its new checks in another case included, and so did the installer, cleanup, signature, Start menu and wrapper tests, and dd2n3 under both PowerShells.
-	- Test case: `cicd/tests/saferm/run.bash` (dehwp) and `cicd/tests/saferm/win.ps1` (dehyk), their HOST_TEMP checks.
-	- Branch: rnd1031
-	- Acceptance signoff: Self-closed: a written rule, and its test fails against the old code.
-	- Closed: 20261031-155500
-
 - The window doesn't paint while the GPU is busy or short on memory, and stays blank after the load ends
 	- ID: 2026100312470535
 	- Type: Bug
@@ -157,74 +129,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Branch: rnd1022
 	- Test case: `no_device_on_macos_says_why_and_that_nothing_can_stand_in` (de9m1)
 
-- A drag select recomposes the minimap about 11 times a second, though the map shows no selection
-	- ID: 2026102407065861
-	- Type: Enhancement
-	- Status: Waiting on UAT
-	- Needs hand testing: With the map on, a drag select, a link hover, typing on the prompt line and a color change in Settings, all in a real window.
-	- Stand-in: none (20261028). The machine part already ran: ddkre and the scroll harness passed at e95b81b. What's left is how the map looks.
-		- 20261025: The dogfood pool now has build dedvg, from dev at a9daddc, for Linux and Windows, with the 10-24 and 10-25 rounds' fixes. A window started before the next launch still runs de5r9.
-	- Priority: Low
-	- Opened: 20261024-070658
-	- Opened by: CC
-	- Related IDs: 2026102321230038, 2026102407065855
-	- Target OS: All
-	- Requirements:
-		- A pane rebuild that changes nothing the map shows, such as a selection change, doesn't recompose the map.
-		- Typing on the prompt line, output, a scroll, a resize and a color change still reach the map.
-	- Notes:
-		- `Pane::build` calls `map.update` on every forced rebuild, and that composes whenever the 90 ms gap is up. A drag rebuilds every frame, so the map composes on every frame past the gap: about 20 allocations a time on b23, and the compose's own CPU.
-		- The due compose is also what picks up a changed screen row with no new history, so skipping it needs some other sign the screen's text changed. `last_rows` already holds a hash per row.
-		- ddkre's drag limit has the compose in every frame, so this lowers its figure.
-	- Decisions:
-		- 20261024: Done by where the rebuild comes from, not by a hash of the screen. A moved selection and a link hover probe now mark the window with their own flag. The panes draw again as before, but the map is only updated for the window's other causes, a pane's own output and its scroll. So typing, output, a scroll, a resize and a color change take the same path to the map as before.
-	- Progress log:
-		- 20261024: The selection alone wasn't enough. A pointer moving over text also starts a link hover probe, which marked the whole window, so both panes still composed on every drag frame. The hover probe takes the same flag now.
-		- 20261025: Verified: the container full run at e95b81b passed the scroll harness on X11 and on Wayland (d9j4r) and the allocations per frame test (ddkre), as did the gate step. Only the hand look is left.
-		- 20261026: ddkre and the scroll harness on X11 and Wayland (d9j4r) passed again at fab6815.
-		- 20261028: ddkre and the scroll harness on X11 and Wayland (d9j4r) passed again at 64f3584.
-	- Verified: 20261024, with a compose logged for the run, a drag frame under load composed both panes every frame before and none after, bar the press. ddkre's drag frame read 315 and 317 with 8 cores loaded, against 333 to 370 before, and 327 idle against 332. With the map off it reads 321. Unit suite, clippy for Linux and Windows, fmt and shellcheck pass.
-	- Swept: every `state.dirty` set on a pointer move. The thumb and map drags move the view, and a divider drag and a pane drag change the layout, so they still compose. The menu, tab and bar hovers don't touch a pane. The wake after a frame looks at the new flag too.
-	- Branch: rnd1024
-	- Test case: ddkre's drag figure, under Verified. The limit stays 360, since the saving is about 5% and the 2026102321230038 margin was set by load.
-
-- CICD reset: one PASS, FAIL or SKIP line per test
-	- ID: 2026102819265198
-	- Type: Task
-	- Status: Done
-	- Priority: High
-	- Opened: 20261028-192651
-	- Opened by: CC
-	- Parent ID: 2026102416233810
-	- Prereq IDs: 2026102819264421
-	- Related IDs: 2026102518360001
-	- Target OS: All
-	- Requirements:
-		- Every regression and fuzz test the run takes prints one line, such as `PASS decp8 <name>`, with `FAIL` or `SKIP` in place of `PASS`. That covers the Rust tests and the test scripts, here and in the Windows pipeline.
-		- The warning count and the gate tests that read those lines follow the new form.
-		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
-	- Progress log:
-		- 20261028: Rust test results, the fuzz soak's included, print as `PASS`, `FAIL` or `SKIP`, the ID and the name, and an ignored test's reason after a comma. A status the filter doesn't know, and a line that isn't UTF-8, go through untouched.
-		- 20261028: Each test script prints its own `PASS`, `FAIL` or `SKIP` line in place of the old OK or warning line. A skip gives the last reason the script printed. The docs check, the scroll and launcher harnesses and the ASan and TSan canaries print the same lines.
-		- 20261028: The Windows pipeline runs cargo test through the ID tool's new `--run`, which keeps cargo's exit status, and falls back to plain cargo test with no working python. Its test scripts print `PASS` or `FAIL` lines.
-		- 20261028: The warning count skips `PASS`, `FAIL` and `SKIP` lines, and no longer the old forms.
-		- 20261028: The full run at 852e213 failed in ddazx, on the engine (dd5nn) and rotate (dd5nq) tests run alone. Neither came from this item. Both are fork counts, which in the container counted every fork on the box, so a busy box pushed them over. Fixed under 2026102518360001. The engine test's failing line isn't in the log, but its fork check is the one that fails that way, and the test passed 2 of 2 alone in the image without the load.
-		- 20261028: The full run at 9eded41 printed a `PASS` or `SKIP` line for each stage 3 script test, each scroll scene and each Rust test, and the run at 852e213 printed the ASan canary's `PASS de5f0`. Its warning count is 29, 3 fewer than the 32 before, since the 3 Wayland skips are `SKIP` lines now.
-		- 20261028: On b29w, `cicd-win.ps1 -BacklogRunQuick tests` at 9eded41 passed, with each of its 1371 Rust tests on a `PASS` or `SKIP` line with its ID, through the Windows python.
-		- 20261031: On b29w at 80ffd30, stage 3's test scripts ran through cicd-win.ps1's own `fScriptTests`, lifted from the file, without the build and cargo test before them. Each printed its `PASS` line with its ID: dcrgs, dcrz7, dd2n3 under both PowerShells, dde3v, ddkk4, ddmj2 and dehyk. The test run folder went at the end.
-	- Decisions:
-		- 20261028: A test that skips is a `SKIP` line with its reason, not a warning. Rust tests that were ignored never counted as warnings either, and the line still says why. It doesn't go on the end-of-run list either, since that list is for boxes that weren't there.
-		- 20261028: The reason goes after a comma, as in the shared rules' example. The old annotate put it in brackets.
-		- 20261028: A new `--run` in the ID tool, rather than piping in PowerShell, which loses the exit status of the first command in a pipe.
-		- 20261028: Step and check lines that aren't tests, such as the lints, the test ID check and the advisory scan, keep their OK and warning lines. The scroll scenes and fuzz cases have no IDs yet, and are 2026102819265312.
-		- 20261031: Closed on the test scripts run alone through the pipeline's own functions, rather than a whole `cicd-win.ps1` run, since the build and cargo test before them print nothing new and their lines passed on b29w on 10-28.
-	- Verified: 20261028. The testout (ddp9p), gates (dcry4), testid (dejjp) and cicd-win (dd5nw) tests pass, and 19 of their new checks failed against the old code. The cicd-win one failed outright there, without the new functions. The engine (dd5nn) and container (ddrp2) tests pass. `--backlog-run-quick` with all five areas passed, with 1439 Rust tests and the 3 docs checks each on a `PASS` or `SKIP` line. shellcheck, the bash style check, the Python and PowerShell lints and `test-id.py --check` pass.
-	- Verified: 20261031 on b29w at 80ffd30. The 8 Windows test script lines, all `PASS`.
-		- Swept: every place in cicd.bash, cicd-win.ps1, asan.bash and tsan.bash that printed a test's result with its ID, the fuzz soak and the dhat run, which go through the same filter, and the tests that lift fRunTest, fScriptTest or the warning filter. No doc described the old lines.
-	- Branch: rnd1029
-	- Test case: ddp9p `cicd/tests/testout/run.bash`, dcry4 `cicd/tests/gates/run.bash` (ddf08's check), dejjp `cicd/tests/testid/run.py`, dd5nw `cicd/tests/cicd-win/run.bash`.
-	- Closed: 20261031-164500
-
 - Always use automatic remote mode when detected.
 	- ID: 2026101914251764
 	- Type: Feature
@@ -264,6 +168,37 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Verified: 20261031 on b29w, as above.
 	- Branch: rnd1022
 	- Test case: `a_remote_screen_is_ignored_when_turned_off` (rating.rs, fails with the check reordered so detection runs first) and `a_remote_screen_takes_remote_unless_turned_off` (config.rs).
+
+- A drag select recomposes the minimap about 11 times a second, though the map shows no selection
+	- ID: 2026102407065861
+	- Type: Enhancement
+	- Status: Waiting on UAT
+	- Needs hand testing: With the map on, a drag select, a link hover, typing on the prompt line and a color change in Settings, all in a real window.
+	- Stand-in: none (20261028). The machine part already ran: ddkre and the scroll harness passed at e95b81b. What's left is how the map looks.
+		- 20261025: The dogfood pool now has build dedvg, from dev at a9daddc, for Linux and Windows, with the 10-24 and 10-25 rounds' fixes. A window started before the next launch still runs de5r9.
+	- Priority: Low
+	- Opened: 20261024-070658
+	- Opened by: CC
+	- Related IDs: 2026102321230038, 2026102407065855
+	- Target OS: All
+	- Requirements:
+		- A pane rebuild that changes nothing the map shows, such as a selection change, doesn't recompose the map.
+		- Typing on the prompt line, output, a scroll, a resize and a color change still reach the map.
+	- Notes:
+		- `Pane::build` calls `map.update` on every forced rebuild, and that composes whenever the 90 ms gap is up. A drag rebuilds every frame, so the map composes on every frame past the gap: about 20 allocations a time on b23, and the compose's own CPU.
+		- The due compose is also what picks up a changed screen row with no new history, so skipping it needs some other sign the screen's text changed. `last_rows` already holds a hash per row.
+		- ddkre's drag limit has the compose in every frame, so this lowers its figure.
+	- Decisions:
+		- 20261024: Done by where the rebuild comes from, not by a hash of the screen. A moved selection and a link hover probe now mark the window with their own flag. The panes draw again as before, but the map is only updated for the window's other causes, a pane's own output and its scroll. So typing, output, a scroll, a resize and a color change take the same path to the map as before.
+	- Progress log:
+		- 20261024: The selection alone wasn't enough. A pointer moving over text also starts a link hover probe, which marked the whole window, so both panes still composed on every drag frame. The hover probe takes the same flag now.
+		- 20261025: Verified: the container full run at e95b81b passed the scroll harness on X11 and on Wayland (d9j4r) and the allocations per frame test (ddkre), as did the gate step. Only the hand look is left.
+		- 20261026: ddkre and the scroll harness on X11 and Wayland (d9j4r) passed again at fab6815.
+		- 20261028: ddkre and the scroll harness on X11 and Wayland (d9j4r) passed again at 64f3584.
+	- Verified: 20261024, with a compose logged for the run, a drag frame under load composed both panes every frame before and none after, bar the press. ddkre's drag frame read 315 and 317 with 8 cores loaded, against 333 to 370 before, and 327 idle against 332. With the map off it reads 321. Unit suite, clippy for Linux and Windows, fmt and shellcheck pass.
+	- Swept: every `state.dirty` set on a pointer move. The thumb and map drags move the view, and a divider drag and a pane drag change the layout, so they still compose. The menu, tab and bar hovers don't touch a pane. The wake after a frame looks at the new flag too.
+	- Branch: rnd1024
+	- Test case: ddkre's drag figure, under Verified. The limit stays 360, since the saving is about 5% and the 2026102321230038 margin was set by load.
 
 - Add a contributor license agreement, like nano-git-db's
 	- ID: 2026101906582193
@@ -449,6 +384,26 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Pre-next-cut.
 		- Work first after the CICD issues.
 
+- CICD reset: test IDs
+	- ID: 2026102416233810
+	- Type: Task
+	- Status: Queued
+	- Priority: High
+	- Opened: 20261024-162338
+	- Opened by: CC
+	- Related IDs: 2026092711142900
+	- Target OS: All
+	- Requirements:
+		- Per the ID and per-test line bullets in `Testing` in the shared CICD rules. Every test has an ID, and the check stage refuses a missing or shared one.
+		- IDs move from base 62 milliseconds to whole minutes since 2000-01-01 00:00 UTC, in lowercase Crockford base 32, like `decp8`. Each existing ID is converted once, from the time it already stands for. When 2 land on one minute, the newer takes the next free one.
+		- The ID tool and the check stage follow the new form.
+		- Every regression and fuzz test prints one line, such as `PASS decp8 <name>`, with `FAIL` or `SKIP` in place of `PASS`. The scroll harness scenes and the fuzz cases have no IDs of their own yet.
+		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
+		- Overrides: 2026092711142900's decision that the scroll harness scenes keep their PASS lines with no IDs, and the base 62 rule in the private notes.
+	- Progress log:
+		- 20261028: Split in 3, too big for one sitting. 2026102819264421 takes the ID tool, the check and converting every ID, 2026102819265198 one PASS, FAIL or SKIP line per test, and 2026102819265312 IDs for the scroll scenes and fuzz cases. This item closes when they do.
+		- 20261028: 2026102819264421 is in, waiting on the full run.
+
 - Regression: "Conserve resources", "Minutes otherwise" isn't working
 	- ID: 2026103010083401
 	- Type: Bug
@@ -476,169 +431,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Notes:
 		- Pre-next-cut.
 		- Need a test case for this to make sure it doesn't keep coming back.
-
-- The unscrollable search and buttons areas should be lighter than the scrollable content
-	- ID: 2026103010083403
-	- Type: Enhancement
-	- Status: Queued
-	- Opened: 20261030-100834
-	- Opened by: JC
-	- Assigned to: CC
-	- Requirements:
-		- The unscrollable search and buttons areas should be lighter than the scrollable content.
-		- The scrollable content needs to be darker (in dark mode at least).
-	- Notes:
-		- Pre-next-cut.
-
-- CICD reset: a test for each old-format Done feature, part 3 of 6
-	- ID: 2026102819193554
-	- Type: Task
-	- Status: Done
-	- Priority: High
-	- Opened: 20261028-191935
-	- Opened by: CC
-	- Parent ID: 2026102416233809
-	- Target OS: All
-	- Requirements:
-		- The old-format Done features from "Menu enhancements: shells in the Tabs and Panes menus" to "Wallpaper settings renamed, and given two master switches", 40 items.
-		- Each names its test ID beside the test it names, or says in a few words why it has none. A test is added where one could exist and doesn't, and is watched to fail with the fix taken out.
-		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
-	- Progress log:
-		- 20261031: Each test the 40 items name, by a name a test still has, now has its ID beside it, every later mention in the same item included.
-		- 20261031: One test named was renamed since, the theme pick one. It now names the test that took over.
-		- 20261031: The `pause_state_` tests named as a family list their six IDs.
-		- 20261031: The rest say why they have no ID: comment and template text, an icon, a web gallery, demo pacing, measurements, host setup, GPU caches, and a removed feature. No test was missing where one could exist, so none was added.
-	- Decisions:
-		- 20261031: As in parts 1 and 2, a test renamed since keeps its old name, with "now" and the test that took over.
-	- Verified: 20261031. Every test ID added in part 3 is one the tree has, and each sits beside the name of its own test. `--backlog-run-quick docs` passed, `test-id.py --check` passes, and the markdown check finds nothing new.
-		- Swept: every name in backticks and test script path in the 40 items, every ticked sub-item for an ID or a "No test", and every "Pinned by" or "No test" written in words.
-	- Branch: rnd1031
-	- Test case: each of the 40 items names its own, or why it has none.
-	- Closed: 20261031-135805
-
-- CICD reset: a test for each old-format Done feature, part 4 of 6
-	- ID: 2026102819193569
-	- Type: Task
-	- Status: Done
-	- Priority: High
-	- Opened: 20261028-191935
-	- Opened by: CC
-	- Parent ID: 2026102416233809
-	- Target OS: All
-	- Requirements:
-		- The old-format Done features from "A wallpaper can say how it wants to be laid out" to "Donations model:", 40 items.
-		- Each names its test ID beside the test it names, or says in a few words why it has none. A test is added where one could exist and doesn't, and is watched to fail with the fix taken out.
-		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
-	- Progress log:
-		- 20261031: Each test the 40 items name, by a name a test still has, now has its ID beside it, every later mention in the same item included.
-		- 20261031: One test named was renamed since, the copy on select default one. It now names the test that took over.
-		- 20261031: `changed_defaults` (d97z3) has its ID too, where the tool left it out for its short name.
-		- 20261031: The Wayland engine item names the scroll harness (d9j4r), whose `--wayland` pass it added.
-		- 20261031: The rest say why they have no ID: git host settings, docs, speed and size tuning, a built-in image, window reveal timing, a removed screenshot renderer, and the TERM fallback in the engine fork. No test was missing where one could exist, so none was added.
-	- Decisions:
-		- 20261031: As in parts 1 to 3, a test renamed since keeps its old name, with "now" and the test that took over.
-	- Verified: 20261031. Every test ID added in part 4 is one the tree has, and each sits beside the name of its own test. `--backlog-run-quick docs` passed, `test-id.py --check` passes, and the markdown check finds nothing new.
-		- Swept: every name in backticks and test script path in the 40 items, every ticked sub-item for an ID or a "No test", and every "Pinned by" or "No test" written in words.
-	- Branch: rnd1031
-	- Test case: each of the 40 items names its own, or why it has none.
-	- Closed: 20261031-140222
-
-- CICD reset: a test for each old-format Done feature, part 5 of 6
-	- ID: 2026102819193582
-	- Type: Task
-	- Status: Done
-	- Priority: High
-	- Opened: 20261028-191935
-	- Opened by: CC
-	- Parent ID: 2026102416233809
-	- Target OS: All
-	- Requirements:
-		- The old-format Done features from "Cursor animation immediately resets and starts over on keypresses" to "Background image:", 40 items.
-		- Each names its test ID beside the test it names, or says in a few words why it has none. A test is added where one could exist and doesn't, and is watched to fail with the fix taken out.
-		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
-	- Progress log:
-		- 20261031: Each test the 40 items name, by a name a test still has, now has its ID beside it, every later mention in the same item included.
-		- 20261031: Two tests named were commented out since, the font order and system font toggle ones. Each now names the tests that took over.
-		- 20261031: The short names `changed_defaults`, `function_keys` and `editing_keys` have their IDs too, and so does the guard test the defaults item names in words.
-		- 20261031: The whole-file config reorder says why it has none: the pass was dropped later.
-		- 20261031: The rest say why they have no ID: label text, a removed feature, window manager behavior, GPU draw order, GPU and compositor blur, a display setup, a one-line formula, and release profile settings. No test was missing where one could exist, so none was added.
-	- Decisions:
-		- 20261031: As in parts 1 to 3, a test renamed or commented out since keeps its old name, with "now" and the tests that took over.
-	- Verified: 20261031. Every test ID added in part 5 is one the tree has, and each sits beside the name of its own test. `--backlog-run-quick docs` passed, `test-id.py --check` passes, and the markdown check finds nothing new.
-		- Swept: every name in backticks and test script path in the 40 items, every ticked sub-item for an ID or a "No test", and every "Pinned by" or "No test" written in words.
-	- Branch: rnd1031
-	- Test case: each of the 40 items names its own, or why it has none.
-	- Closed: 20261031-140222
-
-- CICD reset: a test for each old-format Done feature, part 6 of 6
-	- ID: 2026102819193596
-	- Type: Task
-	- Status: Done
-	- Priority: High
-	- Opened: 20261028-191935
-	- Opened by: CC
-	- Parent ID: 2026102416233809
-	- Target OS: All
-	- Requirements:
-		- The old-format Done features from "Text readability glow:" to "Application name ideas", the end of the list, 43 items.
-		- Each names its test ID beside the test it names, or says in a few words why it has none. A test is added where one could exist and doesn't, and is watched to fail with the fix taken out.
-		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
-	- Progress log:
-		- 20261031: Each test the 43 items name, by a name a test still has, now has its ID beside it, every later mention in the same item included.
-		- 20261031: Three tests named were commented out since, the system font toggle, pane chord and font order ones. Each now names the tests that took over.
-		- 20261031: `changed_defaults` (d97z3) has its ID too, in the three items that name it, and so do the `paste_payload` tests the middle-click item names in words.
-		- 20261031: The window menu item names the menu bar test (dd5pr) for its titles. It still says why the hit test has none.
-		- 20261031: The rest say why they have no ID: GPU and compositor effects, fonts and spacing checked by eye, real OS windows, build targets, the X11 selection, a hotkey reversed later, an umbrella item and a naming decision. No test was missing where one could exist, so none was added.
-	- Decisions:
-		- 20261031: As in parts 1 to 5, a test renamed or commented out since keeps its old name, with "now" and the tests that took over.
-	- Verified: 20261031. Every test ID added in part 6 is one the tree has, and each sits beside the name of its own test. `--backlog-run-quick docs` passed, `test-id.py --check` passes, and the markdown check finds nothing new.
-		- Swept: every name in backticks and test script path in the 43 items, every ticked sub-item for an ID or a "No test", and every "Pinned by" or "No test" written in words.
-	- Branch: rnd1031
-	- Test case: each of the 43 items names its own, or why it has none.
-	- Closed: 20261031-140554
-
-- CICD reset: a test for every Done item
-	- ID: 2026102416233809
-	- Type: Task
-	- Status: Done
-	- Priority: High
-	- Opened: 20261024-162338
-	- Opened by: CC
-	- Target OS: All
-	- Requirements:
-		- Per the regression bullet in `Testing` in the shared CICD rules. Every Done item has a regression test in CI where one could exist, and names its test ID, or says in a few words why it has none.
-		- Most Done items in the new format name one. Left: 4 there that don't, and the Done items in the old format, which name none.
-		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
-	- Progress log:
-		- 20261028: Split in 11, too big for one sitting. The old format has 407 Done items, 164 bugs and 243 features, and most name a test without its ID. 2026102819193456 takes the 4 new-format items, 2026102819193471 to 2026102819193512 the old-format bugs in 4 parts, and 2026102819193525 to 2026102819193596 the features in 6. This item closes when they do.
-		- 20261031: Closed with its last child, part 6 (027c102).
-	- Decisions:
-		- 20261028: Parts of about 40 items, in the list's own order, so each fits one sitting and none needs a call on where an item belongs.
-		- 20261028: An old-format item gets the ID beside the test name it already gives, rather than a new row.
-		- 20261028: No wait on 2026102416233810 (test IDs). Its change of form has to sweep every ID the backlog names anyway.
-	- Test case: each child's items name their own test ID, or say why they have none; test-id.py --check
-	- Acceptance signoff: Self-closed: all 11 children are Done, the last 3 in rnd1031
-	- Closed: 20261031-140732
-
-- CICD reset: test IDs
-	- ID: 2026102416233810
-	- Type: Task
-	- Status: Queued
-	- Priority: High
-	- Opened: 20261024-162338
-	- Opened by: CC
-	- Related IDs: 2026092711142900
-	- Target OS: All
-	- Requirements:
-		- Per the ID and per-test line bullets in `Testing` in the shared CICD rules. Every test has an ID, and the check stage refuses a missing or shared one.
-		- IDs move from base 62 milliseconds to whole minutes since 2000-01-01 00:00 UTC, in lowercase Crockford base 32, like `decp8`. Each existing ID is converted once, from the time it already stands for. When 2 land on one minute, the newer takes the next free one.
-		- The ID tool and the check stage follow the new form.
-		- Every regression and fuzz test prints one line, such as `PASS decp8 <name>`, with `FAIL` or `SKIP` in place of `PASS`. The scroll harness scenes and the fuzz cases have no IDs of their own yet.
-		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
-		- Overrides: 2026092711142900's decision that the scroll harness scenes keep their PASS lines with no IDs, and the base 62 rule in the private notes.
-	- Progress log:
-		- 20261028: Split in 3, too big for one sitting. 2026102819264421 takes the ID tool, the check and converting every ID, 2026102819265198 one PASS, FAIL or SKIP line per test, and 2026102819265312 IDs for the scroll scenes and fuzz cases. This item closes when they do.
-		- 20261028: 2026102819264421 is in, waiting on the full run.
 
 - The Mac CI doesn't name a test that failed when its output splits the result line
 	- ID: 2026102822262458
@@ -748,78 +540,18 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Expected behavior: Each underline style a program sets is drawn, in the underline color it sets, or the text color.
 	- Reproduced: Not run in a window. Found in the code while answering 2026102114411311.
 
-- CICD reset: the private runner's tests still use old base 62 test IDs
-	- ID: 2026102819390388
-	- Type: Task
-	- Status: Done
-	- Priority: Avg
-	- Opened: 20261028-193903
-	- Opened by: CC
-	- Related IDs: 2026102819264421
-	- Target OS: All
+- The unscrollable search and buttons areas should be lighter than the scrollable content
+	- ID: 2026103010083403
+	- Type: Enhancement
+	- Status: Queued
+	- Opened: 20261030-100834
+	- Opened by: JC
+	- Assigned to: CC
 	- Requirements:
-		- The private repo's tests weren't part of the 10-28 conversion. Its one ID this backlog names, Eu0WzDd, became dehx0 here, so the private repo's own test should use that.
-		- Convert with the same old-to-new map the 10-28 conversion used, and its ID check should refuse the old form too.
-	- Progress log:
-		- 20261031: silkterm-private's host test is dehx0 now. Its backlog's 112 mentions of this repo's old IDs went through the same map. No old ID was left there that the map doesn't have.
-		- 20261031: `test-id.py --check` takes silkterm-private's test scripts too, when it's beside this repo, found the way `config.bash` finds the private runner. They share one set of IDs, so the check refuses an old, missing or shared ID there, and a new ID skips one the private repo has. An empty `SILK_PRIVATE_RUNNER` leaves it out.
-		- 20261031: The container gets the private repo's `cicd/tests` read only, so the check inside sees it too. `--no-private` leaves it out.
-	- Decisions:
-		- 20261031: The check stays in this repo's ID tool rather than a copy in the private repo. The private repo has no check of its own, and one tool over both trees keeps the IDs unique across them.
-		- 20261031: Only the tests folder goes into the container, not the private runner, since stage 6 runs on this side.
-	- Verified: 20261031. dejjp passes, and 6 of its 7 new checks failed against the old tool. The 7th, an empty `SILK_PRIVATE_RUNNER`, passes on both by design. ddrp2 passes, and 3 of its 4 new checks failed against the old `cicd.bash`. With the old ID put back in the private host test, `test-id.py --check` and `--backlog-run-quick docs` in the container both refused it, and both pass on dehx0. The private host test (dehx0) passes. `--backlog-run-quick scripts docs` passed.
-		- Swept: every place that reads test IDs from files, which is only `find_ids` in `test-id.py`, used by `--check` and new IDs. `--list` and `--annotate` read Rust tests only, and the private repo has none. No doc describes what the check covers.
-	- Branch: rnd1031
-	- Commit: silkterm-private f867b51
-	- Test case: dejjp `cicd/tests/testid/run.py`, ddrp2 `cicd/tests/container/run.bash`.
-	- Closed: 20261031-141601
-
-- CICD reset: run folders under HOST_TEMP, removed at the end
-	- ID: 2026102807494157
-	- Type: Task
-	- Status: Done
-	- Needs local test suite run?: No
-	- Priority: Avg
-	- Opened: 20261028-074941
-	- Opened by: CC
-	- Parent ID: 2026102416233803
-	- Prereq IDs: 2026102807494121
-	- Related IDs: 2026102518360001
-	- Target OS: All
-	- Requirements:
-		- A run's folder is `${HOST_TEMP}/silkterm/<YYYYmmDD-HHMMSS>_<NNN>/`, on every OS, with `TMPDIR`, `TEMP` and `TMP` pointed at it. Now it's a `test_silkterm_<stamp>` folder straight under the temp dir, plus the container's /tmp under the target dir.
-		- A run removes its own folder at the end, on failure and Ctrl+C too, and `--keep-temp` keeps it and prints where. Now a failed run keeps it, and the newest 5 of those stay.
-		- Stale folders go after 2 days, when no process from the folder's `run.pid` is left.
-		- The container's labels and names take the new folder's name.
-	- Progress log:
-		- 20261031: Split, since it doesn't fit one sitting. This item keeps the Linux pipeline, `cicd.bash`, and its container. Children: 2026103115564575 (the test helpers' own folders, when a test runs alone), 2026103115564581 (the Windows pipeline and the test boxes' run folders).
-		- 20261031: `cicd.bash` makes its run's folder at `${HOST_TEMP}/silkterm/<YYYYmmDD-HHMMSS>_<NNN>/`, falling back to `TMPDIR` or `/tmp`, with this run's PID in `run.pid`, and points `TMPDIR`, `TEMP` and `TMP` at it. It's the tests' folder too, unless one is handed in. The container's `/tmp` is a folder in it, and the labels and container names take its name.
-		- 20261031: The folder goes at the end, on a pass, a failure or Ctrl+C. A failed run says `--keep-temp` keeps it. `--keep-temp` keeps it and prints where.
-		- 20261031: A full run removes run folders over 2 days old whose `run.pid` names no process still there, in place of the newest 5. It empties the old ledgers of test run folders and container `/tmp` folders once, the ones right in HOST_TEMP each under its own parent, and then removes the ledgers.
-		- 20261031: The end's messages wait until the cleanup is done, since a write to the log tee after Ctrl+C ended a full run before its folder went.
-		- 20261031: The full run at 80ffd30 failed in stage 3, in ddazx's case A, on the Rust test dbz8n (`the_other_platforms_spelling_of_a_name_still_answers`). The run now exports `TEMP` as well, and case A points only `TMPDIR` at its read-only folder, so `$TMPDIR` and `%TEMP%` differ. The test fails the same way alone with the two set apart, and passes with them equal or `TEMP` unset. Stages after it weren't reached.
-			- Fix: ddazx's cases that set `TMPDIR` set `TEMP` and `TMP` with it, or unset them.
-		- 20261031: Every ddazx case that sets `TMPDIR` sets `TEMP` and `TMP` to the same folder. The test helpers' `fTestDir_Use` and `use()` point all three at the test folder too, as `_testdir.ps1` already did on Windows, so a test handed a folder other than the run's sees one temp folder.
-		- 20261031: A failed test's line said "output kept in" a path inside the container, in a run folder the run's end then removed. It now names the file only when the file outlives the run, under `--keep-temp` or in a test folder handed in, and otherwise says `--keep-temp` keeps its output.
-		- 20261101: Verified: full run cicd/cicd.bash --backlog-run-full at f721f35 passed all 13 steps, perfladder a SKIP with vm925w off; no run folder or container was left after it. Children 2026103115564575 and 2026103115564581 stay open.
-	- Decisions:
-		- 20261031: The stale sweep takes only a folder with a `run.pid`, named as a run folder, so a temp folder made by hand in `${HOST_TEMP}/silkterm` stays. A folder's age is its mtime.
-		- 20261031: The stale sweep stays in the full run, as the rest of the cleanup does. The gate does none of it.
-		- 20261031: A process is still there when `ps -p` finds its PID, since `kill -0` fails on another user's. A reused PID only keeps a folder longer.
-		- 20261031: A test folder handed in through `SILKTERM_TEST_DIR` stays the tests' folder, as before, so the run in the container under `--keep-temp` still keeps its tests' files. The run's own folder is still made, for `TMPDIR`.
-		- 20261031: A passed container step still removes its `/tmp` right away, rather than waiting for the run's end.
-		- 20261031: ddazx sets `TEMP` and `TMP` with `TMPDIR` rather than unsetting them, since that is how the pipeline runs, and the read-only cases then also catch a write through `TEMP`.
-		- 20261031: The failure line under `--keep-temp` in the container still names the path inside it. The host side prints the container's `/tmp` folder it maps to, so the line stays short.
-		- 20261031: Test changes. In ddazx, "and leaves TMPDIR as it was", "and keeps the run folder" and its "and says where" are commented out, since this item reverses them. In ddrp2, the `/tmp` under the target dir, its ledger, the kept failed `/tmp` and the newest five are commented out for the same reason. ddrp2's run name patterns now take the `_NNN` part, and its `--keep-temp` line names the run's folder, not the test folder.
-	- Verified: 20261031. ddazx's gate cases, run alone, failed 7 against the old `cicd.bash` and pass. de5e9 passes with its new run folder, counter, stale sweep and old ledger checks. ddrp2 passes, its Ctrl+C in a full run case included, which failed before the end's messages were held. A Ctrl+C in a host gate and a host full run removed the run's folder. ddazx's A to E pass, the engine and gates tests, dehwp, shellcheck and the bash style check pass. `--backlog-run-quick scripts docs` passed in the container, and left no run folder.
-		- Not run here: ddazx's G cases, which this item doesn't change.
-		- 20261031, the fix for the 80ffd30 failure: dbz8n failed with `TMPDIR` and `TEMP` apart and passed with them equal. ddp9p's new checks failed 2 against the old `cicd.bash` and pass. ddazx passes all 89 checks with `TEMP` and `TMP` exported apart from `TMPDIR`, as the pipeline leaves them, and leaves nothing behind. dehwp and the bash style check pass.
-			- Swept: every `TMPDIR=` in `cicd/`. The cleanup and wingui harness tests run `cicd.bash` or a script that sets all three itself, and the install tests run under `env -i`, with no `TEMP`.
-		- Swept: every caller of `fRunName`, `fRunEnd`, `fTestDir_Owned` and `CLEANUP_KEEP_RUNS`, and every test that runs `cicd.bash` (container, cleanup, testdir, engine, gates). Only `cicd.bash` used `fTestDir_Owned`. `cicd-win.ps1` is 2026103115564581.
-	- Branch: rnd1031
-	- Test case: ddazx `cicd/tests/testdir/run.bash` (its gate cases and case A), de5e9 `cicd/tests/cleanup/run.bash` (R), ddrp2 `cicd/tests/container/run.bash`, ddp9p `cicd/tests/testout/run.bash`.
-	- Acceptance signoff: Self-closed: the round's full run in the container passed every stage, and its end removed its run folder
-	- Closed: 20261031-184228
+		- The unscrollable search and buttons areas should be lighter than the scrollable content.
+		- The scrollable content needs to be darker (in dark mode at least).
+	- Notes:
+		- Pre-next-cut.
 
 - CICD reset: the test helpers' own run folders under HOST_TEMP
 	- ID: 2026103115564575
@@ -866,129 +598,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- A test like dehwp, run on b29w.
 	- Progress log:
 		- 20261028: Split, since it doesn't fit one sitting. Children: 2026102808471071 (the guard, and `cicd-win.ps1`'s release artifacts folder), 2026102808471076 (the test scripts), 2026102808472645 (`install.ps1`).
-
-- CICD reset: the PowerShell test scripts' recursive removals through the guard
-	- ID: 2026102808471076
-	- Type: Task
-	- Status: Done
-	- Priority: Avg
-	- Opened: 20261028-084710
-	- Opened by: CC
-	- Parent ID: 2026102807494139
-	- Prereq IDs: 2026102808471071
-	- Target OS: Windows
-	- Requirements:
-		- Every `Remove-Item -Recurse` under `cicd/tests` goes through the guard, about 33 lines: the launcher, install, release, cleanup and wingui scripts.
-		- Their scratch folders sit in the test run folder in TEMP, not under a tmp folder, so they use the one-parent form with the folder they made, until 2026102807494157 moves run folders under `HOST_TEMP`.
-		- Run on b29w, and the wingui ones on vm925w.
-	- Progress log:
-		- 20261031: All 33 lines go through `fSafeRm_Under`, 31 in the test scripts and one in the launcher `wingui/run.bash` writes, plus install.ps1's in 2026102808472645. The parent is the folder each path was built from: the temp folder, which the test run folder stands in for, the scenario's out folder, or the box's run folder.
-		- 20261031: The Windows scenarios get the guard in their bundle, and `_lib.ps1` loads it, with a new `fClearOut` for a scenario's own folder. The launcher carries its own copy, since it clears the old `wingui` folder before it unpacks.
-		- 20261031: openwith's registry keys go through `DeleteSubKeyTree`, since they aren't folders.
-		- 20261031: On b29w at 80ffd30, its console unlocked, cmdgui, quiettab, conmap, newwin, wpremote, pathannounce and openwith all passed, each through the new clear. perfladder wasn't run, since vm925w was off and couldn't start while vmKt6m held its display port.
-	- Decisions:
-		- 20261031: A refused removal at the end of a test prints the guard's line and doesn't fail the test, as before, since the test run folder's own removal takes what's left. A refused clear before a scenario runs fails it, since it would run on old files.
-		- 20261031: The parent is named from where the path was made, never worked out from the path itself.
-		- 20261031: dehwp checks every tracked .ps1 and the launcher, for `Remove-Item` with `-Recurse` or `-r`, its short names, and a recursive .NET delete.
-		- 20261031: Closed without perfladder on vm925w. Its only removal is the same `fClearOut` the 9 scenarios that passed on b29w go through, and nothing in it depends on the gpu box.
-	- Verified: 20261031. dehwp passes, and its new check names all 33 lines in the old tree. dcbdd, dcrz7, the desktop entry, signature and cleanup tests pass under pwsh here, and with the test run folder kept, none left a scratch folder. The scenario harness test, dd5nw, the PowerShell lint and `--backlog-run-quick scripts` pass.
-		- Swept: `git grep` for `-Recurse`, the short names and `Delete(..., $true)` over every tracked script. The rest are comments, `Get-ChildItem`, and the guards' own walks.
-	- Verified: 20261031 on b29w, with this tree sent along. dehyk, the Start menu, wrapper, cleanup, signature and temp folder tests, and dd2n3 under both PowerShells, all passed. The Windows scenarios livecfg and conload passed, through the new clear and the launcher's, with the 10-22 build. The other 7 skipped at a locked console.
-	- Verified: 20261031 on b29w at 80ffd30, its console unlocked. The 7 Windows scenarios that skipped before passed.
-	- Branch: rnd1031
-	- Test case: `cicd/tests/saferm/run.bash` (dehwp), its check for a bare recursive removal in any PowerShell script.
-	- Closed: 20261031-165000
-
-- CICD reset: `install.ps1`'s temp folder removal through a guard
-	- ID: 2026102808472645
-	- Type: Task
-	- Status: Done
-	- Priority: Avg
-	- Opened: 20261028-084710
-	- Opened by: CC
-	- Parent ID: 2026102807494139
-	- Prereq IDs: 2026102808471071
-	- Target OS: Windows
-	- Requirements:
-		- `install.ps1` removes its temp folder through a guard with the same rules. It runs alone, through `irm | iex` too, so it carries its own copy rather than dot-sourcing the repo's.
-		- Its installer tests still pass under both PowerShells.
-	- Progress log:
-		- 20261031: install.ps1 has its own `fSafeRm_Under`, and removes its download folder through it, with the system temp folder as the parent. It runs on 5.1, which has no `IsPathFullyQualified`.
-	- Decisions:
-		- 20261031: Only the one-parent form, since the folder is always in the system temp folder, which isn't named tmp on Windows or macOS.
-		- 20261031: It looks for links only below the parent. macOS's temp folder sits behind `/var`, so the repo's rule would leave every download folder there.
-		- 20261031: Same name, arguments, answers and messages as the repo's, so a script that loads both gets the same guard.
-		- 20261031: A refusal prints the guard's line and the install goes on, as a failed removal did before. The installer's version stays 1.3.0, since nothing a user sees changed.
-	- Verified: 20261031. dehyk runs its one-parent cases against both copies, and a parent behind a link, which the repo's refuses and this one takes. 5 broken copies each failed it: no `..` check, no link check, a parent check that takes a longer name, no check below the parent, and a walk that follows links. dcbdz's new check passes, and failed with the guard call taken out. dcrz7, the desktop entry and signature tests pass under pwsh here.
-	- Verified: 20261031 on b29w, with this tree sent along. dd2n3 passed under pwsh and Windows PowerShell 5.1, its new check included, and dehyk passed with junctions. Under 5.1 the installer's copy took a tree with a junction out of it and left what the junction pointed at, and refused a junction and a path through one.
-	- Branch: rnd1031
-	- Test case: `cicd/tests/saferm/win.ps1` (dehyk), install.ps1's copy. dcbdz "ps1: no run leaves its download folder", and the same check in dd2n3.
-	- Acceptance signoff: Self-closed: a written rule, and dehyk fails against the old installer, which had no copy.
-	- Closed: 20261031-144944
-
-- CICD reset: the test and utility scripts' recursive removals through the guard
-	- ID: 2026102807494121
-	- Type: Task
-	- Status: Done
-	- Priority: Avg
-	- Opened: 20261028-074941
-	- Opened by: CC
-	- Parent ID: 2026102416233803
-	- Prereq IDs: 2026102807494103
-	- Related IDs: 2026103115085852
-	- Target OS: Linux
-	- Requirements:
-		- Every recursive `rm` in `cicd/tests/` and `cicd/utility/` goes through the guard from 2026102807494103, about 58 lines in 45 files, `_testdir.bash` included.
-			- Add the short socket folder cleanups in `swnoshm` and `livecfg` from 2026102507092877, and their siblings in `wlclip`, `monwl`, `monwake` and `dpirand`.
-		- dehwp's check for a bare recursive rm covers every bash file in `cicd/`.
-	- Progress log:
-		- 20261031: `_testdir.bash` loads the guard and has a new `fTestDir_Rm`, which removes a folder inside the run's test folder with that folder as the one parent. The run folder itself goes through the guard too, under the temp folder it was made in.
-		- 20261031: Every test script's own folders go through `fTestDir_Rm`. The short socket folders in `/tmp` in `swnoshm`, `livecfg`, `wlclip`, `monwl` and `monwake`, and `install`'s run folders in `/tmp`, go through `fSafeRm`.
-		- 20261031: `codeql.bash`, `repro-check.bash`, `wallpaper-gallery.bash` and `mem-per-window` remove through `fSafeRm_Under`, each under the folder it made its own in.
-		- 20261031: dehwp's check reads every tracked bash file in `cicd/`, by name or by its first line, and also catches a removal in quotes, `-f -r`, `\rm` and `command rm`. It checks `fTestDir_Rm` too.
-		- 20261031: `dpirand`'s socket folder is Python, which has no guard yet. It and the other 12 Python removals are 2026103115085852.
-	- Decisions:
-		- 20261031: A test's folders go by the one-parent form under the run's test folder, not the tmp rule, since `TMPDIR` can be anything, such as macOS's. The test folder is resolved once, so one behind a link still works, and the guard checks the rest of the path.
-		- 20261031: `fTestDir_Rm` leaves a path that isn't there alone, as rm -rf did, since a trap can run before the folder is made.
-		- 20261031: In an exit trap a refusal is printed and the trap goes on, so the test's own result stands. In a test's body it stops the test.
-		- 20261031: The utility scripts resolve the folder they make theirs in once, since the target dir is a link on this box.
-		- 20261031: `dpirand`'s socket folder moved to 2026103115085852, since it's Python, and Python has no guard to go through yet.
-	- Verified: 20261031. dehwp passes, and its new check failed with the old `wallpaper-gallery.bash` put back. Over the old files it finds 56 lines. The testdir (ddazx), cleanup, rotate, rename, pins, testout, hooks, gates, release, advscope, publish, sync, pylint, pslint, win-remote, cicd-win, jobs, packaging, container, engine, install, wingui harness, delcfg, config-convert, yankfresh, wakepic and wpkept tests pass. monwl, monwake and swnoshm pass with their socket folders in `/tmp`, and leave none. The gallery script's folder goes under a `TMPDIR` behind a link. `--backlog-run-quick scripts docs` passes.
-		- Not verified here: livecfg, wlclip, quiettab, mapfollow, allocs and scroll failed on their own checks against a 10-26 debug build, before their cleanup, and printed no refusal. `codeql.bash`, `repro-check.bash` and `mem-per-window` weren't run.
-		- Swept: every `rm` with `-r` or `--recursive` in a tracked bash file in `cicd/`, `-delete` and `git clean` (one, in `win-remote.bash`'s PowerShell for the box's clone), and `shutil.rmtree` in Python, which is 2026103115085852.
-	- Test case: `cicd/tests/saferm/run.bash` (dehwp).
-	- Branch: rnd1031
-	- Closed: 20261031-151619
-
-- CICD reset: the Python test and utility scripts' recursive removals through a guard
-	- ID: 2026103115085852
-	- Type: Task
-	- Status: Done
-	- Priority: Avg
-	- Opened: 20261031-150858
-	- Opened by: CC
-	- Parent ID: 2026102416233803
-	- Related IDs: 2026103115170424
-	- Target OS: All
-	- Requirements:
-		- A Python copy of the guard, with the rules and the one-parent form of `saferm.bash`, and a test like dehwp.
-		- Every `shutil.rmtree` in `cicd/` goes through it, 13 lines in 8 files, `_testdir.py` included.
-			- The short socket folder in `dpirand`, moved here from 2026102807494121.
-	- Progress log:
-		- 20261031: `cicd/utility/include/saferm.py` has `rm` and `rm_under`, with `saferm.bash`'s rules and the HOST_TEMP refusals from 2026103115170424. It walks the tree itself and stays on one filesystem.
-		- 20261031: `_testdir.py` loads it and has a new `rm()`, as `fTestDir_Rm`. Its own run folder goes through the one-parent form, under the temp folder it was made in.
-		- 20261031: The tests' own folders go through `_testdir.rm()`. `dpirand`'s short socket folder in `/tmp` goes through `rm`. `demo-video.py` and the vhist recorder remove through `rm_under`, under the temp folder they made theirs in, resolved once.
-		- 20261031: dehwp runs the new test, depj1, and fails on a bare `rmtree` in any tracked Python file in `cicd/`.
-	- Decisions:
-		- 20261031: The guard returns True or False, with one line on stderr, as the PowerShell one does. A refusal at a test's end is printed and the test's result stands.
-		- 20261031: POSIX paths only. No Python script in `cicd/` removes anything on Windows.
-	- Verified: 20261031. depj1 passes, and broken copies of the guard failed it: without the HOST_TEMP check (12 checks), without the link check (2), and with a walk that crosses filesystems (1). dehwp's new check names the 13 lines in the old files. The test ID, showdown table, showdown rig, demo recorder and cleanup tests pass. dpirand passed a case with its socket folder in `/tmp`, and left none. The vhist recorder ran under `less` and left no folder.
-		- Not verified here: `demo-video.py`'s own cleanup, which needs the recording rig.
-		- Swept: `rmtree` in every tracked Python file in `cicd/`. `os.removedirs` and `shutil.rmtree` outside `cicd/` aren't used.
-	- Test case: `cicd/tests/saferm/run.py` (depj1), run by `cicd/tests/saferm/run.bash` (dehwp), with its check for a bare `rmtree`.
-	- Branch: rnd1031
-	- Acceptance signoff: Self-closed: a written rule, and its test fails against the old code.
-	- Closed: 20261031-153900
 
 - Leak checks: Miri sort, settings_ui
 	- ID: 2026102407430381
@@ -1328,6 +937,34 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Branch: machang
 	- Test case: `a_hidden_window_that_cannot_draw_is_shown_anyway` (ddc9r), seen failing without the fix. The memory side has no unit test, since it needs a GPU.
 	- Closed: 20261001-155746
+
+- CICD reset: the bash guard doesn't refuse HOST_TEMP itself or a project's whole folder under it
+	- ID: 2026103115170424
+	- Type: Bug
+	- Status: Done
+	- Priority: High
+	- Opened: 20261031-151704
+	- Opened by:
+	- Parent ID: 2026102416233803
+	- Related IDs: 2026103115085852
+	- Target OS: All
+	- Progress log:
+		- 20261031: Found by the worker on 2026102807494121. The shared Safe removal rule has asked for both refusals since 10-28. Check the PowerShell copies too.
+		- 20261031: `saferm.bash`'s `fSafeRm` refuses HOST_TEMP itself, and with HOST_TEMP set, any whole folder right under it. Both forms refuse HOST_TEMP and this project's folder in it. `saferm.ps1` has the same, and so does the new Python copy in 2026103115085852.
+		- 20261031: The round's second full run failed dcbdt, the scroll verdict test: saferm.bash called realpath at load, and that test's PATH has none, so sourcing it ended the harness with 127. Load now goes on with no host root, and fSafeRm still refuses there. dcbdt and dehwp pass.
+	- Decisions:
+		- 20261031: A whole folder right under the temp root is refused only when HOST_TEMP is set, as the shared `safe-rm.bash` does. Without it the root is `/tmp`, where the short socket folders sit. The root itself and this project's folder are refused either way.
+		- 20261031: The one-parent form still takes another folder right under HOST_TEMP. The test run folders and the utilities' own folders are made right in TMPDIR, which can be HOST_TEMP, until 2026102807494157 moves them.
+		- 20261031: The repo copies read HOST_TEMP from the environment only. The shared guard's fallback to the login config is for this box, and a fresh clone has none.
+		- 20261031: install.ps1's copy is left as is. It has only the one-parent form, its parent is the system temp folder, which it already refuses, and it runs on users' boxes, which have no HOST_TEMP.
+		- 20261031: With TMPDIR set to HOST_TEMP, a failed run's kept test folder sits right under HOST_TEMP, so the stale sweep now refuses it and says so. A passing run still removes its own folder. 2026102807494157 moves run folders under the project's folder, where the sweep takes them.
+	- Verified: 20261031. dehwp passes, and its new checks failed 9 times against the old `saferm.bash`. dehyk passes under pwsh here, and its new checks failed 15 times with the new check taken out of `saferm.ps1`. The cleanup test passes.
+		- Swept: every copy of the guard: `saferm.bash`, `saferm.ps1`, install.ps1's `fSafeRm_Under`, and the new `saferm.py`. Every `fSafeRm` caller, for a path right under HOST_TEMP: the socket folders and `install`'s run folders are in `/tmp`, and the container's /tmp is in the target dir.
+	- Verified: 20261031 on b29w, with this tree sent along. dehyk passed, its new checks in another case included, and so did the installer, cleanup, signature, Start menu and wrapper tests, and dd2n3 under both PowerShells.
+	- Test case: `cicd/tests/saferm/run.bash` (dehwp) and `cicd/tests/saferm/win.ps1` (dehyk), their HOST_TEMP checks.
+	- Branch: rnd1031
+	- Acceptance signoff: Self-closed: a written rule, and its test fails against the old code.
+	- Closed: 20261031-155500
 
 - Smooth scroll freaked out with a long flatpak update
 	- ID: 2026101310563284
@@ -1911,6 +1548,173 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Verified: seed 30 alone, the native unit tests (1058 passed), the fuzz soak at 60 seconds a target (23 targets, all clean), and native and Windows-target clippy.
 	- Acceptance signoff: JC, 20261003.
 	- Closed: 20261003-193000
+
+- CICD reset: one PASS, FAIL or SKIP line per test
+	- ID: 2026102819265198
+	- Type: Task
+	- Status: Done
+	- Priority: High
+	- Opened: 20261028-192651
+	- Opened by: CC
+	- Parent ID: 2026102416233810
+	- Prereq IDs: 2026102819264421
+	- Related IDs: 2026102518360001
+	- Target OS: All
+	- Requirements:
+		- Every regression and fuzz test the run takes prints one line, such as `PASS decp8 <name>`, with `FAIL` or `SKIP` in place of `PASS`. That covers the Rust tests and the test scripts, here and in the Windows pipeline.
+		- The warning count and the gate tests that read those lines follow the new form.
+		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
+	- Progress log:
+		- 20261028: Rust test results, the fuzz soak's included, print as `PASS`, `FAIL` or `SKIP`, the ID and the name, and an ignored test's reason after a comma. A status the filter doesn't know, and a line that isn't UTF-8, go through untouched.
+		- 20261028: Each test script prints its own `PASS`, `FAIL` or `SKIP` line in place of the old OK or warning line. A skip gives the last reason the script printed. The docs check, the scroll and launcher harnesses and the ASan and TSan canaries print the same lines.
+		- 20261028: The Windows pipeline runs cargo test through the ID tool's new `--run`, which keeps cargo's exit status, and falls back to plain cargo test with no working python. Its test scripts print `PASS` or `FAIL` lines.
+		- 20261028: The warning count skips `PASS`, `FAIL` and `SKIP` lines, and no longer the old forms.
+		- 20261028: The full run at 852e213 failed in ddazx, on the engine (dd5nn) and rotate (dd5nq) tests run alone. Neither came from this item. Both are fork counts, which in the container counted every fork on the box, so a busy box pushed them over. Fixed under 2026102518360001. The engine test's failing line isn't in the log, but its fork check is the one that fails that way, and the test passed 2 of 2 alone in the image without the load.
+		- 20261028: The full run at 9eded41 printed a `PASS` or `SKIP` line for each stage 3 script test, each scroll scene and each Rust test, and the run at 852e213 printed the ASan canary's `PASS de5f0`. Its warning count is 29, 3 fewer than the 32 before, since the 3 Wayland skips are `SKIP` lines now.
+		- 20261028: On b29w, `cicd-win.ps1 -BacklogRunQuick tests` at 9eded41 passed, with each of its 1371 Rust tests on a `PASS` or `SKIP` line with its ID, through the Windows python.
+		- 20261031: On b29w at 80ffd30, stage 3's test scripts ran through cicd-win.ps1's own `fScriptTests`, lifted from the file, without the build and cargo test before them. Each printed its `PASS` line with its ID: dcrgs, dcrz7, dd2n3 under both PowerShells, dde3v, ddkk4, ddmj2 and dehyk. The test run folder went at the end.
+	- Decisions:
+		- 20261028: A test that skips is a `SKIP` line with its reason, not a warning. Rust tests that were ignored never counted as warnings either, and the line still says why. It doesn't go on the end-of-run list either, since that list is for boxes that weren't there.
+		- 20261028: The reason goes after a comma, as in the shared rules' example. The old annotate put it in brackets.
+		- 20261028: A new `--run` in the ID tool, rather than piping in PowerShell, which loses the exit status of the first command in a pipe.
+		- 20261028: Step and check lines that aren't tests, such as the lints, the test ID check and the advisory scan, keep their OK and warning lines. The scroll scenes and fuzz cases have no IDs yet, and are 2026102819265312.
+		- 20261031: Closed on the test scripts run alone through the pipeline's own functions, rather than a whole `cicd-win.ps1` run, since the build and cargo test before them print nothing new and their lines passed on b29w on 10-28.
+	- Verified: 20261028. The testout (ddp9p), gates (dcry4), testid (dejjp) and cicd-win (dd5nw) tests pass, and 19 of their new checks failed against the old code. The cicd-win one failed outright there, without the new functions. The engine (dd5nn) and container (ddrp2) tests pass. `--backlog-run-quick` with all five areas passed, with 1439 Rust tests and the 3 docs checks each on a `PASS` or `SKIP` line. shellcheck, the bash style check, the Python and PowerShell lints and `test-id.py --check` pass.
+	- Verified: 20261031 on b29w at 80ffd30. The 8 Windows test script lines, all `PASS`.
+		- Swept: every place in cicd.bash, cicd-win.ps1, asan.bash and tsan.bash that printed a test's result with its ID, the fuzz soak and the dhat run, which go through the same filter, and the tests that lift fRunTest, fScriptTest or the warning filter. No doc described the old lines.
+	- Branch: rnd1029
+	- Test case: ddp9p `cicd/tests/testout/run.bash`, dcry4 `cicd/tests/gates/run.bash` (ddf08's check), dejjp `cicd/tests/testid/run.py`, dd5nw `cicd/tests/cicd-win/run.bash`.
+	- Closed: 20261031-164500
+
+- CICD reset: a test for each old-format Done feature, part 3 of 6
+	- ID: 2026102819193554
+	- Type: Task
+	- Status: Done
+	- Priority: High
+	- Opened: 20261028-191935
+	- Opened by: CC
+	- Parent ID: 2026102416233809
+	- Target OS: All
+	- Requirements:
+		- The old-format Done features from "Menu enhancements: shells in the Tabs and Panes menus" to "Wallpaper settings renamed, and given two master switches", 40 items.
+		- Each names its test ID beside the test it names, or says in a few words why it has none. A test is added where one could exist and doesn't, and is watched to fail with the fix taken out.
+		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
+	- Progress log:
+		- 20261031: Each test the 40 items name, by a name a test still has, now has its ID beside it, every later mention in the same item included.
+		- 20261031: One test named was renamed since, the theme pick one. It now names the test that took over.
+		- 20261031: The `pause_state_` tests named as a family list their six IDs.
+		- 20261031: The rest say why they have no ID: comment and template text, an icon, a web gallery, demo pacing, measurements, host setup, GPU caches, and a removed feature. No test was missing where one could exist, so none was added.
+	- Decisions:
+		- 20261031: As in parts 1 and 2, a test renamed since keeps its old name, with "now" and the test that took over.
+	- Verified: 20261031. Every test ID added in part 3 is one the tree has, and each sits beside the name of its own test. `--backlog-run-quick docs` passed, `test-id.py --check` passes, and the markdown check finds nothing new.
+		- Swept: every name in backticks and test script path in the 40 items, every ticked sub-item for an ID or a "No test", and every "Pinned by" or "No test" written in words.
+	- Branch: rnd1031
+	- Test case: each of the 40 items names its own, or why it has none.
+	- Closed: 20261031-135805
+
+- CICD reset: a test for each old-format Done feature, part 4 of 6
+	- ID: 2026102819193569
+	- Type: Task
+	- Status: Done
+	- Priority: High
+	- Opened: 20261028-191935
+	- Opened by: CC
+	- Parent ID: 2026102416233809
+	- Target OS: All
+	- Requirements:
+		- The old-format Done features from "A wallpaper can say how it wants to be laid out" to "Donations model:", 40 items.
+		- Each names its test ID beside the test it names, or says in a few words why it has none. A test is added where one could exist and doesn't, and is watched to fail with the fix taken out.
+		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
+	- Progress log:
+		- 20261031: Each test the 40 items name, by a name a test still has, now has its ID beside it, every later mention in the same item included.
+		- 20261031: One test named was renamed since, the copy on select default one. It now names the test that took over.
+		- 20261031: `changed_defaults` (d97z3) has its ID too, where the tool left it out for its short name.
+		- 20261031: The Wayland engine item names the scroll harness (d9j4r), whose `--wayland` pass it added.
+		- 20261031: The rest say why they have no ID: git host settings, docs, speed and size tuning, a built-in image, window reveal timing, a removed screenshot renderer, and the TERM fallback in the engine fork. No test was missing where one could exist, so none was added.
+	- Decisions:
+		- 20261031: As in parts 1 to 3, a test renamed since keeps its old name, with "now" and the test that took over.
+	- Verified: 20261031. Every test ID added in part 4 is one the tree has, and each sits beside the name of its own test. `--backlog-run-quick docs` passed, `test-id.py --check` passes, and the markdown check finds nothing new.
+		- Swept: every name in backticks and test script path in the 40 items, every ticked sub-item for an ID or a "No test", and every "Pinned by" or "No test" written in words.
+	- Branch: rnd1031
+	- Test case: each of the 40 items names its own, or why it has none.
+	- Closed: 20261031-140222
+
+- CICD reset: a test for each old-format Done feature, part 5 of 6
+	- ID: 2026102819193582
+	- Type: Task
+	- Status: Done
+	- Priority: High
+	- Opened: 20261028-191935
+	- Opened by: CC
+	- Parent ID: 2026102416233809
+	- Target OS: All
+	- Requirements:
+		- The old-format Done features from "Cursor animation immediately resets and starts over on keypresses" to "Background image:", 40 items.
+		- Each names its test ID beside the test it names, or says in a few words why it has none. A test is added where one could exist and doesn't, and is watched to fail with the fix taken out.
+		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
+	- Progress log:
+		- 20261031: Each test the 40 items name, by a name a test still has, now has its ID beside it, every later mention in the same item included.
+		- 20261031: Two tests named were commented out since, the font order and system font toggle ones. Each now names the tests that took over.
+		- 20261031: The short names `changed_defaults`, `function_keys` and `editing_keys` have their IDs too, and so does the guard test the defaults item names in words.
+		- 20261031: The whole-file config reorder says why it has none: the pass was dropped later.
+		- 20261031: The rest say why they have no ID: label text, a removed feature, window manager behavior, GPU draw order, GPU and compositor blur, a display setup, a one-line formula, and release profile settings. No test was missing where one could exist, so none was added.
+	- Decisions:
+		- 20261031: As in parts 1 to 3, a test renamed or commented out since keeps its old name, with "now" and the tests that took over.
+	- Verified: 20261031. Every test ID added in part 5 is one the tree has, and each sits beside the name of its own test. `--backlog-run-quick docs` passed, `test-id.py --check` passes, and the markdown check finds nothing new.
+		- Swept: every name in backticks and test script path in the 40 items, every ticked sub-item for an ID or a "No test", and every "Pinned by" or "No test" written in words.
+	- Branch: rnd1031
+	- Test case: each of the 40 items names its own, or why it has none.
+	- Closed: 20261031-140222
+
+- CICD reset: a test for each old-format Done feature, part 6 of 6
+	- ID: 2026102819193596
+	- Type: Task
+	- Status: Done
+	- Priority: High
+	- Opened: 20261028-191935
+	- Opened by: CC
+	- Parent ID: 2026102416233809
+	- Target OS: All
+	- Requirements:
+		- The old-format Done features from "Text readability glow:" to "Application name ideas", the end of the list, 43 items.
+		- Each names its test ID beside the test it names, or says in a few words why it has none. A test is added where one could exist and doesn't, and is watched to fail with the fix taken out.
+		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
+	- Progress log:
+		- 20261031: Each test the 43 items name, by a name a test still has, now has its ID beside it, every later mention in the same item included.
+		- 20261031: Three tests named were commented out since, the system font toggle, pane chord and font order ones. Each now names the tests that took over.
+		- 20261031: `changed_defaults` (d97z3) has its ID too, in the three items that name it, and so do the `paste_payload` tests the middle-click item names in words.
+		- 20261031: The window menu item names the menu bar test (dd5pr) for its titles. It still says why the hit test has none.
+		- 20261031: The rest say why they have no ID: GPU and compositor effects, fonts and spacing checked by eye, real OS windows, build targets, the X11 selection, a hotkey reversed later, an umbrella item and a naming decision. No test was missing where one could exist, so none was added.
+	- Decisions:
+		- 20261031: As in parts 1 to 5, a test renamed or commented out since keeps its old name, with "now" and the tests that took over.
+	- Verified: 20261031. Every test ID added in part 6 is one the tree has, and each sits beside the name of its own test. `--backlog-run-quick docs` passed, `test-id.py --check` passes, and the markdown check finds nothing new.
+		- Swept: every name in backticks and test script path in the 43 items, every ticked sub-item for an ID or a "No test", and every "Pinned by" or "No test" written in words.
+	- Branch: rnd1031
+	- Test case: each of the 43 items names its own, or why it has none.
+	- Closed: 20261031-140554
+
+- CICD reset: a test for every Done item
+	- ID: 2026102416233809
+	- Type: Task
+	- Status: Done
+	- Priority: High
+	- Opened: 20261024-162338
+	- Opened by: CC
+	- Target OS: All
+	- Requirements:
+		- Per the regression bullet in `Testing` in the shared CICD rules. Every Done item has a regression test in CI where one could exist, and names its test ID, or says in a few words why it has none.
+		- Most Done items in the new format name one. Left: 4 there that don't, and the Done items in the old format, which name none.
+		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
+	- Progress log:
+		- 20261028: Split in 11, too big for one sitting. The old format has 407 Done items, 164 bugs and 243 features, and most name a test without its ID. 2026102819193456 takes the 4 new-format items, 2026102819193471 to 2026102819193512 the old-format bugs in 4 parts, and 2026102819193525 to 2026102819193596 the features in 6. This item closes when they do.
+		- 20261031: Closed with its last child, part 6 (027c102).
+	- Decisions:
+		- 20261028: Parts of about 40 items, in the list's own order, so each fits one sitting and none needs a call on where an item belongs.
+		- 20261028: An old-format item gets the ID beside the test name it already gives, rather than a new row.
+		- 20261028: No wait on 2026102416233810 (test IDs). Its change of form has to sweep every ID the backlog names anyway.
+	- Test case: each child's items name their own test ID, or say why they have none; test-id.py --check
+	- Acceptance signoff: Self-closed: all 11 children are Done, the last 3 in rnd1031
+	- Closed: 20261031-140732
 
 - CICD reset: IDs for the scroll scenes and fuzz cases
 	- ID: 2026102819265312
@@ -4316,6 +4120,202 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- The Windows run this item came from named only these four. That full suite was not run again.
 	- Acceptance signoff: Self-closed: test fixes only, and all four failed before the fix and pass after on Windows.
 	- Closed: 20260930-125357
+
+- CICD reset: the private runner's tests still use old base 62 test IDs
+	- ID: 2026102819390388
+	- Type: Task
+	- Status: Done
+	- Priority: Avg
+	- Opened: 20261028-193903
+	- Opened by: CC
+	- Related IDs: 2026102819264421
+	- Target OS: All
+	- Requirements:
+		- The private repo's tests weren't part of the 10-28 conversion. Its one ID this backlog names, Eu0WzDd, became dehx0 here, so the private repo's own test should use that.
+		- Convert with the same old-to-new map the 10-28 conversion used, and its ID check should refuse the old form too.
+	- Progress log:
+		- 20261031: silkterm-private's host test is dehx0 now. Its backlog's 112 mentions of this repo's old IDs went through the same map. No old ID was left there that the map doesn't have.
+		- 20261031: `test-id.py --check` takes silkterm-private's test scripts too, when it's beside this repo, found the way `config.bash` finds the private runner. They share one set of IDs, so the check refuses an old, missing or shared ID there, and a new ID skips one the private repo has. An empty `SILK_PRIVATE_RUNNER` leaves it out.
+		- 20261031: The container gets the private repo's `cicd/tests` read only, so the check inside sees it too. `--no-private` leaves it out.
+	- Decisions:
+		- 20261031: The check stays in this repo's ID tool rather than a copy in the private repo. The private repo has no check of its own, and one tool over both trees keeps the IDs unique across them.
+		- 20261031: Only the tests folder goes into the container, not the private runner, since stage 6 runs on this side.
+	- Verified: 20261031. dejjp passes, and 6 of its 7 new checks failed against the old tool. The 7th, an empty `SILK_PRIVATE_RUNNER`, passes on both by design. ddrp2 passes, and 3 of its 4 new checks failed against the old `cicd.bash`. With the old ID put back in the private host test, `test-id.py --check` and `--backlog-run-quick docs` in the container both refused it, and both pass on dehx0. The private host test (dehx0) passes. `--backlog-run-quick scripts docs` passed.
+		- Swept: every place that reads test IDs from files, which is only `find_ids` in `test-id.py`, used by `--check` and new IDs. `--list` and `--annotate` read Rust tests only, and the private repo has none. No doc describes what the check covers.
+	- Branch: rnd1031
+	- Commit: silkterm-private f867b51
+	- Test case: dejjp `cicd/tests/testid/run.py`, ddrp2 `cicd/tests/container/run.bash`.
+	- Closed: 20261031-141601
+
+- CICD reset: run folders under HOST_TEMP, removed at the end
+	- ID: 2026102807494157
+	- Type: Task
+	- Status: Done
+	- Needs local test suite run?: No
+	- Priority: Avg
+	- Opened: 20261028-074941
+	- Opened by: CC
+	- Parent ID: 2026102416233803
+	- Prereq IDs: 2026102807494121
+	- Related IDs: 2026102518360001
+	- Target OS: All
+	- Requirements:
+		- A run's folder is `${HOST_TEMP}/silkterm/<YYYYmmDD-HHMMSS>_<NNN>/`, on every OS, with `TMPDIR`, `TEMP` and `TMP` pointed at it. Now it's a `test_silkterm_<stamp>` folder straight under the temp dir, plus the container's /tmp under the target dir.
+		- A run removes its own folder at the end, on failure and Ctrl+C too, and `--keep-temp` keeps it and prints where. Now a failed run keeps it, and the newest 5 of those stay.
+		- Stale folders go after 2 days, when no process from the folder's `run.pid` is left.
+		- The container's labels and names take the new folder's name.
+	- Progress log:
+		- 20261031: Split, since it doesn't fit one sitting. This item keeps the Linux pipeline, `cicd.bash`, and its container. Children: 2026103115564575 (the test helpers' own folders, when a test runs alone), 2026103115564581 (the Windows pipeline and the test boxes' run folders).
+		- 20261031: `cicd.bash` makes its run's folder at `${HOST_TEMP}/silkterm/<YYYYmmDD-HHMMSS>_<NNN>/`, falling back to `TMPDIR` or `/tmp`, with this run's PID in `run.pid`, and points `TMPDIR`, `TEMP` and `TMP` at it. It's the tests' folder too, unless one is handed in. The container's `/tmp` is a folder in it, and the labels and container names take its name.
+		- 20261031: The folder goes at the end, on a pass, a failure or Ctrl+C. A failed run says `--keep-temp` keeps it. `--keep-temp` keeps it and prints where.
+		- 20261031: A full run removes run folders over 2 days old whose `run.pid` names no process still there, in place of the newest 5. It empties the old ledgers of test run folders and container `/tmp` folders once, the ones right in HOST_TEMP each under its own parent, and then removes the ledgers.
+		- 20261031: The end's messages wait until the cleanup is done, since a write to the log tee after Ctrl+C ended a full run before its folder went.
+		- 20261031: The full run at 80ffd30 failed in stage 3, in ddazx's case A, on the Rust test dbz8n (`the_other_platforms_spelling_of_a_name_still_answers`). The run now exports `TEMP` as well, and case A points only `TMPDIR` at its read-only folder, so `$TMPDIR` and `%TEMP%` differ. The test fails the same way alone with the two set apart, and passes with them equal or `TEMP` unset. Stages after it weren't reached.
+			- Fix: ddazx's cases that set `TMPDIR` set `TEMP` and `TMP` with it, or unset them.
+		- 20261031: Every ddazx case that sets `TMPDIR` sets `TEMP` and `TMP` to the same folder. The test helpers' `fTestDir_Use` and `use()` point all three at the test folder too, as `_testdir.ps1` already did on Windows, so a test handed a folder other than the run's sees one temp folder.
+		- 20261031: A failed test's line said "output kept in" a path inside the container, in a run folder the run's end then removed. It now names the file only when the file outlives the run, under `--keep-temp` or in a test folder handed in, and otherwise says `--keep-temp` keeps its output.
+		- 20261101: Verified: full run cicd/cicd.bash --backlog-run-full at f721f35 passed all 13 steps, perfladder a SKIP with vm925w off; no run folder or container was left after it. Children 2026103115564575 and 2026103115564581 stay open.
+	- Decisions:
+		- 20261031: The stale sweep takes only a folder with a `run.pid`, named as a run folder, so a temp folder made by hand in `${HOST_TEMP}/silkterm` stays. A folder's age is its mtime.
+		- 20261031: The stale sweep stays in the full run, as the rest of the cleanup does. The gate does none of it.
+		- 20261031: A process is still there when `ps -p` finds its PID, since `kill -0` fails on another user's. A reused PID only keeps a folder longer.
+		- 20261031: A test folder handed in through `SILKTERM_TEST_DIR` stays the tests' folder, as before, so the run in the container under `--keep-temp` still keeps its tests' files. The run's own folder is still made, for `TMPDIR`.
+		- 20261031: A passed container step still removes its `/tmp` right away, rather than waiting for the run's end.
+		- 20261031: ddazx sets `TEMP` and `TMP` with `TMPDIR` rather than unsetting them, since that is how the pipeline runs, and the read-only cases then also catch a write through `TEMP`.
+		- 20261031: The failure line under `--keep-temp` in the container still names the path inside it. The host side prints the container's `/tmp` folder it maps to, so the line stays short.
+		- 20261031: Test changes. In ddazx, "and leaves TMPDIR as it was", "and keeps the run folder" and its "and says where" are commented out, since this item reverses them. In ddrp2, the `/tmp` under the target dir, its ledger, the kept failed `/tmp` and the newest five are commented out for the same reason. ddrp2's run name patterns now take the `_NNN` part, and its `--keep-temp` line names the run's folder, not the test folder.
+	- Verified: 20261031. ddazx's gate cases, run alone, failed 7 against the old `cicd.bash` and pass. de5e9 passes with its new run folder, counter, stale sweep and old ledger checks. ddrp2 passes, its Ctrl+C in a full run case included, which failed before the end's messages were held. A Ctrl+C in a host gate and a host full run removed the run's folder. ddazx's A to E pass, the engine and gates tests, dehwp, shellcheck and the bash style check pass. `--backlog-run-quick scripts docs` passed in the container, and left no run folder.
+		- Not run here: ddazx's G cases, which this item doesn't change.
+		- 20261031, the fix for the 80ffd30 failure: dbz8n failed with `TMPDIR` and `TEMP` apart and passed with them equal. ddp9p's new checks failed 2 against the old `cicd.bash` and pass. ddazx passes all 89 checks with `TEMP` and `TMP` exported apart from `TMPDIR`, as the pipeline leaves them, and leaves nothing behind. dehwp and the bash style check pass.
+			- Swept: every `TMPDIR=` in `cicd/`. The cleanup and wingui harness tests run `cicd.bash` or a script that sets all three itself, and the install tests run under `env -i`, with no `TEMP`.
+		- Swept: every caller of `fRunName`, `fRunEnd`, `fTestDir_Owned` and `CLEANUP_KEEP_RUNS`, and every test that runs `cicd.bash` (container, cleanup, testdir, engine, gates). Only `cicd.bash` used `fTestDir_Owned`. `cicd-win.ps1` is 2026103115564581.
+	- Branch: rnd1031
+	- Test case: ddazx `cicd/tests/testdir/run.bash` (its gate cases and case A), de5e9 `cicd/tests/cleanup/run.bash` (R), ddrp2 `cicd/tests/container/run.bash`, ddp9p `cicd/tests/testout/run.bash`.
+	- Acceptance signoff: Self-closed: the round's full run in the container passed every stage, and its end removed its run folder
+	- Closed: 20261031-184228
+
+- CICD reset: the PowerShell test scripts' recursive removals through the guard
+	- ID: 2026102808471076
+	- Type: Task
+	- Status: Done
+	- Priority: Avg
+	- Opened: 20261028-084710
+	- Opened by: CC
+	- Parent ID: 2026102807494139
+	- Prereq IDs: 2026102808471071
+	- Target OS: Windows
+	- Requirements:
+		- Every `Remove-Item -Recurse` under `cicd/tests` goes through the guard, about 33 lines: the launcher, install, release, cleanup and wingui scripts.
+		- Their scratch folders sit in the test run folder in TEMP, not under a tmp folder, so they use the one-parent form with the folder they made, until 2026102807494157 moves run folders under `HOST_TEMP`.
+		- Run on b29w, and the wingui ones on vm925w.
+	- Progress log:
+		- 20261031: All 33 lines go through `fSafeRm_Under`, 31 in the test scripts and one in the launcher `wingui/run.bash` writes, plus install.ps1's in 2026102808472645. The parent is the folder each path was built from: the temp folder, which the test run folder stands in for, the scenario's out folder, or the box's run folder.
+		- 20261031: The Windows scenarios get the guard in their bundle, and `_lib.ps1` loads it, with a new `fClearOut` for a scenario's own folder. The launcher carries its own copy, since it clears the old `wingui` folder before it unpacks.
+		- 20261031: openwith's registry keys go through `DeleteSubKeyTree`, since they aren't folders.
+		- 20261031: On b29w at 80ffd30, its console unlocked, cmdgui, quiettab, conmap, newwin, wpremote, pathannounce and openwith all passed, each through the new clear. perfladder wasn't run, since vm925w was off and couldn't start while vmKt6m held its display port.
+	- Decisions:
+		- 20261031: A refused removal at the end of a test prints the guard's line and doesn't fail the test, as before, since the test run folder's own removal takes what's left. A refused clear before a scenario runs fails it, since it would run on old files.
+		- 20261031: The parent is named from where the path was made, never worked out from the path itself.
+		- 20261031: dehwp checks every tracked .ps1 and the launcher, for `Remove-Item` with `-Recurse` or `-r`, its short names, and a recursive .NET delete.
+		- 20261031: Closed without perfladder on vm925w. Its only removal is the same `fClearOut` the 9 scenarios that passed on b29w go through, and nothing in it depends on the gpu box.
+	- Verified: 20261031. dehwp passes, and its new check names all 33 lines in the old tree. dcbdd, dcrz7, the desktop entry, signature and cleanup tests pass under pwsh here, and with the test run folder kept, none left a scratch folder. The scenario harness test, dd5nw, the PowerShell lint and `--backlog-run-quick scripts` pass.
+		- Swept: `git grep` for `-Recurse`, the short names and `Delete(..., $true)` over every tracked script. The rest are comments, `Get-ChildItem`, and the guards' own walks.
+	- Verified: 20261031 on b29w, with this tree sent along. dehyk, the Start menu, wrapper, cleanup, signature and temp folder tests, and dd2n3 under both PowerShells, all passed. The Windows scenarios livecfg and conload passed, through the new clear and the launcher's, with the 10-22 build. The other 7 skipped at a locked console.
+	- Verified: 20261031 on b29w at 80ffd30, its console unlocked. The 7 Windows scenarios that skipped before passed.
+	- Branch: rnd1031
+	- Test case: `cicd/tests/saferm/run.bash` (dehwp), its check for a bare recursive removal in any PowerShell script.
+	- Closed: 20261031-165000
+
+- CICD reset: `install.ps1`'s temp folder removal through a guard
+	- ID: 2026102808472645
+	- Type: Task
+	- Status: Done
+	- Priority: Avg
+	- Opened: 20261028-084710
+	- Opened by: CC
+	- Parent ID: 2026102807494139
+	- Prereq IDs: 2026102808471071
+	- Target OS: Windows
+	- Requirements:
+		- `install.ps1` removes its temp folder through a guard with the same rules. It runs alone, through `irm | iex` too, so it carries its own copy rather than dot-sourcing the repo's.
+		- Its installer tests still pass under both PowerShells.
+	- Progress log:
+		- 20261031: install.ps1 has its own `fSafeRm_Under`, and removes its download folder through it, with the system temp folder as the parent. It runs on 5.1, which has no `IsPathFullyQualified`.
+	- Decisions:
+		- 20261031: Only the one-parent form, since the folder is always in the system temp folder, which isn't named tmp on Windows or macOS.
+		- 20261031: It looks for links only below the parent. macOS's temp folder sits behind `/var`, so the repo's rule would leave every download folder there.
+		- 20261031: Same name, arguments, answers and messages as the repo's, so a script that loads both gets the same guard.
+		- 20261031: A refusal prints the guard's line and the install goes on, as a failed removal did before. The installer's version stays 1.3.0, since nothing a user sees changed.
+	- Verified: 20261031. dehyk runs its one-parent cases against both copies, and a parent behind a link, which the repo's refuses and this one takes. 5 broken copies each failed it: no `..` check, no link check, a parent check that takes a longer name, no check below the parent, and a walk that follows links. dcbdz's new check passes, and failed with the guard call taken out. dcrz7, the desktop entry and signature tests pass under pwsh here.
+	- Verified: 20261031 on b29w, with this tree sent along. dd2n3 passed under pwsh and Windows PowerShell 5.1, its new check included, and dehyk passed with junctions. Under 5.1 the installer's copy took a tree with a junction out of it and left what the junction pointed at, and refused a junction and a path through one.
+	- Branch: rnd1031
+	- Test case: `cicd/tests/saferm/win.ps1` (dehyk), install.ps1's copy. dcbdz "ps1: no run leaves its download folder", and the same check in dd2n3.
+	- Acceptance signoff: Self-closed: a written rule, and dehyk fails against the old installer, which had no copy.
+	- Closed: 20261031-144944
+
+- CICD reset: the test and utility scripts' recursive removals through the guard
+	- ID: 2026102807494121
+	- Type: Task
+	- Status: Done
+	- Priority: Avg
+	- Opened: 20261028-074941
+	- Opened by: CC
+	- Parent ID: 2026102416233803
+	- Prereq IDs: 2026102807494103
+	- Related IDs: 2026103115085852
+	- Target OS: Linux
+	- Requirements:
+		- Every recursive `rm` in `cicd/tests/` and `cicd/utility/` goes through the guard from 2026102807494103, about 58 lines in 45 files, `_testdir.bash` included.
+			- Add the short socket folder cleanups in `swnoshm` and `livecfg` from 2026102507092877, and their siblings in `wlclip`, `monwl`, `monwake` and `dpirand`.
+		- dehwp's check for a bare recursive rm covers every bash file in `cicd/`.
+	- Progress log:
+		- 20261031: `_testdir.bash` loads the guard and has a new `fTestDir_Rm`, which removes a folder inside the run's test folder with that folder as the one parent. The run folder itself goes through the guard too, under the temp folder it was made in.
+		- 20261031: Every test script's own folders go through `fTestDir_Rm`. The short socket folders in `/tmp` in `swnoshm`, `livecfg`, `wlclip`, `monwl` and `monwake`, and `install`'s run folders in `/tmp`, go through `fSafeRm`.
+		- 20261031: `codeql.bash`, `repro-check.bash`, `wallpaper-gallery.bash` and `mem-per-window` remove through `fSafeRm_Under`, each under the folder it made its own in.
+		- 20261031: dehwp's check reads every tracked bash file in `cicd/`, by name or by its first line, and also catches a removal in quotes, `-f -r`, `\rm` and `command rm`. It checks `fTestDir_Rm` too.
+		- 20261031: `dpirand`'s socket folder is Python, which has no guard yet. It and the other 12 Python removals are 2026103115085852.
+	- Decisions:
+		- 20261031: A test's folders go by the one-parent form under the run's test folder, not the tmp rule, since `TMPDIR` can be anything, such as macOS's. The test folder is resolved once, so one behind a link still works, and the guard checks the rest of the path.
+		- 20261031: `fTestDir_Rm` leaves a path that isn't there alone, as rm -rf did, since a trap can run before the folder is made.
+		- 20261031: In an exit trap a refusal is printed and the trap goes on, so the test's own result stands. In a test's body it stops the test.
+		- 20261031: The utility scripts resolve the folder they make theirs in once, since the target dir is a link on this box.
+		- 20261031: `dpirand`'s socket folder moved to 2026103115085852, since it's Python, and Python has no guard to go through yet.
+	- Verified: 20261031. dehwp passes, and its new check failed with the old `wallpaper-gallery.bash` put back. Over the old files it finds 56 lines. The testdir (ddazx), cleanup, rotate, rename, pins, testout, hooks, gates, release, advscope, publish, sync, pylint, pslint, win-remote, cicd-win, jobs, packaging, container, engine, install, wingui harness, delcfg, config-convert, yankfresh, wakepic and wpkept tests pass. monwl, monwake and swnoshm pass with their socket folders in `/tmp`, and leave none. The gallery script's folder goes under a `TMPDIR` behind a link. `--backlog-run-quick scripts docs` passes.
+		- Not verified here: livecfg, wlclip, quiettab, mapfollow, allocs and scroll failed on their own checks against a 10-26 debug build, before their cleanup, and printed no refusal. `codeql.bash`, `repro-check.bash` and `mem-per-window` weren't run.
+		- Swept: every `rm` with `-r` or `--recursive` in a tracked bash file in `cicd/`, `-delete` and `git clean` (one, in `win-remote.bash`'s PowerShell for the box's clone), and `shutil.rmtree` in Python, which is 2026103115085852.
+	- Test case: `cicd/tests/saferm/run.bash` (dehwp).
+	- Branch: rnd1031
+	- Closed: 20261031-151619
+
+- CICD reset: the Python test and utility scripts' recursive removals through a guard
+	- ID: 2026103115085852
+	- Type: Task
+	- Status: Done
+	- Priority: Avg
+	- Opened: 20261031-150858
+	- Opened by: CC
+	- Parent ID: 2026102416233803
+	- Related IDs: 2026103115170424
+	- Target OS: All
+	- Requirements:
+		- A Python copy of the guard, with the rules and the one-parent form of `saferm.bash`, and a test like dehwp.
+		- Every `shutil.rmtree` in `cicd/` goes through it, 13 lines in 8 files, `_testdir.py` included.
+			- The short socket folder in `dpirand`, moved here from 2026102807494121.
+	- Progress log:
+		- 20261031: `cicd/utility/include/saferm.py` has `rm` and `rm_under`, with `saferm.bash`'s rules and the HOST_TEMP refusals from 2026103115170424. It walks the tree itself and stays on one filesystem.
+		- 20261031: `_testdir.py` loads it and has a new `rm()`, as `fTestDir_Rm`. Its own run folder goes through the one-parent form, under the temp folder it was made in.
+		- 20261031: The tests' own folders go through `_testdir.rm()`. `dpirand`'s short socket folder in `/tmp` goes through `rm`. `demo-video.py` and the vhist recorder remove through `rm_under`, under the temp folder they made theirs in, resolved once.
+		- 20261031: dehwp runs the new test, depj1, and fails on a bare `rmtree` in any tracked Python file in `cicd/`.
+	- Decisions:
+		- 20261031: The guard returns True or False, with one line on stderr, as the PowerShell one does. A refusal at a test's end is printed and the test's result stands.
+		- 20261031: POSIX paths only. No Python script in `cicd/` removes anything on Windows.
+	- Verified: 20261031. depj1 passes, and broken copies of the guard failed it: without the HOST_TEMP check (12 checks), without the link check (2), and with a walk that crosses filesystems (1). dehwp's new check names the 13 lines in the old files. The test ID, showdown table, showdown rig, demo recorder and cleanup tests pass. dpirand passed a case with its socket folder in `/tmp`, and left none. The vhist recorder ran under `less` and left no folder.
+		- Not verified here: `demo-video.py`'s own cleanup, which needs the recording rig.
+		- Swept: `rmtree` in every tracked Python file in `cicd/`. `os.removedirs` and `shutil.rmtree` outside `cicd/` aren't used.
+	- Test case: `cicd/tests/saferm/run.py` (depj1), run by `cicd/tests/saferm/run.bash` (dehwp), with its check for a bare `rmtree`.
+	- Branch: rnd1031
+	- Acceptance signoff: Self-closed: a written rule, and its test fails against the old code.
+	- Closed: 20261031-153900
 
 - CICD reset: the PowerShell safe removal guard, and `cicd-win.ps1`'s release artifacts
 	- ID: 2026102808471071
