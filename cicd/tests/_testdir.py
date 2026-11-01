@@ -1,6 +1,7 @@
 ##	- Purpose:
-##		The run's test folder, <temp>/test_silkterm_YYYYmmDD-HHMMSSNN, for the
-##		Python tests. Same contract as _testdir.bash: SILKTERM_TEST_DIR set and not
+##		The run's test folder, HOST_TEMP/silkterm/YYYYmmDD-HHMMSS_NNN with a
+##		run.pid, or under the temp dir without HOST_TEMP, for the Python tests.
+##		Same contract as _testdir.bash: SILKTERM_TEST_DIR set and not
 ##		empty is the folder, made if missing, and never removed; otherwise a fresh
 ##		0700 one is made and exported, so every test the caller starts shares it.
 ##		A script that made one calls end(<exit status>) right before it exits,
@@ -33,18 +34,19 @@ def make() -> Path:
 		folder = Path(given)
 		folder.mkdir(parents=True, exist_ok=True)
 		return folder
-	base = Path(tempfile.gettempdir())
-	for _ in range(100):
-		now = datetime.now()
-		folder = base / f"test_silkterm_{now:%Y%m%d-%H%M%S}{now.microsecond // 10000:02d}"
+	base = Path(os.environ.get("HOST_TEMP") or tempfile.gettempdir()) / "silkterm"
+	base.mkdir(parents=True, exist_ok=True)
+	stamp = f"{datetime.now():%Y%m%d-%H%M%S}"
+	for n in range(1, 1000):
+		folder = base / f"{stamp}_{n:03d}"
 		## Never exist_ok here: it would adopt a folder or symlink planted at a guessable name.
 		try:
 			folder.mkdir(mode=0o700)
 		except FileExistsError:
-			time.sleep(0.01)
 			continue
 		token = f"{os.getpid()}-{time.time_ns()}"
 		(folder / _MARKER).write_text(f"{token}\n")
+		(folder / "run.pid").write_text(f"{os.getpid()}\n")
 		_owned = (folder, token)
 		os.environ["SILKTERM_TEST_DIR"] = str(folder)
 		return folder
@@ -127,3 +129,4 @@ def use() -> Path:
 ##		- 20261002 JC: A run removes the folder it made when it passes.
 ##		- 20261031: Removals go through the safe removal guard, and rm() for a test's own folders.
 ##		- 20261031: use() points TEMP and TMP at the folder too.
+##		- 20261101: The folder is HOST_TEMP/silkterm/YYYYmmDD-HHMMSS_NNN, with a run.pid.

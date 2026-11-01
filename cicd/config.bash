@@ -145,9 +145,8 @@ TSAN_CMD=(env "CARGO_TARGET_DIR=${TARGET_DIR}/${TSAN_DIR}" "RUSTFLAGS=-Zsanitize
 ## Races TSan lets through, each with the backlog item that fixes it.
 TSAN_SUPPRESSIONS="cicd/tsan-suppressions.txt"
 
-## Stage 3: the slow leak checks, after the ASan run. On in a full run, off under
-## --quick unless --leakcheck asks, and --no-leakcheck drops them. Any report fails
-## the run.
+## Stage 3: the leak checks, after the ASan run. On by default, --quick too, and
+## --no-leakcheck drops them. Any report fails the run.
 ##  - The heap-growth test (source/src/heap_growth.rs): the main actions in
 ##    rounds, in-process with dhat as the allocator, and the heap at round 2N
 ##    against round N. The dhat-heap feature only changes the silkterm crate, so
@@ -160,8 +159,8 @@ LEAKCHECK_OUT_DIR="cicd/artifacts/leakcheck"
 ##    vendored crates a release binary links, in the image, which has the bundle
 ##    pinned. security-and-quality, since these checks are for correctness bugs
 ##    as well as security ones (2026101714015789). A result the backlog already
-##    has goes in CODEQL_SUPPRESSIONS with its item's ID. Off unless --codeql
-##    or --long.
+##    has goes in CODEQL_SUPPRESSIONS with its item's ID. Off unless --codeql,
+##    --leakcheck or --long.
 CODEQL_SUITE="codeql/rust-queries:codeql-suites/rust-security-and-quality.qls"
 CODEQL_SUPPRESSIONS="cicd/codeql-suppressions.txt"
 

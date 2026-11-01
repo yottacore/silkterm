@@ -6,11 +6,13 @@
 ##		a landscape one and a portrait one, through its Xwayland. The window
 ##		sits on the portrait output at the size kept for it. The portrait
 ##		output is turned off, so sway moves the window onto the landscape one,
-##		where it takes that one's size. The portrait output is turned on again
-##		and sway puts the window back. It must end at the portrait size.
-##			- Turned on just after the window took the landscape size, and
-##			  again 0.8 s after. Both are inside the grace after the window's
+##		where it keeps its size, since that move was sway's. The portrait
+##		output is turned on again and sway puts the window back. It must end
+##		at the portrait size.
+##			- Turned on just after the window's look on the landscape output, and
+##			  again 0.8 s after. Both were inside the grace after the window's
 ##			  own resize, where a move back was dropped (2026100907341816).
+##			- A herded window took the landscape size until 2026102807384201.
 ##			- Neither the dance nor the window's own resizes saves a size.
 ##	- Syntax: run.bash [--bin PATH]   (default: the debug build, then release)
 ##	- Exit: 0 passed, 1 a check failed, 3 nothing ran (no binary, sway,
@@ -142,7 +144,7 @@ fLeaves(){  ## fLeaves <where> <tenths>
 }
 
 ## A window of its own for each dance, so one that ends wrong cannot spoil the next.
-fDance(){  ## fDance <seconds to wait after the landscape size is taken>
+fDance(){  ## fDance <seconds to wait after the look on the landscape output>
 	local -r wait="${1}"
 	local portrait herded landscape final
 	env -u WAYLAND_DISPLAY -u WAYLAND_SOCKET DISPLAY="${xDisplay}" XDG_RUNTIME_DIR="${runDir}" LIBGL_ALWAYS_SOFTWARE=1 \
@@ -166,9 +168,9 @@ fDance(){  ## fDance <seconds to wait after the landscape size is taken>
 	"${wl[@]}" swaymsg "output HEADLESS-2 enable" >/dev/null
 	sleep 4
 	final="$(fWhere)"
-	echo "  portrait: ${portrait}, herded: ${herded}, sized there: ${landscape}, back: ${final}"
+	echo "  portrait: ${portrait}, herded: ${herded}, after its look: ${landscape}, back: ${final}"
 	fCheck "+${wait} s: herded onto the landscape output as it was" test "${herded}" == "HEADLESS-1 ${portrait#* }"
-	fCheck "+${wait} s: took the landscape size there" test "${landscape%% *}" == HEADLESS-1 -a "${landscape#* }" != "${portrait#* }"
+	fCheck "+${wait} s: kept its size there" test "${landscape}" == "${herded}"
 	fCheck "+${wait} s: back on the portrait output at its size" test "${final}" == "${portrait}"
 	fStopOurs "${appPid}"; appPid=""
 }
@@ -189,3 +191,4 @@ echo "all passed"
 ##	History:
 ##		- 20261009 JC: Created.
 ##		- 20261009 JC: The sizes are read from the state file.
+##		- 20261101 JC: A herded window keeps its size.

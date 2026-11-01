@@ -3836,6 +3836,7 @@ impl ApplicationHandler<UserEvent> for App {
 			ignore_moves_until: Instant::now(),
 			layout: Vec::new(),
 			layout_looked: crate::monitor::layout(&window),
+			home: None,
 			size_pinned: cli_win.columns.is_some()
 				|| cli_win.rows.is_some()
 				|| cli_win.pixel_width.is_some()

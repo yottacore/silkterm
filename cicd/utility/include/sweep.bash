@@ -60,6 +60,13 @@ fSweep_Count(){
 	__sweepCounts[${1}]=$(( ${__sweepCounts[${1}]:-0} + ${2} ))
 }
 
+##	fSweep_Note <what>: something removed that has no count, such as the run's
+##	own folder.
+fSweep_Note(){
+	[[ -n "${__sweepCounts[${1}]+x}" ]] || __sweepKinds+=("${1}")
+	__sweepCounts[${1}]=""
+}
+
 ##	fSweep_Remove <dir> <what> [parent]: removes it through the guard and counts
 ##	it under <what>. The caller has checked it is ours. A run folder goes by the
 ##	temp guard; anything else names the <parent> it has to be under. The folders
@@ -298,7 +305,7 @@ fSweep_ZigCache(){
 fSweep_Summary(){
 	local what list="" size=""
 	if ((! ${#__sweepKinds[@]})); then echo "cleanup: nothing stale"; return 0; fi
-	for what in "${__sweepKinds[@]}"; do list+="${list:+, }${__sweepCounts[${what}]} ${what}"; done
+	for what in "${__sweepKinds[@]}"; do list+="${list:+, }${__sweepCounts[${what}]:+${__sweepCounts[${what}]} }${what}"; done
 	if ((__sweepBytes >= 1073741824)); then size="$(awk -v b="${__sweepBytes}" 'BEGIN { printf "%.1f GB", b / 1073741824 }')"
 	elif ((__sweepBytes >= 1048576)); then size="$(( (__sweepBytes + 524288) / 1048576 )) MB"
 	else size=""; fi
@@ -311,3 +318,4 @@ fSweep_Summary(){
 ##		- 20261026 JC: The Zig cap goes by apparent size.
 ##		- 20261028 JC: Removals go through the guard in saferm.bash.
 ##		- 20261031: Run folders, and the stale ones after a few days.
+##		- 20261101: Things removed with no count, for the run's one cleanup line.

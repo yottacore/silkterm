@@ -352,7 +352,9 @@ impl State {
 			self.watch.check_at = Some(now + MONITOR_RECHECK);
 			return;
 		}
+		let herded = herded(self.watch.home, &layout);
 		self.watch.opening = false;
+		self.watch.home = crate::monitor::home(&self.window, &layout);
 		self.watch.layout_looked = layout;
 		// the way back from fullscreen is no size the user set on arrival
 		let pending_at = self
@@ -364,12 +366,13 @@ impl State {
 			now_on.as_deref(),
 			moved_at,
 			pending_at,
+			herded,
 		);
 		mondbg(
-			if settled == Settle::Stay {
-				"stay"
-			} else {
-				"arrive"
+			match settled {
+				Settle::Stay => "stay",
+				Settle::Arrive { .. } if herded => "herded",
+				Settle::Arrive { .. } => "arrive",
 			},
 			now_on.as_deref(),
 			None,
@@ -902,6 +905,7 @@ pub(super) struct MonitorWatch {
 	pub(super) ignore_moves_until: Instant, // the window's own resize can move it, too
 	pub(super) layout: Vec<(i64, i64, i64, i64)>, // the monitors when that resize was asked for
 	pub(super) layout_looked: Vec<(i64, i64, i64, i64)>, // the monitors at the last look
+	pub(super) home: Option<(i64, i64, i64, i64)>, // the one it was on then
 	// The command line set the size, or the font size, and it stays until
 	// the user resizes the window, or zooms the font.
 	pub(super) size_pinned: bool,
@@ -1113,12 +1117,16 @@ enum Settle {
 // What a move does once it has settled. A size the user set before the move
 // began belongs to the monitor it left, and is saved there first. One set
 // after it is the user sizing the window on arrival, which the new monitor's
-// own size must not undo.
+// own size must not undo. A window herded off a monitor that went dark takes
+// no size, since that is the window manager's move, which it undoes when the
+// monitor is back. xfwm4 forgets where to put a window back once the window
+// resizes itself, and left it straddling the two monitors (2026102807384201).
 fn settle(
 	kept_for: Option<&str>,
 	now_on: Option<&str>,
 	moved_at: Option<Instant>,
 	pending_at: Option<Instant>,
+	herded: bool,
 ) -> Settle {
 	let Some(now_on) = now_on else {
 		return Settle::Stay;
@@ -1129,8 +1137,13 @@ fn settle(
 	let save_first = matches!((pending_at, moved_at), (Some(set), Some(moved)) if set < moved);
 	Settle::Arrive {
 		save_first,
-		take_size: pending_at.is_none() || save_first,
+		take_size: !herded && (pending_at.is_none() || save_first),
 	}
+}
+
+// Has the monitor the window was on at the last look gone, or changed?
+fn herded(home: Option<(i64, i64, i64, i64)>, layout: &[(i64, i64, i64, i64)]) -> bool {
+	home.is_some_and(|home| !layout.contains(&home))
 }
 
 // Has the window only left outputs since, and is it still on one?
@@ -1442,12 +1455,12 @@ mod tests {
 		);
 		let (a, b) = (Some("2560x1440_125pct"), Some("1920x1080_100pct"));
 		assert_eq!(
-			settle(a, a, Some(moved), None),
+			settle(a, a, Some(moved), None, false),
 			Settle::Stay,
 			"same monitor"
 		);
 		assert_eq!(
-			settle(a, None, Some(moved), None),
+			settle(a, None, Some(moved), None, false),
 			Settle::Stay,
 			"monitor unknown"
 		);
@@ -1455,19 +1468,35 @@ mod tests {
 			save_first,
 			take_size,
 		};
-		assert_eq!(settle(a, b, Some(moved), None), arrive(false, true));
-		assert_eq!(settle(a, b, Some(moved), Some(before)), arrive(true, true));
-		assert_eq!(settle(a, b, Some(moved), Some(after)), arrive(false, false));
+		assert_eq!(settle(a, b, Some(moved), None, false), arrive(false, true));
+		assert_eq!(
+			settle(a, b, Some(moved), Some(before), false),
+			arrive(true, true)
+		);
+		assert_eq!(
+			settle(a, b, Some(moved), Some(after), false),
+			arrive(false, false)
+		);
 		// the first look after launch on Wayland, where the monitor was unknown
-		assert_eq!(settle(None, b, Some(moved), None), arrive(false, true));
+		assert_eq!(
+			settle(None, b, Some(moved), None, false),
+			arrive(false, true)
+		);
+		// herded off a monitor that went dark
+		assert_eq!(settle(a, b, Some(moved), None, true), arrive(false, false));
+		assert_eq!(
+			settle(a, b, Some(moved), Some(before), true),
+			arrive(true, false)
+		);
 	}
 
 	// The order of a wake from power save, on b23's two monitors: the portrait
 	// one goes dark, the window manager herds the window onto the landscape one,
-	// which sizes it, and the portrait one comes back about a second later and
-	// the window is put back. That move fell in the grace after the window's own
-	// resize and was dropped, so it stayed at the landscape size. The portrait
-	// monitor also read back to the cm, which named a monitor with another size.
+	// and the portrait one comes back about a second later and the window is
+	// put back. That move fell in the grace after the window's own resize and
+	// was dropped, so it stayed at the landscape size. The portrait monitor
+	// also read back to the cm, which named a monitor with another size. Since
+	// 2026102807384201 the the herded window takes no size at all.
 	// Test ID: ddq74
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
@@ -1503,13 +1532,21 @@ mod tests {
 
 		// herded onto the landscape monitor, outside any grace
 		assert!(move_counts(false, &[], || one.clone()));
-		assert_eq!(settle(Some(p_cm), Some(l), at(0), None), arrive);
+		assert!(super::herded(Some(portrait), &one));
+		assert_eq!(
+			settle(Some(p_cm), Some(l), at(0), None, true),
+			Settle::Arrive {
+				save_first: false,
+				take_size: false
+			}
+		);
 		// its own resize there may move it too, and that is not counted
 		let layout_then = one.clone();
 		assert!(!move_counts(true, &layout_then, || one.clone()));
 		// put back 1.2 s in, inside the grace, with the portrait monitor lit
 		assert!(move_counts(true, &layout_then, || both.clone()));
-		assert_eq!(settle(Some(l), Some(p_mm), at(1200), None), arrive);
+		assert!(!super::herded(Some(landscape), &both));
+		assert_eq!(settle(Some(l), Some(p_mm), at(1200), None, false), arrive);
 		assert_eq!(
 			remembered_window(&s, Some(p_mm)),
 			KeptWindow {
@@ -1519,7 +1556,49 @@ mod tests {
 			}
 		);
 		// read to the cm again without a move: the same monitor, so no resize
-		assert_eq!(settle(Some(p_mm), Some(p_cm), at(5000), None), Settle::Stay);
+		assert_eq!(
+			settle(Some(p_mm), Some(p_cm), at(5000), None, false),
+			Settle::Stay
+		);
+	}
+
+	// Two monitors back from power save, one at a time. xfwm4 herds every window
+	// onto the one left as the other goes dark, and puts each back where it was
+	// once it's lit again, unless the window resized itself in between. Then it
+	// stays where it was herded to, which was across the two. Only a monitor the
+	// window was on that has gone or changed makes a move a herd.
+	// Test ID: deqwx
+	#[test]
+	fn a_window_herded_off_a_dark_monitor_takes_no_size() {
+		use super::herded;
+		let (left, right) = ((0, 0, 2560, 1440), (2560, 0, 1920, 1080));
+		let both = [left, right];
+		assert!(!herded(None, &both), "never looked, or on no monitor");
+		assert!(!herded(Some(left), &both), "dragged across");
+		assert!(herded(Some(right), &[left]), "right went dark");
+		assert!(herded(Some(right), &[]), "both dark");
+		assert!(
+			herded(Some(right), &[left, (2560, 0, 1080, 1920)]),
+			"right turned"
+		);
+		// herded onto left, which it now calls home, then put back on right
+		assert!(!herded(Some(left), &both));
+		let (l, r) = (Some("2560x1440_100pct"), Some("1920x1080_100pct"));
+		let t0 = Instant::now();
+		assert_eq!(
+			settle(r, l, Some(t0), None, true),
+			Settle::Arrive {
+				save_first: false,
+				take_size: false
+			}
+		);
+		assert_eq!(
+			settle(l, r, Some(t0), None, false),
+			Settle::Arrive {
+				save_first: false,
+				take_size: true
+			}
+		);
 	}
 
 	// A Wayland window shown with its first frame still being drawn is on no

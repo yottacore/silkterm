@@ -34,6 +34,27 @@ Going forward, new issues in the new template at the bottom of this file, will g
 
 ## Issues
 
+- Regression: "Conserve resources", "Minutes otherwise" isn't working
+	- ID: 2026103010083401
+	- Type: Bug
+	- Status: Waiting for answers
+		- Waits on the question in questions.md: which box, build and setup it failed on.
+	- Opened: 20261030-100834
+	- Opened by: JC
+	- Assigned to: CC
+	- Target OS: All
+	- Notes:
+		- Pre-next-cut.
+		- Need a test case for this to make sure it doesn't keep coming back.
+	- Reproduced: No. On Linux X11 at 79d25ae, an unfocused window on screen with "Minutes otherwise" at 1 and "Minutes when hidden" at 60 let go at 60 to 62 s. Tried with dash and with bash in it, with the performance settings pinned and automatic, and with xfwm4 and with no window manager.
+	- Possible cause:
+		- Windows with Transparency on: a window on screen is never let go there, by design since 7687c4e (2026100319134501). The help says so.
+		- A program that prints now and then in any tab of the window. Output from any pane restarts the wait while the window shows, even from a tab not in front.
+	- Progress log:
+		- 20261101: No change in the log breaks it. The release decision and its inputs are as they were at 75ebca3 (10-05), apart from test attributes. The config, dialog and save paths for the setting are pinned by davbd and ddp90.
+		- 20261101: New test, so it can't come back unseen on Linux: the window is launched unfocused on screen with the waits read from its file, and has to let go after the minute and not well before it. Verified: it fails with "Minutes otherwise" pointed at the hidden wait, and passes at 79d25ae.
+	- Test case: `cicd/tests/idleother/run.bash` (deqy2), in the full run.
+
 - The window doesn't paint while the GPU is busy or short on memory, and stays blank after the load ends
 	- ID: 2026100312470535
 	- Type: Bug
@@ -371,50 +392,38 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Test case: None new. The ignores are test attributes, checked by the runs above.
 	- Branch: rnd1023
 
-- When two screens return after screen power sleep or off, SilkTerm seems to reposition itself in between them
-	- ID: 2026102807384201
-	- Type: Bug
-	- Status: Queued
-	- Severity: High
-	- Opened: 20261028-073842
-	- Opened by: JC
-	- Incorrect behavior: When two screens return after screen power sleep or off, SilkTerm seems to reposition itself in between them.
-	- Expected behavior: It stays where it was. None of the other ~dozen application windows move, other terminals included.
-	- Notes:
-		- Pre-next-cut.
-		- Work first after the CICD issues.
-
-- CICD reset: test IDs
-	- ID: 2026102416233810
+- CICD reset: CICD process gaps
+	- ID: 2026102416233812
 	- Type: Task
-	- Status: Queued
-	- Priority: High
+	- Status: Started
+	- Priority: Avg
 	- Opened: 20261024-162338
 	- Opened by: CC
-	- Related IDs: 2026092711142900
+	- Related IDs: 2026101714445004, 2026101913360695
 	- Target OS: All
 	- Requirements:
-		- Per the ID and per-test line bullets in `Testing` in the shared CICD rules. Every test has an ID, and the check stage refuses a missing or shared one.
-		- IDs move from base 62 milliseconds to whole minutes since 2000-01-01 00:00 UTC, in lowercase Crockford base 32, like `decp8`. Each existing ID is converted once, from the time it already stands for. When 2 land on one minute, the newer takes the next free one.
-		- The ID tool and the check stage follow the new form.
-		- Every regression and fuzz test prints one line, such as `PASS decp8 <name>`, with `FAIL` or `SKIP` in place of `PASS`. The scroll harness scenes and the fuzz cases have no IDs of their own yet.
+		- What else in the shared CICD rules isn't done yet, past the other reset items:
+			- The fast leak checks run under `--quick` too.
+			- The leak checks that take hours, such as the whole suite under Miri, run only under `--long` or `--leakcheck`.
+			- CodeQL runs in the default run, not only behind `--codeql`.
+			- Miri runs from a nightly pinned in the image. Only the host's nightly has it now.
+			- The cleanup line at the end says roughly what it freed.
 		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
-		- Overrides: 2026092711142900's decision that the scroll harness scenes keep their PASS lines with no IDs, and the base 62 rule in the private notes.
+		- Overrides: design.md's CodeQL and heap growth bullets under "Delivery", which keep CodeQL behind `--codeql` and every leak check out of `--quick`.
 	- Progress log:
-		- 20261028: Split in 3, too big for one sitting. 2026102819264421 takes the ID tool, the check and converting every ID, 2026102819265198 one PASS, FAIL or SKIP line per test, and 2026102819265312 IDs for the scroll scenes and fuzz cases. This item closes when they do.
-		- 20261028: 2026102819264421 is in, waiting on the full run.
-
-- Regression: "Conserve resources", "Minutes otherwise" isn't working
-	- ID: 2026103010083401
-	- Type: Bug
-	- Status: Queued
-	- Opened: 20261030-100834
-	- Opened by: JC
-	- Assigned to: CC
-	- Target OS: All
-	- Notes:
-		- Pre-next-cut.
-		- Need a test case for this to make sure it doesn't keep coming back.
+		- 20261101: Split. 2026110112424508 has the cleanup line. The Miri parts, the `miri` component in the image and the step behind `--leakcheck`, are already 2026102320591318's requirements, so they stay there. This item closes when both are done.
+		- 20261101: 2026110112424508 is done: one cleanup line at the end. The same in `cicd-win.ps1` is 2026110112581983. Left: that one and 2026102320591318.
+		- 20261101: The heap-growth test runs under `--quick` too. It took about 8 s to build and 20 s to run in the last full run.
+		- 20261101: `--leakcheck` is every leak check now, so it adds CodeQL, under `--quick` too. `--no-leakcheck` after it still drops them all.
+	- Decisions:
+		- 20261101: CodeQL stays out of the default run, against this item's wording. That run takes about an hour without it, and the same reset sends a step that pushes it past the hour to `--long`, as 2026102616543936 did on 10-28. It also fails until 2026102211462005 files what it finds.
+		- 20261101: The ASan and LSan run stays a step of its own, with `--no-asan`, rather than one of the leak checks the two flags turn on and off. It stays out of `--quick`, since it takes about 12 minutes.
+		- 20261101: Miri under `--long` as well as `--leakcheck` goes to 2026102320591318, whose requirements name `--leakcheck` only.
+		- 20261101: dd5nn's `--quick` check expects `leak=1`, was `leak=0`, and its CodeQL plan check expects "CodeQL (off; --leakcheck or --long adds it)", was "CodeQL (off; --codeql or --long adds it)".
+	- Verified: 20261101. The engine test passed, 177 checks, and 7 failed against the old cicd.bash. `cicd.bash --list` showed the heap-growth test on under `--quick`, CodeQL on with `--leakcheck`, and the leak checks off with `--no-leakcheck` after `--leakcheck`. `cicd/cicd.bash --backlog-run-quick`, all five areas, passed in 175 s at load 7.
+		- Swept: every reader of the leak checks' place in a run: cicd.bash's help, plan and step lines, config.bash, design.md, install.md, `cicd-win.ps1 -Leakcheck`'s help, and the container and cicd-win tests, which don't depend on `--quick` leaving them out.
+	- Branch: rnd1101
+	- Test case: `cicd/tests/engine/run.bash` (dd5nn), 3 new checks for `--leakcheck` and CodeQL, and 3 changed.
 
 - Regression: On Linux, the settings dialog is detached from the main window, and is its own alt+tab target
 	- ID: 2026103010083402
@@ -553,52 +562,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Notes:
 		- Pre-next-cut.
 
-- CICD reset: the test helpers' own run folders under HOST_TEMP
-	- ID: 2026103115564575
-	- Type: Task
-	- Status: Queued
-	- Priority: Avg
-	- Opened: 20261031-155645
-	- Opened by: CC
-	- Parent ID: 2026102807494157
-	- Target OS: All
-	- Requirements:
-		- A test run alone, with no folder handed down, makes its folder the way the pipeline does, `${HOST_TEMP}/silkterm/<YYYYmmDD-HHMMSS>_<NNN>/` with a `run.pid`, in `_testdir.bash`, `_testdir.py`, `_testdir.ps1` and `source/src/testdir.rs`. Now it's `<temp>/test_silkterm_<stamp>`.
-		- Settle whether a lone run that fails still keeps its folder, since a failing Rust test's files are its record, and record the call.
-		- ddazx, de5e9 and the PowerShell remove test follow the new name.
-
-- CICD reset: the Windows pipeline's run folders under HOST_TEMP
-	- ID: 2026103115564581
-	- Type: Task
-	- Status: Queued
-	- Priority: Avg
-	- Opened: 20261031-155645
-	- Opened by: CC
-	- Parent ID: 2026102807494157
-	- Prereq IDs: 2026103115564575
-	- Target OS: Windows
-	- Requirements:
-		- `cicd-win.ps1` and the test boxes' runs take the same run folder as `cicd.bash`, `${HOST_TEMP}/silkterm/<YYYYmmDD-HHMMSS>_<NNN>/`, with `HOST_TEMP` falling back to `%TEMP%`, and `TEMP` and `TMP` pointed at it.
-		- Removed at the end, on failure too. `-KeepTemp` keeps it and prints where. Stale ones go after 2 days, when no process from `run.pid` is left, in place of the ledger and the newest few.
-		- Run on b29w through the host lock.
-
-- CICD reset: the PowerShell recursive removals through a guard
-	- ID: 2026102807494139
-	- Type: Task
-	- Status: Queued
-	- Priority: Avg
-	- Opened: 20261028-074941
-	- Opened by: CC
-	- Parent ID: 2026102416233803
-	- Prereq IDs: 2026102807494103
-	- Target OS: Windows
-	- Requirements:
-		- A PowerShell copy of the guard, with the same rules and the one-parent form as the bash one in 2026102807494103. Under `$env:TEMP`'s project folder counts, since the Windows temp folder isn't named tmp.
-		- Every `Remove-Item -Recurse` goes through it, about 35 lines.
-		- A test like dehwp, run on b29w.
-	- Progress log:
-		- 20261028: Split, since it doesn't fit one sitting. Children: 2026102808471071 (the guard, and `cicd-win.ps1`'s release artifacts folder), 2026102808471076 (the test scripts), 2026102808472645 (`install.ps1`).
-
 - Leak checks: Miri sort, settings_ui
 	- ID: 2026102407430381
 	- Type: Task
@@ -672,6 +635,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- The canary's two tests run apart, since a UB report stops the binary. The step stops unless Miri reports the race as a data race and the forgotten Vec as leaked memory.
 		- A `--no-miri` flag, a plan line, and the cleanup and rar exclude lines. New container and engine cases, watched to fail.
 		- Miri runs only when `--leakcheck` is given, and says first that it's very slow. A run with no flags keeps the other leak checks, which stay on by default. Tests over a time bar under Miri, such as 60 s, are ignored under Miri as too slow, so even a `--leakcheck` run takes the fast part (answer on 2026102320591323).
+		- Under `--long` too, not only `--leakcheck`, per the CICD process gaps item 2026102416233812.
 
 - Leak checks: CodeQL watched to fail, and its first findings filed
 	- ID: 2026102211462005
@@ -707,50 +671,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Notes:
 		- Split from 2026101714445005. Its heap-growth test covers some of the same actions in-process. This one is for what that can't reach: windows, tabs and splits opened and closed, the GPU, the Settings dialog and a real PTY.
 		- `cicd/tests/allocs/run.bash` already drives a window on a private Xvfb.
-
-- CICD reset: temp files and safe removal
-	- ID: 2026102416233803
-	- Type: Task
-	- Status: Queued
-	- Priority: Avg
-	- Opened: 20261024-162338
-	- Opened by: CC
-	- Related IDs: 2026101909222600
-	- Prereq IDs: 2026102507092877
-		- The render-node test skips under a long temp path, so moving run folders under `HOST_TEMP` first would make it skip on every run.
-	- Target OS: All
-	- Requirements:
-		- Per `Temp files` and `Safe removal` in the shared CICD rules.
-		- A run's folder is `${HOST_TEMP}/silkterm/<YYYYmmDD-HHMMSS>_<NNN>/`, on every OS, with `TMPDIR`, `TEMP` and `TMP` pointed at it. Now it's a `test_silkterm_<stamp>` folder straight under the temp dir, plus the container's /tmp under the target dir.
-		- A run removes its own folder at the end, on failure and Ctrl+C too, and `--keep-temp` keeps it and prints where. Now a failed run keeps it, and the newest 5 of those stay.
-		- Stale folders go after 2 days, when no process from the folder's `run.pid` is left.
-		- Every recursive removal goes through the repo's copy of the shared guard. About 63 `rm -r` lines in the scripts and 35 `Remove-Item -Recurse` lines in PowerShell have none. File list in the private notes.
-			- Add the short socket folder cleanups in `swnoshm` and `livecfg` from 2026102507092877, and their siblings in `wlclip`, `monwl`, `monwake` and `dpirand`.
-		- The release artifacts folder in the repo is cleared through a guard that names that one parent.
-		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
-		- Overrides: 2026101909222600's rule that failed runs keep their folders and the newest 5 stay.
-	- Progress log:
-		- 20261028: Split, since it doesn't fit one sitting. Children: 2026102807494103 (the guard, in the pipeline's own scripts, and the release artifacts folder), 2026102807494121 (the test and utility scripts, with the socket folders), 2026102807494139 (PowerShell), 2026102807494157 (run folders under `HOST_TEMP`, removed at the end, stale after 2 days).
-		- 20261028: 2026102807494103 is in.
-
-- CICD reset: CICD process gaps
-	- ID: 2026102416233812
-	- Type: Task
-	- Status: Queued
-	- Priority: Avg
-	- Opened: 20261024-162338
-	- Opened by: CC
-	- Related IDs: 2026101714445004, 2026101913360695
-	- Target OS: All
-	- Requirements:
-		- What else in the shared CICD rules isn't done yet, past the other reset items:
-			- The fast leak checks run under `--quick` too.
-			- The leak checks that take hours, such as the whole suite under Miri, run only under `--long` or `--leakcheck`.
-			- CodeQL runs in the default run, not only behind `--codeql`.
-			- Miri runs from a nightly pinned in the image. Only the host's nightly has it now.
-			- The cleanup line at the end says roughly what it freed.
-		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
-		- Overrides: design.md's CodeQL and heap growth bullets under "Delivery", which keep CodeQL behind `--codeql` and every leak check out of `--quick`.
 
 - Make sure shcl files from v1.0.0-beta3 are accurately converted to the latest shcl spec
 	- ID: 2026102818080401
@@ -937,6 +857,37 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Branch: machang
 	- Test case: `a_hidden_window_that_cannot_draw_is_shown_anyway` (ddc9r), seen failing without the fix. The memory side has no unit test, since it needs a GPU.
 	- Closed: 20261001-155746
+
+- When two screens return after screen power sleep or off, SilkTerm seems to reposition itself in between them
+	- ID: 2026102807384201
+	- Type: Bug
+	- Status: Done
+	- Needs hand testing: On b23 under xfwm4, with the window on each monitor in turn: let both screens sleep, wake them, and see the window back where it was, at its size.
+	- Severity: High
+	- Opened: 20261028-073842
+	- Opened by: JC
+	- Assigned to: CC
+	- Related IDs: 2026100907341816
+	- Target OS: Linux
+	- Test environment: b23, xfwm4 4.20
+	- Incorrect behavior: When two screens return after screen power sleep or off, SilkTerm seems to reposition itself in between them.
+	- Expected behavior: It stays where it was. None of the other ~dozen application windows move, other terminals included.
+	- Reproduced: 20261101, headless, with two outputs under xfwm4. Turned off, the portrait output's window was moved onto the landscape one and took that one's size. Turned on again, the window stayed there, and an xterm beside it went back.
+	- Actual cause: xfwm4 notes where each window was as a monitor goes, and puts it back once the monitor returns, unless the window resized itself in between. SilkTerm took the size kept for the monitor it was herded onto, so xfwm4 left it where it had herded it. Since 2026100907341816 that took place even within a second of the move.
+	- Notes:
+		- Pre-next-cut.
+		- Work first after the CICD issues.
+	- Decisions:
+		- 20261101: A window herded off a monitor that went dark, or changed, keeps its size and takes no other. It notes the monitor it is on, so a size the user sets there is kept for that one. This reverses 2026100907341816's choice that a herded window takes the other monitor's size. Other windows keep their size too.
+		- 20261101: A herd is told from a user's drag by the monitor the window was on at its last look being gone from the layout. Where the window can't say where it is, as on native Wayland, nothing changed.
+		- 20261101: Updated an assert, `monwake` (ddq75): "took the landscape size there" is now "kept its size there". In ddq74 the herd step now takes no size.
+	- Actual fix: The look after a move takes no monitor size when the monitor the window was on at the last look has left the layout. design.md says so under the per-monitor size.
+	- Swept: every call that resizes the main window. The monitor look is the only one made without the user, apart from the system's own resize for a new scale. The Settings and zoom resizes are the user's. Dialogs are placed once, when they open.
+	- Verified: 20261101. The new xfwm4 test fails both cases on the old build and passes on the fix. monwake passes on the fix, and fails only its changed check on the old build. The unit tests, clippy, fmt, script lints, docs and test IDs pass.
+	- Branch: rnd1101
+	- Test case: `cicd/tests/herdback/run.bash` (deqx1), the window back where it was under xfwm4. `a_window_herded_off_a_dark_monitor_takes_no_size` (deqwx). `monwake` (ddq75) and ddq74, changed.
+	- Acceptance signoff: Self-closed: deqx1 passed at ce9d872. A copy that turns both outputs off in turn and back on in either order, 1 s and 4 s apart, put the window back where it was, at its size, all 4 times. Not run on b23's real monitors.
+	- Closed: 20261101-141641
 
 - CICD reset: the bash guard doesn't refuse HOST_TEMP itself or a project's whole folder under it
 	- ID: 2026103115170424
@@ -1548,6 +1499,30 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Verified: seed 30 alone, the native unit tests (1058 passed), the fuzz soak at 60 seconds a target (23 targets, all clean), and native and Windows-target clippy.
 	- Acceptance signoff: JC, 20261003.
 	- Closed: 20261003-193000
+
+- CICD reset: test IDs
+	- ID: 2026102416233810
+	- Type: Task
+	- Status: Done
+	- Priority: High
+	- Opened: 20261024-162338
+	- Opened by: CC
+	- Related IDs: 2026092711142900
+	- Target OS: All
+	- Requirements:
+		- Per the ID and per-test line bullets in `Testing` in the shared CICD rules. Every test has an ID, and the check stage refuses a missing or shared one.
+		- IDs move from base 62 milliseconds to whole minutes since 2000-01-01 00:00 UTC, in lowercase Crockford base 32, like `decp8`. Each existing ID is converted once, from the time it already stands for. When 2 land on one minute, the newer takes the next free one.
+		- The ID tool and the check stage follow the new form.
+		- Every regression and fuzz test prints one line, such as `PASS decp8 <name>`, with `FAIL` or `SKIP` in place of `PASS`. The scroll harness scenes and the fuzz cases have no IDs of their own yet.
+		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
+		- Overrides: 2026092711142900's decision that the scroll harness scenes keep their PASS lines with no IDs, and the base 62 rule in the private notes.
+	- Progress log:
+		- 20261028: Split in 3, too big for one sitting. 2026102819264421 takes the ID tool, the check and converting every ID, 2026102819265198 one PASS, FAIL or SKIP line per test, and 2026102819265312 IDs for the scroll scenes and fuzz cases. This item closes when they do.
+		- 20261028: 2026102819264421 is in, waiting on the full run.
+		- 20261101: All 3 children are Done, so this closes.
+	- Test case: The children's tests, 2026102819264421, 2026102819265198 and 2026102819265312.
+	- Acceptance signoff: Self-closed: every child is Done.
+	- Closed: 20261101-2010
 
 - CICD reset: one PASS, FAIL or SKIP line per test
 	- ID: 2026102819265198
@@ -4120,6 +4095,178 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- The Windows run this item came from named only these four. That full suite was not run again.
 	- Acceptance signoff: Self-closed: test fixes only, and all four failed before the fix and pass after on Windows.
 	- Closed: 20260930-125357
+
+- CICD process gaps: the cleanup line in cicd-win.ps1
+	- ID: 2026110112581983
+	- Type: Task
+	- Status: Done
+	- Priority: Avg
+	- Opened: 20261101-125819
+	- Opened by: CC
+	- Parent ID: 2026102416233812
+	- Prereq IDs: 2026110112424508
+	- Target OS: Windows
+	- Requirements:
+		- The same one cleanup line at the end of a `cicd-win.ps1` run as `cicd.bash` prints since 2026110112424508: what went, the run's own folder included, and about how much it freed.
+		- Now it says only how many old run folders went, near the start, with no size.
+		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
+	- Progress log:
+		- 20261101: The run ends with one line, as `cicd.bash` prints it, such as "cleanup: removed 1 stale run folders, the run's temp folder; about 2 MB freed". It counts the stale sweep, the old ledger's folders and the run's own folder, with the size of each taken just before it goes.
+		- 20261101: On a pass the line comes just before the "done" section. On a failure, `fDie` or Ctrl+C it comes from the `finally` block, after the run's folder goes. `-List` prints none, since it makes no folder. With nothing removed, such as under `-KeepTemp`, it says "cleanup: nothing stale".
+	- Decisions:
+		- 20261101: A folder's size is the bytes of its files, hidden ones included, not through a link, where `cicd.bash` reads blocks with `du -sk`. Windows has no cheap block count, and the line only says "about".
+		- 20261101: The old ledger's share is the size of the folders it names before the sweep, less what is still there after, since the sweep goes through `_testdir.ps1` and returns only a count.
+		- 20261101: The `cicd.bash` that `-Wsl` runs prints its own line inside the Linux half's step, as the run in the container does for `cicd.bash`.
+		- 20261101: dd5nw's text check that the run sweeps right after `fRunDirMake` now looks for the two `fCleanupCount` lines, was `$gone = (fSweepStaleRuns ...) + (fOldLedger ...`. It still checks the same order.
+	- Verified: 20261101. dd5nw passed, with 14 new checks for the line, its counts and sizes, hidden files and links, once only, none without a run folder, and its place before "done" and in the `finally` block. Against the old `cicd-win.ps1` the lift stopped at the first missing function. A copy with no line in the `finally` block failed 1 check, one with no size from the stale sweep 1, and one with .NET's default file listing 3. On b29w every check up to the path map passed, the new ones included. The path map part uses folder names Windows refuses, so it runs only here. `--backlog-run-quick scripts` passed.
+		- 20261101, b29w at ce9d872: `cicd-win.ps1 -MergeGate` passed all 8 steps, through the host lock. It printed no "old run folder(s)" line near the start, and one line just before the "done" section: "cleanup: removed 1 old test run folders, the run's temp folder; under 1 MB freed".
+		- Swept: every place `cicd-win.ps1` removes something: `fRunDirEnd`, `fSweepStaleRuns`, `fOldLedger`, and the release artifacts folder, which is cleared for the next build rather than freed, and old run logs past the newest few, which `cicd.bash` doesn't count either, so neither is counted. `cicd-win.ps1` has no stale build output sweep to count. `_testdir.ps1`'s own removals are its tests' folders, not the run's. `cicd.bash`'s line is 2026110112424508.
+	- Branch: rnd1101
+	- Test case: `cicd/tests/cicd-win/run.bash` (dd5nw), its `_lift.ps1`, 14 new checks and 1 changed.
+	- Closed: 20261101-142930
+
+- CICD process gaps: one cleanup line at the end, with what it freed
+	- ID: 2026110112424508
+	- Type: Task
+	- Status: Done
+	- Priority: Avg
+	- Opened: 20261101-124245
+	- Opened by: CC
+	- Parent ID: 2026102416233812
+	- Target OS: All
+	- Requirements:
+		- The run ends with one cleanup line: what it removed and roughly what that freed, the run's own folder, its containers, the old images and volumes and the docker build cache included.
+		- Now the stale sweep's line comes before the run's folder and the docker cleanup, and docker gets a line of its own after the run's end, with each kind's size before and after rather than what was freed.
+		- The build cache prune says nothing freed, even when the docker line shows the build cache shrinking, such as 189 GB to 186.4 GB on 20261101.
+		- For docker, the freed figure comes from `docker system df` before and after, since shared layers make sizes overlap.
+		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
+	- Estimated effort: Avg
+	- Progress log:
+		- 20261101: The run ends with one line, such as "cleanup: removed 1 stale run folders, 2 of the run's containers, docker build cache over a week old, the run's temp folder; about 5.2 GB freed". It counts the stale sweep, the run's own folder, its containers, untagged and older images, cache volumes, and the build cache prune. The run folder's size comes from `du`, docker's from `docker system df` just before its cleanup and just after.
+		- 20261101: In a full run the line comes before the skip list and the "done" section, so the skip list still comes last. On a failure, Ctrl+C or a backlog quick run, it's the last line the run's end prints.
+		- 20261101: The build cache prune is read as "Total:" too, which newer docker prints, as well as "Total reclaimed space:".
+	- Decisions:
+		- 20261101: The per-volume "removed the volume X, why" and "left ... still in use" lines stay, since they say why. The volumes are counted in the one line too.
+		- 20261101: A run in the container still prints its own line for what it swept there, before the run outside prints the last one. Its counts can't reach the run outside.
+		- 20261101: Container test (ddrp2) asserts changed: "the run says so" looks for "2 of the run's containers" in the cleanup line, was "cleanup: stopped and removed 2 of the run"; "saying what it freed" and "docker's sizes before and after" became the line's build cache entry and "about 5.2 GB freed", was "pruned, 1.2GB freed" and "docker: Images 1GB -> 900MB, Build Cache 7.5GB -> 2GB". Cleanup test (de5e9): the line before "done" and the Zig sweep's order go by `fRunEnd 0`, was `fSweep_Summary`. Engine test (dd5nn): the skip list after `fRunEnd 0`, was after `fSweep_Summary`.
+		- 20261101: The same in `cicd-win.ps1` is 2026110112581983.
+	- Verified: 20261101. Container test passed, 180 checks, cleanup test and engine test passed. Against the previous cicd.bash and sweep.bash, 4 container, 2 cleanup and 1 engine checks failed. A real `cicd/cicd.bash --backlog-run-quick` passed in 202 s at load 17 and ended with "cleanup: removed the run's temp folder; under 1 MB freed". Shellcheck is clean.
+		- Swept: every place a cleanup line was printed: `fSweep_Summary`, `fContainerEnd`, `fContainerTags`, `fContainerVolumes`, `fRunDir_End`, build.md. `cicd-win.ps1` prints its own, filed as 2026110112581983. `ci-mac.bash` prints none.
+	- Branch: rnd1101
+	- Test case: `cicd/tests/container/run.bash` (ddrp2), 2 new checks and 3 changed; `cicd/tests/cleanup/run.bash` (de5e9) and `cicd/tests/engine/run.bash` (dd5nn), 3 changed.
+	- Closed: 20261101-125900
+
+- CICD reset: the test helpers' own run folders under HOST_TEMP
+	- ID: 2026103115564575
+	- Type: Task
+	- Status: Done
+	- Priority: Avg
+	- Opened: 20261031-155645
+	- Opened by: CC
+	- Parent ID: 2026102807494157
+	- Target OS: All
+	- Requirements:
+		- A test run alone, with no folder handed down, makes its folder the way the pipeline does, `${HOST_TEMP}/silkterm/<YYYYmmDD-HHMMSS>_<NNN>/` with a `run.pid`, in `_testdir.bash`, `_testdir.py`, `_testdir.ps1` and `source/src/testdir.rs`. Now it's `<temp>/test_silkterm_<stamp>`.
+		- Settle whether a lone run that fails still keeps its folder, since a failing Rust test's files are its record, and record the call.
+		- ddazx, de5e9 and the PowerShell remove test follow the new name.
+	- Progress log:
+		- 20261101: `_testdir.bash`, `_testdir.py`, `_testdir.ps1` and `testdir.rs` make a lone run's folder at `${HOST_TEMP}/silkterm/<YYYYmmDD-HHMMSS>_<NNN>/`, falling back to the temp dir, with the process's PID in `run.pid`. The last part is a plain mkdir, and a taken name counts up. The owner mark stays, for the removal at the end.
+		- 20261101: `_testdir.ps1` still takes a folder with the old name, which the Windows pipeline's ledger names, until 2026103115564581 replaces the ledger.
+		- 20261101: Test changes. In ddazt the 900 ms wait assert is commented out, since a taken name counts up with no wait now. ddazw's stamp length went from 17 to 15, with no hundredths. ddazr, ddazs and ddazt use the new names.
+	- Decisions:
+		- 20261101: A lone run that fails still keeps its folder, and says where, since a failing test's files are its record and `cargo test` has no `--keep-temp`. It sits with the pipeline's run folders now, so the full run's stale sweep takes it after 2 days once its `run.pid` process is gone. A pipeline run hands its folder down, so it still goes at the end, failed or not.
+		- 20261101: `HOST_TEMP` wins over `TMPDIR`, as in `cicd.bash`. The project's folder is left in place when a run's folder goes.
+		- 20261101: The owner mark with its token stays beside `run.pid`. A PID can be read and reused, and the token can't be guessed from outside the 0700 folder.
+	- Verified: 20261101. ddazx passes (96 checks), with new cases for `HOST_TEMP` winning over the temp dir, the fallback, and `run.pid`, in Rust, bash, Python and PowerShell. de5e9 passes, with a lone run's kept folder taken by the stale sweep. dde3v passes under pwsh. The testdir unit tests pass, deqts new. Against the old helpers, ddazx's new cases failed 33, de5e9 3 and dde3v 4. `--backlog-run-quick` passed every area. `test-id.py --check` passes. dd5nw failed after the first commit, since its lift test left `HOST_TEMP` set and looked for the folder right in its stand-in temp folder, and passes now.
+		- Swept: every `test_silkterm` in the tree, and every test that reads the parent of the test folder.
+	- Verified: 20261101, on b29w. dde3v passes under pwsh and Windows PowerShell 5.1, and de5ea under pwsh. The wingui harness stand-in names and a comment in mem-per-window follow the new name. The container's `/tmp/test_silkterm_<step>` is a handed-down folder and stays. de5e9's old ledger cases keep the old names on purpose.
+	- Acceptance signoff: Self-closed: the tests name the new folder and fail against the old helpers. The call on a failed lone run is in Decisions.
+	- Closed: 20261101-1238
+	- Test case: ddazx (`cicd/tests/testdir/run.bash`), de5e9 (`cicd/tests/cleanup/run.bash`), dde3v (`cicd/tests/testdir/remove.ps1`), de5ea (`cicd/tests/cleanup/win.ps1`), and ddazr, ddazs, ddazt, ddazw and deqts in `testdir.rs`.
+	- Branch: rnd1101
+
+- CICD reset: the Windows pipeline's run folders under HOST_TEMP
+	- ID: 2026103115564581
+	- Type: Task
+	- Status: Done
+	- Priority: Avg
+	- Opened: 20261031-155645
+	- Opened by: CC
+	- Parent ID: 2026102807494157
+	- Prereq IDs: 2026103115564575
+	- Target OS: Windows
+	- Requirements:
+		- `cicd-win.ps1` and the test boxes' runs take the same run folder as `cicd.bash`, `${HOST_TEMP}/silkterm/<YYYYmmDD-HHMMSS>_<NNN>/`, with `HOST_TEMP` falling back to `%TEMP%`, and `TEMP` and `TMP` pointed at it.
+		- Removed at the end, on failure too. `-KeepTemp` keeps it and prints where. Stale ones go after 2 days, when no process from `run.pid` is left, in place of the ledger and the newest few.
+		- Run on b29w through the host lock.
+	- Progress log:
+		- 20261101: `cicd-win.ps1` makes its run's folder with the test helper, at `${HOST_TEMP}\silkterm\<YYYYmmDD-HHMMSS>_<NNN>\` or under `%TEMP%`, with its PID in `run.pid`, and points `TEMP` and `TMP` at it. It's the tests' folder too, unless one is handed in.
+		- 20261101: The folder goes in the script's `finally`, so on a pass, a failure, `fDie` and Ctrl+C. A failed run says `-KeepTemp` keeps it. `-KeepTemp` keeps it and prints where.
+		- 20261101: Each run removes run folders over 2 days old whose `run.pid` names no process still there, in place of the newest 5. The old ledger's folders go once, under the same checks, and then the ledger. `fTestDir_Record` is gone.
+		- 20261101: The test boxes' wingui runs already make their folder through `_testdir.ps1`, so since 2026103115564575 it's in the console user's `%TEMP%\silkterm\`, and `_run.ps1` points `TEMP` and `TMP` at it.
+		- 20261101: Test changes. In de5ea, "a folder handed down is never written down" and the check that a run's folder is written down with its token are commented out, since nothing writes one down now. dd5nw's lift test takes their place.
+	- Decisions:
+		- 20261101: The stale sweep runs at every run past `-List`, as the ledger sweep did, rather than only in a full run as `cicd.bash` has it. It's a listing of one folder, and a Windows run is rarer.
+		- 20261101: `TEMP` and `TMP` point at the run's folder for the whole run, builds included, per this item. That reverses the older note that builds keep the system temp folder.
+		- 20261101: The stale sweep doesn't check a folder's owner, as `cicd.bash` does with `find -user`. The folder is in the account's own temp folder unless `HOST_TEMP` says otherwise.
+		- 20261101: wingui's `runs.txt` stays. It removes a killed run's box folder by its token on the next run, which is sooner than 2 days.
+		- 20261101: The b29w run was of the helper and the pipeline's run folder functions, sent as files, since the box's clone takes only a pushed branch. A whole `cicd-win.ps1` run on b29w is left for the batch.
+	- Verified: 20261101. dd5nw's lift test passes here and on b29w, with new checks for the run's folder, `run.pid`, `TEMP` and `TMP`, `HOST_TEMP`, a handed-in test folder, the end on a pass, a failure and `-KeepTemp`, the stale sweep, the old ledger, and that the `finally` block and `fDie` reach the end. On b29w a link is a junction. Broken copies of `cicd-win.ps1` failed it: no PID check (2 checks), a failed run kept (2), `TEMP` not moved (2), no end in `finally` (1). With no link check in the sweep, the guard still refused the link. de5e9, de5ea, dde3v, the PowerShell lint and `--backlog-run-quick scripts docs` pass.
+		- 20261101, b29w at ce9d872: `cicd-win.ps1 -MergeGate` passed all 8 steps, through the host lock. Before it, the target dir's `.cicd-test-folders` named 2 old folders. After it, `%TEMP%\silkterm` held no run folder and `.cicd-test-folders` was gone.
+		- Swept: every caller of `fTestDir_Record`, `fTestDir_Sweep`, `$TestFolderKeep`, `.cicd-test-folders` and `fTestDir_End` in `cicd-win.ps1`, and the wingui box scripts that make or use a run folder.
+	- Test case: dd5nw (`cicd/tests/cicd-win/run.bash`, its `_lift.ps1`), de5ea (`cicd/tests/cleanup/win.ps1`).
+	- Branch: rnd1101
+	- Closed: 20261101-142930
+
+- CICD reset: the PowerShell recursive removals through a guard
+	- ID: 2026102807494139
+	- Type: Task
+	- Status: Done
+	- Priority: Avg
+	- Opened: 20261028-074941
+	- Opened by: CC
+	- Parent ID: 2026102416233803
+	- Prereq IDs: 2026102807494103
+	- Target OS: Windows
+	- Requirements:
+		- A PowerShell copy of the guard, with the same rules and the one-parent form as the bash one in 2026102807494103. Under `$env:TEMP`'s project folder counts, since the Windows temp folder isn't named tmp.
+		- Every `Remove-Item -Recurse` goes through it, about 35 lines.
+		- A test like dehwp, run on b29w.
+	- Progress log:
+		- 20261028: Split, since it doesn't fit one sitting. Children: 2026102808471071 (the guard, and `cicd-win.ps1`'s release artifacts folder), 2026102808471076 (the test scripts), 2026102808472645 (`install.ps1`).
+		- 20261101: All 3 children are Done, so this closes.
+	- Test case: The children's tests, 2026102808471071, 2026102808471076 and 2026102808472645.
+	- Acceptance signoff: Self-closed: every child is Done.
+	- Closed: 20261101-2010
+
+- CICD reset: temp files and safe removal
+	- ID: 2026102416233803
+	- Type: Task
+	- Status: Done
+	- Priority: Avg
+	- Opened: 20261024-162338
+	- Opened by: CC
+	- Related IDs: 2026101909222600
+	- Prereq IDs: 2026102507092877
+		- The render-node test skips under a long temp path, so moving run folders under `HOST_TEMP` first would make it skip on every run.
+	- Target OS: All
+	- Requirements:
+		- Per `Temp files` and `Safe removal` in the shared CICD rules.
+		- A run's folder is `${HOST_TEMP}/silkterm/<YYYYmmDD-HHMMSS>_<NNN>/`, on every OS, with `TMPDIR`, `TEMP` and `TMP` pointed at it. Now it's a `test_silkterm_<stamp>` folder straight under the temp dir, plus the container's /tmp under the target dir.
+		- A run removes its own folder at the end, on failure and Ctrl+C too, and `--keep-temp` keeps it and prints where. Now a failed run keeps it, and the newest 5 of those stay.
+		- Stale folders go after 2 days, when no process from the folder's `run.pid` is left.
+		- Every recursive removal goes through the repo's copy of the shared guard. About 63 `rm -r` lines in the scripts and 35 `Remove-Item -Recurse` lines in PowerShell have none. File list in the private notes.
+			- Add the short socket folder cleanups in `swnoshm` and `livecfg` from 2026102507092877, and their siblings in `wlclip`, `monwl`, `monwake` and `dpirand`.
+		- The release artifacts folder in the repo is cleared through a guard that names that one parent.
+		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
+		- Overrides: 2026101909222600's rule that failed runs keep their folders and the newest 5 stay.
+	- Progress log:
+		- 20261028: Split, since it doesn't fit one sitting. Children: 2026102807494103 (the guard, in the pipeline's own scripts, and the release artifacts folder), 2026102807494121 (the test and utility scripts, with the socket folders), 2026102807494139 (PowerShell), 2026102807494157 (run folders under `HOST_TEMP`, removed at the end, stale after 2 days).
+		- 20261028: 2026102807494103 is in.
+		- 20261101: All 4 children are Done, so this closes. The 2 follow-ups under 2026102807494157, 2026103115564575 and 2026103115564581, stay open on their own.
+	- Test case: The children's tests, 2026102807494103, 2026102807494121, 2026102807494139 and 2026102807494157.
+	- Acceptance signoff: Self-closed: every child is Done.
+	- Closed: 20261101-2010
 
 - CICD reset: the private runner's tests still use old base 62 test IDs
 	- ID: 2026102819390388

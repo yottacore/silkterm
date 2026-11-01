@@ -87,8 +87,8 @@ parse="$(fLift '^assumeYes=0; ' '^esac; done$')"
 ## checks, lifted on their own.
 refusal="$(grep -F 'if ((gate && leakAsked && leakcheck)); then' "${engine}" || true)"
 fCheck "the parser has a line refusing --leakcheck with --gate" test -n "${refusal}"
-leakOff="$(grep -F 'if ((quick && ! leakAsked)) || ((gate)); then leakcheck=0; fi' "${engine}" || true)"
-fCheck "and one turning the leak checks off under --quick and --gate" test -n "${leakOff}"
+leakOff="$(grep -F 'if ((gate)); then leakcheck=0; fi' "${engine}" || true)"
+fCheck "and one turning the leak checks off under --gate" test -n "${leakOff}"
 codeqlGate="$(grep -F 'if ((gate && codeql)); then' "${engine}" || true)"
 fCheck "and one refusing --codeql with --gate" test -n "${codeqlGate}"
 ## The backlog runs and the merge gate, settled after the loop.
@@ -104,8 +104,8 @@ fParse(){  ## fParse <args...>: prints the settings the parser leaves, or exits 
 }
 rc=0; out="$(fParse --quick 2>&1)" || rc=$?
 fCheck "--quick is accepted" test "${rc}" -eq 0
-fCheck "and turns off the ARM64 builds, profiling, packages and fuzzing" \
-	test "${out}" = "quick=1 cross=1 arm=0 demo=1 gate=0 profile=0 package=0 fuzz=0 yes=0 sync=1 leak=0 inner=--quick"
+fCheck "and turns off the ARM64 builds, profiling, packages and fuzzing, but not the fast leak checks" \
+	test "${out}" = "quick=1 cross=1 arm=0 demo=1 gate=0 profile=0 package=0 fuzz=0 yes=0 sync=1 leak=1 inner=--quick"
 fCheck "with no options every stage is on, the leak checks too" \
 	test "$(fParse)" = "quick=0 cross=1 arm=1 demo=1 gate=0 profile=1 package=1 fuzz=60 yes=0 sync=1 leak=1 inner="
 fCheck "--leakcheck adds the leak checks, and goes into the container with the run" \
@@ -130,7 +130,7 @@ fCheck "the config names the heap-growth test, with its feature and one thread" 
 	bash -c 'source "$1" && [[ " ${LEAKCHECK_DHAT_CMD[*]} " == *" --features dhat-heap "*" heap_growth:: "*" --test-threads=1 "* ]]' _ "${cicd}/config.bash"
 ## CodeQL is in the image only, so a run on this box takes it there, or warns
 ## without docker. The run inside the container does it in place.
-## Off unless --codeql asks, until 2026102211462005 settles its cost.
+## Off unless --codeql, --leakcheck or --long asks, since it takes over half an hour.
 fCodeqlWhere(){
 	local container="${1}" leakcheck="${2}" codeql="${3}" docker="${4}" SILK_CICD_IN_CONTAINER="${5:-}" CODEQL_SUITE=x
 	eval "$(fLift '^codeqlInImage=0' '^fi$')"
@@ -147,10 +147,16 @@ fParseCodeql(){ fParse "${@}" >/dev/null; eval "${parse}"; echo "codeql=${codeql
 fCheck "a full run with no options leaves CodeQL off" bash -c '[[ "$1" == "codeql=0 leak=1 inner=" ]]' _ "$(fParseCodeql)"
 fCheck "--codeql adds it, and goes into the container with the run" \
 	bash -c '[[ "$1" == "codeql=1 leak=1 inner=--codeql" ]]' _ "$(fParseCodeql --codeql)"
+fCheck "--leakcheck adds it, being every leak check" \
+	bash -c '[[ "$1" == "codeql=1 leak=1 inner=--leakcheck" ]]' _ "$(fParseCodeql --leakcheck)"
+fCheck "under --quick too, which alone leaves it off" \
+	bash -c '[[ "$1" == "codeql=1 leak=1 inner=--quick --leakcheck" && "$2" == "codeql=0 leak=1 inner=--quick" ]]' _ "$(fParseCodeql --quick --leakcheck)" "$(fParseCodeql --quick)"
+fCheck "but not once --no-leakcheck comes after it" \
+	bash -c '[[ "$1" == "codeql=0 leak=0 "* && "$2" == "codeql=1 leak=1 "* ]]' _ "$(fParseCodeql --leakcheck --no-leakcheck)" "$(fParseCodeql --no-leakcheck --leakcheck)"
 rc=0; out="$(fParse --gate --codeql 2>&1)" || rc=$?
 fCheck "--codeql with --gate stops the run" test "${rc}" -eq 2
 fCodeqlPlan(){ local codeql="${1}" codeqlSkipped="${2:-}"; eval "$(fLift '^	if ((! codeql)); then codeqlLine=' '^	else codeqlLine="CodeQL"; fi$')"; echo "${codeqlLine}"; }
-fCheck "the plan says how to turn it on" test "$(fCodeqlPlan 0)" = "CodeQL (off; --codeql or --long adds it)"
+fCheck "the plan says how to turn it on" test "$(fCodeqlPlan 0)" = "CodeQL (off; --leakcheck or --long adds it)"
 fCheck "and names it when on" bash -c '[[ "$1" == CodeQL && "$2" == "CodeQL (skipped, no docker"* ]]' _ "$(fCodeqlPlan 1)" "$(fCodeqlPlan 1 'no docker here')"
 fCheck "the step itself stays off without --codeql" \
 	bash -c 'sed -n "/^fRunCodeql(){/,/^}/p" "$1" | grep -qF "if ((! codeql)); then"' _ "${engine}"
@@ -414,8 +420,10 @@ skipLog="${work}/skips.txt"; : >"${skipLog}"
 fCheck "and is left out when nothing was skipped" test -z "$(fSkipSummary)"
 skipLog=""
 fCheck "or when the run has no list" test -z "$(fSkipSummary)" -a "$(fSkipCount)" = 0
-fCheck "and the run says it last, after the sweep's line" \
-	bash -c 'grep -A1 -F "fEcho_Clean \"\$(fSweep_Summary)\"" "$1" | grep -qx "fSkipSummary"' _ "${engine}"
+## Changed 20261101: read before the end removes the run's folder, said after
+## its cleanup line (2026110112424508).
+fCheck "and the run says it last, after the cleanup line" \
+	bash -c 'grep -B1 -A1 -x "fRunEnd 0" "$1" | paste -sd"|" | grep -qF "skipsSaid=\"\$(fSkipSummary)\"|fRunEnd 0|[[ -z \"\${skipsSaid}\" ]]"' _ "${engine}"
 
 ## The steps: which a run takes and counts, which it turns off and why, and the
 ## lines each one opens and closes with.
@@ -468,9 +476,9 @@ fCheck "one that left something out for want of a box closes with SKIP" bash -c 
 rc=0; out="$(fSteps eval 'fStepOpen Format; fDie "it broke"; echo after')" || rc=$?
 fCheck "fDie in a step says why, then closes it with FAIL" bash -c '[[ "$3" == 1 && "$(grep -v "^$" <<<"$1" | tail -2 | head -1)" == "[ FAILED: it broke ]" && "$(grep -v "^$" <<<"$1" | tail -1)" =~ ^\[\ $2:\ Step\ 1\ of\ 2\;\ FAIL\ Format\ \]$ && "$1" != *after* ]]' _ "${out}" "${stamp}" "${rc}"
 eval "$(fLift '^fRunEnd(){' '^}')"
-out="$(fSteps eval 'fContainerEnd(){ :; }; fTestDir_End(){ :; }; fRunDir_End(){ :; }; keepTemp=0; fStepOpen Format; fRunEnd 2')"
+out="$(fSteps eval 'fContainerEnd(){ :; }; fTestDir_End(){ :; }; fRunDir_End(){ :; }; fSweep_Summary(){ :; }; keepTemp=0; runEnded=0; fStepOpen Format; fRunEnd 2')"
 fCheck "a step a plain error ended closes with FAIL too" bash -c '[[ "$(grep -v "^$" <<<"$1" | tail -1)" =~ ^\[\ $2:\ Step\ 1\ of\ 2\;\ FAIL\ Format\ \]$ ]]' _ "${out}" "${stamp}"
-out="$(fSteps eval 'fContainerEnd(){ :; }; fTestDir_End(){ :; }; fRunDir_End(){ :; }; keepTemp=0; fRunEnd 0')"
+out="$(fSteps eval 'fContainerEnd(){ :; }; fTestDir_End(){ :; }; fRunDir_End(){ :; }; fSweep_Summary(){ :; }; keepTemp=0; runEnded=0; fRunEnd 0')"
 fCheck "and a run that passed adds no line" test -z "${out}"
 
 ## The ARM64 smoke run: its own line, SKIP when its box wasn't there.
@@ -535,6 +543,7 @@ if ((failures)); then echo "${failures} failed"; exit 1; fi
 echo "all passed"
 
 ##	History:
+##		- 20261101: The heap-growth test under --quick, and --leakcheck adding CodeQL.
 ##		- 20261028: The release stage's check for local paths in a binary, and the
 ##		            fuzz corpus hashes either side of the tests.
 ##		- 20261028: The steps a run takes, the ones it turns off and why, and each

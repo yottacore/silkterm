@@ -131,7 +131,9 @@ mkdir "${work}/f-base"
 ( cd "${repo}" && env -u SILKTERM_TEST_DIR -u HOST_TEMP TMPDIR="${work}/f-base" GIT_CONFIG_GLOBAL=/dev/null bash cicd/cicd.bash --no-sync </dev/null >"${work}/f.log" 2>&1 ) || true
 fCheck "a run stopped at its prompt leaves no run folder" test -z "$(ls -A "${work}/f-base")"
 fCheck "the build dirs are swept first thing where the builds run" bash -c 'sed -n "/^fBuildTestRelease(){$/,/^}$/p" "$1" | sed -n 2p | grep -qx "[[:space:]]*fSweepBuilds"' _ "${engine}"
-fCheck "the run says what went before it is done" bash -c 'grep -B3 "^fSection \"\${APP_NAME} CI/CD: done.\"" "$1" | grep -qF "fSweep_Summary"' _ "${engine}"
+## Changed 20261101: the end's cleanup line comes from fRunEnd, after the run's
+## folder and docker went (2026110112424508).
+fCheck "the run says what went before it is done" bash -c 'grep -B4 "^fSection \"\${APP_NAME} CI/CD: done.\"" "$1" | grep -qx "fRunEnd 0" && sed -n "/^fRunEnd(){/,/^}/p" "$1" | grep -qF "fRunDir_End \"\${1}\"; fSweep_Summary; }"' _ "${engine}"
 fCheck "the config names its build dirs" bash -c 'source "$1" && ((${#CLEANUP_BUILD_DIRS[@]} >= 4))' _ "${root}/cicd/config.bash"
 
 ## H: the nightly's build dirs, as the pipeline sweeps them. A change of the stable
@@ -177,7 +179,7 @@ fZig nover 0.15.1; fSweep_ZigCache "${zc}/nover" "" 1
 fCheck "with no zig to ask, nothing goes" test -f "${zc}/nover/o/ab/obj"
 fCheck "and the summary counts them" grep -qF '3 zig caches' <<<"$(fSweep_Summary)"
 fCheck "the run sweeps them where the builds ran, before its summary" \
-	bash -c 'awk "/fSweep_ZigCache/ {z = NR} /fEcho_Clean \"\\\$\\(fSweep_Summary\\)\"/ {s = NR} END {exit !(z && s && z < s)}" "$1" && grep -qF "if ((! container)) && command -v zig" "$1"' _ "${engine}"
+	bash -c 'awk "/fSweep_ZigCache/ {z = NR} /^fRunEnd 0$/ {s = NR} END {exit !(z && s && z < s)}" "$1" && grep -qF "if ((! container)) && command -v zig" "$1"' _ "${engine}"
 fCheck "the cap is 2 GB in the config" bash -c 'source "$1" && [[ "${CLEANUP_CACHE_CAP_MB}" == 2048 ]]' _ "${root}/cicd/config.bash"
 
 ## R: the run's own folder, HOST_TEMP/silkterm/YYYYmmDD-HHMMSS_NNN, and the
@@ -203,7 +205,13 @@ fRunOld 20261001-000000_004 "" "3 days ago"
 fRunOld by-hand "${deadPid}" "3 days ago"
 mkdir -p "${work}/r/away/20261001-000000_005"; echo "${deadPid}" >"${work}/r/away/20261001-000000_005/run.pid"
 ln -s "${work}/r/away/20261001-000000_005" "${r}/20261001-000000_005"; touch -h -d "3 days ago" "${r}/20261001-000000_005"
+## A test run alone that failed keeps its folder, made by the test helper in
+## the same place, with the same name and run.pid.
+lone="$(env -u SILKTERM_TEST_DIR HOST_TEMP="${work}/r" bash -c 'source "$1"; fTestDir_Use; echo "${SILKTERM_TEST_DIR}"; exit 1' _ "${meDir}/../_testdir.bash" 2>/dev/null || true)"
+fCheck "a lone test run that fails keeps its folder in the same place" test -n "${lone}" -a "$(dirname "${lone}")" == "${r}" -a -f "${lone}/run.pid"
+[[ -z "${lone}" ]] || touch -d "3 days ago" "${lone}"
 fSweep_StaleRuns "${r}" 2 "stale run folders"
+fCheck "and once it's stale, the sweep takes it" test -n "${lone}" -a ! -e "${lone}"
 fCheck "a run folder over 2 days old, with no process from its run.pid left, goes" test ! -e "${r}/20261001-000000_001"
 fCheck "one whose process is still there stays" test -f "${r}/20261001-000000_002/out.txt"
 fCheck "so does a younger one" test -f "${r}/20261001-000000_003/out.txt"
@@ -234,8 +242,10 @@ if ((failures)); then echo "${failures} failed"; exit 1; fi
 echo "all passed"
 
 ##	History:
+##		- 20261101: What went and what it freed, in the run's one cleanup line.
 ##		- 20261019 JC: Created.
 ##		- 20261019 JC: The nightly's build dirs.
 ##		- 20261025 JC: Zig caches.
 ##		- 20261026 JC: The Zig cap by apparent size.
 ##		- 20261031: Run folders, stale after 2 days, and the old ledgers emptied.
+##		- 20261101: A lone test run's kept folder goes with the stale run folders.

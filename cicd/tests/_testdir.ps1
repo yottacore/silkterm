@@ -3,17 +3,17 @@
 
 <#
 .SYNOPSIS
-	The run's test folder, <temp>/test_silkterm_YYYYmmDD-HHMMSSNN, for the
-	PowerShell tests and cicd-win.ps1.
+	The run's test folder, HOST_TEMP\silkterm\YYYYmmDD-HHMMSS_NNN with a
+	run.pid, or under the temp folder without HOST_TEMP, for the PowerShell
+	tests and cicd-win.ps1.
 .DESCRIPTION
 	Dot-sourced; it defines fTestDir_Make, fTestDir_Use, fTestDir_Keep,
-	fTestDir_End, fTestDir_Remove, fTestDir_Record and fTestDir_Sweep and runs
-	nothing. Same contract as
-	_testdir.bash: SILKTERM_TEST_DIR set and not empty is the folder, made if
-	missing, and never removed; otherwise a fresh one is made, 0700 off Windows,
-	and exported, so every test the caller starts shares it. A script that made
-	one calls fTestDir_End <exit code> before every exit, which removes the
-	folder on 0 and keeps it otherwise.
+	fTestDir_End, fTestDir_Remove and fTestDir_Sweep and runs nothing. Same
+	contract as _testdir.bash: SILKTERM_TEST_DIR set and not empty is the
+	folder, made if missing, and never removed; otherwise a fresh one is made,
+	0700 off Windows, and exported, so every test the caller starts shares it. A
+	script that made one calls fTestDir_End <exit code> before every exit, which
+	removes the folder on 0 and keeps it otherwise.
 
 	Sets no StrictMode, since dot-sourcing would set it for the caller. Every
 	caller sets Latest itself.
@@ -38,10 +38,12 @@ function fTestDir_Make {
 		$null = New-Item -ItemType Directory -Force -Path $env:SILKTERM_TEST_DIR
 		return
 	}
-	$base = [System.IO.Path]::GetTempPath()
+	$base = Join-Path $(if ($env:HOST_TEMP) { $env:HOST_TEMP } else { [System.IO.Path]::GetTempPath() }) 'silkterm'
+	$null = New-Item -ItemType Directory -Force -Path $base
+	$stamp = (Get-Date).ToString('yyyyMMdd-HHmmss')
 	$dir = ''
-	for ($try = 1; $try -le 100; $try++) {
-		$dir = Join-Path $base ('test_silkterm_' + (Get-Date).ToString('yyyyMMdd-HHmmssff'))
+	for ($n = 1; $n -le 999; $n++) {
+		$dir = Join-Path $base ('{0}_{1:D3}' -f $stamp, $n)
 		##	Never -Force: it would adopt a folder or symlink planted at a guessable name.
 		if (-not (Test-Path -LiteralPath $dir)) {
 			$made = $true
@@ -53,13 +55,13 @@ function fTestDir_Make {
 				}
 				$token = "$PID-$([DateTime]::UtcNow.Ticks)"
 				[System.IO.File]::WriteAllText((Join-Path $dir '.test_silkterm_owner'), "$token`n")
+				[System.IO.File]::WriteAllText((Join-Path $dir 'run.pid'), "$PID`n")
 				$script:TestDirOwned = $dir
 				$script:TestDirToken = $token
 				$env:SILKTERM_TEST_DIR = $dir
 				return
 			}
 		}
-		Start-Sleep -Milliseconds 10
 	}
 	throw "test run folder: '$dir' and every name before it were taken"
 }
@@ -114,7 +116,8 @@ function fTestDir_Remove {
 
 function fTestDir_NotOurs([string]$Dir, [string]$Token) {
 	##	Why $Dir is not this run's folder, or nothing when it is.
-	if ((Split-Path -Leaf $Dir) -notmatch '^test_silkterm_\d{8}-\d{8}$') { return 'not named like a run folder' }
+	##	The second form is what older runs made, which their ledgers still name.
+	if ((Split-Path -Leaf $Dir) -notmatch '^(\d{8}-\d{6}_\d{3}|test_silkterm_\d{8}-\d{8})$') { return 'not named like a run folder' }
 	$info = [System.IO.DirectoryInfo]$Dir
 	if (-not $info.Exists) { return 'not a folder' }
 	if ($info.Attributes -band [System.IO.FileAttributes]::ReparsePoint) { return 'it is a link' }
@@ -145,17 +148,8 @@ function fTestDir_Delete([System.IO.DirectoryInfo]$Folder) {
 	$Folder.Delete()
 }
 
-function fTestDir_Record {
-	##	Writes the folder fTestDir_Make made, and its token, at the end of
-	##	$Ledger, so a later run can remove it if this one fails and keeps it.
-	[CmdletBinding()]
-	param([Parameter(Mandatory)][string]$Ledger)
-	if (-not $script:TestDirOwned) { return }
-	$null = New-Item -ItemType Directory -Force -Path (Split-Path -Parent $Ledger)
-	[System.IO.File]::AppendAllText($Ledger, "$($script:TestDirOwned)`t$($script:TestDirToken)`n")
-}
-
 function fTestDir_Sweep {
+	##	For the ledgers older runs wrote, of the test folders failed runs kept.
 	##	Removes the run folders $Ledger names, past the newest $Keep still there,
 	##	each only through fTestDir_Remove's checks against its own token. One
 	##	that is gone, or turns out not to be ours, comes off the ledger. Returns
@@ -198,3 +192,5 @@ function fTestDir_End {
 ##		- 20261019 JC: fTestDir_Record and fTestDir_Sweep, so a pipeline removes
 ##		  the folders its failed runs kept.
 ##		- 20261031: fTestDir_Use points TEMP and TMP at the folder on Linux and macOS too.
+##		- 20261101: The folder is HOST_TEMP\silkterm\YYYYmmDD-HHMMSS_NNN, with a run.pid.
+##		- 20261101: fTestDir_Record goes, since the pipeline sweeps stale run folders.

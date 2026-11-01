@@ -57,9 +57,9 @@
 ##	   --no-fuzz           skip the fuzz soak (the short one in the test run still runs)
 ##	   --no-asan           skip the test suite under ASan and LSan
 ##	   --no-tsan           skip the test suite under TSan, under --long
-##	   --no-leakcheck      skip the slow leak checks (the heap-growth test under dhat, CodeQL)
-##	   --leakcheck         run the leak checks, under --quick too; not with
-##	                       --backlog-run-quick
+##	   --no-leakcheck      skip every leak check (the heap-growth test under dhat, CodeQL)
+##	   --leakcheck         every leak check, the ones that take hours too: CodeQL;
+##	                       not with --backlog-run-quick
 ##	   --codeql            add CodeQL to the leak checks (off by default; slow)
 ##	   --long              everything, the steps that take hours too: the test
 ##	                       suite under TSan and CodeQL. Not with --quick or
@@ -192,7 +192,7 @@ while (($#)); do case "${1}" in
 	--no-fuzz)                FUZZ_SECS=0; innerArgs+=("${1}"); shift ;;
 	--no-asan)                ASAN_CMD=(); innerArgs+=("${1}"); shift ;;
 	--no-tsan)                TSAN_CMD=(); innerArgs+=("${1}"); shift ;;
-	--leakcheck)              leakcheck=1; leakAsked=1; innerArgs+=("${1}"); shift ;;   ## the slow leak checks, under --quick too
+	--leakcheck)              leakcheck=1; leakAsked=1; innerArgs+=("${1}"); shift ;;   ## every leak check, the slow ones too
 	--no-leakcheck)           leakcheck=0; innerArgs+=("${1}"); shift ;;
 	--codeql)                 codeql=1; innerArgs+=("${1}"); shift ;;                ## CodeQL in the leak checks; off until 2026102211462005
 	--message=*|--msg=*|-m=*) cliMessage="${1#*=}"; shift ;;
@@ -209,15 +209,16 @@ if ((fullRun && quick)); then echo "${fullRunName} runs every check of the defau
 if ((long && quick)); then echo "--long runs everything, so not --quick" >&2; exit 2; fi
 if ((long && gate)); then echo "--backlog-run-quick runs the fast checks only, so not --long" >&2; exit 2; fi
 ## TSan and CodeQL take about half an hour each, so they wait for --long, which
-## keeps the default run to about an hour.
-if ((long)); then codeql=1; fi
+## keeps the default run to about an hour. --leakcheck takes CodeQL too, becuase
+## it's every leak check.
+if ((long || (leakAsked && leakcheck))); then codeql=1; fi
 for area in "${gateAreas[@]}"; do case " ${gateAreasAll} " in *" ${area} "*) ;; *) echo "unknown area: ${area} (areas: ${gateAreasAll})" >&2; exit 2 ;; esac; done
 if ((gate && ${#gateAreas[@]} == 0)); then read -r -a gateAreas <<< "${gateAreasAll}"; fi
 if ((fullRun)); then assumeYes=1; sync=0; DOGFOOD_DESTS=(); GIT_PUBLISH=(); DEMO_ENABLE=0; fmtCheck=1; innerArgs+=(--fmt-check); fi
 if ((fmtCheck && ${#FMT_CMD[@]})); then FMT_CMD=("${FMT_CHECK_CMD[@]}"); fi
 if ((gate && leakAsked && leakcheck)); then echo "--leakcheck adds to a full run; the backlog quick run leaves it out" >&2; exit 2; fi
 if ((gate && codeql)); then echo "--codeql is one of the leak checks, which the backlog quick run leaves out" >&2; exit 2; fi
-if ((quick && ! leakAsked)) || ((gate)); then leakcheck=0; fi   ## on by default, like the demo
+if ((gate)); then leakcheck=0; fi   ## on by default, --quick too, since the heap-growth test takes under a minute
 
 ## --no-arm: drop the ARM64 cross targets so the run (and its packages) stay
 ## x86_64-only. Native x86_64 is untouched; the Windows/Linux x86_64 crosses stay.
@@ -486,7 +487,7 @@ docker="${SILK_DOCKER:-docker}"
 ## the run, so a cleanup takes only its own from a shared docker. runName is the
 ## run folder's name, set once that folder is made (fRunDir_Make).
 projectLabel="dev.project=${EXE_NAME}"
-runName=""; dockerUsed=0; dockerDfBefore=""
+runName=""; dockerUsed=0; runEnded=0
 ## The run's folder goes under this, resolved now, before TMPDIR points into it,
 ## and since a container mount needs the real path.
 runBase="$(realpath -m -- "${HOST_TEMP:-${TMPDIR:-/tmp}}")/${EXE_NAME}"; runDir=""
@@ -522,7 +523,7 @@ fRunDir_Make(){
 ## keeps it and says where.
 fRunDir_End(){
 	local -r dir="${runDir}"
-	local why="" err=""
+	local why="" err="" kb=""
 	[[ -n "${dir}" ]] || return 0
 	runDir=""
 	if ((keepTemp)); then echo "kept the run's temp folder (--keep-temp): ${dir}" >&2; return 0; fi
@@ -530,14 +531,22 @@ fRunDir_End(){
 	if [[ -n "${why}" ]]; then echo "cleanup: left ${dir} in place: ${why}" >&2; return 0; fi
 	## Out of it first, should a step have left the shell there.
 	[[ "${PWD}" != "${dir}" && "${PWD}" != "${dir}"/* ]] || cd / || true
+	kb="$(du -sk -- "${dir}" 2>/dev/null)" || true
 	err="$(fSafeRm "${dir}" 2>&1)" || { echo "cleanup: could not remove ${dir}${err:+: ${err}}" >&2; return 0; }
+	kb="${kb%%[[:space:]]*}"; [[ ! "${kb}" =~ ^[0-9]+$ ]] || __sweepBytes+=$((kb * 1024))
+	fSweep_Note "the run's temp folder"
 	((! ${1:-0})) || echo "removed the run's temp folder ${dir}; --keep-temp keeps it" >&2
 }
-## fDockerStart: notes what docker holds, once, for the end line.
-fDockerStart(){
-	((! dockerUsed)) || return 0
-	dockerUsed=1
-	dockerDfBefore="$("${docker}" system df --format '{{.Type}}|{{.Size}}' 2>/dev/null || true)"
+## fDockerStart: the run has used docker, so its end tidies up after it.
+fDockerStart(){ dockerUsed=1; }
+## fDockerBytes: the total of docker system df's sizes on stdin, which docker
+## gives in powers of 1000.
+fDockerBytes(){
+	awk -F'|' '{
+		n = $2 + 0; u = $2; sub(/^[0-9.]+/, "", u)
+		m = (u == "kB") ? 1e3 : (u == "MB") ? 1e6 : (u == "GB") ? 1e9 : (u == "TB") ? 1e12 : 1
+		t += n * m
+	} END { printf "%.0f\n", t }'
 }
 ## fContainerBuild <image>: builds it when it is not there.
 fContainerBuild(){
@@ -584,7 +593,7 @@ fContainerTags(){
 		if ((held < 1)); then held+=1; continue; fi
 		if "${docker}" image rm "${old}" >/dev/null 2>&1; then gone+=1; fi
 	done < <("${docker}" image ls "${image%%:*}" --filter "label=${projectLabel}" --format '{{.CreatedAt}}|{{.Repository}}:{{.Tag}}' 2>/dev/null | sort -r || true)
-	((! gone)) || fEcho_Clean "cleanup: removed ${gone} older container images"
+	((! gone)) || echo "count|older container images|${gone}"
 }
 ## fContainerVolumes: a cache volume of ours over the cap goes whole, and so does
 ## the Zig one once another Zig version filled it. docker refuses a volume that a
@@ -611,7 +620,7 @@ fContainerVolumes(){
 		if [[ "${name}" == "${zigVolume}" && -n "${stamped}" && "${stamped}" != "${zigNow}" ]]; then why="filled by zig ${stamped}"
 		elif ((size > capBytes)); then why="over ${CLEANUP_CACHE_CAP_MB:-2048} MB"; fi
 		[[ -n "${why}" ]] || continue
-		if "${docker}" volume rm "${name}" >/dev/null 2>&1; then fEcho_Clean "cleanup: removed the volume ${name}, ${why}"
+		if "${docker}" volume rm "${name}" >/dev/null 2>&1; then fEcho_Clean "cleanup: removed the volume ${name}, ${why}"; echo "count|cache volumes|1"
 		else fEcho_Clean "cleanup: left the volume ${name} (${why}), still in use"; fi
 	done <<<"${seen}"
 }
@@ -620,19 +629,28 @@ fContainerVolumes(){
 ## older tags once this run has passed, the cache volume rule, and build cache
 ## over a week old, every project's, so the next build stays warm. All of it is
 ## done before a word is printed, since Ctrl+C takes the log tee down too, and a
-## write to it then ends the run on the spot.
+## write to it then ends the run on the spot. What went, and what docker's sizes
+## say it freed, go to the run's one cleanup line.
 fContainerEnd(){
-	local said=""
+	local said="" line what n
 	((dockerUsed)) && [[ -n "${runName}" && -z "${SILK_CICD_IN_CONTAINER:-}" ]] || return 0
 	dockerUsed=0
 	said="$(fContainerEnd_Work "${1:-0}" 2>&1)" || true
-	[[ -z "${said}" ]] || printf '%s\n' "${said}"
+	while IFS= read -r line; do
+		case "${line}" in
+			count\|*) what="${line#count|}"; n="${what##*|}"; what="${what%|*}"; [[ ! "${n}" =~ ^[0-9]+$ ]] || fSweep_Count "${what}" "${n}" ;;
+			freed\|*) n="${line#freed|}"; [[ ! "${n}" =~ ^[0-9]+$ ]] || __sweepBytes+=${n} ;;
+			pruned\|*) fSweep_Note "docker build cache over a week old" ;;
+			?*) printf '%s\n' "${line}" ;;
+		esac
+	done <<<"${said}"
 }
 fContainerEnd_Work(){
 	local -ri rc="${1:-0}"
-	local id freed="" before after line kind
+	local id pruned="" before after
+	local -i gone=0
 	local -a ids=() names=()
-	local -A was=()
+	before="$("${docker}" system df --format '{{.Type}}|{{.Size}}' 2>/dev/null | fDockerBytes || true)"
 	mapfile -t ids < <("${docker}" ps -aq --filter "label=dev.run=${runName}" --filter "label=${projectLabel}" 2>/dev/null | grep . || true)
 	if ((keepTemp)); then
 		mapfile -t names < <("${docker}" ps -a --filter "label=dev.run=${runName}" --filter "label=${projectLabel}" --format '{{.Names}}' 2>/dev/null | grep . || true)
@@ -640,23 +658,20 @@ fContainerEnd_Work(){
 	elif ((${#ids[@]})); then
 		"${docker}" stop -t 10 "${ids[@]}" >/dev/null 2>&1 || true
 		"${docker}" rm "${ids[@]}" >/dev/null 2>&1 || true
-		fEcho_Clean "cleanup: stopped and removed ${#ids[@]} of the run's containers"
+		echo "count|of the run's containers|${#ids[@]}"
 	fi
 	while IFS= read -r id; do
-		[[ -z "${id}" ]] || "${docker}" image rm "${id}" >/dev/null 2>&1 || true
+		[[ -n "${id}" ]] || continue
+		if "${docker}" image rm "${id}" >/dev/null 2>&1; then gone+=1; fi
 	done < <("${docker}" image ls -q --filter dangling=true --filter "label=${projectLabel}" 2>/dev/null || true)
+	((! gone)) || echo "count|untagged images|${gone}"
 	if ((rc == 0)) && [[ -n "${containerImage}" ]]; then fContainerTags "${containerImage}"; fi
 	if ((! keepTemp)) && [[ -n "${containerImage}" ]]; then fContainerVolumes; fi
-	freed="$("${docker}" builder prune -f --filter until=168h 2>/dev/null | sed -n 's/^Total reclaimed space: *//p' || true)"
-	fEcho_Clean "docker build cache over a week old pruned${freed:+, ${freed} freed}"
-	after="$("${docker}" system df --format '{{.Type}}|{{.Size}}' 2>/dev/null || true)"
-	while IFS='|' read -r kind line; do [[ -z "${kind}" ]] || was[${kind}]="${line}"; done <<<"${dockerDfBefore}"
-	line=""
-	while IFS='|' read -r kind before; do
-		[[ -n "${kind}" ]] || continue
-		line+="${line:+, }${kind} ${was[${kind}]:-?} -> ${before}"
-	done <<<"${after}"
-	[[ -z "${line}" ]] || fEcho_Clean "docker: ${line}"
+	## Older docker says "Total reclaimed space:", newer "Total:".
+	pruned="$("${docker}" builder prune -f --filter until=168h 2>/dev/null | sed -n 's/^Total[^:]*:[[:space:]]*//p' || true)"
+	[[ -z "${pruned}" || "${pruned}" =~ ^0(\.0+)?[kMGT]?B$ ]] || echo "pruned|${pruned}"
+	after="$("${docker}" system df --format '{{.Type}}|{{.Size}}' 2>/dev/null | fDockerBytes || true)"
+	if [[ "${before}" =~ ^[0-9]+$ && "${after}" =~ ^[0-9]+$ ]] && ((before > after)); then echo "freed|$((before - after))"; fi
 }
 ## fContainerRun <image> <script> <options...>: a pipeline script in the container,
 ## the engine or the ASan run, against this tree. Its /tmp is a new folder in the
@@ -749,8 +764,8 @@ if ((! container && ! gate && ! quick && long)) && ((${#TSAN_CMD[@]})) && [[ -z 
 	if command -v "${docker}" >/dev/null 2>&1; then tsanInImage=1
 	else tsanSkipped="no docker here for the image with the nightly"; fi
 fi
-## CodeQL, one of the leak checks, is in the image only too. Off unless --codeql
-## or --long asks, since a run takes over half an hour and 19 GB here
+## CodeQL, one of the leak checks, is in the image only too. Off unless --codeql,
+## --leakcheck or --long asks, since a run takes over half an hour and 19 GB here
 ## (2026102211462005).
 codeqlInImage=0; codeqlSkipped=""
 if ((! container && leakcheck && codeql)) && [[ -n "${CODEQL_SUITE:-}" && -z "${SILK_CICD_IN_CONTAINER:-}" ]]; then
@@ -932,9 +947,13 @@ fScriptTests(){
 	## The window shows at the size it keeps, maximized and fullscreen too, with
 	## no jump after. Exit 3 is a skip: no binary, display, window manager or python-xlib.
 	fRunTest_MaySkip cicd/tests/startsize/run.bash "window size at launch"
-	## A window put back on a monitor that went dark and came back takes that
-	## monitor's size again. Exit 3 is a skip: no binary, sway, Xwayland or python3.
+	## A window herded off a monitor that went dark keeps its size, and is back
+	## at that monitor's size once it's lit. Exit 3 is a skip: no binary, sway,
+	## Xwayland or python3.
 	fRunTest_MaySkip cicd/tests/monwake/run.bash "window size after a monitor wakes"
+	## Under xfwm4 that window goes back where it was, too. Exit 3 is a skip: no
+	## binary, sway, Xwayland, xfwm4 or xdotool.
+	fRunTest_MaySkip cicd/tests/herdback/run.bash "window place after a monitor wakes"
 	## On native Wayland a window takes each output's own size once moved or
 	## dropped there, a sliver left on another output too. Exit 3 is a skip: no
 	## binary, sway, python3 or software Vulkan.
@@ -972,6 +991,10 @@ fScriptTests(){
 	## A tab names a command that prints nothing, with the cursor not blinking.
 	## Exit 3 is a skip: no binary, display, dash, xdotool or xprop.
 	fRunTest_MaySkip cicd/tests/quiettab/run.bash "tab names a quiet command"
+	## An unfocused window on screen lets its device go after "Minutes
+	## otherwise", read from the file. About a minute. Exit 3 is a skip: no
+	## binary, display, dash, xdotool or xprop.
+	((quick)) || fRunTest_MaySkip cicd/tests/idleother/run.bash "idle release after Minutes otherwise"
 	## Heap allocations per frame at rest and in a drag select, against a limit.
 	## Exit 3 is a skip: no debug binary, display, window manager or xdotool.
 	fRunTest_MaySkip cicd/tests/allocs/run.bash "allocations per frame"
@@ -1075,8 +1098,10 @@ fScriptTests(){
 ## the run before the run's folder goes.
 fRunEnd(){
 	local said=""
+	((! runEnded)) || return 0
+	runEnded=1
 	((! ${1})) || fStep_End FAIL >&2
-	said="$({ fContainerEnd "${1}"; fTestDir_End "${1}"; fRunDir_End "${1}"; } 2>&1)" || true
+	said="$({ fContainerEnd "${1}"; fTestDir_End "${1}"; fRunDir_End "${1}"; fSweep_Summary; } 2>&1)" || true
 	[[ -z "${said}" ]] || printf '%s\n' "${said}"
 }
 
@@ -1275,14 +1300,12 @@ else
 	fEcho_Clean "ASan + LSan .........: the tests again on ${SANITIZER_TOOLCHAIN}, in ${containerImage:-this container}"
 fi
 if ((leakcheck)); then
-	if ((! codeql)); then codeqlLine="CodeQL (off; --codeql or --long adds it)"
+	if ((! codeql)); then codeqlLine="CodeQL (off; --leakcheck or --long adds it)"
 	elif [[ -n "${codeqlSkipped}" ]]; then codeqlLine="CodeQL (skipped, ${codeqlSkipped})"
 	else codeqlLine="CodeQL"; fi
 	fEcho_Clean "Leak checks .........: heap growth under dhat, ${codeqlLine}, reports to ${LEAKCHECK_OUT_DIR}"
-elif ((quick && ! leakAsked)); then
-	fEcho_Clean "Leak checks .........: (skipped --quick; --leakcheck adds them)"
 else
-	fEcho_Clean "Leak checks .........: (skipped)"
+	fEcho_Clean "Leak checks .........: (skipped --no-leakcheck)"
 fi
 if ((${#TSAN_CMD[@]} == 0)); then
 	fEcho_Clean "TSan ................: (skipped)"
@@ -1820,14 +1843,14 @@ fRunTsan(){
 	fContainerRun "${containerImage}" "${root}/cicd/utility/tsan.bash" || fDie "the test suite under TSan failed (above)"
 }
 
-## The leak checks, after the ASan run. On by default; --no-leakcheck drops them
-## and --quick does unless --leakcheck asks. Each report goes to LEAKCHECK_OUT_DIR,
+## The leak checks, after the ASan run. On by default, --quick too; --no-leakcheck
+## drops them. Each report goes to LEAKCHECK_OUT_DIR,
 ## rotated like the flamegraphs. A test filter that matched nothing would pass, so
 ## a run that wrote no report fails too.
 fRunLeakcheck(){
 	local outDir report
 	local -i rc=0
-	if ((! leakcheck)); then fEcho_Clean "leak checks skipped$( ((quick && ! leakAsked)) && echo ' (--quick; --leakcheck adds them)')"; return 0; fi
+	if ((! leakcheck)); then fEcho_Clean "leak checks skipped (--no-leakcheck)"; return 0; fi
 	outDir="${root}/${LEAKCHECK_OUT_DIR}"
 	mkdir -p "${outDir}" || fDie "could not make ${outDir}"
 	report="${outDir}/heap_${stamp}.txt"
@@ -1846,7 +1869,7 @@ fRunLeakcheck(){
 ## binary links (cicd/utility/codeql.bash), in the image like the ASan run.
 fRunCodeql(){
 	local -r outDir="${1}" why="CodeQL found something new, or couldn't run (above)"
-	if ((! codeql)); then fEcho_Clean "CodeQL off (--codeql or --long adds it)"; return 0; fi
+	if ((! codeql)); then fEcho_Clean "CodeQL off (--leakcheck or --long adds it)"; return 0; fi
 	if [[ -z "${CODEQL_SUITE:-}" ]]; then fEcho_Clean "CodeQL skipped"; return 0; fi
 	if [[ -n "${codeqlSkipped}" ]]; then fEcho "WARNING: CodeQL skipped: ${codeqlSkipped}"; return 0; fi
 	if [[ -n "${SILK_CICD_IN_CONTAINER:-}" ]]; then
@@ -2179,15 +2202,22 @@ if ((! container)) && command -v zig >/dev/null 2>&1; then
 	while IFS= read -r -d '' zigDir; do fSweep_ZigCache "${zigDir}" "${zigNow}" "${CLEANUP_CACHE_CAP_MB:-2048}" || true
 	done < <(find "${root}" -xdev \( -name .git -o -name target -o -path "${root}/forks" -o -path "${root}/cicd/artifacts" \) -prune -o -type d \( -name .zig-cache -o -name zig-cache \) -print0 -prune 2>/dev/null)
 fi
+## The skip list lives in the run's folder, which the end removes, and still
+## comes last.
 fEcho_Clean
-fEcho_Clean "$(fSweep_Summary)"
-fSkipSummary
+skipsSaid="$(fSkipSummary)"
+fRunEnd 0
+[[ -z "${skipsSaid}" ]] || { fEcho_Clean; printf '%s\n' "${skipsSaid}"; }
 
 fSection "${APP_NAME} CI/CD: done."
 fEcho_Clean
 
 
 ##	History:
+##		- 2026-11-01: One cleanup line at the end: what went, the run's own folder and
+##		              docker's included, and about what it freed.
+##		- 2026-11-01: The heap-growth test runs under --quick too, and --leakcheck
+##		              is every leak check, so it adds CodeQL.
 ##		- 2026-10-31: A failed test's line names its output file only when the file
 ##		              outlives the run, and says --keep-temp keeps it otherwise.
 ##		- 2026-10-31: The run's folder is HOST_TEMP/silkterm/YYYYmmDD-HHMMSS_NNN, with
