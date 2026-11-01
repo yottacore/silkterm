@@ -57,9 +57,9 @@
 ##	   --no-fuzz           skip the fuzz soak (the short one in the test run still runs)
 ##	   --no-asan           skip the test suite under ASan and LSan
 ##	   --no-tsan           skip the test suite under TSan, under --long
-##	   --no-leakcheck      skip the slow leak checks (the heap-growth test under dhat, CodeQL)
-##	   --leakcheck         run the leak checks, under --quick too; not with
-##	                       --backlog-run-quick
+##	   --no-leakcheck      skip every leak check (the heap-growth test under dhat, CodeQL)
+##	   --leakcheck         every leak check, the ones that take hours too: CodeQL;
+##	                       not with --backlog-run-quick
 ##	   --codeql            add CodeQL to the leak checks (off by default; slow)
 ##	   --long              everything, the steps that take hours too: the test
 ##	                       suite under TSan and CodeQL. Not with --quick or
@@ -192,7 +192,7 @@ while (($#)); do case "${1}" in
 	--no-fuzz)                FUZZ_SECS=0; innerArgs+=("${1}"); shift ;;
 	--no-asan)                ASAN_CMD=(); innerArgs+=("${1}"); shift ;;
 	--no-tsan)                TSAN_CMD=(); innerArgs+=("${1}"); shift ;;
-	--leakcheck)              leakcheck=1; leakAsked=1; innerArgs+=("${1}"); shift ;;   ## the slow leak checks, under --quick too
+	--leakcheck)              leakcheck=1; leakAsked=1; innerArgs+=("${1}"); shift ;;   ## every leak check, the slow ones too
 	--no-leakcheck)           leakcheck=0; innerArgs+=("${1}"); shift ;;
 	--codeql)                 codeql=1; innerArgs+=("${1}"); shift ;;                ## CodeQL in the leak checks; off until 2026102211462005
 	--message=*|--msg=*|-m=*) cliMessage="${1#*=}"; shift ;;
@@ -209,15 +209,16 @@ if ((fullRun && quick)); then echo "${fullRunName} runs every check of the defau
 if ((long && quick)); then echo "--long runs everything, so not --quick" >&2; exit 2; fi
 if ((long && gate)); then echo "--backlog-run-quick runs the fast checks only, so not --long" >&2; exit 2; fi
 ## TSan and CodeQL take about half an hour each, so they wait for --long, which
-## keeps the default run to about an hour.
-if ((long)); then codeql=1; fi
+## keeps the default run to about an hour. --leakcheck takes CodeQL too, becuase
+## it's every leak check.
+if ((long || (leakAsked && leakcheck))); then codeql=1; fi
 for area in "${gateAreas[@]}"; do case " ${gateAreasAll} " in *" ${area} "*) ;; *) echo "unknown area: ${area} (areas: ${gateAreasAll})" >&2; exit 2 ;; esac; done
 if ((gate && ${#gateAreas[@]} == 0)); then read -r -a gateAreas <<< "${gateAreasAll}"; fi
 if ((fullRun)); then assumeYes=1; sync=0; DOGFOOD_DESTS=(); GIT_PUBLISH=(); DEMO_ENABLE=0; fmtCheck=1; innerArgs+=(--fmt-check); fi
 if ((fmtCheck && ${#FMT_CMD[@]})); then FMT_CMD=("${FMT_CHECK_CMD[@]}"); fi
 if ((gate && leakAsked && leakcheck)); then echo "--leakcheck adds to a full run; the backlog quick run leaves it out" >&2; exit 2; fi
 if ((gate && codeql)); then echo "--codeql is one of the leak checks, which the backlog quick run leaves out" >&2; exit 2; fi
-if ((quick && ! leakAsked)) || ((gate)); then leakcheck=0; fi   ## on by default, like the demo
+if ((gate)); then leakcheck=0; fi   ## on by default, --quick too, since the heap-growth test takes under a minute
 
 ## --no-arm: drop the ARM64 cross targets so the run (and its packages) stay
 ## x86_64-only. Native x86_64 is untouched; the Windows/Linux x86_64 crosses stay.
@@ -749,8 +750,8 @@ if ((! container && ! gate && ! quick && long)) && ((${#TSAN_CMD[@]})) && [[ -z 
 	if command -v "${docker}" >/dev/null 2>&1; then tsanInImage=1
 	else tsanSkipped="no docker here for the image with the nightly"; fi
 fi
-## CodeQL, one of the leak checks, is in the image only too. Off unless --codeql
-## or --long asks, since a run takes over half an hour and 19 GB here
+## CodeQL, one of the leak checks, is in the image only too. Off unless --codeql,
+## --leakcheck or --long asks, since a run takes over half an hour and 19 GB here
 ## (2026102211462005).
 codeqlInImage=0; codeqlSkipped=""
 if ((! container && leakcheck && codeql)) && [[ -n "${CODEQL_SUITE:-}" && -z "${SILK_CICD_IN_CONTAINER:-}" ]]; then
@@ -1275,14 +1276,12 @@ else
 	fEcho_Clean "ASan + LSan .........: the tests again on ${SANITIZER_TOOLCHAIN}, in ${containerImage:-this container}"
 fi
 if ((leakcheck)); then
-	if ((! codeql)); then codeqlLine="CodeQL (off; --codeql or --long adds it)"
+	if ((! codeql)); then codeqlLine="CodeQL (off; --leakcheck or --long adds it)"
 	elif [[ -n "${codeqlSkipped}" ]]; then codeqlLine="CodeQL (skipped, ${codeqlSkipped})"
 	else codeqlLine="CodeQL"; fi
 	fEcho_Clean "Leak checks .........: heap growth under dhat, ${codeqlLine}, reports to ${LEAKCHECK_OUT_DIR}"
-elif ((quick && ! leakAsked)); then
-	fEcho_Clean "Leak checks .........: (skipped --quick; --leakcheck adds them)"
 else
-	fEcho_Clean "Leak checks .........: (skipped)"
+	fEcho_Clean "Leak checks .........: (skipped --no-leakcheck)"
 fi
 if ((${#TSAN_CMD[@]} == 0)); then
 	fEcho_Clean "TSan ................: (skipped)"
@@ -1820,14 +1819,14 @@ fRunTsan(){
 	fContainerRun "${containerImage}" "${root}/cicd/utility/tsan.bash" || fDie "the test suite under TSan failed (above)"
 }
 
-## The leak checks, after the ASan run. On by default; --no-leakcheck drops them
-## and --quick does unless --leakcheck asks. Each report goes to LEAKCHECK_OUT_DIR,
+## The leak checks, after the ASan run. On by default, --quick too; --no-leakcheck
+## drops them. Each report goes to LEAKCHECK_OUT_DIR,
 ## rotated like the flamegraphs. A test filter that matched nothing would pass, so
 ## a run that wrote no report fails too.
 fRunLeakcheck(){
 	local outDir report
 	local -i rc=0
-	if ((! leakcheck)); then fEcho_Clean "leak checks skipped$( ((quick && ! leakAsked)) && echo ' (--quick; --leakcheck adds them)')"; return 0; fi
+	if ((! leakcheck)); then fEcho_Clean "leak checks skipped (--no-leakcheck)"; return 0; fi
 	outDir="${root}/${LEAKCHECK_OUT_DIR}"
 	mkdir -p "${outDir}" || fDie "could not make ${outDir}"
 	report="${outDir}/heap_${stamp}.txt"
@@ -1846,7 +1845,7 @@ fRunLeakcheck(){
 ## binary links (cicd/utility/codeql.bash), in the image like the ASan run.
 fRunCodeql(){
 	local -r outDir="${1}" why="CodeQL found something new, or couldn't run (above)"
-	if ((! codeql)); then fEcho_Clean "CodeQL off (--codeql or --long adds it)"; return 0; fi
+	if ((! codeql)); then fEcho_Clean "CodeQL off (--leakcheck or --long adds it)"; return 0; fi
 	if [[ -z "${CODEQL_SUITE:-}" ]]; then fEcho_Clean "CodeQL skipped"; return 0; fi
 	if [[ -n "${codeqlSkipped}" ]]; then fEcho "WARNING: CodeQL skipped: ${codeqlSkipped}"; return 0; fi
 	if [[ -n "${SILK_CICD_IN_CONTAINER:-}" ]]; then
@@ -2188,6 +2187,8 @@ fEcho_Clean
 
 
 ##	History:
+##		- 2026-11-01: The heap-growth test runs under --quick too, and --leakcheck
+##		              is every leak check, so it adds CodeQL.
 ##		- 2026-10-31: A failed test's line names its output file only when the file
 ##		              outlives the run, and says --keep-temp keeps it otherwise.
 ##		- 2026-10-31: The run's folder is HOST_TEMP/silkterm/YYYYmmDD-HHMMSS_NNN, with

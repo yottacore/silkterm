@@ -86,7 +86,8 @@
 	-Wsl only: the Linux half skips its leak checks (cicd.bash --no-leakcheck).
 	The Windows half has none.
 .PARAMETER Leakcheck
-	-Wsl only: the Linux half runs its leak checks under -Quick too.
+	-Wsl only: the Linux half runs every leak check, CodeQL included
+	(cicd.bash --leakcheck).
 .PARAMETER NoRemote
 	-Wsl only: the Linux half skips every other box, the Windows scenarios and
 	the private runner (cicd.bash --no-remote).

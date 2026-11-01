@@ -34,6 +34,23 @@ Going forward, new issues in the new template at the bottom of this file, will g
 
 ## Issues
 
+- CICD process gaps: one cleanup line at the end, with what it freed
+	- ID: 2026110112424508
+	- Type: Task
+	- Status: Queued
+	- Priority: Avg
+	- Opened: 20261101-124245
+	- Opened by: CC
+	- Parent ID: 2026102416233812
+	- Target OS: All
+	- Requirements:
+		- The run ends with one cleanup line: what it removed and roughly what that freed, the run's own folder, its containers, the old images and volumes and the docker build cache included.
+		- Now the stale sweep's line comes before the run's folder and the docker cleanup, and docker gets a line of its own after the run's end, with each kind's size before and after rather than what was freed.
+		- The build cache prune says nothing freed, even when the docker line shows the build cache shrinking, such as 189 GB to 186.4 GB on 20261101.
+		- For docker, the freed figure comes from `docker system df` before and after, since shared layers make sizes overlap.
+		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
+	- Estimated effort: Avg
+
 - The window doesn't paint while the GPU is busy or short on memory, and stays blank after the load ends
 	- ID: 2026100312470535
 	- Type: Bug
@@ -781,7 +798,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - CICD reset: CICD process gaps
 	- ID: 2026102416233812
 	- Type: Task
-	- Status: Queued
+	- Status: Started
 	- Priority: Avg
 	- Opened: 20261024-162338
 	- Opened by: CC
@@ -796,6 +813,19 @@ Going forward, new issues in the new template at the bottom of this file, will g
 			- The cleanup line at the end says roughly what it freed.
 		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
 		- Overrides: design.md's CodeQL and heap growth bullets under "Delivery", which keep CodeQL behind `--codeql` and every leak check out of `--quick`.
+	- Progress log:
+		- 20261101: Split. 2026110112424508 has the cleanup line. The Miri parts, the `miri` component in the image and the step behind `--leakcheck`, are already 2026102320591318's requirements, so they stay there. This item closes when both are done.
+		- 20261101: The heap-growth test runs under `--quick` too. It took about 8 s to build and 20 s to run in the last full run.
+		- 20261101: `--leakcheck` is every leak check now, so it adds CodeQL, under `--quick` too. `--no-leakcheck` after it still drops them all.
+	- Decisions:
+		- 20261101: CodeQL stays out of the default run, against this item's wording. That run takes about an hour without it, and the same reset sends a step that pushes it past the hour to `--long`, as 2026102616543936 did on 10-28. It also fails until 2026102211462005 files what it finds.
+		- 20261101: The ASan and LSan run stays a step of its own, with `--no-asan`, rather than one of the leak checks the two flags turn on and off. It stays out of `--quick`, since it takes about 12 minutes.
+		- 20261101: Miri under `--long` as well as `--leakcheck` goes to 2026102320591318, whose requirements name `--leakcheck` only.
+		- 20261101: dd5nn's `--quick` check expects `leak=1`, was `leak=0`, and its CodeQL plan check expects "CodeQL (off; --leakcheck or --long adds it)", was "CodeQL (off; --codeql or --long adds it)".
+	- Verified: 20261101. The engine test passed, 177 checks, and 7 failed against the old cicd.bash. `cicd.bash --list` showed the heap-growth test on under `--quick`, CodeQL on with `--leakcheck`, and the leak checks off with `--no-leakcheck` after `--leakcheck`. `cicd/cicd.bash --backlog-run-quick`, all five areas, passed in 175 s at load 7.
+		- Swept: every reader of the leak checks' place in a run: cicd.bash's help, plan and step lines, config.bash, design.md, install.md, `cicd-win.ps1 -Leakcheck`'s help, and the container and cicd-win tests, which don't depend on `--quick` leaving them out.
+	- Branch: rnd1101
+	- Test case: `cicd/tests/engine/run.bash` (dd5nn), 3 new checks for `--leakcheck` and CodeQL, and 3 changed.
 
 - Make sure shcl files from v1.0.0-beta3 are accurately converted to the latest shcl spec
 	- ID: 2026102818080401
