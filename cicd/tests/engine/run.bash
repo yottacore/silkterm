@@ -420,8 +420,10 @@ skipLog="${work}/skips.txt"; : >"${skipLog}"
 fCheck "and is left out when nothing was skipped" test -z "$(fSkipSummary)"
 skipLog=""
 fCheck "or when the run has no list" test -z "$(fSkipSummary)" -a "$(fSkipCount)" = 0
-fCheck "and the run says it last, after the sweep's line" \
-	bash -c 'grep -A1 -F "fEcho_Clean \"\$(fSweep_Summary)\"" "$1" | grep -qx "fSkipSummary"' _ "${engine}"
+## Changed 20261101: read before the end removes the run's folder, said after
+## its cleanup line (2026110112424508).
+fCheck "and the run says it last, after the cleanup line" \
+	bash -c 'grep -B1 -A1 -x "fRunEnd 0" "$1" | paste -sd"|" | grep -qF "skipsSaid=\"\$(fSkipSummary)\"|fRunEnd 0|[[ -z \"\${skipsSaid}\" ]]"' _ "${engine}"
 
 ## The steps: which a run takes and counts, which it turns off and why, and the
 ## lines each one opens and closes with.
@@ -474,9 +476,9 @@ fCheck "one that left something out for want of a box closes with SKIP" bash -c 
 rc=0; out="$(fSteps eval 'fStepOpen Format; fDie "it broke"; echo after')" || rc=$?
 fCheck "fDie in a step says why, then closes it with FAIL" bash -c '[[ "$3" == 1 && "$(grep -v "^$" <<<"$1" | tail -2 | head -1)" == "[ FAILED: it broke ]" && "$(grep -v "^$" <<<"$1" | tail -1)" =~ ^\[\ $2:\ Step\ 1\ of\ 2\;\ FAIL\ Format\ \]$ && "$1" != *after* ]]' _ "${out}" "${stamp}" "${rc}"
 eval "$(fLift '^fRunEnd(){' '^}')"
-out="$(fSteps eval 'fContainerEnd(){ :; }; fTestDir_End(){ :; }; fRunDir_End(){ :; }; keepTemp=0; fStepOpen Format; fRunEnd 2')"
+out="$(fSteps eval 'fContainerEnd(){ :; }; fTestDir_End(){ :; }; fRunDir_End(){ :; }; fSweep_Summary(){ :; }; keepTemp=0; runEnded=0; fStepOpen Format; fRunEnd 2')"
 fCheck "a step a plain error ended closes with FAIL too" bash -c '[[ "$(grep -v "^$" <<<"$1" | tail -1)" =~ ^\[\ $2:\ Step\ 1\ of\ 2\;\ FAIL\ Format\ \]$ ]]' _ "${out}" "${stamp}"
-out="$(fSteps eval 'fContainerEnd(){ :; }; fTestDir_End(){ :; }; fRunDir_End(){ :; }; keepTemp=0; fRunEnd 0')"
+out="$(fSteps eval 'fContainerEnd(){ :; }; fTestDir_End(){ :; }; fRunDir_End(){ :; }; fSweep_Summary(){ :; }; keepTemp=0; runEnded=0; fRunEnd 0')"
 fCheck "and a run that passed adds no line" test -z "${out}"
 
 ## The ARM64 smoke run: its own line, SKIP when its box wasn't there.

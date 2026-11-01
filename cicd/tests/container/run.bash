@@ -356,15 +356,17 @@ FAKE_TAGS="${oldTags}" FAKE_UNTAGGED="sha256:feedface" FAKE_STOPPED="c0ffee" FAK
 	FAKE_IMAGE_MISSING=1 fRun tidy.log --container -y --no-sync --no-dogfood --no-publish --no-private --quick
 fCheck "a stopped container the pipeline labeled goes" bash -c 'grep -qx "ps -aq --filter label=dev.project=silkterm --filter status=exited --filter status=created --filter status=dead" "$1" && grep -qx "rm c0ffee" "$1"' _ "${work}/tidy.log"
 fCheck "the run's containers are stopped and removed by its label" bash -c 'grep -qE "^ps -aq --filter label=dev\.run=[0-9]{8}-[0-9_-]+ --filter label=dev\.project=silkterm$" "$1" && grep -qx "stop -t 10 beef1 beef2" "$1" && grep -qx "rm beef1 beef2" "$1"' _ "${work}/tidy.log"
-fCheck "and the run says so" grep -qF 'cleanup: stopped and removed 2 of the run' <<<"${out}"
+## Changed 20261101: the counts are in the run's one cleanup line (2026110112424508).
+fCheck "and the run says so" grep -qE "^cleanup: removed .*2 of the run's containers" <<<"${out}"
 fCheck "an untagged image the pipeline labeled goes" bash -c 'grep -qx "image ls -q --filter dangling=true --filter label=dev.project=silkterm" "$1" && grep -qx "image rm sha256:feedface" "$1"' _ "${work}/tidy.log"
 fCheck "the older tags are only the pipeline's" grep -qE '^image ls silkterm-cicd --filter label=dev\.project=silkterm --format' "${work}/tidy.log"
 fCheck "the newest one before this run's stays" fNot grep -qx 'image rm silkterm-cicd:000000000003' "${work}/tidy.log"
 fCheck "and older ones go" bash -c 'grep -qx "image rm silkterm-cicd:000000000002" "$1" && grep -qx "image rm silkterm-cicd:000000000001" "$1"' _ "${work}/tidy.log"
 fCheck "the build cache over a week old is pruned" grep -qx 'builder prune -f --filter until=168h' "${work}/tidy.log"
 fCheck "after the run's containers went" bash -c 'awk "/^rm beef1/ {r = NR} /^builder prune/ {p = NR} END {exit !(r && p && r < p)}" "$1"' _ "${work}/tidy.log"
-fCheck "saying what it freed" grep -qF 'docker build cache over a week old pruned, 1.2GB freed' <<<"${out}"
-fCheck "and docker's sizes before and after" grep -qF 'docker: Images 1GB -> 900MB, Build Cache 7.5GB -> 2GB' <<<"${out}"
+fCheck "saying so in the one cleanup line" grep -qE '^cleanup: removed .*1 untagged images, 2 older container images, docker build cache over a week old, ' <<<"${out}"
+fCheck "with about what docker's sizes before and after say it freed" grep -qE "^cleanup: removed .*, the run's temp folder; about 5\.2 GB freed$" <<<"${out}"
+fCheck "and that line is the only one about it" fNot grep -qE '^(docker: |docker build cache|cleanup: stopped)' <<<"${out}"
 fCheck "nothing is removed by force, nor the whole system pruned" fNot grep -qE '^((rm|rmi|image rm|container rm|volume rm) .*(^| )(-f|--force)( |$)|system prune)' "${work}/tidy.log"
 FAKE_TAGS="${oldTags}" FAKE_RUN_RC=7 fRun tagfail.log --container -y --no-sync --no-dogfood --no-publish --no-private --quick
 fCheck "a run that failed removes no tag" fNot grep -q '^image rm silkterm-cicd:' "${work}/tagfail.log"
@@ -556,6 +558,7 @@ if ((failures)); then echo "${failures} failed"; exit 1; fi
 echo "all passed"
 
 ##	History:
+##		- 20261101: What went and what it freed, in the run's one cleanup line.
 ##		- 20261010 JC: Created.
 ##		- 20261013 JC: The time zone goes in.
 ##		- 20261019 JC: A new /tmp per run, and what earlier runs left in docker.

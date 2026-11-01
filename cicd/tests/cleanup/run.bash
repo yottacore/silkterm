@@ -131,7 +131,9 @@ mkdir "${work}/f-base"
 ( cd "${repo}" && env -u SILKTERM_TEST_DIR -u HOST_TEMP TMPDIR="${work}/f-base" GIT_CONFIG_GLOBAL=/dev/null bash cicd/cicd.bash --no-sync </dev/null >"${work}/f.log" 2>&1 ) || true
 fCheck "a run stopped at its prompt leaves no run folder" test -z "$(ls -A "${work}/f-base")"
 fCheck "the build dirs are swept first thing where the builds run" bash -c 'sed -n "/^fBuildTestRelease(){$/,/^}$/p" "$1" | sed -n 2p | grep -qx "[[:space:]]*fSweepBuilds"' _ "${engine}"
-fCheck "the run says what went before it is done" bash -c 'grep -B3 "^fSection \"\${APP_NAME} CI/CD: done.\"" "$1" | grep -qF "fSweep_Summary"' _ "${engine}"
+## Changed 20261101: the end's cleanup line comes from fRunEnd, after the run's
+## folder and docker went (2026110112424508).
+fCheck "the run says what went before it is done" bash -c 'grep -B4 "^fSection \"\${APP_NAME} CI/CD: done.\"" "$1" | grep -qx "fRunEnd 0" && sed -n "/^fRunEnd(){/,/^}/p" "$1" | grep -qF "fRunDir_End \"\${1}\"; fSweep_Summary; }"' _ "${engine}"
 fCheck "the config names its build dirs" bash -c 'source "$1" && ((${#CLEANUP_BUILD_DIRS[@]} >= 4))' _ "${root}/cicd/config.bash"
 
 ## H: the nightly's build dirs, as the pipeline sweeps them. A change of the stable
@@ -177,7 +179,7 @@ fZig nover 0.15.1; fSweep_ZigCache "${zc}/nover" "" 1
 fCheck "with no zig to ask, nothing goes" test -f "${zc}/nover/o/ab/obj"
 fCheck "and the summary counts them" grep -qF '3 zig caches' <<<"$(fSweep_Summary)"
 fCheck "the run sweeps them where the builds ran, before its summary" \
-	bash -c 'awk "/fSweep_ZigCache/ {z = NR} /fEcho_Clean \"\\\$\\(fSweep_Summary\\)\"/ {s = NR} END {exit !(z && s && z < s)}" "$1" && grep -qF "if ((! container)) && command -v zig" "$1"' _ "${engine}"
+	bash -c 'awk "/fSweep_ZigCache/ {z = NR} /^fRunEnd 0$/ {s = NR} END {exit !(z && s && z < s)}" "$1" && grep -qF "if ((! container)) && command -v zig" "$1"' _ "${engine}"
 fCheck "the cap is 2 GB in the config" bash -c 'source "$1" && [[ "${CLEANUP_CACHE_CAP_MB}" == 2048 ]]' _ "${root}/cicd/config.bash"
 
 ## R: the run's own folder, HOST_TEMP/silkterm/YYYYmmDD-HHMMSS_NNN, and the
@@ -240,6 +242,7 @@ if ((failures)); then echo "${failures} failed"; exit 1; fi
 echo "all passed"
 
 ##	History:
+##		- 20261101: What went and what it freed, in the run's one cleanup line.
 ##		- 20261019 JC: Created.
 ##		- 20261019 JC: The nightly's build dirs.
 ##		- 20261025 JC: Zig caches.

@@ -34,10 +34,25 @@ Going forward, new issues in the new template at the bottom of this file, will g
 
 ## Issues
 
+- CICD process gaps: the cleanup line in cicd-win.ps1
+	- ID: 2026110112581983
+	- Type: Task
+	- Status: Queued
+	- Priority: Avg
+	- Opened: 20261101-125819
+	- Opened by: CC
+	- Parent ID: 2026102416233812
+	- Prereq IDs: 2026110112424508
+	- Target OS: Windows
+	- Requirements:
+		- The same one cleanup line at the end of a `cicd-win.ps1` run as `cicd.bash` prints since 2026110112424508: what went, the run's own folder included, and about how much it freed.
+		- Now it says only how many old run folders went, near the start, with no size.
+		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
+
 - CICD process gaps: one cleanup line at the end, with what it freed
 	- ID: 2026110112424508
 	- Type: Task
-	- Status: Queued
+	- Status: Done
 	- Priority: Avg
 	- Opened: 20261101-124245
 	- Opened by: CC
@@ -50,6 +65,20 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- For docker, the freed figure comes from `docker system df` before and after, since shared layers make sizes overlap.
 		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
 	- Estimated effort: Avg
+	- Progress log:
+		- 20261101: The run ends with one line, such as "cleanup: removed 1 stale run folders, 2 of the run's containers, docker build cache over a week old, the run's temp folder; about 5.2 GB freed". It counts the stale sweep, the run's own folder, its containers, untagged and older images, cache volumes, and the build cache prune. The run folder's size comes from `du`, docker's from `docker system df` just before its cleanup and just after.
+		- 20261101: In a full run the line comes before the skip list and the "done" section, so the skip list still comes last. On a failure, Ctrl+C or a backlog quick run, it's the last line the run's end prints.
+		- 20261101: The build cache prune is read as "Total:" too, which newer docker prints, as well as "Total reclaimed space:".
+	- Decisions:
+		- 20261101: The per-volume "removed the volume X, why" and "left ... still in use" lines stay, since they say why. The volumes are counted in the one line too.
+		- 20261101: A run in the container still prints its own line for what it swept there, before the run outside prints the last one. Its counts can't reach the run outside.
+		- 20261101: Container test (ddrp2) asserts changed: "the run says so" looks for "2 of the run's containers" in the cleanup line, was "cleanup: stopped and removed 2 of the run"; "saying what it freed" and "docker's sizes before and after" became the line's build cache entry and "about 5.2 GB freed", was "pruned, 1.2GB freed" and "docker: Images 1GB -> 900MB, Build Cache 7.5GB -> 2GB". Cleanup test (de5e9): the line before "done" and the Zig sweep's order go by `fRunEnd 0`, was `fSweep_Summary`. Engine test (dd5nn): the skip list after `fRunEnd 0`, was after `fSweep_Summary`.
+		- 20261101: The same in `cicd-win.ps1` is 2026110112581983.
+	- Verified: 20261101. Container test passed, 180 checks, cleanup test and engine test passed. Against the previous cicd.bash and sweep.bash, 4 container, 2 cleanup and 1 engine checks failed. A real `cicd/cicd.bash --backlog-run-quick` passed in 202 s at load 17 and ended with "cleanup: removed the run's temp folder; under 1 MB freed". Shellcheck is clean.
+		- Swept: every place a cleanup line was printed: `fSweep_Summary`, `fContainerEnd`, `fContainerTags`, `fContainerVolumes`, `fRunDir_End`, build.md. `cicd-win.ps1` prints its own, filed as 2026110112581983. `ci-mac.bash` prints none.
+	- Branch: rnd1101
+	- Test case: `cicd/tests/container/run.bash` (ddrp2), 2 new checks and 3 changed; `cicd/tests/cleanup/run.bash` (de5e9) and `cicd/tests/engine/run.bash` (dd5nn), 3 changed.
+	- Closed: 20261101-125900
 
 - The window doesn't paint while the GPU is busy or short on memory, and stays blank after the load ends
 	- ID: 2026100312470535
@@ -815,6 +844,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Overrides: design.md's CodeQL and heap growth bullets under "Delivery", which keep CodeQL behind `--codeql` and every leak check out of `--quick`.
 	- Progress log:
 		- 20261101: Split. 2026110112424508 has the cleanup line. The Miri parts, the `miri` component in the image and the step behind `--leakcheck`, are already 2026102320591318's requirements, so they stay there. This item closes when both are done.
+		- 20261101: 2026110112424508 is done: one cleanup line at the end. The same in `cicd-win.ps1` is 2026110112581983. Left: that one and 2026102320591318.
 		- 20261101: The heap-growth test runs under `--quick` too. It took about 8 s to build and 20 s to run in the last full run.
 		- 20261101: `--leakcheck` is every leak check now, so it adds CodeQL, under `--quick` too. `--no-leakcheck` after it still drops them all.
 	- Decisions:
