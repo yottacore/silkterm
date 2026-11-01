@@ -36,12 +36,12 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 $ast = [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path -LiteralPath $Pipeline).Path, [ref]$null, [ref]$null)
-foreach ($name in 'fRotateLogs', 'fTargetDir', 'fRemapConfig', 'fHasLocalPaths', 'fExec', 'fScriptTest', 'fPython', 'fCargoTest', 'fInstallerTests', 'fScriptTests', 'fStashIfDirty', 'fRunFlags', 'fWslArgs', 'fQuickRun', 'fStamp', 'fStepLine', 'fStepIf', 'fStepOpen', 'fStepClose', 'fShowSteps', 'fPlanSteps', 'fRunDirMake', 'fRunDirEnd', 'fSweepStaleRuns', 'fOldLedger') {
+foreach ($name in 'fRotateLogs', 'fTargetDir', 'fRemapConfig', 'fHasLocalPaths', 'fExec', 'fScriptTest', 'fPython', 'fCargoTest', 'fInstallerTests', 'fScriptTests', 'fStashIfDirty', 'fRunFlags', 'fWslArgs', 'fQuickRun', 'fStamp', 'fStepLine', 'fStepIf', 'fStepOpen', 'fStepClose', 'fShowSteps', 'fPlanSteps', 'fRunDirMake', 'fRunDirEnd', 'fSweepStaleRuns', 'fOldLedger', 'fDirBytes', 'fCleanupCount', 'fCleanupNote', 'fCleanupLine') {
 	$fn = $ast.Find({ param($n) $n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq $name }, $true)
 	if (-not $fn) { throw "$name not found in $Pipeline" }
 	. ([scriptblock]::Create($fn.Extent.Text))
 }
-foreach ($name in '$QuickAreas', '$QuickTitles', '$script:StepsOn', '$script:StepsOff', '$script:Letterbox', '$script:StepNum', '$script:StepName', '$Targets') {
+foreach ($name in '$QuickAreas', '$QuickTitles', '$script:StepsOn', '$script:StepsOff', '$script:Letterbox', '$script:StepNum', '$script:StepName', '$Targets', '$script:CleanupKinds', '$script:CleanupBytes', '$script:CleanupDue') {
 	$set = $ast.Find({ param($n) $n -is [System.Management.Automation.Language.AssignmentStatementAst] -and $n.Left.Extent.Text -eq $name }, $true)
 	if (-not $set) { throw "$name not found in $Pipeline" }
 	. ([scriptblock]::Create($set.Extent.Text))
@@ -155,6 +155,7 @@ fCheck 'and it''s the tests'' folder' ($env:SILKTERM_TEST_DIR -eq $rd)
 fRunDirEnd $false
 fCheck 'a run that failed removes it' (-not (Test-Path -LiteralPath $rd))
 fCheck 'and says -KeepTemp keeps it' ($script:notes -contains "removed the run's temp folder $rd; -KeepTemp keeps it")
+fCheck 'and counts it, and its size, for the cleanup line' ($script:CleanupKinds.Contains("the run's temp folder") -and $script:CleanupBytes -gt 0)
 $ht = Join-Path $Work 'ht'
 $null = New-Item -ItemType Directory -Path $ht
 $env:HOST_TEMP = $ht; $env:SILKTERM_TEST_DIR = Join-Path $Work 'handed-in'
@@ -191,9 +192,19 @@ $s5 = fStale -At (Join-Path $stale 'by-hand') -RunPid "$dead" -DaysOld 3
 $away = fStale -At (Join-Path $Work 'away') -RunPid "$dead" -DaysOld 3
 $s6 = Join-Path $stale '20261001-000000_006'
 $null = New-Item -ItemType $(if (fTestDir_OnWindows) { 'Junction' } else { 'SymbolicLink' }) -Path $s6 -Target $away
+$s1Bytes = fDirBytes $s1
+$hid = Join-Path $Work 'hid'
+$null = New-Item -ItemType Directory -Path $hid
+$hidFile = Join-Path $hid '.h'
+[System.IO.File]::WriteAllText($hidFile, 'xyz')
+(Get-Item -LiteralPath $hidFile -Force).Attributes = [System.IO.FileAttributes]::Hidden
+fCheck 'a folder''s size takes its hidden files' ((fDirBytes $hid) -eq 3)
+fCheck 'but not what a link in it points to' ((fDirBytes $stale) -eq (($s1, $s2, $s3, $s4, $s5 | ForEach-Object { fDirBytes $_ } | Measure-Object -Sum).Sum))
+$script:CleanupBytes = [long]0
 $gone = fSweepStaleRuns $stale 2
 fCheck 'a run folder over 2 days old, with no process from its run.pid left, goes' (-not (Test-Path -LiteralPath $s1))
 fCheck 'and only that one' ($gone -eq 1)
+fCheck 'and its size goes to what the cleanup line says it freed' ($s1Bytes -gt 0 -and $script:CleanupBytes -eq $s1Bytes)
 fCheck 'one whose process is still there stays' (Test-Path -LiteralPath (Join-Path $s2 'out.txt'))
 fCheck 'so does a younger one' (Test-Path -LiteralPath (Join-Path $s3 'out.txt'))
 fCheck 'and one with no run.pid' (Test-Path -LiteralPath (Join-Path $s4 'out.txt'))
@@ -208,14 +219,50 @@ $null = New-Item -ItemType Directory -Path $oldDir
 Set-Content -LiteralPath (Join-Path $oldDir '.test_silkterm_owner') -Value 'tok-1'
 $oldLedger = Join-Path $Work 'old.ledger'
 [System.IO.File]::WriteAllText($oldLedger, "$oldDir`ttok-1`n")
+$script:CleanupBytes = [long]0
 $gone = fOldLedger $oldLedger
 fCheck 'an old ledger''s folders go, under its checks' ($gone -eq 1 -and -not (Test-Path -LiteralPath $oldDir))
 fCheck 'and then the ledger' (-not (Test-Path -LiteralPath $oldLedger))
+fCheck 'and what they held goes to what the cleanup line says it freed' ($script:CleanupBytes -gt 0)
 fCheck 'with no ledger, nothing' ((fOldLedger $oldLedger) -eq 0)
 
+##	The run's one cleanup line, as cicd.bash prints it: each kind with its count,
+##	or just named, and about what it freed.
+$script:notes.Clear()
+$script:CleanupKinds = [ordered]@{}
+$script:CleanupDue = $false
+fCleanupCount 'stale run folders' 1
+fCleanupLine
+fCheck 'no cleanup line for a run that never made its folder' ($script:notes.Count -eq 0)
+$script:CleanupDue = $true
+fCleanupCount 'stale run folders' 2
+fCleanupCount 'old test run folders' 0
+fCleanupNote "the run's temp folder"
+fCleanupNote "the run's temp folder"
+$script:CleanupBytes = [long](5.2 * 1GB)
+fCleanupLine
+fCheck 'one cleanup line: what went, the run''s folder included, and about what it freed' ($script:notes.Count -eq 1 -and $script:notes[0] -eq "cleanup: removed 3 stale run folders, the run's temp folder; about 5.2 GB freed")
+fCleanupLine
+fCheck 'and only once' ($script:notes.Count -eq 1)
+$script:CleanupDue = $true
+$script:CleanupBytes = [long]1572864
+fCleanupLine
+fCheck 'in MB under a GB' ($script:notes[-1] -eq "cleanup: removed 3 stale run folders, the run's temp folder; about 2 MB freed")
+$script:CleanupDue = $true
+$script:CleanupBytes = [long]4096
+fCleanupLine
+fCheck 'and under 1 MB below that' ($script:notes[-1] -eq "cleanup: removed 3 stale run folders, the run's temp folder; under 1 MB freed")
+$script:CleanupDue = $true
+$script:CleanupKinds = [ordered]@{}
+fCleanupLine
+fCheck 'with nothing removed, it says so' ($script:notes[-1] -eq 'cleanup: nothing stale')
+
 $text = Get-Content -LiteralPath $Pipeline -Raw
-fCheck 'the pipeline makes its run folder, then sweeps the stale ones and the old ledger' ($text -match '(?m)^\s*fRunDirMake\s*\r?\n\s*\$gone = \(fSweepStaleRuns \(Split-Path -Parent \$script:RunDir\) \$StaleDays\) \+ \(fOldLedger ')
+fCheck 'the pipeline makes its run folder, then sweeps the stale ones and the old ledger' ($text -match '(?m)^\s*fRunDirMake\s*\r?\n\s*\$script:CleanupDue = \$true\s*\r?\n\s*fCleanupCount ''stale run folders'' \(fSweepStaleRuns \(Split-Path -Parent \$script:RunDir\) \$StaleDays\)\s*\r?\n\s*fCleanupCount ''old test run folders'' \(fOldLedger ')
+fCheck 'and says nothing of it until the end' ($text -notmatch 'fNote "cleanup: removed \$gone')
+fCheck 'where the cleanup line comes before done' ($text -match '(?m)^\s*fRunDirEnd \$true\s*\r?\n\s*fCleanupLine\s*\r?\n\s*fSection "\$AppName Windows CI/CD: done\."')
 fCheck 'and removes it in its finally block, on a failure too' ($text -match '(?s)\} finally \{\s*##[^\n]*\n\s*fStepClose FAIL\s*\n\s*##[^\n]*\n\s*fRunDirEnd \$script:RunOk')
+fCheck 'and then says the cleanup line, on a failure too' ($text -match '(?m)^\s*fRunDirEnd \$script:RunOk\s*\r?\n\s*fCleanupLine\s*\r?\n\s*try \{ Stop-Transcript')
 fCheck 'which fDie''s exit reaches' ($text -match '(?m)^function fDie .*; exit 1 \}$' -and $text -notmatch 'fTestDir_End 1')
 fCheck 'with 2 days for a stale one' ($text -match '(?m)^\$StaleDays = 2\r?$')
 
@@ -400,3 +447,4 @@ exit 0
 ##		- 20261028: The PASS and FAIL lines of a test script.
 ##		- 20261101: The run folder goes in the project's folder, and HOST_TEMP is unset for it.
 ##		- 20261101: The run's folder, its end, the stale sweep and the old ledger.
+##		- 20261101: The one cleanup line at the end.

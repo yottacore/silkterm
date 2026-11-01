@@ -37,7 +37,8 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - CICD process gaps: the cleanup line in cicd-win.ps1
 	- ID: 2026110112581983
 	- Type: Task
-	- Status: Queued
+	- Status: Waiting on automated testing
+	- Needs external testing: `cicd-win.ps1 -MergeGate` on b29w at the round branch, through the host lock, with 2026103115564581's run. It ends with one "cleanup: removed ...; ... freed" line, the run's temp folder in it, just before the "done" section, and no "old run folder(s)" line near the start.
 	- Priority: Avg
 	- Opened: 20261101-125819
 	- Opened by: CC
@@ -48,6 +49,18 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- The same one cleanup line at the end of a `cicd-win.ps1` run as `cicd.bash` prints since 2026110112424508: what went, the run's own folder included, and about how much it freed.
 		- Now it says only how many old run folders went, near the start, with no size.
 		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
+	- Progress log:
+		- 20261101: The run ends with one line, as `cicd.bash` prints it, such as "cleanup: removed 1 stale run folders, the run's temp folder; about 2 MB freed". It counts the stale sweep, the old ledger's folders and the run's own folder, with the size of each taken just before it goes.
+		- 20261101: On a pass the line comes just before the "done" section. On a failure, `fDie` or Ctrl+C it comes from the `finally` block, after the run's folder goes. `-List` prints none, since it makes no folder. With nothing removed, such as under `-KeepTemp`, it says "cleanup: nothing stale".
+	- Decisions:
+		- 20261101: A folder's size is the bytes of its files, hidden ones included, not through a link, where `cicd.bash` reads blocks with `du -sk`. Windows has no cheap block count, and the line only says "about".
+		- 20261101: The old ledger's share is the size of the folders it names before the sweep, less what is still there after, since the sweep goes through `_testdir.ps1` and returns only a count.
+		- 20261101: The `cicd.bash` that `-Wsl` runs prints its own line inside the Linux half's step, as the run in the container does for `cicd.bash`.
+		- 20261101: dd5nw's text check that the run sweeps right after `fRunDirMake` now looks for the two `fCleanupCount` lines, was `$gone = (fSweepStaleRuns ...) + (fOldLedger ...`. It still checks the same order.
+	- Verified: 20261101. dd5nw passed, with 14 new checks for the line, its counts and sizes, hidden files and links, once only, none without a run folder, and its place before "done" and in the `finally` block. Against the old `cicd-win.ps1` the lift stopped at the first missing function. A copy with no line in the `finally` block failed 1 check, one with no size from the stale sweep 1, and one with .NET's default file listing 3. On b29w every check up to the path map passed, the new ones included. The path map part uses folder names Windows refuses, so it runs only here. `--backlog-run-quick scripts` passed.
+		- Swept: every place `cicd-win.ps1` removes something: `fRunDirEnd`, `fSweepStaleRuns`, `fOldLedger`, and the release artifacts folder, which is cleared for the next build rather than freed, and old run logs past the newest few, which `cicd.bash` doesn't count either, so neither is counted. `cicd-win.ps1` has no stale build output sweep to count. `_testdir.ps1`'s own removals are its tests' folders, not the run's. `cicd.bash`'s line is 2026110112424508.
+	- Branch: rnd1101
+	- Test case: `cicd/tests/cicd-win/run.bash` (dd5nw), its `_lift.ps1`, 14 new checks and 1 changed.
 
 - CICD process gaps: one cleanup line at the end, with what it freed
 	- ID: 2026110112424508

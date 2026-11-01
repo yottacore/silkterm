@@ -198,6 +198,12 @@ $ExeName = "silkterm"
 ## this many days old and no process from their run.pid is left.
 $StaleDays = 2
 
+## What the run removed, by kind in the order it went, and about how much that
+## freed, for its one cleanup line at the end, as cicd.bash prints it.
+$script:CleanupKinds = [ordered]@{}
+$script:CleanupBytes = [long]0
+$script:CleanupDue = $false
+
 ## The single version source (first `version = "..."` line).
 $VersionManifest = Join-Path $Root "source\Cargo.toml"
 
@@ -450,8 +456,12 @@ function fRunDirEnd([bool]$Ok) {
 	if (-not $dir) { return }
 	$script:RunDir = $null
 	if ($KeepTemp) { $script:TestDirOwned = $null; fNote "kept the run's temp folder (-KeepTemp): $dir"; return }
+	$bytes = fDirBytes $dir
 	fTestDir_End 0
-	if (-not $Ok -and -not (Test-Path -LiteralPath $dir)) { fNote "removed the run's temp folder $dir; -KeepTemp keeps it" }
+	if (Test-Path -LiteralPath $dir) { return }
+	$script:CleanupBytes += $bytes
+	fCleanupNote "the run's temp folder"
+	if (-not $Ok) { fNote "removed the run's temp folder $dir; -KeepTemp keeps it" }
 }
 
 ## fSweepStaleRuns <parent> <days>: the run folders in <parent> older than
@@ -470,7 +480,8 @@ function fSweepStaleRuns([string]$Parent, [int]$Days) {
 		$line = "$(@([System.IO.File]::ReadAllLines($pidFile.FullName)) | Select-Object -First 1)".Trim()
 		$runPid = 0
 		if ([int]::TryParse($line, [ref]$runPid) -and (Get-Process -Id $runPid -ErrorAction SilentlyContinue)) { continue }
-		if (fSafeRm_Under $Parent $dir.FullName) { $gone++ }
+		$bytes = fDirBytes $dir.FullName
+		if (fSafeRm_Under $Parent $dir.FullName) { $gone++; $script:CleanupBytes += $bytes }
 	}
 	return $gone
 }
@@ -479,9 +490,55 @@ function fSweepStaleRuns([string]$Parent, [int]$Days) {
 ## Those go once, under the same checks, and then the ledger. Returns how many went.
 function fOldLedger([string]$Ledger) {
 	if (-not [System.IO.File]::Exists($Ledger)) { return 0 }
+	$dirs = @([System.IO.File]::ReadAllLines($Ledger) | ForEach-Object { ($_ -split "`t", 2)[0] } | Where-Object { $_ })
+	$before = [long]0
+	foreach ($dir in $dirs) { $before += fDirBytes $dir }
 	$gone = fTestDir_Sweep -Ledger $Ledger -Keep 0
 	[System.IO.File]::Delete($Ledger)
+	$after = [long]0
+	foreach ($dir in $dirs) { $after += fDirBytes $dir }
+	if ($before -gt $after) { $script:CleanupBytes += $before - $after }
 	return $gone
+}
+
+## fDirBytes <dir>: the size of the files in it, hidden ones too, but not
+## through a link, since removing a link frees nothing behind it. Never throws,
+## since the removal it comes before matters more than the number.
+function fDirBytes([string]$Dir) {
+	$sum = [long]0
+	if (-not [System.IO.Directory]::Exists($Dir)) { return $sum }
+	$opts = [System.IO.EnumerationOptions]@{ RecurseSubdirectories = $true; IgnoreInaccessible = $true; AttributesToSkip = [System.IO.FileAttributes]::ReparsePoint }
+	try { foreach ($file in ([System.IO.DirectoryInfo]$Dir).EnumerateFiles('*', $opts)) { $sum += $file.Length } }
+	catch { Write-Verbose "size of $Dir cut short: $_" }
+	return $sum
+}
+
+## fCleanupCount <what> <n>, fCleanupNote <what>: what the run removed, with a
+## count, or with none, such as the run's own folder.
+function fCleanupCount([string]$What, [int]$N) {
+	if ($N -le 0) { return }
+	$was = $script:CleanupKinds[$What]
+	$script:CleanupKinds[$What] = if ($was) { $was + $N } else { $N }
+}
+function fCleanupNote([string]$What) {
+	if (-not $script:CleanupKinds.Contains($What)) { $script:CleanupKinds[$What] = $null }
+}
+
+## fCleanupLine: the run's one cleanup line, what went and about what it freed.
+## Once, and only for a run that got as far as its folder.
+function fCleanupLine {
+	if (-not $script:CleanupDue) { return }
+	$script:CleanupDue = $false
+	if ($script:CleanupKinds.Count -eq 0) { fNote 'cleanup: nothing stale'; return }
+	$list = @(foreach ($what in $script:CleanupKinds.Keys) {
+		$n = $script:CleanupKinds[$what]
+		if ($null -ne $n) { "$n $what" } else { $what }
+	}) -join ', '
+	$b = $script:CleanupBytes
+	$size = if ($b -ge 1GB) { 'about ' + ($b / 1GB).ToString('0.0', [cultureinfo]::InvariantCulture) + ' GB' }
+		elseif ($b -ge 1MB) { "about $([math]::Floor(($b + 512KB) / 1MB)) MB" }
+		else { 'under 1 MB' }
+	fNote "cleanup: removed ${list}; $size freed"
 }
 
 ## cargo test, with each result line as PASS, FAIL or SKIP, test ID and name.
@@ -1229,10 +1286,11 @@ function fMain {
 	try { Start-Transcript -LiteralPath (Join-Path $LogDir "run_$stamp.log") | Out-Null } catch {}
 
 	## The run's folder, then the ones killed runs left, once stale, and what the
-	## old ledger still names.
+	## old ledger still names. What went is said in the one line at the end.
 	fRunDirMake
-	$gone = (fSweepStaleRuns (Split-Path -Parent $script:RunDir) $StaleDays) + (fOldLedger (Join-Path (fTargetDir) ".cicd-test-folders"))
-	if ($gone) { fNote "cleanup: removed $gone old run folder(s)" }
+	$script:CleanupDue = $true
+	fCleanupCount 'stale run folders' (fSweepStaleRuns (Split-Path -Parent $script:RunDir) $StaleDays)
+	fCleanupCount 'old test run folders' (fOldLedger (Join-Path (fTargetDir) ".cicd-test-folders"))
 
 	if (fStepOpen 'Remote sync') { fSetJobs; fRemoteSync; fStepClose }
 
@@ -1298,6 +1356,9 @@ function fMain {
 	if (fStepOpen 'Dogfood') { fSetJobs; fDogfood -Built $built; fStepClose }
 	if (fStepOpen 'Publish') { fSetJobs; fPublish -Msg $publishMsg; fStepClose }
 
+	## The cleanup line comes before "done", as in cicd.bash.
+	fRunDirEnd $true
+	fCleanupLine
 	fSection "$AppName Windows CI/CD: done."
 	fEcho_Clean
 }
@@ -1314,6 +1375,7 @@ try {
 	fStepClose FAIL
 	## On a failure and Ctrl+C too.
 	fRunDirEnd $script:RunOk
+	fCleanupLine
 	try { Stop-Transcript | Out-Null } catch {}
 	## The console's code page is shared with the shell that started this.
 	if ($script:OutputWas) { try { [Console]::OutputEncoding = $script:OutputWas } catch { Write-Verbose "code page not put back: $_" } }
@@ -1321,6 +1383,8 @@ try {
 
 
 ##	History:
+##		- 2026-11-01: One cleanup line at the end, what went and about what it
+##		  freed, the run's own folder included.
 ##		- 2026-11-01: The run's folder is HOST_TEMP\silkterm\YYYYmmDD-HHMMSS_NNN,
 ##		  with TEMP and TMP pointed at it, and goes at the end, failed or not.
 ##		  Stale ones go after 2 days, in place of the ledger.
