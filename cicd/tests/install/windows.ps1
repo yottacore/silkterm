@@ -33,6 +33,7 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot '../_testdir.ps1'); fTestDir_Use
+. (Join-Path $PSScriptRoot '../../utility/include/saferm.ps1')
 
 if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows) { Write-Host '  skip installer on Windows (not Windows)'; fTestDir_End 0; exit 0 }
 
@@ -135,12 +136,13 @@ try {
 	$env:STUB_API_CODE = $null
 	fCheck 'a failed API call stops the install' ($out -match '(?m)^Error: could not read the release list')
 	fCheck 'and is not read as no full release' ($out -notmatch 'No full release')
+	fCheck 'no run leaves its download folder' (-not (Get-ChildItem -LiteralPath ([System.IO.Path]::GetTempPath()) -Filter 'silkterm-install-*' -Force))
 } finally {
 	if ($running) { try { $running.Kill() } catch { $null = $_ } }
 	foreach ($name in $saved.Keys) { [Environment]::SetEnvironmentVariable($name, $saved[$name]) }
 	if ($null -eq $hadPath) { $key.DeleteValue('Path', $false) } else { $key.SetValue('Path', $hadPath, $pathKind) }
 	$key.Close()
-	Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue
+	$null = fSafeRm_Under ([System.IO.Path]::GetTempPath()) $work
 }
 
 if ($failures -gt 0) { fTestDir_End 1; exit 1 }

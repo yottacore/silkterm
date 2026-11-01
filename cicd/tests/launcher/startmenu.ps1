@@ -34,6 +34,7 @@ $ErrorActionPreference = "Stop"
 if (-not $IsWindows) { Write-Host "  skip Start menu entry (Windows only)"; exit 0 }
 
 . (Join-Path $PSScriptRoot '../_testdir.ps1'); fTestDir_Use
+. (Join-Path $PSScriptRoot '../../utility/include/saferm.ps1')
 
 $Launcher = Join-Path (Split-Path $PSScriptRoot -Parent | Split-Path -Parent | Split-Path -Parent) "utility/n8runterm.ps1"
 if (-not (Test-Path -LiteralPath $Launcher)) { throw "no launcher at $Launcher" }
@@ -137,7 +138,7 @@ try {
 	fCheck "searches no Start menu ($($next.Walks))" ($next.Walks -eq 0)
 	fCheck "and reads no process list ($($next.ProcessLists))" ($next.ProcessLists -eq 0)
 	fCheck "one entry runs the wrapper" (@(fEntriesRunning $root).Count -eq 1)
-	Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction SilentlyContinue
+	$null = fSafeRm_Under ([System.IO.Path]::GetTempPath()) $root
 
 	## Filed by hand under all users, so a search opens the whole user menu first.
 	Write-Host "an entry filed by hand in a folder"
@@ -166,7 +167,7 @@ try {
 	$next = fLaunch $root
 	fCheck "then stops searching ($($next.Walks))" ($next.Walks -eq 0)
 	fCheck "one entry runs the wrapper" (@(fEntriesRunning $root).Count -eq 1)
-	Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction SilentlyContinue
+	$null = fSafeRm_Under ([System.IO.Path]::GetTempPath()) $root
 } finally {
 	foreach ($name in $saved.Keys) { [Environment]::SetEnvironmentVariable($name, $saved[$name]) }
 }

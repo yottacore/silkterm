@@ -28,7 +28,7 @@ work="$(mktemp -d "${TMPDIR:-/tmp}/silk-wingui.XXXXXX")"
 ## The list of runs not yet swept, here rather than in this tree's artifacts.
 export WINGUI_RUNS="${work}/runs.txt"
 declare -a started=()
-fEnd(){ local -r rc=$?; local p; for p in "${started[@]}"; do kill "${p}" 2>/dev/null || true; done; rm -rf "${work}"; fTestDir_End "${rc}"; }
+fEnd(){ local -r rc=$?; local p; for p in "${started[@]}"; do kill "${p}" 2>/dev/null || true; done; fTestDir_Rm "${work}" || true; fTestDir_End "${rc}"; }
 trap fEnd EXIT
 
 ## The binary. A stand-in win-remote records what it is asked and keeps the

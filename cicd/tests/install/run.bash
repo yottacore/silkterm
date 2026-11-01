@@ -43,7 +43,7 @@ fi
 
 ## Everything below installs for real. One scratch tree, thrown away at the end.
 work="$(mktemp -d)"
-trap 'rc=$?; rm -rf "${work}"; fTestDir_End "${rc}"' EXIT
+trap 'rc=$?; fTestDir_Rm "${work}" || true; fTestDir_End "${rc}"' EXIT
 
 ## A stand-in release: for each version, a program that records that it ran
 ## and a line naming its version, plus the checksums file the installer
@@ -272,6 +272,8 @@ fCases() {
 fCases bash
 if command -v pwsh >/dev/null 2>&1; then
 	fCases ps1
+	## Each run's download folder goes through its guard, failed runs' too.
+	fCheck "ps1: no run leaves its download folder" test -z "$(find "${work}" -path '*/.tmp/silkterm-install-*' -prune -print)"
 else
 	echo "  skip install.ps1 cases (no pwsh)"
 fi
@@ -329,7 +331,7 @@ ln -s "${elsewhere}" "${runDir}"
 rc=0
 USER="${sandboxUser}" "${headless}" status >/dev/null 2>&1 || rc=$?
 fCheck "a run directory that is a link is refused" test "${rc}" -ne 0
-rm -f "${runDir}"; rm -rf "${elsewhere}"
+rm -f "${runDir}"; fTestDir_Rm "${elsewhere}"
 
 ## And an ordinary one of our own is fine, with the mode it should have.
 mkdir -p "${runDir}"
@@ -337,7 +339,7 @@ rc=0
 USER="${sandboxUser}" "${headless}" status >/dev/null 2>&1 || rc=$?
 fCheck "one of our own is used" test "${rc}" -eq 0
 fCheck "and is not readable by anyone else" test "$(stat -c %a "${runDir}")" = "700"
-rm -rf "${runDir}"
+fSafeRm "${runDir}"
 
 ## The rig's display: a number it did not start, a pid file whose pid is now
 ## something else, and a second run's stop. Each on a free number, with the
@@ -386,7 +388,7 @@ if command -v Xvfb >/dev/null && command -v xdpyinfo >/dev/null; then
 	touch "${gate}/go"; wait "${firstRun}" || true
 	fCheck "the first run's own stop ends it" fGone "${server:-0}"
 	rm -f "${gate}/up" "${gate}/go"; rmdir "${gate}"
-	rm -rf "${runDir}"
+	fSafeRm "${runDir}"
 else
 	echo "  skip the rig's display checks (no Xvfb or xdpyinfo)"
 fi

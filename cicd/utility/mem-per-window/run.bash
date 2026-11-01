@@ -38,7 +38,7 @@ repoDir="$(cd "${scriptDir}/../../.." && pwd)"; readonly repoDir
 # shellcheck source=cicd/tests/_testdir.bash
 source "${repoDir}/cicd/tests/_testdir.bash"
 
-swayPid="" appPid="" swayRun="" xDisplay="" rc=0
+swayPid="" appPid="" swayRun="" swayBase="" xDisplay="" rc=0
 
 fMain(){
 	local -r binary="${1:?binary}" mode="${2:?gl|vulkan}" size="${3:?WxH}"
@@ -166,7 +166,9 @@ fStartSway(){
 		node=""
 	done
 	[[ -n "${node}" ]] || { echo "no NVIDIA render node" >&2; return 1; }
-	swayRun="$(mktemp -d "${XDG_RUNTIME_DIR:-/tmp}/silkmem.XXXXXX")"
+	## Resolved, so the guard can name it as the one parent.
+	swayBase="$(realpath -e -- "${XDG_RUNTIME_DIR:-/tmp}")" || return 1
+	swayRun="$(mktemp -d "${swayBase}/silkmem.XXXXXX")"
 	printf 'output HEADLESS-1 resolution %s\nxwayland enable\ndefault_border none\nfor_window [all] floating enable\n' "${output}" >"${work}/sway.conf"
 	env -u DISPLAY -u WAYLAND_DISPLAY XDG_RUNTIME_DIR="${swayRun}" WLR_BACKENDS=headless WLR_HEADLESS_OUTPUTS=1 \
 		WLR_RENDERER=gles2 WLR_RENDER_DRM_DEVICE="/dev/dri/${node##*/}" WLR_LIBINPUT_NO_DEVICES=1 \
@@ -217,7 +219,7 @@ fStop(){
 	[[ -n "${appPid}" ]] && { kill "${appPid}" 2>/dev/null; wait "${appPid}" 2>/dev/null; }
 	[[ -n "${swayPid}" ]] && { kill "${swayPid}" 2>/dev/null; wait "${swayPid}" 2>/dev/null; }
 	# made by this run (mktemp above) and holding only sway's sockets
-	[[ -n "${swayRun}" && -d "${swayRun}" ]] && rm -rf -- "${swayRun}"
+	[[ -n "${swayRun}" && -d "${swayRun}" ]] && fSafeRm_Under "${swayBase}" "${swayRun}"
 	return 0
 }
 

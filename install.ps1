@@ -379,6 +379,64 @@ function fPathNote {
 }
 
 
+##	Temp folder
+
+##	fSafeRm_Under <parent> <path> - removes the folder <path>, somewhere under
+##	<parent>, and nothing else. The repo's cicd/utility/include/saferm.ps1 with
+##	the same rules, carried here since this file runs alone, by `irm | iex` too,
+##	and on 5.1. Links are looked for only below the parent, since the temp
+##	folder the system hands out can sit behind one, as macOS's /var does. It
+##	skips the HOST_TEMP checks, since a user's box has no HOST_TEMP.
+##	$true when removed; otherwise one line on stderr, and $false.
+function fSafeRm_Under {
+	$rooted = if ($onWindows) { '^[A-Za-z]:[\\/]' } else { '^/' }
+	$parent = if ($args.Count) { "$($args[0])".TrimEnd('\', '/') } else { '' }
+	if (-not $parent -or "$($args[0])" -notmatch $rooted) {
+		[Console]::Error.WriteLine("safe-rm: refused, no parent: `"$(if ($args.Count) { $args[0] })`"")
+		return $false
+	}
+	$p = if ($args.Count -eq 2) { "$($args[1])" } else { '' }
+	if ($args.Count -ne 2 -or $p -notmatch $rooted -or $p.Contains('..') -or $p -match '[\\/]{2}' -or $p -match "[`r`n]") {
+		[Console]::Error.WriteLine("safe-rm: refused, bad path: `"$p`"")
+		return $false
+	}
+	$p = $p.TrimEnd('\', '/')
+	$case = if ($onWindows) { [StringComparison]::OrdinalIgnoreCase } else { [StringComparison]::Ordinal }
+	$link = [System.IO.FileAttributes]::ReparsePoint
+	$why = ''
+	if (-not ($p.Length -gt $parent.Length + 1 -and $p.StartsWith($parent, $case) -and $p[$parent.Length] -match '[\\/]')) {
+		$why = "not under ${parent}"
+	} else {
+		$item = Get-Item -LiteralPath $p -Force -ErrorAction SilentlyContinue
+		if ($item -and ($item.Attributes -band $link)) { $why = 'a link' }
+		elseif (-not $item) { $why = 'not there' }
+		else {
+			for ($up = [System.IO.Path]::GetDirectoryName($p); $up.Length -gt $parent.Length; $up = [System.IO.Path]::GetDirectoryName($up)) {
+				if ([System.IO.DirectoryInfo]::new($up).Attributes -band $link) { $why = 'goes through a link'; break }
+			}
+		}
+	}
+	if ($why) { [Console]::Error.WriteLine("safe-rm: refused, ${why}: $p"); return $false }
+	##	Its own walk: Remove-Item -Recurse on 5.1 follows junctions, and a .NET
+	##	recursive delete stops at a read-only file.
+	$walk = {
+		param([System.IO.FileSystemInfo]$Entry)
+		$isFolder = [bool]($Entry.Attributes -band [System.IO.FileAttributes]::Directory)
+		if ($Entry.Attributes -band $link) {
+			if ($isFolder -and $onWindows) { [System.IO.Directory]::Delete($Entry.FullName, $false) }
+			else { [System.IO.File]::Delete($Entry.FullName) }
+			return
+		}
+		$Entry.Attributes = $Entry.Attributes -band -bnot [System.IO.FileAttributes]::ReadOnly
+		if ($isFolder) { foreach ($child in ([System.IO.DirectoryInfo]$Entry.FullName).GetFileSystemInfos()) { & $walk $child } }
+		$Entry.Delete()
+	}
+	try { & $walk $item }
+	catch { [Console]::Error.WriteLine("safe-rm: could not remove ${p}: $($_.Exception.Message)"); return $false }
+	return $true
+}
+
+
 function fMain {
 
 	Write-Host ''
@@ -707,7 +765,7 @@ function fMain {
 		else { Write-Host "Put back what was missing for $appName $tag" }
 		Write-Host ''
 	} finally {
-		Remove-Item -Recurse -Force -LiteralPath $tmpDir -ErrorAction SilentlyContinue
+		$null = fSafeRm_Under ([System.IO.Path]::GetTempPath()) $tmpDir
 	}
 }
 
@@ -845,4 +903,6 @@ if ($state.failed -and $runningAsScriptFile) { exit 1 }
 ##		- 20261006 JC: Help block; StrictMode Latest; named arguments where there
 ##		  were three by position. Runs from a shell that has StrictMode on.
 ##		  mv is called by path.
+##		- 20261031 JC: The download folder goes through a guard of its own, with
+##		  the rules of the repo's saferm.ps1.
 

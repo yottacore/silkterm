@@ -77,7 +77,7 @@ except ImportError as why:
 	sys.exit(0)
 
 def done(rec: Any) -> None:
-	shutil.rmtree(rec.work, ignore_errors=True)
+	_testdir.rm(rec.work)
 
 ## Run folder: the one gui-headless.bash uses, with USER set or not.
 me = pwd.getpwuid(os.getuid()).pw_name
@@ -158,7 +158,7 @@ stand_in = Path(tempfile.mkdtemp(prefix="silk-demo-profiler-")) / "app"
 stand_in.write_text("#!/bin/sh\nexec env\n")
 stand_in.chmod(0o755)
 e = launch_env(f"PROFILE_BIN={stand_in}; hdisp=:197\n" + "\n".join(launch)) if launch else {}
-shutil.rmtree(stand_in.parent, ignore_errors=True)
+_testdir.rm(stand_in.parent)
 check("the profiler stage drops the Wayland session",
 	e and "WAYLAND_DISPLAY" not in e and "XDG_SESSION_TYPE" not in e and e.get("DISPLAY") == ":197",
 	"\n".join(launch) or "no profiler launch found")
@@ -250,7 +250,7 @@ else:
 	alive = [line.split(None, 1)[1] for line in ps.splitlines() if line.split()[0] == str(pgid)]
 	check("nothing the session started is still running", not alive, ", ".join(alive))
 	done(rec)
-	shutil.rmtree(sentinel, ignore_errors=True)
+	_testdir.rm(sentinel)
 
 _testdir.end(1 if failures else 0)
 if failures:

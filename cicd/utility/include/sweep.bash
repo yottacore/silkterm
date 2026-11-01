@@ -6,11 +6,12 @@
 ##	Purpose:
 ##		- What a pipeline run leaves behind, and taking it away once it is stale.
 ##		  Source this. It defines functions and runs nothing.
-##		- Run folders: a test run folder, or the container's /tmp. Each one is
-##		  written down in a ledger with the token in its owner mark. A later run
-##		  removes the ones past the newest few still there, and only one whose
-##		  mark still has the token the ledger wrote. A run taht passes has
-##		  already removed its own.
+##		- Run folders: one a killed run left goes after a few days, once no
+##		  process from its run.pid is left. A run taht ends has already removed
+##		  its own.
+##		- The ledgers older runs wrote, of a test run folder or the container's
+##		  /tmp, each with the token in its owner mark. Only a folder whose mark
+##		  still has the token the ledger wrote goes.
 ##		- Cargo build dirs: everything built before a toolchain change, since
 ##		  cargo rebuilds all of it anyway; a dir the config no longer builds into;
 ##		  and an incremental cache its profile has not used for a while.
@@ -82,11 +83,13 @@ fSweep_Record(){
 	printf '%s\t%s\n' "${2}" "${3}" >>"${1}"
 }
 
-##	fSweep_Ledger <ledger> <keep> <what>: removes the folders <ledger> names,
+##	fSweep_Ledger <ledger> <keep> <what> [own]: removes the folders <ledger> names,
 ##	past the newest <keep> still there. One that is gone, or turns out not to be
 ##	ours, comes off the ledger. Lines are in the order the folders were made.
+##	With "own", each goes under its own parent, for the old test run folders
+##	right in HOST_TEMP, which the temp guard refuses.
 fSweep_Ledger(){
-	local -r ledger="${1}" what="${3}"
+	local -r ledger="${1}" what="${3}" own="${4:-}"
 	local -ri keep="${2}"
 	[[ -f "${ledger}" && ! -L "${ledger}" ]] || return 0
 	local -a lines=() kept=()
@@ -100,7 +103,7 @@ fSweep_Ledger(){
 		if ((held < keep)); then kept=("${lines[i]}" "${kept[@]}"); held+=1; continue; fi
 		why="$(fSweep_NotOurs "${dir}" "${token}")"
 		if [[ -n "${why}" ]]; then echo "cleanup: left ${dir} in place: ${why}" >&2; continue; fi
-		fSweep_Remove "${dir}" "${what}" || kept=("${lines[i]}" "${kept[@]}")
+		fSweep_Remove "${dir}" "${what}" ${own:+"${dir%/*}"} || kept=("${lines[i]}" "${kept[@]}")
 	done
 	if ((${#kept[@]})); then printf '%s\n' "${kept[@]}" >"${ledger}.part"; else : >"${ledger}.part"; fi
 	mv -f -- "${ledger}.part" "${ledger}"
@@ -128,6 +131,59 @@ fSweep_MakeDir(){
 	done
 	echo "cleanup: could not make a folder under ${parent_q7w}" >&2
 	return 1
+}
+
+##	fSweep_RunDir <parent> <dir var>: the run's own folder,
+##	<parent>/YYYYmmDD-HHMMSS_NNN, with this process's PID in its run.pid. The
+##	last part is a plain mkdir, never -p, so a planted one is never adopted, and
+##	NNN counts up while the name is taken.
+fSweep_RunDir(){
+	local -n runDirOut_k4p="${2}"
+	local -r parent_k4p="${1%/}" stamp_k4p="$(date +%Y%m%d-%H%M%S)"
+	local made_k4p=""
+	local -i n_k4p
+	mkdir -p -- "${parent_k4p}" || return 1
+	for ((n_k4p = 1; n_k4p <= 999; n_k4p++)); do
+		printf -v made_k4p '%s/%s_%03d' "${parent_k4p}" "${stamp_k4p}" "${n_k4p}"
+		if mkdir -m 700 -- "${made_k4p}" 2>/dev/null; then
+			echo "$$" >"${made_k4p}/run.pid" || return 1
+			runDirOut_k4p="${made_k4p}"
+			return 0
+		fi
+	done
+	echo "cleanup: could not make a run folder under ${parent_k4p}" >&2
+	return 1
+}
+
+##	fSweep_RunDirNotOurs <dir>: why <dir> is not the run folder this process
+##	made, or nothing when it is.
+fSweep_RunDirNotOurs(){
+	local pid=""
+	if [[ -L "${1}" ]]; then echo "it is a link"
+	elif [[ ! -d "${1}" ]]; then echo "not a folder"
+	elif [[ -L "${1}/run.pid" || ! -f "${1}/run.pid" ]]; then echo "no run.pid"
+	else
+		read -r pid <"${1}/run.pid" || true
+		[[ "${pid}" == "$$" ]] || echo "another run's run.pid"
+	fi
+}
+
+##	fSweep_StaleRuns <parent> <days> <what>: the run folders in <parent> older
+##	than <days>, whose run.pid names no process that's still there. Only a
+##	real folder of this user's with a run.pid in it, named as fSweep_RunDir
+##	names them, so a folder made by hand there stays.
+fSweep_StaleRuns(){
+	local -r parent="${1%/}" what="${3}"
+	local -ri days="${2}"
+	local dir pid
+	[[ -d "${parent}" && ! -L "${parent}" ]] || return 0
+	while IFS= read -r -d '' dir; do
+		[[ "${dir##*/}" =~ ^[0-9]{8}-[0-9]{6}_[0-9]{3}$ && -f "${dir}/run.pid" && ! -L "${dir}/run.pid" ]] || continue
+		pid=""; read -r pid <"${dir}/run.pid" || true
+		## ps, not kill -0, which fails on another user's process.
+		if [[ "${pid}" =~ ^[0-9]+$ ]] && ps -p "${pid}" >/dev/null 2>&1; then continue; fi
+		fSweep_Remove "${dir}" "${what}" || true
+	done < <(find "${parent}" -mindepth 1 -maxdepth 1 -type d -user "$(id -u)" -mmin "+$((days * 1440))" -print0 2>/dev/null)
 }
 
 ##	fSweep_IsBuildDir <dir>: a real dir of this user's that cargo made, either a
@@ -254,3 +310,4 @@ fSweep_Summary(){
 ##		- 20261025 JC: Zig caches.
 ##		- 20261026 JC: The Zig cap goes by apparent size.
 ##		- 20261028 JC: Removals go through the guard in saferm.bash.
+##		- 20261031: Run folders, and the stale ones after a few days.

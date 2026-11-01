@@ -270,8 +270,8 @@ LINT_LOG_DIR="cicd/artifacts/lint"      # relative to repo root; created if miss
 ## Cleanup at the start of a full run (cicd/utility/include/sweep.bash). The gate
 ## does none of it. Only what a run made and wrote down, or what cargo made in the
 ## dirs named here, goes:
-##  - the test run folders failed runs kept, and the container's /tmp, past the
-##    newest CLEANUP_KEEP_RUNS of each
+##  - a run folder in HOST_TEMP/silkterm older than CLEANUP_STALE_DAYS, once no
+##    process from its run.pid is left, and what the old ledgers still name
 ##  - the build dirs below once the toolchain changes, since cargo rebuilds all of
 ##    it then anyway, and one a run built into that the list no longer names
 ##  - an incremental cache not used for CLEANUP_INCREMENTAL_DAYS before the newest
@@ -279,7 +279,7 @@ LINT_LOG_DIR="cicd/artifacts/lint"      # relative to repo root; created if miss
 ## The build dirs are under TARGET_DIR, and each cross target's release dir is
 ## added from CROSS_TARGETS. Scratch dirs made by hand under target/ are never on
 ## the list.
-CLEANUP_KEEP_RUNS=5
+CLEANUP_STALE_DAYS=2
 CLEANUP_INCREMENTAL_DAYS=7
 CLEANUP_BUILD_DIRS=(debug release "${PROFILE_PROFILE}" lint)
 ## The same for the dirs the pinned nightly builds into, which only a nightly bump

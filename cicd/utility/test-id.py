@@ -9,7 +9,9 @@
 ##		it on a "Test ID:" line in its header comment. A script that runs cases
 ##		of its own, such as the scroll harness's scenes, gives each its ID as
 ##		the first word of its row in a case table, listed in CASE_TABLES. Each
-##		fuzz target is a Rust test of its own, so it has its own ID.
+##		fuzz target is a Rust test of its own, so it has its own ID. The test
+##		scripts of silkterm-private, when it is checked out beside this repo
+##		as the pipeline expects, share the one set of IDs.
 ##	Syntax:
 ##		test-id.py [N]            print N new IDs for now (default 1)
 ##		test-id.py --at WHEN [N]  the same for a past time, "YYYY-MM-DD HH:MM" local
@@ -27,6 +29,7 @@
 ##	SPDX-License-Identifier: MIT
 
 import argparse
+import os
 import re
 import subprocess
 import sys
@@ -40,6 +43,7 @@ ID_FORM = re.compile(f"[{DIGITS}]+")
 NO_ID = "-----"
 EPOCH = datetime(2000, 1, 1, tzinfo=timezone.utc)
 ROOT = Path(__file__).resolve().parents[2]
+PRIVATE_NAME = "silkterm-private"
 
 ID_RE = re.compile(r"^\s*(?://|#+)\s*(?:-\s*)?Test ID:\s*(\S*)\s*$")
 TEST_ATTR_RE = re.compile(r"^\s*#\[test\]\s*$")
@@ -101,8 +105,21 @@ def rust_files() -> Iterator[Path]:
 				yield path
 
 
-def script_tests() -> Iterator[Path]:
-	tests = ROOT / "cicd" / "tests"
+def private_root() -> Path | None:
+	##	Found the way cicd/config.bash finds the private runner, and turned
+	##	off the same way, by an empty SILK_PRIVATE_RUNNER.
+	runner = os.environ.get("SILK_PRIVATE_RUNNER")
+	if runner is None:
+		path = ROOT.parents[1] / PRIVATE_NAME / "repo"
+	elif runner:
+		path = Path(runner).parents[1]
+	else:
+		return None
+	return path if (path / "cicd" / "tests").is_dir() else None
+
+
+def script_tests(root: Path = ROOT) -> Iterator[Path]:
+	tests = root / "cicd" / "tests"
 	for path in sorted(tests.rglob("*")):
 		rel = path.relative_to(tests)
 		if (path.is_file() and path.suffix in SCRIPT_EXTS and not path.name.startswith("_")
@@ -161,16 +178,23 @@ def table_cases(path: Path, table: str) -> list[tuple[str, str]] | None:
 	return None
 
 
+def script_id(path: Path) -> str | None:
+	head = path.read_text(encoding="utf-8").splitlines()[:60]
+	return next((m.group(1) for m in map(ID_RE.match, head) if m), None)
+
+
 def find_ids() -> list[tuple[str, str | None]]:
 	##	Every test as (where, id or None), the cases in a case table included.
 	found = [(where, tid) for where, tid, _ in rust_tests()]
 	for path in script_tests():
-		head = path.read_text(encoding="utf-8").splitlines()[:60]
-		ids = [m.group(1) for m in map(ID_RE.match, head) if m]
-		found.append((str(path.relative_to(ROOT)), ids[0] if ids else None))
+		found.append((str(path.relative_to(ROOT)), script_id(path)))
 		table = CASE_TABLES.get(path.relative_to(ROOT / "cicd" / "tests").as_posix())
 		for where, tid in (table_cases(path, table) or []) if table else []:
 			found.append((where, tid or None))
+	private = private_root()
+	if private:
+		for path in script_tests(private):
+			found.append((f"{PRIVATE_NAME}/{path.relative_to(private)}", script_id(path)))
 	return found
 
 
@@ -354,3 +378,5 @@ if __name__ == "__main__":
 ##		  cicd-win.ps1.
 ##		- 20261028: --check takes the scroll harness's scenes, each with an
 ##		  ID of its own, and refuses 2 fuzz targets in one test.
+##		- 20261031: The private repo's test scripts too, when it is beside
+##		  this one.

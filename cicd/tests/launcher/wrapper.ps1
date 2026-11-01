@@ -32,6 +32,7 @@ $ErrorActionPreference = "Stop"
 if (-not $IsWindows) { Write-Host "  skip runterm.cmd (Windows only)"; exit 0 }
 
 . (Join-Path $PSScriptRoot '../_testdir.ps1'); fTestDir_Use
+. (Join-Path $PSScriptRoot '../../utility/include/saferm.ps1')
 
 $Wrapper = Join-Path (Split-Path $PSScriptRoot -Parent | Split-Path -Parent | Split-Path -Parent) "utility/runterm.cmd"
 if (-not (Test-Path -LiteralPath $Wrapper)) { throw "no wrapper at $Wrapper" }
@@ -113,7 +114,7 @@ try {
 		Write-Host "  skip App Paths (pwsh did not register one here)"
 	}
 } finally {
-	Remove-Item -LiteralPath $dir -Recurse -Force -ErrorAction SilentlyContinue
+	$null = fSafeRm_Under ([System.IO.Path]::GetTempPath()) $dir
 }
 
 if ($script:Failures -gt 0) { Write-Host "$($script:Failures) failed"; fTestDir_End 1; exit 1 }

@@ -246,7 +246,7 @@ fCleanup(){
 		fTestDir_End 1
 	else
 		((startedHeadless)) && "${headless}" stop >/dev/null 2>&1 || true
-		rm -rf "${work}" 2>/dev/null || true
+		fTestDir_Rm "${work}" || true
 		fTestDir_End "${rc}"
 	fi
 }

@@ -27,7 +27,7 @@ fCheck(){ local -r what="${1}"; shift; if "${@}"; then echo "  ok   ${what}"; el
 fNot(){ ! "${@}"; }
 
 work="$(mktemp -d "${TMPDIR:-/tmp}/silk-cleanup.XXXXXX")"
-fEnd(){ local -r rc=$?; rm -rf "${work}"; fTestDir_End "${rc}"; }
+fEnd(){ local -r rc=$?; fTestDir_Rm "${work}" || true; fTestDir_End "${rc}"; }
 trap fEnd EXIT
 
 ## A: the test run folders failed runs kept. Eight written down, oldest first.
@@ -38,7 +38,7 @@ fPlant(){ local -r dir="${base}/test_silkterm_2026101${1}-00000000"; mkdir -m 70
 for n in 1 2 3 4 5 6 7 8; do fPlant "${n}"; done
 fDir(){ echo "${base}/test_silkterm_2026101${1}-00000000"; }
 echo "tok-other" >"$(fDir 2)/.test_silkterm_owner"
-rm -rf "$(fDir 3)"
+fTestDir_Rm "$(fDir 3)"
 mv "$(fDir 4)" "${work}/elsewhere/four"; ln -s "${work}/elsewhere/four" "$(fDir 4)"
 mkdir "${base}/test_silkterm_20261099-00000000"; echo tok-99 >"${base}/test_silkterm_20261099-00000000/.test_silkterm_owner"
 ## Not in a subshell, so the counts reach the summary.
@@ -128,8 +128,8 @@ fCheck "nothing goes in a dir cargo did not make" test -d "${t}/notcargo/increme
 repo="${work}/repo"; mkdir -p "${repo}"
 tar -C "${root}" --exclude=cicd/artifacts -cf - cicd rust-toolchain.toml source/Cargo.toml | tar -xf - -C "${repo}"
 mkdir "${work}/f-base"
-( cd "${repo}" && env -u SILKTERM_TEST_DIR TMPDIR="${work}/f-base" GIT_CONFIG_GLOBAL=/dev/null bash cicd/cicd.bash --no-sync </dev/null >"${work}/f.log" 2>&1 ) || true
-fCheck "a run stopped at its prompt leaves no test folder" test -z "$(ls -A "${work}/f-base")"
+( cd "${repo}" && env -u SILKTERM_TEST_DIR -u HOST_TEMP TMPDIR="${work}/f-base" GIT_CONFIG_GLOBAL=/dev/null bash cicd/cicd.bash --no-sync </dev/null >"${work}/f.log" 2>&1 ) || true
+fCheck "a run stopped at its prompt leaves no run folder" test -z "$(ls -A "${work}/f-base")"
 fCheck "the build dirs are swept first thing where the builds run" bash -c 'sed -n "/^fBuildTestRelease(){$/,/^}$/p" "$1" | sed -n 2p | grep -qx "[[:space:]]*fSweepBuilds"' _ "${engine}"
 fCheck "the run says what went before it is done" bash -c 'grep -B3 "^fSection \"\${APP_NAME} CI/CD: done.\"" "$1" | grep -qF "fSweep_Summary"' _ "${engine}"
 fCheck "the config names its build dirs" bash -c 'source "$1" && ((${#CLEANUP_BUILD_DIRS[@]} >= 4))' _ "${root}/cicd/config.bash"
@@ -180,6 +180,48 @@ fCheck "the run sweeps them where the builds ran, before its summary" \
 	bash -c 'awk "/fSweep_ZigCache/ {z = NR} /fEcho_Clean \"\\\$\\(fSweep_Summary\\)\"/ {s = NR} END {exit !(z && s && z < s)}" "$1" && grep -qF "if ((! container)) && command -v zig" "$1"' _ "${engine}"
 fCheck "the cap is 2 GB in the config" bash -c 'source "$1" && [[ "${CLEANUP_CACHE_CAP_MB}" == 2048 ]]' _ "${root}/cicd/config.bash"
 
+## R: the run's own folder, HOST_TEMP/silkterm/YYYYmmDD-HHMMSS_NNN, and the
+## stale ones killed runs left.
+r="${work}/r/silkterm"; made=""
+fSweep_RunDir "${r}" made
+fCheck "a run folder is made, 0700, named for the time with a counter" bash -c '[[ "$(basename "$1")" =~ ^[0-9]{8}-[0-9]{6}_001$ && "$(stat -c %a "$1")" == 700 && "$(dirname "$1")" == "$2" ]]' _ "${made}" "${r}"
+fCheck "with this process's PID in its run.pid" test "$(cat "${made}/run.pid")" == "$$"
+fCheck "which marks it as this run's" test -z "$(fSweep_RunDirNotOurs "${made}")"
+echo 1 >"${made}/run.pid"
+fCheck "and another PID does not" grep -qx "another run's run.pid" <<<"$(fSweep_RunDirNotOurs "${made}")"
+fCheck "nor does a link" grep -qx "it is a link" <<<"$(ln -s "${made}" "${r}/ln" && fSweep_RunDirNotOurs "${r}/ln")"
+## The name is taken twice over in the same second, so it counts up. Never -p,
+## so the planted ones are never adopted.
+( date(){ echo 20261001-120000; }; mkdir "${r}/20261001-120000_001" "${r}/20261001-120000_002"; fSweep_RunDir "${r}" made; echo "${made}" >"${work}/r/next" )
+fCheck "a name that is taken counts up" test "$(cat "${work}/r/next")" == "${r}/20261001-120000_003"
+sh -c 'exit 0' & deadPid=$!; wait "${deadPid}" || true
+fRunOld(){ mkdir -p "${r}/${1}"; [[ -z "${2}" ]] || echo "${2}" >"${r}/${1}/run.pid"; echo x >"${r}/${1}/out.txt"; touch -d "${3}" "${r}/${1}"; }
+fRunOld 20261001-000000_001 "${deadPid}" "3 days ago"
+fRunOld 20261001-000000_002 "$$" "3 days ago"
+fRunOld 20261001-000000_003 "${deadPid}" "1 day ago"
+fRunOld 20261001-000000_004 "" "3 days ago"
+fRunOld by-hand "${deadPid}" "3 days ago"
+mkdir -p "${work}/r/away/20261001-000000_005"; echo "${deadPid}" >"${work}/r/away/20261001-000000_005/run.pid"
+ln -s "${work}/r/away/20261001-000000_005" "${r}/20261001-000000_005"; touch -h -d "3 days ago" "${r}/20261001-000000_005"
+fSweep_StaleRuns "${r}" 2 "stale run folders"
+fCheck "a run folder over 2 days old, with no process from its run.pid left, goes" test ! -e "${r}/20261001-000000_001"
+fCheck "one whose process is still there stays" test -f "${r}/20261001-000000_002/out.txt"
+fCheck "so does a younger one" test -f "${r}/20261001-000000_003/out.txt"
+fCheck "and one with no run.pid" test -f "${r}/20261001-000000_004/out.txt"
+fCheck "and one not named as a run folder" test -f "${r}/by-hand/out.txt"
+fCheck "and a link, and what it points to" test -L "${r}/20261001-000000_005" -a -f "${work}/r/away/20261001-000000_005/run.pid"
+fCheck "the config says 2 days" bash -c 'source "$1" && [[ "${CLEANUP_STALE_DAYS}" == 2 ]]' _ "${root}/cicd/config.bash"
+## The old test run folders sat right in HOST_TEMP, where the temp guard refuses
+## a whole folder. Their ledger takes each under its own parent.
+ht="${work}/r/ht"; mkdir -p "${ht}"; ht="$(realpath -e "${ht}")"; : >"${work}/r/old.ledger"
+for n in 1 2; do mkdir "${ht}/test_silkterm_2026102${n}-00000000"; echo "tok-${n}" >"${ht}/test_silkterm_2026102${n}-00000000/.test_silkterm_owner"; fSweep_Record "${work}/r/old.ledger" "${ht}/test_silkterm_2026102${n}-00000000" "tok-${n}"; done
+said="$( __safeRmHost="${ht}"; __safeRmHostSet=1; fSweep_Ledger "${work}/r/old.ledger" 0 x 2>&1 )"
+fCheck "the temp guard refuses an old test run folder right in HOST_TEMP" bash -c '[[ "$1" == *"a whole project temp folder"* && -d "$2" ]]' _ "${said}" "${ht}/test_silkterm_20261021-00000000"
+( __safeRmHost="${ht}"; __safeRmHostSet=1; fSweep_Ledger "${work}/r/old.ledger" 0 x own )
+fCheck "and the ledger takes them under their own parent" test ! -e "${ht}/test_silkterm_20261021-00000000" -a ! -e "${ht}/test_silkterm_20261022-00000000" -a ! -s "${work}/r/old.ledger"
+fCheck "the run sweeps stale run folders and empties the old ledgers" \
+	bash -c 'grep -qF "fSweep_StaleRuns \"\${runBase}\" \"\${CLEANUP_STALE_DAYS:-2}\"" "$1" && grep -qF "fOldLedger \"\${TARGET_DIR}/.cicd-test-folders\" \"old test run folders\" own" "$1"' _ "${engine}"
+
 ## G: the PowerShell side, for cicd-win.ps1's test folders on Windows.
 if command -v pwsh >/dev/null 2>&1; then
 	rc=0; pwsh -NoProfile -NonInteractive -File "${meDir}/win.ps1" || rc=$?
@@ -196,3 +238,4 @@ echo "all passed"
 ##		- 20261019 JC: The nightly's build dirs.
 ##		- 20261025 JC: Zig caches.
 ##		- 20261026 JC: The Zig cap by apparent size.
+##		- 20261031: Run folders, stale after 2 days, and the old ledgers emptied.

@@ -28,6 +28,7 @@ param(
 
 Set-StrictMode -Version Latest
 . (Join-Path $PSScriptRoot '../_testdir.ps1'); fTestDir_Use
+. (Join-Path $PSScriptRoot '../../utility/include/saferm.ps1')
 $failures = 0
 function fCheck([string]$What, [bool]$Ok) {
 	if ($Ok) { Write-Output "  ok   $What" } else { Write-Output "  FAIL $What"; $script:failures++ }
@@ -59,7 +60,7 @@ try {
 	try { . $make } catch { $refused = $true }
 	fCheck 'a folder that is already there is refused' $refused
 } finally {
-	foreach ($dir in $made) { Remove-Item -Recurse -Force -LiteralPath $dir -ErrorAction SilentlyContinue }
+	foreach ($dir in $made) { $null = fSafeRm_Under ([System.IO.Path]::GetTempPath()) $dir }
 }
 
 if ($failures) { Write-Output "$failures failed"; fTestDir_End 1; exit 1 }

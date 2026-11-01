@@ -66,8 +66,8 @@ fCleanup(){
 	if [[ -n "${appPid}" ]]; then fStopOurs "${appPid}"; fi
 	if [[ -n "${proxyPid}" ]]; then kill "${proxyPid}" 2>/dev/null || true; wait "${proxyPid}" 2>/dev/null || true; fi
 	if [[ -n "${swayPid}" ]]; then kill "${swayPid}" 2>/dev/null || true; wait "${swayPid}" 2>/dev/null || true; fi
-	if [[ -n "${shortRun}" && "${shortRun}" == /tmp/silknoshm.* && -d "${shortRun}" && ! -L "${shortRun}" && -O "${shortRun}" ]]; then rm -rf "${shortRun}"; fi
-	if [[ "${rc}" == 0 ]]; then rm -rf "${work}"; fi
+	if [[ -n "${shortRun}" && "${shortRun}" == /tmp/silknoshm.* && -d "${shortRun}" && ! -L "${shortRun}" && -O "${shortRun}" ]]; then fSafeRm "${shortRun}" || true; fi
+	if [[ "${rc}" == 0 ]]; then fTestDir_Rm "${work}" || true; fi
 	fTestDir_End "${rc}"
 }
 trap 'fCleanup $?' EXIT

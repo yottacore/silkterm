@@ -28,7 +28,7 @@ fNot(){ ! "${@}"; }
 
 work="$(mktemp -d "${TMPDIR:-/tmp}/silk-engine.XXXXXX")"
 declare -a started=()
-fEnd(){ local -r rc=$?; local p; for p in "${started[@]}"; do kill "${p}" 2>/dev/null || true; done; rm -rf "${work}"; fTestDir_End "${rc}"; }
+fEnd(){ local -r rc=$?; local p; for p in "${started[@]}"; do kill "${p}" 2>/dev/null || true; done; fTestDir_Rm "${work}" || true; fTestDir_End "${rc}"; }
 trap fEnd EXIT
 
 fEcho(){ echo "    ${*}"; }
@@ -468,9 +468,9 @@ fCheck "one that left something out for want of a box closes with SKIP" bash -c 
 rc=0; out="$(fSteps eval 'fStepOpen Format; fDie "it broke"; echo after')" || rc=$?
 fCheck "fDie in a step says why, then closes it with FAIL" bash -c '[[ "$3" == 1 && "$(grep -v "^$" <<<"$1" | tail -2 | head -1)" == "[ FAILED: it broke ]" && "$(grep -v "^$" <<<"$1" | tail -1)" =~ ^\[\ $2:\ Step\ 1\ of\ 2\;\ FAIL\ Format\ \]$ && "$1" != *after* ]]' _ "${out}" "${stamp}" "${rc}"
 eval "$(fLift '^fRunEnd(){' '^}')"
-out="$(fSteps eval 'fContainerEnd(){ :; }; fTestDir_End(){ :; }; keepTemp=0; fStepOpen Format; fRunEnd 2')"
+out="$(fSteps eval 'fContainerEnd(){ :; }; fTestDir_End(){ :; }; fRunDir_End(){ :; }; keepTemp=0; fStepOpen Format; fRunEnd 2')"
 fCheck "a step a plain error ended closes with FAIL too" bash -c '[[ "$(grep -v "^$" <<<"$1" | tail -1)" =~ ^\[\ $2:\ Step\ 1\ of\ 2\;\ FAIL\ Format\ \]$ ]]' _ "${out}" "${stamp}"
-out="$(fSteps eval 'fContainerEnd(){ :; }; fTestDir_End(){ :; }; keepTemp=0; fRunEnd 0')"
+out="$(fSteps eval 'fContainerEnd(){ :; }; fTestDir_End(){ :; }; fRunDir_End(){ :; }; keepTemp=0; fRunEnd 0')"
 fCheck "and a run that passed adds no line" test -z "${out}"
 
 ## The ARM64 smoke run: its own line, SKIP when its box wasn't there.

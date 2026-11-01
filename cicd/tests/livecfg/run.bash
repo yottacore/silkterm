@@ -64,8 +64,8 @@ fCleanup(){
 	local name
 	for name in "${!pids[@]}"; do fStopOurs "${pids[${name}]}"; done
 	if ((startedDisplay)); then "${headless}" stop >/dev/null 2>&1 || true; fi
-	if [[ -n "${shortRun}" && "${shortRun}" == /tmp/silklive.* && -d "${shortRun}" && ! -L "${shortRun}" && -O "${shortRun}" ]]; then rm -rf "${shortRun}"; fi
-	if [[ "${rc}" == 0 ]]; then rm -rf "${work}"; fi
+	if [[ -n "${shortRun}" && "${shortRun}" == /tmp/silklive.* && -d "${shortRun}" && ! -L "${shortRun}" && -O "${shortRun}" ]]; then fSafeRm "${shortRun}" || true; fi
+	if [[ "${rc}" == 0 ]]; then fTestDir_Rm "${work}" || true; fi
 	fTestDir_End "${rc}"
 }
 trap 'fCleanup $?' EXIT

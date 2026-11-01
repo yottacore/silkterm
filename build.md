@@ -126,6 +126,8 @@ wgpu uses the Metal backend automatically. No extra system packages are needed b
 
 - The crate cache and the run's home are a named volume, `silkterm-cicd-cache`. `docker volume rm silkterm-cicd-cache` starts it fresh. Zig's cache, which the ARM64 builds fill, is a volume of its own, `silkterm-zig-cache`. A run empties either one when it's over 2 GB, and the Zig one when another Zig version filled it. The Zig cache in your home folder is never touched.
 
+- Each run works in a folder of its own, `${HOST_TEMP}/silkterm/<YYYYmmDD-HHMMSS>_<NNN>`, or under `TMPDIR` or `/tmp` where `HOST_TEMP` isn't set, with `TMPDIR`, `TEMP` and `TMP` pointed at it. The container's `/tmp` is a folder in it. It goes when the run ends, failed or stopped too, unless `--keep-temp`. One a killed run left goes after 2 days, once no process from its `run.pid` is left.
+
 - What the pipeline makes in docker is labeled `dev.project=silkterm` and `dev.run=<run>`, and only that is ever cleaned up. When a run ends, failed or stopped too, its containers go. Then untagged images of ours go, and once a run has passed, every image tag older than the one it used and the one before that. Build cache over a week old goes as well, every project's, so the next build stays warm. The run's last line compares `docker system df` before and after. `--keep-temp` keeps the run's containers, and its temp folders too, and says where they are.
 
 - Everything that needs this machine stays outside and runs once the container is done: the remote sync, the Windows boxes, the private runner, dogfood, the demo and publish. So do the steps that need the graphics card, since the window tests inside run on software rendering: the render node test and the profiler.

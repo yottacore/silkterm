@@ -229,7 +229,7 @@ for exe, name, version in ((bundle / "usr/bin/wez-gui", "wez", "20240203"),
 	check(f"{exe.name} reports {name} {version}",
 		got_name == name and build.split("+", 1)[0] == version, f"{got_name} {build}")
 
-shutil.rmtree(scratch, ignore_errors=True)
+_testdir.rm(scratch)
 _testdir.end(1 if failures else 0)
 if failures:
 	print(f"{failures} failed")

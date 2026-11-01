@@ -26,7 +26,7 @@ Add-Type -Namespace SilkConMap -Name Win -MemberDefinition @'
 '@
 
 $dir = Join-Path $OutDir "conmap"
-Remove-Item $dir -Recurse -ErrorAction SilentlyContinue
+fClearOut $dir
 [void](New-Item -ItemType Directory -Path $dir -Force)
 
 ##	PowerShell only to read the width. Neither it nor ping asks for anything.

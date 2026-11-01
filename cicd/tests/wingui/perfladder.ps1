@@ -19,7 +19,7 @@ if (-not (fSessionUsable)) { fSkip "console session is locked - the banner canno
 
 ##	A folder of its own, since the state file sits beside the config.
 $dir = Join-Path $OutDir "perf"
-Remove-Item $dir -Recurse -ErrorAction SilentlyContinue
+fClearOut $dir
 [void](New-Item -ItemType Directory -Path $dir -Force)
 $cfg = Join-Path $dir "config.shcl"
 $state = Join-Path $dir "state.shcl"

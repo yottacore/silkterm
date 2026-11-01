@@ -4,7 +4,7 @@
 
 ##	- Purpose:
 ##		A failed test script's output reaches the run log, then its FAIL line, and
-##		the failure line names the file that keeps it. A passing or skipped test
+##		the failure line names the file that keeps it, when it outlives the run. A passing or skipped test
 ##		stays quiet but for its PASS or SKIP line, which says why it skipped. Lifts
 ##		fRunTest and its helpers out of cicd.bash as they stand and feeds them
 ##		scratch scripts that pass, fail and skip.
@@ -26,7 +26,7 @@ fCheck(){ local -r what="${1}"; shift; if "${@}"; then echo "  ok   ${what}"; el
 fNot(){ ! "${@}"; }
 
 work="$(mktemp -d "${TMPDIR:-/tmp}/silk-testout.XXXXXX")"
-fEnd(){ local -r rc=$?; rm -rf "${work}"; fTestDir_End "${rc}"; }
+fEnd(){ local -r rc=$?; fTestDir_Rm "${work}" || true; fTestDir_End "${rc}"; }
 trap fEnd EXIT
 
 ## The fake repo root fRunTest reads scripts from, and the folder it writes
@@ -73,6 +73,17 @@ fCheck "and names a file" test -n "${kept}"
 fCheck "which holds the output" grep -q '^fail-clue-one$' "${kept:-/nonexistent}"
 fCheck "inside the test run folder" test "${kept%/*}" = "${work}/run"
 
+##	The run's own folder goes at the end, so a failure there names no file and
+##	says --keep-temp keeps it. Under --keep-temp it names the file again.
+runDir="${work}/run"; keepTemp=0
+fRun "${work}/gone.log" fRunTest t/fail.bash "failing one"
+fCheck "a failure in the run's own folder names no file" test -z "$(fNamed "${work}/gone.log" || true)"
+fCheck "and says --keep-temp keeps it" grep -qF 'FAILED: failing one test failed (zzzzz), --keep-temp keeps its output' "${work}/gone.log"
+keepTemp=1
+fRun "${work}/kept.log" fRunTest t/fail.bash "failing one"
+fCheck "with --keep-temp it names the file" test "$(fNamed "${work}/kept.log" || true)" = "${work}/run/output_t_fail.txt"
+unset runDir keepTemp
+
 fRun "${work}/pass.log" fRunTest t/pass.bash "passing one"
 fCheck "a passing test goes on" test "${rc}" -eq 0
 fCheck "with its PASS line" grep -qxF 'PASS zzzzz passing one' "${work}/pass.log"
@@ -110,3 +121,4 @@ echo "all passed"
 ##	History:
 ##		- 20261008 JC: Created.
 ##		- 20261028: PASS, FAIL and SKIP lines, and the why of a skip.
+##		- 20261031: The failure line names the file only when it outlives the run.

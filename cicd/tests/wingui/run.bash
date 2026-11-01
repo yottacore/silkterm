@@ -103,10 +103,11 @@ bundle="$(mktemp --suffix=.tgz)"
 runId="$(date +%Y%m%d%H%M%S)-$$"
 scripts="$(mktemp -d)"
 ##	install.ps1 goes along for the scenario that checks its PATH change.
-tar czf "${bundle}" -C "${meDir}" --exclude=run.bash --exclude=harness-test.bash --exclude=_stage.ps1 . -C "${root}" install.ps1
+##	So does the safe removal guard, which _lib.ps1 loads.
+tar czf "${bundle}" -C "${meDir}" --exclude=run.bash --exclude=harness-test.bash --exclude=_stage.ps1 . -C "${root}" install.ps1 -C "${root}/cicd/utility/include" saferm.ps1
 fEnd(){
 	local -r rc=$?
-	rm -f "${bundle}"; rm -rf "${scripts}"
+	rm -f "${bundle}"; fTestDir_Rm "${scripts}" || true
 	if ((ownRan)); then fSkipsLeft; rm -f "${WINGUI_RAN}"; fi
 	fTestDir_End "${rc}"
 }
@@ -221,10 +222,11 @@ fRun() {
 		printf '$dir = %s\n' "$(fQuote "${runDir}")"
 		printf '$runFor = %s\n' "$(fQuote "${runFor}")"
 		printf '$b64 = @"\n%s\n"@\n' "$(base64 -w120 "${bundle}")"
+		cat "${root}/cicd/utility/include/saferm.ps1"; echo
 		cat <<'PS'
 $work = Join-Path $dir "wingui"
 $out  = Join-Path $dir "out"
-Remove-Item $work -Recurse -Force -ErrorAction SilentlyContinue
+if ((Test-Path -LiteralPath $work) -and -not (fSafeRm_Under $dir $work)) { "VERDICT fail could not clear $work"; exit 1 }
 New-Item -ItemType Directory -Force -Path $work, $out | Out-Null
 $tgz = Join-Path $dir "wingui.tgz"
 [IO.File]::WriteAllBytes($tgz, [Convert]::FromBase64String(($b64 -replace '\s', '')))

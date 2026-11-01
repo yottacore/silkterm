@@ -26,7 +26,7 @@ failures=0
 fCheck(){ local -r what="${1}"; shift; if "${@}"; then echo "  ok   ${what}"; else echo "  FAIL ${what}"; failures=$((failures + 1)); fi; }
 
 work="$(mktemp -d "${TMPDIR:-/tmp}/silk-pylint.XXXXXX")"
-trap 'rc=$?; rm -rf "${work}"; fTestDir_End "${rc}"' EXIT
+trap 'rc=$?; fTestDir_Rm "${work}" || true; fTestDir_End "${rc}"' EXIT
 
 printf 'def main() -> None:\n\tprint(1)\n\n\nmain()\n' >"${work}/clean.py"
 ## An unused import, in ruff's default set.

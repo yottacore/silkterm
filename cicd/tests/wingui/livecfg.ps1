@@ -35,7 +35,7 @@ Add-Type -Namespace SilkLive -Name Win -MemberDefinition @'
 '@
 
 $dir = Join-Path $OutDir "livecfg"
-Remove-Item $dir -Recurse -ErrorAction SilentlyContinue
+fClearOut $dir
 [void](New-Item -ItemType Directory -Path $dir -Force)
 
 ##	Two folders of pictures that look nothing alike, so a pick can be told by name.
