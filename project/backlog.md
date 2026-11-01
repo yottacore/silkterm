@@ -759,6 +759,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- The canary's two tests run apart, since a UB report stops the binary. The step stops unless Miri reports the race as a data race and the forgotten Vec as leaked memory.
 		- A `--no-miri` flag, a plan line, and the cleanup and rar exclude lines. New container and engine cases, watched to fail.
 		- Miri runs only when `--leakcheck` is given, and says first that it's very slow. A run with no flags keeps the other leak checks, which stay on by default. Tests over a time bar under Miri, such as 60 s, are ignored under Miri as too slow, so even a `--leakcheck` run takes the fast part (answer on 2026102320591323).
+		- Under `--long` too, not only `--leakcheck`, per the CICD process gaps item 2026102416233812.
 
 - Leak checks: CodeQL watched to fail, and its first findings filed
 	- ID: 2026102211462005
