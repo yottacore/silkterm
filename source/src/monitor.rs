@@ -154,6 +154,20 @@ pub fn layout(window: &Window) -> Vec<(i64, i64, i64, i64)> {
 		.collect()
 }
 
+/// Which of `layout` the window is mostly on. None where it can't say where it
+/// is, as on Wayland, or it's on none of them.
+pub fn home(window: &Window, layout: &[(i64, i64, i64, i64)]) -> Option<(i64, i64, i64, i64)> {
+	let at = window.outer_position().ok()?;
+	let size = window.outer_size();
+	let win = (
+		i64::from(at.x),
+		i64::from(at.y),
+		i64::from(size.width),
+		i64::from(size.height),
+	);
+	monitor_under(win, None, layout).map(|index| layout[index])
+}
+
 /// Where in the layout each output a Wayland window is on sits, first entered
 /// first. None off Wayland, or where winit's state can't be read.
 pub fn outputs_under(window: &Window) -> Option<Vec<(i64, i64, i64, i64)>> {
@@ -611,7 +625,6 @@ mod wayland {
 // overlaps most, and none when it overlaps none, as when the monitor it was
 // on has just gone dark. Taking the first then gave a window left in the
 // gap the size of a monitor it was never on.
-#[cfg_attr(not(any(target_os = "linux", test)), allow(dead_code))]
 fn monitor_under(
 	window: (i64, i64, i64, i64),
 	pointer: Option<(i64, i64)>,
@@ -630,7 +643,6 @@ fn monitor_under(
 }
 
 // Shared area of two (x, y, width, height) rectangles.
-#[cfg_attr(not(any(target_os = "linux", test)), allow(dead_code))]
 fn overlap(a: (i64, i64, i64, i64), b: (i64, i64, i64, i64)) -> i64 {
 	let w = (a.0 + a.2).min(b.0 + b.2) - a.0.max(b.0);
 	let h = (a.1 + a.3).min(b.1 + b.3) - a.1.max(b.1);

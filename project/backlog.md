@@ -433,15 +433,32 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - When two screens return after screen power sleep or off, SilkTerm seems to reposition itself in between them
 	- ID: 2026102807384201
 	- Type: Bug
-	- Status: Queued
+	- Status: Waiting on UAT
+		- Fixed and pinned by a test under xfwm4 with two outputs. A real wake on b23's two monitors is left.
+	- Needs hand testing: On b23 under xfwm4, with the window on each monitor in turn: let both screens sleep, wake them, and see the window back where it was, at its size.
 	- Severity: High
 	- Opened: 20261028-073842
 	- Opened by: JC
+	- Assigned to: CC
+	- Related IDs: 2026100907341816
+	- Target OS: Linux
+	- Test environment: b23, xfwm4 4.20
 	- Incorrect behavior: When two screens return after screen power sleep or off, SilkTerm seems to reposition itself in between them.
 	- Expected behavior: It stays where it was. None of the other ~dozen application windows move, other terminals included.
+	- Reproduced: 20261101, headless, with two outputs under xfwm4. Turned off, the portrait output's window was moved onto the landscape one and took that one's size. Turned on again, the window stayed there, and an xterm beside it went back.
+	- Actual cause: xfwm4 notes where each window was as a monitor goes, and puts it back once the monitor returns, unless the window resized itself in between. SilkTerm took the size kept for the monitor it was herded onto, so xfwm4 left it where it had herded it. Since 2026100907341816 that took place even within a second of the move.
 	- Notes:
 		- Pre-next-cut.
 		- Work first after the CICD issues.
+	- Decisions:
+		- 20261101: A window herded off a monitor that went dark, or changed, keeps its size and takes no other. It notes the monitor it is on, so a size the user sets there is kept for that one. This reverses 2026100907341816's choice that a herded window takes the other monitor's size. Other windows keep their size too.
+		- 20261101: A herd is told from a user's drag by the monitor the window was on at its last look being gone from the layout. Where the window can't say where it is, as on native Wayland, nothing changed.
+		- 20261101: Updated an assert, `monwake` (ddq75): "took the landscape size there" is now "kept its size there". In ddq74 the herd step now takes no size.
+	- Actual fix: The look after a move takes no monitor size when the monitor the window was on at the last look has left the layout. design.md says so under the per-monitor size.
+	- Swept: every call that resizes the main window. The monitor look is the only one made without the user, apart from the system's own resize for a new scale. The Settings and zoom resizes are the user's. Dialogs are placed once, when they open.
+	- Verified: 20261101. The new xfwm4 test fails both cases on the old build and passes on the fix. monwake passes on the fix, and fails only its changed check on the old build. The unit tests, clippy, fmt, script lints, docs and test IDs pass.
+	- Branch: rnd1101
+	- Test case: `cicd/tests/herdback/run.bash` (deqx1), the window back where it was under xfwm4. `a_window_herded_off_a_dark_monitor_takes_no_size` (deqwx). `monwake` (ddq75) and ddq74, changed.
 
 - CICD reset: test IDs
 	- ID: 2026102416233810
