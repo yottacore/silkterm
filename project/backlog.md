@@ -387,7 +387,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - CICD reset: test IDs
 	- ID: 2026102416233810
 	- Type: Task
-	- Status: Queued
+	- Status: Done
 	- Priority: High
 	- Opened: 20261024-162338
 	- Opened by: CC
@@ -403,6 +403,10 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Progress log:
 		- 20261028: Split in 3, too big for one sitting. 2026102819264421 takes the ID tool, the check and converting every ID, 2026102819265198 one PASS, FAIL or SKIP line per test, and 2026102819265312 IDs for the scroll scenes and fuzz cases. This item closes when they do.
 		- 20261028: 2026102819264421 is in, waiting on the full run.
+		- 20261101: All 3 children are Done, so this closes.
+	- Test case: The children's tests, 2026102819264421, 2026102819265198 and 2026102819265312.
+	- Acceptance signoff: Self-closed: every child is Done.
+	- Closed: 20261101-2010
 
 - Regression: "Conserve resources", "Minutes otherwise" isn't working
 	- ID: 2026103010083401
@@ -585,7 +589,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - CICD reset: the PowerShell recursive removals through a guard
 	- ID: 2026102807494139
 	- Type: Task
-	- Status: Queued
+	- Status: Done
 	- Priority: Avg
 	- Opened: 20261028-074941
 	- Opened by: CC
@@ -598,6 +602,10 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- A test like dehwp, run on b29w.
 	- Progress log:
 		- 20261028: Split, since it doesn't fit one sitting. Children: 2026102808471071 (the guard, and `cicd-win.ps1`'s release artifacts folder), 2026102808471076 (the test scripts), 2026102808472645 (`install.ps1`).
+		- 20261101: All 3 children are Done, so this closes.
+	- Test case: The children's tests, 2026102808471071, 2026102808471076 and 2026102808472645.
+	- Acceptance signoff: Self-closed: every child is Done.
+	- Closed: 20261101-2010
 
 - Leak checks: Miri sort, settings_ui
 	- ID: 2026102407430381
@@ -711,7 +719,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - CICD reset: temp files and safe removal
 	- ID: 2026102416233803
 	- Type: Task
-	- Status: Queued
+	- Status: Done
 	- Priority: Avg
 	- Opened: 20261024-162338
 	- Opened by: CC
@@ -732,6 +740,10 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Progress log:
 		- 20261028: Split, since it doesn't fit one sitting. Children: 2026102807494103 (the guard, in the pipeline's own scripts, and the release artifacts folder), 2026102807494121 (the test and utility scripts, with the socket folders), 2026102807494139 (PowerShell), 2026102807494157 (run folders under `HOST_TEMP`, removed at the end, stale after 2 days).
 		- 20261028: 2026102807494103 is in.
+		- 20261101: All 4 children are Done, so this closes. The 2 follow-ups under 2026102807494157, 2026103115564575 and 2026103115564581, stay open on their own.
+	- Test case: The children's tests, 2026102807494103, 2026102807494121, 2026102807494139 and 2026102807494157.
+	- Acceptance signoff: Self-closed: every child is Done.
+	- Closed: 20261101-2010
 
 - CICD reset: CICD process gaps
 	- ID: 2026102416233812
