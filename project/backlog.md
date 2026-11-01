@@ -37,7 +37,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - Regression: "Conserve resources", "Minutes otherwise" isn't working
 	- ID: 2026103010083401
 	- Type: Bug
-	- Status: Waiting for answers
+	- Status: Queued
 		- Waits on the question in questions.md: which box, build and setup it failed on.
 	- Opened: 20261030-100834
 	- Opened by: JC
@@ -53,6 +53,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Progress log:
 		- 20261101: No change in the log breaks it. The release decision and its inputs are as they were at 75ebca3 (10-05), apart from test attributes. The config, dialog and save paths for the setting are pinned by davbd and ddp90.
 		- 20261101: New test, so it can't come back unseen on Linux: the window is launched unfocused on screen with the waits read from its file, and has to let go after the minute and not well before it. Verified: it fails with "Minutes otherwise" pointed at the hidden wait, and passes at 79d25ae.
+		- 20261101: Answer to the question: change it so only output from the tab in front restarts the wait while the window shows, the way a hidden window already works.
 	- Test case: `cicd/tests/idleother/run.bash` (deqy2), in the full run.
 
 - The window doesn't paint while the GPU is busy or short on memory, and stays blank after the load ends
@@ -395,7 +396,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - CICD reset: CICD process gaps
 	- ID: 2026102416233812
 	- Type: Task
-	- Status: Started
+	- Status: Done
 	- Priority: Avg
 	- Opened: 20261024-162338
 	- Opened by: CC
@@ -415,6 +416,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261101: 2026110112424508 is done: one cleanup line at the end. The same in `cicd-win.ps1` is 2026110112581983. Left: that one and 2026102320591318.
 		- 20261101: The heap-growth test runs under `--quick` too. It took about 8 s to build and 20 s to run in the last full run.
 		- 20261101: `--leakcheck` is every leak check now, so it adds CodeQL, under `--quick` too. `--no-leakcheck` after it still drops them all.
+		- 20261101: The answer to the Check entry confirms CodeQL under `--long` and `--leakcheck`. Both children are done, and the Miri parts are in 2026102320591318's requirements, so that item tracks them.
 	- Decisions:
 		- 20261101: CodeQL stays out of the default run, against this item's wording. That run takes about an hour without it, and the same reset sends a step that pushes it past the hour to `--long`, as 2026102616543936 did on 10-28. It also fails until 2026102211462005 files what it finds.
 		- 20261101: The ASan and LSan run stays a step of its own, with `--no-asan`, rather than one of the leak checks the two flags turn on and off. It stays out of `--quick`, since it takes about 12 minutes.
@@ -424,6 +426,8 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Swept: every reader of the leak checks' place in a run: cicd.bash's help, plan and step lines, config.bash, design.md, install.md, `cicd-win.ps1 -Leakcheck`'s help, and the container and cicd-win tests, which don't depend on `--quick` leaving them out.
 	- Branch: rnd1101
 	- Test case: `cicd/tests/engine/run.bash` (dd5nn), 3 new checks for `--leakcheck` and CodeQL, and 3 changed.
+	- Acceptance signoff: Self-closed: its children are done, the CodeQL call was confirmed, and the Miri work is tracked by 2026102320591318.
+	- Closed: 20261101-235800
 
 - Regression: On Linux, the settings dialog is detached from the main window, and is its own alt+tab target
 	- ID: 2026103010083402
@@ -861,7 +865,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - When two screens return after screen power sleep or off, SilkTerm seems to reposition itself in between them
 	- ID: 2026102807384201
 	- Type: Bug
-	- Status: Done
+	- Status: Queued
 	- Needs hand testing: On b23 under xfwm4, with the window on each monitor in turn: let both screens sleep, wake them, and see the window back where it was, at its size.
 	- Severity: High
 	- Opened: 20261028-073842
@@ -881,13 +885,13 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261101: A window herded off a monitor that went dark, or changed, keeps its size and takes no other. It notes the monitor it is on, so a size the user sets there is kept for that one. This reverses 2026100907341816's choice that a herded window takes the other monitor's size. Other windows keep their size too.
 		- 20261101: A herd is told from a user's drag by the monitor the window was on at its last look being gone from the layout. Where the window can't say where it is, as on native Wayland, nothing changed.
 		- 20261101: Updated an assert, `monwake` (ddq75): "took the landscape size there" is now "kept its size there". In ddq74 the herd step now takes no size.
+		- 20261101: Back to Queued by the answer to the Check entry. A window can't jump between monitors each time they sleep. Two asks: add a warning to the per-monitor size tip text that the feature can fight the window manager when screens sleep and come back, with unexpected size and placement; and note the window's place and size when a screen goes dark, and if the user didn't move or resize it, put it back there when the screen returns.
 	- Actual fix: The look after a move takes no monitor size when the monitor the window was on at the last look has left the layout. design.md says so under the per-monitor size.
 	- Swept: every call that resizes the main window. The monitor look is the only one made without the user, apart from the system's own resize for a new scale. The Settings and zoom resizes are the user's. Dialogs are placed once, when they open.
 	- Verified: 20261101. The new xfwm4 test fails both cases on the old build and passes on the fix. monwake passes on the fix, and fails only its changed check on the old build. The unit tests, clippy, fmt, script lints, docs and test IDs pass.
 	- Branch: rnd1101
 	- Test case: `cicd/tests/herdback/run.bash` (deqx1), the window back where it was under xfwm4. `a_window_herded_off_a_dark_monitor_takes_no_size` (deqwx). `monwake` (ddq75) and ddq74, changed.
 	- Acceptance signoff: Self-closed: deqx1 passed at ce9d872. A copy that turns both outputs off in turn and back on in either order, 1 s and 4 s apart, put the window back where it was, at its size, all 4 times. Not run on b23's real monitors.
-	- Closed: 20261101-141641
 
 - CICD reset: the bash guard doesn't refuse HOST_TEMP itself or a project's whole folder under it
 	- ID: 2026103115170424
