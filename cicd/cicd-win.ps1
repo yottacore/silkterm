@@ -94,8 +94,9 @@
 	-Wsl only: the Linux half runs on the distro itself, not in its image
 	(cicd.bash --no-container). The Windows half uses none.
 .PARAMETER KeepTemp
-	Keep the run's test folder, and print where it is. Under -Wsl the Linux half
-	keeps its own too (cicd.bash --keep-temp).
+	Keep the run's temp folder, and print where it is. Without it the folder goes
+	at the end, failed or not. Under -Wsl the Linux half keeps its own too
+	(cicd.bash --keep-temp).
 .PARAMETER List
 	Print the steps and test IDs the other options would run, and run nothing.
 	Under -Wsl the Linux half prints its own (cicd.bash --list).
@@ -186,16 +187,15 @@ $Root    = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $AppName = "SilkTerm"
 $ExeName = "silkterm"
 
-## One folder for every file the tests write, shared by both cargo test runs and
-## the installer tests, made once the run is past its prompt. TEMP and TMP stay
-## put, so builds keep the system temp dir.
+## The run's folder, made once the run is past its prompt, for every file the
+## tools and tests write (fRunDirMake).
 . (Join-Path $Root "cicd\tests\_testdir.ps1")
 ## fSafeRm and fSafeRm_Under: every recursive removal goes through them.
 . (Join-Path $Root "cicd\utility\include\saferm.ps1")
 
-## Test folders that failed runs kept, past the newest this many, go at the start
-## of the next run. Only ones a run here wrote down, with its token.
-$TestFolderKeep = 5
+## Run folders a killed run left go at the start of a later one, once they are
+## this many days old and no process from their run.pid is left.
+$StaleDays = 2
 
 ## The single version source (first `version = "..."` line).
 $VersionManifest = Join-Path $Root "source\Cargo.toml"
@@ -354,7 +354,7 @@ function fSetJobs {
 	if ($script:JobsLast -ne $jobs) { fNote "jobs: $jobs of $Cores CPUs$(if ($why) { " ($why)" })"; $script:JobsLast = $jobs }
 }
 function fWarn     { param([string]$Msg); fEcho "WARNING: $Msg" }
-function fDie      { param([string]$Msg); fEcho "FAILED: $Msg"; fStepClose FAIL; fTestDir_End 1; exit 1 }
+function fDie      { param([string]$Msg); fEcho "FAILED: $Msg"; fStepClose FAIL; exit 1 }
 
 
 #==============================================================================
@@ -425,6 +425,62 @@ function fPython {
 	& $py.Source -c 'import sys' 2>$null
 	if ($LASTEXITCODE -ne 0) { return $null }
 	return $py.Source
+}
+
+## fRunDirMake: the run's folder, HOST_TEMP\silkterm\YYYYmmDD-HHMMSS_NNN with a
+## run.pid, as cicd.bash makes its own, with TEMP and TMP pointed at it, so what
+## the tools write goes there and goes with it. It's the tests' folder too,
+## unless one was handed in.
+function fRunDirMake {
+	$handed = $env:SILKTERM_TEST_DIR
+	$env:SILKTERM_TEST_DIR = $null
+	fTestDir_Make
+	$script:RunDir = $env:SILKTERM_TEST_DIR
+	if ($handed) { $env:SILKTERM_TEST_DIR = $handed }
+	$env:TEMP = $script:RunDir
+	$env:TMP = $script:RunDir
+	if (-not (fTestDir_OnWindows)) { $env:TMPDIR = $script:RunDir }
+}
+
+## fRunDirEnd <ok>: removes the run's folder, failed or not. -KeepTemp keeps it
+## and says where.
+function fRunDirEnd([bool]$Ok) {
+	$dir = $script:RunDir
+	if (-not $dir) { return }
+	$script:RunDir = $null
+	if ($KeepTemp) { $script:TestDirOwned = $null; fNote "kept the run's temp folder (-KeepTemp): $dir"; return }
+	fTestDir_End 0
+	if (-not $Ok -and -not (Test-Path -LiteralPath $dir)) { fNote "removed the run's temp folder $dir; -KeepTemp keeps it" }
+}
+
+## fSweepStaleRuns <parent> <days>: the run folders in <parent> older than
+## <days>, whose run.pid names no process that's still there. Only a real
+## folder named as a run folder, with a run.pid, so one made by hand stays.
+## Returns how many went.
+function fSweepStaleRuns([string]$Parent, [int]$Days) {
+	$gone = 0
+	if (-not [System.IO.Directory]::Exists($Parent)) { return 0 }
+	$link = [System.IO.FileAttributes]::ReparsePoint
+	$cutoff = (Get-Date).AddDays(-$Days)
+	foreach ($dir in ([System.IO.DirectoryInfo]$Parent).GetDirectories()) {
+		if ($dir.Name -notmatch '^\d{8}-\d{6}_\d{3}$' -or ($dir.Attributes -band $link) -or $dir.LastWriteTime -ge $cutoff) { continue }
+		$pidFile = [System.IO.FileInfo](Join-Path $dir.FullName 'run.pid')
+		if (-not $pidFile.Exists -or ($pidFile.Attributes -band $link)) { continue }
+		$line = "$(@([System.IO.File]::ReadAllLines($pidFile.FullName)) | Select-Object -First 1)".Trim()
+		$runPid = 0
+		if ([int]::TryParse($line, [ref]$runPid) -and (Get-Process -Id $runPid -ErrorAction SilentlyContinue)) { continue }
+		if (fSafeRm_Under $Parent $dir.FullName) { $gone++ }
+	}
+	return $gone
+}
+
+## fOldLedger <ledger>: older runs wrote down the test folders failed runs kept.
+## Those go once, under the same checks, and then the ledger. Returns how many went.
+function fOldLedger([string]$Ledger) {
+	if (-not [System.IO.File]::Exists($Ledger)) { return 0 }
+	$gone = fTestDir_Sweep -Ledger $Ledger -Keep 0
+	[System.IO.File]::Delete($Ledger)
+	return $gone
 }
 
 ## cargo test, with each result line as PASS, FAIL or SKIP, test ID and name.
@@ -1171,13 +1227,11 @@ function fMain {
 	fRotateLogs $LogDir $LogKeep
 	try { Start-Transcript -LiteralPath (Join-Path $LogDir "run_$stamp.log") | Out-Null } catch {}
 
-	## The test run folder, then the ones earlier runs kept, past the newest
-	## few. This run's own goes on the list after the sweep.
-	fTestDir_Make
-	$testLedger = Join-Path (fTargetDir) ".cicd-test-folders"
-	$gone = fTestDir_Sweep -Ledger $testLedger -Keep $TestFolderKeep
-	fTestDir_Record -Ledger $testLedger
-	if ($gone) { fNote "cleanup: removed $gone old test run folder(s)" }
+	## The run's folder, then the ones killed runs left, once stale, and what the
+	## old ledger still names.
+	fRunDirMake
+	$gone = (fSweepStaleRuns (Split-Path -Parent $script:RunDir) $StaleDays) + (fOldLedger (Join-Path (fTargetDir) ".cicd-test-folders"))
+	if ($gone) { fNote "cleanup: removed $gone old run folder(s)" }
 
 	if (fStepOpen 'Remote sync') { fSetJobs; fRemoteSync; fStepClose }
 
@@ -1243,24 +1297,22 @@ function fMain {
 	if (fStepOpen 'Dogfood') { fSetJobs; fDogfood -Built $built; fStepClose }
 	if (fStepOpen 'Publish') { fSetJobs; fPublish -Msg $publishMsg; fStepClose }
 
-	## -KeepTemp: the run's test folder stays. A failed run keeps it anyway.
-	if ($KeepTemp -and $script:TestDirOwned) {
-		fNote "kept the run's temp folder (-KeepTemp): $($script:TestDirOwned)"
-		$script:TestDirOwned = $null
-	}
-
 	fSection "$AppName Windows CI/CD: done."
 	fEcho_Clean
 }
 
 $script:OutputWas = $null
+$script:RunDir = $null
+$script:RunOk = $false
 try {
 	$script:OutputWas = fUtf8Output
 	fMain
-	fTestDir_End 0
+	$script:RunOk = $true
 } finally {
 	## A step a thrown error ended.
 	fStepClose FAIL
+	## On a failure and Ctrl+C too.
+	fRunDirEnd $script:RunOk
 	try { Stop-Transcript | Out-Null } catch {}
 	## The console's code page is shared with the shell that started this.
 	if ($script:OutputWas) { try { [Console]::OutputEncoding = $script:OutputWas } catch { Write-Verbose "code page not put back: $_" } }
@@ -1268,6 +1320,9 @@ try {
 
 
 ##	History:
+##		- 2026-11-01: The run's folder is HOST_TEMP\silkterm\YYYYmmDD-HHMMSS_NNN,
+##		  with TEMP and TMP pointed at it, and goes at the end, failed or not.
+##		  Stale ones go after 2 days, in place of the ledger.
 ##		- 2026-10-28: One PASS or FAIL line per test, with its ID and name. cargo
 ##		  test's lines go through test-id.py when there's a python.
 ##		- 2026-10-28: -List takes test IDs in the new 5-character form.

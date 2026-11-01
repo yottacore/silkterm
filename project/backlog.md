@@ -560,8 +560,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - CICD reset: the test helpers' own run folders under HOST_TEMP
 	- ID: 2026103115564575
 	- Type: Task
-	- Status: Waiting on automated testing
-	- Needs external testing: dde3v and de5ea under Windows PowerShell on b29w, in `cicd-win.ps1`'s stage 3. 2026103115564581's b29w run covers it.
+	- Status: Done
 	- Priority: Avg
 	- Opened: 20261031-155645
 	- Opened by: CC
@@ -580,14 +579,18 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261101: `HOST_TEMP` wins over `TMPDIR`, as in `cicd.bash`. The project's folder is left in place when a run's folder goes.
 		- 20261101: The owner mark with its token stays beside `run.pid`. A PID can be read and reused, and the token can't be guessed from outside the 0700 folder.
 	- Verified: 20261101. ddazx passes (96 checks), with new cases for `HOST_TEMP` winning over the temp dir, the fallback, and `run.pid`, in Rust, bash, Python and PowerShell. de5e9 passes, with a lone run's kept folder taken by the stale sweep. dde3v passes under pwsh. The testdir unit tests pass, deqts new. Against the old helpers, ddazx's new cases failed 33, de5e9 3 and dde3v 4. `--backlog-run-quick` passed every area. `test-id.py --check` passes. dd5nw failed after the first commit, since its lift test left `HOST_TEMP` set and looked for the folder right in its stand-in temp folder, and passes now.
-		- Swept: every `test_silkterm` in the tree, and every test that reads the parent of the test folder. The wingui harness stand-in names and a comment in mem-per-window follow the new name. The container's `/tmp/test_silkterm_<step>` is a handed-down folder and stays. de5e9's old ledger cases keep the old names on purpose.
+		- Swept: every `test_silkterm` in the tree, and every test that reads the parent of the test folder.
+	- Verified: 20261101, on b29w. dde3v passes under pwsh and Windows PowerShell 5.1, and de5ea under pwsh. The wingui harness stand-in names and a comment in mem-per-window follow the new name. The container's `/tmp/test_silkterm_<step>` is a handed-down folder and stays. de5e9's old ledger cases keep the old names on purpose.
+	- Acceptance signoff: Self-closed: the tests name the new folder and fail against the old helpers. The call on a failed lone run is in Decisions.
+	- Closed: 20261101-1238
 	- Test case: ddazx (`cicd/tests/testdir/run.bash`), de5e9 (`cicd/tests/cleanup/run.bash`), dde3v (`cicd/tests/testdir/remove.ps1`), de5ea (`cicd/tests/cleanup/win.ps1`), and ddazr, ddazs, ddazt, ddazw and deqts in `testdir.rs`.
 	- Branch: rnd1101
 
 - CICD reset: the Windows pipeline's run folders under HOST_TEMP
 	- ID: 2026103115564581
 	- Type: Task
-	- Status: Queued
+	- Status: Waiting on automated testing
+	- Needs external testing: `cicd-win.ps1 -MergeGate` on b29w at the round branch, through the host lock. After it, `%TEMP%\silkterm` holds no run folder and `.cicd-test-folders` is gone from the target dir.
 	- Priority: Avg
 	- Opened: 20261031-155645
 	- Opened by: CC
@@ -598,6 +601,23 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- `cicd-win.ps1` and the test boxes' runs take the same run folder as `cicd.bash`, `${HOST_TEMP}/silkterm/<YYYYmmDD-HHMMSS>_<NNN>/`, with `HOST_TEMP` falling back to `%TEMP%`, and `TEMP` and `TMP` pointed at it.
 		- Removed at the end, on failure too. `-KeepTemp` keeps it and prints where. Stale ones go after 2 days, when no process from `run.pid` is left, in place of the ledger and the newest few.
 		- Run on b29w through the host lock.
+	- Progress log:
+		- 20261101: `cicd-win.ps1` makes its run's folder with the test helper, at `${HOST_TEMP}\silkterm\<YYYYmmDD-HHMMSS>_<NNN>\` or under `%TEMP%`, with its PID in `run.pid`, and points `TEMP` and `TMP` at it. It's the tests' folder too, unless one is handed in.
+		- 20261101: The folder goes in the script's `finally`, so on a pass, a failure, `fDie` and Ctrl+C. A failed run says `-KeepTemp` keeps it. `-KeepTemp` keeps it and prints where.
+		- 20261101: Each run removes run folders over 2 days old whose `run.pid` names no process still there, in place of the newest 5. The old ledger's folders go once, under the same checks, and then the ledger. `fTestDir_Record` is gone.
+		- 20261101: The test boxes' wingui runs already make their folder through `_testdir.ps1`, so since 2026103115564575 it's in the console user's `%TEMP%\silkterm\`, and `_run.ps1` points `TEMP` and `TMP` at it.
+		- 20261101: Test changes. In de5ea, "a folder handed down is never written down" and the check that a run's folder is written down with its token are commented out, since nothing writes one down now. dd5nw's lift test takes their place.
+	- Decisions:
+		- 20261101: The stale sweep runs at every run past `-List`, as the ledger sweep did, rather than only in a full run as `cicd.bash` has it. It's a listing of one folder, and a Windows run is rarer.
+		- 20261101: `TEMP` and `TMP` point at the run's folder for the whole run, builds included, per this item. That reverses the older note that builds keep the system temp folder.
+		- 20261101: The stale sweep doesn't check a folder's owner, as `cicd.bash` does with `find -user`. The folder is in the account's own temp folder unless `HOST_TEMP` says otherwise.
+		- 20261101: wingui's `runs.txt` stays. It removes a killed run's box folder by its token on the next run, which is sooner than 2 days.
+		- 20261101: The b29w run was of the helper and the pipeline's run folder functions, sent as files, since the box's clone takes only a pushed branch. A whole `cicd-win.ps1` run on b29w is left for the batch.
+	- Verified: 20261101. dd5nw's lift test passes here and on b29w, with new checks for the run's folder, `run.pid`, `TEMP` and `TMP`, `HOST_TEMP`, a handed-in test folder, the end on a pass, a failure and `-KeepTemp`, the stale sweep, the old ledger, and that the `finally` block and `fDie` reach the end. On b29w a link is a junction. Broken copies of `cicd-win.ps1` failed it: no PID check (2 checks), a failed run kept (2), `TEMP` not moved (2), no end in `finally` (1). With no link check in the sweep, the guard still refused the link. de5e9, de5ea, dde3v, the PowerShell lint and `--backlog-run-quick scripts docs` pass.
+		- Not run: a whole `cicd-win.ps1` run on b29w.
+		- Swept: every caller of `fTestDir_Record`, `fTestDir_Sweep`, `$TestFolderKeep`, `.cicd-test-folders` and `fTestDir_End` in `cicd-win.ps1`, and the wingui box scripts that make or use a run folder.
+	- Test case: dd5nw (`cicd/tests/cicd-win/run.bash`, its `_lift.ps1`), de5ea (`cicd/tests/cleanup/win.ps1`).
+	- Branch: rnd1101
 
 - CICD reset: the PowerShell recursive removals through a guard
 	- ID: 2026102807494139

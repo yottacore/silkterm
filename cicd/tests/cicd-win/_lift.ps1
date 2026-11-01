@@ -9,7 +9,8 @@
 .DESCRIPTION
 	The pieces: the run log rotation, the path map it hands the release builds,
 	the check for a local path left in a built file, the installer tests,
-	which must leave the pipeline's temp folder as they found it, the stash
+	which must leave the pipeline's temp folder as they found it, the run's
+	folder, removed at the end, and the stale ones swept, the stash
 	taken before a pull, which answers whether it stashed anything, and the run
 	options: their other names, the pairs refused, what the Linux half is
 	handed, and -List printing the test scripts rather than running them.
@@ -35,7 +36,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 $ast = [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path -LiteralPath $Pipeline).Path, [ref]$null, [ref]$null)
-foreach ($name in 'fRotateLogs', 'fTargetDir', 'fRemapConfig', 'fHasLocalPaths', 'fExec', 'fScriptTest', 'fPython', 'fCargoTest', 'fInstallerTests', 'fScriptTests', 'fStashIfDirty', 'fRunFlags', 'fWslArgs', 'fQuickRun', 'fStamp', 'fStepLine', 'fStepIf', 'fStepOpen', 'fStepClose', 'fShowSteps', 'fPlanSteps') {
+foreach ($name in 'fRotateLogs', 'fTargetDir', 'fRemapConfig', 'fHasLocalPaths', 'fExec', 'fScriptTest', 'fPython', 'fCargoTest', 'fInstallerTests', 'fScriptTests', 'fStashIfDirty', 'fRunFlags', 'fWslArgs', 'fQuickRun', 'fStamp', 'fStepLine', 'fStepIf', 'fStepOpen', 'fStepClose', 'fShowSteps', 'fPlanSteps', 'fRunDirMake', 'fRunDirEnd', 'fSweepStaleRuns', 'fOldLedger') {
 	$fn = $ast.Find({ param($n) $n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq $name }, $true)
 	if (-not $fn) { throw "$name not found in $Pipeline" }
 	. ([scriptblock]::Create($fn.Extent.Text))
@@ -130,6 +131,93 @@ fCheck 'the pipeline made its run folder in the project''s folder in the system 
 fCheck 'and none of the installer tests removed it' (Test-Path -LiteralPath $run)
 fTestDir_End 0
 fCheck 'while the pipeline''s own fTestDir_End 0 does' (-not (Test-Path -LiteralPath $run))
+
+##	The run's folder: HOST_TEMP\silkterm\YYYYmmDD-HHMMSS_NNN, else under the temp
+##	folder, with TEMP and TMP pointed at it. It goes at the end, failed or not,
+##	unless -KeepTemp. Stale ones go once no process from their run.pid is left,
+##	and so do the folders an old ledger names.
+. (Join-Path $PSScriptRoot '../../utility/include/saferm.ps1')
+$script:notes = [System.Collections.Generic.List[string]]::new()
+function fNote { param([string]$Msg); $script:notes.Add($Msg) }
+$KeepTemp = $false
+$envWas = @{}
+foreach ($name in 'TEMP', 'TMP', 'TMPDIR', 'HOST_TEMP', 'SILKTERM_TEST_DIR') { $envWas[$name] = [Environment]::GetEnvironmentVariable($name) }
+$sys2 = Join-Path $Work 'sys2'
+$null = New-Item -ItemType Directory -Path $sys2
+$env:TEMP = $sys2; $env:TMP = $sys2; $env:TMPDIR = $sys2
+Remove-Item env:HOST_TEMP, env:SILKTERM_TEST_DIR -ErrorAction SilentlyContinue
+fRunDirMake
+$rd = $script:RunDir
+fCheck 'the run''s folder is made in the project''s folder in the temp folder, named for the time' ((Split-Path $rd) -eq (Join-Path $sys2 'silkterm') -and (Split-Path -Leaf $rd) -match '^\d{8}-\d{6}_\d{3}$')
+fCheck 'with this process''s PID in its run.pid' ("$(Get-Content -LiteralPath (Join-Path $rd 'run.pid') -TotalCount 1)" -eq "$PID")
+fCheck 'and TEMP and TMP pointed at it' ($env:TEMP -eq $rd -and $env:TMP -eq $rd)
+fCheck 'and it''s the tests'' folder' ($env:SILKTERM_TEST_DIR -eq $rd)
+fRunDirEnd $false
+fCheck 'a run that failed removes it' (-not (Test-Path -LiteralPath $rd))
+fCheck 'and says -KeepTemp keeps it' ($script:notes -contains "removed the run's temp folder $rd; -KeepTemp keeps it")
+$ht = Join-Path $Work 'ht'
+$null = New-Item -ItemType Directory -Path $ht
+$env:HOST_TEMP = $ht; $env:SILKTERM_TEST_DIR = Join-Path $Work 'handed-in'
+$script:notes.Clear()
+fRunDirMake
+$rd = $script:RunDir
+fCheck 'with HOST_TEMP set, it''s made there' ((Split-Path $rd) -eq (Join-Path $ht 'silkterm'))
+fCheck 'and a test folder handed in stays the tests'' folder' ($env:SILKTERM_TEST_DIR -eq (Join-Path $Work 'handed-in') -and $env:TEMP -eq $rd)
+fRunDirEnd $true
+fCheck 'a run that passed removes it, and says nothing' (-not (Test-Path -LiteralPath $rd) -and $script:notes.Count -eq 0)
+$KeepTemp = $true
+fRunDirMake
+$rd = $script:RunDir
+fRunDirEnd $false
+fCheck '-KeepTemp keeps it' (Test-Path -LiteralPath (Join-Path $rd 'run.pid'))
+fCheck 'and says where' ($script:notes -contains "kept the run's temp folder (-KeepTemp): $rd")
+$KeepTemp = $false
+foreach ($name in $envWas.Keys) { [Environment]::SetEnvironmentVariable($name, $envWas[$name]) }
+
+$stale = Join-Path $Work 'stale'
+$dead = (Start-Process -FilePath (Get-Process -Id $PID).Path -ArgumentList '-NoProfile', '-Command', 'exit 0' -PassThru -Wait).Id
+function fStale([string]$At, [string]$RunPid, [int]$DaysOld) {
+	$null = New-Item -ItemType Directory -Path $At -Force
+	if ($RunPid) { Set-Content -LiteralPath (Join-Path $At 'run.pid') -Value $RunPid }
+	Set-Content -LiteralPath (Join-Path $At 'out.txt') -Value 'x'
+	(Get-Item -LiteralPath $At).LastWriteTime = (Get-Date).AddDays(-$DaysOld)
+	$At
+}
+$s1 = fStale -At (Join-Path $stale '20261001-000000_001') -RunPid "$dead" -DaysOld 3
+$s2 = fStale -At (Join-Path $stale '20261001-000000_002') -RunPid "$PID" -DaysOld 3
+$s3 = fStale -At (Join-Path $stale '20261001-000000_003') -RunPid "$dead" -DaysOld 1
+$s4 = fStale -At (Join-Path $stale '20261001-000000_004') -RunPid '' -DaysOld 3
+$s5 = fStale -At (Join-Path $stale 'by-hand') -RunPid "$dead" -DaysOld 3
+$away = fStale -At (Join-Path $Work 'away') -RunPid "$dead" -DaysOld 3
+$s6 = Join-Path $stale '20261001-000000_006'
+$null = New-Item -ItemType $(if (fTestDir_OnWindows) { 'Junction' } else { 'SymbolicLink' }) -Path $s6 -Target $away
+$gone = fSweepStaleRuns $stale 2
+fCheck 'a run folder over 2 days old, with no process from its run.pid left, goes' (-not (Test-Path -LiteralPath $s1))
+fCheck 'and only that one' ($gone -eq 1)
+fCheck 'one whose process is still there stays' (Test-Path -LiteralPath (Join-Path $s2 'out.txt'))
+fCheck 'so does a younger one' (Test-Path -LiteralPath (Join-Path $s3 'out.txt'))
+fCheck 'and one with no run.pid' (Test-Path -LiteralPath (Join-Path $s4 'out.txt'))
+fCheck 'and one not named as a run folder' (Test-Path -LiteralPath (Join-Path $s5 'out.txt'))
+fCheck 'and a link, and what it points to' ((Test-Path -LiteralPath $s6) -and (Test-Path -LiteralPath (Join-Path $away 'out.txt')))
+fCheck 'with no folder there, nothing' ((fSweepStaleRuns (Join-Path $Work 'none') 2) -eq 0)
+Remove-Item -LiteralPath $s6 -Force
+
+$oldBase = Join-Path $Work 'old'
+$oldDir = Join-Path $oldBase 'test_silkterm_20261020-00000000'
+$null = New-Item -ItemType Directory -Path $oldDir
+Set-Content -LiteralPath (Join-Path $oldDir '.test_silkterm_owner') -Value 'tok-1'
+$oldLedger = Join-Path $Work 'old.ledger'
+[System.IO.File]::WriteAllText($oldLedger, "$oldDir`ttok-1`n")
+$gone = fOldLedger $oldLedger
+fCheck 'an old ledger''s folders go, under its checks' ($gone -eq 1 -and -not (Test-Path -LiteralPath $oldDir))
+fCheck 'and then the ledger' (-not (Test-Path -LiteralPath $oldLedger))
+fCheck 'with no ledger, nothing' ((fOldLedger $oldLedger) -eq 0)
+
+$text = Get-Content -LiteralPath $Pipeline -Raw
+fCheck 'the pipeline makes its run folder, then sweeps the stale ones and the old ledger' ($text -match '(?m)^\s*fRunDirMake\s*\r?\n\s*\$gone = \(fSweepStaleRuns \(Split-Path -Parent \$script:RunDir\) \$StaleDays\) \+ \(fOldLedger ')
+fCheck 'and removes it in its finally block, on a failure too' ($text -match '(?s)\} finally \{\s*##[^\n]*\n\s*fStepClose FAIL\s*\n\s*##[^\n]*\n\s*fRunDirEnd \$script:RunOk')
+fCheck 'which fDie''s exit reaches' ($text -match '(?m)^function fDie .*; exit 1 \}$' -and $text -notmatch 'fTestDir_End 1')
+fCheck 'with 2 days for a stale one' ($text -match '(?m)^\$StaleDays = 2\r?$')
 
 ##	The stash before a pull answers with a bare bool, so git's own lines must
 ##	not end up in it. A clean tree stashes nothing; a dirty one is stashed with
@@ -311,3 +399,4 @@ exit 0
 ##		- 20261028: The steps, the ones turned off, and each step's lines.
 ##		- 20261028: The PASS and FAIL lines of a test script.
 ##		- 20261101: The run folder goes in the project's folder, and HOST_TEMP is unset for it.
+##		- 20261101: The run's folder, its end, the stale sweep and the old ledger.
