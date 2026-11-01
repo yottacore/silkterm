@@ -47,6 +47,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Progress log:
 		- 20261031: Found by the worker on 2026102807494121. The shared Safe removal rule has asked for both refusals since 10-28. Check the PowerShell copies too.
 		- 20261031: `saferm.bash`'s `fSafeRm` refuses HOST_TEMP itself, and with HOST_TEMP set, any whole folder right under it. Both forms refuse HOST_TEMP and this project's folder in it. `saferm.ps1` has the same, and so does the new Python copy in 2026103115085852.
+		- 20261031: The round's second full run failed dcbdt, the scroll verdict test: saferm.bash called realpath at load, and that test's PATH has none, so sourcing it ended the harness with 127. Load now goes on with no host root, and fSafeRm still refuses there. dcbdt and dehwp pass.
 	- Decisions:
 		- 20261031: A whole folder right under the temp root is refused only when HOST_TEMP is set, as the shared `safe-rm.bash` does. Without it the root is `/tmp`, where the short socket folders sit. The root itself and this project's folder are refused either way.
 		- 20261031: The one-parent form still takes another folder right under HOST_TEMP. The test run folders and the utilities' own folders are made right in TMPDIR, which can be HOST_TEMP, until 2026102807494157 moves them.
