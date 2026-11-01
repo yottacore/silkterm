@@ -798,18 +798,24 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261031: The end's messages wait until the cleanup is done, since a write to the log tee after Ctrl+C ended a full run before its folder went.
 		- 20261031: The full run at 80ffd30 failed in stage 3, in ddazx's case A, on the Rust test dbz8n (`the_other_platforms_spelling_of_a_name_still_answers`). The run now exports `TEMP` as well, and case A points only `TMPDIR` at its read-only folder, so `$TMPDIR` and `%TEMP%` differ. The test fails the same way alone with the two set apart, and passes with them equal or `TEMP` unset. Stages after it weren't reached.
 			- Fix: ddazx's cases that set `TMPDIR` set `TEMP` and `TMP` with it, or unset them.
+		- 20261031: Every ddazx case that sets `TMPDIR` sets `TEMP` and `TMP` to the same folder. The test helpers' `fTestDir_Use` and `use()` point all three at the test folder too, as `_testdir.ps1` already did on Windows, so a test handed a folder other than the run's sees one temp folder.
+		- 20261031: A failed test's line said "output kept in" a path inside the container, in a run folder the run's end then removed. It now names the file only when the file outlives the run, under `--keep-temp` or in a test folder handed in, and otherwise says `--keep-temp` keeps its output.
 	- Decisions:
 		- 20261031: The stale sweep takes only a folder with a `run.pid`, named as a run folder, so a temp folder made by hand in `${HOST_TEMP}/silkterm` stays. A folder's age is its mtime.
 		- 20261031: The stale sweep stays in the full run, as the rest of the cleanup does. The gate does none of it.
 		- 20261031: A process is still there when `ps -p` finds its PID, since `kill -0` fails on another user's. A reused PID only keeps a folder longer.
 		- 20261031: A test folder handed in through `SILKTERM_TEST_DIR` stays the tests' folder, as before, so the run in the container under `--keep-temp` still keeps its tests' files. The run's own folder is still made, for `TMPDIR`.
 		- 20261031: A passed container step still removes its `/tmp` right away, rather than waiting for the run's end.
+		- 20261031: ddazx sets `TEMP` and `TMP` with `TMPDIR` rather than unsetting them, since that is how the pipeline runs, and the read-only cases then also catch a write through `TEMP`.
+		- 20261031: The failure line under `--keep-temp` in the container still names the path inside it. The host side prints the container's `/tmp` folder it maps to, so the line stays short.
 		- 20261031: Test changes. In ddazx, "and leaves TMPDIR as it was", "and keeps the run folder" and its "and says where" are commented out, since this item reverses them. In ddrp2, the `/tmp` under the target dir, its ledger, the kept failed `/tmp` and the newest five are commented out for the same reason. ddrp2's run name patterns now take the `_NNN` part, and its `--keep-temp` line names the run's folder, not the test folder.
 	- Verified: 20261031. ddazx's gate cases, run alone, failed 7 against the old `cicd.bash` and pass. de5e9 passes with its new run folder, counter, stale sweep and old ledger checks. ddrp2 passes, its Ctrl+C in a full run case included, which failed before the end's messages were held. A Ctrl+C in a host gate and a host full run removed the run's folder. ddazx's A to E pass, the engine and gates tests, dehwp, shellcheck and the bash style check pass. `--backlog-run-quick scripts docs` passed in the container, and left no run folder.
 		- Not run here: ddazx's G cases, which this item doesn't change.
+		- 20261031, the fix for the 80ffd30 failure: dbz8n failed with `TMPDIR` and `TEMP` apart and passed with them equal. ddp9p's new checks failed 2 against the old `cicd.bash` and pass. ddazx passes all 89 checks with `TEMP` and `TMP` exported apart from `TMPDIR`, as the pipeline leaves them, and leaves nothing behind. dehwp and the bash style check pass.
+			- Swept: every `TMPDIR=` in `cicd/`. The cleanup and wingui harness tests run `cicd.bash` or a script that sets all three itself, and the install tests run under `env -i`, with no `TEMP`.
 		- Swept: every caller of `fRunName`, `fRunEnd`, `fTestDir_Owned` and `CLEANUP_KEEP_RUNS`, and every test that runs `cicd.bash` (container, cleanup, testdir, engine, gates). Only `cicd.bash` used `fTestDir_Owned`. `cicd-win.ps1` is 2026103115564581.
 	- Branch: rnd1031
-	- Test case: ddazx `cicd/tests/testdir/run.bash` (its gate cases), de5e9 `cicd/tests/cleanup/run.bash` (R), ddrp2 `cicd/tests/container/run.bash`.
+	- Test case: ddazx `cicd/tests/testdir/run.bash` (its gate cases and case A), de5e9 `cicd/tests/cleanup/run.bash` (R), ddrp2 `cicd/tests/container/run.bash`, ddp9p `cicd/tests/testout/run.bash`.
 
 - CICD reset: the test helpers' own run folders under HOST_TEMP
 	- ID: 2026103115564575

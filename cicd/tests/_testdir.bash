@@ -102,9 +102,10 @@ fTestDir_Owned(){
 
 fTestDir_Use(){
 	##	fTestDir_Make, then points TMPDIR at the folder, so the script's own mktemp
-	##	calls and every program it starts write there.
+	##	calls and every program it starts write there. TEMP and TMP too, as the
+	##	pipeline sets them, since a program may read either spelling.
 	fTestDir_Make || return 1
-	export TMPDIR="${SILKTERM_TEST_DIR}"
+	export TMPDIR="${SILKTERM_TEST_DIR}" TEMP="${SILKTERM_TEST_DIR}" TMP="${SILKTERM_TEST_DIR}"
 }
 
 ##	History:
@@ -112,3 +113,4 @@ fTestDir_Use(){
 ##		- 20261002 JC: A run removes the folder it made when it passes.
 ##		- 20261019 JC: fTestDir_Owned, for the pipeline's record of its folders.
 ##		- 20261031: fTestDir_Rm, and the folder goes through the safe removal guard.
+##		- 20261031: fTestDir_Use points TEMP and TMP at the folder too.

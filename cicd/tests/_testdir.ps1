@@ -72,7 +72,10 @@ function fTestDir_Use {
 		$env:TEMP = $env:SILKTERM_TEST_DIR
 		$env:TMP = $env:SILKTERM_TEST_DIR
 	} else {
+		## TEMP and TMP too, as the pipeline sets them.
 		$env:TMPDIR = $env:SILKTERM_TEST_DIR
+		$env:TEMP = $env:SILKTERM_TEST_DIR
+		$env:TMP = $env:SILKTERM_TEST_DIR
 	}
 }
 
@@ -194,3 +197,4 @@ function fTestDir_End {
 ##		- 20261002 JC: A run removes the folder it made when it passes.
 ##		- 20261019 JC: fTestDir_Record and fTestDir_Sweep, so a pipeline removes
 ##		  the folders its failed runs kept.
+##		- 20261031: fTestDir_Use points TEMP and TMP at the folder on Linux and macOS too.

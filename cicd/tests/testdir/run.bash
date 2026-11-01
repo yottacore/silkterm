@@ -58,7 +58,7 @@ fOneStamped(){
 ##	environment, so rustc and the linker never write there.
 if ! ( cd "${root}" && cargo test --no-run ) >"${work}/build.log" 2>&1; then fShowTail "${work}/build.log"; echo "the test build failed"; exit 1; fi
 baseA="$(mktemp -d "${TMPDIR}/${longName}XXX")"; fLocked "${baseA}"
-rc=0; ( cd "${root}" && SILKTERM_TEST_DIR="${baseA}/r" TMPDIR="${baseA}" cargo test ) >"${work}/a.log" 2>&1 || rc=$?
+rc=0; ( cd "${root}" && SILKTERM_TEST_DIR="${baseA}/r" TMPDIR="${baseA}" TEMP="${baseA}" TMP="${baseA}" cargo test ) >"${work}/a.log" 2>&1 || rc=$?
 fCheck "the Rust suite passes with the temp dir read-only" test "${rc}" -eq 0
 ((rc == 0)) || grep -E 'FAILED|panicked' "${work}/a.log" | head -n 20 | sed 's/^/      /'
 fCheck "and writes nothing beside the run folder" fOnlyRun "${baseA}"
@@ -67,13 +67,13 @@ fCheck "and writes nothing beside the run folder" fOnlyRun "${baseA}"
 ##	even though one of the run folder's own tests panics on purpose.
 fEmpty(){ [[ -d "${1}" && -z "$(ls -A "${1}")" ]]; }
 mkdir "${work}/a2"
-rc=0; ( cd "${root}" && env -u SILKTERM_TEST_DIR TMPDIR="${work}/a2" cargo test testdir:: ) >"${work}/a2.log" 2>&1 || rc=$?
+rc=0; ( cd "${root}" && env -u SILKTERM_TEST_DIR TMPDIR="${work}/a2" TEMP="${work}/a2" TMP="${work}/a2" cargo test testdir:: ) >"${work}/a2.log" 2>&1 || rc=$?
 fCheck "a lone Rust run passes the run folder's own tests" bash -c '(($1 == 0)) && grep -qE "test result: ok\. [0-9]+ passed; 0 failed" "$2"' _ "${rc}" "${work}/a2.log"
 fCheck "and leaves nothing in the temp dir" fEmpty "${work}/a2"
 
 ##	A3: a lone run that fails keeps its folder, with the failing test's file in it.
 mkdir "${work}/a3"
-rc=0; ( cd "${root}" && env -u SILKTERM_TEST_DIR SILKTERM_TEST_FAIL_ON_PURPOSE=1 TMPDIR="${work}/a3" \
+rc=0; ( cd "${root}" && env -u SILKTERM_TEST_DIR SILKTERM_TEST_FAIL_ON_PURPOSE=1 TMPDIR="${work}/a3" TEMP="${work}/a3" TMP="${work}/a3" \
 	cargo test testdir::tests::a_run_that_fails_keeps_its_folder ) >"${work}/a3.log" 2>&1 || rc=$?
 kept="$(find "${work}/a3" -mindepth 1 -maxdepth 1 -print -quit)"
 fCheck "a lone Rust run that fails exits 101" test "${rc}" -eq 101
@@ -88,7 +88,7 @@ fScript(){  ## fScript <label> <command ...>
 	local -r label="${1}"; shift
 	local -r log="${work}/c-${label//\//-}.log"
 	local rc=0
-	( cd "${root}" && env -u DISPLAY -u WAYLAND_DISPLAY SILKTERM_TEST_DIR="${baseC}/r" TMPDIR="${baseC}" "${@}" ) >"${log}" 2>&1 || rc=$?
+	( cd "${root}" && env -u DISPLAY -u WAYLAND_DISPLAY SILKTERM_TEST_DIR="${baseC}/r" TMPDIR="${baseC}" TEMP="${baseC}" TMP="${baseC}" "${@}" ) >"${log}" 2>&1 || rc=$?
 	fCheck "${label} passes with the temp dir read-only" test "${rc}" -eq 0
 	((rc == 0)) || fShowTail "${log}"
 }
@@ -113,7 +113,7 @@ fAlone(){  ## fAlone <label> <command ...>
 	local -r base="${work}/c2/${label//\//-}" log="${work}/c2-${label//\//-}.log"
 	local rc=0
 	mkdir -p "${base}"
-	( cd "${root}" && env -u DISPLAY -u WAYLAND_DISPLAY -u SILKTERM_TEST_DIR TMPDIR="${base}" "${@}" ) >"${log}" 2>&1 || rc=$?
+	( cd "${root}" && env -u DISPLAY -u WAYLAND_DISPLAY -u SILKTERM_TEST_DIR TMPDIR="${base}" TEMP="${base}" TMP="${base}" "${@}" ) >"${log}" 2>&1 || rc=$?
 	fCheck "${label} alone passes and leaves nothing in the temp dir" bash -c '(($1 == 0)) && [[ -z "$(ls -A "$2")" ]]' _ "${rc}" "${base}"
 	if ((rc)) || ! fEmpty "${base}"; then fShowTail "${log}"; fi
 }
@@ -137,7 +137,7 @@ if command -v pwsh >/dev/null; then langs+=(pwsh); else echo "  skip the PowerSh
 mkdir "${work}/d"
 for lang in "${langs[@]}"; do
 	base="${work}/d/${lang}"; mkdir "${base}"
-	out="$(unset SILKTERM_TEST_DIR; export TMPDIR="${base}"; fHelper "${lang}" 2>&1 || true)"
+	out="$(unset SILKTERM_TEST_DIR; export TMPDIR="${base}" TEMP="${base}" TMP="${base}"; fHelper "${lang}" 2>&1 || true)"
 	made="$(sed -n 1p <<<"${out}")"; answer="$(sed -n 2p <<<"${out}")"
 	if [[ "${lang}" == bash ]]; then
 		fCheck "the ${lang} helper makes exactly one 0700 folder named for the time" \
@@ -149,7 +149,7 @@ for lang in "${langs[@]}"; do
 	fCheck "and exports it" test "$(dirname "${made}")" == "${base}"
 	fCheck "and the temp dir then points inside it" fInside "${made}" "${answer}"
 	base="${work}/d/${lang}-given-base"; mkdir "${base}"
-	out="$(export SILKTERM_TEST_DIR="${work}/d/given" TMPDIR="${base}"; fHelper "${lang}" 2>&1 || true)"
+	out="$(export SILKTERM_TEST_DIR="${work}/d/given" TMPDIR="${base}" TEMP="${base}" TMP="${base}"; fHelper "${lang}" 2>&1 || true)"
 	made="$(sed -n 1p <<<"${out}")"; answer="$(sed -n 2p <<<"${out}")"
 	fCheck "given a folder, the ${lang} helper uses it" test "${made}" == "${work}/d/given" -a -d "${work}/d/given"
 	fCheck "and the temp dir points inside it" fInside "${made}" "${answer}"
@@ -225,7 +225,7 @@ fGate(){  ## fGate <name> [env...] -- [options...]: the gate, from a base of its
 	local -a envs=()
 	while [[ "${1}" != -- ]]; do envs+=("${1}"); shift; done; shift
 	mkdir -p "${work}/f/${name}"
-	rc=0; env -u SILKTERM_TEST_DIR -u HOST_TEMP TMPDIR="${work}/f/${name}" HOME="${home}" STUB_RECORD="${work}/f/${name}.record" "${envs[@]}" \
+	rc=0; env -u SILKTERM_TEST_DIR -u HOST_TEMP TMPDIR="${work}/f/${name}" TEMP="${work}/f/${name}" TMP="${work}/f/${name}" HOME="${home}" STUB_RECORD="${work}/f/${name}.record" "${envs[@]}" \
 		bash "${root}/cicd/cicd.bash" --gate --no-container "${@}" >"${work}/f/${name}.log" 2>&1 || rc=$?
 	given="$(sed -n 1p "${work}/f/${name}.record" 2>/dev/null || true)"
 }
@@ -267,7 +267,7 @@ mkdir -p "${work}/g/outside"; echo x >"${work}/g/outside/file"
 ##	child whose temp dir is a fresh base. The code finds the folder in d.
 fChild(){
 	local -r lang="${1}" base="${2}" code="${3}" given="${4:-}"
-	local -a run=(env -u SILKTERM_TEST_DIR TMPDIR="${base}" OUTSIDE="${work}/g/outside")
+	local -a run=(env -u SILKTERM_TEST_DIR TMPDIR="${base}" TEMP="${base}" TMP="${base}" OUTSIDE="${work}/g/outside")
 	[[ -z "${given}" ]] || run+=(SILKTERM_TEST_DIR="${given}")
 	mkdir -p "${base}"
 	case "${lang}" in
@@ -318,7 +318,7 @@ for lang in bash python; do
 done
 if command -v pwsh >/dev/null; then
 	mkdir "${work}/g/pwsh"
-	rc=0; env -u SILKTERM_TEST_DIR TMPDIR="${work}/g/pwsh" pwsh -NoProfile -NonInteractive -File "${meDir}/remove.ps1" >"${work}/g-pwsh.log" 2>&1 || rc=$?
+	rc=0; env -u SILKTERM_TEST_DIR TMPDIR="${work}/g/pwsh" TEMP="${work}/g/pwsh" TMP="${work}/g/pwsh" pwsh -NoProfile -NonInteractive -File "${meDir}/remove.ps1" >"${work}/g-pwsh.log" 2>&1 || rc=$?
 	fCheck "the PowerShell helper passes remove.ps1" test "${rc}" -eq 0
 	((rc == 0)) || fShowTail "${work}/g-pwsh.log"
 	fCheck "which removes its own folder too" fEmpty "${work}/g/pwsh"
@@ -334,3 +334,4 @@ echo "all passed"
 ##		- 20261002 JC: A run removes the folder it made when it passes.
 ##		- 20261025 JC: A script that binds sockets under its run folder keeps them short.
 ##		- 20261031: cicd.bash's run folder is in HOST_TEMP/silkterm, and goes failed or not.
+##		- 20261031: Each case that sets TMPDIR sets TEMP and TMP with it, as the pipeline does.

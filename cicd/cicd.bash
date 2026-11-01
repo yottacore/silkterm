@@ -257,22 +257,24 @@ fi
 
 ## A test script's ID, from the "Test ID:" line in its header.
 fTestId(){ sed -n '/Test ID:/{s/.*Test ID:[[:space:]]*//;s/[[:space:]].*//;p;q;}' "${root}/${1}" 2>/dev/null || true; }
-## Where a test script's stdout goes while it runs. The test run folder outlives
-## a failed run, so a failed test's file is still there afterward.
+## Where a test script's stdout goes while it runs. It goes with the run's folder,
+## unless --keep-temp or the test folder was handed in.
 fTestOut(){ local name="${1//\//_}"; echo "${SILKTERM_TEST_DIR:-${TMPDIR:-/tmp}}/output_${name%.*}.txt"; }
 ## fTestLine <PASS|FAIL|SKIP> <script> <label> [why]: a test's one result line.
 fTestLine(){ local id; id="$(fTestId "${2}")"; fEcho_Clean "${1} ${id:------} ${3}${4:+, ${4}}"; }
 ## fTestOut_Fail <out> <script> <label> <failure>: the end of a failed test's
-## output into the log, its FAIL line, then the failure line, naming the file,
-## aborts the run.
+## output into the log, its FAIL line, then the failure line aborts the run. It
+## names the file only when the file outlives the run.
 fTestOut_Fail(){
 	local -r out="${1}" script="${2}" label="${3}" failure="${4}"
 	local -i lines=0
+	local where="output kept in ${out}"
 	[[ -f "${out}" ]] && lines="$(wc -l <"${out}")"
 	if ((lines > 200)); then fEcho_Clean "last 200 of ${lines} lines of output:"; tail -n 200 "${out}"
 	elif ((lines)); then cat "${out}"; fi
 	fTestLine FAIL "${script}" "${label}"
-	fDie "${failure} ($(fTestId "${script}")), output kept in ${out}"
+	if ((! ${keepTemp:-0})) && [[ -n "${runDir:-}" && "${SILKTERM_TEST_DIR:-}" == "${runDir}" ]]; then where="--keep-temp keeps its output"; fi
+	fDie "${failure} ($(fTestId "${script}")), ${where}"
 }
 ## fRunTest <script> <label> [failure]: runs a test script under the repo root,
 ## if it is there. Its PASS line on a pass, with its output dropped. The failure
@@ -2186,6 +2188,8 @@ fEcho_Clean
 
 
 ##	History:
+##		- 2026-10-31: A failed test's line names its output file only when the file
+##		              outlives the run, and says --keep-temp keeps it otherwise.
 ##		- 2026-10-31: The run's folder is HOST_TEMP/silkterm/YYYYmmDD-HHMMSS_NNN, with
 ##		              TMPDIR, TEMP and TMP pointed at it, and goes at the end, failed
 ##		              or not. A stale one goes after 2 days, once its run.pid is gone.

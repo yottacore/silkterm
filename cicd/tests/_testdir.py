@@ -114,8 +114,10 @@ def rm(path: "str | os.PathLike[str]") -> bool:
 def use() -> Path:
 	## make(), then this process's tempfile calls and every program it starts
 	## write there. tempfile caches its answer, so TMPDIR alone would not move it.
+	## TEMP and TMP too, as the pipeline sets them.
 	folder = make()
-	os.environ["TMPDIR"] = str(folder)
+	for name in ("TMPDIR", "TEMP", "TMP"):
+		os.environ[name] = str(folder)
 	tempfile.tempdir = str(folder)
 	return folder
 
@@ -124,3 +126,4 @@ def use() -> Path:
 ##		- 20260930 JC: Created.
 ##		- 20261002 JC: A run removes the folder it made when it passes.
 ##		- 20261031: Removals go through the safe removal guard, and rm() for a test's own folders.
+##		- 20261031: use() points TEMP and TMP at the folder too.
