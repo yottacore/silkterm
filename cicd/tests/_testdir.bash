@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 
 ##	- Purpose:
-##		The run's test folder, <temp>/test_silkterm_YYYYmmDD-HHMMSSNN, that every
-##		file a test writes goes under. Sourced; it defines fTestDir_Make,
+##		The run's test folder, HOST_TEMP/silkterm/YYYYmmDD-HHMMSS_NNN with a
+##		run.pid, as cicd.bash makes its own, that every file a test writes goes
+##		under. Without HOST_TEMP it's under TMPDIR. Sourced; it defines fTestDir_Make,
 ##		fTestDir_Use, fTestDir_Owned, fTestDir_Rm and fTestDir_End, plus the safe
 ##		removal guard's fSafeRm and fSafeRm_Under, and runs nothing. The Rust tests
 ##		(source/src/testdir.rs), _testdir.py and _testdir.ps1 keep the same contract:
@@ -10,7 +11,8 @@
 ##			  and never removed.
 ##			- Otherwise a fresh one is made, 0700, and exported as SILKTERM_TEST_DIR
 ##			  so every test the caller starts shares it. The process that made it
-##			  removes it when it exits with 0, and keeps it otherwise.
+##			  removes it when it exits with 0, and keeps it otherwise, for the
+##			  pipeline's stale sweep to take once its run.pid is gone.
 ##		fTestDir_Make sets an EXIT trap that calls fTestDir_End. A caller that sets
 ##		its own EXIT trap afterward replaces it, so that trap takes $? first and
 ##		calls fTestDir_End "${rc}" last:
@@ -33,11 +35,13 @@ fTestDir_Make(){
 		export SILKTERM_TEST_DIR
 		return 0
 	fi
-	local -r base="${TMPDIR:-/tmp}"
-	local dir="" err=""
-	local -i tries
-	for ((tries = 1; tries <= 100; tries++)); do
-		dir="${base%/}/test_silkterm_$(date +%Y%m%d-%H%M%S%2N)"
+	local base="${HOST_TEMP:-${TMPDIR:-/tmp}}"; base="${base%/}/silkterm"
+	local dir="" err="" stamp=""
+	local -i n
+	if ! err="$(mkdir -p -- "${base}" 2>&1)"; then echo "test run folder: ${err}" >&2; return 1; fi
+	stamp="$(date +%Y%m%d-%H%M%S)"
+	for ((n = 1; n <= 999; n++)); do
+		printf -v dir '%s/%s_%03d' "${base}" "${stamp}" "${n}"
 		## Never mkdir -p: it would adopt a folder or symlink planted at a guessable name.
 		if err="$(mkdir -m 700 -- "${dir}" 2>&1)"; then
 			export SILKTERM_TEST_DIR="${dir}"
@@ -45,11 +49,11 @@ fTestDir_Make(){
 			__testDirOwned="${dir}"
 			__testDirToken="${BASHPID}-$(date +%s%N)"
 			echo "${__testDirToken}" >"${dir}/${__testDirMarker}"
+			echo "$$" >"${dir}/run.pid"
 			trap 'fTestDir_End $?' EXIT
 			return 0
 		fi
 		if [[ ! -e "${dir}" && ! -L "${dir}" ]]; then echo "test run folder: ${err}" >&2; return 1; fi
-		sleep 0.01
 	done
 	echo "test run folder: '${dir}' and every name before it were taken" >&2
 	return 1
@@ -114,3 +118,4 @@ fTestDir_Use(){
 ##		- 20261019 JC: fTestDir_Owned, for the pipeline's record of its folders.
 ##		- 20261031: fTestDir_Rm, and the folder goes through the safe removal guard.
 ##		- 20261031: fTestDir_Use points TEMP and TMP at the folder too.
+##		- 20261101: The folder is HOST_TEMP/silkterm/YYYYmmDD-HHMMSS_NNN, with a run.pid.

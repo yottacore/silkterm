@@ -23,7 +23,7 @@
 # Prints the process's graphics memory as the driver bills it (nvidia-smi), its
 # unique resident footprint less the driver's libraries (sizebench-classify.py),
 # its anonymous resident memory, and the window's own SILK_MEMDBG lines. Use an
-# optimized binary. Test files go in the run's test_silkterm_<stamp> folder
+# optimized binary. Test files go in the run's HOST_TEMP/silkterm/<stamp>_<NNN> folder
 # (cicd/tests/_testdir.bash).
 
 ##	History: At bottom of file.

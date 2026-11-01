@@ -560,7 +560,8 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - CICD reset: the test helpers' own run folders under HOST_TEMP
 	- ID: 2026103115564575
 	- Type: Task
-	- Status: Queued
+	- Status: Waiting on automated testing
+	- Needs external testing: dde3v and de5ea under Windows PowerShell on b29w, in `cicd-win.ps1`'s stage 3. 2026103115564581's b29w run covers it.
 	- Priority: Avg
 	- Opened: 20261031-155645
 	- Opened by: CC
@@ -570,6 +571,18 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- A test run alone, with no folder handed down, makes its folder the way the pipeline does, `${HOST_TEMP}/silkterm/<YYYYmmDD-HHMMSS>_<NNN>/` with a `run.pid`, in `_testdir.bash`, `_testdir.py`, `_testdir.ps1` and `source/src/testdir.rs`. Now it's `<temp>/test_silkterm_<stamp>`.
 		- Settle whether a lone run that fails still keeps its folder, since a failing Rust test's files are its record, and record the call.
 		- ddazx, de5e9 and the PowerShell remove test follow the new name.
+	- Progress log:
+		- 20261101: `_testdir.bash`, `_testdir.py`, `_testdir.ps1` and `testdir.rs` make a lone run's folder at `${HOST_TEMP}/silkterm/<YYYYmmDD-HHMMSS>_<NNN>/`, falling back to the temp dir, with the process's PID in `run.pid`. The last part is a plain mkdir, and a taken name counts up. The owner mark stays, for the removal at the end.
+		- 20261101: `_testdir.ps1` still takes a folder with the old name, which the Windows pipeline's ledger names, until 2026103115564581 replaces the ledger.
+		- 20261101: Test changes. In ddazt the 900 ms wait assert is commented out, since a taken name counts up with no wait now. ddazw's stamp length went from 17 to 15, with no hundredths. ddazr, ddazs and ddazt use the new names.
+	- Decisions:
+		- 20261101: A lone run that fails still keeps its folder, and says where, since a failing test's files are its record and `cargo test` has no `--keep-temp`. It sits with the pipeline's run folders now, so the full run's stale sweep takes it after 2 days once its `run.pid` process is gone. A pipeline run hands its folder down, so it still goes at the end, failed or not.
+		- 20261101: `HOST_TEMP` wins over `TMPDIR`, as in `cicd.bash`. The project's folder is left in place when a run's folder goes.
+		- 20261101: The owner mark with its token stays beside `run.pid`. A PID can be read and reused, and the token can't be guessed from outside the 0700 folder.
+	- Verified: 20261101. ddazx passes (96 checks), with new cases for `HOST_TEMP` winning over the temp dir, the fallback, and `run.pid`, in Rust, bash, Python and PowerShell. de5e9 passes, with a lone run's kept folder taken by the stale sweep. dde3v passes under pwsh. The testdir unit tests pass, deqts new. Against the old helpers, ddazx's new cases failed 33, de5e9 3 and dde3v 4. `--backlog-run-quick` passed every area. `test-id.py --check` passes.
+		- Swept: every `test_silkterm` in the tree. The wingui harness stand-in names and a comment in mem-per-window follow the new name. The container's `/tmp/test_silkterm_<step>` is a handed-down folder and stays. de5e9's old ledger cases keep the old names on purpose.
+	- Test case: ddazx (`cicd/tests/testdir/run.bash`), de5e9 (`cicd/tests/cleanup/run.bash`), dde3v (`cicd/tests/testdir/remove.ps1`), de5ea (`cicd/tests/cleanup/win.ps1`), and ddazr, ddazs, ddazt, ddazw and deqts in `testdir.rs`.
+	- Branch: rnd1101
 
 - CICD reset: the Windows pipeline's run folders under HOST_TEMP
 	- ID: 2026103115564581

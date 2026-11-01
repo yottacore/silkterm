@@ -3,8 +3,9 @@
 
 <#
 .SYNOPSIS
-	The run's test folder, <temp>/test_silkterm_YYYYmmDD-HHMMSSNN, for the
-	PowerShell tests and cicd-win.ps1.
+	The run's test folder, HOST_TEMP\silkterm\YYYYmmDD-HHMMSS_NNN with a
+	run.pid, or under the temp folder without HOST_TEMP, for the PowerShell
+	tests and cicd-win.ps1.
 .DESCRIPTION
 	Dot-sourced; it defines fTestDir_Make, fTestDir_Use, fTestDir_Keep,
 	fTestDir_End, fTestDir_Remove, fTestDir_Record and fTestDir_Sweep and runs
@@ -38,10 +39,12 @@ function fTestDir_Make {
 		$null = New-Item -ItemType Directory -Force -Path $env:SILKTERM_TEST_DIR
 		return
 	}
-	$base = [System.IO.Path]::GetTempPath()
+	$base = Join-Path $(if ($env:HOST_TEMP) { $env:HOST_TEMP } else { [System.IO.Path]::GetTempPath() }) 'silkterm'
+	$null = New-Item -ItemType Directory -Force -Path $base
+	$stamp = (Get-Date).ToString('yyyyMMdd-HHmmss')
 	$dir = ''
-	for ($try = 1; $try -le 100; $try++) {
-		$dir = Join-Path $base ('test_silkterm_' + (Get-Date).ToString('yyyyMMdd-HHmmssff'))
+	for ($n = 1; $n -le 999; $n++) {
+		$dir = Join-Path $base ('{0}_{1:D3}' -f $stamp, $n)
 		##	Never -Force: it would adopt a folder or symlink planted at a guessable name.
 		if (-not (Test-Path -LiteralPath $dir)) {
 			$made = $true
@@ -53,13 +56,13 @@ function fTestDir_Make {
 				}
 				$token = "$PID-$([DateTime]::UtcNow.Ticks)"
 				[System.IO.File]::WriteAllText((Join-Path $dir '.test_silkterm_owner'), "$token`n")
+				[System.IO.File]::WriteAllText((Join-Path $dir 'run.pid'), "$PID`n")
 				$script:TestDirOwned = $dir
 				$script:TestDirToken = $token
 				$env:SILKTERM_TEST_DIR = $dir
 				return
 			}
 		}
-		Start-Sleep -Milliseconds 10
 	}
 	throw "test run folder: '$dir' and every name before it were taken"
 }
@@ -114,7 +117,8 @@ function fTestDir_Remove {
 
 function fTestDir_NotOurs([string]$Dir, [string]$Token) {
 	##	Why $Dir is not this run's folder, or nothing when it is.
-	if ((Split-Path -Leaf $Dir) -notmatch '^test_silkterm_\d{8}-\d{8}$') { return 'not named like a run folder' }
+	##	The second form is what older runs made, which their ledgers still name.
+	if ((Split-Path -Leaf $Dir) -notmatch '^(\d{8}-\d{6}_\d{3}|test_silkterm_\d{8}-\d{8})$') { return 'not named like a run folder' }
 	$info = [System.IO.DirectoryInfo]$Dir
 	if (-not $info.Exists) { return 'not a folder' }
 	if ($info.Attributes -band [System.IO.FileAttributes]::ReparsePoint) { return 'it is a link' }
@@ -198,3 +202,4 @@ function fTestDir_End {
 ##		- 20261019 JC: fTestDir_Record and fTestDir_Sweep, so a pipeline removes
 ##		  the folders its failed runs kept.
 ##		- 20261031: fTestDir_Use points TEMP and TMP at the folder on Linux and macOS too.
+##		- 20261101: The folder is HOST_TEMP\silkterm\YYYYmmDD-HHMMSS_NNN, with a run.pid.

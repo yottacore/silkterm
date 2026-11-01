@@ -203,7 +203,13 @@ fRunOld 20261001-000000_004 "" "3 days ago"
 fRunOld by-hand "${deadPid}" "3 days ago"
 mkdir -p "${work}/r/away/20261001-000000_005"; echo "${deadPid}" >"${work}/r/away/20261001-000000_005/run.pid"
 ln -s "${work}/r/away/20261001-000000_005" "${r}/20261001-000000_005"; touch -h -d "3 days ago" "${r}/20261001-000000_005"
+## A test run alone that failed keeps its folder, made by the test helper in
+## the same place, with the same name and run.pid.
+lone="$(env -u SILKTERM_TEST_DIR HOST_TEMP="${work}/r" bash -c 'source "$1"; fTestDir_Use; echo "${SILKTERM_TEST_DIR}"; exit 1' _ "${meDir}/../_testdir.bash" 2>/dev/null || true)"
+fCheck "a lone test run that fails keeps its folder in the same place" test -n "${lone}" -a "$(dirname "${lone}")" == "${r}" -a -f "${lone}/run.pid"
+[[ -z "${lone}" ]] || touch -d "3 days ago" "${lone}"
 fSweep_StaleRuns "${r}" 2 "stale run folders"
+fCheck "and once it's stale, the sweep takes it" test -n "${lone}" -a ! -e "${lone}"
 fCheck "a run folder over 2 days old, with no process from its run.pid left, goes" test ! -e "${r}/20261001-000000_001"
 fCheck "one whose process is still there stays" test -f "${r}/20261001-000000_002/out.txt"
 fCheck "so does a younger one" test -f "${r}/20261001-000000_003/out.txt"
@@ -239,3 +245,4 @@ echo "all passed"
 ##		- 20261025 JC: Zig caches.
 ##		- 20261026 JC: The Zig cap by apparent size.
 ##		- 20261031: Run folders, stale after 2 days, and the old ledgers emptied.
+##		- 20261101: A lone test run's kept folder goes with the stale run folders.

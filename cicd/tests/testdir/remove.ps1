@@ -32,7 +32,7 @@ $helper = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '../_testdir.ps1')
 $shell = (Get-Process -Id $PID).Path
 $work = Join-Path $env:SILKTERM_TEST_DIR "silk-remove-$PID"
 $null = New-Item -ItemType Directory -Path $work
-$stampRe = '^test_silkterm_\d{8}-\d{8}$'
+$stampRe = '^\d{8}-\d{6}_\d{3}$'
 $link = if (fTestDir_OnWindows) { 'Junction' } else { 'SymbolicLink' }
 
 ##	fCase <name> <body> [<given folder>]: the body runs after fTestDir_Use in a
@@ -48,12 +48,12 @@ function fCase([string]$Name, [string]$Body, [string]$Given = '') {
 	##	a long one across lines.
 	$run = Join-Path $work "$Name-run.ps1"
 	Set-Content -LiteralPath $run -Value "& '$file' 3>&1 | ForEach-Object { if (`$_ -is [System.Management.Automation.WarningRecord]) { [Console]::Out.WriteLine('WARNING: ' + `$_.Message) } else { `$_ } }`nexit `$LASTEXITCODE"
-	$saved = @{ SILKTERM_TEST_DIR = $env:SILKTERM_TEST_DIR; TEMP = $env:TEMP; TMP = $env:TMP; TMPDIR = $env:TMPDIR }
+	$saved = @{ SILKTERM_TEST_DIR = $env:SILKTERM_TEST_DIR; TEMP = $env:TEMP; TMP = $env:TMP; TMPDIR = $env:TMPDIR; HOST_TEMP = $env:HOST_TEMP }
 	##	Windows PowerShell 5.1 turns a native command's stderr into an error, which Stop would throw.
 	$ErrorActionPreference = 'Continue'
 	try {
 		if ($Given) { $env:SILKTERM_TEST_DIR = $Given } else { Remove-Item env:SILKTERM_TEST_DIR -ErrorAction SilentlyContinue }
-		$env:TEMP = $base; $env:TMP = $base; $env:TMPDIR = $base
+		$env:TEMP = $base; $env:TMP = $base; $env:TMPDIR = $base; $env:HOST_TEMP = $base
 		$out = & $shell -NoProfile -NonInteractive -File $run 2>&1 | Out-String
 		$code = $LASTEXITCODE
 	} finally {
@@ -62,9 +62,13 @@ function fCase([string]$Name, [string]$Body, [string]$Given = '') {
 			else { Set-Item "env:$name" $saved[$name] }
 		}
 	}
-	[pscustomobject]@{ Base = $base; Out = $out; Code = $code; Left = @(Get-ChildItem -LiteralPath $base -Force) }
+	##	What's left in the project's folder. Anything else in the base is a stray.
+	$project = Join-Path $base 'silkterm'
+	$left = @(Get-ChildItem -LiteralPath $base -Force | Where-Object { $_.FullName -ne $project })
+	if (Test-Path -LiteralPath $project) { $left += @(Get-ChildItem -LiteralPath $project -Force) }
+	[pscustomobject]@{ Base = $base; Out = $out; Code = $code; Left = $left }
 }
-function fOneStamped([psobject]$Case) { $Case.Left.Count -eq 1 -and $Case.Left[0].Name -match $stampRe -and $Case.Left[0].PSIsContainer }
+function fOneStamped([psobject]$Case) { $Case.Left.Count -eq 1 -and $Case.Left[0].Name -match $stampRe -and $Case.Left[0].PSIsContainer -and $Case.Left[0].Parent.Name -eq 'silkterm' }
 function fShow([psobject]$Case) { if ($Case.Out) { $Case.Out.TrimEnd() -split "`n" | ForEach-Object { "      $_" } } }
 
 $case = fCase 'pass' "Set-Content -LiteralPath (Join-Path `$dir 'file') -Value x`nfTestDir_End 0`nexit 0"
@@ -72,7 +76,8 @@ fCheck 'a run that passes removes its folder' ($case.Code -eq 0 -and $case.Left.
 if ($case.Left.Count) { fShow $case }
 
 $case = fCase 'fail' "Set-Content -LiteralPath (Join-Path `$dir 'file') -Value x`nfTestDir_End 1`nexit 1"
-fCheck 'a run that fails keeps it' ($case.Code -eq 1 -and (fOneStamped $case) -and (Test-Path -LiteralPath (Join-Path $case.Left[0].FullName 'file')))
+fCheck 'a run that fails keeps it, in HOST_TEMP''s project folder' ($case.Code -eq 1 -and (fOneStamped $case) -and (Test-Path -LiteralPath (Join-Path $case.Left[0].FullName 'file')))
+fCheck 'with its PID in its run.pid' ((fOneStamped $case) -and (Get-Content -LiteralPath (Join-Path $case.Left[0].FullName 'run.pid') -TotalCount 1) -match '^\d+$')
 fCheck 'and says where' ($case.Out -match 'test files kept in')
 
 $case = fCase 'nested' "function fQuit([int]`$Code) { fTestDir_End `$Code; exit `$Code }`nfQuit 0"
@@ -111,6 +116,11 @@ $null = New-Item -ItemType Directory -Path $odd
 Set-Content -LiteralPath (Join-Path $odd '.test_silkterm_owner') -Value 'token'
 $removed = fTestDir_Remove -Dir $odd -Token 'token' 3>$null
 fCheck 'fTestDir_Remove refuses a folder not named like a run folder' (-not $removed -and (Test-Path -LiteralPath $odd))
+##	Older runs' folders, which the ledgers still name.
+$old = Join-Path $work 'test_silkterm_20261001-00000000'
+$null = New-Item -ItemType Directory -Path $old
+Set-Content -LiteralPath (Join-Path $old '.test_silkterm_owner') -Value 'token'
+fCheck 'and takes one named the old way' ((fTestDir_Remove -Dir $old -Token 'token' 3>$null) -and -not (Test-Path -LiteralPath $old))
 
 if ($failures) { Write-Output "$failures failed"; fTestDir_End 1; exit 1 }
 Write-Output 'all passed'
@@ -120,3 +130,4 @@ exit 0
 ##	History:
 ##		- 20261002 JC: Created.
 ##		- 20261006 JC: Help block, StrictMode Latest, typed parameters.
+##		- 20261101: The folder is HOST_TEMP\silkterm\YYYYmmDD-HHMMSS_NNN, with a run.pid.

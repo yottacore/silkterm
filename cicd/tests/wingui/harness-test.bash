@@ -50,7 +50,7 @@ case "${1:-}" in
 			[[ -n "${STUB_NOSTAGE:-}" ]] && { echo "test run folder: refused"; exit 1; }
 			[[ " ${STUB_NOSESSION:-} " == *" ${stubHost} "* ]] && { printf 'NOSESSION nobody is logged on at the console\r\n'; exit 0; }
 			echo "RUNFOR wintest"
-			printf 'RUNDIR %s\r\n' 'C:\Users\wintest\AppData\Local\Temp\test_silkterm_20260101-00000000'
+			printf 'RUNDIR %s\r\n' 'C:\Users\wintest\AppData\Local\Temp\silkterm\20260101-000000_001'
 			printf 'RUNTOKEN %s\r\n' '4242-1234567890'
 		elif grep -qE "^'SWEPT'" "$2"; then
 			kind=sweep; [[ "$2" == *_old.ps1 ]] && kind=old
@@ -77,7 +77,7 @@ fCheck "the result names the commit tested" fNamesCommit
 
 ## Where it all goes: one run folder in the console user's temp folder, made
 ## on the box, since that user's temp folder is not the ssh account's.
-runDir='C:\Users\wintest\AppData\Local\Temp\test_silkterm_20260101-00000000'
+runDir='C:\Users\wintest\AppData\Local\Temp\silkterm\20260101-000000_001'
 fStaged(){ [[ -f "${work}/stage.ps1" ]] && grep -q '^function fTestDir_Make' "${work}/stage.ps1" ;}
 fSentThere(){ grep -qFx "push ${work}/silkterm.exe ${runDir}\silkterm.exe" "${work}/calls" ;}
 fRunsThere(){ [[ -n "${launcher}" ]] && grep -qFx "\$dir = '${runDir}'" "${launcher}" && grep -qF -- '-RunDir `"$dir`"' "${launcher}" ;}
@@ -129,7 +129,7 @@ fCheck "and the run, once swept, is off the list" bash -c '! grep -qF "$1" "$2" 
 ## A run killed before its sweep: the next run on that box sweeps it first, its
 ## folder through the token it was given and its scripts by name, and takes it
 ## off the list. Another box's stays.
-killedDir='C:\Users\wintest\AppData\Local\Temp\test_silkterm_20251231-00000000'
+killedDir='C:\Users\wintest\AppData\Local\Temp\silkterm\20251231-000000_001'
 mkdir "${work}/killed"
 printf 'box\t20251231000000-1\t\t\nbox\t20251231000000-1\t%s\t77-88\nother\t20251231000000-2\t\t\n' "${killedDir}" >"${work}/killed/runs.txt"
 rc=0

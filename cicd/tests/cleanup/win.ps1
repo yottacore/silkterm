@@ -34,7 +34,8 @@ $null = New-Item -ItemType Directory -Path $base
 $ledger = Join-Path $work 'ledger'
 $link = if (fTestDir_OnWindows) { 'Junction' } else { 'SymbolicLink' }
 
-function fDir([int]$N) { Join-Path $base ('test_silkterm_2026101{0}-00000000' -f $N) }
+##	The old name, as the ledgers on the boxes still hold, and the new one.
+function fDir([int]$N) { Join-Path $base $(if ($N -le 3) { 'test_silkterm_2026101{0}-00000000' -f $N } else { '20261001-00000{0}_001' -f $N }) }
 foreach ($n in 1..6) {
 	$null = New-Item -ItemType Directory -Path (fDir $n)
 	Set-Content -LiteralPath (Join-Path (fDir $n) '.test_silkterm_owner') -Value "tok-$n"
@@ -80,6 +81,7 @@ fCheck 'and is never removed' (Test-Path -LiteralPath $given -PathType Container
 $own = Join-Path $work 'own'
 Set-Content -LiteralPath $child -Value @"
 `$env:SILKTERM_TEST_DIR = `$null
+`$env:HOST_TEMP = '$work'
 . '$helper'
 fTestDir_Make
 fTestDir_Record -Ledger '$own'
@@ -87,7 +89,7 @@ fTestDir_End 0
 "@
 & (Get-Process -Id $PID).Path -NoProfile -File $child
 $line = @([System.IO.File]::ReadAllLines($own))
-fCheck 'a folder a run made is written down with its token' ($line.Count -eq 1 -and $line[0] -match '[\\/]test_silkterm_\d{8}-\d{8}\t\d+-\d+$')
+fCheck 'a folder a run made is written down with its token' ($line.Count -eq 1 -and $line[0] -match '[\\/]silkterm[\\/]\d{8}-\d{6}_\d{3}\t\d+-\d+$')
 
 Remove-Item -LiteralPath (fDir 4) -Force
 fTestDir_End ([int]($failures -ne 0))
@@ -97,3 +99,4 @@ Write-Output 'all passed'
 ##	History:
 ##		- 20261019 JC: Created.
 ##		- 20261026 JC: The handed-down check runs in a child, so it passes alone.
+##		- 20261101: Run folders named HOST_TEMP\silkterm\YYYYmmDD-HHMMSS_NNN, and the old name.

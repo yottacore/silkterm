@@ -1,21 +1,24 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 // Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
 
-//! One folder per test run, `<temp>/test_silkterm_YYYYmmDD-HHMMSSNN`, that every
-//! file a test writes goes under. A runner that sets `SILKTERM_TEST_DIR` hands its
-//! own folder down instead, so a whole pipeline run shares one. The scripts
-//! under cicd/tests keep the same contract in _testdir.bash, .py and .ps1.
-//! A folder this process made is removed when the run passes, and kept when a
-//! test panicked. One named by `SILKTERM_TEST_DIR` is never removed.
+//! One folder per test run, `<HOST_TEMP>/silkterm/YYYYmmDD-HHMMSS_NNN` with a
+//! `run.pid`, the way the pipeline makes its own, that every file a test writes
+//! goes under. Without `HOST_TEMP` it's under the temp dir. A runner that sets
+//! `SILKTERM_TEST_DIR` hands its own folder down instead, so a whole pipeline
+//! run shares one. The scripts under cicd/tests keep the same contract in
+//! _testdir.bash, .py and .ps1. A folder this process made is removed when the
+//! run passes, and kept when a test panicked, for the pipeline's stale sweep
+//! to take once its process is gone. One named by `SILKTERM_TEST_DIR` is never
+//! removed.
 
 use std::cell::Cell;
 use std::io::{self, ErrorKind, Write};
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::time::Duration;
 
 const OWNER_FILE: &str = ".test_silkterm_owner";
+const PID_FILE: &str = "run.pid";
 static PANICKED: AtomicBool = AtomicBool::new(false);
 static OWNED: OnceLock<Owned> = OnceLock::new();
 
@@ -48,7 +51,7 @@ pub fn run_dir() -> &'static Path {
 			.filter(|dir| !dir.is_empty())
 			.map(PathBuf::from);
 		let adopted = given.is_some();
-		let dir = make_run_dir(&std::env::temp_dir(), given, local_stamp).expect("test run folder");
+		let dir = make_run_dir(&run_base(), given, local_stamp).expect("test run folder");
 		if adopted {
 			return dir;
 		}
@@ -90,14 +93,26 @@ pub fn catch_expected_panic<R>(
 	caught
 }
 
+// HOST_TEMP/silkterm, as cicd.bash puts its runs.
+fn run_base() -> PathBuf {
+	std::env::var_os("HOST_TEMP")
+		.filter(|dir| !dir.is_empty())
+		.map_or_else(std::env::temp_dir, PathBuf::from)
+		.join("silkterm")
+}
+
+// The token proves the folder is ours at the end. run.pid tells the
+// pipeline's stale sweep whether the run is still going.
 fn mark_owned(dir: &Path) -> io::Result<String> {
 	let nanos = std::time::SystemTime::now()
 		.duration_since(std::time::UNIX_EPOCH)
 		.unwrap_or_default()
 		.as_nanos();
-	let token = format!("{}-{nanos}", std::process::id());
+	let pid = std::process::id();
+	let token = format!("{pid}-{nanos}");
 	let mut marker = std::fs::File::create_new(dir.join(OWNER_FILE))?;
 	writeln!(marker, "{token}")?;
+	writeln!(std::fs::File::create_new(dir.join(PID_FILE))?, "{pid}")?;
 	Ok(token)
 }
 
@@ -169,14 +184,15 @@ extern "C" fn remove_at_exit() {
 fn make_run_dir(
 	base: &Path,
 	given: Option<PathBuf>,
-	mut clock: impl FnMut() -> String,
+	clock: impl FnOnce() -> String,
 ) -> io::Result<PathBuf> {
 	if let Some(given) = given {
 		std::fs::create_dir_all(&given)?;
 		return Ok(given);
 	}
-	// Never create_dir_all here: a folder or symlink planted at a guessable name
-	// in a shared temp dir would be adopted. A taken name waits for the next stamp.
+	std::fs::create_dir_all(base)?;
+	// Never create_dir_all for the run's own folder: a folder or symlink planted
+	// at a guessable name would be adopted. A taken name counts up.
 	#[cfg(unix)]
 	let builder = {
 		use std::os::unix::fs::DirBuilderExt;
@@ -186,25 +202,21 @@ fn make_run_dir(
 	};
 	#[cfg(not(unix))]
 	let builder = std::fs::DirBuilder::new();
-	let mut tries = 1;
+	let stamp = clock();
+	let mut counter = 1;
 	loop {
-		let path = base.join(format!("test_silkterm_{}", clock()));
+		let path = base.join(format!("{stamp}_{counter:03}"));
 		match builder.create(&path) {
 			Ok(()) => return Ok(path),
-			Err(e) if e.kind() == ErrorKind::AlreadyExists && tries < 100 => {
-				tries += 1;
-				std::thread::sleep(Duration::from_millis(10));
-			}
+			Err(e) if e.kind() == ErrorKind::AlreadyExists && counter < 999 => counter += 1,
 			Err(e) => return Err(io::Error::new(e.kind(), format!("{}: {e}", path.display()))),
 		}
 	}
 }
 
-// Local time, like every other stamp the project writes by hand. NN is
-// hundredths of a second.
+// Local time, like every other stamp the project writes by hand.
 fn local_stamp() -> String {
-	let (stamp, hundredths) = crate::config::local_stamp();
-	format!("{stamp}{hundredths:02}")
+	crate::config::local_stamp().0
 }
 
 #[cfg(test)]
@@ -223,8 +235,8 @@ mod tests {
 	#[test]
 	fn a_run_folder_is_made_fresh_under_the_temp_base() {
 		let base = base_for("fresh");
-		let got = make_run_dir(&base, None, || "20260101-00000000".to_string()).unwrap();
-		assert_eq!(got, base.join("test_silkterm_20260101-00000000"));
+		let got = make_run_dir(&base, None, || "20260101-000000".to_string()).unwrap();
+		assert_eq!(got, base.join("20260101-000000_001"));
 		assert!(got.is_dir());
 		#[cfg(unix)]
 		{
@@ -241,12 +253,12 @@ mod tests {
 	#[test]
 	fn a_run_folder_already_there_is_never_adopted() {
 		let base = base_for("planted");
-		let planted = base.join("test_silkterm_20260101-00000001");
+		let planted = base.join("20260101-000000_001");
 		std::fs::create_dir(&planted).unwrap();
 		std::fs::write(planted.join("marker"), "planted").unwrap();
 		let target = base.join("elsewhere");
 		std::fs::create_dir(&target).unwrap();
-		let linked = base.join("test_silkterm_20260101-00000002");
+		let linked = base.join("20260101-000000_002");
 		#[cfg(unix)]
 		std::os::unix::fs::symlink(&target, &linked).unwrap();
 		// A junction, since anyone can make one there and a symlink needs a privilege.
@@ -269,14 +281,8 @@ mod tests {
 			"nothing planted at {}",
 			linked.display()
 		);
-		let mut stamps = [
-			"20260101-00000001",
-			"20260101-00000002",
-			"20260101-00000003",
-		]
-		.into_iter();
-		let got = make_run_dir(&base, None, || stamps.next().unwrap().to_string()).unwrap();
-		assert_eq!(got, base.join("test_silkterm_20260101-00000003"));
+		let got = make_run_dir(&base, None, || "20260101-000000".to_string()).unwrap();
+		assert_eq!(got, base.join("20260101-000000_003"));
 		let planted_entries: Vec<_> = std::fs::read_dir(&planted)
 			.unwrap()
 			.map(|entry| entry.unwrap().file_name())
@@ -294,20 +300,20 @@ mod tests {
 	#[test]
 	fn a_run_folder_gives_up_when_every_name_is_taken() {
 		let base = base_for("taken");
-		std::fs::create_dir(base.join("test_silkterm_20260101-00000000")).unwrap();
-		let started = std::time::Instant::now();
-		let got = make_run_dir(&base, None, || "20260101-00000000".to_string());
+		for counter in 1..=999 {
+			std::fs::create_dir(base.join(format!("20260101-000000_{counter:03}"))).unwrap();
+		}
+		let got = make_run_dir(&base, None, || "20260101-000000".to_string());
 		let err = got.unwrap_err();
 		assert_eq!(err.kind(), ErrorKind::AlreadyExists);
-		assert!(
-			err.to_string().contains("test_silkterm_20260101-00000000"),
-			"{err}"
-		);
-		assert!(
-			started.elapsed() >= Duration::from_millis(900),
-			"{:?}",
-			started.elapsed()
-		);
+		assert!(err.to_string().contains("20260101-000000_999"), "{err}");
+		// Commented out 20261101: a taken name counts up now, with no wait
+		// between tries (2026103115564575).
+		// assert!(
+		// 	started.elapsed() >= Duration::from_millis(900),
+		// 	"{:?}",
+		// 	started.elapsed()
+		// );
 		std::fs::remove_dir_all(&base).unwrap();
 	}
 
@@ -344,7 +350,7 @@ mod tests {
 	#[cfg_attr(miri, ignore = "Miri can't start a process")]
 	fn a_run_folder_is_stamped_in_local_time() {
 		let stamp = local_stamp();
-		assert_eq!(stamp.len(), 17, "{stamp}");
+		assert_eq!(stamp.len(), 15, "{stamp}");
 		for (at, character) in stamp.chars().enumerate() {
 			if at == 8 {
 				assert_eq!(character, '-', "{stamp}");
@@ -366,7 +372,7 @@ mod tests {
 	// A marked run folder under a base of the test's own.
 	fn marked_folder(what: &str) -> (PathBuf, PathBuf, String) {
 		let base = base_for(what);
-		let dir = make_run_dir(&base, None, || "20260101-00000000".to_string()).unwrap();
+		let dir = make_run_dir(&base, None, || "20260101-000000".to_string()).unwrap();
 		let token = mark_owned(&dir).unwrap();
 		(base, dir, token)
 	}
@@ -390,6 +396,17 @@ mod tests {
 				String::from_utf8_lossy(&made.stdout)
 			);
 		}
+	}
+
+	// Test ID: deqts
+	#[test]
+	fn a_marked_run_folder_names_this_process_in_its_run_pid() {
+		let (base, dir, _) = marked_folder("pid");
+		assert_eq!(
+			std::fs::read_to_string(dir.join(PID_FILE)).unwrap(),
+			format!("{}\n", std::process::id())
+		);
+		std::fs::remove_dir_all(&base).unwrap();
 	}
 
 	// Test ID: dde3p
