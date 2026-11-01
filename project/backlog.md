@@ -227,11 +227,12 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - Always use automatic remote mode when detected.
 	- ID: 2026101914251764
 	- Type: Feature
-	- Status: Waiting on automated testing
+	- Status: Waiting on UAT
 		- The row's label is shorter than the requested name. See Decisions.
 		- 20261023: Back from Waiting on UAT, since the 2 rows below are machine runs.
+		- 20261031: Back to Waiting on UAT. The Windows run passed, so only the label is left.
 	- Needs hand testing: OK the shorter Settings label.
-	- Needs external testing: the wingui `wpremote` scenario on vm925w or b29w over a real RDP session with `performance.detect_remote: false`, which should keep the stored profile and the wallpaper. The Windows detection code is unchanged and only compiled here.
+	- Stand-in: none (20261031). Turns on whether the shorter label reads right.
 	- Priority: Avg
 	- Opened: 20261019-142517
 	- Opened by: JC
@@ -258,6 +259,8 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261026: Both new tests passed again at fab6815 (de9n8, de9n7). `wpremote` skipped on b29w again, its console session locked. vm925w was off and held by another session.
 		- 20261028: Both new tests passed again at 64f3584 (de9n8, de9n7). `wpremote` skipped on b29w again, its console session locked, and vm925w was off.
 		- 20261028: `wpremote` skipped again in the full run at 9eded41, b29w's console session locked. vm925w never started, since vmKt6m held its SPICE port. It still needs a real RDP session on a box.
+		- 20261031: On b29w at 80ffd30, in a real RDP session that Windows reported as remote, a launch with `performance.detect_remote: false` kept the stored profile, `high`, and showed the wallpaper. The same launch with it true came up under Remote, with no wallpaper, and left `high` in the file. `wpremote` passed there too, on the console.
+		- Verified: 20261031 on b29w, as above.
 	- Branch: rnd1022
 	- Test case: `a_remote_screen_is_ignored_when_turned_off` (rating.rs, fails with the check reordered so detection runs first) and `a_remote_screen_takes_remote_unless_turned_off` (config.rs).
 
