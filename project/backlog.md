@@ -679,7 +679,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - Make sure shcl files from v1.0.0-beta3 are accurately converted to the latest shcl spec
 	- ID: 2026102818080401
 	- Type: Enhancement
-	- Status: Queued
+	- Status: Done
 	- Opened: 20261028-180804
 	- Opened by: JC
 	- Requirements:
@@ -687,6 +687,21 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- The latest spec is listed as v2 but is actually working toward v3 beta.
 	- Notes:
 		- Pre-next-cut.
+	- Progress log:
+		- 20261101: beta3 wrote one shcl file, the config, with its themes and shell list in it, through shcl 1.2. The wallpaper history it also writes is a plain list.
+		- 20261101: Test files made the way beta3 wrote them: its template on a first launch, and a Settings save that changed every setting, added a theme and set the shell list.
+		- 20261101: Every value carried, renames and the blink rate included. The theme's ANSI lists, the shell list and its dates read the same.
+		- 20261101: Gap found: beta3 had no performance profiles. A file with its own scroll timings, halo, outline, blur or wallpaper switch came up under the automatic profile, which drew the profile's values in place of the user's. 16 of the beta3 save's values read that way.
+		- 20261101: Fixed in the conversion. A file from before the profiles, with a governed row set to anything but Max silk's value, comes up on Custom with "Choose automatically" off. An untouched beta3 file stays automatic.
+	- Decisions:
+		- 20261101: "From before the profiles" means a file in an older format with no `performance` line at all, active or commented. Every template since the profiles has those lines, so a later file keeps the profile it says.
+		- 20261101: A governed row equal to Max silk's value doesn't count as a look of its own. beta3's template had the scroll timings active at those values, so an untouched file would otherwise lose the hardware test.
+		- 20261101: Done in `upgrade`, so it happens once, keeps the same backup, and also covers a file a busy launch left for the next save.
+	- Test case: `a_file_beta3_saved_keeps_every_setting` (der3m), `a_file_beta3_wrote_on_first_launch_stays_automatic` (der3n), `only_a_look_set_before_the_profiles_comes_up_custom` (der3p), and the beta3 case in `cicd/tests/config-convert/run.bash` (ddf6j). der3m and der3p fail with the profile step off and pass with it.
+	- Verified: The backlog quick run passes, all five areas, 1417 unit tests. Windows clippy is clean. `cicd/tests/config-convert/run.bash` passes, 113 checks, the beta3 case included.
+	- Swept: Every path that converts an older file goes through `upgrade`: the launch, the in-memory read for a busy file, the launch steps the rating check replays, and the writer every save goes through. Both its old-format arms, in place and written new, take the step.
+	- Acceptance signoff: Self-closed: the tests failed before the fix and pass after. The profile choice has a Check entry.
+	- Closed: 20261101-170218
 
 - A backlog line names a path under the private notes folder
 	- ID: 2026102819390403

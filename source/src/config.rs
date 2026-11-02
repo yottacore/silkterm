@@ -6966,8 +6966,11 @@ fn upgrade(body: &[u8]) -> Upgrade {
 	}
 	if shcl::format_version(&stamped.text).is_none_or(|n| n < shcl::FORMAT_MAJOR) {
 		let respelled = shcl::migrate_unstamped(text, true).text;
-		let (text, lost) = rebuilt_config_text(&respelled, &[]);
-		return Upgrade::Rewritten { text, lost };
+		let (new, lost) = rebuilt_config_text(&respelled, &[]);
+		return Upgrade::Rewritten {
+			text: with_own_look(text, new),
+			lost,
+		};
 	}
 	// The footer's Format line is what says it was done, so the footer goes on
 	// in place of migrate's own stamp wherever it is ours.
@@ -6980,9 +6983,45 @@ fn upgrade(body: &[u8]) -> Upgrade {
 		return Upgrade::Current;
 	}
 	Upgrade::InPlace {
-		text: out,
+		text: with_own_look(text, out),
 		lost: migrated.lost,
 	}
+}
+
+// A file from before the performance profiles (v1.0.0-beta3) drew exactly what
+// it said. A look set there by hand that differs from Max silk would sit under
+// whatever profile the launch picks, so it comes up as Custom with the choice
+// made by hand, as an edit in Settings does. An untouched file stays automatic.
+fn with_own_look(old: &str, new: String) -> String {
+	let has_profile = walk_settings(old).iter().any(|w| {
+		matches!(w, WalkLine::Setting { path, .. }
+			if path == "performance" || path.starts_with("performance."))
+	});
+	if has_profile {
+		return new;
+	}
+	let spec = crate::fields::spec();
+	let Some(group) = spec.groups.iter().find(|g| g.id == crate::fields::PROFILE) else {
+		return new;
+	};
+	let max = crate::profile::Profile::Max.key();
+	let Some(shipped) = group.presets.iter().find(|p| p.key == max) else {
+		return new;
+	};
+	let renamed = rewritten_by(&new, &[migrate_config_text]);
+	let model = crate::fields::load(&shcl::Document::parse(&renamed));
+	let own = &model.values.own;
+	let differs = group.members.iter().any(|id| {
+		own.get(id)
+			.is_some_and(|v| shipped.values.get(id) != Some(v))
+	});
+	if !differs {
+		return new;
+	}
+	let mut doc = shcl::Document::parse(&new);
+	doc.put_bool("performance.automatic", false);
+	doc.put_string("performance.profile", knobs::CUSTOM);
+	saved_text(&doc)
 }
 
 // Not UTF-8. A line that does not decode is left out, and counted when it held
@@ -18590,6 +18629,316 @@ mod tests {
 				rating_check(&case, &mut rng);
 			});
 		}
+	}
+
+	// v1.0.0-beta3's config files, as it wrote them through shcl 1.2: its
+	// template on a first launch, and a Settings save that changed every
+	// setting, added a theme and set the shell list.
+	const BETA3_FIRST_LAUNCH: &str = include_str!("testdata/beta3_first_launch.shcl");
+	const BETA3_SAVED: &str = include_str!("testdata/beta3_saved.shcl");
+
+	// Each row the beta3 save set, as it reads now. `blink_rate_ms: 400` was half
+	// a cycle, so 0.8 s.
+	fn beta3_rows() -> Vec<(Key, Value)> {
+		use Value::{Bool, Float, Int};
+		let text = |s: &str| Value::Text(s.to_string());
+		vec![
+			(Key::Transparency, Bool(false)),
+			(Key::Opacity, Float(0.8)),
+			(Key::BackdropBlur, Bool(false)),
+			(Key::BgEnabled, Bool(false)),
+			(Key::BgImage, text("mine.jpg")),
+			(Key::BgFolder, text("pics/")),
+			(Key::BgRotate, Bool(false)),
+			(Key::BgOpacity, Float(0.25)),
+			(Key::BgBlur, Float(4.0)),
+			(Key::BgFit, text("zoom")),
+			(Key::BgHonorXmp, Bool(false)),
+			(Key::BgContrastMask, Bool(false)),
+			(Key::BgContrastSize, Float(0.3)),
+			(Key::BgContrastStrength, Float(0.7)),
+			(Key::BgContrastAuto, Float(0.25)),
+			(Key::TextScrim, Bool(false)),
+			(Key::ScrimRadius, Float(3.0)),
+			(Key::ScrimSoftness, Float(0.25)),
+			(Key::ScrimStrength, Float(30.0)),
+			(Key::ScrimFunction, text("dilate")),
+			(Key::ScrimRamp, text("linear")),
+			(Key::Outline, Float(0.5)),
+			(Key::CursorScrim, Bool(true)),
+			(Key::CursorOutline, Bool(false)),
+			(Key::CursorBlinking, Bool(true)),
+			(Key::CursorBlinkRate, Float(0.8)),
+			(Key::CursorHeight, Float(80.0)),
+			(Key::CursorWidth, Float(50.0)),
+			(Key::CursorAnimation, text("phase")),
+			(Key::CursorResume, Float(2.0)),
+			(Key::SystemFont, Bool(false)),
+			(Key::SystemFontSize, Bool(false)),
+			(Key::FontFamily, text("Fira Code")),
+			(Key::FontSize, Float(14.5)),
+			(Key::LineHeight, Float(1.1)),
+			(Key::RememberSize, Bool(false)),
+			(Key::Columns, Int(120)),
+			(Key::Rows, Int(40)),
+			(Key::Margin, Float(4.0)),
+			(Key::TabRegularWidth, Float(10.0)),
+			(Key::TabMaxWidth, Float(30.0)),
+			(Key::StartupDirectory, text("/srv/work")),
+			(Key::ShellIntegration, Bool(false)),
+			(Key::CopyOnSelect, Bool(true)),
+			(Key::Hyperlinks, Bool(false)),
+			(Key::LinkOpenCommand, text("xdg-open")),
+			(Key::SmoothScroll, Bool(false)),
+			(Key::ScrollEaseIn, Float(60.0)),
+			(Key::ScrollRampUp, Float(80.0)),
+			(Key::SingleScreenTau, Float(40.0)),
+			(Key::ScrollRampDown, Float(120.0)),
+			(Key::ScrollEaseOut, Float(180.0)),
+			(Key::SmoothApps, Bool(false)),
+			(Key::WheelLines, Float(5.0)),
+			(Key::Scrollbar, Bool(false)),
+			(Key::ScrollbarThickness, Float(12.0)),
+			(Key::ScrollbarAutoHide, Bool(false)),
+			(Key::Theme, text("Matrix")),
+			(Key::ThemeMode, text("light")),
+			(Key::ColBg, text("#9e3779")),
+			(Key::ColFg, text("#3c6ef3")),
+			(Key::ColCursor, text("#daa66d")),
+			(Key::ColHighlight, text("#78dde6")),
+			(Key::ColFocus, text("#171560")),
+			(Key::ColMenuBg, text("#b54cda")),
+			(Key::ColMenuFg, text("#538453")),
+			(Key::ColDialogBg, text("#f1bbcd")),
+			(Key::ColDialogFg, text("#8ff347")),
+			(Key::ColGutter, text("#2e2ac0")),
+			(Key::ColScrollbarThumb, text("#cc623a")),
+			(Key::ColScrollbarTrough, text("#6a99b4")),
+		]
+	}
+
+	fn assert_beta3_saved_kept(s: &Settings, when: &str) {
+		for (key, want) in beta3_rows() {
+			assert_eq!(crate::fields::get(s, key), Some(want), "{key:?} {when}");
+		}
+		// a look of its own, so the profile it comes up on is Custom, by hand
+		assert_eq!(
+			crate::profile::current(s),
+			crate::profile::Profile::Custom,
+			"{when}"
+		);
+		assert_eq!(
+			crate::fields::get(s, Key::PerfAuto),
+			Some(Value::Bool(false)),
+			"{when}"
+		);
+		let near = |a: f32, b: f32| (a - b).abs() < 1e-4;
+		assert_eq!(s.scrollback, 20000, "{when}");
+		assert!(near(s.alt_scroll_lines, 2.0), "{when}");
+		assert!(near(s.output_ease_lines, 2.0), "{when}");
+		assert!(near(s.wallpaper_rotate_interval_s, 300.0), "{when}");
+		assert!(near(s.cursor_animation_idle_stop_s, 30.0), "{when}");
+		let flags = [
+			s.wallpaper_fallback_builtin,
+			s.wallpaper_rotate_random,
+			s.text_scrim_regular_weight,
+			s.color_emoji,
+			s.embolden_inverse,
+		];
+		assert_eq!(flags, [false; 5], "{when}");
+		assert!(s.hide_single_tab, "{when}");
+		assert_eq!(
+			(s.remembered_columns, s.remembered_rows),
+			(140, 42),
+			"{when}"
+		);
+		assert_eq!(s.word_separators, ",; ()", "{when}");
+		assert_eq!(s.selection_pairs, "() []", "{when}");
+		assert_eq!(s.command_line, "--new-tab", "{when}");
+
+		let [theme] = s.user_themes.as_slice() else {
+			panic!("{when}: {:?}", s.user_themes);
+		};
+		assert_eq!(
+			(theme.slug.as_str(), theme.name.as_str()),
+			("mine", "Mine"),
+			"{when}"
+		);
+		let hex = |c: &str| parse_hex(c).unwrap();
+		assert_eq!(theme.dark.bg, hex("#cdab89"), "{when}");
+		assert_eq!(theme.light.gutter, hex("#2b4a59"), "{when}");
+		assert_eq!(theme.dark.ansi[0], hex("#08b35b"), "{when}");
+		assert_eq!(theme.dark.ansi[15], hex("#4df37c"), "{when}");
+		assert_eq!(theme.light.ansi[15], hex("#56a6d8"), "{when}");
+
+		let shells: Vec<_> = s
+			.shells
+			.iter()
+			.map(|e| {
+				(
+					e.slug.as_str(),
+					e.command.as_str(),
+					e.active,
+					e.comment.as_str(),
+					e.last_seen.as_str(),
+				)
+			})
+			.collect();
+		assert_eq!(
+			shells,
+			[
+				("bash", "/bin/bash", true, "", "2026-08-20"),
+				("zsh", "/usr/bin/zsh -l", false, "login shell", ""),
+			],
+			"{when}"
+		);
+	}
+
+	// A file beta3 saved converts with every setting it held: the launch keeps
+	// the old file, loses nothing, and reads each value as beta3 did. A Settings
+	// save after that keeps them all, and the next launch has nothing to do.
+	// Test ID: der3m
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_file_beta3_saved_keeps_every_setting() {
+		let _guard = test_config_lock();
+		let _store = test_store_lock();
+		let _ = take_conversion_loss();
+		let dir = format_test_dir("beta3_saved");
+		let path = dir.join("config.shcl");
+		std::fs::write(&path, BETA3_SAVED.replace("\r\n", "\n")).unwrap();
+		set_config_override(path.clone());
+
+		let s = load();
+		assert_eq!(take_conversion_loss(), None, "nothing lost");
+		let kept = backups_in(&dir, "config");
+		assert_eq!(kept.len(), 1, "{kept:?}");
+		assert!(is_backup_name(&kept[0], "config", 2), "{kept:?}");
+		let now = std::fs::read_to_string(&path).unwrap();
+		assert_eq!(
+			shcl::format_version(&now),
+			Some(shcl::FORMAT_MAJOR),
+			"{now}"
+		);
+		assert!(config_complaints(&now).is_empty(), "{now}");
+		assert_beta3_saved_kept(&s, "after the launch");
+
+		let mut edited = s.clone();
+		change(&mut edited, Key::Minimap, Value::Bool(false));
+		assert!(persist(&s, &edited));
+		let saved = reload_from_disk();
+		assert_beta3_saved_kept(&saved, "after a save");
+		assert_eq!(
+			crate::fields::get(&saved, Key::Minimap),
+			Some(Value::Bool(false))
+		);
+
+		let written = std::fs::read_to_string(&path).unwrap();
+		let again = load();
+		assert_beta3_saved_kept(&again, "on the next launch");
+		assert_eq!(std::fs::read_to_string(&path).unwrap(), written, "settled");
+		assert_eq!(backups_in(&dir, "config").len(), 1);
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
+	// The template beta3 wrote on a first launch converts with nothing lost and
+	// nothing set by hand that it did not set, so the profile stays automatic.
+	// Test ID: der3n
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_file_beta3_wrote_on_first_launch_stays_automatic() {
+		use Value::{Bool, Float, Int};
+		let _guard = test_config_lock();
+		let _store = test_store_lock();
+		let _ = take_conversion_loss();
+		let dir = format_test_dir("beta3_first");
+		let path = dir.join("config.shcl");
+		std::fs::write(&path, BETA3_FIRST_LAUNCH.replace("\r\n", "\n")).unwrap();
+		set_config_override(path.clone());
+
+		let s = load();
+		assert_eq!(take_conversion_loss(), None, "nothing lost");
+		assert_eq!(backups_in(&dir, "config").len(), 1);
+		let now = std::fs::read_to_string(&path).unwrap();
+		assert_eq!(
+			shcl::format_version(&now),
+			Some(shcl::FORMAT_MAJOR),
+			"{now}"
+		);
+		assert!(config_complaints(&now).is_empty(), "{now}");
+		assert_eq!(
+			crate::fields::get(&s, Key::PerfAuto),
+			Some(Value::Bool(true))
+		);
+		assert!(
+			!crate::fields::by_hand(&s, Key::PerfAuto)
+				&& !crate::fields::by_hand(&s, Key::PerfProfile)
+		);
+		// the template's own active lines
+		for (key, want) in [
+			(Key::SystemFont, Bool(true)),
+			(Key::LineHeight, Float(1.22)),
+			(Key::Margin, Float(8.0)),
+			(Key::Columns, Int(160)),
+			(Key::Rows, Int(48)),
+			(Key::Opacity, Float(0.95)),
+			(Key::ScrollEaseIn, Float(82.0)),
+			(Key::ScrollRampUp, Float(96.0)),
+			(Key::SingleScreenTau, Float(32.0)),
+			(Key::ScrollRampDown, Float(144.0)),
+			(Key::ScrollEaseOut, Float(212.0)),
+			(Key::WheelLines, Float(3.0)),
+			(Key::Theme, Value::Text("SilkTerm".into())),
+			(Key::ThemeMode, Value::Text("dark".into())),
+		] {
+			assert_eq!(crate::fields::get(&s, key), Some(want), "{key:?}");
+		}
+		assert_eq!(s.scrollback, 10000);
+		assert!((s.alt_scroll_lines - 3.0).abs() < 1e-4);
+		assert!((s.output_ease_lines - 1.0).abs() < 1e-4);
+		let _ = load();
+		assert_eq!(std::fs::read_to_string(&path).unwrap(), now, "settled");
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
+	// Only a file from before the profiles, with a look of its own, comes up on
+	// Custom. A later file says what it wants, and an untouched one stays put.
+	// Test ID: der3p
+	#[test]
+	fn only_a_look_set_before_the_profiles_comes_up_custom() {
+		let old = "scroll:\n\tsmooth: false\n";
+		let custom = |text: &str| {
+			let doc = shcl::Document::parse(&next_launch_text(text));
+			(
+				doc.get_string("performance.profile").ok(),
+				doc.get_bool("performance.automatic").ok(),
+			)
+		};
+		assert_eq!(custom(old), (Some("custom".into()), Some(false)));
+		assert_eq!(
+			custom("scroll:\n\tsmooth: true\n"),
+			(None, None),
+			"Max silk's value"
+		);
+		// beta3 wrote a float with no point when it had none
+		assert_eq!(
+			custom("wallpaper:\n\tblur: 10\n"),
+			(None, None),
+			"10 is 10.0"
+		);
+		assert_eq!(
+			custom("font:\n\tsize: 12\n"),
+			(None, None),
+			"no profile row"
+		);
+		let chose = "scroll:\n\tsmooth: false\nperformance:\n\t# profile: \"max\"  ## Default\n";
+		assert_eq!(
+			custom(chose),
+			(None, None),
+			"a file from after the profiles"
+		);
+		let current = next_launch_text(old).into_owned();
+		assert_eq!(next_launch_text(&current), current, "settles");
 	}
 }
 

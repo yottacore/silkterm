@@ -62,6 +62,8 @@ One setting decides how much the look may cost, so a slow machine is a choice on
 
 - A profile sits on top of the user's settings. The file and the dialog keep the user's own values, and Custom brings them all back.
 
+- A file from before the profiles, such as one v1.0.0-beta3 saved, with a governed row set to anything but Max silk's value, comes up on Custom with "Choose automatically" off, the way an edit in Settings does. Its look was the user's own, and a profile laid over it would change it with no word (2026-11-01).
+
 - In Settings, a row a profile governs shows the profile's value. Editing it switches the profile to Custom, keeps what is on screen, and turns "Choose automatically" off.
 
 - Picking a profile in the dropdown turns "Choose automatically" off, except Remote (temporary).
