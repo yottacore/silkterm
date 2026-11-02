@@ -10,11 +10,12 @@
 ##		process, the graphics driver and the other C libraries included.
 ##		Every shell is soak-shell.sh, from --shell adn the test config's shell
 ##		list, with HOME and the XDG dirs in the run's own folder.
-##	- Syntax: run.bash [--bin PATH] [--rounds N] [--out DIR] [--plant]
+##	- Syntax: run.bash [--bin PATH] [--rounds N] [--out DIR] [--stamp STAMP] [--plant]
 ##		--bin     the program (default: the debug build, a plain one)
 ##		--rounds  N, so 2N rounds in all (default 6, or SOAK_ROUNDS)
 ##		--out     keep the heaptrack data and a summary there, as
-##		          soak_<stamp>.zst and soak_<stamp>.txt (SOAK_STAMP, else now)
+##		          soak_<stamp>.zst and soak_<stamp>.txt
+##		--stamp   the <stamp> for --out (default SOAK_STAMP, else now)
 ##		--plant   preload plant.c, which leaks 64 KiB per child started; the
 ##		          test must then fail
 ##	- Exit: 0 passed, 1 a check failed, 3 nothing ran (no binary, display,
@@ -36,11 +37,12 @@ headless="${root}/cicd/utility/gui-headless.bash"
 ## children, and round 6 to 12 grew 1152 KiB.
 marginKib="${SOAK_MARGIN_KIB:-256}"
 rounds="${SOAK_ROUNDS:-6}"
-bin=""; out=""; plant=0
+bin=""; out=""; stamp="${SOAK_STAMP:-}"; plant=0
 while (($#)); do case "${1}" in
 	--bin) bin="${2-}"; shift 2 ;;
 	--rounds) rounds="${2-}"; shift 2 ;;
 	--out) out="${2-}"; shift 2 ;;
+	--stamp) stamp="${2-}"; shift 2 ;;
 	--plant) plant=1; shift ;;
 	-h|--help) sed -n '/^##	- Purpose:/,/^##	- History:/p' "${BASH_SOURCE[0]}" | sed 's/^##	\{0,1\}//'; exit 0 ;;
 	*) echo "unknown option: ${1} (try --help)" >&2; exit 2 ;;
@@ -230,7 +232,7 @@ else
 fi
 if [[ -n "${out}" ]]; then
 	mkdir -p "${out}"
-	stamp="${SOAK_STAMP:-$(date +%Y%m%d-%H%M%S)}"
+	[[ -n "${stamp}" ]] || stamp="$(date +%Y%m%d-%H%M%S)"
 	cp "${data}" "${out}/soak_${stamp}.zst"
 	cp "${summary}" "${out}/soak_${stamp}.txt"
 	echo "  kept ${out}/soak_${stamp}.zst and .txt"
@@ -243,4 +245,5 @@ fi
 echo "all passed"
 
 ##	History:
+##		- 20261101: --stamp, for the pipeline step.
 ##		- 20261101 JC: Created.

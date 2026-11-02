@@ -155,6 +155,13 @@ TSAN_SUPPRESSIONS="cicd/tsan-suppressions.txt"
 ## Reports go to LEAKCHECK_OUT_DIR (gitignored), rotated like the flamegraphs.
 LEAKCHECK_DHAT_CMD=(cargo test --features dhat-heap --bin "${EXE_NAME}" heap_growth:: -- --test-threads=1)
 LEAKCHECK_OUT_DIR="cicd/artifacts/leakcheck"
+##  - The soak test (cicd/tests/soak/run.bash): the program's main actions in
+##    rounds on a private Xvfb, under heaptrack, and the live heap at round 2N
+##    against round N. Runs the debug build, in the image, which has heaptrack
+##    pinned. About 2.5 minutes, so --quick leaves it out unless --leakcheck
+##    asks. Its heaptrack data and summary go to LEAKCHECK_OUT_DIR as soak_<stamp>.
+##    Empty disables it.
+LEAKCHECK_SOAK="cicd/tests/soak/run.bash"
 ##  - CodeQL's Rust queries (cicd/utility/codeql.bash) over our crates and the
 ##    vendored crates a release binary links, in the image, which has the bundle
 ##    pinned. security-and-quality, since these checks are for correctness bugs

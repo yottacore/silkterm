@@ -37,7 +37,8 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - Leak checks: the soak test as a pipeline step
 	- ID: 2026110117065496
 	- Type: Task
-	- Status: Queued
+	- Status: Waiting on automated testing
+	- Needs local test suite run?: The first full run, the default container arm: stage 3's soak step after the heap-growth test, a `soak_<stamp>.txt` and `.zst` with the run's stamp in `cicd/artifacts/leakcheck/`, and what it finds filed. The plan line and `--list` (der46) say it's on, and dd5nn passes.
 	- Priority: Avg
 	- Opened: 20261101-170654
 	- Opened by: CC
@@ -50,6 +51,20 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Notes:
 		- `cicd/tests/soak/run.bash --out <dir>` keeps the data and summary as `soak_<stamp>`, with SOAK_STAMP for the run's stamp. It takes about 2.5 minutes, and the data is about 3.5 MB a round.
 		- It runs the way `fContainerRun` runs a step: as root first for the passwd entry, then under `dbus-run-session`, which xfwm4 needs.
+	- Progress log:
+		- 20261101: The soak test is a leak check, after the heap-growth test and before CodeQL, through `fRunSoak` and `LEAKCHECK_SOAK` in config.bash. It runs in a full run and under `--leakcheck`. `--quick` leaves it out, `--no-leakcheck` and `--backlog-run-quick` drop it, and a run on the host takes it into the image, or warns and skips it without docker.
+		- 20261101: The summary and heaptrack's data go to `cicd/artifacts/leakcheck/` as `soak_<stamp>` with the run's stamp, rotated like the heap reports. The step fails on a failed test, and on its exit 3 too.
+		- 20261101: `run.bash` takes `--stamp`, since the container run hands on arguments, not the environment. SOAK_STAMP still works.
+		- 20261101: The plan's Leak checks line, `--list`, `--help`, config.bash, design.md and install.md name it.
+		- 20261101: The heaptrack data was 9.5 MB for 12 rounds, not the 3.5 MB the notes gave, so the rotation keeps up to a few hundred MB, in a gitignored folder.
+	- Decisions:
+		- 20261101: Off under `--quick` unless `--leakcheck` asks, like the slow window tests, since it takes about 2.5 minutes. `--leakcheck` is every leak check.
+		- 20261101: A run on the host runs the debug build it made in the image, the way the ASan and CodeQL steps hop there. Both are Debian trixie, and the run in the image passed.
+		- 20261101: Exit 3, could not run, fails the step rather than skipping it, since the image pins every tool the test needs.
+	- Verified: 20261101. The step's command, `run.bash --out cicd/artifacts/leakcheck --stamp <stamp>`, in the current build image, through the image rig, on the host's debug build: passed, round 6 to 12 grew 20 KiB, and both files kept with that stamp. `cicd.bash --list`: der46 and "soak test under heaptrack" in a default run, off under `--quick`, back with `--quick --leakcheck`, "(skipped --no-leakcheck)". The engine test, 24 new checks, all failed against the old cicd.bash, and 7 mutants each failed their own. The container test, `cicd/cicd.bash --backlog-run-quick`, all five areas, and `lint-report.bash`.
+		- Swept: every test that lifts the leak checks (engine, container), `cicd-win.ps1`'s leak flags, which hand on to the Linux half, and every doc naming the leak checks.
+	- Test case: `cicd/tests/engine/run.bash` (dd5nn), 24 new checks, and `cicd/tests/soak/run.bash` (der46) in the pipeline.
+	- Branch: rnd1101b
 
 - Leak checks: the soak driver and its heap check
 	- ID: 2026110117065477
