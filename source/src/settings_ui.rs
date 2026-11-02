@@ -12766,9 +12766,20 @@ mod tests {
 		// Changed 20261017: the tmux switch warns too, above Resource use on the
 		// Program tab, so that tab has 2 marks (2026101611321632).
 		// assert_eq!(warned, [Key::Transparency, Key::IdleRelease]);
+		// Changed 20261101: Per monitor warns too, of screens that sleep and
+		// wake (2026102807384201).
+		// assert_eq!(
+		// 	warned,
+		// 	[Key::Transparency, Key::TmuxNewSession, Key::IdleRelease]
+		// );
 		assert_eq!(
 			warned,
-			[Key::Transparency, Key::TmuxNewSession, Key::IdleRelease]
+			[
+				Key::Transparency,
+				Key::RememberPerMonitor,
+				Key::TmuxNewSession,
+				Key::IdleRelease
+			]
 		);
 		let mut marked = Vec::new();
 		for key in warned {
@@ -12823,9 +12834,13 @@ mod tests {
 		assert_eq!(tab_titles()[marked[0]], "Background");
 		// Changed 20261016: Resource use moved to the Program tab (2026101611321634).
 		// assert_eq!(tab_titles()[marked[1]], "Window");
-		assert_eq!(tab_titles()[marked[1]], "Program");
+		// Changed 20261101: Per monitor on the Window tab comes first (2026102807384201).
+		// assert_eq!(tab_titles()[marked[1]], "Program");
+		assert_eq!(tab_titles()[marked[1]], "Window");
+		assert_eq!(tab_titles()[marked[2]], "Program");
 		let at = |key: Key| d.specs.iter().find(|s| s.key == key).unwrap().warning;
 		assert!(at(Key::Transparency).contains("compositor"));
+		assert!(at(Key::RememberPerMonitor).contains("window manager"));
 		assert!(at(Key::IdleRelease).contains("driver"));
 		// the memory half is Windows' alone
 		assert_eq!(

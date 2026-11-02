@@ -865,7 +865,8 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - When two screens return after screen power sleep or off, SilkTerm seems to reposition itself in between them
 	- ID: 2026102807384201
 	- Type: Bug
-	- Status: Queued
+	- Status: Waiting on UAT
+		- A look on b23, in the hand testing row. The put-back for a window manager that never puts a window back has no real desktop to try it on here.
 	- Needs hand testing: On b23 under xfwm4, with the window on each monitor in turn: let both screens sleep, wake them, and see the window back where it was, at its size.
 	- Severity: High
 	- Opened: 20261028-073842
@@ -886,12 +887,32 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261101: A herd is told from a user's drag by the monitor the window was on at its last look being gone from the layout. Where the window can't say where it is, as on native Wayland, nothing changed.
 		- 20261101: Updated an assert, `monwake` (ddq75): "took the landscape size there" is now "kept its size there". In ddq74 the herd step now takes no size.
 		- 20261101: Back to Queued by the answer to the Check entry. A window can't jump between monitors each time they sleep. Two asks: add a warning to the per-monitor size tip text that the feature can fight the window manager when screens sleep and come back, with unexpected size and placement; and note the window's place and size when a screen goes dark, and if the user didn't move or resize it, put it back there when the screen returns.
-	- Actual fix: The look after a move takes no monitor size when the monitor the window was on at the last look has left the layout. design.md says so under the per-monitor size.
+		- 20261101: The tip warning is the row's warning mark, as Transparency and the tmux switch have, so it shows on the label too.
+		- 20261101: The put-back runs only while per-monitor sizes are taking effect, since only then does SilkTerm move the window off where the window manager leaves it. The window manager gets 2 s first, so xfwm4, which puts windows back itself, is never fought. Moved or resized by the user while herded, the window is left alone.
+		- 20261101: Updated an assert, `two_rows_warn_and_each_mark_shows_the_rows_tip` (ddp7w): the warned rows were Transparency, the tmux switch and Free resources when idle, and Per monitor is now among them, on the Window tab.
+	- Actual fix: The look after a move takes no monitor size when the monitor the window was on at the last look has left the layout. design.md says so under the per-monitor size. Since the second answer, the Per monitor tip warns that the feature can fight the window manager as screens sleep and wake. A herded window notes where it was and at what size. Once that monitor is back and the window manager has had 2 s, a window not there yet is put back, unless the user moved or resized it since.
 	- Swept: every call that resizes the main window. The monitor look is the only one made without the user, apart from the system's own resize for a new scale. The Settings and zoom resizes are the user's. Dialogs are placed once, when they open.
-	- Verified: 20261101. The new xfwm4 test fails both cases on the old build and passes on the fix. monwake passes on the fix, and fails only its changed check on the old build. The unit tests, clippy, fmt, script lints, docs and test IDs pass.
-	- Branch: rnd1101
-	- Test case: `cicd/tests/herdback/run.bash` (deqx1), the window back where it was under xfwm4. `a_window_herded_off_a_dark_monitor_takes_no_size` (deqwx). `monwake` (ddq75) and ddq74, changed.
-	- Acceptance signoff: Self-closed: deqx1 passed at ce9d872. A copy that turns both outputs off in turn and back on in either order, 1 s and 4 s apart, put the window back where it was, at its size, all 4 times. Not run on b23's real monitors.
+		- 20261101: every place the window notes its place: each look, a size saved, and the window's own resize and the move it can cause. The put-back is skipped while a move is waiting to settle, a button is held, or the window is minimized, maximized or fullscreen.
+	- Verified: 20261101. deqx1 now also runs with no window manager, the herd made by hand: put back, and left alone when moved or resized while herded. The put-back case fails with the put-back taken out, and the resized case with the forget-on-resize taken out. The xfwm4 cases and monwake pass. The unit tests, clippy for Linux and Windows, fmt, script lints, docs and test IDs pass.
+		- The moved case passes either way here, since under Xwayland a look after a move waits for a sign the drag is over, and that wait holds the window too.
+	- Branch: rnd1101b
+	- Test case: `cicd/tests/herdback/run.bash` (deqx1), the window back where it was under xfwm4, and with no window manager. `a_window_herded_off_a_dark_monitor_takes_no_size` (deqwx). `a_herded_window_goes_back_once_its_monitor_is_lit` (der22). `monwake` (ddq75) and ddq74, changed. `two_rows_warn_and_each_mark_shows_the_rows_tip` (ddp7w), changed.
+	- Acceptance signoff: Waiting on the b23 look. deqx1 and der22 pass on rnd1101b.
+
+- deqx1's first case sometimes fails "the window was herded" on a busy box
+	- ID: 2026110116413708
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261101-164137
+	- Opened by: CC
+	- Related IDs: 2026102807384201
+	- Target OS: Linux
+	- Steps to reproduce:
+		- `cicd/tests/herdback/run.bash` a few times at a load over 20.
+	- Incorrect behavior: In the first xfwm4 case the window sometimes never takes the portrait size, so it straddles the 2 outputs, and xfwm4 doesn't herd it. About 2 runs in 8 on 20261101.
+	- Expected behavior: Every case starts wholly on the portrait output.
+	- Possible cause: Under Xwayland the buttons can't be seen, so the look after the test's move waits for a sign the drag is over, and the test gives none. A pointer move or a focus change from the test did not end it.
 
 - CICD reset: the bash guard doesn't refuse HOST_TEMP itself or a project's whole folder under it
 	- ID: 2026103115170424

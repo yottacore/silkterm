@@ -367,6 +367,11 @@ const SIZE_SAVE_DEBOUNCE: Duration = Duration::from_millis(500); // remember-siz
 // still this long, and not while a mouse button is still down.
 const MONITOR_SETTLE: Duration = Duration::from_millis(750);
 const MONITOR_RECHECK: Duration = Duration::from_millis(250);
+// A window herded off a monitor that went dark looks this often for it to come
+// back, and gives the window manager this long to put it back first.
+const HERD_POLL: Duration = Duration::from_secs(1);
+const HERD_POLL_LATER: Duration = Duration::from_secs(5); // after a minute dark
+const PUT_BACK_WAIT: Duration = Duration::from_secs(2);
 // A Wayland window is on no output until its first frame is up there, which
 // software rendering can take seconds to draw (2026101411504818).
 const NO_OUTPUT_YET: Duration = Duration::from_secs(10);
@@ -3837,6 +3842,8 @@ impl ApplicationHandler<UserEvent> for App {
 			layout: Vec::new(),
 			layout_looked: crate::monitor::layout(&window),
 			home: None,
+			place: None,
+			herd: None,
 			size_pinned: cli_win.columns.is_some()
 				|| cli_win.rows.is_some()
 				|| cli_win.pixel_width.is_some()
@@ -5795,6 +5802,7 @@ impl ApplicationHandler<UserEvent> for App {
 		// A move between monitors is looked at once it has settled, before the
 		// size is saved, so the size goes to the monitor the window ended on.
 		state.check_monitor();
+		state.check_herd();
 		// Debounced remember-size: persist once the size has held; while one is
 		// pending, make sure the loop wakes up to flush it even when idle.
 		state.flush_window_size(false);
@@ -5811,6 +5819,7 @@ impl ApplicationHandler<UserEvent> for App {
 			flow
 		};
 		let flow = wake_by(flow, state.watch.check_at);
+		let flow = wake_by(flow, state.watch.herd.map(|herd| herd.poll_at));
 		// copy-output: while a capture is armed, make sure the loop wakes at its
 		// settle deadline to run the capture check even when otherwise idle.
 		let flow = wake_by(flow, state.capture_wake());
