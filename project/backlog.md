@@ -34,6 +34,22 @@ Going forward, new issues in the new template at the bottom of this file, will g
 
 ## Issues
 
+- dd5nw fails its fDie check on every run, so every full run stops at step 4
+	- ID: 2026110119292010
+	- Type: Bug
+	- Status: Queued
+	- Severity: High
+	- Opened: 20261101-192920
+	- Opened by:
+	- Target OS: Linux
+	- Incorrect behavior: `cicd/tests/cicd-win/run.bash` (dd5nw) fails "which fDie's exit reaches", then "the lifted pieces all passed". The full run is fail-fast, so it stops at step 4 and never reaches the leak checks or later steps.
+	- Expected behavior: The check passes on the current cicd-win.ps1.
+	- Reproduced: 20261101. 3 of 3 runs alone in the build image, and on the host, at 4e46ef9. The test and cicd-win.ps1 are the same on dev at dc260f6, so it was already there before rnd1101b.
+	- Possible cause: `.gitattributes` gives `*.ps1` CRLF endings. The check's regex ends `exit 1 \}$` under `(?m)`, and .NET's `$` doesn't match before a `\r`. The checks beside it take `\r?$`. The check came in with e9f3066.
+	- Progress log:
+		- 20261101: Found by rnd1101b's full run, run.log in its run folder. Filed after the gate step, so it waits for the next round.
+	- Test case: `cicd/tests/cicd-win/run.bash` (dd5nw).
+
 - Leak checks: the soak test as a pipeline step
 	- ID: 2026110117065496
 	- Type: Task
@@ -47,7 +63,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- The soak test runs among the leak checks, in the build image, with the heap report kept as a pipeline artifact under the leak checks' report folder, rotated like the others.
 		- The plan line, `--list`, `--help` and the docs name it. New engine cases, watched to fail.
 		- What the first full run finds goes on the backlog.
-	- Prereq IDs: 2026110117065477
+	- Prereq IDs: 2026110119292010
 	- Notes:
 		- `cicd/tests/soak/run.bash --out <dir>` keeps the data and summary as `soak_<stamp>`, with SOAK_STAMP for the run's stamp. It takes about 2.5 minutes, and the data is about 3.5 MB a round.
 		- It runs the way `fContainerRun` runs a step: as root first for the passwd entry, then under `dbus-run-session`, which xfwm4 needs.
@@ -57,6 +73,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261101: `run.bash` takes `--stamp`, since the container run hands on arguments, not the environment. SOAK_STAMP still works.
 		- 20261101: The plan's Leak checks line, `--list`, `--help`, config.bash, design.md and install.md name it.
 		- 20261101: The heaptrack data was 9.5 MB for 12 rounds, not the 3.5 MB the notes gave, so the rotation keeps up to a few hundred MB, in a gitignored folder.
+		- 20261101: rnd1101b's full run at 4e46ef9 stopped at step 4 on dd5nw, which was already failing on dev, so it never reached the leak checks. Waits on 2026110119292010.
 	- Decisions:
 		- 20261101: Off under `--quick` unless `--leakcheck` asks, like the slow window tests, since it takes about 2.5 minutes. `--leakcheck` is every leak check.
 		- 20261101: A run on the host runs the debug build it made in the image, the way the ASan and CodeQL steps hop there. Both are Debian trixie, and the run in the image passed.
