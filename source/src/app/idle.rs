@@ -75,12 +75,18 @@ impl IdleClock {
 	// A shell printing. Output nobody can see does not keep a hidden window's
 	// device, or a program that prints forever would hold it for good. It is
 	// still owed at the reveal, so a desktop that says nothing about showing
-	// the window again cannot leave old pixels up.
-	fn output(&mut self, released: bool, hidden: bool) -> bool {
+	// the window again cannot leave old pixels up. A tab in the back of a
+	// window on screen is out of sight the same way, but nothing it prints
+	// changes the picture, so it is not owed the device either: that would
+	// take it back and let it go again once per wait for as long as the tab
+	// prints. Switching to the tab is input, which brings it back.
+	fn output(&mut self, released: bool, hidden: bool, in_front: bool) -> bool {
 		if hidden {
 			self.owe(released)
-		} else {
+		} else if in_front {
 			self.active(released)
+		} else {
+			false
 		}
 	}
 }
@@ -380,10 +386,15 @@ impl State {
 		}
 	}
 
-	/// Output, which counts only while the window can be seen (`IdleClock::output`).
-	/// The hidden flag is the one the last pass settled on.
-	pub(super) fn note_output(&mut self) {
-		if self.idle.output(self.gpu.is_none(), self.was_hidden) {
+	/// Output from `pane`, which counts only while it can be seen: the window
+	/// shown and the pane in the tab in front (`IdleClock::output`). The hidden
+	/// flag is the one the last pass settled on.
+	pub(super) fn note_output(&mut self, pane: crate::term::PaneId) {
+		let in_front = self.tabs.cur().panes.contains_key(&pane);
+		if self
+			.idle
+			.output(self.gpu.is_none(), self.was_hidden, in_front)
+		{
 			idledbg("wake: output");
 		}
 	}
@@ -860,23 +871,54 @@ mod tests {
 			wake_owed: false,
 			retry: Retry::default(),
 		};
-		assert!(!clock.output(false, true));
+		assert!(!clock.output(false, true, true));
 		assert_eq!(clock.since, long_ago, "hidden output restarted the clock");
 		assert!(!clock.wake_owed);
-		assert!(clock.output(true, true), "a released window is owed it");
+		assert!(
+			clock.output(true, true, true),
+			"a released window is owed it"
+		);
 		assert!(clock.wake_owed);
 		assert_eq!(clock.since, long_ago);
-		assert!(!clock.output(true, true), "owed once");
+		assert!(!clock.output(true, true, true), "owed once");
 
 		let mut seen = IdleClock {
 			since: long_ago,
 			wake_owed: false,
 			retry: Retry::default(),
 		};
-		assert!(!seen.output(false, false));
+		assert!(!seen.output(false, false, true));
 		assert!(seen.since > long_ago, "output on screen is a sign of life");
-		assert!(seen.output(true, false));
+		assert!(seen.output(true, false, true));
 		assert!(seen.wake_owed);
+	}
+
+	// A program printing now and then in a tab in the back kept an unfocused
+	// window on screen from ever letting go after "Minutes otherwise". Only
+	// the tab in front counts while the window shows, and a released window
+	// is not owed its device for a tab nobody sees.
+	// Test ID: der5b
+	#[test]
+	fn output_from_a_tab_in_the_back_does_not_keep_the_device() {
+		let long_ago = Instant::now()
+			.checked_sub(Duration::from_secs(1))
+			.expect("a second of uptime");
+		let mut clock = IdleClock {
+			since: long_ago,
+			wake_owed: false,
+			retry: Retry::default(),
+		};
+		assert!(!clock.output(false, false, false));
+		assert_eq!(
+			clock.since, long_ago,
+			"a tab in the back restarted the clock"
+		);
+		assert!(!clock.output(true, false, false));
+		assert!(!clock.wake_owed, "a tab in the back took the device back");
+		// hidden, it is owed at the reveal, whichever tab printed
+		assert!(clock.output(true, true, false));
+		assert!(clock.wake_owed);
+		assert_eq!(clock.since, long_ago);
 	}
 
 	// A device the GPU refused on the way back from the idle release used to

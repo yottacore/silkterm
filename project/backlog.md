@@ -85,8 +85,8 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - Regression: "Conserve resources", "Minutes otherwise" isn't working
 	- ID: 2026103010083401
 	- Type: Bug
-	- Status: Queued
-		- Waits on the question in questions.md: which box, build and setup it failed on.
+	- Status: Waiting on UAT
+		- JC: check on the box and setup where it failed that a window left unfocused lets go after "Minutes otherwise".
 	- Opened: 20261030-100834
 	- Opened by: JC
 	- Assigned to: CC
@@ -102,7 +102,33 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261101: No change in the log breaks it. The release decision and its inputs are as they were at 75ebca3 (10-05), apart from test attributes. The config, dialog and save paths for the setting are pinned by davbd and ddp90.
 		- 20261101: New test, so it can't come back unseen on Linux: the window is launched unfocused on screen with the waits read from its file, and has to let go after the minute and not well before it. Verified: it fails with "Minutes otherwise" pointed at the hidden wait, and passes at 79d25ae.
 		- 20261101: Answer to the question: change it so only output from the tab in front restarts the wait while the window shows, the way a hidden window already works.
-	- Test case: `cicd/tests/idleother/run.bash` (deqy2), in the full run.
+		- 20261101: Done as answered. While the window shows, output from a tab in the back neither restarts the wait nor brings a released window back. A hidden window is as before. The releasing resources design doc says so.
+		- 20261101: Verified: der5b fails with the tab check taken out and passes with it. The idle unit tests and `cicd/cicd.bash --backlog-run-quick`, all five areas, pass.
+		- 20261101: A second window in deqy2, printing in a tab in the back, failed about half its runs, with the quiet window beside it failing too, so it stays off the full run. Filed as 2026110118143797. The script is on `wip/rnd1101b-2026103010083401`.
+	- Decisions:
+		- 20261101: A tab in the back is not owed the device while the window shows. Owing it would take the device back at once and let it go again once per wait, for as long as the tab prints. Switching to the tab is input, which brings it back.
+		- 20261101: The "Minutes otherwise" help and the config comment are left as they are. "Quiet" and "nothing printing" still read right for what the user sees.
+	- Actual fix: Only output from the tab in front counts as a sign of life while the window shows.
+	- Swept: the one output path, `UserEvent::Wakeup` to `State::note_output`. Other signs of life (input, focus, shown, pointer) are about the window, not a pane. `ChildGone` touches the pane only.
+	- Branch: rnd1101b
+	- Test case: `output_from_a_tab_in_the_back_does_not_keep_the_device` (der5b). Also `cicd/tests/idleother/run.bash` (deqy2), in the full run.
+
+- Two SilkTerm windows on one headless display: an idle release sometimes never shows, or never happens
+	- ID: 2026110118143797
+	- Type: Bug
+	- Status: Queued
+	- Severity: Avg
+	- Opened: 20261101-181437
+	- Opened by: CC
+	- Related IDs: 2026103010083401
+	- Target OS: Linux
+	- Test environment: Xvfb with no window manager, software GL
+	- Steps to reproduce:
+		- Run `cicd/tests/idleother/run.bash` from `wip/rnd1101b-2026103010083401`, which opens two windows at once with "Minutes otherwise" at 1.
+	- Incorrect behavior: About half the runs, neither window's title ever shows "(resource conservation mode)" in 100 s. In one, the quiet window's log said it let go at 61 s while its title stayed as it was, and the other window never let go, with no sign of life logged after launch.
+	- Expected behavior: Both let go after about a minute, as one window alone does every time.
+	- Reproduced: Yes, in 3 of 7 runs with 2026103010083401 in, and 1 of 2 with it taken out, on a display of its own each time, with or without the second window moved off the first. One window alone passed both runs tried.
+	- Possible cause: Not known. Could be the test rig, or two GL clients on one Xvfb, or a real fault with two windows open.
 
 - The window doesn't paint while the GPU is busy or short on memory, and stays blank after the load ends
 	- ID: 2026100312470535

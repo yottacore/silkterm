@@ -4115,7 +4115,7 @@ impl ApplicationHandler<UserEvent> for App {
 						p.note_history();
 					}
 				});
-				state.note_output(); // a shell that prints is not idle, if seen
+				state.note_output(id); // a shell that prints is not idle, if seen
 			}
 			UserEvent::ChildGone(id) => {
 				if let Some(p) = state.tabs.find_pane_mut(id) {

@@ -44,7 +44,7 @@ What a window costs while in use is in the [Reducing resources](20261004-182255_
 - A minimized window, a covered window where the desktop reports it, and a tab that is not shown draw nothing. They never stop reading their programs' output, and they catch up in one cut when shown.
 
 - "Free resources when idle" on the Window tab, on by default, lets an unused window give its GPU device back.
-	- A window counts as unused with no input, no focus change and no output from any pane while it can be seen.
+	- A window counts as unused with no input, no focus change and no output from any pane while it can be seen. A pane in a tab in the back cannot be seen.
 	- It lets go after "Minutes when hidden", 1 by default, if minimized or covered, and after "Minutes otherwise", 240 by default, if only unfocused.
 	- On Windows with Transparency on, a window in view never lets go, since nothing would be left on screen without its device. It waits until it is minimized.
 	- It takes the device back on any sign of life: a key, a click, the pointer entering, focus, being shown, a shell printing while it can be seen, or the desktop asking for a repaint.
@@ -94,7 +94,7 @@ What a window costs while in use is in the [Reducing resources](20261004-182255_
 
 - On by default. A window that has sat unused lets its GPU device go, with everything uploaded to it, and takes it back the moment it is used again. The shells run on and the grid keeps up. Only drawing stops. The case is many windows open for days, each holding a device, a swapchain, two glyph atlases, the scrim's textures and a wallpaper the whole time.
 
-- Unused means no input, no focus change and no output from any pane while the window can be seen. Output into a hidden window does not count, or a program printing in a minimized window would keep the device for good. There are two waits, both in minutes on the Window tab. A shorter one is for a window that is minimized, or covered where the desktop reports it. A longer one is for a window that is only unfocused, since that one may be on a second screen being read. A window with focus and on screen never lets go.
+- Unused means no input, no focus change and no output from any pane while the window can be seen. Output into a hidden window does not count, or a program printing in a minimized window would keep the device for good. Output from a tab in the back does not count either, and does not bring a released window back, since it changes nothing on screen. There are two waits, both in minutes on the Window tab. A shorter one is for a window that is minimized, or covered where the desktop reports it. A longer one is for a window that is only unfocused, since that one may be on a second screen being read. A window with focus and on screen never lets go.
 
 - It comes back on any sign of life: a key, a click, the pointer entering, focus, a hidden window being shown, a shell printing, or the desktop asking for a repaint. Output into a hidden window does not bring it back. That waits for the reveal, the way the frozen-window rule already works. A released hidden window is owed its device at the reveal, so a desktop that says nothing about showing it again cannot leave old text up.
 
