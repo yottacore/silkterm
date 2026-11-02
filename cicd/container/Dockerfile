@@ -146,6 +146,14 @@ RUN curl -fsSLo codeql.tzst "https://github.com/github/codeql-action/releases/do
 	&& /opt/cargo/bin/rustup toolchain install "${CODEQL_RUST}" --profile minimal -c rust-src \
 	&& cd / && rm -rf /tmp/dl
 
+# heaptrack for the soak test (cicd/tests/soak/run.bash), held at trixie's build so
+# a point release can't change what it counts. A layer of its own, late, so adding
+# it didn't rebuild the toolchains above.
+ARG HEAPTRACK_VER=1.5.0+dfsg1-5
+RUN apt-get update \
+	&& apt-get install -y --no-install-recommends "heaptrack=${HEAPTRACK_VER}" "libheaptrack=${HEAPTRACK_VER}" \
+	&& rm -rf /var/lib/apt/lists/*
+
 # The run drops to the caller's uid once it has a passwd entry (cicd.bash writes
 # one on the way in). /cache takes the named volume, which copies this dir's mode
 # when new, so anyone can write. The crate registry goes there, so the toolchain

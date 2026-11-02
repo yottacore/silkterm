@@ -34,6 +34,54 @@ Going forward, new issues in the new template at the bottom of this file, will g
 
 ## Issues
 
+- Leak checks: the soak test as a pipeline step
+	- ID: 2026110117065496
+	- Type: Task
+	- Status: Queued
+	- Priority: Avg
+	- Opened: 20261101-170654
+	- Opened by: CC
+	- Parent ID: 2026101913370214
+	- Requirements:
+		- The soak test runs among the leak checks, in the build image, with the heap report kept as a pipeline artifact under the leak checks' report folder, rotated like the others.
+		- The plan line, `--list`, `--help` and the docs name it. New engine cases, watched to fail.
+		- What the first full run finds goes on the backlog.
+	- Prereq IDs: 2026110117065477
+	- Notes:
+		- `cicd/tests/soak/run.bash --out <dir>` keeps the data and summary as `soak_<stamp>`, with SOAK_STAMP for the run's stamp. It takes about 2.5 minutes, and the data is about 3.5 MB a round.
+		- It runs the way `fContainerRun` runs a step: as root first for the passwd entry, then under `dbus-run-session`, which xfwm4 needs.
+
+- Leak checks: the soak driver and its heap check
+	- ID: 2026110117065477
+	- Type: Task
+	- Status: Done
+	- Priority: Avg
+	- Opened: 20261101-170654
+	- Opened by: CC
+	- Parent ID: 2026101913370214
+	- Requirements:
+		- A test script loops the main actions headless on a private display: a tab, a split, typing into a real PTY, the Settings dialog and a second window, each opened and closed.
+		- Every shell is a harmless test script, given by `--shell` and the test config's shell list, never the user's shell or its config.
+		- The heap at round N and 2N comes from heaptrack on a plain build, pinned in the build image, and the test fails when 2N is over N by more than a set margin. The heaptrack data and a summary are kept for the step to save.
+		- Watched to fail on a planted leak.
+	- Progress log:
+		- 20261101: `cicd/tests/soak/run.bash` runs the debug build under heaptrack on a private Xvfb with xfwm4, in the build image. Each round opens a tab and a split and types into both, closes the split, opens and closes the Settings dialog, opens a window, types into it and closes it, then closes the tab. 6 rounds and then 6 more, about 2.5 minutes.
+		- 20261101: Each shell notes its pid with what it got, so the test fails when a hotkey did nothing and the typing went to an older pane, or a closed pane's shell lives on.
+		- 20261101: The heap after each round is the lowest live heap in a quiet 2 s after it. On llvmpipe it moves between two levels about 120 KiB apart, and round 6 to 12 grew 4 KiB, -68 and -30 in three runs. The margin is 256 KiB.
+		- 20261101: `--plant` preloads a shim that leaks 64 KiB in the program each time it starts a child, 3 a round. Round 6 to 12 then grew 1152 KiB, and the test failed.
+		- 20261101: `--out` keeps heaptrack's data and the per-round summary, about 7 MB for 2 rounds. The step that saves them is 2026110117065496.
+		- 20261101: Found nothing: the heap reads flat.
+	- Decisions:
+		- 20261101: The heap at a round comes from heaptrack's raw data, read by `heapat.py`, since `heaptrack_print` gives only the peak and what was left at exit.
+		- 20261101: The debug build, the plain one stage 2 makes before the leak checks. The release build comes later, in stage 5.
+		- 20261101: The planted leak hooks the spawn, since the PTY is opened by raw syscalls, so the program itself stays untouched.
+		- 20261101: heaptrack is trixie's 1.5.0+dfsg1-5, held by version in a layer of its own after CodeQL, so adding it didn't rebuild the toolchains.
+		- 20261101: A new window is a process of its own, so only the spawn side is measured. The window's own process isn't.
+	- Verified: 20261101. The test passed at round 6 to 12 once in the rebuilt build image, and twice in a stand-in image, the old one plus the same heaptrack layer. It failed with `--plant`, and with the new tab key swapped for one that does nothing. `--out` kept both files. `cicd/cicd.bash --backlog-run-quick`, all five areas, the header test ddghe included, `test-id.py --check` and its test, ruff, mypy, shellcheck.
+	- Test case: `cicd/tests/soak/run.bash` (der46), not in the pipeline until 2026110117065496.
+	- Branch: rnd1101b
+	- Closed: 20261101-174350
+
 - Regression: "Conserve resources", "Minutes otherwise" isn't working
 	- ID: 2026103010083401
 	- Type: Bug
@@ -660,7 +708,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - Leak checks: the headless soak test under `--leakcheck`
 	- ID: 2026101913370214
 	- Type: Task
-	- Status: Queued
+	- Status: Started
 	- Priority: Avg
 	- Opened: 20261019-133702
 	- Opened by: CC
@@ -675,6 +723,8 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Notes:
 		- Split from 2026101714445005. Its heap-growth test covers some of the same actions in-process. This one is for what that can't reach: windows, tabs and splits opened and closed, the GPU, the Settings dialog and a real PTY.
 		- `cicd/tests/allocs/run.bash` already drives a window on a private Xvfb.
+	- Progress log:
+		- 20261101: Split in 2. 2026110117065477 is the driver and its heap check, and 2026110117065496 makes it a pipeline step. This item closes when they do.
 
 - Make sure shcl files from v1.0.0-beta3 are accurately converted to the latest shcl spec
 	- ID: 2026102818080401
