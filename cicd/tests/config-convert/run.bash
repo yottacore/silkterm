@@ -8,6 +8,8 @@
 ##			- A pre-nesting flat file, converted to the nested layout.
 ##			- A shcl 2.x file with no Format line, and one stamped Format 2, both
 ##			  converted in place with their comments.
+##			- What v1.0.0-beta3 saved, every setting changed, converted in place
+##			  with its values, and its look on the Custom profile.
 ##			- One shcl cannot migrate (a raw block that never closes) and one it
 ##			  cannot read (not UTF-8), each written new from the template with the
 ##			  settings that still read.
@@ -186,6 +188,19 @@ fFixture format2 '## kept as written' 'font:' "${tab}size: 15" 'window:' "${tab}
 fConverts format2 inplace 0
 fCheck "format2: values kept" fHas font.size 15 "${work}/format2/config.shcl"
 
+echo "a file v1.0.0-beta3 saved"
+mkdir -p "${work}/beta3"
+{ echo '## kept as written'; cat "${root}/source/src/testdata/beta3_saved.shcl"; } >"${work}/beta3/config.shcl"
+fConverts beta3 inplace 0
+b3="${work}/beta3/config.shcl"
+fCheck "beta3: its look is the Custom profile" fHas performance.profile custom "${b3}"
+fCheck "beta3: chosen by hand" fHas performance.automatic false "${b3}"
+fCheck "beta3: a scroll timing kept" fHas scroll.ease_in_ms 60 "${b3}"
+fCheck "beta3: blink_rate_ms is blink_rate_s" fHas cursor.blink_rate_s 0.8 "${b3}"
+fCheck "beta3: tab_min_width_pct is tab_regular_width_pct" fHas window.tab_regular_width_pct 10 "${b3}"
+fCheck "beta3: its theme's ANSI colors kept" fHas themes.mine.light.ansi '"#1166b6", "#af9e30", "#4dd5aa", "#ec0d23", "#8a449d", "#287c17", "#c6b390", "#64eb0a", "#032284", "#a159fe", "#3f9177", "#ddc8f1", "#7c006b", "#1a37e4", "#b86f5e", "#56a6d8"' "${b3}"
+fCheck "beta3: its shell list kept" fHas shells.zsh.command '"/usr/bin/zsh -l"' "${b3}"
+
 echo "a file shcl cannot migrate"
 fFixture nomigrate '## kept as written' 'font:' "${tab}size: 15" "${tab}family:[One, Two]" 'window:' "${tab}columns: 101" 'notes: ```' 'written before the block was closed'
 fConverts nomigrate new 2
@@ -312,3 +327,4 @@ echo "all passed"
 ##		- 20261003 JC: Created.
 ##		- 20261003 JC: A current file that is not UTF-8.
 ##		- 20261003 JC: That file is written again without the lines, not left.
+##		- 20261101 JC: A file v1.0.0-beta3 saved.

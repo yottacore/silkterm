@@ -5,11 +5,11 @@
 //! monitor checks after a move.
 
 use super::{
-	MONITOR_RECHECK, MONITOR_SETTLE, NO_OUTPUT_YET, OWN_RESIZE_GRACE, SAFE_MAX_DIM,
-	SIZE_SAVE_DEBOUNCE, State, TAKE_SCALE_WAIT, save_live,
+	HERD_POLL, HERD_POLL_LATER, MONITOR_RECHECK, MONITOR_SETTLE, NO_OUTPUT_YET, OWN_RESIZE_GRACE,
+	PUT_BACK_WAIT, SAFE_MAX_DIM, SIZE_SAVE_DEBOUNCE, State, TAKE_SCALE_WAIT, save_live,
 };
 use crate::config;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 use winit::window::Window;
 
 impl State {
@@ -34,6 +34,7 @@ impl State {
 			Instant::now() < self.watch.ignore_resize_until,
 			self.watch.noted,
 		) {
+			self.note_own_place();
 			return;
 		}
 		let now = self.window.inner_size();
@@ -85,6 +86,9 @@ impl State {
 			remember_resize(self.size_tracked, fullscreen, maximized),
 		);
 		self.watch.noted = keep.carry;
+		if !force {
+			self.note_place(keep.grid);
+		}
 		if keep.unpin {
 			self.watch.size_pinned = false;
 		}
@@ -227,6 +231,7 @@ impl State {
 			&self.watch.layout,
 			|| crate::monitor::layout(&self.window),
 		) {
+			self.note_own_place();
 			return;
 		}
 		self.start_settle(now);
@@ -353,6 +358,7 @@ impl State {
 			return;
 		}
 		let herded = herded(self.watch.home, &layout);
+		self.note_herd(herded, now);
 		self.watch.opening = false;
 		self.watch.home = crate::monitor::home(&self.window, &layout);
 		self.watch.layout_looked = layout;
@@ -394,6 +400,142 @@ impl State {
 		self.watch.key = now_on;
 		if take_size {
 			self.take_monitor_size();
+		}
+	}
+
+	// Where the window is and how big, for putting it back after a herd.
+	fn place_now(&self) -> Option<Place> {
+		let at = self.window.outer_position().ok()?;
+		let size = self.window.inner_size();
+		Some(Place {
+			at: (at.x, at.y),
+			size: (size.width, size.height),
+		})
+	}
+
+	// A look notes where the window is. One that finds it herded keeps where
+	// it was before, and a later one that doesn't means someone else moved it
+	// since, so it stays where they put it. A second herd, as when the other
+	// monitor goes dark too, keeps the first one's place.
+	fn note_herd(&mut self, herded: bool, now: Instant) {
+		let place = self.place_now();
+		if !herded {
+			self.watch.herd = None;
+			self.watch.place = place;
+			return;
+		}
+		if self.watch.herd.is_some() {
+			return;
+		}
+		let (Some(from), Some(was)) = (self.watch.home, self.watch.place) else {
+			return;
+		};
+		if self.keeps_size()
+			|| crate::monitor::fullscreen(&self.window)
+			|| self.window.is_maximized()
+		{
+			return;
+		}
+		mondbg("noted", self.watch.key.as_deref(), None, None);
+		self.watch.herd = Some(Herd {
+			from,
+			place: was,
+			since: now,
+			back_at: None,
+			poll_at: now + HERD_POLL,
+		});
+	}
+
+	// The window's own resize after a look, such as a take, and the move it
+	// can cause. Noted at the look only, the place kept the size from before
+	// the take, and a put-back undid it.
+	fn note_own_place(&mut self) {
+		if self.watch.herd.is_none() && self.watch.check_at.is_none() {
+			self.watch.place = self.place_now();
+		}
+	}
+
+	// A size saved since the last look. The user's, made after a herd, means
+	// the window stays as they left it.
+	fn note_place(&mut self, users: bool) {
+		match self.watch.herd {
+			None => self.watch.place = self.place_now(),
+			Some(herd) if users && self.pending_size_at > herd.since => {
+				mondbg("unherd", self.watch.key.as_deref(), None, None);
+				self.watch.herd = None;
+				self.watch.place = self.place_now();
+			}
+			Some(_) => {}
+		}
+	}
+
+	/// While the window is herded off a monitor that went dark, look for the
+	/// monitor to come back. Once it has, and the window manager hasn't put
+	/// the window back by then, put it back where it was, at its size. A
+	/// window manager that does so forgets where once the window resizes
+	/// itself, and one that doesn't left the window on the other monitor.
+	/// Never in the middle of a move or a drag (2026102807384201).
+	pub(super) fn check_herd(&mut self) {
+		let Some(herd) = self.watch.herd else {
+			return;
+		};
+		let now = Instant::now();
+		if now < herd.poll_at {
+			return;
+		}
+		// a minimized window is put back once it's up again
+		if self.watch.check_at.is_some()
+			|| self.watch.put_off
+			|| self.window.is_minimized() == Some(true)
+			|| crate::monitor::button_held(&self.window) == Some(true)
+		{
+			self.watch.herd = Some(Herd {
+				poll_at: now + MONITOR_RECHECK,
+				..herd
+			});
+			return;
+		}
+		let place = self.place_now();
+		if self.keeps_size()
+			|| crate::monitor::fullscreen(&self.window)
+			|| self.window.is_maximized()
+			|| place.is_none()
+		{
+			self.watch.herd = None;
+			return;
+		}
+		let layout = crate::monitor::layout(&self.window);
+		match herd_step(&herd, &layout, place, now) {
+			HerdStep::Home => {
+				self.watch.herd = None;
+			}
+			HerdStep::Dark => {
+				self.watch.herd = Some(Herd {
+					back_at: None,
+					poll_at: now + herd_poll_gap(herd.since, now),
+					..herd
+				});
+			}
+			HerdStep::Lit(at) => {
+				self.watch.herd = Some(Herd {
+					back_at: Some(at),
+					poll_at: at,
+					..herd
+				});
+			}
+			HerdStep::PutBack(Place { at, size }) => {
+				mondbg("put back", self.watch.key.as_deref(), None, None);
+				self.watch.herd = None;
+				self.window
+					.set_outer_position(winit::dpi::PhysicalPosition::new(at.0, at.1));
+				let now_size = self.window.inner_size();
+				if (now_size.width, now_size.height) != size {
+					self.watch.ignore_resize_until = now + OWN_RESIZE_GRACE;
+					let _ = self
+						.window
+						.request_inner_size(winit::dpi::PhysicalSize::new(size.0, size.1));
+				}
+			}
 		}
 	}
 
@@ -906,6 +1048,8 @@ pub(super) struct MonitorWatch {
 	pub(super) layout: Vec<(i64, i64, i64, i64)>, // the monitors when that resize was asked for
 	pub(super) layout_looked: Vec<(i64, i64, i64, i64)>, // the monitors at the last look
 	pub(super) home: Option<(i64, i64, i64, i64)>, // the one it was on then
+	pub(super) place: Option<Place>,        // and where, at what size
+	pub(super) herd: Option<Herd>,          // herded off a monitor, to be put back (`check_herd`)
 	// The command line set the size, or the font size, and it stays until
 	// the user resizes the window, or zooms the font.
 	pub(super) size_pinned: bool,
@@ -926,6 +1070,60 @@ pub(super) struct MonitorWatch {
 	// to be saved (`look_unseen`).
 	pub(super) set_on: Option<Vec<(i64, i64, i64, i64)>>,
 	pub(super) took: Option<Took>, // a take whose scale change hasn't come (`note_rescaled`)
+}
+
+/// Where a window is, and its inner size, in physical pixels.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(super) struct Place {
+	at: (i32, i32),
+	size: (u32, u32),
+}
+
+/// A window herded off a monitor that went dark, waiting for it to be back.
+#[derive(Debug, Clone, Copy)]
+pub(super) struct Herd {
+	from: (i64, i64, i64, i64), // the monitor that went
+	place: Place,               // where the window was on it
+	since: Instant,             // the look that found the herd
+	back_at: Option<Instant>,   // the window manager's turn to put it back ends
+	pub(super) poll_at: Instant,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum HerdStep {
+	Home,         // where it was, by whoever's hand
+	Dark,         // the monitor's still gone
+	Lit(Instant), // back, and the window manager has until then
+	PutBack(Place),
+}
+
+// What a look at a herded window does now.
+fn herd_step(
+	herd: &Herd,
+	layout: &[(i64, i64, i64, i64)],
+	now_at: Option<Place>,
+	now: Instant,
+) -> HerdStep {
+	if now_at == Some(herd.place) {
+		return HerdStep::Home;
+	}
+	if !layout.contains(&herd.from) {
+		return HerdStep::Dark;
+	}
+	match herd.back_at {
+		Some(at) if now >= at => HerdStep::PutBack(herd.place),
+		Some(at) => HerdStep::Lit(at),
+		None => HerdStep::Lit(now + PUT_BACK_WAIT),
+	}
+}
+
+// A monitor dark for long, or gone for good, is looked for less often.
+fn herd_poll_gap(since: Instant, now: Instant) -> Duration {
+	if now.duration_since(since) < Duration::from_mins(1) {
+		HERD_POLL
+	} else {
+		HERD_POLL_LATER
+	}
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -1598,6 +1796,85 @@ mod tests {
 				save_first: false,
 				take_size: true
 			}
+		);
+	}
+
+	// A window manager that herds a window off a dark monitor but never puts
+	// it back left it on the other one. Once the monitor's back and the window
+	// manager has had its turn, the window goes back where it was, at its size,
+	// unless it's there already.
+	// Test ID: der22
+	#[test]
+	fn a_herded_window_goes_back_once_its_monitor_is_lit() {
+		use super::{Herd, HerdStep, Place, herd_poll_gap, herd_step};
+		use crate::app::{HERD_POLL, HERD_POLL_LATER, PUT_BACK_WAIT};
+		let (left, right) = ((0, 0, 1200, 1920), (1200, 400, 1920, 1080));
+		let was = Place {
+			at: (100, 100),
+			size: (600, 900),
+		};
+		let herded_to = Some(Place {
+			at: (1300, 500),
+			..was
+		});
+		let t0 = Instant::now();
+		let mut herd = Herd {
+			from: left,
+			place: was,
+			since: t0,
+			back_at: None,
+			poll_at: t0,
+		};
+		assert_eq!(herd_step(&herd, &[right], herded_to, t0), HerdStep::Dark);
+		let lit = t0 + Duration::from_secs(30);
+		let wm_turn = lit + PUT_BACK_WAIT;
+		assert_eq!(
+			herd_step(&herd, &[left, right], herded_to, lit),
+			HerdStep::Lit(wm_turn)
+		);
+		herd.back_at = Some(wm_turn);
+		assert_eq!(
+			herd_step(
+				&herd,
+				&[left, right],
+				herded_to,
+				lit + Duration::from_secs(1)
+			),
+			HerdStep::Lit(wm_turn),
+			"the window manager's turn"
+		);
+		assert_eq!(
+			herd_step(&herd, &[left, right], herded_to, wm_turn),
+			HerdStep::PutBack(was)
+		);
+		assert_eq!(
+			herd_step(&herd, &[left, right], Some(was), wm_turn),
+			HerdStep::Home,
+			"the window manager put it back"
+		);
+		let shrunk = Some(Place {
+			size: (500, 800),
+			..was
+		});
+		assert_eq!(
+			herd_step(&herd, &[left, right], shrunk, wm_turn),
+			HerdStep::PutBack(was),
+			"back in place, but not at its size"
+		);
+		// dark again before the window manager's turn was up
+		assert_eq!(
+			herd_step(&herd, &[right], herded_to, wm_turn),
+			HerdStep::Dark
+		);
+		// a monitor that changed is not the one that went
+		assert_eq!(
+			herd_step(&herd, &[(0, 0, 1920, 1200), right], herded_to, wm_turn),
+			HerdStep::Dark
+		);
+		assert_eq!(herd_poll_gap(t0, t0 + Duration::from_secs(5)), HERD_POLL);
+		assert_eq!(
+			herd_poll_gap(t0, t0 + Duration::from_secs(90)),
+			HERD_POLL_LATER
 		);
 	}
 

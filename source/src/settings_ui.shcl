@@ -902,6 +902,7 @@ rows:
 		setting: window.remember_per_monitor
 		gate: RememberSize
 		help: "Remember a separate size for each monitor. A window moved to another monitor takes that monitor's size."
+		warning: "When screens sleep and wake, this can fight the window manager, and the window may come back at an unexpected size or place."
 
 	Columns:
 		label: Columns

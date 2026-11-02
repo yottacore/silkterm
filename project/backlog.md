@@ -34,27 +34,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 
 ## Issues
 
-- Regression: "Conserve resources", "Minutes otherwise" isn't working
-	- ID: 2026103010083401
-	- Type: Bug
-	- Status: Waiting for answers
-		- Waits on the question in questions.md: which box, build and setup it failed on.
-	- Opened: 20261030-100834
-	- Opened by: JC
-	- Assigned to: CC
-	- Target OS: All
-	- Notes:
-		- Pre-next-cut.
-		- Need a test case for this to make sure it doesn't keep coming back.
-	- Reproduced: No. On Linux X11 at 79d25ae, an unfocused window on screen with "Minutes otherwise" at 1 and "Minutes when hidden" at 60 let go at 60 to 62 s. Tried with dash and with bash in it, with the performance settings pinned and automatic, and with xfwm4 and with no window manager.
-	- Possible cause:
-		- Windows with Transparency on: a window on screen is never let go there, by design since 7687c4e (2026100319134501). The help says so.
-		- A program that prints now and then in any tab of the window. Output from any pane restarts the wait while the window shows, even from a tab not in front.
-	- Progress log:
-		- 20261101: No change in the log breaks it. The release decision and its inputs are as they were at 75ebca3 (10-05), apart from test attributes. The config, dialog and save paths for the setting are pinned by davbd and ddp90.
-		- 20261101: New test, so it can't come back unseen on Linux: the window is launched unfocused on screen with the waits read from its file, and has to let go after the minute and not well before it. Verified: it fails with "Minutes otherwise" pointed at the hidden wait, and passes at 79d25ae.
-	- Test case: `cicd/tests/idleother/run.bash` (deqy2), in the full run.
-
 - The window doesn't paint while the GPU is busy or short on memory, and stays blank after the load ends
 	- ID: 2026100312470535
 	- Type: Bug
@@ -110,6 +89,74 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Test case: `a_refused_frame_is_drawn_again_on_a_backoff` (ddf4e) and `a_refused_rebuild_stays_pending_and_is_tried_again` (ddf4f). The GL swap result has no test, since it needs a real GL context.
 	- Note: 20261003, Free resources when idle was on for some of the windows that went blank and off for others. Which ones is not remembered, so both the frame path and the rebuild path stay suspects.
 
+- When two screens return after screen power sleep or off, SilkTerm seems to reposition itself in between them
+	- ID: 2026102807384201
+	- Type: Bug
+	- Status: Waiting on UAT
+		- A look on b23, in the hand testing row. The put-back for a window manager that never puts a window back has no real desktop to try it on here.
+	- Needs hand testing: On b23 under xfwm4, with the window on each monitor in turn: let both screens sleep, wake them, and see the window back where it was, at its size.
+	- Severity: High
+	- Opened: 20261028-073842
+	- Opened by: JC
+	- Assigned to: CC
+	- Related IDs: 2026100907341816
+	- Target OS: Linux
+	- Test environment: b23, xfwm4 4.20
+	- Incorrect behavior: When two screens return after screen power sleep or off, SilkTerm seems to reposition itself in between them.
+	- Expected behavior: It stays where it was. None of the other ~dozen application windows move, other terminals included.
+	- Reproduced: 20261101, headless, with two outputs under xfwm4. Turned off, the portrait output's window was moved onto the landscape one and took that one's size. Turned on again, the window stayed there, and an xterm beside it went back.
+	- Actual cause: xfwm4 notes where each window was as a monitor goes, and puts it back once the monitor returns, unless the window resized itself in between. SilkTerm took the size kept for the monitor it was herded onto, so xfwm4 left it where it had herded it. Since 2026100907341816 that took place even within a second of the move.
+	- Notes:
+		- Pre-next-cut.
+		- Work first after the CICD issues.
+	- Decisions:
+		- 20261101: A window herded off a monitor that went dark, or changed, keeps its size and takes no other. It notes the monitor it is on, so a size the user sets there is kept for that one. This reverses 2026100907341816's choice that a herded window takes the other monitor's size. Other windows keep their size too.
+		- 20261101: A herd is told from a user's drag by the monitor the window was on at its last look being gone from the layout. Where the window can't say where it is, as on native Wayland, nothing changed.
+		- 20261101: Updated an assert, `monwake` (ddq75): "took the landscape size there" is now "kept its size there". In ddq74 the herd step now takes no size.
+		- 20261101: Back to Queued by the answer to the Check entry. A window can't jump between monitors each time they sleep. Two asks: add a warning to the per-monitor size tip text that the feature can fight the window manager when screens sleep and come back, with unexpected size and placement; and note the window's place and size when a screen goes dark, and if the user didn't move or resize it, put it back there when the screen returns.
+		- 20261101: The tip warning is the row's warning mark, as Transparency and the tmux switch have, so it shows on the label too.
+		- 20261101: The put-back runs only while per-monitor sizes are taking effect, since only then does SilkTerm move the window off where the window manager leaves it. The window manager gets 2 s first, so xfwm4, which puts windows back itself, is never fought. Moved or resized by the user while herded, the window is left alone.
+		- 20261101: Updated an assert, `two_rows_warn_and_each_mark_shows_the_rows_tip` (ddp7w): the warned rows were Transparency, the tmux switch and Free resources when idle, and Per monitor is now among them, on the Window tab.
+	- Actual fix: The look after a move takes no monitor size when the monitor the window was on at the last look has left the layout. design.md says so under the per-monitor size. Since the second answer, the Per monitor tip warns that the feature can fight the window manager as screens sleep and wake. A herded window notes where it was and at what size. Once that monitor is back and the window manager has had 2 s, a window not there yet is put back, unless the user moved or resized it since.
+	- Swept: every call that resizes the main window. The monitor look is the only one made without the user, apart from the system's own resize for a new scale. The Settings and zoom resizes are the user's. Dialogs are placed once, when they open.
+		- 20261101: every place the window notes its place: each look, a size saved, and the window's own resize and the move it can cause. The put-back is skipped while a move is waiting to settle, a button is held, or the window is minimized, maximized or fullscreen.
+	- Verified: 20261101. deqx1 now also runs with no window manager, the herd made by hand: put back, and left alone when moved or resized while herded. The put-back case fails with the put-back taken out, and the resized case with the forget-on-resize taken out. The xfwm4 cases and monwake pass. The unit tests, clippy for Linux and Windows, fmt, script lints, docs and test IDs pass.
+		- The moved case passes either way here, since under Xwayland a look after a move waits for a sign the drag is over, and that wait holds the window too.
+	- Branch: rnd1101b
+	- Test case: `cicd/tests/herdback/run.bash` (deqx1), the window back where it was under xfwm4, and with no window manager. `a_window_herded_off_a_dark_monitor_takes_no_size` (deqwx). `a_herded_window_goes_back_once_its_monitor_is_lit` (der22). `monwake` (ddq75) and ddq74, changed. `two_rows_warn_and_each_mark_shows_the_rows_tip` (ddp7w), changed.
+	- Acceptance signoff: Waiting on the b23 look. deqx1 and der22 pass on rnd1101b.
+
+- Regression: "Conserve resources", "Minutes otherwise" isn't working
+	- ID: 2026103010083401
+	- Type: Bug
+	- Status: Waiting on UAT
+		- JC: check on the box and setup where it failed that a window left unfocused lets go after "Minutes otherwise".
+	- Opened: 20261030-100834
+	- Opened by: JC
+	- Assigned to: CC
+	- Target OS: All
+	- Notes:
+		- Pre-next-cut.
+		- Need a test case for this to make sure it doesn't keep coming back.
+	- Reproduced: No. On Linux X11 at 79d25ae, an unfocused window on screen with "Minutes otherwise" at 1 and "Minutes when hidden" at 60 let go at 60 to 62 s. Tried with dash and with bash in it, with the performance settings pinned and automatic, and with xfwm4 and with no window manager.
+	- Possible cause:
+		- Windows with Transparency on: a window on screen is never let go there, by design since 7687c4e (2026100319134501). The help says so.
+		- A program that prints now and then in any tab of the window. Output from any pane restarts the wait while the window shows, even from a tab not in front.
+	- Progress log:
+		- 20261101: No change in the log breaks it. The release decision and its inputs are as they were at 75ebca3 (10-05), apart from test attributes. The config, dialog and save paths for the setting are pinned by davbd and ddp90.
+		- 20261101: New test, so it can't come back unseen on Linux: the window is launched unfocused on screen with the waits read from its file, and has to let go after the minute and not well before it. Verified: it fails with "Minutes otherwise" pointed at the hidden wait, and passes at 79d25ae.
+		- 20261101: Answer to the question: change it so only output from the tab in front restarts the wait while the window shows, the way a hidden window already works.
+		- 20261101: Done as answered. While the window shows, output from a tab in the back neither restarts the wait nor brings a released window back. A hidden window is as before. The releasing resources design doc says so.
+		- 20261101: Verified: der5b fails with the tab check taken out and passes with it. The idle unit tests and `cicd/cicd.bash --backlog-run-quick`, all five areas, pass.
+		- 20261101: A second window in deqy2, printing in a tab in the back, failed about half its runs, with the quiet window beside it failing too, so it stays off the full run. Filed as 2026110118143797. The script is on `wip/rnd1101b-2026103010083401`.
+	- Decisions:
+		- 20261101: A tab in the back is not owed the device while the window shows. Owing it would take the device back at once and let it go again once per wait, for as long as the tab prints. Switching to the tab is input, which brings it back.
+		- 20261101: The "Minutes otherwise" help and the config comment are left as they are. "Quiet" and "nothing printing" still read right for what the user sees.
+	- Actual fix: Only output from the tab in front counts as a sign of life while the window shows.
+	- Swept: the one output path, `UserEvent::Wakeup` to `State::note_output`. Other signs of life (input, focus, shown, pointer) are about the window, not a pane. `ChildGone` touches the pane only.
+	- Branch: rnd1101b
+	- Test case: `output_from_a_tab_in_the_back_does_not_keep_the_device` (der5b). Also `cicd/tests/idleother/run.bash` (deqy2), in the full run.
+
 - Running on macOS without a GPU fails to launch
 	- ID: 2026102209035801
 	- Type: Bug
@@ -149,6 +196,37 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Swept: the one exit site where no device could be made at launch. Rebuilds after idle and the dialogs keep their own error paths, and both need a device that once worked.
 	- Branch: rnd1022
 	- Test case: `no_device_on_macos_says_why_and_that_nothing_can_stand_in` (de9m1)
+
+- Regression: On Linux, the settings dialog is detached from the main window, and is its own alt+tab target
+	- ID: 2026103010083402
+	- Type: Bug
+	- Status: Waiting on UAT
+		- Open Settings from a release build on the desktop, under xfwm4 and under Compiz. It should make one taskbar button, one pager entry and one alt+tab entry, and stay above the terminal when the terminal is clicked or raised.
+	- Needs hand testing: the above, on the real desktop.
+	- Opened: 20261030-100834
+	- Opened by: JC
+	- Assigned to: CC
+	- Related IDs: 2026110118260314
+	- Target OS: Linux
+	- Expected behavior:
+		- Settings should always be on top of the main window, never able to be behind it.
+			- Most Linux DEs purposely allow moving a window that has a modal dialog over it, even though the modal still stays over it. That's fine.
+		- There should only be one window pager target, and only one taskbar button, when Settings is open.
+	- Notes:
+		- Pre-next-cut.
+		- Need a test case for this to make sure it doesn't keep coming back.
+	- Reproduced: In part, 20261101, on X11 under xfwm4 4.20 and Compiz 0.8.18 with a debug build. The pager showed 2 entries. The taskbar showed 1, and the dialog stayed above the terminal through a click, a raise, and another window in front.
+	- Possible cause:
+		- Pager: the dialog never asked to skip the pager. Its hints went in 20260702 and 20260703 with skip taskbar only, so that part was never right rather than a regression.
+		- Taskbar and stacking: no change to the hints or to how the dialog is created since 20260704, apart from moving code. A plain window, as reported, is what the dialog becomes when its hints miss the map. They were written on a second X connection with only a flush, and the server owes no order between two clients, so a fast open could map first.
+		- On Wayland the dialog is a window of its own by design, since winit has no parent there. That is 2026110118260314.
+	- Actual fix: The dialog skips the pager too, and its hints are confirmed with the server before the window is mapped.
+	- Decisions:
+		- 20261101: The round trip goes in although the race wasn't caught in the act. It costs one request when a dialog opens, and makes the hints' order certain.
+	- Verified: 20261101. dlgtie passed after the fix, failed before it on the pager check only, and failed 6 checks with the hints left out, the raise among them.
+		- Swept: the other dialogs share the same window code, so About, the notices and the questions get the pager hint too. `restack_parent_below` only sends one message and needs no reply.
+	- Branch: rnd1101b
+	- Test case: `cicd/tests/dlgtie/run.bash` (der6f).
 
 - Always use automatic remote mode when detected.
 	- ID: 2026101914251764
@@ -220,6 +298,39 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Swept: every `state.dirty` set on a pointer move. The thumb and map drags move the view, and a divider drag and a pane drag change the layout, so they still compose. The menu, tab and bar hovers don't touch a pane. The wake after a frame looks at the new flag too.
 	- Branch: rnd1024
 	- Test case: ddkre's drag figure, under Verified. The limit stays 360, since the saving is about 5% and the 2026102321230038 margin was set by load.
+
+- Leak checks: the soak test as a pipeline step
+	- ID: 2026110117065496
+	- Type: Task
+	- Status: Waiting on automated testing
+	- Needs local test suite run?: The first full run, the default container arm: stage 3's soak step after the heap-growth test, a `soak_<stamp>.txt` and `.zst` with the run's stamp in `cicd/artifacts/leakcheck/`, and what it finds filed. The plan line and `--list` (der46) say it's on, and dd5nn passes.
+	- Priority: Avg
+	- Opened: 20261101-170654
+	- Opened by: CC
+	- Parent ID: 2026101913370214
+	- Requirements:
+		- The soak test runs among the leak checks, in the build image, with the heap report kept as a pipeline artifact under the leak checks' report folder, rotated like the others.
+		- The plan line, `--list`, `--help` and the docs name it. New engine cases, watched to fail.
+		- What the first full run finds goes on the backlog.
+	- Prereq IDs: 2026110119292010
+	- Notes:
+		- `cicd/tests/soak/run.bash --out <dir>` keeps the data and summary as `soak_<stamp>`, with SOAK_STAMP for the run's stamp. It takes about 2.5 minutes, and the data is about 3.5 MB a round.
+		- It runs the way `fContainerRun` runs a step: as root first for the passwd entry, then under `dbus-run-session`, which xfwm4 needs.
+	- Progress log:
+		- 20261101: The soak test is a leak check, after the heap-growth test and before CodeQL, through `fRunSoak` and `LEAKCHECK_SOAK` in config.bash. It runs in a full run and under `--leakcheck`. `--quick` leaves it out, `--no-leakcheck` and `--backlog-run-quick` drop it, and a run on the host takes it into the image, or warns and skips it without docker.
+		- 20261101: The summary and heaptrack's data go to `cicd/artifacts/leakcheck/` as `soak_<stamp>` with the run's stamp, rotated like the heap reports. The step fails on a failed test, and on its exit 3 too.
+		- 20261101: `run.bash` takes `--stamp`, since the container run hands on arguments, not the environment. SOAK_STAMP still works.
+		- 20261101: The plan's Leak checks line, `--list`, `--help`, config.bash, design.md and install.md name it.
+		- 20261101: The heaptrack data was 9.5 MB for 12 rounds, not the 3.5 MB the notes gave, so the rotation keeps up to a few hundred MB, in a gitignored folder.
+		- 20261101: rnd1101b's full run at 4e46ef9 stopped at step 4 on dd5nw, which was already failing on dev, so it never reached the leak checks. Waits on 2026110119292010.
+	- Decisions:
+		- 20261101: Off under `--quick` unless `--leakcheck` asks, like the slow window tests, since it takes about 2.5 minutes. `--leakcheck` is every leak check.
+		- 20261101: A run on the host runs the debug build it made in the image, the way the ASan and CodeQL steps hop there. Both are Debian trixie, and the run in the image passed.
+		- 20261101: Exit 3, could not run, fails the step rather than skipping it, since the image pins every tool the test needs.
+	- Verified: 20261101. The step's command, `run.bash --out cicd/artifacts/leakcheck --stamp <stamp>`, in the current build image, through the image rig, on the host's debug build: passed, round 6 to 12 grew 20 KiB, and both files kept with that stamp. `cicd.bash --list`: der46 and "soak test under heaptrack" in a default run, off under `--quick`, back with `--quick --leakcheck`, "(skipped --no-leakcheck)". The engine test, 24 new checks, all failed against the old cicd.bash, and 7 mutants each failed their own. The container test, `cicd/cicd.bash --backlog-run-quick`, all five areas, and `lint-report.bash`.
+		- Swept: every test that lifts the leak checks (engine, container), `cicd-win.ps1`'s leak flags, which hand on to the Linux half, and every doc naming the leak checks.
+	- Test case: `cicd/tests/engine/run.bash` (dd5nn), 24 new checks, and `cicd/tests/soak/run.bash` (der46) in the pipeline.
+	- Branch: rnd1101b
 
 - Add a contributor license agreement, like nano-git-db's
 	- ID: 2026101906582193
@@ -392,54 +503,59 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Test case: None new. The ignores are test attributes, checked by the runs above.
 	- Branch: rnd1023
 
-- CICD reset: CICD process gaps
-	- ID: 2026102416233812
+- Leak checks: the headless soak test under `--leakcheck`
+	- ID: 2026101913370214
 	- Type: Task
 	- Status: Started
 	- Priority: Avg
-	- Opened: 20261024-162338
+	- Opened: 20261019-133702
 	- Opened by: CC
-	- Related IDs: 2026101714445004, 2026101913360695
-	- Target OS: All
+	- Parent ID: 2026101714015789
+	- Related IDs: 2026101714445005
 	- Requirements:
-		- What else in the shared CICD rules isn't done yet, past the other reset items:
-			- The fast leak checks run under `--quick` too.
-			- The leak checks that take hours, such as the whole suite under Miri, run only under `--long` or `--leakcheck`.
-			- CodeQL runs in the default run, not only behind `--codeql`.
-			- Miri runs from a nightly pinned in the image. Only the host's nightly has it now.
-			- The cleanup line at the end says roughly what it freed.
-		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
-		- Overrides: design.md's CodeQL and heap growth bullets under "Delivery", which keep CodeQL behind `--codeql` and every leak check out of `--quick`.
+		- Third-party and vendored code end users run is covered, per the parent's 20261017 decision. What it finds goes on the backlog.
+		- The parent's soak row: the program's main actions looped headless, failing when the heap at round 2N is over round N by more than a set margin, with the heap report kept as a pipeline artifact. A plain build, since heaptrack can't share one with a sanitizer.
+		- Every tool pinned and run in the build container.
+		- A loop that types goes into a harmless shell, through `--shell` and a test script, never the user's shell config.
+		- Watched to fail on a planted leak before it's trusted.
+	- Notes:
+		- Split from 2026101714445005. Its heap-growth test covers some of the same actions in-process. This one is for what that can't reach: windows, tabs and splits opened and closed, the GPU, the Settings dialog and a real PTY.
+		- `cicd/tests/allocs/run.bash` already drives a window on a private Xvfb.
 	- Progress log:
-		- 20261101: Split. 2026110112424508 has the cleanup line. The Miri parts, the `miri` component in the image and the step behind `--leakcheck`, are already 2026102320591318's requirements, so they stay there. This item closes when both are done.
-		- 20261101: 2026110112424508 is done: one cleanup line at the end. The same in `cicd-win.ps1` is 2026110112581983. Left: that one and 2026102320591318.
-		- 20261101: The heap-growth test runs under `--quick` too. It took about 8 s to build and 20 s to run in the last full run.
-		- 20261101: `--leakcheck` is every leak check now, so it adds CodeQL, under `--quick` too. `--no-leakcheck` after it still drops them all.
-	- Decisions:
-		- 20261101: CodeQL stays out of the default run, against this item's wording. That run takes about an hour without it, and the same reset sends a step that pushes it past the hour to `--long`, as 2026102616543936 did on 10-28. It also fails until 2026102211462005 files what it finds.
-		- 20261101: The ASan and LSan run stays a step of its own, with `--no-asan`, rather than one of the leak checks the two flags turn on and off. It stays out of `--quick`, since it takes about 12 minutes.
-		- 20261101: Miri under `--long` as well as `--leakcheck` goes to 2026102320591318, whose requirements name `--leakcheck` only.
-		- 20261101: dd5nn's `--quick` check expects `leak=1`, was `leak=0`, and its CodeQL plan check expects "CodeQL (off; --leakcheck or --long adds it)", was "CodeQL (off; --codeql or --long adds it)".
-	- Verified: 20261101. The engine test passed, 177 checks, and 7 failed against the old cicd.bash. `cicd.bash --list` showed the heap-growth test on under `--quick`, CodeQL on with `--leakcheck`, and the leak checks off with `--no-leakcheck` after `--leakcheck`. `cicd/cicd.bash --backlog-run-quick`, all five areas, passed in 175 s at load 7.
-		- Swept: every reader of the leak checks' place in a run: cicd.bash's help, plan and step lines, config.bash, design.md, install.md, `cicd-win.ps1 -Leakcheck`'s help, and the container and cicd-win tests, which don't depend on `--quick` leaving them out.
-	- Branch: rnd1101
-	- Test case: `cicd/tests/engine/run.bash` (dd5nn), 3 new checks for `--leakcheck` and CodeQL, and 3 changed.
+		- 20261101: Split in 2. 2026110117065477 is the driver and its heap check, and 2026110117065496 makes it a pipeline step. This item closes when they do.
 
-- Regression: On Linux, the settings dialog is detached from the main window, and is its own alt+tab target
-	- ID: 2026103010083402
+- dd5nw fails its fDie check on every run, so every full run stops at step 4
+	- ID: 2026110119292010
 	- Type: Bug
 	- Status: Queued
-	- Opened: 20261030-100834
-	- Opened by: JC
-	- Assigned to: CC
+	- Severity: High
+	- Opened: 20261101-192920
+	- Opened by:
 	- Target OS: Linux
-	- Expected behavior:
-		- Settings should always be on top of the main window, never able to be behind it.
-			- Most Linux DEs purposely allow moving a window that has a modal dialog over it, even though the modal still stays over it. That's fine.
-		- There should only be one window pager target, and only one taskbar button, when Settings is open.
-	- Notes:
-		- Pre-next-cut.
-		- Need a test case for this to make sure it doesn't keep coming back.
+	- Incorrect behavior: `cicd/tests/cicd-win/run.bash` (dd5nw) fails "which fDie's exit reaches", then "the lifted pieces all passed". The full run is fail-fast, so it stops at step 4 and never reaches the leak checks or later steps.
+	- Expected behavior: The check passes on the current cicd-win.ps1.
+	- Reproduced: 20261101. 3 of 3 runs alone in the build image, and on the host, at 4e46ef9. The test and cicd-win.ps1 are the same on dev at dc260f6, so it was already there before rnd1101b.
+	- Possible cause: `.gitattributes` gives `*.ps1` CRLF endings. The check's regex ends `exit 1 \}$` under `(?m)`, and .NET's `$` doesn't match before a `\r`. The checks beside it take `\r?$`. The check came in with e9f3066.
+	- Progress log:
+		- 20261101: Found by rnd1101b's full run, run.log in its run folder. Filed after the gate step, so it waits for the next round.
+	- Test case: `cicd/tests/cicd-win/run.bash` (dd5nw).
+
+- Two SilkTerm windows on one headless display: an idle release sometimes never shows, or never happens
+	- ID: 2026110118143797
+	- Type: Bug
+	- Status: Queued
+	- Severity: Avg
+	- Opened: 20261101-181437
+	- Opened by: CC
+	- Related IDs: 2026103010083401
+	- Target OS: Linux
+	- Test environment: Xvfb with no window manager, software GL
+	- Steps to reproduce:
+		- Run `cicd/tests/idleother/run.bash` from `wip/rnd1101b-2026103010083401`, which opens two windows at once with "Minutes otherwise" at 1.
+	- Incorrect behavior: About half the runs, neither window's title ever shows "(resource conservation mode)" in 100 s. In one, the quiet window's log said it let go at 61 s while its title stayed as it was, and the other window never let go, with no sign of life logged after launch.
+	- Expected behavior: Both let go after about a minute, as one window alone does every time.
+	- Reproduced: Yes, in 3 of 7 runs with 2026103010083401 in, and 1 of 2 with it taken out, on a display of its own each time, with or without the second window moved off the first. One window alone passed both runs tried.
+	- Possible cause: Not known. Could be the test rig, or two GL clients on one Xvfb, or a real fault with two windows open.
 
 - The Mac CI doesn't name a test that failed when its output splits the result line
 	- ID: 2026102822262458
@@ -653,36 +769,18 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261022: The first try didn't finish in 35 minutes (see 2026102211461905). Options: a per-query `--timeout` that fails the step, the smaller `rust-code-scanning` suite, a memory cap with `--ram`, or the step behind `--leakcheck` only. Pick after one full measured run.
 		- 20261022: The step is opt-in until this item decides: run it with `cicd.bash --codeql`. It will be red until the findings are filed and suppressed here. Turning it on by default is part of closing this item.
 
-- Leak checks: the headless soak test under `--leakcheck`
-	- ID: 2026101913370214
-	- Type: Task
+- Wayland: Settings isn't tied to the terminal window
+	- ID: 2026110118260314
+	- Type: Bug
 	- Status: Queued
-	- Priority: Avg
-	- Opened: 20261019-133702
+	- Severity: Low
+	- Opened: 20261101-182603
 	- Opened by: CC
-	- Parent ID: 2026101714015789
-	- Related IDs: 2026101714445005
-	- Requirements:
-		- Third-party and vendored code end users run is covered, per the parent's 20261017 decision. What it finds goes on the backlog.
-		- The parent's soak row: the program's main actions looped headless, failing when the heap at round 2N is over round N by more than a set margin, with the heap report kept as a pipeline artifact. A plain build, since heaptrack can't share one with a sanitizer.
-		- Every tool pinned and run in the build container.
-		- A loop that types goes into a harmless shell, through `--shell` and a test script, never the user's shell config.
-		- Watched to fail on a planted leak before it's trusted.
-	- Notes:
-		- Split from 2026101714445005. Its heap-growth test covers some of the same actions in-process. This one is for what that can't reach: windows, tabs and splits opened and closed, the GPU, the Settings dialog and a real PTY.
-		- `cicd/tests/allocs/run.bash` already drives a window on a private Xvfb.
-
-- Make sure shcl files from v1.0.0-beta3 are accurately converted to the latest shcl spec
-	- ID: 2026102818080401
-	- Type: Enhancement
-	- Status: Queued
-	- Opened: 20261028-180804
-	- Opened by: JC
-	- Requirements:
-		- Files from v1.0.0-beta3 are accurately converted to the latest shcl spec.
-		- The latest spec is listed as v2 but is actually working toward v3 beta.
-	- Notes:
-		- Pre-next-cut.
+	- Related IDs: 2026103010083402
+	- Target OS: Linux
+	- Incorrect behavior: On native Wayland Settings and About are toplevels of their own, with their own taskbar and alt+tab entries, and can go behind the terminal.
+	- Expected behavior: The same as on X11, per 2026103010083402.
+	- Possible cause: winit 0.30 has no parent for a Wayland window. xdg-shell has `set_parent` for this, so it needs a winit change or a call on the raw surface.
 
 - A backlog line names a path under the private notes folder
 	- ID: 2026102819390403
@@ -752,6 +850,21 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- 20261026: It failed again on Mac CI run 40263068770 at 0b16ae9, with keeping rows 10% over and pairs from 0.711 to 2.116. It passed when run again alone. Back to Queued, since a 7th failure makes it more than a one-off.
 	- 20261028: Failed again on Mac CI run 40744137399 at e809cca: keeping rows 21% more, pairs from 0.570 to 1.966. It passed run again alone. From ce3d9fb the Mac suite runs at 1 job, so nothing runs beside it, which tests the memory traffic guess.
 	- 20261028: Mac CI run 40750006918 at ce3d9fb, at 1 job, passed it. Median 1.034, pairs from 0.466 to 1.290.
+
+- deqx1's first case sometimes fails "the window was herded" on a busy box
+	- ID: 2026110116413708
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261101-164137
+	- Opened by: CC
+	- Related IDs: 2026102807384201
+	- Target OS: Linux
+	- Steps to reproduce:
+		- `cicd/tests/herdback/run.bash` a few times at a load over 20.
+	- Incorrect behavior: In the first xfwm4 case the window sometimes never takes the portrait size, so it straddles the 2 outputs, and xfwm4 doesn't herd it. About 2 runs in 8 on 20261101.
+	- Expected behavior: Every case starts wholly on the portrait output.
+	- Possible cause: Under Xwayland the buttons can't be seen, so the look after the test's move waits for a sign the drag is over, and the test gives none. A pointer move or a focus change from the test did not end it.
 
 - Wayland: a copy a program sends while no SilkTerm window has focus is dropped
 	- ID: 2026101607585700
@@ -857,37 +970,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Branch: machang
 	- Test case: `a_hidden_window_that_cannot_draw_is_shown_anyway` (ddc9r), seen failing without the fix. The memory side has no unit test, since it needs a GPU.
 	- Closed: 20261001-155746
-
-- When two screens return after screen power sleep or off, SilkTerm seems to reposition itself in between them
-	- ID: 2026102807384201
-	- Type: Bug
-	- Status: Done
-	- Needs hand testing: On b23 under xfwm4, with the window on each monitor in turn: let both screens sleep, wake them, and see the window back where it was, at its size.
-	- Severity: High
-	- Opened: 20261028-073842
-	- Opened by: JC
-	- Assigned to: CC
-	- Related IDs: 2026100907341816
-	- Target OS: Linux
-	- Test environment: b23, xfwm4 4.20
-	- Incorrect behavior: When two screens return after screen power sleep or off, SilkTerm seems to reposition itself in between them.
-	- Expected behavior: It stays where it was. None of the other ~dozen application windows move, other terminals included.
-	- Reproduced: 20261101, headless, with two outputs under xfwm4. Turned off, the portrait output's window was moved onto the landscape one and took that one's size. Turned on again, the window stayed there, and an xterm beside it went back.
-	- Actual cause: xfwm4 notes where each window was as a monitor goes, and puts it back once the monitor returns, unless the window resized itself in between. SilkTerm took the size kept for the monitor it was herded onto, so xfwm4 left it where it had herded it. Since 2026100907341816 that took place even within a second of the move.
-	- Notes:
-		- Pre-next-cut.
-		- Work first after the CICD issues.
-	- Decisions:
-		- 20261101: A window herded off a monitor that went dark, or changed, keeps its size and takes no other. It notes the monitor it is on, so a size the user sets there is kept for that one. This reverses 2026100907341816's choice that a herded window takes the other monitor's size. Other windows keep their size too.
-		- 20261101: A herd is told from a user's drag by the monitor the window was on at its last look being gone from the layout. Where the window can't say where it is, as on native Wayland, nothing changed.
-		- 20261101: Updated an assert, `monwake` (ddq75): "took the landscape size there" is now "kept its size there". In ddq74 the herd step now takes no size.
-	- Actual fix: The look after a move takes no monitor size when the monitor the window was on at the last look has left the layout. design.md says so under the per-monitor size.
-	- Swept: every call that resizes the main window. The monitor look is the only one made without the user, apart from the system's own resize for a new scale. The Settings and zoom resizes are the user's. Dialogs are placed once, when they open.
-	- Verified: 20261101. The new xfwm4 test fails both cases on the old build and passes on the fix. monwake passes on the fix, and fails only its changed check on the old build. The unit tests, clippy, fmt, script lints, docs and test IDs pass.
-	- Branch: rnd1101
-	- Test case: `cicd/tests/herdback/run.bash` (deqx1), the window back where it was under xfwm4. `a_window_herded_off_a_dark_monitor_takes_no_size` (deqwx). `monwake` (ddq75) and ddq74, changed.
-	- Acceptance signoff: Self-closed: deqx1 passed at ce9d872. A copy that turns both outputs off in turn and back on in either order, 1 s and 4 s apart, put the window back where it was, at its size, all 4 times. Not run on b23's real monitors.
-	- Closed: 20261101-141641
 
 - CICD reset: the bash guard doesn't refuse HOST_TEMP itself or a project's whole folder under it
 	- ID: 2026103115170424
@@ -4095,6 +4177,100 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- The Windows run this item came from named only these four. That full suite was not run again.
 	- Acceptance signoff: Self-closed: test fixes only, and all four failed before the fix and pass after on Windows.
 	- Closed: 20260930-125357
+
+- Leak checks: the soak driver and its heap check
+	- ID: 2026110117065477
+	- Type: Task
+	- Status: Done
+	- Priority: Avg
+	- Opened: 20261101-170654
+	- Opened by: CC
+	- Parent ID: 2026101913370214
+	- Requirements:
+		- A test script loops the main actions headless on a private display: a tab, a split, typing into a real PTY, the Settings dialog and a second window, each opened and closed.
+		- Every shell is a harmless test script, given by `--shell` and the test config's shell list, never the user's shell or its config.
+		- The heap at round N and 2N comes from heaptrack on a plain build, pinned in the build image, and the test fails when 2N is over N by more than a set margin. The heaptrack data and a summary are kept for the step to save.
+		- Watched to fail on a planted leak.
+	- Progress log:
+		- 20261101: `cicd/tests/soak/run.bash` runs the debug build under heaptrack on a private Xvfb with xfwm4, in the build image. Each round opens a tab and a split and types into both, closes the split, opens and closes the Settings dialog, opens a window, types into it and closes it, then closes the tab. 6 rounds and then 6 more, about 2.5 minutes.
+		- 20261101: Each shell notes its pid with what it got, so the test fails when a hotkey did nothing and the typing went to an older pane, or a closed pane's shell lives on.
+		- 20261101: The heap after each round is the lowest live heap in a quiet 2 s after it. On llvmpipe it moves between two levels about 120 KiB apart, and round 6 to 12 grew 4 KiB, -68 and -30 in three runs. The margin is 256 KiB.
+		- 20261101: `--plant` preloads a shim that leaks 64 KiB in the program each time it starts a child, 3 a round. Round 6 to 12 then grew 1152 KiB, and the test failed.
+		- 20261101: `--out` keeps heaptrack's data and the per-round summary, about 7 MB for 2 rounds. The step that saves them is 2026110117065496.
+		- 20261101: Found nothing: the heap reads flat.
+	- Decisions:
+		- 20261101: The heap at a round comes from heaptrack's raw data, read by `heapat.py`, since `heaptrack_print` gives only the peak and what was left at exit.
+		- 20261101: The debug build, the plain one stage 2 makes before the leak checks. The release build comes later, in stage 5.
+		- 20261101: The planted leak hooks the spawn, since the PTY is opened by raw syscalls, so the program itself stays untouched.
+		- 20261101: heaptrack is trixie's 1.5.0+dfsg1-5, held by version in a layer of its own after CodeQL, so adding it didn't rebuild the toolchains.
+		- 20261101: A new window is a process of its own, so only the spawn side is measured. The window's own process isn't.
+	- Verified: 20261101. The test passed at round 6 to 12 once in the rebuilt build image, and twice in a stand-in image, the old one plus the same heaptrack layer. It failed with `--plant`, and with the new tab key swapped for one that does nothing. `--out` kept both files. `cicd/cicd.bash --backlog-run-quick`, all five areas, the header test ddghe included, `test-id.py --check` and its test, ruff, mypy, shellcheck.
+	- Test case: `cicd/tests/soak/run.bash` (der46), not in the pipeline until 2026110117065496.
+	- Branch: rnd1101b
+	- Closed: 20261101-174350
+
+- CICD reset: CICD process gaps
+	- ID: 2026102416233812
+	- Type: Task
+	- Status: Done
+	- Priority: Avg
+	- Opened: 20261024-162338
+	- Opened by: CC
+	- Related IDs: 2026101714445004, 2026101913360695
+	- Target OS: All
+	- Requirements:
+		- What else in the shared CICD rules isn't done yet, past the other reset items:
+			- The fast leak checks run under `--quick` too.
+			- The leak checks that take hours, such as the whole suite under Miri, run only under `--long` or `--leakcheck`.
+			- CodeQL runs in the default run, not only behind `--codeql`.
+			- Miri runs from a nightly pinned in the image. Only the host's nightly has it now.
+			- The cleanup line at the end says roughly what it freed.
+		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
+		- Overrides: design.md's CodeQL and heap growth bullets under "Delivery", which keep CodeQL behind `--codeql` and every leak check out of `--quick`.
+	- Progress log:
+		- 20261101: Split. 2026110112424508 has the cleanup line. The Miri parts, the `miri` component in the image and the step behind `--leakcheck`, are already 2026102320591318's requirements, so they stay there. This item closes when both are done.
+		- 20261101: 2026110112424508 is done: one cleanup line at the end. The same in `cicd-win.ps1` is 2026110112581983. Left: that one and 2026102320591318.
+		- 20261101: The heap-growth test runs under `--quick` too. It took about 8 s to build and 20 s to run in the last full run.
+		- 20261101: `--leakcheck` is every leak check now, so it adds CodeQL, under `--quick` too. `--no-leakcheck` after it still drops them all.
+		- 20261101: The answer to the Check entry confirms CodeQL under `--long` and `--leakcheck`. Both children are done, and the Miri parts are in 2026102320591318's requirements, so that item tracks them.
+	- Decisions:
+		- 20261101: CodeQL stays out of the default run, against this item's wording. That run takes about an hour without it, and the same reset sends a step that pushes it past the hour to `--long`, as 2026102616543936 did on 10-28. It also fails until 2026102211462005 files what it finds.
+		- 20261101: The ASan and LSan run stays a step of its own, with `--no-asan`, rather than one of the leak checks the two flags turn on and off. It stays out of `--quick`, since it takes about 12 minutes.
+		- 20261101: Miri under `--long` as well as `--leakcheck` goes to 2026102320591318, whose requirements name `--leakcheck` only.
+		- 20261101: dd5nn's `--quick` check expects `leak=1`, was `leak=0`, and its CodeQL plan check expects "CodeQL (off; --leakcheck or --long adds it)", was "CodeQL (off; --codeql or --long adds it)".
+	- Verified: 20261101. The engine test passed, 177 checks, and 7 failed against the old cicd.bash. `cicd.bash --list` showed the heap-growth test on under `--quick`, CodeQL on with `--leakcheck`, and the leak checks off with `--no-leakcheck` after `--leakcheck`. `cicd/cicd.bash --backlog-run-quick`, all five areas, passed in 175 s at load 7.
+		- Swept: every reader of the leak checks' place in a run: cicd.bash's help, plan and step lines, config.bash, design.md, install.md, `cicd-win.ps1 -Leakcheck`'s help, and the container and cicd-win tests, which don't depend on `--quick` leaving them out.
+	- Branch: rnd1101
+	- Test case: `cicd/tests/engine/run.bash` (dd5nn), 3 new checks for `--leakcheck` and CodeQL, and 3 changed.
+	- Acceptance signoff: Self-closed: its children are done, the CodeQL call was confirmed, and the Miri work is tracked by 2026102320591318.
+	- Closed: 20261101-235800
+
+- Make sure shcl files from v1.0.0-beta3 are accurately converted to the latest shcl spec
+	- ID: 2026102818080401
+	- Type: Enhancement
+	- Status: Done
+	- Opened: 20261028-180804
+	- Opened by: JC
+	- Requirements:
+		- Files from v1.0.0-beta3 are accurately converted to the latest shcl spec.
+		- The latest spec is listed as v2 but is actually working toward v3 beta.
+	- Notes:
+		- Pre-next-cut.
+	- Progress log:
+		- 20261101: beta3 wrote one shcl file, the config, with its themes and shell list in it, through shcl 1.2. The wallpaper history it also writes is a plain list.
+		- 20261101: Test files made the way beta3 wrote them: its template on a first launch, and a Settings save that changed every setting, added a theme and set the shell list.
+		- 20261101: Every value carried, renames and the blink rate included. The theme's ANSI lists, the shell list and its dates read the same.
+		- 20261101: Gap found: beta3 had no performance profiles. A file with its own scroll timings, halo, outline, blur or wallpaper switch came up under the automatic profile, which drew the profile's values in place of the user's. 16 of the beta3 save's values read that way.
+		- 20261101: Fixed in the conversion. A file from before the profiles, with a governed row set to anything but Max silk's value, comes up on Custom with "Choose automatically" off. An untouched beta3 file stays automatic.
+	- Decisions:
+		- 20261101: "From before the profiles" means a file in an older format with no `performance` line at all, active or commented. Every template since the profiles has those lines, so a later file keeps the profile it says.
+		- 20261101: A governed row equal to Max silk's value doesn't count as a look of its own. beta3's template had the scroll timings active at those values, so an untouched file would otherwise lose the hardware test.
+		- 20261101: Done in `upgrade`, so it happens once, keeps the same backup, and also covers a file a busy launch left for the next save.
+	- Test case: `a_file_beta3_saved_keeps_every_setting` (der3m), `a_file_beta3_wrote_on_first_launch_stays_automatic` (der3n), `only_a_look_set_before_the_profiles_comes_up_custom` (der3p), and the beta3 case in `cicd/tests/config-convert/run.bash` (ddf6j). der3m and der3p fail with the profile step off and pass with it.
+	- Verified: The backlog quick run passes, all five areas, 1417 unit tests. Windows clippy is clean. `cicd/tests/config-convert/run.bash` passes, 113 checks, the beta3 case included.
+	- Swept: Every path that converts an older file goes through `upgrade`: the launch, the in-memory read for a busy file, the launch steps the rating check replays, and the writer every save goes through. Both its old-format arms, in place and written new, take the step.
+	- Acceptance signoff: Self-closed: the tests failed before the fix and pass after. The profile choice has a Check entry.
+	- Closed: 20261101-170218
 
 - CICD process gaps: the cleanup line in cicd-win.ps1
 	- ID: 2026110112581983

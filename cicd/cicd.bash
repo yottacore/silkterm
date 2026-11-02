@@ -27,7 +27,8 @@
 ##	   3. regression tests + lints + fuzz soak (clippy for Linux, Windows and macOS
 ##	      and the advisory scan gating, the rest of cargo-deny not; the tests again
 ##	      under ASan and LSan, in the container image; the leak checks, which
-##	      are the heap-growth test under dhat; under --long, the tests again
+##	      are the heap-growth test under dhat and the soak test under
+##	      heaptrack, in the image; under --long, the tests again
 ##	      under TSan, in the image too; scroll harness)
 ##	   4. profiler (flamegraph SVG; non-gating artifact - see failure policy), on
 ##	      the card through a headless sway, and always on this box
@@ -57,9 +58,11 @@
 ##	   --no-fuzz           skip the fuzz soak (the short one in the test run still runs)
 ##	   --no-asan           skip the test suite under ASan and LSan
 ##	   --no-tsan           skip the test suite under TSan, under --long
-##	   --no-leakcheck      skip every leak check (the heap-growth test under dhat, CodeQL)
-##	   --leakcheck         every leak check, the ones that take hours too: CodeQL;
-##	                       not with --backlog-run-quick
+##	   --no-leakcheck      skip every leak check (the heap-growth test under dhat,
+##	                       the soak test, CodeQL)
+##	   --leakcheck         every leak check, the slow ones too: the soak test under
+##	                       --quick, and CodeQL, over half an hour; not with
+##	                       --backlog-run-quick
 ##	   --codeql            add CodeQL to the leak checks (off by default; slow)
 ##	   --long              everything, the steps that take hours too: the test
 ##	                       suite under TSan and CodeQL. Not with --quick or
@@ -73,8 +76,8 @@
 ##	   --demo              re-record the demo video, under --quick too
 ##	   --quick             only the quick lints and tests, and the x86_64 release builds;
 ##	                       skips the ARM64 builds, packages, profiling, the fuzz soak,
-##	                       the ASan and TSan runs, the slow window tests and anything
-##	                       that needs another box
+##	                       the ASan and TSan runs, the soak test, the slow window
+##	                       tests and anything that needs another box
 ##	   --backlog-run-quick [AREA...]
 ##	                       the fast checks only, then exit: every area, or the ones
 ##	                       named. Areas: fmt (cargo fmt --check), clippy (Linux),
@@ -219,6 +222,8 @@ if ((fmtCheck && ${#FMT_CMD[@]})); then FMT_CMD=("${FMT_CHECK_CMD[@]}"); fi
 if ((gate && leakAsked && leakcheck)); then echo "--leakcheck adds to a full run; the backlog quick run leaves it out" >&2; exit 2; fi
 if ((gate && codeql)); then echo "--codeql is one of the leak checks, which the backlog quick run leaves out" >&2; exit 2; fi
 if ((gate)); then leakcheck=0; fi   ## on by default, --quick too, since the heap-growth test takes under a minute
+## The soak test takes about 2.5 minutes, so --quick leaves it out unless --leakcheck asks.
+soak=0; if ((leakcheck && (! quick || leakAsked))) && [[ -n "${LEAKCHECK_SOAK:-}" ]]; then soak=1; fi
 
 ## --no-arm: drop the ARM64 cross targets so the run (and its packages) stay
 ## x86_64-only. Native x86_64 is untouched; the Windows/Linux x86_64 crosses stay.
@@ -772,7 +777,14 @@ if ((! container && leakcheck && codeql)) && [[ -n "${CODEQL_SUITE:-}" && -z "${
 	if command -v "${docker}" >/dev/null 2>&1; then codeqlInImage=1
 	else codeqlSkipped="no docker here for the image with CodeQL"; fi
 fi
-if ((container || asanInImage || tsanInImage || codeqlInImage)); then
+## The soak test needs heaptrack, Xvfb and xfwm4 at the image's pins, so it goes
+## there the same way, with the debug build this box made.
+soakInImage=0; soakSkipped=""
+if ((! container && soak)) && [[ -z "${SILK_CICD_IN_CONTAINER:-}" ]]; then
+	if command -v "${docker}" >/dev/null 2>&1; then soakInImage=1
+	else soakSkipped="no docker here for the image with heaptrack"; fi
+fi
+if ((container || asanInImage || tsanInImage || codeqlInImage || soakInImage)); then
 	[[ -f "${containerRecipe}" ]] || fDie "missing ${containerRecipe}"
 	containerImage="$(fContainerImage)"
 	## Its real path, since a target dir linked to another disk would dangle inside.
@@ -954,6 +966,9 @@ fScriptTests(){
 	## Under xfwm4 that window goes back where it was, too. Exit 3 is a skip: no
 	## binary, sway, Xwayland, xfwm4 or xdotool.
 	fRunTest_MaySkip cicd/tests/herdback/run.bash "window place after a monitor wakes"
+	## Under xfwm4 Settings stays above the terminal, as its modal, and off the
+	## taskbar and pager. Exit 3 is a skip: no binary, xfwm4, xdotool or xprop.
+	fRunTest_MaySkip cicd/tests/dlgtie/run.bash "Settings tied to its window"
 	## On native Wayland a window takes each output's own size once moved or
 	## dropped there, a sliver left on another output too. Exit 3 is a skip: no
 	## binary, sway, python3 or software Vulkan.
@@ -1303,7 +1318,11 @@ if ((leakcheck)); then
 	if ((! codeql)); then codeqlLine="CodeQL (off; --leakcheck or --long adds it)"
 	elif [[ -n "${codeqlSkipped}" ]]; then codeqlLine="CodeQL (skipped, ${codeqlSkipped})"
 	else codeqlLine="CodeQL"; fi
-	fEcho_Clean "Leak checks .........: heap growth under dhat, ${codeqlLine}, reports to ${LEAKCHECK_OUT_DIR}"
+	if [[ -z "${LEAKCHECK_SOAK:-}" ]]; then soakLine="soak test (skipped)"
+	elif ((! soak)); then soakLine="soak test (off under --quick; --leakcheck adds it)"
+	elif [[ -n "${soakSkipped}" ]]; then soakLine="soak test (skipped, ${soakSkipped})"
+	else soakLine="soak test under heaptrack"; fi
+	fEcho_Clean "Leak checks .........: heap growth under dhat, ${soakLine}, ${codeqlLine}, reports to ${LEAKCHECK_OUT_DIR}"
 else
 	fEcho_Clean "Leak checks .........: (skipped --no-leakcheck)"
 fi
@@ -1415,6 +1434,7 @@ if ((listing)); then
 	fEcho_Clean "Test scripts and harnesses:"
 	if [[ -n "${ADVISORY_CMD+x}" ]] && ((${#ADVISORY_CMD[@]})); then fAdvisoryTests; fi
 	fScriptTests
+	if ((soak)); then fListTest "${LEAKCHECK_SOAK}" "soak test under heaptrack"; fi
 	exit 0
 fi
 
@@ -1863,7 +1883,35 @@ fRunLeakcheck(){
 	gfs_rotate "${outDir}" heap txt >/dev/null 2>&1 || true
 	gfs_rotate "${outDir}" heap dhat.json >/dev/null 2>&1 || true
 	fEcho "OK: no heap growth past the warm-up"
+	fRunSoak "${outDir}"
 	fRunCodeql "${outDir}"
+}
+## fRunSoak <out dir>: the soak test (LEAKCHECK_SOAK) on the debug build, in the
+## image like the ASan run. Its data and summary are kept as soak_<stamp> with
+## this run's stamp. Its exit 3, could not run, fails here too, since the image
+## pins every tool it needs.
+fRunSoak(){
+	local -r outDir="${1}" why="the soak test failed: the heap grew, or an action didn't happen (summary and heaptrack data in ${1})"
+	local -i rc=0
+	if [[ -z "${LEAKCHECK_SOAK:-}" ]]; then fEcho_Clean "soak test skipped"; return 0; fi
+	if ((! soak)); then fEcho_Clean "soak test off under --quick (--leakcheck adds it)"; return 0; fi
+	if [[ -n "${soakSkipped}" ]]; then fEcho "WARNING: soak test skipped: ${soakSkipped}"; return 0; fi
+	fJobs hard
+	fEcho_Clean "soak test under heaptrack ..."
+	if [[ -n "${SILK_CICD_IN_CONTAINER:-}" ]]; then
+		"${root}/${LEAKCHECK_SOAK}" --out "${outDir}" --stamp "${stamp}" || rc=$?
+	else
+		fContainerBuild "${containerImage}"
+		fContainerRun "${containerImage}" "${root}/${LEAKCHECK_SOAK}" --out "${outDir}" --stamp "${stamp}" || rc=$?
+	fi
+	case "${rc}" in
+		0) ;;
+		3) fDie "the soak test could not run, though the image should have all it needs (above)" ;;
+		*) fDie "${why}" ;;
+	esac
+	gfs_rotate "${outDir}" soak txt >/dev/null 2>&1 || true
+	gfs_rotate "${outDir}" soak zst >/dev/null 2>&1 || true
+	fEcho "OK: no heap growth over the soak test's rounds"
 }
 ## fRunCodeql <out dir>: CodeQL over our crates and the vendored ones a release
 ## binary links (cicd/utility/codeql.bash), in the image like the ASan run.
@@ -2214,6 +2262,8 @@ fEcho_Clean
 
 
 ##	History:
+##		- 2026-11-01: The soak test joins the leak checks, in the image, with its
+##		              heaptrack data kept beside the heap reports.
 ##		- 2026-11-01: One cleanup line at the end: what went, the run's own folder and
 ##		              docker's included, and about what it freed.
 ##		- 2026-11-01: The heap-growth test runs under --quick too, and --leakcheck

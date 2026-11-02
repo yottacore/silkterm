@@ -164,6 +164,64 @@ fCheck "the dhat test hands on to CodeQL, with the report folder" \
 	bash -c 'sed -n "/^fRunLeakcheck(){/,/^}/p" "$1" | grep -q "^[[:space:]]*fRunCodeql \"\${outDir}\"$"' _ "${engine}"
 fCheck "the config names a Rust suite, and the suppressions file is there" \
 	bash -c 'source "$1" && [[ "${CODEQL_SUITE}" == codeql/rust-queries:* && -f "$2/../${CODEQL_SUPPRESSIONS}" ]]' _ "${cicd}/config.bash" "${cicd}"
+## The soak test is a leak check, about 2.5 minutes, so --quick leaves it out
+## unless --leakcheck asks. It needs heaptrack at the image's pin, so a run on
+## this box takes it there, or warns without docker.
+soakOn="$(grep -F 'soak=0; if ((leakcheck && ' "${engine}" || true)"
+fCheck "the parser has a line settling the soak test" test -n "${soakOn}"
+fParseSoak(){ fParse "${@}" >/dev/null; eval "${parse}"; LEAKCHECK_SOAK="${soakScript-cicd/tests/soak/run.bash}"; eval "${soakOn}"; echo "soak=${soak} leak=${leakcheck}"; }
+fCheck "a full run with no options runs the soak test" test "$(fParseSoak)" = "soak=1 leak=1"
+fCheck "--quick leaves it out, and --leakcheck puts it back, in either order" \
+	bash -c '[[ "$1" == "soak=0 leak=1" && "$2" == "soak=1 leak=1" && "$3" == "soak=1 leak=1" ]]' _ "$(fParseSoak --quick)" "$(fParseSoak --quick --leakcheck)" "$(fParseSoak --leakcheck --quick)"
+fCheck "--no-leakcheck drops it, from a full run and after --leakcheck" \
+	bash -c '[[ "$1" == "soak=0 leak=0" && "$2" == "soak=0 leak=0" ]]' _ "$(fParseSoak --no-leakcheck)" "$(fParseSoak --quick --leakcheck --no-leakcheck)"
+fCheck "--gate leaves it out" test "$(fParseSoak --gate)" = "soak=0 leak=0"
+fCheck "and an empty LEAKCHECK_SOAK turns it off" test "$(soakScript="" fParseSoak)" = "soak=0 leak=1"
+fSoakWhere(){
+	local container="${1}" soak="${2}" docker="${3}" SILK_CICD_IN_CONTAINER="${4:-}"
+	eval "$(fLift '^soakInImage=0' '^fi$')"
+	echo "${soakInImage}|${soakSkipped}"
+}
+fCheck "a full run here takes the soak test to the image" test "$(fSoakWhere 0 1 bash)" = "1|"
+fCheck "and says so with no docker, rather than stopping" bash -c '[[ "$1" == "0|no docker here"* ]]' _ "$(fSoakWhere 0 1 no-such-docker-here)"
+fCheck "but not when it's off" test "$(fSoakWhere 0 0 bash)" = "0|"
+fCheck "nor from a run already in the container" \
+	bash -c '[[ "$1" == "0|" && "$2" == "0|" ]]' _ "$(fSoakWhere 1 1 bash)" "$(fSoakWhere 0 1 bash 1)"
+fCheck "and a run on this box builds the image for it" grep -qF 'if ((container || asanInImage || tsanInImage || codeqlInImage || soakInImage)); then' "${engine}"
+fSoakPlan(){ local soak="${1}" soakSkipped="${2:-}" LEAKCHECK_SOAK="${3-cicd/tests/soak/run.bash}"; eval "$(fLift '^	if \[\[ -z "\${LEAKCHECK_SOAK:-}" \]\]; then soakLine=' '^	else soakLine=')"; echo "${soakLine}"; }
+fCheck "the plan names the soak test when on" test "$(fSoakPlan 1)" = "soak test under heaptrack"
+fCheck "and says how to turn it on under --quick" test "$(fSoakPlan 0)" = "soak test (off under --quick; --leakcheck adds it)"
+fCheck "and why it's skipped" bash -c '[[ "$1" == "soak test (skipped, no docker"* && "$2" == "soak test (skipped)" ]]' _ "$(fSoakPlan 1 'no docker here')" "$(fSoakPlan 0 '' '')"
+fCheck "the plan's leak checks line carries it" grep -qF 'Leak checks .........: heap growth under dhat, ${soakLine}, ${codeqlLine}' "${engine}"
+fCheck "--list names it when it would run" grep -qF 'if ((soak)); then fListTest "${LEAKCHECK_SOAK}" ' "${engine}"
+fCheck "the dhat test hands on to the soak test before CodeQL, with the report folder" \
+	bash -c 'sed -n "/^fRunLeakcheck(){/,/^}/p" "$1" | grep -A1 "^[[:space:]]*fRunSoak \"\${outDir}\"$" | grep -q "^[[:space:]]*fRunCodeql "' _ "${engine}"
+## The step lifted on its own, with the script and the container run stood in.
+fRunSoakAs(){  ## fRunSoakAs <soak> <exit> [in container]: what the step printed, and DIE or rc
+	local soak="${1}" soakSkipped="" stamp=20261101-120000 containerImage=img SILK_CICD_IN_CONTAINER="${3:-}"
+	local root="${work}/soakroot" LEAKCHECK_SOAK=soak.bash
+	mkdir -p "${root}/out"; printf '#!/bin/sh\necho "ran $*"\nexit %s\n' "${2}" >"${root}/soak.bash"; chmod +x "${root}/soak.bash"
+	fJobs(){ :; }; fEcho_Clean(){ echo "    ${*}"; }; fContainerBuild(){ :; }
+	fContainerRun(){ echo "in ${1}:"; local -r s="${2}"; shift 2; "${s}" "${@}"; }
+	## A stand-in keeps the real name only for a real command, so the copy calls a spy.
+	fRotateSpy(){ echo "rotate ${2} ${3}" >>"${work}/soak-rotated"; }; : >"${work}/soak-rotated"
+	eval "$(fLift '^fRunSoak(){' '^}' | sed 's/\bgfs_rotate /fRotateSpy /')"
+	( fRunSoak "${root}/out" ) || echo "rc=$?"
+	sed 's/^/    /' "${work}/soak-rotated"
+}
+out="$(fRunSoakAs 1 0 1)"
+fCheck "in the container the step runs the script with the folder and the run's stamp" grep -qxF "ran --out ${work}/soakroot/out --stamp 20261101-120000" <<<"${out}"
+fCheck "and rotates the summary and the data" bash -c '[[ "$1" == *"rotate soak txt"*"rotate soak zst"* ]]' _ "${out}"
+out="$(fRunSoakAs 1 0)"
+fCheck "on this box it goes through the image" grep -q '^in img:' <<<"${out}"
+out="$(fRunSoakAs 1 1 1)"
+fCheck "a failed soak test stops the run, saying where the data is" bash -c '[[ "$1" == *"DIE: the soak test failed"*"soakroot/out"* && "$1" != *rotate* ]]' _ "${out}"
+out="$(fRunSoakAs 1 3 1)"
+fCheck "and so does one that couldn't run, since the image has every tool" grep -qF 'DIE: the soak test could not run' <<<"${out}"
+out="$(fRunSoakAs 0 0 1)"
+fCheck "off, it runs nothing" bash -c '[[ "$1" != *ran* && "$1" == *"soak test off under --quick"* ]]' _ "${out}"
+fCheck "the config names the soak test, which has a test ID" \
+	bash -c 'source "$1" && [[ -x "$2/../${LEAKCHECK_SOAK}" ]] && grep -q "^##	- Test ID: der46$" "$2/../${LEAKCHECK_SOAK}"' _ "${cicd}/config.bash" "${cicd}"
 ## --long, or --slow: the steps that take hours. TSan and CodeQL wait for it, so
 ## the default run stays near an hour.
 fParseLong(){ fParse "${@}" >/dev/null; eval "${parse}"; echo "long=${long} codeql=${codeql} leak=${leakcheck} inner=${innerArgs[*]}"; }
@@ -543,6 +601,8 @@ if ((failures)); then echo "${failures} failed"; exit 1; fi
 echo "all passed"
 
 ##	History:
+##		- 20261101: The soak test: when it runs, where, its plan and --list lines,
+##		            and the step.
 ##		- 20261101: The heap-growth test under --quick, and --leakcheck adding CodeQL.
 ##		- 20261028: The release stage's check for local paths in a binary, and the
 ##		            fuzz corpus hashes either side of the tests.

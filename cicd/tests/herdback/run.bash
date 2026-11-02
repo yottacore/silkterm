@@ -14,9 +14,12 @@
 ##			  where it had been herded to (2026102807384201).
 ##			- Turned on again 4 s after, past the window's look, and 1 s after,
 ##			  inside it.
+##		Then the same with no window manager, the herd made by hand, as one that
+##		herds but never puts back: the window must put itself back. Moved or
+##		resized by hand while herded, it must stay where it was left.
 ##	- Syntax: run.bash [--bin PATH]   (default: the debug build, then release)
 ##	- Exit: 0 passed, 1 a check failed, 3 nothing ran (no binary, sway,
-##	  Xwayland, xfwm4 or xdotool).
+##	  Xwayland, xfwm4, xdotool or xrandr).
 ##	- Test ID: deqx1
 ##	- History: At bottom of file.
 
@@ -42,7 +45,7 @@ if [[ -z "${bin}" ]]; then
 fi
 if [[ -z "${bin}" || ! -x "${bin}" ]]; then echo "  skip: no SilkTerm binary (build it first, or pass --bin)"; exit 3; fi
 echo "  binary: ${bin}"
-for tool in sway swaymsg Xwayland xfwm4 xdotool xprop; do
+for tool in sway swaymsg Xwayland xfwm4 xdotool xprop xrandr; do
 	if ! command -v "${tool}" >/dev/null 2>&1; then echo "  skip: no ${tool}"; exit 3; fi
 done
 
@@ -147,6 +150,23 @@ fWhere(){
 	[[ -n "${X-}" ]] && echo "${X},${Y} ${WIDTH}x${HEIGHT}"
 }
 
+## Is "<x>,<y> <width>x<height>" wholly on the portrait output, which is 1200 wide?
+fOnPortrait(){
+	local -r at="${1}"
+	local -r x="${at%%,*}" size="${at#* }"
+	[[ "${x}" =~ ^[0-9]+$ && "${size%%x*}" =~ ^[0-9]+$ ]] && ((x + ${size%%x*} <= 1200))
+}
+
+## Wait for the X server to show this many monitors.
+fMonitors(){
+	local -r want="${1}"
+	for _ in {1..50}; do
+		[[ "$(fX xrandr --listactivemonitors 2>/dev/null | head -n 1)" == "Monitors: ${want}" ]] && return 0
+		sleep 0.1
+	done
+	return 0
+}
+
 ## A window of its own for each dance, so one that ends wrong cannot spoil the next.
 fDance(){  ## fDance <seconds the portrait output stays off>
 	local -r off="${1}"
@@ -163,12 +183,13 @@ fDance(){  ## fDance <seconds the portrait output stays off>
 	done
 	if [[ -z "${id}" ]]; then echo "  FAIL ${off} s off: the window never showed"; failures=$((failures + 1)); return 0; fi
 	## a move before the window has settled from its launch can be undone by it
-	for _ in {1..10}; do
+	## a move to where it already is is no move, so every other try is a step over
+	for try in {0..9}; do
 		sleep 1
-		fX xdotool windowmove "${id}" 100 100
+		fX xdotool windowmove "${id}" $((100 + 20 * (try % 2))) 100
 		sleep 2
 		start="$(fWhere "${id}")"
-		[[ "${start%%,*}" == 1?? ]] && break
+		fOnPortrait "${start}" && break
 	done
 	fCheck "${off} s off: the window starts on the portrait output" test "${start%%,*}" -lt 1200
 	fSway "output HEADLESS-2 disable"
@@ -185,8 +206,69 @@ fDance(){  ## fDance <seconds the portrait output stays off>
 fDance 4
 fDance 1
 
+## No window manager from here on. Under dbus-run-session xfwm4 is its child.
+wmOnly="$(pgrep -P "${wmPid}" -x xfwm4 2>/dev/null || true)"
+kill "${wmOnly:-${wmPid}}" 2>/dev/null || true
+wait "${wmPid}" 2>/dev/null || true
+wmPidWas="${wmPid}"; wmPid=""
+if [[ -n "${wmOnly}" ]]; then
+	for _ in {1..50}; do kill -0 "${wmOnly}" 2>/dev/null || break; sleep 0.1; done
+fi
+fCheck "xfwm4 has stopped" test -z "$(pgrep -x xfwm4 -P "${wmPidWas}" 2>/dev/null || true)" -a ! -e "/proc/${wmOnly:-0}"
+
+## A window manager that herds but never puts back, played by hand.
+fDanceBare(){  ## fDanceBare back|moved|resized
+	local -r how="${1}"
+	local id="" start="" herded left final
+	fX XDG_RUNTIME_DIR="${runDir}" LIBGL_ALWAYS_SOFTWARE=1 \
+		HOME="${work}/home" XDG_CONFIG_HOME="${cfgHome}" XDG_DATA_HOME="${work}/home/.local/share" XDG_CACHE_HOME="${work}/home/.cache" \
+		XDG_STATE_HOME="${work}/home/.local/state" \
+		"${bin}" --shell "/bin/dash -c 'sleep 600'" >/dev/null 2>>"${work}/said.txt" &
+	appPid=$!
+	for _ in {1..100}; do
+		id="$(fX xdotool search --pid "${appPid}" --name '^SilkTerm' 2>/dev/null | head -n 1 || true)"
+		[[ -n "${id}" ]] && break
+		sleep 0.1
+	done
+	if [[ -z "${id}" ]]; then echo "  FAIL ${how}, no window manager: the window never showed"; failures=$((failures + 1)); return 0; fi
+	## a move to where it already is is no move, so every other try is a step over
+	for try in {0..9}; do
+		sleep 1
+		fX xdotool windowmove "${id}" $((100 + 20 * (try % 2))) 100
+		sleep 2
+		start="$(fWhere "${id}")"
+		fOnPortrait "${start}" && break
+	done
+	fCheck "${how}, no window manager: the window starts on the portrait output" fOnPortrait "${start}"
+	fSway "output HEADLESS-2 disable"
+	## the X server has to know the monitor went before the herd, as it would
+	fMonitors 1
+	fX xdotool windowmove "${id}" 1300 500
+	sleep 2
+	herded="$(fWhere "${id}")"
+	case "${how}" in
+		moved) fX xdotool windowmove "${id}" 1500 600; sleep 2 ;;
+		resized) fX xdotool windowsize "${id}" 700 500; sleep 2 ;;
+	esac
+	left="$(fWhere "${id}")"
+	fSway "output HEADLESS-2 enable"
+	sleep 6
+	final="$(fWhere "${id}")"
+	echo "  start: ${start}, herded: ${herded}, left: ${left}, back: ${final}"
+	if [[ "${how}" == back ]]; then
+		fCheck "${how}, no window manager: back where it was, at its size" test -n "${start}" -a "${final}" == "${start}"
+	else
+		fCheck "${how}, no window manager: stays where it was left" test -n "${left}" -a "${left}" != "${herded}" -a "${final}" == "${left}"
+	fi
+	fStopOurs "${appPid}"; appPid=""
+}
+fDanceBare back
+fDanceBare moved
+fDanceBare resized
+
 if ((failures)); then echo "${failures} failed; kept ${work}"; exit 1; fi
 echo "all passed"
 
 ##	History:
 ##		- 20261101 JC: Created.
+##		- 20261101 JC: The cases with no window manager.

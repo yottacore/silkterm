@@ -62,6 +62,7 @@ NOT_TESTS = {
 	"install/stubrun.ps1",
 	"scroll/analyze.py",
 	"scroll/verdict.bash",
+	"soak/heapat.py",
 	"wingui/run.bash",
 }
 NOT_TEST_DIRS = {"fuzz-corpus", "scenes", "target", "__pycache__"}
