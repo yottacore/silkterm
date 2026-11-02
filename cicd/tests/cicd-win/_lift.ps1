@@ -263,7 +263,7 @@ fCheck 'and says nothing of it until the end' ($text -notmatch 'fNote "cleanup: 
 fCheck 'where the cleanup line comes before done' ($text -match '(?m)^\s*fRunDirEnd \$true\s*\r?\n\s*fCleanupLine\s*\r?\n\s*fSection "\$AppName Windows CI/CD: done\."')
 fCheck 'and removes it in its finally block, on a failure too' ($text -match '(?s)\} finally \{\s*##[^\n]*\n\s*fStepClose FAIL\s*\n\s*##[^\n]*\n\s*fRunDirEnd \$script:RunOk')
 fCheck 'and then says the cleanup line, on a failure too' ($text -match '(?m)^\s*fRunDirEnd \$script:RunOk\s*\r?\n\s*fCleanupLine\s*\r?\n\s*try \{ Stop-Transcript')
-fCheck 'which fDie''s exit reaches' ($text -match '(?m)^function fDie .*; exit 1 \}$' -and $text -notmatch 'fTestDir_End 1')
+fCheck 'which fDie''s exit reaches' ($text -match '(?m)^function fDie .*; exit 1 \}\r?$' -and $text -notmatch 'fTestDir_End 1')
 fCheck 'with 2 days for a stale one' ($text -match '(?m)^\$StaleDays = 2\r?$')
 
 ##	The stash before a pull answers with a bare bool, so git's own lines must
