@@ -1864,10 +1864,11 @@ fn ring(rects: &mut Vec<RectInstance>, r: Rect, t: f32, color: [u8; 3]) {
 
 // X11: make the dialog a proper transient modal of the terminal via WM hints -
 // WM_TRANSIENT_FOR (winit has no API for it there; its parent_window means
-// literal X reparenting), plus the EWMH dialog type and the MODAL / SKIP_TASKBAR
-// states. That gives the standard Linux modal behavior (kept off the taskbar,
-// stacked above and raised with its parent, retains focus) without any input
-// tricks. Same throwaway-connection pattern as app::set_blur_behind. No-op off X11.
+// literal X reparenting), plus the EWMH dialog type and the MODAL / SKIP_TASKBAR /
+// SKIP_PAGER states. That gives the standard Linux modal behavior (kept off the
+// taskbar, pager and alt+tab, stacked above and raised with its parent, retains
+// focus) without any input tricks. Same throwaway-connection pattern as
+// app::set_blur_behind. No-op off X11.
 #[cfg(target_os = "linux")]
 fn set_transient_for(window: &Window, parent: Option<&RawWindowHandle>) {
 	use winit::raw_window_handle::HasWindowHandle;
@@ -1893,12 +1894,13 @@ fn set_transient_for(window: &Window, parent: Option<&RawWindowHandle>) {
 	let atom = |name: &[u8]| -> Option<u32> {
 		Some(conn.intern_atom(false, name).ok()?.reply().ok()?.atom)
 	};
-	let (Some(wt), Some(wt_dialog), Some(state), Some(modal), Some(skip)) = (
+	let (Some(wt), Some(wt_dialog), Some(state), Some(modal), Some(skip), Some(skip_pager)) = (
 		atom(b"_NET_WM_WINDOW_TYPE"),
 		atom(b"_NET_WM_WINDOW_TYPE_DIALOG"),
 		atom(b"_NET_WM_STATE"),
 		atom(b"_NET_WM_STATE_MODAL"),
 		atom(b"_NET_WM_STATE_SKIP_TASKBAR"),
+		atom(b"_NET_WM_STATE_SKIP_PAGER"),
 	) else {
 		return;
 	};
@@ -1922,12 +1924,12 @@ fn set_transient_for(window: &Window, parent: Option<&RawWindowHandle>) {
 		xid,
 		state,
 		AtomEnum::ATOM,
-		&[modal, skip],
+		&[modal, skip, skip_pager],
 	);
 
-	// the window is already mapped, so also request the states via the EWMH
-	// client message (action ADD=1, source = application=1) for WMs that only
-	// honor a state change that way rather than a bare property write.
+	// also request the states via the EWMH client message (action ADD=1, source
+	// = application=1), for a WM that has already taken the window and only
+	// honors a state change that way rather than a bare property write.
 	let add_state = |st: u32| {
 		let ev = ClientMessageEvent::new(32, xid, state, [1, st, 0, 1, 0]);
 		let _ = conn.send_event(
@@ -1939,7 +1941,13 @@ fn set_transient_for(window: &Window, parent: Option<&RawWindowHandle>) {
 	};
 	add_state(modal);
 	add_state(skip);
-	let _ = conn.flush();
+	add_state(skip_pager);
+	// A round trip, not just a flush: winit maps the window on its own
+	// connection, and the server owes no order between two clients. A map read
+	// first comes up as a plain window.
+	if let Ok(cookie) = conn.get_input_focus() {
+		let _ = cookie.reply();
+	}
 }
 #[cfg(not(target_os = "linux"))]
 fn set_transient_for(_window: &Window, _parent: Option<&RawWindowHandle>) {}

@@ -954,6 +954,9 @@ fScriptTests(){
 	## Under xfwm4 that window goes back where it was, too. Exit 3 is a skip: no
 	## binary, sway, Xwayland, xfwm4 or xdotool.
 	fRunTest_MaySkip cicd/tests/herdback/run.bash "window place after a monitor wakes"
+	## Under xfwm4 Settings stays above the terminal, as its modal, and off the
+	## taskbar and pager. Exit 3 is a skip: no binary, xfwm4, xdotool or xprop.
+	fRunTest_MaySkip cicd/tests/dlgtie/run.bash "Settings tied to its window"
 	## On native Wayland a window takes each output's own size once moved or
 	## dropped there, a sliver left on another output too. Exit 3 is a skip: no
 	## binary, sway, python3 or software Vulkan.

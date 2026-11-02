@@ -506,10 +506,13 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - Regression: On Linux, the settings dialog is detached from the main window, and is its own alt+tab target
 	- ID: 2026103010083402
 	- Type: Bug
-	- Status: Queued
+	- Status: Waiting on UAT
+		- Open Settings from a release build on the desktop, under xfwm4 and under Compiz. It should make one taskbar button, one pager entry and one alt+tab entry, and stay above the terminal when the terminal is clicked or raised.
+	- Needs hand testing: the above, on the real desktop.
 	- Opened: 20261030-100834
 	- Opened by: JC
 	- Assigned to: CC
+	- Related IDs: 2026110118260314
 	- Target OS: Linux
 	- Expected behavior:
 		- Settings should always be on top of the main window, never able to be behind it.
@@ -518,6 +521,31 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Notes:
 		- Pre-next-cut.
 		- Need a test case for this to make sure it doesn't keep coming back.
+	- Reproduced: In part, 20261101, on X11 under xfwm4 4.20 and Compiz 0.8.18 with a debug build. The pager showed 2 entries. The taskbar showed 1, and the dialog stayed above the terminal through a click, a raise, and another window in front.
+	- Possible cause:
+		- Pager: the dialog never asked to skip the pager. Its hints went in 20260702 and 20260703 with skip taskbar only, so that part was never right rather than a regression.
+		- Taskbar and stacking: no change to the hints or to how the dialog is created since 20260704, apart from moving code. A plain window, as reported, is what the dialog becomes when its hints miss the map. They were written on a second X connection with only a flush, and the server owes no order between two clients, so a fast open could map first.
+		- On Wayland the dialog is a window of its own by design, since winit has no parent there. That is 2026110118260314.
+	- Actual fix: The dialog skips the pager too, and its hints are confirmed with the server before the window is mapped.
+	- Decisions:
+		- 20261101: The round trip goes in although the race wasn't caught in the act. It costs one request when a dialog opens, and makes the hints' order certain.
+	- Verified: 20261101. dlgtie passed after the fix, failed before it on the pager check only, and failed 6 checks with the hints left out, the raise among them.
+		- Swept: the other dialogs share the same window code, so About, the notices and the questions get the pager hint too. `restack_parent_below` only sends one message and needs no reply.
+	- Branch: rnd1101b
+	- Test case: `cicd/tests/dlgtie/run.bash` (der6f).
+
+- Wayland: Settings isn't tied to the terminal window
+	- ID: 2026110118260314
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261101-182603
+	- Opened by: CC
+	- Related IDs: 2026103010083402
+	- Target OS: Linux
+	- Incorrect behavior: On native Wayland Settings and About are toplevels of their own, with their own taskbar and alt+tab entries, and can go behind the terminal.
+	- Expected behavior: The same as on X11, per 2026103010083402.
+	- Possible cause: winit 0.30 has no parent for a Wayland window. xdg-shell has `set_parent` for this, so it needs a winit change or a call on the raw surface.
 
 - The Mac CI doesn't name a test that failed when its output splits the result line
 	- ID: 2026102822262458
