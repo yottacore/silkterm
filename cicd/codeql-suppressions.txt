@@ -2,3 +2,11 @@
 # item that fixes it. One per line: <rule id> <path glob> <item ID>, the path
 # as the SARIF has it (source/..., vendor/<crate>-<version>/...). Keep the glob
 # as narrow as the cause.
+# An optional fourth field is a regex that every value the result's message
+# links, such as a flow's source, must match in full. A flow that also starts
+# from something else still fails the run.
+
+# CFF's UidBase and Mach-O's Uuid read as user IDs. Their flows go through std's
+# generic code, such as clone, iterators and parse, without telling types apart,
+# so they reach every assert and eprintln.
+rust/cleartext-logging source/* 2026110315303525 \.\.\.::(UidBase|Uuid)\(\.\.\.\)

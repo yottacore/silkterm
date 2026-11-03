@@ -60,8 +60,9 @@ fEcho_Clean "vendoring the dependencies ..."
 ## the copies offline. --quiet would drop that too.
 (cd "${src}" && cargo vendor --locked --versioned-dirs vendor >>.cargo/config.toml 2>"${work}/vendor.log") \
 	|| { cat "${work}/vendor.log" >&2; fDie "cargo vendor failed"; }
-## What a release binary links for the target, as vendor's folder names.
-(cd "${src}" && cargo tree --offline --locked -e normal --target "${target}" -p "${EXE_NAME}" --prefix none -f '{p}') \
+## What a release binary links for the target, as vendor's folder names. A proc
+## macro's own dependencies, such as syn, run only at build time.
+(cd "${src}" && cargo tree --offline --locked -e normal,no-proc-macro --target "${target}" -p "${EXE_NAME}" --prefix none -f '{p}') \
 	| awk '$3 !~ /^\(\// && !/\(proc-macro\)/ { sub(/^v/, "", $2); print $1 "-" $2 }' | sort -u >"${work}/release-crates.txt"
 [[ -s "${work}/release-crates.txt" ]] || fDie "cargo tree named no crates"
 
@@ -89,15 +90,20 @@ codeql database analyze "${db}" "${CODEQL_SUITE}" --format=sarif-latest --output
 ## the kept ones not suppressed are what fails the run.
 rc=0
 python3 - "${raw}" "${sarif}" "${work}/release-crates.txt" "${root}/${CODEQL_SUPPRESSIONS}" <<'EOF' || rc=$?
-import fnmatch, json, sys
+import fnmatch, json, re, sys
 raw, out, crates, supp = sys.argv[1:5]
 release = {line.strip() for line in open(crates) if line.strip()}
 rules = []
 for line in open(supp):
 	line = line.strip()
 	if line and not line.startswith("#"):
-		rule, glob, item = line.split()
-		rules.append((rule, glob, item))
+		rule, glob, item, *names = line.split(None, 3)
+		rules.append((rule, glob, item, re.compile(names[0]) if names else None))
+## A flow's message links what it starts from, such as [password](1). A rule with
+## a pattern lets the result through only when every one of those matches it.
+def sources_match(pat, text):
+	links = re.findall(r"\[([^\]]*)\]\(\d+\)", text)
+	return pat is None or (links and all(pat.fullmatch(n) for n in links))
 doc = json.load(open(raw))
 failed = 0
 for run in doc["runs"]:
@@ -112,7 +118,8 @@ for run in doc["runs"]:
 			continue
 		kept.append(res)
 		line = loc.get("region", {}).get("startLine", 0)
-		hit = next((r for r in rules if r[0] == res["ruleId"] and fnmatch.fnmatch(path, r[1])), None)
+		hit = next((r for r in rules if r[0] == res["ruleId"] and fnmatch.fnmatch(path, r[1])
+			and sources_match(r[3], res["message"]["text"])), None)
 		tag = f"known, {hit[2]}" if hit else "NEW"
 		failed += hit is None
 		print(f"    {tag}: {res['ruleId']} {path}:{line}: {res['message']['text'][:160]}")
@@ -127,3 +134,4 @@ fEcho "OK: no new CodeQL results ($((SECONDS - start))s)"
 ##	History:
 ##		- 20261022 JC: Created.
 ##		- 20261026 JC: Jobs and priority from include/jobs.bash.
+##		- 20261103 JC: Proc macros' own deps left out; a suppression can name a flow's sources.

@@ -720,7 +720,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - Leak checks: CodeQL watched to fail, and its first findings filed
 	- ID: 2026102211462005
 	- Type: Task
-	- Status: Queued
+	- Status: Started
 	- Priority: Avg
 	- Opened: 20261022-114620
 	- Opened by: CC
@@ -732,6 +732,87 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Note the step's measured time on 2026102211461905. If it's too slow for every full run, say so there rather than moving it.
 		- 20261022: The first try didn't finish in 35 minutes (see 2026102211461905). Options: a per-query `--timeout` that fails the step, the smaller `rust-code-scanning` suite, a memory cap with `--ram`, or the step behind `--leakcheck` only. Pick after one full measured run.
 		- 20261022: The step is opt-in until this item decides: run it with `cicd.bash --codeql`. It will be red until the findings are filed and suppressed here. Turning it on by default is part of closing this item.
+	- Progress log:
+		- 20261103: The first full measured run, at 595a542 in the image, took about 65 minutes and failed on 1024 results, as it should with nothing filed. That is red on real findings; the planted one is child 2026110315304782.
+		- 20261103: The release crate list let in what only proc macros use, such as syn, litrs and quote, about 210 results. It now leaves them out, 186 crates.
+		- 20261103: A suppression can name the values a flow starts from, so a rule for a false flow doesn't hide a real one at the same path.
+		- 20261103: Split in 5. 2026110315303525, our code's results, is done. 2026110315303530, 35 and 41 are the third-party roll-ups. 2026110315304782 plants a finding and checks the run is green otherwise. This item closes when they do.
+	- Decisions:
+		- 20261103: CodeQL stays out of the default run, under `--long`, `--leakcheck` and `--codeql`, against this item's "on by default". It takes about 65 minutes alone, and the default run has to fit in about an hour, per the 2026-10-24 reset and 2026102616543936. The smaller suite or a timeout would drop the quality queries the parent asked for.
+	- Branch: rnd1103
+	- Test case: dd5nn `cicd/tests/engine/run.bash`, 5 new checks, and its children's.
+
+- CodeQL: our code's cleartext-logging results are one false flow
+	- ID: 2026110315303525
+	- Type: Task
+	- Status: Done
+	- Priority: Avg
+	- Opened: 20261103-153035
+	- Opened by: CC
+	- Parent ID: 2026102211462005
+	- Requirements:
+		- All 165 results in `source/` were `rust/cleartext-logging`, on asserts, `eprintln!` and a build script warning. Fix a real one, suppress a false one with a reason.
+	- Progress log:
+		- 20261103: Every one starts from `UidBase`, a CFF dict entry in read-fonts, or `Uuid`, a Mach-O load command in object. CodeQL reads both names as user IDs. Their flows go through std's generic code, such as `clone`, iterators and `parse`, as if all types were one, and reach any format call. One into `main.rs` passes through regex and an ARM code generator on the way. None logs anything private.
+		- 20261103: Suppressed by rule, `source/*`, and those 2 sources, so a flow from anything else in our code still fails.
+	- Decisions:
+		- 20261103: One suppression, not one per file, since it's one cause.
+	- Verified: 20261103. The step's filter over the first run's SARIF: 0 results left in our code, 165 known, 646 new in third-party code. The engine test passed, and its new checks failed against the old codeql.bash.
+	- Branch: rnd1103
+	- Test case: dd5nn `cicd/tests/engine/run.bash`: a suppression with sources lets that flow through, and not one that also starts from a password.
+	- Closed: 20261103-153630
+
+- CodeQL: unused variables in third-party crates, a roll-up
+	- ID: 2026110315303530
+	- Type: Task
+	- Status: Queued
+	- Priority: Avg
+	- Opened: 20261103-153035
+	- Opened by: CC
+	- Parent ID: 2026102211462005
+	- Estimated effort: Low
+	- Requirements:
+		- About 270 `rust/unused-variable` results in release crates on 20261103, most in wgpu-hal (144) and base64 (41), then rustix, jiff, winit, read-fonts, naga, glow and a few more.
+		- Check a sample for a cfg the extractor didn't see, or a pattern read as a variable. Suppress per crate with this ID.
+
+- CodeQL: pointer lifetime results in ash, lru and other crates
+	- ID: 2026110315303535
+	- Type: Task
+	- Status: Queued
+	- Priority: Avg
+	- Opened: 20261103-153035
+	- Opened by: CC
+	- Parent ID: 2026102211462005
+	- Requirements:
+		- About 290 `rust/access-invalid-pointer` and `rust/access-after-lifetime-ended` results on 20261103: 216 in ash, 41 in lru, then lock_api, rustix, parking_lot_core, ordered-float, hashbrown, smol_str and others.
+		- Read the ash and lru ones first. A real one gets its own Bug and an upstream draft. The rest are suppressed per crate with this ID.
+
+- CodeQL: taint flows in third-party crates from an X11 read and libc fields
+	- ID: 2026110315303541
+	- Type: Task
+	- Status: Queued
+	- Priority: Avg
+	- Opened: 20261103-153035
+	- Opened by: CC
+	- Parent ID: 2026102211462005
+	- Requirements:
+		- About 85 results on 20261103. `rust/cleartext-logging` in naga, x11rb, wgpu-hal, alacritty_terminal, cosmic-text and others, from the same `UidBase` and `Uuid` and from libc fields such as `nm_uid`.
+		- `rust/log-injection`, `rust/regex-injection` and `rust/uncontrolled-allocation-size`, all from one X11 socket read in x11rb, into wgpu-hal, naga, regex and allocator-api2.
+		- Suppress the false flows by their sources, the way 2026110315303525 did. A real one gets its own Bug.
+
+- CodeQL: watched to fail on a planted finding, and green otherwise
+	- ID: 2026110315304782
+	- Type: Task
+	- Status: Queued
+	- Needs local test suite run?: the CodeQL step twice in the image, about 65 minutes each: once on a scratch copy with an unused variable in `main`, which must fail on it, and once as is, which must pass.
+	- Priority: Avg
+	- Opened: 20261103-153047
+	- Opened by: CC
+	- Parent ID: 2026102211462005
+	- Prereq IDs: 2026110315303530, 2026110315303535, 2026110315303541
+	- Requirements:
+		- The parent's planted finding.
+		- Note the time of the clean run on 2026102211461905.
 
 - dct7r's check that a passing run leaves no local run folder failed once in the container
 	- ID: 2026110222113195
@@ -5460,6 +5541,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261022: Opt-in for now: `--codeql` adds the step to the leak checks, so it needs them on too, and `--gate` refuses it. A default full run leaves it out, so the run stays green and short until 2026102211462005 settles its cost and files what it finds.
 		- 20261022: Measured here, it's slow. The database takes about 5 to 6 minutes. The analysis ran 35 minutes at 8 threads and about 19 GB of memory without finishing, and was stopped: 39 of 41 queries done, `rust/cleartext-logging` (CWE-312) and the summary stats still running. So the step can add well over half an hour to a full run. 2026102211462005 decides whether it goes back in by default.
 		- 20261022: Full runs, container and plain: the plan's Leak checks line reads "CodeQL (off; --codeql adds it)", stage 3 printed "CodeQL off (--codeql adds it)" after the heap-growth test, no "CodeQL database" line, and no `codeql_*.sarif` in `cicd/artifacts/leakcheck/`. The image was built once, by the gate run.
+		- 20261103: The first full measured run, at 595a542 in the image at a load of 8 to 14, took about 65 minutes for the step. That's too slow for every full run, so it stays under `--long` (2026102211462005).
 	- Verified: 20261022. The step in the rebuilt image, as the run's own uid, on a copy of this tree: vendoring, the release crate list (191), and the database with the workspace loaded and nothing fetched, about 6 minutes at 12 threads. Before the extractor's toolchain went in the image, the workspace failed to load and the new check caught it. The image builds with the new layer. New engine cases, each watched to fail against a mutated cicd.bash. shellcheck, house style.
 	- Test case: New cases in `cicd/tests/engine/run.bash` (dd5nn): where CodeQL runs, that the dhat step hands on to it, and `--codeql`: off by default, on with the flag and carried into the container, refused with `--gate`, and the plan line. Each watched to fail against a mutated cicd.bash. The step itself is watched to fail under 2026102211462005.
 	- Branch: rnd1022
