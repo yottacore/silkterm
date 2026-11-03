@@ -606,16 +606,26 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - Running with `--software-rendering` on vmKt6m still fails with a complaint about no suitable GPU
 	- ID: 2026102807384202
 	- Type: Bug
-	- Status: Queued
+	- Status: Waiting for answers
+		- Waits on the question in questions.md: ship SwiftShader in the Mac app, or keep the alert.
 	- Severity: Avg
 	- Opened: 20261028-073842
 	- Opened by: JC
 	- Target OS: macOS
 	- Test environment: vmKt6m
 	- Incorrect behavior: It still fails with a complaint about no suitable GPU.
+	- Reproduced: 20261103 on vmKt6m, launched in the console session. stderr had the no-Metal words, and the alert was up.
+	- Actual cause:
+		- The Mac build has only wgpu's Metal backend, so `--software-rendering` there is refused with a line on stderr, and the launch goes on to look for a card. With no Metal device there's none, per 2026102209035801.
 	- Related IDs: 2026102209035801
 	- Notes:
 		- Pre-next-cut.
+	- Progress log:
+		- 20261103: Tried on vmKt6m. wgpu's GL backend through ANGLE found nothing, since LibreWolf's ANGLE is Metal only, and Chrome and Brave link theirs in. SwiftShader's Vulkan driver, as Chrome ships it, gave a CPU device once wgpu's `vulkan-portability` feature was on. SilkTerm came up on it and started its shells, but every frame was dropped, since the Metal layer it draws to has no device to give a picture with.
+		- 20261103: So a fix needs the libraries in the Mac app and a second way to show a frame, drawn off screen and copied back. That's too big for one pass. It gets split once the question is answered.
+		- 20261103: Nothing changed in the code.
+	- Test case: none yet. Waits on the answer.
+	- Branch: rnd1103
 
 - The unscrollable search and buttons areas should be lighter than the scrollable content
 	- ID: 2026103010083403
