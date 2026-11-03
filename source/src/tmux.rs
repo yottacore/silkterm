@@ -274,19 +274,27 @@ fn command(tmux: &Path) -> Command {
 }
 
 // Runs `cmd` to its end, or gives up on it after ASK_FOR.
-fn run(mut cmd: Command) -> Option<std::process::Output> {
-	let mut child = cmd.spawn().ok()?;
-	let until = Instant::now() + ASK_FOR;
+fn run(cmd: Command) -> Option<std::process::Output> {
+	ask(cmd, ASK_FOR).ok()
+}
+
+// The same with its own wait, and why it came back with nothing.
+fn ask(mut cmd: Command, wait: Duration) -> Result<std::process::Output, String> {
+	let mut child = cmd.spawn().map_err(|e| format!("didn't start: {e}"))?;
+	let until = Instant::now() + wait;
 	loop {
-		match child.try_wait() {
-			Ok(Some(_)) => return child.wait_with_output().ok(),
-			Ok(None) if Instant::now() < until => std::thread::sleep(Duration::from_millis(2)),
-			_ => {
-				let _ = child.kill();
-				let _ = child.wait();
-				return None;
+		let gave_up = match child.try_wait() {
+			Ok(Some(_)) => return child.wait_with_output().map_err(|e| e.to_string()),
+			Ok(None) if Instant::now() < until => {
+				std::thread::sleep(Duration::from_millis(2));
+				continue;
 			}
-		}
+			Ok(None) => format!("no answer in {wait:?}"),
+			Err(e) => e.to_string(),
+		};
+		let _ = child.kill();
+		let _ = child.wait();
+		return Err(gave_up);
 	}
 }
 
@@ -447,6 +455,12 @@ mod tests {
 		dir.join("sock")
 	}
 
+	// The test's own setup and cleanup aren't what it tests, so they aren't held
+	// to ASK_FOR. On vmKt6m a first new-session takes about 40 ms in the whole
+	// suite, yet once didn't answer in time (2026110313290006).
+	#[cfg(unix)]
+	const SETUP_WAIT: Duration = Duration::from_secs(10);
+
 	// The test's tmux server goes when the test ends, even when an assert fails.
 	// It's killed only when it says it's on the test's socket.
 	#[cfg(unix)]
@@ -491,8 +505,14 @@ mod tests {
 		TEST_SOCKET.with(|d| *d.borrow_mut() = Some(sock));
 		let tmux_cmd = |args: &[&str]| {
 			let mut cmd = command(&tmux);
-			cmd.args(args);
-			run(cmd)
+			cmd.args(args).stderr(Stdio::piped());
+			let asked = Instant::now();
+			let said = ask(cmd, SETUP_WAIT);
+			if asked.elapsed() > ASK_FOR {
+				eprintln!("tmux {} took {:?}", args[0], asked.elapsed());
+			}
+			said.map_err(|why| eprintln!("tmux {}: {why}", args[0]))
+				.ok()
 		};
 		let _server = Server(&tmux_cmd);
 		let ours = Session {
@@ -503,7 +523,14 @@ mod tests {
 		let ours = Session { name, ..ours };
 		for name in [ours.name.as_str(), "silk-test_1-more", "theirs"] {
 			let made = tmux_cmd(&["new-session", "-d", "-s", name, "-c", "/", "sleep 60"]);
-			assert!(made.is_some_and(|out| out.status.success()), "{name}");
+			assert!(
+				made.as_ref().is_some_and(|out| out.status.success()),
+				"{name}: {:?}",
+				made.map(|out| (
+					out.status,
+					String::from_utf8_lossy(&out.stderr).into_owned()
+				))
+			);
 		}
 		assert!(has_session(&tmux, &ours.name));
 		assert!(

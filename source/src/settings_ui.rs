@@ -6516,11 +6516,35 @@ mod tests {
 			max_h * scale,
 			scale,
 		);
-		// the rows a profile governs answer with its values while one is chosen;
-		// the tests below drive the rows themselves, so they start from Custom
+		at_defaults(&mut d);
+		d
+	}
+	// Test ID: detqs
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_test_dialog_opens_on_the_shipped_values_whatever_the_config_holds() {
+		let _store = config::test_store_lock();
+		let saved = config::settings();
+		// not the tmux switch, which a split in another test would act on
+		let mut tuned = (*saved).clone();
+		tuned.idle_release_hidden_min += 6;
+		config::update(tuned);
+		let (d, line) = (mk_dialog(4000.0), mk_dialog_line(19.0));
+		config::update((*saved).clone());
+		let shipped = super::Settings::default().idle_release_hidden_min;
+		for d in [&d, &line] {
+			assert_eq!(d.orig.idle_release_hidden_min, shipped);
+			assert_eq!(d.edited.idle_release_hidden_min, shipped);
+		}
+	}
+	// The dialog opens on the live config (G6), so a tuned value there showed up
+	// in a tip or a toggle. The tests start from the shipped values instead. The
+	// rows a profile governs answer with its values while one is chosen; the
+	// tests drive the rows themselves, so they start from Custom.
+	fn at_defaults(d: &mut SettingsDialog) {
+		d.start_from(d.defaults.clone());
 		d.orig.performance_profile = crate::profile::Profile::Custom;
 		d.edited.performance_profile = crate::profile::Profile::Custom;
-		d
 	}
 
 	// A scale change is a boundary change and nothing else. The layout is solved
@@ -11928,6 +11952,7 @@ mod tests {
 		assert_ne!(derived, mine.0, "the derived text color should be live");
 
 		let mut d = mk_dialog(4000.0);
+		d.start_from((*config::settings()).clone());
 		assert_eq!(d.edited.fg, derived, "the row shows the color in use");
 		assert!(!d.disabled(Key::ColFg) && !d.disabled(Key::ColCursor));
 		let i = d.specs.iter().position(|s| s.key == Key::ColFg).unwrap();
@@ -11968,8 +11993,7 @@ mod tests {
 			4000.0,
 			1.0,
 		);
-		d.orig.performance_profile = crate::profile::Profile::Custom;
-		d.edited.performance_profile = crate::profile::Profile::Custom;
+		at_defaults(&mut d);
 		d
 	}
 

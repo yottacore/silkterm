@@ -37,7 +37,8 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - The tmux end test fails in the whole suite on vmKt6m, and passes alone there
 	- ID: 2026110313290006
 	- Type: Bug
-	- Status: Queued
+	- Status: Waiting on automated testing
+	- Needs external testing: The private runner's Mac job on vmKt6m with tests, 3 times. de30d passes each time. A fail now says whether tmux didn't answer in time, didn't start, or said no, with its message.
 	- Severity: Avg
 	- Opened: 20261103-132900
 	- Opened by: CC
@@ -49,6 +50,18 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Expected behavior: It passes, or skips when there is no tmux.
 	- Reproduced: 20261103, once in the whole suite. Control: alone on the same build it passed 3 of 3, and 5 of 5 with 12 busy loops on the VM's 8 cores (load about 7).
 	- Possible cause: Unmeasured. `run` gives a tmux call 800 ms (ASK_FOR), and the first `new-session` also starts the server, during the suite's process churn. Or another test reaching the same server.
+	- Progress log:
+		- 20261103: Measured in the whole suite on vmKt6m, 3 runs, all passed: the first `new-session` takes 35 to 47 ms, at 8 and 16 test threads and with 12 busy loops (guest load 27), and the others about 15 ms. On b23 it's 6 to 13 ms. So a fail at 800 ms is a stall of 20 times that or more, not the usual cost.
+		- 20261103: Ruled out: another test on the same server, since only this test sets its socket, per thread, in its own run folder, and every other ask goes to `/dev/null/no-tmux`. A stale socket folder, since there's none in `/tmp`, and the failing run's folder had no `tmuxend` left in it.
+		- 20261103: Still open: what stalled. The guest can stall that long. While it was loaded, an ssh to it timed out in the banner exchange after 20 s. A spawn that failed for the 256 open files a Mac allows is the other candidate, and the new message would tell it apart.
+	- Decisions:
+		- 20261103: The test's own setup and cleanup calls get 10 s, not ASK_FOR, since they aren't what it tests. The asks it does test, `has_session`, `current_path` and `end`, keep the app's 800 ms. Its message gives what tmux said or why there was no answer, and a setup call past 800 ms is noted in its output.
+		- 20261103: `run` is now `ask` with ASK_FOR, and `ask` says why it came back empty. Nothing changes for the app.
+	- Actual fix: A workaround, since the stall isn't explained: the test's setup waits up to 10 s, and a fail says why.
+	- Verified: 20261103. With the first `new-session` held 1.2 s, de30d failed at it with "silk-test_1" under the old wait, as on vmKt6m, and passes now. The quick gate, clippy for Windows and the test ID check pass.
+	- Swept: every `run` caller in tmux.rs. de541 asks with no socket and expects no answer, so it passes either way. No other test starts a tmux server.
+	- Test case: `ending_kills_the_session_started_and_no_other` (de30d).
+	- Branch: rnd1103
 
 - The window doesn't paint while the GPU is busy or short on memory, and stays blank after the load ends
 	- ID: 2026100312470535
@@ -745,7 +758,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - The tmux rows test fails when the live config turns tmux sessions on
 	- ID: 2026110219042107
 	- Type: Bug
-	- Status: Queued
+	- Status: Done
 	- Severity: Low
 	- Opened: 20261102-190421
 	- Opened by: CC
@@ -754,6 +767,16 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Incorrect behavior: it fails at settings_ui.rs:13044. The tip has "Current value: On" and "Default value: Off" after the no-tmux text, since the value isn't the default.
 	- Expected behavior: the test gives the same answer whatever the live config holds.
 	- Possible cause: the test reads the live user config (G6), and doesn't pin the setting.
+	- Reproduced: 20261103, with a config holding that switch on, de30r failed with the two value lines. With the idle wait when hidden off its default as well, ddkgx failed the same way.
+	- Actual cause: Every settings_ui test helper opened the dialog on the live config, so a value off its default there added the value lines to a tip, or changed what a toggle started at.
+	- Actual fix: The two dialog helpers in the tests start from the shipped values. The one test that sets the live settings on purpose, dcww4, opens the dialog on them itself.
+	- Decisions:
+		- 20261103: Fixed in the helpers, not in de30r alone, so a new test can't pick up the live config by accident. The tests that already reset to the defaults keep doing so.
+	- Verified: 20261103. The 204 settings_ui tests, detqs among them, pass with no config, and with a config that sets 13 values, most of them off their defaults. Before, that config failed de30r and ddkgx. detqs fails with the helpers on the live config and passes now. The quick gate passes.
+	- Swept: every `SettingsDialog::new` in the tests. The other 7 pass under that config too.
+	- Test case: `a_test_dialog_opens_on_the_shipped_values_whatever_the_config_holds` (detqs). de30r and ddkgx under any config.
+	- Branch: rnd1103
+	- Closed: 20261103-141323
 
 - Wayland: Settings isn't tied to the terminal window
 	- ID: 2026110118260314
