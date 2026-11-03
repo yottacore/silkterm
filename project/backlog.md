@@ -715,7 +715,9 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - Text underlines aren't drawn
 	- ID: 2026102511131401
 	- Type: Bug
-	- Status: Queued
+	- Status: Waiting on UAT
+		- 20261102: Look at each style from the repro line, with `4:2` for double, and at spell checking in vim or Neovim, on the real desktop. The curl's height and the dot and dash spacing are first picks.
+	- Needs hand testing: The look of the curly, dotted and dashed underlines, and the strike-through's height, in a light and a dark theme.
 	- Severity: Avg
 	- Opened: 20261025-111314
 	- Opened by: CC
@@ -728,6 +730,40 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Incorrect behavior: No underline under any of them. The drawing code reads no underline flag from the engine, so plain, double, curly, dotted and dashed underlines all show as plain text. The link hover underline is SilkTerm's own and works.
 	- Expected behavior: Each underline style a program sets is drawn, in the underline color it sets, or the text color.
 	- Reproduced: Not run in a window. Found in the code while answering 2026102114411311.
+	- Actual cause: The cell loop read bold, italic, inverse, hidden and dim from the engine, but no underline or strike flag, so nothing drew either.
+	- Actual effort: Avg
+	- Decisions:
+		- 20261102: SGR 21 stays as the engine reads it, "not bold", as in Alacritty and the Linux console. Double underline is `4:2`, which is what terminfo's `Smulx` and Neovim send. xterm and GNOME Terminal draw 21 as a double underline; that part is in child 2026110220554102.
+		- 20261102: Strike-through (SGR 9) is drawn too. It was missing the same way and goes through the same code.
+		- 20261102: An underline color the program sets gets the same contrast lift as the text, so a red curl on a dark red background still shows.
+		- 20261102: The lines sit where the link underline does, inside the cell, so none draws into the row below. They draw over the text scrim and under the text, like the link underline.
+	- Actual fix:
+		- Plain, double, curly, dotted and dashed underlines are drawn under their run of cells, in the color set with SGR 58, or else the text color. Concealed text draws none.
+		- Curly, dotted and dashed are drawn by the quad shader, so a run is one quad and the pattern runs on across cells.
+		- An app's scroll slide carries them along with the rows it reveals.
+	- Swept: Every place cells are styled for drawing: the pane's cell loop and the scrolled-off strip. The link underline now takes its place from the same helper. The minimap draws no lines, left as is. Engine flags now read: all five underline styles, the underline color, strike-through and hidden.
+	- Verified: 20261102, the backlog quick run (fmt, clippy, tests, scripts, docs), and every style seen drawn in a window, with SGR 58 colors in both its forms.
+	- Branch: rnd1102
+	- Commit: 87f070f
+	- Test case: `each_underline_style_lines_its_own_cells` (desqy), which fails with the style read taken out, and `the_rules_stay_inside_their_cells` (desqz). `each_quad_mode_reaches_its_own_branch_of_the_shader` (ddj83) covers the 2 new shader modes.
+
+- SGR 21 turns bold off instead of drawing a double underline
+	- ID: 2026110220554102
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261102-205541
+	- Opened by: CC
+	- Parent ID: 2026102511131401
+	- Target OS: All
+	- Steps to reproduce:
+		- In SilkTerm, run `printf '\e[21mdouble\e[0m\n'`.
+	- Incorrect behavior: No underline. 21 also turns bold off.
+	- Expected behavior: A double underline, as ECMA-48, xterm and GNOME Terminal have it.
+	- Reproduced: Yes, 20261102, on b23: drawn with no line.
+	- Actual cause: vte 0.15, the engine's parser, reads 21 as "cancel bold", as Alacritty and the Linux console do.
+	- Notes:
+		- 20261102: A fix needs a patched vte, beside the engine fork that's already patched in. Or leave it, since programs reach double underline through `4:2`.
 
 - The unscrollable search and buttons areas should be lighter than the scrollable content
 	- ID: 2026103010083403
