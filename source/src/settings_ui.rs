@@ -1670,7 +1670,9 @@ impl SettingsDialog {
 				| QuadMode::CloseMark
 				| QuadMode::Rounded
 				| QuadMode::PickSquare
-				| QuadMode::HueStrip => quad.params[1] = self.to_px(quad.params[1]),
+				| QuadMode::HueStrip
+				| QuadMode::Curl
+				| QuadMode::Dashes => quad.params[1] = self.to_px(quad.params[1]),
 			}
 		}
 	}
