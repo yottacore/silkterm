@@ -144,6 +144,21 @@ TSAN_DIR="tsan-${SANITIZER_TOOLCHAIN#nightly-}"
 TSAN_CMD=(env "CARGO_TARGET_DIR=${TARGET_DIR}/${TSAN_DIR}" "RUSTFLAGS=-Zsanitizer=thread -Cforce-frame-pointers=yes --cfg silk_tsan" cargo "+${SANITIZER_TOOLCHAIN}" test -Zbuild-std --target x86_64-unknown-linux-gnu --tests --no-fail-fast)
 ## Races TSan lets through, each with the backlog item that fixes it.
 TSAN_SUPPRESSIONS="cicd/tsan-suppressions.txt"
+## Stage 3: the test suite under Miri, for undefined behavior in unsafe code, ours
+## and the dependencies', and memory still allocated at exit. The same nightly,
+## with the miri component, which only the image has. A test that takes over 60 s
+## of CPU under Miri is ignored there as too slow, and still the rest takes hours,
+## so it runs only under --leakcheck or --long, and --no-miri skips it there;
+## empty () disables it. Isolation is off, since the tests read the clock and the
+## test folder. cargo miri builds into miri/ under the target dir, and Miri's
+## sysroot goes in there too, so one dir named for the nightly holds both.
+## The sysroot's path is absolute, since cargo runs each test binary from its
+## crate's dir.
+MIRI_DIR="miri-${SANITIZER_TOOLCHAIN#nightly-}"
+MIRI_SYSROOT_DIR="${TARGET_DIR}/${MIRI_DIR}/miri/sysroot"
+[[ "${MIRI_SYSROOT_DIR}" == /* ]] || MIRI_SYSROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/${MIRI_SYSROOT_DIR}"
+MIRI_ENV=("CARGO_TARGET_DIR=${TARGET_DIR}/${MIRI_DIR}" "MIRI_SYSROOT=${MIRI_SYSROOT_DIR}" "MIRIFLAGS=-Zmiri-disable-isolation")
+MIRI_CMD=(env "${MIRI_ENV[@]}" cargo "+${SANITIZER_TOOLCHAIN}" miri test --tests --no-fail-fast)
 
 ## Stage 3: the leak checks, after the ASan run. On by default, --quick too, and
 ## --no-leakcheck drops them. Any report fails the run.
@@ -290,7 +305,7 @@ CLEANUP_INCREMENTAL_DAYS=7
 CLEANUP_BUILD_DIRS=(debug release "${PROFILE_PROFILE}" lint)
 ## The same for the dirs the pinned nightly builds into, which only a nightly bump
 ## makes stale.
-CLEANUP_NIGHTLY_DIRS=("${ASAN_DIR}" "${TSAN_DIR}")
+CLEANUP_NIGHTLY_DIRS=("${ASAN_DIR}" "${TSAN_DIR}" "${MIRI_DIR}/miri")
 ## At the end of a run a cache over this many MB is emptied whole: the container's
 ## cache volumes, and a Zig cache in the tree. A Zig cache is also emptied when
 ## another Zig version filled it. Zig's global cache on this box is never touched.
@@ -364,8 +379,9 @@ GIT_PUBLISH=(cicd/utility/n8git_backup-and-publish)
 ## backup from the 09-15 history rewrite. source/target and the clipboard-race
 ## test crate's target are stray lint and test builds, and target/darwin is a
 ## macOS type check. target/container is what a --container run builds, a second
-## copy of all of it, and target/asan-* and target/tsan-* the test builds under
-## the sanitizers. A new scratch dir under target/ needs a line here.
+## copy of all of it, and target/asan-*, target/tsan-* and target/miri-* the test
+## builds under the sanitizers and Miri. A new scratch dir under target/ needs a
+## line here.
 ##
 ## The wallpaper originals (about 350 MB) and duplicates (80 MB) sit behind the
 ## private/wallpaper/source symlink, which rar follows. The originals are the
@@ -382,6 +398,7 @@ export GIT_BACKUP_AND_PUBLISH_RAR_EXCLUDES='*/forks
 */target/container
 */target/asan-*
 */target/tsan-*
+*/target/miri-*
 */target/lightnew
 */target/lightold
 */target/mapopt

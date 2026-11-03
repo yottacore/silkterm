@@ -154,6 +154,12 @@ RUN apt-get update \
 	&& apt-get install -y --no-install-recommends "heaptrack=${HEAPTRACK_VER}" "libheaptrack=${HEAPTRACK_VER}" \
 	&& rm -rf /var/lib/apt/lists/*
 
+# Miri on the same nightly, for the Miri step (cicd/utility/miri.bash). The step
+# builds Miri's sysroot under target/ from the rust-src above, since a run can't
+# write here. Late too, so adding it didn't rebuild CodeQL.
+RUN : "${RUST_NIGHTLY:?}" \
+	&& /opt/cargo/bin/rustup component add --toolchain "${RUST_NIGHTLY}" miri
+
 # The run drops to the caller's uid once it has a passwd entry (cicd.bash writes
 # one on the way in). /cache takes the named volume, which copies this dir's mode
 # when new, so anyone can write. The crate registry goes there, so the toolchain

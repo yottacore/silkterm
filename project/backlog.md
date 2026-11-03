@@ -794,7 +794,9 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - Leak checks: the Miri step, with the canary
 	- ID: 2026102320591318
 	- Type: Task
-	- Status: Queued
+	- Status: Waiting on automated testing
+		- Waits on the step's first run over the whole suite, which takes hours.
+	- Needs local test suite run?: the Miri step alone over the whole suite, in the image, hours: `cicd/utility/miri.bash` through the image rig, `in_image.bash miri silkterm-cicd:<tag> cicd/utility/miri.bash` in the private tools folder, with `IN_IMAGE_TMP` set to a run folder and the tag the plan names. Its log should show `PASS debjk`, `PASS de5f0` and "OK: no Miri reports". A report in a crate a release binary links is filed, one item per cause, and one in our code is fixed.
 	- Priority: Avg
 	- Opened: 20261023-205913
 	- Opened by: CC
@@ -807,6 +809,22 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- A `--no-miri` flag, a plan line, and the cleanup and rar exclude lines. New container and engine cases, watched to fail.
 		- Miri runs only when `--leakcheck` is given, and says first that it's very slow. A run with no flags keeps the other leak checks, which stay on by default. Tests over a time bar under Miri, such as 60 s, are ignored under Miri as too slow, so even a `--leakcheck` run takes the fast part (answer on 2026102320591323).
 		- Under `--long` too, not only `--leakcheck`, per the CICD process gaps item 2026102416233812.
+	- Progress log:
+		- 20261102: The image adds the `miri` component on the pinned nightly. `cicd/utility/miri.bash` builds Miri's sysroot, runs the canary's race and leak tests one at a time, then the suite, all under `target/miri-<date>`. It takes cargo test arguments after the suite command, to run a few tests through it.
+		- 20261102: `cicd.bash` runs it after the TSan run, under `--leakcheck` or `--long`, in the image from a run on the host. The plan has a Miri line, and says before the run starts that it's very slow. `--no-miri` skips it, and `--no-leakcheck` drops it with the other leak checks.
+		- 20261102: The cleanup takes the old `target/miri-<date>` on a nightly bump, and the backup leaves `target/miri-*` out. design.md, install.md, build.md and prerequisites.md say so.
+	- Decisions:
+		- 20261102: `--quick --leakcheck` runs it too, as it does CodeQL, since `--leakcheck` is every leak check.
+		- 20261102: The `miri` component goes in a late layer of its own, not on the `rust-src` line, so adding it didn't rebuild the CodeQL layer after it. The heaptrack layer did the same. The image grew about 20 MB.
+		- 20261102: Miri's sysroot goes inside cargo's own `miri/` dir under `target/miri-<date>`, so the cleanup's nightly-dir sweep takes both whole. Its path is absolute, since cargo runs each test binary from its crate's dir.
+		- 20261102: The suite runs with `--no-fail-fast`, so a report that stops one test binary still lets the others run, and the step lists every report.
+		- 20261102: The canary's PASS lines reuse its tests' IDs, debjk for the race and de5f0 for the leak, as the ASan and TSan steps do.
+	- Verified: 20261102. In the image at d47751450835, `miri.bash -p knobs -- a_bad_spec_names_every_mistake` printed `PASS debjk Miri canary race caught` and `PASS de5f0 Miri canary leak caught`, then "OK: no Miri reports (1 passed, 0 failed, 0 ignored, 4s)". Pointed at the canary crate as its suite, it stopped on the race's data race report. With `-Zmiri-ignore-leaks` the leak canary printed `FAIL de5f0` and stopped the step.
+	- Verified: 20261102. The engine test passed with 225 checks, and its 24 new checks and the changed one failed against the old cicd.bash and config.bash. The container test passed with 198 checks. Against the old files it failed its 2 new recipe and `--no-miri` checks, then stopped outright at the missing step. The cleanup test passed. `cicd/cicd.bash --backlog-run-quick`, all five areas, passed. shellcheck and the bash style check are clean.
+		- Swept: every reader of the sanitizer steps' places in a run: cicd.bash's help, plan, `--list`, the image check and stage 3, config.bash's cleanup and rar lines, design.md, install.md, build.md, prerequisites.md, and the engine, container and cleanup tests. `cicd-win.ps1` and `ci-mac.bash` don't run the nightly steps.
+	- Branch: rnd1102
+	- Test case: dd5nn `cicd/tests/engine/run.bash`, 24 new checks and 1 changed; ddrp2 `cicd/tests/container/run.bash`, 18 new; de5e9 `cicd/tests/cleanup/run.bash`, 4 new. The canary lines debjk and de5f0 in a Miri run.
+		- 20261102: dd5nn's soak check "and a run on this box builds the image for it" expects `miriInImage` in the image line, was without it.
 
 - Leak checks: CodeQL watched to fail, and its first findings filed
 	- ID: 2026102211462005

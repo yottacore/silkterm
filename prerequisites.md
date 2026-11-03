@@ -129,7 +129,7 @@ For the full `cicd/cicd.bash` run (packages, deps check): `cargo install cargo-d
 
 Or skip all of that: with docker installed, `cicd/cicd.bash` runs those stages in a container and needs nothing else. See [build.md](build.md).
 
-A full run needs docker either way, for the test suite under AddressSanitizer, and under ThreadSanitizer with `--long`, which runs in that image. `--no-asan` and `--no-tsan` skip them.
+A full run needs docker either way, for the test suite under AddressSanitizer, under ThreadSanitizer with `--long`, and under Miri with `--leakcheck` or `--long`, which run in that image. `--no-asan`, `--no-tsan` and `--no-miri` skip them.
 
 ## macOS (native)
 

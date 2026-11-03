@@ -94,6 +94,7 @@ fCheck "every version the recipe takes is a pin" fRecipeArgsPinned
 fCheck "and the engine hands it each one, with the toolchain, its targets and the nightly" fRecipeArgsHanded
 fCheck "the nightly is a dated one, from rust-toolchain.toml" bash -c 'source "$1" && [[ "${SANITIZER_TOOLCHAIN}" =~ ^nightly-[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]]' _ "${root}/cicd/config.bash"
 fCheck "and the recipe installs it with the std source" grep -qE 'rustup toolchain install "\$\{RUST_NIGHTLY\}" .*-c rust-src' "${recipe}"
+fCheck "and the miri component on it" grep -qE 'rustup component add --toolchain "\$\{RUST_NIGHTLY\}" miri$' "${recipe}"
 fCheck "every download in the recipe is checked" fDownloadsChecked
 fCheck "the base image is pinned by digest" grep -qE '^FROM debian:[a-z-]+@sha256:[0-9a-f]{64} AS base$' "${recipe}"
 fCheck "the image marks itself, so a run inside cannot start another" grep -qE '^[[:space:]]*SILK_CICD_IN_CONTAINER=1' "${recipe}"
@@ -114,6 +115,7 @@ fCheck "the host options stay out" test "$(fParse -y --no-sync --no-dogfood --no
 fCheck "and so does --container itself" test "$(fParse --container)" = "container=1 inner="
 fCheck "--no-asan is a stage option" test "$(fParse --container --no-asan)" = "container=1 inner=--no-asan"
 fCheck "--no-tsan is too" test "$(fParse --container --no-tsan)" = "container=1 inner=--no-tsan"
+fCheck "and --no-miri" test "$(fParse --container --no-miri)" = "container=1 inner=--no-miri"
 fCheck "with docker here it is the default" test "$(USE_CONTAINER=1 fParse -y)" = "container=1 inner="
 fCheck "--no-container turns it off" test "$(USE_CONTAINER=1 fParse --no-container -y)" = "container=0 inner="
 fCheck "and wins over --container, wherever it sits" test "$(USE_CONTAINER=1 fParse --no-container --container)" = "container=0 inner="
@@ -512,14 +514,45 @@ fCheck "and with no docker it warns" grep -qF 'WARNING: TSan run skipped: no doc
 fCheck "the TSan run follows the leak checks in stage 3" \
 	bash -c 'grep -A1 "^[[:space:]]*fRunLeakcheck$" "$1" | grep -q "^[[:space:]]*fRunTsan$"' _ "${engine}"
 
+## The Miri run goes the same way, under --leakcheck or --long.
+eval "$(fLift '^fRunMiri(){' '^}')"
+printf '#!/bin/sh\necho "miri ran here"\nexit "${FAKE_RC:-0}"\n' >"${asanStand}/utility/miri.bash"; chmod +x "${asanStand}/utility/miri.bash"
+fMiri(){ (MIRI_CMD=(cargo miri test); leakcheck=1; miri=1; miriSkipped=""; containerImage=img:1; root=/r; here="${asanStand}"; unset SILK_CICD_IN_CONTAINER FAKE_RC; "${@}"; fRunMiri) 2>&1; }
+out="$(fMiri fNothing)"
+fCheck "a run here does the Miri step in the image" bash -c '[[ "$1" == *"build img:1"* && "$1" == *"run img:1 /r/cicd/utility/miri.bash"* ]]' _ "${out}"
+fCheck "and says first that it takes hours" bash -c '[[ "$1" == *"Miri is very slow"*"hours"*"build img:1"* ]]' _ "${out}"
+rc=0; out="$(fMiri fReport)" || rc=$?
+fCheck "a Miri report there stops the run" test "${rc}" -ne 0
+fCheck "and says so" grep -q '^DIE: the test suite under Miri failed' <<<"${out}"
+fCheck "inside the container it runs miri.bash as is" bash -c '[[ "$1" == *"miri ran here"* && "$1" != *"run img"* ]]' _ "$(fMiri fInside)"
+fNoMiriFlag(){ miri=0; }
+fCheck "without --leakcheck or --long it's off" bash -c '[[ "$1" == *"Miri run off (--leakcheck or --long adds it)"* && "$1" != *"run img"* ]]' _ "$(fMiri fNoMiriFlag)"
+fNoLeak(){ leakcheck=0; }
+fCheck "--no-leakcheck skips it" bash -c '[[ "$1" == *"Miri run skipped (--no-leakcheck)"* && "$1" != *"run img"* ]]' _ "$(fMiri fNoLeak)"
+fNoMiri(){ MIRI_CMD=(); }
+fCheck "--no-miri does" grep -q 'Miri run skipped$' <<<"$(fMiri fNoMiri)"
+fNoDockerM(){ miriSkipped="no docker"; }
+fCheck "and with no docker it says so" grep -qF 'WARNING: Miri run skipped: no docker' <<<"$(fMiri fNoDockerM)"
+fMiriJobs(){ (__jobsCeiling=""; export CICD_CORES=8 CICD_MAX_JOBS=4; fContainerRun(){ echo "jobs=${CICD_MAX_JOBS}"; }; fMiri fNothing); }
+fCheck "the Miri step goes in with a quarter of the CPUs" grep -qx 'jobs=2' <<<"$(fMiriJobs)"
+
 ## Before anything is built: a full run plans that step in the image, or skipped
 ## with no docker.
 fPlan(){ rc=0; out="$(cd "${repo}" && env -u SILK_CICD_IN_CONTAINER -u CARGO_TARGET_DIR -u CICD_LINUX_HALF "${@}" bash cicd/cicd.bash --no-sync </dev/null 2>&1)" || rc=$?; }
 fPlan
 fCheck "a full run plans the ASan step in the image" grep -qE '^ASan \+ LSan \.+: the tests again on nightly-[0-9-]+, in silkterm-cicd:[0-9a-f]{12}$' <<<"${out}"
 fCheck "and TSan off, for --long" grep -qE '^TSan \.+: \(off; --long adds it\)$' <<<"${out}"
+fCheck "and Miri off, for --leakcheck or --long, saying nothing of hours" \
+	bash -c 'grep -qE "^Miri \.+: \(off; --leakcheck or --long adds it\)$" <<<"$1" && ! grep -q "^Miri is on" <<<"$1"' _ "${out}"
 rc=0; out="$(cd "${repo}" && env -u SILK_CICD_IN_CONTAINER -u CARGO_TARGET_DIR -u CICD_LINUX_HALF bash cicd/cicd.bash --no-sync --long </dev/null 2>&1)" || rc=$?
 fCheck "--long plans the TSan step in the image" grep -qE '^TSan \.+: the tests again on nightly-[0-9-]+, in silkterm-cicd:[0-9a-f]{12}$' <<<"${out}"
+fCheck "and the Miri step, as very slow" grep -qE '^Miri \.+: the tests again on nightly-[0-9-]+, in silkterm-cicd:[0-9a-f]{12}; very slow, hours$' <<<"${out}"
+fCheck "and says so before it starts" grep -q '^Miri is on: very slow' <<<"${out}"
+rc=0; out="$(cd "${repo}" && env -u SILK_CICD_IN_CONTAINER -u CARGO_TARGET_DIR -u CICD_LINUX_HALF bash cicd/cicd.bash --no-sync --quick --leakcheck </dev/null 2>&1)" || rc=$?
+fCheck "--leakcheck plans the Miri step in the image, under --quick too" grep -qE '^Miri \.+: the tests again on nightly-[0-9-]+, in silkterm-cicd:[0-9a-f]{12}; very slow, hours$' <<<"${out}"
+rc=0; out="$(cd "${repo}" && env -u SILK_CICD_IN_CONTAINER -u CARGO_TARGET_DIR -u CICD_LINUX_HALF bash cicd/cicd.bash --no-sync --long --no-miri </dev/null 2>&1)" || rc=$?
+fCheck "--no-miri plans it skipped, with nothing said of hours" \
+	bash -c 'grep -qE "^Miri \.+: \(skipped\)$" <<<"$1" && ! grep -q "^Miri is on" <<<"$1"' _ "${out}"
 fCheck "and plans the container as the default" grep -qE '^Container \.+: stages 1-6 in silkterm-cicd:[0-9a-f]{12}' <<<"${out}"
 fPlan SILK_DOCKER="${work}/no-such-docker"
 fCheck "with no docker the run says it builds here" grep -qF 'no docker here, so stages 1-6 run on this box' <<<"${out}"
@@ -529,6 +562,7 @@ fPlan SILK_DOCKER="${work}/no-such-docker"
 fCheck "with no docker a full run plans it skipped and goes on" bash -c '[[ "$1" != *"DIE:"* && "$1" == *"Fail-fast"* ]] && grep -qE "^ASan \+ LSan \.+: \(skipped, no docker" <<<"$1"' _ "${out}"
 rc=0; out="$(cd "${repo}" && env -u SILK_CICD_IN_CONTAINER -u CARGO_TARGET_DIR -u CICD_LINUX_HALF SILK_DOCKER="${work}/no-such-docker" bash cicd/cicd.bash --no-sync --long </dev/null 2>&1)" || rc=$?
 fCheck "and TSan too, under --long" grep -qE '^TSan \.+: \(skipped, no docker' <<<"${out}"
+fCheck "and Miri" grep -qE '^Miri \.+: \(skipped, no docker' <<<"${out}"
 fPlan SILK_DOCKER="${work}/no-such-docker" CICD_LINUX_HALF=1
 fCheck "and so does the Linux half of a Windows run" grep -qE '^ASan \+ LSan \.+: \(skipped, no docker' <<<"${out}"
 rc=0; out="$(cd "${repo}" && env -u SILK_CICD_IN_CONTAINER -u CARGO_TARGET_DIR SILK_DOCKER="${work}/no-such-docker" bash cicd/cicd.bash --no-sync --no-asan </dev/null 2>&1)" || rc=$?
@@ -572,3 +606,4 @@ echo "all passed"
 ##		- 20261028: The steps by name, the profiler a step of its own after the checks here.
 ##		- 20261031: The private repo's test scripts go in read only.
 ##		- 20261031: /tmp in the run's folder in HOST_TEMP, gone with it, failed or not.
+##		- 20261102: The Miri step, the miri component and --no-miri.
