@@ -311,8 +311,14 @@ fCheck "before the fail-fast line, which a run without -y prompts after" \
 	bash -c 'grep -A1 "^if ((miri && .*Miri is on" "$1" | grep -q "^fEcho_Clean \"Fail-fast"' _ "${engine}"
 fCheck "the Miri run follows the TSan run in stage 3" \
 	bash -c 'grep -A1 "^[[:space:]]*fRunTsan$" "$1" | grep -q "^[[:space:]]*fRunMiri$"' _ "${engine}"
-fCheck "the config runs Miri on the nightly with isolation off, in a dir named for it" \
-	bash -c 'source "$1" && [[ " ${MIRI_CMD[*]} " == *" MIRIFLAGS=-Zmiri-disable-isolation cargo +${SANITIZER_TOOLCHAIN} miri test "* && "${MIRI_DIR}" == "miri-${SANITIZER_TOOLCHAIN#nightly-}" && " ${MIRI_ENV[*]} " == *" CARGO_TARGET_DIR=${TARGET_DIR}/${MIRI_DIR} MIRI_SYSROOT=/"*"/${TARGET_DIR}/${MIRI_DIR}/miri/sysroot "* ]]' _ "${cicd}/config.bash"
+## fMiriConfig [CARGO_TARGET_DIR]: Miri's sysroot path is absolute either way.
+## The container hands in an absolute target dir, a run here none.
+fMiriConfig(){
+	local -a targetEnv=(-u CARGO_TARGET_DIR); [[ -z "${1:-}" ]] || targetEnv=("CARGO_TARGET_DIR=${1}")
+	env "${targetEnv[@]}" bash -c 'source "$1" && sys="${TARGET_DIR}/${MIRI_DIR}/miri/sysroot" && { [[ "${sys}" == /* ]] || sys="$2/${sys}"; } && [[ " ${MIRI_CMD[*]} " == *" MIRIFLAGS=-Zmiri-disable-isolation cargo +${SANITIZER_TOOLCHAIN} miri test "* && "${MIRI_DIR}" == "miri-${SANITIZER_TOOLCHAIN#nightly-}" && " ${MIRI_ENV[*]} " == *" CARGO_TARGET_DIR=${TARGET_DIR}/${MIRI_DIR} MIRI_SYSROOT=${sys} "* ]]' _ "${cicd}/config.bash" "$(cd "${cicd}/.." && pwd)"
+}
+fCheck "the config runs Miri on the nightly with isolation off, in a dir named for it" fMiriConfig
+fCheck "and with an absolute target dir, as in the container" fMiriConfig /no/such/target
 fCheck "and the cleanup and the backup know that dir" \
 	bash -c 'source "$1" && [[ " ${CLEANUP_NIGHTLY_DIRS[*]} " == *" ${MIRI_DIR}/miri "* && "${MIRI_ENV[*]}" == *"/${MIRI_DIR}/miri/sysroot"* ]] && grep -qxF "*/target/miri-*" <<<"${GIT_BACKUP_AND_PUBLISH_RAR_EXCLUDES}"' _ "${cicd}/config.bash"
 fCheck "--list says what the Miri step runs" grep -qF 'if ((miri && ${#MIRI_CMD[@]})); then fEcho_Clean "Miri: the canary' "${engine}"
@@ -657,6 +663,7 @@ if ((failures)); then echo "${failures} failed"; exit 1; fi
 echo "all passed"
 
 ##	History:
+##		- 20261102: Miri's config check with an absolute target dir too.
 ##		- 20261102: Miri: when it runs, where, its plan, first and --list lines, the
 ##		            step, and its config.
 ##		- 20261101: The soak test: when it runs, where, its plan and --list lines,
