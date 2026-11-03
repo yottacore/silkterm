@@ -6527,6 +6527,7 @@ mod tests {
 	// which is the whole reason the dialog is not rebuilt for one.
 	// Test ID: dcvf7
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_scale_change_moves_the_boundary_and_leaves_the_rest() {
 		let mut d = mk_dialog_at(900.0, 1.0);
 		d.set_size(700.0, 600.0);
@@ -6620,6 +6621,7 @@ mod tests {
 	// at 3x (the title runs past the box).
 	// Test ID: dbjn7
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_tab_title_keeps_its_clear_space_at_every_scale() {
 		let pad = super::lay().tab_pad;
 		for scale in [1.0, 1.25, 1.5, 2.0, 3.0, 4.0] {
@@ -6751,6 +6753,7 @@ mod tests {
 	// in the clear space above the footer, so showing it costs the rows nothing.
 	// Test ID: dcd38
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_narrow_window_scrolls_sideways_rather_than_truncating() {
 		let mut d = mk_dialog(2000.0);
 		let wide = d.size().0;
@@ -6866,6 +6869,7 @@ mod tests {
 	// on the first row, answers for every setting on the line.
 	// Test ID: ddkfs
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_shared_line_puts_its_parts_side_by_side() {
 		let mut d = mk_dialog(4000.0);
 		let (w, h) = d.natural;
@@ -7317,6 +7321,7 @@ mod tests {
 	// where it is drawn. A line of anything else still splits the control column.
 	// Test ID: ddp8a
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_line_of_toggles_packs_each_label_against_its_box_off_the_column() {
 		for scale in [1.0f32, 2.0] {
 			let mut d = mk_dialog_at(4000.0, scale);
@@ -7422,6 +7427,7 @@ mod tests {
 	// a pair's label after its box go the same way.
 	// Test ID: ddpay
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_large_interface_font_keeps_each_label_clear_of_its_box() {
 		use super::{GAPS_DRAWN_AT, PACK_GAP, PART_LABEL_GAP};
 		// UI line heights, DIP: the test default, the 11 pt default, 24 pt, 32 pt
@@ -7524,6 +7530,7 @@ mod tests {
 	// and at the default font each keeps the size it always had.
 	// Test ID: ddpc0
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_checkbox_and_a_radio_box_grow_to_one_size() {
 		let lay = lay();
 		// UI line heights, DIP: the test default, 11 pt at 2x and 1x, 24 pt, 32 pt
@@ -7592,6 +7599,7 @@ mod tests {
 	// size and well past it.
 	// Test ID: ddpc1
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_focus_ring_takes_in_the_line_its_labels_are_on() {
 		let attrs = crate::text::ui_attrs();
 		// (font size, display scale)
@@ -7670,6 +7678,7 @@ mod tests {
 	// off its default with no other way back.
 	// Test ID: dcwqt
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_governed_half_does_not_silence_its_partner_s_revert() {
 		let mut d = mk_dialog(4000.0);
 		let lead = d
@@ -7830,6 +7839,7 @@ mod tests {
 	// its own test.
 	// Test ID: ddmkf
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_sub_group_indents_labels_and_nothing_else_off_a_packed_line() {
 		let mut d = mk_dialog(4000.0);
 		let mut seen_indented = false;
@@ -7878,6 +7888,7 @@ mod tests {
 	// heading is - but its own members are not, or the run would not read as one.
 	// Test ID: davbc
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_sub_group_leader_gets_the_gap_and_its_members_do_not() {
 		let d = mk_dialog(4000.0);
 		let mut leaders = 0;
@@ -8033,6 +8044,7 @@ mod tests {
 	// be written and then commented straight back out, and so gone at relaunch.
 	// Test ID: dcnx7
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_row_changed_after_its_revert_keeps_the_change() {
 		let _guard = config::test_config_lock();
 		let _ = config::settings(); // memoize before the override goes in
@@ -8319,6 +8331,7 @@ mod tests {
 	// switch on again sets the value aside, and off brings it back.
 	// Test ID: ddqa9
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_switch_s_row_follows_its_rule_and_keeps_a_value_set_by_hand() {
 		let mut d = mk_dialog(4000.0);
 		let fam = d
@@ -8474,6 +8487,7 @@ mod tests {
 	// changed under it.
 	// Test ID: ddqab
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_tip_says_where_the_value_comes_from() {
 		let mut d = mk_dialog(4000.0);
 		d.edited = d.defaults.clone();
@@ -8534,6 +8548,7 @@ mod tests {
 	// it as it was, and picking a theme drops the change.
 	// Test ID: ddqbs
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_theme_color_changed_marks_the_theme_and_its_arrow_puts_the_theme_s_back() {
 		let mut d = on_theme("Matrix");
 		let i = d.specs.iter().position(|s| s.key == Key::ColBg).unwrap();
@@ -8584,6 +8599,7 @@ mod tests {
 	// picture still picks the text colors; off, they are the new theme's.
 	// Test ID: ddwm6
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_theme_pick_leaves_the_wallpaper_colors_switch_alone() {
 		use knobs::Value;
 		let mut d = on_theme("Matrix");
@@ -8701,6 +8717,7 @@ mod tests {
 	// default it has neither, and an auto setting keeps its state line instead.
 	// Test ID: ddqbv
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_tip_ends_with_the_current_and_default_values_where_they_differ() {
 		let mut d = mk_dialog(4000.0);
 		d.edited = d.defaults.clone();
@@ -8805,6 +8822,7 @@ mod tests {
 
 	// Test ID: dcbdk
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_grayed_control_takes_no_click() {
 		let mut m = |s: &str| s.chars().count() as f32;
 		let mut d = mk_dialog(4000.0);
@@ -8853,6 +8871,7 @@ mod tests {
 	// governs nothing.
 	// Test ID: dcwqv
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_profile_shows_its_values_in_its_rows() {
 		use knobs::Value;
 		let mut d = mk_dialog(4000.0);
@@ -8923,6 +8942,7 @@ mod tests {
 	// dragged slider's value. dialog.rs draws nothing for any other move.
 	// Test ID: ddgh0
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_pointer_move_says_whether_it_changed_anything() {
 		use super::{Key, Kind};
 		let mut d = mk_dialog(2000.0);
@@ -8987,6 +9007,7 @@ mod tests {
 	// made a frame copy them dozens of times.
 	// Test ID: ddgg6
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_dialog_frame_copies_the_settings_at_most_once() {
 		for profile in crate::profile::Profile::ALL {
 			let mut d = mk_dialog(4000.0);
@@ -9019,6 +9040,7 @@ mod tests {
 	// each one made a frame quadratic in the declarations.
 	// Test ID: ddgg8
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_dialog_frame_walks_the_tab_at_most_once() {
 		let mut d = mk_dialog(300.0);
 		for tab in 0..tab_titles().len() {
@@ -9043,6 +9065,7 @@ mod tests {
 	// read through what was kept, then against a walk from nothing.
 	// Test ID: ddggd
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_kept_row_top_follows_what_it_was_walked_from() {
 		let shell_tab = mk_dialog(300.0)
 			.specs
@@ -9085,6 +9108,7 @@ mod tests {
 	// every quad asking again.
 	// Test ID: ddggc
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_dialog_frame_builds_its_colors_once_per_drawing_call() {
 		let mut d = mk_dialog(300.0);
 		for tab in 0..tab_titles().len() {
@@ -9230,6 +9254,7 @@ mod tests {
 	// its own default would leave the arrow lit with nothing to undo.
 	// Test ID: davbe
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_fraction_reads_as_a_whole_percent_and_stores_as_a_decimal() {
 		let mut d = mk_dialog(4000.0);
 		for key in [
@@ -9267,6 +9292,7 @@ mod tests {
 	// entirely - not merely hidden, or it would leave a gap where it used to be.
 	// Test ID: dava1
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_heading_that_repeats_its_tab_takes_no_room() {
 		let mut d = mk_dialog(2000.0);
 		for tab in 0..tab_titles().len() {
@@ -9367,6 +9393,7 @@ mod tests {
 	// there and goes dim again.
 	// Test ID: ddams
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_file_type_registers_at_once_and_its_arrow_puts_it_back() {
 		let store = Box::new(crate::fileassoc::Memory::default());
 		let (mut d, i) = mk_assoc_dialog(Key::OpenBatch, store);
@@ -9394,6 +9421,7 @@ mod tests {
 	// The button and the arrow each say what they do.
 	// Test ID: ddamt
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_file_types_button_and_arrow_have_their_own_tips() {
 		let store = Box::new(crate::fileassoc::Memory::default());
 		for key in [
@@ -9421,6 +9449,7 @@ mod tests {
 	// the dialog says so rather than looking as if it worked.
 	// Test ID: ddamv
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_type_windows_keeps_elsewhere_is_reported() {
 		use crate::fileassoc::Store;
 		let mut store = crate::fileassoc::Memory::default();
@@ -9445,6 +9474,7 @@ mod tests {
 
 	// Test ID: ddamw
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_registry_that_refuses_says_why() {
 		struct Refuses;
 		impl crate::fileassoc::Store for Refuses {
@@ -9543,6 +9573,7 @@ mod tests {
 
 	// Test ID: datde
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_restored_view_never_outruns_the_new_dialog() {
 		// scrolled to the bottom of the last tab, as if the user had just closed it
 		let mut d = mk_dialog(400.0);
@@ -9798,6 +9829,7 @@ mod tests {
 
 	// Test ID: dav3z
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_large_ui_font_scales_radio_layout_and_widens_panel() {
 		use super::Kind;
 		// base vs a desktop UI font twice the size (a bigger font, same DPI)
@@ -10202,6 +10234,7 @@ mod tests {
 	// travel, and an arrow press is the same ratio anywhere along it.
 	// Test ID: ddp8z
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_log_slider_gives_each_doubling_the_same_travel() {
 		use super::{Key, SliderScale};
 		let d = mk_dialog(4000.0);
@@ -10336,6 +10369,7 @@ mod tests {
 	// drops places as its whole part grows. 3600 seconds showed "3600.00", cut off.
 	// Test ID: ddp98
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_big_decimal_drops_places_to_fit_its_box() {
 		use super::Key;
 		let mut d = mk_dialog(4000.0);
@@ -10518,6 +10552,7 @@ mod tests {
 	// with a % goes past its slider, and every log row starts above 0.
 	// Test ID: ddp91
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_number_typed_past_a_slider_survives_a_save_and_a_relaunch() {
 		use super::SliderScale;
 		let _guard = config::test_config_lock();
@@ -10922,6 +10957,7 @@ mod tests {
 	// and ] reach the tabs through the menu bar.
 	// Test ID: dde0d
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_mac_text_box_takes_the_mac_keys() {
 		use crate::input::edit_keys;
 		use winit::keyboard::ModifiersState as M;
@@ -11513,6 +11549,7 @@ mod tests {
 	// profile the file already holds writes only the automatic switch.
 	// Test ID: dcf3x
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_session_step_shows_and_a_hand_pick_lifts_it() {
 		let _guard = config::test_config_lock();
 		let _ = config::settings();
@@ -11618,6 +11655,7 @@ mod tests {
 
 	// Test ID: dcrpr
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_click_into_a_field_selects_all_on_release() {
 		use super::lay;
 		let (mut d, i) = mk_text_edit("old.png");
@@ -11889,6 +11927,7 @@ mod tests {
 	// the dialog as it opened, or putting a value back reads as no change.
 	// Test ID: dd5qq
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_second_apply_diffs_against_the_first() {
 		let mut d = mk_dialog(4000.0);
 		d.orig.wallpaper_default_fit = config::Fit::Stretch;
@@ -11919,6 +11958,7 @@ mod tests {
 	// so they line up with their controls at any interface font.
 	// Test ID: dd5qr
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_label_centers_on_its_row_at_any_line_height() {
 		for line_h in [19.0, 38.0] {
 			let mut d = mk_dialog_line(line_h);
@@ -11985,6 +12025,7 @@ mod tests {
 	// and the two stay apart whatever the interface font.
 	// Test ID: dd5qt
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_heading_never_runs_into_its_rule() {
 		for line_h in [14.0, 19.0, 26.0, 38.0, 60.0] {
 			let mut d = mk_dialog_line(line_h);
@@ -12099,6 +12140,7 @@ mod tests {
 	// indented rows leads one, and gets the sub-group gap after a plain row.
 	// Test ID: dd5qw
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_sub_group_stands_without_a_heading() {
 		let row = |key: Key, indent: u8| super::Spec {
 			label: "",
@@ -12361,6 +12403,7 @@ mod tests {
 	// centers in the row it is in, not in the row floor.
 	// Test ID: dd5r0
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_field_has_room_for_its_text_and_centers_in_its_row() {
 		for line_h in [18.0, 38.0] {
 			let mut d = mk_dialog_line(line_h);
@@ -12396,6 +12439,7 @@ mod tests {
 	// the field's border standing down.
 	// Test ID: dd5r2
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_focused_field_draws_one_outline() {
 		let mut d = mk_dialog(4000.0);
 		let i = d.specs.iter().position(|s| s.key == Key::BgImage).unwrap();
@@ -12433,6 +12477,7 @@ mod tests {
 
 	// Test ID: dd5r4
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_footer_caption_is_centered_in_its_button() {
 		let d = mk_dialog(4000.0);
 		let measure = |s: &str| s.chars().count() as f32 * 7.0;
@@ -12452,6 +12497,7 @@ mod tests {
 	// A second section on a tab is set off from the one above it.
 	// Test ID: dd5r5
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_heading_after_a_section_gets_clear_space_above_it() {
 		assert!(lay().header_gap > 0.0);
 		let mut d = mk_dialog(4000.0);
@@ -13038,6 +13084,7 @@ mod tests {
 	// boundary must not scale it. At 2x the mark turned to point the other way.
 	// Test ID: ddeqj
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_triangle_keeps_its_direction_at_any_scale() {
 		for scale in [1.0, 1.25, 1.5, 2.0] {
 			let mut d = mk_dialog_at(4000.0, scale);
@@ -13086,6 +13133,7 @@ mod tests {
 	// while it waits, and ends on a chord, on Escape or on Backspace.
 	// Test ID: ddev0
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_hotkey_row_takes_the_next_chord_pressed() {
 		use crate::input::Hotkey;
 		use winit::keyboard::{Key as Pressed, ModifiersState, NamedKey};
@@ -13162,6 +13210,7 @@ mod tests {
 	// default stays the file's business; one it had been set to moves.
 	// Test ID: ddev1
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_chord_another_hotkey_had_is_said_on_both_rows() {
 		use crate::input::Hotkey;
 		use winit::keyboard::{Key as Pressed, ModifiersState};
@@ -13256,6 +13305,7 @@ mod tests {
 	// color, both inside the box.
 	// Test ID: ddev3
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_hotkey_row_draws_its_chords_and_its_note_in_the_box() {
 		use winit::keyboard::{Key as Pressed, ModifiersState};
 		let (mut d, _) = keys_dialog(false);
@@ -13284,6 +13334,7 @@ mod tests {
 	// own line back.
 	// Test ID: ddev4
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_hotkey_set_in_settings_saves_as_a_hand_edit_would() {
 		use winit::keyboard::{Key as Pressed, ModifiersState};
 		let _guard = config::test_config_lock();

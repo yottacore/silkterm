@@ -434,6 +434,7 @@ mod tests {
 
 	// Test ID: dcx0k
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_chip_opens_the_picker_and_cancel_puts_the_color_back() {
 		let (mut d, _) = mk_picker();
 		let before = d.get_col(Key::ColBg);
@@ -465,6 +466,7 @@ mod tests {
 	// the hue without disturbing what the square set.
 	// Test ID: dcx0m
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_drag_across_the_square_moves_the_color_with_it() {
 		let (mut d, _) = mk_picker();
 		let g = d.pick_geom();
@@ -508,6 +510,7 @@ mod tests {
 	// is still there, still has a focused row, and would take the keystroke.
 	// Test ID: dcx0n
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_picker_swallows_every_input_path() {
 		let (mut d, i) = mk_picker();
 		let mut m = |s: &str| s.chars().count() as f32;
@@ -575,6 +578,7 @@ mod tests {
 	// past, and what is typed into it reaches the row behind.
 	// Test ID: dcx0q
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn walking_the_box_opens_each_value_box_selected() {
 		let (mut d, _) = mk_picker();
 		assert_eq!(d.pick.as_ref().map(|p| p.focus), Some(pick::Focus::Square));
@@ -611,6 +615,7 @@ mod tests {
 
 	// Test ID: dcx0r
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_typed_value_box_reaches_the_row_behind_the_box() {
 		let (mut d, _) = mk_picker();
 		d.pick_focus_to(pick::Focus::Field(pick::Field::Hex));
@@ -643,6 +648,7 @@ mod tests {
 	// reachable only by pointer.
 	// Test ID: dcx0s
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_arrows_work_the_square_the_strip_and_the_boxes() {
 		let (mut d, _) = mk_picker();
 		d.pick_set(pick::Hsv {
@@ -687,6 +693,7 @@ mod tests {
 	// nor opens the picker by itself.
 	// Test ID: dcx0t
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_chip_is_a_focus_stop_of_its_own() {
 		let mut d = mk_dialog(4000.0);
 		let i = color_row(&d);
@@ -714,6 +721,7 @@ mod tests {
 	// the row list gets read with it.
 	// Test ID: dcx0v
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_box_draws_without_reading_a_row_that_is_not_there() {
 		let (mut d, _) = mk_picker();
 		let mut m = |s: &str| s.chars().count() as f32;

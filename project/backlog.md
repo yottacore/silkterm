@@ -688,13 +688,47 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - Leak checks: Miri sort, settings_ui
 	- ID: 2026102407430381
 	- Type: Task
-	- Status: Queued
+	- Status: Started
 	- Priority: Avg
 	- Opened: 20261024-074303
 	- Opened by: CC
 	- Parent ID: 2026102320591313
 	- Requirements:
 		- The parent's requirements, for the 203 tests in `settings_ui`.
+	- Progress log:
+		- 20261102: 91 tests run alone under Miri, 8 at a time, against the slow bar of 60 s of CPU time: all of picker, prompt, search and shell_grid, and the first 51 of the dialog's own tests. One passed. 90 are too slow under Miri and are ignored as that. None stopped at a call Miri can't make.
+		- 20261102: Miri reported no UB and no leak.
+		- 20261102: The other 112 didn't fit in the time, at a load of 40 to 57 on 32 cores. They went to 2026110219042006. This item closes with it.
+	- Verified: 20261102. The 90 new ignores each show as ignored under Miri (`--ignored --list`), and the one that passed doesn't. fmt check, clippy for Linux. The 203 settings_ui tests pass in a plain run but one, which fails on the live config, filed as 2026110219042107.
+	- Swept: the 91 tests above.
+	- Test case: None new. The ignores are test attributes, checked by the runs above.
+	- Branch: rnd1102
+
+- Leak checks: Miri sort, settings_ui, the rest
+	- ID: 2026110219042006
+	- Type: Task
+	- Status: Queued
+	- Priority: Avg
+	- Opened: 20261102-190421
+	- Opened by: CC
+	- Parent ID: 2026102407430381
+	- Requirements:
+		- The parent's requirements, for the 112 settings_ui tests not yet sorted: themes' 18 and 94 of the dialog's own. The list is `private/claude_simple/tools/miri-results-20261102/settings_ui-left.txt`.
+	- Notes:
+		- Most of the first 91 hit the bar, at 1 to 3 min of wall time each on a busy box. Run it when the load is low, or give it the time.
+
+- The tmux rows test fails when the live config turns tmux sessions on
+	- ID: 2026110219042107
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261102-190421
+	- Opened by: CC
+	- Steps to reproduce:
+		- Set `tmux: always_new_session: true` in the user's config, then run `cargo test -p silkterm --bin silkterm -- --exact settings_ui::tests::the_tmux_rows_gray_and_say_why_where_there_is_no_tmux`.
+	- Incorrect behavior: it fails at settings_ui.rs:13044. The tip has "Current value: On" and "Default value: Off" after the no-tmux text, since the value isn't the default.
+	- Expected behavior: the test gives the same answer whatever the live config holds.
+	- Possible cause: the test reads the live user config (G6), and doesn't pin the setting.
 
 - Implement leak and static checks of the Rust code run as part of CI/CD
 	- ID: 2026101714015789

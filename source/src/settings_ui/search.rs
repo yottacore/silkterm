@@ -809,6 +809,7 @@ mod tests {
 	// in the order the dialog shows them.
 	// Test ID: de03v
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn label_matches_come_before_alias_ones_and_loose_ones_last() {
 		let hits = rank(&ui().specs, "opacity");
 		let mut seen = tiers(&hits);
@@ -854,6 +855,7 @@ mod tests {
 	// start, which beats the middle of a word.
 	// Test ID: de03w
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_whole_label_beats_a_word_start_beats_the_middle_of_one() {
 		let hits = rank(&ui().specs, "cursor");
 		let first: Vec<Target> = hits.iter().take(2).map(|h| h.to).collect();
@@ -878,6 +880,7 @@ mod tests {
 	// what has them together.
 	// Test ID: de03x
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_short_query_matches_only_as_typed() {
 		for q in ["ot", "zq"] {
 			let hits = rank(&ui().specs, q);
@@ -897,6 +900,7 @@ mod tests {
 	// marks over the matched text.
 	// Test ID: de03y
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_result_reads_tab_then_heading_then_setting() {
 		let sep = ui().icons.search_sep;
 		let specs = &ui().specs;
@@ -944,6 +948,7 @@ mod tests {
 	// No two results read the same, or picking between them is a guess.
 	// Test ID: de03z
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn no_two_results_read_the_same() {
 		let specs = &ui().specs;
 		let mut seen = std::collections::HashMap::new();
@@ -960,6 +965,7 @@ mod tests {
 	// doesn't, and finds that row by itself.
 	// Test ID: de040
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn every_alias_finds_the_row_it_is_on() {
 		let specs = &ui().specs;
 		let mut count = 0;
@@ -1000,6 +1006,7 @@ mod tests {
 	// the box. Escape empties it first and cancels only once it's empty.
 	// Test ID: de041
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn enter_goes_to_the_pick_and_escape_empties_the_box_first() {
 		let mut d = mk_dialog(420.0);
 		let mut m = chars7;
@@ -1069,6 +1076,7 @@ mod tests {
 	// a click on a result goes there.
 	// Test ID: de042
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_list_covers_the_rows_behind_it() {
 		let mut d = mk_dialog(900.0);
 		let mut m = chars7;
@@ -1118,6 +1126,7 @@ mod tests {
 	// place that reads the rows by that index has to know it.
 	// Test ID: de044
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_search_box_is_no_rows_field() {
 		let mut d = mk_dialog(900.0);
 		let mut m = chars7;
@@ -1150,6 +1159,7 @@ mod tests {
 	// Tab goes on to that control and Shift+Tab back to OK.
 	// Test ID: de045
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn tab_from_the_empty_box_goes_on_to_the_first_control() {
 		let mut d = mk_dialog(900.0);
 		let first = d.first_focus();
@@ -1172,6 +1182,7 @@ mod tests {
 	// under it, so nothing on a tab moves relative to the others.
 	// Test ID: de043
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_search_box_sits_over_the_rows_and_clear_of_them() {
 		let d = mk_dialog(900.0);
 		let field = d.search_box();
