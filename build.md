@@ -136,7 +136,7 @@ wgpu uses the Metal backend automatically. No extra system packages are needed b
 
 - `cicd/cicd.bash --backlog-run-quick` runs inside too.
 
-- A full run with `--no-container` still uses the image for two steps. The test suite under AddressSanitizer, and under ThreadSanitizer with `--long`, need the nightly that `rust-toolchain.toml` dates, and only the image has it. `--no-asan` and `--no-tsan` skip those steps, and then the run needs no docker.
+- A full run with `--no-container` still uses the image for three steps. The test suite under AddressSanitizer, under ThreadSanitizer with `--long`, and under Miri with `--leakcheck` or `--long`, need the nightly that `rust-toolchain.toml` dates, and only the image has it. `--no-asan`, `--no-tsan` and `--no-miri` skip those steps, and then the run needs no docker.
 
 ## Formatting
 

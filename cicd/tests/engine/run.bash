@@ -187,7 +187,7 @@ fCheck "and says so with no docker, rather than stopping" bash -c '[[ "$1" == "0
 fCheck "but not when it's off" test "$(fSoakWhere 0 0 bash)" = "0|"
 fCheck "nor from a run already in the container" \
 	bash -c '[[ "$1" == "0|" && "$2" == "0|" ]]' _ "$(fSoakWhere 1 1 bash)" "$(fSoakWhere 0 1 bash 1)"
-fCheck "and a run on this box builds the image for it" grep -qF 'if ((container || asanInImage || tsanInImage || codeqlInImage || soakInImage)); then' "${engine}"
+fCheck "and a run on this box builds the image for it" grep -qF 'if ((container || asanInImage || tsanInImage || miriInImage || codeqlInImage || soakInImage)); then' "${engine}"
 fSoakPlan(){ local soak="${1}" soakSkipped="${2:-}" LEAKCHECK_SOAK="${3-cicd/tests/soak/run.bash}"; eval "$(fLift '^	if \[\[ -z "\${LEAKCHECK_SOAK:-}" \]\]; then soakLine=' '^	else soakLine=')"; echo "${soakLine}"; }
 fCheck "the plan names the soak test when on" test "$(fSoakPlan 1)" = "soak test under heaptrack"
 fCheck "and says how to turn it on under --quick" test "$(fSoakPlan 0)" = "soak test (off under --quick; --leakcheck adds it)"
@@ -260,6 +260,68 @@ fTsanPlan(){
 }
 fCheck "the plan says how to turn TSan on" test "$(fTsanPlan 0)" = "TSan ................: (off; --long adds it)"
 fCheck "and names it when on" test "$(fTsanPlan 1)" = "TSan ................: the tests again on nightly, in img"
+## Miri: hours even for the fast part, so only --leakcheck or --long asks for it,
+## and a later --no-leakcheck drops it with the rest (2026102320591323).
+fParseMiri(){ MIRI_CMD=(x); fParse "${@}" >/dev/null; eval "${parse}"; echo "miri=${miri} leak=${leakcheck} cmd=${#MIRI_CMD[@]} inner=${innerArgs[*]}"; }
+fCheck "a run with no options leaves Miri off" test "$(fParseMiri)" = "miri=0 leak=1 cmd=1 inner="
+fCheck "and so does --quick" bash -c '[[ "$1" == "miri=0 "* ]]' _ "$(fParseMiri --quick)"
+fCheck "--leakcheck turns it on, under --quick too" \
+	bash -c '[[ "$1" == "miri=1 leak=1 cmd=1 inner=--leakcheck" && "$2" == "miri=1 "* ]]' _ "$(fParseMiri --leakcheck)" "$(fParseMiri --quick --leakcheck)"
+fCheck "--long and --slow do" bash -c '[[ "$1" == "miri=1 "* && "$2" == "miri=1 "* ]]' _ "$(fParseMiri --long)" "$(fParseMiri --slow)"
+fCheck "--backlog-run-full leaves it off, and takes --long" \
+	bash -c '[[ "$1" == "miri=0 "* && "$2" == "miri=1 "* ]]' _ "$(fParseMiri --backlog-run-full)" "$(fParseMiri --backlog-run-full --long)"
+fCheck "the last of --leakcheck and --no-leakcheck wins for it too" \
+	bash -c '[[ "$1" == "miri=0 leak=0 "* && "$2" == "miri=1 leak=1 "* && "$3" == "miri=0 leak=0 "* ]]' _ \
+	"$(fParseMiri --leakcheck --no-leakcheck)" "$(fParseMiri --no-leakcheck --leakcheck)" "$(fParseMiri --long --no-leakcheck)"
+fCheck "--no-miri empties its command, and goes into the container" \
+	test "$(fParseMiri --long --no-miri)" = "miri=1 leak=1 cmd=0 inner=--long --no-miri"
+fMiriWhere(){
+	local container="${1}" miri="${2}" docker="${3}" SILK_CICD_IN_CONTAINER="${4:-}" MIRI_CMD=(x)
+	eval "$(fLift '^miriInImage=0' '^fi$')"
+	echo "${miriInImage}|${miriSkipped}"
+}
+fCheck "a run here takes Miri to the image when it's on" test "$(fMiriWhere 0 1 bash)" = "1|"
+fCheck "and says so with no docker" bash -c '[[ "$1" == "0|no docker here"* ]]' _ "$(fMiriWhere 0 1 no-such-docker-here)"
+fCheck "but not when it's off, docker or not" \
+	bash -c '[[ "$1" == "0|" && "$2" == "0|" ]]' _ "$(fMiriWhere 0 0 bash)" "$(fMiriWhere 0 0 no-such-docker-here)"
+fCheck "nor from a run already in the container" \
+	bash -c '[[ "$1" == "0|" && "$2" == "0|" ]]' _ "$(fMiriWhere 1 1 bash)" "$(fMiriWhere 0 1 bash 1)"
+fMiriStep(){
+	local miri="${1}" leakcheck="${2:-1}" miriSkipped="no docker here" MIRI_CMD=(x)
+	fEcho_Clean(){ echo "${*}"; }; fJobs(){ :; }
+	eval "$(fLift '^fRunMiri(){' '^}')"
+	fRunMiri
+}
+fCheck "the Miri step is off without --leakcheck or --long" test "$(fMiriStep 0)" = "Miri run off (--leakcheck or --long adds it)"
+fCheck "and says why under --no-leakcheck" test "$(fMiriStep 0 0)" = "Miri run skipped (--no-leakcheck)"
+fCheck "and runs when on" bash -c '[[ "$1" == *"Miri run skipped: no docker here" ]]' _ "$(fMiriStep 1)"
+fMiriPlan(){
+	local miri="${1}" leakcheck="${2:-1}" miriSkipped="${3:-}" MIRI_CMD=(x) SANITIZER_TOOLCHAIN=nightly containerImage=img
+	fEcho_Clean(){ echo "${*}"; }
+	eval "$(fLift 'MIRI_CMD\[@\]} == 0)); then$' '^fi$')"
+}
+fCheck "the plan says how to turn Miri on" test "$(fMiriPlan 0)" = "Miri ................: (off; --leakcheck or --long adds it)"
+fCheck "and that --no-leakcheck took it out" test "$(fMiriPlan 0 0)" = "Miri ................: (skipped --no-leakcheck)"
+fCheck "and names it when on, as very slow" test "$(fMiriPlan 1)" = "Miri ................: the tests again on nightly, in img; very slow, hours"
+fCheck "and why it's skipped" test "$(fMiriPlan 1 1 'no docker here')" = "Miri ................: (skipped, no docker here)"
+fMiriFirst(){ local miri="${1}" miriSkipped="${2:-}" MIRI_CMD=(x); fEcho_Clean(){ echo "${*}"; }; eval "$(grep '^if ((miri && ${#MIRI_CMD\[@\]})) && \[\[ -z "${miriSkipped}" \]\]; then fEcho_Clean "Miri is on' "${engine}")"; }
+fCheck "a run with Miri on says it's very slow before it starts" \
+	bash -c '[[ "$1" == "Miri is on: very slow"*"Ctrl+C"* && -z "$2" && -z "$3" ]]' _ "$(fMiriFirst 1)" "$(fMiriFirst 0)" "$(fMiriFirst 1 'no docker here')"
+fCheck "before the fail-fast line, which a run without -y prompts after" \
+	bash -c 'grep -A1 "^if ((miri && .*Miri is on" "$1" | grep -q "^fEcho_Clean \"Fail-fast"' _ "${engine}"
+fCheck "the Miri run follows the TSan run in stage 3" \
+	bash -c 'grep -A1 "^[[:space:]]*fRunTsan$" "$1" | grep -q "^[[:space:]]*fRunMiri$"' _ "${engine}"
+## fMiriConfig [CARGO_TARGET_DIR]: Miri's sysroot path is absolute either way.
+## The container hands in an absolute target dir, a run here none.
+fMiriConfig(){
+	local -a targetEnv=(-u CARGO_TARGET_DIR); [[ -z "${1:-}" ]] || targetEnv=("CARGO_TARGET_DIR=${1}")
+	env "${targetEnv[@]}" bash -c 'source "$1" && sys="${TARGET_DIR}/${MIRI_DIR}/miri/sysroot" && { [[ "${sys}" == /* ]] || sys="$2/${sys}"; } && [[ " ${MIRI_CMD[*]} " == *" MIRIFLAGS=-Zmiri-disable-isolation cargo +${SANITIZER_TOOLCHAIN} miri test "* && "${MIRI_DIR}" == "miri-${SANITIZER_TOOLCHAIN#nightly-}" && " ${MIRI_ENV[*]} " == *" CARGO_TARGET_DIR=${TARGET_DIR}/${MIRI_DIR} MIRI_SYSROOT=${sys} "* ]]' _ "${cicd}/config.bash" "$(cd "${cicd}/.." && pwd)"
+}
+fCheck "the config runs Miri on the nightly with isolation off, in a dir named for it" fMiriConfig
+fCheck "and with an absolute target dir, as in the container" fMiriConfig /no/such/target
+fCheck "and the cleanup and the backup know that dir" \
+	bash -c 'source "$1" && [[ " ${CLEANUP_NIGHTLY_DIRS[*]} " == *" ${MIRI_DIR}/miri "* && "${MIRI_ENV[*]}" == *"/${MIRI_DIR}/miri/sysroot"* ]] && grep -qxF "*/target/miri-*" <<<"${GIT_BACKUP_AND_PUBLISH_RAR_EXCLUDES}"' _ "${cicd}/config.bash"
+fCheck "--list says what the Miri step runs" grep -qF 'if ((miri && ${#MIRI_CMD[@]})); then fEcho_Clean "Miri: the canary' "${engine}"
 fCheck "--no-demo turns the demo off" bash -c '[[ "$1" == *" demo=0 "* ]]' _ "$(fParse --no-demo)"
 fCheck "--gate is the backlog quick run" bash -c '[[ "$1" == *" gate=1 "* ]]' _ "$(fParse --gate 2>/dev/null)"
 
@@ -601,6 +663,9 @@ if ((failures)); then echo "${failures} failed"; exit 1; fi
 echo "all passed"
 
 ##	History:
+##		- 20261102: Miri's config check with an absolute target dir too.
+##		- 20261102: Miri: when it runs, where, its plan, first and --list lines, the
+##		            step, and its config.
 ##		- 20261101: The soak test: when it runs, where, its plan and --list lines,
 ##		            and the step.
 ##		- 20261101: The heap-growth test under --quick, and --leakcheck adding CodeQL.

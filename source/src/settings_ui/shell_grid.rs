@@ -593,6 +593,7 @@ mod tests {
 	// in the dialog with no menu, while the Menu key worked on them.
 	// Test ID: dcbek
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_shells_grid_fields_have_a_right_click_menu() {
 		let mut m = |s: &str| s.chars().count() as f32;
 		let mut d = mk_dialog(4000.0);
@@ -661,6 +662,7 @@ mod tests {
 	// another.
 	// Test ID: dbfrv
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_part_index_names_one_control_on_one_line() {
 		let (d, i) = mk_shell_dialog(3);
 		assert_eq!(d.parts_of(i), 3 * super::super::ShellPart::COUNT + 1);
@@ -686,6 +688,7 @@ mod tests {
 	// ring at all. Nothing in the grid is grayed any more either.
 	// Test ID: dbg0s
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_grip_is_a_gesture_and_not_a_keyboard_stop() {
 		let (d, i) = mk_shell_dialog(3);
 		assert_eq!(d.parts_of(i), 3 * super::super::ShellPart::COUNT + 1);
@@ -710,6 +713,7 @@ mod tests {
 	// not just where it ended up.
 	// Test ID: dbg0t
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_grip_drag_reorders_the_list() {
 		let (mut d, i) = mk_shell_dialog(3);
 		let mut measure = |s: &str| s.chars().count() as f32 * 7.0;
@@ -747,6 +751,7 @@ mod tests {
 	// that says the saturating cast is being RELIED on rather than tolerated.
 	// Test ID: dbg0v
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_line_dragged_off_the_top_ends_up_first() {
 		let (mut d, i) = mk_shell_dialog(3);
 		let mut measure = |s: &str| s.chars().count() as f32 * 7.0;
@@ -765,6 +770,7 @@ mod tests {
 	// again, which is the whole rule at the field.
 	// Test ID: dbfrw
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_blank_command_cannot_replace_a_stored_one() {
 		let (mut d, _) = mk_shell_dialog(2);
 		let row = super::super::shell_field_row(1, true);
@@ -786,6 +792,7 @@ mod tests {
 	// pseudo-row scheme.
 	// Test ID: dbfrx
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_field_edit_goes_to_its_own_entry() {
 		let (mut d, _) = mk_shell_dialog(3);
 		d.open_edit(super::super::shell_field_row(2, false), true);
@@ -800,6 +807,7 @@ mod tests {
 	// one field that has to be filled before the entry means anything.
 	// Test ID: dbfry
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn adding_a_shell_opens_the_field_it_needs() {
 		let (mut d, i) = mk_shell_dialog(1);
 		d.shell_add(i);
@@ -822,6 +830,7 @@ mod tests {
 	// first - and asking must not remove anything by itself.
 	// Test ID: dbfrz
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn removing_a_shell_asks_before_it_happens() {
 		let (mut d, _) = mk_shell_dialog(3);
 		d.shell_confirm_remove(1);
@@ -846,6 +855,7 @@ mod tests {
 	// command and the date, where it is hard to press by accident.
 	// Test ID: dbfs0
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_grid_columns_stay_inside_the_panel_in_order() {
 		let (d, i) = mk_shell_dialog(2);
 		let left = d.rect.x + super::super::lay().pad;
@@ -886,6 +896,7 @@ mod tests {
 	// arrow survives anywhere in the grid.
 	// Test ID: dbg14
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_grip_reads_as_bars_and_the_remove_mark_reads_as_red() {
 		let (mut d, i) = mk_shell_dialog(2);
 		d.tab = d.specs[i].tab;
@@ -954,6 +965,7 @@ mod tests {
 	// test above. So this walks what would actually be handed to the renderer.
 	// Test ID: dbfs7
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_grid_draws_a_line_for_every_shell() {
 		let (d, i) = mk_shell_dialog(3);
 		let mut measure = |s: &str| s.chars().count() as f32 * 7.0;
@@ -1003,6 +1015,7 @@ mod tests {
 	// would otherwise look inert while it is typed into.
 	// Test ID: dbfs8
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_grid_field_being_edited_shows_what_is_typed() {
 		let (mut d, _) = mk_shell_dialog(2);
 		d.open_edit(super::super::shell_field_row(1, false), true);
@@ -1020,6 +1033,7 @@ mod tests {
 	// done rather than replacing it.
 	// Test ID: dbfs1
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_scan_that_arrives_mid_edit_is_not_mistaken_for_an_edit() {
 		let (mut d, _) = mk_shell_dialog(1);
 		d.edited.shells[0].title = "Renamed by hand".into();
@@ -1040,6 +1054,7 @@ mod tests {
 	// fits at the large one too.
 	// Test ID: ddq87
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_shells_grid_columns_fit_their_text_at_a_large_interface_font() {
 		use super::{ACTIVE_TITLE, NEVER_SEEN, SEEN_TITLE};
 		let names = [
@@ -1141,6 +1156,7 @@ mod tests {
 	// centered on its line with the fields beside it.
 	// Test ID: dd5r1
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_shells_active_box_is_square_and_centered_on_its_line() {
 		let (d, i) = mk_shell_dialog(2);
 		for k in 0..2 {

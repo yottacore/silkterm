@@ -2141,16 +2141,20 @@ pub enum QuadMode {
 	Triangle,
 	PickSquare,
 	HueStrip,
+	Curl,
+	Dashes,
 }
 
 impl QuadMode {
-	const ALL: [QuadMode; 6] = [
+	const ALL: [QuadMode; 8] = [
 		QuadMode::Solid,
 		QuadMode::CloseMark,
 		QuadMode::Rounded,
 		QuadMode::Triangle,
 		QuadMode::PickSquare,
 		QuadMode::HueStrip,
+		QuadMode::Curl,
+		QuadMode::Dashes,
 	];
 
 	pub fn code(self) -> f32 {
@@ -2161,6 +2165,8 @@ impl QuadMode {
 			QuadMode::Triangle => 3.0,
 			QuadMode::PickSquare => 4.0,
 			QuadMode::HueStrip => 5.0,
+			QuadMode::Curl => 6.0,
+			QuadMode::Dashes => 7.0,
 		}
 	}
 }
@@ -2173,9 +2179,12 @@ pub struct RectInstance {
 	pub color: [f32; 4],
 	/// params.x = mode (0 solid quad, 1 close-"X" mark, 2 rounded quad,
 	/// 3 triangle - a submenu arrow, or the Settings warning mark,
-	/// 4 the color picker's saturation/brightness square, 5 its hue strip),
+	/// 4 the color picker's saturation/brightness square, 5 its hue strip,
+	/// 6 a curly underline, 7 a dotted or dashed one),
 	/// params.y = stroke px for the X, corner radius for the rounded quad,
-	/// quarter-turns clockwise for the triangle (0 right, 1 down, 2 left, 3 up).
+	/// quarter-turns clockwise for the triangle (0 right, 1 down, 2 left, 3 up),
+	/// the wavelength of the curl, the period of the dashes (on for its first half).
+	/// The curl's stroke is a quarter of the quad's height.
 	/// The X and the arrows are drawn in the fragment shader, so each centers
 	/// exactly in its quad (a font glyph never did - baseline metrics vary, and
 	/// there is no arrow every interface font carries).
@@ -2459,11 +2468,38 @@ fn hue_rgb(h: f32) -> vec3<f32> {
     );
 }
 
+// A sine wave one period per p across the quad, its stroke a quarter of the
+// quad tall. Distance over the slope keeps the stroke even on the steep parts.
+fn curl(local: vec2<f32>, size: vec2<f32>, p: f32) -> f32 {
+    let t = size.y * 0.25;
+    let amp = (size.y - t) * 0.5;
+    let k = 6.2831853 / max(p, 1.0);
+    let wave = size.y * 0.5 - amp * sin(local.x * k);
+    let slope = amp * k * cos(local.x * k);
+    let d = abs(local.y - wave) / sqrt(1.0 + slope * slope);
+    return clamp(t * 0.5 + 0.5 - d, 0.0, 1.0);
+}
+
+// How much of a square wave, on for the first half of each period p, has run
+// up to x. The difference across a pixel is its coverage, so dots that don't
+// land on whole pixels still come out even.
+fn dash_ink(x: f32, p: f32) -> f32 {
+    return floor(x / p) * p * 0.5 + min(fract(x / p) * p, p * 0.5);
+}
+fn dashes(x: f32, period: f32) -> f32 {
+    let p = max(period, 1.0);
+    return clamp(dash_ink(x + 0.5, p) - dash_ink(x - 0.5, p), 0.0, 1.0);
+}
+
 @fragment
 fn fs(in: VsOut) -> @location(0) vec4<f32> {
     var rgb = in.color.rgb;
     var a = in.color.a;
-    if (in.params.x > 4.5) {
+    if (in.params.x > 6.5) {
+        a = a * dashes(in.local.x, in.params.y);
+    } else if (in.params.x > 5.5) {
+        a = a * curl(in.local, in.size, in.params.y);
+    } else if (in.params.x > 4.5) {
         rgb = to_linear(hue_rgb(in.local.y / in.size.y));
     } else if (in.params.x > 3.5) {
         let s = in.local.x / in.size.x;
@@ -2574,6 +2610,8 @@ mod tests {
 				QuadMode::Triangle => Some("right_triangle("),
 				QuadMode::PickSquare => Some("mix(vec3<f32>(1.0)"),
 				QuadMode::HueStrip => Some("hue_rgb("),
+				QuadMode::Curl => Some("curl("),
+				QuadMode::Dashes => Some("dashes("),
 			};
 			let branch = branches.iter().find(|(bound, _)| mode.code() > *bound);
 			match (branch, drawn_by) {

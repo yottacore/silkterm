@@ -233,19 +233,15 @@ Same story for a shell running behind `ssh` or in a container - that one is your
 
 ## Programs over ssh
 
-SilkTerm tells programs what kind of terminal they are in through `TERM`. It is `alacritty` where this computer has that terminfo entry, since SilkTerm's terminal engine comes from Alacritty, and `xterm-256color` where it doesn't. `COLORTERM=truecolor` is set either way.
+SilkTerm tells programs what kind of terminal they are in through `TERM`. Each pane gets `TERM=xterm-256color` and `COLORTERM=truecolor`. `ssh` sends the same `TERM` to the other host, and every host has the xterm-256color entry, so `nano`, `less` and other full-screen programs work there with nothing set up first.
 
-`ssh` sends the same `TERM` to the other host. A host that has never had the alacritty entry, such as a stock Mac, then can't run `nano`, `less` or other full-screen programs, and says "'alacritty': unknown terminal type." There are two ways out:
+SilkTerm's terminal engine comes from Alacritty, and the alacritty entry describes a few extras that xterm-256color doesn't, such as curly underlines. To use it, set `shell.term: alacritty` in the config. Every new pane then gets that instead, here and over ssh. A host that has never had the alacritty entry, such as a stock Mac, then says "'alacritty': unknown terminal type." Copy the entry to that host. It goes in your home folder there, so it needs no admin rights:
 
-- Copy the entry to that host. It goes in your home folder there, so it needs no admin rights:
+~~~sh
+infocmp -x alacritty | ssh HOST 'cat > /tmp/alacritty.ti && tic -x -o ~/.terminfo /tmp/alacritty.ti && rm /tmp/alacritty.ti'
+~~~
 
-	~~~sh
-	infocmp -x alacritty | ssh HOST 'cat > /tmp/alacritty.ti && tic -x -o ~/.terminfo /tmp/alacritty.ti && rm /tmp/alacritty.ti'
-	~~~
-
-	On macOS `sudo` keeps `HOME`, so a program run with `sudo` finds it too. Linux usually sets `HOME` to root's, so there root needs its own copy.
-
-- Or set `shell.term: xterm-256color` in the config. Every new pane gets that instead, here and over ssh. A few extras only the alacritty entry describes, such as curly underlines, go unused.
+On macOS `sudo` keeps `HOME`, so a program run with `sudo` finds it too. Linux usually sets `HOME` to root's, so there root needs its own copy.
 
 ## Opening scripts and folders on Windows
 

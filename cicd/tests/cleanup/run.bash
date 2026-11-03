@@ -155,6 +155,18 @@ fSweepBuilds
 fCheck "a nightly bump takes the old nightly's dir" test ! -e "${TARGET_DIR}/asan-2026-01-01"
 fCheck "and keeps the new one" test -f "${TARGET_DIR}/asan-2026-02-02/CACHEDIR.TAG"
 fCheck "the config names the ASan dir for the nightly" bash -c 'source "$1" && [[ " ${CLEANUP_NIGHTLY_DIRS[*]} " == *" ${ASAN_DIR} "* && "${ASAN_DIR}" == asan-* ]]' _ "${root}/cicd/config.bash"
+## Miri's dir has cargo's target dir one down, miri/, with Miri's sysroot in it,
+## so the dir named for the nightly goes whole.
+fTag "${TARGET_DIR}/miri-2026-01-01/miri"; fCargo "${TARGET_DIR}/miri-2026-01-01/miri/x86_64-unknown-linux-gnu/debug"
+mkdir -p "${TARGET_DIR}/miri-2026-01-01/miri/sysroot/lib"
+CLEANUP_NIGHTLY_DIRS=(asan-2026-02-02 miri-2026-01-01/miri)
+fSweepBuilds
+fCheck "the Miri dir stays while the nightly does" test -d "${TARGET_DIR}/miri-2026-01-01/miri/sysroot/lib"
+fTag "${TARGET_DIR}/miri-2026-02-02/miri"; CLEANUP_NIGHTLY_DIRS=(asan-2026-02-02 miri-2026-02-02/miri)
+fSweepBuilds
+fCheck "and a bump takes it, its sysroot and the dir named for it" test ! -e "${TARGET_DIR}/miri-2026-01-01"
+fCheck "and keeps the new one" test -f "${TARGET_DIR}/miri-2026-02-02/miri/CACHEDIR.TAG"
+fCheck "the config names the Miri dir that way" bash -c 'source "$1" && [[ " ${CLEANUP_NIGHTLY_DIRS[*]} " == *" ${MIRI_DIR}/miri "* && "${MIRI_DIR}" == miri-* ]]' _ "${root}/cicd/config.bash"
 unset -f rustc
 
 ## H: Zig caches, emptied whole once another Zig filled them or once over the cap,
@@ -249,3 +261,4 @@ echo "all passed"
 ##		- 20261026 JC: The Zig cap by apparent size.
 ##		- 20261031: Run folders, stale after 2 days, and the old ledgers emptied.
 ##		- 20261101: A lone test run's kept folder goes with the stale run folders.
+##		- 20261102: The Miri dir, its sysroot in it, goes whole on a nightly bump.

@@ -7,6 +7,8 @@
 ##		lets its device go after the one minute, and the title says so.
 ##			- Not before most of the minute is up.
 ##			- By a little past it.
+##		A second window beside it runs a program that prints every 10 s in a
+##		tab in the back, with a quiet tab in front, and has to let go the same.
 ##		The wait is the setting's own, read from the file, so no idle override
 ##		is set: SILK_IDLE_SECS would stand in for both waits and hide a setting
 ##		that never reaches the release.
@@ -52,10 +54,11 @@ failures=0
 fCheck(){ local -r what="${1}"; shift; if "${@}"; then echo "  ok   ${what}"; else echo "  FAIL ${what}"; failures=$((failures + 1)); fi; }
 
 work="$(mktemp -d "${SILKTERM_TEST_DIR}/idleother.XXXXXX")"
-appPid=""; startedDisplay=0
+appPid=""; backPid=""; startedDisplay=0
 fCleanup(){
 	local -r rc="${1}"
 	if [[ -n "${appPid}" ]]; then fStopOurs "${appPid}"; fi
+	if [[ -n "${backPid}" ]]; then fStopOurs "${backPid}"; fi
 	if ((startedDisplay)); then "${headless}" stop >/dev/null 2>&1 || true; fi
 	local pid; for pid in $(fLeftovers); do kill "${pid}" 2>/dev/null || true; done
 	if [[ "${rc}" == 0 ]]; then fTestDir_Rm "${work}" || true; fi
@@ -101,50 +104,81 @@ if [[ "${status}" == *"no Xvfb"* ]]; then
 	startedDisplay=1
 fi
 
-home="${work}/home"
-mkdir -p "${home}"
 ## No blink, wallpaper or minimap, so nothing but the idle release changes the
 ## window, and no rating run to put the release off.
 printf '%s\n' 'performance:' $'\tautomatic: false' $'\tprofile: "custom"' \
 	'window:' $'\tremember_per_monitor: false' $'\tidle_release: true' $'\tidle_release_hidden_min: 60' $'\tidle_release_min: 1' \
 	'cursor:' $'\tblink: false' 'wallpaper:' $'\tenabled: false' 'scroll:' $'\tminimap:' $'\t\tenabled: false' >"${work}/config.shcl"
 printf '%s\n' 'while :; do sleep 300; done' >"${work}/scene.sh"
+printf '%s\n' 'while :; do sleep 10; echo tick; done' >"${work}/ticks.sh"
 
-DISPLAY="${display}" XAUTHORITY="${auth}" env -u WAYLAND_DISPLAY -u WAYLAND_SOCKET -u TMUX -u TMUX_PANE -u XDG_CONFIG_HOME -u XDG_CACHE_HOME -u XDG_DATA_HOME -u SILKTERM_SOCKET -u SILK_IDLE_SECS \
-	LIBGL_ALWAYS_SOFTWARE=1 HOME="${home}" XDG_RUNTIME_DIR="${home}" SILK_IDLEDBG=1 \
-	"${bin}" --config "${work}/config.shcl" --pixel-width 700 --pixel-height 400 --shell "${dash} ${work}/scene.sh" >/dev/null 2>"${work}/said.txt" &
+## One window, with a home and a config of its own, so two never race to
+## convert or seed the same file. Its title lines go to `<name>.titles`, its
+## stderr to `<name>.said`. The arguments after the name are its layout.
+fLaunch(){
+	local -r name="${1}"; shift
+	local -r home="${work}/${name}"
+	mkdir -p "${home}"
+	cp "${work}/config.shcl" "${home}/config.shcl"
+	DISPLAY="${display}" XAUTHORITY="${auth}" env -u WAYLAND_DISPLAY -u WAYLAND_SOCKET -u TMUX -u TMUX_PANE -u XDG_CONFIG_HOME -u XDG_CACHE_HOME -u XDG_DATA_HOME -u SILKTERM_SOCKET -u SILK_IDLE_SECS \
+		LIBGL_ALWAYS_SOFTWARE=1 HOME="${home}" XDG_RUNTIME_DIR="${home}" SILK_IDLEDBG=1 \
+		"${bin}" --config "${home}/config.shcl" --pixel-width 700 --pixel-height 400 "${@}" >/dev/null 2>"${work}/${name}.said" &
+}
+fLaunch quiet --shell "${dash} ${work}/scene.sh"
 appPid=$!
+## The window opens on its first tab, so that one is quiet and the tab made
+## after it prints. A --shell before --new-tab is the window's, for every tab.
+fLaunch back --shell "${dash} ${work}/scene.sh" --new-tab --shell "${dash} ${work}/ticks.sh"
+backPid=$!
 launched=${SECONDS}
 
-## The title once a half second, with the seconds since launch, until the note
-## shows or the wait is well past.
-win=""
-releasedAt=""
+## Each title once a half second, with the seconds since launch, until both
+## notes show or the wait is well past.
+declare -A win=([quiet]="" [back]="") releasedAt=([quiet]="" [back]="")
+declare -A pidOf=([quiet]="${appPid}" [back]="${backPid}")
 giveUp=$((launched + 100))
 while ((SECONDS < giveUp)); do
-	if [[ -z "${win}" ]]; then
-		win="$(DISPLAY="${display}" XAUTHORITY="${auth}" xdotool search --pid "${appPid}" --name 'SilkTerm' 2>/dev/null | head -n 1 || true)"
-	fi
-	if [[ -n "${win}" ]]; then
-		title="$(DISPLAY="${display}" XAUTHORITY="${auth}" xprop -id "${win}" _NET_WM_NAME 2>/dev/null || true)"
-		echo "$((SECONDS - launched)) ${title#*= }" >>"${work}/titles.txt"
-		if [[ "${title}" == *"(resource conservation mode)"* ]]; then releasedAt=$((SECONDS - launched)); break; fi
-	fi
+	for name in quiet back; do
+		[[ -n "${releasedAt[${name}]}" ]] && continue
+		if [[ -z "${win[${name}]}" ]]; then
+			win[${name}]="$(DISPLAY="${display}" XAUTHORITY="${auth}" xdotool search --all --pid "${pidOf[${name}]}" --name 'SilkTerm' 2>/dev/null | head -n 1 || true)"
+			## side by side, since with no window manager both open at the
+			## same corner and one would cover the other
+			if [[ "${name}" == back && -n "${win[${name}]}" ]]; then DISPLAY="${display}" XAUTHORITY="${auth}" xdotool windowmove "${win[${name}]}" 0 500 2>/dev/null || true; fi
+		fi
+		[[ -n "${win[${name}]}" ]] || continue
+		title="$(DISPLAY="${display}" XAUTHORITY="${auth}" xprop -id "${win[${name}]}" _NET_WM_NAME 2>/dev/null || true)"
+		echo "$((SECONDS - launched)) ${title#*= }" >>"${work}/${name}.titles"
+		if [[ "${title}" == *"(resource conservation mode)"* ]]; then releasedAt[${name}]=$((SECONDS - launched)); fi
+	done
+	[[ -n "${releasedAt[quiet]}" && -n "${releasedAt[back]}" ]] && break
 	sleep 0.5
 done
 fStopOurs "${appPid}"; appPid=""
+fStopOurs "${backPid}"; backPid=""
 
-fCheck "the window came up" test -n "${win}"
-fCheck "an unfocused window on screen lets its device go after Minutes otherwise" test -n "${releasedAt}"
-fNotEarly(){ [[ -n "${releasedAt}" ]] && ((releasedAt >= 45)); }
-fCheck "and not well before the minute (${releasedAt:-never} s)" fNotEarly
+fNotEarly(){ [[ -n "${releasedAt[${1}]}" ]] && ((releasedAt[${1}] >= 45)); }
+fCheck "the window came up" test -n "${win[quiet]}"
+fCheck "an unfocused window on screen lets its device go after Minutes otherwise" test -n "${releasedAt[quiet]}"
+fCheck "and not well before the minute (${releasedAt[quiet]:-never} s)" fNotEarly quiet
+fCheck "the window with a printing tab in the back came up" test -n "${win[back]}"
+## xdotool matches any one condition unless told --all, and two windows read
+## as one then
+fCheck "each window is its own" test "${win[quiet]}" != "${win[back]}"
+fCheck "output from a tab in the back does not keep the device" test -n "${releasedAt[back]}"
+fCheck "and not well before the minute (${releasedAt[back]:-never} s)" fNotEarly back
 
 if ((failures)); then
-	echo "  titles:"; uniq -f 1 "${work}/titles.txt" 2>/dev/null | sed 's/^/      /' || true
-	echo "  said:"; sed 's/^/      /' "${work}/said.txt" 2>/dev/null || true
+	for name in quiet back; do
+		echo "  ${name} titles:"; uniq -f 1 "${work}/${name}.titles" 2>/dev/null | sed 's/^/      /' || true
+		echo "  ${name} said:"; sed 's/^/      /' "${work}/${name}.said" 2>/dev/null || true
+	done
 	echo "${failures} failed"; exit 1
 fi
 echo "all passed"
 
 ##	History:
 ##		- 20261101 JC: Created.
+##		- 20261102 JC: A second window, printing in a tab in the back.
+##		- 20261102 JC: Each title read from its own window, and the printing
+##		  tab really in the back.

@@ -138,6 +138,190 @@ struct StripCell {
 	bold: bool,
 	italic: bool,
 	wide: u8,
+	rules: CellRules,
+}
+
+/// A line drawn across a cell besides its glyph.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum Rule {
+	Single,
+	Double,
+	Curly,
+	Dotted,
+	Dashed,
+	Strike,
+}
+
+/// What a cell asks to be lined with: one underline style (SGR 4 and its
+/// sub-styles) and a strike through (SGR 9), each in its color.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+struct CellRules {
+	under: Option<(Rule, [u8; 3])>,
+	strike: Option<[u8; 3]>,
+}
+
+// The engine keeps one underline style at a time, and SGR 24 or 4:0 clears it.
+fn underline_style(flags: Flags) -> Option<Rule> {
+	[
+		(Flags::UNDERCURL, Rule::Curly),
+		(Flags::DOUBLE_UNDERLINE, Rule::Double),
+		(Flags::DOTTED_UNDERLINE, Rule::Dotted),
+		(Flags::DASHED_UNDERLINE, Rule::Dashed),
+		(Flags::UNDERLINE, Rule::Single),
+	]
+	.into_iter()
+	.find(|(flag, _)| flags.contains(*flag))
+	.map(|(_, rule)| rule)
+}
+
+// `fg` is the text color as drawn, lifted off `behind` already. An underline
+// color the program set (SGR 58) gets the same lift, or a red squiggle on a
+// red-ish background would vanish. Concealed text hides its lines too.
+fn cell_rules(
+	cell: &Cell,
+	fg: [u8; 3],
+	behind: [u8; 3],
+	colors: &Colors,
+	settings: &config::Settings,
+	readable: &mut palette::Readable,
+) -> CellRules {
+	if cell.flags.contains(Flags::HIDDEN) {
+		return CellRules::default();
+	}
+	let under = underline_style(cell.flags).map(|rule| {
+		let color = cell.underline_color().map_or(fg, |color| {
+			readable.get(
+				palette::resolve(color, colors, settings),
+				behind,
+				settings.min_contrast(),
+			)
+		});
+		(rule, color)
+	});
+	CellRules {
+		under,
+		strike: cell.flags.contains(Flags::STRIKEOUT).then_some(fg),
+	}
+}
+
+/// Thickness of an underline, and how far its top sits below the cell's top.
+/// The mono baseline isn't published, so it goes off the cell box instead -
+/// close enough for a thin rule, and it scales with the font.
+fn underline_metrics(cell_h: f32) -> (f32, f32) {
+	let thick = (cell_h * 0.06).round().max(1.0);
+	let gap = (cell_h * 0.10).round();
+	(thick, cell_h - thick - gap)
+}
+
+/// Cells in one row under the same rule and color, `first..end` in columns.
+/// Kept whole so a curl or a dash pattern runs on unbroken across cells.
+#[derive(Clone, Copy, PartialEq, Debug)]
+struct RuleSpan {
+	rule: Rule,
+	color: [u8; 3],
+	row: i32,
+	y: f32,
+	first: usize,
+	end: usize,
+}
+
+fn push_rule(
+	spans: &mut Vec<RuleSpan>,
+	rule: Rule,
+	color: [u8; 3],
+	row: i32,
+	y: f32,
+	column: usize,
+	cells: usize,
+) {
+	if let Some(last) = spans.last_mut()
+		&& last.row == row
+		&& last.end == column
+		&& (last.rule, last.color) == (rule, color)
+	{
+		last.end = column + cells;
+		return;
+	}
+	spans.push(RuleSpan {
+		rule,
+		color,
+		row,
+		y,
+		first: column,
+		end: column + cells,
+	});
+}
+
+fn push_cell_rules(
+	rules: CellRules,
+	(unders, strikes): (&mut Vec<RuleSpan>, &mut Vec<RuleSpan>),
+	row: i32,
+	y: f32,
+	column: usize,
+	cells: usize,
+) {
+	if let Some((rule, color)) = rules.under {
+		push_rule(unders, rule, color, row, y, column, cells);
+	}
+	if let Some(color) = rules.strike {
+		push_rule(strikes, Rule::Strike, color, row, y, column, cells);
+	}
+}
+
+/// The quads for one span, `x0` the left edge of column 0. A quad that would
+/// cross `clip` is left out rather than cut, since a cut curl or dash would
+/// redraw squashed into what is left.
+fn span_quads(
+	span: &RuleSpan,
+	x0: f32,
+	(cell_w, cell_h): (f32, f32),
+	clip: Option<(f32, f32)>,
+	out: &mut Vec<RectInstance>,
+) {
+	use crate::gfx::QuadMode;
+	let (thick, drop) = underline_metrics(cell_h);
+	let line_y = span.y + drop;
+	let bottom = span.y + cell_h;
+	let x = x0 + span.first as f32 * cell_w;
+	let w = (span.end - span.first) as f32 * cell_w;
+	let mut quad = |top: f32, h: f32, mode: QuadMode, period: f32| {
+		if clip.is_some_and(|(clip_t, clip_b)| top < clip_t || top + h > clip_b) {
+			return;
+		}
+		out.push(RectInstance {
+			pos: [x, top],
+			size: [w, h],
+			color: config::srgb_f32(span.color),
+			params: [mode.code(), period],
+		});
+	};
+	match span.rule {
+		Rule::Single => quad(line_y, thick, QuadMode::Solid, 0.0),
+		Rule::Double => {
+			// the first rule where a single one goes, unless a short cell has no
+			// room for the second under it
+			let lower = (line_y + 2.0 * thick).min(bottom - thick);
+			quad(lower - 2.0 * thick, thick, QuadMode::Solid, 0.0);
+			quad(lower, thick, QuadMode::Solid, 0.0);
+		}
+		Rule::Curly => {
+			let h = 4.0 * thick;
+			quad(
+				(line_y - 1.5 * thick).min(bottom - h),
+				h,
+				QuadMode::Curl,
+				cell_w,
+			);
+		}
+		Rule::Dotted => quad(line_y, thick, QuadMode::Dashes, 2.0 * thick),
+		Rule::Dashed => quad(line_y, thick, QuadMode::Dashes, cell_w),
+		Rule::Strike => quad(
+			(span.y + cell_h * 0.55 - thick * 0.5).round(),
+			thick,
+			QuadMode::Solid,
+			0.0,
+		),
+	}
 }
 
 // Scrolled-off strip: the rows a scroll pushed out of an app's region, retained
@@ -388,6 +572,7 @@ fn strip_cell(
 			bold: false,
 			italic: false,
 			wide: 0,
+			rules: CellRules::default(),
 		};
 	}
 	let mut fg = palette::resolve(cell.fg, colors, settings);
@@ -406,9 +591,11 @@ fn strip_cell(
 		];
 	}
 	fg = readable.get(fg, cell_bg, settings.min_contrast());
+	let rules = cell_rules(cell, fg, cell_bg, colors, settings, readable);
 	StripCell {
 		c: cell.c,
 		fg,
+		rules,
 		bg: (cell_bg != settings.bg).then_some(cell_bg),
 		bold: flags.contains(Flags::BOLD)
 			|| (settings.embolden_inverse && flags.contains(Flags::INVERSE)),
@@ -1187,6 +1374,10 @@ pub struct PaneDraw {
 	/// an underline is not a cell background - filing it there would punch the
 	/// readability halo out of every line holding a link.
 	pub links: Vec<RectInstance>,
+	/// Underlines and strike-throughs the text asks for. Out of `bg` for the
+	/// same reason as `links`, and drawn with them; unlike them, built with the
+	/// text and kept on a cursor-only frame.
+	pub rules: Vec<RectInstance>,
 	pub cursor: Option<RectInstance>,
 	/// App-scroll slide (None = common case: whole pane at `top`). While a
 	/// full-screen app's scroll eases, the current frame draws shifted at `top`
@@ -2101,11 +2292,8 @@ impl Pane {
 		// through y_of, so a cached set would lag the text it belongs to.
 		let mut link_rects = Vec::new();
 		if let Some(link) = &self.link_hover {
-			// A link underline wants to sit just under the baseline; the mono
-			// baseline isn't published, so it's placed off the cell box instead -
-			// close enough for a 1px rule, and it scales with the font.
-			let thick = (cell_h * 0.06).round().max(1.0);
-			let gap = (cell_h * 0.10).round();
+			// where a text underline goes, so one under a link isn't doubled
+			let (thick, drop) = underline_metrics(cell_h);
 			let color = config::srgb_f32(link.fg);
 			for grid_line in link.start.line.0..=link.end.line.0 {
 				let screen_row = if ob > 0 && grid_line >= split_row {
@@ -2136,7 +2324,7 @@ impl Pane {
 				link_rects.push(RectInstance {
 					pos: [
 						content_x + first_col as f32 * cell_w,
-						y_of(screen_row) + cell_h - thick - gap,
+						y_of(screen_row) + drop,
 					],
 					size: [(last_col - first_col + 1) as f32 * cell_w, thick],
 					color,
@@ -2204,6 +2392,9 @@ impl Pane {
 		// last frame's list, emptied, so a rebuild doesn't grow one from nothing
 		let mut bg = std::mem::take(&mut self.last_draw.bg);
 		bg.clear();
+		let mut rules = std::mem::take(&mut self.last_draw.rules);
+		rules.clear();
+		let (mut unders, mut strikes) = (Vec::new(), Vec::new());
 		// fallback glyphs to draw per-cell: (char, fg, bold, italic, col, screen-row, cells)
 		let mut glyph_specs: Vec<(char, [u8; 3], bool, bool, usize, i32, u8)> = Vec::new();
 		let default_attrs = mono_attrs();
@@ -2332,8 +2523,14 @@ impl Pane {
 					cell_bg
 				};
 				fg = self.readable.get(fg, behind, settings.min_contrast());
+				let mut cell_lines =
+					cell_rules(cell, fg, behind, colors, &settings, &mut self.readable);
 				if bell > 0.0 {
 					fg = bell_brighten(fg, bell); // visual-bell flash
+					if let Some((_, color)) = &mut cell_lines.under {
+						*color = bell_brighten(*color, bell);
+					}
+					cell_lines.strike = cell_lines.strike.map(|_| fg);
 				}
 
 				let bg_color = if selected {
@@ -2379,6 +2576,14 @@ impl Pane {
 				} else {
 					1
 				};
+				push_cell_rules(
+					cell_lines,
+					(&mut unders, &mut strikes),
+					screen_row,
+					y,
+					column,
+					usize::from(w),
+				);
 				if !cell.c.is_ascii() && !ctx.covered_at(cell.c, w) {
 					for _ in 0..w {
 						run.push(' ');
@@ -2397,6 +2602,11 @@ impl Pane {
 			flush_row!();
 		}
 		rows_out.truncate(rows_used); // drop stale slots from a taller prior frame
+		for span in unders.iter().chain(&strikes) {
+			let clip =
+				region_rect_clip.filter(|_| span.row >= top_split_row && span.row < split_row);
+			span_quads(span, content_x, (cell_w, cell_h), clip, &mut rules);
+		}
 
 		drop(guard);
 		let mut cursor = self.cursor_quad(
@@ -2505,10 +2715,19 @@ impl Pane {
 				if rect_bot <= rect_top {
 					continue;
 				}
+				let (mut unders, mut strikes) = (Vec::new(), Vec::new());
 				for (c, cell) in row.iter().enumerate() {
 					if cell.wide == 0 {
 						continue;
 					}
+					push_cell_rules(
+						cell.rules,
+						(&mut unders, &mut strikes),
+						j as i32,
+						y,
+						c,
+						usize::from(cell.wide),
+					);
 					if let Some(col) = cell.bg {
 						bg.push(RectInstance {
 							pos: [content_x + c as f32 * cell_w, rect_top],
@@ -2517,6 +2736,10 @@ impl Pane {
 							..Default::default()
 						});
 					}
+				}
+				for span in unders.iter().chain(&strikes) {
+					let clip = Some((clip_t, clip_b));
+					span_quads(span, content_x, (cell_w, cell_h), clip, &mut rules);
 				}
 			}
 		}
@@ -2600,6 +2823,7 @@ impl Pane {
 			top,
 			bg,
 			links: link_rects,
+			rules,
 			cursor,
 			slide,
 		};
@@ -4146,6 +4370,7 @@ fn spawn_pane(
 			top: rect.y,
 			bg: Vec::new(),
 			links: Vec::new(),
+			rules: Vec::new(),
 			cursor: None,
 			slide: None,
 		},
@@ -5418,22 +5643,23 @@ mod vhist_probe;
 mod tests {
 	use super::{
 		APP_SCROLL_MAX, AttrsList, BAR_MIN_THUMB, BRACKET_REACH_ROWS, CURSOR_ALPHA,
-		CURSOR_ALPHA_LIGHT, CURSOR_MAX_LAG, CursorAnimation, DepthSampler, Dir, GColor, LinkHit,
-		Node, OffStrip, Output, PROMPT_SKEL_MIN, PauseState, Rect, SLIDE_TOP_BAND_APPS, StripCell,
-		Style, Weight, adopt_band, alloc_pane_id, band_row_line, bar_applies_to, bar_pos_to_lines,
-		bar_thumb_span, bar_track, bell_brighten, blank_went_up, bracket_reach, capture_grid_text,
-		capture_start, child_areas, cursor_alpha, cursor_cycle, cursor_envelope, cursor_geometry,
-		cursor_plate, cursor_slide_step, cursor_wake_after, debold_attrs, distinct_pair,
-		divider_at, drop_hold_over, ease_output, edge_scroll_rate, equalize_dir_run,
-		fingerprint_frame, fnv_row, fnv_row_skel, glide_to_full, grid_point, handle_is_dragged,
-		handle_pos, has_ink, layout, ledger_makes_room, ledger_step, link_at, lock_for_frame,
-		logical_line_bounds, minimap, mono_attrs, move_is_input, next_capture_poll, output_advance,
-		output_band, pair_inside, paste_payload, place_split, prompt_strip, pulse_env,
-		pushed_since, render_char, repaint_shift, repainted_edge, resume_delay, same_char_pair,
+		CURSOR_ALPHA_LIGHT, CURSOR_MAX_LAG, CellRules, CursorAnimation, DepthSampler, Dir, GColor,
+		LinkHit, Node, OffStrip, Output, PROMPT_SKEL_MIN, PauseState, Rect, Rule, RuleSpan,
+		SLIDE_TOP_BAND_APPS, StripCell, Style, Weight, adopt_band, alloc_pane_id, band_row_line,
+		bar_applies_to, bar_pos_to_lines, bar_thumb_span, bar_track, bell_brighten, blank_went_up,
+		bracket_reach, capture_grid_text, capture_start, cell_rules, child_areas, cursor_alpha,
+		cursor_cycle, cursor_envelope, cursor_geometry, cursor_plate, cursor_slide_step,
+		cursor_wake_after, debold_attrs, distinct_pair, divider_at, drop_hold_over, ease_output,
+		edge_scroll_rate, equalize_dir_run, fingerprint_frame, fnv_row, fnv_row_skel,
+		glide_to_full, grid_point, handle_is_dragged, handle_pos, has_ink, layout,
+		ledger_makes_room, ledger_step, link_at, lock_for_frame, logical_line_bounds, minimap,
+		mono_attrs, move_is_input, next_capture_poll, output_advance, output_band, pair_inside,
+		paste_payload, place_split, prompt_strip, pulse_env, push_cell_rules, pushed_since,
+		render_char, repaint_shift, repainted_edge, resume_delay, same_char_pair,
 		scroll_shift_signed, set_buffer_rows, set_ratio, shape_reach, shift_makes_room,
-		shown_cursor_shape, skel_rows, slide_bands, slide_is_visible, snapshot_rows, static_bands,
-		strip_cell, strip_rows, swap_leaves, text_buffer_h, translate_span, vanished_range,
-		weld_region_clip,
+		shown_cursor_shape, skel_rows, slide_bands, slide_is_visible, snapshot_rows, span_quads,
+		static_bands, strip_cell, strip_rows, swap_leaves, text_buffer_h, translate_span,
+		underline_metrics, vanished_range, weld_region_clip,
 	};
 	use crate::{config, palette};
 	use alacritty_terminal::event::{Event, EventListener};
@@ -7692,6 +7918,7 @@ mod tests {
 				bold: false,
 				italic: false,
 				wide: 1,
+				rules: CellRules::default(),
 			})
 			.collect()
 	}
@@ -8662,6 +8889,7 @@ mod tests {
 			bold: false,
 			italic: false,
 			wide: 1,
+			rules: CellRules::default(),
 		}]
 	}
 
@@ -9551,5 +9779,139 @@ mod tests {
 		);
 		buf.shape_until_scroll(&mut ctx.font_system, false);
 		assert_eq!(buf.layout_runs().count(), lines + 1);
+	}
+
+	// The repro line, with 4:2 for double (the engine reads 21 as not bold), and
+	// the other styles: each underline the engine keeps is
+	// its own rule over exactly its cells, in the color the program set or else
+	// the text's. Concealed text draws none, and the strip keeps them too.
+	// Test ID: desqy
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn each_underline_style_lines_its_own_cells() {
+		let line = concat!(
+			"\x1b[4mplain\x1b[0m \x1b[4:3mcurly\x1b[0m \x1b[4:2mdouble\x1b[0m ",
+			"\x1b[4:4mdot\x1b[0m \x1b[4:5mdash\x1b[0m \x1b[9mgone\x1b[0m ",
+			"\x1b[4;58:2::255:0:0mred\x1b[0m \x1b[4;8mhid\x1b[0m",
+		);
+		let cols = 60;
+		let term = term_fed(cols, 2, 0, line);
+		let settings = config::Settings::default();
+		let mut readable = palette::Readable::default();
+		let (mut unders, mut strikes) = (Vec::new(), Vec::new());
+		let row = &term.grid()[Line(0)];
+		for column in 0..cols {
+			let rules = cell_rules(
+				&row[Column(column)],
+				[200; 3],
+				[0; 3],
+				term.colors(),
+				&settings,
+				&mut readable,
+			);
+			push_cell_rules(rules, (&mut unders, &mut strikes), 0, 0.0, column, 1);
+		}
+		let spans = |list: &[RuleSpan]| -> Vec<(Rule, usize, usize)> {
+			list.iter().map(|s| (s.rule, s.first, s.end)).collect()
+		};
+		assert_eq!(
+			spans(&unders),
+			[
+				(Rule::Single, 0, 5),
+				(Rule::Curly, 6, 11),
+				(Rule::Double, 12, 18),
+				(Rule::Dotted, 19, 22),
+				(Rule::Dashed, 23, 27),
+				(Rule::Single, 33, 36),
+			]
+		);
+		assert_eq!(spans(&strikes), [(Rule::Strike, 28, 32)]);
+		let red = palette::readable([255, 0, 0], [0; 3], settings.min_contrast());
+		let colors: Vec<_> = unders.iter().map(|s| s.color).collect();
+		assert_eq!(colors[..5], [[200; 3]; 5]);
+		assert_eq!(colors[5], red);
+		assert_eq!(strikes[0].color, [200; 3]);
+		let strip = strip_cell(&row[Column(6)], term.colors(), &settings, &mut readable);
+		assert_eq!(strip.rules.under.map(|(rule, _)| rule), Some(Rule::Curly));
+	}
+
+	// Every rule stays inside its own cell at any font size, so none draws into
+	// the row under it, and the underline sits where the link one does. A rule
+	// crossing the slide's clip is left out, not squashed.
+	// Test ID: desqz
+	#[test]
+	fn the_rules_stay_inside_their_cells() {
+		use crate::gfx::QuadMode;
+		let all = [
+			Rule::Single,
+			Rule::Double,
+			Rule::Curly,
+			Rule::Dotted,
+			Rule::Dashed,
+			Rule::Strike,
+		];
+		for height in 6..=64u8 {
+			let cell_h = f32::from(height);
+			let cell_w = (cell_h * 0.5).round();
+			let (thick, drop) = underline_metrics(cell_h);
+			for rule in all {
+				let span = RuleSpan {
+					rule,
+					color: [1, 2, 3],
+					row: 3,
+					y: 100.0,
+					first: 2,
+					end: 5,
+				};
+				let mut out = Vec::new();
+				span_quads(&span, 10.0, (cell_w, cell_h), None, &mut out);
+				assert_eq!(
+					out.len(),
+					if rule == Rule::Double { 2 } else { 1 },
+					"{rule:?}"
+				);
+				for quad in &out {
+					assert_eq!(quad.pos[0], 10.0 + 2.0 * cell_w);
+					assert_eq!(quad.size[0], 3.0 * cell_w);
+					assert!(
+						quad.pos[1] >= 100.0 && quad.pos[1] + quad.size[1] <= 100.0 + cell_h,
+						"{rule:?} at {cell_h}: {quad:?}"
+					);
+				}
+				let mode = match rule {
+					Rule::Single | Rule::Double | Rule::Strike => QuadMode::Solid,
+					Rule::Curly => QuadMode::Curl,
+					Rule::Dotted | Rule::Dashed => QuadMode::Dashes,
+				};
+				assert!(out.iter().all(|quad| quad.mode() == mode), "{rule:?}");
+				match rule {
+					Rule::Single | Rule::Dotted | Rule::Dashed => {
+						assert_eq!(out[0].pos[1], 100.0 + drop);
+						assert_eq!(out[0].size[1], thick);
+					}
+					Rule::Double => assert!(out[1].pos[1] - out[0].pos[1] >= 2.0 * thick),
+					Rule::Curly => assert_eq!(out[0].size[1], 4.0 * thick),
+					Rule::Strike => assert!(out[0].pos[1] + thick <= 100.0 + drop),
+				}
+				let mut clipped = Vec::new();
+				let (clip_t, clip_b) = (100.0, 100.0 + drop);
+				span_quads(
+					&span,
+					10.0,
+					(cell_w, cell_h),
+					Some((clip_t, clip_b)),
+					&mut clipped,
+				);
+				assert!(
+					clipped
+						.iter()
+						.all(|quad| quad.pos[1] >= clip_t && quad.pos[1] + quad.size[1] <= clip_b),
+					"{rule:?} at {cell_h}: {clipped:?}"
+				);
+				if rule == Rule::Single {
+					assert!(clipped.is_empty());
+				}
+			}
+		}
 	}
 }

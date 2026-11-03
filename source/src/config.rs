@@ -920,7 +920,7 @@ pub struct Settings {
 	pub copy_on_select: bool,       // panes start with copy-on-select enabled
 	pub shell_integration: bool,    // put the directory-reporting block in PowerShell profiles
 	pub bash_prompt: bool,          // give bash panes the x9ps1-git prompt (see integration.rs)
-	pub term: String,               // TERM for new panes; empty leaves the engine's pick
+	pub term: String,               // TERM for new panes; empty is xterm-256color
 	pub tmux_new_session: bool,     // a split starts in a tmux session of its own (tmux.rs)
 	pub tmux_session_name: String,  // that session's name, as a template
 	pub tmux_on_close: crate::tmux::OnClose, // what closing such a pane does to its session
@@ -8314,10 +8314,10 @@ shell:
 	## replaces a prompt set in .bashrc.
 	# bash_prompt: false  ## Default
 
-	## The TERM a new pane gets. Empty is alacritty where this computer has
-	## that terminfo entry, and xterm-256color where it doesn't. ssh hands
-	## the same TERM to the remote host, so if programs there say "unknown
-	## terminal type", set xterm-256color here.
+	## The TERM a new pane gets. Empty is xterm-256color, which every host
+	## knows, here and over ssh. alacritty describes a few more extras, such
+	## as curly underlines, but a host without that terminfo entry can't run
+	## full-screen programs under it.
 	# term: ""  ## Default
 
 	# copy_on_select: true  ## Default
@@ -15088,7 +15088,7 @@ mod tests {
 		assert_eq!(odd.tmux_session_name, d.tmux_session_name);
 	}
 
-	// Empty leaves TERM to the engine; anything else is one word, and a value
+	// Empty is the pane's xterm-256color; anything else is one word, and a value
 	// with a space in it can't be a TERM, so it reads as the default.
 	// Test ID: de9kp
 	#[test]

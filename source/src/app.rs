@@ -2005,13 +2005,15 @@ impl State {
 		// glyphs, so a solid rule came out as a barcode tracing the letterforms.
 		// They stay out of the scrim's coverage map either way (an underline should
 		// cast no halo of its own), and stay under the cursor as before.
+		// The text's own underlines and strike-throughs go the same way.
 		for p in self.tabs.cur().panes.values() {
-			let link_quads = &p.draw().links;
-			if link_quads.is_empty() {
+			let draw = p.draw();
+			if draw.links.is_empty() && draw.rules.is_empty() {
 				continue;
 			}
 			let start = instances.len() as u32;
-			instances.extend_from_slice(link_quads);
+			instances.extend_from_slice(&draw.rules);
+			instances.extend_from_slice(&draw.links);
 			link_ranges.push((p.rect, start, instances.len() as u32));
 		}
 

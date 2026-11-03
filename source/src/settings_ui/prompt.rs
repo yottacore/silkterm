@@ -295,6 +295,7 @@ mod tests {
 	// dialog through the box, and typing edited the row sitting behind it.
 	// Test ID: davex
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_prompt_swallows_every_input_path() {
 		let mut m = |s: &str| s.chars().count() as f32;
 		for which in [
@@ -339,6 +340,7 @@ mod tests {
 	// with it.
 	// Test ID: dcbcx
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn clicking_the_prompt_field_leaves_the_focus_ring_on_a_real_row() {
 		let mut m = |s: &str| s.chars().count() as f32;
 		let mut d = on_theme("Matrix");
@@ -360,6 +362,7 @@ mod tests {
 	// exactly as it was.
 	// Test ID: davcv
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_prompt_box_owns_the_keyboard_until_it_closes() {
 		let mut d = on_theme("Matrix");
 		d.set_col(Key::ColFg, [7, 7, 7]);
@@ -395,6 +398,7 @@ mod tests {
 	// and quietly doing nothing.
 	// Test ID: davcw
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_name_it_cannot_take_keeps_the_box_open() {
 		let mut d = on_theme("Matrix");
 		d.save_theme_as("Mine");

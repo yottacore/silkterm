@@ -29,7 +29,8 @@
 ##	      under ASan and LSan, in the container image; the leak checks, which
 ##	      are the heap-growth test under dhat and the soak test under
 ##	      heaptrack, in the image; under --long, the tests again
-##	      under TSan, in the image too; scroll harness)
+##	      under TSan, in the image too; under --leakcheck or --long, the tests
+##	      again under Miri, in the image, for hours; scroll harness)
 ##	   4. profiler (flamegraph SVG; non-gating artifact - see failure policy), on
 ##	      the card through a headless sway, and always on this box
 ##	   5. release build (native + cross targets; optimized, for packaging + dogfood),
@@ -58,15 +59,17 @@
 ##	   --no-fuzz           skip the fuzz soak (the short one in the test run still runs)
 ##	   --no-asan           skip the test suite under ASan and LSan
 ##	   --no-tsan           skip the test suite under TSan, under --long
+##	   --no-miri           skip the test suite under Miri, under --leakcheck or --long
 ##	   --no-leakcheck      skip every leak check (the heap-growth test under dhat,
-##	                       the soak test, CodeQL)
+##	                       the soak test, CodeQL, Miri)
 ##	   --leakcheck         every leak check, the slow ones too: the soak test under
-##	                       --quick, and CodeQL, over half an hour; not with
+##	                       --quick, CodeQL, over half an hour, and the test suite
+##	                       under Miri, which takes hours; not with
 ##	                       --backlog-run-quick
 ##	   --codeql            add CodeQL to the leak checks (off by default; slow)
 ##	   --long              everything, the steps that take hours too: the test
-##	                       suite under TSan and CodeQL. Not with --quick or
-##	                       --backlog-run-quick
+##	                       suite under TSan and under Miri, and CodeQL. Not with
+##	                       --quick or --backlog-run-quick
 ##	   --slow              another name for --long
 ##	   --no-profile        skip the profiler stage
 ##	   --no-dogfood        skip the dogfood install
@@ -195,6 +198,7 @@ while (($#)); do case "${1}" in
 	--no-fuzz)                FUZZ_SECS=0; innerArgs+=("${1}"); shift ;;
 	--no-asan)                ASAN_CMD=(); innerArgs+=("${1}"); shift ;;
 	--no-tsan)                TSAN_CMD=(); innerArgs+=("${1}"); shift ;;
+	--no-miri)                MIRI_CMD=(); innerArgs+=("${1}"); shift ;;
 	--leakcheck)              leakcheck=1; leakAsked=1; innerArgs+=("${1}"); shift ;;   ## every leak check, the slow ones too
 	--no-leakcheck)           leakcheck=0; innerArgs+=("${1}"); shift ;;
 	--codeql)                 codeql=1; innerArgs+=("${1}"); shift ;;                ## CodeQL in the leak checks; off until 2026102211462005
@@ -215,6 +219,9 @@ if ((long && gate)); then echo "--backlog-run-quick runs the fast checks only, s
 ## keeps the default run to about an hour. --leakcheck takes CodeQL too, becuase
 ## it's every leak check.
 if ((long || (leakAsked && leakcheck))); then codeql=1; fi
+## Miri takes hours even for the tests it's fast on, so only --leakcheck and
+## --long ask for it (2026102320591323). A later --no-leakcheck drops it with the rest.
+miri=0; if ((leakcheck && (long || leakAsked))); then miri=1; fi
 for area in "${gateAreas[@]}"; do case " ${gateAreasAll} " in *" ${area} "*) ;; *) echo "unknown area: ${area} (areas: ${gateAreasAll})" >&2; exit 2 ;; esac; done
 if ((gate && ${#gateAreas[@]} == 0)); then read -r -a gateAreas <<< "${gateAreasAll}"; fi
 if ((fullRun)); then assumeYes=1; sync=0; DOGFOOD_DESTS=(); GIT_PUBLISH=(); DEMO_ENABLE=0; fmtCheck=1; innerArgs+=(--fmt-check); fi
@@ -769,6 +776,12 @@ if ((! container && ! gate && ! quick && long)) && ((${#TSAN_CMD[@]})) && [[ -z 
 	if command -v "${docker}" >/dev/null 2>&1; then tsanInImage=1
 	else tsanSkipped="no docker here for the image with the nightly"; fi
 fi
+## The Miri run the same way, on the same nightly, under --leakcheck or --long.
+miriInImage=0; miriSkipped=""
+if ((! container && miri)) && ((${#MIRI_CMD[@]})) && [[ -z "${SILK_CICD_IN_CONTAINER:-}" ]]; then
+	if command -v "${docker}" >/dev/null 2>&1; then miriInImage=1
+	else miriSkipped="no docker here for the image with the nightly"; fi
+fi
 ## CodeQL, one of the leak checks, is in the image only too. Off unless --codeql,
 ## --leakcheck or --long asks, since a run takes over half an hour and 19 GB here
 ## (2026102211462005).
@@ -784,7 +797,7 @@ if ((! container && soak)) && [[ -z "${SILK_CICD_IN_CONTAINER:-}" ]]; then
 	if command -v "${docker}" >/dev/null 2>&1; then soakInImage=1
 	else soakSkipped="no docker here for the image with heaptrack"; fi
 fi
-if ((container || asanInImage || tsanInImage || codeqlInImage || soakInImage)); then
+if ((container || asanInImage || tsanInImage || miriInImage || codeqlInImage || soakInImage)); then
 	[[ -f "${containerRecipe}" ]] || fDie "missing ${containerRecipe}"
 	containerImage="$(fContainerImage)"
 	## Its real path, since a target dir linked to another disk would dangle inside.
@@ -1033,6 +1046,8 @@ fScriptTests(){
 	## One tool pin list for both pipelines, and the docs quoting it.
 	fRunTest cicd/tests/pins/run.bash "tool pins" "tool pin test failed"
 	fRunTest cicd/tests/jobs/run.bash "step jobs and priority" "step jobs test failed"
+	## The Mac CI's failed test names, which a split result line once hid.
+	fRunTest cicd/tests/ci-mac/run.bash "Mac CI failed test names"
 	## The PowerShell lint this stage gates on has to fail on a finding.
 	fRunTest cicd/tests/pslint/run.bash "PowerShell lint"
 	## The Python lint, the same way.
@@ -1337,6 +1352,17 @@ elif [[ -n "${tsanSkipped}" ]]; then
 else
 	fEcho_Clean "TSan ................: the tests again on ${SANITIZER_TOOLCHAIN}, in ${containerImage:-this container}"
 fi
+if ((${#MIRI_CMD[@]} == 0)); then
+	fEcho_Clean "Miri ................: (skipped)"
+elif ((! leakcheck)); then
+	fEcho_Clean "Miri ................: (skipped --no-leakcheck)"
+elif ((! miri)); then
+	fEcho_Clean "Miri ................: (off; --leakcheck or --long adds it)"
+elif [[ -n "${miriSkipped}" ]]; then
+	fEcho_Clean "Miri ................: (skipped, ${miriSkipped})"
+else
+	fEcho_Clean "Miri ................: the tests again on ${SANITIZER_TOOLCHAIN}, in ${containerImage:-this container}; very slow, hours"
+fi
 if [[ -z "${WINGUI_HARNESS+x}" ]] || ((${#WINGUI_HARNESS[@]} == 0)); then
 	fEcho_Clean "Windows scenarios ...: (disabled)"
 elif ((quick)); then
@@ -1426,6 +1452,7 @@ fi
 fPlanSteps
 fPlanSteps_Show
 fEcho_Clean
+if ((miri && ${#MIRI_CMD[@]})) && [[ -z "${miriSkipped}" ]]; then fEcho_Clean "Miri is on: very slow, it adds hours. Ctrl+C now stops the run, and --no-miri leaves it out."; fi
 fEcho_Clean "Fail-fast: any error aborts before the next step."
 fEcho_Clean
 if ((listing)); then
@@ -1435,6 +1462,7 @@ if ((listing)); then
 	if [[ -n "${ADVISORY_CMD+x}" ]] && ((${#ADVISORY_CMD[@]})); then fAdvisoryTests; fi
 	fScriptTests
 	if ((soak)); then fListTest "${LEAKCHECK_SOAK}" "soak test under heaptrack"; fi
+	if ((miri && ${#MIRI_CMD[@]})); then fEcho_Clean "Miri: the canary (debjk, de5f0), then the Rust tests above again, but those ignored under Miri"; fi
 	exit 0
 fi
 
@@ -1863,6 +1891,23 @@ fRunTsan(){
 	fContainerRun "${containerImage}" "${root}/cicd/utility/tsan.bash" || fDie "the test suite under TSan failed (above)"
 }
 
+## Stage 3's test suite under Miri (cicd/utility/miri.bash), after the TSan run,
+## in the image like it. Hours, so only under --leakcheck or --long.
+fRunMiri(){
+	if ((${#MIRI_CMD[@]} == 0)); then fEcho_Clean "Miri run skipped"; return 0; fi
+	if ((! leakcheck)); then fEcho_Clean "Miri run skipped (--no-leakcheck)"; return 0; fi
+	if ((! miri)); then fEcho_Clean "Miri run off (--leakcheck or --long adds it)"; return 0; fi
+	if [[ -n "${miriSkipped}" ]]; then fEcho "WARNING: Miri run skipped: ${miriSkipped}"; return 0; fi
+	fEcho_Clean "Miri is very slow, so this step takes hours. Ctrl+C stops the run."
+	fJobs hard
+	if [[ -n "${SILK_CICD_IN_CONTAINER:-}" ]]; then
+		"${here}/utility/miri.bash" || fDie "the test suite under Miri failed (above)"
+		return 0
+	fi
+	fContainerBuild "${containerImage}"
+	fContainerRun "${containerImage}" "${root}/cicd/utility/miri.bash" || fDie "the test suite under Miri failed (above)"
+}
+
 ## The leak checks, after the ASan run. On by default, --quick too; --no-leakcheck
 ## drops them. Each report goes to LEAKCHECK_OUT_DIR,
 ## rotated like the flamegraphs. A test filter that matched nothing would pass, so
@@ -2028,6 +2073,7 @@ fBuildTestRelease(){
 	fRunAsan
 	fRunLeakcheck
 	fRunTsan
+	fRunMiri
 	fJobs
 	fScriptTests
 	if [[ -n "${corpusBefore}" ]] && [[ "$(fCorpusHashes)" != "${corpusBefore}" ]]; then
@@ -2262,6 +2308,9 @@ fEcho_Clean
 
 
 ##	History:
+##		- 2026-11-02: The test suite again under Miri, after the TSan run, in the
+##		              image, under --leakcheck or --long. The canary goes first, and
+##		              --no-miri skips it.
 ##		- 2026-11-01: The soak test joins the leak checks, in the image, with its
 ##		              heaptrack data kept beside the heap reports.
 ##		- 2026-11-01: One cleanup line at the end: what went, the run's own folder and
