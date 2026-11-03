@@ -34,6 +34,16 @@ Going forward, new issues in the new template at the bottom of this file, will g
 
 ## Issues
 
+- A launch with --config pointing elsewhere still adds shell integration to the account's own shell profiles
+	- ID: 2026110314410446
+	- Type: Bug
+	- Status: Queued
+	- Priority: Low
+	- Opened: 20261103-144104
+	- Opened by:
+	- Progress log:
+		- 20261103: Seen on vmKt6m while working 2026102807384202. A launch as collierjr made ~/.config/powershell/Microsoft.PowerShell_profile.ps1 and its folder, with --config set to a temp file. Check whether that's wanted, or whether a launch with its own config should leave the real profiles alone.
+
 - The tmux end test fails in the whole suite on vmKt6m, and passes alone there
 	- ID: 2026110313290006
 	- Type: Bug
@@ -528,7 +538,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - Leak checks: the test suite under Miri on every full run
 	- ID: 2026101714445004
 	- Type: Task
-	- Status: Started
+	- Status: Done
 	- Priority: Avg
 	- Opened: 20261017-144450
 	- Opened by: CC
@@ -545,6 +555,9 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261023: No UB or leak turned up in the tests that finished.
 		- 20261023: Since 10-22 the leak checks are on in every full run by default (2026101916054002), so moving Miri behind `--leakcheck` no longer keeps it out of one. That's the question on 2026102320591323.
 		- 20261023: Split in 3. 2026102320591313 makes the suite runnable under Miri, 2026102320591318 adds the step, and 2026102320591323 settles where it runs. This item closes when they do.
+	- Test case: The Miri step's canary lines debjk and de5f0, and dd5nn, ddrp2 and de5e9, per 2026102320591318. The suite's Miri sorts, per 2026102320591313.
+	- Acceptance signoff: Self-closed: all 3 children are Done, and the first whole-suite Miri run on 20261103 was clean. It runs under --leakcheck or --long, per the answer on 2026102320591323.
+	- Closed: 20261103-144104
 
 - Leak checks: the headless soak test under `--leakcheck`
 	- ID: 2026101913370214
