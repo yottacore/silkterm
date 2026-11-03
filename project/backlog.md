@@ -34,21 +34,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 
 ## Issues
 
-- dct7r's check that a passing run leaves no local run folder failed once in the container
-	- ID: 2026110222113195
-	- Type: Bug
-	- Status: Queued
-	- Severity: Low
-	- Opened: 20261102-221131
-	- Opened by:
-	- Target OS: Linux
-	- Incorrect behavior: In the full run at 3ac421d, in the container, cicd/tests/wingui/harness-test.bash failed 'and leaves no run folder in the local temp dir'. Every other check in it passed. The check needs the smoke run's exit code to be 0 and its TMPDIR to be empty after.
-	- Expected behavior: The check passes every time.
-	- Reproduced: No. 3 of 3 runs alone on the host passed on 20261102.
-	- Progress log:
-		- 20261102: Seen once, in rnd1102's second full run. The round didn't touch the wingui harness. The run stops at the first failure, so it didn't show whether rc or a leftover folder failed it.
-	- Test case: cicd/tests/wingui/harness-test.bash (dct7r).
-
 - The window doesn't paint while the GPU is busy or short on memory, and stays blank after the load ends
 	- ID: 2026100312470535
 	- Type: Bug
@@ -246,6 +231,42 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Branch: rnd1101b
 	- Test case: `cicd/tests/dlgtie/run.bash` (der6f).
 
+- Text underlines aren't drawn
+	- ID: 2026102511131401
+	- Type: Bug
+	- Status: Waiting on UAT
+		- 20261102: Look at each style from the repro line, with `4:2` for double, and at spell checking in vim or Neovim, on the real desktop. The curl's height and the dot and dash spacing are first picks.
+	- Stand-in: none (20261102). Turns on how the curl, dots and dashes look. desqy and desqz already check where each line goes.
+	- Needs hand testing: The look of the curly, dotted and dashed underlines, and the strike-through's height, in a light and a dark theme.
+	- Severity: Avg
+	- Opened: 20261025-111314
+	- Opened by: CC
+	- Related IDs: 2026102114411311
+	- Target OS: All
+	- Test environment: b23, dev at a9daddc
+	- Steps to reproduce:
+		- In SilkTerm, run `printf '\e[4mplain\e[0m \e[4:3mcurly\e[0m \e[21mdouble\e[0m\n'`.
+		- Or turn on spell checking in vim or Neovim.
+	- Incorrect behavior: No underline under any of them. The drawing code reads no underline flag from the engine, so plain, double, curly, dotted and dashed underlines all show as plain text. The link hover underline is SilkTerm's own and works.
+	- Expected behavior: Each underline style a program sets is drawn, in the underline color it sets, or the text color.
+	- Reproduced: Not run in a window. Found in the code while answering 2026102114411311.
+	- Actual cause: The cell loop read bold, italic, inverse, hidden and dim from the engine, but no underline or strike flag, so nothing drew either.
+	- Actual effort: Avg
+	- Decisions:
+		- 20261102: SGR 21 stays as the engine reads it, "not bold", as in Alacritty and the Linux console. Double underline is `4:2`, which is what terminfo's `Smulx` and Neovim send. xterm and GNOME Terminal draw 21 as a double underline; that part is in child 2026110220554102.
+		- 20261102: Strike-through (SGR 9) is drawn too. It was missing the same way and goes through the same code.
+		- 20261102: An underline color the program sets gets the same contrast lift as the text, so a red curl on a dark red background still shows.
+		- 20261102: The lines sit where the link underline does, inside the cell, so none draws into the row below. They draw over the text scrim and under the text, like the link underline.
+	- Actual fix:
+		- Plain, double, curly, dotted and dashed underlines are drawn under their run of cells, in the color set with SGR 58, or else the text color. Concealed text draws none.
+		- Curly, dotted and dashed are drawn by the quad shader, so a run is one quad and the pattern runs on across cells.
+		- An app's scroll slide carries them along with the rows it reveals.
+	- Swept: Every place cells are styled for drawing: the pane's cell loop and the scrolled-off strip. The link underline now takes its place from the same helper. The minimap draws no lines, left as is. Engine flags now read: all five underline styles, the underline color, strike-through and hidden.
+	- Verified: 20261102, the backlog quick run (fmt, clippy, tests, scripts, docs), and every style seen drawn in a window, with SGR 58 colors in both its forms.
+	- Branch: rnd1102
+	- Commit: 87f070f
+	- Test case: `each_underline_style_lines_its_own_cells` (desqy), which fails with the style read taken out, and `the_rules_stay_inside_their_cells` (desqz). `each_quad_mode_reaches_its_own_branch_of_the_shader` (ddj83) covers the 2 new shader modes.
+
 - Always use automatic remote mode when detected.
 	- ID: 2026101914251764
 	- Type: Feature
@@ -317,40 +338,44 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Branch: rnd1024
 	- Test case: ddkre's drag figure, under Verified. The limit stays 360, since the saving is about 5% and the 2026102321230038 margin was set by load.
 
-- Leak checks: the soak test as a pipeline step
-	- ID: 2026110117065496
+- Leak checks: the Miri step, with the canary
+	- ID: 2026102320591318
 	- Type: Task
-	- Status: Done
+	- Status: Waiting on automated testing
+		- Waits on the step's first run over the whole suite, which takes hours.
+	- Needs local test suite run?: the Miri step alone over the whole suite, in the image, hours: `cicd/utility/miri.bash` through the image rig, `in_image.bash miri silkterm-cicd:<tag> cicd/utility/miri.bash` in the private tools folder, with `IN_IMAGE_TMP` set to a run folder and the tag the plan names. Its log should show `PASS debjk`, `PASS de5f0` and "OK: no Miri reports". A report in a crate a release binary links is filed, one item per cause, and one in our code is fixed.
 	- Priority: Avg
-	- Opened: 20261101-170654
+	- Opened: 20261023-205913
 	- Opened by: CC
-	- Parent ID: 2026101913370214
+	- Parent ID: 2026101714445004
+	- Prereq IDs: 2026102320591313
 	- Requirements:
-		- The soak test runs among the leak checks, in the build image, with the heap report kept as a pipeline artifact under the leak checks' report folder, rotated like the others.
-		- The plan line, `--list`, `--help` and the docs name it. New engine cases, watched to fail.
-		- What the first full run finds goes on the backlog.
-	- Prereq IDs: 2026110119292010
-	- Notes:
-		- `cicd/tests/soak/run.bash --out <dir>` keeps the data and summary as `soak_<stamp>`, with SOAK_STAMP for the run's stamp. It takes about 2.5 minutes, and the data is about 3.5 MB a round.
-		- It runs the way `fContainerRun` runs a step: as root first for the passwd entry, then under `dbus-run-session`, which xfwm4 needs.
+		- The image installs the `miri` component on the pinned nightly, beside `rust-src`.
+		- A step script, like `tsan.bash`, runs the sanitizer canary first, then the suite, in a target dir and Miri sysroot of its own under `target/`.
+		- The canary's two tests run apart, since a UB report stops the binary. The step stops unless Miri reports the race as a data race and the forgotten Vec as leaked memory.
+		- A `--no-miri` flag, a plan line, and the cleanup and rar exclude lines. New container and engine cases, watched to fail.
+		- Miri runs only when `--leakcheck` is given, and says first that it's very slow. A run with no flags keeps the other leak checks, which stay on by default. Tests over a time bar under Miri, such as 60 s, are ignored under Miri as too slow, so even a `--leakcheck` run takes the fast part (answer on 2026102320591323).
+		- Under `--long` too, not only `--leakcheck`, per the CICD process gaps item 2026102416233812.
 	- Progress log:
-		- 20261101: The soak test is a leak check, after the heap-growth test and before CodeQL, through `fRunSoak` and `LEAKCHECK_SOAK` in config.bash. It runs in a full run and under `--leakcheck`. `--quick` leaves it out, `--no-leakcheck` and `--backlog-run-quick` drop it, and a run on the host takes it into the image, or warns and skips it without docker.
-		- 20261101: The summary and heaptrack's data go to `cicd/artifacts/leakcheck/` as `soak_<stamp>` with the run's stamp, rotated like the heap reports. The step fails on a failed test, and on its exit 3 too.
-		- 20261101: `run.bash` takes `--stamp`, since the container run hands on arguments, not the environment. SOAK_STAMP still works.
-		- 20261101: The plan's Leak checks line, `--list`, `--help`, config.bash, design.md and install.md name it.
-		- 20261101: The heaptrack data was 9.5 MB for 12 rounds, not the 3.5 MB the notes gave, so the rotation keeps up to a few hundred MB, in a gitignored folder.
-		- 20261101: rnd1101b's full run at 4e46ef9 stopped at step 4 on dd5nw, which was already failing on dev, so it never reached the leak checks. Waits on 2026110119292010.
-		- 20261102: rnd1102's full run at 383a14c ran the soak step after the heap-growth test and kept soak_20261102-210819.zst and .txt. Round 6 to 12 grew 1 KiB against a 256 KiB margin.
+		- 20261102: The image adds the `miri` component on the pinned nightly. `cicd/utility/miri.bash` builds Miri's sysroot, runs the canary's race and leak tests one at a time, then the suite, all under `target/miri-<date>`. It takes cargo test arguments after the suite command, to run a few tests through it.
+		- 20261102: `cicd.bash` runs it after the TSan run, under `--leakcheck` or `--long`, in the image from a run on the host. The plan has a Miri line, and says before the run starts that it's very slow. `--no-miri` skips it, and `--no-leakcheck` drops it with the other leak checks.
+		- 20261102: The cleanup takes the old `target/miri-<date>` on a nightly bump, and the backup leaves `target/miri-*` out. design.md, install.md, build.md and prerequisites.md say so.
+		- 20261102: The full run at 383a14c failed in the 'test run folder' step (ddazx), at dd5nn's Miri config check. Nothing wrote to the temp dir. The check expected a relative target dir, and the container hands in an absolute one, so it failed in the container whatever the temp dir. It now works out the sysroot path either way, and checks both.
 	- Decisions:
-		- 20261101: Off under `--quick` unless `--leakcheck` asks, like the slow window tests, since it takes about 2.5 minutes. `--leakcheck` is every leak check.
-		- 20261101: A run on the host runs the debug build it made in the image, the way the ASan and CodeQL steps hop there. Both are Debian trixie, and the run in the image passed.
-		- 20261101: Exit 3, could not run, fails the step rather than skipping it, since the image pins every tool the test needs.
-	- Verified: 20261101. The step's command, `run.bash --out cicd/artifacts/leakcheck --stamp <stamp>`, in the current build image, through the image rig, on the host's debug build: passed, round 6 to 12 grew 20 KiB, and both files kept with that stamp. `cicd.bash --list`: der46 and "soak test under heaptrack" in a default run, off under `--quick`, back with `--quick --leakcheck`, "(skipped --no-leakcheck)". The engine test, 24 new checks, all failed against the old cicd.bash, and 7 mutants each failed their own. The container test, `cicd/cicd.bash --backlog-run-quick`, all five areas, and `lint-report.bash`.
-		- Swept: every test that lifts the leak checks (engine, container), `cicd-win.ps1`'s leak flags, which hand on to the Linux half, and every doc naming the leak checks.
-	- Verified: 20261102. The full run at 383a14c, in the container: the plan's Leak checks line names the soak test, and stage 3 ran it after the heap-growth test. 12 rounds, round 6 to 12 grew 1 KiB against a 256 KiB margin, and `soak_20261102-210819.zst` and `.txt` were kept in `cicd/artifacts/leakcheck/`. It found no growth, so nothing to file. dd5nn passed in the full run at 3ac421d.
-	- Test case: `cicd/tests/engine/run.bash` (dd5nn), 24 new checks, and `cicd/tests/soak/run.bash` (der46) in the pipeline.
-	- Branch: rnd1101b
-	- Closed: 20261102-221500
+		- 20261102: `--quick --leakcheck` runs it too, as it does CodeQL, since `--leakcheck` is every leak check.
+		- 20261102: The `miri` component goes in a late layer of its own, not on the `rust-src` line, so adding it didn't rebuild the CodeQL layer after it. The heaptrack layer did the same. The image grew about 20 MB.
+		- 20261102: Miri's sysroot goes inside cargo's own `miri/` dir under `target/miri-<date>`, so the cleanup's nightly-dir sweep takes both whole. Its path is absolute, since cargo runs each test binary from its crate's dir.
+		- 20261102: The suite runs with `--no-fail-fast`, so a report that stops one test binary still lets the others run, and the step lists every report.
+		- 20261102: The canary's PASS lines reuse its tests' IDs, debjk for the race and de5f0 for the leak, as the ASan and TSan steps do.
+	- Verified: 20261102. In the image at d47751450835, `miri.bash -p knobs -- a_bad_spec_names_every_mistake` printed `PASS debjk Miri canary race caught` and `PASS de5f0 Miri canary leak caught`, then "OK: no Miri reports (1 passed, 0 failed, 0 ignored, 4s)". Pointed at the canary crate as its suite, it stopped on the race's data race report. With `-Zmiri-ignore-leaks` the leak canary printed `FAIL de5f0` and stopped the step.
+	- Verified: 20261102. The engine test passed with 225 checks, and its 24 new checks and the changed one failed against the old cicd.bash and config.bash. The container test passed with 198 checks. Against the old files it failed its 2 new recipe and `--no-miri` checks, then stopped outright at the missing step. The cleanup test passed. `cicd/cicd.bash --backlog-run-quick`, all five areas, passed. shellcheck and the bash style check are clean.
+		- Swept: every reader of the sanitizer steps' places in a run: cicd.bash's help, plan, `--list`, the image check and stage 3, config.bash's cleanup and rar lines, design.md, install.md, build.md, prerequisites.md, and the engine, container and cleanup tests. `cicd-win.ps1` and `ci-mac.bash` don't run the nightly steps.
+	- Verified: 20261102. With an absolute `CARGO_TARGET_DIR`, the old dd5nn failed the Miri config check, on this box and in the image with the temp dir read-only. The new one passes there, with no target dir set, and in the image (226 checks), and fails on a config whose Miri sysroot stays relative. ddazx alone in the image at d47751450835 passed, 96 checks, both engine cases included. `cicd/cicd.bash --backlog-run-quick`, all five areas, passed.
+	- Branch: rnd1102
+	- Test case: dd5nn `cicd/tests/engine/run.bash`, 24 new checks and 1 changed; ddrp2 `cicd/tests/container/run.bash`, 18 new; de5e9 `cicd/tests/cleanup/run.bash`, 4 new. The canary lines debjk and de5f0 in a Miri run.
+		- 20261102: dd5nn's soak check "and a run on this box builds the image for it" expects `miriInImage` in the image line, was without it.
+		- 20261102: dd5nn's Miri config check runs with no target dir set and with an absolute one, the second as a new check.
+		- 20261102: Verified: the full run at 3ac421d with `--no-fuzz --no-asan --no-leakcheck`, in the container, passed the 'test run folder' step (ddazx) and dd5nn, and said "Miri run skipped (--no-leakcheck)". The run then stopped on the dct7r flake, 2026110222113195.
 
 - Add a contributor license agreement, like nano-git-db's
 	- ID: 2026101906582193
@@ -489,43 +514,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261023: Since 10-22 the leak checks are on in every full run by default (2026101916054002), so moving Miri behind `--leakcheck` no longer keeps it out of one. That's the question on 2026102320591323.
 		- 20261023: Split in 3. 2026102320591313 makes the suite runnable under Miri, 2026102320591318 adds the step, and 2026102320591323 settles where it runs. This item closes when they do.
 
-- Leak checks: the test suite runnable under Miri
-	- ID: 2026102320591313
-	- Type: Task
-	- Status: Done
-	- Priority: Avg
-	- Opened: 20261023-205913
-	- Opened by: CC
-	- Parent ID: 2026101714445004
-	- Related IDs: 2026102321073303
-	- Requirements:
-		- Every test passes under `cargo miri test`, or is ignored under Miri with a one-line reason: `#[cfg_attr(miri, ignore = "...")]`. None is left out silently.
-		- Miri runs with isolation off (`-Zmiri-disable-isolation`) and with `SILKTERM_TEST_DIR` set, as the sanitizer steps run the suite. Isolation stops a test at the clock, the local time, a directory listing or a path lookup, and with no test folder given, `testdir.rs` calls `atexit`, which Miri refuses.
-		- The reasons go by kind: it calls into C (the GPU, X11, the OS's fonts), it starts a process or a PTY, or it's too slow under Miri. The slow bar depends on the answer on 2026102320591323.
-		- What Miri reports in a crate a release binary links is filed, one item per cause. What it reports in our code is fixed.
-	- Notes:
-		- Each test has to run alone, several at once, to sort the suite. One unsupported call or UB report stops the whole test binary, and the tests after it never run.
-	- Progress log:
-		- 20261023: Went through the 145 tests in the modules most likely to call into C: term, gfx, tmux, shells, monitor, cwd, fileassoc, front, ctl and sysfont. 118 passed under Miri, and 12 ran past 45 s, 8 of them in term. 15 stopped at a call Miri can't make, and are ignored under Miri now: 11 start a process, and 4 load the graphics driver. Three of the 11 stop at a `socketpair`, which is std starting the process.
-		- 20261023: Four tests from the sample that ran past 90 s were let run longer. bc1's flat color test passed in 477 s. A Settings dialog test reached the test folder's `atexit` after 568 s, run without `SILKTERM_TEST_DIR`. An autotheme and a config test started a process after about 10 minutes: `sysfont::monospace` asks `gsettings` and `xfconf-query` for the desktop's font.
-		- 20261023: That font probe is likely on the path of many config and Settings tests. A stand-in answer under `cfg(miri)` there may beat an ignore on each of them. Not decided.
-		- 20261023: Left: the other 1292 tests, and the slow ones once the bar is set.
-		- 20261024: Split in 5 by module, since the rest is too much for one sitting: 2026102407430372, 2026102407430375, 2026102407430377, 2026102407430379 and 2026102407430381. This item closes when they do.
-		- 20261024: 2026102407430372 is done: 278 tests, 178 passing under Miri and 99 newly ignored there with a reason.
-		- 20261024: 2026102407430375 is done: 330 tests, 184 passing under Miri and 146 newly ignored there with a reason.
-		- 20261024: 2026102407430377 is done: 262 tests, 199 passing under Miri and 61 newly ignored there with a reason.
-		- 20261024: 2026102407430379 is done, with its child 2026102410035982: 232 tests, 71 passing under Miri and 161 newly ignored there with a reason.
-		- 20261024: Left: 2026102407430381, the settings_ui tests.
-		- 20261102: 2026102407430381 is done with its child 2026110219042006: 203 tests, 3 passing under Miri and 200 ignored as too slow. Closed.
-	- Verified: 20261023. The 15 pass in a plain run and show as ignored under Miri. fmt check, clippy for Linux.
-	- Decisions:
-		- 20261024: The slow bar is 60 s of CPU time under Miri, not wall time, so a verdict doesn't swing with the box's load. Miri runs a test's threads on one core, so on an idle box the two are about the same.
-	- Swept: the 145 tests above. A test elsewhere that starts a process or opens a device turns up in the rest of the run.
-	- Test case: The children's sorts, each checked by Miri's --ignored --list: 2026102407430372, 75, 77, 79 and 81.
-	- Branch: rnd1023
-	- Acceptance signoff: Self-closed: every test is sorted. A whole cargo miri test run is the Miri step's job, 2026102320591318.
-	- Closed: 20261102-195100
-
 - Leak checks: the headless soak test under `--leakcheck`
 	- ID: 2026101913370214
 	- Type: Task
@@ -546,119 +534,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- `cicd/tests/allocs/run.bash` already drives a window on a private Xvfb.
 	- Progress log:
 		- 20261101: Split in 2. 2026110117065477 is the driver and its heap check, and 2026110117065496 makes it a pipeline step. This item closes when they do.
-
-- dd5nw fails its fDie check on every run, so every full run stops at step 4
-	- ID: 2026110119292010
-	- Type: Bug
-	- Status: Done
-	- Severity: High
-	- Opened: 20261101-192920
-	- Opened by:
-	- Target OS: Linux
-	- Incorrect behavior: `cicd/tests/cicd-win/run.bash` (dd5nw) fails "which fDie's exit reaches", then "the lifted pieces all passed". The full run is fail-fast, so it stops at step 4 and never reaches the leak checks or later steps.
-	- Expected behavior: The check passes on the current cicd-win.ps1.
-	- Reproduced: 20261101. 3 of 3 runs alone in the build image, and on the host, at 4e46ef9. The test and cicd-win.ps1 are the same on dev at dc260f6, so it was already there before rnd1101b.
-	- Possible cause: `.gitattributes` gives `*.ps1` CRLF endings. The check's regex ends `exit 1 \}$` under `(?m)`, and .NET's `$` doesn't match before a `\r`. The checks beside it take `\r?$`. The check came in with e9f3066.
-	- Progress log:
-		- 20261101: Found by rnd1101b's full run, run.log in its run folder. Filed after the gate step, so it waits for the next round.
-		- 20261102: The fix was already on dev: a06bc64 gave the regex `\r?$`. This round confirmed it and swept for the same slip.
-	- Decisions:
-		- 20261102: No code change here. The one check was the only line-end anchor that missed a `\r`.
-	- Verified: 20261102 at 343814f. dd5nw passes, rc 0. In PowerShell the old regex gives False and the new one True on the CRLF `cicd-win.ps1`, so the check failed before a06bc64 and passes after.
-		- Swept: every regex in `cicd/tests` and `cicd/utility` that reads a `.ps1` or `.cmd` file, the only CRLF types in `.gitattributes`: `_lift.ps1` (the rest already take `\r?` or `\s*`), dd5nw's `run.bash` (`$'\r'?$`), `wingui/run.bash` and `harness-test.bash` (same), `install/tempdir.ps1` (`[^\r\n]*`), `wingui/_lib.ps1` and `test-id.py` (`\s*$`). Lines from PowerShell's own pipeline or from a bash-written LF file need no `\r`.
-	- Test case: `cicd/tests/cicd-win/run.bash` (dd5nw).
-	- Branch: rnd1102
-	- Closed: 20261102-182500
-
-- Two SilkTerm windows on one headless display: an idle release sometimes never shows, or never happens
-	- ID: 2026110118143797
-	- Type: Bug
-	- Status: Done
-	- Severity: Avg
-	- Opened: 20261101-181437
-	- Opened by: CC
-	- Assigned to: CC
-	- Related IDs: 2026103010083401, 2026110220221592
-	- Target OS: Linux
-	- Test environment: Xvfb with no window manager, software GL
-	- Steps to reproduce:
-		- Run `cicd/tests/idleother/run.bash` from `wip/rnd1101b-2026103010083401`, which opens two windows at once with "Minutes otherwise" at 1.
-	- Incorrect behavior: About half the runs, neither window's title ever shows "(resource conservation mode)" in 100 s. In one, the quiet window's log said it let go at 61 s while its title stayed as it was, and the other window never let go, with no sign of life logged after launch.
-	- Expected behavior: Both let go after about a minute, as one window alone does every time.
-	- Reproduced: Yes, in 3 of 7 runs with 2026103010083401 in, and 1 of 2 with it taken out, on a display of its own each time, with or without the second window moved off the first. One window alone passed both runs tried.
-	- Possible cause: Not known. Could be the test rig, or two GL clients on one Xvfb, or a real fault with two windows open.
-	- Actual cause: Both in the test, not the program.
-		- `xdotool search --pid P --name SilkTerm` matches either condition unless given `--all`. So each window's lookup took whichever SilkTerm window came first, and both checks often read the one window that never let go.
-		- That window never let go because its printing tab was in front. A launch opens on its first tab, and the `--shell` given before `--new-tab` is the window's, so the first tab printed.
-		- The idledbg stamp counts from its own first line, so "61 s" in the old log was not time since launch.
-	- Actual fix: Each lookup takes `--all`, a check fails when both find the same window, and the printing tab is the second one, in the back.
-	- Swept: every `xdotool search` in `cicd`. quiettab paired `--pid` with `--name` the same way and takes `--all` now, and still passes. herdback does too, but its `appPid` is a subshell, so `--all` finds nothing there. Filed as 2026110220294255. The rest give one condition, or `--onlyvisible` with one.
-	- Decisions:
-		- 20261102: The two-window case stays in deqy2, so in the full run. Both windows run side by side, so it adds no time.
-		- 20261102: Which tab a launch with several tabs opens on is filed as 2026110220221592, since `--help` says a `--new-tab` "becomes current".
-	- Progress log:
-		- 20261102: Reproduced in 3 of 4 runs of the old script. A probe that logged every top-level window's title found the quiet window let go at 62 to 64 s each time, and the other one never did, idle in its event loop.
-		- 20261102: Verified: the fixed script passed 4 runs of 4, at load 12 to 17. With the tab check from 2026103010083401 taken out, the second window failed in 2 runs of 2 and the quiet one passed.
-	- Test case: `cicd/tests/idleother/run.bash` (deqy2), now with the second window.
-	- Branch: rnd1102
-	- Closed: 20261102-202215
-
-- Which tab a window launched with several tabs opens on
-	- ID: 2026110220221592
-	- Type: Bug
-	- Status: Queued
-	- Severity: Low
-	- Opened: 20261102-202215
-	- Opened by: CC
-	- Related IDs: 2026110118143797
-	- Target OS: All
-	- Steps to reproduce:
-		- Run `silkterm --new-tab=logs --directory /var/log`.
-	- Incorrect behavior: The window opens on the first tab. `--help` says `--new-tab` "becomes current", and usage.md says "which becomes the current one", which can read as the tab in front.
-	- Expected behavior: Not decided. Either the last tab made is in front, or the help and usage.md say the launch opens on the first tab and "current" means where later options go.
-	- Notes:
-		- `State` starts with `Tabs { list, active: 0 }` in app.rs. Wording only is the smaller change.
-
-- herdback's window lookup and stop miss the program, since `appPid` is a subshell
-	- ID: 2026110220294255
-	- Type: Bug
-	- Status: Queued
-	- Severity: Low
-	- Opened: 20261102-202942
-	- Opened by: CC
-	- Related IDs: 2026110118143797, 2026102807384201
-	- Target OS: Linux
-	- Steps to reproduce:
-		- Change both `xdotool search --pid "${appPid}" --name '^SilkTerm'` lines in `cicd/tests/herdback/run.bash` to take `--all`, and run it.
-	- Incorrect behavior: Every case says the window never showed. The launch is `fX ... &`, and `fX` is a function, so `$!` is the subshell, not SilkTerm. The lookup finds the window by its name only, and `fStopOurs` sees bash, not the binary, so it stops nothing. A window from one dance can still be up in the next.
-	- Expected behavior: `appPid` is the program, so the lookup can take `--all` and each dance stops its own window.
-	- Notes:
-		- gui-headless.bash's `fOnX --bg` execs for the same reason.
-
-- The Mac CI doesn't name a test that failed when its output splits the result line
-	- ID: 2026102822262458
-	- Type: Bug
-	- Status: Done
-	- Priority: Avg
-	- Opened: 20261028-222624
-	- Opened by: CC
-	- Target OS: macOS
-	- Requirements:
-		- Hosted run 40818838314 at 9eded41 printed a lone `FAILED` line and `1 failed`, but no test name, panic text or rerun. With `--nocapture`, a test's own output can land between `test <name> ...` and `FAILED`, so the pattern in `ci-mac.bash` that looks for both on one line finds nothing.
-		- Take the names from cargo's `failures:` list at the end, or run without `--nocapture` for the names.
-	- 20261028: The failed job's rerun passed (attempt 2), so the failure was a flake. Which test it was can't be read from the log, which is this bug.
-	- Actual cause: `ci-mac.bash` took the names only from `test <name> ... FAILED` on one line. With `--nocapture` at 1 job, the test's own output and its panic go between the two. And without `--no-fail-fast` cargo stopped at the first test binary that failed.
-	- Actual fix: `fFailedNames` takes the names from the `failures:` list each test binary ends with, its last one only, plus any one-line `FAILED`, each name once. The report prints them, then the panic text, then runs just those again with `--exact`. With no name found it prints the end of the log. Both cargo test calls take `--no-fail-fast`.
-	- Decisions:
-		- 20261102: `--nocapture` stays, since the skip reasons and `measured:` lines need it.
-		- 20261102: `--no-fail-fast` added, so a failure in one binary doesn't leave the rest unrun. It costs nothing on a passing run.
-		- 20261102: `--exact` on the rerun, so a name doesn't also run every test it's a prefix of.
-	- Verified: 20261102. desrb passed 9 checks, on logs of the shapes cargo test 1.96 wrote here at 1 and 2 threads, captured and not, across 2 binaries. Against the old `ci-mac.bash` 8 of them failed. `fFailedNames` gave the same names under gawk --posix, mawk and busybox awk. defn6 and dd5nn pass. `cicd/cicd.bash --backlog-run-quick scripts docs` passed. shellcheck and the bash style check are clean.
-		- Swept: the other readers of cargo's `test <name> ...` lines, `test-id.py --run` and `lint-report.bash`. The pipeline's runs capture test output, so the line stays whole there. `cicd-win.ps1` and `miri.bash` read no names from it.
-	- Verified: 20261102. Hosted `mac.yml` run 41581768957 on rnd1102 at 383a14c passed, macOS arm64. Its Test step printed the 2 `test result: ok` lines as before (28 and 1402 passed, 4 ignored), and the Skips and Measured steps after it passed.
-	- Branch: rnd1102
-	- Test case: desrb `cicd/tests/ci-mac/run.bash`, run by the pipeline after defn6.
-	- Closed: 20261102-221500
 
 - The private runner's Mac job can't build on vmKt6m: rustup isn't there for the account it uses
 	- ID: 2026102811082502
@@ -690,113 +565,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Notes:
 		- Pre-next-cut.
 
-- Over ssh to a host with no alacritty terminfo, full-screen programs fail with "'alacritty': unknown terminal type."
-	- ID: 2026102114411311
-	- Type: Bug
-	- Status: Done
-		- 20261025: Answered. The default TERM becomes `xterm-256color` everywhere, with no ssh wrapping.
-	- Severity: Avg
-	- Opened: 20261021-144113
-	- Opened by: CC
-	- Target OS: All
-	- Test environment: b23 to b26 and vmKt6m, both macOS 15.8 on Intel
-	- Steps to reproduce:
-		- In SilkTerm on b23, ssh to a Mac that has never had the alacritty terminfo entry added.
-		- Run `sudo nano /etc/hosts`.
-	- Incorrect behavior: nano exits with "'alacritty': unknown terminal type." Anything else that reads terminfo on that host, like `tput` or `less`, can fail or draw wrong the same way.
-	- Expected behavior: Full-screen programs work over ssh without anything set up on the remote host first.
-	- Reproduced: Yes, 20261021, on b26 and vmKt6m. macOS ships no alacritty entry, and its `/usr/share/terminfo` is read-only under SIP.
-	- Possible cause: The local TERM check only looks at b23's terminfo database. ssh forwards `TERM=alacritty` as-is, and the remote may not know it. This was noted as out of reach in the done item "If host doesn't TERM=alacritty (including remote SSH hosts), then fallback to `TERM=xterm-256color` + `COLORTERM=truecolor`."
-	- Notes:
-		- 20261021: Worked around on both Macs by compiling b23's entry there with the Mac's own `tic` into `~/.terminfo`: `infocmp -x alacritty | ssh <host> 'cat > /tmp/a.ti && /usr/bin/tic -x -o ~/.terminfo /tmp/a.ti'`. sudo on macOS keeps `HOME`, so root finds it too.
-		- Ways to fix it from SilkTerm's side, none picked yet:
-			- A config key to always use `xterm-256color`, which the done item above already suggested.
-			- Notice an ssh command in the pane and offer to copy the terminfo entry over, like kitty's ssh kitten does.
-			- Say in the docs how to install the entry on a remote host.
-	- Actual cause: Each pane inherits the TERM the engine picks at startup, `alacritty` when this computer has the entry. Nothing let that be changed, and ssh can't know whether the far side has the entry.
-	- Requirements:
-		- An empty `shell.term`, the default, gives a pane `TERM=xterm-256color` on every OS, whether or not this computer has the alacritty entry. A set `shell.term` still wins, so `alacritty` stays one line away.
-		- ssh to a host with no alacritty entry works with nothing set up on either end.
-		- `COLORTERM=truecolor` stays as it is.
-		- The config template comment, usage.md's "Programs over ssh" and the pane test follow the new default.
-	- Decisions:
-		- 20261025: B, `xterm-256color` everywhere. No wrapping of ssh, and no swapping TERM per program, which can't be done without a wrapper, since the shell hands TERM to ssh before SilkTerm sees the process.
-			- The cursor costs nothing. SilkTerm draws its own cursor, size and animation, for any block a program asks for, and ignores the program's blink flag. xterm-256color's reset asks for a steady block and alacritty's for the default block, so both end on the configured cursor.
-			- Curly underlines cost nothing today, since SilkTerm draws no text underlines yet (2026102511131401).
-			- Check before closing: the engine has no left and right margins, which xterm-256color claims (`smglr`). GNOME Terminal, Konsole and Windows Terminal claim them too without them, so few programs rely on it.
-				- 20261102: Checked. vte 0.15 has no private mode 69, so `smglr`'s `CSI ?69h` is dropped and its `CSI Pl;Pr s` reads as save cursor, as it does under alacritty's own TERM. Nothing changes for a program that sends it either way.
-		- 20261102: The default is set where the pane is made, not in the config's default value, so an empty `shell.term` still reads as "use the default" and the template line stays `term: ""`. SilkTerm's own process keeps the engine's TERM, since only panes run programs that read it.
-	- Progress log:
-		- 20261022: Added `shell.term`, the TERM a new pane gets. Empty, the default, keeps the engine's pick. A value with a space or control character in it reads as empty.
-		- 20261022: usage.md has a "Programs over ssh" section, with the command that copies the entry to a remote host, and the setting as the other way out.
-		- 20261022: Left open the default, and any ssh handling of its own. Question filed.
-		- 20261022: The pane test failed on macOS: with no TERM set it read `dumb`. bash, which is macOS's `/bin/sh`, makes up an unexported `TERM=dumb` when none is inherited, so the test's own shell said so, not the engine or `login`. The test now reads the environment through `printenv`. Reproduced on Linux under bash with TERM unset; passes there, and on Linux with TERM set and unset.
-		- 20261022: `the_configured_term_reaches_the_program` fails on macOS, at `term.rs:2124`, the empty-setting case: left "dumb", right "". The program sees `TERM=dumb` where the test expects the test process's own TERM, which is unset there. Failed on the Mac CI (run 39842974082, arm64), again when run alone, and on b26 in the private runner, which failed the full pipeline run at stage 6. Linux passes, on the host and in the container. Not fixed here.
-		- 20261022: The fixed test passed on Mac CI run 39858608191, with the whole suite.
-		- 20261102: An empty `shell.term`, the default, now gives each pane `TERM=xterm-256color` on every OS. The config template comment, usage.md's "Programs over ssh" and the alacritty fork design doc say so.
-		- 20261102: `the_configured_term_reaches_the_program` (de9kn): the empty case expected this process's TERM and now expects `xterm-256color`. It also checks the pane's environment directly, since a test run's own TERM may already be xterm-256color, and that `alacritty` set by hand gets through.
-		- 20261102: Verified: de9kn fails with the old pane code (no TERM in the pane's environment) and passes with the fix, with TERM unset, `xterm-256color` and `alacritty` in the test's environment. de9kp passes. `--backlog-run-quick` with all 5 areas passed.
-		- 20261102: Verified: over ssh to vmKt6m with `TERM=xterm-256color` and only macOS's own terminfo database (`TERMINFO=/usr/share/terminfo`), `tput cols` read the pane's 100 columns, `less` showed a full page and quit with 0, and `nano` drew its screen and exited with 0. The same database doesn't know `alacritty`. de9kn and de9kp passed in the full run at 383a14c. Not run with `sudo`, which keeps TERM.
-	- Actual fix: `shell.term` in the config, passed to each new pane's environment, with empty as `xterm-256color`; usage.md "Programs over ssh".
-	- Branch: rnd1022, rnd1102
-	- Test case: `the_configured_term_reaches_the_program` (de9kn, term.rs) fails with the setting dropped from the pane's environment and passes with it. `shell_term_reads_one_word_and_defaults_empty` (de9kp, config.rs) covers the read and the template line.
-		- Swept: `pane_options` has the one spawn caller and one Windows test; no other place sets TERM for a pane. `front.rs`'s TERM is a test's tmux client. 20261102: no doc but usage.md and the fork design doc named the old default.
-	- Closed:
-
-- Text underlines aren't drawn
-	- ID: 2026102511131401
-	- Type: Bug
-	- Status: Waiting on UAT
-		- 20261102: Look at each style from the repro line, with `4:2` for double, and at spell checking in vim or Neovim, on the real desktop. The curl's height and the dot and dash spacing are first picks.
-	- Stand-in: none (20261102). Turns on how the curl, dots and dashes look. desqy and desqz already check where each line goes.
-	- Needs hand testing: The look of the curly, dotted and dashed underlines, and the strike-through's height, in a light and a dark theme.
-	- Severity: Avg
-	- Opened: 20261025-111314
-	- Opened by: CC
-	- Related IDs: 2026102114411311
-	- Target OS: All
-	- Test environment: b23, dev at a9daddc
-	- Steps to reproduce:
-		- In SilkTerm, run `printf '\e[4mplain\e[0m \e[4:3mcurly\e[0m \e[21mdouble\e[0m\n'`.
-		- Or turn on spell checking in vim or Neovim.
-	- Incorrect behavior: No underline under any of them. The drawing code reads no underline flag from the engine, so plain, double, curly, dotted and dashed underlines all show as plain text. The link hover underline is SilkTerm's own and works.
-	- Expected behavior: Each underline style a program sets is drawn, in the underline color it sets, or the text color.
-	- Reproduced: Not run in a window. Found in the code while answering 2026102114411311.
-	- Actual cause: The cell loop read bold, italic, inverse, hidden and dim from the engine, but no underline or strike flag, so nothing drew either.
-	- Actual effort: Avg
-	- Decisions:
-		- 20261102: SGR 21 stays as the engine reads it, "not bold", as in Alacritty and the Linux console. Double underline is `4:2`, which is what terminfo's `Smulx` and Neovim send. xterm and GNOME Terminal draw 21 as a double underline; that part is in child 2026110220554102.
-		- 20261102: Strike-through (SGR 9) is drawn too. It was missing the same way and goes through the same code.
-		- 20261102: An underline color the program sets gets the same contrast lift as the text, so a red curl on a dark red background still shows.
-		- 20261102: The lines sit where the link underline does, inside the cell, so none draws into the row below. They draw over the text scrim and under the text, like the link underline.
-	- Actual fix:
-		- Plain, double, curly, dotted and dashed underlines are drawn under their run of cells, in the color set with SGR 58, or else the text color. Concealed text draws none.
-		- Curly, dotted and dashed are drawn by the quad shader, so a run is one quad and the pattern runs on across cells.
-		- An app's scroll slide carries them along with the rows it reveals.
-	- Swept: Every place cells are styled for drawing: the pane's cell loop and the scrolled-off strip. The link underline now takes its place from the same helper. The minimap draws no lines, left as is. Engine flags now read: all five underline styles, the underline color, strike-through and hidden.
-	- Verified: 20261102, the backlog quick run (fmt, clippy, tests, scripts, docs), and every style seen drawn in a window, with SGR 58 colors in both its forms.
-	- Branch: rnd1102
-	- Commit: 87f070f
-	- Test case: `each_underline_style_lines_its_own_cells` (desqy), which fails with the style read taken out, and `the_rules_stay_inside_their_cells` (desqz). `each_quad_mode_reaches_its_own_branch_of_the_shader` (ddj83) covers the 2 new shader modes.
-
-- SGR 21 turns bold off instead of drawing a double underline
-	- ID: 2026110220554102
-	- Type: Bug
-	- Status: Queued
-	- Severity: Low
-	- Opened: 20261102-205541
-	- Opened by: CC
-	- Parent ID: 2026102511131401
-	- Target OS: All
-	- Steps to reproduce:
-		- In SilkTerm, run `printf '\e[21mdouble\e[0m\n'`.
-	- Incorrect behavior: No underline. 21 also turns bold off.
-	- Expected behavior: A double underline, as ECMA-48, xterm and GNOME Terminal have it.
-	- Reproduced: Yes, 20261102, on b23: drawn with no line.
-	- Actual cause: vte 0.15, the engine's parser, reads 21 as "cancel bold", as Alacritty and the Linux console do.
-	- Notes:
-		- 20261102: A fix needs a patched vte, beside the engine fork that's already patched in. Or leave it, since programs reach double underline through `4:2`.
-
 - The unscrollable search and buttons areas should be lighter than the scrollable content
 	- ID: 2026103010083403
 	- Type: Enhancement
@@ -809,62 +577,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- The scrollable content needs to be darker (in dark mode at least).
 	- Notes:
 		- Pre-next-cut.
-
-- Leak checks: Miri sort, settings_ui
-	- ID: 2026102407430381
-	- Type: Task
-	- Status: Done
-	- Priority: Avg
-	- Opened: 20261024-074303
-	- Opened by: CC
-	- Parent ID: 2026102320591313
-	- Requirements:
-		- The parent's requirements, for the 203 tests in `settings_ui`.
-	- Progress log:
-		- 20261102: 91 tests run alone under Miri, 8 at a time, against the slow bar of 60 s of CPU time: all of picker, prompt, search and shell_grid, and the first 51 of the dialog's own tests. One passed. 90 are too slow under Miri and are ignored as that. None stopped at a call Miri can't make.
-		- 20261102: Miri reported no UB and no leak.
-		- 20261102: The other 112 didn't fit in the time, at a load of 40 to 57 on 32 cores. They went to 2026110219042006. This item closes with it.
-		- 20261102: Closed. The rest went in through 2026110219042006.
-	- Verified: 20261102. The 90 new ignores each show as ignored under Miri (`--ignored --list`), and the one that passed doesn't. fmt check, clippy for Linux. The 203 settings_ui tests pass in a plain run but one, which fails on the live config, filed as 2026110219042107.
-	- Swept: the 91 tests above.
-	- Test case: Miri's --ignored --list over settings_ui shows the 200 slow tests, per children 2026110219042006 and this item's 90
-	- Branch: rnd1102
-	- Acceptance signoff: Self-closed: all 203 settings_ui tests sorted across this item and 2026110219042006
-	- Closed: 20261102-195000
-
-- Leak checks: Miri sort, settings_ui, the rest
-	- ID: 2026110219042006
-	- Type: Task
-	- Status: Done
-	- Priority: Avg
-	- Opened: 20261102-190421
-	- Opened by: CC
-	- Parent ID: 2026102407430381
-	- Requirements:
-		- The parent's requirements, for the 112 settings_ui tests not yet sorted: themes' 18 and 94 of the dialog's own. The list is `private/claude_simple/tools/miri-results-20261102/settings_ui-left.txt`.
-	- Notes:
-		- Most of the first 91 hit the bar, at 1 to 3 min of wall time each on a busy box. Run it when the load is low, or give it the time.
-	- Progress log:
-		- 20261102: The 112 tests run alone under Miri, 8 at a time, against the slow bar of 60 s of CPU time, at a load of 29 to 39 on 32 cores. Two passed, `scroll_speed_inverts_tau` and `slider_step_matches_spec`. 110 are too slow under Miri and are ignored as that: 92 of the dialog's own and all 18 of themes'. None stopped at a call Miri can't make.
-		- 20261102: Miri reported no UB and no leak.
-	- Verified: 20261102. Under Miri, `--ignored --list` over settings_ui shows 200 tests, the 90 from the parent and these 110, and not the 3 that pass. `--backlog-run-quick fmt clippy tests` passed, 1418 tests.
-	- Swept: all 203 settings_ui tests are sorted now, between this item and its parent.
-	- Test case: None new. The ignores are test attributes, checked by the runs above.
-	- Branch: rnd1102
-	- Closed: 20261102-194900
-
-- The tmux rows test fails when the live config turns tmux sessions on
-	- ID: 2026110219042107
-	- Type: Bug
-	- Status: Queued
-	- Severity: Low
-	- Opened: 20261102-190421
-	- Opened by: CC
-	- Steps to reproduce:
-		- Set `tmux: always_new_session: true` in the user's config, then run `cargo test -p silkterm --bin silkterm -- --exact settings_ui::tests::the_tmux_rows_gray_and_say_why_where_there_is_no_tmux`.
-	- Incorrect behavior: it fails at settings_ui.rs:13044. The tip has "Current value: On" and "Default value: Off" after the no-tmux text, since the value isn't the default.
-	- Expected behavior: the test gives the same answer whatever the live config holds.
-	- Possible cause: the test reads the live user config (G6), and doesn't pin the setting.
 
 - Implement leak and static checks of the Rust code run as part of CI/CD
 	- ID: 2026101714015789
@@ -913,45 +625,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261017: Priority Avg is a best guess, since none was given. Split into 5 child items, worked one at a time, the cheap static checks first. This item closes when they do.
 	- Closed:
 
-- Leak checks: the Miri step, with the canary
-	- ID: 2026102320591318
-	- Type: Task
-	- Status: Waiting on automated testing
-		- Waits on the step's first run over the whole suite, which takes hours.
-	- Needs local test suite run?: the Miri step alone over the whole suite, in the image, hours: `cicd/utility/miri.bash` through the image rig, `in_image.bash miri silkterm-cicd:<tag> cicd/utility/miri.bash` in the private tools folder, with `IN_IMAGE_TMP` set to a run folder and the tag the plan names. Its log should show `PASS debjk`, `PASS de5f0` and "OK: no Miri reports". A report in a crate a release binary links is filed, one item per cause, and one in our code is fixed.
-	- Priority: Avg
-	- Opened: 20261023-205913
-	- Opened by: CC
-	- Parent ID: 2026101714445004
-	- Prereq IDs: 2026102320591313
-	- Requirements:
-		- The image installs the `miri` component on the pinned nightly, beside `rust-src`.
-		- A step script, like `tsan.bash`, runs the sanitizer canary first, then the suite, in a target dir and Miri sysroot of its own under `target/`.
-		- The canary's two tests run apart, since a UB report stops the binary. The step stops unless Miri reports the race as a data race and the forgotten Vec as leaked memory.
-		- A `--no-miri` flag, a plan line, and the cleanup and rar exclude lines. New container and engine cases, watched to fail.
-		- Miri runs only when `--leakcheck` is given, and says first that it's very slow. A run with no flags keeps the other leak checks, which stay on by default. Tests over a time bar under Miri, such as 60 s, are ignored under Miri as too slow, so even a `--leakcheck` run takes the fast part (answer on 2026102320591323).
-		- Under `--long` too, not only `--leakcheck`, per the CICD process gaps item 2026102416233812.
-	- Progress log:
-		- 20261102: The image adds the `miri` component on the pinned nightly. `cicd/utility/miri.bash` builds Miri's sysroot, runs the canary's race and leak tests one at a time, then the suite, all under `target/miri-<date>`. It takes cargo test arguments after the suite command, to run a few tests through it.
-		- 20261102: `cicd.bash` runs it after the TSan run, under `--leakcheck` or `--long`, in the image from a run on the host. The plan has a Miri line, and says before the run starts that it's very slow. `--no-miri` skips it, and `--no-leakcheck` drops it with the other leak checks.
-		- 20261102: The cleanup takes the old `target/miri-<date>` on a nightly bump, and the backup leaves `target/miri-*` out. design.md, install.md, build.md and prerequisites.md say so.
-		- 20261102: The full run at 383a14c failed in the 'test run folder' step (ddazx), at dd5nn's Miri config check. Nothing wrote to the temp dir. The check expected a relative target dir, and the container hands in an absolute one, so it failed in the container whatever the temp dir. It now works out the sysroot path either way, and checks both.
-	- Decisions:
-		- 20261102: `--quick --leakcheck` runs it too, as it does CodeQL, since `--leakcheck` is every leak check.
-		- 20261102: The `miri` component goes in a late layer of its own, not on the `rust-src` line, so adding it didn't rebuild the CodeQL layer after it. The heaptrack layer did the same. The image grew about 20 MB.
-		- 20261102: Miri's sysroot goes inside cargo's own `miri/` dir under `target/miri-<date>`, so the cleanup's nightly-dir sweep takes both whole. Its path is absolute, since cargo runs each test binary from its crate's dir.
-		- 20261102: The suite runs with `--no-fail-fast`, so a report that stops one test binary still lets the others run, and the step lists every report.
-		- 20261102: The canary's PASS lines reuse its tests' IDs, debjk for the race and de5f0 for the leak, as the ASan and TSan steps do.
-	- Verified: 20261102. In the image at d47751450835, `miri.bash -p knobs -- a_bad_spec_names_every_mistake` printed `PASS debjk Miri canary race caught` and `PASS de5f0 Miri canary leak caught`, then "OK: no Miri reports (1 passed, 0 failed, 0 ignored, 4s)". Pointed at the canary crate as its suite, it stopped on the race's data race report. With `-Zmiri-ignore-leaks` the leak canary printed `FAIL de5f0` and stopped the step.
-	- Verified: 20261102. The engine test passed with 225 checks, and its 24 new checks and the changed one failed against the old cicd.bash and config.bash. The container test passed with 198 checks. Against the old files it failed its 2 new recipe and `--no-miri` checks, then stopped outright at the missing step. The cleanup test passed. `cicd/cicd.bash --backlog-run-quick`, all five areas, passed. shellcheck and the bash style check are clean.
-		- Swept: every reader of the sanitizer steps' places in a run: cicd.bash's help, plan, `--list`, the image check and stage 3, config.bash's cleanup and rar lines, design.md, install.md, build.md, prerequisites.md, and the engine, container and cleanup tests. `cicd-win.ps1` and `ci-mac.bash` don't run the nightly steps.
-	- Verified: 20261102. With an absolute `CARGO_TARGET_DIR`, the old dd5nn failed the Miri config check, on this box and in the image with the temp dir read-only. The new one passes there, with no target dir set, and in the image (226 checks), and fails on a config whose Miri sysroot stays relative. ddazx alone in the image at d47751450835 passed, 96 checks, both engine cases included. `cicd/cicd.bash --backlog-run-quick`, all five areas, passed.
-	- Branch: rnd1102
-	- Test case: dd5nn `cicd/tests/engine/run.bash`, 24 new checks and 1 changed; ddrp2 `cicd/tests/container/run.bash`, 18 new; de5e9 `cicd/tests/cleanup/run.bash`, 4 new. The canary lines debjk and de5f0 in a Miri run.
-		- 20261102: dd5nn's soak check "and a run on this box builds the image for it" expects `miriInImage` in the image line, was without it.
-		- 20261102: dd5nn's Miri config check runs with no target dir set and with an absolute one, the second as a new check.
-		- 20261102: Verified: the full run at 3ac421d with `--no-fuzz --no-asan --no-leakcheck`, in the container, passed the 'test run folder' step (ddazx) and dd5nn, and said "Miri run skipped (--no-leakcheck)". The run then stopped on the dct7r flake, 2026110222113195.
-
 - Leak checks: CodeQL watched to fail, and its first findings filed
 	- ID: 2026102211462005
 	- Type: Task
@@ -967,6 +640,84 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Note the step's measured time on 2026102211461905. If it's too slow for every full run, say so there rather than moving it.
 		- 20261022: The first try didn't finish in 35 minutes (see 2026102211461905). Options: a per-query `--timeout` that fails the step, the smaller `rust-code-scanning` suite, a memory cap with `--ram`, or the step behind `--leakcheck` only. Pick after one full measured run.
 		- 20261022: The step is opt-in until this item decides: run it with `cicd.bash --codeql`. It will be red until the findings are filed and suppressed here. Turning it on by default is part of closing this item.
+
+- dct7r's check that a passing run leaves no local run folder failed once in the container
+	- ID: 2026110222113195
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261102-221131
+	- Opened by:
+	- Target OS: Linux
+	- Incorrect behavior: In the full run at 3ac421d, in the container, cicd/tests/wingui/harness-test.bash failed 'and leaves no run folder in the local temp dir'. Every other check in it passed. The check needs the smoke run's exit code to be 0 and its TMPDIR to be empty after.
+	- Expected behavior: The check passes every time.
+	- Reproduced: No. 3 of 3 runs alone on the host passed on 20261102.
+	- Progress log:
+		- 20261102: Seen once, in rnd1102's second full run. The round didn't touch the wingui harness. The run stops at the first failure, so it didn't show whether rc or a leftover folder failed it.
+	- Test case: cicd/tests/wingui/harness-test.bash (dct7r).
+
+- Which tab a window launched with several tabs opens on
+	- ID: 2026110220221592
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261102-202215
+	- Opened by: CC
+	- Related IDs: 2026110118143797
+	- Target OS: All
+	- Steps to reproduce:
+		- Run `silkterm --new-tab=logs --directory /var/log`.
+	- Incorrect behavior: The window opens on the first tab. `--help` says `--new-tab` "becomes current", and usage.md says "which becomes the current one", which can read as the tab in front.
+	- Expected behavior: Not decided. Either the last tab made is in front, or the help and usage.md say the launch opens on the first tab and "current" means where later options go.
+	- Notes:
+		- `State` starts with `Tabs { list, active: 0 }` in app.rs. Wording only is the smaller change.
+
+- herdback's window lookup and stop miss the program, since `appPid` is a subshell
+	- ID: 2026110220294255
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261102-202942
+	- Opened by: CC
+	- Related IDs: 2026110118143797, 2026102807384201
+	- Target OS: Linux
+	- Steps to reproduce:
+		- Change both `xdotool search --pid "${appPid}" --name '^SilkTerm'` lines in `cicd/tests/herdback/run.bash` to take `--all`, and run it.
+	- Incorrect behavior: Every case says the window never showed. The launch is `fX ... &`, and `fX` is a function, so `$!` is the subshell, not SilkTerm. The lookup finds the window by its name only, and `fStopOurs` sees bash, not the binary, so it stops nothing. A window from one dance can still be up in the next.
+	- Expected behavior: `appPid` is the program, so the lookup can take `--all` and each dance stops its own window.
+	- Notes:
+		- gui-headless.bash's `fOnX --bg` execs for the same reason.
+
+- SGR 21 turns bold off instead of drawing a double underline
+	- ID: 2026110220554102
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261102-205541
+	- Opened by: CC
+	- Parent ID: 2026102511131401
+	- Target OS: All
+	- Steps to reproduce:
+		- In SilkTerm, run `printf '\e[21mdouble\e[0m\n'`.
+	- Incorrect behavior: No underline. 21 also turns bold off.
+	- Expected behavior: A double underline, as ECMA-48, xterm and GNOME Terminal have it.
+	- Reproduced: Yes, 20261102, on b23: drawn with no line.
+	- Actual cause: vte 0.15, the engine's parser, reads 21 as "cancel bold", as Alacritty and the Linux console do.
+	- Notes:
+		- 20261102: A fix needs a patched vte, beside the engine fork that's already patched in. Or leave it, since programs reach double underline through `4:2`.
+
+- The tmux rows test fails when the live config turns tmux sessions on
+	- ID: 2026110219042107
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261102-190421
+	- Opened by: CC
+	- Steps to reproduce:
+		- Set `tmux: always_new_session: true` in the user's config, then run `cargo test -p silkterm --bin silkterm -- --exact settings_ui::tests::the_tmux_rows_gray_and_say_why_where_there_is_no_tmux`.
+	- Incorrect behavior: it fails at settings_ui.rs:13044. The tip has "Current value: On" and "Default value: Off" after the no-tmux text, since the value isn't the default.
+	- Expected behavior: the test gives the same answer whatever the live config holds.
+	- Possible cause: the test reads the live user config (G6), and doesn't pin the setting.
 
 - Wayland: Settings isn't tied to the terminal window
 	- ID: 2026110118260314
@@ -1169,6 +920,29 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Branch: machang
 	- Test case: `a_hidden_window_that_cannot_draw_is_shown_anyway` (ddc9r), seen failing without the fix. The memory side has no unit test, since it needs a GPU.
 	- Closed: 20261001-155746
+
+- dd5nw fails its fDie check on every run, so every full run stops at step 4
+	- ID: 2026110119292010
+	- Type: Bug
+	- Status: Done
+	- Severity: High
+	- Opened: 20261101-192920
+	- Opened by:
+	- Target OS: Linux
+	- Incorrect behavior: `cicd/tests/cicd-win/run.bash` (dd5nw) fails "which fDie's exit reaches", then "the lifted pieces all passed". The full run is fail-fast, so it stops at step 4 and never reaches the leak checks or later steps.
+	- Expected behavior: The check passes on the current cicd-win.ps1.
+	- Reproduced: 20261101. 3 of 3 runs alone in the build image, and on the host, at 4e46ef9. The test and cicd-win.ps1 are the same on dev at dc260f6, so it was already there before rnd1101b.
+	- Possible cause: `.gitattributes` gives `*.ps1` CRLF endings. The check's regex ends `exit 1 \}$` under `(?m)`, and .NET's `$` doesn't match before a `\r`. The checks beside it take `\r?$`. The check came in with e9f3066.
+	- Progress log:
+		- 20261101: Found by rnd1101b's full run, run.log in its run folder. Filed after the gate step, so it waits for the next round.
+		- 20261102: The fix was already on dev: a06bc64 gave the regex `\r?$`. This round confirmed it and swept for the same slip.
+	- Decisions:
+		- 20261102: No code change here. The one check was the only line-end anchor that missed a `\r`.
+	- Verified: 20261102 at 343814f. dd5nw passes, rc 0. In PowerShell the old regex gives False and the new one True on the CRLF `cicd-win.ps1`, so the check failed before a06bc64 and passes after.
+		- Swept: every regex in `cicd/tests` and `cicd/utility` that reads a `.ps1` or `.cmd` file, the only CRLF types in `.gitattributes`: `_lift.ps1` (the rest already take `\r?` or `\s*`), dd5nw's `run.bash` (`$'\r'?$`), `wingui/run.bash` and `harness-test.bash` (same), `install/tempdir.ps1` (`[^\r\n]*`), `wingui/_lib.ps1` and `test-id.py` (`\s*$`). Lines from PowerShell's own pipeline or from a bash-written LF file need no `\r`.
+	- Test case: `cicd/tests/cicd-win/run.bash` (dd5nw).
+	- Branch: rnd1102
+	- Closed: 20261102-182500
 
 - CICD reset: the bash guard doesn't refuse HOST_TEMP itself or a project's whole folder under it
 	- ID: 2026103115170424
@@ -3180,6 +2954,117 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Acceptance signoff: Self-closed: the numbers are in the design doc and nothing is left to judge.
 	- Closed: 20261004-194634
 
+- Two SilkTerm windows on one headless display: an idle release sometimes never shows, or never happens
+	- ID: 2026110118143797
+	- Type: Bug
+	- Status: Done
+	- Severity: Avg
+	- Opened: 20261101-181437
+	- Opened by: CC
+	- Assigned to: CC
+	- Related IDs: 2026103010083401, 2026110220221592
+	- Target OS: Linux
+	- Test environment: Xvfb with no window manager, software GL
+	- Steps to reproduce:
+		- Run `cicd/tests/idleother/run.bash` from `wip/rnd1101b-2026103010083401`, which opens two windows at once with "Minutes otherwise" at 1.
+	- Incorrect behavior: About half the runs, neither window's title ever shows "(resource conservation mode)" in 100 s. In one, the quiet window's log said it let go at 61 s while its title stayed as it was, and the other window never let go, with no sign of life logged after launch.
+	- Expected behavior: Both let go after about a minute, as one window alone does every time.
+	- Reproduced: Yes, in 3 of 7 runs with 2026103010083401 in, and 1 of 2 with it taken out, on a display of its own each time, with or without the second window moved off the first. One window alone passed both runs tried.
+	- Possible cause: Not known. Could be the test rig, or two GL clients on one Xvfb, or a real fault with two windows open.
+	- Actual cause: Both in the test, not the program.
+		- `xdotool search --pid P --name SilkTerm` matches either condition unless given `--all`. So each window's lookup took whichever SilkTerm window came first, and both checks often read the one window that never let go.
+		- That window never let go because its printing tab was in front. A launch opens on its first tab, and the `--shell` given before `--new-tab` is the window's, so the first tab printed.
+		- The idledbg stamp counts from its own first line, so "61 s" in the old log was not time since launch.
+	- Actual fix: Each lookup takes `--all`, a check fails when both find the same window, and the printing tab is the second one, in the back.
+	- Swept: every `xdotool search` in `cicd`. quiettab paired `--pid` with `--name` the same way and takes `--all` now, and still passes. herdback does too, but its `appPid` is a subshell, so `--all` finds nothing there. Filed as 2026110220294255. The rest give one condition, or `--onlyvisible` with one.
+	- Decisions:
+		- 20261102: The two-window case stays in deqy2, so in the full run. Both windows run side by side, so it adds no time.
+		- 20261102: Which tab a launch with several tabs opens on is filed as 2026110220221592, since `--help` says a `--new-tab` "becomes current".
+	- Progress log:
+		- 20261102: Reproduced in 3 of 4 runs of the old script. A probe that logged every top-level window's title found the quiet window let go at 62 to 64 s each time, and the other one never did, idle in its event loop.
+		- 20261102: Verified: the fixed script passed 4 runs of 4, at load 12 to 17. With the tab check from 2026103010083401 taken out, the second window failed in 2 runs of 2 and the quiet one passed.
+	- Test case: `cicd/tests/idleother/run.bash` (deqy2), now with the second window.
+	- Branch: rnd1102
+	- Closed: 20261102-202215
+
+- The Mac CI doesn't name a test that failed when its output splits the result line
+	- ID: 2026102822262458
+	- Type: Bug
+	- Status: Done
+	- Priority: Avg
+	- Opened: 20261028-222624
+	- Opened by: CC
+	- Target OS: macOS
+	- Requirements:
+		- Hosted run 40818838314 at 9eded41 printed a lone `FAILED` line and `1 failed`, but no test name, panic text or rerun. With `--nocapture`, a test's own output can land between `test <name> ...` and `FAILED`, so the pattern in `ci-mac.bash` that looks for both on one line finds nothing.
+		- Take the names from cargo's `failures:` list at the end, or run without `--nocapture` for the names.
+	- 20261028: The failed job's rerun passed (attempt 2), so the failure was a flake. Which test it was can't be read from the log, which is this bug.
+	- Actual cause: `ci-mac.bash` took the names only from `test <name> ... FAILED` on one line. With `--nocapture` at 1 job, the test's own output and its panic go between the two. And without `--no-fail-fast` cargo stopped at the first test binary that failed.
+	- Actual fix: `fFailedNames` takes the names from the `failures:` list each test binary ends with, its last one only, plus any one-line `FAILED`, each name once. The report prints them, then the panic text, then runs just those again with `--exact`. With no name found it prints the end of the log. Both cargo test calls take `--no-fail-fast`.
+	- Decisions:
+		- 20261102: `--nocapture` stays, since the skip reasons and `measured:` lines need it.
+		- 20261102: `--no-fail-fast` added, so a failure in one binary doesn't leave the rest unrun. It costs nothing on a passing run.
+		- 20261102: `--exact` on the rerun, so a name doesn't also run every test it's a prefix of.
+	- Verified: 20261102. desrb passed 9 checks, on logs of the shapes cargo test 1.96 wrote here at 1 and 2 threads, captured and not, across 2 binaries. Against the old `ci-mac.bash` 8 of them failed. `fFailedNames` gave the same names under gawk --posix, mawk and busybox awk. defn6 and dd5nn pass. `cicd/cicd.bash --backlog-run-quick scripts docs` passed. shellcheck and the bash style check are clean.
+		- Swept: the other readers of cargo's `test <name> ...` lines, `test-id.py --run` and `lint-report.bash`. The pipeline's runs capture test output, so the line stays whole there. `cicd-win.ps1` and `miri.bash` read no names from it.
+	- Verified: 20261102. Hosted `mac.yml` run 41581768957 on rnd1102 at 383a14c passed, macOS arm64. Its Test step printed the 2 `test result: ok` lines as before (28 and 1402 passed, 4 ignored), and the Skips and Measured steps after it passed.
+	- Branch: rnd1102
+	- Test case: desrb `cicd/tests/ci-mac/run.bash`, run by the pipeline after defn6.
+	- Closed: 20261102-221500
+
+- Over ssh to a host with no alacritty terminfo, full-screen programs fail with "'alacritty': unknown terminal type."
+	- ID: 2026102114411311
+	- Type: Bug
+	- Status: Done
+		- 20261025: Answered. The default TERM becomes `xterm-256color` everywhere, with no ssh wrapping.
+	- Severity: Avg
+	- Opened: 20261021-144113
+	- Opened by: CC
+	- Target OS: All
+	- Test environment: b23 to b26 and vmKt6m, both macOS 15.8 on Intel
+	- Steps to reproduce:
+		- In SilkTerm on b23, ssh to a Mac that has never had the alacritty terminfo entry added.
+		- Run `sudo nano /etc/hosts`.
+	- Incorrect behavior: nano exits with "'alacritty': unknown terminal type." Anything else that reads terminfo on that host, like `tput` or `less`, can fail or draw wrong the same way.
+	- Expected behavior: Full-screen programs work over ssh without anything set up on the remote host first.
+	- Reproduced: Yes, 20261021, on b26 and vmKt6m. macOS ships no alacritty entry, and its `/usr/share/terminfo` is read-only under SIP.
+	- Possible cause: The local TERM check only looks at b23's terminfo database. ssh forwards `TERM=alacritty` as-is, and the remote may not know it. This was noted as out of reach in the done item "If host doesn't TERM=alacritty (including remote SSH hosts), then fallback to `TERM=xterm-256color` + `COLORTERM=truecolor`."
+	- Notes:
+		- 20261021: Worked around on both Macs by compiling b23's entry there with the Mac's own `tic` into `~/.terminfo`: `infocmp -x alacritty | ssh <host> 'cat > /tmp/a.ti && /usr/bin/tic -x -o ~/.terminfo /tmp/a.ti'`. sudo on macOS keeps `HOME`, so root finds it too.
+		- Ways to fix it from SilkTerm's side, none picked yet:
+			- A config key to always use `xterm-256color`, which the done item above already suggested.
+			- Notice an ssh command in the pane and offer to copy the terminfo entry over, like kitty's ssh kitten does.
+			- Say in the docs how to install the entry on a remote host.
+	- Actual cause: Each pane inherits the TERM the engine picks at startup, `alacritty` when this computer has the entry. Nothing let that be changed, and ssh can't know whether the far side has the entry.
+	- Requirements:
+		- An empty `shell.term`, the default, gives a pane `TERM=xterm-256color` on every OS, whether or not this computer has the alacritty entry. A set `shell.term` still wins, so `alacritty` stays one line away.
+		- ssh to a host with no alacritty entry works with nothing set up on either end.
+		- `COLORTERM=truecolor` stays as it is.
+		- The config template comment, usage.md's "Programs over ssh" and the pane test follow the new default.
+	- Decisions:
+		- 20261025: B, `xterm-256color` everywhere. No wrapping of ssh, and no swapping TERM per program, which can't be done without a wrapper, since the shell hands TERM to ssh before SilkTerm sees the process.
+			- The cursor costs nothing. SilkTerm draws its own cursor, size and animation, for any block a program asks for, and ignores the program's blink flag. xterm-256color's reset asks for a steady block and alacritty's for the default block, so both end on the configured cursor.
+			- Curly underlines cost nothing today, since SilkTerm draws no text underlines yet (2026102511131401).
+			- Check before closing: the engine has no left and right margins, which xterm-256color claims (`smglr`). GNOME Terminal, Konsole and Windows Terminal claim them too without them, so few programs rely on it.
+				- 20261102: Checked. vte 0.15 has no private mode 69, so `smglr`'s `CSI ?69h` is dropped and its `CSI Pl;Pr s` reads as save cursor, as it does under alacritty's own TERM. Nothing changes for a program that sends it either way.
+		- 20261102: The default is set where the pane is made, not in the config's default value, so an empty `shell.term` still reads as "use the default" and the template line stays `term: ""`. SilkTerm's own process keeps the engine's TERM, since only panes run programs that read it.
+	- Progress log:
+		- 20261022: Added `shell.term`, the TERM a new pane gets. Empty, the default, keeps the engine's pick. A value with a space or control character in it reads as empty.
+		- 20261022: usage.md has a "Programs over ssh" section, with the command that copies the entry to a remote host, and the setting as the other way out.
+		- 20261022: Left open the default, and any ssh handling of its own. Question filed.
+		- 20261022: The pane test failed on macOS: with no TERM set it read `dumb`. bash, which is macOS's `/bin/sh`, makes up an unexported `TERM=dumb` when none is inherited, so the test's own shell said so, not the engine or `login`. The test now reads the environment through `printenv`. Reproduced on Linux under bash with TERM unset; passes there, and on Linux with TERM set and unset.
+		- 20261022: `the_configured_term_reaches_the_program` fails on macOS, at `term.rs:2124`, the empty-setting case: left "dumb", right "". The program sees `TERM=dumb` where the test expects the test process's own TERM, which is unset there. Failed on the Mac CI (run 39842974082, arm64), again when run alone, and on b26 in the private runner, which failed the full pipeline run at stage 6. Linux passes, on the host and in the container. Not fixed here.
+		- 20261022: The fixed test passed on Mac CI run 39858608191, with the whole suite.
+		- 20261102: An empty `shell.term`, the default, now gives each pane `TERM=xterm-256color` on every OS. The config template comment, usage.md's "Programs over ssh" and the alacritty fork design doc say so.
+		- 20261102: `the_configured_term_reaches_the_program` (de9kn): the empty case expected this process's TERM and now expects `xterm-256color`. It also checks the pane's environment directly, since a test run's own TERM may already be xterm-256color, and that `alacritty` set by hand gets through.
+		- 20261102: Verified: de9kn fails with the old pane code (no TERM in the pane's environment) and passes with the fix, with TERM unset, `xterm-256color` and `alacritty` in the test's environment. de9kp passes. `--backlog-run-quick` with all 5 areas passed.
+		- 20261102: Verified: over ssh to vmKt6m with `TERM=xterm-256color` and only macOS's own terminfo database (`TERMINFO=/usr/share/terminfo`), `tput cols` read the pane's 100 columns, `less` showed a full page and quit with 0, and `nano` drew its screen and exited with 0. The same database doesn't know `alacritty`. de9kn and de9kp passed in the full run at 383a14c. Not run with `sudo`, which keeps TERM.
+	- Actual fix: `shell.term` in the config, passed to each new pane's environment, with empty as `xterm-256color`; usage.md "Programs over ssh".
+	- Branch: rnd1022, rnd1102
+	- Test case: `the_configured_term_reaches_the_program` (de9kn, term.rs) fails with the setting dropped from the pane's environment and passes with it. `shell_term_reads_one_word_and_defaults_empty` (de9kp, config.rs) covers the read and the template line.
+		- Swept: `pane_options` has the one spawn caller and one Windows test; no other place sets TERM for a pane. `front.rs`'s TERM is a test's tmux client. 20261102: no doc but usage.md and the fork design doc named the old default.
+	- Closed:
+
 - The advisory scan misses a crate yanked since cargo's index cache was filled, and clipboard-win 5.4.1 is yanked
 	- ID: 2026102518563500
 	- Type: Bug
@@ -4376,6 +4261,121 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- The Windows run this item came from named only these four. That full suite was not run again.
 	- Acceptance signoff: Self-closed: test fixes only, and all four failed before the fix and pass after on Windows.
 	- Closed: 20260930-125357
+
+- Leak checks: the soak test as a pipeline step
+	- ID: 2026110117065496
+	- Type: Task
+	- Status: Done
+	- Priority: Avg
+	- Opened: 20261101-170654
+	- Opened by: CC
+	- Parent ID: 2026101913370214
+	- Requirements:
+		- The soak test runs among the leak checks, in the build image, with the heap report kept as a pipeline artifact under the leak checks' report folder, rotated like the others.
+		- The plan line, `--list`, `--help` and the docs name it. New engine cases, watched to fail.
+		- What the first full run finds goes on the backlog.
+	- Prereq IDs: 2026110119292010
+	- Notes:
+		- `cicd/tests/soak/run.bash --out <dir>` keeps the data and summary as `soak_<stamp>`, with SOAK_STAMP for the run's stamp. It takes about 2.5 minutes, and the data is about 3.5 MB a round.
+		- It runs the way `fContainerRun` runs a step: as root first for the passwd entry, then under `dbus-run-session`, which xfwm4 needs.
+	- Progress log:
+		- 20261101: The soak test is a leak check, after the heap-growth test and before CodeQL, through `fRunSoak` and `LEAKCHECK_SOAK` in config.bash. It runs in a full run and under `--leakcheck`. `--quick` leaves it out, `--no-leakcheck` and `--backlog-run-quick` drop it, and a run on the host takes it into the image, or warns and skips it without docker.
+		- 20261101: The summary and heaptrack's data go to `cicd/artifacts/leakcheck/` as `soak_<stamp>` with the run's stamp, rotated like the heap reports. The step fails on a failed test, and on its exit 3 too.
+		- 20261101: `run.bash` takes `--stamp`, since the container run hands on arguments, not the environment. SOAK_STAMP still works.
+		- 20261101: The plan's Leak checks line, `--list`, `--help`, config.bash, design.md and install.md name it.
+		- 20261101: The heaptrack data was 9.5 MB for 12 rounds, not the 3.5 MB the notes gave, so the rotation keeps up to a few hundred MB, in a gitignored folder.
+		- 20261101: rnd1101b's full run at 4e46ef9 stopped at step 4 on dd5nw, which was already failing on dev, so it never reached the leak checks. Waits on 2026110119292010.
+		- 20261102: rnd1102's full run at 383a14c ran the soak step after the heap-growth test and kept soak_20261102-210819.zst and .txt. Round 6 to 12 grew 1 KiB against a 256 KiB margin.
+	- Decisions:
+		- 20261101: Off under `--quick` unless `--leakcheck` asks, like the slow window tests, since it takes about 2.5 minutes. `--leakcheck` is every leak check.
+		- 20261101: A run on the host runs the debug build it made in the image, the way the ASan and CodeQL steps hop there. Both are Debian trixie, and the run in the image passed.
+		- 20261101: Exit 3, could not run, fails the step rather than skipping it, since the image pins every tool the test needs.
+	- Verified: 20261101. The step's command, `run.bash --out cicd/artifacts/leakcheck --stamp <stamp>`, in the current build image, through the image rig, on the host's debug build: passed, round 6 to 12 grew 20 KiB, and both files kept with that stamp. `cicd.bash --list`: der46 and "soak test under heaptrack" in a default run, off under `--quick`, back with `--quick --leakcheck`, "(skipped --no-leakcheck)". The engine test, 24 new checks, all failed against the old cicd.bash, and 7 mutants each failed their own. The container test, `cicd/cicd.bash --backlog-run-quick`, all five areas, and `lint-report.bash`.
+		- Swept: every test that lifts the leak checks (engine, container), `cicd-win.ps1`'s leak flags, which hand on to the Linux half, and every doc naming the leak checks.
+	- Verified: 20261102. The full run at 383a14c, in the container: the plan's Leak checks line names the soak test, and stage 3 ran it after the heap-growth test. 12 rounds, round 6 to 12 grew 1 KiB against a 256 KiB margin, and `soak_20261102-210819.zst` and `.txt` were kept in `cicd/artifacts/leakcheck/`. It found no growth, so nothing to file. dd5nn passed in the full run at 3ac421d.
+	- Test case: `cicd/tests/engine/run.bash` (dd5nn), 24 new checks, and `cicd/tests/soak/run.bash` (der46) in the pipeline.
+	- Branch: rnd1101b
+	- Closed: 20261102-221500
+
+- Leak checks: the test suite runnable under Miri
+	- ID: 2026102320591313
+	- Type: Task
+	- Status: Done
+	- Priority: Avg
+	- Opened: 20261023-205913
+	- Opened by: CC
+	- Parent ID: 2026101714445004
+	- Related IDs: 2026102321073303
+	- Requirements:
+		- Every test passes under `cargo miri test`, or is ignored under Miri with a one-line reason: `#[cfg_attr(miri, ignore = "...")]`. None is left out silently.
+		- Miri runs with isolation off (`-Zmiri-disable-isolation`) and with `SILKTERM_TEST_DIR` set, as the sanitizer steps run the suite. Isolation stops a test at the clock, the local time, a directory listing or a path lookup, and with no test folder given, `testdir.rs` calls `atexit`, which Miri refuses.
+		- The reasons go by kind: it calls into C (the GPU, X11, the OS's fonts), it starts a process or a PTY, or it's too slow under Miri. The slow bar depends on the answer on 2026102320591323.
+		- What Miri reports in a crate a release binary links is filed, one item per cause. What it reports in our code is fixed.
+	- Notes:
+		- Each test has to run alone, several at once, to sort the suite. One unsupported call or UB report stops the whole test binary, and the tests after it never run.
+	- Progress log:
+		- 20261023: Went through the 145 tests in the modules most likely to call into C: term, gfx, tmux, shells, monitor, cwd, fileassoc, front, ctl and sysfont. 118 passed under Miri, and 12 ran past 45 s, 8 of them in term. 15 stopped at a call Miri can't make, and are ignored under Miri now: 11 start a process, and 4 load the graphics driver. Three of the 11 stop at a `socketpair`, which is std starting the process.
+		- 20261023: Four tests from the sample that ran past 90 s were let run longer. bc1's flat color test passed in 477 s. A Settings dialog test reached the test folder's `atexit` after 568 s, run without `SILKTERM_TEST_DIR`. An autotheme and a config test started a process after about 10 minutes: `sysfont::monospace` asks `gsettings` and `xfconf-query` for the desktop's font.
+		- 20261023: That font probe is likely on the path of many config and Settings tests. A stand-in answer under `cfg(miri)` there may beat an ignore on each of them. Not decided.
+		- 20261023: Left: the other 1292 tests, and the slow ones once the bar is set.
+		- 20261024: Split in 5 by module, since the rest is too much for one sitting: 2026102407430372, 2026102407430375, 2026102407430377, 2026102407430379 and 2026102407430381. This item closes when they do.
+		- 20261024: 2026102407430372 is done: 278 tests, 178 passing under Miri and 99 newly ignored there with a reason.
+		- 20261024: 2026102407430375 is done: 330 tests, 184 passing under Miri and 146 newly ignored there with a reason.
+		- 20261024: 2026102407430377 is done: 262 tests, 199 passing under Miri and 61 newly ignored there with a reason.
+		- 20261024: 2026102407430379 is done, with its child 2026102410035982: 232 tests, 71 passing under Miri and 161 newly ignored there with a reason.
+		- 20261024: Left: 2026102407430381, the settings_ui tests.
+		- 20261102: 2026102407430381 is done with its child 2026110219042006: 203 tests, 3 passing under Miri and 200 ignored as too slow. Closed.
+	- Verified: 20261023. The 15 pass in a plain run and show as ignored under Miri. fmt check, clippy for Linux.
+	- Decisions:
+		- 20261024: The slow bar is 60 s of CPU time under Miri, not wall time, so a verdict doesn't swing with the box's load. Miri runs a test's threads on one core, so on an idle box the two are about the same.
+	- Swept: the 145 tests above. A test elsewhere that starts a process or opens a device turns up in the rest of the run.
+	- Test case: The children's sorts, each checked by Miri's --ignored --list: 2026102407430372, 75, 77, 79 and 81.
+	- Branch: rnd1023
+	- Acceptance signoff: Self-closed: every test is sorted. A whole cargo miri test run is the Miri step's job, 2026102320591318.
+	- Closed: 20261102-195100
+
+- Leak checks: Miri sort, settings_ui
+	- ID: 2026102407430381
+	- Type: Task
+	- Status: Done
+	- Priority: Avg
+	- Opened: 20261024-074303
+	- Opened by: CC
+	- Parent ID: 2026102320591313
+	- Requirements:
+		- The parent's requirements, for the 203 tests in `settings_ui`.
+	- Progress log:
+		- 20261102: 91 tests run alone under Miri, 8 at a time, against the slow bar of 60 s of CPU time: all of picker, prompt, search and shell_grid, and the first 51 of the dialog's own tests. One passed. 90 are too slow under Miri and are ignored as that. None stopped at a call Miri can't make.
+		- 20261102: Miri reported no UB and no leak.
+		- 20261102: The other 112 didn't fit in the time, at a load of 40 to 57 on 32 cores. They went to 2026110219042006. This item closes with it.
+		- 20261102: Closed. The rest went in through 2026110219042006.
+	- Verified: 20261102. The 90 new ignores each show as ignored under Miri (`--ignored --list`), and the one that passed doesn't. fmt check, clippy for Linux. The 203 settings_ui tests pass in a plain run but one, which fails on the live config, filed as 2026110219042107.
+	- Swept: the 91 tests above.
+	- Test case: Miri's --ignored --list over settings_ui shows the 200 slow tests, per children 2026110219042006 and this item's 90
+	- Branch: rnd1102
+	- Acceptance signoff: Self-closed: all 203 settings_ui tests sorted across this item and 2026110219042006
+	- Closed: 20261102-195000
+
+- Leak checks: Miri sort, settings_ui, the rest
+	- ID: 2026110219042006
+	- Type: Task
+	- Status: Done
+	- Priority: Avg
+	- Opened: 20261102-190421
+	- Opened by: CC
+	- Parent ID: 2026102407430381
+	- Requirements:
+		- The parent's requirements, for the 112 settings_ui tests not yet sorted: themes' 18 and 94 of the dialog's own. The list is `private/claude_simple/tools/miri-results-20261102/settings_ui-left.txt`.
+	- Notes:
+		- Most of the first 91 hit the bar, at 1 to 3 min of wall time each on a busy box. Run it when the load is low, or give it the time.
+	- Progress log:
+		- 20261102: The 112 tests run alone under Miri, 8 at a time, against the slow bar of 60 s of CPU time, at a load of 29 to 39 on 32 cores. Two passed, `scroll_speed_inverts_tau` and `slider_step_matches_spec`. 110 are too slow under Miri and are ignored as that: 92 of the dialog's own and all 18 of themes'. None stopped at a call Miri can't make.
+		- 20261102: Miri reported no UB and no leak.
+	- Verified: 20261102. Under Miri, `--ignored --list` over settings_ui shows 200 tests, the 90 from the parent and these 110, and not the 3 that pass. `--backlog-run-quick fmt clippy tests` passed, 1418 tests.
+	- Swept: all 203 settings_ui tests are sorted now, between this item and its parent.
+	- Test case: None new. The ignores are test attributes, checked by the runs above.
+	- Branch: rnd1102
+	- Closed: 20261102-194900
 
 - Leak checks: the soak driver and its heap check
 	- ID: 2026110117065477
