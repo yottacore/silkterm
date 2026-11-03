@@ -472,7 +472,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - Leak checks: the test suite runnable under Miri
 	- ID: 2026102320591313
 	- Type: Task
-	- Status: Started
+	- Status: Done
 	- Priority: Avg
 	- Opened: 20261023-205913
 	- Opened by: CC
@@ -496,12 +496,15 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261024: 2026102407430377 is done: 262 tests, 199 passing under Miri and 61 newly ignored there with a reason.
 		- 20261024: 2026102407430379 is done, with its child 2026102410035982: 232 tests, 71 passing under Miri and 161 newly ignored there with a reason.
 		- 20261024: Left: 2026102407430381, the settings_ui tests.
+		- 20261102: 2026102407430381 is done with its child 2026110219042006: 203 tests, 3 passing under Miri and 200 ignored as too slow. Closed.
 	- Verified: 20261023. The 15 pass in a plain run and show as ignored under Miri. fmt check, clippy for Linux.
 	- Decisions:
 		- 20261024: The slow bar is 60 s of CPU time under Miri, not wall time, so a verdict doesn't swing with the box's load. Miri runs a test's threads on one core, so on an idle box the two are about the same.
 	- Swept: the 145 tests above. A test elsewhere that starts a process or opens a device turns up in the rest of the run.
-	- Test case: None new. The ignores are test attributes, checked by the runs above.
+	- Test case: The children's sorts, each checked by Miri's --ignored --list: 2026102407430372, 75, 77, 79 and 81.
 	- Branch: rnd1023
+	- Acceptance signoff: Self-closed: every test is sorted. A whole cargo miri test run is the Miri step's job, 2026102320591318.
+	- Closed: 20261102-195100
 
 - Leak checks: the headless soak test under `--leakcheck`
 	- ID: 2026101913370214
@@ -688,7 +691,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - Leak checks: Miri sort, settings_ui
 	- ID: 2026102407430381
 	- Type: Task
-	- Status: Started
+	- Status: Done
 	- Priority: Avg
 	- Opened: 20261024-074303
 	- Opened by: CC
@@ -699,10 +702,13 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261102: 91 tests run alone under Miri, 8 at a time, against the slow bar of 60 s of CPU time: all of picker, prompt, search and shell_grid, and the first 51 of the dialog's own tests. One passed. 90 are too slow under Miri and are ignored as that. None stopped at a call Miri can't make.
 		- 20261102: Miri reported no UB and no leak.
 		- 20261102: The other 112 didn't fit in the time, at a load of 40 to 57 on 32 cores. They went to 2026110219042006. This item closes with it.
+		- 20261102: Closed. The rest went in through 2026110219042006.
 	- Verified: 20261102. The 90 new ignores each show as ignored under Miri (`--ignored --list`), and the one that passed doesn't. fmt check, clippy for Linux. The 203 settings_ui tests pass in a plain run but one, which fails on the live config, filed as 2026110219042107.
 	- Swept: the 91 tests above.
-	- Test case: None new. The ignores are test attributes, checked by the runs above.
+	- Test case: Miri's --ignored --list over settings_ui shows the 200 slow tests, per children 2026110219042006 and this item's 90
 	- Branch: rnd1102
+	- Acceptance signoff: Self-closed: all 203 settings_ui tests sorted across this item and 2026110219042006
+	- Closed: 20261102-195000
 
 - Leak checks: Miri sort, settings_ui, the rest
 	- ID: 2026110219042006
