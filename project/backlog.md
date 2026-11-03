@@ -736,7 +736,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261103: The first full measured run, at 595a542 in the image, took about 65 minutes and failed on 1024 results, as it should with nothing filed. That is red on real findings; the planted one is child 2026110315304782.
 		- 20261103: The release crate list let in what only proc macros use, such as syn, litrs and quote, about 210 results. It now leaves them out, 186 crates.
 		- 20261103: A suppression can name the values a flow starts from, so a rule for a false flow doesn't hide a real one at the same path.
-		- 20261103: Split in 5. 2026110315303525, our code's results, is done. 2026110315303530, 35 and 41 are the third-party roll-ups. 2026110315304782 plants a finding and checks the run is green otherwise. This item closes when they do.
+		- 20261103: Split in 5. 2026110315303525, our code's results, is done. 2026110315303530, 35 and 41 are the third-party roll-ups; 30 is done. 2026110315304782 plants a finding and checks the run is green otherwise. This item closes when they do.
 	- Decisions:
 		- 20261103: CodeQL stays out of the default run, under `--long`, `--leakcheck` and `--codeql`, against this item's "on by default". It takes about 65 minutes alone, and the default run has to fit in about an hour, per the 2026-10-24 reset and 2026102616543936. The smaller suite or a timeout would drop the quality queries the parent asked for.
 	- Branch: rnd1103
@@ -765,7 +765,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - CodeQL: unused variables in third-party crates, a roll-up
 	- ID: 2026110315303530
 	- Type: Task
-	- Status: Queued
+	- Status: Done
 	- Priority: Avg
 	- Opened: 20261103-153035
 	- Opened by: CC
@@ -774,6 +774,15 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Requirements:
 		- About 270 `rust/unused-variable` results in release crates on 20261103, most in wgpu-hal (144) and base64 (41), then rustix, jiff, winit, read-fonts, naga, glow and a few more.
 		- Check a sample for a cfg the extractor didn't see, or a pattern read as a variable. Suppress per crate with this ID.
+	- Progress log:
+		- 20261103: 257 in 16 crates once proc macros' crates were left out. A sample of about 40 were constants and enum variants in a pattern read as bindings, such as `VK_LCONTROL` and `Uint`, files for other platforms such as winit's Windows code and glow's web code, wgpu-hal's noop backend, and base64's own tests. None is a defect a user runs into.
+		- 20261103: Suppressed per crate, any version, with this ID.
+	- Decisions:
+		- 20261103: Any version, so a lock bump doesn't turn the run red on the same kind. A crate new to the list still fails it and gets a look.
+	- Verified: 20261103. The step's filter over the first run's SARIF: 0 unused-variable results left, 257 known under this ID.
+	- Branch: rnd1103
+	- Test case: dd5nn `cicd/tests/engine/run.bash` covers the rule-and-path suppressions. The rest is suppression lines, with no behavior of their own.
+	- Closed: 20261103-154000
 
 - CodeQL: pointer lifetime results in ash, lru and other crates
 	- ID: 2026110315303535

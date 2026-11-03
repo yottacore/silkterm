@@ -10,3 +10,20 @@
 # generic code, such as clone, iterators and parse, without telling types apart,
 # so they reach every assert and eprintln.
 rust/cleartext-logging source/* 2026110315303525 \.\.\.::(UidBase|Uuid)\(\.\.\.\)
+
+# Unused variables in third-party crates: constants and enum variants in a
+# pattern read as bindings, other platforms' files, wgpu-hal's noop backend and
+# crates' own tests. None is a defect a user runs into.
+rust/unused-variable vendor/base64-[0-9]*/* 2026110315303530
+rust/unused-variable vendor/calloop-[0-9]*/* 2026110315303530
+rust/unused-variable vendor/codespan-reporting-[0-9]*/* 2026110315303530
+rust/unused-variable vendor/glow-[0-9]*/* 2026110315303530
+rust/unused-variable vendor/glutin-[0-9]*/* 2026110315303530
+rust/unused-variable vendor/jiff-[0-9]*/* 2026110315303530
+rust/unused-variable vendor/naga-[0-9]*/* 2026110315303530
+rust/unused-variable vendor/polling-[0-9]*/* 2026110315303530
+rust/unused-variable vendor/read-fonts-[0-9]*/* 2026110315303530
+rust/unused-variable vendor/rustix-[0-9]*/* 2026110315303530
+rust/unused-variable vendor/wgpu-[0-9]*/* 2026110315303530
+rust/unused-variable vendor/wgpu-hal-[0-9]*/* 2026110315303530
+rust/unused-variable vendor/winit-[0-9]*/* 2026110315303530
