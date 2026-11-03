@@ -553,11 +553,12 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - Two SilkTerm windows on one headless display: an idle release sometimes never shows, or never happens
 	- ID: 2026110118143797
 	- Type: Bug
-	- Status: Queued
+	- Status: Done
 	- Severity: Avg
 	- Opened: 20261101-181437
 	- Opened by: CC
-	- Related IDs: 2026103010083401
+	- Assigned to: CC
+	- Related IDs: 2026103010083401, 2026110220221592
 	- Target OS: Linux
 	- Test environment: Xvfb with no window manager, software GL
 	- Steps to reproduce:
@@ -566,6 +567,53 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Expected behavior: Both let go after about a minute, as one window alone does every time.
 	- Reproduced: Yes, in 3 of 7 runs with 2026103010083401 in, and 1 of 2 with it taken out, on a display of its own each time, with or without the second window moved off the first. One window alone passed both runs tried.
 	- Possible cause: Not known. Could be the test rig, or two GL clients on one Xvfb, or a real fault with two windows open.
+	- Actual cause: Both in the test, not the program.
+		- `xdotool search --pid P --name SilkTerm` matches either condition unless given `--all`. So each window's lookup took whichever SilkTerm window came first, and both checks often read the one window that never let go.
+		- That window never let go because its printing tab was in front. A launch opens on its first tab, and the `--shell` given before `--new-tab` is the window's, so the first tab printed.
+		- The idledbg stamp counts from its own first line, so "61 s" in the old log was not time since launch.
+	- Actual fix: Each lookup takes `--all`, a check fails when both find the same window, and the printing tab is the second one, in the back.
+	- Swept: every `xdotool search` in `cicd`. quiettab paired `--pid` with `--name` the same way and takes `--all` now, and still passes. herdback does too, but its `appPid` is a subshell, so `--all` finds nothing there. Filed as 2026110220294255. The rest give one condition, or `--onlyvisible` with one.
+	- Decisions:
+		- 20261102: The two-window case stays in deqy2, so in the full run. Both windows run side by side, so it adds no time.
+		- 20261102: Which tab a launch with several tabs opens on is filed as 2026110220221592, since `--help` says a `--new-tab` "becomes current".
+	- Progress log:
+		- 20261102: Reproduced in 3 of 4 runs of the old script. A probe that logged every top-level window's title found the quiet window let go at 62 to 64 s each time, and the other one never did, idle in its event loop.
+		- 20261102: Verified: the fixed script passed 4 runs of 4, at load 12 to 17. With the tab check from 2026103010083401 taken out, the second window failed in 2 runs of 2 and the quiet one passed.
+	- Test case: `cicd/tests/idleother/run.bash` (deqy2), now with the second window.
+	- Branch: rnd1102
+	- Closed: 20261102-202215
+
+- Which tab a window launched with several tabs opens on
+	- ID: 2026110220221592
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261102-202215
+	- Opened by: CC
+	- Related IDs: 2026110118143797
+	- Target OS: All
+	- Steps to reproduce:
+		- Run `silkterm --new-tab=logs --directory /var/log`.
+	- Incorrect behavior: The window opens on the first tab. `--help` says `--new-tab` "becomes current", and usage.md says "which becomes the current one", which can read as the tab in front.
+	- Expected behavior: Not decided. Either the last tab made is in front, or the help and usage.md say the launch opens on the first tab and "current" means where later options go.
+	- Notes:
+		- `State` starts with `Tabs { list, active: 0 }` in app.rs. Wording only is the smaller change.
+
+- herdback's window lookup and stop miss the program, since `appPid` is a subshell
+	- ID: 2026110220294255
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261102-202942
+	- Opened by: CC
+	- Related IDs: 2026110118143797, 2026102807384201
+	- Target OS: Linux
+	- Steps to reproduce:
+		- Change both `xdotool search --pid "${appPid}" --name '^SilkTerm'` lines in `cicd/tests/herdback/run.bash` to take `--all`, and run it.
+	- Incorrect behavior: Every case says the window never showed. The launch is `fX ... &`, and `fX` is a function, so `$!` is the subshell, not SilkTerm. The lookup finds the window by its name only, and `fStopOurs` sees bash, not the binary, so it stops nothing. A window from one dance can still be up in the next.
+	- Expected behavior: `appPid` is the program, so the lookup can take `--all` and each dance stops its own window.
+	- Notes:
+		- gui-headless.bash's `fOnX --bg` execs for the same reason.
 
 - The Mac CI doesn't name a test that failed when its output splits the result line
 	- ID: 2026102822262458

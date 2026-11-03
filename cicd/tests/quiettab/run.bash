@@ -139,7 +139,7 @@ while ((SECONDS < giveUp)); do
 	step="$(cat "${work}/step" 2>/dev/null || true)"
 	[[ "${step}" == "done" ]] && break
 	if [[ -z "${win}" ]]; then
-		win="$(DISPLAY="${display}" XAUTHORITY="${auth}" xdotool search --pid "${appPid}" --name 'SilkTerm' 2>/dev/null | head -n 1 || true)"
+		win="$(DISPLAY="${display}" XAUTHORITY="${auth}" xdotool search --all --pid "${appPid}" --name 'SilkTerm' 2>/dev/null | head -n 1 || true)"
 	fi
 	if [[ -n "${win}" && -n "${step}" ]]; then
 		title="$(DISPLAY="${display}" XAUTHORITY="${auth}" xprop -id "${win}" _NET_WM_NAME 2>/dev/null || true)"
