@@ -661,8 +661,9 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - Over ssh to a host with no alacritty terminfo, full-screen programs fail with "'alacritty': unknown terminal type."
 	- ID: 2026102114411311
 	- Type: Bug
-	- Status: Queued
+	- Status: Waiting on automated testing
 		- 20261025: Answered. The default TERM becomes `xterm-256color` everywhere, with no ssh wrapping.
+		- 20261102: Waits on the Mac check below. No local stand-in: Debian's ncurses still finds the system alacritty entry with `TERMINFO` and `TERMINFO_DIRS` pointed at a database without it.
 	- Needs external testing: Over ssh to a Mac with no alacritty entry, with no `shell.term` set: `sudo nano /etc/hosts`, `less` and `tput cols` work.
 	- Severity: Avg
 	- Opened: 20261021-144113
@@ -693,6 +694,8 @@ Going forward, new issues in the new template at the bottom of this file, will g
 			- The cursor costs nothing. SilkTerm draws its own cursor, size and animation, for any block a program asks for, and ignores the program's blink flag. xterm-256color's reset asks for a steady block and alacritty's for the default block, so both end on the configured cursor.
 			- Curly underlines cost nothing today, since SilkTerm draws no text underlines yet (2026102511131401).
 			- Check before closing: the engine has no left and right margins, which xterm-256color claims (`smglr`). GNOME Terminal, Konsole and Windows Terminal claim them too without them, so few programs rely on it.
+				- 20261102: Checked. vte 0.15 has no private mode 69, so `smglr`'s `CSI ?69h` is dropped and its `CSI Pl;Pr s` reads as save cursor, as it does under alacritty's own TERM. Nothing changes for a program that sends it either way.
+		- 20261102: The default is set where the pane is made, not in the config's default value, so an empty `shell.term` still reads as "use the default" and the template line stays `term: ""`. SilkTerm's own process keeps the engine's TERM, since only panes run programs that read it.
 	- Progress log:
 		- 20261022: Added `shell.term`, the TERM a new pane gets. Empty, the default, keeps the engine's pick. A value with a space or control character in it reads as empty.
 		- 20261022: usage.md has a "Programs over ssh" section, with the command that copies the entry to a remote host, and the setting as the other way out.
@@ -700,10 +703,13 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261022: The pane test failed on macOS: with no TERM set it read `dumb`. bash, which is macOS's `/bin/sh`, makes up an unexported `TERM=dumb` when none is inherited, so the test's own shell said so, not the engine or `login`. The test now reads the environment through `printenv`. Reproduced on Linux under bash with TERM unset; passes there, and on Linux with TERM set and unset.
 		- 20261022: `the_configured_term_reaches_the_program` fails on macOS, at `term.rs:2124`, the empty-setting case: left "dumb", right "". The program sees `TERM=dumb` where the test expects the test process's own TERM, which is unset there. Failed on the Mac CI (run 39842974082, arm64), again when run alone, and on b26 in the private runner, which failed the full pipeline run at stage 6. Linux passes, on the host and in the container. Not fixed here.
 		- 20261022: The fixed test passed on Mac CI run 39858608191, with the whole suite.
-	- Actual fix: `shell.term` in the config, passed to each new pane's environment; usage.md "Programs over ssh".
-	- Branch: rnd1022
-	- Test case: `the_configured_term_reaches_the_program` (term.rs) fails with the setting dropped from the pane's environment and passes with it. `shell_term_reads_one_word_and_defaults_empty` (config.rs) covers the read and the template line.
-		- Swept: `pane_options` has the one spawn caller and one Windows test; no other place sets TERM for a pane. `front.rs`'s TERM is a test's tmux client.
+		- 20261102: An empty `shell.term`, the default, now gives each pane `TERM=xterm-256color` on every OS. The config template comment, usage.md's "Programs over ssh" and the alacritty fork design doc say so.
+		- 20261102: `the_configured_term_reaches_the_program` (de9kn): the empty case expected this process's TERM and now expects `xterm-256color`. It also checks the pane's environment directly, since a test run's own TERM may already be xterm-256color, and that `alacritty` set by hand gets through.
+		- 20261102: Verified: de9kn fails with the old pane code (no TERM in the pane's environment) and passes with the fix, with TERM unset, `xterm-256color` and `alacritty` in the test's environment. de9kp passes. `--backlog-run-quick` with all 5 areas passed.
+	- Actual fix: `shell.term` in the config, passed to each new pane's environment, with empty as `xterm-256color`; usage.md "Programs over ssh".
+	- Branch: rnd1022, rnd1102
+	- Test case: `the_configured_term_reaches_the_program` (de9kn, term.rs) fails with the setting dropped from the pane's environment and passes with it. `shell_term_reads_one_word_and_defaults_empty` (de9kp, config.rs) covers the read and the template line.
+		- Swept: `pane_options` has the one spawn caller and one Windows test; no other place sets TERM for a pane. `front.rs`'s TERM is a test's tmux client. 20261102: no doc but usage.md and the fork design doc named the old default.
 	- Closed:
 
 - Text underlines aren't drawn

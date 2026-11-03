@@ -1687,13 +1687,20 @@ fn pane_options(
 	if tmux_client {
 		opts.env.insert("TMUX".to_string(), String::new());
 	}
-	// Empty keeps the engine's pick from main. ssh passes TERM on as-is, to
-	// hosts that may not know alacritty (2026102114411311).
-	if !term_name.is_empty() {
-		opts.env.insert("TERM".to_string(), term_name.to_string());
-	}
+	// ssh passes TERM on as-is, and a host with no alacritty entry can't run
+	// nano or less, so empty is xterm-256color rather than the engine's pick
+	// (2026102114411311).
+	let term_name = if term_name.is_empty() {
+		DEFAULT_TERM
+	} else {
+		term_name
+	};
+	opts.env.insert("TERM".to_string(), term_name.to_string());
 	opts
 }
+
+// Every host has this entry, a stock Mac included.
+const DEFAULT_TERM: &str = "xterm-256color";
 
 // wsl.exe launches the shell inside the distribution, which does not inherit
 // the Windows working directory. --cd is how it is told, and it takes a
@@ -2087,7 +2094,7 @@ mod tests {
 
 	// ssh hands TERM to the far side as-is, and a host with no alacritty entry
 	// refused nano. A TERM set in the config has to reach the program itself,
-	// and an empty one has to leave the engine's pick alone.
+	// and an empty one has to be xterm-256color whatever this process holds.
 	// Test ID: de9kn
 	#[cfg(unix)]
 	#[test]
@@ -2129,9 +2136,15 @@ mod tests {
 		};
 		assert_eq!(seen_by_program("xterm-256color"), "xterm-256color");
 		assert_eq!(seen_by_program("vt220"), "vt220");
-		// the pane keeps this process's TERM, which in the app is setup_env's pick
-		let inherited = std::env::var("TERM").unwrap_or_default();
-		assert_eq!(seen_by_program(""), inherited);
+		// Set on the pane itself, since setup_env puts alacritty in this
+		// process's TERM where the entry exists, and a test run may hold any.
+		let empty = super::pane_options(None, None, false, "");
+		assert_eq!(
+			empty.env.get("TERM").map(String::as_str),
+			Some("xterm-256color")
+		);
+		assert_eq!(seen_by_program(""), "xterm-256color");
+		assert_eq!(seen_by_program("alacritty"), "alacritty");
 	}
 
 	fn argv(words: &str) -> Vec<String> {
