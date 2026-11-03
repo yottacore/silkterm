@@ -707,7 +707,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - Leak checks: Miri sort, settings_ui, the rest
 	- ID: 2026110219042006
 	- Type: Task
-	- Status: Queued
+	- Status: Done
 	- Priority: Avg
 	- Opened: 20261102-190421
 	- Opened by: CC
@@ -716,6 +716,14 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- The parent's requirements, for the 112 settings_ui tests not yet sorted: themes' 18 and 94 of the dialog's own. The list is `private/claude_simple/tools/miri-results-20261102/settings_ui-left.txt`.
 	- Notes:
 		- Most of the first 91 hit the bar, at 1 to 3 min of wall time each on a busy box. Run it when the load is low, or give it the time.
+	- Progress log:
+		- 20261102: The 112 tests run alone under Miri, 8 at a time, against the slow bar of 60 s of CPU time, at a load of 29 to 39 on 32 cores. Two passed, `scroll_speed_inverts_tau` and `slider_step_matches_spec`. 110 are too slow under Miri and are ignored as that: 92 of the dialog's own and all 18 of themes'. None stopped at a call Miri can't make.
+		- 20261102: Miri reported no UB and no leak.
+	- Verified: 20261102. Under Miri, `--ignored --list` over settings_ui shows 200 tests, the 90 from the parent and these 110, and not the 3 that pass. `--backlog-run-quick fmt clippy tests` passed, 1418 tests.
+	- Swept: all 203 settings_ui tests are sorted now, between this item and its parent.
+	- Test case: None new. The ignores are test attributes, checked by the runs above.
+	- Branch: rnd1102
+	- Closed: 20261102-194900
 
 - The tmux rows test fails when the live config turns tmux sessions on
 	- ID: 2026110219042107

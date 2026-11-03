@@ -6578,6 +6578,7 @@ mod tests {
 	// window really measures is what puts the two back in step.
 	// Test ID: dcwhs
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_window_that_keeps_its_pixels_through_a_scale_change_still_fits_them() {
 		let mut d = mk_dialog_at(900.0, 1.0);
 		d.set_size(700.0, 600.0);
@@ -6643,6 +6644,7 @@ mod tests {
 
 	// Test ID: d9b8v
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn tabs_partition_all_specs() {
 		let d = mk_dialog(2000.0);
 		// every spec sits on a valid tab and no tab is empty
@@ -6654,6 +6656,7 @@ mod tests {
 
 	// Test ID: d9c2j
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn revert_restores_default_and_records_key() {
 		let mut d = mk_dialog(2000.0);
 		d.edited = d.defaults.clone(); // a loaded config may start off-default
@@ -6686,6 +6689,7 @@ mod tests {
 
 	// Test ID: d9b8w
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn height_cap_enables_scroll() {
 		// generous cap: natural size, nothing to scroll
 		let d = mk_dialog(2000.0);
@@ -6713,6 +6717,7 @@ mod tests {
 	// every other tab as tall as its list.
 	// Test ID: ddb56
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_dialog_is_as_tall_as_its_tallest_fixed_tab() {
 		let mut d = mk_dialog(4000.0);
 		let fixed: Vec<usize> = SettingsDialog::fixed_tabs(d.specs).collect();
@@ -6801,6 +6806,7 @@ mod tests {
 	// so both stay in one column whatever the window is doing.
 	// Test ID: dcd39
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn widening_stretches_the_control_and_not_its_value_field() {
 		let mut d = mk_dialog(2000.0);
 		let row = SettingsDialog::visible(d.specs, 0)
@@ -6921,6 +6927,7 @@ mod tests {
 	// macro the tab knows.
 	// Test ID: de2zh
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_tab_text_row_keeps_what_is_typed_and_its_tip_names_a_mistake() {
 		let mut d = mk_dialog(4000.0);
 		let i = d
@@ -7110,6 +7117,7 @@ mod tests {
 	// revert arrow is the one part that may say something else.
 	// Test ID: ddp7v
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn every_part_of_a_row_shows_the_rows_tip() {
 		let mut d = mk_dialog(4000.0);
 		let mut probed = 0;
@@ -7715,6 +7723,7 @@ mod tests {
 	// not fit. Both sides, over SilkTerm's own tabs.
 	// Test ID: dcd48
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_tab_strip_keeps_the_current_tab_in_the_window() {
 		let paths: Vec<&str> = tab_nodes().iter().map(|n| n.path).collect();
 		for side in [TabsSide::Top, TabsSide::Left] {
@@ -7745,6 +7754,7 @@ mod tests {
 	// A pair is worth having only if it is shorter than the two rows it replaces.
 	// Test ID: dcd3b
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn pairing_rows_makes_the_tab_shorter() {
 		let d = mk_dialog(4000.0);
 		let shells = d.edited.shells.len();
@@ -7768,6 +7778,7 @@ mod tests {
 	// look across the top, so SilkTerm's own tabs are put there for it.
 	// Test ID: dava0
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_tabs_stand_on_the_line_that_closes_their_strip() {
 		let paths: Vec<&str> = tab_nodes().iter().map(|n| n.path).collect();
 		let _tabs = stand_in_tabs(&paths, TabsSide::Top);
@@ -7981,6 +7992,7 @@ mod tests {
 	// shipped, so the check is generic - every row, saved and read back.
 	// Test ID: davbd
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn every_row_survives_a_save_and_a_relaunch() {
 		let _guard = config::test_config_lock();
 		let _ = config::settings(); // memoize before the override goes in
@@ -8121,6 +8133,7 @@ mod tests {
 	// of `revert` and fell to the slider arm, which did nothing for a toggle.
 	// Test ID: ddf52
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn every_revert_arrow_puts_its_row_back_to_the_default() {
 		let mut d = mk_dialog(4000.0);
 		d.edited = d.defaults.clone();
@@ -8173,6 +8186,7 @@ mod tests {
 	// filed under the sliders would compile and read as off forever.
 	// Test ID: ddf57
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn every_row_kind_matches_its_key_list() {
 		let listed = |key: Key| match key {
 			keys_of!(slider) => "slider",
@@ -8212,6 +8226,7 @@ mod tests {
 	// tip that only reworded its label would be the thing to delete.
 	// Test ID: dcbf1
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn no_flyover_merely_restates_its_label() {
 		let d = mk_dialog(4000.0);
 		let mut with_help = 0;
@@ -8255,6 +8270,7 @@ mod tests {
 	// say why. Each slider names the switch by its label as it reads now.
 	// Test ID: ddn08
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_wallpaper_look_sliders_say_a_tag_wins() {
 		let d = mk_dialog(4000.0);
 		let spec = |key: Key| d.specs.iter().find(|s| s.key == key).unwrap();
@@ -8289,6 +8305,7 @@ mod tests {
 	// it replaces, not yet an automatic setting, and the machine.
 	// Test ID: ddqa8
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn rows_that_only_count_while_a_switch_is_on_stay_live() {
 		let mut d = mk_dialog(4000.0);
 		custom(&mut d);
@@ -8374,6 +8391,7 @@ mod tests {
 	// mark, no italic, no other color (2026100913394948, 2026100913394950).
 	// Test ID: ddwhr
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_font_switches_are_there_and_an_automatic_value_draws_like_any_other() {
 		let mut m = chars7;
 		let mut d = mk_dialog(4000.0);
@@ -8450,6 +8468,7 @@ mod tests {
 	// arrow. A size typed in turns it off, and the other keeps what it showed.
 	// Test ID: ddqaa
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn remember_last_size_is_stored_and_a_size_typed_turns_it_off() {
 		let mut d = mk_dialog(4000.0);
 		let sw = d
@@ -8660,6 +8679,7 @@ mod tests {
 	// one, and the arrow puts back both.
 	// Test ID: ddqbt
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_open_command_and_file_or_folder_take_their_default_until_typed() {
 		let mut d = mk_dialog(4000.0);
 		d.edited = d.defaults.clone();
@@ -9137,6 +9157,7 @@ mod tests {
 	// keeps what it showed, bar a checkbox the row sits under.
 	// Test ID: dcwqw
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn changing_a_profile_s_row_marks_it_and_leaves_custom_alone() {
 		let members: Vec<Key> = Key::ALL
 			.iter()
@@ -9204,6 +9225,7 @@ mod tests {
 	// it, and the change goes on the stored pick, as a change under it.
 	// Test ID: dcwqx
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn changing_a_row_under_remote_ends_it() {
 		let mut d = mk_dialog(900.0);
 		d.set_radio(Key::PerfProfile, crate::profile::Profile::High.index());
@@ -9230,6 +9252,7 @@ mod tests {
 	// what the machine should settle on.
 	// Test ID: dcvf8
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn naming_a_profile_switches_off_the_automatic_choice_except_remote() {
 		let mut d = mk_dialog(900.0);
 		d.set_toggle(Key::PerfAuto, true);
@@ -9514,6 +9537,7 @@ mod tests {
 
 	// Test ID: dbfrs
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_shells_grid_has_a_tab_to_itself() {
 		let ui = crate::ui_spec::ui();
 		let grid = ui
@@ -9555,6 +9579,7 @@ mod tests {
 	// pinned, or a row appended later quietly takes its place.
 	// Test ID: dbfrt
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn copy_on_select_is_the_last_thing_on_the_cursor_tab() {
 		let d = mk_dialog(4000.0);
 		let i = d
@@ -9612,6 +9637,7 @@ mod tests {
 
 	// Test ID: d9c8b
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn keyboard_focus_walks_controls_then_buttons() {
 		use super::Focus;
 		let mut d = mk_dialog(2000.0);
@@ -9653,6 +9679,7 @@ mod tests {
 
 	// Test ID: d9pk0
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn dual_cursor_row_two_stops_toggle_and_revert() {
 		use super::{Focus, Kind};
 		let mut d = mk_dialog(2000.0);
@@ -9736,6 +9763,7 @@ mod tests {
 	// flips, never grayed. The macOS build has no row for it at all.
 	// Test ID: ddkm0
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn software_rendering_is_a_plain_switch_beside_the_idle_rows() {
 		use super::Key;
 		let mut d = mk_dialog(2000.0);
@@ -9875,6 +9903,7 @@ mod tests {
 	// dialog, twice the pixels, and a pointer still hits the same control.
 	// Test ID: dav40
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_scale_factor_only_multiplies_the_layout() {
 		let mut base = mk_dialog(4000.0);
 		let mut hidpi = mk_dialog_at(4000.0, 2.0);
@@ -9906,6 +9935,7 @@ mod tests {
 
 	// Test ID: d9p3w
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn dropdown_open_navigate_commit() {
 		use super::{Action, Focus, Key, Kind};
 		let mut d = mk_dialog(2000.0);
@@ -9947,6 +9977,7 @@ mod tests {
 	// row shows it for that value, and picking it stores that value.
 	// Test ID: ddj80
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn each_choice_row_shows_and_sets_the_option_it_names() {
 		use super::Key;
 		use crate::config::Settings;
@@ -10023,6 +10054,7 @@ mod tests {
 
 	// Test ID: d9p3x
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn dropdown_mouse_open_and_pick() {
 		use super::Key;
 		let mut d = mk_dialog(2000.0);
@@ -10048,6 +10080,7 @@ mod tests {
 
 	// Test ID: daqye
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_scrolling_feel_sliders_read_where_their_defaults_claim() {
 		// Every one of these is documented in the config template as coming out at a
 		// particular number, and each stored default was picked to match. A
@@ -10082,6 +10115,7 @@ mod tests {
 
 	// Test ID: daqyf
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_scrolling_feel_sliders_round_trip_and_run_the_right_way() {
 		// A slider that reads back as something else is the "setting does
 		// nothing" bug in its quietest form. Also pins the DIRECTION of every
@@ -10129,6 +10163,7 @@ mod tests {
 
 	// Test ID: d9chh
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn buttons_fire_on_release_over_button() {
 		use super::Action;
 		let mut d = mk_dialog(2000.0);
@@ -10150,6 +10185,7 @@ mod tests {
 
 	// Test ID: d9c8c
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn space_or_enter_activates_focused_button() {
 		use super::{Action, Focus};
 		let mut d = mk_dialog(2000.0);
@@ -10161,6 +10197,7 @@ mod tests {
 
 	// Test ID: d9c7z
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn keyboard_skips_headers_and_disabled() {
 		let mut d = mk_dialog(2000.0);
 		d.tab = tab_named("Background");
@@ -10175,6 +10212,7 @@ mod tests {
 
 	// Test ID: d9c80
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn space_toggles_focused_boolean() {
 		let mut d = mk_dialog(2000.0);
 		d.tab = tab_named("Background");
@@ -10186,6 +10224,7 @@ mod tests {
 
 	// Test ID: d9c81
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn arrows_adjust_slider_and_radio() {
 		use super::Key;
 		let mut d = mk_dialog(2000.0);
@@ -10307,6 +10346,7 @@ mod tests {
 	// parked handle does not throw it away. Below the slider still clamps.
 	// Test ID: ddp90
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_typed_wait_can_go_past_the_slider_up_to_a_week() {
 		use super::{Focus, Key, SliderScale};
 		let mut d = mk_dialog(4000.0);
@@ -10392,6 +10432,7 @@ mod tests {
 	// its size.
 	// Test ID: ddpa5
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn every_slider_number_fits_its_box_at_a_large_interface_font() {
 		use super::SliderScale;
 		let texts: Vec<String> = super::ui()
@@ -10433,6 +10474,7 @@ mod tests {
 	// size.
 	// Test ID: ddq88
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_revert_arrow_and_the_pickers_text_fit_at_a_large_interface_font() {
 		let row = super::ui()
 			.specs
@@ -10497,6 +10539,7 @@ mod tests {
 	// the panel's own floor the widest thing, as a wide font's labels can.
 	// Test ID: ddpa6
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_wider_number_box_widens_the_panel_and_leaves_the_sliders() {
 		let row = super::ui()
 			.specs
@@ -10608,6 +10651,7 @@ mod tests {
 
 	// Test ID: da581
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn up_down_step_focused_slider() {
 		use super::Key;
 		let mut d = mk_dialog(2000.0);
@@ -10631,6 +10675,7 @@ mod tests {
 
 	// Test ID: da582
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn up_down_step_slider_during_edit() {
 		use super::Key;
 		let mut d = mk_dialog(2000.0);
@@ -10652,6 +10697,7 @@ mod tests {
 
 	// Test ID: da583
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn fresh_click_selects_all_but_drag_keeps_range() {
 		use super::Key;
 		let i0 = mk_dialog(4000.0)
@@ -10700,6 +10746,7 @@ mod tests {
 	// steal: Tab alone walks controls, and PageUp/PageDown alone do nothing here.
 	// Test ID: dava2
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn ctrl_tab_and_ctrl_page_walk_the_tabs_both_ways() {
 		let mut d = mk_dialog(2000.0);
 		let last = tab_titles().len() - 1;
@@ -10731,6 +10778,7 @@ mod tests {
 
 	// Test ID: d9cgw
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn slider_numeric_field_edits_and_clamps() {
 		use super::{Focus, Key};
 		let mut d = mk_dialog(2000.0);
@@ -10766,6 +10814,7 @@ mod tests {
 
 	// Test ID: d9cgx
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn slider_field_typing_starts_fresh_and_rejects_letters() {
 		use super::{Focus, Key};
 		let mut d = mk_dialog(2000.0);
@@ -10805,6 +10854,7 @@ mod tests {
 	// named image wins at run time, so it shows whichever way the switch is set.
 	// Test ID: dd5ge
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_wallpaper_box_follows_the_rotate_switch() {
 		use super::Key;
 		let token = crate::config::WALLPAPER_DIR_TOKEN;
@@ -10900,6 +10950,7 @@ mod tests {
 
 	// Test ID: da104
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn open_selects_all_and_typing_replaces() {
 		let (mut d, _) = mk_text_edit("old.png");
 		assert_eq!(d.selected_text().as_deref(), Some("old.png"));
@@ -10921,6 +10972,7 @@ mod tests {
 
 	// Test ID: da105
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn ctrl_word_nav_and_word_delete() {
 		let (mut d, _) = mk_text_edit("foo bar.png");
 		d.cursor_end(); // also collapses the open-time selection
@@ -10942,6 +10994,7 @@ mod tests {
 	// types what the layout gives it, here "{" as on a German layout.
 	// Test ID: dde0x
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn option_types_into_a_mac_text_box() {
 		use winit::keyboard::ModifiersState as M;
 		let (mut d, _) = mk_text_edit("a");
@@ -11007,6 +11060,7 @@ mod tests {
 
 	// Test ID: da106
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn select_all_cut_paste_roundtrip() {
 		let (mut d, _) = mk_text_edit("keep me");
 		d.cursor_end();
@@ -11025,6 +11079,7 @@ mod tests {
 
 	// Test ID: da107
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn paste_respects_field_validation() {
 		use super::{Focus, Key, Kind};
 		// color field: hex chars pass, junk drops, '#' only up front
@@ -11061,6 +11116,7 @@ mod tests {
 
 	// Test ID: da108
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn mouse_click_drag_and_multiclick_select() {
 		let (mut d, i) = mk_text_edit("foo bar.png");
 		let field = d.textbox(i);
@@ -11121,6 +11177,7 @@ mod tests {
 
 	// Test ID: da173
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn long_value_scrolls_to_keep_caret_visible() {
 		use super::lay;
 		let (mut d, i, n) = mk_long_text_edit('x');
@@ -11152,6 +11209,7 @@ mod tests {
 
 	// Test ID: da174
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn short_value_never_scrolls() {
 		let (mut d, _) = mk_text_edit("short.png");
 		let mut m = |s: &str| s.chars().count() as f32;
@@ -11162,6 +11220,7 @@ mod tests {
 
 	// Test ID: da175
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn click_and_drag_map_through_the_view() {
 		use super::lay;
 		let (mut d, i, n) = mk_long_text_edit('y');
@@ -11200,6 +11259,7 @@ mod tests {
 
 	// Test ID: da176
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn context_menu_open_fire_and_gating() {
 		use super::{Action, EditCmd, lay};
 		let (mut d, i) = mk_text_edit("hello world");
@@ -11245,6 +11305,7 @@ mod tests {
 
 	// Test ID: da177
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn blink_stays_solid_on_activity() {
 		let (mut d, _) = mk_text_edit("abc");
 		let mut m = |s: &str| s.chars().count() as f32;
@@ -11323,6 +11384,7 @@ mod tests {
 	// was edited.
 	// Test ID: dczr2
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn settings_opens_on_the_file_as_it_is_now() {
 		let _guard = config::test_config_lock();
 		let _ = config::settings();
@@ -11356,6 +11418,7 @@ mod tests {
 	// the Apply's save keeps both.
 	// Test ID: ddwng
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn an_open_dialog_follows_another_windows_save() {
 		let _guard = config::test_config_lock();
 		let _ = config::settings();
@@ -11421,6 +11484,7 @@ mod tests {
 	// Apply of something else leaves the file's alone.
 	// Test ID: ddxj6
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn an_open_dialog_shows_this_windows_view_over_another_windows_save() {
 		let _guard = config::test_config_lock();
 		let _ = config::settings();
@@ -11474,6 +11538,7 @@ mod tests {
 	// with the scrim off, and the cursor may join it either way.
 	// Test ID: dc7fv
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_outline_stands_without_the_scrim() {
 		let mut d = mk_dialog(4000.0);
 		d.edited.text_scrim = false;
@@ -11514,6 +11579,7 @@ mod tests {
 	// override over the stored profile, and any other pick lowers it again.
 	// Test ID: dc7fw
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn picking_remote_never_reaches_the_stored_profile() {
 		let mut d = mk_dialog(4000.0);
 		d.set_radio(Key::PerfProfile, crate::profile::Profile::High.index());
@@ -11618,6 +11684,7 @@ mod tests {
 	// track alone crossed it there.
 	// Test ID: dc7fx
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_slider_focus_ring_clears_the_handle_at_both_ends() {
 		let d = mk_dialog(4000.0);
 		let i = d
@@ -11686,6 +11753,7 @@ mod tests {
 	// replaces it. A slider is deliberately not in that set.
 	// Test ID: dcrps
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn keyboard_focus_opens_a_text_field_with_the_value_selected() {
 		use super::{Focus, Key};
 		let mut d = mk_dialog(2000.0);
@@ -11778,6 +11846,7 @@ mod tests {
 	// Esc from inside a field is the dialog's Cancel, not "shut the field".
 	// Test ID: dcrpt
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn escape_from_inside_a_field_cancels_the_dialog() {
 		use super::Action;
 		let (mut d, _) = mk_text_edit("old.png");
@@ -11788,6 +11857,7 @@ mod tests {
 	// Enter in a field is OK, not "close the field and wait for another Enter".
 	// Test ID: dcrpv
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn enter_in_a_field_is_the_dialogs_ok() {
 		use super::{Action, Key};
 		let (mut d, _) = mk_text_edit("old.png");
@@ -11819,6 +11889,7 @@ mod tests {
 	// a save writes nothing of the derived pair.
 	// Test ID: dcww4
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_wallpaper_colors_show_in_their_rows_and_the_own_ones_stay() {
 		use knobs::Value;
 		let mine = ([0x12u8, 0x34, 0x56], [0x65u8, 0x43, 0x21]);
@@ -11991,6 +12062,7 @@ mod tests {
 	// old Performance tab is gone.
 	// Test ID: dd5qs
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_silk_tab_has_performance_readability_and_scrolling() {
 		let specs = &super::ui().specs;
 		let at = |key: Key| specs.iter().position(|s| s.key == key).unwrap();
@@ -12060,6 +12132,7 @@ mod tests {
 	// The footer buttons explain themselves, each with its own line.
 	// Test ID: dd5qv
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn every_footer_button_has_its_own_tip() {
 		let d = mk_dialog(4000.0);
 		let help = &super::ui().help;
@@ -12088,6 +12161,7 @@ mod tests {
 	// under it, and neither does anything else while it's up (2026100913394952).
 	// Test ID: ddwja
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn an_open_popup_hides_every_tip_behind_it() {
 		let mut d = mk_dialog(4000.0);
 		let mut probed = 0;
@@ -12186,6 +12260,7 @@ mod tests {
 	// by key so a relabel does not move it.
 	// Test ID: dd5qx
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn each_tab_has_its_designed_sub_groups() {
 		let specs = &super::ui().specs;
 		let at = |key: Key| {
@@ -12353,6 +12428,7 @@ mod tests {
 	// whole ones rather than showing 10.00 beside whole percentages.
 	// Test ID: dd5qz
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn every_slider_names_its_unit_and_pixels_step_whole() {
 		// counts and sizes whose label already says what they are
 		let unitless = [
@@ -12456,6 +12532,7 @@ mod tests {
 	// take the quiet gray.
 	// Test ID: dd5r3
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn only_the_default_button_is_outlined_in_the_highlight() {
 		let mut d = mk_dialog(4000.0);
 		d.focus = None;
@@ -12524,6 +12601,7 @@ mod tests {
 	// the letter that does it.
 	// Test ID: dd5r6
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn alt_fires_the_footer_buttons_and_underlines_them() {
 		use super::Action;
 		let mut d = mk_dialog(4000.0);
@@ -12558,6 +12636,7 @@ mod tests {
 	// Space typed into an open field is a space, and the dialog takes no action.
 	// Test ID: dd5r7
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn space_types_into_an_open_field() {
 		let (mut d, _) = mk_text_edit("DejaVu");
 		d.cursor_end();
@@ -12570,6 +12649,7 @@ mod tests {
 	// after everything that works whatever the desktop.
 	// Test ID: ddeqg
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn transparency_is_the_last_group_on_the_background_tab() {
 		let specs = &super::ui().specs;
 		let background = tab_titles()
@@ -12770,6 +12850,7 @@ mod tests {
 
 	// Test ID: ddp7w
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn two_rows_warn_and_each_mark_shows_the_rows_tip() {
 		// the label column the way `chrome_widths` measures it, marks included
 		let line_h = 18.0;
@@ -12941,6 +13022,7 @@ mod tests {
 	// depth. Anything else on the tab goes above it.
 	// Test ID: de1am
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_resource_use_group_ends_the_program_tab() {
 		let specs = &super::ui().specs;
 		let head = specs
@@ -12970,6 +13052,7 @@ mod tests {
 	// since "New tab in tmux" uses both with the switch off.
 	// Test ID: de30q
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_tmux_group_opens_the_program_tab_with_its_two_rows_under_the_switch() {
 		let specs = &super::ui().specs;
 		let head = specs
@@ -13009,6 +13092,7 @@ mod tests {
 	// switch can't be turned on.
 	// Test ID: de30r
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_tmux_rows_gray_and_say_why_where_there_is_no_tmux() {
 		assert_eq!(super::no_tmux_tip(true), None);
 		assert!(super::no_tmux_tip(false).is_some_and(|tip| tip.starts_with("tmux ")));
@@ -13055,6 +13139,7 @@ mod tests {
 	// and the other wait stay as they were.
 	// Test ID: ddkgx
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_hidden_wait_is_grayed_where_the_desktop_never_says() {
 		assert_eq!(super::hidden_wait_tip(true), None);
 		assert!(super::hidden_wait_tip(false).is_some_and(|tip| tip.contains("Wayland")));
@@ -13280,6 +13365,7 @@ mod tests {
 	// at a press is the chord's Command.
 	// Test ID: ddev2
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_keys_tab_shows_the_mac_chords_on_a_mac() {
 		use winit::keyboard::{Key as Pressed, ModifiersState};
 		let (mut d, _) = keys_dialog(true);
@@ -13498,6 +13584,7 @@ mod tests {
 	// it is current, and it reads as current along with the one under it.
 	// Test ID: ddrjg
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn sub_tabs_show_in_a_second_row_only_under_their_parent() {
 		let _tabs = stand_in_tabs(NESTED, TabsSide::Top);
 		let mut d = mk_dialog(2000.0);
@@ -13556,6 +13643,7 @@ mod tests {
 	// tab; the macOS menu's rows take the same walk.
 	// Test ID: ddrjh
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_tab_walk_runs_through_the_sub_tabs_and_on_to_the_next_tab() {
 		let _tabs = stand_in_tabs(NESTED, TabsSide::Top);
 		let mut d = mk_dialog(2000.0);
@@ -13585,6 +13673,7 @@ mod tests {
 	// parent, and the rows begin beside the list.
 	// Test ID: ddrjj
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn down_the_side_every_tab_is_listed_and_the_rows_start_beside_them() {
 		let _tabs = stand_in_tabs(NESTED, TabsSide::Left);
 		let mut d = mk_dialog(2000.0);
@@ -13642,6 +13731,7 @@ mod tests {
 	// are mouse-only and say where you are.
 	// Test ID: ddrjk
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn tabs_take_no_focus() {
 		let mut d = mk_dialog(2000.0);
 		d.set_mods(false, false, false);
@@ -13660,6 +13750,7 @@ mod tests {
 	// that change how the text and its backdrop look.
 	// Test ID: ddwk0
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn silkterms_tabs_go_down_the_left_with_appearance_over_four() {
 		assert_eq!(super::ui().tabs_side, TabsSide::Left);
 		let tree: Vec<(&str, u8)> = super::ui()
@@ -13705,6 +13796,7 @@ mod tests {
 	// it (2026101419165501).
 	// Test ID: de1aj
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_search_box_and_the_buttons_sit_on_still_bands_lined_off_from_the_rows() {
 		let near = |a: f32, b: f32| (a - b).abs() < 0.01;
 		for (max_h, scrolls) in [(2000.0, false), (300.0, true)] {

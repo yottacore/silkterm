@@ -284,6 +284,7 @@ mod tests {
 	// the answer is the same after a restart.
 	// Test ID: davcp
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn an_edited_color_is_what_makes_the_theme_dirty() {
 		let mut d = on_theme("Matrix");
 		let row = theme_row(&d);
@@ -304,6 +305,7 @@ mod tests {
 	// have nothing left to say and are queued to be commented back out.
 	// Test ID: davcq
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn saving_folds_the_edits_into_the_theme() {
 		let mut d = on_theme("Matrix");
 		d.set_col(Key::ColFg, [1, 2, 3]);
@@ -336,6 +338,7 @@ mod tests {
 	// takes the ones under them: the theme's, with any change made by hand.
 	// Test ID: ddwma
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_saved_theme_never_takes_the_wallpaper_s_text_colors() {
 		use knobs::Value;
 		let mut d = on_theme("Matrix");
@@ -385,6 +388,7 @@ mod tests {
 	// back to the first control on the tab.
 	// Test ID: davev
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn focus_stays_when_the_control_under_it_grays_out() {
 		let mut d = on_theme("Matrix");
 		let row = theme_row(&d);
@@ -405,6 +409,7 @@ mod tests {
 	// built-in back rather than leaving the name pointing at nothing.
 	// Test ID: davcr
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_saved_theme_shadows_a_builtin_and_delete_uncovers_it() {
 		let mut d = on_theme("Matrix");
 		let builtin_fg = d.get_col(Key::ColFg);
@@ -428,6 +433,7 @@ mod tests {
 	// picking it back adopts its colors and the box says its name again.
 	// Test ID: dcx27
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn an_edited_theme_reads_as_unsaved_in_the_box() {
 		let mut d = on_theme("Matrix");
 		let row = d
@@ -465,6 +471,7 @@ mod tests {
 	// make the picker look broken on every color that had been edited.
 	// Test ID: davcs
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn picking_a_theme_adopts_its_colors() {
 		let mut d = on_theme("SilkTerm");
 		d.set_col(Key::ColFg, [1, 2, 3]);
@@ -489,6 +496,7 @@ mod tests {
 	// the old palette is saved over the new one.
 	// Test ID: davew
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn picking_a_theme_drops_the_changes_under_the_last() {
 		let mut d = on_theme("SilkTerm");
 		d.set_col(Key::ColFg, [1, 2, 3]);
@@ -510,6 +518,7 @@ mod tests {
 	// not move, so the config subtree stays where it is.
 	// Test ID: dcq55
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_theme_can_be_renamed_to_its_own_name_or_a_different_case() {
 		let mut d = on_theme("Matrix");
 		d.save_theme_as("Mine");
@@ -539,6 +548,7 @@ mod tests {
 
 	// Test ID: davct
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_rename_moves_the_name_and_the_selection() {
 		let mut d = on_theme("Matrix");
 		d.set_col(Key::ColFg, [4, 5, 6]);
@@ -575,6 +585,7 @@ mod tests {
 	// A saved theme has to come back after a restart, or saving it meant nothing.
 	// Test ID: davcx
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_saved_theme_survives_a_relaunch() {
 		let _guard = config::test_config_lock();
 		let _ = config::settings();
@@ -672,6 +683,7 @@ mod tests {
 	// fonts follow themes, since a theme is stored whole.
 	// Test ID: ddwkt
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn saving_a_theme_keeps_the_font_on_screen() {
 		let mut d = on_theme("Matrix");
 		assert!(d.edited.font_ignores_themes, "on by default");
@@ -692,6 +704,7 @@ mod tests {
 	// saved theme brings its font, and a built-in, which has none, changes none.
 	// Test ID: ddwkv
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_theme_pick_takes_its_font_only_once_fonts_follow_themes() {
 		let mut d = on_theme("Matrix");
 		own_font(&mut d, "Mono One", 31.0, 1.5);
@@ -725,6 +738,7 @@ mod tests {
 	// in does: the switch for each value it changes turns off.
 	// Test ID: ddwkw
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_theme_font_wins_over_the_system_font() {
 		use knobs::Value;
 		let mut d = on_theme("Matrix");
@@ -749,6 +763,7 @@ mod tests {
 	// system font switch is turned off by it.
 	// Test ID: ddwkx
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn saving_a_theme_turns_no_font_switch_off() {
 		let mut d = on_theme("Matrix");
 		follow_themes(&mut d);
@@ -765,6 +780,7 @@ mod tests {
 	// the row, and Save keeps it. While fonts ignore themes it is none of that.
 	// Test ID: ddwky
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_changed_font_reads_as_a_change_once_fonts_follow_themes() {
 		let mut d = on_theme("Matrix");
 		own_font(&mut d, "Mono One", 31.0, 1.5);
@@ -791,6 +807,7 @@ mod tests {
 	// with it.
 	// Test ID: ddwkz
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_theme_font_survives_a_relaunch() {
 		let _guard = config::test_config_lock();
 		let _ = config::settings();
@@ -832,6 +849,7 @@ mod tests {
 	// replaces it.
 	// Test ID: dd5qy
 	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn rename_opens_on_the_name_selected() {
 		let mut d = on_theme("Matrix");
 		d.save_theme_as("Mine");
