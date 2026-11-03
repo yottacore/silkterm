@@ -94,17 +94,22 @@ fCheck "nothing the harness sends uses a folder outside it" fNoOtherFolder
 ## The run folder on the box goes once the run is over, pass or fail, and only
 ## by the helper's checks against the stage's token. --keep keeps it. The local
 ## run folder goes too, so the first pass, before the hold, must not make one.
+## HOST_TEMP is unset, as in the container, so the run folder lands in the temp
+## dir checked and not the real HOST_TEMP.
 fSweeps(){ find "${1}" -maxdepth 1 -name 'sweep-*.ps1' | wc -l ;}
 fCheck "--keep leaves the folder on the box" test "$(fSweeps "${work}")" -eq 0
 mkdir "${work}/swept" "${work}/swept-base"
 rc=0
-out="$(env -u SILKTERM_TEST_DIR TMPDIR="${work}/swept-base" STUB_LOG="${work}/swept/calls" STUB_DIR="${work}/swept" \
+out="$(env -u SILKTERM_TEST_DIR -u HOST_TEMP TMPDIR="${work}/swept-base" STUB_LOG="${work}/swept/calls" STUB_DIR="${work}/swept" \
 	WINGUI_WIN_REMOTE="${work}/win-remote" WINGUI_EXE="${work}/silkterm.exe" "${meDir}/run.bash" smoke 2>&1)" || rc=$?
 sweep="$(find "${work}/swept" -name 'sweep-*.ps1' | head -1)"
 fSweepsOurs(){ [[ -n "${sweep}" ]] && grep -qFx "if (fTestDir_Remove -Dir '${runDir}' -Token '4242-1234567890') { 'REMOVED' } else { 'NOT REMOVED' }" "${sweep}" ;}
 fCheck "a run that passes sweeps the box's run folder with the stage's token" fSweepsOurs
 fCheck "through the helper's own checks" grep -q '^function fTestDir_Remove' "${sweep:-/dev/null}"
-fCheck "and leaves no run folder in the local temp dir" test "${rc}" -eq 0 -a -z "$(ls -A "${work}/swept-base")"
+## The project's folder stays, as every run's does, but empty.
+fNoLocalLeft(){ [[ "$(ls -A "${work}/swept-base")" == silkterm && -z "$(ls -A "${work}/swept-base/silkterm")" ]] ;}
+fCheck "and the run passes" test "${rc}" -eq 0
+fCheck "and leaves no run folder in the local temp dir" fNoLocalLeft
 mkdir "${work}/pushfail"
 rc=0
 out="$(STUB_PUSHFAIL=1 STUB_LOG="${work}/pushfail/calls" STUB_DIR="${work}/pushfail" WINRIG_HELD=1 \
@@ -376,3 +381,4 @@ echo "all passed"
 ##		- 20261025: The SKIP lines on the run's skip list.
 ##		- 20261025: The 'Box: gpu' line with CRLF ends.
 ##		- 20261028: The console wait goes by how old the session is.
+##		- 20261103: The local run folder check unsets HOST_TEMP and allows the project's empty folder.

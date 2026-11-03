@@ -719,17 +719,27 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - dct7r's check that a passing run leaves no local run folder failed once in the container
 	- ID: 2026110222113195
 	- Type: Bug
-	- Status: Queued
+	- Status: Done
 	- Severity: Low
 	- Opened: 20261102-221131
 	- Opened by:
 	- Target OS: Linux
 	- Incorrect behavior: In the full run at 3ac421d, in the container, cicd/tests/wingui/harness-test.bash failed 'and leaves no run folder in the local temp dir'. Every other check in it passed. The check needs the smoke run's exit code to be 0 and its TMPDIR to be empty after.
 	- Expected behavior: The check passes every time.
-	- Reproduced: No. 3 of 3 runs alone on the host passed on 20261102.
+	- Reproduced: 20261103, every time, on this box with HOST_TEMP unset, as the container has it. 3 of 3 runs alone on the host passed on 20261102, with HOST_TEMP set.
+	- Actual cause: The smoke run passed. With HOST_TEMP unset its run folder goes under the TMPDIR handed to it, and on a pass the empty project folder `silkterm` stays there, by design. The check wanted that TMPDIR empty. On the host the run folder went to the real HOST_TEMP, so the check never looked at it there. It wasn't a flake. The container run was the first to reach it since 2026103115564575 moved the folders.
+	- Actual fix: The smoke call unsets HOST_TEMP, as the testdir test does, and the check allows the empty project folder and nothing else. The run's exit code is a check of its own, so a failure says which part failed.
 	- Progress log:
 		- 20261102: Seen once, in rnd1102's second full run. The round didn't touch the wingui harness. The run stops at the first failure, so it didn't show whether rc or a leftover folder failed it.
-	- Test case: cicd/tests/wingui/harness-test.bash (dct7r).
+		- 20261103: Fixed in the test. Nothing in run.bash or the helpers changed.
+	- Decisions:
+		- 20261103: The check needs the project folder to be there, so it fails if the run folder ends up somewhere else again, rather than passing with nothing to check.
+	- Swept: every test that runs a helper with its own TMPDIR and checks what's left there: testdir and cleanup already unset HOST_TEMP and allow the project folder. This was the only one that didn't.
+	- Verified: 20261103. Before the fix, dct7r with HOST_TEMP unset failed this check every time, and the run exited 0. After the fix it passes with HOST_TEMP unset, with it set, and in the image at d47751450835. With run.bash made to keep its run folder, the check fails. `cicd/cicd.bash --backlog-run-quick scripts docs` passed.
+	- Branch: rnd1103
+	- Test case: cicd/tests/wingui/harness-test.bash (dct7r), its checks "and the run passes" and "and leaves no run folder in the local temp dir".
+	- Acceptance signoff: Self-closed: reproduced, and the test fails before the fix and passes after.
+	- Closed: 20261103-144800
 
 - Which tab a window launched with several tabs opens on
 	- ID: 2026110220221592
