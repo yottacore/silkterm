@@ -761,10 +761,11 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - Which tab a window launched with several tabs opens on
 	- ID: 2026110220221592
 	- Type: Bug
-	- Status: Queued
+	- Status: Done
 	- Severity: Low
 	- Opened: 20261102-202215
 	- Opened by: CC
+	- Assigned to: CC
 	- Related IDs: 2026110118143797
 	- Target OS: All
 	- Steps to reproduce:
@@ -773,6 +774,17 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Expected behavior: Not decided. Either the last tab made is in front, or the help and usage.md say the launch opens on the first tab and "current" means where later options go.
 	- Notes:
 		- `State` starts with `Tabs { list, active: 0 }` in app.rs. Wording only is the smaller change.
+	- Reproduced: Yes, by reading. The strip always starts with the first tab, and the window opens on the strip's first tab. Each tab opens on its first pane too, by a line in the layout code.
+	- Actual cause: The help and usage.md said "current" without saying it means where the options after it go. The original spec of the command line meant only that.
+	- Decisions:
+		- 20261103: Wording only. A window opens on its first tab, and each tab on its first pane. Tabs and panes keep one rule, the tests that count on the first tab in front stay as they are, and the spec never meant "current" as the tab in front. design.md says so, under Command-line options.
+	- Actual fix: `--help` says a window opens on its first tab and pane, and that options after a `--new-tab` go to it. `--tab` and `--pane` say "go back to", like usage.md. usage.md says the same under Tabs and panes.
+	- Swept: every `--new-tab` and "current" in the docs, the help and the tests. The `--new-pane` lines keep "current", which reads right once the heading says where the window opens.
+	- Test case: `a_launch_opens_on_its_first_tab_and_the_help_says_so` (dett5). Failed with the old help text, passes with the new.
+	- Branch: rnd1103
+	- Commit: 02be574
+	- Verified: the backlog quick run, all five areas.
+	- Closed: 20261103-151033
 
 - herdback's window lookup and stop miss the program, since `appPid` is a subshell
 	- ID: 2026110220294255
