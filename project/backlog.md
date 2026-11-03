@@ -527,7 +527,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - dd5nw fails its fDie check on every run, so every full run stops at step 4
 	- ID: 2026110119292010
 	- Type: Bug
-	- Status: Queued
+	- Status: Done
 	- Severity: High
 	- Opened: 20261101-192920
 	- Opened by:
@@ -538,7 +538,14 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Possible cause: `.gitattributes` gives `*.ps1` CRLF endings. The check's regex ends `exit 1 \}$` under `(?m)`, and .NET's `$` doesn't match before a `\r`. The checks beside it take `\r?$`. The check came in with e9f3066.
 	- Progress log:
 		- 20261101: Found by rnd1101b's full run, run.log in its run folder. Filed after the gate step, so it waits for the next round.
+		- 20261102: The fix was already on dev: a06bc64 gave the regex `\r?$`. This round confirmed it and swept for the same slip.
+	- Decisions:
+		- 20261102: No code change here. The one check was the only line-end anchor that missed a `\r`.
+	- Verified: 20261102 at 343814f. dd5nw passes, rc 0. In PowerShell the old regex gives False and the new one True on the CRLF `cicd-win.ps1`, so the check failed before a06bc64 and passes after.
+		- Swept: every regex in `cicd/tests` and `cicd/utility` that reads a `.ps1` or `.cmd` file, the only CRLF types in `.gitattributes`: `_lift.ps1` (the rest already take `\r?` or `\s*`), dd5nw's `run.bash` (`$'\r'?$`), `wingui/run.bash` and `harness-test.bash` (same), `install/tempdir.ps1` (`[^\r\n]*`), `wingui/_lib.ps1` and `test-id.py` (`\s*$`). Lines from PowerShell's own pipeline or from a bash-written LF file need no `\r`.
 	- Test case: `cicd/tests/cicd-win/run.bash` (dd5nw).
+	- Branch: rnd1102
+	- Closed: 20261102-182500
 
 - Two SilkTerm windows on one headless display: an idle release sometimes never shows, or never happens
 	- ID: 2026110118143797
