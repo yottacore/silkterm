@@ -789,10 +789,11 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - herdback's window lookup and stop miss the program, since `appPid` is a subshell
 	- ID: 2026110220294255
 	- Type: Bug
-	- Status: Queued
+	- Status: Done
 	- Severity: Low
 	- Opened: 20261102-202942
 	- Opened by: CC
+	- Assigned to: CC
 	- Related IDs: 2026110118143797, 2026102807384201
 	- Target OS: Linux
 	- Steps to reproduce:
@@ -801,6 +802,31 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Expected behavior: `appPid` is the program, so the lookup can take `--all` and each dance stops its own window.
 	- Notes:
 		- gui-headless.bash's `fOnX --bg` execs for the same reason.
+	- Reproduced: 20261103, with `--all` on both lookups: every case said the window never showed, and 5 windows were left running until the X server went.
+	- Actual cause: Each launch was a function sent to the background, so `$!` was a bash waiting on the program. The same went for xfwm4: `pgrep -P` looked under the wrong parent, the kill stopped only that bash, and xfwm4 stayed up through the cases with no window manager. Its stop check passed anyway, since it only asked about pids it never found.
+	- Actual fix: `fX --bg` execs, as `fOnX --bg` does, and the program, xfwm4 and the window lookups go by it. The lookups take `--all`. Each case checks its window is gone once stopped, and stops it when it never showed. The stop of xfwm4 checks its window is gone from the X server.
+	- Swept: every `$!` in `cicd` after a backgrounded function. dlgtie's `fX xterm ... &` had the same shape, so its kill of the other window stopped only a bash. Its `fX --bg` execs now, and der6f still passes. idleother's `fLaunch` puts the program itself in the background inside the function, so its `$!` was already right. gui-headless already execs.
+	- Decisions:
+		- 20261103: The "no window manager" cases now really run with none, so the mutation checks 2026102807384201 recorded for them ran with xfwm4 still up. Filed as 2026110315170584 to run them again.
+	- Verified: 20261103. The script with the exec taken out failed 6 checks, the window never showing in all 5 cases, and xfwm4's window still on the X server. With it in, all 19 checks passed in 2 runs of 3, at load 7 to 10. The third failed only "the window was herded" in the first case, at load 14, the 2026110116413708 flake: one window on the display, so this fix does not explain it. der6f passed.
+	- Test case: `cicd/tests/herdback/run.bash` (deqx1), with the new "gone once stopped" and "xfwm4's window has gone" checks. `cicd/tests/dlgtie/run.bash` (der6f).
+	- Branch: rnd1103
+	- Closed: 20261103-151705
+
+- herdback's mutation checks with no window manager were run with xfwm4 still up
+	- ID: 2026110315170584
+	- Type: Task
+	- Status: Queued
+	- Priority: Low
+	- Opened: 20261103-151705
+	- Opened by: CC
+	- Related IDs: 2026102807384201, 2026110220294255
+	- Target OS: Linux
+	- Requirements:
+		- Until 2026110220294255, deqx1 never stopped xfwm4, so its 3 cases with no window manager ran under it.
+		- Run them again now that xfwm4 is gone: the "back" case with the put-back taken out, and the "resized" case with the forget-on-resize taken out. Each should fail.
+		- See whether the "moved" case still passes with the forget-on-move taken out, as 2026102807384201 notes it did under xfwm4.
+	- Estimated effort: Low
 
 - SGR 21 turns bold off instead of drawing a double underline
 	- ID: 2026110220554102

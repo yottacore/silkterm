@@ -118,12 +118,14 @@ read -r -t 10 -u "${numFd}" xDisplay || true
 exec {numFd}<&-
 if [[ -z "${xDisplay}" ]]; then echo "  skip: Xwayland did not start"; exit 3; fi
 xDisplay=":${xDisplay}"
-fX(){ env -u WAYLAND_DISPLAY -u WAYLAND_SOCKET DISPLAY="${xDisplay}" "${@}"; }
+## A function sent to the background runs in a subshell, so --bg execs, and $!
+## is the program and not a bash waiting on it.
+fX(){ local how=""; [[ "${1:-}" == "--bg" ]] && { how="exec"; shift; }; ${how} env -u WAYLAND_DISPLAY -u WAYLAND_SOCKET DISPLAY="${xDisplay}" "${@}"; }
 
 ## xfwm4 asks xfconf for its settings over the session bus, and does without one.
 wm=(xfwm4 --compositor=off)
 if command -v dbus-run-session >/dev/null 2>&1; then wm=(dbus-run-session -- "${wm[@]}"); fi
-fX HOME="${work}/home" XDG_CONFIG_HOME="${work}/home/.config" "${wm[@]}" >"${work}/xfwm4.log" 2>&1 &
+fX --bg HOME="${work}/home" XDG_CONFIG_HOME="${work}/home/.config" "${wm[@]}" >"${work}/xfwm4.log" 2>&1 &
 wmPid=$!
 for _ in {1..50}; do
 	[[ "$(fX xprop -root _NET_SUPPORTING_WM_CHECK 2>/dev/null || true)" == *"window id"* ]] && break
@@ -157,6 +159,17 @@ fOnPortrait(){
 	[[ "${x}" =~ ^[0-9]+$ && "${size%%x*}" =~ ^[0-9]+$ ]] && ((x + ${size%%x*} <= 1200))
 }
 
+## Has the X server let go of this window? A process that is gone takes its
+## windows with it.
+fGone(){
+	local -r id="${1}"
+	for _ in {1..30}; do
+		fX xprop -id "${id}" WM_NAME >/dev/null 2>&1 || return 0
+		sleep 0.1
+	done
+	return 1
+}
+
 ## Wait for the X server to show this many monitors.
 fMonitors(){
 	local -r want="${1}"
@@ -171,17 +184,17 @@ fMonitors(){
 fDance(){  ## fDance <seconds the portrait output stays off>
 	local -r off="${1}"
 	local id="" start="" herded final
-	fX XDG_RUNTIME_DIR="${runDir}" LIBGL_ALWAYS_SOFTWARE=1 \
+	fX --bg XDG_RUNTIME_DIR="${runDir}" LIBGL_ALWAYS_SOFTWARE=1 \
 		HOME="${work}/home" XDG_CONFIG_HOME="${cfgHome}" XDG_DATA_HOME="${work}/home/.local/share" XDG_CACHE_HOME="${work}/home/.cache" \
 		XDG_STATE_HOME="${work}/home/.local/state" \
 		"${bin}" --shell "/bin/dash -c 'sleep 600'" >/dev/null 2>>"${work}/said.txt" &
 	appPid=$!
 	for _ in {1..100}; do
-		id="$(fX xdotool search --pid "${appPid}" --name '^SilkTerm' 2>/dev/null | head -n 1 || true)"
+		id="$(fX xdotool search --all --pid "${appPid}" --name '^SilkTerm' 2>/dev/null | head -n 1 || true)"
 		[[ -n "${id}" ]] && break
 		sleep 0.1
 	done
-	if [[ -z "${id}" ]]; then echo "  FAIL ${off} s off: the window never showed"; failures=$((failures + 1)); return 0; fi
+	if [[ -z "${id}" ]]; then echo "  FAIL ${off} s off: the window never showed"; failures=$((failures + 1)); fStopOurs "${appPid}"; appPid=""; return 0; fi
 	## a move before the window has settled from its launch can be undone by it
 	## a move to where it already is is no move, so every other try is a step over
 	for try in {0..9}; do
@@ -202,11 +215,13 @@ fDance(){  ## fDance <seconds the portrait output stays off>
 	fCheck "${off} s off: the window was herded" test -n "${herded}" -a "${herded%% *}" != "${start%% *}"
 	fCheck "${off} s off: back where it was, at its size" test -n "${start}" -a "${final}" == "${start}"
 	fStopOurs "${appPid}"; appPid=""
+	fCheck "${off} s off: the window is gone once stopped" fGone "${id}"
 }
 fDance 4
 fDance 1
 
 ## No window manager from here on. Under dbus-run-session xfwm4 is its child.
+wmWin="$(fX xprop -root _NET_SUPPORTING_WM_CHECK 2>/dev/null | sed -n 's/.*window id # //p')"
 wmOnly="$(pgrep -P "${wmPid}" -x xfwm4 2>/dev/null || true)"
 kill "${wmOnly:-${wmPid}}" 2>/dev/null || true
 wait "${wmPid}" 2>/dev/null || true
@@ -214,23 +229,24 @@ wmPidWas="${wmPid}"; wmPid=""
 if [[ -n "${wmOnly}" ]]; then
 	for _ in {1..50}; do kill -0 "${wmOnly}" 2>/dev/null || break; sleep 0.1; done
 fi
-fCheck "xfwm4 has stopped" test -z "$(pgrep -x xfwm4 -P "${wmPidWas}" 2>/dev/null || true)" -a ! -e "/proc/${wmOnly:-0}"
+fCheck "xfwm4 has stopped" test -n "${wmWin}" -a -z "$(pgrep -x xfwm4 -P "${wmPidWas}" 2>/dev/null || true)" -a ! -e "/proc/${wmOnly:-0}"
+fCheck "xfwm4's window has gone from the X server" fGone "${wmWin:-0}"
 
 ## A window manager that herds but never puts back, played by hand.
 fDanceBare(){  ## fDanceBare back|moved|resized
 	local -r how="${1}"
 	local id="" start="" herded left final
-	fX XDG_RUNTIME_DIR="${runDir}" LIBGL_ALWAYS_SOFTWARE=1 \
+	fX --bg XDG_RUNTIME_DIR="${runDir}" LIBGL_ALWAYS_SOFTWARE=1 \
 		HOME="${work}/home" XDG_CONFIG_HOME="${cfgHome}" XDG_DATA_HOME="${work}/home/.local/share" XDG_CACHE_HOME="${work}/home/.cache" \
 		XDG_STATE_HOME="${work}/home/.local/state" \
 		"${bin}" --shell "/bin/dash -c 'sleep 600'" >/dev/null 2>>"${work}/said.txt" &
 	appPid=$!
 	for _ in {1..100}; do
-		id="$(fX xdotool search --pid "${appPid}" --name '^SilkTerm' 2>/dev/null | head -n 1 || true)"
+		id="$(fX xdotool search --all --pid "${appPid}" --name '^SilkTerm' 2>/dev/null | head -n 1 || true)"
 		[[ -n "${id}" ]] && break
 		sleep 0.1
 	done
-	if [[ -z "${id}" ]]; then echo "  FAIL ${how}, no window manager: the window never showed"; failures=$((failures + 1)); return 0; fi
+	if [[ -z "${id}" ]]; then echo "  FAIL ${how}, no window manager: the window never showed"; failures=$((failures + 1)); fStopOurs "${appPid}"; appPid=""; return 0; fi
 	## a move to where it already is is no move, so every other try is a step over
 	for try in {0..9}; do
 		sleep 1
@@ -261,6 +277,7 @@ fDanceBare(){  ## fDanceBare back|moved|resized
 		fCheck "${how}, no window manager: stays where it was left" test -n "${left}" -a "${left}" != "${herded}" -a "${final}" == "${left}"
 	fi
 	fStopOurs "${appPid}"; appPid=""
+	fCheck "${how}, no window manager: the window is gone once stopped" fGone "${id}"
 }
 fDanceBare back
 fDanceBare moved
@@ -272,3 +289,5 @@ echo "all passed"
 ##	History:
 ##		- 20261101 JC: Created.
 ##		- 20261101 JC: The cases with no window manager.
+##		- 20261103 JC: The launches exec, so the window lookup and stop find the
+##		  program, and xfwm4 is stopped for the cases with no window manager.
