@@ -7678,6 +7678,20 @@ pub fn data_dir() -> Option<PathBuf> {
 	)
 }
 
+/// `data_dir` as it is with no `--config`. For what belongs to the account
+/// rather than to one config, such as which shell profiles were written to: the
+/// profiles are the same whichever config a launch names.
+pub fn native_data_dir() -> Option<PathBuf> {
+	data_dir_for(
+		host_layout(),
+		env_path("XDG_CONFIG_HOME").is_some(),
+		env_path("LOCALAPPDATA").as_deref(),
+		native_config_path()?
+			.parent()
+			.map(std::path::Path::to_path_buf),
+	)
+}
+
 // The decision above with its inputs passed in, so every platform's answer can
 // be checked from any box (G15).
 fn data_dir_for(
