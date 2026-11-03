@@ -37,12 +37,29 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - A launch with --config pointing elsewhere still adds shell integration to the account's own shell profiles
 	- ID: 2026110314410446
 	- Type: Bug
-	- Status: Queued
+	- Status: Done
 	- Priority: Low
 	- Opened: 20261103-144104
-	- Opened by:
+	- Opened by: CC
+	- Target OS: All
+	- Test environment: b23
 	- Progress log:
 		- 20261103: Seen on vmKt6m while working 2026102807384202. A launch as collierjr made ~/.config/powershell/Microsoft.PowerShell_profile.ps1 and its folder, with --config set to a temp file. Check whether that's wanted, or whether a launch with its own config should leave the real profiles alone.
+		- 20261103: Writing the profile is by design. design.md and shell-integration.md say it goes in at launch, once, unless `shell.integration` is off, and a `--config` launch reads that setting from its own file. The profile belongs to the account, not to a config, so a `--config` session gets the same new-tab directory as any other.
+		- 20261103: What was wrong is the note of profiles written to. It sat beside the config in use, so a `--config` launch found none and put back a block the user had deleted, which the docs say never happens.
+	- Actual cause:
+		- The note lived in `data_dir()`, which follows `--config`.
+	- Decisions:
+		- 20261103: A `--config` launch still installs, governed by that file's `shell.integration`. Skipping it would leave a `--config` user without an advertised feature, and the account's profile is shared anyway. A test launch that must not touch the account gets its own HOME.
+		- 20261103: The note always lives in the account's own data folder, as with no `--config`. An older note beside a `--config` file is not read: only dev builds since 09-08 wrote one, never a release.
+	- Actual fix:
+		- The note is kept in the account's data folder whatever `--config` names. shell-integration.md says so.
+	- Swept: the other `data_dir`, `cache_dir` and `state_dir` users (the bash prompt script, wallpaper cache and history, state.shcl) are the program's own files, which the flag is meant to keep apart. Nothing else records state about files outside SilkTerm's folders.
+	- Branch: rnd1103
+	- Commit: cb14f0c
+	- Test case: `a_config_named_on_the_command_line_reads_the_accounts_profile_note` (detst). Failed with the note beside the config, passes with the fix.
+	- Verified: the backlog quick run, all five areas, and Windows-target clippy.
+	- Closed: 20261103-145900
 
 - The tmux end test fails in the whole suite on vmKt6m, and passes alone there
 	- ID: 2026110313290006
