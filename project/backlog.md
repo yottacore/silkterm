@@ -737,6 +737,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261103: The release crate list let in what only proc macros use, such as syn, litrs and quote, about 210 results. It now leaves them out, 186 crates.
 		- 20261103: A suppression can name the values a flow starts from, so a rule for a false flow doesn't hide a real one at the same path.
 		- 20261103: Split in 5. 2026110315303525, our code's results, is done. 2026110315303530, 35 and 41 are the third-party roll-ups; 30 and 35 are done. 2026110315304782 plants a finding and checks the run is green otherwise. This item closes when they do.
+		- 20261103: 41 is done too, so only 2026110315304782 is left, the planted and clean runs, about 65 min each.
 	- Decisions:
 		- 20261103: CodeQL stays out of the default run, under `--long`, `--leakcheck` and `--codeql`, against this item's "on by default". It takes about 65 minutes alone, and the default run has to fit in about an hour, per the 2026-10-24 reset and 2026102616543936. The smaller suite or a timeout would drop the quality queries the parent asked for.
 	- Branch: rnd1103
