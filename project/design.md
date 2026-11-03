@@ -452,6 +452,8 @@ What a window costs while in use is planned in [Reducing resources](design_docs/
 
 - Most options describe a window to open: a hierarchy of tabs and panes built with create/select verbs, with look and behavior cascading window -> tab -> pane.
 
+- The create and select verbs only say where the options after them go. A window opens on its first tab, and each tab on its first pane, however many the line makes (2026-11-03). The first tab is the one a plain launch has, and the one the window's options describe. Putting the last tab made in front, as Windows Terminal does, was the other choice. Panes would then have to follow, or a tab and its panes would answer the question differently.
+
 - A second, much smaller family only prints something and exits. `--help`, `--syntax`, `--about`, `--donate` and `--version` never open a window, never read a config, and never touch a layout.
 
 - Those flags are accepted in any position. The rest of the grammar cares a great deal about order, but answering a request for the help with a complaint about where the flag was written would be absurd.
