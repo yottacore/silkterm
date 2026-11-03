@@ -110,6 +110,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Status: Waiting on UAT
 		- A look on b23, in the hand testing row. The put-back for a window manager that never puts a window back has no real desktop to try it on here.
 	- Needs hand testing: On b23 under xfwm4, with the window on each monitor in turn: let both screens sleep, wake them, and see the window back where it was, at its size.
+	- Stand-in: none (20261102). deqx1 already stands in for the window manager's part headless. What's left needs b23's 2 real monitors going to sleep.
 	- Severity: High
 	- Opened: 20261028-073842
 	- Opened by: JC
@@ -146,6 +147,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Type: Bug
 	- Status: Waiting on UAT
 		- JC: check on the box and setup where it failed that a window left unfocused lets go after "Minutes otherwise".
+	- Stand-in: none (20261102). It never failed here. deqy2, with its 2-window case fixed in 2026110118143797, passed 4 of 4, so only the box and setup it failed on can show it's gone.
 	- Opened: 20261030-100834
 	- Opened by: JC
 	- Assigned to: CC
@@ -218,6 +220,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Status: Waiting on UAT
 		- Open Settings from a release build on the desktop, under xfwm4 and under Compiz. It should make one taskbar button, one pager entry and one alt+tab entry, and stay above the terminal when the terminal is clicked or raised.
 	- Needs hand testing: the above, on the real desktop.
+	- Stand-in: none (20261102). dlgtie (der6f) already checks the hints and stacking under xfwm4. The taskbar button and alt+tab entry as reported never showed here, so only the real desktop can show they're gone.
 	- Opened: 20261030-100834
 	- Opened by: JC
 	- Assigned to: CC
@@ -317,8 +320,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - Leak checks: the soak test as a pipeline step
 	- ID: 2026110117065496
 	- Type: Task
-	- Status: Waiting on automated testing
-	- Needs local test suite run?: The first full run, the default container arm: stage 3's soak step after the heap-growth test, a `soak_<stamp>.txt` and `.zst` with the run's stamp in `cicd/artifacts/leakcheck/`, and what it finds filed. The plan line and `--list` (der46) say it's on, and dd5nn passes.
+	- Status: Done
 	- Priority: Avg
 	- Opened: 20261101-170654
 	- Opened by: CC
@@ -345,8 +347,10 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261101: Exit 3, could not run, fails the step rather than skipping it, since the image pins every tool the test needs.
 	- Verified: 20261101. The step's command, `run.bash --out cicd/artifacts/leakcheck --stamp <stamp>`, in the current build image, through the image rig, on the host's debug build: passed, round 6 to 12 grew 20 KiB, and both files kept with that stamp. `cicd.bash --list`: der46 and "soak test under heaptrack" in a default run, off under `--quick`, back with `--quick --leakcheck`, "(skipped --no-leakcheck)". The engine test, 24 new checks, all failed against the old cicd.bash, and 7 mutants each failed their own. The container test, `cicd/cicd.bash --backlog-run-quick`, all five areas, and `lint-report.bash`.
 		- Swept: every test that lifts the leak checks (engine, container), `cicd-win.ps1`'s leak flags, which hand on to the Linux half, and every doc naming the leak checks.
+	- Verified: 20261102. The full run at 383a14c, in the container: the plan's Leak checks line names the soak test, and stage 3 ran it after the heap-growth test. 12 rounds, round 6 to 12 grew 1 KiB against a 256 KiB margin, and `soak_20261102-210819.zst` and `.txt` were kept in `cicd/artifacts/leakcheck/`. It found no growth, so nothing to file. dd5nn passed in the full run at 3ac421d.
 	- Test case: `cicd/tests/engine/run.bash` (dd5nn), 24 new checks, and `cicd/tests/soak/run.bash` (der46) in the pipeline.
 	- Branch: rnd1101b
+	- Closed: 20261102-221500
 
 - Add a contributor license agreement, like nano-git-db's
 	- ID: 2026101906582193
@@ -634,9 +638,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - The Mac CI doesn't name a test that failed when its output splits the result line
 	- ID: 2026102822262458
 	- Type: Bug
-	- Status: Waiting on automated testing
-		- Waits on one hosted `mac.yml` run on rnd1102, for BSD awk and the new flags on the runner.
-	- Needs external testing: one `mac.yml` run on rnd1102. It should pass as before, with the Test step's lines unchanged.
+	- Status: Done
 	- Priority: Avg
 	- Opened: 20261028-222624
 	- Opened by: CC
@@ -653,8 +655,10 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261102: `--exact` on the rerun, so a name doesn't also run every test it's a prefix of.
 	- Verified: 20261102. desrb passed 9 checks, on logs of the shapes cargo test 1.96 wrote here at 1 and 2 threads, captured and not, across 2 binaries. Against the old `ci-mac.bash` 8 of them failed. `fFailedNames` gave the same names under gawk --posix, mawk and busybox awk. defn6 and dd5nn pass. `cicd/cicd.bash --backlog-run-quick scripts docs` passed. shellcheck and the bash style check are clean.
 		- Swept: the other readers of cargo's `test <name> ...` lines, `test-id.py --run` and `lint-report.bash`. The pipeline's runs capture test output, so the line stays whole there. `cicd-win.ps1` and `miri.bash` read no names from it.
+	- Verified: 20261102. Hosted `mac.yml` run 41581768957 on rnd1102 at 383a14c passed, macOS arm64. Its Test step printed the 2 `test result: ok` lines as before (28 and 1402 passed, 4 ignored), and the Skips and Measured steps after it passed.
 	- Branch: rnd1102
 	- Test case: desrb `cicd/tests/ci-mac/run.bash`, run by the pipeline after defn6.
+	- Closed: 20261102-221500
 
 - The private runner's Mac job can't build on vmKt6m: rustup isn't there for the account it uses
 	- ID: 2026102811082502
@@ -689,10 +693,8 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - Over ssh to a host with no alacritty terminfo, full-screen programs fail with "'alacritty': unknown terminal type."
 	- ID: 2026102114411311
 	- Type: Bug
-	- Status: Waiting on automated testing
+	- Status: Done
 		- 20261025: Answered. The default TERM becomes `xterm-256color` everywhere, with no ssh wrapping.
-		- 20261102: Waits on the Mac check below. No local stand-in: Debian's ncurses still finds the system alacritty entry with `TERMINFO` and `TERMINFO_DIRS` pointed at a database without it.
-	- Needs external testing: Over ssh to a Mac with no alacritty entry, with no `shell.term` set: `sudo nano /etc/hosts`, `less` and `tput cols` work.
 	- Severity: Avg
 	- Opened: 20261021-144113
 	- Opened by: CC
@@ -734,6 +736,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261102: An empty `shell.term`, the default, now gives each pane `TERM=xterm-256color` on every OS. The config template comment, usage.md's "Programs over ssh" and the alacritty fork design doc say so.
 		- 20261102: `the_configured_term_reaches_the_program` (de9kn): the empty case expected this process's TERM and now expects `xterm-256color`. It also checks the pane's environment directly, since a test run's own TERM may already be xterm-256color, and that `alacritty` set by hand gets through.
 		- 20261102: Verified: de9kn fails with the old pane code (no TERM in the pane's environment) and passes with the fix, with TERM unset, `xterm-256color` and `alacritty` in the test's environment. de9kp passes. `--backlog-run-quick` with all 5 areas passed.
+		- 20261102: Verified: over ssh to vmKt6m with `TERM=xterm-256color` and only macOS's own terminfo database (`TERMINFO=/usr/share/terminfo`), `tput cols` read the pane's 100 columns, `less` showed a full page and quit with 0, and `nano` drew its screen and exited with 0. The same database doesn't know `alacritty`. de9kn and de9kp passed in the full run at 383a14c. Not run with `sudo`, which keeps TERM.
 	- Actual fix: `shell.term` in the config, passed to each new pane's environment, with empty as `xterm-256color`; usage.md "Programs over ssh".
 	- Branch: rnd1022, rnd1102
 	- Test case: `the_configured_term_reaches_the_program` (de9kn, term.rs) fails with the setting dropped from the pane's environment and passes with it. `shell_term_reads_one_word_and_defaults_empty` (de9kp, config.rs) covers the read and the template line.
@@ -745,6 +748,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Type: Bug
 	- Status: Waiting on UAT
 		- 20261102: Look at each style from the repro line, with `4:2` for double, and at spell checking in vim or Neovim, on the real desktop. The curl's height and the dot and dash spacing are first picks.
+	- Stand-in: none (20261102). Turns on how the curl, dots and dashes look. desqy and desqz already check where each line goes.
 	- Needs hand testing: The look of the curly, dotted and dashed underlines, and the strike-through's height, in a light and a dark theme.
 	- Severity: Avg
 	- Opened: 20261025-111314
@@ -914,7 +918,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Type: Task
 	- Status: Waiting on automated testing
 		- Waits on the step's first run over the whole suite, which takes hours.
-	- Needs local test suite run?: the Miri step alone over the whole suite, in the image, hours: `cicd/utility/miri.bash` through the image rig, `in_image.bash miri silkterm-cicd:<tag> cicd/utility/miri.bash` in the private tools folder, with `IN_IMAGE_TMP` set to a run folder and the tag the plan names. Its log should show `PASS debjk`, `PASS de5f0` and "OK: no Miri reports". A report in a crate a release binary links is filed, one item per cause, and one in our code is fixed. Then the full run again from its 'test run folder' step on, which dd5nn's Miri config check failed at 383a14c: `cicd/cicd.bash --backlog-run-full --no-fuzz --no-asan --no-leakcheck`.
+	- Needs local test suite run?: the Miri step alone over the whole suite, in the image, hours: `cicd/utility/miri.bash` through the image rig, `in_image.bash miri silkterm-cicd:<tag> cicd/utility/miri.bash` in the private tools folder, with `IN_IMAGE_TMP` set to a run folder and the tag the plan names. Its log should show `PASS debjk`, `PASS de5f0` and "OK: no Miri reports". A report in a crate a release binary links is filed, one item per cause, and one in our code is fixed.
 	- Priority: Avg
 	- Opened: 20261023-205913
 	- Opened by: CC
@@ -946,6 +950,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Test case: dd5nn `cicd/tests/engine/run.bash`, 24 new checks and 1 changed; ddrp2 `cicd/tests/container/run.bash`, 18 new; de5e9 `cicd/tests/cleanup/run.bash`, 4 new. The canary lines debjk and de5f0 in a Miri run.
 		- 20261102: dd5nn's soak check "and a run on this box builds the image for it" expects `miriInImage` in the image line, was without it.
 		- 20261102: dd5nn's Miri config check runs with no target dir set and with an absolute one, the second as a new check.
+		- 20261102: Verified: the full run at 3ac421d with `--no-fuzz --no-asan --no-leakcheck`, in the container, passed the 'test run folder' step (ddazx) and dd5nn, and said "Miri run skipped (--no-leakcheck)". The run then stopped on the dct7r flake, 2026110222113195.
 
 - Leak checks: CodeQL watched to fail, and its first findings filed
 	- ID: 2026102211462005
