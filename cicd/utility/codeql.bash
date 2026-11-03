@@ -100,10 +100,16 @@ for line in open(supp):
 		rule, glob, item, *names = line.split(None, 3)
 		rules.append((rule, glob, item, re.compile(names[0]) if names else None))
 ## A flow's message links what it starts from, such as [password](1). A rule with
-## a pattern lets the result through only when every one of those matches it.
-def sources_match(pat, text):
-	links = re.findall(r"\[([^\]]*)\]\(\d+\)", text)
-	return pat is None or (links and all(pat.fullmatch(n) for n in links))
+## a pattern lets the result through only when every one of those matches it,
+## as its name or as name@path, the file the related location gives. A generic
+## name such as "user-provided value" needs the path to tell one source apart.
+def sources_match(pat, res):
+	if pat is None:
+		return True
+	where = {str(r.get("id")): r.get("physicalLocation", {}).get("artifactLocation", {}).get("uri", "")
+		for r in res.get("relatedLocations", [])}
+	links = re.findall(r"\[([^\]]*)\]\((\d+)\)", res["message"]["text"])
+	return bool(links) and all(pat.fullmatch(n) or pat.fullmatch(f"{n}@{where.get(i, '')}") for n, i in links)
 doc = json.load(open(raw))
 failed = 0
 for run in doc["runs"]:
@@ -119,7 +125,7 @@ for run in doc["runs"]:
 		kept.append(res)
 		line = loc.get("region", {}).get("startLine", 0)
 		hit = next((r for r in rules if r[0] == res["ruleId"] and fnmatch.fnmatch(path, r[1])
-			and sources_match(r[3], res["message"]["text"])), None)
+			and sources_match(r[3], res)), None)
 		tag = f"known, {hit[2]}" if hit else "NEW"
 		failed += hit is None
 		print(f"    {tag}: {res['ruleId']} {path}:{line}: {res['message']['text'][:160]}")
@@ -135,3 +141,4 @@ fEcho "OK: no new CodeQL results ($((SECONDS - start))s)"
 ##		- 20261022 JC: Created.
 ##		- 20261026 JC: Jobs and priority from include/jobs.bash.
 ##		- 20261103 JC: Proc macros' own deps left out; a suppression can name a flow's sources.
+##		- 20261103 JC: A suppression's sources can name where they start.

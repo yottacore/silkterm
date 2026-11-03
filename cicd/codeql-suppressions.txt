@@ -3,8 +3,9 @@
 # as the SARIF has it (source/..., vendor/<crate>-<version>/...). Keep the glob
 # as narrow as the cause.
 # An optional fourth field is a regex that every value the result's message
-# links, such as a flow's source, must match in full. A flow that also starts
-# from something else still fails the run.
+# links, such as a flow's source, must match in full, as its name or as
+# name@path, where path is the file it starts in. A flow that also starts from
+# something else still fails the run.
 
 # CFF's UidBase and Mach-O's Uuid read as user IDs. Their flows go through std's
 # generic code, such as clone, iterators and parse, without telling types apart,
@@ -55,3 +56,19 @@ rust/access-invalid-pointer vendor/wayland-backend-[0-9]*/src/sys/client_impl/mo
 rust/access-invalid-pointer vendor/wgpu-hal-[0-9]*/src/auxil/renderdoc.rs 2026110315303535
 rust/access-invalid-pointer vendor/winit-[0-9]*/src/platform_impl/linux/common/xkb/keymap.rs 2026110315303535
 rust/access-invalid-pointer vendor/winit-[0-9]*/src/platform_impl/linux/x11/ime/input_method.rs 2026110315303535
+
+# Third-party cleartext logging from the same UidBase and Uuid, and from fields
+# named like user IDs, UUIDs or passwords where a struct is declared or printed:
+# libc, linux-raw-sys, rustix and std's own copies, Mach-O and ar headers in
+# object, ash, wayland, winit's macOS monitor and autocfg. The flows go through
+# std's generic Debug, From and iterator code without telling types apart, so
+# the same sources reach every log and assert. None reads anything private.
+rust/cleartext-logging vendor/* 2026110315303541 [^@]*@(file:///.*/rustlib/src/rust/library/(std/src/(os/unix/net/ucred|sys/process/unix/common)\.rs|stdarch/.*|vendor/(libc|object)-[^/]*/src/.*)|vendor/(libc|linux-raw-sys)-[^/]*/src/.*|vendor/ash-[^/]*/src/vk/definitions\.rs|vendor/autocfg-[^/]*/src/lib\.rs|vendor/object-[^/]*/src/(archive|macho|pe|read/macho/(dyld_cache|load_command))\.rs|vendor/read-fonts-[^/]*/src/(tables/postscript|ps/cff)/dict\.rs|vendor/rustix-[^/]*/src/(backend/linux_raw/fs/types|fs/statx|net/types)\.rs|vendor/wayland-backend-[^/]*/src/types/server\.rs|vendor/wayland-protocols-plasma-[^/]*/src/lib\.rs|vendor/winit-[^/]*/src/platform_impl/macos/monitor\.rs)
+# A TcpStream from x11rb's connect, for a DISPLAY that names a host, reaches
+# these through core's identity From, as if every From were the same. Nothing
+# read from the socket goes into a log, a regex or an allocation size here.
+rust/log-injection vendor/naga-[0-9]*/src/valid/expression.rs 2026110315303541 user-provided\ value@vendor/x11rb-[^/]*/src/rust_connection/stream\.rs
+rust/log-injection vendor/regex-automata-[0-9]*/src/meta/error.rs 2026110315303541 user-provided\ value@vendor/x11rb-[^/]*/src/rust_connection/stream\.rs
+rust/log-injection vendor/wgpu-hal-[0-9]*/src/lib.rs 2026110315303541 user-provided\ value@vendor/x11rb-[^/]*/src/rust_connection/stream\.rs
+rust/regex-injection vendor/regex-[0-9]*/src/regex/string.rs 2026110315303541 user-provided\ value@vendor/x11rb-[^/]*/src/rust_connection/stream\.rs
+rust/uncontrolled-allocation-size vendor/allocator-api2-[0-9]*/src/stable/alloc/global.rs 2026110315303541 user-provided\ value@vendor/x11rb-[^/]*/src/rust_connection/stream\.rs

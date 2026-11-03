@@ -811,7 +811,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - CodeQL: taint flows in third-party crates from an X11 read and libc fields
 	- ID: 2026110315303541
 	- Type: Task
-	- Status: Queued
+	- Status: Done
 	- Priority: Avg
 	- Opened: 20261103-153035
 	- Opened by: CC
@@ -820,6 +820,19 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- About 85 results on 20261103. `rust/cleartext-logging` in naga, x11rb, wgpu-hal, alacritty_terminal, cosmic-text and others, from the same `UidBase` and `Uuid` and from libc fields such as `nm_uid`.
 		- `rust/log-injection`, `rust/regex-injection` and `rust/uncontrolled-allocation-size`, all from one X11 socket read in x11rb, into wgpu-hal, naga, regex and allocator-api2.
 		- Suppress the false flows by their sources, the way 2026110315303525 did. A real one gets its own Bug.
+	- Progress log:
+		- 20261103: 96 results in 3 false flows. 69 cleartext-logging results start from the same `UidBase` and `Uuid` as 2026110315303525.
+		- 20261103: 15 more start from 74 fields named like user IDs, UUIDs or passwords, such as `nm_uid`, `st_uid` and `pw_passwd`. Each is where a struct is declared or printed: libc, linux-raw-sys, rustix, std's own copies, Mach-O and ar headers in object, ash's `Debug`, wayland-backend's credentials, and winit's macOS monitor. autocfg and std's tests are among them, though neither is in the binary. The flows go through std's generic `Debug`, `From` and iterator code to asserts and logs of sizes and indexes.
+		- 20261103: The 12 others start at x11rb's `TcpStream::connect`, for a DISPLAY that names a host, not at a read. Every flow passes the stream through core's identity `From`, and comes out as a gpu-allocator error, a regex `MatchError`, a toml string or an allocator-api2 `Vec`. Nothing read from the socket reaches those sinks.
+		- 20261103: A rule's source pattern can now also match `name@path`, the file the source is in, since "user-provided value" names every remote source alike. Suppressed with this ID: one cleartext-logging rule for `vendor/*`, pinned to those sources' files, and one rule per sink file for the X11 flow.
+	- Decisions:
+		- 20261103: Sources pinned by file, not by name, so a real read of `pw_passwd` in, say, nix still fails the step. Files rather than lines, so a version bump doesn't turn the step red.
+		- 20261103: The X11 rules go per sink file, since the same source would start a real flow from server data, such as a reply length in x11rb.
+		- 20261103: No Bug and no upstream draft, since none is real.
+	- Verified: 20261103. The step's filter over the first run's SARIF: 0 new, 96 known under this ID, the other items' counts unchanged. Before the new lines the same 96 were new. Hand-made results with a `pw_passwd` read in nix, a mixed flow, and the X11 source at another sink, or another source at an X11 sink, all still fail. The engine test passed, and its new check failed against the old codeql.bash. `cicd/cicd.bash --backlog-run-quick`, all five areas, passed.
+	- Branch: rnd1103
+	- Test case: dd5nn `cicd/tests/engine/run.bash`: a source pinned by file lets that flow through, and not the same name from another file.
+	- Closed: 20261103-155643
 
 - CodeQL: watched to fail on a planted finding, and green otherwise
 	- ID: 2026110315304782
