@@ -517,7 +517,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - Leak checks: the headless soak test under `--leakcheck`
 	- ID: 2026101913370214
 	- Type: Task
-	- Status: Started
+	- Status: Done
 	- Priority: Avg
 	- Opened: 20261019-133702
 	- Opened by: CC
@@ -534,6 +534,9 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- `cicd/tests/allocs/run.bash` already drives a window on a private Xvfb.
 	- Progress log:
 		- 20261101: Split in 2. 2026110117065477 is the driver and its heap check, and 2026110117065496 makes it a pipeline step. This item closes when they do.
+	- Test case: der46 `cicd/tests/soak/run.bash`, in the pipeline through dd5nn `cicd/tests/engine/run.bash`
+	- Acceptance signoff: Self-closed: both children are Done, the driver and its heap check, and the pipeline step.
+	- Closed: 20261103-130738
 
 - The private runner's Mac job can't build on vmKt6m: rustup isn't there for the account it uses
 	- ID: 2026102811082502
