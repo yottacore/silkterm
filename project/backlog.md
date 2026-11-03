@@ -618,7 +618,9 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - The Mac CI doesn't name a test that failed when its output splits the result line
 	- ID: 2026102822262458
 	- Type: Bug
-	- Status: Queued
+	- Status: Waiting on automated testing
+		- Waits on one hosted `mac.yml` run on rnd1102, for BSD awk and the new flags on the runner.
+	- Needs external testing: one `mac.yml` run on rnd1102. It should pass as before, with the Test step's lines unchanged.
 	- Priority: Avg
 	- Opened: 20261028-222624
 	- Opened by: CC
@@ -627,6 +629,16 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Hosted run 40818838314 at 9eded41 printed a lone `FAILED` line and `1 failed`, but no test name, panic text or rerun. With `--nocapture`, a test's own output can land between `test <name> ...` and `FAILED`, so the pattern in `ci-mac.bash` that looks for both on one line finds nothing.
 		- Take the names from cargo's `failures:` list at the end, or run without `--nocapture` for the names.
 	- 20261028: The failed job's rerun passed (attempt 2), so the failure was a flake. Which test it was can't be read from the log, which is this bug.
+	- Actual cause: `ci-mac.bash` took the names only from `test <name> ... FAILED` on one line. With `--nocapture` at 1 job, the test's own output and its panic go between the two. And without `--no-fail-fast` cargo stopped at the first test binary that failed.
+	- Actual fix: `fFailedNames` takes the names from the `failures:` list each test binary ends with, its last one only, plus any one-line `FAILED`, each name once. The report prints them, then the panic text, then runs just those again with `--exact`. With no name found it prints the end of the log. Both cargo test calls take `--no-fail-fast`.
+	- Decisions:
+		- 20261102: `--nocapture` stays, since the skip reasons and `measured:` lines need it.
+		- 20261102: `--no-fail-fast` added, so a failure in one binary doesn't leave the rest unrun. It costs nothing on a passing run.
+		- 20261102: `--exact` on the rerun, so a name doesn't also run every test it's a prefix of.
+	- Verified: 20261102. desrb passed 9 checks, on logs of the shapes cargo test 1.96 wrote here at 1 and 2 threads, captured and not, across 2 binaries. Against the old `ci-mac.bash` 8 of them failed. `fFailedNames` gave the same names under gawk --posix, mawk and busybox awk. defn6 and dd5nn pass. `cicd/cicd.bash --backlog-run-quick scripts docs` passed. shellcheck and the bash style check are clean.
+		- Swept: the other readers of cargo's `test <name> ...` lines, `test-id.py --run` and `lint-report.bash`. The pipeline's runs capture test output, so the line stays whole there. `cicd-win.ps1` and `miri.bash` read no names from it.
+	- Branch: rnd1102
+	- Test case: desrb `cicd/tests/ci-mac/run.bash`, run by the pipeline after defn6.
 
 - The private runner's Mac job can't build on vmKt6m: rustup isn't there for the account it uses
 	- ID: 2026102811082502

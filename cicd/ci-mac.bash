@@ -95,28 +95,45 @@ fBuild(){ cargo build --locked; }
 fClippy(){ cargo clippy --workspace --all-targets --locked -- -D warnings; }
 
 ## --nocapture so a test that skips can say why. The log is long, so only the
-## result lines and the skips are printed.
+## result lines and the skips are printed. --no-fail-fast so a failure in one
+## test binary doesn't leave the rest unrun.
 fTest(){
 	local rc=0
-	cargo test --locked -- --nocapture > "${logDir}/test.log" 2>&1 || rc=${?}
+	cargo test --locked --no-fail-fast -- --nocapture > "${logDir}/test.log" 2>&1 || rc=${?}
 	grep -E '^test result:|^error|FAILED' "${logDir}/test.log" | head -n 60
 	if ((rc)); then fWhyFailed; fi
 	return "${rc}"
 }
 
-## --nocapture leaves no failure section at the end. The panic text is in the
-## log, between the other tests' output, so it's pulled out first. Then the
-## failed ones run again alone. A test that passes the second time is a flaky
-## one, so that run keeps its output too.
+## fFailedNames <log>: each failed test once. With --nocapture a test's own
+## output can split "test <name> ..." from its FAILED, so the names come from
+## the list each binary ends with. Only its last "failures:" block counts, since
+## the one before it holds captured output.
+fFailedNames(){
+	awk '/^failures:$/{list=""; on=1; next}
+		on && /^    [^ ]/{sub(/^    /, ""); list=list $0 "\n"; next}
+		/^test result:/{printf "%s", list; list=""; on=0; next}
+		/^test .* \.\.\. FAILED$/{sub(/^test /, ""); sub(/ \.\.\. FAILED$/, ""); print}' "${1}" | awk '!seen[$0]++'
+}
+
+## The panic text is in the log, between the other tests' output, so it's
+## pulled out first. Then the failed ones run again alone. A test that passes
+## the second time is a flaky one, so that run keeps its output too.
 fWhyFailed(){
 	local name
 	local names=()
-	while IFS= read -r name; do names+=("${name}"); done < <(sed -n 's/^test \(.*\) \.\.\. FAILED$/\1/p' "${logDir}/test.log")
-	if ((${#names[@]} == 0)); then return 0; fi
+	while IFS= read -r name; do names+=("${name}"); done < <(fFailedNames "${logDir}/test.log")
+	if ((${#names[@]} == 0)); then
+		echo "--- no failed test named, so the end of the log"
+		tail -n 40 "${logDir}/test.log"
+		return 0
+	fi
+	echo "--- failed tests"
+	printf '%s\n' "${names[@]}"
 	echo "--- failed tests, as they failed"
-	awk '/^thread .* panicked at /{n=12} n&&/^(note: |test |$)/{n=0} n{print; n--}' "${logDir}/test.log" | head -n 120
+	awk '/^thread .* panicked at /{n=12} n&&/^(note: |test |FAILED$|$)/{n=0} n{print; n--}' "${logDir}/test.log" | head -n 120
 	echo "--- failed tests, run again alone"
-	cargo test --locked -- --test-threads=1 --nocapture "${names[@]}" 2>&1 | grep -vE '^\s*(Compiling|Finished|Running)' | head -n 200
+	cargo test --locked --no-fail-fast -- --test-threads=1 --nocapture --exact "${names[@]}" 2>&1 | grep -vE '^\s*(Compiling|Finished|Running)' | head -n 200
 }
 
 ## What --about reports is the adapter the app would draw with. No Renderer line
@@ -157,3 +174,5 @@ echo
 ##		- 20261028: Each step between a rule and its stamped Starting and closing
 ##		            lines, numbered of the total, as cicd.bash prints them.
 ##		- 20261028: Job count and low priority from jobs.bash, as the other runs.
+##		- 20261102: Failed tests named from cargo's failures list, so a test whose
+##		            output splits its result line is still named. --no-fail-fast.

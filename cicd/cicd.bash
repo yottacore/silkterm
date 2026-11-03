@@ -1046,6 +1046,8 @@ fScriptTests(){
 	## One tool pin list for both pipelines, and the docs quoting it.
 	fRunTest cicd/tests/pins/run.bash "tool pins" "tool pin test failed"
 	fRunTest cicd/tests/jobs/run.bash "step jobs and priority" "step jobs test failed"
+	## The Mac CI's failed test names, which a split result line once hid.
+	fRunTest cicd/tests/ci-mac/run.bash "Mac CI failed test names"
 	## The PowerShell lint this stage gates on has to fail on a finding.
 	fRunTest cicd/tests/pslint/run.bash "PowerShell lint"
 	## The Python lint, the same way.
