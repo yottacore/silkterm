@@ -736,7 +736,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261103: The first full measured run, at 595a542 in the image, took about 65 minutes and failed on 1024 results, as it should with nothing filed. That is red on real findings; the planted one is child 2026110315304782.
 		- 20261103: The release crate list let in what only proc macros use, such as syn, litrs and quote, about 210 results. It now leaves them out, 186 crates.
 		- 20261103: A suppression can name the values a flow starts from, so a rule for a false flow doesn't hide a real one at the same path.
-		- 20261103: Split in 5. 2026110315303525, our code's results, is done. 2026110315303530, 35 and 41 are the third-party roll-ups; 30 is done. 2026110315304782 plants a finding and checks the run is green otherwise. This item closes when they do.
+		- 20261103: Split in 5. 2026110315303525, our code's results, is done. 2026110315303530, 35 and 41 are the third-party roll-ups; 30 and 35 are done. 2026110315304782 plants a finding and checks the run is green otherwise. This item closes when they do.
 	- Decisions:
 		- 20261103: CodeQL stays out of the default run, under `--long`, `--leakcheck` and `--codeql`, against this item's "on by default". It takes about 65 minutes alone, and the default run has to fit in about an hour, per the 2026-10-24 reset and 2026102616543936. The smaller suite or a timeout would drop the quality queries the parent asked for.
 	- Branch: rnd1103
@@ -787,7 +787,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - CodeQL: pointer lifetime results in ash, lru and other crates
 	- ID: 2026110315303535
 	- Type: Task
-	- Status: Queued
+	- Status: Done
 	- Priority: Avg
 	- Opened: 20261103-153035
 	- Opened by: CC
@@ -795,6 +795,18 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Requirements:
 		- About 290 `rust/access-invalid-pointer` and `rust/access-after-lifetime-ended` results on 20261103: 216 in ash, 41 in lru, then lock_api, rustix, parking_lot_core, ordered-float, hashbrown, smol_str and others.
 		- Read the ash and lru ones first. A real one gets its own Bug and an upstream draft. The rest are suppressed per crate with this ID.
+	- Progress log:
+		- 20261103: 293 in 13 crates once proc macros' crates were left out. 282 are one false flow: the same few sources, std's `null()` behind `Default` and some rustix syscall arguments, reach every crate through std's generic `From`, iterator and fold code. ash's 216 are its generated `push_next`, 108 structs with 2 rules each. lru's read its head and tail sentinels, boxed when the cache is made, and its map's keys.
+		- 20261103: The other 11 start from a null in the same function: an FFI out-parameter in winit, wayland-backend and wgpu-hal, or a pointer checked for null first in parking_lot_core and rustix. Each was read by hand, and none is a defect.
+		- 20261103: ash's `push_next` is unsound from safe code when a pushed struct's `p_next` is garbage. That is upstream's ash-rs/ash#905, and not what these flows show.
+		- 20261103: Suppressed with this ID, any version.
+	- Decisions:
+		- 20261103: Per crate for the false flow, but per file for the 11 read by hand, since each was cleared at its site and not for the crate.
+		- 20261103: No Bug and no upstream draft, since none is real and ash#905 is already filed.
+	- Verified: 20261103. The step's filter over the first run's SARIF: 0 pointer results left, 293 known under this ID. Before the new lines it reported the same 293 as new.
+	- Branch: rnd1103
+	- Test case: dd5nn `cicd/tests/engine/run.bash` covers the rule-and-path suppressions. The rest is suppression lines, with no behavior of their own.
+	- Closed: 20261103-154238
 
 - CodeQL: taint flows in third-party crates from an X11 read and libc fields
 	- ID: 2026110315303541

@@ -27,3 +27,31 @@ rust/unused-variable vendor/rustix-[0-9]*/* 2026110315303530
 rust/unused-variable vendor/wgpu-[0-9]*/* 2026110315303530
 rust/unused-variable vendor/wgpu-hal-[0-9]*/* 2026110315303530
 rust/unused-variable vendor/winit-[0-9]*/* 2026110315303530
+
+# Pointer flows in third-party crates. Most start from std's null() behind
+# Default, and reach these through std's generic From, iterator and fold code
+# without telling types apart, so the same sources reach every crate. ash's are
+# its generated push_next, one per struct.
+rust/access-invalid-pointer vendor/ash-[0-9]*/src/vk/definitions.rs 2026110315303535
+rust/access-after-lifetime-ended vendor/ash-[0-9]*/src/vk/definitions.rs 2026110315303535
+rust/access-invalid-pointer vendor/lru-[0-9]*/* 2026110315303535
+rust/access-after-lifetime-ended vendor/lru-[0-9]*/* 2026110315303535
+rust/access-invalid-pointer vendor/lock_api-[0-9]*/* 2026110315303535
+rust/access-after-lifetime-ended vendor/lock_api-[0-9]*/* 2026110315303535
+rust/access-invalid-pointer vendor/ordered-float-[0-9]*/* 2026110315303535
+rust/access-after-lifetime-ended vendor/ordered-float-[0-9]*/* 2026110315303535
+rust/access-invalid-pointer vendor/allocator-api2-[0-9]*/* 2026110315303535
+rust/access-invalid-pointer vendor/hashbrown-[0-9]*/* 2026110315303535
+rust/access-invalid-pointer vendor/memchr-[0-9]*/* 2026110315303535
+rust/access-invalid-pointer vendor/smol_str-[0-9]*/* 2026110315303535
+rust/access-invalid-pointer vendor/rustix-[0-9]*/src/backend/linux_raw/param/auxv.rs 2026110315303535
+# A pointer set to null, then filled by an FFI out-parameter or checked for null
+# before use, each read by hand.
+rust/access-invalid-pointer vendor/parking_lot_core-[0-9]*/src/parking_lot.rs 2026110315303535
+rust/access-invalid-pointer vendor/parking_lot_core-[0-9]*/src/word_lock.rs 2026110315303535
+rust/access-invalid-pointer vendor/rustix-[0-9]*/src/backend/linux_raw/runtime/tls.rs 2026110315303535
+rust/access-invalid-pointer vendor/rustix-[0-9]*/src/backend/linux_raw/vdso.rs 2026110315303535
+rust/access-invalid-pointer vendor/wayland-backend-[0-9]*/src/sys/client_impl/mod.rs 2026110315303535
+rust/access-invalid-pointer vendor/wgpu-hal-[0-9]*/src/auxil/renderdoc.rs 2026110315303535
+rust/access-invalid-pointer vendor/winit-[0-9]*/src/platform_impl/linux/common/xkb/keymap.rs 2026110315303535
+rust/access-invalid-pointer vendor/winit-[0-9]*/src/platform_impl/linux/x11/ime/input_method.rs 2026110315303535
