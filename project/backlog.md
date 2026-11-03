@@ -34,6 +34,22 @@ Going forward, new issues in the new template at the bottom of this file, will g
 
 ## Issues
 
+- The tmux end test fails in the whole suite on vmKt6m, and passes alone there
+	- ID: 2026110313290006
+	- Type: Bug
+	- Status: Queued
+	- Severity: Avg
+	- Opened: 20261103-132900
+	- Opened by: CC
+	- Related IDs: 2026102811082502
+	- Target OS: macOS
+	- Test environment: vmKt6m, as mactest, with MacPorts tmux 3.8 at /opt/local/bin
+	- Steps to reproduce: Run the private runner's Mac job on vmKt6m with its tests, or `cargo test --workspace` there as mactest.
+	- Incorrect behavior: `ending_kills_the_session_started_and_no_other` (de30d) fails at tmux.rs:506 with "silk-test_1": the first `new-session` on the test's own server didn't succeed. The other 1401 pass.
+	- Expected behavior: It passes, or skips when there is no tmux.
+	- Reproduced: 20261103, once in the whole suite. Control: alone on the same build it passed 3 of 3, and 5 of 5 with 12 busy loops on the VM's 8 cores (load about 7).
+	- Possible cause: Unmeasured. `run` gives a tmux call 800 ms (ASK_FOR), and the first `new-session` also starts the server, during the suite's process churn. Or another test reaching the same server.
+
 - The window doesn't paint while the GPU is busy or short on memory, and stays blank after the load ends
 	- ID: 2026100312470535
 	- Type: Bug
@@ -541,7 +557,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - The private runner's Mac job can't build on vmKt6m: rustup isn't there for the account it uses
 	- ID: 2026102811082502
 	- Type: Bug
-	- Status: Queued
+	- Status: Done
 	- Opened: 20261028-110825
 	- Opened by: CC
 	- Related IDs: 2026102507245265
@@ -553,6 +569,23 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Reproduced: 20261028, in the test batch, with the runner from silkterm-private `wip/rnd1028-2026102507245265`.
 	- Possible cause: `ssh vmKt6m` lands as collierjr, who has only a MacPorts cargo at /opt/local/bin. rustup is set up for mactest only. Either the box gets rustup for that account, or the job line takes an ssh account, which the lock and VM state helper names would then need kept apart from.
 	- Severity: Avg
+	- Actual cause: The job ssh'd to the bare box name, so it ran in whatever account ssh picked there, collierjr on vmKt6m. The runner had no way to name another.
+	- Actual fix: A box in `privrig.conf` can be `user@box`, such as `mac b26,mactest@vmKt6m`. The job's ssh and scp use it as written. The host lock, its list of known boxes and the VM state helper get the bare box. README says so.
+	- Progress log:
+		- 20261103: The `@vmstate` runner is on silkterm-private's main now, so the fix is on its `rnd1103`.
+		- 20261103: The real `privrig.conf` still says `mac b26,vmKt6m`. It needs `mac b26,mactest@vmKt6m`. It's outside the repo, so it wasn't changed here.
+		- 20261103: With tests on, the job on vmKt6m got through the build and ran the suite. One test failed, de30d, the tmux end test, and it passed alone there. That is 2026110313290006.
+	- Decisions:
+		- 20261103: The job line names the account, rather than the box getting rustup for collierjr. That would put a second Rust next to that account's MacPorts cargo, and build as the admin account rather than the test one. mactest already has rustup 1.96.
+		- 20261103: The lower-case `vmkt6m` lands as mactest through ssh's own config, but wasn't used. The lock and the VM state helper know the box as `vmKt6m`, and a case difference would be easy to break.
+	- Verified: 20261103. dehx0 passes with 10 new checks, and 7 of them failed against the old runner. shellcheck on both files.
+	- Verified: 20261103. A copy of the runner with `mac mactest@vmKt6m`, the host lock and `@vmstate`, vmKt6m paused, `--no-test`: it woke vmKt6m, both release builds and the .app, .zip and .dmg were made as mactest, and the 4 files came back. vmKt6m was paused again after.
+	- Verified: 20261103. The same with `mac b26-nosuchbox,mactest@vmKt6m` and tests on: it fell back to vmKt6m, the silkterm unit tests ran there with 1401 passed and 1 failed (de30d, above), and vmKt6m was paused again after.
+	- Swept: every use of the job's host in run.bash. The pick, `fAsleep`, the lock's list, `check`, `wrap` and the skip messages take the bare box. ssh and scp in both jobs take it as written, the store job's included.
+	- Test case: `silkterm-private` `cicd/tests/hosts/run.bash` (dehx0).
+	- Branch: `silkterm-private` `rnd1103`
+	- Commit: `silkterm-private` 09298a8
+	- Closed: 20261103-132943
 
 - Running with `--software-rendering` on vmKt6m still fails with a complaint about no suitable GPU
 	- ID: 2026102807384202
