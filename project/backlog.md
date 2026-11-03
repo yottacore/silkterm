@@ -34,6 +34,21 @@ Going forward, new issues in the new template at the bottom of this file, will g
 
 ## Issues
 
+- dct7r's check that a passing run leaves no local run folder failed once in the container
+	- ID: 2026110222113195
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261102-221131
+	- Opened by:
+	- Target OS: Linux
+	- Incorrect behavior: In the full run at 3ac421d, in the container, cicd/tests/wingui/harness-test.bash failed 'and leaves no run folder in the local temp dir'. Every other check in it passed. The check needs the smoke run's exit code to be 0 and its TMPDIR to be empty after.
+	- Expected behavior: The check passes every time.
+	- Reproduced: No. 3 of 3 runs alone on the host passed on 20261102.
+	- Progress log:
+		- 20261102: Seen once, in rnd1102's second full run. The round didn't touch the wingui harness. The run stops at the first failure, so it didn't show whether rc or a leftover folder failed it.
+	- Test case: cicd/tests/wingui/harness-test.bash (dct7r).
+
 - The window doesn't paint while the GPU is busy or short on memory, and stays blank after the load ends
 	- ID: 2026100312470535
 	- Type: Bug
@@ -323,6 +338,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261101: The plan's Leak checks line, `--list`, `--help`, config.bash, design.md and install.md name it.
 		- 20261101: The heaptrack data was 9.5 MB for 12 rounds, not the 3.5 MB the notes gave, so the rotation keeps up to a few hundred MB, in a gitignored folder.
 		- 20261101: rnd1101b's full run at 4e46ef9 stopped at step 4 on dd5nw, which was already failing on dev, so it never reached the leak checks. Waits on 2026110119292010.
+		- 20261102: rnd1102's full run at 383a14c ran the soak step after the heap-growth test and kept soak_20261102-210819.zst and .txt. Round 6 to 12 grew 1 KiB against a 256 KiB margin.
 	- Decisions:
 		- 20261101: Off under `--quick` unless `--leakcheck` asks, like the slow window tests, since it takes about 2.5 minutes. `--leakcheck` is every leak check.
 		- 20261101: A run on the host runs the debug build it made in the image, the way the ASan and CodeQL steps hop there. Both are Debian trixie, and the run in the image passed.
