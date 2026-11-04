@@ -64,8 +64,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - The tmux end test fails in the whole suite on vmKt6m, and passes alone there
 	- ID: 2026110313290006
 	- Type: Bug
-	- Status: Waiting on automated testing
-	- Needs external testing: The private runner's Mac job on vmKt6m with tests, 3 times. de30d passes each time. A fail now says whether tmux didn't answer in time, didn't start, or said no, with its message.
+	- Status: Done
 	- Severity: Avg
 	- Opened: 20261103-132900
 	- Opened by: CC
@@ -81,6 +80,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261103: Measured in the whole suite on vmKt6m, 3 runs, all passed: the first `new-session` takes 35 to 47 ms, at 8 and 16 test threads and with 12 busy loops (guest load 27), and the others about 15 ms. On b23 it's 6 to 13 ms. So a fail at 800 ms is a stall of 20 times that or more, not the usual cost.
 		- 20261103: Ruled out: another test on the same server, since only this test sets its socket, per thread, in its own run folder, and every other ask goes to `/dev/null/no-tmux`. A stale socket folder, since there's none in `/tmp`, and the failing run's folder had no `tmuxend` left in it.
 		- 20261103: Still open: what stalled. The guest can stall that long. While it was loaded, an ssh to it timed out in the banner exchange after 20 s. A spawn that failed for the 256 open files a Mac allows is the other candidate, and the new message would tell it apart.
+		- 20261103: Verified: the whole unit suite on vmKt6m as mactest, at dcbec71, 3 runs in a row. 1405 passed, 0 failed, each time, de30d included, against the real tmux. No setup call took over 800 ms, so no fail message came up to tell the causes apart. The stall stays unexplained, and the next fail will say which it was.
 	- Decisions:
 		- 20261103: The test's own setup and cleanup calls get 10 s, not ASK_FOR, since they aren't what it tests. The asks it does test, `has_session`, `current_path` and `end`, keep the app's 800 ms. Its message gives what tmux said or why there was no answer, and a setup call past 800 ms is noted in its output.
 		- 20261103: `run` is now `ask` with ASK_FOR, and `ask` says why it came back empty. Nothing changes for the app.
@@ -89,6 +89,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Swept: every `run` caller in tmux.rs. de541 asks with no socket and expects no answer, so it passes either way. No other test starts a tmux server.
 	- Test case: `ending_kills_the_session_started_and_no_other` (de30d).
 	- Branch: rnd1103
+	- Closed: 20261103-163000
 
 - The window doesn't paint while the GPU is busy or short on memory, and stays blank after the load ends
 	- ID: 2026100312470535
@@ -219,13 +220,14 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - Running on macOS without a GPU fails to launch
 	- ID: 2026102209035801
 	- Type: Bug
-	- Status: Waiting on UAT
+	- Status: Done
 		- Answered: keep the alert. Left is the no-Metal check, on vmKt6m, which has no Metal.
 		- 20261025: The round's build runs on vmKt6m, but a launch with nobody logged on at its console never gets to the device check. Logging on there is a person's part.
 		- Stand-in: 20261025. A debug build of 8a28055, made on b26, run on vmKt6m over ssh as `mactest`. `--version` printed `build deea6 (2026-10-25)`. A plain launch printed nothing and was still running after 60 s, its main thread waiting for events in `NSApplication run`. With no one logged on the app never finishes launching, so nothing reaches the device check.
-	- Needs hand testing:
-		- On vmKt6m, logged on at the console: a launch from Finder shows the alert, and the program exits after OK. From Terminal, stderr has the same words and the exit code is 2.
-	- Stand-in: none (20261028). Only a launch in a console session reaches the device check, and logging on at vmKt6m's console is a person's part.
+	- Stand-in: 20261103. The stock debug build of dcbec71, launched on vmKt6m through `open` as the user logged on at its console, with its own HOME. That stood in for the hand test, which asked for a Finder launch, OK, and exit code 2 from Terminal.
+		- It reached the device check. stderr had the headline, the no-software-renderer line and wgpu's "metal found no adapters".
+		- The app was frontmost, and its one on-screen window was 260 by 372 at the modal panel level, the alert's shape. It was still up at 15 and 20 s, waiting on it.
+		- Not reached: the alert's text on screen, and the exit after OK. The box can't send keys or read window contents over ssh. The exit is the plain `exit(2)` after the modal returns, and de9m1 covers the words.
 	- Severity: Avg
 	- Opened: 20261022-090358
 	- Opened by: JC
@@ -255,6 +257,8 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Swept: the one exit site where no device could be made at launch. Rebuilds after idle and the dialogs keep their own error paths, and both need a device that once worked.
 	- Branch: rnd1022
 	- Test case: `no_device_on_macos_says_why_and_that_nothing_can_stand_in` (de9m1)
+	- Acceptance signoff: Self-closed: the stock build on vmKt6m, launched in the console session, put the alert up and wrote its words to stderr (20261103).
+	- Closed: 20261103-163000
 
 - Regression: On Linux, the settings dialog is detached from the main window, and is its own alt+tab target
 	- ID: 2026103010083402
