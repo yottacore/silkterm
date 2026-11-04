@@ -689,10 +689,97 @@ printf '## a banner a launch refreshed\n' >>"${work}/corpus-root/cicd/tests/fuzz
 fCheck "a seed written through hashes differently" test "$(root="${work}/corpus-root" fCorpusHashes)" != "${corpusBefore}"
 fCheck "and the test stage fails on a difference" grep -qF '[[ "$(fCorpusHashes)" != "${corpusBefore}" ]]; then' "${engine}"
 
+## The options that each turn off one part of a full run, so a test batch can
+## run past a part that fails.
+offFlags=(--no-rust-tests --no-clippy --no-script-lint --no-scrub --no-deny --no-script-tests --no-docs --no-scroll --no-wingui --no-release --no-cleanup)
+fParseOff(){ fParse "${@}" >/dev/null; eval "${parse}"; echo "${noRustTests}${noClippy}${noScriptLint}${noScrub}${noDeny}${noScriptTests}${noDocs}${noScroll}${noWingui}${noRelease}${noCleanup} inner=${innerArgs[*]}"; }
+fCheck "with no options none of them is set" test "$(fParseOff)" = "00000000000 inner="
+fOffEach(){
+	local -i i; local want
+	for i in "${!offFlags[@]}"; do
+		want="$(printf '%*s' 11 '' | tr ' ' 0)"; want="${want:0:i}1${want:i+1}"
+		[[ "$(fParseOff "${offFlags[i]}")" == "${want} inner="* ]] || { echo "    ${offFlags[i]}: $(fParseOff "${offFlags[i]}")"; return 1; }
+	done
+}
+fCheck "each sets only its own" fOffEach
+fCheck "all but --no-wingui go into the container with the run" \
+	test "$(fParseOff "${offFlags[@]}")" = "11111111111 inner=--no-rust-tests --no-clippy --no-script-lint --no-scrub --no-deny --no-script-tests --no-docs --no-scroll --no-release --no-cleanup"
+fCheck "and a full run takes them" bash -c '[[ "$1" == "00000000011 inner=--no-release --no-cleanup --fmt-check" ]]' _ "$(fParseOff --backlog-run-full --no-release --no-cleanup)"
+fOffHelp(){ local help f; help="$("${engine}" --help)"; for f in "${offFlags[@]}"; do grep -q -- "^ *${f} " <<<"${help}" || { echo "    ${f} not in --help"; return 1; }; done; }
+fCheck "--help names each" fOffHelp
+
+## Stage 3 with every command a stand-in, which says what ran.
+fStage(){ (
+	eval "$(fLift '^fBuildTestRelease(){' '^}')"
+	local noRustTests=0 noClippy=0 noScriptLint=0 noDeny=0 noRelease=0 fmtCheck=0 root="${work}/stage3" kv
+	mkdir -p "${root}"
+	FMT_CMD=(echo RAN fmt); DEBUG_BUILD_CMD=(echo RAN debug); TEST_CMD=(cargo test); FUZZ_CMD=(); FUZZ_SECS=0
+	LINT_PROBE=(true); LINT_CMD=(echo RAN clippy); XLINT_CMD=(echo RAN clippy-windows); MACLINT_CMD=(echo RAN clippy-macos)
+	DENY_PROBE=(true); INDEX_REFRESH_CMD=(echo RAN index); ADVISORY_CMD=(echo RAN advisories); DENY_CMD=(echo RAN deny)
+	fEcho(){ :; }; fEcho_Clean(){ :; }; fJobs(){ :; }; fStepOpen(){ :; }; fStepClose(){ :; }; fSweepBuilds(){ :; }
+	fTestLines(){ echo "RAN ${*}"; }; fLintScripts(){ echo RAN script-lints; }; fAdvisoryTests(){ echo RAN advisory-tests; }
+	fContentScrub(){ :; }; fRunAsan(){ :; }; fRunLeakcheck(){ :; }; fRunTsan(){ :; }; fRunMiri(){ :; }; fScriptTests(){ :; }
+	fRunProfiler(){ :; }; fBuildRelease(){ echo RAN release; }; fBuildPackages(){ echo RAN packages; }
+	for kv in "${@}"; do eval "${kv}"; done
+	fBuildTestRelease | sed 's/^RAN //' | paste -sd, -
+) 2>&1; }
+fCheck "stage 3 with no options runs every part" test "$(fStage)" = "fmt,debug,cargo test,clippy,clippy-windows,clippy-macos,script-lints,index,advisories,advisory-tests,deny,release,packages"
+fCheck "and each option leaves out its own part" test "$(fStage noRustTests=1 noClippy=1 noScriptLint=1 noDeny=1 noRelease=1)" = "fmt,debug,packages"
+fCheck "--no-clippy all 3 clippy runs" test "$(fStage noClippy=1)" = "fmt,debug,cargo test,script-lints,index,advisories,advisory-tests,deny,release,packages"
+fCheck "--no-deny the advisory scan, its tests and the rest of cargo-deny" test "$(fStage noDeny=1)" = "fmt,debug,cargo test,clippy,clippy-windows,clippy-macos,script-lints,release,packages"
+
+## The test scripts, while the docs checks, which run through the same
+## helper, keep to --no-docs.
+offRoot="${work}/offroot"; mkdir -p "${offRoot}/t" "${offRoot}/cicd/tests/toc"
+printf '#!/usr/bin/env bash\necho ran >>"%s/ran"\n' "${offRoot}" >"${offRoot}/t/x.bash"
+cp "${offRoot}/t/x.bash" "${offRoot}/cicd/tests/toc/run.py"; chmod +x "${offRoot}/t/x.bash" "${offRoot}/cicd/tests/toc/run.py"
+eval "$(grep -E '^(fTestId|fTestOut|fTestLine|fListTest)\(\)\{' "${engine}")"
+for f in fRunTest fRunTest_MaySkip fCheckDocs; do eval "$(fLift "^${f}(){" '^}')"; done
+fOffRun(){ : >"${offRoot}/ran"; ( root="${offRoot}"; noScriptTests="${1}"; listing=0; SILKTERM_TEST_DIR="${work}"; shift; "${@}" ) >/dev/null 2>&1; [[ -s "${offRoot}/ran" ]] && echo ran || echo none; }
+fCheck "a test script runs with no options" test "$(fOffRun 0 fRunTest t/x.bash x)" = ran
+fCheck "--no-script-tests leaves it out" test "$(fOffRun 1 fRunTest t/x.bash x)" = none
+fCheck "and one that may skip" test "$(fOffRun 1 fRunTest_MaySkip t/x.bash x)" = none
+fCheck "but not the docs checks" test "$(fOffRun 1 fCheckDocs)" = ran
+fCheck "which --no-docs leaves out, with the wallpaper gallery" bash -c 'grep -qxF "	if ((! noDocs)); then fCheckDocs" "$1" && grep -qxF "	if ((noDocs)); then :" "$1"' _ "${engine}"
+fCheck "--no-scroll leaves out the scroll harness" grep -qxF '	if ((noScroll)); then' "${engine}"
+
+leftPlan="$(fLift '^leftOut=()$' '^fi$')"
+fLeft(){ ( noClippy=0; noScriptLint=0; noScrub=0; noDeny=0; noScriptTests=0; noDocs=0; noScroll=0; for kv in "${@}"; do eval "${kv}"; done; eval "${leftPlan}" ); }
+fCheck "the plan names what they left out of stage 3" test "$(fLeft noDocs=1 noScroll=1)" = "Left out ............: docs checks (--no-docs), scroll harness (--no-scroll)"
+fCheck "one on its own" test "$(fLeft noDeny=1)" = "Left out ............: cargo-deny (--no-deny)"
+fCheck "and has no line when none is set" test -z "$(fLeft)"
+
+## --no-wingui, --no-scrub and --no-cleanup.
+out="$(noWingui=1 fWingPlan 0 0)"
+fCheck "the plan says --no-wingui left the scenarios out" test "${out}" = "Windows scenarios ...: (skipped --no-wingui)"
+noWingui=1 fWing 0 ""
+fCheck "and they don't run" bash -c '[[ "$1" == "windows gui scenarios skipped (--no-wingui)" && ! -s "$2" ]]' _ "${out}" "${STUB_RAN}"
+eval "$(fLift '^fContentScrub(){' '^}')"
+mkdir -p "${work}/scrub/repo" "${work}/scrub/private/hooks"
+printf '#!/usr/bin/env bash\necho scrubbed\n' >"${work}/scrub/private/hooks/scrub.bash"; chmod +x "${work}/scrub/private/hooks/scrub.bash"
+fCheck "the content scrub runs with no options" bash -c '[[ "$(root="$1/repo"; fEcho(){ :; }; eval "$2"; fContentScrub)" == scrubbed ]]' _ "${work}/scrub" "$(declare -f fContentScrub)"
+fCheck "and --no-scrub leaves it out" bash -c '[[ "$(root="$1/repo"; noScrub=1; fEcho_Clean(){ echo "$*"; }; eval "$2"; fContentScrub)" == "content scrub skipped (--no-scrub)" ]]' _ "${work}/scrub" "$(declare -f fContentScrub)"
+eval "$(fLift '^fSweepBuilds(){' '^}')"
+fSweepOff(){ ( noCleanup="${1}"; CLEANUP_BUILD_DIRS=(debug); CLEANUP_NIGHTLY_DIRS=(); TARGET_DIR="${work}/sweeptarget"
+	fBuildDirs(){ echo "${TARGET_DIR}/debug"; }; fSweep_Toolchain(){ echo swept; }; fSweep_OldBuildDirs(){ :; }; fSweep_Incremental(){ :; }
+	fSweepBuilds ); }
+fCheck "the build dirs are swept with no options" test "$(fSweepOff 0)" = swept
+fCheck "and --no-cleanup leaves them" test -z "$(fSweepOff 1)"
+fCheck "with what earlier runs left at the start" grep -qF 'if [[ -z "${SILK_CICD_IN_CONTAINER:-}" ]] && ((! noCleanup)); then' "${engine}"
+
+## --no-release: the release steps, and what reads their binaries.
+plan="$(fPlan noRelease=1)"
+fCheck "--no-release turns off the release steps and what reads them, and says so" \
+	bash -c 'for w in "Release build: native" "Release build: lw" "Release build: la" "Release artifacts" Packages Dogfood "Demo video"; do grep -qxF "off:${w}|--no-release" <<<"$1" || exit 1; done' _ "${plan}"
+fCheck "and leaves them out of the count" grep -qx 'base=0 total=7' <<<"${plan}"
+fCheck "the run in the container skips them too" bash -c '[[ "$(grep "^on:" <<<"$1" | paste -sd, -)" == "on:Format,on:Debug build,on:Regression tests" ]]' _ "$(fPlan noRelease=1 SILK_CICD_IN_CONTAINER=1)"
+fCheck "and the run here doesn't take an earlier run's binaries" grep -qxF '	((noRelease)) || fContainerArtifacts' "${engine}"
+
 if ((failures)); then echo "${failures} failed"; exit 1; fi
 echo "all passed"
 
 ##	History:
+##		- 20261103: The options that each turn off one part of a full run.
 ##		- 20261102: Miri's config check with an absolute target dir too.
 ##		- 20261102: Miri: when it runs, where, its plan, first and --list lines, the
 ##		            step, and its config.

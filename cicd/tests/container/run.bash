@@ -116,6 +116,8 @@ fCheck "and so does --container itself" test "$(fParse --container)" = "containe
 fCheck "--no-asan is a stage option" test "$(fParse --container --no-asan)" = "container=1 inner=--no-asan"
 fCheck "--no-tsan is too" test "$(fParse --container --no-tsan)" = "container=1 inner=--no-tsan"
 fCheck "and --no-miri" test "$(fParse --container --no-miri)" = "container=1 inner=--no-miri"
+fCheck "and the options that turn off one part of stage 3 or 5, but not --no-wingui" \
+	test "$(fParse --container --no-rust-tests --no-clippy --no-script-lint --no-scrub --no-deny --no-script-tests --no-docs --no-scroll --no-wingui --no-release --no-cleanup)" = "container=1 inner=--no-rust-tests --no-clippy --no-script-lint --no-scrub --no-deny --no-script-tests --no-docs --no-scroll --no-release --no-cleanup"
 fCheck "with docker here it is the default" test "$(USE_CONTAINER=1 fParse -y)" = "container=1 inner="
 fCheck "--no-container turns it off" test "$(USE_CONTAINER=1 fParse --no-container -y)" = "container=0 inner="
 fCheck "and wins over --container, wherever it sits" test "$(USE_CONTAINER=1 fParse --no-container --container)" = "container=0 inner="
@@ -592,6 +594,7 @@ if ((failures)); then echo "${failures} failed"; exit 1; fi
 echo "all passed"
 
 ##	History:
+##		- 20261103: The options that turn off one part of stage 3 or 5 go in.
 ##		- 20261101: What went and what it freed, in the run's one cleanup line.
 ##		- 20261010 JC: Created.
 ##		- 20261013 JC: The time zone goes in.

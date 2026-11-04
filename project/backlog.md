@@ -849,17 +849,50 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - CI/CD: a flag to turn off each full-run stage that has none
 	- ID: 2026102319535661
 	- Type: Task
-	- Status: Queued
+	- Status: Waiting on automated testing
+	- Needs local test suite run?: The round's full run, `cicd/cicd.bash --backlog-run-full`, since stage 5 moved into a function of its own. dd5nn, ddrp2 and de5e9 should pass in it.
 	- Priority: Low
 	- Opened: 20261023-195356
 	- Opened by: CC
-	- Related IDs: 2026101816103601
+	- Related IDs: 2026101816103601, 2026110320010164
+	- Target OS: Linux
 	- Requirements:
 		- A failure in a stage with no off flag stops the whole full run, and a test batch can't run past it.
 		- Stages with no flag now: the debug build and `cargo test`, the 3 clippy runs, shellcheck and `bash-style.bash`, the PowerShell and Python lints, the content scrub, the advisory scan and `cargo deny`, the script tests under `cicd/tests`, the docs, TOC, table and test ID checks, the wallpaper gallery check, the launcher harness, and the native release build with its checks, plus the stale-run cleanup.
 		- The Windows GUI scenarios and the scroll harness turn off only with `--quick`, and dpirand only with `DPIRAND_SECS=0` in config.bash.
 	- Notes:
 		- Not every stage needs its own flag. A few grouped ones may do, such as one for the lints and one for the script tests.
+	- Progress log:
+		- 20261103: New `--no-rust-tests`, `--no-clippy` (all 3 runs), `--no-script-lint` (shellcheck, the bash style check, the PowerShell and Python lints), `--no-scrub`, `--no-deny` (the advisory scan, its tests and the rest of cargo-deny), `--no-script-tests` (every test script under `cicd/tests`, dpirand and the launcher harness included), `--no-docs` (the docs, TOC, table and test ID checks, and the wallpaper gallery), `--no-scroll`, `--no-wingui`, `--no-release` and `--no-cleanup`. Each goes in with the run in the container, but `--no-wingui`.
+		- 20261103: `--no-release` turns off the native and cross builds, the release checks and artifacts, and with them the packages, the ARM64 smoke run, dogfood and the demo. The run outside the container then takes no earlier run's binaries.
+		- 20261103: The plan says what each one left out: a step off with its flag, a plan line, or a new `Left out` line for parts of stage 3. Each part prints a skipped line in the run, and `--list` leaves its tests out.
+		- 20261103: `--help` and design.md list them.
+		- 20261103: The Windows scenarios already turned off with `--no-remote` too, since 2026-10-25. `--no-wingui` turns off only them.
+		- 20261103: The cleanup test's (de5e9) check of the Zig sweep's line now reads `if ((! container && ! noCleanup)) && command -v zig`, where it read `if ((! container)) && command -v zig`. It still checks the same thing.
+	- Decisions:
+		- 20261103: Grouped flags, named after the parts and the quick run's areas, rather than one per command. The 3 clippy runs go together, the 4 script lints, and every test script.
+		- 20261103: The debug build gets no off flag, which departs from the wording. If it fails the code doesn't compile, so every later build fails the same way, and the tests would read an earlier run's binary.
+		- 20261103: The docs checks and the wallpaper gallery go with `--no-docs`, not `--no-script-tests`, though the TOC and table checks are scripts under `cicd/tests`. The advisory scan's 2 tests go with either flag.
+		- 20261103: `--no-cleanup` leaves only what earlier runs left. The run's own folder and containers still go at the end, as `--keep-temp` decides.
+		- 20261103: The flags change nothing in `--backlog-run-quick`, which goes by its areas, the same as `--no-fmt` and `--no-fuzz` there.
+		- 20261103: `cicd-win.ps1` has the same gap. That is 2026110320010164.
+	- Verified: 20261103. dd5nn passed with 29 new checks, 24 of which failed against the old cicd.bash, and ddrp2 with 1 new one. de5e9 and the failed test output test pass. A copy of the pipeline with a stand-in debug build ran `--backlog-run-full --no-container` with every off flag and passed, printing each part's skipped line, and a plan of 2 steps with the rest listed off by flag. `--list` with the flags left their tests out. shellcheck and the bash style check pass.
+		- Swept: every `fRunTest` and `fRunTest_MaySkip` call, the scroll and launcher harnesses, both `fContentScrub` and `fRenderNodeTest` sites (in stage 3 and in `Checks on this box`), every reader of `builtArts` and `ver` after stage 5, the plan's step list and its `...:` lines, and the tests that lift any of them (dd5nn, ddrp2, de5e9, testout).
+	- Branch: rnd1104
+	- Test case: `cicd/tests/engine/run.bash` (dd5nn), the off-option checks: the parser, `--help`, stage 3 with stand-ins, the test scripts and docs checks, the plan, `--no-wingui`, `--no-scrub`, `--no-cleanup` and `--no-release`. `cicd/tests/container/run.bash` (ddrp2), the options that go in with the run.
+
+- CI/CD: the same off options in `cicd-win.ps1`
+	- ID: 2026110320010164
+	- Type: Task
+	- Status: Queued
+	- Priority: Low
+	- Opened: 20261103-200101
+	- Opened by: CC
+	- Related IDs: 2026102319535661
+	- Target OS: Windows
+	- Requirements:
+		- `cicd-win.ps1` gets the off options `cicd.bash` took in 2026102319535661, in its `-PascalCase` form, for the parts it has: `-NoRustTests`, `-NoClippy`, `-NoScriptLint`, `-NoDeny`, `-NoScriptTests` and `-NoRelease`, and others where it has the part.
+		- Under `-Wsl` each goes to the Linux half as its `cicd.bash` flag.
 
 - `--about` should only show the first line of the existing output
 	- ID: 2026102807384204
