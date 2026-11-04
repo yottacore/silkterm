@@ -2182,7 +2182,7 @@ fn layout_about(
 	let menu_fg = crate::settings_ui::dialog_text();
 	let menu_dim = crate::settings_ui::dialog_dim();
 	let menu_link = config::MENU_LINK;
-	let accel = crate::gfx::acceleration(info.device_type);
+	let accel = crate::gfx::acceleration(info);
 	let repo_url = env!("CARGO_PKG_REPOSITORY").to_string();
 	// Every measurement below is DIP, converted here rather than at a boundary -
 	// the panel is small enough that one conversion per number is clearer than a

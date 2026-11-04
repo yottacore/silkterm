@@ -826,7 +826,7 @@ pub fn about(info: Option<&wgpu::AdapterInfo>) -> String {
 		lines.push(format!("  Backend:  {:?}", info.backend));
 		lines.push(format!(
 			"  Acceleration:  {}",
-			crate::gfx::acceleration(info.device_type)
+			crate::gfx::acceleration(info)
 		));
 	}
 	lines.push(String::new());
