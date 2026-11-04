@@ -4155,12 +4155,10 @@ impl ApplicationHandler<UserEvent> for App {
 				let in_use = id == state.tabs.cur().focused;
 				if input::copy_allowed(CopyFrom::Program, state.focused, in_use) {
 					match kind {
-						ClipboardType::Clipboard => state.clipboard.set_clipboard(text),
-						// set_primary falls back to the real clipboard where there is
-						// no primary, which a store never asked for
-						ClipboardType::Selection if cfg!(target_os = "linux") => {
-							state.clipboard.set_primary(text);
-						}
+						ClipboardType::Clipboard => state.clipboard.program_set_clipboard(text),
+						#[cfg(target_os = "linux")]
+						ClipboardType::Selection => state.clipboard.program_set_primary(text),
+						#[cfg(not(target_os = "linux"))]
 						ClipboardType::Selection => {}
 					}
 				}
@@ -4363,6 +4361,7 @@ impl ApplicationHandler<UserEvent> for App {
 					eprintln!("[focus] {focused}");
 				}
 				state.focused = focused;
+				state.clipboard.focus_changed(focused);
 				if !focused {
 					state.commit_tab_edit(); // a rename does not outlive the window's focus
 				}

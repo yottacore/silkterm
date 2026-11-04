@@ -343,7 +343,7 @@ Three defects came out of building it, all fixed with it: a program could put co
 
 - Target: Debian. The primary dev/reference environment is X11 (Compiz), but one Linux binary runs native on both X11 and Wayland. winit selects the backend at runtime, and X11/Wayland/GL are all loaded on demand. Windows and macOS are targets too, all with x86_64 and ARM64 variants.
 
-	- On Wayland the clipboard and the primary selection are the compositor's, reached over the window's own connection, and SilkTerm opens no X connection (2026-10-15). Only an X11 window uses the X11 selections, Xwayland included. Wayland lets a client set a selection only while it has the keyboard, so there a program's store made while no SilkTerm window has focus is dropped.
+	- On Wayland the clipboard and the primary selection are the compositor's, reached over the window's own connection, and SilkTerm opens no X connection (2026-10-15). Only an X11 window uses the X11 selections, Xwayland included. Wayland lets a client set a selection only while it has the keyboard, so there a program's store made while the window doesn't have focus is held, the last one per selection, and set when the window gets focus back. A copy a person makes meanwhile, such as in a dialog, replaces the held one (2026101607585700).
 
 		- Pinned by `cicd/tests/wlclip/run.bash`.
 
