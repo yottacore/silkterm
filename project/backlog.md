@@ -726,9 +726,9 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - `the_scroll_record_costs_a_full_screen_program_little` failed once on the Mac runner
 	- ID: 2026102113432602
 	- Type: Bug
-	- Status: Waiting on automated testing
+	- Status: Done
 		- 20261103: The fix is in, and passes the stand-ins here. One hosted Mac run is left, in the external testing row.
-	- Needs external testing: `gitsby raw gh workflow run mac.yml --ref rnd1104`, once. A pass is dct9f passing with its `measured:` line's by-round medians within about 0.05 of each other. Before, single pairs ran from 0.47 to 1.79 on the same runner.
+	- Needs external testing: No
 	- Stand-in: 20261103: b23, the test pinned to one core while its SMT sibling copies memory in random 10 to 80 ms stretches, so the core slows and speeds up under the test without the thread waiting. It stands in for the core changing under the test, not for the Mac itself.
 	- Severity: Low
 	- Opened: 20261021-134326
@@ -751,6 +751,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261022: Mac CI run 39858608191 passed it again. Median 1.038, pairs from 0.841 to 2.112, kept above bare in 10 of 15.
 		- 20261023: Mac CI runs 39859635085, 40049932196, 40051324149 and 40062142185 passed it. Medians 1.008, 1.032, 1.035 and 1.032, with kept above bare in 8, 9, 15 and 9 of 15 pairs. 40051324149 had tight pairs, about 20.2 against 19.4 ms, which is the steady keep cost seen on b23. It failed on the header test, 2026102320070112. The private runner's run on b26 in the full run passed it too.
 		- 20261024: Mac CI run 40099145373 on dev at 936658b failed it again: kept cost 18% more, pairs from 0.768 to 1.568, with kept above bare in most. Run again alone it passed, median 1.002 over pairs from 0.623 to 1.643. The merge's run 40118767927 passed. So it's still live, and the spread on both sides is wide.
+		- 20261104: Verified: hosted run 41761962307 on rnd1104 passed, 1407 passed and 0 failed.
 	- Verified: `ci-mac.bash`'s extraction on a test binary with a failing assert, a multi-line `assert_eq!` and a `measured:` line. shellcheck, fmt, clippy on Linux, Windows and macOS targets. The test passes here and prints the new line.
 		- 20261103, on b23, the old form against the new, 10 runs each, at a load of 10 to 24:
 			- The SMT stand-in: old 1.02 to 1.12, 1 over the limit. New 1.029 to 1.040, none over.
@@ -770,6 +771,8 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Decisions:
 		- 20261103: The test now judges the scroll record against a screen keeping as many rows of history, not against an alt screen keeping none. That cost is what the record adds, about 3% here. The cold row history pays too moves with the box, 4% quiet to 10% under memory load. A clone of each kept row, standing in for the copy F94 removed, still reads 45% over. The F94 note's "about 5% of the parse on the alt screen" is the older measure.
 	- Swept: `thread_cpu` and every `measured:` line in the unit tests. This is the only test that compares two timings.
+	- Acceptance signoff: Self-closed: the hosted macOS arm64 run 41761962307 on rnd1104 passed the whole suite, dct9f included, with 1407 passed and 0 failed. The by-round medians aren't in the log, since a passing test's output is captured, and the b23 loads in the table show the spread.
+	- Closed: 20261104-031300
 
 - deqx1's first case sometimes fails "the window was herded" on a busy box
 	- ID: 2026110116413708
