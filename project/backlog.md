@@ -34,26 +34,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 
 ## Issues
 
-- `--about` should only show the first line of the existing output
-	- ID: 2026102807384204
-	- Type: Enhancement
-	- Status: Done
-	- Priority: Low
-	- Opened: 20261028-073842
-	- Opened by: JC
-	- Requirements:
-		- `--about` shows only the first line of the existing output.
-		- For that flag only, no blank lines before or after.
-	- Notes:
-		- Pre-next-cut.
-	- Progress log:
-		- 20261104: The no-blank-lines half is in. `--about` prints flush, like `--version`. The first-line half waits on a question: the first line is now the "About SilkTerm" heading, and cutting to one line drops the renderer details a bug report needs and `ci-mac.bash`'s adapter check reads.
-		- 20261104: Answer: leave the text as is, only the padding changes. The padding half is in, so nothing is left.
-		- Verified 20261104: a dev build at 2c2bc7a prints `--about` with no blank line first or last.
-	- Test case: none for the padding, since it is a print call in main.rs. Checked by running `--about` and reading the first and last bytes.
-	- Acceptance signoff: Self-closed: the answer drops the first-line half, and the padding half checks out.
-	- Closed: 20261104-150000
-
 - The window doesn't paint while the GPU is busy or short on memory, and stays blank after the load ends
 	- ID: 2026100312470535
 	- Type: Bug
@@ -289,6 +269,34 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Branch: rnd1022
 	- Test case: `a_remote_screen_is_ignored_when_turned_off` (rating.rs, fails with the check reordered so detection runs first) and `a_remote_screen_takes_remote_unless_turned_off` (config.rs).
 
+- The unscrollable search and buttons areas should be lighter than the scrollable content
+	- ID: 2026103010083403
+	- Type: Enhancement
+	- Status: Waiting on UAT
+		- A look at the Settings dialog in a dark and a light theme, to judge whether the step is enough.
+	- Opened: 20261030-100834
+	- Opened by: JC
+	- Assigned to: CC
+	- Related IDs: 2026101419165501
+	- Requirements:
+		- The unscrollable search and buttons areas should be lighter than the scrollable content.
+		- The scrollable content needs to be darker (in dark mode at least).
+	- Notes:
+		- Pre-next-cut.
+	- Progress log:
+		- 20261104: The rows now sit on a shade halfway toward `gutter`, and the search box's band and the footer keep the dialog background, so they read lighter. The 1 DIP lines along the rows stay. A warning sign's cut-out follows the rows' shade.
+	- Decisions:
+		- 20261104: Swapped the shade 2026101419165501 put on the bands over to the rows, the same step, so the bands stay the dialog's own color. In dark mode the rows go from `0x20202a` to `0x1b1b24`.
+		- 20261104: Light mode too. One rule for both modes, and every built-in theme's gutter is darker than its dialog background, so the bands read lighter in both.
+	- Verified:
+		- Unit suite, clippy, rustfmt, scripts and docs checks, through the quick gate.
+		- de1aj failed with the rows' shade taken out, and devr1 with the shade mixed toward white.
+		- A real window on Linux in dark mode: rows `0x1b1b24`, bands `0x20202a`, gutter `0x16161e`.
+		- Not verified: light mode in a window.
+	- Commit: e677501
+	- Test case: de1aj `the_search_box_and_the_buttons_sit_on_still_bands_lined_off_from_the_rows`, and devr1 `the_rows_sit_darker_than_the_still_bands_in_every_theme`.
+		- 20261104: de1aj checked that the bands were drawn in a shade off the panel. It now checks that the rows are, with the bands left the panel's color. Its geometry and line checks are unchanged.
+
 - A drag select recomposes the minimap about 11 times a second, though the map shows no selection
 	- ID: 2026102407065861
 	- Type: Enhancement
@@ -417,222 +425,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261019: Still stuck upstream. `cargo update --dry-run` moves none of fontdb, cosmic-text, ab_glyph, sctk-adwaita, glyphon or winit, and ttf-parser 0.25.1 still comes in both ways. On crates.io, fontdb 0.24.0 drops it, but the newest cosmic-text, 0.19.0, still asks for fontdb 0.23. sctk-adwaita 0.12.0 still pulls in ab_glyph. Even glyphon 0.12, a breaking bump, still brings cosmic-text 0.19.
 		- Stalled until a cosmic-text release takes fontdb 0.24 or later, and winit's sctk-adwaita drops ab_glyph.
 	- Held for a cosmic-text release on fontdb 0.24 or later, and an sctk-adwaita without ab_glyph.
-
-- Leak checks: CodeQL under `--leakcheck`, from a pinned CLI on a vendored tree
-	- ID: 2026101913360695
-	- Type: Task
-	- Status: Done
-	- Priority: Avg
-	- Opened: 20261019-133606
-	- Opened by: CC
-	- Parent ID: 2026101714015789
-	- Related IDs: 2026101714445005
-	- Requirements:
-		- Third-party and vendored code end users run is covered, per the parent's 20261017 decision. What it finds goes on the backlog.
-		- The parent's CodeQL row: a pinned CLI run locally under `--leakcheck`, no hosted service, in the build container or lint image. The dependencies are vendored into the tree first (`cargo vendor`), since CodeQL reports only on source inside the database's root.
-		- Watched to fail on a planted finding before it's trusted.
-	- Notes:
-		- Split from 2026101714445005, which added the flag.
-	- Progress log:
-		- 20261022: Split in 2, too big for one sitting. 2026102211461905 puts the pinned CodeQL in the image and the step in the leak checks. 2026102211462005 watches it fail on a planted finding and files what the first run finds. This item closes when they do.
-		- 20261104: Both children are Done. The step failed on a planted finding and passed clean at 8a1d7fc.
-	- Test case: the CodeQL step's planted and clean runs on 2026110315304782, under 2026102211462005
-	- Acceptance signoff: Self-closed: both children closed, and the step was watched to fail.
-	- Closed: 20261104-181800
-
-- Leak checks: CodeQL watched to fail, and its first findings filed
-	- ID: 2026102211462005
-	- Type: Task
-	- Status: Done
-	- Priority: Avg
-	- Opened: 20261022-114620
-	- Opened by: CC
-	- Parent ID: 2026101913360695
-	- Prereq IDs: 2026102211461905
-	- Requirements:
-		- Plant a finding the suite flags in a scratch copy of the tree, and see `cicd/utility/codeql.bash` go red. An unused variable in `main` works.
-		- File what the first run finds, one item per distinct cause, or one roll-up for many of one kind in third-party code. Suppress each in `cicd/codeql-suppressions.txt` with its item's ID.
-		- Note the step's measured time on 2026102211461905. If it's too slow for every full run, say so there rather than moving it.
-		- 20261022: The first try didn't finish in 35 minutes (see 2026102211461905). Options: a per-query `--timeout` that fails the step, the smaller `rust-code-scanning` suite, a memory cap with `--ram`, or the step behind `--leakcheck` only. Pick after one full measured run.
-		- 20261022: The step is opt-in until this item decides: run it with `cicd.bash --codeql`. It will be red until the findings are filed and suppressed here. Turning it on by default is part of closing this item.
-	- Progress log:
-		- 20261103: The first full measured run, at 595a542 in the image, took about 65 minutes and failed on 1024 results, as it should with nothing filed. That is red on real findings; the planted one is child 2026110315304782.
-		- 20261103: The release crate list let in what only proc macros use, such as syn, litrs and quote, about 210 results. It now leaves them out, 186 crates.
-		- 20261103: A suppression can name the values a flow starts from, so a rule for a false flow doesn't hide a real one at the same path.
-		- 20261103: Split in 5. 2026110315303525, our code's results, is done. 2026110315303530, 35 and 41 are the third-party roll-ups; 30 and 35 are done. 2026110315304782 plants a finding and checks the run is green otherwise. This item closes when they do.
-		- 20261103: 41 is done too, so only 2026110315304782 is left, the planted and clean runs, about 65 min each.
-		- 20261104: 2026110315304782 is done. The step went red on a planted unused variable in `main`, and was green on the same commit without it. The plant has to be a variable never set, such as `let x: u8;`, since the query skips one with a value.
-	- Decisions:
-		- 20261103: CodeQL stays out of the default run, under `--long`, `--leakcheck` and `--codeql`, against this item's "on by default". It takes about 65 minutes alone, and the default run has to fit in about an hour, per the 2026-10-24 reset and 2026102616543936. The smaller suite or a timeout would drop the quality queries the parent asked for.
-	- Verified: 20261104, through 2026110315304782: planted red, clean green, at 8a1d7fc.
-	- Branch: rnd1103
-	- Test case: dd5nn `cicd/tests/engine/run.bash`, 5 new checks, and its children's: the CodeQL step run planted and clean (2026110315304782).
-	- Closed: 20261104-101558
-
-- The unscrollable search and buttons areas should be lighter than the scrollable content
-	- ID: 2026103010083403
-	- Type: Enhancement
-	- Status: Waiting on UAT
-		- A look at the Settings dialog in a dark and a light theme, to judge whether the step is enough.
-	- Opened: 20261030-100834
-	- Opened by: JC
-	- Assigned to: CC
-	- Related IDs: 2026101419165501
-	- Requirements:
-		- The unscrollable search and buttons areas should be lighter than the scrollable content.
-		- The scrollable content needs to be darker (in dark mode at least).
-	- Notes:
-		- Pre-next-cut.
-	- Progress log:
-		- 20261104: The rows now sit on a shade halfway toward `gutter`, and the search box's band and the footer keep the dialog background, so they read lighter. The 1 DIP lines along the rows stay. A warning sign's cut-out follows the rows' shade.
-	- Decisions:
-		- 20261104: Swapped the shade 2026101419165501 put on the bands over to the rows, the same step, so the bands stay the dialog's own color. In dark mode the rows go from `0x20202a` to `0x1b1b24`.
-		- 20261104: Light mode too. One rule for both modes, and every built-in theme's gutter is darker than its dialog background, so the bands read lighter in both.
-	- Verified:
-		- Unit suite, clippy, rustfmt, scripts and docs checks, through the quick gate.
-		- de1aj failed with the rows' shade taken out, and devr1 with the shade mixed toward white.
-		- A real window on Linux in dark mode: rows `0x1b1b24`, bands `0x20202a`, gutter `0x16161e`.
-		- Not verified: light mode in a window.
-	- Commit: e677501
-	- Test case: de1aj `the_search_box_and_the_buttons_sit_on_still_bands_lined_off_from_the_rows`, and devr1 `the_rows_sit_darker_than_the_still_bands_in_every_theme`.
-		- 20261104: de1aj checked that the bands were drawn in a shade off the panel. It now checks that the rows are, with the bands left the panel's color. Its geometry and line checks are unchanged.
-
-- Implement leak and static checks of the Rust code run as part of CI/CD
-	- ID: 2026101714015789
-	- Type: Task
-	- Status: Done
-	- Priority: Avg
-	- Opened: 20261017-140157
-	- Opened by: JC
-	- Requirements:
-		- For all:
-			- The checks cover first-party and third-party code. Vendored code is included.
-				- Third-party code gets every leak, memory, and correctness check named here, and what they find gets fixed. Only our code gets linted.
-				- CodeQL reports only on source inside the database's root. For its run, vendor the dependencies into the tree first (`cargo vendor`).
-			- Any report fails the test that made it.
-			- Any leak is fixed, in our code or third-party code. If the fix has to wait, it gets a backlog item, and the test that shows it turns the check off with that item's ID beside it.
-			- A `--leakcheck` flag adds the slow checks:
-				- CodeQL, from a pinned CLI run locally. No hosted service.
-				- A soak test. It loops through the program's main actions headless, and fails if the heap at round 2N is larger than at round N by more than a set margin. The heap report is kept as a pipeline artifact.
-			- Every tool is pinned and runs in the build container or lint image, never installed on the host.
-			- Each new gate is watched to fail before it's trusted, by planting the leak it's meant to catch and seeing it go red.
-			- Known-advisory scans run on every full run: `cargo deny check advisories` or `cargo audit`. They cover third-party code only, which is the point.
-		- For Rust:
-			- Safe Rust leaks only through `Rc` or `Arc` cycles, `mem::forget`, `Box::leak`, and collections that grow forever. Real leaks and memory errors come from `unsafe` and FFI, in our crates or in dependencies.
-			- Every full run builds the whole test suite with AddressSanitizer and LeakSanitizer, in a build dir of its own.
-				- `RUSTFLAGS=-Zsanitizer=address cargo +NIGHTLY test -Zbuild-std --target x86_64-unknown-linux-gnu`.
-				- That needs a dated nightly, pinned beside the stable toolchain. Sanitizers aren't stable.
-				- Every crate built from source is instrumented, dependencies included.
-			- If the code starts threads, every full run also builds the tests with ThreadSanitizer (`-Zsanitizer=thread`), in another build dir.
-			- Every full run runs the test suite under Miri: `cargo +NIGHTLY miri test`. It catches undefined behavior in `unsafe` code, ours and dependencies', and fails on memory still allocated at exit.
-				- It moves behind `--leakcheck` only if a full run measures too slow.
-			- A heap-growth test with `dhat` in testing mode reads `dhat::HeapStats` at round N and 2N in-process. It's the soak test for a library with no main program.
-			- clippy runs with `-D warnings`, plus `clippy::mem_forget` and `clippy::undocumented_unsafe_blocks`.
-			- Every `unsafe` block has a `// SAFETY:` comment.
-			- Traps:
-				- Without `-Zbuild-std`, std isn't instrumented. ASan mostly copes, but TSan gives false reports.
-				- Without an explicit `--target`, the sanitizer flags reach build scripts and proc macros, and the build fails in odd places.
-				- LSan reports at process exit, so a leak fails the whole test binary, not one test. Rerun with `--test-threads=1` and a test-name filter to find which.
-				- Miri can't call FFI and has limited file and network access. A test that needs them gets `#[cfg_attr(miri, ignore)]` with a one-line reason. It's not silently left out.
-				- Miri doesn't count memory reachable from a `static` as a leak, so a cache in a static that grows forever passes. The soak test catches that.
-				- heaptrack and dhat both see only the global allocator. A crate that maps memory itself, or a custom allocator, hides it.
-				- ASan and TSan can't share a build, and heaptrack can't share one with either. The soak test uses a plain build.
-	- Decisions:
-		- 20261017: JC: CI/CD leak tests, and all tests, include third-party and vendored code, but only code that gets run by end users. Anything wrong goes on the backlog for a fix.
-			- Read as: crates built into a release binary for a release target. Build scripts, proc macros, dev-dependencies and test-only tools are left out.
-	- Progress log:
-		- 20261017: Priority Avg is a best guess, since none was given. Split into 5 child items, worked one at a time, the cheap static checks first. This item closes when they do.
-		- 20261104: All 8 children are Done, the CodeQL one last. clippy denies mem_forget and undocumented_unsafe_blocks through -D warnings.
-	- Test case: its 8 children's tests, the last being the CodeQL planted and clean runs on 2026110315304782
-	- Acceptance signoff: Self-closed: every child closed with its own test.
-	- Closed: 20261104-181800
-
-- CodeQL: watched to fail on a planted finding, and green otherwise
-	- ID: 2026110315304782
-	- Type: Task
-	- Status: Done
-	- Priority: Avg
-	- Opened: 20261103-153047
-	- Opened by: CC
-	- Parent ID: 2026102211462005
-	- Prereq IDs: 2026110315303530, 2026110315303535, 2026110315303541
-	- Requirements:
-		- The parent's planted finding.
-		- Note the time of the clean run on 2026102211461905.
-	- Progress log:
-		- 20261104: Two run folders under HOST_TEMP, each a `git archive` of 8a1d7fc with its own target dir, /tmp, out dir and container name. The planted one has `let planted_unused = 1;` as the first line of `main`, and differs from the clean one only there. No suppression covers `rust/unused-variable` under `source/`.
-		- 20261104: A smoke run of the same container on the planted copy passed: CodeQL 2.27.3, cargo 1.96.0, `cargo vendor --locked` 388 crates from the cache volume, target dir writable as the run's uid. No step bug found that blocks the runs.
-		- 20261104: The clean run passed: no new results, 106 minutes at 4 jobs (time on 2026102211461905). The planted run passed too, so it missed the plant. Its SARIF had nothing at line 117.
-		- 20261104: Cause: the plant's form. `rust/unused-variable` reports only a variable with no initializer and no use, so `let planted_unused = 1;` isn't one. The suite has no unused-value query. On a small database the query reported `let x: u8;`, in a `main` with `println!` too, and not `let x = 1;`. On the planted run's kept database every macro call in `main.rs` was expanded, so `main` isn't left out as incomplete. The step itself is fine.
-		- 20261104: A new planted copy of 8a1d7fc has `let planted_unused: u8;` as the first line of `main`, and differs from the clean copy only there.
-		- 20261104: The new planted run failed, as it should, on one NEW result, `rust/unused-variable` at `source/src/main.rs:117` for `planted_unused`, and nothing else. 72 minutes at 8 jobs, alone, at a load of about 19 to 22.
-	- Decisions:
-		- 20261104: The parent's "an unused variable in `main` works" holds only for one that is never set. The step is unchanged, since the cause was the plant.
-		- 20261104: Copies of one commit for both runs, not the live tree, so round commits during the hour can't make the two differ.
-		- 20261104: Both can run at once, since they share only the cargo cache volume, which cargo locks. Each gets 4 jobs, so together they stay in the quarter of the CPUs a hard step may take. The 11-03 run took about 19 GB at 8 threads, so expect up to about 40 GB together.
-	- Verified: 20261104. `cicd/utility/codeql.bash` in image d47751450835 at 8a1d7fc: the clean copy passed with no new results, and the planted copy failed on the plant alone.
-	- Branch: rnd1104b
-	- Test case: the CodeQL step itself, run planted and clean. It has no test ID.
-	- Closed: 20261104-101558
-
-- Wayland: Settings asks to be modal
-	- ID: 2026110317323442
-	- Type: Enhancement
-	- Status: Done
-	- Needs hand testing: No. A look on GNOME under Wayland is still welcome, but folding the dialog into alt+tab is the desktop's call once the hint is sent.
-	- Priority: Low
-	- Opened: 20261103-173234
-	- Opened by: CC
-	- Assigned to: CC
-	- Related IDs: 2026110118260314
-	- Target OS: Linux
-	- Test environment: headless sway 1.10.1; headless labwc 0.20.2 in a Debian unstable container
-	- Requirements:
-		- Where the compositor offers the xdg-dialog protocol, Settings and the other dialogs ask to be modal through it, as X11's modal state does. GNOME, for one, then folds the dialog into the terminal's alt+tab entry.
-		- The dialog object is kept for the window's life, and destroyed before it.
-		- dlgwl (detyk) checks the request where sway offers the protocol, and says so where it doesn't.
-	- Notes:
-		- The parent itself went in with 2026110118260314.
-		- Binding the global needs a registry and an event queue of its own on winit's connection. A registry can't be destroyed, so it's best kept for the life of the program, not made for each dialog.
-	- Decisions:
-		- 20261104: The registry, its queue and the bound global are made once, at the first dialog on Wayland, and kept for the program's life. The set_parent call uses the same guest connection now, rather than one per dialog.
-		- 20261104: Every dialog asks to be modal, About, the notices and the questions too, as each is modal on X11.
-		- 20261104: Neither sway 1.10.1 here nor sway 1.12 offers xdg_wm_dialog_v1, so dlgwl says so and checks nothing asks for it. labwc 0.20 does, and stood in for the modal half.
-	- Verified: 20261104. dlgwl passes 8 of 8 on sway, through the note branch, Escape closing Settings among them. On labwc 0.20.2 the dialog's toplevel gets set_parent, an xdg_dialog_v1 and set_modal, and on close the xdg_dialog_v1 goes before the toplevel. 3 of those checks fail on the build before the change. dlgwl's own modal checks pass against that labwc log. The quick gate, all five areas, plus clippy for Windows and macOS, pass.
-		- Swept: About, the notices and the close question are made by the same code, so they ask too. Off Wayland no toplevel is given and nothing is bound.
-	- Branch: rnd1104b
-	- Test case: `cicd/tests/dlgwl/run.bash` (detyk). Its modal checks run only where the compositor offers the protocol.
-	- Acceptance signoff: Self-closed: the request is sent where the protocol is offered, its object goes before the window, and the test fails without it.
-	- Closed: 20261104-074821
-
-- CI/CD: the same off options in `cicd-win.ps1`
-	- ID: 2026110320010164
-	- Type: Task
-	- Status: Done
-	- Priority: Low
-	- Opened: 20261103-200101
-	- Opened by: CC
-	- Related IDs: 2026102319535661
-	- Target OS: Windows
-	- Requirements:
-		- `cicd-win.ps1` gets the off options `cicd.bash` took in 2026102319535661, in its `-PascalCase` form, for the parts it has: `-NoRustTests`, `-NoClippy`, `-NoScriptLint`, `-NoDeny`, `-NoScriptTests` and `-NoRelease`, and others where it has the part.
-		- Under `-Wsl` each goes to the Linux half as its `cicd.bash` flag.
-	- Progress log:
-		- 20261104: New `-NoRustTests`, `-NoClippy`, `-NoScriptLint`, `-NoDeny` (the advisory scan and the license, ban and source checks), `-NoScriptTests` (stage 3's test scripts), `-NoRelease` and `-NoCleanup`. Each part prints a skipped line, the plan has a `Left out` line, and `-List` leaves the tests turned off out.
-		- 20261104: `-NoRelease` turns off the release builds, the artifacts, the packages and dogfood, so nothing reads an earlier run's build. `-NoCleanup` leaves the stale run folders and the old ledger's. The run's own folder still goes.
-		- 20261104: Under `-Wsl` the Linux half gets each one, and `-NoScrub`, `-NoDocs`, `-NoScroll` and `-NoWingui` too. `-Help` and design.md list them.
-		- 20261104: dd5nw's text check that the run sweeps right after `fRunDirMake` now allows the `-NoCleanup` branch around the two `fCleanupCount` lines. It still checks the same order.
-	- Decisions:
-		- 20261104: `-NoScrub`, `-NoDocs`, `-NoScroll` and `-NoWingui` are taken for the Linux half only, as `-NoLeakcheck` and `-NoRemote` are, since the Windows side has none of those parts.
-		- 20261104: The flags change nothing in `-BacklogRunQuick`, and aren't handed to its Linux half, as in `cicd.bash`.
-		- 20261104: The advisory lints were one function, clippy and cargo-deny. They are two now, so each goes with its own flag. The quick run's `clippy` area still runs both.
-		- 20261104: No `-NoDebugBuild`, as in `cicd.bash`.
-	- Verified: 20261104. dd5nw passed with 19 new checks. Against the old `cicd-win.ps1` the lift stops at the first missing function. Copies with one Linux half flag dropped, the advisory scan left on under `-NoDeny`, dogfood left on under `-NoRelease`, cleanup missing from the plan, and the release builds left on under `-NoRelease` each failed 1 to 6 checks. `-Help` lists the new options under pwsh here. The jobs, saferm, pins, packaging and cleanup tests, `--backlog-run-quick scripts docs` and `lint-report.bash` pass.
-		- Swept: every caller of `fLintAdvisory` (the quick run and stage 3, now `fLintClippy` and `fLintDeny`), every reader of `$built` and `$ver` after the release builds (packages, dogfood), the plan's step list and its preflight lines, `fWslArgs`, and the tests that lift from `cicd-win.ps1` (dd5nw, the pins, packaging, jobs and saferm tests). prerequisites.md names no off options.
-		- 20261104, on vm925w at 41318c0: `cicd-win.ps1 -MergeGate -NoRustTests -NoClippy -NoScriptLint -NoDeny -NoScriptTests -NoRelease -NoCleanup` passed its 3 steps (format check, debug build, Tests). The Tests step printed its 5 skipped lines, the plan's `Left out` line named all 6, and the plan put the 3 release builds, the artifacts, packages and dogfood off under `-NoRelease`. `-MergeGate -List -NoRustTests -NoScriptTests` printed the `Stage 3 tests:` heading with no tests under it, and ran nothing.
-	- Branch: rnd1104b
-	- Test case: `cicd/tests/cicd-win/run.bash` (dd5nw), the off options: what stage 3 runs, the plan, `-List`, `-NoRelease`, `-NoCleanup` and what the Linux half gets.
-	- Closed: 20261104-081608
 
 - Wayland: must use the Wayland clipboard, and minimize other X11 features
 	- ID: 2026101509024607
@@ -4142,6 +3934,135 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- The Windows run this item came from named only these four. That full suite was not run again.
 	- Acceptance signoff: Self-closed: test fixes only, and all four failed before the fix and pass after on Windows.
 	- Closed: 20260930-125357
+
+- Leak checks: CodeQL under `--leakcheck`, from a pinned CLI on a vendored tree
+	- ID: 2026101913360695
+	- Type: Task
+	- Status: Done
+	- Priority: Avg
+	- Opened: 20261019-133606
+	- Opened by: CC
+	- Parent ID: 2026101714015789
+	- Related IDs: 2026101714445005
+	- Requirements:
+		- Third-party and vendored code end users run is covered, per the parent's 20261017 decision. What it finds goes on the backlog.
+		- The parent's CodeQL row: a pinned CLI run locally under `--leakcheck`, no hosted service, in the build container or lint image. The dependencies are vendored into the tree first (`cargo vendor`), since CodeQL reports only on source inside the database's root.
+		- Watched to fail on a planted finding before it's trusted.
+	- Notes:
+		- Split from 2026101714445005, which added the flag.
+	- Progress log:
+		- 20261022: Split in 2, too big for one sitting. 2026102211461905 puts the pinned CodeQL in the image and the step in the leak checks. 2026102211462005 watches it fail on a planted finding and files what the first run finds. This item closes when they do.
+		- 20261104: Both children are Done. The step failed on a planted finding and passed clean at 8a1d7fc.
+	- Test case: the CodeQL step's planted and clean runs on 2026110315304782, under 2026102211462005
+	- Acceptance signoff: Self-closed: both children closed, and the step was watched to fail.
+	- Closed: 20261104-181800
+
+- Leak checks: CodeQL watched to fail, and its first findings filed
+	- ID: 2026102211462005
+	- Type: Task
+	- Status: Done
+	- Priority: Avg
+	- Opened: 20261022-114620
+	- Opened by: CC
+	- Parent ID: 2026101913360695
+	- Prereq IDs: 2026102211461905
+	- Requirements:
+		- Plant a finding the suite flags in a scratch copy of the tree, and see `cicd/utility/codeql.bash` go red. An unused variable in `main` works.
+		- File what the first run finds, one item per distinct cause, or one roll-up for many of one kind in third-party code. Suppress each in `cicd/codeql-suppressions.txt` with its item's ID.
+		- Note the step's measured time on 2026102211461905. If it's too slow for every full run, say so there rather than moving it.
+		- 20261022: The first try didn't finish in 35 minutes (see 2026102211461905). Options: a per-query `--timeout` that fails the step, the smaller `rust-code-scanning` suite, a memory cap with `--ram`, or the step behind `--leakcheck` only. Pick after one full measured run.
+		- 20261022: The step is opt-in until this item decides: run it with `cicd.bash --codeql`. It will be red until the findings are filed and suppressed here. Turning it on by default is part of closing this item.
+	- Progress log:
+		- 20261103: The first full measured run, at 595a542 in the image, took about 65 minutes and failed on 1024 results, as it should with nothing filed. That is red on real findings; the planted one is child 2026110315304782.
+		- 20261103: The release crate list let in what only proc macros use, such as syn, litrs and quote, about 210 results. It now leaves them out, 186 crates.
+		- 20261103: A suppression can name the values a flow starts from, so a rule for a false flow doesn't hide a real one at the same path.
+		- 20261103: Split in 5. 2026110315303525, our code's results, is done. 2026110315303530, 35 and 41 are the third-party roll-ups; 30 and 35 are done. 2026110315304782 plants a finding and checks the run is green otherwise. This item closes when they do.
+		- 20261103: 41 is done too, so only 2026110315304782 is left, the planted and clean runs, about 65 min each.
+		- 20261104: 2026110315304782 is done. The step went red on a planted unused variable in `main`, and was green on the same commit without it. The plant has to be a variable never set, such as `let x: u8;`, since the query skips one with a value.
+	- Decisions:
+		- 20261103: CodeQL stays out of the default run, under `--long`, `--leakcheck` and `--codeql`, against this item's "on by default". It takes about 65 minutes alone, and the default run has to fit in about an hour, per the 2026-10-24 reset and 2026102616543936. The smaller suite or a timeout would drop the quality queries the parent asked for.
+	- Verified: 20261104, through 2026110315304782: planted red, clean green, at 8a1d7fc.
+	- Branch: rnd1103
+	- Test case: dd5nn `cicd/tests/engine/run.bash`, 5 new checks, and its children's: the CodeQL step run planted and clean (2026110315304782).
+	- Closed: 20261104-101558
+
+- Implement leak and static checks of the Rust code run as part of CI/CD
+	- ID: 2026101714015789
+	- Type: Task
+	- Status: Done
+	- Priority: Avg
+	- Opened: 20261017-140157
+	- Opened by: JC
+	- Requirements:
+		- For all:
+			- The checks cover first-party and third-party code. Vendored code is included.
+				- Third-party code gets every leak, memory, and correctness check named here, and what they find gets fixed. Only our code gets linted.
+				- CodeQL reports only on source inside the database's root. For its run, vendor the dependencies into the tree first (`cargo vendor`).
+			- Any report fails the test that made it.
+			- Any leak is fixed, in our code or third-party code. If the fix has to wait, it gets a backlog item, and the test that shows it turns the check off with that item's ID beside it.
+			- A `--leakcheck` flag adds the slow checks:
+				- CodeQL, from a pinned CLI run locally. No hosted service.
+				- A soak test. It loops through the program's main actions headless, and fails if the heap at round 2N is larger than at round N by more than a set margin. The heap report is kept as a pipeline artifact.
+			- Every tool is pinned and runs in the build container or lint image, never installed on the host.
+			- Each new gate is watched to fail before it's trusted, by planting the leak it's meant to catch and seeing it go red.
+			- Known-advisory scans run on every full run: `cargo deny check advisories` or `cargo audit`. They cover third-party code only, which is the point.
+		- For Rust:
+			- Safe Rust leaks only through `Rc` or `Arc` cycles, `mem::forget`, `Box::leak`, and collections that grow forever. Real leaks and memory errors come from `unsafe` and FFI, in our crates or in dependencies.
+			- Every full run builds the whole test suite with AddressSanitizer and LeakSanitizer, in a build dir of its own.
+				- `RUSTFLAGS=-Zsanitizer=address cargo +NIGHTLY test -Zbuild-std --target x86_64-unknown-linux-gnu`.
+				- That needs a dated nightly, pinned beside the stable toolchain. Sanitizers aren't stable.
+				- Every crate built from source is instrumented, dependencies included.
+			- If the code starts threads, every full run also builds the tests with ThreadSanitizer (`-Zsanitizer=thread`), in another build dir.
+			- Every full run runs the test suite under Miri: `cargo +NIGHTLY miri test`. It catches undefined behavior in `unsafe` code, ours and dependencies', and fails on memory still allocated at exit.
+				- It moves behind `--leakcheck` only if a full run measures too slow.
+			- A heap-growth test with `dhat` in testing mode reads `dhat::HeapStats` at round N and 2N in-process. It's the soak test for a library with no main program.
+			- clippy runs with `-D warnings`, plus `clippy::mem_forget` and `clippy::undocumented_unsafe_blocks`.
+			- Every `unsafe` block has a `// SAFETY:` comment.
+			- Traps:
+				- Without `-Zbuild-std`, std isn't instrumented. ASan mostly copes, but TSan gives false reports.
+				- Without an explicit `--target`, the sanitizer flags reach build scripts and proc macros, and the build fails in odd places.
+				- LSan reports at process exit, so a leak fails the whole test binary, not one test. Rerun with `--test-threads=1` and a test-name filter to find which.
+				- Miri can't call FFI and has limited file and network access. A test that needs them gets `#[cfg_attr(miri, ignore)]` with a one-line reason. It's not silently left out.
+				- Miri doesn't count memory reachable from a `static` as a leak, so a cache in a static that grows forever passes. The soak test catches that.
+				- heaptrack and dhat both see only the global allocator. A crate that maps memory itself, or a custom allocator, hides it.
+				- ASan and TSan can't share a build, and heaptrack can't share one with either. The soak test uses a plain build.
+	- Decisions:
+		- 20261017: JC: CI/CD leak tests, and all tests, include third-party and vendored code, but only code that gets run by end users. Anything wrong goes on the backlog for a fix.
+			- Read as: crates built into a release binary for a release target. Build scripts, proc macros, dev-dependencies and test-only tools are left out.
+	- Progress log:
+		- 20261017: Priority Avg is a best guess, since none was given. Split into 5 child items, worked one at a time, the cheap static checks first. This item closes when they do.
+		- 20261104: All 8 children are Done, the CodeQL one last. clippy denies mem_forget and undocumented_unsafe_blocks through -D warnings.
+	- Test case: its 8 children's tests, the last being the CodeQL planted and clean runs on 2026110315304782
+	- Acceptance signoff: Self-closed: every child closed with its own test.
+	- Closed: 20261104-181800
+
+- CodeQL: watched to fail on a planted finding, and green otherwise
+	- ID: 2026110315304782
+	- Type: Task
+	- Status: Done
+	- Priority: Avg
+	- Opened: 20261103-153047
+	- Opened by: CC
+	- Parent ID: 2026102211462005
+	- Prereq IDs: 2026110315303530, 2026110315303535, 2026110315303541
+	- Requirements:
+		- The parent's planted finding.
+		- Note the time of the clean run on 2026102211461905.
+	- Progress log:
+		- 20261104: Two run folders under HOST_TEMP, each a `git archive` of 8a1d7fc with its own target dir, /tmp, out dir and container name. The planted one has `let planted_unused = 1;` as the first line of `main`, and differs from the clean one only there. No suppression covers `rust/unused-variable` under `source/`.
+		- 20261104: A smoke run of the same container on the planted copy passed: CodeQL 2.27.3, cargo 1.96.0, `cargo vendor --locked` 388 crates from the cache volume, target dir writable as the run's uid. No step bug found that blocks the runs.
+		- 20261104: The clean run passed: no new results, 106 minutes at 4 jobs (time on 2026102211461905). The planted run passed too, so it missed the plant. Its SARIF had nothing at line 117.
+		- 20261104: Cause: the plant's form. `rust/unused-variable` reports only a variable with no initializer and no use, so `let planted_unused = 1;` isn't one. The suite has no unused-value query. On a small database the query reported `let x: u8;`, in a `main` with `println!` too, and not `let x = 1;`. On the planted run's kept database every macro call in `main.rs` was expanded, so `main` isn't left out as incomplete. The step itself is fine.
+		- 20261104: A new planted copy of 8a1d7fc has `let planted_unused: u8;` as the first line of `main`, and differs from the clean copy only there.
+		- 20261104: The new planted run failed, as it should, on one NEW result, `rust/unused-variable` at `source/src/main.rs:117` for `planted_unused`, and nothing else. 72 minutes at 8 jobs, alone, at a load of about 19 to 22.
+	- Decisions:
+		- 20261104: The parent's "an unused variable in `main` works" holds only for one that is never set. The step is unchanged, since the cause was the plant.
+		- 20261104: Copies of one commit for both runs, not the live tree, so round commits during the hour can't make the two differ.
+		- 20261104: Both can run at once, since they share only the cargo cache volume, which cargo locks. Each gets 4 jobs, so together they stay in the quarter of the CPUs a hard step may take. The 11-03 run took about 19 GB at 8 threads, so expect up to about 40 GB together.
+	- Verified: 20261104. `cicd/utility/codeql.bash` in image d47751450835 at 8a1d7fc: the clean copy passed with no new results, and the planted copy failed on the plant alone.
+	- Branch: rnd1104b
+	- Test case: the CodeQL step itself, run planted and clean. It has no test ID.
+	- Closed: 20261104-101558
 
 - Leak checks: the Miri step, with the canary
 	- ID: 2026102320591318
@@ -8903,6 +8824,85 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Commit: c9b40aa
 	- Acceptance signoff: Self-closed: the fix does what the item asks and no more, and its test passes.
 	- Closed: 20261014-152600
+
+- `--about` should only show the first line of the existing output
+	- ID: 2026102807384204
+	- Type: Enhancement
+	- Status: Done
+	- Priority: Low
+	- Opened: 20261028-073842
+	- Opened by: JC
+	- Requirements:
+		- `--about` shows only the first line of the existing output.
+		- For that flag only, no blank lines before or after.
+	- Notes:
+		- Pre-next-cut.
+	- Progress log:
+		- 20261104: The no-blank-lines half is in. `--about` prints flush, like `--version`. The first-line half waits on a question: the first line is now the "About SilkTerm" heading, and cutting to one line drops the renderer details a bug report needs and `ci-mac.bash`'s adapter check reads.
+		- 20261104: Answer: leave the text as is, only the padding changes. The padding half is in, so nothing is left.
+		- Verified 20261104: a dev build at 2c2bc7a prints `--about` with no blank line first or last.
+	- Test case: none for the padding, since it is a print call in main.rs. Checked by running `--about` and reading the first and last bytes.
+	- Acceptance signoff: Self-closed: the answer drops the first-line half, and the padding half checks out.
+	- Closed: 20261104-150000
+
+- Wayland: Settings asks to be modal
+	- ID: 2026110317323442
+	- Type: Enhancement
+	- Status: Done
+	- Needs hand testing: No. A look on GNOME under Wayland is still welcome, but folding the dialog into alt+tab is the desktop's call once the hint is sent.
+	- Priority: Low
+	- Opened: 20261103-173234
+	- Opened by: CC
+	- Assigned to: CC
+	- Related IDs: 2026110118260314
+	- Target OS: Linux
+	- Test environment: headless sway 1.10.1; headless labwc 0.20.2 in a Debian unstable container
+	- Requirements:
+		- Where the compositor offers the xdg-dialog protocol, Settings and the other dialogs ask to be modal through it, as X11's modal state does. GNOME, for one, then folds the dialog into the terminal's alt+tab entry.
+		- The dialog object is kept for the window's life, and destroyed before it.
+		- dlgwl (detyk) checks the request where sway offers the protocol, and says so where it doesn't.
+	- Notes:
+		- The parent itself went in with 2026110118260314.
+		- Binding the global needs a registry and an event queue of its own on winit's connection. A registry can't be destroyed, so it's best kept for the life of the program, not made for each dialog.
+	- Decisions:
+		- 20261104: The registry, its queue and the bound global are made once, at the first dialog on Wayland, and kept for the program's life. The set_parent call uses the same guest connection now, rather than one per dialog.
+		- 20261104: Every dialog asks to be modal, About, the notices and the questions too, as each is modal on X11.
+		- 20261104: Neither sway 1.10.1 here nor sway 1.12 offers xdg_wm_dialog_v1, so dlgwl says so and checks nothing asks for it. labwc 0.20 does, and stood in for the modal half.
+	- Verified: 20261104. dlgwl passes 8 of 8 on sway, through the note branch, Escape closing Settings among them. On labwc 0.20.2 the dialog's toplevel gets set_parent, an xdg_dialog_v1 and set_modal, and on close the xdg_dialog_v1 goes before the toplevel. 3 of those checks fail on the build before the change. dlgwl's own modal checks pass against that labwc log. The quick gate, all five areas, plus clippy for Windows and macOS, pass.
+		- Swept: About, the notices and the close question are made by the same code, so they ask too. Off Wayland no toplevel is given and nothing is bound.
+	- Branch: rnd1104b
+	- Test case: `cicd/tests/dlgwl/run.bash` (detyk). Its modal checks run only where the compositor offers the protocol.
+	- Acceptance signoff: Self-closed: the request is sent where the protocol is offered, its object goes before the window, and the test fails without it.
+	- Closed: 20261104-074821
+
+- CI/CD: the same off options in `cicd-win.ps1`
+	- ID: 2026110320010164
+	- Type: Task
+	- Status: Done
+	- Priority: Low
+	- Opened: 20261103-200101
+	- Opened by: CC
+	- Related IDs: 2026102319535661
+	- Target OS: Windows
+	- Requirements:
+		- `cicd-win.ps1` gets the off options `cicd.bash` took in 2026102319535661, in its `-PascalCase` form, for the parts it has: `-NoRustTests`, `-NoClippy`, `-NoScriptLint`, `-NoDeny`, `-NoScriptTests` and `-NoRelease`, and others where it has the part.
+		- Under `-Wsl` each goes to the Linux half as its `cicd.bash` flag.
+	- Progress log:
+		- 20261104: New `-NoRustTests`, `-NoClippy`, `-NoScriptLint`, `-NoDeny` (the advisory scan and the license, ban and source checks), `-NoScriptTests` (stage 3's test scripts), `-NoRelease` and `-NoCleanup`. Each part prints a skipped line, the plan has a `Left out` line, and `-List` leaves the tests turned off out.
+		- 20261104: `-NoRelease` turns off the release builds, the artifacts, the packages and dogfood, so nothing reads an earlier run's build. `-NoCleanup` leaves the stale run folders and the old ledger's. The run's own folder still goes.
+		- 20261104: Under `-Wsl` the Linux half gets each one, and `-NoScrub`, `-NoDocs`, `-NoScroll` and `-NoWingui` too. `-Help` and design.md list them.
+		- 20261104: dd5nw's text check that the run sweeps right after `fRunDirMake` now allows the `-NoCleanup` branch around the two `fCleanupCount` lines. It still checks the same order.
+	- Decisions:
+		- 20261104: `-NoScrub`, `-NoDocs`, `-NoScroll` and `-NoWingui` are taken for the Linux half only, as `-NoLeakcheck` and `-NoRemote` are, since the Windows side has none of those parts.
+		- 20261104: The flags change nothing in `-BacklogRunQuick`, and aren't handed to its Linux half, as in `cicd.bash`.
+		- 20261104: The advisory lints were one function, clippy and cargo-deny. They are two now, so each goes with its own flag. The quick run's `clippy` area still runs both.
+		- 20261104: No `-NoDebugBuild`, as in `cicd.bash`.
+	- Verified: 20261104. dd5nw passed with 19 new checks. Against the old `cicd-win.ps1` the lift stops at the first missing function. Copies with one Linux half flag dropped, the advisory scan left on under `-NoDeny`, dogfood left on under `-NoRelease`, cleanup missing from the plan, and the release builds left on under `-NoRelease` each failed 1 to 6 checks. `-Help` lists the new options under pwsh here. The jobs, saferm, pins, packaging and cleanup tests, `--backlog-run-quick scripts docs` and `lint-report.bash` pass.
+		- Swept: every caller of `fLintAdvisory` (the quick run and stage 3, now `fLintClippy` and `fLintDeny`), every reader of `$built` and `$ver` after the release builds (packages, dogfood), the plan's step list and its preflight lines, `fWslArgs`, and the tests that lift from `cicd-win.ps1` (dd5nw, the pins, packaging, jobs and saferm tests). prerequisites.md names no off options.
+		- 20261104, on vm925w at 41318c0: `cicd-win.ps1 -MergeGate -NoRustTests -NoClippy -NoScriptLint -NoDeny -NoScriptTests -NoRelease -NoCleanup` passed its 3 steps (format check, debug build, Tests). The Tests step printed its 5 skipped lines, the plan's `Left out` line named all 6, and the plan put the 3 release builds, the artifacts, packages and dogfood off under `-NoRelease`. `-MergeGate -List -NoRustTests -NoScriptTests` printed the `Stage 3 tests:` heading with no tests under it, and ran nothing.
+	- Branch: rnd1104b
+	- Test case: `cicd/tests/cicd-win/run.bash` (dd5nw), the off options: what stage 3 runs, the plan, `-List`, `-NoRelease`, `-NoCleanup` and what the Linux half gets.
+	- Closed: 20261104-081608
 
 - herdback's no window manager cases need their mutation checks again, since they ran under a restarted xfwm4
 	- ID: 2026110319081175
