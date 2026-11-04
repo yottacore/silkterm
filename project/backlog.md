@@ -486,6 +486,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- de1aj failed with the rows' shade taken out, and devr1 with the shade mixed toward white.
 		- A real window on Linux in dark mode: rows `0x1b1b24`, bands `0x20202a`, gutter `0x16161e`.
 		- Not verified: light mode in a window.
+	- Commit: e677501
 	- Test case: de1aj `the_search_box_and_the_buttons_sit_on_still_bands_lined_off_from_the_rows`, and devr1 `the_rows_sit_darker_than_the_still_bands_in_every_theme`.
 		- 20261104: de1aj checked that the bands were drawn in a shade off the panel. It now checks that the rows are, with the bands left the panel's color. Its geometry and line checks are unchanged.
 
