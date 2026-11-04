@@ -421,7 +421,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - Leak checks: CodeQL under `--leakcheck`, from a pinned CLI on a vendored tree
 	- ID: 2026101913360695
 	- Type: Task
-	- Status: Started
+	- Status: Done
 	- Priority: Avg
 	- Opened: 20261019-133606
 	- Opened by: CC
@@ -435,6 +435,10 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Split from 2026101714445005, which added the flag.
 	- Progress log:
 		- 20261022: Split in 2, too big for one sitting. 2026102211461905 puts the pinned CodeQL in the image and the step in the leak checks. 2026102211462005 watches it fail on a planted finding and files what the first run finds. This item closes when they do.
+		- 20261104: Both children are Done. The step failed on a planted finding and passed clean at 8a1d7fc.
+	- Test case: the CodeQL step's planted and clean runs on 2026110315304782, under 2026102211462005
+	- Acceptance signoff: Self-closed: both children closed, and the step was watched to fail.
+	- Closed: 20261104-181800
 
 - Leak checks: CodeQL watched to fail, and its first findings filed
 	- ID: 2026102211462005
@@ -496,7 +500,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - Implement leak and static checks of the Rust code run as part of CI/CD
 	- ID: 2026101714015789
 	- Type: Task
-	- Status: Queued
+	- Status: Done
 	- Priority: Avg
 	- Opened: 20261017-140157
 	- Opened by: JC
@@ -538,7 +542,10 @@ Going forward, new issues in the new template at the bottom of this file, will g
 			- Read as: crates built into a release binary for a release target. Build scripts, proc macros, dev-dependencies and test-only tools are left out.
 	- Progress log:
 		- 20261017: Priority Avg is a best guess, since none was given. Split into 5 child items, worked one at a time, the cheap static checks first. This item closes when they do.
-	- Closed:
+		- 20261104: All 8 children are Done, the CodeQL one last. clippy denies mem_forget and undocumented_unsafe_blocks through -D warnings.
+	- Test case: its 8 children's tests, the last being the CodeQL planted and clean runs on 2026110315304782
+	- Acceptance signoff: Self-closed: every child closed with its own test.
+	- Closed: 20261104-181800
 
 - CodeQL: watched to fail on a planted finding, and green otherwise
 	- ID: 2026110315304782
