@@ -26,11 +26,11 @@
 //!   is only safe because the region is delimited by our own two markers and
 //!   was written by us - which is exactly the signal a stored shell entry
 //!   lacks, and why THAT list may only ever be added to.
-//! - Deleting the block is how it is switched off. A note beside the config
-//!   records which profiles were written to, so a profile that carried the block
-//!   and no longer does is left alone - without it the next launch simply put the
-//!   block back, since the marker went with it. `shell.integration` switches the
-//!   whole thing off before it starts.
+//! - Deleting the block is how it is switched off. A note beside the account's
+//!   own config, whatever `--config` names, records which profiles were written
+//!   to, so a profile that carried the block and no longer does is left alone -
+//!   without it the next launch simply put the block back, since the marker went
+//!   with it. `shell.integration` switches the whole thing off before it starts.
 //! - A profile that does not decode as UTF-8 is left alone: 5.1 writes UTF-16 by
 //!   default, and appending to a file we cannot read replaces it.
 //! - A shell that would refuse to load the profile is left alone. Measured on
@@ -354,14 +354,17 @@ fn write_atomic(path: &Path, text: &str) -> anyhow::Result<()> {
 		.with_context(|| format!("could not write {}", path.display()))
 }
 
-// Profiles we have written to before, one path per line, kept beside the config.
+// Profiles we have written to before, one path per line.
 //
 // Deleting the block is documented as how to switch this off, and without a note
 // of our own it was not: with the block gone there is no marker and no reporting
 // sequence, so the next launch put it straight back. A profile on this list that
 // no longer carries the block was emptied on purpose.
+//
+// The profiles are the account's, so the note is too. Kept beside a `--config`
+// file, a launch with one found no note and put a deleted block back.
 fn installed_record() -> Option<PathBuf> {
-	Some(config::data_dir()?.join("shell-integration.installed"))
+	Some(config::native_data_dir()?.join("shell-integration.installed"))
 }
 
 fn already_installed(record: Option<&Path>, profile: &Path) -> bool {
@@ -555,6 +558,27 @@ mod tests {
 	use crate::shells::Found;
 	#[cfg(unix)]
 	use std::path::{Path, PathBuf};
+
+	// A launch with `--config` kept its own note of the profiles written to, found
+	// it empty, and put back a block the user had deleted.
+	// Test ID: detst
+	#[test]
+	fn a_config_named_on_the_command_line_reads_the_accounts_profile_note() {
+		let _guard = crate::config::test_config_lock();
+		let _ = crate::config::settings();
+		let dir = crate::testdir::run_dir().join(format!("silkterm_intalt_{}", std::process::id()));
+		crate::config::set_config_override(dir.join("alt.shcl"));
+		let record = super::installed_record();
+		assert!(record.is_some(), "no data dir for the account");
+		assert_eq!(
+			record,
+			crate::config::native_data_dir().map(|d| d.join("shell-integration.installed"))
+		);
+		assert!(
+			!record.unwrap().starts_with(&dir),
+			"the note follows the config"
+		);
+	}
 
 	// sh may well be dash, and a shell named by a full path is the ordinary case
 	// on Windows - so both have to answer the way a bare `bash` does.

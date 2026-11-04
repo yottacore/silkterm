@@ -889,11 +889,11 @@ Control (run from a shell inside a window; acts on that window, then exits):
   --wallpaper [PATH]          change the wallpaper live (no value = none)
   --reload-settings           re-read the config file and apply it
 
-Layout:
-  --new-tab[=HANDLE]          create a tab (becomes current)
-  --tab=ID                    select an existing tab (0/main or a handle)
+Layout (a window opens on its first tab and pane):
+  --new-tab[=HANDLE]          create a tab; later options go to it
+  --tab=ID                    go back to a tab already made (0/main or a handle)
   --new-pane[=HANDLE]         create a pane by splitting the current/--splits pane
-  --pane=ID                   select an existing pane (0/main or a handle)
+  --pane=ID                   go back to a pane already made (0/main or a handle)
   --splits=ID                 (with --new-pane) which pane to split
   --down|--up|--left|--right  where the new pane goes
   --size=N | --size=N%        new pane size in the split direction
@@ -1611,6 +1611,24 @@ mod tests {
 		assert_eq!(c.tab_order(true), c.tab_order(false));
 		assert_eq!(p("--title T").tab_order(true), Vec::<usize>::new());
 		assert_eq!(p("--tab=main").tab_order(true), [0]);
+	}
+
+	// The window opens on the strip's first tab (`active: 0` in app.rs), so the
+	// first tab has to lead it however the line ends, and the help says so.
+	// Test ID: dett5
+	#[test]
+	fn a_launch_opens_on_its_first_tab_and_the_help_says_so() {
+		for line in [
+			"--new-tab=logs --directory /var/log",
+			"--new-tab=a --new-tab=b --tab=b --new-tab=c",
+			"--new-tab=a --tab=a --new-pane",
+		] {
+			for beside in [true, false] {
+				assert_eq!(p(line).tab_order(beside)[0], 0, "{line}, beside {beside}");
+			}
+		}
+		assert!(usage().contains("a window opens on its first tab"));
+		assert!(!usage().contains("becomes current"));
 	}
 
 	// Test ID: dd5nb

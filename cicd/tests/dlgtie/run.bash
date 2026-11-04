@@ -95,7 +95,9 @@ if [[ "${status}" == *"no Xvfb"* ]]; then
 	if ! "${headless}" start --wm >/dev/null 2>&1; then echo "  skip: the display on ${display} did not start"; exit 3; fi
 	startedDisplay=1
 fi
-fX(){ DISPLAY="${display}" XAUTHORITY="${auth}" "${@}"; }
+## A function sent to the background runs in a subshell, so --bg execs, and $!
+## is the program and not a bash waiting on it.
+fX(){ local how=""; [[ "${1:-}" == "--bg" ]] && { how="exec"; shift; }; DISPLAY="${display}" XAUTHORITY="${auth}" ${how} "${@}"; }
 if ! fX xprop -root _NET_SUPPORTING_WM_CHECK 2>/dev/null | grep -qF 'window id'; then
 	echo "  skip: no window manager on ${display}"; exit 3
 fi
@@ -173,7 +175,7 @@ fX xdotool windowraise "${main}"; sleep 1
 fCheck "above the terminal after it is raised" fAbove
 
 if command -v xterm >/dev/null 2>&1; then
-	fX xterm -geometry 60x20+500+200 -T dlgtie-other -e /bin/sh "${work}/scene.sh" >/dev/null 2>&1 &
+	fX --bg xterm -geometry 60x20+500+200 -T dlgtie-other -e /bin/sh "${work}/scene.sh" >/dev/null 2>&1 &
 	otherPid=$!
 	other=""
 	for _ in {1..50}; do other="$(fX xdotool search --onlyvisible --name "^dlgtie-other$" 2>/dev/null | head -n 1 || true)"; [[ -n "${other}" ]] && break; sleep 0.2; done
@@ -199,3 +201,4 @@ echo "all passed"
 
 ##	History:
 ##		- 20261101 JC: Created.
+##		- 20261103 JC: The other window's launch execs, so its pid is xterm.

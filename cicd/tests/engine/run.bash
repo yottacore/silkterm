@@ -164,6 +164,36 @@ fCheck "the dhat test hands on to CodeQL, with the report folder" \
 	bash -c 'sed -n "/^fRunLeakcheck(){/,/^}/p" "$1" | grep -q "^[[:space:]]*fRunCodeql \"\${outDir}\"$"' _ "${engine}"
 fCheck "the config names a Rust suite, and the suppressions file is there" \
 	bash -c 'source "$1" && [[ "${CODEQL_SUITE}" == codeql/rust-queries:* && -f "$2/../${CODEQL_SUPPRESSIONS}" ]]' _ "${cicd}/config.bash" "${cicd}"
+## syn and the like reach the crate list only through proc macros, which run at
+## build time, and brought about 200 results with them (2026102211462005).
+fCheck "the release crates leave out a proc macro's own dependencies" \
+	grep -qF 'cargo tree --offline --locked -e normal,no-proc-macro ' "${cicd}/utility/codeql.bash"
+## The SARIF filter, lifted from codeql.bash, on two results with the same rule
+## and path: one from a CFF dict's UidBase, one that adds a real password.
+sed -n "/<<'EOF' || rc=\$?$/,/^EOF$/p" "${cicd}/utility/codeql.bash" | sed '1d;$d' >"${work}/cqfilter.py"
+printf 'serde-1.0.0\n' >"${work}/cqcrates.txt"
+cat >"${work}/cqraw.sarif" <<'EOF'
+{"runs": [{"results": [
+ {"ruleId": "rust/cleartext-logging", "message": {"text": "This operation writes [...::UidBase(...)](1) to a log file."}, "locations": [{"physicalLocation": {"artifactLocation": {"uri": "source/src/a.rs"}, "region": {"startLine": 3}}}]},
+ {"ruleId": "rust/cleartext-logging", "message": {"text": "This operation writes [...::UidBase(...)](1) to a log file. This operation writes [password](2) to a log file."}, "locations": [{"physicalLocation": {"artifactLocation": {"uri": "source/src/a.rs"}, "region": {"startLine": 9}}}]},
+ {"ruleId": "rust/unused-variable", "message": {"text": "Variable 'x' is not used."}, "locations": [{"physicalLocation": {"artifactLocation": {"uri": "vendor/serde-1.0.0/src/de.rs"}, "region": {"startLine": 5}}}]},
+ {"ruleId": "rust/unused-variable", "message": {"text": "Variable 'y' is not used."}, "locations": [{"physicalLocation": {"artifactLocation": {"uri": "vendor/syn-2.0.0/src/lib.rs"}, "region": {"startLine": 7}}}]},
+ {"ruleId": "rust/log-injection", "message": {"text": "This log entry depends on a [user-provided value](1)."}, "locations": [{"physicalLocation": {"artifactLocation": {"uri": "vendor/serde-1.0.0/src/ser.rs"}, "region": {"startLine": 11}}}], "relatedLocations": [{"id": 1, "physicalLocation": {"artifactLocation": {"uri": "vendor/x11rb-0.1.0/src/stream.rs"}, "region": {"startLine": 4}}}]},
+ {"ruleId": "rust/log-injection", "message": {"text": "This log entry depends on a [user-provided value](1)."}, "locations": [{"physicalLocation": {"artifactLocation": {"uri": "vendor/serde-1.0.0/src/ser.rs"}, "region": {"startLine": 13}}}], "relatedLocations": [{"id": 1, "physicalLocation": {"artifactLocation": {"uri": "vendor/serde-1.0.0/src/de.rs"}, "region": {"startLine": 8}}}]}
+]}]}
+EOF
+printf '# a note\nrust/cleartext-logging source/* 1111 \\.\\.\\.::(UidBase|Uuid)\\(\\.\\.\\.\\)\nrust/unused-variable vendor/serde-*/* 2222\nrust/log-injection vendor/serde-*/* 3333 user-provided value@vendor/x11rb-[^/]*/src/stream\\.rs\n' >"${work}/cqsupp.txt"
+fCqFilter(){ python3 "${work}/cqfilter.py" "${work}/cqraw.sarif" "${work}/cqout.sarif" "${work}/cqcrates.txt" "${work}/cqsupp.txt"; }
+rc=0; out="$(fCqFilter)" || rc=$?
+fCheck "a suppression naming a flow's sources lets that flow through" grep -qF 'known, 1111: rust/cleartext-logging source/src/a.rs:3:' <<<"${out}"
+fCheck "but not one that also starts from something else, and that fails the step" \
+	bash -c 'grep -qF "NEW: rust/cleartext-logging source/src/a.rs:9:" <<<"$1" && (($2 == 1))' _ "${out}" "${rc}"
+fCheck "a suppression with no sources still goes by rule and path" grep -qF 'known, 2222: rust/unused-variable vendor/serde-1.0.0/src/de.rs:5:' <<<"${out}"
+fCheck "and a crate outside the release binary is dropped" fNot grep -qF 'syn-2.0.0' <<<"${out}"
+## "user-provided value" names every remote source alike, so a rule can pin
+## where a flow starts by name@path (2026110315303541).
+fCheck "a suppression's source can name the file it starts in" grep -qF 'known, 3333: rust/log-injection vendor/serde-1.0.0/src/ser.rs:11:' <<<"${out}"
+fCheck "and the same source name from another file still fails" grep -qF 'NEW: rust/log-injection vendor/serde-1.0.0/src/ser.rs:13:' <<<"${out}"
 ## The soak test is a leak check, about 2.5 minutes, so --quick leaves it out
 ## unless --leakcheck asks. It needs heaptrack at the image's pin, so a run on
 ## this box takes it there, or warns without docker.

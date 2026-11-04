@@ -28,7 +28,7 @@ What it will not do:
 
 - **Rewrite what is there.** The block is appended, after a copy of the profile is saved beside it as `Microsoft.PowerShell_profile.ps1.silkterm-backup`. Everything above and below the two markers stays exactly as you wrote it.
 
-- **Put it back.** Deleting the block is how you switch it off. Nothing restores it - a note beside the config records which profiles were written to, so an empty one is left alone.
+- **Put it back.** Deleting the block is how you switch it off. Nothing restores it - a note beside your usual config records which profiles were written to, so an empty one is left alone. A launch with `--config` reads and keeps the same note, since the profiles are the same whichever config it uses.
 
 - **Replace a prompt you chose.** If your prompt is still the one PowerShell comes with, the block swaps in a git-aware one (below). If it is anything else, including oh-my-posh, starship or a `prompt` function of your own, it is left alone: on PowerShell 6+ the prompt is not touched at all, and on Windows PowerShell 5.1, which has no other hook, yours is wrapped rather than replaced.
 

@@ -192,14 +192,16 @@ Run these from a shell inside a SilkTerm window. They act on that window, then e
 ### Tabs and panes
 
 | Option                                | What it does
-| :------------------------------------ | :----------------------------------------------------------------------------------------
-| `--new-tab[=HANDLE]`                  | Make a tab, which becomes the current one. The handle is a name for later options to use.
+| :------------------------------------ | :----------------------------------------------------------------------------------
+| `--new-tab[=HANDLE]`                  | Make a tab for the options after it. The handle is a name for later options to use.
 | `--tab=ID`                            | Go back to a tab already made, by its handle, or `0` or `main` for the first.
 | `--new-pane[=HANDLE]`                 | Make a pane by splitting the current one, or the one `--splits` names.
 | `--pane=ID`                           | Go back to a pane already made.
 | `--splits=ID`                         | With `--new-pane`, which pane to split.
 | `--down`, `--up`, `--left`, `--right` | Where the new pane goes.
 | `--size=N`, `--size=N%`               | The new pane's size in the split direction, in cells or percent.
+
+A window opens on its first tab, and each tab on its first pane, however many the line makes. Making a tab or pane, or going back to one, only says where the options after it go.
 
 ### Window, tab or pane
 
