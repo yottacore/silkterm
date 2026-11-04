@@ -544,10 +544,10 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - SGR 21 turns bold off instead of drawing a double underline
 	- ID: 2026110220554102
 	- Type: Bug
-	- Status: Stalled
-		- Held for: a push of engine fork commit 65dbcd81 to `scroll-ledger-0.26.0`. Then `cargo update -p alacritty_terminal`, merge `wip/rnd1104-2026110220554102`, and run the unit tests.
+	- Status: Done
 	- Severity: Low
 	- Opened: 20261102-205541
+	- Closed: 20261103-171842
 	- Opened by: CC
 	- Parent ID: 2026102511131401
 	- Target OS: All
@@ -566,10 +566,11 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261103: 21 leaves bold as it was, as in xterm, kitty and WezTerm. A program that sends 21 to mean "bold off" now gets a double underline. 22 still turns bold off.
 	- Actual fix: SGR 21 sets a double underline, in place of any other underline style, and leaves bold alone. It draws as `4:2` does.
 	- Swept: vte's SGR table, where only 21 gives "cancel bold" and 22 still gives "cancel bold and dim". The engine's attribute handling, the only reader of either. The pane's underline styles read the engine's double underline flag, whichever code set it. No doc says what 21 does. The comment on desqy that said 21 is "not bold" goes with the test.
-	- Verified: 20261103, the fork's terminal tests, and SilkTerm's unit tests with the fork commit in. fmt and clippy.
-	- Branch: fork `scroll-ledger-0.26.0`, and `wip/rnd1104-2026110220554102` for the SilkTerm test.
-	- Commit: fork 65dbcd81.
-	- Test case: `sgr_21_double_underlines_and_keeps_bold` (detxz), on the wip branch until the lock moves, and the fork test of the same name. Both fail without the fix and pass with it.
+	- Verified: 20261103, the fork's terminal tests, and the backlog quick run (fmt, clippy, tests, scripts, docs) with the lock on the fork commit.
+	- Branch: rnd1104, and fork `scroll-ledger-0.26.0`.
+	- Commit: 9fdde7c (test), fork 65dbcd81. Cargo.lock moves only the fork's commit.
+	- Test case: `sgr_21_double_underlines_and_keeps_bold` (detxz), and the fork test of the same name. Both fail without the fix and pass with it.
+	- Acceptance signoff: Self-closed: detxz checks the cell flags the drawing reads, and the underline draws as `4:2` does.
 
 - Wayland: Settings isn't tied to the terminal window
 	- ID: 2026110118260314
