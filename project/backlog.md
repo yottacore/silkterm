@@ -439,7 +439,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - Leak checks: CodeQL watched to fail, and its first findings filed
 	- ID: 2026102211462005
 	- Type: Task
-	- Status: Started
+	- Status: Done
 	- Priority: Avg
 	- Opened: 20261022-114620
 	- Opened by: CC
@@ -457,10 +457,13 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261103: A suppression can name the values a flow starts from, so a rule for a false flow doesn't hide a real one at the same path.
 		- 20261103: Split in 5. 2026110315303525, our code's results, is done. 2026110315303530, 35 and 41 are the third-party roll-ups; 30 and 35 are done. 2026110315304782 plants a finding and checks the run is green otherwise. This item closes when they do.
 		- 20261103: 41 is done too, so only 2026110315304782 is left, the planted and clean runs, about 65 min each.
+		- 20261104: 2026110315304782 is done. The step went red on a planted unused variable in `main`, and was green on the same commit without it. The plant has to be a variable never set, such as `let x: u8;`, since the query skips one with a value.
 	- Decisions:
 		- 20261103: CodeQL stays out of the default run, under `--long`, `--leakcheck` and `--codeql`, against this item's "on by default". It takes about 65 minutes alone, and the default run has to fit in about an hour, per the 2026-10-24 reset and 2026102616543936. The smaller suite or a timeout would drop the quality queries the parent asked for.
+	- Verified: 20261104, through 2026110315304782: planted red, clean green, at 8a1d7fc.
 	- Branch: rnd1103
-	- Test case: dd5nn `cicd/tests/engine/run.bash`, 5 new checks, and its children's.
+	- Test case: dd5nn `cicd/tests/engine/run.bash`, 5 new checks, and its children's: the CodeQL step run planted and clean (2026110315304782).
+	- Closed: 20261104-101558
 
 - The unscrollable search and buttons areas should be lighter than the scrollable content
 	- ID: 2026103010083403
@@ -540,8 +543,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - CodeQL: watched to fail on a planted finding, and green otherwise
 	- ID: 2026110315304782
 	- Type: Task
-	- Status: Waiting on automated testing
-	- Needs local test suite run?: `cicd/utility/codeql.bash` once more in image d47751450835, on the new planted copy of 8a1d7fc, about 65 to 105 minutes. It must fail with one NEW `rust/unused-variable` at `source/src/main.rs:117`, and nothing else new.
+	- Status: Done
 	- Priority: Avg
 	- Opened: 20261103-153047
 	- Opened by: CC
@@ -556,12 +558,15 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261104: The clean run passed: no new results, 106 minutes at 4 jobs (time on 2026102211461905). The planted run passed too, so it missed the plant. Its SARIF had nothing at line 117.
 		- 20261104: Cause: the plant's form. `rust/unused-variable` reports only a variable with no initializer and no use, so `let planted_unused = 1;` isn't one. The suite has no unused-value query. On a small database the query reported `let x: u8;`, in a `main` with `println!` too, and not `let x = 1;`. On the planted run's kept database every macro call in `main.rs` was expanded, so `main` isn't left out as incomplete. The step itself is fine.
 		- 20261104: A new planted copy of 8a1d7fc has `let planted_unused: u8;` as the first line of `main`, and differs from the clean copy only there.
+		- 20261104: The new planted run failed, as it should, on one NEW result, `rust/unused-variable` at `source/src/main.rs:117` for `planted_unused`, and nothing else. 72 minutes at 8 jobs, alone, at a load of about 19 to 22.
 	- Decisions:
 		- 20261104: The parent's "an unused variable in `main` works" holds only for one that is never set. The step is unchanged, since the cause was the plant.
 		- 20261104: Copies of one commit for both runs, not the live tree, so round commits during the hour can't make the two differ.
 		- 20261104: Both can run at once, since they share only the cargo cache volume, which cargo locks. Each gets 4 jobs, so together they stay in the quarter of the CPUs a hard step may take. The 11-03 run took about 19 GB at 8 threads, so expect up to about 40 GB together.
+	- Verified: 20261104. `cicd/utility/codeql.bash` in image d47751450835 at 8a1d7fc: the clean copy passed with no new results, and the planted copy failed on the plant alone.
 	- Branch: rnd1104b
 	- Test case: the CodeQL step itself, run planted and clean. It has no test ID.
+	- Closed: 20261104-101558
 
 - Wayland: Settings asks to be modal
 	- ID: 2026110317323442
