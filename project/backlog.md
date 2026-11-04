@@ -37,7 +37,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - herdback's no window manager cases need their mutation checks again, since they ran under a restarted xfwm4
 	- ID: 2026110319081175
 	- Type: Task
-	- Status: Queued
+	- Status: Done
 	- Priority: Low
 	- Opened: 20261103-190811
 	- Opened by: CC
@@ -47,6 +47,14 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Until 2026110318260287, the desktop's session started xfwm4 again once deqx1 stopped it, so on a desktop shell its 3 cases with no window manager ran under one. The mutation checks on 2026102807384201 and 2026110315170584 were run that way.
 		- Run deqx1 again, at each of three debug builds: the put-back taken out, where the back case should fail; the forget-on-resize taken out, the resized case; the forget-on-move taken out, the moved case.
 	- Estimated effort: Low
+	- Actual effort: Low
+	- Assigned to: CC
+	- Progress log:
+		- 20261103: deqx1 at 33d7da5's script, with one of three debug builds each, and one with nothing taken out. With the put-back taken out, the back case failed: the window stayed where it was herded, at 1300,500. With the forget-on-resize taken out, the resized case failed: the window went back to 100,100 and lost the size it was given. With the forget-on-move taken out, the moved case failed: the window went back to 100,100 from where it was moved. Each build failed only its own case, and "no window manager came back for the cases with none" passed in all four. With nothing taken out, all 20 checks passed. 2 runs side by side at a time, at load 5 to 12.
+	- Verified: 20261103, as in the progress log. Noted on 2026102807384201's and 2026110315170584's Verified rows.
+	- Branch: rnd1104
+	- Test case: `cicd/tests/herdback/run.bash` (deqx1). No change to it.
+	- Closed: 20261103-194447
 
 - deqx1's "xfwm4's window has gone from the X server" sometimes fails on a busy box
 	- ID: 2026110318260287
@@ -192,6 +200,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Verified: 20261101. deqx1 now also runs with no window manager, the herd made by hand: put back, and left alone when moved or resized while herded. The put-back case fails with the put-back taken out, and the resized case with the forget-on-resize taken out. The xfwm4 cases and monwake pass. The unit tests, clippy for Linux and Windows, fmt, script lints, docs and test IDs pass.
 		- The moved case passes either way here, since under Xwayland a look after a move waits for a sign the drag is over, and that wait holds the window too.
 		- 20261103: Run again with xfwm4 really gone (2026110315170584). The back case fails with the put-back taken out, and the resized case with the forget-on-resize taken out. The moved case still passes with the forget-on-move taken out, since its look after the move still waits for a sign the drag is over. With nothing taken out, all 19 checks pass.
+		- 20261103: The line above was run under an xfwm4 the desktop's session had started again (2026110318260287). Run again with none on the display (2026110319081175). The back case fails with the put-back taken out, the resized case with the forget-on-resize taken out, and the moved case with the forget-on-move taken out. Each failed only its own case. With nothing taken out, all 20 checks pass.
 	- Branch: rnd1101b
 	- Test case: `cicd/tests/herdback/run.bash` (deqx1), the window back where it was under xfwm4, and with no window manager. `a_window_herded_off_a_dark_monitor_takes_no_size` (deqwx). `a_herded_window_goes_back_once_its_monitor_is_lit` (der22). `monwake` (ddq75) and ddq74, changed. `two_rows_warn_and_each_mark_shows_the_rows_tip` (ddp7w), changed.
 	- Acceptance signoff: Waiting on the b23 look. deqx1 and der22 pass on rnd1101b.
@@ -8925,6 +8934,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Decisions:
 		- 20261103: The moved case stays as it is. It can't watch the forget-on-move while the look after a move waits for the end of a drag the test never ends. That is the same wait 2026110116413708 names.
 	- Verified: 20261103, as in the progress log. The results are on 2026102807384201's Verified row.
+		- 20261103: These ran under an xfwm4 the desktop's session had started again (2026110318260287). Run again with none on the display in 2026110319081175, where the moved case now fails with the forget-on-move taken out.
 	- Branch: rnd1103
 	- Test case: `cicd/tests/herdback/run.bash` (deqx1). No change to it.
 	- Closed: 20261103-161123
