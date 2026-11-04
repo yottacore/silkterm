@@ -179,6 +179,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261101: every place the window notes its place: each look, a size saved, and the window's own resize and the move it can cause. The put-back is skipped while a move is waiting to settle, a button is held, or the window is minimized, maximized or fullscreen.
 	- Verified: 20261101. deqx1 now also runs with no window manager, the herd made by hand: put back, and left alone when moved or resized while herded. The put-back case fails with the put-back taken out, and the resized case with the forget-on-resize taken out. The xfwm4 cases and monwake pass. The unit tests, clippy for Linux and Windows, fmt, script lints, docs and test IDs pass.
 		- The moved case passes either way here, since under Xwayland a look after a move waits for a sign the drag is over, and that wait holds the window too.
+		- 20261103: Run again with xfwm4 really gone (2026110315170584). The back case fails with the put-back taken out, and the resized case with the forget-on-resize taken out. The moved case still passes with the forget-on-move taken out, since its look after the move still waits for a sign the drag is over. With nothing taken out, all 19 checks pass.
 	- Branch: rnd1101b
 	- Test case: `cicd/tests/herdback/run.bash` (deqx1), the window back where it was under xfwm4, and with no window manager. `a_window_herded_off_a_dark_monitor_takes_no_size` (deqwx). `a_herded_window_goes_back_once_its_monitor_is_lit` (der22). `monwake` (ddq75) and ddq74, changed. `two_rows_warn_and_each_mark_shows_the_rows_tip` (ddp7w), changed.
 	- Acceptance signoff: Waiting on the b23 look. deqx1 and der22 pass on rnd1101b.
@@ -932,17 +933,28 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - herdback's mutation checks with no window manager were run with xfwm4 still up
 	- ID: 2026110315170584
 	- Type: Task
-	- Status: Queued
+	- Status: Done
 	- Priority: Low
 	- Opened: 20261103-151705
 	- Opened by: CC
-	- Related IDs: 2026102807384201, 2026110220294255
+	- Assigned to: CC
+	- Related IDs: 2026102807384201, 2026110220294255, 2026110116413708
 	- Target OS: Linux
 	- Requirements:
 		- Until 2026110220294255, deqx1 never stopped xfwm4, so its 3 cases with no window manager ran under it.
 		- Run them again now that xfwm4 is gone: the "back" case with the put-back taken out, and the "resized" case with the forget-on-resize taken out. Each should fail.
 		- See whether the "moved" case still passes with the forget-on-move taken out, as 2026102807384201 notes it did under xfwm4.
 	- Estimated effort: Low
+	- Actual effort: Low
+	- Progress log:
+		- 20261103: deqx1 at f6c33c9's script, each with one of three debug builds. With the put-back taken out, the back case failed: the window stayed where it was herded. With the forget-on-resize taken out, the resized case failed: the window went back and lost the size it was given. With the forget-on-move taken out, the moved case passed. Its log shows the look after the move waiting for a sign the drag is over, and no put-back after it. With nothing taken out, all 19 checks passed.
+		- 20261103: Two of the four runs side by side, at load 10 to 15, failed "the window was herded" in the first xfwm4 case, with the window still at its launch size. That is 2026110116413708, and doesn't touch the cases above.
+	- Decisions:
+		- 20261103: The moved case stays as it is. It can't watch the forget-on-move while the look after a move waits for the end of a drag the test never ends. That is the same wait 2026110116413708 names.
+	- Verified: 20261103, as in the progress log. The results are on 2026102807384201's Verified row.
+	- Branch: rnd1103
+	- Test case: `cicd/tests/herdback/run.bash` (deqx1). No change to it.
+	- Closed: 20261103-161123
 
 - SGR 21 turns bold off instead of drawing a double underline
 	- ID: 2026110220554102
