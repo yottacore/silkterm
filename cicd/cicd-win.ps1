@@ -82,6 +82,39 @@
 	Skip the git publish stage.
 .PARAMETER NoSync
 	Skip the remote sync check (stage 0).
+.PARAMETER NoRustTests
+	Skip cargo test. Under -Wsl the Linux half skips its own (cicd.bash
+	--no-rust-tests).
+.PARAMETER NoClippy
+	Skip clippy. Under -Wsl the Linux half skips its 3 clippy runs (cicd.bash
+	--no-clippy).
+.PARAMETER NoScriptLint
+	Skip the PowerShell lint. Under -Wsl the Linux half skips all of its script
+	lints (cicd.bash --no-script-lint).
+.PARAMETER NoDeny
+	Skip cargo-deny: the advisory scan, and the license, ban and source checks.
+	Under -Wsl the Linux half skips its own (cicd.bash --no-deny).
+.PARAMETER NoScriptTests
+	Skip stage 3's test scripts: the installer, test run folder removal,
+	launcher and safe removal tests. Under -Wsl the Linux half skips the ones
+	under cicd/tests (cicd.bash --no-script-tests).
+.PARAMETER NoRelease
+	Skip the release builds and their checks, and with them the packages and
+	dogfood, so nothing reads an earlier run's build. Under -Wsl the Linux half
+	does the same (cicd.bash --no-release).
+.PARAMETER NoCleanup
+	Leave what earlier runs left: stale run folders and the old ledger's. The
+	run's own folder still goes, as -KeepTemp decides. Under -Wsl the Linux half
+	leaves its own (cicd.bash --no-cleanup).
+.PARAMETER NoScrub
+	-Wsl only: the Linux half skips the content scrub (cicd.bash --no-scrub).
+.PARAMETER NoDocs
+	-Wsl only: the Linux half skips the docs checks (cicd.bash --no-docs).
+.PARAMETER NoScroll
+	-Wsl only: the Linux half skips the scroll harness (cicd.bash --no-scroll).
+.PARAMETER NoWingui
+	-Wsl only: the Linux half skips the Windows scenarios (cicd.bash
+	--no-wingui).
 .PARAMETER NoLeakcheck
 	-Wsl only: the Linux half skips its leak checks (cicd.bash --no-leakcheck).
 	The Windows half has none.
@@ -134,6 +167,17 @@ param(
 	[switch]$NoDogfood,
 	[switch]$NoPublish,
 	[switch]$NoSync,
+	[switch]$NoRustTests,
+	[switch]$NoClippy,
+	[switch]$NoScriptLint,
+	[switch]$NoDeny,
+	[switch]$NoScriptTests,
+	[switch]$NoRelease,
+	[switch]$NoCleanup,
+	[switch]$NoScrub,
+	[switch]$NoDocs,
+	[switch]$NoScroll,
+	[switch]$NoWingui,
 	[switch]$NoLeakcheck,
 	[switch]$Leakcheck,
 	[switch]$NoRemote,
@@ -974,7 +1018,7 @@ function fPublish {
 
 ## Advisory lint pass: clippy can't gate on Windows (Unix-gated ctl code emits
 ## dead_code, so -D warnings never passes), so run it plain and just report.
-function fLintAdvisory {
+function fLintClippy {
 	if (Get-Command cargo-clippy -ErrorAction SilentlyContinue) {
 		$saved = $env:CARGO_TARGET_DIR
 		$env:CARGO_TARGET_DIR = "target/lint"   ## don't invalidate the build cache
@@ -984,7 +1028,10 @@ function fLintAdvisory {
 			else { fEcho "OK: clippy clean" }
 		} finally { $env:CARGO_TARGET_DIR = $saved }
 	} else { fNote "clippy skipped (component not installed)" }
+}
 
+## cargo-deny's license, ban and source checks, advisory too.
+function fLintDeny {
 	if (Get-Command cargo-deny -ErrorAction SilentlyContinue) {
 		& cargo deny check licenses bans sources
 		## The OK line also keeps the next section's spacing right: raw deny output
@@ -1017,6 +1064,34 @@ function fLintPowerShell {
 		2       { fNote "PowerShell lint skipped (PSScriptAnalyzer not installed)" }
 		default { fWarn "PSScriptAnalyzer reported findings (advisory)" }
 	}
+}
+
+## Stage 3, less the parts an option turned off, each of which says so.
+function fTestStep {
+	if ($NoRustTests) { fNote "cargo test skipped (-NoRustTests)" } else { fCargoTest; fEcho "OK: tests passed" }
+	if ($NoScriptTests) { fNote "test scripts skipped (-NoScriptTests)" } else { fScriptTests }
+	if ($NoClippy) { fNote "clippy skipped (-NoClippy)" } else { fLintClippy }
+	if ($NoDeny) { fNote "cargo-deny skipped (-NoDeny)" } else { fLintDeny }
+	if ($NoScriptLint) { fNote "PowerShell lint skipped (-NoScriptLint)" } else { fLintPowerShell }
+	if (-not $NoDeny) { fAdvisoryScan }
+}
+
+## -List: the tests stage 3 runs, the ones turned off left out.
+function fListTests {
+	fEcho_Clean "Stage 3 tests:"
+	if (-not $NoRustTests) { fListRustTests }
+	if (-not $NoScriptTests) { fEcho_Clean "Test scripts:"; fScriptTests }
+}
+
+## The parts of a run an option turned off that the plan has no step or line
+## for, as "<part> (<option>)".
+function fLeftOut {
+	if ($NoRustTests)   { 'cargo test (-NoRustTests)' }
+	if ($NoScriptTests) { 'test scripts (-NoScriptTests)' }
+	if ($NoClippy)      { 'clippy (-NoClippy)' }
+	if ($NoDeny)        { 'cargo-deny (-NoDeny)' }
+	if ($NoScriptLint)  { 'PowerShell lint (-NoScriptLint)' }
+	if ($NoCleanup)     { 'cleanup of earlier runs (-NoCleanup)' }
 }
 
 
@@ -1086,6 +1161,19 @@ function fWslArgs {
 		if ($NoPackage)   { $cicdArgs.Add("--no-package") }
 		if ($NoLeakcheck) { $cicdArgs.Add("--no-leakcheck") }
 		elseif ($Leakcheck) { $cicdArgs.Add("--leakcheck") }
+		## The parts' off options. They change nothing in the quick run, which
+		## goes by its areas.
+		if ($NoRustTests)   { $cicdArgs.Add("--no-rust-tests") }
+		if ($NoClippy)      { $cicdArgs.Add("--no-clippy") }
+		if ($NoScriptLint)  { $cicdArgs.Add("--no-script-lint") }
+		if ($NoScrub)       { $cicdArgs.Add("--no-scrub") }
+		if ($NoDeny)        { $cicdArgs.Add("--no-deny") }
+		if ($NoScriptTests) { $cicdArgs.Add("--no-script-tests") }
+		if ($NoDocs)        { $cicdArgs.Add("--no-docs") }
+		if ($NoScroll)      { $cicdArgs.Add("--no-scroll") }
+		if ($NoWingui)      { $cicdArgs.Add("--no-wingui") }
+		if ($NoRelease)     { $cicdArgs.Add("--no-release") }
+		if ($NoCleanup)     { $cicdArgs.Add("--no-cleanup") }
 	}
 	if ($NoRemote)    { $cicdArgs.Add("--no-remote") }
 	if ($NoContainer) { $cicdArgs.Add("--no-container") }
@@ -1149,13 +1237,14 @@ function fPlanSteps {
 	fStepIf -Name 'Debug build'
 	fStepIf -Name 'Tests'
 	foreach ($t in $Targets) {
-		$off = if (-not $t.Arm) { '' } elseif ($NoArm) { '-NoArm' } elseif ($Quick) { '-Quick' } else { fArmSkipReason $t }
+		$off = if ($NoRelease) { '-NoRelease' } elseif (-not $t.Arm) { '' } elseif ($NoArm) { '-NoArm' } elseif ($Quick) { '-Quick' } else { fArmSkipReason $t }
 		fStepIf -Name "Release build: $($t.OsArch)" -Off $off
 	}
-	fStepIf -Name 'Release artifacts'
-	fStepIf -Name 'Packages' -Off $(if ($Quick) { '-Quick' } elseif ($NoPackage) { '-NoPackage' })
+	## What reads the release binaries goes with them, or it reads an earlier run's.
+	fStepIf -Name 'Release artifacts' -Off $(if ($NoRelease) { '-NoRelease' })
+	fStepIf -Name 'Packages' -Off $(if ($NoRelease) { '-NoRelease' } elseif ($Quick) { '-Quick' } elseif ($NoPackage) { '-NoPackage' })
 	fStepIf -Name 'Linux half (WSL2)' -Off $(if (-not $Wsl) { '-Wsl adds it' })
-	fStepIf -Name 'Dogfood' -Off $(if ($NoDogfood) { & $by '-NoDogfood' })
+	fStepIf -Name 'Dogfood' -Off $(if ($NoRelease) { '-NoRelease' } elseif ($NoDogfood) { & $by '-NoDogfood' })
 	fStepIf -Name 'Publish' -Off $(if ($NoPublish) { & $by '-NoPublish' })
 }
 
@@ -1180,7 +1269,7 @@ function fQuickRun {
 			fSetJobs
 			switch ($area) {
 				'fmt'     { fExec -What "format check" -File "cargo" -CmdArgs @("fmt", "--check"); fEcho "OK: formatting clean" }
-				'clippy'  { fLintAdvisory }
+				'clippy'  { fLintClippy; fLintDeny }
 				'tests'   { fCargoTest; fEcho "OK: tests passed" }
 				'scripts' { fLintPowerShell }
 				'docs'    { fNote "the docs checks are cicd.bash's$(if ($Wsl) { '; the Linux half runs them' } else { '; -Wsl runs them here' })" }
@@ -1235,8 +1324,11 @@ function fMain {
 	fEcho_Clean "Jobs ........: $CicdMaxJobs of $Cores cores"
 	fEcho_Clean "Remote sync .: $(if ($NoSync) { '(skipped)' } else { 'fetch + fast-forward check' })"
 	fEcho_Clean "Format ......: $(if ($NoFmt) { '(skipped)' } elseif ($FmtCheck) { 'cargo fmt --check' } else { 'cargo fmt' })"
-	fEcho_Clean "Release .....: x86_64 msvc + gnu$(if ($NoArm -or $Quick) { '' } else { ' + ARM64 (if toolchain present)' })"
-	fEcho_Clean "Packages ....: $(if ($NoPackage -or $Quick) { '(skipped)' } else { 'NSIS installers (if makensis present)' })"
+	$leftOut = @(fLeftOut)
+	if ($leftOut) { fEcho_Clean "Left out ....: $($leftOut -join ', ')" }
+	if ($NoRelease) { fEcho_Clean "Release .....: (skipped -NoRelease)" }
+	else { fEcho_Clean "Release .....: x86_64 msvc + gnu$(if ($NoArm -or $Quick) { '' } else { ' + ARM64 (if toolchain present)' })" }
+	fEcho_Clean "Packages ....: $(if ($NoRelease) { '(skipped -NoRelease)' } elseif ($NoPackage -or $Quick) { '(skipped)' } else { 'NSIS installers (if makensis present)' })"
 	if ($Wsl) { fEcho_Clean "Linux half ..: WSL2 (.deb/.rpm, profiler, scroll harness)" }
 	else {
 		## Say it is available rather than leaving it to be found in the help.
@@ -1245,7 +1337,7 @@ function fMain {
 		else          { fEcho_Clean "Linux half ..: (no WSL2 on this box)" }
 	}
 	if ($Long) { fEcho_Clean "Long steps ..: none on Windows$(if ($Wsl) { '; the Linux half gets --long' } else { '; -Wsl hands --long to the Linux half' })" }
-	fEcho_Clean "Dogfood .....: $(if ($NoDogfood) { '(skipped)' } else { "$DogfoodDir\$DogfoodFixedExe" })"
+	fEcho_Clean "Dogfood .....: $(if ($NoDogfood) { '(skipped)' } elseif ($NoRelease) { '(skipped -NoRelease)' } else { "$DogfoodDir\$DogfoodFixedExe" })"
 	if ($NoPublish)          { fEcho_Clean "Publish .....: (skipped)" }
 	elseif ($publishMsg)     { fEcho_Clean "Publish .....: commit + push current branch (hands-off: `"$publishMsg`")" }
 	else                     { fEcho_Clean "Publish .....: commit + push current branch (will prompt; blank = editor)" }
@@ -1257,10 +1349,7 @@ function fMain {
 
 	## -List: the tests stage 3 runs, then the Linux half's own list, and nothing else.
 	if ($List) {
-		fEcho_Clean "Stage 3 tests:"
-		fListRustTests
-		fEcho_Clean "Test scripts:"
-		fScriptTests
+		fListTests
 		if ($Wsl) {
 			fSection "Linux half (WSL2)"
 			fWslLinuxHalf
@@ -1289,8 +1378,11 @@ function fMain {
 	## old ledger still names. What went is said in the one line at the end.
 	fRunDirMake
 	$script:CleanupDue = $true
-	fCleanupCount 'stale run folders' (fSweepStaleRuns (Split-Path -Parent $script:RunDir) $StaleDays)
-	fCleanupCount 'old test run folders' (fOldLedger (Join-Path (fTargetDir) ".cicd-test-folders"))
+	if ($NoCleanup) { fNote "cleanup of earlier runs skipped (-NoCleanup)" }
+	else {
+		fCleanupCount 'stale run folders' (fSweepStaleRuns (Split-Path -Parent $script:RunDir) $StaleDays)
+		fCleanupCount 'old test run folders' (fOldLedger (Join-Path (fTargetDir) ".cicd-test-folders"))
+	}
 
 	if (fStepOpen 'Remote sync') { fSetJobs; fRemoteSync; fStepClose }
 
@@ -1327,28 +1419,27 @@ function fMain {
 	## Tests and the advisory lints.
 	$null = fStepOpen 'Tests'
 	fSetJobs
-	fCargoTest
-	fEcho "OK: tests passed"
-	fScriptTests
-	fLintAdvisory
-	fLintPowerShell
-	fAdvisoryScan
+	fTestStep
 	fStepClose
 
 	## Release builds (x86_64 msvc + gnu always; ARM64 when ready).
 	## (No profiler stage here: pprof's SIGPROF sampler is Unix-only - the
 	## profiling feature can't even compile for a Windows target.)
-	$script:RemapConfig = fRemapConfig
-	$built = @(foreach ($t in $Targets) { fBuildTarget -Target $t | Where-Object { $_ } })
-	$null = fStepOpen 'Release artifacts'
-	if (-not $built) { fDie "no release binaries were produced" }
-	foreach ($b in $built) {
-		if (fHasLocalPaths $b.Exe) { fDie "$($b.Exe) still holds a local path ($env:USERPROFILE or $Root)" }
+	## -NoRelease: none of them, and the steps that read them are off too.
+	$built = @(); $ver = ''
+	if (-not $NoRelease) {
+		$script:RemapConfig = fRemapConfig
+		$built = @(foreach ($t in $Targets) { fBuildTarget -Target $t | Where-Object { $_ } })
+		$null = fStepOpen 'Release artifacts'
+		if (-not $built) { fDie "no release binaries were produced" }
+		foreach ($b in $built) {
+			if (fHasLocalPaths $b.Exe) { fDie "$($b.Exe) still holds a local path ($env:USERPROFILE or $Root)" }
+		}
+		fEcho "OK: no local paths in $($built.Count) binary(s)"
+		$ver = fVersion
+		fCollectArtifacts -Built $built -Ver $ver
+		fStepClose
 	}
-	fEcho "OK: no local paths in $($built.Count) binary(s)"
-	$ver = fVersion
-	fCollectArtifacts -Built $built -Ver $ver
-	fStepClose
 
 	if (fStepOpen 'Packages') { fSetJobs; fBuildPackages -Built $built -Ver $ver; fStepClose }
 	## The Linux half is a run of its own, with its own plan and steps.
@@ -1383,6 +1474,10 @@ try {
 
 
 ##	History:
+##		- 2026-11-04: An off option for each part cicd.bash has one for:
+##		  -NoRustTests, -NoClippy, -NoScriptLint, -NoDeny, -NoScriptTests,
+##		  -NoRelease and -NoCleanup, each passed on to the Linux half, and
+##		  -NoScrub, -NoDocs, -NoScroll and -NoWingui for the Linux half only.
 ##		- 2026-11-01: One cleanup line at the end, what went and about what it
 ##		  freed, the run's own folder included.
 ##		- 2026-11-01: The run's folder is HOST_TEMP\silkterm\YYYYmmDD-HHMMSS_NNN,

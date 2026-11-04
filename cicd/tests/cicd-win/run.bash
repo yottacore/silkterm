@@ -63,6 +63,16 @@ if (-not \$p['Long'].Aliases.Contains('Slow')) { 'Slow' }
 }
 fCheck "the standard runs are parameters, with -Slow as another name for -Long" fHasParams
 
+## Each part's off option, as cicd.bash has them. What each hands on is checked in _lift.ps1.
+fHasOffParams(){
+	local out
+	out="$(pwsh -NoProfile -NonInteractive -Command "\$p = (Get-Command -Name '${ps1}').Parameters
+@('NoRustTests', 'NoClippy', 'NoScriptLint', 'NoScrub', 'NoDeny', 'NoScriptTests', 'NoDocs', 'NoScroll', 'NoWingui', 'NoRelease', 'NoCleanup') | Where-Object { -not \$p.ContainsKey(\$_) }
+'all there'" 2>&1)"
+	[[ "${out}" == 'all there' ]]
+}
+fCheck "each part's off option is a parameter" fHasOffParams
+
 ## Over ssh pwsh writes in code page 437, where the rule's dot is the bell byte.
 ## A fresh pwsh starts in 437 here, takes the switch, then prints a step's rule.
 fRuleOut(){ cat > "${work}/rule.ps1" <<'PS'
@@ -94,3 +104,4 @@ echo "all passed"
 ##		- 20261025: -NoRemote goes to the Linux half.
 ##		- 20261028: The standard runs.
 ##		- 20261028: A rule written to a pipe is UTF-8 dots, not bell bytes.
+##		- 20261104: The parts' off options.
