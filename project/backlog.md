@@ -592,8 +592,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - CI/CD: the same off options in `cicd-win.ps1`
 	- ID: 2026110320010164
 	- Type: Task
-	- Status: Waiting on automated testing
-	- Needs external testing: on vm925w through `win-remote.bash`, with the round branch synced: `cicd-win.ps1 -MergeGate -NoRustTests -NoClippy -NoScriptLint -NoDeny -NoScriptTests -NoRelease -NoCleanup` passes with the Tests step printing its 5 skipped lines, the plan's `Left out` line, and the release steps, packages and dogfood off with `-NoRelease`. Then `-MergeGate -List -NoRustTests -NoScriptTests` lists no tests.
+	- Status: Done
 	- Priority: Low
 	- Opened: 20261103-200101
 	- Opened by: CC
@@ -614,8 +613,10 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261104: No `-NoDebugBuild`, as in `cicd.bash`.
 	- Verified: 20261104. dd5nw passed with 19 new checks. Against the old `cicd-win.ps1` the lift stops at the first missing function. Copies with one Linux half flag dropped, the advisory scan left on under `-NoDeny`, dogfood left on under `-NoRelease`, cleanup missing from the plan, and the release builds left on under `-NoRelease` each failed 1 to 6 checks. `-Help` lists the new options under pwsh here. The jobs, saferm, pins, packaging and cleanup tests, `--backlog-run-quick scripts docs` and `lint-report.bash` pass.
 		- Swept: every caller of `fLintAdvisory` (the quick run and stage 3, now `fLintClippy` and `fLintDeny`), every reader of `$built` and `$ver` after the release builds (packages, dogfood), the plan's step list and its preflight lines, `fWslArgs`, and the tests that lift from `cicd-win.ps1` (dd5nw, the pins, packaging, jobs and saferm tests). prerequisites.md names no off options.
+		- 20261104, on vm925w at 41318c0: `cicd-win.ps1 -MergeGate -NoRustTests -NoClippy -NoScriptLint -NoDeny -NoScriptTests -NoRelease -NoCleanup` passed its 3 steps (format check, debug build, Tests). The Tests step printed its 5 skipped lines, the plan's `Left out` line named all 6, and the plan put the 3 release builds, the artifacts, packages and dogfood off under `-NoRelease`. `-MergeGate -List -NoRustTests -NoScriptTests` printed the `Stage 3 tests:` heading with no tests under it, and ran nothing.
 	- Branch: rnd1104b
 	- Test case: `cicd/tests/cicd-win/run.bash` (dd5nw), the off options: what stage 3 runs, the plan, `-List`, `-NoRelease`, `-NoCleanup` and what the Linux half gets.
+	- Closed: 20261104-081608
 
 - Wayland: must use the Wayland clipboard, and minimize other X11 features
 	- ID: 2026101509024607
