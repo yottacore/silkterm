@@ -1093,6 +1093,8 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Incorrect behavior: In the first xfwm4 case the window sometimes never takes the portrait size, so it straddles the 2 outputs, and xfwm4 doesn't herd it. About 2 runs in 8 on 20261101.
 	- Expected behavior: Every case starts wholly on the portrait output.
 	- Possible cause: Under Xwayland the buttons can't be seen, so the look after the test's move waits for a sign the drag is over, and the test gives none. A pointer move or a focus change from the test did not end it.
+	- 20261103: A lead from 2026110220294255: fDance's start check tests only that x is under 1200, while fDanceBare uses fOnPortrait, so a window across both outputs passes the start and fails later at "was herded".
+	- 20261103: Giving the test a sign that the drag is over would also let deqx1's moved case watch the forget-on-move, per 2026110315170584.
 
 - Wayland: a copy a program sends while no SilkTerm window has focus is dropped
 	- ID: 2026101607585700
