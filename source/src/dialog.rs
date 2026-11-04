@@ -173,6 +173,8 @@ pub enum DialogAction {
 }
 
 pub struct DialogWin {
+	// kept for its drop, and ahead of the window so it goes first
+	_modal: ModalHint,
 	pub window: Arc<Window>,
 	gfx: Gfx,
 	text: TextCtx,
@@ -277,7 +279,7 @@ impl DialogWin {
 		resizable: bool,
 		parent: Option<Parent>,
 		warm: Option<&crate::gfx::DialogGpu>,
-	) -> anyhow::Result<(Arc<Window>, Gfx, TextCtx, RectRenderer)> {
+	) -> anyhow::Result<(ModalHint, Arc<Window>, Gfx, TextCtx, RectRenderer)> {
 		let handle = parent.map(Parent::handle);
 		#[allow(unused_mut)] // reassigned on linux/windows/macos below
 		let mut attrs = Window::default_attributes()
@@ -326,7 +328,9 @@ impl DialogWin {
 		let window = Arc::new(el.create_window(attrs)?);
 		set_transient_for(&window, handle.as_ref());
 		#[cfg(target_os = "linux")]
-		set_toplevel_parent(&window, parent);
+		let modal = set_toplevel_parent(&window, parent);
+		#[cfg(not(target_os = "linux"))]
+		let modal = ModalHint::default();
 		// PRIMARY (no GL): the main window may hold a glutin GL/EGL context, and a
 		// second wgpu GL instance would panic in EGL teardown. Dialogs are opaque,
 		// so Vulkan/Metal/DX12 is all they need. The warm context (see DialogGpu)
@@ -347,7 +351,7 @@ impl DialogWin {
 		let scale = config::display_scale(window.scale_factor());
 		let text = TextCtx::new(&gfx.device, &gfx.queue, gfx.format, scale);
 		let rects = RectRenderer::new(&gfx.device, gfx.format);
-		Ok((window, gfx, text, rects))
+		Ok((modal, window, gfx, text, rects))
 	}
 
 	pub fn new_about(
@@ -357,7 +361,7 @@ impl DialogWin {
 		warm: Option<&crate::gfx::DialogGpu>,
 	) -> anyhow::Result<Self> {
 		// provisional window so we have a TextCtx to measure with
-		let (window, mut gfx, mut text, rects) = Self::make(
+		let (modal, window, mut gfx, mut text, rects) = Self::make(
 			el,
 			format!("About {}", config::APP_NAME),
 			560.0,
@@ -376,6 +380,7 @@ impl DialogWin {
 		#[cfg(target_os = "linux")]
 		window.set_visible(true);
 		Ok(Self {
+			_modal: modal,
 			window,
 			gfx,
 			text,
@@ -410,7 +415,7 @@ impl DialogWin {
 		parent: Option<Parent>,
 		warm: Option<&crate::gfx::DialogGpu>,
 	) -> anyhow::Result<Self> {
-		let (window, mut gfx, mut text, rects) =
+		let (modal, window, mut gfx, mut text, rects) =
 			Self::make(el, title, 480.0, 200.0, false, parent, warm)?;
 		let (lines, links, size) = layout_notice(&mut text, paras);
 		let requested_size =
@@ -421,6 +426,7 @@ impl DialogWin {
 		#[cfg(target_os = "linux")]
 		window.set_visible(true);
 		Ok(Self {
+			_modal: modal,
 			window,
 			gfx,
 			text,
@@ -455,7 +461,7 @@ impl DialogWin {
 		parent: Option<Parent>,
 		warm: Option<&crate::gfx::DialogGpu>,
 	) -> anyhow::Result<Self> {
-		let (window, mut gfx, mut text, rects) =
+		let (modal, window, mut gfx, mut text, rects) =
 			Self::make(el, title, 480.0, 200.0, false, parent, warm)?;
 		let ask = Ask {
 			paras: paras.to_vec(),
@@ -471,6 +477,7 @@ impl DialogWin {
 		#[cfg(target_os = "linux")]
 		window.set_visible(true);
 		Ok(Self {
+			_modal: modal,
 			window,
 			gfx,
 			text,
@@ -509,7 +516,7 @@ impl DialogWin {
 	) -> anyhow::Result<Self> {
 		// provisional window first: sizing needs a TextCtx to measure labels in
 		// the real UI font (same pattern as About)
-		let (window, mut gfx, mut text, rects) =
+		let (modal, window, mut gfx, mut text, rects) =
 			Self::make(el, "Settings".into(), 560.0, 800.0, true, parent, warm)?;
 		let scale = config::display_scale(window.scale_factor());
 		let chrome = crate::settings_ui::chrome_widths(&mut text, scale);
@@ -552,6 +559,7 @@ impl DialogWin {
 		#[cfg(target_os = "linux")]
 		window.set_visible(true);
 		Ok(Self {
+			_modal: modal,
 			window,
 			gfx,
 			text,
@@ -1981,43 +1989,175 @@ fn set_transient_for(window: &Window, parent: Option<&RawWindowHandle>) {
 fn set_transient_for(_window: &Window, _parent: Option<&RawWindowHandle>) {}
 
 // Wayland's transient-for: the compositor keeps the dialog above the terminal,
-// and may leave it out of the taskbar and alt+tab (2026110118260314). Sent
-// before the first buffer, so it's there when the dialog maps. No-op off
-// Wayland, where neither window has a toplevel.
+// and may leave it out of the taskbar and alt+tab (2026110118260314). Where it
+// offers xdg-dialog the dialog also asks to be modal, as on X11. Sent before
+// the first buffer, so it's there when the dialog maps. No-op off Wayland,
+// where neither window has a toplevel.
 #[cfg(target_os = "linux")]
-fn set_toplevel_parent(window: &Window, parent: Option<Parent>) {
-	use wayland_backend::client::{Backend, ObjectId};
-	use wayland_client::{Connection, Proxy};
+fn set_toplevel_parent(window: &Window, parent: Option<Parent>) -> ModalHint {
+	use wayland_backend::client::ObjectId;
+	use wayland_client::Proxy;
 	use wayland_protocols::xdg::shell::client::xdg_toplevel::XdgToplevel;
 	use winit::platform::wayland::WindowExtWayland;
-	use winit::raw_window_handle::{HasDisplayHandle, RawDisplayHandle};
 
 	let (Some(ours), Some(theirs)) = (window.xdg_toplevel(), parent.and_then(|p| p.toplevel))
 	else {
-		return;
+		return ModalHint::default();
 	};
-	let Ok(display) = window.display_handle() else {
-		return;
+	let Some(guest) = wl_guest::on(window) else {
+		return ModalHint::default();
 	};
-	let RawDisplayHandle::Wayland(display) = display.as_raw() else {
-		return;
-	};
-	// A guest on winit's connection, as in monitor.rs, kept only for the call.
-	// SAFETY: winit's display, live while its window is.
-	let conn = Connection::from_backend(unsafe {
-		Backend::from_foreign_display(display.display.as_ptr().cast())
-	});
 	let toplevel = |ptr: std::ptr::NonNull<std::ffi::c_void>| {
 		// SAFETY: both are winit's toplevels, live while their windows are, and
 		// the interface is checked by name.
 		let id = unsafe { ObjectId::from_ptr(XdgToplevel::interface(), ptr.as_ptr().cast()) };
-		id.ok().and_then(|id| XdgToplevel::from_id(&conn, id).ok())
+		id.ok()
+			.and_then(|id| XdgToplevel::from_id(&guest.conn, id).ok())
 	};
 	let (Some(ours), Some(theirs)) = (toplevel(ours), toplevel(theirs)) else {
-		return;
+		return ModalHint::default();
 	};
 	ours.set_parent(Some(&theirs));
-	let _ = conn.flush();
+	let modal = ModalHint(guest.modal(&ours));
+	let _ = guest.conn.flush();
+	modal
+}
+
+/// A dialog's xdg-dialog object, which asks the compositor for modal. Let go
+/// before the window, while winit's connection is sure to be live.
+#[derive(Debug, Default)]
+struct ModalHint(
+	#[cfg(target_os = "linux")]
+	Option<wayland_protocols::xdg::dialog::v1::client::xdg_dialog_v1::XdgDialogV1>,
+);
+
+#[cfg(target_os = "linux")]
+impl Drop for ModalHint {
+	fn drop(&mut self) {
+		let Some(dialog) = self.0.take() else {
+			return;
+		};
+		dialog.destroy();
+		if let Some(guest) = wl_guest::GUEST.get() {
+			let _ = guest.conn.flush();
+		}
+	}
+}
+
+// A guest on winit's connection, as in monitor.rs, kept for the program's
+// life: binding xdg-dialog takes a registry, and a registry can't be
+// destroyed. Its queue gets the registry's events, and nothing else.
+#[cfg(target_os = "linux")]
+mod wl_guest {
+	use std::sync::{Mutex, OnceLock};
+	use wayland_backend::client::Backend;
+	use wayland_client::globals::{GlobalListContents, registry_queue_init};
+	use wayland_client::protocol::wl_registry::WlRegistry;
+	use wayland_client::{Connection, Dispatch, EventQueue, QueueHandle};
+	use wayland_protocols::xdg::dialog::v1::client::xdg_dialog_v1::XdgDialogV1;
+	use wayland_protocols::xdg::dialog::v1::client::xdg_wm_dialog_v1::XdgWmDialogV1;
+	use wayland_protocols::xdg::shell::client::xdg_toplevel::XdgToplevel;
+	use winit::raw_window_handle::{HasDisplayHandle, RawDisplayHandle};
+	use winit::window::Window;
+
+	pub static GUEST: OnceLock<Guest> = OnceLock::new();
+
+	#[derive(Debug)]
+	pub struct Guest {
+		pub conn: Connection,
+		// None where the compositor doesn't offer xdg-dialog
+		dialogs: Option<Dialogs>,
+	}
+
+	#[derive(Debug)]
+	struct Dialogs {
+		wm: XdgWmDialogV1,
+		handle: QueueHandle<Deaf>,
+		queue: Mutex<EventQueue<Deaf>>,
+	}
+
+	/// Nothing here has an event worth hearing.
+	#[derive(Debug)]
+	pub struct Deaf;
+
+	impl Dispatch<WlRegistry, GlobalListContents> for Deaf {
+		fn event(
+			_: &mut Self,
+			_: &WlRegistry,
+			_: <WlRegistry as wayland_client::Proxy>::Event,
+			_: &GlobalListContents,
+			_: &Connection,
+			_: &QueueHandle<Self>,
+		) {
+		}
+	}
+
+	impl Dispatch<XdgWmDialogV1, ()> for Deaf {
+		fn event(
+			_: &mut Self,
+			_: &XdgWmDialogV1,
+			_: <XdgWmDialogV1 as wayland_client::Proxy>::Event,
+			(): &(),
+			_: &Connection,
+			_: &QueueHandle<Self>,
+		) {
+		}
+	}
+
+	impl Dispatch<XdgDialogV1, ()> for Deaf {
+		fn event(
+			_: &mut Self,
+			_: &XdgDialogV1,
+			_: <XdgDialogV1 as wayland_client::Proxy>::Event,
+			(): &(),
+			_: &Connection,
+			_: &QueueHandle<Self>,
+		) {
+		}
+	}
+
+	pub fn on(window: &Window) -> Option<&'static Guest> {
+		if let Some(guest) = GUEST.get() {
+			return Some(guest);
+		}
+		let RawDisplayHandle::Wayland(display) = window.display_handle().ok()?.as_raw() else {
+			return None;
+		};
+		// SAFETY: winit's display, live while its windows are. Every dialog
+		// window is winit's, on that one display.
+		let conn = Connection::from_backend(unsafe {
+			Backend::from_foreign_display(display.display.as_ptr().cast())
+		});
+		Some(GUEST.get_or_init(|| {
+			let dialogs = registry_queue_init::<Deaf>(&conn)
+				.ok()
+				.and_then(|(globals, queue)| {
+					let handle = queue.handle();
+					let wm = globals
+						.bind::<XdgWmDialogV1, _, _>(&handle, 1..=1, ())
+						.ok()?;
+					Some(Dialogs {
+						wm,
+						handle,
+						queue: Mutex::new(queue),
+					})
+				});
+			Guest { conn, dialogs }
+		}))
+	}
+
+	impl Guest {
+		pub fn modal(&self, toplevel: &XdgToplevel) -> Option<XdgDialogV1> {
+			let dialogs = self.dialogs.as_ref()?;
+			// a monitor plugged in queues a registry event here
+			if let Ok(mut queue) = dialogs.queue.lock() {
+				let _ = queue.dispatch_pending(&mut Deaf);
+			}
+			let dialog = dialogs.wm.get_xdg_dialog(toplevel, &dialogs.handle, ());
+			dialog.set_modal();
+			Some(dialog)
+		}
+	}
 }
 
 // Keep the parent (terminal) window directly below `dialog` in the stack, via an

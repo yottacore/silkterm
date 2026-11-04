@@ -129,7 +129,7 @@ x11-dl = "2.21"
 smithay-client-toolkit = { version = "0.19", default-features = false }
 wayland-backend = { version = "0.3", features = ["client_system"] }
 wayland-client = "0.31"
-wayland-protocols = { version = "0.32", features = ["client"] }
+wayland-protocols = { version = "0.32", features = ["client", "staging"] }
 
 # macOS: the system font sizes (sysfont.rs), the part of the screen a window
 # can use, below the menu bar and clear of the Dock (dialog.rs), and the menu

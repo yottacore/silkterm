@@ -36,7 +36,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 $ast = [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path -LiteralPath $Pipeline).Path, [ref]$null, [ref]$null)
-foreach ($name in 'fRotateLogs', 'fTargetDir', 'fRemapConfig', 'fHasLocalPaths', 'fExec', 'fScriptTest', 'fPython', 'fCargoTest', 'fInstallerTests', 'fScriptTests', 'fStashIfDirty', 'fRunFlags', 'fWslArgs', 'fQuickRun', 'fStamp', 'fStepLine', 'fStepIf', 'fStepOpen', 'fStepClose', 'fShowSteps', 'fPlanSteps', 'fRunDirMake', 'fRunDirEnd', 'fSweepStaleRuns', 'fOldLedger', 'fDirBytes', 'fCleanupCount', 'fCleanupNote', 'fCleanupLine') {
+foreach ($name in 'fRotateLogs', 'fTargetDir', 'fRemapConfig', 'fHasLocalPaths', 'fExec', 'fScriptTest', 'fPython', 'fCargoTest', 'fInstallerTests', 'fScriptTests', 'fStashIfDirty', 'fRunFlags', 'fWslArgs', 'fQuickRun', 'fStamp', 'fStepLine', 'fStepIf', 'fStepOpen', 'fStepClose', 'fShowSteps', 'fPlanSteps', 'fRunDirMake', 'fRunDirEnd', 'fSweepStaleRuns', 'fOldLedger', 'fDirBytes', 'fCleanupCount', 'fCleanupNote', 'fCleanupLine', 'fTestStep', 'fListTests', 'fLeftOut') {
 	$fn = $ast.Find({ param($n) $n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq $name }, $true)
 	if (-not $fn) { throw "$name not found in $Pipeline" }
 	. ([scriptblock]::Create($fn.Extent.Text))
@@ -258,7 +258,7 @@ fCleanupLine
 fCheck 'with nothing removed, it says so' ($script:notes[-1] -eq 'cleanup: nothing stale')
 
 $text = Get-Content -LiteralPath $Pipeline -Raw
-fCheck 'the pipeline makes its run folder, then sweeps the stale ones and the old ledger' ($text -match '(?m)^\s*fRunDirMake\s*\r?\n\s*\$script:CleanupDue = \$true\s*\r?\n\s*fCleanupCount ''stale run folders'' \(fSweepStaleRuns \(Split-Path -Parent \$script:RunDir\) \$StaleDays\)\s*\r?\n\s*fCleanupCount ''old test run folders'' \(fOldLedger ')
+fCheck 'the pipeline makes its run folder, then sweeps the stale ones and the old ledger' ($text -match '(?m)^\s*fRunDirMake\s*\r?\n\s*\$script:CleanupDue = \$true\s*\r?\n\s*if \(\$NoCleanup\) \{ fNote "cleanup of earlier runs skipped \(-NoCleanup\)" \}\s*\r?\n\s*else \{\s*\r?\n\s*fCleanupCount ''stale run folders'' \(fSweepStaleRuns \(Split-Path -Parent \$script:RunDir\) \$StaleDays\)\s*\r?\n\s*fCleanupCount ''old test run folders'' \(fOldLedger ')
 fCheck 'and says nothing of it until the end' ($text -notmatch 'fNote "cleanup: removed \$gone')
 fCheck 'where the cleanup line comes before done' ($text -match '(?m)^\s*fRunDirEnd \$true\s*\r?\n\s*fCleanupLine\s*\r?\n\s*fSection "\$AppName Windows CI/CD: done\."')
 fCheck 'and removes it in its finally block, on a failure too' ($text -match '(?s)\} finally \{\s*##[^\n]*\n\s*fStepClose FAIL\s*\n\s*##[^\n]*\n\s*fRunDirEnd \$script:RunOk')
@@ -293,7 +293,8 @@ finally { Pop-Location }
 
 ##	The run options. Each case starts from none set, as a bare run does, and
 ##	notes the refusal, the one-line notices and what the Linux half gets.
-$flagNames = 'Gate', 'Ci', 'BacklogRunQuick', 'BacklogRunFull', 'MergeGate', 'Quick', 'Long', 'Leakcheck', 'NoLeakcheck', 'NoArm', 'NoPackage', 'NoRemote', 'NoContainer', 'KeepTemp', 'List', 'NoSync', 'NoDogfood', 'NoPublish', 'Unattended'
+$offNames = 'NoRustTests', 'NoClippy', 'NoScriptLint', 'NoScrub', 'NoDeny', 'NoScriptTests', 'NoDocs', 'NoScroll', 'NoWingui', 'NoRelease', 'NoCleanup'
+$flagNames = @('Gate', 'Ci', 'BacklogRunQuick', 'BacklogRunFull', 'MergeGate', 'Quick', 'Long', 'Leakcheck', 'NoLeakcheck', 'NoArm', 'NoPackage', 'NoRemote', 'NoContainer', 'KeepTemp', 'List', 'NoSync', 'NoDogfood', 'NoPublish', 'Unattended') + $offNames
 function fRun { param([hashtable]$Set = @{})
 	foreach ($n in $flagNames) { Set-Variable -Name $n -Value $false -Scope Script }
 	$script:Areas = @()
@@ -322,6 +323,17 @@ $r = fRun @{ Quick = $true }
 fCheck 'a plain run neither checks the format only nor drops publish' ($r.Why -eq '' -and -not $FmtCheck -and -not $NoPublish -and $FullRunName -eq '')
 $r = fRun @{ NoRemote = $true; NoContainer = $true; KeepTemp = $true; List = $true }
 fCheck '-NoRemote, -NoContainer, -KeepTemp and -List each reach the Linux half' ($r.Wsl -eq "$plain --no-remote --no-container --keep-temp --list")
+$every = @{}; foreach ($n in $offNames) { $every[$n] = $true }
+$r = fRun $every
+fCheck 'each part''s off option reaches the Linux half as its cicd.bash flag' ($r.Why -eq '' -and $r.Wsl -eq "$plain --no-rust-tests --no-clippy --no-script-lint --no-scrub --no-deny --no-script-tests --no-docs --no-scroll --no-wingui --no-release --no-cleanup")
+foreach ($n in $offNames) {
+	$want = '--' + ($n -creplace '([a-z])([A-Z])', '$1-$2').ToLowerInvariant()
+	$r = fRun @{ $n = $true }
+	if ($r.Wsl -ne "$plain $want") { fCheck "-$n alone hands on $want" $false }
+}
+$every.BacklogRunQuick = $true
+$r = fRun $every
+fCheck 'and none of them to its quick run, which goes by its areas' ($r.Why -eq '' -and $r.Wsl -eq '--backlog-run-quick')
 foreach ($case in @(
 		@{ Set = @{ Long = $true; Quick = $true }; Want = '-Long runs everything, so not -Quick' }
 		@{ Set = @{ Long = $true; Gate = $true }; Want = '-BacklogRunQuick runs the fast checks only, so not -Long' }
@@ -397,7 +409,7 @@ fCheck 'and the areas not named as off' ($listed -contains '    - Tests (not nam
 ##	The steps a full run takes, and the ones it turns off with why.
 function fArmSkipReason { param($Target); return $null }
 function fPlan { param([hashtable]$Set)
-	$vars = @{ NoSync = $false; NoFmt = $false; NoArm = $false; Quick = $false; NoPackage = $false; Wsl = $false; NoDogfood = $false; NoPublish = $false }
+	$vars = @{ NoSync = $false; NoFmt = $false; NoArm = $false; Quick = $false; NoPackage = $false; Wsl = $false; NoDogfood = $false; NoPublish = $false; NoRelease = $false }
 	foreach ($k in $Set.Keys) { $vars[$k] = $Set[$k] }
 	foreach ($k in $vars.Keys) { Set-Variable -Name $k -Value $vars[$k] }
 	$script:FullRunName = if ($Set.ContainsKey('FullRunName')) { $Set.FullRunName } else { '' }
@@ -410,6 +422,10 @@ fCheck '-Quick turns off the ARM64 build and the packages, and says so' (($scrip
 fCheck 'and leaves them out of the count' ($script:StepsOn.Count -eq 10)
 fPlan @{ FullRunName = '-MergeGate'; NoSync = $true; NoDogfood = $true; NoPublish = $true }
 fCheck 'a full run names itself as what turned a step off' (($script:StepsOff -join ',') -eq 'Remote sync (-MergeGate),Linux half (WSL2) (-Wsl adds it),Dogfood (-MergeGate),Publish (-MergeGate)')
+fPlan @{ NoRelease = $true; NoArm = $true; Quick = $true }
+fCheck '-NoRelease turns off every release build, the artifacts, the packages and dogfood, and says so' (($script:StepsOff -join ',') -eq 'Release build: windows-x86_64-msvc (-NoRelease),Release build: windows-x86_64-gnu (-NoRelease),Release build: windows-arm64-gnullvm (-NoRelease),Release artifacts (-NoRelease),Packages (-NoRelease),Linux half (WSL2) (-Wsl adds it),Dogfood (-NoRelease)')
+fCheck 'and leaves the rest on' (($script:StepsOn -join ',') -eq 'Remote sync,Format,Debug build,Tests,Publish')
+fPlan @{ FullRunName = '-MergeGate'; NoSync = $true; NoDogfood = $true; NoPublish = $true }
 $listed.Clear()
 $null = fStepOpen 'Tests'; fEcho 'tested'; fStepClose
 $stamp = '\d{8}-\d{6}\.\d{2}'
@@ -420,6 +436,46 @@ fCheck 'a step that is off is false, and prints nothing' (-not (fStepOpen 'Dogfo
 $listed.Clear()
 $null = fStepOpen 'Format'; fStepClose FAIL
 fCheck 'one that failed closes with FAIL' ($listed[3] -match "^\[ ${stamp}: Step 1 of 8; FAIL Format \]$")
+
+##	Stage 3's parts, each off with its option, with a skipped line in its place.
+##	Stand-ins note what ran.
+$ran = [System.Collections.Generic.List[string]]::new()
+function fNote { param([string]$Msg = ''); $listed.Add($Msg) }
+foreach ($n in 'fCargoTest', 'fScriptTests', 'fLintClippy', 'fLintDeny', 'fLintPowerShell', 'fAdvisoryScan', 'fListRustTests') {
+	Set-Item -Path "function:$n" -Value ([scriptblock]::Create("`$ran.Add('$n')"))
+}
+function fParts { param([hashtable]$Set = @{})
+	foreach ($n in $offNames) { Set-Variable -Name $n -Value ([bool]$Set[$n]) -Scope Script }
+	$ran.Clear(); $listed.Clear()
+	fTestStep
+}
+fParts
+fCheck 'stage 3 runs every part, in order, with none off' (($ran -join ',') -eq 'fCargoTest,fScriptTests,fLintClippy,fLintDeny,fLintPowerShell,fAdvisoryScan' -and -not @($listed -match 'skipped').Count)
+fCheck 'with nothing left out of the plan' (-not @(fLeftOut).Count)
+foreach ($case in @(
+		@{ Off = 'NoRustTests'; Gone = 'fCargoTest'; Said = 'cargo test skipped (-NoRustTests)' }
+		@{ Off = 'NoScriptTests'; Gone = 'fScriptTests'; Said = 'test scripts skipped (-NoScriptTests)' }
+		@{ Off = 'NoClippy'; Gone = 'fLintClippy'; Said = 'clippy skipped (-NoClippy)' }
+		@{ Off = 'NoDeny'; Gone = 'fLintDeny,fAdvisoryScan'; Said = 'cargo-deny skipped (-NoDeny)' }
+		@{ Off = 'NoScriptLint'; Gone = 'fLintPowerShell'; Said = 'PowerShell lint skipped (-NoScriptLint)' })) {
+	fParts @{ $case.Off = $true }
+	$gone = $case.Gone -split ','
+	$left = @('fCargoTest', 'fScriptTests', 'fLintClippy', 'fLintDeny', 'fLintPowerShell', 'fAdvisoryScan' | Where-Object { $gone -notcontains $_ })
+	fCheck "-$($case.Off) leaves out $($case.Gone -replace ',', ' and '), and says so" (($ran -join ',') -eq ($left -join ',') -and @($listed -match 'skipped').Count -eq 1 -and $listed -contains $case.Said)
+}
+$all = @{}; foreach ($n in $offNames) { $all[$n] = $true }
+fParts $all
+fCheck 'with all of them off, stage 3 runs nothing' ($ran.Count -eq 0 -and @($listed -match 'skipped').Count -eq 5)
+fCheck 'and the plan lists each part left out, cleanup too' ((@(fLeftOut) -join ', ') -eq 'cargo test (-NoRustTests), test scripts (-NoScriptTests), clippy (-NoClippy), cargo-deny (-NoDeny), PowerShell lint (-NoScriptLint), cleanup of earlier runs (-NoCleanup)')
+$ran.Clear(); $listed.Clear()
+fListTests
+fCheck '-List leaves out the tests turned off' (($ran -join ',') -eq '' -and ($listed -join '|') -eq 'Stage 3 tests:')
+fParts @{}
+$ran.Clear(); $listed.Clear()
+fListTests
+fCheck 'and lists both with none off' (($ran -join ',') -eq 'fListRustTests,fScriptTests' -and ($listed -join '|') -eq 'Stage 3 tests:|Test scripts:')
+fCheck 'the pipeline''s stage 3 is fTestStep' ($text -match '(?m)^\s*\$null = fStepOpen ''Tests''\s*\r?\n\s*fSetJobs\s*\r?\n\s*fTestStep\s*\r?\n\s*fStepClose')
+fCheck 'and -NoRelease builds nothing for release' ($text -match '(?m)^\s*if \(-not \$NoRelease\) \{\s*\r?\n\s*\$script:RemapConfig = fRemapConfig\s*\r?\n\s*\$built = ')
 
 ##	The path map, from folders whose names hold a backslash and a quote. The
 ##	TOML reader on the other end decides whether they were escaped right.
@@ -448,3 +504,5 @@ exit 0
 ##		- 20261101: The run folder goes in the project's folder, and HOST_TEMP is unset for it.
 ##		- 20261101: The run's folder, its end, the stale sweep and the old ledger.
 ##		- 20261101: The one cleanup line at the end.
+##		- 20261104: The parts' off options: what stage 3 runs, the plan, -List,
+##		  -NoRelease and -NoCleanup, and what the Linux half gets.

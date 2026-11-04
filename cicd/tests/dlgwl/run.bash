@@ -6,6 +6,9 @@
 ##			- Its toplevel names the terminal's as its parent.
 ##			- sway reads it as a dialog, so it floats above the tiled terminal
 ##			  rather than taking half the screen, and holds the focus.
+##			- Where the compositor offers xdg-dialog, the dialog asks to be
+##			  modal, and lets go of that before its toplevel when closed.
+##			  Where it doesn't, it says so, and checks nothing is asked.
 ##	- Syntax: run.bash [--bin PATH]   (default: the debug build, then release)
 ##	- Exit: 0 passed, 1 a check failed, 3 nothing ran (no binary, sway,
 ##	  wtype, python3 or software Vulkan).
@@ -149,6 +152,33 @@ fCheck "sway floats the dialog" grep -qE '^floating .* Settings$' <<<"$(fWindows
 fCheck "and the terminal stays tiled" grep -qE '^tiled ' <<<"$(fWindows)"
 fCheck "the dialog has the focus" grep -qE '^floating focused Settings$' <<<"$(fWindows)"
 
+## xdg-dialog is a staging protocol, and a compositor may not offer it.
+dialogObj=""
+if grep -qE 'wl_registry[@#][0-9]+\.global\([0-9]+, "xdg_wm_dialog_v1", [0-9]+\)' "${work}/said.txt"; then
+	dialogObj="$(grep -oE "get_xdg_dialog\(new id xdg_dialog_v1[@#][0-9]+, xdg_toplevel[@#]${toplevels[1]-x}\)" "${work}/said.txt" | grep -oE 'xdg_dialog_v1[@#][0-9]+' | head -n 1 || true)"
+	fCheck "the dialog's toplevel gets an xdg-dialog object" test -n "${dialogObj}"
+	fCheck "and asks to be modal" grep -qF "${dialogObj:-none}.set_modal()" "${work}/said.txt"
+else
+	echo "  note: the compositor offers no xdg_wm_dialog_v1, so the modal ask isn't checked"
+	fNoAsk(){ ! grep -qE 'xdg_wm_dialog_v1[@#]|xdg_dialog_v1[@#]' "${work}/said.txt"; }
+	fCheck "and nothing asks for one" fNoAsk
+fi
+
+"${wl[@]}" wtype -k Escape
+for _ in {1..50}; do (($(fCount) <= 1)) && break; sleep 0.2; done
+fCheck "Escape closes Settings, and the terminal stays" test "$(fCount)" -eq 1
+## The dialog object goes before its toplevel.
+fDestroyOrder(){
+	local dialogAt toplevelAt
+	dialogAt="$(grep -nF -- "${dialogObj}.destroy()" "${work}/said.txt" | head -n 1 | cut -d: -f1)"
+	toplevelAt="$(grep -nE -- "xdg_toplevel[@#]${toplevels[1]-x}\.destroy\(\)" "${work}/said.txt" | head -n 1 | cut -d: -f1)"
+	[[ -n "${dialogAt}" && -n "${toplevelAt}" ]] && ((dialogAt < toplevelAt))
+}
+if [[ -n "${dialogObj}" ]]; then
+	sleep 0.5
+	fCheck "its xdg-dialog object is destroyed before its toplevel" fDestroyOrder
+fi
+
 if ((failures)); then
 	echo "  windows:"; fWindows | sed 's/^/      /'
 	echo "  ${failures} check(s) failed; files kept in ${work}"; exit 1
@@ -157,3 +187,4 @@ echo "all passed"
 
 ##	History:
 ##		- 20261103 JC: Created.
+##		- 20261104 JC: The xdg-dialog modal ask, and closing Settings.
