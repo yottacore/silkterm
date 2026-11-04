@@ -3147,7 +3147,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Target OS: Linux
 	- Test environment: b23 at load 20 to 45, the full run's ASan step in the container at e95b81b on `rnd1025`, and the same test alone under ASan on dev at b0c2238
 	- Steps to reproduce:
-		- Run `config::tests::launches_converting_at_once_leave_one_whole_copy` (dder1) alone under ASan, as `private/claude_simple/tools/lsan_some_tests.bash` does, a few times.
+		- Run `config::tests::launches_converting_at_once_leave_one_whole_copy` (dder1) alone in the cicd image with ASan and leak checking on, the way `cicd/utility/asan.bash` runs the suite, a few times.
 	- Incorrect behavior: Launches converting at once each kept their own backup, with stamps a second apart, so the test found 3 copies where it wants 1. Under ASan each conversion took over a second. The full run stopped in stage 3 there.
 	- Expected behavior: One whole copy, or a test that doesn't hang on how long a conversion takes.
 	- Reproduced: Yes. 2 of 3 alone under ASan on `rnd1025`, and 2 of 3 on dev, so it was there before the round.
