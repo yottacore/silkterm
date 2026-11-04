@@ -864,7 +864,8 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - `--about` should only show the first line of the existing output
 	- ID: 2026102807384204
 	- Type: Enhancement
-	- Status: Queued
+	- Status: Waiting for answers
+		- Waits on the question 2026102807384204 in questions.md.
 	- Priority: Low
 	- Opened: 20261028-073842
 	- Opened by: JC
@@ -873,6 +874,10 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- For that flag only, no blank lines before or after.
 	- Notes:
 		- Pre-next-cut.
+	- Progress log:
+		- 20261104: The no-blank-lines half is in. `--about` prints flush, like `--version`. The first-line half waits on a question: the first line is now the "About SilkTerm" heading, and cutting to one line drops the renderer details a bug report needs and `ci-mac.bash`'s adapter check reads.
+	- Branch: rnd1104
+	- Test case: none for the padding, since it is a print call in main.rs. Checked by running `--about` and reading the first and last bytes.
 
 - Wayland: must use the Wayland clipboard, and minimize other X11 features
 	- ID: 2026101509024607
