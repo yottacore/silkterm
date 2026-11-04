@@ -982,6 +982,10 @@ fScriptTests(){
 	## Under xfwm4 Settings stays above the terminal, as its modal, and off the
 	## taskbar and pager. Exit 3 is a skip: no binary, xfwm4, xdotool or xprop.
 	fRunTest_MaySkip cicd/tests/dlgtie/run.bash "Settings tied to its window"
+	## On native Wayland Settings names the terminal's toplevel as its parent, so
+	## sway floats it above the terminal. Exit 3 is a skip: no binary, sway,
+	## wtype, python3 or software Vulkan.
+	fRunTest_MaySkip cicd/tests/dlgwl/run.bash "Settings tied to its window on Wayland"
 	## On native Wayland a window takes each output's own size once moved or
 	## dropped there, a sliver left on another output too. Exit 3 is a skip: no
 	## binary, sway, python3 or software Vulkan.

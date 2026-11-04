@@ -575,15 +575,47 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - Wayland: Settings isn't tied to the terminal window
 	- ID: 2026110118260314
 	- Type: Bug
-	- Status: Queued
+	- Status: Waiting on UAT
+		- Open Settings on a real Wayland desktop, GNOME and KDE if there are both. It should stay above the terminal, and make no taskbar or alt+tab entry of its own where that desktop folds a dialog into its parent's.
+	- Needs hand testing: the above, on a real Wayland desktop.
 	- Severity: Low
 	- Opened: 20261101-182603
 	- Opened by: CC
-	- Related IDs: 2026103010083402
+	- Assigned to: CC
+	- Related IDs: 2026103010083402, 2026110317323442
 	- Target OS: Linux
+	- Test environment: headless sway 1.10.1
 	- Incorrect behavior: On native Wayland Settings and About are toplevels of their own, with their own taskbar and alt+tab entries, and can go behind the terminal.
 	- Expected behavior: The same as on X11, per 2026103010083402.
+	- Reproduced: 20261103, on headless sway. Settings came up tiled beside the terminal, as a window of its own, rather than floating over it as a dialog.
 	- Possible cause: winit 0.30 has no parent for a Wayland window. xdg-shell has `set_parent` for this, so it needs a winit change or a call on the raw surface.
+	- Actual cause: winit 0.30 has no parent for a Wayland window, so the dialog never named one.
+	- Actual fix: Each dialog's xdg_toplevel names the terminal's as its parent, on winit's own connection, before the dialog first draws. winit 0.30.13 hands out both toplevels.
+	- Decisions:
+		- 20261103: The call goes on winit's toplevel rather than into a winit fork. It is one request on the connection, as monitor.rs already reads winit's state there.
+		- 20261103: No modal hint yet. Wayland's is the staging xdg-dialog protocol, which needs its global bound from the registry. That is 2026110317323442.
+		- 20261103: Taskbar and alt+tab entries are each desktop's call on Wayland, with no state a client can set the way X11's skip hints do. The parent is all a client can give, so that part is left to the hand test.
+	- Verified: 20261103. dlgwl passes 6 of 6 checks, and fails 3 with the parent call taken out: no set_parent on the wire, and the dialog tiled rather than floating, which fails its focus check too. dlgtie still passes 13 of 13 on X11. The quick gate, all five areas, plus clippy for Windows and macOS, pass.
+		- Swept: About, the notices and the close question are made by the same code, so they get the parent too. A notice over Settings names Settings. Off Wayland the toplevels are None and nothing is sent.
+	- Branch: rnd1104
+	- Test case: `cicd/tests/dlgwl/run.bash` (detyk).
+
+- Wayland: Settings asks to be modal
+	- ID: 2026110317323442
+	- Type: Enhancement
+	- Status: Queued
+	- Priority: Low
+	- Opened: 20261103-173234
+	- Opened by: CC
+	- Related IDs: 2026110118260314
+	- Target OS: Linux
+	- Requirements:
+		- Where the compositor offers the xdg-dialog protocol, Settings and the other dialogs ask to be modal through it, as X11's modal state does. GNOME, for one, then folds the dialog into the terminal's alt+tab entry.
+		- The dialog object is kept for the window's life, and destroyed before it.
+		- dlgwl (detyk) checks the request where sway offers the protocol, and says so where it doesn't.
+	- Notes:
+		- The parent itself went in with 2026110118260314.
+		- Binding the global needs a registry and an event queue of its own on winit's connection. A registry can't be destroyed, so it's best kept for the life of the program, not made for each dialog.
 
 - A backlog line names a path under the private notes folder
 	- ID: 2026102819390403

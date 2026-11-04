@@ -219,9 +219,8 @@ impl App {
 		}
 		#[cfg(not(target_os = "windows"))]
 		{
-			use winit::raw_window_handle::HasWindowHandle;
 			let (title, paras) = ask_text(closing, &names);
-			let parent = state.window.window_handle().ok().map(|h| h.as_raw());
+			let parent = crate::dialog::Parent::of(&state.window);
 			let warm = self.gpu_warm.get();
 			match crate::dialog::DialogWin::new_ask(
 				event_loop,

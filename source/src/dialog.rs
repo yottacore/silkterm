@@ -215,6 +215,30 @@ impl std::fmt::Debug for DialogWin {
 	}
 }
 
+/// The window a dialog belongs to. On Wayland the tie goes on its
+/// `xdg_toplevel`, which the raw handle doesn't carry.
+#[derive(Debug, Clone, Copy)]
+pub struct Parent {
+	handle: RawWindowHandle,
+	#[cfg(target_os = "linux")]
+	toplevel: Option<std::ptr::NonNull<std::ffi::c_void>>,
+}
+
+impl Parent {
+	pub fn of(window: &Window) -> Option<Self> {
+		use winit::raw_window_handle::HasWindowHandle;
+		Some(Self {
+			handle: window.window_handle().ok()?.as_raw(),
+			#[cfg(target_os = "linux")]
+			toplevel: winit::platform::wayland::WindowExtWayland::xdg_toplevel(window),
+		})
+	}
+
+	pub fn handle(self) -> RawWindowHandle {
+		self.handle
+	}
+}
+
 impl DialogWin {
 	pub fn device(&self) -> &wgpu::Device {
 		&self.gfx.device
@@ -251,9 +275,10 @@ impl DialogWin {
 		w: f32,
 		h: f32,
 		resizable: bool,
-		parent: Option<RawWindowHandle>,
+		parent: Option<Parent>,
 		warm: Option<&crate::gfx::DialogGpu>,
 	) -> anyhow::Result<(Arc<Window>, Gfx, TextCtx, RectRenderer)> {
+		let handle = parent.map(Parent::handle);
 		#[allow(unused_mut)] // reassigned on linux/windows/macos below
 		let mut attrs = Window::default_attributes()
 			.with_title(title)
@@ -273,16 +298,17 @@ impl DialogWin {
 		// is child-window-of semantics, which is what we want there. X11:
 		// parent_window means literal X reparenting (an embedded child, unmanaged
 		// by the WM), so DON'T pass it there; WM_TRANSIENT_FOR is set after
-		// creation instead (below).
+		// creation instead (below). Wayland: winit has no parent at all, so
+		// xdg_toplevel.set_parent goes on the raw toplevel, also below.
 		#[cfg(target_os = "windows")]
-		if let Some(RawWindowHandle::Win32(h)) = parent {
+		if let Some(RawWindowHandle::Win32(h)) = handle {
 			use winit::platform::windows::WindowAttributesExtWindows;
 			attrs = attrs.with_owner_window(h.hwnd.get());
 		}
 		#[cfg(target_os = "macos")]
-		if parent.is_some() {
+		if handle.is_some() {
 			// SAFETY: the handle comes from the live main window on this same thread.
-			attrs = unsafe { attrs.with_parent_window(parent) };
+			attrs = unsafe { attrs.with_parent_window(handle) };
 		}
 		// X11: create unmapped so WM_TRANSIENT_FOR + the modal/dialog hints are all
 		// set BEFORE the WM maps the window and fixes its stacking group. A post-map
@@ -298,7 +324,9 @@ impl DialogWin {
 			attrs = attrs.with_visible(false);
 		}
 		let window = Arc::new(el.create_window(attrs)?);
-		set_transient_for(&window, parent.as_ref());
+		set_transient_for(&window, handle.as_ref());
+		#[cfg(target_os = "linux")]
+		set_toplevel_parent(&window, parent);
 		// PRIMARY (no GL): the main window may hold a glutin GL/EGL context, and a
 		// second wgpu GL instance would panic in EGL teardown. Dialogs are opaque,
 		// so Vulkan/Metal/DX12 is all they need. The warm context (see DialogGpu)
@@ -325,7 +353,7 @@ impl DialogWin {
 	pub fn new_about(
 		el: &ActiveEventLoop,
 		adapter: &wgpu::AdapterInfo,
-		parent: Option<RawWindowHandle>,
+		parent: Option<Parent>,
 		warm: Option<&crate::gfx::DialogGpu>,
 	) -> anyhow::Result<Self> {
 		// provisional window so we have a TextCtx to measure with
@@ -365,7 +393,7 @@ impl DialogWin {
 			tip_drawn: None,
 			focus: crate::tip::Focus::default(),
 			shaped: ShapedText::default(),
-			parent,
+			parent: parent.map(Parent::handle),
 			snapped: false,
 			caps: (f32::MAX, f32::MAX),
 			mods: ModifiersState::empty(),
@@ -379,7 +407,7 @@ impl DialogWin {
 		el: &ActiveEventLoop,
 		title: String,
 		paras: &[String],
-		parent: Option<RawWindowHandle>,
+		parent: Option<Parent>,
 		warm: Option<&crate::gfx::DialogGpu>,
 	) -> anyhow::Result<Self> {
 		let (window, mut gfx, mut text, rects) =
@@ -410,7 +438,7 @@ impl DialogWin {
 			tip_drawn: None,
 			focus: crate::tip::Focus::default(),
 			shaped: ShapedText::default(),
-			parent,
+			parent: parent.map(Parent::handle),
 			snapped: false,
 			caps: (f32::MAX, f32::MAX),
 			mods: ModifiersState::empty(),
@@ -424,7 +452,7 @@ impl DialogWin {
 		el: &ActiveEventLoop,
 		title: String,
 		paras: &[String],
-		parent: Option<RawWindowHandle>,
+		parent: Option<Parent>,
 		warm: Option<&crate::gfx::DialogGpu>,
 	) -> anyhow::Result<Self> {
 		let (window, mut gfx, mut text, rects) =
@@ -460,7 +488,7 @@ impl DialogWin {
 			tip_drawn: None,
 			focus: crate::tip::Focus::default(),
 			shaped: ShapedText::default(),
-			parent,
+			parent: parent.map(Parent::handle),
 			snapped: false,
 			caps: (f32::MAX, f32::MAX),
 			mods: ModifiersState::empty(),
@@ -473,7 +501,7 @@ impl DialogWin {
 	/// and is never written anywhere.
 	pub fn new_settings(
 		el: &ActiveEventLoop,
-		parent: Option<RawWindowHandle>,
+		parent: Option<Parent>,
 		resume: Option<View>,
 		sized: Option<(f32, f32)>,
 		warm: Option<&crate::gfx::DialogGpu>,
@@ -490,7 +518,7 @@ impl DialogWin {
 		// ~1010 DIP tall. A tab that doesn't fit scrolls instead of pushing the
 		// footer buttons off the bottom. SettingsDialog divides these by the scale
 		// factor on the way in, so every figure here is physical.
-		let (max_w, max_h) = Self::settings_caps(&window, parent, scale);
+		let (max_w, max_h) = Self::settings_caps(&window, parent.map(Parent::handle), scale);
 		// laid out at the origin
 		let mut dialog = SettingsDialog::new(0.0, 0.0, text.ui_line_h, chrome, max_w, max_h, scale);
 		dialog.start_from(base);
@@ -537,7 +565,7 @@ impl DialogWin {
 			tip_drawn: None,
 			focus: crate::tip::Focus::default(),
 			shaped: ShapedText::default(),
-			parent,
+			parent: parent.map(Parent::handle),
 			snapped: false,
 			caps: (max_w, max_h),
 			mods: ModifiersState::empty(),
@@ -1951,6 +1979,46 @@ fn set_transient_for(window: &Window, parent: Option<&RawWindowHandle>) {
 }
 #[cfg(not(target_os = "linux"))]
 fn set_transient_for(_window: &Window, _parent: Option<&RawWindowHandle>) {}
+
+// Wayland's transient-for: the compositor keeps the dialog above the terminal,
+// and may leave it out of the taskbar and alt+tab (2026110118260314). Sent
+// before the first buffer, so it's there when the dialog maps. No-op off
+// Wayland, where neither window has a toplevel.
+#[cfg(target_os = "linux")]
+fn set_toplevel_parent(window: &Window, parent: Option<Parent>) {
+	use wayland_backend::client::{Backend, ObjectId};
+	use wayland_client::{Connection, Proxy};
+	use wayland_protocols::xdg::shell::client::xdg_toplevel::XdgToplevel;
+	use winit::platform::wayland::WindowExtWayland;
+	use winit::raw_window_handle::{HasDisplayHandle, RawDisplayHandle};
+
+	let (Some(ours), Some(theirs)) = (window.xdg_toplevel(), parent.and_then(|p| p.toplevel))
+	else {
+		return;
+	};
+	let Ok(display) = window.display_handle() else {
+		return;
+	};
+	let RawDisplayHandle::Wayland(display) = display.as_raw() else {
+		return;
+	};
+	// A guest on winit's connection, as in monitor.rs, kept only for the call.
+	// SAFETY: winit's display, live while its window is.
+	let conn = Connection::from_backend(unsafe {
+		Backend::from_foreign_display(display.display.as_ptr().cast())
+	});
+	let toplevel = |ptr: std::ptr::NonNull<std::ffi::c_void>| {
+		// SAFETY: both are winit's toplevels, live while their windows are, and
+		// the interface is checked by name.
+		let id = unsafe { ObjectId::from_ptr(XdgToplevel::interface(), ptr.as_ptr().cast()) };
+		id.ok().and_then(|id| XdgToplevel::from_id(&conn, id).ok())
+	};
+	let (Some(ours), Some(theirs)) = (toplevel(ours), toplevel(theirs)) else {
+		return;
+	};
+	ours.set_parent(Some(&theirs));
+	let _ = conn.flush();
+}
 
 // Keep the parent (terminal) window directly below `dialog` in the stack, via an
 // EWMH _NET_RESTACK_WINDOW client message to the root window. xfwm4/GNOME raise a

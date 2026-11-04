@@ -5354,14 +5354,10 @@ impl ApplicationHandler<UserEvent> for App {
 			.is_some_and(|state| std::mem::take(&mut state.pending_about));
 		// parent handle so the WM ties the dialog to the terminal window
 		// (transient-for / owner)
-		let parent = self.state.as_ref().and_then(|state| {
-			use winit::raw_window_handle::HasWindowHandle;
-			state
-				.window
-				.window_handle()
-				.ok()
-				.map(|handle| handle.as_raw())
-		});
+		let parent = self
+			.state
+			.as_ref()
+			.and_then(|state| crate::dialog::Parent::of(&state.window));
 		// cloned (all wgpu handles, so refcount bumps) rather than borrowed: the
 		// open arms below also take `&mut self` to store the dialog
 		let warm = (open_about

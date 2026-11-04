@@ -2519,6 +2519,7 @@ dependencies = [
  "smithay-client-toolkit 0.19.2",
  "wayland-backend",
  "wayland-client",
+ "wayland-protocols",
  "wgpu",
  "windows-sys 0.59.0",
  "winit",
