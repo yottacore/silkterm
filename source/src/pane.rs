@@ -9781,10 +9781,9 @@ mod tests {
 		assert_eq!(buf.layout_runs().count(), lines + 1);
 	}
 
-	// The repro line, with 4:2 for double (the engine reads 21 as not bold), and
-	// the other styles: each underline the engine keeps is
-	// its own rule over exactly its cells, in the color the program set or else
-	// the text's. Concealed text draws none, and the strip keeps them too.
+	// The repro line, with 4:2 for double, and the other styles: each underline
+	// the engine keeps is its own rule over exactly its cells, in the color the
+	// program set or else the text's. Concealed text draws none, and the strip keeps them too.
 	// Test ID: desqy
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
@@ -9833,6 +9832,32 @@ mod tests {
 		assert_eq!(strikes[0].color, [200; 3]);
 		let strip = strip_cell(&row[Column(6)], term.colors(), &settings, &mut readable);
 		assert_eq!(strip.rules.under.map(|(rule, _)| rule), Some(Rule::Curly));
+	}
+
+	// SGR 21 is a double underline, as in ECMA-48 and xterm, and bold stays on.
+	// Test ID: detxz
+	#[test]
+	fn sgr_21_double_underlines_and_keeps_bold() {
+		let term = term_fed(8, 1, 0, "\x1b[1;21mtwo\x1b[24mone");
+		let settings = config::Settings::default();
+		let mut readable = palette::Readable::default();
+		let row = &term.grid()[Line(0)];
+		let mut unders = Vec::new();
+		for column in 0..6 {
+			let cell = &row[Column(column)];
+			assert!(cell.flags.contains(Flags::BOLD), "column {column}");
+			let rules = cell_rules(
+				cell,
+				[200; 3],
+				[0; 3],
+				term.colors(),
+				&settings,
+				&mut readable,
+			);
+			unders.push(rules.under.map(|(rule, _)| rule));
+		}
+		let double = Some(Rule::Double);
+		assert_eq!(unders, [double, double, double, None, None, None]);
 	}
 
 	// Every rule stays inside its own cell at any font size, so none draws into
