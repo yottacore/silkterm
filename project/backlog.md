@@ -34,62 +34,29 @@ Going forward, new issues in the new template at the bottom of this file, will g
 
 ## Issues
 
-- A launch with --config pointing elsewhere still adds shell integration to the account's own shell profiles
-	- ID: 2026110314410446
+- Running with `--software-rendering` on vmKt6m still fails with a complaint about no suitable GPU
+	- ID: 2026102807384202
 	- Type: Bug
-	- Status: Done
-	- Priority: Low
-	- Opened: 20261103-144104
-	- Opened by: CC
-	- Target OS: All
-	- Test environment: b23
-	- Progress log:
-		- 20261103: Seen on vmKt6m while working 2026102807384202. A launch as collierjr made ~/.config/powershell/Microsoft.PowerShell_profile.ps1 and its folder, with --config set to a temp file. Check whether that's wanted, or whether a launch with its own config should leave the real profiles alone.
-		- 20261103: Writing the profile is by design. design.md and shell-integration.md say it goes in at launch, once, unless `shell.integration` is off, and a `--config` launch reads that setting from its own file. The profile belongs to the account, not to a config, so a `--config` session gets the same new-tab directory as any other.
-		- 20261103: What was wrong is the note of profiles written to. It sat beside the config in use, so a `--config` launch found none and put back a block the user had deleted, which the docs say never happens.
-	- Actual cause:
-		- The note lived in `data_dir()`, which follows `--config`.
-	- Decisions:
-		- 20261103: A `--config` launch still installs, governed by that file's `shell.integration`. Skipping it would leave a `--config` user without an advertised feature, and the account's profile is shared anyway. A test launch that must not touch the account gets its own HOME.
-		- 20261103: The note always lives in the account's own data folder, as with no `--config`. An older note beside a `--config` file is not read: only dev builds since 09-08 wrote one, never a release.
-	- Actual fix:
-		- The note is kept in the account's data folder whatever `--config` names. shell-integration.md says so.
-	- Swept: the other `data_dir`, `cache_dir` and `state_dir` users (the bash prompt script, wallpaper cache and history, state.shcl) are the program's own files, which the flag is meant to keep apart. Nothing else records state about files outside SilkTerm's folders.
-	- Branch: rnd1103
-	- Commit: cb14f0c
-	- Test case: `a_config_named_on_the_command_line_reads_the_accounts_profile_note` (detst). Failed with the note beside the config, passes with the fix.
-	- Verified: the backlog quick run, all five areas, and Windows-target clippy.
-	- Closed: 20261103-145900
-
-- The tmux end test fails in the whole suite on vmKt6m, and passes alone there
-	- ID: 2026110313290006
-	- Type: Bug
-	- Status: Done
+	- Status: Waiting for answers
+		- Waits on the question in questions.md: ship SwiftShader in the Mac app, or keep the alert.
 	- Severity: Avg
-	- Opened: 20261103-132900
-	- Opened by: CC
-	- Related IDs: 2026102811082502
+	- Opened: 20261028-073842
+	- Opened by: JC
 	- Target OS: macOS
-	- Test environment: vmKt6m, as mactest, with MacPorts tmux 3.8 at /opt/local/bin
-	- Steps to reproduce: Run the private runner's Mac job on vmKt6m with its tests, or `cargo test --workspace` there as mactest.
-	- Incorrect behavior: `ending_kills_the_session_started_and_no_other` (de30d) fails at tmux.rs:506 with "silk-test_1": the first `new-session` on the test's own server didn't succeed. The other 1401 pass.
-	- Expected behavior: It passes, or skips when there is no tmux.
-	- Reproduced: 20261103, once in the whole suite. Control: alone on the same build it passed 3 of 3, and 5 of 5 with 12 busy loops on the VM's 8 cores (load about 7).
-	- Possible cause: Unmeasured. `run` gives a tmux call 800 ms (ASK_FOR), and the first `new-session` also starts the server, during the suite's process churn. Or another test reaching the same server.
+	- Test environment: vmKt6m
+	- Incorrect behavior: It still fails with a complaint about no suitable GPU.
+	- Reproduced: 20261103 on vmKt6m, launched in the console session. stderr had the no-Metal words, and the alert was up.
+	- Actual cause:
+		- The Mac build has only wgpu's Metal backend, so `--software-rendering` there is refused with a line on stderr, and the launch goes on to look for a card. With no Metal device there's none, per 2026102209035801.
+	- Related IDs: 2026102209035801
+	- Notes:
+		- Pre-next-cut.
 	- Progress log:
-		- 20261103: Measured in the whole suite on vmKt6m, 3 runs, all passed: the first `new-session` takes 35 to 47 ms, at 8 and 16 test threads and with 12 busy loops (guest load 27), and the others about 15 ms. On b23 it's 6 to 13 ms. So a fail at 800 ms is a stall of 20 times that or more, not the usual cost.
-		- 20261103: Ruled out: another test on the same server, since only this test sets its socket, per thread, in its own run folder, and every other ask goes to `/dev/null/no-tmux`. A stale socket folder, since there's none in `/tmp`, and the failing run's folder had no `tmuxend` left in it.
-		- 20261103: Still open: what stalled. The guest can stall that long. While it was loaded, an ssh to it timed out in the banner exchange after 20 s. A spawn that failed for the 256 open files a Mac allows is the other candidate, and the new message would tell it apart.
-		- 20261103: Verified: the whole unit suite on vmKt6m as mactest, at dcbec71, 3 runs in a row. 1405 passed, 0 failed, each time, de30d included, against the real tmux. No setup call took over 800 ms, so no fail message came up to tell the causes apart. The stall stays unexplained, and the next fail will say which it was.
-	- Decisions:
-		- 20261103: The test's own setup and cleanup calls get 10 s, not ASK_FOR, since they aren't what it tests. The asks it does test, `has_session`, `current_path` and `end`, keep the app's 800 ms. Its message gives what tmux said or why there was no answer, and a setup call past 800 ms is noted in its output.
-		- 20261103: `run` is now `ask` with ASK_FOR, and `ask` says why it came back empty. Nothing changes for the app.
-	- Actual fix: A workaround, since the stall isn't explained: the test's setup waits up to 10 s, and a fail says why.
-	- Verified: 20261103. With the first `new-session` held 1.2 s, de30d failed at it with "silk-test_1" under the old wait, as on vmKt6m, and passes now. The quick gate, clippy for Windows and the test ID check pass.
-	- Swept: every `run` caller in tmux.rs. de541 asks with no socket and expects no answer, so it passes either way. No other test starts a tmux server.
-	- Test case: `ending_kills_the_session_started_and_no_other` (de30d).
+		- 20261103: Tried on vmKt6m. wgpu's GL backend through ANGLE found nothing, since LibreWolf's ANGLE is Metal only, and Chrome and Brave link theirs in. SwiftShader's Vulkan driver, as Chrome ships it, gave a CPU device once wgpu's `vulkan-portability` feature was on. SilkTerm came up on it and started its shells, but every frame was dropped, since the Metal layer it draws to has no device to give a picture with.
+		- 20261103: So a fix needs the libraries in the Mac app and a second way to show a frame, drawn off screen and copied back. That's too big for one pass. It gets split once the question is answered.
+		- 20261103: Nothing changed in the code.
+	- Test case: none yet. Waits on the answer.
 	- Branch: rnd1103
-	- Closed: 20261103-163000
 
 - The window doesn't paint while the GPU is busy or short on memory, and stays blank after the load ends
 	- ID: 2026100312470535
@@ -216,49 +183,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Swept: the one output path, `UserEvent::Wakeup` to `State::note_output`. Other signs of life (input, focus, shown, pointer) are about the window, not a pane. `ChildGone` touches the pane only.
 	- Branch: rnd1101b
 	- Test case: `output_from_a_tab_in_the_back_does_not_keep_the_device` (der5b). Also `cicd/tests/idleother/run.bash` (deqy2), in the full run.
-
-- Running on macOS without a GPU fails to launch
-	- ID: 2026102209035801
-	- Type: Bug
-	- Status: Done
-		- Answered: keep the alert. Left is the no-Metal check, on vmKt6m, which has no Metal.
-		- 20261025: The round's build runs on vmKt6m, but a launch with nobody logged on at its console never gets to the device check. Logging on there is a person's part.
-		- Stand-in: 20261025. A debug build of 8a28055, made on b26, run on vmKt6m over ssh as `mactest`. `--version` printed `build deea6 (2026-10-25)`. A plain launch printed nothing and was still running after 60 s, its main thread waiting for events in `NSApplication run`. With no one logged on the app never finishes launching, so nothing reaches the device check.
-	- Stand-in: 20261103. The stock debug build of dcbec71, launched on vmKt6m through `open` as the user logged on at its console, with its own HOME. That stood in for the hand test, which asked for a Finder launch, OK, and exit code 2 from Terminal.
-		- It reached the device check. stderr had the headline, the no-software-renderer line and wgpu's "metal found no adapters".
-		- The app was frontmost, and its one on-screen window was 260 by 372 at the modal panel level, the alert's shape. It was still up at 15 and 20 s, waiting on it.
-		- Not reached: the alert's text on screen, and the exit after OK. The box can't send keys or read window contents over ssh. The exit is the plain `exit(2)` after the modal returns, and de9m1 covers the words.
-	- Severity: Avg
-	- Opened: 20261022-090358
-	- Opened by: JC
-	- Assigned to: CC
-	- Related IDs: 2026102209035802, 2026100418225504
-	- Target OS: macOS
-	- Steps to reproduce:
-		- Run on macOS without a GPU.
-	- Incorrect behavior: It fails to launch.
-	- Expected behavior: It falls back to software rendering if possible.
-	- Notes:
-		- Pre-next-cut.
-	- Reproduced: No. No Mac here. Traced in the code instead.
-	- Actual cause:
-		- The macOS build has only wgpu's Metal backend. GL there needs ANGLE, and Vulkan needs MoltenVK, which runs on Metal itself. wgpu has no software adapter on macOS. So a Mac with no Metal device finds no adapter at all.
-		- The launch then printed "no usable GPU/renderer" on stderr and exited with 2. A launch from Finder shows no stderr, so the program seemed to just vanish.
-	- Progress log:
-		- 20261022: No fallback is possible with what's in the tree. The options are in questions.md: keep an alert, ship ANGLE with SwiftShader, or write a CPU renderer.
-		- 20261022: Done meanwhile: with no device at all, macOS says why in an alert as well as on stderr, then exits with 2. Other platforms keep their stderr line as it was.
-		- 20261022: Verified: the words test passes. fmt, and clippy for Linux, Windows and macOS, pass. The alert itself is only compiled.
-		- 20261022: No real software path on macOS was found, so the Resource use group's `not_macos` row stays as it is.
-		- 20261024: Answer: A, keep the alert. A Mac with no Metal can't run SilkTerm, and the alert says why. A real fallback through ANGLE would be its own item, if Mac VMs turn out to matter.
-		- 20261025: The words test passed again in both full runs at e95b81b, and the hosted Mac workflow passed on rnd1025. The vmKt6m check didn't fit this round's time.
-		- 20261025: Tried on vmKt6m over ssh, per the Stand-in row. A launch with nobody logged on waits quietly for the window server, as macOS apps do there, so that isn't filed.
-		- 20261026: The words test passed again at fab6815, and the hosted Mac workflow on rnd1026.
-		- 20261028: The words test passed again at 64f3584, and the hosted Mac workflow on rnd1028.
-	- Swept: the one exit site where no device could be made at launch. Rebuilds after idle and the dialogs keep their own error paths, and both need a device that once worked.
-	- Branch: rnd1022
-	- Test case: `no_device_on_macos_says_why_and_that_nothing_can_stand_in` (de9m1)
-	- Acceptance signoff: Self-closed: the stock build on vmKt6m, launched in the console session, put the alert up and wrote its words to stderr (20261103).
-	- Closed: 20261103-163000
 
 - Regression: On Linux, the settings dialog is detached from the main window, and is its own alt+tab target
 	- ID: 2026103010083402
@@ -399,48 +323,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Branch: rnd1024
 	- Test case: ddkre's drag figure, under Verified. The limit stays 360, since the saving is about 5% and the 2026102321230038 margin was set by load.
 
-- Leak checks: the Miri step, with the canary
-	- ID: 2026102320591318
-	- Type: Task
-	- Status: Done
-		- Waits on the step's first run over the whole suite, which takes hours.
-	- Needs local test suite run?: No
-	- Priority: Avg
-	- Opened: 20261023-205913
-	- Opened by: CC
-	- Parent ID: 2026101714445004
-	- Prereq IDs: 2026102320591313
-	- Requirements:
-		- The image installs the `miri` component on the pinned nightly, beside `rust-src`.
-		- A step script, like `tsan.bash`, runs the sanitizer canary first, then the suite, in a target dir and Miri sysroot of its own under `target/`.
-		- The canary's two tests run apart, since a UB report stops the binary. The step stops unless Miri reports the race as a data race and the forgotten Vec as leaked memory.
-		- A `--no-miri` flag, a plan line, and the cleanup and rar exclude lines. New container and engine cases, watched to fail.
-		- Miri runs only when `--leakcheck` is given, and says first that it's very slow. A run with no flags keeps the other leak checks, which stay on by default. Tests over a time bar under Miri, such as 60 s, are ignored under Miri as too slow, so even a `--leakcheck` run takes the fast part (answer on 2026102320591323).
-		- Under `--long` too, not only `--leakcheck`, per the CICD process gaps item 2026102416233812.
-	- Progress log:
-		- 20261102: The image adds the `miri` component on the pinned nightly. `cicd/utility/miri.bash` builds Miri's sysroot, runs the canary's race and leak tests one at a time, then the suite, all under `target/miri-<date>`. It takes cargo test arguments after the suite command, to run a few tests through it.
-		- 20261102: `cicd.bash` runs it after the TSan run, under `--leakcheck` or `--long`, in the image from a run on the host. The plan has a Miri line, and says before the run starts that it's very slow. `--no-miri` skips it, and `--no-leakcheck` drops it with the other leak checks.
-		- 20261102: The cleanup takes the old `target/miri-<date>` on a nightly bump, and the backup leaves `target/miri-*` out. design.md, install.md, build.md and prerequisites.md say so.
-		- 20261102: The full run at 383a14c failed in the 'test run folder' step (ddazx), at dd5nn's Miri config check. Nothing wrote to the temp dir. The check expected a relative target dir, and the container hands in an absolute one, so it failed in the container whatever the temp dir. It now works out the sysroot path either way, and checks both.
-	- Decisions:
-		- 20261102: `--quick --leakcheck` runs it too, as it does CodeQL, since `--leakcheck` is every leak check.
-		- 20261102: The `miri` component goes in a late layer of its own, not on the `rust-src` line, so adding it didn't rebuild the CodeQL layer after it. The heaptrack layer did the same. The image grew about 20 MB.
-		- 20261102: Miri's sysroot goes inside cargo's own `miri/` dir under `target/miri-<date>`, so the cleanup's nightly-dir sweep takes both whole. Its path is absolute, since cargo runs each test binary from its crate's dir.
-		- 20261102: The suite runs with `--no-fail-fast`, so a report that stops one test binary still lets the others run, and the step lists every report.
-		- 20261102: The canary's PASS lines reuse its tests' IDs, debjk for the race and de5f0 for the leak, as the ASan and TSan steps do.
-	- Verified: 20261102. In the image at d47751450835, `miri.bash -p knobs -- a_bad_spec_names_every_mistake` printed `PASS debjk Miri canary race caught` and `PASS de5f0 Miri canary leak caught`, then "OK: no Miri reports (1 passed, 0 failed, 0 ignored, 4s)". Pointed at the canary crate as its suite, it stopped on the race's data race report. With `-Zmiri-ignore-leaks` the leak canary printed `FAIL de5f0` and stopped the step.
-	- Verified: 20261102. The engine test passed with 225 checks, and its 24 new checks and the changed one failed against the old cicd.bash and config.bash. The container test passed with 198 checks. Against the old files it failed its 2 new recipe and `--no-miri` checks, then stopped outright at the missing step. The cleanup test passed. `cicd/cicd.bash --backlog-run-quick`, all five areas, passed. shellcheck and the bash style check are clean.
-		- Swept: every reader of the sanitizer steps' places in a run: cicd.bash's help, plan, `--list`, the image check and stage 3, config.bash's cleanup and rar lines, design.md, install.md, build.md, prerequisites.md, and the engine, container and cleanup tests. `cicd-win.ps1` and `ci-mac.bash` don't run the nightly steps.
-	- Verified: 20261102. With an absolute `CARGO_TARGET_DIR`, the old dd5nn failed the Miri config check, on this box and in the image with the temp dir read-only. The new one passes there, with no target dir set, and in the image (226 checks), and fails on a config whose Miri sysroot stays relative. ddazx alone in the image at d47751450835 passed, 96 checks, both engine cases included. `cicd/cicd.bash --backlog-run-quick`, all five areas, passed.
-	- Verified: 20261103. The whole suite under Miri in the image at d47751450835, at 3377c7f: `PASS debjk`, `PASS de5f0`, then "OK: no Miri reports (763 passed, 0 failed, 688 ignored, 3711s)". Log /mnt/ext/wip2/wip/tmp/silkterm/20261103-130757_001/run.log.
-	- Branch: rnd1102
-	- Test case: dd5nn `cicd/tests/engine/run.bash`, 24 new checks and 1 changed; ddrp2 `cicd/tests/container/run.bash`, 18 new; de5e9 `cicd/tests/cleanup/run.bash`, 4 new. The canary lines debjk and de5f0 in a Miri run.
-		- 20261102: dd5nn's soak check "and a run on this box builds the image for it" expects `miriInImage` in the image line, was without it.
-		- 20261102: dd5nn's Miri config check runs with no target dir set and with an absolute one, the second as a new check.
-		- 20261102: Verified: the full run at 3ac421d with `--no-fuzz --no-asan --no-leakcheck`, in the container, passed the 'test run folder' step (ddazx) and dd5nn, and said "Miri run skipped (--no-leakcheck)". The run then stopped on the dct7r flake, 2026110222113195.
-	- Acceptance signoff: Self-closed: the step's first whole-suite run passed, with both canaries caught and no reports, in 62 min.
-	- Closed: 20261103-142045
-
 - Add a contributor license agreement, like nano-git-db's
 	- ID: 2026101906582193
 	- Type: Task
@@ -557,110 +439,31 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Progress log:
 		- 20261022: Split in 2, too big for one sitting. 2026102211461905 puts the pinned CodeQL in the image and the step in the leak checks. 2026102211462005 watches it fail on a planted finding and files what the first run finds. This item closes when they do.
 
-- Leak checks: the test suite under Miri on every full run
-	- ID: 2026101714445004
+- Leak checks: CodeQL watched to fail, and its first findings filed
+	- ID: 2026102211462005
 	- Type: Task
-	- Status: Done
+	- Status: Started
 	- Priority: Avg
-	- Opened: 20261017-144450
+	- Opened: 20261022-114620
 	- Opened by: CC
-	- Parent ID: 2026101714015789
-	- Prereq IDs: 2026101714445002
+	- Parent ID: 2026101913360695
+	- Prereq IDs: 2026102211461905
 	- Requirements:
-		- Third-party and vendored code end users run is covered, per the parent's 20261017 decision. What it finds goes on the backlog.
-		- The parent's Miri rows, including the ignore-with-reason rule and the move behind `--leakcheck` if a full run measures too slow.
+		- Plant a finding the suite flags in a scratch copy of the tree, and see `cicd/utility/codeql.bash` go red. An unused variable in `main` works.
+		- File what the first run finds, one item per distinct cause, or one roll-up for many of one kind in third-party code. Suppress each in `cicd/codeql-suppressions.txt` with its item's ID.
+		- Note the step's measured time on 2026102211461905. If it's too slow for every full run, say so there rather than moving it.
+		- 20261022: The first try didn't finish in 35 minutes (see 2026102211461905). Options: a per-query `--timeout` that fails the step, the smaller `rust-code-scanning` suite, a memory cap with `--ram`, or the step behind `--leakcheck` only. Pick after one full measured run.
+		- 20261022: The step is opt-in until this item decides: run it with `cicd.bash --codeql`. It will be red until the findings are filed and suppressed here. Turning it on by default is part of closing this item.
 	- Progress log:
-		- 20261023: Measured on 72 of the suite's 1437 tests, picked at random, each run alone under Miri on nightly-2026-10-16, 12 at a time, at a load of 25 to 60. 19 passed, in 5 to 35 s each. 14 stopped at Miri's isolation. 39 were still running at 90 s, the Settings dialog and config tests most of all. The knobs crate got through 3 tests in 220 s.
-		- 20261023: Of the 14 isolation stops, 8 pass with isolation off and the test folder given. The other 4 didn't finish in the time.
-		- 20261023: Too slow for every full run. Over half the suite at more than 90 s each is at least 19 hours of CPU, against under 2 minutes for the plain suite.
-		- 20261023: The sanitizer canary works under Miri as it is, each test run alone. Miri reports the race as UB and the forgotten Vec as leaked memory.
-		- 20261023: No UB or leak turned up in the tests that finished.
-		- 20261023: Since 10-22 the leak checks are on in every full run by default (2026101916054002), so moving Miri behind `--leakcheck` no longer keeps it out of one. That's the question on 2026102320591323.
-		- 20261023: Split in 3. 2026102320591313 makes the suite runnable under Miri, 2026102320591318 adds the step, and 2026102320591323 settles where it runs. This item closes when they do.
-	- Test case: The Miri step's canary lines debjk and de5f0, and dd5nn, ddrp2 and de5e9, per 2026102320591318. The suite's Miri sorts, per 2026102320591313.
-	- Acceptance signoff: Self-closed: all 3 children are Done, and the first whole-suite Miri run on 20261103 was clean. It runs under --leakcheck or --long, per the answer on 2026102320591323.
-	- Closed: 20261103-144104
-
-- Leak checks: the headless soak test under `--leakcheck`
-	- ID: 2026101913370214
-	- Type: Task
-	- Status: Done
-	- Priority: Avg
-	- Opened: 20261019-133702
-	- Opened by: CC
-	- Parent ID: 2026101714015789
-	- Related IDs: 2026101714445005
-	- Requirements:
-		- Third-party and vendored code end users run is covered, per the parent's 20261017 decision. What it finds goes on the backlog.
-		- The parent's soak row: the program's main actions looped headless, failing when the heap at round 2N is over round N by more than a set margin, with the heap report kept as a pipeline artifact. A plain build, since heaptrack can't share one with a sanitizer.
-		- Every tool pinned and run in the build container.
-		- A loop that types goes into a harmless shell, through `--shell` and a test script, never the user's shell config.
-		- Watched to fail on a planted leak before it's trusted.
-	- Notes:
-		- Split from 2026101714445005. Its heap-growth test covers some of the same actions in-process. This one is for what that can't reach: windows, tabs and splits opened and closed, the GPU, the Settings dialog and a real PTY.
-		- `cicd/tests/allocs/run.bash` already drives a window on a private Xvfb.
-	- Progress log:
-		- 20261101: Split in 2. 2026110117065477 is the driver and its heap check, and 2026110117065496 makes it a pipeline step. This item closes when they do.
-	- Test case: der46 `cicd/tests/soak/run.bash`, in the pipeline through dd5nn `cicd/tests/engine/run.bash`
-	- Acceptance signoff: Self-closed: both children are Done, the driver and its heap check, and the pipeline step.
-	- Closed: 20261103-130738
-
-- The private runner's Mac job can't build on vmKt6m: rustup isn't there for the account it uses
-	- ID: 2026102811082502
-	- Type: Bug
-	- Status: Done
-	- Opened: 20261028-110825
-	- Opened by: CC
-	- Related IDs: 2026102507245265
-	- Target OS: macOS
-	- Test environment: vmKt6m
-	- Steps to reproduce: Point the `mac` job at vmKt6m in a `privrig.conf` with `@vmstate`, and run the private runner.
-	- Incorrect behavior: "macos: rustup could not add x86_64-apple-darwin aarch64-apple-darwin", and the job fails. vmKt6m is still put back.
-	- Expected behavior: The job builds there, as on b26.
-	- Reproduced: 20261028, in the test batch, with the runner from silkterm-private `wip/rnd1028-2026102507245265`.
-	- Possible cause: `ssh vmKt6m` lands as collierjr, who has only a MacPorts cargo at /opt/local/bin. rustup is set up for mactest only. Either the box gets rustup for that account, or the job line takes an ssh account, which the lock and VM state helper names would then need kept apart from.
-	- Severity: Avg
-	- Actual cause: The job ssh'd to the bare box name, so it ran in whatever account ssh picked there, collierjr on vmKt6m. The runner had no way to name another.
-	- Actual fix: A box in `privrig.conf` can be `user@box`, such as `mac b26,mactest@vmKt6m`. The job's ssh and scp use it as written. The host lock, its list of known boxes and the VM state helper get the bare box. README says so.
-	- Progress log:
-		- 20261103: The `@vmstate` runner is on silkterm-private's main now, so the fix is on its `rnd1103`.
-		- 20261103: The real `privrig.conf` still says `mac b26,vmKt6m`. It needs `mac b26,mactest@vmKt6m`. It's outside the repo, so it wasn't changed here.
-		- 20261103: With tests on, the job on vmKt6m got through the build and ran the suite. One test failed, de30d, the tmux end test, and it passed alone there. That is 2026110313290006.
+		- 20261103: The first full measured run, at 595a542 in the image, took about 65 minutes and failed on 1024 results, as it should with nothing filed. That is red on real findings; the planted one is child 2026110315304782.
+		- 20261103: The release crate list let in what only proc macros use, such as syn, litrs and quote, about 210 results. It now leaves them out, 186 crates.
+		- 20261103: A suppression can name the values a flow starts from, so a rule for a false flow doesn't hide a real one at the same path.
+		- 20261103: Split in 5. 2026110315303525, our code's results, is done. 2026110315303530, 35 and 41 are the third-party roll-ups; 30 and 35 are done. 2026110315304782 plants a finding and checks the run is green otherwise. This item closes when they do.
+		- 20261103: 41 is done too, so only 2026110315304782 is left, the planted and clean runs, about 65 min each.
 	- Decisions:
-		- 20261103: The job line names the account, rather than the box getting rustup for collierjr. That would put a second Rust next to that account's MacPorts cargo, and build as the admin account rather than the test one. mactest already has rustup 1.96.
-		- 20261103: The lower-case `vmkt6m` lands as mactest through ssh's own config, but wasn't used. The lock and the VM state helper know the box as `vmKt6m`, and a case difference would be easy to break.
-	- Verified: 20261103. dehx0 passes with 10 new checks, and 7 of them failed against the old runner. shellcheck on both files.
-	- Verified: 20261103. A copy of the runner with `mac mactest@vmKt6m`, the host lock and `@vmstate`, vmKt6m paused, `--no-test`: it woke vmKt6m, both release builds and the .app, .zip and .dmg were made as mactest, and the 4 files came back. vmKt6m was paused again after.
-	- Verified: 20261103. The same with `mac b26-nosuchbox,mactest@vmKt6m` and tests on: it fell back to vmKt6m, the silkterm unit tests ran there with 1401 passed and 1 failed (de30d, above), and vmKt6m was paused again after.
-	- Swept: every use of the job's host in run.bash. The pick, `fAsleep`, the lock's list, `check`, `wrap` and the skip messages take the bare box. ssh and scp in both jobs take it as written, the store job's included.
-	- Test case: `silkterm-private` `cicd/tests/hosts/run.bash` (dehx0).
-	- Branch: `silkterm-private` `rnd1103`
-	- Commit: `silkterm-private` 09298a8
-	- Closed: 20261103-132943
-
-- Running with `--software-rendering` on vmKt6m still fails with a complaint about no suitable GPU
-	- ID: 2026102807384202
-	- Type: Bug
-	- Status: Waiting for answers
-		- Waits on the question in questions.md: ship SwiftShader in the Mac app, or keep the alert.
-	- Severity: Avg
-	- Opened: 20261028-073842
-	- Opened by: JC
-	- Target OS: macOS
-	- Test environment: vmKt6m
-	- Incorrect behavior: It still fails with a complaint about no suitable GPU.
-	- Reproduced: 20261103 on vmKt6m, launched in the console session. stderr had the no-Metal words, and the alert was up.
-	- Actual cause:
-		- The Mac build has only wgpu's Metal backend, so `--software-rendering` there is refused with a line on stderr, and the launch goes on to look for a card. With no Metal device there's none, per 2026102209035801.
-	- Related IDs: 2026102209035801
-	- Notes:
-		- Pre-next-cut.
-	- Progress log:
-		- 20261103: Tried on vmKt6m. wgpu's GL backend through ANGLE found nothing, since LibreWolf's ANGLE is Metal only, and Chrome and Brave link theirs in. SwiftShader's Vulkan driver, as Chrome ships it, gave a CPU device once wgpu's `vulkan-portability` feature was on. SilkTerm came up on it and started its shells, but every frame was dropped, since the Metal layer it draws to has no device to give a picture with.
-		- 20261103: So a fix needs the libraries in the Mac app and a second way to show a frame, drawn off screen and copied back. That's too big for one pass. It gets split once the question is answered.
-		- 20261103: Nothing changed in the code.
-	- Test case: none yet. Waits on the answer.
+		- 20261103: CodeQL stays out of the default run, under `--long`, `--leakcheck` and `--codeql`, against this item's "on by default". It takes about 65 minutes alone, and the default run has to fit in about an hour, per the 2026-10-24 reset and 2026102616543936. The smaller suite or a timeout would drop the quality queries the parent asked for.
 	- Branch: rnd1103
+	- Test case: dd5nn `cicd/tests/engine/run.bash`, 5 new checks, and its children's.
 
 - The unscrollable search and buttons areas should be lighter than the scrollable content
 	- ID: 2026103010083403
@@ -722,124 +525,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261017: Priority Avg is a best guess, since none was given. Split into 5 child items, worked one at a time, the cheap static checks first. This item closes when they do.
 	- Closed:
 
-- Leak checks: CodeQL watched to fail, and its first findings filed
-	- ID: 2026102211462005
-	- Type: Task
-	- Status: Started
-	- Priority: Avg
-	- Opened: 20261022-114620
-	- Opened by: CC
-	- Parent ID: 2026101913360695
-	- Prereq IDs: 2026102211461905
-	- Requirements:
-		- Plant a finding the suite flags in a scratch copy of the tree, and see `cicd/utility/codeql.bash` go red. An unused variable in `main` works.
-		- File what the first run finds, one item per distinct cause, or one roll-up for many of one kind in third-party code. Suppress each in `cicd/codeql-suppressions.txt` with its item's ID.
-		- Note the step's measured time on 2026102211461905. If it's too slow for every full run, say so there rather than moving it.
-		- 20261022: The first try didn't finish in 35 minutes (see 2026102211461905). Options: a per-query `--timeout` that fails the step, the smaller `rust-code-scanning` suite, a memory cap with `--ram`, or the step behind `--leakcheck` only. Pick after one full measured run.
-		- 20261022: The step is opt-in until this item decides: run it with `cicd.bash --codeql`. It will be red until the findings are filed and suppressed here. Turning it on by default is part of closing this item.
-	- Progress log:
-		- 20261103: The first full measured run, at 595a542 in the image, took about 65 minutes and failed on 1024 results, as it should with nothing filed. That is red on real findings; the planted one is child 2026110315304782.
-		- 20261103: The release crate list let in what only proc macros use, such as syn, litrs and quote, about 210 results. It now leaves them out, 186 crates.
-		- 20261103: A suppression can name the values a flow starts from, so a rule for a false flow doesn't hide a real one at the same path.
-		- 20261103: Split in 5. 2026110315303525, our code's results, is done. 2026110315303530, 35 and 41 are the third-party roll-ups; 30 and 35 are done. 2026110315304782 plants a finding and checks the run is green otherwise. This item closes when they do.
-		- 20261103: 41 is done too, so only 2026110315304782 is left, the planted and clean runs, about 65 min each.
-	- Decisions:
-		- 20261103: CodeQL stays out of the default run, under `--long`, `--leakcheck` and `--codeql`, against this item's "on by default". It takes about 65 minutes alone, and the default run has to fit in about an hour, per the 2026-10-24 reset and 2026102616543936. The smaller suite or a timeout would drop the quality queries the parent asked for.
-	- Branch: rnd1103
-	- Test case: dd5nn `cicd/tests/engine/run.bash`, 5 new checks, and its children's.
-
-- CodeQL: our code's cleartext-logging results are one false flow
-	- ID: 2026110315303525
-	- Type: Task
-	- Status: Done
-	- Priority: Avg
-	- Opened: 20261103-153035
-	- Opened by: CC
-	- Parent ID: 2026102211462005
-	- Requirements:
-		- All 165 results in `source/` were `rust/cleartext-logging`, on asserts, `eprintln!` and a build script warning. Fix a real one, suppress a false one with a reason.
-	- Progress log:
-		- 20261103: Every one starts from `UidBase`, a CFF dict entry in read-fonts, or `Uuid`, a Mach-O load command in object. CodeQL reads both names as user IDs. Their flows go through std's generic code, such as `clone`, iterators and `parse`, as if all types were one, and reach any format call. One into `main.rs` passes through regex and an ARM code generator on the way. None logs anything private.
-		- 20261103: Suppressed by rule, `source/*`, and those 2 sources, so a flow from anything else in our code still fails.
-	- Decisions:
-		- 20261103: One suppression, not one per file, since it's one cause.
-	- Verified: 20261103. The step's filter over the first run's SARIF: 0 results left in our code, 165 known, 646 new in third-party code. The engine test passed, and its new checks failed against the old codeql.bash.
-	- Branch: rnd1103
-	- Test case: dd5nn `cicd/tests/engine/run.bash`: a suppression with sources lets that flow through, and not one that also starts from a password.
-	- Closed: 20261103-153630
-
-- CodeQL: unused variables in third-party crates, a roll-up
-	- ID: 2026110315303530
-	- Type: Task
-	- Status: Done
-	- Priority: Avg
-	- Opened: 20261103-153035
-	- Opened by: CC
-	- Parent ID: 2026102211462005
-	- Estimated effort: Low
-	- Requirements:
-		- About 270 `rust/unused-variable` results in release crates on 20261103, most in wgpu-hal (144) and base64 (41), then rustix, jiff, winit, read-fonts, naga, glow and a few more.
-		- Check a sample for a cfg the extractor didn't see, or a pattern read as a variable. Suppress per crate with this ID.
-	- Progress log:
-		- 20261103: 257 in 16 crates once proc macros' crates were left out. A sample of about 40 were constants and enum variants in a pattern read as bindings, such as `VK_LCONTROL` and `Uint`, files for other platforms such as winit's Windows code and glow's web code, wgpu-hal's noop backend, and base64's own tests. None is a defect a user runs into.
-		- 20261103: Suppressed per crate, any version, with this ID.
-	- Decisions:
-		- 20261103: Any version, so a lock bump doesn't turn the run red on the same kind. A crate new to the list still fails it and gets a look.
-	- Verified: 20261103. The step's filter over the first run's SARIF: 0 unused-variable results left, 257 known under this ID.
-	- Branch: rnd1103
-	- Test case: dd5nn `cicd/tests/engine/run.bash` covers the rule-and-path suppressions. The rest is suppression lines, with no behavior of their own.
-	- Closed: 20261103-154000
-
-- CodeQL: pointer lifetime results in ash, lru and other crates
-	- ID: 2026110315303535
-	- Type: Task
-	- Status: Done
-	- Priority: Avg
-	- Opened: 20261103-153035
-	- Opened by: CC
-	- Parent ID: 2026102211462005
-	- Requirements:
-		- About 290 `rust/access-invalid-pointer` and `rust/access-after-lifetime-ended` results on 20261103: 216 in ash, 41 in lru, then lock_api, rustix, parking_lot_core, ordered-float, hashbrown, smol_str and others.
-		- Read the ash and lru ones first. A real one gets its own Bug and an upstream draft. The rest are suppressed per crate with this ID.
-	- Progress log:
-		- 20261103: 293 in 13 crates once proc macros' crates were left out. 282 are one false flow: the same few sources, std's `null()` behind `Default` and some rustix syscall arguments, reach every crate through std's generic `From`, iterator and fold code. ash's 216 are its generated `push_next`, 108 structs with 2 rules each. lru's read its head and tail sentinels, boxed when the cache is made, and its map's keys.
-		- 20261103: The other 11 start from a null in the same function: an FFI out-parameter in winit, wayland-backend and wgpu-hal, or a pointer checked for null first in parking_lot_core and rustix. Each was read by hand, and none is a defect.
-		- 20261103: ash's `push_next` is unsound from safe code when a pushed struct's `p_next` is garbage. That is upstream's ash-rs/ash#905, and not what these flows show.
-		- 20261103: Suppressed with this ID, any version.
-	- Decisions:
-		- 20261103: Per crate for the false flow, but per file for the 11 read by hand, since each was cleared at its site and not for the crate.
-		- 20261103: No Bug and no upstream draft, since none is real and ash#905 is already filed.
-	- Verified: 20261103. The step's filter over the first run's SARIF: 0 pointer results left, 293 known under this ID. Before the new lines it reported the same 293 as new.
-	- Branch: rnd1103
-	- Test case: dd5nn `cicd/tests/engine/run.bash` covers the rule-and-path suppressions. The rest is suppression lines, with no behavior of their own.
-	- Closed: 20261103-154238
-
-- CodeQL: taint flows in third-party crates from an X11 read and libc fields
-	- ID: 2026110315303541
-	- Type: Task
-	- Status: Done
-	- Priority: Avg
-	- Opened: 20261103-153035
-	- Opened by: CC
-	- Parent ID: 2026102211462005
-	- Requirements:
-		- About 85 results on 20261103. `rust/cleartext-logging` in naga, x11rb, wgpu-hal, alacritty_terminal, cosmic-text and others, from the same `UidBase` and `Uuid` and from libc fields such as `nm_uid`.
-		- `rust/log-injection`, `rust/regex-injection` and `rust/uncontrolled-allocation-size`, all from one X11 socket read in x11rb, into wgpu-hal, naga, regex and allocator-api2.
-		- Suppress the false flows by their sources, the way 2026110315303525 did. A real one gets its own Bug.
-	- Progress log:
-		- 20261103: 96 results in 3 false flows. 69 cleartext-logging results start from the same `UidBase` and `Uuid` as 2026110315303525.
-		- 20261103: 15 more start from 74 fields named like user IDs, UUIDs or passwords, such as `nm_uid`, `st_uid` and `pw_passwd`. Each is where a struct is declared or printed: libc, linux-raw-sys, rustix, std's own copies, Mach-O and ar headers in object, ash's `Debug`, wayland-backend's credentials, and winit's macOS monitor. autocfg and std's tests are among them, though neither is in the binary. The flows go through std's generic `Debug`, `From` and iterator code to asserts and logs of sizes and indexes.
-		- 20261103: The 12 others start at x11rb's `TcpStream::connect`, for a DISPLAY that names a host, not at a read. Every flow passes the stream through core's identity `From`, and comes out as a gpu-allocator error, a regex `MatchError`, a toml string or an allocator-api2 `Vec`. Nothing read from the socket reaches those sinks.
-		- 20261103: A rule's source pattern can now also match `name@path`, the file the source is in, since "user-provided value" names every remote source alike. Suppressed with this ID: one cleartext-logging rule for `vendor/*`, pinned to those sources' files, and one rule per sink file for the X11 flow.
-	- Decisions:
-		- 20261103: Sources pinned by file, not by name, so a real read of `pw_passwd` in, say, nix still fails the step. Files rather than lines, so a version bump doesn't turn the step red.
-		- 20261103: The X11 rules go per sink file, since the same source would start a real flow from server data, such as a reply length in x11rb.
-		- 20261103: No Bug and no upstream draft, since none is real.
-	- Verified: 20261103. The step's filter over the first run's SARIF: 0 new, 96 known under this ID, the other items' counts unchanged. Before the new lines the same 96 were new. Hand-made results with a `pw_passwd` read in nix, a mixed flow, and the X11 source at another sink, or another source at an X11 sink, all still fail. The engine test passed, and its new check failed against the old codeql.bash. `cicd/cicd.bash --backlog-run-quick`, all five areas, passed.
-	- Branch: rnd1103
-	- Test case: dd5nn `cicd/tests/engine/run.bash`: a source pinned by file lets that flow through, and not the same name from another file.
-	- Closed: 20261103-155643
-
 - CodeQL: watched to fail on a planted finding, and green otherwise
 	- ID: 2026110315304782
 	- Type: Task
@@ -853,112 +538,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Requirements:
 		- The parent's planted finding.
 		- Note the time of the clean run on 2026102211461905.
-
-- dct7r's check that a passing run leaves no local run folder failed once in the container
-	- ID: 2026110222113195
-	- Type: Bug
-	- Status: Done
-	- Severity: Low
-	- Opened: 20261102-221131
-	- Opened by:
-	- Target OS: Linux
-	- Incorrect behavior: In the full run at 3ac421d, in the container, cicd/tests/wingui/harness-test.bash failed 'and leaves no run folder in the local temp dir'. Every other check in it passed. The check needs the smoke run's exit code to be 0 and its TMPDIR to be empty after.
-	- Expected behavior: The check passes every time.
-	- Reproduced: 20261103, every time, on this box with HOST_TEMP unset, as the container has it. 3 of 3 runs alone on the host passed on 20261102, with HOST_TEMP set.
-	- Actual cause: The smoke run passed. With HOST_TEMP unset its run folder goes under the TMPDIR handed to it, and on a pass the empty project folder `silkterm` stays there, by design. The check wanted that TMPDIR empty. On the host the run folder went to the real HOST_TEMP, so the check never looked at it there. It wasn't a flake. The container run was the first to reach it since 2026103115564575 moved the folders.
-	- Actual fix: The smoke call unsets HOST_TEMP, as the testdir test does, and the check allows the empty project folder and nothing else. The run's exit code is a check of its own, so a failure says which part failed.
-	- Progress log:
-		- 20261102: Seen once, in rnd1102's second full run. The round didn't touch the wingui harness. The run stops at the first failure, so it didn't show whether rc or a leftover folder failed it.
-		- 20261103: Fixed in the test. Nothing in run.bash or the helpers changed.
-	- Decisions:
-		- 20261103: The check needs the project folder to be there, so it fails if the run folder ends up somewhere else again, rather than passing with nothing to check.
-	- Swept: every test that runs a helper with its own TMPDIR and checks what's left there: testdir and cleanup already unset HOST_TEMP and allow the project folder. This was the only one that didn't.
-	- Verified: 20261103. Before the fix, dct7r with HOST_TEMP unset failed this check every time, and the run exited 0. After the fix it passes with HOST_TEMP unset, with it set, and in the image at d47751450835. With run.bash made to keep its run folder, the check fails. `cicd/cicd.bash --backlog-run-quick scripts docs` passed.
-	- Branch: rnd1103
-	- Test case: cicd/tests/wingui/harness-test.bash (dct7r), its checks "and the run passes" and "and leaves no run folder in the local temp dir".
-	- Acceptance signoff: Self-closed: reproduced, and the test fails before the fix and passes after.
-	- Closed: 20261103-144800
-
-- Which tab a window launched with several tabs opens on
-	- ID: 2026110220221592
-	- Type: Bug
-	- Status: Done
-	- Severity: Low
-	- Opened: 20261102-202215
-	- Opened by: CC
-	- Assigned to: CC
-	- Related IDs: 2026110118143797
-	- Target OS: All
-	- Steps to reproduce:
-		- Run `silkterm --new-tab=logs --directory /var/log`.
-	- Incorrect behavior: The window opens on the first tab. `--help` says `--new-tab` "becomes current", and usage.md says "which becomes the current one", which can read as the tab in front.
-	- Expected behavior: Not decided. Either the last tab made is in front, or the help and usage.md say the launch opens on the first tab and "current" means where later options go.
-	- Notes:
-		- `State` starts with `Tabs { list, active: 0 }` in app.rs. Wording only is the smaller change.
-	- Reproduced: Yes, by reading. The strip always starts with the first tab, and the window opens on the strip's first tab. Each tab opens on its first pane too, by a line in the layout code.
-	- Actual cause: The help and usage.md said "current" without saying it means where the options after it go. The original spec of the command line meant only that.
-	- Decisions:
-		- 20261103: Wording only. A window opens on its first tab, and each tab on its first pane. Tabs and panes keep one rule, the tests that count on the first tab in front stay as they are, and the spec never meant "current" as the tab in front. design.md says so, under Command-line options.
-	- Actual fix: `--help` says a window opens on its first tab and pane, and that options after a `--new-tab` go to it. `--tab` and `--pane` say "go back to", like usage.md. usage.md says the same under Tabs and panes.
-	- Swept: every `--new-tab` and "current" in the docs, the help and the tests. The `--new-pane` lines keep "current", which reads right once the heading says where the window opens.
-	- Test case: `a_launch_opens_on_its_first_tab_and_the_help_says_so` (dett5). Failed with the old help text, passes with the new.
-	- Branch: rnd1103
-	- Commit: 02be574
-	- Verified: the backlog quick run, all five areas.
-	- Closed: 20261103-151033
-
-- herdback's window lookup and stop miss the program, since `appPid` is a subshell
-	- ID: 2026110220294255
-	- Type: Bug
-	- Status: Done
-	- Severity: Low
-	- Opened: 20261102-202942
-	- Opened by: CC
-	- Assigned to: CC
-	- Related IDs: 2026110118143797, 2026102807384201
-	- Target OS: Linux
-	- Steps to reproduce:
-		- Change both `xdotool search --pid "${appPid}" --name '^SilkTerm'` lines in `cicd/tests/herdback/run.bash` to take `--all`, and run it.
-	- Incorrect behavior: Every case says the window never showed. The launch is `fX ... &`, and `fX` is a function, so `$!` is the subshell, not SilkTerm. The lookup finds the window by its name only, and `fStopOurs` sees bash, not the binary, so it stops nothing. A window from one dance can still be up in the next.
-	- Expected behavior: `appPid` is the program, so the lookup can take `--all` and each dance stops its own window.
-	- Notes:
-		- gui-headless.bash's `fOnX --bg` execs for the same reason.
-	- Reproduced: 20261103, with `--all` on both lookups: every case said the window never showed, and 5 windows were left running until the X server went.
-	- Actual cause: Each launch was a function sent to the background, so `$!` was a bash waiting on the program. The same went for xfwm4: `pgrep -P` looked under the wrong parent, the kill stopped only that bash, and xfwm4 stayed up through the cases with no window manager. Its stop check passed anyway, since it only asked about pids it never found.
-	- Actual fix: `fX --bg` execs, as `fOnX --bg` does, and the program, xfwm4 and the window lookups go by it. The lookups take `--all`. Each case checks its window is gone once stopped, and stops it when it never showed. The stop of xfwm4 checks its window is gone from the X server.
-	- Swept: every `$!` in `cicd` after a backgrounded function. dlgtie's `fX xterm ... &` had the same shape, so its kill of the other window stopped only a bash. Its `fX --bg` execs now, and der6f still passes. idleother's `fLaunch` puts the program itself in the background inside the function, so its `$!` was already right. gui-headless already execs.
-	- Decisions:
-		- 20261103: The "no window manager" cases now really run with none, so the mutation checks 2026102807384201 recorded for them ran with xfwm4 still up. Filed as 2026110315170584 to run them again.
-	- Verified: 20261103. The script with the exec taken out failed 6 checks, the window never showing in all 5 cases, and xfwm4's window still on the X server. With it in, all 19 checks passed in 2 runs of 3, at load 7 to 10. The third failed only "the window was herded" in the first case, at load 14, the 2026110116413708 flake: one window on the display, so this fix does not explain it. der6f passed.
-	- Test case: `cicd/tests/herdback/run.bash` (deqx1), with the new "gone once stopped" and "xfwm4's window has gone" checks. `cicd/tests/dlgtie/run.bash` (der6f).
-	- Branch: rnd1103
-	- Closed: 20261103-151705
-
-- herdback's mutation checks with no window manager were run with xfwm4 still up
-	- ID: 2026110315170584
-	- Type: Task
-	- Status: Done
-	- Priority: Low
-	- Opened: 20261103-151705
-	- Opened by: CC
-	- Assigned to: CC
-	- Related IDs: 2026102807384201, 2026110220294255, 2026110116413708
-	- Target OS: Linux
-	- Requirements:
-		- Until 2026110220294255, deqx1 never stopped xfwm4, so its 3 cases with no window manager ran under it.
-		- Run them again now that xfwm4 is gone: the "back" case with the put-back taken out, and the "resized" case with the forget-on-resize taken out. Each should fail.
-		- See whether the "moved" case still passes with the forget-on-move taken out, as 2026102807384201 notes it did under xfwm4.
-	- Estimated effort: Low
-	- Actual effort: Low
-	- Progress log:
-		- 20261103: deqx1 at f6c33c9's script, each with one of three debug builds. With the put-back taken out, the back case failed: the window stayed where it was herded. With the forget-on-resize taken out, the resized case failed: the window went back and lost the size it was given. With the forget-on-move taken out, the moved case passed. Its log shows the look after the move waiting for a sign the drag is over, and no put-back after it. With nothing taken out, all 19 checks passed.
-		- 20261103: Two of the four runs side by side, at load 10 to 15, failed "the window was herded" in the first xfwm4 case, with the window still at its launch size. That is 2026110116413708, and doesn't touch the cases above.
-	- Decisions:
-		- 20261103: The moved case stays as it is. It can't watch the forget-on-move while the look after a move waits for the end of a drag the test never ends. That is the same wait 2026110116413708 names.
-	- Verified: 20261103, as in the progress log. The results are on 2026102807384201's Verified row.
-	- Branch: rnd1103
-	- Test case: `cicd/tests/herdback/run.bash` (deqx1). No change to it.
-	- Closed: 20261103-161123
 
 - SGR 21 turns bold off instead of drawing a double underline
 	- ID: 2026110220554102
@@ -977,29 +556,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Actual cause: vte 0.15, the engine's parser, reads 21 as "cancel bold", as Alacritty and the Linux console do.
 	- Notes:
 		- 20261102: A fix needs a patched vte, beside the engine fork that's already patched in. Or leave it, since programs reach double underline through `4:2`.
-
-- The tmux rows test fails when the live config turns tmux sessions on
-	- ID: 2026110219042107
-	- Type: Bug
-	- Status: Done
-	- Severity: Low
-	- Opened: 20261102-190421
-	- Opened by: CC
-	- Steps to reproduce:
-		- Set `tmux: always_new_session: true` in the user's config, then run `cargo test -p silkterm --bin silkterm -- --exact settings_ui::tests::the_tmux_rows_gray_and_say_why_where_there_is_no_tmux`.
-	- Incorrect behavior: it fails at settings_ui.rs:13044. The tip has "Current value: On" and "Default value: Off" after the no-tmux text, since the value isn't the default.
-	- Expected behavior: the test gives the same answer whatever the live config holds.
-	- Possible cause: the test reads the live user config (G6), and doesn't pin the setting.
-	- Reproduced: 20261103, with a config holding that switch on, de30r failed with the two value lines. With the idle wait when hidden off its default as well, ddkgx failed the same way.
-	- Actual cause: Every settings_ui test helper opened the dialog on the live config, so a value off its default there added the value lines to a tip, or changed what a toggle started at.
-	- Actual fix: The two dialog helpers in the tests start from the shipped values. The one test that sets the live settings on purpose, dcww4, opens the dialog on them itself.
-	- Decisions:
-		- 20261103: Fixed in the helpers, not in de30r alone, so a new test can't pick up the live config by accident. The tests that already reset to the defaults keep doing so.
-	- Verified: 20261103. The 204 settings_ui tests, detqs among them, pass with no config, and with a config that sets 13 values, most of them off their defaults. Before, that config failed de30r and ddkgx. detqs fails with the helpers on the live config and passes now. The quick gate passes.
-	- Swept: every `SettingsDialog::new` in the tests. The other 7 pass under that config too.
-	- Test case: `a_test_dialog_opens_on_the_shipped_values_whatever_the_config_holds` (detqs). de30r and ddkgx under any config.
-	- Branch: rnd1103
-	- Closed: 20261103-141323
 
 - Wayland: Settings isn't tied to the terminal window
 	- ID: 2026110118260314
@@ -3238,6 +2794,112 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Acceptance signoff: Self-closed: the numbers are in the design doc and nothing is left to judge.
 	- Closed: 20261004-194634
 
+- The tmux end test fails in the whole suite on vmKt6m, and passes alone there
+	- ID: 2026110313290006
+	- Type: Bug
+	- Status: Done
+	- Severity: Avg
+	- Opened: 20261103-132900
+	- Opened by: CC
+	- Related IDs: 2026102811082502
+	- Target OS: macOS
+	- Test environment: vmKt6m, as mactest, with MacPorts tmux 3.8 at /opt/local/bin
+	- Steps to reproduce: Run the private runner's Mac job on vmKt6m with its tests, or `cargo test --workspace` there as mactest.
+	- Incorrect behavior: `ending_kills_the_session_started_and_no_other` (de30d) fails at tmux.rs:506 with "silk-test_1": the first `new-session` on the test's own server didn't succeed. The other 1401 pass.
+	- Expected behavior: It passes, or skips when there is no tmux.
+	- Reproduced: 20261103, once in the whole suite. Control: alone on the same build it passed 3 of 3, and 5 of 5 with 12 busy loops on the VM's 8 cores (load about 7).
+	- Possible cause: Unmeasured. `run` gives a tmux call 800 ms (ASK_FOR), and the first `new-session` also starts the server, during the suite's process churn. Or another test reaching the same server.
+	- Progress log:
+		- 20261103: Measured in the whole suite on vmKt6m, 3 runs, all passed: the first `new-session` takes 35 to 47 ms, at 8 and 16 test threads and with 12 busy loops (guest load 27), and the others about 15 ms. On b23 it's 6 to 13 ms. So a fail at 800 ms is a stall of 20 times that or more, not the usual cost.
+		- 20261103: Ruled out: another test on the same server, since only this test sets its socket, per thread, in its own run folder, and every other ask goes to `/dev/null/no-tmux`. A stale socket folder, since there's none in `/tmp`, and the failing run's folder had no `tmuxend` left in it.
+		- 20261103: Still open: what stalled. The guest can stall that long. While it was loaded, an ssh to it timed out in the banner exchange after 20 s. A spawn that failed for the 256 open files a Mac allows is the other candidate, and the new message would tell it apart.
+		- 20261103: Verified: the whole unit suite on vmKt6m as mactest, at dcbec71, 3 runs in a row. 1405 passed, 0 failed, each time, de30d included, against the real tmux. No setup call took over 800 ms, so no fail message came up to tell the causes apart. The stall stays unexplained, and the next fail will say which it was.
+	- Decisions:
+		- 20261103: The test's own setup and cleanup calls get 10 s, not ASK_FOR, since they aren't what it tests. The asks it does test, `has_session`, `current_path` and `end`, keep the app's 800 ms. Its message gives what tmux said or why there was no answer, and a setup call past 800 ms is noted in its output.
+		- 20261103: `run` is now `ask` with ASK_FOR, and `ask` says why it came back empty. Nothing changes for the app.
+	- Actual fix: A workaround, since the stall isn't explained: the test's setup waits up to 10 s, and a fail says why.
+	- Verified: 20261103. With the first `new-session` held 1.2 s, de30d failed at it with "silk-test_1" under the old wait, as on vmKt6m, and passes now. The quick gate, clippy for Windows and the test ID check pass.
+	- Swept: every `run` caller in tmux.rs. de541 asks with no socket and expects no answer, so it passes either way. No other test starts a tmux server.
+	- Test case: `ending_kills_the_session_started_and_no_other` (de30d).
+	- Branch: rnd1103
+	- Closed: 20261103-163000
+
+- Running on macOS without a GPU fails to launch
+	- ID: 2026102209035801
+	- Type: Bug
+	- Status: Done
+		- Answered: keep the alert. Left is the no-Metal check, on vmKt6m, which has no Metal.
+		- 20261025: The round's build runs on vmKt6m, but a launch with nobody logged on at its console never gets to the device check. Logging on there is a person's part.
+		- Stand-in: 20261025. A debug build of 8a28055, made on b26, run on vmKt6m over ssh as `mactest`. `--version` printed `build deea6 (2026-10-25)`. A plain launch printed nothing and was still running after 60 s, its main thread waiting for events in `NSApplication run`. With no one logged on the app never finishes launching, so nothing reaches the device check.
+	- Stand-in: 20261103. The stock debug build of dcbec71, launched on vmKt6m through `open` as the user logged on at its console, with its own HOME. That stood in for the hand test, which asked for a Finder launch, OK, and exit code 2 from Terminal.
+		- It reached the device check. stderr had the headline, the no-software-renderer line and wgpu's "metal found no adapters".
+		- The app was frontmost, and its one on-screen window was 260 by 372 at the modal panel level, the alert's shape. It was still up at 15 and 20 s, waiting on it.
+		- Not reached: the alert's text on screen, and the exit after OK. The box can't send keys or read window contents over ssh. The exit is the plain `exit(2)` after the modal returns, and de9m1 covers the words.
+	- Severity: Avg
+	- Opened: 20261022-090358
+	- Opened by: JC
+	- Assigned to: CC
+	- Related IDs: 2026102209035802, 2026100418225504
+	- Target OS: macOS
+	- Steps to reproduce:
+		- Run on macOS without a GPU.
+	- Incorrect behavior: It fails to launch.
+	- Expected behavior: It falls back to software rendering if possible.
+	- Notes:
+		- Pre-next-cut.
+	- Reproduced: No. No Mac here. Traced in the code instead.
+	- Actual cause:
+		- The macOS build has only wgpu's Metal backend. GL there needs ANGLE, and Vulkan needs MoltenVK, which runs on Metal itself. wgpu has no software adapter on macOS. So a Mac with no Metal device finds no adapter at all.
+		- The launch then printed "no usable GPU/renderer" on stderr and exited with 2. A launch from Finder shows no stderr, so the program seemed to just vanish.
+	- Progress log:
+		- 20261022: No fallback is possible with what's in the tree. The options are in questions.md: keep an alert, ship ANGLE with SwiftShader, or write a CPU renderer.
+		- 20261022: Done meanwhile: with no device at all, macOS says why in an alert as well as on stderr, then exits with 2. Other platforms keep their stderr line as it was.
+		- 20261022: Verified: the words test passes. fmt, and clippy for Linux, Windows and macOS, pass. The alert itself is only compiled.
+		- 20261022: No real software path on macOS was found, so the Resource use group's `not_macos` row stays as it is.
+		- 20261024: Answer: A, keep the alert. A Mac with no Metal can't run SilkTerm, and the alert says why. A real fallback through ANGLE would be its own item, if Mac VMs turn out to matter.
+		- 20261025: The words test passed again in both full runs at e95b81b, and the hosted Mac workflow passed on rnd1025. The vmKt6m check didn't fit this round's time.
+		- 20261025: Tried on vmKt6m over ssh, per the Stand-in row. A launch with nobody logged on waits quietly for the window server, as macOS apps do there, so that isn't filed.
+		- 20261026: The words test passed again at fab6815, and the hosted Mac workflow on rnd1026.
+		- 20261028: The words test passed again at 64f3584, and the hosted Mac workflow on rnd1028.
+	- Swept: the one exit site where no device could be made at launch. Rebuilds after idle and the dialogs keep their own error paths, and both need a device that once worked.
+	- Branch: rnd1022
+	- Test case: `no_device_on_macos_says_why_and_that_nothing_can_stand_in` (de9m1)
+	- Acceptance signoff: Self-closed: the stock build on vmKt6m, launched in the console session, put the alert up and wrote its words to stderr (20261103).
+	- Closed: 20261103-163000
+
+- The private runner's Mac job can't build on vmKt6m: rustup isn't there for the account it uses
+	- ID: 2026102811082502
+	- Type: Bug
+	- Status: Done
+	- Opened: 20261028-110825
+	- Opened by: CC
+	- Related IDs: 2026102507245265
+	- Target OS: macOS
+	- Test environment: vmKt6m
+	- Steps to reproduce: Point the `mac` job at vmKt6m in a `privrig.conf` with `@vmstate`, and run the private runner.
+	- Incorrect behavior: "macos: rustup could not add x86_64-apple-darwin aarch64-apple-darwin", and the job fails. vmKt6m is still put back.
+	- Expected behavior: The job builds there, as on b26.
+	- Reproduced: 20261028, in the test batch, with the runner from silkterm-private `wip/rnd1028-2026102507245265`.
+	- Possible cause: `ssh vmKt6m` lands as collierjr, who has only a MacPorts cargo at /opt/local/bin. rustup is set up for mactest only. Either the box gets rustup for that account, or the job line takes an ssh account, which the lock and VM state helper names would then need kept apart from.
+	- Severity: Avg
+	- Actual cause: The job ssh'd to the bare box name, so it ran in whatever account ssh picked there, collierjr on vmKt6m. The runner had no way to name another.
+	- Actual fix: A box in `privrig.conf` can be `user@box`, such as `mac b26,mactest@vmKt6m`. The job's ssh and scp use it as written. The host lock, its list of known boxes and the VM state helper get the bare box. README says so.
+	- Progress log:
+		- 20261103: The `@vmstate` runner is on silkterm-private's main now, so the fix is on its `rnd1103`.
+		- 20261103: The real `privrig.conf` still says `mac b26,vmKt6m`. It needs `mac b26,mactest@vmKt6m`. It's outside the repo, so it wasn't changed here.
+		- 20261103: With tests on, the job on vmKt6m got through the build and ran the suite. One test failed, de30d, the tmux end test, and it passed alone there. That is 2026110313290006.
+	- Decisions:
+		- 20261103: The job line names the account, rather than the box getting rustup for collierjr. That would put a second Rust next to that account's MacPorts cargo, and build as the admin account rather than the test one. mactest already has rustup 1.96.
+		- 20261103: The lower-case `vmkt6m` lands as mactest through ssh's own config, but wasn't used. The lock and the VM state helper know the box as `vmKt6m`, and a case difference would be easy to break.
+	- Verified: 20261103. dehx0 passes with 10 new checks, and 7 of them failed against the old runner. shellcheck on both files.
+	- Verified: 20261103. A copy of the runner with `mac mactest@vmKt6m`, the host lock and `@vmstate`, vmKt6m paused, `--no-test`: it woke vmKt6m, both release builds and the .app, .zip and .dmg were made as mactest, and the 4 files came back. vmKt6m was paused again after.
+	- Verified: 20261103. The same with `mac b26-nosuchbox,mactest@vmKt6m` and tests on: it fell back to vmKt6m, the silkterm unit tests ran there with 1401 passed and 1 failed (de30d, above), and vmKt6m was paused again after.
+	- Swept: every use of the job's host in run.bash. The pick, `fAsleep`, the lock's list, `check`, `wrap` and the skip messages take the bare box. ssh and scp in both jobs take it as written, the store job's included.
+	- Test case: `silkterm-private` `cicd/tests/hosts/run.bash` (dehx0).
+	- Branch: `silkterm-private` `rnd1103`
+	- Commit: `silkterm-private` 09298a8
+	- Closed: 20261103-132943
+
 - Two SilkTerm windows on one headless display: an idle release sometimes never shows, or never happens
 	- ID: 2026110118143797
 	- Type: Bug
@@ -4545,6 +4207,188 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- The Windows run this item came from named only these four. That full suite was not run again.
 	- Acceptance signoff: Self-closed: test fixes only, and all four failed before the fix and pass after on Windows.
 	- Closed: 20260930-125357
+
+- Leak checks: the Miri step, with the canary
+	- ID: 2026102320591318
+	- Type: Task
+	- Status: Done
+		- Waits on the step's first run over the whole suite, which takes hours.
+	- Needs local test suite run?: No
+	- Priority: Avg
+	- Opened: 20261023-205913
+	- Opened by: CC
+	- Parent ID: 2026101714445004
+	- Prereq IDs: 2026102320591313
+	- Requirements:
+		- The image installs the `miri` component on the pinned nightly, beside `rust-src`.
+		- A step script, like `tsan.bash`, runs the sanitizer canary first, then the suite, in a target dir and Miri sysroot of its own under `target/`.
+		- The canary's two tests run apart, since a UB report stops the binary. The step stops unless Miri reports the race as a data race and the forgotten Vec as leaked memory.
+		- A `--no-miri` flag, a plan line, and the cleanup and rar exclude lines. New container and engine cases, watched to fail.
+		- Miri runs only when `--leakcheck` is given, and says first that it's very slow. A run with no flags keeps the other leak checks, which stay on by default. Tests over a time bar under Miri, such as 60 s, are ignored under Miri as too slow, so even a `--leakcheck` run takes the fast part (answer on 2026102320591323).
+		- Under `--long` too, not only `--leakcheck`, per the CICD process gaps item 2026102416233812.
+	- Progress log:
+		- 20261102: The image adds the `miri` component on the pinned nightly. `cicd/utility/miri.bash` builds Miri's sysroot, runs the canary's race and leak tests one at a time, then the suite, all under `target/miri-<date>`. It takes cargo test arguments after the suite command, to run a few tests through it.
+		- 20261102: `cicd.bash` runs it after the TSan run, under `--leakcheck` or `--long`, in the image from a run on the host. The plan has a Miri line, and says before the run starts that it's very slow. `--no-miri` skips it, and `--no-leakcheck` drops it with the other leak checks.
+		- 20261102: The cleanup takes the old `target/miri-<date>` on a nightly bump, and the backup leaves `target/miri-*` out. design.md, install.md, build.md and prerequisites.md say so.
+		- 20261102: The full run at 383a14c failed in the 'test run folder' step (ddazx), at dd5nn's Miri config check. Nothing wrote to the temp dir. The check expected a relative target dir, and the container hands in an absolute one, so it failed in the container whatever the temp dir. It now works out the sysroot path either way, and checks both.
+	- Decisions:
+		- 20261102: `--quick --leakcheck` runs it too, as it does CodeQL, since `--leakcheck` is every leak check.
+		- 20261102: The `miri` component goes in a late layer of its own, not on the `rust-src` line, so adding it didn't rebuild the CodeQL layer after it. The heaptrack layer did the same. The image grew about 20 MB.
+		- 20261102: Miri's sysroot goes inside cargo's own `miri/` dir under `target/miri-<date>`, so the cleanup's nightly-dir sweep takes both whole. Its path is absolute, since cargo runs each test binary from its crate's dir.
+		- 20261102: The suite runs with `--no-fail-fast`, so a report that stops one test binary still lets the others run, and the step lists every report.
+		- 20261102: The canary's PASS lines reuse its tests' IDs, debjk for the race and de5f0 for the leak, as the ASan and TSan steps do.
+	- Verified: 20261102. In the image at d47751450835, `miri.bash -p knobs -- a_bad_spec_names_every_mistake` printed `PASS debjk Miri canary race caught` and `PASS de5f0 Miri canary leak caught`, then "OK: no Miri reports (1 passed, 0 failed, 0 ignored, 4s)". Pointed at the canary crate as its suite, it stopped on the race's data race report. With `-Zmiri-ignore-leaks` the leak canary printed `FAIL de5f0` and stopped the step.
+	- Verified: 20261102. The engine test passed with 225 checks, and its 24 new checks and the changed one failed against the old cicd.bash and config.bash. The container test passed with 198 checks. Against the old files it failed its 2 new recipe and `--no-miri` checks, then stopped outright at the missing step. The cleanup test passed. `cicd/cicd.bash --backlog-run-quick`, all five areas, passed. shellcheck and the bash style check are clean.
+		- Swept: every reader of the sanitizer steps' places in a run: cicd.bash's help, plan, `--list`, the image check and stage 3, config.bash's cleanup and rar lines, design.md, install.md, build.md, prerequisites.md, and the engine, container and cleanup tests. `cicd-win.ps1` and `ci-mac.bash` don't run the nightly steps.
+	- Verified: 20261102. With an absolute `CARGO_TARGET_DIR`, the old dd5nn failed the Miri config check, on this box and in the image with the temp dir read-only. The new one passes there, with no target dir set, and in the image (226 checks), and fails on a config whose Miri sysroot stays relative. ddazx alone in the image at d47751450835 passed, 96 checks, both engine cases included. `cicd/cicd.bash --backlog-run-quick`, all five areas, passed.
+	- Verified: 20261103. The whole suite under Miri in the image at d47751450835, at 3377c7f: `PASS debjk`, `PASS de5f0`, then "OK: no Miri reports (763 passed, 0 failed, 688 ignored, 3711s)". Log /mnt/ext/wip2/wip/tmp/silkterm/20261103-130757_001/run.log.
+	- Branch: rnd1102
+	- Test case: dd5nn `cicd/tests/engine/run.bash`, 24 new checks and 1 changed; ddrp2 `cicd/tests/container/run.bash`, 18 new; de5e9 `cicd/tests/cleanup/run.bash`, 4 new. The canary lines debjk and de5f0 in a Miri run.
+		- 20261102: dd5nn's soak check "and a run on this box builds the image for it" expects `miriInImage` in the image line, was without it.
+		- 20261102: dd5nn's Miri config check runs with no target dir set and with an absolute one, the second as a new check.
+		- 20261102: Verified: the full run at 3ac421d with `--no-fuzz --no-asan --no-leakcheck`, in the container, passed the 'test run folder' step (ddazx) and dd5nn, and said "Miri run skipped (--no-leakcheck)". The run then stopped on the dct7r flake, 2026110222113195.
+	- Acceptance signoff: Self-closed: the step's first whole-suite run passed, with both canaries caught and no reports, in 62 min.
+	- Closed: 20261103-142045
+
+- Leak checks: the test suite under Miri on every full run
+	- ID: 2026101714445004
+	- Type: Task
+	- Status: Done
+	- Priority: Avg
+	- Opened: 20261017-144450
+	- Opened by: CC
+	- Parent ID: 2026101714015789
+	- Prereq IDs: 2026101714445002
+	- Requirements:
+		- Third-party and vendored code end users run is covered, per the parent's 20261017 decision. What it finds goes on the backlog.
+		- The parent's Miri rows, including the ignore-with-reason rule and the move behind `--leakcheck` if a full run measures too slow.
+	- Progress log:
+		- 20261023: Measured on 72 of the suite's 1437 tests, picked at random, each run alone under Miri on nightly-2026-10-16, 12 at a time, at a load of 25 to 60. 19 passed, in 5 to 35 s each. 14 stopped at Miri's isolation. 39 were still running at 90 s, the Settings dialog and config tests most of all. The knobs crate got through 3 tests in 220 s.
+		- 20261023: Of the 14 isolation stops, 8 pass with isolation off and the test folder given. The other 4 didn't finish in the time.
+		- 20261023: Too slow for every full run. Over half the suite at more than 90 s each is at least 19 hours of CPU, against under 2 minutes for the plain suite.
+		- 20261023: The sanitizer canary works under Miri as it is, each test run alone. Miri reports the race as UB and the forgotten Vec as leaked memory.
+		- 20261023: No UB or leak turned up in the tests that finished.
+		- 20261023: Since 10-22 the leak checks are on in every full run by default (2026101916054002), so moving Miri behind `--leakcheck` no longer keeps it out of one. That's the question on 2026102320591323.
+		- 20261023: Split in 3. 2026102320591313 makes the suite runnable under Miri, 2026102320591318 adds the step, and 2026102320591323 settles where it runs. This item closes when they do.
+	- Test case: The Miri step's canary lines debjk and de5f0, and dd5nn, ddrp2 and de5e9, per 2026102320591318. The suite's Miri sorts, per 2026102320591313.
+	- Acceptance signoff: Self-closed: all 3 children are Done, and the first whole-suite Miri run on 20261103 was clean. It runs under --leakcheck or --long, per the answer on 2026102320591323.
+	- Closed: 20261103-144104
+
+- Leak checks: the headless soak test under `--leakcheck`
+	- ID: 2026101913370214
+	- Type: Task
+	- Status: Done
+	- Priority: Avg
+	- Opened: 20261019-133702
+	- Opened by: CC
+	- Parent ID: 2026101714015789
+	- Related IDs: 2026101714445005
+	- Requirements:
+		- Third-party and vendored code end users run is covered, per the parent's 20261017 decision. What it finds goes on the backlog.
+		- The parent's soak row: the program's main actions looped headless, failing when the heap at round 2N is over round N by more than a set margin, with the heap report kept as a pipeline artifact. A plain build, since heaptrack can't share one with a sanitizer.
+		- Every tool pinned and run in the build container.
+		- A loop that types goes into a harmless shell, through `--shell` and a test script, never the user's shell config.
+		- Watched to fail on a planted leak before it's trusted.
+	- Notes:
+		- Split from 2026101714445005. Its heap-growth test covers some of the same actions in-process. This one is for what that can't reach: windows, tabs and splits opened and closed, the GPU, the Settings dialog and a real PTY.
+		- `cicd/tests/allocs/run.bash` already drives a window on a private Xvfb.
+	- Progress log:
+		- 20261101: Split in 2. 2026110117065477 is the driver and its heap check, and 2026110117065496 makes it a pipeline step. This item closes when they do.
+	- Test case: der46 `cicd/tests/soak/run.bash`, in the pipeline through dd5nn `cicd/tests/engine/run.bash`
+	- Acceptance signoff: Self-closed: both children are Done, the driver and its heap check, and the pipeline step.
+	- Closed: 20261103-130738
+
+- CodeQL: our code's cleartext-logging results are one false flow
+	- ID: 2026110315303525
+	- Type: Task
+	- Status: Done
+	- Priority: Avg
+	- Opened: 20261103-153035
+	- Opened by: CC
+	- Parent ID: 2026102211462005
+	- Requirements:
+		- All 165 results in `source/` were `rust/cleartext-logging`, on asserts, `eprintln!` and a build script warning. Fix a real one, suppress a false one with a reason.
+	- Progress log:
+		- 20261103: Every one starts from `UidBase`, a CFF dict entry in read-fonts, or `Uuid`, a Mach-O load command in object. CodeQL reads both names as user IDs. Their flows go through std's generic code, such as `clone`, iterators and `parse`, as if all types were one, and reach any format call. One into `main.rs` passes through regex and an ARM code generator on the way. None logs anything private.
+		- 20261103: Suppressed by rule, `source/*`, and those 2 sources, so a flow from anything else in our code still fails.
+	- Decisions:
+		- 20261103: One suppression, not one per file, since it's one cause.
+	- Verified: 20261103. The step's filter over the first run's SARIF: 0 results left in our code, 165 known, 646 new in third-party code. The engine test passed, and its new checks failed against the old codeql.bash.
+	- Branch: rnd1103
+	- Test case: dd5nn `cicd/tests/engine/run.bash`: a suppression with sources lets that flow through, and not one that also starts from a password.
+	- Closed: 20261103-153630
+
+- CodeQL: unused variables in third-party crates, a roll-up
+	- ID: 2026110315303530
+	- Type: Task
+	- Status: Done
+	- Priority: Avg
+	- Opened: 20261103-153035
+	- Opened by: CC
+	- Parent ID: 2026102211462005
+	- Estimated effort: Low
+	- Requirements:
+		- About 270 `rust/unused-variable` results in release crates on 20261103, most in wgpu-hal (144) and base64 (41), then rustix, jiff, winit, read-fonts, naga, glow and a few more.
+		- Check a sample for a cfg the extractor didn't see, or a pattern read as a variable. Suppress per crate with this ID.
+	- Progress log:
+		- 20261103: 257 in 16 crates once proc macros' crates were left out. A sample of about 40 were constants and enum variants in a pattern read as bindings, such as `VK_LCONTROL` and `Uint`, files for other platforms such as winit's Windows code and glow's web code, wgpu-hal's noop backend, and base64's own tests. None is a defect a user runs into.
+		- 20261103: Suppressed per crate, any version, with this ID.
+	- Decisions:
+		- 20261103: Any version, so a lock bump doesn't turn the run red on the same kind. A crate new to the list still fails it and gets a look.
+	- Verified: 20261103. The step's filter over the first run's SARIF: 0 unused-variable results left, 257 known under this ID.
+	- Branch: rnd1103
+	- Test case: dd5nn `cicd/tests/engine/run.bash` covers the rule-and-path suppressions. The rest is suppression lines, with no behavior of their own.
+	- Closed: 20261103-154000
+
+- CodeQL: pointer lifetime results in ash, lru and other crates
+	- ID: 2026110315303535
+	- Type: Task
+	- Status: Done
+	- Priority: Avg
+	- Opened: 20261103-153035
+	- Opened by: CC
+	- Parent ID: 2026102211462005
+	- Requirements:
+		- About 290 `rust/access-invalid-pointer` and `rust/access-after-lifetime-ended` results on 20261103: 216 in ash, 41 in lru, then lock_api, rustix, parking_lot_core, ordered-float, hashbrown, smol_str and others.
+		- Read the ash and lru ones first. A real one gets its own Bug and an upstream draft. The rest are suppressed per crate with this ID.
+	- Progress log:
+		- 20261103: 293 in 13 crates once proc macros' crates were left out. 282 are one false flow: the same few sources, std's `null()` behind `Default` and some rustix syscall arguments, reach every crate through std's generic `From`, iterator and fold code. ash's 216 are its generated `push_next`, 108 structs with 2 rules each. lru's read its head and tail sentinels, boxed when the cache is made, and its map's keys.
+		- 20261103: The other 11 start from a null in the same function: an FFI out-parameter in winit, wayland-backend and wgpu-hal, or a pointer checked for null first in parking_lot_core and rustix. Each was read by hand, and none is a defect.
+		- 20261103: ash's `push_next` is unsound from safe code when a pushed struct's `p_next` is garbage. That is upstream's ash-rs/ash#905, and not what these flows show.
+		- 20261103: Suppressed with this ID, any version.
+	- Decisions:
+		- 20261103: Per crate for the false flow, but per file for the 11 read by hand, since each was cleared at its site and not for the crate.
+		- 20261103: No Bug and no upstream draft, since none is real and ash#905 is already filed.
+	- Verified: 20261103. The step's filter over the first run's SARIF: 0 pointer results left, 293 known under this ID. Before the new lines it reported the same 293 as new.
+	- Branch: rnd1103
+	- Test case: dd5nn `cicd/tests/engine/run.bash` covers the rule-and-path suppressions. The rest is suppression lines, with no behavior of their own.
+	- Closed: 20261103-154238
+
+- CodeQL: taint flows in third-party crates from an X11 read and libc fields
+	- ID: 2026110315303541
+	- Type: Task
+	- Status: Done
+	- Priority: Avg
+	- Opened: 20261103-153035
+	- Opened by: CC
+	- Parent ID: 2026102211462005
+	- Requirements:
+		- About 85 results on 20261103. `rust/cleartext-logging` in naga, x11rb, wgpu-hal, alacritty_terminal, cosmic-text and others, from the same `UidBase` and `Uuid` and from libc fields such as `nm_uid`.
+		- `rust/log-injection`, `rust/regex-injection` and `rust/uncontrolled-allocation-size`, all from one X11 socket read in x11rb, into wgpu-hal, naga, regex and allocator-api2.
+		- Suppress the false flows by their sources, the way 2026110315303525 did. A real one gets its own Bug.
+	- Progress log:
+		- 20261103: 96 results in 3 false flows. 69 cleartext-logging results start from the same `UidBase` and `Uuid` as 2026110315303525.
+		- 20261103: 15 more start from 74 fields named like user IDs, UUIDs or passwords, such as `nm_uid`, `st_uid` and `pw_passwd`. Each is where a struct is declared or printed: libc, linux-raw-sys, rustix, std's own copies, Mach-O and ar headers in object, ash's `Debug`, wayland-backend's credentials, and winit's macOS monitor. autocfg and std's tests are among them, though neither is in the binary. The flows go through std's generic `Debug`, `From` and iterator code to asserts and logs of sizes and indexes.
+		- 20261103: The 12 others start at x11rb's `TcpStream::connect`, for a DISPLAY that names a host, not at a read. Every flow passes the stream through core's identity `From`, and comes out as a gpu-allocator error, a regex `MatchError`, a toml string or an allocator-api2 `Vec`. Nothing read from the socket reaches those sinks.
+		- 20261103: A rule's source pattern can now also match `name@path`, the file the source is in, since "user-provided value" names every remote source alike. Suppressed with this ID: one cleartext-logging rule for `vendor/*`, pinned to those sources' files, and one rule per sink file for the X11 flow.
+	- Decisions:
+		- 20261103: Sources pinned by file, not by name, so a real read of `pw_passwd` in, say, nix still fails the step. Files rather than lines, so a version bump doesn't turn the step red.
+		- 20261103: The X11 rules go per sink file, since the same source would start a real flow from server data, such as a reply length in x11rb.
+		- 20261103: No Bug and no upstream draft, since none is real.
+	- Verified: 20261103. The step's filter over the first run's SARIF: 0 new, 96 known under this ID, the other items' counts unchanged. Before the new lines the same 96 were new. Hand-made results with a `pw_passwd` read in nix, a mixed flow, and the X11 source at another sink, or another source at an X11 sink, all still fail. The engine test passed, and its new check failed against the old codeql.bash. `cicd/cicd.bash --backlog-run-quick`, all five areas, passed.
+	- Branch: rnd1103
+	- Test case: dd5nn `cicd/tests/engine/run.bash`: a source pinned by file lets that flow through, and not the same name from another file.
+	- Closed: 20261103-155643
 
 - Leak checks: the soak test as a pipeline step
 	- ID: 2026110117065496
@@ -7183,6 +7027,136 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Test case: No test. Output only. The gate and a quick run showed all 942 Rust tests with an ID, and a made-up name showed the dashes and the warning.
 	- Closed: 20260928-111812
 
+- A launch with --config pointing elsewhere still adds shell integration to the account's own shell profiles
+	- ID: 2026110314410446
+	- Type: Bug
+	- Status: Done
+	- Priority: Low
+	- Opened: 20261103-144104
+	- Opened by: CC
+	- Target OS: All
+	- Test environment: b23
+	- Progress log:
+		- 20261103: Seen on vmKt6m while working 2026102807384202. A launch as collierjr made ~/.config/powershell/Microsoft.PowerShell_profile.ps1 and its folder, with --config set to a temp file. Check whether that's wanted, or whether a launch with its own config should leave the real profiles alone.
+		- 20261103: Writing the profile is by design. design.md and shell-integration.md say it goes in at launch, once, unless `shell.integration` is off, and a `--config` launch reads that setting from its own file. The profile belongs to the account, not to a config, so a `--config` session gets the same new-tab directory as any other.
+		- 20261103: What was wrong is the note of profiles written to. It sat beside the config in use, so a `--config` launch found none and put back a block the user had deleted, which the docs say never happens.
+	- Actual cause:
+		- The note lived in `data_dir()`, which follows `--config`.
+	- Decisions:
+		- 20261103: A `--config` launch still installs, governed by that file's `shell.integration`. Skipping it would leave a `--config` user without an advertised feature, and the account's profile is shared anyway. A test launch that must not touch the account gets its own HOME.
+		- 20261103: The note always lives in the account's own data folder, as with no `--config`. An older note beside a `--config` file is not read: only dev builds since 09-08 wrote one, never a release.
+	- Actual fix:
+		- The note is kept in the account's data folder whatever `--config` names. shell-integration.md says so.
+	- Swept: the other `data_dir`, `cache_dir` and `state_dir` users (the bash prompt script, wallpaper cache and history, state.shcl) are the program's own files, which the flag is meant to keep apart. Nothing else records state about files outside SilkTerm's folders.
+	- Branch: rnd1103
+	- Commit: cb14f0c
+	- Test case: `a_config_named_on_the_command_line_reads_the_accounts_profile_note` (detst). Failed with the note beside the config, passes with the fix.
+	- Verified: the backlog quick run, all five areas, and Windows-target clippy.
+	- Closed: 20261103-145900
+
+- dct7r's check that a passing run leaves no local run folder failed once in the container
+	- ID: 2026110222113195
+	- Type: Bug
+	- Status: Done
+	- Severity: Low
+	- Opened: 20261102-221131
+	- Opened by:
+	- Target OS: Linux
+	- Incorrect behavior: In the full run at 3ac421d, in the container, cicd/tests/wingui/harness-test.bash failed 'and leaves no run folder in the local temp dir'. Every other check in it passed. The check needs the smoke run's exit code to be 0 and its TMPDIR to be empty after.
+	- Expected behavior: The check passes every time.
+	- Reproduced: 20261103, every time, on this box with HOST_TEMP unset, as the container has it. 3 of 3 runs alone on the host passed on 20261102, with HOST_TEMP set.
+	- Actual cause: The smoke run passed. With HOST_TEMP unset its run folder goes under the TMPDIR handed to it, and on a pass the empty project folder `silkterm` stays there, by design. The check wanted that TMPDIR empty. On the host the run folder went to the real HOST_TEMP, so the check never looked at it there. It wasn't a flake. The container run was the first to reach it since 2026103115564575 moved the folders.
+	- Actual fix: The smoke call unsets HOST_TEMP, as the testdir test does, and the check allows the empty project folder and nothing else. The run's exit code is a check of its own, so a failure says which part failed.
+	- Progress log:
+		- 20261102: Seen once, in rnd1102's second full run. The round didn't touch the wingui harness. The run stops at the first failure, so it didn't show whether rc or a leftover folder failed it.
+		- 20261103: Fixed in the test. Nothing in run.bash or the helpers changed.
+	- Decisions:
+		- 20261103: The check needs the project folder to be there, so it fails if the run folder ends up somewhere else again, rather than passing with nothing to check.
+	- Swept: every test that runs a helper with its own TMPDIR and checks what's left there: testdir and cleanup already unset HOST_TEMP and allow the project folder. This was the only one that didn't.
+	- Verified: 20261103. Before the fix, dct7r with HOST_TEMP unset failed this check every time, and the run exited 0. After the fix it passes with HOST_TEMP unset, with it set, and in the image at d47751450835. With run.bash made to keep its run folder, the check fails. `cicd/cicd.bash --backlog-run-quick scripts docs` passed.
+	- Branch: rnd1103
+	- Test case: cicd/tests/wingui/harness-test.bash (dct7r), its checks "and the run passes" and "and leaves no run folder in the local temp dir".
+	- Acceptance signoff: Self-closed: reproduced, and the test fails before the fix and passes after.
+	- Closed: 20261103-144800
+
+- Which tab a window launched with several tabs opens on
+	- ID: 2026110220221592
+	- Type: Bug
+	- Status: Done
+	- Severity: Low
+	- Opened: 20261102-202215
+	- Opened by: CC
+	- Assigned to: CC
+	- Related IDs: 2026110118143797
+	- Target OS: All
+	- Steps to reproduce:
+		- Run `silkterm --new-tab=logs --directory /var/log`.
+	- Incorrect behavior: The window opens on the first tab. `--help` says `--new-tab` "becomes current", and usage.md says "which becomes the current one", which can read as the tab in front.
+	- Expected behavior: Not decided. Either the last tab made is in front, or the help and usage.md say the launch opens on the first tab and "current" means where later options go.
+	- Notes:
+		- `State` starts with `Tabs { list, active: 0 }` in app.rs. Wording only is the smaller change.
+	- Reproduced: Yes, by reading. The strip always starts with the first tab, and the window opens on the strip's first tab. Each tab opens on its first pane too, by a line in the layout code.
+	- Actual cause: The help and usage.md said "current" without saying it means where the options after it go. The original spec of the command line meant only that.
+	- Decisions:
+		- 20261103: Wording only. A window opens on its first tab, and each tab on its first pane. Tabs and panes keep one rule, the tests that count on the first tab in front stay as they are, and the spec never meant "current" as the tab in front. design.md says so, under Command-line options.
+	- Actual fix: `--help` says a window opens on its first tab and pane, and that options after a `--new-tab` go to it. `--tab` and `--pane` say "go back to", like usage.md. usage.md says the same under Tabs and panes.
+	- Swept: every `--new-tab` and "current" in the docs, the help and the tests. The `--new-pane` lines keep "current", which reads right once the heading says where the window opens.
+	- Test case: `a_launch_opens_on_its_first_tab_and_the_help_says_so` (dett5). Failed with the old help text, passes with the new.
+	- Branch: rnd1103
+	- Commit: 02be574
+	- Verified: the backlog quick run, all five areas.
+	- Closed: 20261103-151033
+
+- herdback's window lookup and stop miss the program, since `appPid` is a subshell
+	- ID: 2026110220294255
+	- Type: Bug
+	- Status: Done
+	- Severity: Low
+	- Opened: 20261102-202942
+	- Opened by: CC
+	- Assigned to: CC
+	- Related IDs: 2026110118143797, 2026102807384201
+	- Target OS: Linux
+	- Steps to reproduce:
+		- Change both `xdotool search --pid "${appPid}" --name '^SilkTerm'` lines in `cicd/tests/herdback/run.bash` to take `--all`, and run it.
+	- Incorrect behavior: Every case says the window never showed. The launch is `fX ... &`, and `fX` is a function, so `$!` is the subshell, not SilkTerm. The lookup finds the window by its name only, and `fStopOurs` sees bash, not the binary, so it stops nothing. A window from one dance can still be up in the next.
+	- Expected behavior: `appPid` is the program, so the lookup can take `--all` and each dance stops its own window.
+	- Notes:
+		- gui-headless.bash's `fOnX --bg` execs for the same reason.
+	- Reproduced: 20261103, with `--all` on both lookups: every case said the window never showed, and 5 windows were left running until the X server went.
+	- Actual cause: Each launch was a function sent to the background, so `$!` was a bash waiting on the program. The same went for xfwm4: `pgrep -P` looked under the wrong parent, the kill stopped only that bash, and xfwm4 stayed up through the cases with no window manager. Its stop check passed anyway, since it only asked about pids it never found.
+	- Actual fix: `fX --bg` execs, as `fOnX --bg` does, and the program, xfwm4 and the window lookups go by it. The lookups take `--all`. Each case checks its window is gone once stopped, and stops it when it never showed. The stop of xfwm4 checks its window is gone from the X server.
+	- Swept: every `$!` in `cicd` after a backgrounded function. dlgtie's `fX xterm ... &` had the same shape, so its kill of the other window stopped only a bash. Its `fX --bg` execs now, and der6f still passes. idleother's `fLaunch` puts the program itself in the background inside the function, so its `$!` was already right. gui-headless already execs.
+	- Decisions:
+		- 20261103: The "no window manager" cases now really run with none, so the mutation checks 2026102807384201 recorded for them ran with xfwm4 still up. Filed as 2026110315170584 to run them again.
+	- Verified: 20261103. The script with the exec taken out failed 6 checks, the window never showing in all 5 cases, and xfwm4's window still on the X server. With it in, all 19 checks passed in 2 runs of 3, at load 7 to 10. The third failed only "the window was herded" in the first case, at load 14, the 2026110116413708 flake: one window on the display, so this fix does not explain it. der6f passed.
+	- Test case: `cicd/tests/herdback/run.bash` (deqx1), with the new "gone once stopped" and "xfwm4's window has gone" checks. `cicd/tests/dlgtie/run.bash` (der6f).
+	- Branch: rnd1103
+	- Closed: 20261103-151705
+
+- The tmux rows test fails when the live config turns tmux sessions on
+	- ID: 2026110219042107
+	- Type: Bug
+	- Status: Done
+	- Severity: Low
+	- Opened: 20261102-190421
+	- Opened by: CC
+	- Steps to reproduce:
+		- Set `tmux: always_new_session: true` in the user's config, then run `cargo test -p silkterm --bin silkterm -- --exact settings_ui::tests::the_tmux_rows_gray_and_say_why_where_there_is_no_tmux`.
+	- Incorrect behavior: it fails at settings_ui.rs:13044. The tip has "Current value: On" and "Default value: Off" after the no-tmux text, since the value isn't the default.
+	- Expected behavior: the test gives the same answer whatever the live config holds.
+	- Possible cause: the test reads the live user config (G6), and doesn't pin the setting.
+	- Reproduced: 20261103, with a config holding that switch on, de30r failed with the two value lines. With the idle wait when hidden off its default as well, ddkgx failed the same way.
+	- Actual cause: Every settings_ui test helper opened the dialog on the live config, so a value off its default there added the value lines to a tip, or changed what a toggle started at.
+	- Actual fix: The two dialog helpers in the tests start from the shipped values. The one test that sets the live settings on purpose, dcww4, opens the dialog on them itself.
+	- Decisions:
+		- 20261103: Fixed in the helpers, not in de30r alone, so a new test can't pick up the live config by accident. The tests that already reset to the defaults keep doing so.
+	- Verified: 20261103. The 204 settings_ui tests, detqs among them, pass with no config, and with a config that sets 13 values, most of them off their defaults. Before, that config failed de30r and ddkgx. detqs fails with the helpers on the live config and passes now. The quick gate passes.
+	- Swept: every `SettingsDialog::new` in the tests. The other 7 pass under that config too.
+	- Test case: `a_test_dialog_opens_on_the_shipped_values_whatever_the_config_holds` (detqs). de30r and ddkgx under any config.
+	- Branch: rnd1103
+	- Closed: 20261103-141323
+
 - The rotate test's fork count went over its limit once inside the test run folder test
 	- ID: 2026102518360001
 	- Type: Bug
@@ -8761,6 +8735,32 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Commit: c9b40aa
 	- Acceptance signoff: Self-closed: the fix does what the item asks and no more, and its test passes.
 	- Closed: 20261014-152600
+
+- herdback's mutation checks with no window manager were run with xfwm4 still up
+	- ID: 2026110315170584
+	- Type: Task
+	- Status: Done
+	- Priority: Low
+	- Opened: 20261103-151705
+	- Opened by: CC
+	- Assigned to: CC
+	- Related IDs: 2026102807384201, 2026110220294255, 2026110116413708
+	- Target OS: Linux
+	- Requirements:
+		- Until 2026110220294255, deqx1 never stopped xfwm4, so its 3 cases with no window manager ran under it.
+		- Run them again now that xfwm4 is gone: the "back" case with the put-back taken out, and the "resized" case with the forget-on-resize taken out. Each should fail.
+		- See whether the "moved" case still passes with the forget-on-move taken out, as 2026102807384201 notes it did under xfwm4.
+	- Estimated effort: Low
+	- Actual effort: Low
+	- Progress log:
+		- 20261103: deqx1 at f6c33c9's script, each with one of three debug builds. With the put-back taken out, the back case failed: the window stayed where it was herded. With the forget-on-resize taken out, the resized case failed: the window went back and lost the size it was given. With the forget-on-move taken out, the moved case passed. Its log shows the look after the move waiting for a sign the drag is over, and no put-back after it. With nothing taken out, all 19 checks passed.
+		- 20261103: Two of the four runs side by side, at load 10 to 15, failed "the window was herded" in the first xfwm4 case, with the window still at its launch size. That is 2026110116413708, and doesn't touch the cases above.
+	- Decisions:
+		- 20261103: The moved case stays as it is. It can't watch the forget-on-move while the look after a move waits for the end of a drag the test never ends. That is the same wait 2026110116413708 names.
+	- Verified: 20261103, as in the progress log. The results are on 2026102807384201's Verified row.
+	- Branch: rnd1103
+	- Test case: `cicd/tests/herdback/run.bash` (deqx1). No change to it.
+	- Closed: 20261103-161123
 
 - Put tmux in the container image, so the tmux tests run under ASan and in `--container`
 	- ID: 2026101914251765
