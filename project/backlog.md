@@ -806,17 +806,36 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - Wayland: a copy a program sends while no SilkTerm window has focus is dropped
 	- ID: 2026101607585700
 	- Type: Enhancement
-	- Status: Queued
+	- Status: Done
 	- Priority: Low
 	- Opened: 20261016-075857
 	- Opened by: JC
 	- Related IDs: 2026101509024607
 	- Target OS: Linux
+	- Test environment: Headless sway on b23, with no DISPLAY and with DISPLAY set.
 	- Requirements:
 		- Hold the copy, and set the clipboard when that SilkTerm window gets the focus again.
 		- A line in usage.md saying a copy made from a window without focus on Wayland waits for it to get focus.
 	- Notes:
 		- Wayland lets a window set the clipboard only while it has the keyboard. X11 doesn't have that limit, and stays as it is.
+	- Progress log:
+		- 20261103: It's the clipboard crate's own worker that drops the store, when its seat has no keyboard. The compositor never sees it.
+		- 20261103: A window on a workspace out of view reads no output, so its store only arrives once it's shown and has the keyboard again. The case that lost a copy was a window on screen with another one in front.
+		- 20261103: The window also has no keyboard for a moment after it opens, while it already counted as focused. A store then was dropped too, and is held now.
+	- Decisions:
+		- 20261103: The clipboard keeps its own idea of whether the window has the keyboard, starting with none on Wayland, rather than reading the window's focus flag, which starts out true.
+		- 20261103: Only the last store per selection is held. A copy a person makes meanwhile, such as in Settings, replaces the held one, so a held store never overwrites a newer copy made in SilkTerm.
+		- 20261103: While a dialog has the keyboard, a program's store waits for the terminal window too. A dialog is modal, so the terminal gets focus back when it closes.
+		- 20261103: The test takes a second window from `foot`, which sway tiles beside SilkTerm, so the window stays on screen. foot is now one of the tools the test needs.
+	- Swept: Every place a program sets a selection: OSC 52 to the clipboard and to the primary, both through the one handler. Copy on select, copy on output, the chords and the dialogs all run with the keyboard, and set at once as before. X11, macOS and Windows set at once too.
+	- Branch: rnd1104
+	- Commit: 6b138b0
+	- Test case: `cicd/tests/wlclip/run.bash` (ddzwc), with a second window taking the keyboard: both stores wait, then land on focus. The 4 new checks failed with the hold switched off and pass with it, also with the cores loaded. Unit tests dev22, dev23, dev24, dev25 cover held until focus (and before the first focus), last wins, a newer copy wins, and X11 unchanged.
+	- Verified:
+		- 20261103: wlclip passes 23 of 23 on the final code, also with no wait after launch. An earlier form of the same hold passed 3 times, once at load 36 on 32 cores.
+		- 20261103: Gate: fmt, clippy, scripts and docs pass; clippy for Windows and macOS is clean. Tests: 1428 pass, and the 1 failure is ddghe on `cicd/tests/herdback/_wmmove.py`, from another item's commit.
+	- Acceptance signoff: Self-closed: the store is held and lands on focus, the test fails before and passes after, and X11 is unchanged.
+	- Closed: 20261103-193225
 
 - CI/CD: a flag to turn off each full-run stage that has none
 	- ID: 2026102319535661
