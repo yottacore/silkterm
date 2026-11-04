@@ -7052,6 +7052,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Commit: cb14f0c
 	- Test case: `a_config_named_on_the_command_line_reads_the_accounts_profile_note` (detst). Failed with the note beside the config, passes with the fix.
 	- Verified: the backlog quick run, all five areas, and Windows-target clippy.
+	- Acceptance signoff: JC, 20261103. As built, option A.
 	- Closed: 20261103-145900
 
 - dct7r's check that a passing run leaves no local run folder failed once in the container
