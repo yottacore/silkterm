@@ -562,12 +562,15 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - Wayland: Settings asks to be modal
 	- ID: 2026110317323442
 	- Type: Enhancement
-	- Status: Queued
+	- Status: Done
+	- Needs hand testing: No. A look on GNOME under Wayland is still welcome, but folding the dialog into alt+tab is the desktop's call once the hint is sent.
 	- Priority: Low
 	- Opened: 20261103-173234
 	- Opened by: CC
+	- Assigned to: CC
 	- Related IDs: 2026110118260314
 	- Target OS: Linux
+	- Test environment: headless sway 1.10.1; headless labwc 0.20.2 in a Debian unstable container
 	- Requirements:
 		- Where the compositor offers the xdg-dialog protocol, Settings and the other dialogs ask to be modal through it, as X11's modal state does. GNOME, for one, then folds the dialog into the terminal's alt+tab entry.
 		- The dialog object is kept for the window's life, and destroyed before it.
@@ -575,6 +578,16 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Notes:
 		- The parent itself went in with 2026110118260314.
 		- Binding the global needs a registry and an event queue of its own on winit's connection. A registry can't be destroyed, so it's best kept for the life of the program, not made for each dialog.
+	- Decisions:
+		- 20261104: The registry, its queue and the bound global are made once, at the first dialog on Wayland, and kept for the program's life. The set_parent call uses the same guest connection now, rather than one per dialog.
+		- 20261104: Every dialog asks to be modal, About, the notices and the questions too, as each is modal on X11.
+		- 20261104: Neither sway 1.10.1 here nor sway 1.12 offers xdg_wm_dialog_v1, so dlgwl says so and checks nothing asks for it. labwc 0.20 does, and stood in for the modal half.
+	- Verified: 20261104. dlgwl passes 8 of 8 on sway, through the note branch, Escape closing Settings among them. On labwc 0.20.2 the dialog's toplevel gets set_parent, an xdg_dialog_v1 and set_modal, and on close the xdg_dialog_v1 goes before the toplevel. 3 of those checks fail on the build before the change. dlgwl's own modal checks pass against that labwc log. The quick gate, all five areas, plus clippy for Windows and macOS, pass.
+		- Swept: About, the notices and the close question are made by the same code, so they ask too. Off Wayland no toplevel is given and nothing is bound.
+	- Branch: rnd1104b
+	- Test case: `cicd/tests/dlgwl/run.bash` (detyk). Its modal checks run only where the compositor offers the protocol.
+	- Acceptance signoff: Self-closed: the request is sent where the protocol is offered, its object goes before the window, and the test fails without it.
+	- Closed: 20261104-074821
 
 - CI/CD: the same off options in `cicd-win.ps1`
 	- ID: 2026110320010164
