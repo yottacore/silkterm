@@ -622,13 +622,17 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - A backlog line names a path under the private notes folder
 	- ID: 2026102819390403
 	- Type: Bug
-	- Status: Queued
+	- Status: Done
 	- Priority: Low
 	- Opened: 20261028-193904
 	- Opened by: CC
 	- Target OS: All
 	- Requirements:
-		- One line in the public backlog names `lsan_some_tests.bash` under the private notes folder. Public docs shouldn't name it. Say what the script does, or move the note to the private notes.
+		- One line in the public backlog named a leak-check script under the private notes folder. Public docs shouldn't name it. Say what the script does, or move the note to the private notes.
+	- Decisions:
+		- 20261104: Said what the script does in the step line, and pointed at `cicd/utility/asan.bash`. No script is named.
+	- Test case: Not applicable, a docs wording fix. A grep for the script name finds nothing in the backlog.
+	- Closed: 20261104-013900
 
 - The private Mac build prints empty sizes and five `stat` errors on b26
 	- ID: 2026102811082478
