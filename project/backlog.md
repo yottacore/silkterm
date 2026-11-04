@@ -34,6 +34,20 @@ Going forward, new issues in the new template at the bottom of this file, will g
 
 ## Issues
 
+- deqx1's "xfwm4's window has gone from the X server" sometimes fails on a busy box
+	- ID: 2026110318260287
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261103-182602
+	- Opened by: CC
+	- Related IDs: 2026110116413708, 2026110220294255
+	- Target OS: Linux
+	- Steps to reproduce: Run `cicd/tests/herdback/run.bash` 4 times side by side at a load over 20.
+	- Incorrect behavior: xfwm4's process is gone, and passes "xfwm4 has stopped", but its `_NET_SUPPORTING_WM_CHECK` window is still on the X server 3 s later. 1 run of 7 on 20261103, at load 25. Every other check in that run passed.
+	- Expected behavior: The X server lets go of the window once xfwm4 has exited.
+	- Possible cause: Not known. Either the X server is slow to see the closed connection at that load, and the 3 s wait in fGone is short, or something else holds xfwm4's connection open, such as a helper started under its dbus-run-session. The kept folder from that run had nothing more in its logs.
+
 - Running with `--software-rendering` on vmKt6m still fails with a complaint about no suitable GPU
 	- ID: 2026102807384202
 	- Type: Bug
@@ -684,10 +698,10 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - `the_scroll_record_costs_a_full_screen_program_little` failed once on the Mac runner
 	- ID: 2026102113432602
 	- Type: Bug
-	- Status: Queued
-		- 6 Mac CI runs in a row passed it since 20261022, against 3 failures in the 7 before. The cause was never found. Close it as Can't reproduce, or keep it open. Mac CI runs on every push to dev, so a new failure would show its numbers.
-		- 20261025: Since the 10-24 failure, 6 more Mac CI runs passed it (40118767927, 40119271523, 40145850085, 40214477949, 40218542312, 40221760659), and one was cancelled.
-	- Stand-in: none. It fails only on the hosted runner beside the rest of the suite. b26 is another machine, so a pass there settles nothing.
+	- Status: Waiting on automated testing
+		- 20261103: The fix is in, and passes the stand-ins here. One hosted Mac run is left, in the external testing row.
+	- Needs external testing: `gitsby raw gh workflow run mac.yml --ref rnd1104`, once. A pass is dct9f passing with its `measured:` line's by-round medians within about 0.05 of each other. Before, single pairs ran from 0.47 to 1.79 on the same runner.
+	- Stand-in: 20261103: b23, the test pinned to one core while its SMT sibling copies memory in random 10 to 80 ms stretches, so the core slows and speeds up under the test without the thread waiting. It stands in for the core changing under the test, not for the Mac itself.
 	- Severity: Low
 	- Opened: 20261021-134326
 	- Opened by: CC
@@ -702,26 +716,42 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- The copy this test was made for cost 28 to 35% here, and the pointer check catches it with no timing at all. The 10% limit is unchanged.
 		- If the Mac shows a steady gap over 10%, the options are to run this test apart from the suite, or to judge the keep cost against something the neighbours slow down as much. Neither is done yet.
 	- Progress log:
+		- 6 Mac CI runs in a row passed it since 20261022, against 3 failures in the 7 before. The cause was never found. Close it as Can't reproduce, or keep it open. Mac CI runs on every push to dev, so a new failure would show its numbers.
+		- 20261025: Since the 10-24 failure, 6 more Mac CI runs passed it (40118767927, 40119271523, 40145850085, 40214477949, 40218542312, 40221760659), and one was cancelled.
 		- 20261022: The failure text never reached the CI log. `ci-mac.bash` now prints each failed test's panic text from the first run, runs the failed tests again with their output shown, and prints every `measured:` line a test writes. The test writes its ratios and each pair's times that way, and puts the times in its failure message too.
 		- 20261022: Mac CI run 39842974082 on rnd1022 passed it. Median 1.005 over 15 pairs, from 0.766 to 1.211. Kept was above bare in 9 of 15 pairs, each by a little. The big swings were on the bare side, 24.5 against 32.0 and 23.3 against 27.7 ms, which reads more like the core or host changing than a steady keep cost. One run, so not settled. The run failed on another test, filed on 2026102114411311.
 		- 20261022: Mac CI run 39858608191 passed it again. Median 1.038, pairs from 0.841 to 2.112, kept above bare in 10 of 15.
 		- 20261023: Mac CI runs 39859635085, 40049932196, 40051324149 and 40062142185 passed it. Medians 1.008, 1.032, 1.035 and 1.032, with kept above bare in 8, 9, 15 and 9 of 15 pairs. 40051324149 had tight pairs, about 20.2 against 19.4 ms, which is the steady keep cost seen on b23. It failed on the header test, 2026102320070112. The private runner's run on b26 in the full run passed it too.
 		- 20261024: Mac CI run 40099145373 on dev at 936658b failed it again: kept cost 18% more, pairs from 0.768 to 1.568, with kept above bare in most. Run again alone it passed, median 1.002 over pairs from 0.623 to 1.643. The merge's run 40118767927 passed. So it's still live, and the spread on both sides is wide.
 	- Verified: `ci-mac.bash`'s extraction on a test binary with a failing assert, a multi-line `assert_eq!` and a `measured:` line. shellcheck, fmt, clippy on Linux, Windows and macOS targets. The test passes here and prints the new line.
-	- Branch: rnd1022
-	- Test case: `the_scroll_record_costs_a_full_screen_program_little` (dct9f), message only.
+		- 20261103, on b23, the old form against the new, 10 runs each, at a load of 10 to 24:
+			- The SMT stand-in: old 1.02 to 1.12, 1 over the limit. New 1.029 to 1.040, none over.
+			- 3 memory-bound loops on the test's 3 pinned cores: old 1.08 to 1.14, 4 over. New 1.048 to 1.073, none over.
+			- Alone: new 1.029 to 1.050. With a clone of each kept row put in the kept turns it read 1.45, and failed.
+			- The quick gate, all five areas.
+	- Branch: rnd1022, rnd1104
+	- Test case: `the_scroll_record_costs_a_full_screen_program_little` (dct9f), rewritten in place, same ID.
 	- 20261026: It failed again on Mac CI run 40263068770 at 0b16ae9, with keeping rows 10% over and pairs from 0.711 to 2.116. It passed when run again alone. Back to Queued, since a 7th failure makes it more than a one-off.
 	- 20261028: Failed again on Mac CI run 40744137399 at e809cca: keeping rows 21% more, pairs from 0.570 to 1.966. It passed run again alone. From ce3d9fb the Mac suite runs at 1 job, so nothing runs beside it, which tests the memory traffic guess.
 	- 20261028: Mac CI run 40750006918 at ce3d9fb, at 1 job, passed it. Median 1.034, pairs from 0.466 to 1.290.
+	- 20261103: The 19 Mac CI runs since ce3d9fb, all at 1 job, failed it twice: 40779983969 at a median of 1.126 and 40945628828 at 1.108. 41747375039 passed at 1.095. Pairs ran from 0.47 to 1.79 in the noisy runs, and from 0.98 to 1.15 in the quiet ones, such as 41581768957 and 40825948501, whose medians were 1.03. So with nothing beside it, the swings were still there.
+	- Actual cause:
+		- On the hosted Mac one whole flood took 20 ms in one run and 35 in the next, on either side, as the core under it changed. Thread CPU time can't see that. Pairs taken a whole flood apart spread from 0.47 to 1.79, and the median of 15 crossed 1.10 now and then, at 1 job too.
+		- Against an alt screen that keeps no rows, much of the gap is the oldest kept row, which has gone cold by the time it's reset. Memory traffic beside the test makes that dearer. On b23 that was 1.04 alone and 1.08 to 1.14 beside 3 memory-bound loops, so no 10% limit could hold there.
+	- Actual fix: Both sides take the same flood in turns of 8 KiB, about 100 lines, with the order swapped each turn, and the verdict is the median of every turn's ratio. The other side is a shell's screen that keeps 128 rows of history, which resets a cold row the same way. The 10% limit and the pointer check are unchanged.
+	- Decisions:
+		- 20261103: The test now judges the scroll record against a screen keeping as many rows of history, not against an alt screen keeping none. That cost is what the record adds, about 3% here. The cold row history pays too moves with the box, 4% quiet to 10% under memory load. A clone of each kept row, standing in for the copy F94 removed, still reads 45% over. The F94 note's "about 5% of the parse on the alt screen" is the older measure.
+	- Swept: `thread_cpu` and every `measured:` line in the unit tests. This is the only test that compares two timings.
 
 - deqx1's first case sometimes fails "the window was herded" on a busy box
 	- ID: 2026110116413708
 	- Type: Bug
-	- Status: Queued
+	- Status: Done
 	- Severity: Low
 	- Opened: 20261101-164137
 	- Opened by: CC
-	- Related IDs: 2026102807384201
+	- Assigned to: CC
+	- Related IDs: 2026102807384201, 2026110315170584, 2026110318260287
 	- Target OS: Linux
 	- Steps to reproduce:
 		- `cicd/tests/herdback/run.bash` a few times at a load over 20.
@@ -730,6 +760,17 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Possible cause: Under Xwayland the buttons can't be seen, so the look after the test's move waits for a sign the drag is over, and the test gives none. A pointer move or a focus change from the test did not end it.
 	- 20261103: A lead from 2026110220294255: fDance's start check tests only that x is under 1200, while fDanceBare uses fOnPortrait, so a window across both outputs passes the start and fails later at "was herded".
 	- 20261103: Giving the test a sign that the drag is over would also let deqx1's moved case watch the forget-on-move, per 2026110315170584.
+	- Reproduced: 20261103, every time, with the test's first move made 3 s after the window showed rather than 1. Every case failed to start on the portrait output, and both xfwm4 cases failed "the window was herded" with the window at its launch size.
+	- Actual cause: The window's first look after it shows goes ahead with no sign, and takes the size of the monitor it is on. Every later look after a move waits for a sign that the person is back at the window, since under Xwayland a drag held on the title bar can't be seen. The test moved the window 1 s after it showed, and the first look comes 0.75 s after the window is revealed. On a busy box the look sometimes came first, on the landscape output, and the move after it waited for good, so the window kept the landscape size and straddled both outputs.
+		- A Shift key sent to the window, pointer motion over it, or focus moved to it from another window each ended the wait. Focusing it again while it already had focus did not, since that is no change.
+	- Actual fix: After each move onto the portrait output the test sends the window a Shift key, which is that sign. fDance's start check uses fOnPortrait, as fDanceBare does. The moved case gets the key after its move too, so its look runs, and the case now watches the forget-on-move.
+	- Decisions:
+		- 20261103: A key, sent to the window itself, rather than pointer motion. It leaves no pointer over a window to count as presence in a later step, and it needs neither focus nor a window manager.
+	- Verified: 20261103. With the first move made late, the old script failed the start in every case, and the new one passed all 19 checks. 7 runs of the new one at load 18 to 30, up to 4 side by side: every case started on the portrait output, and 6 runs passed whole. The other failed only "xfwm4's window has gone from the X server", filed as 2026110318260287. With the forget-on-move taken out, the moved case now fails "stays where it was left". The quick gate, all five areas.
+	- Swept: Every `xdotool windowmove` in `cicd`. idleother's runs on Xvfb, where the buttons can be seen, and doesn't wait on a look.
+	- Branch: rnd1104
+	- Test case: `cicd/tests/herdback/run.bash` (deqx1), changed.
+	- Closed: 20261103-183632
 
 - Wayland: a copy a program sends while no SilkTerm window has focus is dropped
 	- ID: 2026101607585700

@@ -170,6 +170,30 @@ fGone(){
 	return 1
 }
 
+## Xwayland shows the window no button held on a title bar, so a look after a
+## move waits for a sign the person is back at it. Only the first look goes
+## ahead without one, and a move that came after it waited for good
+## (2026110116413708). A key is that sign, and leaves no pointer over a window.
+fBack(){ sleep 0.5; fX xdotool key --window "${1}" shift; }
+
+## Put the window on the portrait output, at that output's size, and say where
+## it ended. A move before the window has settled from its launch can be undone
+## by it, and a move to where it already is is no move, so every other try is a
+## step over.
+fToPortrait(){
+	local -r id="${1}"
+	local try at=""
+	for try in {0..9}; do
+		sleep 1
+		fX xdotool windowmove "${id}" $((100 + 20 * (try % 2))) 100
+		fBack "${id}"
+		sleep 2
+		at="$(fWhere "${id}")"
+		fOnPortrait "${at}" && break
+	done
+	echo "${at}"
+}
+
 ## Wait for the X server to show this many monitors.
 fMonitors(){
 	local -r want="${1}"
@@ -195,16 +219,8 @@ fDance(){  ## fDance <seconds the portrait output stays off>
 		sleep 0.1
 	done
 	if [[ -z "${id}" ]]; then echo "  FAIL ${off} s off: the window never showed"; failures=$((failures + 1)); fStopOurs "${appPid}"; appPid=""; return 0; fi
-	## a move before the window has settled from its launch can be undone by it
-	## a move to where it already is is no move, so every other try is a step over
-	for try in {0..9}; do
-		sleep 1
-		fX xdotool windowmove "${id}" $((100 + 20 * (try % 2))) 100
-		sleep 2
-		start="$(fWhere "${id}")"
-		fOnPortrait "${start}" && break
-	done
-	fCheck "${off} s off: the window starts on the portrait output" test "${start%%,*}" -lt 1200
+	start="$(fToPortrait "${id}")"
+	fCheck "${off} s off: the window starts on the portrait output" fOnPortrait "${start}"
 	fSway "output HEADLESS-2 disable"
 	sleep "${off}"
 	herded="$(fWhere "${id}")"
@@ -247,14 +263,7 @@ fDanceBare(){  ## fDanceBare back|moved|resized
 		sleep 0.1
 	done
 	if [[ -z "${id}" ]]; then echo "  FAIL ${how}, no window manager: the window never showed"; failures=$((failures + 1)); fStopOurs "${appPid}"; appPid=""; return 0; fi
-	## a move to where it already is is no move, so every other try is a step over
-	for try in {0..9}; do
-		sleep 1
-		fX xdotool windowmove "${id}" $((100 + 20 * (try % 2))) 100
-		sleep 2
-		start="$(fWhere "${id}")"
-		fOnPortrait "${start}" && break
-	done
+	start="$(fToPortrait "${id}")"
 	fCheck "${how}, no window manager: the window starts on the portrait output" fOnPortrait "${start}"
 	fSway "output HEADLESS-2 disable"
 	## the X server has to know the monitor went before the herd, as it would
@@ -263,7 +272,9 @@ fDanceBare(){  ## fDanceBare back|moved|resized
 	sleep 2
 	herded="$(fWhere "${id}")"
 	case "${how}" in
-		moved) fX xdotool windowmove "${id}" 1500 600; sleep 2 ;;
+		## the look after it has to run, or it holds the window and the put-back
+		## would never come either way
+		moved) fX xdotool windowmove "${id}" 1500 600; fBack "${id}"; sleep 2 ;;
 		resized) fX xdotool windowsize "${id}" 700 500; sleep 2 ;;
 	esac
 	left="$(fWhere "${id}")"
@@ -291,3 +302,6 @@ echo "all passed"
 ##		- 20261101 JC: The cases with no window manager.
 ##		- 20261103 JC: The launches exec, so the window lookup and stop find the
 ##		  program, and xfwm4 is stopped for the cases with no window manager.
+##		- 20261103 JC: A key after each move to the portrait output, so a move
+##		  after the window's first look takes that output's size too, and the
+##		  moved case's look runs, so it watches the forget-on-move.
