@@ -7,6 +7,7 @@
 ##		takes that for no move at all. A piece of herdback/run.bash.
 ##	- Syntax: _wmmove.py <window id> <x> <y>
 ##	- Exit: 0 moved, 2 bad arguments or no python-xlib.
+##	- History: At bottom of file.
 
 ##	Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
 ##	SPDX-License-Identifier: GPL-2.0-or-later
@@ -41,3 +42,7 @@ win.send_event(
 	event_mask=X.StructureNotifyMask,
 )
 disp.sync()
+
+
+##	History:
+##		- 20261104: Created.
