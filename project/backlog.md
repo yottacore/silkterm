@@ -465,15 +465,29 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - The unscrollable search and buttons areas should be lighter than the scrollable content
 	- ID: 2026103010083403
 	- Type: Enhancement
-	- Status: Queued
+	- Status: Waiting on UAT
+		- A look at the Settings dialog in a dark and a light theme, to judge whether the step is enough.
 	- Opened: 20261030-100834
 	- Opened by: JC
 	- Assigned to: CC
+	- Related IDs: 2026101419165501
 	- Requirements:
 		- The unscrollable search and buttons areas should be lighter than the scrollable content.
 		- The scrollable content needs to be darker (in dark mode at least).
 	- Notes:
 		- Pre-next-cut.
+	- Progress log:
+		- 20261104: The rows now sit on a shade halfway toward `gutter`, and the search box's band and the footer keep the dialog background, so they read lighter. The 1 DIP lines along the rows stay. A warning sign's cut-out follows the rows' shade.
+	- Decisions:
+		- 20261104: Swapped the shade 2026101419165501 put on the bands over to the rows, the same step, so the bands stay the dialog's own color. In dark mode the rows go from `0x20202a` to `0x1b1b24`.
+		- 20261104: Light mode too. One rule for both modes, and every built-in theme's gutter is darker than its dialog background, so the bands read lighter in both.
+	- Verified:
+		- Unit suite, clippy, rustfmt, scripts and docs checks, through the quick gate.
+		- de1aj failed with the rows' shade taken out, and devr1 with the shade mixed toward white.
+		- A real window on Linux in dark mode: rows `0x1b1b24`, bands `0x20202a`, gutter `0x16161e`.
+		- Not verified: light mode in a window.
+	- Test case: de1aj `the_search_box_and_the_buttons_sit_on_still_bands_lined_off_from_the_rows`, and devr1 `the_rows_sit_darker_than_the_still_bands_in_every_theme`.
+		- 20261104: de1aj checked that the bands were drawn in a shade off the panel. It now checks that the rows are, with the bands left the panel's color. Its geometry and line checks are unchanged.
 
 - Implement leak and static checks of the Rust code run as part of CI/CD
 	- ID: 2026101714015789

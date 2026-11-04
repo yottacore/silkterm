@@ -133,6 +133,12 @@ const LIGHT_DLG: Dlg = Dlg {
 	text: [0x22, 0x24, 0x2c], dim: [0x70, 0x70, 0x76],
 	danger: [0xb8, 0x2c, 0x2c],
 };
+impl Dlg {
+	// Under the scrolled rows, darker than the bands that hold still around them
+	fn rows_bg(&self) -> [u8; 3] {
+		mix3(self.panel_bg, self.gutter, 0.5)
+	}
+}
 // sRGB-space blend of two colors (selection highlight = field bg toward accent)
 fn mix3(a: [u8; 3], b: [u8; 3], t: f32) -> [u8; 3] {
 	let mut out = [0u8; 3];
@@ -5386,11 +5392,18 @@ impl SettingsDialog {
 			colors.panel_bg,
 		));
 		border(&mut fixed, self.rect, 1.0, colors.panel_border);
-		// What holds still while the rows scroll is a shade toward the gutter,
-		// with a line along the rows, on every tab whether it scrolls or not.
-		let still = mix3(colors.panel_bg, colors.gutter, 0.5);
+		// The rows sit a shade down toward the gutter, so the bands that hold
+		// still over and under them read lighter, each with a line along the
+		// rows. On every tab whether it scrolls or not.
 		let [top, foot] = self.fixed_bands();
-		fixed.push(quad(top.x, top.y, top.w, top.h, still));
+		let rows_y = top.y + top.h;
+		fixed.push(quad(
+			top.x,
+			rows_y,
+			top.w,
+			(foot.y - rows_y).max(0.0),
+			colors.rows_bg(),
+		));
 		fixed.push(quad(
 			top.x,
 			top.y + top.h - 1.0,
@@ -5398,7 +5411,6 @@ impl SettingsDialog {
 			1.0,
 			colors.panel_border,
 		));
-		fixed.push(quad(foot.x, foot.y, foot.w, foot.h, still));
 		fixed.push(quad(foot.x, foot.y, foot.w, 1.0, colors.panel_border));
 		// The tab strip: a recessed gutter closed off by a rule, with the tabs
 		// standing on that rule. The current one is a lighter gray rather than an
@@ -5779,7 +5791,7 @@ impl SettingsDialog {
 		});
 		let stroke = (r.w * 0.13).max(1.5);
 		let x = r.x + (r.w - stroke) / 2.0;
-		let cut = config::srgb_f32(colors.panel_bg);
+		let cut = config::srgb_f32(colors.rows_bg());
 		for (top, h) in [(0.36, 0.32), (0.76, 0.0)] {
 			out.push(RectInstance {
 				pos: [x, r.y + r.h * top],
@@ -13819,7 +13831,7 @@ mod tests {
 	// The search box's band and the footer's hold still while the rows scroll,
 	// and each is a shade off the rows with a line along them. That holds on a
 	// tab that scrolls and on one that doesn't, so no tab looks different for
-	// it (2026101419165501).
+	// it (2026101419165501). The rows are the darker side (2026103010083403).
 	// Test ID: de1aj
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
@@ -13866,9 +13878,18 @@ mod tests {
 					.map(|q| q.color)
 			};
 			let panel = fixed[0].color;
-			let shade = at(top).expect("the top band is drawn");
-			assert_ne!(shade, panel, "and set off from the rows");
-			assert_eq!(at(foot), Some(shade), "the footer's is the same shade");
+			let rows_y = top.y + top.h;
+			let rows_bg = at(super::Rect {
+				x: top.x,
+				y: rows_y,
+				w: top.w,
+				h: foot.y - rows_y,
+			})
+			.expect("the rows have a shade of their own");
+			assert_ne!(
+				rows_bg, panel,
+				"set off from the bands, which are the panel's"
+			);
 			let line = |y: f32| {
 				at(super::Rect {
 					x: top.x,
@@ -13879,7 +13900,7 @@ mod tests {
 			};
 			let top_line = line(vp.y - 1.0).expect("a line over the rows");
 			let foot_line = line(foot.y).expect("and one under them");
-			assert!(top_line != shade && foot_line == top_line);
+			assert!(top_line != rows_bg && top_line != panel && foot_line == top_line);
 			// the rows start clear of the line, and end clear of the other one
 			let rows: Vec<usize> = SettingsDialog::visible(d.specs, d.tab)
 				.map(|(i, _)| i)
@@ -13892,6 +13913,29 @@ mod tests {
 				assert!(near(bottom + lay().rows_pad, vp.y + vp.h));
 			} else {
 				assert!(bottom + lay().rows_pad <= vp.y + vp.h + 0.01);
+			}
+		}
+	}
+
+	// The still bands read lighter than the rows they hold, in both modes of
+	// every built-in theme (2026103010083403).
+	// Test ID: devr1
+	#[test]
+	fn the_rows_sit_darker_than_the_still_bands_in_every_theme() {
+		for (name, t) in crate::theme::THEMES {
+			for (mode, pal, base) in [
+				("dark", &t.dark, super::DARK_DLG),
+				("light", &t.light, super::LIGHT_DLG),
+			] {
+				let colors = super::Dlg {
+					panel_bg: pal.dialog_bg,
+					gutter: pal.gutter,
+					..base
+				};
+				assert!(
+					config::luma(colors.rows_bg()) < config::luma(colors.panel_bg),
+					"{name} {mode}"
+				);
 			}
 		}
 	}
