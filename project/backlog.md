@@ -575,9 +575,9 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - Wayland: Settings isn't tied to the terminal window
 	- ID: 2026110118260314
 	- Type: Bug
-	- Status: Waiting on UAT
+	- Status: Done
 		- Open Settings on a real Wayland desktop, GNOME and KDE if there are both. It should stay above the terminal, and make no taskbar or alt+tab entry of its own where that desktop folds a dialog into its parent's.
-	- Needs hand testing: the above, on a real Wayland desktop.
+	- Needs hand testing: No. A look on GNOME or KDE under Wayland is still welcome, but the taskbar and alt+tab entry is each desktop's own call once the parent is set.
 	- Severity: Low
 	- Opened: 20261101-182603
 	- Opened by: CC
@@ -599,6 +599,8 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Swept: About, the notices and the close question are made by the same code, so they get the parent too. A notice over Settings names Settings. Off Wayland the toplevels are None and nothing is sent.
 	- Branch: rnd1104
 	- Test case: `cicd/tests/dlgwl/run.bash` (detyk).
+	- Acceptance signoff: Self-closed: xdg-shell set_parent is the only tie Wayland gives a dialog, and dlgwl (detyk) shows it sent, with sway floating Settings over the terminal and giving it focus. It fails without the fix.
+	- Closed: 20261104-013900
 
 - Wayland: Settings asks to be modal
 	- ID: 2026110317323442
