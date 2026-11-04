@@ -1837,15 +1837,20 @@ impl GpuWarm {
 	}
 }
 
-/// How the About text names an adapter's device type. Shared by the dialog and
-/// `--about`, so a bug report reads the same either way.
-pub const fn acceleration(device_type: wgpu::DeviceType) -> &'static str {
-	match device_type {
+/// How the About text says whether an adapter is accelerated. Shared by the
+/// dialog and `--about`, so a bug report reads the same either way.
+pub fn acceleration(info: &wgpu::AdapterInfo) -> &'static str {
+	if crate::profile::software_adapter(info) {
+		return "Software (CPU)";
+	}
+	match info.device_type {
 		wgpu::DeviceType::Cpu => "Software (CPU)",
 		wgpu::DeviceType::IntegratedGpu => "Hardware (integrated GPU)",
 		wgpu::DeviceType::DiscreteGpu => "Hardware (discrete GPU)",
 		wgpu::DeviceType::VirtualGpu => "Hardware (virtual GPU)",
-		wgpu::DeviceType::Other => "Unknown",
+		// wgpu's GL backend knows integrated and software chips by name only, and
+		// calls the rest Other, a discrete card on X11 included.
+		wgpu::DeviceType::Other => "Hardware (GPU)",
 	}
 }
 
@@ -2836,15 +2841,46 @@ mod tests {
 	#[test]
 	fn every_gpu_is_hardware_and_only_the_cpu_is_software() {
 		use wgpu::DeviceType;
-		assert_eq!(acceleration(DeviceType::Cpu), "Software (CPU)");
+		assert_eq!(
+			acceleration(&test_adapter("gpu", DeviceType::Cpu)),
+			"Software (CPU)"
+		);
 		for (kind, said) in [
 			(DeviceType::DiscreteGpu, "Hardware (discrete GPU)"),
 			(DeviceType::IntegratedGpu, "Hardware (integrated GPU)"),
 			(DeviceType::VirtualGpu, "Hardware (virtual GPU)"),
 		] {
-			assert_eq!(acceleration(kind), said);
+			assert_eq!(acceleration(&test_adapter("gpu", kind)), said);
 		}
-		assert!(!acceleration(DeviceType::Other).starts_with("Hardware"));
+		let unsure = test_adapter("llvmpipe (LLVM 19.1.7, 256 bits)", DeviceType::Other);
+		assert!(!acceleration(&unsure).starts_with("Hardware"));
+	}
+
+	// 2026102807384203: the card on X11's GL path read as Unknown.
+	// Test ID: detz5
+	#[test]
+	fn a_card_on_gl_is_hardware_and_a_software_name_never_is() {
+		use wgpu::DeviceType;
+		let mut card = test_adapter("NVIDIA GeForce RTX 3060 Ti/PCIe/SSE2", DeviceType::Other);
+		card.backend = wgpu::Backend::Gl;
+		assert_eq!(acceleration(&card), "Hardware (GPU)");
+		for name in [
+			"softpipe",
+			"Microsoft Basic Render Driver",
+			"Microsoft Remote Display Adapter",
+		] {
+			for kind in [
+				DeviceType::Other,
+				DeviceType::IntegratedGpu,
+				DeviceType::VirtualGpu,
+			] {
+				assert_eq!(
+					acceleration(&test_adapter(name, kind)),
+					"Software (CPU)",
+					"{name} {kind:?}"
+				);
+			}
+		}
 	}
 
 	// The dialogs' context reserved 128 + 64 MiB for under 1 MiB of use under

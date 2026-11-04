@@ -19,7 +19,7 @@
 ##		resized by hand while herded, it must stay where it was left.
 ##	- Syntax: run.bash [--bin PATH]   (default: the debug build, then release)
 ##	- Exit: 0 passed, 1 a check failed, 3 nothing ran (no binary, sway,
-##	  Xwayland, xfwm4, xdotool or xrandr).
+##	  Xwayland, xfwm4, xdotool, xrandr or python-xlib).
 ##	- Test ID: deqx1
 ##	- History: At bottom of file.
 
@@ -45,9 +45,10 @@ if [[ -z "${bin}" ]]; then
 fi
 if [[ -z "${bin}" || ! -x "${bin}" ]]; then echo "  skip: no SilkTerm binary (build it first, or pass --bin)"; exit 3; fi
 echo "  binary: ${bin}"
-for tool in sway swaymsg Xwayland xfwm4 xdotool xprop xrandr; do
+for tool in sway swaymsg Xwayland xfwm4 xdotool xprop xrandr python3; do
 	if ! command -v "${tool}" >/dev/null 2>&1; then echo "  skip: no ${tool}"; exit 3; fi
 done
+if ! python3 -c 'import Xlib' 2>/dev/null; then echo "  skip: no python-xlib"; exit 3; fi
 
 # shellcheck source=cicd/tests/_testdir.bash
 source "${meDir}/../_testdir.bash"; fTestDir_Use
@@ -119,8 +120,10 @@ exec {numFd}<&-
 if [[ -z "${xDisplay}" ]]; then echo "  skip: Xwayland did not start"; exit 3; fi
 xDisplay=":${xDisplay}"
 ## A function sent to the background runs in a subshell, so --bg execs, and $!
-## is the program and not a bash waiting on it.
-fX(){ local how=""; [[ "${1:-}" == "--bg" ]] && { how="exec"; shift; }; ${how} env -u WAYLAND_DISPLAY -u WAYLAND_SOCKET DISPLAY="${xDisplay}" "${@}"; }
+## is the program and not a bash waiting on it. Without SESSION_MANAGER, as in
+## gui-headless.bash: xfwm4 joined the desktop's session, which started it again
+## on this display once stopped, so its window seemed never to go.
+fX(){ local how=""; [[ "${1:-}" == "--bg" ]] && { how="exec"; shift; }; ${how} env -u WAYLAND_DISPLAY -u WAYLAND_SOCKET -u SESSION_MANAGER DISPLAY="${xDisplay}" "${@}"; }
 
 ## xfwm4 asks xfconf for its settings over the session bus, and does without one.
 wm=(xfwm4 --compositor=off)
@@ -170,6 +173,37 @@ fGone(){
 	return 1
 }
 
+## Xwayland shows the window no button held on a title bar, so a look after a
+## move waits for a sign the person is back at it. Only the first look goes
+## ahead without one, and a move that came after it waited for good
+## (2026110116413708). A key is that sign, and leaves no pointer over a window.
+## With no window manager to focus the window the key never arrived, so it
+## takes focus first.
+fBack(){ sleep 0.5; fX xdotool windowfocus "${1}"; fX xdotool key --window "${1}" shift; }
+
+## A window manager tells the window it moved, and winit sees no move without
+## that, so with none the move is made as one would (_wmmove.py).
+mover=(xdotool windowmove)
+fMove(){ fX "${mover[@]}" "${@}"; }
+
+## Put the window on the portrait output, at that output's size, and say where
+## it ended. A move before the window has settled from its launch can be undone
+## by it, and a move to where it already is is no move, so every other try is a
+## step over.
+fToPortrait(){
+	local -r id="${1}"
+	local try at=""
+	for try in {0..9}; do
+		sleep 1
+		fMove "${id}" $((100 + 20 * (try % 2))) 100
+		fBack "${id}"
+		sleep 2
+		at="$(fWhere "${id}")"
+		fOnPortrait "${at}" && break
+	done
+	echo "${at}"
+}
+
 ## Wait for the X server to show this many monitors.
 fMonitors(){
 	local -r want="${1}"
@@ -195,16 +229,8 @@ fDance(){  ## fDance <seconds the portrait output stays off>
 		sleep 0.1
 	done
 	if [[ -z "${id}" ]]; then echo "  FAIL ${off} s off: the window never showed"; failures=$((failures + 1)); fStopOurs "${appPid}"; appPid=""; return 0; fi
-	## a move before the window has settled from its launch can be undone by it
-	## a move to where it already is is no move, so every other try is a step over
-	for try in {0..9}; do
-		sleep 1
-		fX xdotool windowmove "${id}" $((100 + 20 * (try % 2))) 100
-		sleep 2
-		start="$(fWhere "${id}")"
-		fOnPortrait "${start}" && break
-	done
-	fCheck "${off} s off: the window starts on the portrait output" test "${start%%,*}" -lt 1200
+	start="$(fToPortrait "${id}")"
+	fCheck "${off} s off: the window starts on the portrait output" fOnPortrait "${start}"
 	fSway "output HEADLESS-2 disable"
 	sleep "${off}"
 	herded="$(fWhere "${id}")"
@@ -226,6 +252,7 @@ wmOnly="$(pgrep -P "${wmPid}" -x xfwm4 2>/dev/null || true)"
 kill "${wmOnly:-${wmPid}}" 2>/dev/null || true
 wait "${wmPid}" 2>/dev/null || true
 wmPidWas="${wmPid}"; wmPid=""
+mover=(python3 -I "${meDir}/_wmmove.py")
 if [[ -n "${wmOnly}" ]]; then
 	for _ in {1..50}; do kill -0 "${wmOnly}" 2>/dev/null || break; sleep 0.1; done
 fi
@@ -247,23 +274,18 @@ fDanceBare(){  ## fDanceBare back|moved|resized
 		sleep 0.1
 	done
 	if [[ -z "${id}" ]]; then echo "  FAIL ${how}, no window manager: the window never showed"; failures=$((failures + 1)); fStopOurs "${appPid}"; appPid=""; return 0; fi
-	## a move to where it already is is no move, so every other try is a step over
-	for try in {0..9}; do
-		sleep 1
-		fX xdotool windowmove "${id}" $((100 + 20 * (try % 2))) 100
-		sleep 2
-		start="$(fWhere "${id}")"
-		fOnPortrait "${start}" && break
-	done
+	start="$(fToPortrait "${id}")"
 	fCheck "${how}, no window manager: the window starts on the portrait output" fOnPortrait "${start}"
 	fSway "output HEADLESS-2 disable"
 	## the X server has to know the monitor went before the herd, as it would
 	fMonitors 1
-	fX xdotool windowmove "${id}" 1300 500
+	fMove "${id}" 1300 500
 	sleep 2
 	herded="$(fWhere "${id}")"
 	case "${how}" in
-		moved) fX xdotool windowmove "${id}" 1500 600; sleep 2 ;;
+		## the look after it has to run, or it holds the window and the put-back
+		## would never come either way
+		moved) fMove "${id}" 1500 600; fBack "${id}"; sleep 2 ;;
 		resized) fX xdotool windowsize "${id}" 700 500; sleep 2 ;;
 	esac
 	left="$(fWhere "${id}")"
@@ -282,6 +304,9 @@ fDanceBare(){  ## fDanceBare back|moved|resized
 fDanceBare back
 fDanceBare moved
 fDanceBare resized
+## A window manager back on the display would have run the cases above.
+fNoWm(){ local w; w="$(fX xprop -root _NET_SUPPORTING_WM_CHECK 2>/dev/null | sed -n 's/.*window id # //p')"; [[ -z "${w}" ]] || ! fX xprop -id "${w}" WM_NAME >/dev/null 2>&1; }
+fCheck "no window manager came back for the cases with none" fNoWm
 
 if ((failures)); then echo "${failures} failed; kept ${work}"; exit 1; fi
 echo "all passed"
@@ -291,3 +316,9 @@ echo "all passed"
 ##		- 20261101 JC: The cases with no window manager.
 ##		- 20261103 JC: The launches exec, so the window lookup and stop find the
 ##		  program, and xfwm4 is stopped for the cases with no window manager.
+##		- 20261103 JC: A key after each move to the portrait output, so a move
+##		  after the window's first look takes that output's size too, and the
+##		  moved case's look runs, so it watches the forget-on-move.
+##		- 20261103 JC: No SESSION_MANAGER, so the desktop's session doesn't start
+##		  xfwm4 again once it's stopped, and the cases with no window manager
+##		  run with none. Their moves tell the window, as a window manager does.

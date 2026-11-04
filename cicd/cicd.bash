@@ -77,6 +77,25 @@
 ##	   --no-sync           skip the remote sync check (stage 0)
 ##	   --no-demo           skip the demo video re-record
 ##	   --demo              re-record the demo video, under --quick too
+##	   --no-rust-tests     skip cargo test; fuzz, the leak checks and the sanitizer
+##	                       runs have their own options
+##	   --no-clippy         skip the 3 clippy runs (Linux, Windows, macOS)
+##	   --no-script-lint    skip shellcheck, the bash style check, and the PowerShell
+##	                       and Python lints
+##	   --no-scrub          skip the content scrub
+##	   --no-deny           skip cargo-deny: the advisory scan and its tests, and the
+##	                       license, ban and source checks
+##	   --no-script-tests   skip the test scripts under cicd/tests, dpirand and the
+##	                       launcher harness included
+##	   --no-docs           skip the docs, table of contents, table and test ID
+##	                       checks, and the wallpaper gallery check
+##	   --no-scroll         skip the scroll harness
+##	   --no-wingui         skip the Windows scenarios
+##	   --no-release        skip the release builds, native and cross, and their
+##	                       checks, and with them the packages, the ARM64 smoke run,
+##	                       dogfood and the demo
+##	   --no-cleanup        leave what earlier runs left: stale run folders, old
+##	                       build dirs, stopped containers and Zig caches
 ##	   --quick             only the quick lints and tests, and the x86_64 release builds;
 ##	                       skips the ARM64 builds, packages, profiling, the fuzz soak,
 ##	                       the ASan and TSan runs, the soak test, the slow window
@@ -168,6 +187,7 @@ stamp="$(date +%Y%m%d-%H%M%S)"
 
 ## Parse options.
 assumeYes=0; quiet=0; quick=0; long=0; noRemote=0; skipLog=""; gate=0; gateAreas=(); fullRun=0; fullRunName=""; fmtCheck=0; leakcheck=1; leakAsked=0; codeql=0; demoAsked=0; noArm=0; noWindows=0; sync=1; cliMessage=""; container="${useContainer:-0}"; noContainer=0; keepTemp=0; listing=0; innerArgs=()
+noRustTests=0; noClippy=0; noScriptLint=0; noScrub=0; noDeny=0; noScriptTests=0; noDocs=0; noScroll=0; noWingui=0; noRelease=0; noCleanup=0
 while (($#)); do case "${1}" in
 	-y|--yes)                 assumeYes=1; shift ;;
 	-q|--quiet)               quiet=1; assumeYes=1; shift ;;   ## quiet + unattended; publish runs quiet too
@@ -193,6 +213,18 @@ while (($#)); do case "${1}" in
 	--no-sync)                sync=0; shift ;;
 	--demo)                   DEMO_ENABLE=1; demoAsked=1; shift ;;
 	--no-demo)                DEMO_ENABLE=0; shift ;;
+	## So a test batch can run past a part that fails (2026102319535661).
+	--no-rust-tests)          noRustTests=1; innerArgs+=("${1}"); shift ;;
+	--no-clippy)              noClippy=1; innerArgs+=("${1}"); shift ;;
+	--no-script-lint)         noScriptLint=1; innerArgs+=("${1}"); shift ;;
+	--no-scrub)               noScrub=1; innerArgs+=("${1}"); shift ;;
+	--no-deny)                noDeny=1; innerArgs+=("${1}"); shift ;;
+	--no-script-tests)        noScriptTests=1; innerArgs+=("${1}"); shift ;;
+	--no-docs)                noDocs=1; innerArgs+=("${1}"); shift ;;
+	--no-scroll)              noScroll=1; innerArgs+=("${1}"); shift ;;
+	--no-wingui)              noWingui=1; shift ;;              ## the container never reaches the boxes
+	--no-release)             noRelease=1; innerArgs+=("${1}"); shift ;;
+	--no-cleanup)             noCleanup=1; innerArgs+=("${1}"); shift ;;
 	--quick)                  quick=1; noArm=1; PROFILE_ENABLE=0; PACKAGE_ENABLE=0; FUZZ_SECS=0; innerArgs+=("${1}"); shift ;;   ## skip the slow stages
 	--long|--slow)            long=1; innerArgs+=(--long); shift ;;   ## the steps that take hours too
 	--no-fuzz)                FUZZ_SECS=0; innerArgs+=("${1}"); shift ;;
@@ -296,6 +328,7 @@ fTestOut_Fail(){
 fRunTest(){
 	local -r script="${1}" label="${2}" failure="${3:-${2} test failed}"
 	[[ -x "${root}/${script}" ]] || return 0
+	((! ${noScriptTests:-0})) || return 0
 	if ((listing)); then fListTest "${script}" "${label}"; return 0; fi
 	fEcho_Clean "${label} ..."
 	local out; out="$(fTestOut "${script}")"
@@ -309,6 +342,7 @@ fRunTest(){
 fRunTest_MaySkip(){
 	local -r script="${1}" label="${2}" why="${3:-could not run}"
 	[[ -x "${root}/${script}" ]] || return 0
+	((! ${noScriptTests:-0})) || return 0
 	if ((listing)); then fListTest "${script}" "${label}"; return 0; fi
 	fEcho_Clean "${label} ..."
 	local rc=0 out said; out="$(fTestOut "${script}")"
@@ -851,6 +885,8 @@ fLintScripts(){
 	esac
 }
 fCheckDocs(){
+	## Its checks go with --no-docs, not --no-script-tests.
+	local noScriptTests=0
 	## Every table of contents, which no markdown linter regenerates. design.md had
 	## been missing eight of its headings.
 	fRunTest cicd/tests/toc/run.py "tables of contents" "a table of contents is out of date - run cicd/tests/toc/run.py --fix"
@@ -896,6 +932,7 @@ fWinGuiScenarios(){
 	if ((quick)) || [[ -z "${WINGUI_HARNESS+x}" ]] || ((${#WINGUI_HARNESS[@]} == 0)) || [[ ! -x "${root}/${WINGUI_HARNESS[0]}" ]]; then return 0; fi
 	if [[ -n "${SILK_CICD_IN_CONTAINER:-}" ]]; then fEcho_Clean "windows gui scenarios run outside the container"; return 0; fi
 	if ((noRemote)); then fEcho_Clean "windows gui scenarios skipped (--no-remote)"; return 0; fi
+	if ((${noWingui:-0})); then ((listing)) || fEcho_Clean "windows gui scenarios skipped (--no-wingui)"; return 0; fi
 	if ((listing)); then fListTest "${WINGUI_HARNESS[0]}" "windows gui scenarios"; return 0; fi
 	fEcho_Clean "windows gui scenarios ..."
 	local -ri before="$(fSkipCount)"
@@ -930,6 +967,7 @@ fArmSmoke(){
 ## Stage 3's test scripts and harnesses. --list goes through it too, with each
 ## test printing its line rather than running.
 fScriptTests(){
+	if ((noScriptTests && ! listing)); then fEcho_Clean "test scripts skipped (--no-script-tests)"; fi
 	## A release may only publish what was built from the source being tagged.
 	fRunTest cicd/tests/release/run.bash "release provenance"
 	## The release notes link every download by name, and only those uploaded.
@@ -977,11 +1015,15 @@ fScriptTests(){
 	## Xwayland or python3.
 	fRunTest_MaySkip cicd/tests/monwake/run.bash "window size after a monitor wakes"
 	## Under xfwm4 that window goes back where it was, too. Exit 3 is a skip: no
-	## binary, sway, Xwayland, xfwm4 or xdotool.
+	## binary, sway, Xwayland, xfwm4, xdotool or python-xlib.
 	fRunTest_MaySkip cicd/tests/herdback/run.bash "window place after a monitor wakes"
 	## Under xfwm4 Settings stays above the terminal, as its modal, and off the
 	## taskbar and pager. Exit 3 is a skip: no binary, xfwm4, xdotool or xprop.
 	fRunTest_MaySkip cicd/tests/dlgtie/run.bash "Settings tied to its window"
+	## On native Wayland Settings names the terminal's toplevel as its parent, so
+	## sway floats it above the terminal. Exit 3 is a skip: no binary, sway,
+	## wtype, python3 or software Vulkan.
+	fRunTest_MaySkip cicd/tests/dlgwl/run.bash "Settings tied to its window on Wayland"
 	## On native Wayland a window takes each output's own size once moved or
 	## dropped there, a sliver left on another output too. Exit 3 is a skip: no
 	## binary, sway, python3 or software Vulkan.
@@ -1058,7 +1100,8 @@ fScriptTests(){
 	fRunTest cicd/tests/armsmoke/run.bash "arm64 smoke runner"
 	## The parts of the Windows pipeline that run anywhere.
 	fRunTest cicd/tests/cicd-win/run.bash "windows pipeline pieces" "windows pipeline test failed"
-	fCheckDocs
+	if ((! noDocs)); then fCheckDocs
+	elif ((! listing)); then fEcho_Clean "docs checks and the wallpaper gallery skipped (--no-docs)"; fi
 	## The Windows scenario harness, which once tested whatever the box last built
 	## and stopped every SilkTerm on a shared box.
 	fRunTest cicd/tests/wingui/harness-test.bash "windows scenario harness"
@@ -1066,7 +1109,8 @@ fScriptTests(){
 	fRunTest cicd/tests/wine/run.bash "wine launcher"
 	## The wallpaper gallery and contact sheet are rendered, so they go stale in
 	## silence when the pack changes. Nine removed images sat in both for a month.
-	if [[ -f "${root}/cicd/utility/wallpaper-gallery.bash" ]] && ((listing)); then
+	if ((noDocs)); then :
+	elif [[ -f "${root}/cicd/utility/wallpaper-gallery.bash" ]] && ((listing)); then
 		fListTest cicd/utility/wallpaper-gallery.bash "wallpaper gallery"
 	elif [[ -f "${root}/cicd/utility/wallpaper-gallery.bash" ]]; then
 		fEcho_Clean "wallpaper gallery ..."
@@ -1077,7 +1121,9 @@ fScriptTests(){
 	## Headless scroll regression harness (slow; skipped under --quick). A measured
 	## regression aborts here. Exit 3 means it could not run at all (no Xvfb, cage or
 	## binary), which is a SKIP line for that arm and never a PASS.
-	if ((! quick)) && [[ -n "${SCROLL_HARNESS+x}" ]] && ((${#SCROLL_HARNESS[@]})) && ((listing)); then
+	if ((noScroll)); then
+		((listing)) || fEcho_Clean "scroll harness skipped (--no-scroll)"
+	elif ((! quick)) && [[ -n "${SCROLL_HARNESS+x}" ]] && ((${#SCROLL_HARNESS[@]})) && ((listing)); then
 		fListTest "${SCROLL_HARNESS[0]}" "scroll harness (X11)"
 		"${root}/${SCROLL_HARNESS[0]}" "${SCROLL_HARNESS[@]:1}" --list
 		if [[ "${SCROLL_HARNESS_WAYLAND:-0}" == 1 ]]; then
@@ -1106,7 +1152,8 @@ fScriptTests(){
 	fi
 	## Dogfood launcher: it shares a path with the release installer, so what it does
 	## to a file it did not create is worth a gate. Runs in a sandboxed HOME.
-	if [[ -n "${LAUNCHER_HARNESS+x}" ]] && ((${#LAUNCHER_HARNESS[@]})) && ((listing)); then
+	if ((noScriptTests)); then :
+	elif [[ -n "${LAUNCHER_HARNESS+x}" ]] && ((${#LAUNCHER_HARNESS[@]})) && ((listing)); then
 		fListTest "${LAUNCHER_HARNESS[0]}" "launcher harness"
 	elif [[ -n "${LAUNCHER_HARNESS+x}" ]] && ((${#LAUNCHER_HARNESS[@]})); then
 		if command -v pwsh >/dev/null 2>&1; then
@@ -1151,7 +1198,7 @@ fStepIf(){ if [[ -z "${2:-}" ]]; then stepsOn+=("${1}"); else stepsOff+=("${1}|$
 ## fStepOff_Why <flag>: the flag, or the full run that turned it off.
 fStepOff_Why(){ if ((fullRun)); then echo "${fullRunName}"; else echo "${1}"; fi; }
 fPlanSteps(){
-	local t why onHost=1
+	local t why rel onHost=1
 	stepsOn=(); stepsOff=()
 	[[ -z "${SILK_CICD_IN_CONTAINER:-}" ]] || onHost=0
 	if ((onHost)); then why=""; ((sync)) || why="$(fStepOff_Why --no-sync)"; fStepIf "Remote sync" "${why}"; fi
@@ -1160,16 +1207,18 @@ fPlanSteps(){
 	fStepIf "Debug build"
 	fStepIf "Regression tests"
 	if ((onHost && ! container)); then why=""; ((PROFILE_ENABLE)) || why="$( ((quick)) && echo --quick || echo --no-profile)"; fStepIf "Profiler" "${why}"; fi
-	fStepIf "Release build: native"
+	rel=""; ((! ${noRelease:-0})) || rel="--no-release"
+	fStepIf "Release build: native" "${rel}"
 	for t in "${allCrossTargets[@]}"; do
-		if ! ((BUILD_CROSS)); then why="--no-cross"
+		if [[ -n "${rel}" ]]; then why="${rel}"
+		elif ! ((BUILD_CROSS)); then why="--no-cross"
 		elif [[ " ${CROSS_TARGETS[*]:-} " == *" ${t} "* ]]; then why=""
 		elif [[ "${t}" == *windows* ]] && ((noWindows)); then why="--no-windows"
 		else why="$( ((quick)) && echo --quick || echo --no-arm)"; fi
 		fStepIf "Release build: ${t%%|*}" "${why}"
 	done
-	fStepIf "Release artifacts"
-	why=""; ((PACKAGE_ENABLE)) || why="$( ((quick)) && echo --quick || echo --no-package)"; fStepIf "Packages" "${why}"
+	fStepIf "Release artifacts" "${rel}"
+	why="${rel}"; ((PACKAGE_ENABLE)) || why="$( ((quick)) && echo --quick || echo --no-package)"; fStepIf "Packages" "${why}"
 	if ((! onHost)); then fStepNumbers; return 0; fi
 	if ((container)); then
 		fStepIf "Checks on this box"
@@ -1179,8 +1228,9 @@ fPlanSteps(){
 	elif [[ -n "${PRIVATE_RUNNER:-}" && -x "${PRIVATE_RUNNER}" ]]; then why=""
 	else why="--no-private, or not checked out"; fi
 	fStepIf "Private runner" "${why}"
-	why=""; ((${#DOGFOOD_DESTS[@]})) || why="$(fStepOff_Why --no-dogfood)"; fStepIf "Dogfood" "${why}"
+	why="${rel}"; ((${#DOGFOOD_DESTS[@]})) || why="$(fStepOff_Why --no-dogfood)"; fStepIf "Dogfood" "${why}"
 	if ! ((${DEMO_ENABLE:-0})); then why="$(fStepOff_Why --no-demo)"
+	elif [[ -n "${rel}" ]]; then why="${rel}"
 	elif ((quick && ! demoAsked)); then why="--quick; --demo adds it"
 	elif [[ ! -f "${root}/cicd/utility/demo-video/demo-video.py" ]]; then why="no recorder in this tree"
 	else why=""; fi
@@ -1314,7 +1364,20 @@ if ((fullRun)); then fEcho_Clean "Run .................: ${fullRunName}, every c
 fEcho_Clean "Remote sync .........: $( ((sync)) && echo 'fetch + fast-forward check' || echo '(skipped)')"
 fEcho_Clean "Format ..............: ${FMT_CMD[*]:-(skipped)}"
 fEcho_Clean "Debug build .........: ${DEBUG_BUILD_CMD[*]}"
-fEcho_Clean "Tests ...............: ${TEST_CMD[*]}"
+fEcho_Clean "Tests ...............: $( ((noRustTests)) && echo '(skipped --no-rust-tests)' || echo "${TEST_CMD[*]}")"
+## The parts of stage 3 that have an off option and nothing else to say.
+leftOut=()
+((! noClippy))      || leftOut+=("clippy (--no-clippy)")
+((! noScriptLint))  || leftOut+=("script lints (--no-script-lint)")
+((! noScrub))       || leftOut+=("content scrub (--no-scrub)")
+((! noDeny))        || leftOut+=("cargo-deny (--no-deny)")
+((! noScriptTests)) || leftOut+=("test scripts (--no-script-tests)")
+((! noDocs))        || leftOut+=("docs checks (--no-docs)")
+((! noScroll))      || leftOut+=("scroll harness (--no-scroll)")
+if ((${#leftOut[@]})); then
+	leftLine="${leftOut[0]}"; for x in "${leftOut[@]:1}"; do leftLine+=", ${x}"; done
+	fEcho_Clean "Left out ............: ${leftLine}"
+fi
 if ((${FUZZ_SECS:-0} > 0)) && ((${#FUZZ_CMD[@]})); then
 	fEcho_Clean "Fuzz ................: ${FUZZ_CMD[*]} at ${FUZZ_SECS}s per target"
 else
@@ -1369,6 +1432,8 @@ elif ((quick)); then
 	fEcho_Clean "Windows scenarios ...: (skipped --quick)"
 elif ((noRemote)); then
 	fEcho_Clean "Windows scenarios ...: (skipped --no-remote)"
+elif ((${noWingui:-0})); then
+	fEcho_Clean "Windows scenarios ...: (skipped --no-wingui)"
 elif [[ -n "${SILK_CICD_IN_CONTAINER:-}" ]]; then
 	fEcho_Clean "Windows scenarios ...: (run outside the container)"
 else
@@ -1383,15 +1448,21 @@ elif ((PROFILE_ENABLE)); then
 else
 	fEcho_Clean "Profiler ............: (disabled)"
 fi
-fEcho_Clean "Release (native) ....: ${RELEASE_NATIVE_CMD[*]} -> ${RELEASE_NATIVE_BIN}"
-if ((BUILD_CROSS)) && ((${#CROSS_TARGETS[@]})); then
+if ((noRelease)); then
+	fEcho_Clean "Release (native) ....: (skipped --no-release)"
+else
+	fEcho_Clean "Release (native) ....: ${RELEASE_NATIVE_CMD[*]} -> ${RELEASE_NATIVE_BIN}"
+fi
+if ((noRelease)); then
+	fEcho_Clean "Release (cross) .....: (skipped --no-release)"
+elif ((BUILD_CROSS)) && ((${#CROSS_TARGETS[@]})); then
 	fEcho_Clean "Release (cross) .....:$( ((noArm)) && echo ' (x86_64 only)')$( ((noWindows)) && echo ' (Linux only, --no-windows)')"
 	for t in "${CROSS_TARGETS[@]}"; do fEcho_Clean "    - ${t%%|*}"; done
 else
 	fEcho_Clean "Release (cross) .....: (skipped)"
 fi
 ## --quick has no ARM64 build either.
-if ! ((BUILD_CROSS)) || [[ " ${CROSS_TARGETS[*]:-} " != *"|linux-arm64|"* ]]; then
+if ((${noRelease:-0})) || ! ((BUILD_CROSS)) || [[ " ${CROSS_TARGETS[*]:-} " != *"|linux-arm64|"* ]]; then
 	fEcho_Clean "ARM64 smoke run .....: (no Linux ARM64 build)"
 elif ((noRemote)); then
 	fEcho_Clean "ARM64 smoke run .....: (skipped --no-remote)"
@@ -1400,7 +1471,9 @@ elif [[ -n "${SILK_CICD_IN_CONTAINER:-}" ]]; then
 else
 	fEcho_Clean "ARM64 smoke run .....: --version on the arm64 box, woken and put back if it's a VM$( ((container)) && echo ', here after the container')"
 fi
-if ((PACKAGE_ENABLE)) && ((! quick)); then
+if ((noRelease)); then
+	fEcho_Clean "Packages ............: (skipped --no-release)"
+elif ((PACKAGE_ENABLE)) && ((! quick)); then
 	## Name only what stage 5 will actually leave behind. The installer wraps a
 	## Windows binary, so under --no-windows (or --no-cross) there is none to wrap.
 	pkgKinds=".deb/.rpm (Linux)"
@@ -1421,7 +1494,9 @@ elif [[ -n "${PRIVATE_RUNNER:-}" && -x "${PRIVATE_RUNNER}" ]]; then
 else
 	fEcho_Clean "Private runner ......: (not checked out)"
 fi
-if ((${#DOGFOOD_DESTS[@]})); then
+if ((${#DOGFOOD_DESTS[@]})) && ((noRelease)); then
+	fEcho_Clean "Dogfood .............: (skipped --no-release)"
+elif ((${#DOGFOOD_DESTS[@]})); then
 	fEcho_Clean "Dogfood .............: install to the synced app dir per target"
 	for xd in "${DOGFOOD_DESTS[@]}"; do
 		xosarch="${xd%%|*}"; xrest="${xd#*|}"; xname="${xrest%%|*}"
@@ -1434,12 +1509,16 @@ else
 fi
 if ((! ${DEMO_ENABLE:-0})); then
 	fEcho_Clean "Demo video ..........: (disabled)"
+elif ((noRelease)); then
+	fEcho_Clean "Demo video ..........: (skipped --no-release)"
 elif ((quick && ! demoAsked)); then
 	fEcho_Clean "Demo video ..........: (skipped --quick)"
 else
 	fEcho_Clean "Demo video ..........: re-record, README gif to assets/demo.gif"
 fi
-if declare -p CLEANUP_BUILD_DIRS &>/dev/null; then
+if declare -p CLEANUP_BUILD_DIRS &>/dev/null && ((noCleanup)); then
+	fEcho_Clean "Cleanup .............: (skipped --no-cleanup)"
+elif declare -p CLEANUP_BUILD_DIRS &>/dev/null; then
 	fEcho_Clean "Cleanup .............: run folders over ${CLEANUP_STALE_DAYS:-2} days old, stale build dirs$( [[ -n "${containerTmpLedger}" ]] && echo ', stopped containers and old images')"
 fi
 if ((${#GIT_PUBLISH[@]} == 0)); then
@@ -1456,10 +1535,10 @@ if ((miri && ${#MIRI_CMD[@]})) && [[ -z "${miriSkipped}" ]]; then fEcho_Clean "M
 fEcho_Clean "Fail-fast: any error aborts before the next step."
 fEcho_Clean
 if ((listing)); then
-	((! ${#TEST_CMD[@]})) || fListRustTests
+	((! ${#TEST_CMD[@]} || noRustTests)) || fListRustTests
 	if ((${FUZZ_SECS:-0} > 0)) && ((${#FUZZ_CMD[@]})); then fEcho_Clean "Fuzz soak: the ${FUZZ_CMD[*]} tests above again, ${FUZZ_SECS}s each"; fi
 	fEcho_Clean "Test scripts and harnesses:"
-	if [[ -n "${ADVISORY_CMD+x}" ]] && ((${#ADVISORY_CMD[@]})); then fAdvisoryTests; fi
+	if ((! noDeny)) && [[ -n "${ADVISORY_CMD+x}" ]] && ((${#ADVISORY_CMD[@]})); then fAdvisoryTests; fi
 	fScriptTests
 	if ((soak)); then fListTest "${LEAKCHECK_SOAK}" "soak test under heaptrack"; fi
 	if ((miri && ${#MIRI_CMD[@]})); then fEcho_Clean "Miri: the canary (debjk, de5f0), then the Rust tests above again, but those ignored under Miri"; fi
@@ -1528,7 +1607,7 @@ fOldLedger(){  ## fOldLedger <ledger> <what> [own]: empties it, then it goes.
 	fSweep_Ledger "${1}" 0 "${2}" "${3:-}"
 	[[ ! -f "${1}" || -s "${1}" ]] || rm -f -- "${1}"
 }
-if [[ -z "${SILK_CICD_IN_CONTAINER:-}" ]]; then
+if [[ -z "${SILK_CICD_IN_CONTAINER:-}" ]] && ((! noCleanup)); then
 	fSweep_StaleRuns "${runBase}" "${CLEANUP_STALE_DAYS:-2}" "stale run folders"
 	fOldLedger "${TARGET_DIR}/.cicd-test-folders" "old test run folders" own
 	if [[ -n "${containerTmpLedger}" ]]; then
@@ -1841,6 +1920,7 @@ fBuildPackages(){
 ## it builds as before, and so does the container, which never sees that tree.
 fContentScrub(){
 	[[ -x "${root}/../private/hooks/scrub.bash" ]] || return 0
+	if ((${noScrub:-0})); then fEcho_Clean "content scrub skipped (--no-scrub)"; return 0; fi
 	"${root}/../private/hooks/scrub.bash" "${root}" || fDie "content scrub failed"
 	fEcho "OK: content scrub"
 }
@@ -1990,6 +2070,7 @@ fSweepBuilds(){
 	local key="" ver="" dir
 	local -a dirs=()
 	declare -p CLEANUP_BUILD_DIRS &>/dev/null || return 0
+	((! ${noCleanup:-0})) || return 0
 	local -a nightlyDirs=()
 	mapfile -t dirs < <(fBuildDirs)
 	## The nightly's build dirs are named for it, so a bump leaves the old one
@@ -2023,8 +2104,10 @@ fBuildTestRelease(){
 	fJobs
 	corpusBefore=""
 	if [[ -d "${root}/cicd/tests/fuzz-corpus" ]]; then corpusBefore="$(fCorpusHashes)"; fi
-	fTestLines "${TEST_CMD[@]}"
-	if [[ -n "${LINT_CMD+x}" ]] && ((${#LINT_CMD[@]})); then
+	if ((noRustTests)); then fEcho_Clean "cargo test skipped (--no-rust-tests)"; else fTestLines "${TEST_CMD[@]}"; fi
+	if ((noClippy)); then
+		fEcho_Clean "clippy skipped (--no-clippy)"
+	elif [[ -n "${LINT_CMD+x}" ]] && ((${#LINT_CMD[@]})); then
 		if "${LINT_PROBE[@]}" >/dev/null 2>&1; then
 			"${LINT_CMD[@]}"
 			fEcho "OK: lints clean"
@@ -2032,15 +2115,15 @@ fBuildTestRelease(){
 			fEcho "WARNING: lints skipped: ${LINT_PROBE[*]} failed (component not installed?)"
 		fi
 	fi
-	if [[ -n "${XLINT_CMD+x}" ]] && ((${#XLINT_CMD[@]})) && "${LINT_PROBE[@]}" >/dev/null 2>&1; then
+	if ((! noClippy)) && [[ -n "${XLINT_CMD+x}" ]] && ((${#XLINT_CMD[@]})) && "${LINT_PROBE[@]}" >/dev/null 2>&1; then
 		"${XLINT_CMD[@]}" || fDie "windows lints failed"
 		fEcho "OK: windows lints clean"
 	fi
-	if [[ -n "${MACLINT_CMD+x}" ]] && ((${#MACLINT_CMD[@]})) && "${LINT_PROBE[@]}" >/dev/null 2>&1; then
+	if ((! noClippy)) && [[ -n "${MACLINT_CMD+x}" ]] && ((${#MACLINT_CMD[@]})) && "${LINT_PROBE[@]}" >/dev/null 2>&1; then
 		"${MACLINT_CMD[@]}" || fDie "macOS lints failed"
 		fEcho "OK: macOS lints clean"
 	fi
-	fLintScripts
+	if ((noScriptLint)); then fEcho_Clean "script lints skipped (--no-script-lint)"; else fLintScripts; fi
 	fContentScrub
 	## The fuzz soak. Same targets the test run just went through, given a real
 	## budget each. Gating: a case that breaks an invariant reports the seed that
@@ -2052,7 +2135,9 @@ fBuildTestRelease(){
 		fEcho "OK: fuzz clean"
 		fJobs
 	fi
-	if [[ -n "${ADVISORY_CMD+x}" ]] && ((${#ADVISORY_CMD[@]})); then
+	if ((noDeny)); then
+		fEcho_Clean "cargo-deny skipped (--no-deny)"
+	elif [[ -n "${ADVISORY_CMD+x}" ]] && ((${#ADVISORY_CMD[@]})); then
 		"${DENY_PROBE[@]}" >/dev/null 2>&1 || fDie "advisory scan can't run: ${DENY_PROBE[*]} failed (see cicd/tool-pins.txt)"
 		if [[ -n "${INDEX_REFRESH_CMD+x}" ]] && ((${#INDEX_REFRESH_CMD[@]})); then
 			"${INDEX_REFRESH_CMD[@]}" || fDie "can't refresh the crates.io index, so the advisory scan can't see a yanked crate (above)"
@@ -2061,7 +2146,7 @@ fBuildTestRelease(){
 		fEcho "OK: no known advisories"
 		fAdvisoryTests
 	fi
-	if [[ -n "${DENY_CMD+x}" ]] && ((${#DENY_CMD[@]})); then
+	if ((! noDeny)) && [[ -n "${DENY_CMD+x}" ]] && ((${#DENY_CMD[@]})); then
 		if "${DENY_PROBE[@]}" >/dev/null 2>&1; then
 			## Advisory-only for now: report license/advisory/duplicate findings
 			## without failing the pipeline (tighten to gating once tuned).
@@ -2084,6 +2169,14 @@ fBuildTestRelease(){
 
 	if fStepOpen "Profiler"; then fJobs; fRunProfiler; fStepClose; fi
 
+	## --no-release: none of stage 5. The steps after it are off too, or find no
+	## binaries, and taht keeps them off an earlier run's.
+	if ((! noRelease)); then fBuildRelease; fi
+
+	if fStepOpen "Packages"; then fJobs; fBuildPackages; fStepClose; fi
+}
+## Stage 5: the release builds and their checks.
+fBuildRelease(){
 	fStepOpen "Release build: native"
 	fJobs
 	## Panic locations and generated bindings carry the build box's absolute paths, which
@@ -2159,11 +2252,10 @@ fBuildTestRelease(){
 	fi
 	fArmSmoke
 	fStepClose
-
-	if fStepOpen "Packages"; then fJobs; fBuildPackages; fStepClose; fi
 }
 
 ## Stages 1 to 6 on this box, or in the container with this box taking over after.
+builtArts=()
 if ((container)); then
 	fStepOpen "Container image"
 	fJobs
@@ -2177,7 +2269,7 @@ if ((container)); then
 	fEcho "OK: stages 1-6 in the container"
 	## What needs this box's own trees and keys, or the card.
 	fStepOpen "Checks on this box"
-	fContainerArtifacts
+	((noRelease)) || fContainerArtifacts
 	fContentScrub
 	fWinGuiScenarios
 	fArmSmoke
@@ -2198,7 +2290,7 @@ if fStepOpen "Private runner"; then
 	fStepDone "private runner" "${privSkips}"
 	## The Mac build joins this run's set only if the runner made it just now. One
 	## left from an earlier run of the same version must not be dogfooded again.
-	macBin="${PRIVATE_RUNNER%/cicd/*}/dist/${ver}/macos/${EXE_NAME}-${ver}-macos-universal"
+	macBin="${PRIVATE_RUNNER%/cicd/*}/dist/${ver:-}/macos/${EXE_NAME}-${ver:-}-macos-universal"
 	if [[ -f "${macBin}" && "${macBin}" -nt "${privStart}" ]]; then builtArts+=("macos-universal|${macBin}"); fi
 	rm -f "${privStart}"
 	fStepClose
@@ -2291,7 +2383,7 @@ fi
 ## Zig's caches in the tree, where the builds ran. zig cc keeps to its global
 ## cache, which the container has on a volume and this box shares, so most runs
 ## find none.
-if ((! container)) && command -v zig >/dev/null 2>&1; then
+if ((! container && ! noCleanup)) && command -v zig >/dev/null 2>&1; then
 	zigNow="$(zig version 2>/dev/null || true)"
 	while IFS= read -r -d '' zigDir; do fSweep_ZigCache "${zigDir}" "${zigNow}" "${CLEANUP_CACHE_CAP_MB:-2048}" || true
 	done < <(find "${root}" -xdev \( -name .git -o -name target -o -path "${root}/forks" -o -path "${root}/cicd/artifacts" \) -prune -o -type d \( -name .zig-cache -o -name zig-cache \) -print0 -prune 2>/dev/null)
@@ -2308,6 +2400,10 @@ fEcho_Clean
 
 
 ##	History:
+##		- 2026-11-03: An off option for each part of a full run that had none:
+##		              --no-rust-tests, --no-clippy, --no-script-lint, --no-scrub,
+##		              --no-deny, --no-script-tests, --no-docs, --no-scroll,
+##		              --no-wingui, --no-release and --no-cleanup.
 ##		- 2026-11-02: The test suite again under Miri, after the TSan run, in the
 ##		              image, under --leakcheck or --long. The canary goes first, and
 ##		              --no-miri skips it.

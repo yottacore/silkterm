@@ -136,9 +136,9 @@ fn main() -> anyhow::Result<()> {
 		open_console();
 	}
 	// CLI-only flags: print and exit, before anything reads a config or opens a
-	// window. All but --version are padded with a blank line either side so the
-	// block stands clear of the prompts above and below it; --version stays flush
-	// because its job is to be captured.
+	// window. All but --version and --about are padded with a blank line either
+	// side so the block stands clear of the prompts above and below it; those two
+	// stay flush.
 	if let Some(info) = cli.info {
 		match info {
 			cli::Info::Help => print!(
@@ -146,10 +146,7 @@ fn main() -> anyhow::Result<()> {
 				cli::padded(&format!("{}\n\n{}", cli::version_line(), cli::usage()))
 			),
 			cli::Info::Syntax => print!("{}", cli::padded(cli::usage())),
-			cli::Info::About => print!(
-				"{}",
-				cli::padded(&cli::about(gfx::probe_adapter_info().as_ref()))
-			),
+			cli::Info::About => println!("{}", cli::about(gfx::probe_adapter_info().as_ref())),
 			cli::Info::Donate => print!("{}", cli::padded(&cli::donate())),
 			cli::Info::Version => println!("{}", cli::version_text()),
 		}

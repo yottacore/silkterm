@@ -386,7 +386,6 @@ impl App {
 	/// Put an owed notice up, once nothing is saying one already. In front of
 	/// Settings when that is open, since an OK there is the usual way to meet it.
 	pub(super) fn show_notice(&mut self, event_loop: &ActiveEventLoop) {
-		use winit::raw_window_handle::HasWindowHandle;
 		#[cfg(target_os = "windows")]
 		if NOTICE_UP.load(std::sync::atomic::Ordering::SeqCst) {
 			return;
@@ -406,11 +405,11 @@ impl App {
 			.as_ref()
 			.map(|d| &d.window)
 			.or(self.state.as_ref().map(|s| &s.window))
-			.and_then(|w| w.window_handle().ok().map(|h| h.as_raw()));
+			.and_then(|w| crate::dialog::Parent::of(w));
 		#[cfg(target_os = "windows")]
 		{
 			let _ = event_loop;
-			let owner = match parent {
+			let owner = match parent.map(crate::dialog::Parent::handle) {
 				Some(winit::raw_window_handle::RawWindowHandle::Win32(h)) => h.hwnd.get(),
 				_ => 0,
 			};

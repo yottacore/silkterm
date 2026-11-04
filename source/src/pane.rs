@@ -8648,8 +8648,8 @@ mod tests {
 	fn the_scroll_record_costs_a_full_screen_program_little() {
 		// tmux, vim and less scroll a screen that keeps no history, so the engine
 		// keeps the rows that leave for the slide to draw. It copied each one, and
-		// that took a third off the parse. Same flood with the rows kept and
-		// without.
+		// that took a third off the parse. Same flood with the rows kept, and on a
+		// shell's screen that keeps as many in its history.
 		let (cols, lines) = (160usize, 42usize);
 		let mut term = term_fed(cols, lines, 1000, "\x1b[?1049h");
 		term.set_scroll_ledger_rows(crate::scroll::SLIDE_ROWS);
@@ -8660,53 +8660,87 @@ mod tests {
 
 		let line = format!("{}\r\n", "0123456789".repeat(8));
 		let flood = line.repeat(4000);
-		let run = |keep: usize| {
-			let mut term = term_fed(cols, lines, 1000, "\x1b[?1049h");
-			term.set_scroll_ledger_rows(keep);
-			let mut parser: Processor = Processor::new();
-			let start = thread_cpu();
-			for chunk in flood.as_bytes().chunks(64 * 1024) {
-				parser.advance(&mut term, chunk);
-			}
-			assert_eq!(
-				term.scroll_ledger().rows().len(),
-				keep.min(crate::scroll::SLIDE_ROWS)
+		// Both keep 128 rows, and each line resets the oldest, which has gone cold
+		// by then. Against an alt screen that keeps none, memory traffic from the
+		// neighbours took the gap from 4% to 10%, and that was the cold row.
+		// History pays the same for it, so only what the record adds is left.
+		//
+		// A whole flood on each side in turn wasn't enough on the hosted Mac: one
+		// run took 20 ms and the next 35, on either side, as the core under it
+		// changed (2026102113432602). So both sides take the same flood in turns
+		// of about 100 lines, the order swapped each turn, and the verdict is the
+		// median of the turns' ratios. A slow stretch then lands on both sides,
+		// and a turn some other load hit is outvoted. The copy was 28% over.
+		let round = || {
+			let mut kept = term_fed(cols, lines, 1000, "\x1b[?1049h");
+			kept.set_scroll_ledger_rows(crate::scroll::SLIDE_ROWS);
+			let mut history = term_fed(cols, lines, crate::scroll::SLIDE_ROWS, "");
+			history.set_scroll_ledger_rows(0);
+			let (mut kept_parser, mut history_parser): (Processor, Processor) =
+				(Processor::new(), Processor::new());
+			let turns: Vec<(f64, f64)> = flood
+				.as_bytes()
+				.chunks(8 * 1024)
+				.enumerate()
+				.map(|(turn, chunk)| {
+					let timed = |term: &mut Term<VoidListener>, parser: &mut Processor| {
+						let start = thread_cpu();
+						parser.advance(term, chunk);
+						thread_cpu().saturating_sub(start) as f64
+					};
+					if turn % 2 == 0 {
+						let k = timed(&mut kept, &mut kept_parser);
+						(k, timed(&mut history, &mut history_parser))
+					} else {
+						let h = timed(&mut history, &mut history_parser);
+						(timed(&mut kept, &mut kept_parser), h)
+					}
+				})
+				.collect();
+			assert!(
+				turns.iter().all(|&(k, h)| k > 0.0 && h > 0.0),
+				"a turn took no time on the clock, which is too coarse for turns this short"
 			);
-			thread_cpu().saturating_sub(start) as f64
+			assert_eq!(kept.scroll_ledger().rows().len(), crate::scroll::SLIDE_ROWS);
+			assert!(history.scroll_ledger().rows().is_empty());
+			assert_eq!(history.grid().history_size(), crate::scroll::SLIDE_ROWS);
+			turns
 		};
-		// The rest of the suite runs beside this. The best of each side, taken at
-		// different moments, failed under load now and then (2026100714145220).
-		// Each pair runs back to back, order swapped every time, so both halves
-		// see the same box, and the median ignores the pairs some other load hit.
-		// The copy was 28% over.
-		let pairs: Vec<(f64, f64)> = (0..15)
-			.map(|turn| {
-				if turn % 2 == 0 {
-					let kept = run(crate::scroll::SLIDE_ROWS);
-					(kept, run(0))
-				} else {
-					let bare = run(0);
-					(run(crate::scroll::SLIDE_ROWS), bare)
-				}
+		let median = |mut ratios: Vec<f64>| {
+			ratios.sort_by(f64::total_cmp);
+			ratios[ratios.len() / 2]
+		};
+		let rounds: Vec<Vec<(f64, f64)>> = (0..15).map(|_| round()).collect();
+		let all = median(
+			rounds
+				.iter()
+				.flatten()
+				.map(|(kept, history)| kept / history)
+				.collect(),
+		);
+		// Millions of the clock's unit, only good side by side: ms on Linux,
+		// Mcycles on Windows, and some Macs skip the tick conversion. The history
+		// side's sum carries its first rows being made, which the median skips.
+		let by_round: Vec<f64> = rounds
+			.iter()
+			.map(|turns| median(turns.iter().map(|(kept, history)| kept / history).collect()))
+			.collect();
+		let times: Vec<(f64, f64)> = rounds
+			.iter()
+			.map(|turns| {
+				let (kept, history) = turns.iter().fold((0.0, 0.0), |(k, h), (kept, history)| {
+					(k + kept, h + history)
+				});
+				(kept / 1e6, history / 1e6)
 			})
 			.collect();
-		let mut ratios: Vec<f64> = pairs.iter().map(|(kept, bare)| kept / bare).collect();
-		ratios.sort_by(f64::total_cmp);
-		let median = ratios[ratios.len() / 2];
-		// Millions of the clock's unit, only good side by side: ms on Linux,
-		// Mcycles on Windows, and some Macs skip the tick conversion. A steady gap
-		// means the kept rows really cost more on that box, as neighbours' memory
-		// traffic does (2026102113432602). One side jumping means the core or the
-		// host changed under it.
-		let times: Vec<(f64, f64)> = pairs
-			.iter()
-			.map(|(kept, bare)| (kept / 1e6, bare / 1e6))
-			.collect();
-		eprintln!("measured: rows kept against none: {ratios:.3?}, kept and bare: {times:.1?}");
+		eprintln!(
+			"measured: rows kept against history: {all:.3}, by round {by_round:.3?}, kept and history: {times:.1?}"
+		);
 		assert!(
-			median <= 1.10,
-			"keeping rows cost {:.0}% more, pairs {ratios:.3?}, kept and bare: {times:.1?}",
-			(median - 1.0) * 100.0
+			all <= 1.10,
+			"keeping rows cost {:.0}% more than history, by round {by_round:.3?}, kept and history: {times:.1?}",
+			(all - 1.0) * 100.0
 		);
 	}
 
@@ -9781,10 +9815,9 @@ mod tests {
 		assert_eq!(buf.layout_runs().count(), lines + 1);
 	}
 
-	// The repro line, with 4:2 for double (the engine reads 21 as not bold), and
-	// the other styles: each underline the engine keeps is
-	// its own rule over exactly its cells, in the color the program set or else
-	// the text's. Concealed text draws none, and the strip keeps them too.
+	// The repro line, with 4:2 for double, and the other styles: each underline
+	// the engine keeps is its own rule over exactly its cells, in the color the
+	// program set or else the text's. Concealed text draws none, and the strip keeps them too.
 	// Test ID: desqy
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
@@ -9833,6 +9866,32 @@ mod tests {
 		assert_eq!(strikes[0].color, [200; 3]);
 		let strip = strip_cell(&row[Column(6)], term.colors(), &settings, &mut readable);
 		assert_eq!(strip.rules.under.map(|(rule, _)| rule), Some(Rule::Curly));
+	}
+
+	// SGR 21 is a double underline, as in ECMA-48 and xterm, and bold stays on.
+	// Test ID: detxz
+	#[test]
+	fn sgr_21_double_underlines_and_keeps_bold() {
+		let term = term_fed(8, 1, 0, "\x1b[1;21mtwo\x1b[24mone");
+		let settings = config::Settings::default();
+		let mut readable = palette::Readable::default();
+		let row = &term.grid()[Line(0)];
+		let mut unders = Vec::new();
+		for column in 0..6 {
+			let cell = &row[Column(column)];
+			assert!(cell.flags.contains(Flags::BOLD), "column {column}");
+			let rules = cell_rules(
+				cell,
+				[200; 3],
+				[0; 3],
+				term.colors(),
+				&settings,
+				&mut readable,
+			);
+			unders.push(rules.under.map(|(rule, _)| rule));
+		}
+		let double = Some(Rule::Double);
+		assert_eq!(unders, [double, double, double, None, None, None]);
 	}
 
 	// Every rule stays inside its own cell at any font size, so none draws into

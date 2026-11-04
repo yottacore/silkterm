@@ -191,7 +191,7 @@ fZig nover 0.15.1; fSweep_ZigCache "${zc}/nover" "" 1
 fCheck "with no zig to ask, nothing goes" test -f "${zc}/nover/o/ab/obj"
 fCheck "and the summary counts them" grep -qF '3 zig caches' <<<"$(fSweep_Summary)"
 fCheck "the run sweeps them where the builds ran, before its summary" \
-	bash -c 'awk "/fSweep_ZigCache/ {z = NR} /^fRunEnd 0$/ {s = NR} END {exit !(z && s && z < s)}" "$1" && grep -qF "if ((! container)) && command -v zig" "$1"' _ "${engine}"
+	bash -c 'awk "/fSweep_ZigCache/ {z = NR} /^fRunEnd 0$/ {s = NR} END {exit !(z && s && z < s)}" "$1" && grep -qF "if ((! container && ! noCleanup)) && command -v zig" "$1"' _ "${engine}"
 fCheck "the cap is 2 GB in the config" bash -c 'source "$1" && [[ "${CLEANUP_CACHE_CAP_MB}" == 2048 ]]' _ "${root}/cicd/config.bash"
 
 ## R: the run's own folder, HOST_TEMP/silkterm/YYYYmmDD-HHMMSS_NNN, and the
@@ -254,6 +254,7 @@ if ((failures)); then echo "${failures} failed"; exit 1; fi
 echo "all passed"
 
 ##	History:
+##		- 20261103: The Zig sweep's line with --no-cleanup in it.
 ##		- 20261101: What went and what it freed, in the run's one cleanup line.
 ##		- 20261019 JC: Created.
 ##		- 20261019 JC: The nightly's build dirs.

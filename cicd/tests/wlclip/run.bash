@@ -10,11 +10,14 @@
 ##			- Text set outside goes in with Ctrl+Shift+V, and the primary
 ##			  with a middle click.
 ##			- A double-click on a word puts it in the primary.
+##			- With another window in front, an OSC 52 store sets nothing
+##			  until the window has the keyboard again, and then sets both
+##			  (2026101607585700).
 ##			- The window closes cleanly when its shell exits.
 ##		With DISPLAY set, the window must never call the X server.
 ##	- Syntax: run.bash [--bin PATH]   (default: the debug build, then release)
 ##	- Exit: 0 passed, 1 a check failed, 3 nothing ran (no binary, sway,
-##	  wtype, python3 or software Vulkan).
+##	  wtype, foot, python3 or software Vulkan).
 ##	- Test ID: ddzwc
 ##	- History: At bottom of file.
 
@@ -41,7 +44,7 @@ if [[ -z "${bin}" ]]; then
 fi
 if [[ -z "${bin}" || ! -x "${bin}" ]]; then echo "  skip: no SilkTerm binary (build it first, or pass --bin)"; exit 3; fi
 echo "  binary: ${bin}"
-for tool in sway swaymsg wtype python3 base64; do
+for tool in sway swaymsg wtype foot python3 base64; do
 	if ! command -v "${tool}" >/dev/null 2>&1; then echo "  skip: no ${tool}"; exit 3; fi
 done
 if [[ ! -f "${lvp}" ]]; then echo "  skip: no software Vulkan (${lvp})"; exit 3; fi
@@ -57,12 +60,12 @@ work="$(mktemp -d "${SILKTERM_TEST_DIR}/wlclip.XXXXXX")"
 runDir="${work}/run"
 shortRun=""
 if ((${#runDir} > 70)); then shortRun="$(mktemp -d /tmp/silkclip.XXXXXX)"; runDir="${shortRun}"; else mkdir -m 700 "${runDir}"; fi
-appPid=""; swayPid=""; ptrPid=""; kbdPid=""; xPid=""; setPid=""
+appPid=""; swayPid=""; ptrPid=""; kbdPid=""; xPid=""; setPid=""; footPid=""
 fCleanup(){
 	local -r rc="${1}"
 	if [[ -n "${appPid}" ]]; then fStopOurs "${appPid}"; fi
 	local pid
-	for pid in "${setPid}" "${kbdPid}" "${xPid}"; do
+	for pid in "${footPid}" "${setPid}" "${kbdPid}" "${xPid}"; do
 		if [[ -n "${pid}" ]]; then kill "${pid}" 2>/dev/null || true; wait "${pid}" 2>/dev/null || true; fi
 	done
 	if [[ -n "${ptrPid}" ]]; then exec 7>&- || true; kill "${ptrPid}" 2>/dev/null || true; wait "${ptrPid}" 2>/dev/null || true; fi
@@ -178,6 +181,10 @@ word="$(head -c "$(($2 - 1))" </dev/zero | tr '\0' q)"
 printf '\033[H\033[2J'
 i=1; while [ "$i" -lt "$1" ]; do printf '%s\n' "$word"; i=$((i + 1)); done
 : >"$dir/filled"
+while [ ! -e "$dir/away" ]; do sleep 0.1; done
+printf '\033]52;c;%s\a' "$(printf 'held-clipboard' | base64)"
+printf '\033]52;p;%s\a' "$(printf 'held-primary' | base64)"
+: >"$dir/sent"
 while [ ! -e "$dir/quit" ]; do sleep 0.1; done
 EOF
 
@@ -191,6 +198,8 @@ fHasClip(){  ## fHasClip <clipboard|primary> <want>, within 5 s
 	done
 	echo "    ${1}: ${got:-nothing}"; return 1
 }
+fFocusLeft(){ local _; for _ in {1..50}; do grep -q '^\[focus\] false$' "${dir}/app.err" 2>/dev/null && { sleep 0.3; return 0; }; sleep 0.1; done; return 1; }  ## uses fPass's dir
+fNotClip(){ local got; got="$(fClip get "${1}" 2>/dev/null || true)"; [[ "${got}" != "${2}" ]] || { echo "    ${1} set while away"; return 1; }; }  ## fNotClip <clipboard|primary> <unwanted>
 fSaid(){ [[ "$(cat "${1}" 2>/dev/null || true)" == "${2}" ]] || { echo "    got: $(cat "${1}" 2>/dev/null || echo nothing)"; return 1; }; }
 fQrun(){  ## the primary is a run of q, within 5 s
 	local _ got
@@ -213,14 +222,14 @@ fPass(){  ## fPass <folder> <name> [DISPLAY]
 	## Mesa's device select layer asks an X server which card is the default
 	## when Wayland can't say. Its own call, not the program's, and there is
 	## one card here.
-	"${appEnv[@]}" NODEVICE_SELECT=1 LIBGL_ALWAYS_SOFTWARE=1 VK_ICD_FILENAMES="${lvp}" \
+	"${appEnv[@]}" SILK_KEYDBG=1 NODEVICE_SELECT=1 LIBGL_ALWAYS_SOFTWARE=1 VK_ICD_FILENAMES="${lvp}" \
 		VK_LAYER_MESSAGE_ID_FILTER=VUID-vkCmdCopyBufferToImage-pRegions-00173 \
 		HOME="${work}/home" XDG_CONFIG_HOME="${cfgHome}" XDG_DATA_HOME="${work}/home/.local/share" \
 		XDG_CACHE_HOME="${work}/home/.cache" XDG_STATE_HOME="${work}/home/.local/state" \
 		"${bin}" --shell "/bin/dash ${work}/scene.sh ${dir}" >/dev/null 2>"${dir}/app.err" &
 	appPid=$!
 	if ! fWaitFile "${dir}/up" 200; then echo "  FAIL ${name}: the window never started its shell"; failures=$((failures + 1)); return; fi
-	## The keyboard has to reach the window before it may set a selection.
+	## Let the keyboard reach the window first. A store made before then is held, like the one below.
 	sleep 1.5
 	: >"${dir}/go"
 	fCheck "${name}: OSC 52 sets the clipboard" fHasClip clipboard osc-clipboard
@@ -250,6 +259,20 @@ fPass(){  ## fPass <folder> <name> [DISPLAY]
 	fPtr down; fPtr up; fPtr down; fPtr up
 	fCheck "${name}: a double-click puts the word in the primary" fQrun
 
+	## A second window takes the keyboard and leaves this one on screen. An
+	## empty workspace would not do: a window out of view reads no output.
+	"${wl[@]}" HOME="${work}/home" XDG_CONFIG_HOME="${cfgHome}" foot sleep 600 >/dev/null 2>&1 &
+	footPid=$!
+	fCheck "${name}: another window takes the keyboard" fFocusLeft
+	: >"${dir}/away"
+	fWaitFile "${dir}/sent" 30 || true
+	sleep 1
+	fCheck "${name}: a clipboard store without focus waits" fNotClip clipboard held-clipboard
+	fCheck "${name}: a primary store without focus waits" fNotClip primary held-primary
+	kill "${footPid}" 2>/dev/null || true; wait "${footPid}" 2>/dev/null || true; footPid=""
+	fCheck "${name}: a held store sets the clipboard on focus" fHasClip clipboard held-clipboard
+	fCheck "${name}: a held store sets the primary on focus" fHasClip primary held-primary
+
 	: >"${dir}/quit"
 	local rc=0 _
 	for _ in {1..50}; do kill -0 "${appPid}" 2>/dev/null || break; sleep 0.1; done
@@ -275,3 +298,4 @@ exit 0
 
 ##	History:
 ##		- 20261015 JC: Created.
+##		- 20261104 JC: A store made without focus waits for it.

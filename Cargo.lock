@@ -58,7 +58,7 @@ dependencies = [
 [[package]]
 name = "alacritty_terminal"
 version = "0.26.0"
-source = "git+https://github.com/jim-collier/alacritty?branch=scroll-ledger-0.26.0#09f24ebec4c54bdf9d9328e4656288b3d5210dae"
+source = "git+https://github.com/jim-collier/alacritty?branch=scroll-ledger-0.26.0#65dbcd810ffa2946aee71e0fcd31861fcd5fab33"
 dependencies = [
  "arrayvec",
  "base64",
@@ -2519,6 +2519,7 @@ dependencies = [
  "smithay-client-toolkit 0.19.2",
  "wayland-backend",
  "wayland-client",
+ "wayland-protocols",
  "wgpu",
  "windows-sys 0.59.0",
  "winit",

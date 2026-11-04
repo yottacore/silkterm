@@ -245,6 +245,8 @@ infocmp -x alacritty | ssh HOST 'cat > /tmp/alacritty.ti && tic -x -o ~/.terminf
 
 On macOS `sudo` keeps `HOME`, so a program run with `sudo` finds it too. Linux usually sets `HOME` to root's, so there root needs its own copy.
 
+A program in the pane you're using can set the clipboard, such as tmux or an editor over ssh. On Wayland only the window with the keyboard may set it, so a copy a program makes while the SilkTerm window doesn't have focus waits, and goes to the clipboard when the window gets focus back. If it made more than one meanwhile, the last one wins. X11, macOS and Windows take it at once.
+
 ## Opening scripts and folders on Windows
 
 The Shell tab of Settings has an "Open with SilkTerm" group, one row per kind of file:

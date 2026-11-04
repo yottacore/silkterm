@@ -4155,12 +4155,10 @@ impl ApplicationHandler<UserEvent> for App {
 				let in_use = id == state.tabs.cur().focused;
 				if input::copy_allowed(CopyFrom::Program, state.focused, in_use) {
 					match kind {
-						ClipboardType::Clipboard => state.clipboard.set_clipboard(text),
-						// set_primary falls back to the real clipboard where there is
-						// no primary, which a store never asked for
-						ClipboardType::Selection if cfg!(target_os = "linux") => {
-							state.clipboard.set_primary(text);
-						}
+						ClipboardType::Clipboard => state.clipboard.program_set_clipboard(text),
+						#[cfg(target_os = "linux")]
+						ClipboardType::Selection => state.clipboard.program_set_primary(text),
+						#[cfg(not(target_os = "linux"))]
 						ClipboardType::Selection => {}
 					}
 				}
@@ -4363,6 +4361,7 @@ impl ApplicationHandler<UserEvent> for App {
 					eprintln!("[focus] {focused}");
 				}
 				state.focused = focused;
+				state.clipboard.focus_changed(focused);
 				if !focused {
 					state.commit_tab_edit(); // a rename does not outlive the window's focus
 				}
@@ -5354,14 +5353,10 @@ impl ApplicationHandler<UserEvent> for App {
 			.is_some_and(|state| std::mem::take(&mut state.pending_about));
 		// parent handle so the WM ties the dialog to the terminal window
 		// (transient-for / owner)
-		let parent = self.state.as_ref().and_then(|state| {
-			use winit::raw_window_handle::HasWindowHandle;
-			state
-				.window
-				.window_handle()
-				.ok()
-				.map(|handle| handle.as_raw())
-		});
+		let parent = self
+			.state
+			.as_ref()
+			.and_then(|state| crate::dialog::Parent::of(&state.window));
 		// cloned (all wgpu handles, so refcount bumps) rather than borrowed: the
 		// open arms below also take `&mut self` to store the dialog
 		let warm = (open_about
