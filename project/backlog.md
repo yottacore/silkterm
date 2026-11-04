@@ -637,7 +637,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - The private Mac build prints empty sizes and five `stat` errors on b26
 	- ID: 2026102811082478
 	- Type: Bug
-	- Status: Queued
+	- Status: Done
 	- Opened: 20261028-110824
 	- Opened by: CC
 	- Target OS: macOS
@@ -648,6 +648,16 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Reproduced: 20261028, in the full run at 64f3584.
 	- Possible cause: `fSize` in silkterm-private `macos/build.bash` calls `stat -f%z`, the BSD form. The `stat` first on PATH there is GNU, which wants `-c%s`.
 	- Severity: Low
+	- Actual cause: As guessed. On b26 the login PATH puts Homebrew's GNU coreutils (`gnubin`) ahead of `/usr/bin`, so `stat` is GNU's.
+	- Actual fix: `fSize` counts bytes with `wc -c`, which answers the same from GNU or BSD, and drops the padding BSD's `wc` adds. It now sits with the other helpers at the top of the script.
+	- Decisions:
+		- 20261103: `wc -c` rather than a fixed `/usr/bin/stat`, so the line works whichever tools come first on PATH, on b26 and on vmKt6m as mactest.
+	- Swept: the rest of `macos/build.bash` and the private `cicd/run.bash` for other calls that differ between GNU and BSD. None found. `stat` appeared only in `fSize`.
+	- Verified: 20261103. On b26, under bash 3.2 and Homebrew's bash 5.3 with the build's PATH, `fSize` gave the same sizes as `/usr/bin/stat -f%z`, and with only `/usr/bin` on PATH it stripped BSD wc's padding. detz1 passes, and fails on the old `fSize`.
+	- Branch: silkterm-private `rnd1104`
+	- Commit: silkterm-private 34c9833
+	- Test case: silkterm-private `cicd/tests/macsize/run.bash` (detz1), run by hand like dehx0.
+	- Closed: 20261103-173834
 
 - Help|About: "Acceleration" shows as "Unknown"
 	- ID: 2026102807384203
