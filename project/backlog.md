@@ -37,8 +37,8 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - Running with `--software-rendering` on vmKt6m still fails with a complaint about no suitable GPU
 	- ID: 2026102807384202
 	- Type: Bug
-	- Status: Waiting for answers
-		- Waits on the question in questions.md: ship SwiftShader in the Mac app, or keep the alert.
+	- Status: Moot
+		- Answered: keep the alert.
 	- Severity: Avg
 	- Opened: 20261028-073842
 	- Opened by: JC
@@ -55,8 +55,10 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261103: Tried on vmKt6m. wgpu's GL backend through ANGLE found nothing, since LibreWolf's ANGLE is Metal only, and Chrome and Brave link theirs in. SwiftShader's Vulkan driver, as Chrome ships it, gave a CPU device once wgpu's `vulkan-portability` feature was on. SilkTerm came up on it and started its shells, but every frame was dropped, since the Metal layer it draws to has no device to give a picture with.
 		- 20261103: So a fix needs the libraries in the Mac app and a second way to show a frame, drawn off screen and copied back. That's too big for one pass. It gets split once the question is answered.
 		- 20261103: Nothing changed in the code.
-	- Test case: none yet. Waits on the answer.
+		- 20261104: Answered A in questions.md, so the alert stays and this closes as moot. Nothing changed in the code.
 	- Branch: rnd1103
+	- Decided against: bundling SwiftShader in the Mac app (option B). A Mac with no Metal is a VM or a hackintosh, since every Mac that runs a supported macOS has Metal. The no-Metal alert from 2026102209035801 stays.
+	- Closed: 20261104-010500
 
 - The window doesn't paint while the GPU is busy or short on memory, and stays blank after the load ends
 	- ID: 2026100312470535
