@@ -977,7 +977,7 @@ fScriptTests(){
 	## Xwayland or python3.
 	fRunTest_MaySkip cicd/tests/monwake/run.bash "window size after a monitor wakes"
 	## Under xfwm4 that window goes back where it was, too. Exit 3 is a skip: no
-	## binary, sway, Xwayland, xfwm4 or xdotool.
+	## binary, sway, Xwayland, xfwm4, xdotool or python-xlib.
 	fRunTest_MaySkip cicd/tests/herdback/run.bash "window place after a monitor wakes"
 	## Under xfwm4 Settings stays above the terminal, as its modal, and off the
 	## taskbar and pager. Exit 3 is a skip: no binary, xfwm4, xdotool or xprop.

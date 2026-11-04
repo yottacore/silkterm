@@ -34,19 +34,47 @@ Going forward, new issues in the new template at the bottom of this file, will g
 
 ## Issues
 
+- herdback's no window manager cases need their mutation checks again, since they ran under a restarted xfwm4
+	- ID: 2026110319081175
+	- Type: Task
+	- Status: Queued
+	- Priority: Low
+	- Opened: 20261103-190811
+	- Opened by: CC
+	- Related IDs: 2026110318260287, 2026102807384201, 2026110315170584
+	- Target OS: Linux
+	- Requirements:
+		- Until 2026110318260287, the desktop's session started xfwm4 again once deqx1 stopped it, so on a desktop shell its 3 cases with no window manager ran under one. The mutation checks on 2026102807384201 and 2026110315170584 were run that way.
+		- Run deqx1 again, at each of three debug builds: the put-back taken out, where the back case should fail; the forget-on-resize taken out, the resized case; the forget-on-move taken out, the moved case.
+	- Estimated effort: Low
+
 - deqx1's "xfwm4's window has gone from the X server" sometimes fails on a busy box
 	- ID: 2026110318260287
 	- Type: Bug
-	- Status: Queued
+	- Status: Done
 	- Severity: Low
 	- Opened: 20261103-182602
 	- Opened by: CC
-	- Related IDs: 2026110116413708, 2026110220294255
+	- Assigned to: CC
+	- Related IDs: 2026110116413708, 2026110220294255, 2026110319081175
 	- Target OS: Linux
 	- Steps to reproduce: Run `cicd/tests/herdback/run.bash` 4 times side by side at a load over 20.
 	- Incorrect behavior: xfwm4's process is gone, and passes "xfwm4 has stopped", but its `_NET_SUPPORTING_WM_CHECK` window is still on the X server 3 s later. 1 run of 7 on 20261103, at load 25. Every other check in that run passed.
 	- Expected behavior: The X server lets go of the window once xfwm4 has exited.
 	- Possible cause: Not known. Either the X server is slow to see the closed connection at that load, and the 3 s wait in fGone is short, or something else holds xfwm4's connection open, such as a helper started under its dbus-run-session. The kept folder from that run had nothing more in its logs.
+	- Reproduced: 20261103, from a desktop shell. Once stopped, xfwm4 was running again on the test's display, started by the desktop's own session, and stayed up through the cases with no window manager. Under load, 4 stops in 90 left the window there for good.
+	- Actual cause: xfwm4 joined the desktop's xfce4-session through SESSION_MANAGER, and the session starts its window manager again when it exits. The new xfwm4 took the client slot the old one freed, so its check window had the same ID. fGone found it whenever the new one was up before fGone's first look, which a busy box allows. The X server was never slow.
+		- With xfwm4 really gone, the back case with no window manager failed. winit counts a move only from the notice a window manager sends, so the window never knew it was herded. The restarted xfwm4 had sent it.
+	- Actual fix: The test's X programs run without SESSION_MANAGER, as gui-headless.bash's do. With no window manager, the test's moves send the window that notice as a window manager would (`_wmmove.py`), and the key after a move goes to a window it has given focus first, since without focus the key never arrived. A new check fails when a window manager is back on the display for the cases with none.
+	- Decisions:
+		- 20261103: The moves with no window manager tell the window, rather than staying plain moves. Every window manager sends that notice, so a plain move tests a case that doesn't happen. The herd move gets no key, since a window manager's herd brings none, and the look after it runs anyway.
+		- 20261103: This departs from 2026110116413708's call that the key needs no focus. It needs none under xfwm4, which gives the window focus.
+		- 20261103: The mutation checks for the 3 cases ran under the restarted xfwm4, so they need running again. Filed as 2026110319081175.
+	- Verified: 20261103. The old script, with only the new check added, failed it, with the restarted xfwm4 on the display. The new one passed alone at load 10 to 13, and 4 runs side by side at load 25 to 52. Its window logs show the back case put back, the moved case's look after its move dropping the herd, and the resized case dropping it at the resize. Without the focus, the moved case's look waited for good and the case passed on that alone. The quick gate, scripts and docs.
+	- Swept: Every xfwm4 start in `cicd`. gui-headless.bash's fOnX and demo-video.py already drop SESSION_MANAGER, and dlgtie, startsize and allocs start xfwm4 through gui-headless.bash. Every `xdotool windowmove` in `cicd`. idleother's also runs with no window manager, but only moves a window out from under another, and nothing there waits on the window to see the move. demo-video.py's run under xfwm4.
+	- Branch: rnd1104
+	- Test case: `cicd/tests/herdback/run.bash` (deqx1), changed, with the new "no window manager came back for the cases with none" check.
+	- Closed: 20261103-190900
 
 - Running with `--software-rendering` on vmKt6m still fails with a complaint about no suitable GPU
 	- ID: 2026102807384202
