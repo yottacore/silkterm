@@ -37,8 +37,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - `--about` should only show the first line of the existing output
 	- ID: 2026102807384204
 	- Type: Enhancement
-	- Status: Waiting for answers
-		- Waits on the question 2026102807384204 in questions.md.
+	- Status: Done
 	- Priority: Low
 	- Opened: 20261028-073842
 	- Opened by: JC
@@ -49,8 +48,11 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Pre-next-cut.
 	- Progress log:
 		- 20261104: The no-blank-lines half is in. `--about` prints flush, like `--version`. The first-line half waits on a question: the first line is now the "About SilkTerm" heading, and cutting to one line drops the renderer details a bug report needs and `ci-mac.bash`'s adapter check reads.
-	- Branch: rnd1104
+		- 20261104: Answer: leave the text as is, only the padding changes. The padding half is in, so nothing is left.
+		- Verified 20261104: a dev build at 2c2bc7a prints `--about` with no blank line first or last.
 	- Test case: none for the padding, since it is a print call in main.rs. Checked by running `--about` and reading the first and last bytes.
+	- Acceptance signoff: Self-closed: the answer drops the first-line half, and the padding half checks out.
+	- Closed: 20261104-150000
 
 - The window doesn't paint while the GPU is busy or short on memory, and stays blank after the load ends
 	- ID: 2026100312470535
