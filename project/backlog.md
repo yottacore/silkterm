@@ -544,7 +544,8 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - SGR 21 turns bold off instead of drawing a double underline
 	- ID: 2026110220554102
 	- Type: Bug
-	- Status: Queued
+	- Status: Stalled
+		- Held for: a push of engine fork commit 65dbcd81 to `scroll-ledger-0.26.0`. Then `cargo update -p alacritty_terminal`, merge `wip/rnd1104-2026110220554102`, and run the unit tests.
 	- Severity: Low
 	- Opened: 20261102-205541
 	- Opened by: CC
@@ -555,9 +556,20 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Incorrect behavior: No underline. 21 also turns bold off.
 	- Expected behavior: A double underline, as ECMA-48, xterm and GNOME Terminal have it.
 	- Reproduced: Yes, 20261102, on b23: drawn with no line.
-	- Actual cause: vte 0.15, the engine's parser, reads 21 as "cancel bold", as Alacritty and the Linux console do.
+	- Actual cause: vte 0.15, the engine's parser, hands 21 over as "cancel bold", and the engine took bold off, as Alacritty does.
 	- Notes:
 		- 20261102: A fix needs a patched vte, beside the engine fork that's already patched in. Or leave it, since programs reach double underline through `4:2`.
+		- 20261103: No vte patch is needed. vte sends "cancel bold" for 21 and nothing else, so the engine fork can read it as a double underline.
+	- Actual effort: Low
+	- Decisions:
+		- 20261103: Fixed in the engine fork, not a patched vte, so the patched crates stay at three.
+		- 20261103: 21 leaves bold as it was, as in xterm, kitty and WezTerm. A program that sends 21 to mean "bold off" now gets a double underline. 22 still turns bold off.
+	- Actual fix: SGR 21 sets a double underline, in place of any other underline style, and leaves bold alone. It draws as `4:2` does.
+	- Swept: vte's SGR table, where only 21 gives "cancel bold" and 22 still gives "cancel bold and dim". The engine's attribute handling, the only reader of either. The pane's underline styles read the engine's double underline flag, whichever code set it. No doc says what 21 does. The comment on desqy that said 21 is "not bold" goes with the test.
+	- Verified: 20261103, the fork's terminal tests, and SilkTerm's unit tests with the fork commit in. fmt and clippy.
+	- Branch: fork `scroll-ledger-0.26.0`, and `wip/rnd1104-2026110220554102` for the SilkTerm test.
+	- Commit: fork 65dbcd81.
+	- Test case: `sgr_21_double_underlines_and_keeps_bold` (detxz), on the wip branch until the lock moves, and the fork test of the same name. Both fail without the fix and pass with it.
 
 - Wayland: Settings isn't tied to the terminal window
 	- ID: 2026110118260314
