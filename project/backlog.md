@@ -541,7 +541,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- ID: 2026110315304782
 	- Type: Task
 	- Status: Waiting on automated testing
-	- Needs local test suite run?: `cicd/utility/codeql.bash` twice in image d47751450835, at 8a1d7fc, about 65 minutes or more each. The planted copy must fail with one NEW `rust/unused-variable` at `source/src/main.rs:117`, and nothing else new. The clean copy must pass.
+	- Needs local test suite run?: `cicd/utility/codeql.bash` once more in image d47751450835, on the new planted copy of 8a1d7fc, about 65 to 105 minutes. It must fail with one NEW `rust/unused-variable` at `source/src/main.rs:117`, and nothing else new.
 	- Priority: Avg
 	- Opened: 20261103-153047
 	- Opened by: CC
@@ -553,7 +553,11 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Progress log:
 		- 20261104: Two run folders under HOST_TEMP, each a `git archive` of 8a1d7fc with its own target dir, /tmp, out dir and container name. The planted one has `let planted_unused = 1;` as the first line of `main`, and differs from the clean one only there. No suppression covers `rust/unused-variable` under `source/`.
 		- 20261104: A smoke run of the same container on the planted copy passed: CodeQL 2.27.3, cargo 1.96.0, `cargo vendor --locked` 388 crates from the cache volume, target dir writable as the run's uid. No step bug found that blocks the runs.
+		- 20261104: The clean run passed: no new results, 106 minutes at 4 jobs (time on 2026102211461905). The planted run passed too, so it missed the plant. Its SARIF had nothing at line 117.
+		- 20261104: Cause: the plant's form. `rust/unused-variable` reports only a variable with no initializer and no use, so `let planted_unused = 1;` isn't one. The suite has no unused-value query. On a small database the query reported `let x: u8;`, in a `main` with `println!` too, and not `let x = 1;`. On the planted run's kept database every macro call in `main.rs` was expanded, so `main` isn't left out as incomplete. The step itself is fine.
+		- 20261104: A new planted copy of 8a1d7fc has `let planted_unused: u8;` as the first line of `main`, and differs from the clean copy only there.
 	- Decisions:
+		- 20261104: The parent's "an unused variable in `main` works" holds only for one that is never set. The step is unchanged, since the cause was the plant.
 		- 20261104: Copies of one commit for both runs, not the live tree, so round commits during the hour can't make the two differ.
 		- 20261104: Both can run at once, since they share only the cargo cache volume, which cargo locks. Each gets 4 jobs, so together they stay in the quarter of the CPUs a hard step may take. The 11-03 run took about 19 GB at 8 threads, so expect up to about 40 GB together.
 	- Branch: rnd1104b
@@ -5358,6 +5362,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261022: Measured here, it's slow. The database takes about 5 to 6 minutes. The analysis ran 35 minutes at 8 threads and about 19 GB of memory without finishing, and was stopped: 39 of 41 queries done, `rust/cleartext-logging` (CWE-312) and the summary stats still running. So the step can add well over half an hour to a full run. 2026102211462005 decides whether it goes back in by default.
 		- 20261022: Full runs, container and plain: the plan's Leak checks line reads "CodeQL (off; --codeql adds it)", stage 3 printed "CodeQL off (--codeql adds it)" after the heap-growth test, no "CodeQL database" line, and no `codeql_*.sarif` in `cicd/artifacts/leakcheck/`. The image was built once, by the gate run.
 		- 20261103: The first full measured run, at 595a542 in the image at a load of 8 to 14, took about 65 minutes for the step. That's too slow for every full run, so it stays under `--long` (2026102211462005).
+		- 20261104: The clean run at 8a1d7fc took 106 minutes at 4 jobs, at a load of about 21 to 25, beside a planted run (2026110315304782). It passed: no new results.
 	- Verified: 20261022. The step in the rebuilt image, as the run's own uid, on a copy of this tree: vendoring, the release crate list (191), and the database with the workspace loaded and nothing fetched, about 6 minutes at 12 threads. Before the extractor's toolchain went in the image, the workspace failed to load and the new check caught it. The image builds with the new layer. New engine cases, each watched to fail against a mutated cicd.bash. shellcheck, house style.
 	- Test case: New cases in `cicd/tests/engine/run.bash` (dd5nn): where CodeQL runs, that the dhat step hands on to it, and `--codeql`: off by default, on with the flag and carried into the container, refused with `--gate`, and the plan line. Each watched to fail against a mutated cicd.bash. The step itself is watched to fail under 2026102211462005.
 	- Branch: rnd1022
