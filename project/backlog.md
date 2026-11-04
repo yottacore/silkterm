@@ -34,81 +34,23 @@ Going forward, new issues in the new template at the bottom of this file, will g
 
 ## Issues
 
-- herdback's no window manager cases need their mutation checks again, since they ran under a restarted xfwm4
-	- ID: 2026110319081175
-	- Type: Task
-	- Status: Done
+- `--about` should only show the first line of the existing output
+	- ID: 2026102807384204
+	- Type: Enhancement
+	- Status: Waiting for answers
+		- Waits on the question 2026102807384204 in questions.md.
 	- Priority: Low
-	- Opened: 20261103-190811
-	- Opened by: CC
-	- Related IDs: 2026110318260287, 2026102807384201, 2026110315170584
-	- Target OS: Linux
-	- Requirements:
-		- Until 2026110318260287, the desktop's session started xfwm4 again once deqx1 stopped it, so on a desktop shell its 3 cases with no window manager ran under one. The mutation checks on 2026102807384201 and 2026110315170584 were run that way.
-		- Run deqx1 again, at each of three debug builds: the put-back taken out, where the back case should fail; the forget-on-resize taken out, the resized case; the forget-on-move taken out, the moved case.
-	- Estimated effort: Low
-	- Actual effort: Low
-	- Assigned to: CC
-	- Progress log:
-		- 20261103: deqx1 at 33d7da5's script, with one of three debug builds each, and one with nothing taken out. With the put-back taken out, the back case failed: the window stayed where it was herded, at 1300,500. With the forget-on-resize taken out, the resized case failed: the window went back to 100,100 and lost the size it was given. With the forget-on-move taken out, the moved case failed: the window went back to 100,100 from where it was moved. Each build failed only its own case, and "no window manager came back for the cases with none" passed in all four. With nothing taken out, all 20 checks passed. 2 runs side by side at a time, at load 5 to 12.
-	- Verified: 20261103, as in the progress log. Noted on 2026102807384201's and 2026110315170584's Verified rows.
-	- Branch: rnd1104
-	- Test case: `cicd/tests/herdback/run.bash` (deqx1). No change to it.
-	- Closed: 20261103-194447
-
-- deqx1's "xfwm4's window has gone from the X server" sometimes fails on a busy box
-	- ID: 2026110318260287
-	- Type: Bug
-	- Status: Done
-	- Severity: Low
-	- Opened: 20261103-182602
-	- Opened by: CC
-	- Assigned to: CC
-	- Related IDs: 2026110116413708, 2026110220294255, 2026110319081175
-	- Target OS: Linux
-	- Steps to reproduce: Run `cicd/tests/herdback/run.bash` 4 times side by side at a load over 20.
-	- Incorrect behavior: xfwm4's process is gone, and passes "xfwm4 has stopped", but its `_NET_SUPPORTING_WM_CHECK` window is still on the X server 3 s later. 1 run of 7 on 20261103, at load 25. Every other check in that run passed.
-	- Expected behavior: The X server lets go of the window once xfwm4 has exited.
-	- Possible cause: Not known. Either the X server is slow to see the closed connection at that load, and the 3 s wait in fGone is short, or something else holds xfwm4's connection open, such as a helper started under its dbus-run-session. The kept folder from that run had nothing more in its logs.
-	- Reproduced: 20261103, from a desktop shell. Once stopped, xfwm4 was running again on the test's display, started by the desktop's own session, and stayed up through the cases with no window manager. Under load, 4 stops in 90 left the window there for good.
-	- Actual cause: xfwm4 joined the desktop's xfce4-session through SESSION_MANAGER, and the session starts its window manager again when it exits. The new xfwm4 took the client slot the old one freed, so its check window had the same ID. fGone found it whenever the new one was up before fGone's first look, which a busy box allows. The X server was never slow.
-		- With xfwm4 really gone, the back case with no window manager failed. winit counts a move only from the notice a window manager sends, so the window never knew it was herded. The restarted xfwm4 had sent it.
-	- Actual fix: The test's X programs run without SESSION_MANAGER, as gui-headless.bash's do. With no window manager, the test's moves send the window that notice as a window manager would (`_wmmove.py`), and the key after a move goes to a window it has given focus first, since without focus the key never arrived. A new check fails when a window manager is back on the display for the cases with none.
-	- Decisions:
-		- 20261103: The moves with no window manager tell the window, rather than staying plain moves. Every window manager sends that notice, so a plain move tests a case that doesn't happen. The herd move gets no key, since a window manager's herd brings none, and the look after it runs anyway.
-		- 20261103: This departs from 2026110116413708's call that the key needs no focus. It needs none under xfwm4, which gives the window focus.
-		- 20261103: The mutation checks for the 3 cases ran under the restarted xfwm4, so they need running again. Filed as 2026110319081175.
-	- Verified: 20261103. The old script, with only the new check added, failed it, with the restarted xfwm4 on the display. The new one passed alone at load 10 to 13, and 4 runs side by side at load 25 to 52. Its window logs show the back case put back, the moved case's look after its move dropping the herd, and the resized case dropping it at the resize. Without the focus, the moved case's look waited for good and the case passed on that alone. The quick gate, scripts and docs.
-	- Swept: Every xfwm4 start in `cicd`. gui-headless.bash's fOnX and demo-video.py already drop SESSION_MANAGER, and dlgtie, startsize and allocs start xfwm4 through gui-headless.bash. Every `xdotool windowmove` in `cicd`. idleother's also runs with no window manager, but only moves a window out from under another, and nothing there waits on the window to see the move. demo-video.py's run under xfwm4.
-	- Branch: rnd1104
-	- Test case: `cicd/tests/herdback/run.bash` (deqx1), changed, with the new "no window manager came back for the cases with none" check.
-	- Closed: 20261103-190900
-
-- Running with `--software-rendering` on vmKt6m still fails with a complaint about no suitable GPU
-	- ID: 2026102807384202
-	- Type: Bug
-	- Status: Moot
-		- Answered: keep the alert.
-	- Severity: Avg
 	- Opened: 20261028-073842
 	- Opened by: JC
-	- Target OS: macOS
-	- Test environment: vmKt6m
-	- Incorrect behavior: It still fails with a complaint about no suitable GPU.
-	- Reproduced: 20261103 on vmKt6m, launched in the console session. stderr had the no-Metal words, and the alert was up.
-	- Actual cause:
-		- The Mac build has only wgpu's Metal backend, so `--software-rendering` there is refused with a line on stderr, and the launch goes on to look for a card. With no Metal device there's none, per 2026102209035801.
-	- Related IDs: 2026102209035801
+	- Requirements:
+		- `--about` shows only the first line of the existing output.
+		- For that flag only, no blank lines before or after.
 	- Notes:
 		- Pre-next-cut.
 	- Progress log:
-		- 20261103: Tried on vmKt6m. wgpu's GL backend through ANGLE found nothing, since LibreWolf's ANGLE is Metal only, and Chrome and Brave link theirs in. SwiftShader's Vulkan driver, as Chrome ships it, gave a CPU device once wgpu's `vulkan-portability` feature was on. SilkTerm came up on it and started its shells, but every frame was dropped, since the Metal layer it draws to has no device to give a picture with.
-		- 20261103: So a fix needs the libraries in the Mac app and a second way to show a frame, drawn off screen and copied back. That's too big for one pass. It gets split once the question is answered.
-		- 20261103: Nothing changed in the code.
-		- 20261104: Answered A in questions.md, so the alert stays and this closes as moot. Nothing changed in the code.
-	- Branch: rnd1103
-	- Decided against: bundling SwiftShader in the Mac app (option B). A Mac with no Metal is a VM or a hackintosh, since every Mac that runs a supported macOS has Metal. The no-Metal alert from 2026102209035801 stays.
-	- Closed: 20261104-010500
+		- 20261104: The no-blank-lines half is in. `--about` prints flush, like `--version`. The first-line half waits on a question: the first line is now the "About SilkTerm" heading, and cutting to one line drops the renderer details a bug report needs and `ci-mac.bash`'s adapter check reads.
+	- Branch: rnd1104
+	- Test case: none for the padding, since it is a print call in main.rs. Checked by running `--about` and reading the first and last bytes.
 
 - The window doesn't paint while the GPU is busy or short on memory, and stays blank after the load ends
 	- ID: 2026100312470535
@@ -592,67 +534,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- The parent's planted finding.
 		- Note the time of the clean run on 2026102211461905.
 
-- SGR 21 turns bold off instead of drawing a double underline
-	- ID: 2026110220554102
-	- Type: Bug
-	- Status: Done
-	- Severity: Low
-	- Opened: 20261102-205541
-	- Closed: 20261103-171842
-	- Opened by: CC
-	- Parent ID: 2026102511131401
-	- Target OS: All
-	- Steps to reproduce:
-		- In SilkTerm, run `printf '\e[21mdouble\e[0m\n'`.
-	- Incorrect behavior: No underline. 21 also turns bold off.
-	- Expected behavior: A double underline, as ECMA-48, xterm and GNOME Terminal have it.
-	- Reproduced: Yes, 20261102, on b23: drawn with no line.
-	- Actual cause: vte 0.15, the engine's parser, hands 21 over as "cancel bold", and the engine took bold off, as Alacritty does.
-	- Notes:
-		- 20261102: A fix needs a patched vte, beside the engine fork that's already patched in. Or leave it, since programs reach double underline through `4:2`.
-		- 20261103: No vte patch is needed. vte sends "cancel bold" for 21 and nothing else, so the engine fork can read it as a double underline.
-	- Actual effort: Low
-	- Decisions:
-		- 20261103: Fixed in the engine fork, not a patched vte, so the patched crates stay at three.
-		- 20261103: 21 leaves bold as it was, as in xterm, kitty and WezTerm. A program that sends 21 to mean "bold off" now gets a double underline. 22 still turns bold off.
-	- Actual fix: SGR 21 sets a double underline, in place of any other underline style, and leaves bold alone. It draws as `4:2` does.
-	- Swept: vte's SGR table, where only 21 gives "cancel bold" and 22 still gives "cancel bold and dim". The engine's attribute handling, the only reader of either. The pane's underline styles read the engine's double underline flag, whichever code set it. No doc says what 21 does. The comment on desqy that said 21 is "not bold" goes with the test.
-	- Verified: 20261103, the fork's terminal tests, and the backlog quick run (fmt, clippy, tests, scripts, docs) with the lock on the fork commit.
-	- Branch: rnd1104, and fork `scroll-ledger-0.26.0`.
-	- Commit: 9fdde7c (test), fork 65dbcd81. Cargo.lock moves only the fork's commit.
-	- Test case: `sgr_21_double_underlines_and_keeps_bold` (detxz), and the fork test of the same name. Both fail without the fix and pass with it.
-	- Acceptance signoff: Self-closed: detxz checks the cell flags the drawing reads, and the underline draws as `4:2` does.
-
-- Wayland: Settings isn't tied to the terminal window
-	- ID: 2026110118260314
-	- Type: Bug
-	- Status: Done
-		- Open Settings on a real Wayland desktop, GNOME and KDE if there are both. It should stay above the terminal, and make no taskbar or alt+tab entry of its own where that desktop folds a dialog into its parent's.
-	- Needs hand testing: No. A look on GNOME or KDE under Wayland is still welcome, but the taskbar and alt+tab entry is each desktop's own call once the parent is set.
-	- Severity: Low
-	- Opened: 20261101-182603
-	- Opened by: CC
-	- Assigned to: CC
-	- Related IDs: 2026103010083402, 2026110317323442
-	- Target OS: Linux
-	- Test environment: headless sway 1.10.1
-	- Incorrect behavior: On native Wayland Settings and About are toplevels of their own, with their own taskbar and alt+tab entries, and can go behind the terminal.
-	- Expected behavior: The same as on X11, per 2026103010083402.
-	- Reproduced: 20261103, on headless sway. Settings came up tiled beside the terminal, as a window of its own, rather than floating over it as a dialog.
-	- Possible cause: winit 0.30 has no parent for a Wayland window. xdg-shell has `set_parent` for this, so it needs a winit change or a call on the raw surface.
-	- Actual cause: winit 0.30 has no parent for a Wayland window, so the dialog never named one.
-	- Actual fix: Each dialog's xdg_toplevel names the terminal's as its parent, on winit's own connection, before the dialog first draws. winit 0.30.13 hands out both toplevels.
-	- Decisions:
-		- 20261103: The call goes on winit's toplevel rather than into a winit fork. It is one request on the connection, as monitor.rs already reads winit's state there.
-		- 20261103: No modal hint yet. Wayland's is the staging xdg-dialog protocol, which needs its global bound from the registry. That is 2026110317323442.
-		- 20261103: Taskbar and alt+tab entries are each desktop's call on Wayland, with no state a client can set the way X11's skip hints do. The parent is all a client can give, so that part is left to the hand test.
-	- Verified: 20261103. dlgwl passes 6 of 6 checks, and fails 3 with the parent call taken out: no set_parent on the wire, and the dialog tiled rather than floating, which fails its focus check too. dlgtie still passes 13 of 13 on X11. The quick gate, all five areas, plus clippy for Windows and macOS, pass.
-		- Swept: About, the notices and the close question are made by the same code, so they get the parent too. A notice over Settings names Settings. Off Wayland the toplevels are None and nothing is sent.
-	- Branch: rnd1104
-	- Test case: `cicd/tests/dlgwl/run.bash` (detyk).
-	- Acceptance signoff: Self-closed: xdg-shell set_parent is the only tie Wayland gives a dialog, and dlgwl (detyk) shows it sent, with sway floating Settings over the terminal and giving it focus. It fails without the fix.
-	- Closed: 20261104-013900
-
 - Wayland: Settings asks to be modal
 	- ID: 2026110317323442
 	- Type: Enhancement
@@ -670,217 +551,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- The parent itself went in with 2026110118260314.
 		- Binding the global needs a registry and an event queue of its own on winit's connection. A registry can't be destroyed, so it's best kept for the life of the program, not made for each dialog.
 
-- A backlog line names a path under the private notes folder
-	- ID: 2026102819390403
-	- Type: Bug
-	- Status: Done
-	- Priority: Low
-	- Opened: 20261028-193904
-	- Opened by: CC
-	- Target OS: All
-	- Requirements:
-		- One line in the public backlog named a leak-check script under the private notes folder. Public docs shouldn't name it. Say what the script does, or move the note to the private notes.
-	- Decisions:
-		- 20261104: Said what the script does in the step line, and pointed at `cicd/utility/asan.bash`. No script is named.
-	- Test case: Not applicable, a docs wording fix. A grep for the script name finds nothing in the backlog.
-	- Closed: 20261104-013900
-
-- The private Mac build prints empty sizes and five `stat` errors on b26
-	- ID: 2026102811082478
-	- Type: Bug
-	- Status: Done
-	- Opened: 20261028-110824
-	- Opened by: CC
-	- Target OS: macOS
-	- Test environment: b26, through the private runner
-	- Steps to reproduce: A full run with stage 6, or the private runner's `mac` job on b26.
-	- Incorrect behavior: "stat: invalid option -- '%'" five times, then "bytes: x86_64 , arm64 , universal , zip , dmg" with no numbers.
-	- Expected behavior: The five sizes in bytes.
-	- Reproduced: 20261028, in the full run at 64f3584.
-	- Possible cause: `fSize` in silkterm-private `macos/build.bash` calls `stat -f%z`, the BSD form. The `stat` first on PATH there is GNU, which wants `-c%s`.
-	- Severity: Low
-	- Actual cause: As guessed. On b26 the login PATH puts Homebrew's GNU coreutils (`gnubin`) ahead of `/usr/bin`, so `stat` is GNU's.
-	- Actual fix: `fSize` counts bytes with `wc -c`, which answers the same from GNU or BSD, and drops the padding BSD's `wc` adds. It now sits with the other helpers at the top of the script.
-	- Decisions:
-		- 20261103: `wc -c` rather than a fixed `/usr/bin/stat`, so the line works whichever tools come first on PATH, on b26 and on vmKt6m as mactest.
-	- Swept: the rest of `macos/build.bash` and the private `cicd/run.bash` for other calls that differ between GNU and BSD. None found. `stat` appeared only in `fSize`.
-	- Verified: 20261103. On b26, under bash 3.2 and Homebrew's bash 5.3 with the build's PATH, `fSize` gave the same sizes as `/usr/bin/stat -f%z`, and with only `/usr/bin` on PATH it stripped BSD wc's padding. detz1 passes, and fails on the old `fSize`.
-	- Branch: silkterm-private `rnd1104`
-	- Commit: silkterm-private 34c9833
-	- Test case: silkterm-private `cicd/tests/macsize/run.bash` (detz1), run by hand like dehx0.
-	- Closed: 20261103-173834
-
-- Help|About: "Acceleration" shows as "Unknown"
-	- ID: 2026102807384203
-	- Type: Bug
-	- Status: Done
-	- Severity: Low
-	- Opened: 20261028-073842
-	- Opened by: JC
-	- Target OS: Linux
-	- Reproduced: The startup line on b23's X11 desktop reads `NVIDIA GeForce RTX 3060 Ti/PCIe/SSE2 [Gl / Other]`.
-	- Actual cause: On X11 the window draws through GL. wgpu's GL backend can only tell integrated and software chips apart by name, and calls everything else `Other`. About mapped `Other` to "Unknown". `--about` asks Vulkan, so it said "Hardware (discrete GPU)" on the same box.
-	- Actual fix: An adapter of type `Other` reads as "Hardware (GPU)". Any adapter with a software name, from the list the performance rating already uses, reads as "Software (CPU)" whatever type it gives.
-	- Decisions:
-		- "Hardware (GPU)" with no kind, since GL doesn't say whether the card is discrete. wgpu's own note says `Other` there is most likely a discrete card. The rest of the program already treats `Other` as a card.
-		- The software name check covers every type, so About agrees with the rating on remote and basic display drivers.
-	- Swept: The other `device_type` checks in gfx.rs (`Drawn::of`, the refusal stand-in, the fallback) already count `Other` as a card. The rating goes by `profile::software_adapter`, the same list used here.
-	- Notes:
-		- Pre-next-cut.
-		- 20261103: `every_gpu_is_hardware_and_only_the_cpu_is_software` (dd5n5) asserted that a bare `Other` is never Hardware. It now asserts that for an `Other` with a software name. Everything else it checks is unchanged.
-	- Commit: 5d1e88a
-	- Test case: `a_card_on_gl_is_hardware_and_a_software_name_never_is` (detz5), which fails with the old mapping and passes with the fix.
-	- Closed: 20261103-174640
-
-- `the_scroll_record_costs_a_full_screen_program_little` failed once on the Mac runner
-	- ID: 2026102113432602
-	- Type: Bug
-	- Status: Done
-		- 20261103: The fix is in, and passes the stand-ins here. One hosted Mac run is left, in the external testing row.
-	- Needs external testing: No
-	- Stand-in: 20261103: b23, the test pinned to one core while its SMT sibling copies memory in random 10 to 80 ms stretches, so the core slows and speeds up under the test without the thread waiting. It stands in for the core changing under the test, not for the Mac itself.
-	- Severity: Low
-	- Opened: 20261021-134326
-	- Opened by: CC
-	- Assigned to: CC
-	- Related IDs: 2026102113432600, 2026100714145220
-	- Target OS: macOS
-	- Test environment: GitHub macos-15, arm64, 3 cores
-	- Reproduced: 3 of the 7 full Mac runs to 20261022 16:04 UTC failed it (runs 39667988647, 39709345533, 39810794398). Each time it passed when run again alone, in under a second. No failure kept its numbers.
-	- Possible cause: Memory traffic from the tests running beside it. The test times by the thread's own CPU time, which leaves out waiting for a core but not cache misses. Keeping rows cycles 128 rows of 160 cells, so each scrolled line writes a row last touched 128 lines ago. The bare side reuses rows still in cache. On b23, on 3 pinned cores, the median was 1.02 to 1.07 alone, 1.04 to 1.07 beside 3 CPU-bound loops, and 1.06 to 1.14 beside 3 memory-bound ones, failing 2 of 10 runs there. Bare against bare under the same memory load stayed 0.98 to 1.02, so the pairing is fair and the extra cost is the kept side's. An M1's cores share an L2 per cluster, and the suite runs on all 3 cores, so it may well be more there. Not confirmed on the Mac.
-	- Notes:
-		- Ruled out: the Mac's clock. macOS reads it from `__thread_selfusage()` in mach ticks, about 42 ns on an M1, against runs of about 40 ms. An Apple forum thread reports some M1 Macs leaving out the tick conversion, about 41.7 times too small, but a constant factor cancels in a ratio.
-		- The copy this test was made for cost 28 to 35% here, and the pointer check catches it with no timing at all. The 10% limit is unchanged.
-		- If the Mac shows a steady gap over 10%, the options are to run this test apart from the suite, or to judge the keep cost against something the neighbours slow down as much. Neither is done yet.
-	- Progress log:
-		- 6 Mac CI runs in a row passed it since 20261022, against 3 failures in the 7 before. The cause was never found. Close it as Can't reproduce, or keep it open. Mac CI runs on every push to dev, so a new failure would show its numbers.
-		- 20261025: Since the 10-24 failure, 6 more Mac CI runs passed it (40118767927, 40119271523, 40145850085, 40214477949, 40218542312, 40221760659), and one was cancelled.
-		- 20261022: The failure text never reached the CI log. `ci-mac.bash` now prints each failed test's panic text from the first run, runs the failed tests again with their output shown, and prints every `measured:` line a test writes. The test writes its ratios and each pair's times that way, and puts the times in its failure message too.
-		- 20261022: Mac CI run 39842974082 on rnd1022 passed it. Median 1.005 over 15 pairs, from 0.766 to 1.211. Kept was above bare in 9 of 15 pairs, each by a little. The big swings were on the bare side, 24.5 against 32.0 and 23.3 against 27.7 ms, which reads more like the core or host changing than a steady keep cost. One run, so not settled. The run failed on another test, filed on 2026102114411311.
-		- 20261022: Mac CI run 39858608191 passed it again. Median 1.038, pairs from 0.841 to 2.112, kept above bare in 10 of 15.
-		- 20261023: Mac CI runs 39859635085, 40049932196, 40051324149 and 40062142185 passed it. Medians 1.008, 1.032, 1.035 and 1.032, with kept above bare in 8, 9, 15 and 9 of 15 pairs. 40051324149 had tight pairs, about 20.2 against 19.4 ms, which is the steady keep cost seen on b23. It failed on the header test, 2026102320070112. The private runner's run on b26 in the full run passed it too.
-		- 20261024: Mac CI run 40099145373 on dev at 936658b failed it again: kept cost 18% more, pairs from 0.768 to 1.568, with kept above bare in most. Run again alone it passed, median 1.002 over pairs from 0.623 to 1.643. The merge's run 40118767927 passed. So it's still live, and the spread on both sides is wide.
-		- 20261104: Verified: hosted run 41761962307 on rnd1104 passed, 1407 passed and 0 failed.
-	- Verified: `ci-mac.bash`'s extraction on a test binary with a failing assert, a multi-line `assert_eq!` and a `measured:` line. shellcheck, fmt, clippy on Linux, Windows and macOS targets. The test passes here and prints the new line.
-		- 20261103, on b23, the old form against the new, 10 runs each, at a load of 10 to 24:
-			- The SMT stand-in: old 1.02 to 1.12, 1 over the limit. New 1.029 to 1.040, none over.
-			- 3 memory-bound loops on the test's 3 pinned cores: old 1.08 to 1.14, 4 over. New 1.048 to 1.073, none over.
-			- Alone: new 1.029 to 1.050. With a clone of each kept row put in the kept turns it read 1.45, and failed.
-			- The quick gate, all five areas.
-	- Branch: rnd1022, rnd1104
-	- Test case: `the_scroll_record_costs_a_full_screen_program_little` (dct9f), rewritten in place, same ID.
-	- 20261026: It failed again on Mac CI run 40263068770 at 0b16ae9, with keeping rows 10% over and pairs from 0.711 to 2.116. It passed when run again alone. Back to Queued, since a 7th failure makes it more than a one-off.
-	- 20261028: Failed again on Mac CI run 40744137399 at e809cca: keeping rows 21% more, pairs from 0.570 to 1.966. It passed run again alone. From ce3d9fb the Mac suite runs at 1 job, so nothing runs beside it, which tests the memory traffic guess.
-	- 20261028: Mac CI run 40750006918 at ce3d9fb, at 1 job, passed it. Median 1.034, pairs from 0.466 to 1.290.
-	- 20261103: The 19 Mac CI runs since ce3d9fb, all at 1 job, failed it twice: 40779983969 at a median of 1.126 and 40945628828 at 1.108. 41747375039 passed at 1.095. Pairs ran from 0.47 to 1.79 in the noisy runs, and from 0.98 to 1.15 in the quiet ones, such as 41581768957 and 40825948501, whose medians were 1.03. So with nothing beside it, the swings were still there.
-	- Actual cause:
-		- On the hosted Mac one whole flood took 20 ms in one run and 35 in the next, on either side, as the core under it changed. Thread CPU time can't see that. Pairs taken a whole flood apart spread from 0.47 to 1.79, and the median of 15 crossed 1.10 now and then, at 1 job too.
-		- Against an alt screen that keeps no rows, much of the gap is the oldest kept row, which has gone cold by the time it's reset. Memory traffic beside the test makes that dearer. On b23 that was 1.04 alone and 1.08 to 1.14 beside 3 memory-bound loops, so no 10% limit could hold there.
-	- Actual fix: Both sides take the same flood in turns of 8 KiB, about 100 lines, with the order swapped each turn, and the verdict is the median of every turn's ratio. The other side is a shell's screen that keeps 128 rows of history, which resets a cold row the same way. The 10% limit and the pointer check are unchanged.
-	- Decisions:
-		- 20261103: The test now judges the scroll record against a screen keeping as many rows of history, not against an alt screen keeping none. That cost is what the record adds, about 3% here. The cold row history pays too moves with the box, 4% quiet to 10% under memory load. A clone of each kept row, standing in for the copy F94 removed, still reads 45% over. The F94 note's "about 5% of the parse on the alt screen" is the older measure.
-	- Swept: `thread_cpu` and every `measured:` line in the unit tests. This is the only test that compares two timings.
-	- Acceptance signoff: Self-closed: the hosted macOS arm64 run 41761962307 on rnd1104 passed the whole suite, dct9f included, with 1407 passed and 0 failed. The by-round medians aren't in the log, since a passing test's output is captured, and the b23 loads in the table show the spread.
-	- Closed: 20261104-031300
-
-- deqx1's first case sometimes fails "the window was herded" on a busy box
-	- ID: 2026110116413708
-	- Type: Bug
-	- Status: Done
-	- Severity: Low
-	- Opened: 20261101-164137
-	- Opened by: CC
-	- Assigned to: CC
-	- Related IDs: 2026102807384201, 2026110315170584, 2026110318260287
-	- Target OS: Linux
-	- Steps to reproduce:
-		- `cicd/tests/herdback/run.bash` a few times at a load over 20.
-	- Incorrect behavior: In the first xfwm4 case the window sometimes never takes the portrait size, so it straddles the 2 outputs, and xfwm4 doesn't herd it. About 2 runs in 8 on 20261101.
-	- Expected behavior: Every case starts wholly on the portrait output.
-	- Possible cause: Under Xwayland the buttons can't be seen, so the look after the test's move waits for a sign the drag is over, and the test gives none. A pointer move or a focus change from the test did not end it.
-	- 20261103: A lead from 2026110220294255: fDance's start check tests only that x is under 1200, while fDanceBare uses fOnPortrait, so a window across both outputs passes the start and fails later at "was herded".
-	- 20261103: Giving the test a sign that the drag is over would also let deqx1's moved case watch the forget-on-move, per 2026110315170584.
-	- Reproduced: 20261103, every time, with the test's first move made 3 s after the window showed rather than 1. Every case failed to start on the portrait output, and both xfwm4 cases failed "the window was herded" with the window at its launch size.
-	- Actual cause: The window's first look after it shows goes ahead with no sign, and takes the size of the monitor it is on. Every later look after a move waits for a sign that the person is back at the window, since under Xwayland a drag held on the title bar can't be seen. The test moved the window 1 s after it showed, and the first look comes 0.75 s after the window is revealed. On a busy box the look sometimes came first, on the landscape output, and the move after it waited for good, so the window kept the landscape size and straddled both outputs.
-		- A Shift key sent to the window, pointer motion over it, or focus moved to it from another window each ended the wait. Focusing it again while it already had focus did not, since that is no change.
-	- Actual fix: After each move onto the portrait output the test sends the window a Shift key, which is that sign. fDance's start check uses fOnPortrait, as fDanceBare does. The moved case gets the key after its move too, so its look runs, and the case now watches the forget-on-move.
-	- Decisions:
-		- 20261103: A key, sent to the window itself, rather than pointer motion. It leaves no pointer over a window to count as presence in a later step, and it needs neither focus nor a window manager.
-	- Verified: 20261103. With the first move made late, the old script failed the start in every case, and the new one passed all 19 checks. 7 runs of the new one at load 18 to 30, up to 4 side by side: every case started on the portrait output, and 6 runs passed whole. The other failed only "xfwm4's window has gone from the X server", filed as 2026110318260287. With the forget-on-move taken out, the moved case now fails "stays where it was left". The quick gate, all five areas.
-	- Swept: Every `xdotool windowmove` in `cicd`. idleother's runs on Xvfb, where the buttons can be seen, and doesn't wait on a look.
-	- Branch: rnd1104
-	- Test case: `cicd/tests/herdback/run.bash` (deqx1), changed.
-	- Closed: 20261103-183632
-
-- Wayland: a copy a program sends while no SilkTerm window has focus is dropped
-	- ID: 2026101607585700
-	- Type: Enhancement
-	- Status: Done
-	- Priority: Low
-	- Opened: 20261016-075857
-	- Opened by: JC
-	- Related IDs: 2026101509024607
-	- Target OS: Linux
-	- Test environment: Headless sway on b23, with no DISPLAY and with DISPLAY set.
-	- Requirements:
-		- Hold the copy, and set the clipboard when that SilkTerm window gets the focus again.
-		- A line in usage.md saying a copy made from a window without focus on Wayland waits for it to get focus.
-	- Notes:
-		- Wayland lets a window set the clipboard only while it has the keyboard. X11 doesn't have that limit, and stays as it is.
-	- Progress log:
-		- 20261103: It's the clipboard crate's own worker that drops the store, when its seat has no keyboard. The compositor never sees it.
-		- 20261103: A window on a workspace out of view reads no output, so its store only arrives once it's shown and has the keyboard again. The case that lost a copy was a window on screen with another one in front.
-		- 20261103: The window also has no keyboard for a moment after it opens, while it already counted as focused. A store then was dropped too, and is held now.
-	- Decisions:
-		- 20261103: The clipboard keeps its own idea of whether the window has the keyboard, starting with none on Wayland, rather than reading the window's focus flag, which starts out true.
-		- 20261103: Only the last store per selection is held. A copy a person makes meanwhile, such as in Settings, replaces the held one, so a held store never overwrites a newer copy made in SilkTerm.
-		- 20261103: While a dialog has the keyboard, a program's store waits for the terminal window too. A dialog is modal, so the terminal gets focus back when it closes.
-		- 20261103: The test takes a second window from `foot`, which sway tiles beside SilkTerm, so the window stays on screen. foot is now one of the tools the test needs.
-	- Swept: Every place a program sets a selection: OSC 52 to the clipboard and to the primary, both through the one handler. Copy on select, copy on output, the chords and the dialogs all run with the keyboard, and set at once as before. X11, macOS and Windows set at once too.
-	- Branch: rnd1104
-	- Commit: 6b138b0
-	- Test case: `cicd/tests/wlclip/run.bash` (ddzwc), with a second window taking the keyboard: both stores wait, then land on focus. The 4 new checks failed with the hold switched off and pass with it, also with the cores loaded. Unit tests dev22, dev23, dev24, dev25 cover held until focus (and before the first focus), last wins, a newer copy wins, and X11 unchanged.
-	- Verified:
-		- 20261103: wlclip passes 23 of 23 on the final code, also with no wait after launch. An earlier form of the same hold passed 3 times, once at load 36 on 32 cores.
-		- 20261103: Gate: fmt, clippy, scripts and docs pass; clippy for Windows and macOS is clean. Tests: 1428 pass, and the 1 failure is ddghe on `cicd/tests/herdback/_wmmove.py`, from another item's commit.
-	- Acceptance signoff: Self-closed: the store is held and lands on focus, the test fails before and passes after, and X11 is unchanged.
-	- Closed: 20261103-193225
-
-- CI/CD: a flag to turn off each full-run stage that has none
-	- ID: 2026102319535661
-	- Type: Task
-	- Status: Waiting on automated testing
-	- Needs local test suite run?: The round's full run, `cicd/cicd.bash --backlog-run-full`, since stage 5 moved into a function of its own. dd5nn, ddrp2 and de5e9 should pass in it.
-	- Priority: Low
-	- Opened: 20261023-195356
-	- Opened by: CC
-	- Related IDs: 2026101816103601, 2026110320010164
-	- Target OS: Linux
-	- Requirements:
-		- A failure in a stage with no off flag stops the whole full run, and a test batch can't run past it.
-		- Stages with no flag now: the debug build and `cargo test`, the 3 clippy runs, shellcheck and `bash-style.bash`, the PowerShell and Python lints, the content scrub, the advisory scan and `cargo deny`, the script tests under `cicd/tests`, the docs, TOC, table and test ID checks, the wallpaper gallery check, the launcher harness, and the native release build with its checks, plus the stale-run cleanup.
-		- The Windows GUI scenarios and the scroll harness turn off only with `--quick`, and dpirand only with `DPIRAND_SECS=0` in config.bash.
-	- Notes:
-		- Not every stage needs its own flag. A few grouped ones may do, such as one for the lints and one for the script tests.
-	- Progress log:
-		- 20261103: New `--no-rust-tests`, `--no-clippy` (all 3 runs), `--no-script-lint` (shellcheck, the bash style check, the PowerShell and Python lints), `--no-scrub`, `--no-deny` (the advisory scan, its tests and the rest of cargo-deny), `--no-script-tests` (every test script under `cicd/tests`, dpirand and the launcher harness included), `--no-docs` (the docs, TOC, table and test ID checks, and the wallpaper gallery), `--no-scroll`, `--no-wingui`, `--no-release` and `--no-cleanup`. Each goes in with the run in the container, but `--no-wingui`.
-		- 20261103: `--no-release` turns off the native and cross builds, the release checks and artifacts, and with them the packages, the ARM64 smoke run, dogfood and the demo. The run outside the container then takes no earlier run's binaries.
-		- 20261103: The plan says what each one left out: a step off with its flag, a plan line, or a new `Left out` line for parts of stage 3. Each part prints a skipped line in the run, and `--list` leaves its tests out.
-		- 20261103: `--help` and design.md list them.
-		- 20261103: The Windows scenarios already turned off with `--no-remote` too, since 2026-10-25. `--no-wingui` turns off only them.
-		- 20261103: The cleanup test's (de5e9) check of the Zig sweep's line now reads `if ((! container && ! noCleanup)) && command -v zig`, where it read `if ((! container)) && command -v zig`. It still checks the same thing.
-	- Decisions:
-		- 20261103: Grouped flags, named after the parts and the quick run's areas, rather than one per command. The 3 clippy runs go together, the 4 script lints, and every test script.
-		- 20261103: The debug build gets no off flag, which departs from the wording. If it fails the code doesn't compile, so every later build fails the same way, and the tests would read an earlier run's binary.
-		- 20261103: The docs checks and the wallpaper gallery go with `--no-docs`, not `--no-script-tests`, though the TOC and table checks are scripts under `cicd/tests`. The advisory scan's 2 tests go with either flag.
-		- 20261103: `--no-cleanup` leaves only what earlier runs left. The run's own folder and containers still go at the end, as `--keep-temp` decides.
-		- 20261103: The flags change nothing in `--backlog-run-quick`, which goes by its areas, the same as `--no-fmt` and `--no-fuzz` there.
-		- 20261103: `cicd-win.ps1` has the same gap. That is 2026110320010164.
-	- Verified: 20261103. dd5nn passed with 29 new checks, 24 of which failed against the old cicd.bash, and ddrp2 with 1 new one. de5e9 and the failed test output test pass. A copy of the pipeline with a stand-in debug build ran `--backlog-run-full --no-container` with every off flag and passed, printing each part's skipped line, and a plan of 2 steps with the rest listed off by flag. `--list` with the flags left their tests out. shellcheck and the bash style check pass.
-		- Swept: every `fRunTest` and `fRunTest_MaySkip` call, the scroll and launcher harnesses, both `fContentScrub` and `fRenderNodeTest` sites (in stage 3 and in `Checks on this box`), every reader of `builtArts` and `ver` after stage 5, the plan's step list and its `...:` lines, and the tests that lift any of them (dd5nn, ddrp2, de5e9, testout).
-	- Branch: rnd1104
-	- Test case: `cicd/tests/engine/run.bash` (dd5nn), the off-option checks: the parser, `--help`, stage 3 with stand-ins, the test scripts and docs checks, the plan, `--no-wingui`, `--no-scrub`, `--no-cleanup` and `--no-release`. `cicd/tests/container/run.bash` (ddrp2), the options that go in with the run.
-
 - CI/CD: the same off options in `cicd-win.ps1`
 	- ID: 2026110320010164
 	- Type: Task
@@ -893,24 +563,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Requirements:
 		- `cicd-win.ps1` gets the off options `cicd.bash` took in 2026102319535661, in its `-PascalCase` form, for the parts it has: `-NoRustTests`, `-NoClippy`, `-NoScriptLint`, `-NoDeny`, `-NoScriptTests` and `-NoRelease`, and others where it has the part.
 		- Under `-Wsl` each goes to the Linux half as its `cicd.bash` flag.
-
-- `--about` should only show the first line of the existing output
-	- ID: 2026102807384204
-	- Type: Enhancement
-	- Status: Waiting for answers
-		- Waits on the question 2026102807384204 in questions.md.
-	- Priority: Low
-	- Opened: 20261028-073842
-	- Opened by: JC
-	- Requirements:
-		- `--about` shows only the first line of the existing output.
-		- For that flag only, no blank lines before or after.
-	- Notes:
-		- Pre-next-cut.
-	- Progress log:
-		- 20261104: The no-blank-lines half is in. `--about` prints flush, like `--version`. The first-line half waits on a question: the first line is now the "About SilkTerm" heading, and cutting to one line drops the renderer details a bug report needs and `ci-mac.bash`'s adapter check reads.
-	- Branch: rnd1104
-	- Test case: none for the padding, since it is a print call in main.rs. Checked by running `--about` and reading the first and last bytes.
 
 - Wayland: must use the Wayland clipboard, and minimize other X11 features
 	- ID: 2026101509024607
@@ -7240,6 +6892,237 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Test case: No test. Output only. The gate and a quick run showed all 942 Rust tests with an ID, and a made-up name showed the dashes and the warning.
 	- Closed: 20260928-111812
 
+- deqx1's "xfwm4's window has gone from the X server" sometimes fails on a busy box
+	- ID: 2026110318260287
+	- Type: Bug
+	- Status: Done
+	- Severity: Low
+	- Opened: 20261103-182602
+	- Opened by: CC
+	- Assigned to: CC
+	- Related IDs: 2026110116413708, 2026110220294255, 2026110319081175
+	- Target OS: Linux
+	- Steps to reproduce: Run `cicd/tests/herdback/run.bash` 4 times side by side at a load over 20.
+	- Incorrect behavior: xfwm4's process is gone, and passes "xfwm4 has stopped", but its `_NET_SUPPORTING_WM_CHECK` window is still on the X server 3 s later. 1 run of 7 on 20261103, at load 25. Every other check in that run passed.
+	- Expected behavior: The X server lets go of the window once xfwm4 has exited.
+	- Possible cause: Not known. Either the X server is slow to see the closed connection at that load, and the 3 s wait in fGone is short, or something else holds xfwm4's connection open, such as a helper started under its dbus-run-session. The kept folder from that run had nothing more in its logs.
+	- Reproduced: 20261103, from a desktop shell. Once stopped, xfwm4 was running again on the test's display, started by the desktop's own session, and stayed up through the cases with no window manager. Under load, 4 stops in 90 left the window there for good.
+	- Actual cause: xfwm4 joined the desktop's xfce4-session through SESSION_MANAGER, and the session starts its window manager again when it exits. The new xfwm4 took the client slot the old one freed, so its check window had the same ID. fGone found it whenever the new one was up before fGone's first look, which a busy box allows. The X server was never slow.
+		- With xfwm4 really gone, the back case with no window manager failed. winit counts a move only from the notice a window manager sends, so the window never knew it was herded. The restarted xfwm4 had sent it.
+	- Actual fix: The test's X programs run without SESSION_MANAGER, as gui-headless.bash's do. With no window manager, the test's moves send the window that notice as a window manager would (`_wmmove.py`), and the key after a move goes to a window it has given focus first, since without focus the key never arrived. A new check fails when a window manager is back on the display for the cases with none.
+	- Decisions:
+		- 20261103: The moves with no window manager tell the window, rather than staying plain moves. Every window manager sends that notice, so a plain move tests a case that doesn't happen. The herd move gets no key, since a window manager's herd brings none, and the look after it runs anyway.
+		- 20261103: This departs from 2026110116413708's call that the key needs no focus. It needs none under xfwm4, which gives the window focus.
+		- 20261103: The mutation checks for the 3 cases ran under the restarted xfwm4, so they need running again. Filed as 2026110319081175.
+	- Verified: 20261103. The old script, with only the new check added, failed it, with the restarted xfwm4 on the display. The new one passed alone at load 10 to 13, and 4 runs side by side at load 25 to 52. Its window logs show the back case put back, the moved case's look after its move dropping the herd, and the resized case dropping it at the resize. Without the focus, the moved case's look waited for good and the case passed on that alone. The quick gate, scripts and docs.
+	- Swept: Every xfwm4 start in `cicd`. gui-headless.bash's fOnX and demo-video.py already drop SESSION_MANAGER, and dlgtie, startsize and allocs start xfwm4 through gui-headless.bash. Every `xdotool windowmove` in `cicd`. idleother's also runs with no window manager, but only moves a window out from under another, and nothing there waits on the window to see the move. demo-video.py's run under xfwm4.
+	- Branch: rnd1104
+	- Test case: `cicd/tests/herdback/run.bash` (deqx1), changed, with the new "no window manager came back for the cases with none" check.
+	- Closed: 20261103-190900
+
+- SGR 21 turns bold off instead of drawing a double underline
+	- ID: 2026110220554102
+	- Type: Bug
+	- Status: Done
+	- Severity: Low
+	- Opened: 20261102-205541
+	- Closed: 20261103-171842
+	- Opened by: CC
+	- Parent ID: 2026102511131401
+	- Target OS: All
+	- Steps to reproduce:
+		- In SilkTerm, run `printf '\e[21mdouble\e[0m\n'`.
+	- Incorrect behavior: No underline. 21 also turns bold off.
+	- Expected behavior: A double underline, as ECMA-48, xterm and GNOME Terminal have it.
+	- Reproduced: Yes, 20261102, on b23: drawn with no line.
+	- Actual cause: vte 0.15, the engine's parser, hands 21 over as "cancel bold", and the engine took bold off, as Alacritty does.
+	- Notes:
+		- 20261102: A fix needs a patched vte, beside the engine fork that's already patched in. Or leave it, since programs reach double underline through `4:2`.
+		- 20261103: No vte patch is needed. vte sends "cancel bold" for 21 and nothing else, so the engine fork can read it as a double underline.
+	- Actual effort: Low
+	- Decisions:
+		- 20261103: Fixed in the engine fork, not a patched vte, so the patched crates stay at three.
+		- 20261103: 21 leaves bold as it was, as in xterm, kitty and WezTerm. A program that sends 21 to mean "bold off" now gets a double underline. 22 still turns bold off.
+	- Actual fix: SGR 21 sets a double underline, in place of any other underline style, and leaves bold alone. It draws as `4:2` does.
+	- Swept: vte's SGR table, where only 21 gives "cancel bold" and 22 still gives "cancel bold and dim". The engine's attribute handling, the only reader of either. The pane's underline styles read the engine's double underline flag, whichever code set it. No doc says what 21 does. The comment on desqy that said 21 is "not bold" goes with the test.
+	- Verified: 20261103, the fork's terminal tests, and the backlog quick run (fmt, clippy, tests, scripts, docs) with the lock on the fork commit.
+	- Branch: rnd1104, and fork `scroll-ledger-0.26.0`.
+	- Commit: 9fdde7c (test), fork 65dbcd81. Cargo.lock moves only the fork's commit.
+	- Test case: `sgr_21_double_underlines_and_keeps_bold` (detxz), and the fork test of the same name. Both fail without the fix and pass with it.
+	- Acceptance signoff: Self-closed: detxz checks the cell flags the drawing reads, and the underline draws as `4:2` does.
+
+- Wayland: Settings isn't tied to the terminal window
+	- ID: 2026110118260314
+	- Type: Bug
+	- Status: Done
+		- Open Settings on a real Wayland desktop, GNOME and KDE if there are both. It should stay above the terminal, and make no taskbar or alt+tab entry of its own where that desktop folds a dialog into its parent's.
+	- Needs hand testing: No. A look on GNOME or KDE under Wayland is still welcome, but the taskbar and alt+tab entry is each desktop's own call once the parent is set.
+	- Severity: Low
+	- Opened: 20261101-182603
+	- Opened by: CC
+	- Assigned to: CC
+	- Related IDs: 2026103010083402, 2026110317323442
+	- Target OS: Linux
+	- Test environment: headless sway 1.10.1
+	- Incorrect behavior: On native Wayland Settings and About are toplevels of their own, with their own taskbar and alt+tab entries, and can go behind the terminal.
+	- Expected behavior: The same as on X11, per 2026103010083402.
+	- Reproduced: 20261103, on headless sway. Settings came up tiled beside the terminal, as a window of its own, rather than floating over it as a dialog.
+	- Possible cause: winit 0.30 has no parent for a Wayland window. xdg-shell has `set_parent` for this, so it needs a winit change or a call on the raw surface.
+	- Actual cause: winit 0.30 has no parent for a Wayland window, so the dialog never named one.
+	- Actual fix: Each dialog's xdg_toplevel names the terminal's as its parent, on winit's own connection, before the dialog first draws. winit 0.30.13 hands out both toplevels.
+	- Decisions:
+		- 20261103: The call goes on winit's toplevel rather than into a winit fork. It is one request on the connection, as monitor.rs already reads winit's state there.
+		- 20261103: No modal hint yet. Wayland's is the staging xdg-dialog protocol, which needs its global bound from the registry. That is 2026110317323442.
+		- 20261103: Taskbar and alt+tab entries are each desktop's call on Wayland, with no state a client can set the way X11's skip hints do. The parent is all a client can give, so that part is left to the hand test.
+	- Verified: 20261103. dlgwl passes 6 of 6 checks, and fails 3 with the parent call taken out: no set_parent on the wire, and the dialog tiled rather than floating, which fails its focus check too. dlgtie still passes 13 of 13 on X11. The quick gate, all five areas, plus clippy for Windows and macOS, pass.
+		- Swept: About, the notices and the close question are made by the same code, so they get the parent too. A notice over Settings names Settings. Off Wayland the toplevels are None and nothing is sent.
+	- Branch: rnd1104
+	- Test case: `cicd/tests/dlgwl/run.bash` (detyk).
+	- Acceptance signoff: Self-closed: xdg-shell set_parent is the only tie Wayland gives a dialog, and dlgwl (detyk) shows it sent, with sway floating Settings over the terminal and giving it focus. It fails without the fix.
+	- Closed: 20261104-013900
+
+- A backlog line names a path under the private notes folder
+	- ID: 2026102819390403
+	- Type: Bug
+	- Status: Done
+	- Priority: Low
+	- Opened: 20261028-193904
+	- Opened by: CC
+	- Target OS: All
+	- Requirements:
+		- One line in the public backlog named a leak-check script under the private notes folder. Public docs shouldn't name it. Say what the script does, or move the note to the private notes.
+	- Decisions:
+		- 20261104: Said what the script does in the step line, and pointed at `cicd/utility/asan.bash`. No script is named.
+	- Test case: Not applicable, a docs wording fix. A grep for the script name finds nothing in the backlog.
+	- Closed: 20261104-013900
+
+- The private Mac build prints empty sizes and five `stat` errors on b26
+	- ID: 2026102811082478
+	- Type: Bug
+	- Status: Done
+	- Opened: 20261028-110824
+	- Opened by: CC
+	- Target OS: macOS
+	- Test environment: b26, through the private runner
+	- Steps to reproduce: A full run with stage 6, or the private runner's `mac` job on b26.
+	- Incorrect behavior: "stat: invalid option -- '%'" five times, then "bytes: x86_64 , arm64 , universal , zip , dmg" with no numbers.
+	- Expected behavior: The five sizes in bytes.
+	- Reproduced: 20261028, in the full run at 64f3584.
+	- Possible cause: `fSize` in silkterm-private `macos/build.bash` calls `stat -f%z`, the BSD form. The `stat` first on PATH there is GNU, which wants `-c%s`.
+	- Severity: Low
+	- Actual cause: As guessed. On b26 the login PATH puts Homebrew's GNU coreutils (`gnubin`) ahead of `/usr/bin`, so `stat` is GNU's.
+	- Actual fix: `fSize` counts bytes with `wc -c`, which answers the same from GNU or BSD, and drops the padding BSD's `wc` adds. It now sits with the other helpers at the top of the script.
+	- Decisions:
+		- 20261103: `wc -c` rather than a fixed `/usr/bin/stat`, so the line works whichever tools come first on PATH, on b26 and on vmKt6m as mactest.
+	- Swept: the rest of `macos/build.bash` and the private `cicd/run.bash` for other calls that differ between GNU and BSD. None found. `stat` appeared only in `fSize`.
+	- Verified: 20261103. On b26, under bash 3.2 and Homebrew's bash 5.3 with the build's PATH, `fSize` gave the same sizes as `/usr/bin/stat -f%z`, and with only `/usr/bin` on PATH it stripped BSD wc's padding. detz1 passes, and fails on the old `fSize`.
+	- Branch: silkterm-private `rnd1104`
+	- Commit: silkterm-private 34c9833
+	- Test case: silkterm-private `cicd/tests/macsize/run.bash` (detz1), run by hand like dehx0.
+	- Closed: 20261103-173834
+
+- Help|About: "Acceleration" shows as "Unknown"
+	- ID: 2026102807384203
+	- Type: Bug
+	- Status: Done
+	- Severity: Low
+	- Opened: 20261028-073842
+	- Opened by: JC
+	- Target OS: Linux
+	- Reproduced: The startup line on b23's X11 desktop reads `NVIDIA GeForce RTX 3060 Ti/PCIe/SSE2 [Gl / Other]`.
+	- Actual cause: On X11 the window draws through GL. wgpu's GL backend can only tell integrated and software chips apart by name, and calls everything else `Other`. About mapped `Other` to "Unknown". `--about` asks Vulkan, so it said "Hardware (discrete GPU)" on the same box.
+	- Actual fix: An adapter of type `Other` reads as "Hardware (GPU)". Any adapter with a software name, from the list the performance rating already uses, reads as "Software (CPU)" whatever type it gives.
+	- Decisions:
+		- "Hardware (GPU)" with no kind, since GL doesn't say whether the card is discrete. wgpu's own note says `Other` there is most likely a discrete card. The rest of the program already treats `Other` as a card.
+		- The software name check covers every type, so About agrees with the rating on remote and basic display drivers.
+	- Swept: The other `device_type` checks in gfx.rs (`Drawn::of`, the refusal stand-in, the fallback) already count `Other` as a card. The rating goes by `profile::software_adapter`, the same list used here.
+	- Notes:
+		- Pre-next-cut.
+		- 20261103: `every_gpu_is_hardware_and_only_the_cpu_is_software` (dd5n5) asserted that a bare `Other` is never Hardware. It now asserts that for an `Other` with a software name. Everything else it checks is unchanged.
+	- Commit: 5d1e88a
+	- Test case: `a_card_on_gl_is_hardware_and_a_software_name_never_is` (detz5), which fails with the old mapping and passes with the fix.
+	- Closed: 20261103-174640
+
+- `the_scroll_record_costs_a_full_screen_program_little` failed once on the Mac runner
+	- ID: 2026102113432602
+	- Type: Bug
+	- Status: Done
+		- 20261103: The fix is in, and passes the stand-ins here. One hosted Mac run is left, in the external testing row.
+	- Needs external testing: No
+	- Stand-in: 20261103: b23, the test pinned to one core while its SMT sibling copies memory in random 10 to 80 ms stretches, so the core slows and speeds up under the test without the thread waiting. It stands in for the core changing under the test, not for the Mac itself.
+	- Severity: Low
+	- Opened: 20261021-134326
+	- Opened by: CC
+	- Assigned to: CC
+	- Related IDs: 2026102113432600, 2026100714145220
+	- Target OS: macOS
+	- Test environment: GitHub macos-15, arm64, 3 cores
+	- Reproduced: 3 of the 7 full Mac runs to 20261022 16:04 UTC failed it (runs 39667988647, 39709345533, 39810794398). Each time it passed when run again alone, in under a second. No failure kept its numbers.
+	- Possible cause: Memory traffic from the tests running beside it. The test times by the thread's own CPU time, which leaves out waiting for a core but not cache misses. Keeping rows cycles 128 rows of 160 cells, so each scrolled line writes a row last touched 128 lines ago. The bare side reuses rows still in cache. On b23, on 3 pinned cores, the median was 1.02 to 1.07 alone, 1.04 to 1.07 beside 3 CPU-bound loops, and 1.06 to 1.14 beside 3 memory-bound ones, failing 2 of 10 runs there. Bare against bare under the same memory load stayed 0.98 to 1.02, so the pairing is fair and the extra cost is the kept side's. An M1's cores share an L2 per cluster, and the suite runs on all 3 cores, so it may well be more there. Not confirmed on the Mac.
+	- Notes:
+		- Ruled out: the Mac's clock. macOS reads it from `__thread_selfusage()` in mach ticks, about 42 ns on an M1, against runs of about 40 ms. An Apple forum thread reports some M1 Macs leaving out the tick conversion, about 41.7 times too small, but a constant factor cancels in a ratio.
+		- The copy this test was made for cost 28 to 35% here, and the pointer check catches it with no timing at all. The 10% limit is unchanged.
+		- If the Mac shows a steady gap over 10%, the options are to run this test apart from the suite, or to judge the keep cost against something the neighbours slow down as much. Neither is done yet.
+	- Progress log:
+		- 6 Mac CI runs in a row passed it since 20261022, against 3 failures in the 7 before. The cause was never found. Close it as Can't reproduce, or keep it open. Mac CI runs on every push to dev, so a new failure would show its numbers.
+		- 20261025: Since the 10-24 failure, 6 more Mac CI runs passed it (40118767927, 40119271523, 40145850085, 40214477949, 40218542312, 40221760659), and one was cancelled.
+		- 20261022: The failure text never reached the CI log. `ci-mac.bash` now prints each failed test's panic text from the first run, runs the failed tests again with their output shown, and prints every `measured:` line a test writes. The test writes its ratios and each pair's times that way, and puts the times in its failure message too.
+		- 20261022: Mac CI run 39842974082 on rnd1022 passed it. Median 1.005 over 15 pairs, from 0.766 to 1.211. Kept was above bare in 9 of 15 pairs, each by a little. The big swings were on the bare side, 24.5 against 32.0 and 23.3 against 27.7 ms, which reads more like the core or host changing than a steady keep cost. One run, so not settled. The run failed on another test, filed on 2026102114411311.
+		- 20261022: Mac CI run 39858608191 passed it again. Median 1.038, pairs from 0.841 to 2.112, kept above bare in 10 of 15.
+		- 20261023: Mac CI runs 39859635085, 40049932196, 40051324149 and 40062142185 passed it. Medians 1.008, 1.032, 1.035 and 1.032, with kept above bare in 8, 9, 15 and 9 of 15 pairs. 40051324149 had tight pairs, about 20.2 against 19.4 ms, which is the steady keep cost seen on b23. It failed on the header test, 2026102320070112. The private runner's run on b26 in the full run passed it too.
+		- 20261024: Mac CI run 40099145373 on dev at 936658b failed it again: kept cost 18% more, pairs from 0.768 to 1.568, with kept above bare in most. Run again alone it passed, median 1.002 over pairs from 0.623 to 1.643. The merge's run 40118767927 passed. So it's still live, and the spread on both sides is wide.
+		- 20261104: Verified: hosted run 41761962307 on rnd1104 passed, 1407 passed and 0 failed.
+	- Verified: `ci-mac.bash`'s extraction on a test binary with a failing assert, a multi-line `assert_eq!` and a `measured:` line. shellcheck, fmt, clippy on Linux, Windows and macOS targets. The test passes here and prints the new line.
+		- 20261103, on b23, the old form against the new, 10 runs each, at a load of 10 to 24:
+			- The SMT stand-in: old 1.02 to 1.12, 1 over the limit. New 1.029 to 1.040, none over.
+			- 3 memory-bound loops on the test's 3 pinned cores: old 1.08 to 1.14, 4 over. New 1.048 to 1.073, none over.
+			- Alone: new 1.029 to 1.050. With a clone of each kept row put in the kept turns it read 1.45, and failed.
+			- The quick gate, all five areas.
+	- Branch: rnd1022, rnd1104
+	- Test case: `the_scroll_record_costs_a_full_screen_program_little` (dct9f), rewritten in place, same ID.
+	- 20261026: It failed again on Mac CI run 40263068770 at 0b16ae9, with keeping rows 10% over and pairs from 0.711 to 2.116. It passed when run again alone. Back to Queued, since a 7th failure makes it more than a one-off.
+	- 20261028: Failed again on Mac CI run 40744137399 at e809cca: keeping rows 21% more, pairs from 0.570 to 1.966. It passed run again alone. From ce3d9fb the Mac suite runs at 1 job, so nothing runs beside it, which tests the memory traffic guess.
+	- 20261028: Mac CI run 40750006918 at ce3d9fb, at 1 job, passed it. Median 1.034, pairs from 0.466 to 1.290.
+	- 20261103: The 19 Mac CI runs since ce3d9fb, all at 1 job, failed it twice: 40779983969 at a median of 1.126 and 40945628828 at 1.108. 41747375039 passed at 1.095. Pairs ran from 0.47 to 1.79 in the noisy runs, and from 0.98 to 1.15 in the quiet ones, such as 41581768957 and 40825948501, whose medians were 1.03. So with nothing beside it, the swings were still there.
+	- Actual cause:
+		- On the hosted Mac one whole flood took 20 ms in one run and 35 in the next, on either side, as the core under it changed. Thread CPU time can't see that. Pairs taken a whole flood apart spread from 0.47 to 1.79, and the median of 15 crossed 1.10 now and then, at 1 job too.
+		- Against an alt screen that keeps no rows, much of the gap is the oldest kept row, which has gone cold by the time it's reset. Memory traffic beside the test makes that dearer. On b23 that was 1.04 alone and 1.08 to 1.14 beside 3 memory-bound loops, so no 10% limit could hold there.
+	- Actual fix: Both sides take the same flood in turns of 8 KiB, about 100 lines, with the order swapped each turn, and the verdict is the median of every turn's ratio. The other side is a shell's screen that keeps 128 rows of history, which resets a cold row the same way. The 10% limit and the pointer check are unchanged.
+	- Decisions:
+		- 20261103: The test now judges the scroll record against a screen keeping as many rows of history, not against an alt screen keeping none. That cost is what the record adds, about 3% here. The cold row history pays too moves with the box, 4% quiet to 10% under memory load. A clone of each kept row, standing in for the copy F94 removed, still reads 45% over. The F94 note's "about 5% of the parse on the alt screen" is the older measure.
+	- Swept: `thread_cpu` and every `measured:` line in the unit tests. This is the only test that compares two timings.
+	- Acceptance signoff: Self-closed: the hosted macOS arm64 run 41761962307 on rnd1104 passed the whole suite, dct9f included, with 1407 passed and 0 failed. The by-round medians aren't in the log, since a passing test's output is captured, and the b23 loads in the table show the spread.
+	- Closed: 20261104-031300
+
+- deqx1's first case sometimes fails "the window was herded" on a busy box
+	- ID: 2026110116413708
+	- Type: Bug
+	- Status: Done
+	- Severity: Low
+	- Opened: 20261101-164137
+	- Opened by: CC
+	- Assigned to: CC
+	- Related IDs: 2026102807384201, 2026110315170584, 2026110318260287
+	- Target OS: Linux
+	- Steps to reproduce:
+		- `cicd/tests/herdback/run.bash` a few times at a load over 20.
+	- Incorrect behavior: In the first xfwm4 case the window sometimes never takes the portrait size, so it straddles the 2 outputs, and xfwm4 doesn't herd it. About 2 runs in 8 on 20261101.
+	- Expected behavior: Every case starts wholly on the portrait output.
+	- Possible cause: Under Xwayland the buttons can't be seen, so the look after the test's move waits for a sign the drag is over, and the test gives none. A pointer move or a focus change from the test did not end it.
+	- 20261103: A lead from 2026110220294255: fDance's start check tests only that x is under 1200, while fDanceBare uses fOnPortrait, so a window across both outputs passes the start and fails later at "was herded".
+	- 20261103: Giving the test a sign that the drag is over would also let deqx1's moved case watch the forget-on-move, per 2026110315170584.
+	- Reproduced: 20261103, every time, with the test's first move made 3 s after the window showed rather than 1. Every case failed to start on the portrait output, and both xfwm4 cases failed "the window was herded" with the window at its launch size.
+	- Actual cause: The window's first look after it shows goes ahead with no sign, and takes the size of the monitor it is on. Every later look after a move waits for a sign that the person is back at the window, since under Xwayland a drag held on the title bar can't be seen. The test moved the window 1 s after it showed, and the first look comes 0.75 s after the window is revealed. On a busy box the look sometimes came first, on the landscape output, and the move after it waited for good, so the window kept the landscape size and straddled both outputs.
+		- A Shift key sent to the window, pointer motion over it, or focus moved to it from another window each ended the wait. Focusing it again while it already had focus did not, since that is no change.
+	- Actual fix: After each move onto the portrait output the test sends the window a Shift key, which is that sign. fDance's start check uses fOnPortrait, as fDanceBare does. The moved case gets the key after its move too, so its look runs, and the case now watches the forget-on-move.
+	- Decisions:
+		- 20261103: A key, sent to the window itself, rather than pointer motion. It leaves no pointer over a window to count as presence in a later step, and it needs neither focus nor a window manager.
+	- Verified: 20261103. With the first move made late, the old script failed the start in every case, and the new one passed all 19 checks. 7 runs of the new one at load 18 to 30, up to 4 side by side: every case started on the portrait output, and 6 runs passed whole. The other failed only "xfwm4's window has gone from the X server", filed as 2026110318260287. With the forget-on-move taken out, the moved case now fails "stays where it was left". The quick gate, all five areas.
+	- Swept: Every `xdotool windowmove` in `cicd`. idleother's runs on Xvfb, where the buttons can be seen, and doesn't wait on a look.
+	- Branch: rnd1104
+	- Test case: `cicd/tests/herdback/run.bash` (deqx1), changed.
+	- Closed: 20261103-183632
+
 - A launch with --config pointing elsewhere still adds shell integration to the account's own shell profiles
 	- ID: 2026110314410446
 	- Type: Bug
@@ -8950,6 +8833,100 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Acceptance signoff: Self-closed: the fix does what the item asks and no more, and its test passes.
 	- Closed: 20261014-152600
 
+- herdback's no window manager cases need their mutation checks again, since they ran under a restarted xfwm4
+	- ID: 2026110319081175
+	- Type: Task
+	- Status: Done
+	- Priority: Low
+	- Opened: 20261103-190811
+	- Opened by: CC
+	- Related IDs: 2026110318260287, 2026102807384201, 2026110315170584
+	- Target OS: Linux
+	- Requirements:
+		- Until 2026110318260287, the desktop's session started xfwm4 again once deqx1 stopped it, so on a desktop shell its 3 cases with no window manager ran under one. The mutation checks on 2026102807384201 and 2026110315170584 were run that way.
+		- Run deqx1 again, at each of three debug builds: the put-back taken out, where the back case should fail; the forget-on-resize taken out, the resized case; the forget-on-move taken out, the moved case.
+	- Estimated effort: Low
+	- Actual effort: Low
+	- Assigned to: CC
+	- Progress log:
+		- 20261103: deqx1 at 33d7da5's script, with one of three debug builds each, and one with nothing taken out. With the put-back taken out, the back case failed: the window stayed where it was herded, at 1300,500. With the forget-on-resize taken out, the resized case failed: the window went back to 100,100 and lost the size it was given. With the forget-on-move taken out, the moved case failed: the window went back to 100,100 from where it was moved. Each build failed only its own case, and "no window manager came back for the cases with none" passed in all four. With nothing taken out, all 20 checks passed. 2 runs side by side at a time, at load 5 to 12.
+	- Verified: 20261103, as in the progress log. Noted on 2026102807384201's and 2026110315170584's Verified rows.
+	- Branch: rnd1104
+	- Test case: `cicd/tests/herdback/run.bash` (deqx1). No change to it.
+	- Closed: 20261103-194447
+
+- Wayland: a copy a program sends while no SilkTerm window has focus is dropped
+	- ID: 2026101607585700
+	- Type: Enhancement
+	- Status: Done
+	- Priority: Low
+	- Opened: 20261016-075857
+	- Opened by: JC
+	- Related IDs: 2026101509024607
+	- Target OS: Linux
+	- Test environment: Headless sway on b23, with no DISPLAY and with DISPLAY set.
+	- Requirements:
+		- Hold the copy, and set the clipboard when that SilkTerm window gets the focus again.
+		- A line in usage.md saying a copy made from a window without focus on Wayland waits for it to get focus.
+	- Notes:
+		- Wayland lets a window set the clipboard only while it has the keyboard. X11 doesn't have that limit, and stays as it is.
+	- Progress log:
+		- 20261103: It's the clipboard crate's own worker that drops the store, when its seat has no keyboard. The compositor never sees it.
+		- 20261103: A window on a workspace out of view reads no output, so its store only arrives once it's shown and has the keyboard again. The case that lost a copy was a window on screen with another one in front.
+		- 20261103: The window also has no keyboard for a moment after it opens, while it already counted as focused. A store then was dropped too, and is held now.
+	- Decisions:
+		- 20261103: The clipboard keeps its own idea of whether the window has the keyboard, starting with none on Wayland, rather than reading the window's focus flag, which starts out true.
+		- 20261103: Only the last store per selection is held. A copy a person makes meanwhile, such as in Settings, replaces the held one, so a held store never overwrites a newer copy made in SilkTerm.
+		- 20261103: While a dialog has the keyboard, a program's store waits for the terminal window too. A dialog is modal, so the terminal gets focus back when it closes.
+		- 20261103: The test takes a second window from `foot`, which sway tiles beside SilkTerm, so the window stays on screen. foot is now one of the tools the test needs.
+	- Swept: Every place a program sets a selection: OSC 52 to the clipboard and to the primary, both through the one handler. Copy on select, copy on output, the chords and the dialogs all run with the keyboard, and set at once as before. X11, macOS and Windows set at once too.
+	- Branch: rnd1104
+	- Commit: 6b138b0
+	- Test case: `cicd/tests/wlclip/run.bash` (ddzwc), with a second window taking the keyboard: both stores wait, then land on focus. The 4 new checks failed with the hold switched off and pass with it, also with the cores loaded. Unit tests dev22, dev23, dev24, dev25 cover held until focus (and before the first focus), last wins, a newer copy wins, and X11 unchanged.
+	- Verified:
+		- 20261103: wlclip passes 23 of 23 on the final code, also with no wait after launch. An earlier form of the same hold passed 3 times, once at load 36 on 32 cores.
+		- 20261103: Gate: fmt, clippy, scripts and docs pass; clippy for Windows and macOS is clean. Tests: 1428 pass, and the 1 failure is ddghe on `cicd/tests/herdback/_wmmove.py`, from another item's commit.
+	- Acceptance signoff: Self-closed: the store is held and lands on focus, the test fails before and passes after, and X11 is unchanged.
+	- Closed: 20261103-193225
+
+- CI/CD: a flag to turn off each full-run stage that has none
+	- ID: 2026102319535661
+	- Type: Task
+	- Status: Done
+	- Needs local test suite run?: No
+	- Priority: Low
+	- Opened: 20261023-195356
+	- Opened by: CC
+	- Related IDs: 2026101816103601, 2026110320010164
+	- Target OS: Linux
+	- Requirements:
+		- A failure in a stage with no off flag stops the whole full run, and a test batch can't run past it.
+		- Stages with no flag now: the debug build and `cargo test`, the 3 clippy runs, shellcheck and `bash-style.bash`, the PowerShell and Python lints, the content scrub, the advisory scan and `cargo deny`, the script tests under `cicd/tests`, the docs, TOC, table and test ID checks, the wallpaper gallery check, the launcher harness, and the native release build with its checks, plus the stale-run cleanup.
+		- The Windows GUI scenarios and the scroll harness turn off only with `--quick`, and dpirand only with `DPIRAND_SECS=0` in config.bash.
+	- Notes:
+		- Not every stage needs its own flag. A few grouped ones may do, such as one for the lints and one for the script tests.
+	- Progress log:
+		- 20261103: New `--no-rust-tests`, `--no-clippy` (all 3 runs), `--no-script-lint` (shellcheck, the bash style check, the PowerShell and Python lints), `--no-scrub`, `--no-deny` (the advisory scan, its tests and the rest of cargo-deny), `--no-script-tests` (every test script under `cicd/tests`, dpirand and the launcher harness included), `--no-docs` (the docs, TOC, table and test ID checks, and the wallpaper gallery), `--no-scroll`, `--no-wingui`, `--no-release` and `--no-cleanup`. Each goes in with the run in the container, but `--no-wingui`.
+		- 20261103: `--no-release` turns off the native and cross builds, the release checks and artifacts, and with them the packages, the ARM64 smoke run, dogfood and the demo. The run outside the container then takes no earlier run's binaries.
+		- 20261103: The plan says what each one left out: a step off with its flag, a plan line, or a new `Left out` line for parts of stage 3. Each part prints a skipped line in the run, and `--list` leaves its tests out.
+		- 20261103: `--help` and design.md list them.
+		- 20261103: The Windows scenarios already turned off with `--no-remote` too, since 2026-10-25. `--no-wingui` turns off only them.
+		- 20261103: The cleanup test's (de5e9) check of the Zig sweep's line now reads `if ((! container && ! noCleanup)) && command -v zig`, where it read `if ((! container)) && command -v zig`. It still checks the same thing.
+		- 20261104: Verified: full run at 0621ec4 passed in 69 min, log 20261103-200928.
+	- Decisions:
+		- 20261103: Grouped flags, named after the parts and the quick run's areas, rather than one per command. The 3 clippy runs go together, the 4 script lints, and every test script.
+		- 20261103: The debug build gets no off flag, which departs from the wording. If it fails the code doesn't compile, so every later build fails the same way, and the tests would read an earlier run's binary.
+		- 20261103: The docs checks and the wallpaper gallery go with `--no-docs`, not `--no-script-tests`, though the TOC and table checks are scripts under `cicd/tests`. The advisory scan's 2 tests go with either flag.
+		- 20261103: `--no-cleanup` leaves only what earlier runs left. The run's own folder and containers still go at the end, as `--keep-temp` decides.
+		- 20261103: The flags change nothing in `--backlog-run-quick`, which goes by its areas, the same as `--no-fmt` and `--no-fuzz` there.
+		- 20261103: `cicd-win.ps1` has the same gap. That is 2026110320010164.
+	- Verified: 20261103. dd5nn passed with 29 new checks, 24 of which failed against the old cicd.bash, and ddrp2 with 1 new one. de5e9 and the failed test output test pass. A copy of the pipeline with a stand-in debug build ran `--backlog-run-full --no-container` with every off flag and passed, printing each part's skipped line, and a plan of 2 steps with the rest listed off by flag. `--list` with the flags left their tests out. shellcheck and the bash style check pass.
+		- Swept: every `fRunTest` and `fRunTest_MaySkip` call, the scroll and launcher harnesses, both `fContentScrub` and `fRenderNodeTest` sites (in stage 3 and in `Checks on this box`), every reader of `builtArts` and `ver` after stage 5, the plan's step list and its `...:` lines, and the tests that lift any of them (dd5nn, ddrp2, de5e9, testout).
+	- Branch: rnd1104
+	- Test case: `cicd/tests/engine/run.bash` (dd5nn), the off-option checks: the parser, `--help`, stage 3 with stand-ins, the test scripts and docs checks, the plan, `--no-wingui`, `--no-scrub`, `--no-cleanup` and `--no-release`. `cicd/tests/container/run.bash` (ddrp2), the options that go in with the run.
+	- Acceptance signoff: Self-closed: the round's full run at 0621ec4 passed all 13 steps, with dd5nn, ddrp2 and de5e9 passing.
+	- Closed: 20261104-052000
+
 - herdback's mutation checks with no window manager were run with xfwm4 still up
 	- ID: 2026110315170584
 	- Type: Task
@@ -9397,6 +9374,32 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Acceptance signoff:
 	- Superseded by ID: 2026093009280571
 	- Closed: 20260930-092805
+
+- Running with `--software-rendering` on vmKt6m still fails with a complaint about no suitable GPU
+	- ID: 2026102807384202
+	- Type: Bug
+	- Status: Moot
+		- Answered: keep the alert.
+	- Severity: Avg
+	- Opened: 20261028-073842
+	- Opened by: JC
+	- Target OS: macOS
+	- Test environment: vmKt6m
+	- Incorrect behavior: It still fails with a complaint about no suitable GPU.
+	- Reproduced: 20261103 on vmKt6m, launched in the console session. stderr had the no-Metal words, and the alert was up.
+	- Actual cause:
+		- The Mac build has only wgpu's Metal backend, so `--software-rendering` there is refused with a line on stderr, and the launch goes on to look for a card. With no Metal device there's none, per 2026102209035801.
+	- Related IDs: 2026102209035801
+	- Notes:
+		- Pre-next-cut.
+	- Progress log:
+		- 20261103: Tried on vmKt6m. wgpu's GL backend through ANGLE found nothing, since LibreWolf's ANGLE is Metal only, and Chrome and Brave link theirs in. SwiftShader's Vulkan driver, as Chrome ships it, gave a CPU device once wgpu's `vulkan-portability` feature was on. SilkTerm came up on it and started its shells, but every frame was dropped, since the Metal layer it draws to has no device to give a picture with.
+		- 20261103: So a fix needs the libraries in the Mac app and a second way to show a frame, drawn off screen and copied back. That's too big for one pass. It gets split once the question is answered.
+		- 20261103: Nothing changed in the code.
+		- 20261104: Answered A in questions.md, so the alert stays and this closes as moot. Nothing changed in the code.
+	- Branch: rnd1103
+	- Decided against: bundling SwiftShader in the Mac app (option B). A Mac with no Metal is a VM or a hackintosh, since every Mac that runs a supported macOS has Metal. The no-Metal alert from 2026102209035801 stays.
+	- Closed: 20261104-010500
 
 - top quits smooth scrolling at some point
 	- ID: 2026101310563310
