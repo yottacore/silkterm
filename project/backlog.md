@@ -540,8 +540,8 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - CodeQL: watched to fail on a planted finding, and green otherwise
 	- ID: 2026110315304782
 	- Type: Task
-	- Status: Queued
-	- Needs local test suite run?: the CodeQL step twice in the image, about 65 minutes each: once on a scratch copy with an unused variable in `main`, which must fail on it, and once as is, which must pass.
+	- Status: Waiting on automated testing
+	- Needs local test suite run?: `cicd/utility/codeql.bash` twice in image d47751450835, at 8a1d7fc, about 65 minutes or more each. The planted copy must fail with one NEW `rust/unused-variable` at `source/src/main.rs:117`, and nothing else new. The clean copy must pass.
 	- Priority: Avg
 	- Opened: 20261103-153047
 	- Opened by: CC
@@ -550,6 +550,14 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Requirements:
 		- The parent's planted finding.
 		- Note the time of the clean run on 2026102211461905.
+	- Progress log:
+		- 20261104: Two run folders under HOST_TEMP, each a `git archive` of 8a1d7fc with its own target dir, /tmp, out dir and container name. The planted one has `let planted_unused = 1;` as the first line of `main`, and differs from the clean one only there. No suppression covers `rust/unused-variable` under `source/`.
+		- 20261104: A smoke run of the same container on the planted copy passed: CodeQL 2.27.3, cargo 1.96.0, `cargo vendor --locked` 388 crates from the cache volume, target dir writable as the run's uid. No step bug found that blocks the runs.
+	- Decisions:
+		- 20261104: Copies of one commit for both runs, not the live tree, so round commits during the hour can't make the two differ.
+		- 20261104: Both can run at once, since they share only the cargo cache volume, which cargo locks. Each gets 4 jobs, so together they stay in the quarter of the CPUs a hard step may take. The 11-03 run took about 19 GB at 8 threads, so expect up to about 40 GB together.
+	- Branch: rnd1104b
+	- Test case: the CodeQL step itself, run planted and clean. It has no test ID.
 
 - Wayland: Settings asks to be modal
 	- ID: 2026110317323442
