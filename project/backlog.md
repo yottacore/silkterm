@@ -662,12 +662,24 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - Help|About: "Acceleration" shows as "Unknown"
 	- ID: 2026102807384203
 	- Type: Bug
-	- Status: Queued
+	- Status: Done
 	- Severity: Low
 	- Opened: 20261028-073842
 	- Opened by: JC
+	- Target OS: Linux
+	- Reproduced: The startup line on b23's X11 desktop reads `NVIDIA GeForce RTX 3060 Ti/PCIe/SSE2 [Gl / Other]`.
+	- Actual cause: On X11 the window draws through GL. wgpu's GL backend can only tell integrated and software chips apart by name, and calls everything else `Other`. About mapped `Other` to "Unknown". `--about` asks Vulkan, so it said "Hardware (discrete GPU)" on the same box.
+	- Actual fix: An adapter of type `Other` reads as "Hardware (GPU)". Any adapter with a software name, from the list the performance rating already uses, reads as "Software (CPU)" whatever type it gives.
+	- Decisions:
+		- "Hardware (GPU)" with no kind, since GL doesn't say whether the card is discrete. wgpu's own note says `Other` there is most likely a discrete card. The rest of the program already treats `Other` as a card.
+		- The software name check covers every type, so About agrees with the rating on remote and basic display drivers.
+	- Swept: The other `device_type` checks in gfx.rs (`Drawn::of`, the refusal stand-in, the fallback) already count `Other` as a card. The rating goes by `profile::software_adapter`, the same list used here.
 	- Notes:
 		- Pre-next-cut.
+		- 20261103: `every_gpu_is_hardware_and_only_the_cpu_is_software` (dd5n5) asserted that a bare `Other` is never Hardware. It now asserts that for an `Other` with a software name. Everything else it checks is unchanged.
+	- Commit: 5d1e88a
+	- Test case: `a_card_on_gl_is_hardware_and_a_software_name_never_is` (detz5), which fails with the old mapping and passes with the fix.
+	- Closed: 20261103-174640
 
 - `the_scroll_record_costs_a_full_screen_program_little` failed once on the Mac runner
 	- ID: 2026102113432602
