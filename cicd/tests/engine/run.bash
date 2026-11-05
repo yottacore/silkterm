@@ -413,6 +413,69 @@ for _ in {1..50}; do [[ "$(readlink "/proc/${started[1]}/exe" 2>/dev/null)" == "
 rm -f "${work}/swap"; cp "$(command -v sleep)" "${work}/swap"
 fCheck "nor a new file put where a running one was deleted" fNot fInUse "${work}/swap"
 
+## A default or --quick run that can't dogfood a build it made fails, once the
+## builds it could copy are in. A target it never built is passed over.
+eval "$(fLift '^fDogfoodDest(){' '^}')"
+eval "$(fLift '^fDogfoodMakeable(){' '^}')"
+eval "$(fLift '^fDogfoodPlanned(){' '^}')"
+eval "$(fLift '^fDogfoodPreflight(){' '^}')"
+eval "$(fLift '^fDogfoodInstall(){' '^}')"
+dog="${work}/dog"; mkdir -p "${dog}/src" "${dog}/lin" "${dog}/win" "${dog}/ro"
+cp "$(command -v sleep)" "${dog}/src/silk"; touch -d '2026-01-02 03:04:05' "${dog}/src/silk"
+: >"${dog}/src/silk.exe"
+chmod 555 "${dog}/ro"
+fDog(){  ## fDog [var=value]...: the copy over these dests and builds; sets rc and out
+	rc=0; out="$(
+		fEcho_Clean(){ echo "    ${*}"; }
+		root="${dog}"; EXE_NAME=silk; DOGFOOD_ICON=""; DOGFOOD_TAG=t1
+		DOGFOOD_DESTS=("linux-x86_64|silk|${dog}/lin" "windows-x86_64|silk.exe|${dog}/win" "macos-universal|silk|${dog}/mac")
+		builtArts=("linux-x86_64|${dog}/src/silk" "windows-x86_64|${dog}/src/silk.exe")
+		for kv in "${@}"; do eval "${kv}"; done
+		fDogfoodInstall
+	)" || rc=$?
+}
+fDog
+fCheck "each build made is copied to its dest" test "${rc}" -eq 0 -a -x "${dog}/lin/silk" -a -x "${dog}/win/silk.exe"
+fCheck "keeping its mtime" test "$(stat -c %Y "${dog}/lin/silk")" = "$(stat -c %Y "${dog}/src/silk")"
+fCheck "with its tag beside it" grep -qx t1 "${dog}/lin/silk.tag"
+fCheck "and a target not built is passed over" grep -qF 'no macos-universal build this run' <<<"${out}"
+rm -f "${dog}/lin/silk"
+fDog 'DOGFOOD_DESTS[1]="windows-x86_64|silk.exe|${dog}/ro/win"'
+fCheck "a dest that can't be written fails the run" \
+	bash -c '(($1)) && grep -qF "ERROR: no dogfood dest writable for windows-x86_64" <<<"$2" && grep -qx "DIE: dogfood: 1 build(s) not installed" <<<"$2"' _ "${rc}" "${out}"
+fCheck "once the builds it could copy are in" test -x "${dog}/lin/silk"
+"${dog}/lin/silk" 60 &
+started+=("$!")
+for _ in {1..50}; do [[ "$(readlink "/proc/${started[-1]}/exe" 2>/dev/null)" == "${dog}/lin/silk" ]] && break; sleep 0.05; done
+fDog
+fCheck "a copy that is running fails the run" bash -c '(($1)) && grep -qF "/lin/silk is running" <<<"$2"' _ "${rc}" "${out}"
+kill "${started[-1]}" 2>/dev/null || true
+fDog 'builtArts=("linux-x86_64|${dog}/src/none")' 'DOGFOOD_DESTS=("linux-x86_64|silk|${dog}/lin")'
+fCheck "and so does a copy that fails" bash -c '(($1)) && grep -qF "could not copy the linux-x86_64 build" <<<"$2"' _ "${rc}" "${out}"
+fDog 'builtArts=()'
+fCheck "and so does a run that built none of the targets" bash -c '(($1)) && grep -qF "built none of the dogfood targets" <<<"$2"' _ "${rc}" "${out}"
+fCheck "a missing dest under a writable dir can be made" fDogfoodMakeable "${dog}/new/a/b"
+fCheck "but not one under a read-only dir" fNot fDogfoodMakeable "${dog}/ro/a"
+fPre(){  ## fPre [var=value]...: the start-of-run check; sets rc and out
+	rc=0; out="$(
+		RELEASE_NATIVE_OSARCH=linux-x86_64; BUILD_CROSS=1; CROSS_TARGETS=("lw|windows-x86_64|a|b")
+		DOGFOOD_DESTS=("linux-x86_64|silk|${dog}/lin" "windows-x86_64|silk.exe|${dog}/win" "macos-universal|silk|${dog}/mac")
+		for kv in "${@}"; do eval "${kv}"; done
+		fDogfoodPreflight
+	)" || rc=$?
+}
+fPre
+fCheck "the start-of-run check passes dests it can write or make" test "${rc}" -eq 0
+fPre 'DOGFOOD_DESTS[1]="windows-x86_64|silk.exe|${dog}/ro/win"'
+fCheck "and stops the run for one it can't" bash -c '(($1)) && grep -qF "DIE: no dogfood dest writable for windows-x86_64" <<<"$2"' _ "${rc}" "${out}"
+fPre 'DOGFOOD_DESTS[1]="windows-x86_64|silk.exe|${dog}/ro/win"' BUILD_CROSS=0
+fCheck "but not when that target isn't built" test "${rc}" -eq 0
+fPre 'DOGFOOD_DESTS[2]="macos-universal|silk|${dog}/ro/mac"'
+fCheck "nor for the Mac build, which comes back from another box" test "${rc}" -eq 0
+fCheck "a run checks the dests before it starts" grep -qxF 'if ((${#DOGFOOD_DESTS[@]} && ! noRelease)); then fDogfoodPreflight; fi' "${engine}"
+fCheck "and the step copies through the checked copy" grep -qxF '	fDogfoodInstall' "${engine}"
+chmod 755 "${dog}/ro"
+
 ## The same check over a stand-in /proc of 2000 processes. One fork per process
 ## was about 4,500 a full run.
 fake="${work}/proc"
@@ -596,6 +659,7 @@ fCheck "and counts them all" grep -qx 'base=0 total=14' <<<"${plan}"
 plan="$(fPlan quick=1 PROFILE_ENABLE=0 PACKAGE_ENABLE=0 'CROSS_TARGETS=("lw|a")')"
 fCheck "--quick turns steps off and says so" bash -c 'for w in "Profiler|--quick" "Packages|--quick" "Private runner|--quick" "Release build: la|--quick" "Demo video|--quick; --demo adds it"; do grep -qxF "off:${w}" <<<"$1" || exit 1; done' _ "${plan}"
 fCheck "and leaves them out of the count" grep -qx 'base=0 total=9' <<<"${plan}"
+fCheck "but still dogfoods" grep -qx 'on:Dogfood' <<<"${plan}"
 plan="$(fPlan fullRun=1 fullRunName=--merge-gate sync=0 DOGFOOD_DESTS=\(\) GIT_PUBLISH=\(\) DEMO_ENABLE=0 noRemote=1)"
 fCheck "a full run names itself as what turned a step off" bash -c 'for w in "Remote sync" Dogfood "Demo video" "Backup + publish"; do grep -qxF "off:${w}|--merge-gate" <<<"$1" || exit 1; done' _ "${plan}"
 fCheck "and --no-remote the private runner" grep -qxF 'off:Private runner|--no-remote' <<<"${plan}"
@@ -779,6 +843,8 @@ if ((failures)); then echo "${failures} failed"; exit 1; fi
 echo "all passed"
 
 ##	History:
+##		- 20261105: The dogfood copy and its start-of-run check: what fails the run,
+##		            and what is passed over.
 ##		- 20261103: The options that each turn off one part of a full run.
 ##		- 20261102: Miri's config check with an absolute target dir too.
 ##		- 20261102: Miri: when it runs, where, its plan, first and --list lines, the

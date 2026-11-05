@@ -1144,6 +1144,26 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Acceptance signoff: JC, 20261003.
 	- Closed: 20261003-193000
 
+- Dogfood: a default or `--quick` run that can't copy a build passes anyway
+	- ID: 2026110514400000
+	- Type: Bug
+	- Status: Done
+	- Severity: High
+	- Opened: 20261105-144000
+	- Opened by: JC
+	- Assigned to: CC
+	- Related IDs: 2026110514184921
+	- Target OS: Linux, Windows
+	- Incorrect behavior: A dest that couldn't be written, or a copy that was running, printed a warning and the Dogfood step still passed. The plan said "will skip". `cicd-win.ps1` did the same for a copy in use.
+	- Expected behavior: cicd.bash with no flags, and with `--quick`, copies dogfood, and errors if it can't.
+	- Notes:
+		- 20261105: Nothing was dogfooded from 11-01 to 11-05 for other reasons. The rounds' full runs never dogfood, and the one default run stopped at the tmuxclear scene, 2026110514184921.
+	- Actual fix: Each problem is listed and the run fails, once the builds it can copy are in. A dest it can't write or make stops the run at the start, before the tests. A target the run didn't build, such as under `--no-windows`, or the Mac build when b26 is off, is still passed over. In `cicd-win.ps1` a copy that fails, a dir it can't make, or no x86_64 build fails the run.
+	- Branch: dogfoodfail
+	- Test case: engine harness (dd5nn), the dogfood copy and its start-of-run check. Seen to fail with the fail paths taken out.
+	- Acceptance signoff: Self-closed: the engine harness covers each fail path, and the script lints and the scripts quick run pass. `cicd-win.ps1` was linted and parsed here, but not run on a Windows box.
+	- Closed: 20261105-144000
+
 - CICD reset: test IDs
 	- ID: 2026102416233810
 	- Type: Task
