@@ -448,6 +448,22 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- It stopped the 11-04 default cicd run at regression tests, so that run never got to dogfood. Nothing has been dogfooded since 11-01.
 	- Test case: de19r, scroll scene `tmuxclear` in `cicd/tests/scroll/run.bash`.
 
+- Test run folders pile up in HOST_TEMP/silkterm, and the 2-day sweep doesn't take them
+	- ID: 2026110514393095
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261105-143930
+	- Opened by: CC
+	- Assigned to: CC
+	- Target OS: Linux
+	- Test environment: b23
+	- Incorrect behavior: On 11-05 there were 28 run folders from 11-01 to 11-04, most holding only `.test_silkterm_owner` and `run.pid`. Folders from 11-02 were still there after the 11-04 default run.
+	- Expected behavior: Each run removes its folder at the end, and a run removes ones older than 2 days.
+	- Reproduced: No. On 11-05 the scroll harness run by hand and the engine harness each left a folder now and then, but not every time.
+	- Notes:
+		- Which tests leave them isn't known yet.
+
 - Wayland: must use the Wayland clipboard, and minimize other X11 features
 	- ID: 2026101509024607
 	- Type: Bug
