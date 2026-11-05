@@ -322,7 +322,7 @@ CLEANUP_CACHE_CAP_MB=2048
 ## rotated versions folder.
 ## One line per flavor: "<os-arch>|<name at dest>|<dir>[|<dir>...]", where os-arch
 ## names a CROSS_TARGETS row or RELEASE_NATIVE_OSARCH. The first writable dir wins;
-## none writable warn-skips, and a target not built this run is skipped quietly.
+## none writable fails the run, and a target not built this run is passed over.
 ## The copy keeps its mtime, which is the build date the launcher reads.
 DOGFOOD_DESTS=(
 	"linux-x86_64|${EXE_NAME}|${HOME}/synced/0-0/common/exec/app/linux"

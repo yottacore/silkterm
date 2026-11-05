@@ -877,15 +877,17 @@ function fDogfood {
 	} elseif ($msvc) { $pick = $msvc; $why = "only msvc built" }
 	elseif   ($gnu)  { $pick = $gnu;  $why = "only gnu built" }
 
-	if (-not $pick) { fWarn "no x86_64 build to dogfood; skipping"; return }
+	if (-not $pick) { fDie "no x86_64 build to dogfood" }
 
 	if (-not (Test-Path -LiteralPath $DogfoodDir)) {
-		New-Item -ItemType Directory -Path $DogfoodDir -Force | Out-Null
+		try { New-Item -ItemType Directory -Path $DogfoodDir -Force -ErrorAction Stop | Out-Null }
+		catch { fDie "could not make the dogfood dir $DogfoodDir; -NoDogfood skips the copy" }
 	}
 	$dst = Join-Path $DogfoodDir $DogfoodFixedExe
-	## A running copy is locked on Windows. Leave it be rather than end the run here.
+	## A running copy is locked on Windows. The launcher runs its own copy from the
+	## versions folder, so this one is running only when started by hand.
 	try { Copy-Item -LiteralPath $pick.Exe -Destination $dst -Force -ErrorAction Stop }
-	catch { fWarn "dogfood copy is in use; skipped ($dst)"; return }
+	catch { fDie "could not replace $dst, which may be running; close it and run again ($($_.Exception.Message))" }
 	Set-Content -LiteralPath "$dst.tag" -Value "$($pick.Tk)wwi" -Encoding ascii
 
 	$icon = Join-Path $Root $DogfoodIcon
@@ -1474,6 +1476,8 @@ try {
 
 
 ##	History:
+##		- 2026-11-05: A dogfood copy that can't be made fails the run, where it used
+##		              to warn and pass.
 ##		- 2026-11-04: An off option for each part cicd.bash has one for:
 ##		  -NoRustTests, -NoClippy, -NoScriptLint, -NoDeny, -NoScriptTests,
 ##		  -NoRelease and -NoCleanup, each passed on to the Linux half, and

@@ -426,6 +426,97 @@ fDogfoodDest(){
 	done
 	return 0
 }
+## Whether the copy's mkdir -p of a dest dir would work: the nearest part of the
+## path that is there is a writable dir.
+fDogfoodMakeable(){
+	local dir="${1:-}"
+	while [[ ! -e "${dir}" && "${dir}" == /?* ]]; do dir="$(dirname "${dir}")"; done
+	[[ -d "${dir}" && -w "${dir}" ]]
+}
+## Whether this run builds the os-arch a dest names. The Mac build isn't known
+## until the private runner is back, so it never counts here.
+fDogfoodPlanned(){
+	local t rest
+	[[ "${1:-}" == "${RELEASE_NATIVE_OSARCH:-native}" ]] && return 0
+	((${BUILD_CROSS:-0})) || return 1
+	for t in "${CROSS_TARGETS[@]}"; do
+		rest="${t#*|}"
+		[[ "${rest%%|*}" == "${1:-}" ]] && return 0
+	done
+	return 1
+}
+## A default or --quick run that can't dogfood a build it makes fails, so it stops
+## before the tests rather than at the copy, an hour in.
+fDogfoodPreflight(){
+	local xd xosarch xrest xdirs
+	for xd in "${DOGFOOD_DESTS[@]}"; do
+		xosarch="${xd%%|*}"; xrest="${xd#*|}"; xdirs="${xrest#*|}"
+		fDogfoodPlanned "${xosarch}" || continue
+		[[ -n "$(fDogfoodDest "${xdirs}")" ]] || fDogfoodMakeable "${xdirs%%|*}" \
+			|| fDie "no dogfood dest writable for ${xosarch} (${xdirs//|/, }); --no-dogfood skips the copy"
+	done
+}
+## Copy each build this run made to its dogfood dest. A target the run didn't build
+## is passed over, since a flag such as --no-windows said so, or the Mac box was
+## off. A build that can't be copied fails the run, once the others are in.
+fDogfoodInstall(){
+	local xd xosarch xrest xname xdirs xsrc pair xdest xtag problem
+	local -a problems=()
+	local installed=0
+	for xd in "${DOGFOOD_DESTS[@]}"; do
+		xosarch="${xd%%|*}"; xrest="${xd#*|}"; xname="${xrest%%|*}"; xdirs="${xrest#*|}"
+
+		xsrc=""
+		for pair in "${builtArts[@]}"; do
+			[[ "${pair%%|*}" == "${xosarch}" ]] && { xsrc="${pair#*|}"; break; }
+		done
+		if [[ -z "${xsrc}" ]]; then
+			fEcho_Clean "no ${xosarch} build this run; nothing to dogfood for it"
+			continue
+		fi
+
+		## Make the first candidate when none is there yet, so a fresh box needs no
+		## setup step of its own.
+		xdest="$(fDogfoodDest "${xdirs}")"
+		if [[ -z "${xdest}" ]]; then
+			mkdir -p "${xdirs%%|*}" 2>/dev/null || true
+			xdest="$(fDogfoodDest "${xdirs}")"
+		fi
+		if [[ -z "${xdest}" ]]; then
+			problems+=("no dogfood dest writable for ${xosarch} (${xdirs//|/, })")
+			continue
+		fi
+
+		if [[ -e "${xdest}/${xname}" ]] && fInUse "${xdest}/${xname}"; then
+			problems+=("${xdest}/${xname} is running, so it can't be replaced; close it and run again")
+			continue
+		fi
+
+		## -p: the launcher dates a build by its mtime, so the copy has to keep it.
+		if ! cp -pf "${xsrc}" "${xdest}/${xname}" || ! chmod +x "${xdest}/${xname}"; then
+			problems+=("could not copy the ${xosarch} build to ${xdest}/${xname}")
+			continue
+		fi
+
+		## A cross-build says nothing about the box that later reads it, so the tag
+		## rides along in a sidecar rather than being guessed at the far end.
+		xtag="${DOGFOOD_TAG-$(fBuildTag "${xosarch}")}"
+		if [[ -n "${xtag}" ]]; then printf '%s\n' "${xtag}" > "${xdest}/${xname}.tag"
+		else rm -f "${xdest}/${xname}.tag"; fi
+
+		if [[ -n "${DOGFOOD_ICON:-}" && -f "${root}/${DOGFOOD_ICON}" ]]; then
+			cp -f "${root}/${DOGFOOD_ICON}" "${xdest}/${EXE_NAME}.png"
+		fi
+
+		fEcho "OK: installed (${xosarch}${xtag:+, ${xtag}}) -> ${xdest}/${xname}"
+		installed=$((installed + 1))
+	done
+	if ((! installed && ! ${#problems[@]})); then problems+=("this run built none of the dogfood targets"); fi
+	if ((${#problems[@]})); then
+		for problem in "${problems[@]}"; do fEcho "ERROR: ${problem}"; done
+		fDie "dogfood: ${#problems[@]} build(s) not installed"
+	fi
+}
 ## Where this run is happening, for the plan header: the skips differ per host, so
 ## say which one it is up front. WSL is told from its kernel string; the Windows
 ## pipeline sets CICD_LINUX_HALF when it hands the Linux stages over.
@@ -1500,9 +1591,10 @@ elif ((${#DOGFOOD_DESTS[@]})); then
 	fEcho_Clean "Dogfood .............: install to the synced app dir per target"
 	for xd in "${DOGFOOD_DESTS[@]}"; do
 		xosarch="${xd%%|*}"; xrest="${xd#*|}"; xname="${xrest%%|*}"
-		xdest="$(fDogfoodDest "${xrest#*|}")"
+		xdirs="${xrest#*|}"; xdest="$(fDogfoodDest "${xdirs}")"
 		if [[ -n "${xdest}" ]]; then fEcho_Clean "    - ${xosarch} -> ${xdest}/${xname}"
-		else fEcho_Clean "    - ${xosarch} -> <none of: ${xrest#*|} writable - will skip>"; fi
+		elif fDogfoodMakeable "${xdirs%%|*}"; then fEcho_Clean "    - ${xosarch} -> ${xdirs%%|*}/${xname} (made at the copy)"
+		else fEcho_Clean "    - ${xosarch} -> <none of: ${xdirs} writable - fails if built>"; fi
 	done
 else
 	fEcho_Clean "Dogfood .............: (disabled)"
@@ -1544,6 +1636,7 @@ if ((listing)); then
 	if ((miri && ${#MIRI_CMD[@]})); then fEcho_Clean "Miri: the canary (debjk, de5f0), then the Rust tests above again, but those ignored under Miri"; fi
 	exit 0
 fi
+if ((${#DOGFOOD_DESTS[@]} && ! noRelease)); then fDogfoodPreflight; fi
 
 if ((! assumeYes)); then
 	## Capture the commit message up front so the run can finish unattended. This
@@ -2301,51 +2394,7 @@ fi
 ## there and keeps its own rotated versions folder.
 if fStepOpen "Dogfood"; then
 	fJobs
-	for xd in "${DOGFOOD_DESTS[@]}"; do
-		xosarch="${xd%%|*}"; xrest="${xd#*|}"; xname="${xrest%%|*}"; xdirs="${xrest#*|}"
-
-		xsrc=""
-		for pair in "${builtArts[@]}"; do
-			[[ "${pair%%|*}" == "${xosarch}" ]] && { xsrc="${pair#*|}"; break; }
-		done
-		if [[ -z "${xsrc}" ]]; then
-			fEcho_Clean "no ${xosarch} build this run; dogfood skipped"
-			continue
-		fi
-
-		## Make the first candidate when none is there yet, so a fresh box needs no
-		## setup step of its own.
-		xdest="$(fDogfoodDest "${xdirs}")"
-		if [[ -z "${xdest}" ]]; then
-			mkdir -p "${xdirs%%|*}" 2>/dev/null || true
-			xdest="$(fDogfoodDest "${xdirs}")"
-		fi
-		if [[ -z "${xdest}" ]]; then
-			fEcho "WARNING: no dogfood dest writable for ${xosarch} (${xdirs//|/, }); skipping"
-			continue
-		fi
-
-		if [[ -e "${xdest}/${xname}" ]] && fInUse "${xdest}/${xname}"; then
-			fEcho "WARNING: ${xdest}/${xname} is running; dogfood copy skipped"
-			continue
-		fi
-
-		## -p: the launcher dates a build by its mtime, so the copy has to keep it.
-		cp -pf "${xsrc}" "${xdest}/${xname}"
-		chmod +x "${xdest}/${xname}"
-
-		## A cross-build says nothing about the box that later reads it, so the tag
-		## rides along in a sidecar rather than being guessed at the far end.
-		xtag="${DOGFOOD_TAG-$(fBuildTag "${xosarch}")}"
-		if [[ -n "${xtag}" ]]; then printf '%s\n' "${xtag}" > "${xdest}/${xname}.tag"
-		else rm -f "${xdest}/${xname}.tag"; fi
-
-		if [[ -n "${DOGFOOD_ICON:-}" && -f "${root}/${DOGFOOD_ICON}" ]]; then
-			cp -f "${root}/${DOGFOOD_ICON}" "${xdest}/${EXE_NAME}.png"
-		fi
-
-		fEcho "OK: installed (${xosarch}${xtag:+, ${xtag}}) -> ${xdest}/${xname}"
-	done
+	fDogfoodInstall
 	fStepClose
 fi
 
@@ -2400,6 +2449,9 @@ fEcho_Clean
 
 
 ##	History:
+##		- 2026-11-05: A build that can't be dogfooded fails the run, where it used to
+##		              warn and pass. A dest that can't be written stops it at the
+##		              start.
 ##		- 2026-11-03: An off option for each part of a full run that had none:
 ##		              --no-rust-tests, --no-clippy, --no-script-lint, --no-scrub,
 ##		              --no-deny, --no-script-tests, --no-docs, --no-scroll,
