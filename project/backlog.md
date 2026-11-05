@@ -426,6 +426,28 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Stalled until a cosmic-text release takes fontdb 0.24 or later, and winit's sctk-adwaita drops ab_glyph.
 	- Held for a cosmic-text release on fontdb 0.24 or later, and an sctk-adwaita without ab_glyph.
 
+- Scroll scene tmuxclear fails under load: a clear inside tmux slides
+	- ID: 2026110514184921
+	- Type: Bug
+	- Status: Queued
+	- Severity: High
+	- Opened: 20261105-141849
+	- Opened by: CC
+	- Assigned to: CC
+	- Target OS: Linux
+	- Test environment: b23, headless X11
+	- Version and build: dev at aeb0fc6
+	- Steps to reproduce:
+		- Load every core, such as 24 `nice -n 19` busy loops.
+		- `cicd/tests/scroll/run.bash --only tmuxclear` on a debug build.
+	- Incorrect behavior: `FAIL de19r scroll scene tmuxclear (X11), a clear slid: 2 frame(s)`. In the 11-04 16:31 default cicd run it was 5 frames, with the rest of the regression tests running beside it.
+	- Expected behavior: Every clear shows at once, under load too.
+	- Reproduced: 20261105, 2 of 2 with the cores loaded. Passed 3 of 3 with the box at load 12. It passed in every earlier run log, X11 and Wayland, back to 10-29.
+	- Possible cause: Not known yet. Either the clear really slides when the frames come slowly, which a user on a busy box would see, or the scene's timing doesn't hold up under load. Telling those apart comes first.
+	- Notes:
+		- It stopped the 11-04 default cicd run at regression tests, so that run never got to dogfood. Nothing has been dogfooded since 11-01.
+	- Test case: de19r, scroll scene `tmuxclear` in `cicd/tests/scroll/run.bash`.
+
 - Wayland: must use the Wayland clipboard, and minimize other X11 features
 	- ID: 2026101509024607
 	- Type: Bug
