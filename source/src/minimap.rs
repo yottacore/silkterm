@@ -708,6 +708,9 @@ impl Minimap {
 		// width until it does, and at a deep scrollback the wait is seconds
 		if due || self.img_h != img_h || self.img_w != width {
 			self.last_compose = Some(now);
+			// The allocs window test counts these to see a drag select compose
+			// nothing.
+			crate::perf::allocs_note("map composed");
 			// A whole redraw, after a screen swap, a resize or a resync, costs
 			// far more than the ordinary ones after it. Twenty times its cost
 			// left the map standing still for seconds, so the wait follows the

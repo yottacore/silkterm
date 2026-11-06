@@ -8,6 +8,8 @@
 ##			- At rest: the cursor pulse redraws and nothing else changes.
 ##			- Drag: the pointer held down, taken down a pane's rows, then moved
 ##			  along the last one.
+##		Neither one composes the minimap, since it shows no selection and
+##		nothing printed.
 ##	- Syntax: run.bash [--bin PATH] [--report]   (default: the debug build)
 ##		--report prints the figures and checks no limit.
 ##	- Exit: 0 passed, 1 a check failed, 3 nothing ran (no debug binary,
@@ -154,6 +156,8 @@ fMean(){
 		END { if (n) printf "%d %.0f %.0f %d\n", n, f / n, t / n, b; else print "0 0 0 0" }'
 }
 fLines(){ wc -l <"${said}"; }
+## Minimap composes over the same lines.
+fComposes(){ sed -n "$((${1} + 1)),${2}p" "${said}" | grep -cxF '[allocs] map composed' || true; }
 ## The shell scan has been folded in, and the last few frames since were drawn
 ## for the cursor pulse and nothing else.
 fAtRest(){
@@ -176,7 +180,8 @@ from="$(fLines)"; countFrom="${SECONDS}"; sleep 4
 while (($(fMean "${from}" "$(fLines)" | cut -d' ' -f1) < idleWant && SECONDS - countFrom < 20)); do sleep 0.5; done
 to="$(fLines)"
 read -r idleFrames idleFrame idleTotal _ < <(fMean "${from}" "${to}")
-echo "    at rest: ${idleFrames} frames, ${idleFrame} allocations drawing each, ${idleTotal} with what came before"
+idleMaps="$(fComposes "${from}" "${to}")"
+echo "    at rest: ${idleFrames} frames, ${idleFrame} allocations drawing each, ${idleTotal} with what came before, ${idleMaps} map composes"
 
 moves=80
 fX xdotool mousedown 1
@@ -191,7 +196,8 @@ fX xdotool mouseup 1
 to="$(fLines)"
 read -r dragFrames dragFrame dragTotal dragBetween < <(fMean "${from}" "${to}")
 dragPerMove="$(awk -v b="${dragBetween}" -v m="${moves}" 'BEGIN { printf "%.1f", b / m }')"
-echo "    drag: ${dragFrames} frames, ${dragFrame} allocations drawing each, ${dragTotal} with what came before, ${dragPerMove} per pointer move between frames"
+dragMaps="$(fComposes "${from}" "${to}")"
+echo "    drag: ${dragFrames} frames, ${dragFrame} allocations drawing each, ${dragTotal} with what came before, ${dragPerMove} per pointer move between frames, ${dragMaps} map composes"
 
 if ((idleFrames > 0 && idleTotal == 0)); then echo "  skip: this build counts no allocations (a release build?)"; exit 3; fi
 if ((!report)); then
@@ -201,6 +207,8 @@ if ((!report)); then
 	fCheck "drag: ${dragFrame} per frame, limit ${dragLimit}" test "${dragFrame}" -le "${dragLimit}"
 	fCheck "drag: ${dragPerMove} per move between frames, limit ${moveLimit}" \
 		awk -v a="${dragPerMove}" -v l="${moveLimit}" 'BEGIN { exit !(a <= l) }'
+	fCheck "at rest: the map composed ${idleMaps} times, none wanted" test "${idleMaps}" -eq 0
+	fCheck "drag: the map composed ${dragMaps} times, none wanted" test "${dragMaps}" -eq 0
 fi
 
 if ((failures)); then
@@ -214,3 +222,4 @@ echo "all passed"
 ##		- 20261010 JC: The drag holds its frame and its pointer moves apart.
 ##		- 20261024 JC: The counted drag moves along one row.
 ##		- 20261024 JC: The count at rest waits for frames drawn for the cursor alone.
+##		- 20261105 JC: Neither the rest nor the drag may compose the minimap.

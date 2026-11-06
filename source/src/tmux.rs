@@ -77,11 +77,14 @@ pub fn program() -> Option<PathBuf> {
 // it, so their folders are tried after PATH.
 fn look_for_tmux() -> Option<PathBuf> {
 	const ALSO: &[&str] = &["/opt/homebrew/bin", "/usr/local/bin", "/opt/local/bin"];
-	crate::shells::which("tmux").or_else(|| {
-		ALSO.iter()
-			.map(|dir| Path::new(dir).join("tmux"))
-			.find(|path| runs(path))
-	})
+	crate::shells::which("tmux").or_else(|| tmux_in(ALSO.iter().map(Path::new)))
+}
+
+// The first of these folders with a tmux that runs.
+fn tmux_in<'a>(dirs: impl IntoIterator<Item = &'a Path>) -> Option<PathBuf> {
+	dirs.into_iter()
+		.map(|dir| dir.join("tmux"))
+		.find(|path| runs(path))
 }
 
 #[cfg(unix)]
@@ -310,6 +313,34 @@ const NO_SOCKET: &str = "/dev/null/no-tmux";
 #[cfg(test)]
 mod tests {
 	use super::*;
+
+	// A Mac app started from the Dock finds tmux only this way, since
+	// Homebrew isn't on its PATH.
+	// Test ID: dexnx
+	#[cfg(unix)]
+	#[test]
+	fn tmux_off_path_is_the_first_in_the_folders_that_runs() {
+		use std::os::unix::fs::PermissionsExt;
+		let base = crate::testdir::run_dir().join(format!("tmux_in_{}", std::process::id()));
+		let [empty, plain, first, second] =
+			["empty", "plain", "first", "second"].map(|name| base.join(name));
+		for dir in [&empty, &plain, &first, &second] {
+			std::fs::create_dir_all(dir).unwrap();
+		}
+		for (dir, mode) in [(&plain, 0o644), (&first, 0o755), (&second, 0o755)] {
+			let path = dir.join("tmux");
+			std::fs::write(&path, "").unwrap();
+			std::fs::set_permissions(&path, std::fs::Permissions::from_mode(mode)).unwrap();
+		}
+		let found = tmux_in([
+			empty.as_path(),
+			plain.as_path(),
+			first.as_path(),
+			second.as_path(),
+		]);
+		assert_eq!(found, Some(first.join("tmux")));
+		assert_eq!(tmux_in([empty.as_path(), plain.as_path()]), None);
+	}
 
 	// Test ID: de306
 	#[test]
