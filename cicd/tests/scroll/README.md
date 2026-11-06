@@ -54,6 +54,6 @@ A scene with too little trace or that never scrolled is a **skip** (an environme
 
 `clear` checks frames that should never be drawn moving, and a frame at rest prints nothing, so it brackets the clears with two short trips to the alt screen. The first scrolls down a line at a time and the second 9 lines at once, which is how the check tells the start from the end. A burst before the first trip has to be seen easing, or the run tested nothing and fails.
 
-`tmuxclear` uses the same bracketing on the alt screen, where tmux keeps the outer terminal. Its marks are region scrolls of 3 and 5 rows, told apart by the trace's `sh`. Each clear goes over a screen filled in place, so only the clear can scroll.
+`tmuxclear` uses the same bracketing on the alt screen, where tmux keeps the outer terminal. Its marks are region scrolls of 3 and 5 rows, told apart by the trace's `sh`. Each clear goes over a screen filled in place, so only the clear can scroll. Each step waits for a frame drawn since, at rest, since on a busy box a clear can land while the bursts still slide, or in one frame with the next fill. A wait that runs out is a skip.
 
 `aptbar` prints past the scrollback's depth before its loop, because a full scrollback stops growing and the output ease then runs off the engine's own count. A pinned scene whose opening burst eased and whose loop did not is a failure, not a skip.

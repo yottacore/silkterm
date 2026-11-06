@@ -319,7 +319,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - Scroll scene tmuxclear fails under load: a clear inside tmux slides
 	- ID: 2026110514184921
 	- Type: Bug
-	- Status: Queued
+	- Status: Done
 	- Severity: High
 	- Opened: 20261105-141849
 	- Opened by: CC
@@ -334,8 +334,20 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Expected behavior: Every clear shows at once, under load too.
 	- Reproduced: 20261105, 2 of 2 with the cores loaded. Passed 3 of 3 with the box at load 12. It passed in every earlier run log, X11 and Wayland, back to 10-29.
 	- Possible cause: Not known yet. Either the clear really slides when the frames come slowly, which a user on a busy box would see, or the scene's timing doesn't hold up under load. Telling those apart comes first.
+	- Actual cause [Bug]:
+		- The scene's timing. A frame moves a slide on by at most 0.1 s, so with frames a second apart the bursts were still sliding when the clears came. A clear while a big slide still runs slides by design, per 2026101611321631's "Not covered". The failing frames were that leftover slide.
+		- With that fixed, a second gap: with no frame between a clear and the next fill, one frame held the pane scrolled away and then refilled. That is a burst, which slides.
+		- Telling them apart: 2 cores taken by busy loops, with the harness pinned there, gave a frame about a second. The old scene failed there, with the 4 bursts' slide at its 128-row cap under the clears. Spread across 32 cores, the same load passed twice.
 	- Notes:
 		- It stopped the 11-04 default cicd run at regression tests, so that run never got to dogfood. Nothing has been dogfooded since 11-01.
+	- Decisions:
+		- 20261106: Fixed in the scene, not the clear rule. On a box this slow a user who clears while output still slides sees it slide, which is the documented limit. The rule stays out of the way while a big slide runs so a flood in tmux keeps sliding.
+		- 20261106: A wait that runs out is a skip, not a pass or a fail, since the scene never got the screen it tests. altenter does the same.
+	- Actual fix [Bug]: After each fill, clear and mark, the scene waits up to 15 s for a frame drawn since then, at rest, in place of a fixed 0.8 s. A wait that runs out leaves a note, and the analyzer calls that run a skip.
+	- Verified: 20261106 on b23, debug build, harness pinned to 2 cores under 6 busy loops. The old scene failed 1 of 1, the first fix failed 2 of 10, and the final scene passed 4 of 4. With a 1 s wait it reported the skip. Quiet runs pass on X11 and Wayland. dcbdt passes. shellcheck, ruff, and `--backlog-run-quick` with all five areas pass.
+		- Swept: the other scenes on fixed pauses. The `clear` scene under the same load ran past an 85 s limit, so it is unverified there. It passed in every earlier full run.
+	- Branch: rnd1106
+	- Closed: 20261106-125200
 	- Test case: de19r, scroll scene `tmuxclear` in `cicd/tests/scroll/run.bash`.
 
 - Settings: Side-tabs: the lower the tab, the lower the text is within the tab
