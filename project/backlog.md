@@ -332,7 +332,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261106: Comma lists are gone. The Settings spec and the knobs demo spec write arrays in brackets. "Function, falloff" was a list to 2.x, and is now the label it was meant to be.
 		- 20261106: A backslash is plain text again. The Windows wallpaper folder goes back to single backslashes, and a commented line in the doubled spelling is refreshed at launch.
 		- 20261106: beta1 quotes a name that doesn't start with a letter, such as a monitor's size key. The launch reads a quoted name now, so a remembered size isn't called a misspelling.
-		- 20261106: 6 config tests still fail. Split into 2026110610154300 (quotes) and 2026110610154305 (conversion checks). The work waits on the wip branch until they pass.
+		- 20261106: 6 config tests failed after the swap. Split into 2026110610154300 (quotes) and 2026110610154305 (conversion checks). The work waits on the wip branch until they pass. 5 are left.
 		- 20261106: Held items, checked on beta1: 2026100219054510 is still there (the value goes in as a new line at the end of the block). 2026100315553545: `Migration` still says nothing, but `upgrade()` closes the open raw block and gives E005 in its diagnostics.
 	- Decisions:
 		- 20261106: The requirement is `3.0.0-beta1`, not `=3.0.0-beta1`. The lock holds it at beta1.
@@ -362,9 +362,11 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Opened by: CC
 	- Parent ID: 2026110609500004
 	- Notes:
-		- Lines under a heading that doesn't read get no E018 now. So a current file whose heading isn't UTF-8 keeps its layout, though its lines would move to the block above (`a_current_file_that_is_not_utf8_drops_only_those_lines`).
+		- Lines under a heading that doesn't read get no E018 now. So a current file whose heading isn't UTF-8 kept its layout, though its lines would move to the block above (ddf93).
 		- beta1 reads a 2.x `family:[One, Two]` line as the text `[One, Two]`, with no diagnostic, though `migrate` counts it lost. So the conversion counts one line fewer, and later launches no longer name it (`a_file_shcl_cannot_migrate_is_written_new`, `a_setting_the_conversion_cannot_keep_is_reported`).
 		- A dogfood file a b10c2009 build stamped Format 3 reads as current. Its comma lists, doubled backslashes and bare monitor keys set nothing. No release wrote one.
+	- Progress log:
+		- 20261106: ddf93 fixed on the wip branch. Lines under a heading shcl refused count as unread again, as E018 had them. ddf93 failed before and passes after. The `family:[One, Two]` part and the dogfood files are left.
 	- Branch: wip/rnd1106-2026110609500004
 
 - The Wayland window tests skip in every container full run, for want of wtype
