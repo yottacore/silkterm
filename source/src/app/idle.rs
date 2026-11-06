@@ -306,6 +306,26 @@ pub(super) fn restore_sign(event: &WindowEvent) -> bool {
 	)
 }
 
+/// Whether an event is a person at the window, for the idle clock. The pointer
+/// counts once it is over the window by the rule the look after a move uses
+/// (`note_presence`), not on being told it entered: on X11 a pointer grab let
+/// go by any program on the desktop, such as a menu, a window drag or a screen
+/// locker, tells the window under a pointer at rest that it entered, with one
+/// move to where it already was. That kept the wait from ever running out
+/// there, and took a released device back for nobody.
+pub(super) fn sign_of_life(event: &WindowEvent, pointer_over: bool) -> bool {
+	match event {
+		WindowEvent::CursorMoved { .. } | WindowEvent::CursorEntered { .. } => pointer_over,
+		WindowEvent::KeyboardInput { .. }
+		| WindowEvent::MouseInput { .. }
+		| WindowEvent::MouseWheel { .. }
+		| WindowEvent::Touch(_)
+		| WindowEvent::Ime(_)
+		| WindowEvent::Focused(_) => true,
+		_ => false,
+	}
+}
+
 /// The window's minimized state as last asked, so a pass asks at most once per
 /// `MINIMIZED_RECHECK` rather than every time.
 #[derive(Debug, Default)]
@@ -539,6 +559,39 @@ mod tests {
 	use crate::config;
 	use crate::gfx::Retry;
 	use std::time::{Duration, Instant};
+	// A pointer at rest told it entered, as a grab let go elsewhere on the
+	// desktop does on X11, is nobody at the window. Moving inside it is, and so
+	// is anything pressed or a change of focus.
+	// Test ID: deyts
+	#[test]
+	fn a_pointer_only_told_it_entered_is_not_a_sign_of_life() {
+		use super::sign_of_life;
+		use winit::event::{DeviceId, WindowEvent};
+		let device_id = DeviceId::dummy();
+		let entered = WindowEvent::CursorEntered { device_id };
+		let moved = WindowEvent::CursorMoved {
+			device_id,
+			position: winit::dpi::PhysicalPosition::new(10.0, 10.0),
+		};
+		assert!(!sign_of_life(&entered, false));
+		assert!(!sign_of_life(&moved, false));
+		assert!(sign_of_life(&moved, true));
+		// Wayland's compositor knows its pointer, so an enter there is over
+		assert!(sign_of_life(&entered, true));
+		assert!(!sign_of_life(&WindowEvent::CursorLeft { device_id }, true));
+		assert!(sign_of_life(&WindowEvent::Focused(false), false));
+		assert!(sign_of_life(&WindowEvent::Focused(true), false));
+		assert!(sign_of_life(
+			&WindowEvent::MouseInput {
+				device_id,
+				state: winit::event::ElementState::Pressed,
+				button: winit::event::MouseButton::Left,
+			},
+			false
+		));
+		assert!(!sign_of_life(&WindowEvent::RedrawRequested, true));
+	}
+
 	// SILK_IDLE_SECS is read once per process. The idle rule is asked twice on
 	// every loop pass, and it went to the environment each time. Run in a child
 	// copy of this test binary, since the answer is cached per process.

@@ -13,7 +13,7 @@ publish = false
 doctest = false
 
 [dependencies]
-shcl = "2.0.0"
+shcl = "3.0.0-beta1"
 
 [lints]
 workspace = true

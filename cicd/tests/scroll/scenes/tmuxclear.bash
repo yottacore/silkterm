@@ -8,6 +8,13 @@
 ## bursts first show that output still slides. The clears sit between a region
 ## scroll of 3 and one of 5, which the trace shows as sh. Each clear goes over a
 ## screen filled in place, so nothing but the clear can scroll.
+## A clear while a big slide is still running slides, by design
+## (2026101611321631), and a fill drawn in the same frame as a clear reads as a
+## burst. So after each fill, clear and mark the scene waits for the trace to
+## show a frame since, at rest. A fixed pause did that only on a quiet box. A
+## frame advances the ease by at most 0.1 s, so at a frame a second the bursts
+## were still sliding under the clears. A wait that runs out leaves a note, and
+## the analyzer calls the run a skip.
 ## POSIX sh (dash).
 
 ##	History: At bottom of file.
@@ -16,7 +23,36 @@
 ##	SPDX-License-Identifier: GPL-2.0-or-later
 
 settle="${SILK_SCENE_SETTLE:-13}"   ## seconds to idle past the GL pipeline warmup
-pause="${SILK_SCENE_PAUSE:-0.8}"    ## seconds between steps, past any slide
+pause="${SILK_SCENE_PAUSE:-0.8}"    ## seconds between steps, past any slide on a quiet box
+restWait="${SILK_SCENE_REST_WAIT:-15}"  ## seconds a step waits for a frame at rest
+trace="${SILK_SCENE_TRACE:-}"
+note="${SILK_SCENE_NOTE:-}"
+
+fFrames(){
+	n=$(grep -c 'SCROLLDBG' "${trace}" 2>/dev/null)
+	echo "${n:-0}"
+}
+
+## $1 frames traced before the step: wait for a later one at rest
+fRest(){
+	[ -n "${trace}" ] || return 0
+	deadline=$(($(date +%s) + restWait))
+	until [ "$(fFrames)" -gt "${1}" ] \
+		&& grep 'SCROLLDBG' "${trace}" 2>/dev/null | tail -n 1 | grep -qE 'app_off=-?0\.0000 '; do
+		if [ "$(date +%s)" -ge "${deadline}" ]; then
+			[ -z "${note}" ] || echo "no rest within ${restWait}s" >"${note}"
+			return 0
+		fi
+		sleep 0.05
+	done
+}
+
+## after a step, until a frame has shown it and the slide is at rest
+fPause(){
+	shown=$(fFrames)
+	sleep "${pause}"
+	fRest "${shown}"
+}
 
 ## the pane drawn in place, row by row
 fFill(){
@@ -26,7 +62,7 @@ fFill(){
 		i=$((i + 1))
 	done
 	printf '\033[%d;1H' "${pane}"
-	sleep "${pause}"
+	fPause
 }
 
 ## a burst as tmux passes it on: the pane scrolled away whole, then drawn
@@ -62,7 +98,7 @@ fBle(){
 fMark(){
 	fFill mark
 	printf '\033[1;%dr\033[%dS\033[1;%dr\033[%d;1H' "${pane}" "${1}" "${rows}" "${pane}"
-	sleep "${pause}"
+	fPause
 }
 
 sleep "${settle}"
@@ -83,13 +119,13 @@ fFill one
 fEnter clear
 fWipe
 printf '\033[1;%dr\033[1;1H$ ' "${rows}"
-sleep "${pause}"
+fPause
 
 ## Ctrl+L
 fFill two
 fWipe
 printf '$ \033[1;%dr\033[1;3H' "${rows}"
-sleep "${pause}"
+fPause
 
 ## under ble.sh, in one write and with a frame between tmux's clear and ble.sh
 fFill three
@@ -98,14 +134,14 @@ fWipe
 printf '\033[1;%dr\033[1;1H\033[K\033[1;%dr\033[2;1H\033[1L' "${rows}" "${pane}"
 fBle
 printf '\033[1;%dr\033[2;6H' "${rows}"
-sleep "${pause}"
+fPause
 fFill four
 fWipe
 sleep 0.2
 printf '\033[1;%dr' "${pane}"
 fBle
 printf '\033[1;%dr\033[2;6H' "${rows}"
-sleep "${pause}"
+fPause
 
 ## a reset: tmux scrolls the whole pane away and redraws every row
 fFill five
@@ -117,10 +153,11 @@ while [ "${i}" -lt "${pane}" ]; do
 	i=$((i + 1))
 done
 printf '\033[K\033[1;3H'
-sleep "${pause}"
+fPause
 
 fMark 5
 while :; do sleep 1; done
 
 ##	History:
 ##		- 20261016 JC: Created.
+##		- 20261106: Each step waits for a frame at rest, not a fixed pause.

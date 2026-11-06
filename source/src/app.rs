@@ -4278,22 +4278,12 @@ impl ApplicationHandler<UserEvent> for App {
 			) {
 			return;
 		}
+		state.note_presence(&event);
 		// Anything a person does to the window is a sign of life (see
 		// `release_deadline`); the hidden-to-shown edge is one too, in its arm.
-		if matches!(
-			event,
-			WindowEvent::KeyboardInput { .. }
-				| WindowEvent::MouseInput { .. }
-				| WindowEvent::MouseWheel { .. }
-				| WindowEvent::CursorMoved { .. }
-				| WindowEvent::CursorEntered { .. }
-				| WindowEvent::Touch(_)
-				| WindowEvent::Ime(_)
-				| WindowEvent::Focused(_)
-		) {
+		if idle::sign_of_life(&event, state.watch.pointer == window_size::Pointer::Over) {
 			state.note_active("input or focus");
 		}
-		state.note_presence(&event);
 		match event {
 			WindowEvent::CloseRequested => {
 				if state.may_close(closing::Closing::Window) {

@@ -42,7 +42,9 @@ supposed to hold:
                     and one of 5. A burst before them scrolls the pane away
                     whole too and has to slide, or the check tested nothing.
                     Between the marks no frame takes a step that big, and no
-                    slide goes past the 3 rows of the first mark.
+                    slide goes past the 3 rows of the first mark. The scene
+                    waits for each slide to come to rest, so a slide past
+                    that is a skip when its --note says the wait ran out.
   --mode popin    : content growing down into blank rows on a half-empty screen
                     (an input box taking a paste). That is room, not a scroll, so
                     a step down must never slide: app_off never goes below 0.
@@ -171,6 +173,11 @@ def main() -> int:
             return 1
         slid = [f for f in alt[start + 1:end] if f["sh"] >= 8 or f["app_off"] > 4]
         if slid:
+            # a clear while a big slide still runs slides by design
+            note = read_note(a.note)
+            if note:
+                out("SKIP", f"the scene saw {note} (busy box?), so a clear came mid-slide")
+                return 2
             worst = max(f["app_off"] for f in slid)
             out("FAIL", f"a clear slid: {len(slid)} frame(s), sh up to "
                        f"{max(f['sh'] for f in slid)} (app_off up to {worst:.3f})")
@@ -282,3 +289,4 @@ if __name__ == "__main__":
 ##		- 20260706 JC: Created.
 ##		- 20261013 JC: --note, so altenter's wait running out is a skip.
 ##		- 20261016 JC: wipe mode, for a clear inside tmux.
+##		- 20261106: wipe reads --note, so a scene that never saw the slide at rest is a skip.

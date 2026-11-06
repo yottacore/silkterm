@@ -2047,7 +2047,9 @@ pub(crate) fn write_config_atomic(path: &std::path::Path, text: &str) -> anyhow:
 // a file a busy launch left alone says it as the launch would. A clean
 // conversion says nothing.
 fn write_config_keeping(path: &std::path::Path, text: &str) -> anyhow::Result<Option<PathBuf>> {
-	let kept = publish_keeping(path, text, shcl::write_file_atomic)?;
+	let kept = publish_keeping(path, text, |file, text| {
+		shcl::write_file_atomic(file, text).map_err(|e| e.to_string())
+	})?;
 	note_seen(path, text);
 	if may_write(path) && config_path().as_deref() == Some(path) {
 		SAVES.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
@@ -2087,7 +2089,7 @@ fn write_config_atomic_with(
 // Windows' replace can fail after the old file is gone (1176, 1177), and shcl
 // then deletes its temp copy too, so the text is written at the empty name
 // rather than lost. The publish is a parameter so a test can fail it that way,
-// and has shcl's own `String` error.
+// and has shcl's error as its text.
 fn publish_keeping(
 	path: &std::path::Path,
 	text: &str,
@@ -2113,7 +2115,9 @@ fn publish_keeping(
 		return Ok(None);
 	};
 	// A file kept for its lines that are not UTF-8 is said by `write_config_keeping`.
-	if let Some(new) = shcl::format_version(text).filter(|new| *new > old) {
+	// One a build before beta1 stamped keeps its format number.
+	let decoded = || std::fs::read_to_string(&backup).is_ok();
+	if let Some(new) = shcl::format_version(text).filter(|new| *new > old || decoded()) {
 		eprintln!(
 			"{APP_NAME}: {} converted to SHCL format {new}; the old file is kept at {}",
 			path.display(),
@@ -2176,7 +2180,8 @@ fn keep_old_format_at(
 	};
 	let old = format_of(&String::from_utf8_lossy(&body));
 	let decodes = std::str::from_utf8(&body).is_ok();
-	if (new <= old && decodes) || body.iter().all(u8::is_ascii_whitespace) {
+	let beta = || std::str::from_utf8(&body).is_ok_and(|old| from_a_beta(old).is_some());
+	if (new <= old && decodes && !beta()) || body.iter().all(u8::is_ascii_whitespace) {
 		return Ok(None);
 	}
 	let stem = name.strip_suffix(".shcl").unwrap_or(&name);
@@ -2646,11 +2651,30 @@ fn unreadable_lines(doc: &shcl::Document) -> Vec<usize> {
 		.iter()
 		.filter(|d| matches!(d.severity, shcl::Severity::Error))
 		.map(|d| d.line)
+		.chain(misplaced_lists(doc))
 		.filter(|line| *line > 0)
 		.collect();
 	lines.sort_unstable();
 	lines.dedup();
 	lines
+}
+
+// The lines that give a list to a setting that takes one value. shcl 3.0 reads
+// a 2.x `family:[One, Two]` as a list, where `migrate` counts it as nothing
+// bound, and `get_string` hands back the brackets as text. Only a theme's
+// `ansi` takes a list.
+fn misplaced_lists(doc: &shcl::Document) -> impl Iterator<Item = usize> + '_ {
+	doc.fields().into_iter().filter_map(|field| {
+		let mut names = field.path.split('.');
+		let ansi = names
+			.next()
+			.is_some_and(|n| n.eq_ignore_ascii_case("themes"))
+			&& names
+				.next_back()
+				.is_some_and(|n| n.eq_ignore_ascii_case("ansi"));
+		let list = !ansi && doc.kind(&field.path) == shcl::ValueKind::Array;
+		list.then_some(field.line)
+	})
 }
 
 // The same gate and text as shcl's save_file_keep_lines, through the writer above, which
@@ -2699,36 +2723,27 @@ trait Put {
 }
 impl Put for shcl::Document {
 	fn put_string(&mut self, path: &str, v: &str) {
-		let applied = self.set_string(path, v);
-		unwritable(self, path, applied);
+		unwritable(path, self.set_string(path, v));
 	}
 	fn put_bool(&mut self, path: &str, v: bool) {
-		let applied = self.set_bool(path, v);
-		unwritable(self, path, applied);
+		unwritable(path, self.set_bool(path, v));
 	}
 	fn put_float(&mut self, path: &str, v: f64) {
-		let applied = self.set_float(path, v);
-		unwritable(self, path, applied);
+		unwritable(path, self.set_float(path, v));
 	}
 	fn put_int(&mut self, path: &str, v: i64) {
-		let applied = self.set_int(path, v);
-		unwritable(self, path, applied);
+		unwritable(path, self.set_int(path, v));
 	}
 	fn put_datetime(&mut self, path: &str, v: &shcl::ShclDateTime) {
-		let applied = self.set_datetime(path, v);
-		unwritable(self, path, applied);
+		unwritable(path, self.set_datetime(path, v));
 	}
 	fn put_string_array(&mut self, path: &str, v: &[&str]) {
-		let applied = self.set_string_array(path, v);
-		unwritable(self, path, applied);
+		unwritable(path, self.set_string_array(path, v));
 	}
 }
-fn unwritable(doc: &shcl::Document, path: &str, applied: bool) {
-	if !applied {
-		eprintln!(
-			"{APP_NAME}: config: could not write {path} ({:?})",
-			doc.write_reason(path)
-		);
+fn unwritable(path: &str, status: shcl::SetStatus) {
+	if status != shcl::SetStatus::Ok {
+		eprintln!("{APP_NAME}: config: could not write {path} ({status:?})");
 	}
 }
 
@@ -3417,7 +3432,11 @@ fn line_list(lines: &[usize]) -> String {
 impl Reader<'_> {
 	// Complain once about a value that is present but the wrong type. Anything
 	// else (absent, empty) is silent - a commented-out setting is the norm here.
+	// A list is said as a line that can't be read (`misplaced_lists`).
 	fn note<T>(&self, key: &str, got: Result<T, shcl::Status>) -> Option<T> {
+		if self.doc.kind(key) == shcl::ValueKind::Array {
+			return None;
+		}
 		match got {
 			Ok(v) => Some(v),
 			Err(shcl::Status::BadType) => {
@@ -4739,6 +4758,12 @@ fn setting_groups(text: &str) -> Vec<(String, Vec<String>, bool)> {
 fn line_setting_key(line: &str) -> Option<&str> {
 	let trimmed = line.trim_start();
 	let trimmed = trimmed.strip_prefix('#').map_or(trimmed, str::trim_start);
+	// shcl 3.0 quotes a name that doesn't start with a letter, such as a
+	// monitor's `"1920x1080_100pct":`
+	if let Some(quoted) = trimmed.strip_prefix('"') {
+		let (key, rest) = quoted.split_once('"')?;
+		return (!key.is_empty() && rest.trim_start().starts_with(':')).then_some(key);
+	}
 	let end = trimmed.find(|c: char| !(c.is_ascii_alphanumeric() || c == '_' || c == '.'))?;
 	let key = &trimmed[..end];
 	if key.is_empty() {
@@ -4930,12 +4955,12 @@ const SUPERSEDED_DEFAULTS: &[(&str, &str)] = &[
 	("wallpaper.rotate.folder", "\"wallpaper/\"  ## Default"),
 	// then empty, which meant the same place without naming it
 	("wallpaper.rotate.folder", "\"\"  ## Default"),
-	// then with single backslashes, which shcl 3.0 reads as escapes, so the line
-	// set nothing once uncommented
+	// then with doubled backslashes, for the shcl 3.0 betas that read one as an
+	// escape. 3.0.0-beta1 takes a backslash as plain text, so they read as two.
 	#[cfg(windows)]
 	(
 		"wallpaper.rotate.folder",
-		"\"%LOCALAPPDATA%\\silkterm\\wallpaper\"  ## Default",
+		"\"%LOCALAPPDATA%\\\\silkterm\\\\wallpaper\"  ## Default",
 	),
 	(
 		"selection.word_separators",
@@ -5055,25 +5080,16 @@ const LEGACY_KEYS: &[(&str, &str)] = &[
 // the new template's comments describe the setting already. `#` inside a
 // quoted value (every color) survives.
 fn strip_trailing_comment(value: &str) -> &str {
-	let mut quote: Option<char> = None;
-	let mut escaped = false;
-	for (at, c) in value.char_indices() {
-		if escaped {
-			escaped = false;
-			continue;
-		}
-		match c {
-			'\\' => escaped = true,
-			'"' | '\'' => match quote {
-				Some(q) if q == c => quote = None,
-				None => quote = Some(c),
-				_ => {}
-			},
-			'#' if quote.is_none() => return value[..at].trim_end(),
-			_ => {}
-		}
-	}
-	value
+	comment_at(value).map_or(value, |at| value[..at].trim_end())
+}
+
+// Where a value's comment starts, as shcl reads it. A backslash is plain text
+// since 3.0, an apostrophe inside a bare value opens no quote, and a '#' against
+// text opens a comment too (H008).
+fn comment_at(value: &str) -> Option<usize> {
+	let mut tokens = shcl::Tokens::default();
+	shcl::tokenize_value(value, 0, shcl::Rules::Current, &mut tokens);
+	tokens.comment
 }
 
 // Rewrite the template line for `path` as an active assignment of `value`,
@@ -5511,9 +5527,9 @@ fn note_config_busy(path: &std::path::Path) {
 }
 
 // Bring a font_family line still carrying a superseded default stack up to the
-// current one. The value is matched as it reads, in either quote, because a save
-// swaps one quote for the other. An edited stack, or one with a note on the
-// line, is left exactly as the user wrote it.
+// current one. The value is matched as it reads, in either quote, since a save
+// before shcl 3.0.0-beta1 swapped one for the other. An edited stack, or one with
+// a note on the line, is left exactly as the user wrote it.
 fn refresh_font_stack(line: &str) -> Option<String> {
 	let (head, value) = line.split_once(':')?;
 	let value = value.trim();
@@ -5533,7 +5549,12 @@ fn refresh_font_stack(line: &str) -> Option<String> {
 // comment included, deliberately, so the exact-match test below refuses any line
 // the user has written a note on.
 fn line_setting_value(line: &str) -> Option<&str> {
-	Some(line.split_once(':')?.1.trim())
+	let key = line_setting_key(line);
+	let after_key = key.map_or(line, |key| {
+		let at = key.as_ptr() as usize - line.as_ptr() as usize + key.len();
+		&line[at..]
+	});
+	Some(after_key.split_once(':')?.1.trim())
 }
 
 // Bring a commented line still echoing a superseded default up to the template's
@@ -5762,7 +5783,7 @@ fn tab_text_line(text: &str, line: &str) -> Option<String> {
 	}
 	let template = crate::tabtitle::tab_text_for(parts);
 	let mut one = shcl::Document::new();
-	if !one.set_string("window.tab_text", &template) {
+	if one.set_string("window.tab_text", &template) != shcl::SetStatus::Ok {
 		return None;
 	}
 	let value = one.to_canonical().lines().find_map(|l| {
@@ -6634,10 +6655,10 @@ fn saved_rating(before: &shcl::Document, wanted: &[(&str, Option<bool>)]) -> Opt
 	for (leaf, value) in wanted {
 		let path = format!("performance.{leaf}");
 		let applied = match value {
-			None => true,
+			None => shcl::SetStatus::Ok,
 			Some(flag) => doc.set_bool(&path, *flag),
 		};
-		if !applied {
+		if applied != shcl::SetStatus::Ok {
 			return None;
 		}
 	}
@@ -6693,7 +6714,7 @@ fn reads_as_asked(
 fn rating_spelling(leaf: &str, flag: bool) -> Option<String> {
 	let path = format!("performance.{leaf}");
 	let mut doc = shcl::Document::new();
-	if !doc.set_bool(&path, flag) {
+	if doc.set_bool(&path, flag) != shcl::SetStatus::Ok {
 		return None;
 	}
 	doc.to_canonical().lines().find_map(|line| {
@@ -6799,24 +6820,8 @@ fn with_setting_value(line: &str, spelled: &str) -> String {
 	}
 }
 
-// Where a comment starts after a value: a '#' after whitespace, outside quotes.
 fn trailing_comment(rest: &str) -> Option<&str> {
-	let mut quoted = false;
-	let mut escaped = false;
-	let mut after_space = true;
-	for (at, ch) in rest.char_indices() {
-		if escaped {
-			escaped = false;
-		} else if ch == '\\' && quoted {
-			escaped = true;
-		} else if ch == '"' {
-			quoted = !quoted;
-		} else if ch == '#' && !quoted && after_space {
-			return Some(&rest[at..]);
-		}
-		after_space = ch.is_whitespace();
-	}
-	None
+	comment_at(rest).map(|at| &rest[at..])
 }
 
 // shcl's own footer. Kept last: backfill appends a wholly-new section at the
@@ -6962,7 +6967,10 @@ fn upgrade(body: &[u8]) -> Upgrade {
 	// closes.
 	let stamped = shcl::migrate(text, true);
 	if stamped.current {
-		return Upgrade::Current;
+		return match from_a_beta(text) {
+			Some((text, lost)) => Upgrade::InPlace { text, lost },
+			None => Upgrade::Current,
+		};
 	}
 	if shcl::format_version(&stamped.text).is_none_or(|n| n < shcl::FORMAT_MAJOR) {
 		let respelled = shcl::migrate_unstamped(text, true).text;
@@ -6986,6 +6994,49 @@ fn upgrade(body: &[u8]) -> Upgrade {
 		text: with_own_look(text, out),
 		lost: migrated.lost,
 	}
+}
+
+// A 3.0 build of shcl from before beta1 (b10c2009, dogfood only) stamped Format
+// 3 too, in its own spellings: comma lists, doubled backslashes, bare monitor
+// keys. Where only such lines no longer read, shcl's `upgrade` takes the file
+// for 2.x. That is kept only when it loses nothing, and every line that still
+// reads reads the same after, or with its backslashes halved. So a beta1 file
+// with one comma list typed in never has the `\n` in a path turned into a line
+// break. The count is what the conversion could not carry.
+fn from_a_beta(text: &str) -> Option<(String, usize)> {
+	if shcl::format_version(text) != Some(shcl::FORMAT_MAJOR) {
+		return None;
+	}
+	// a comma list is E026 and a bare name not led by a letter E014; a line
+	// that does not read for any other reason is a beta1 file's own
+	let before = shcl::Document::parse(text);
+	let spellings = before
+		.diagnostics()
+		.iter()
+		.filter(|d| matches!(d.severity, shcl::Severity::Error))
+		.all(|d| matches!(d.code, "E026" | "E014"));
+	if !spellings {
+		return None;
+	}
+	let up = shcl::upgrade(text, true);
+	if up.current || up.ambiguous > 0 || up.lost > 0 || !up.errors_left.is_empty() {
+		return None;
+	}
+	let after = shcl::Document::parse(&up.text);
+	let unread = unreadable_lines(&before);
+	let kept = before
+		.fields()
+		.iter()
+		.filter(|field| !unread.contains(&field.line))
+		.all(|field| {
+			let (was, now) = (
+				before.get_string(&field.path),
+				after.get_string(&field.path),
+			);
+			was == now
+				|| matches!((&was, &now), (Ok(was), Ok(now)) if *was == now.replace('\\', "\\\\"))
+		});
+	kept.then_some((up.text, up.lost))
 }
 
 // A file from before the performance profiles (v1.0.0-beta3) drew exactly what
@@ -7139,8 +7190,23 @@ struct LineReading {
 	read: bool,
 }
 
+// shcl 3.0 reads the lines under a heading it refused, under that heading and
+// without a word. They count as unread here, as 2.x's E018 had them.
 fn line_readings(text: &str) -> Vec<LineReading> {
-	let unread = unreadable_lines(&shcl::Document::parse(text));
+	let doc = shcl::Document::parse(text);
+	let mut unread = unreadable_lines(&doc);
+	let fields = doc.fields();
+	let refused: Vec<String> = fields
+		.iter()
+		.filter(|field| unread.contains(&field.line))
+		.map(|field| format!("{}.", field.path))
+		.collect();
+	unread.extend(
+		fields
+			.iter()
+			.filter(|field| refused.iter().any(|head| field.path.starts_with(head)))
+			.map(|field| field.line),
+	);
 	walk_settings(text)
 		.into_iter()
 		.enumerate()
@@ -7892,7 +7958,7 @@ fn adopt_legacy_config() {
 static DEFAULT_CONFIG_TEXT: std::sync::LazyLock<String> = std::sync::LazyLock::new(|| {
 	DEFAULT_CONFIG_TEMPLATE
 		.replace("{HOME}", HOME_TOKEN)
-		.replace("{WPDIR}", &wallpaper_dir_escaped())
+		.replace("{WPDIR}", WALLPAPER_DIR_TOKEN)
 		.replace(
 			"{KEYS}",
 			&crate::keys::template_lines(cfg!(target_os = "macos")),
@@ -7927,18 +7993,14 @@ pub const HOME_TOKEN: &str = "$HOME";
 
 /// The wallpaper folder's shipped default: the usual place on this platform, in
 /// the same spelling. It is looked up rather than expanded (`rotation_folder_for`),
-/// so it is right even where `XDG_CONFIG_HOME` is unset. The template writes it in
-/// double quotes, so a backslash goes in doubled (`wallpaper_dir_escaped`).
+/// so it is right even where `XDG_CONFIG_HOME` is unset. A backslash is plain
+/// text to shcl 3.0, so the template writes it as it is.
 #[cfg(windows)]
 pub const WALLPAPER_DIR_TOKEN: &str = r"%LOCALAPPDATA%\silkterm\wallpaper";
 #[cfg(target_os = "macos")]
 pub const WALLPAPER_DIR_TOKEN: &str = "$HOME/Library/Application Support/silkterm/wallpaper";
 #[cfg(not(any(windows, target_os = "macos")))]
 pub const WALLPAPER_DIR_TOKEN: &str = "$XDG_CONFIG_HOME/silkterm/wallpaper";
-
-fn wallpaper_dir_escaped() -> String {
-	WALLPAPER_DIR_TOKEN.replace('\\', r"\\")
-}
 
 const DEFAULT_CONFIG_TEMPLATE: &str = r##"# SilkTerm configuration file.
 #
@@ -10452,7 +10514,10 @@ mod tests {
 		// dialog's save would write.
 		let bare = "window:\n\tmargin: 4\n";
 		let mut saved = shcl::Document::parse(bare);
-		assert!(saved.set_bool("performance.check_next_run", false));
+		assert_eq!(
+			saved.set_bool("performance.check_next_run", false),
+			shcl::SetStatus::Ok
+		);
 		assert_eq!(
 			with_rating_lines(bare, clear).as_deref(),
 			Ok(saved.to_canonical().as_str()),
@@ -10823,10 +10888,9 @@ mod tests {
 		}
 	}
 
-	// A canonical save quotes a bare value holding a space or a colon, and takes
-	// the quotes off one that reads as a number, bool or date. The rating check
-	// leaves the quoted flag out because of this. The quote character itself is
-	// read by the launch's migration, and the check compares migrated text for that.
+	// A canonical save quotes a bare value holding a space or a colon. Since shcl
+	// 3.0.0-beta1 it keeps the quotes a value already has, the quote character
+	// too. The rating check leaves the quoted flag out because of the first.
 	// Test ID: dcfck
 	#[test]
 	fn a_save_that_requotes_a_value_changes_no_read() {
@@ -10897,8 +10961,8 @@ mod tests {
 			"a save quotes none of these now, so the rating check's handling of quoting needs another look"
 		);
 		assert!(
-			dropped,
-			"a save unquotes none of these now, so the rating check's handling of quoting needs another look"
+			!dropped,
+			"a save unquotes a value again, so the rating check's handling of quoting needs another look"
 		);
 	}
 
@@ -10946,7 +11010,11 @@ mod tests {
 		];
 		for (what, text, other) in files {
 			let mut saved = parse_kept(text);
-			assert!(saved.set_bool("performance.check_next_run", true), "{what}");
+			assert_eq!(
+				saved.set_bool("performance.check_next_run", true),
+				shcl::SetStatus::Ok,
+				"{what}"
+			);
 			assert_eq!(
 				with_rating_lines(text, lines).as_deref(),
 				Ok(saved_text(&saved).as_str()),
@@ -10974,9 +11042,9 @@ mod tests {
 	}
 
 	// A launch parses migrated text, and the migration reads how a line is
-	// written: only a double-quoted old font list is refreshed, and a commented
-	// heading deeper than its block becomes the parent of the setting under it.
-	// The save's text moves both without changing a value. Each file is written
+	// written: an old font list is refreshed, and a commented heading deeper than
+	// its block becomes the parent of the setting under it. The save's text may
+	// move either without changing a value. Each file is written
 	// again before the rating, as a launch that found it busy leaves it.
 	// Test ID: dcfef
 	#[test]
@@ -11017,8 +11085,8 @@ mod tests {
 
 	// The same one launch step earlier. A file from before the nested layout is
 	// converted first, and the conversion copies a font list with its quotes, which
-	// the refresh after it reads. A save spells them the other way, so the rating
-	// check has to look through the conversion as well.
+	// the refresh after it reads. A save before shcl 3.0.0-beta1 spelled them the
+	// other way, so the rating check has to look through the conversion as well.
 	// Test ID: dctab
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
@@ -11091,11 +11159,12 @@ mod tests {
 	}
 
 	// The check compares what the next launch loads, through that launch's own
-	// rewrites. Here one of them reads the quote character, as the font list
-	// refresh once did: a value in single quotes is replaced. The only text that
-	// keeps a rating in this file is a save's, which spells the value in double
-	// quotes, so the step stops firing and the value loads differently. That write
-	// has to be refused, and with no such step it goes through.
+	// rewrites. Here one of them reads how a value is written: a bare one is
+	// replaced. The only text that keeps a rating in this file is a save's, which
+	// quotes a value holding a space, so the step stops firing and the value loads
+	// differently. That write has to be refused, and with no such step it goes
+	// through. A save keeps the quote character since shcl 3.0.0-beta1, so the
+	// step reads a bare value, where the font list refresh once read the quote.
 	// A setting typed two tabs in under its block loads, until the launch adds the
 	// template's own active lines above it. It then read as part of one of those
 	// and was ignored from the next launch on, with nothing said.
@@ -11201,35 +11270,35 @@ mod tests {
 	// Test ID: dcfp4
 	#[test]
 	fn a_rating_is_refused_where_a_launch_step_reads_the_layout() {
-		fn reads_quotes(text: &str) -> Option<String> {
-			text.contains("'Old Mono'")
-				.then(|| text.replace("'Old Mono'", "\"New Mono\""))
+		fn reads_bare(text: &str) -> Option<String> {
+			text.contains("family: Old Mono\n")
+				.then(|| text.replace("family: Old Mono\n", "family: \"New Mono\"\n"))
 		}
 		let lines = RatingLines {
 			check_next_run: Some(true),
 		};
-		// the save keeps the quotes of a file it can keep line by line
-		let single = "font:\n\tfamily: 'Old Mono'\n";
-		let out = with_rating_lines_through(single, lines, &[reads_quotes]).expect("kept");
-		assert!(out.contains("'Old Mono'"), "{out}");
+		// the save keeps a bare value bare in a file it can keep line by line
+		let single = "font:\n\tfamily: Old Mono\n";
+		let out = with_rating_lines_through(single, lines, &[reads_bare]).expect("kept");
+		assert!(out.contains("family: Old Mono\n"), "{out}");
 		// `font` twice is folded into one block, so the save falls back to the
 		// canonical form
-		let text = "font:\n\tfamily: 'Old Mono'\nwindow:\n\tcolumns: 90\nfont:\n\tsize: 13\n";
+		let text = "font:\n\tfamily: Old Mono\nwindow:\n\tcolumns: 90\nfont:\n\tsize: 13\n";
 		let plain = with_rating_lines_through(text, lines, &[]).expect("no step, so it is kept");
 		assert!(
 			plain.contains("\"Old Mono\""),
 			"the save respells the value:\n{plain}"
 		);
 		assert_eq!(
-			with_rating_lines_through(text, lines, &[reads_quotes]),
+			with_rating_lines_through(text, lines, &[reads_bare]),
 			Err(Kept::Unplaced),
 			"the next launch would load another font"
 		);
 		// a file with somewhere to put the lines is written line by line, the value
-		// keeps its quotes, and the step fires on both sides
+		// stays bare, and the step fires on both sides
 		let blocked = format!("{text}performance:\n\tautomatic: true\n");
-		let out = with_rating_lines_through(&blocked, lines, &[reads_quotes]).expect("kept");
-		assert!(out.contains("'Old Mono'"), "{out}");
+		let out = with_rating_lines_through(&blocked, lines, &[reads_bare]).expect("kept");
+		assert!(out.contains("family: Old Mono\n"), "{out}");
 	}
 
 	// Each file is loaded, put back as it was (the state a launch leaves when it
@@ -11284,7 +11353,11 @@ mod tests {
 			// the check to account instead, with a step of its own.
 			//   assert_ne!(other(&reload_from_disk()), loaded, "... proves nothing");
 			let mut saved = shcl::Document::parse(&text);
-			assert!(saved.set_bool("performance.check_next_run", true), "{what}");
+			assert_eq!(
+				saved.set_bool("performance.check_next_run", true),
+				shcl::SetStatus::Ok,
+				"{what}"
+			);
 			std::fs::write(&path, saved.to_canonical()).unwrap();
 			assert_eq!(
 				other(&reload_from_disk()),
@@ -11820,8 +11893,7 @@ mod tests {
 		let blank = read("hyperlinks:\n\topen_command: \" \"\n");
 		assert!(!crate::fields::by_hand(&blank, Key::LinkOpenCommand));
 		let usual = read(&format!(
-			"wallpaper:\n\trotate:\n\t\tfolder: \"{}\"\n",
-			wallpaper_dir_escaped()
+			"wallpaper:\n\trotate:\n\t\tfolder: \"{WALLPAPER_DIR_TOKEN}\"\n"
 		));
 		assert!(!crate::fields::by_hand(&usual, Key::BgFolder));
 		assert_eq!(
@@ -12174,7 +12246,7 @@ mod tests {
 
 		// a monitor's size is read, and a misspelled field in one is not
 		let kept =
-			"window:\n\tmonitors:\n\t\t1920x1080_100pct:\n\t\t\tcolumns: 90\n\t\t\trows: 30\n";
+			"window:\n\tmonitors:\n\t\t\"1920x1080_100pct\":\n\t\t\tcolumns: 90\n\t\t\trows: 30\n";
 		assert!(
 			config_complaints(kept).is_empty(),
 			"{:?}",
@@ -13414,6 +13486,51 @@ mod tests {
 		);
 	}
 
+	// shcl 3.0 reads `[A, B]` as a list, and `get_string` hands one back as its
+	// bracketed text, so a list loaded as a font named that. A setting that takes
+	// one value sets nothing from a list, and the line is named once. A theme's
+	// `ansi` list still reads.
+	// Test ID: deyry
+	#[test]
+	fn a_list_sets_nothing_where_one_value_goes() {
+		let path = std::path::Path::new("test.shcl");
+		let text = "font:\n\tfamily: [Iosevka, Hack]\n\tsize: [13, 14]\n";
+		let (raw, said) = read_config_text(text, path);
+		let s = resolve(raw);
+		let d = Settings::default();
+		assert_eq!(s.font_family, d.font_family);
+		assert_eq!(s.font_size.to_bits(), d.font_size.to_bits());
+		assert!(
+			config_complaints(text)
+				.iter()
+				.any(|c| c.contains("lines 2, 3")),
+			"{said:?}"
+		);
+		assert_eq!(said.len(), 1, "named once: {said:?}");
+		let model = crate::fields::load(&shcl::Document::parse(text));
+		assert!(
+			!format!("{:?}", model.values.own).contains("Iosevka"),
+			"{:?}",
+			model.values.own
+		);
+		let theme = "themes:\n\tmine:\n\t\tdark:\n\t\t\tansi: [\"#000000\", \"#111111\"]\n";
+		assert_eq!(unreadable_lines(&shcl::Document::parse(theme)), [0usize; 0]);
+	}
+
+	// A backslash is plain text since shcl 3.0, so a folder ending in one closes
+	// its quotes, and the note after it is kept.
+	// Test ID: deyrz
+	#[test]
+	fn a_note_after_a_folder_ending_in_a_backslash_is_kept() {
+		assert_eq!(
+			with_setting_value("\tfolder: \"C:\\Pics\\\"  # mine", "\"D:\\x\""),
+			"\tfolder: \"D:\\x\"  # mine"
+		);
+		assert_eq!(strip_trailing_comment(r"'C:\Pics\' # mine"), r"'C:\Pics\'");
+		assert_eq!(strip_trailing_comment("it's # mine"), "it's");
+		assert_eq!(strip_trailing_comment("\"#112233\""), "\"#112233\"");
+	}
+
 	// The launch that loses a setting leaves word for the window, with the count
 	// and the copy it really made. A launch that loses nothing leaves none.
 	// Test ID: ddex2
@@ -13512,6 +13629,201 @@ mod tests {
 		assert!(config_complaints(&out).is_empty(), "{out}");
 		assert_eq!(from_shcl2_text(&out), None, "settled");
 		assert_eq!(next_launch_text(text), next_launch_text(&out));
+	}
+
+	// A file a dogfood build on shcl b10c2009 wrote says Format 3, in that
+	// build's spellings. It is converted where it stands: the comma list goes in
+	// brackets, the doubled backslashes are halved and the monitor key is quoted,
+	// and each still sets what it did. The launch keeps a copy, and the next one
+	// has nothing to do.
+	// Test ID: deysd
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_file_a_build_before_beta1_stamped_is_converted() {
+		let text = format!(
+			"## mine\nfont:\n\tsize: 13\nwallpaper:\n\timage: \"C:\\\\pics\\\\sea.jpg\"\n\
+			shell:\n\tstartup_directory: \"\\\\\\\\server\\\\share\"\n\
+			themes:\n\tmine:\n\t\tdark:\n\t\t\tansi: \"#000000\", \"#111111\"\n\
+			window:\n\tmonitors:\n\t\t1920x1080_100pct:\n\t\t\tcolumns: 120\n\n{SHCL_BANNER}"
+		);
+		let Upgrade::InPlace { text: out, lost } = upgrade(text.as_bytes()) else {
+			panic!("not converted:\n{text}");
+		};
+		assert_eq!(lost, 0);
+		let doc = shcl::Document::parse(&out);
+		assert_eq!(doc.lost_count(), 0, "{out}");
+		assert_eq!(
+			doc.get_string("wallpaper.image").as_deref(),
+			Ok(r"C:\pics\sea.jpg")
+		);
+		assert_eq!(
+			doc.get_string("shell.startup_directory").as_deref(),
+			Ok(r"\\server\share")
+		);
+		assert_eq!(
+			doc.get_string_array("themes.mine.dark.ansi"),
+			Ok(vec!["#000000".to_string(), "#111111".to_string()])
+		);
+		assert_eq!(
+			doc.get_int("window.monitors.\"1920x1080_100pct\".columns"),
+			Ok(120),
+			"{out}"
+		);
+		assert!(out.starts_with("## mine\n"), "{out}");
+		assert_eq!(shcl::format_version(&out), Some(shcl::FORMAT_MAJOR));
+		assert!(config_complaints(&out).is_empty(), "{out}");
+		assert_eq!(upgrade(out.as_bytes()), Upgrade::Current, "settled");
+
+		let dir = format_test_dir("fmtcopy_beta");
+		let path = dir.join("config.shcl");
+		std::fs::write(&path, &text).unwrap();
+		write_config_atomic(&path, &out).unwrap();
+		let copies = backups_in(&dir, "config");
+		assert_eq!(copies.len(), 1, "a copy is kept");
+		assert_eq!(std::fs::read_to_string(dir.join(&copies[0])).unwrap(), text);
+		write_config_atomic(&path, &out).unwrap();
+		assert_eq!(backups_in(&dir, "config").len(), 1, "and only once");
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
+	// A beta1 file in error is taken for 2.x only where that changes no line
+	// that reads now. A comma list typed into one beside a path holding `\n`,
+	// or a typo shcl can't place, leaves the file as it is.
+	// Test ID: deyse
+	#[test]
+	fn a_beta1_file_in_error_is_not_read_the_old_way() {
+		for text in [
+			format!(
+				"wallpaper:\n\timage: \"C:\\new\\sea.jpg\"\nfont:\n\tfamily: Iosevka, Hack\n{SHCL_BANNER}"
+			),
+			format!("wallpaper:\n\timage: \"C:\\x\\\" # mine\n\ttags: a, b\n{SHCL_BANNER}"),
+			format!(
+				"font:\n\tsize: 13\n\tbad line here\nwallpaper:\n\timage: \"C:\\new\"\n{SHCL_BANNER}"
+			),
+		] {
+			assert!(shcl::Document::parse(&text).error_count() > 0, "{text}");
+			assert_eq!(upgrade(text.as_bytes()), Upgrade::Current, "{text}");
+		}
+	}
+
+	// A config as each shcl release before 3.0 writes it, from v1.0.0-beta1 on.
+	// Releases that write the same bytes share a file. Each was written, and
+	// `reads.tsv` read back, by that release's own crate, and every release read
+	// the same values. After one launch every value reads as it did, nothing is
+	// lost, the old file is kept byte for byte, and the next launch changes
+	// nothing.
+	// Test ID: deyst
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_file_every_shcl_release_wrote_converts_with_its_values() {
+		const RELEASES: [(&str, &str); 4] = [
+			(
+				"v1.0.0-beta1",
+				include_str!("testdata/formats/shcl_v1.0.0-beta1.shcl"),
+			),
+			(
+				"v1.0.0-beta2 to v1.0.0",
+				include_str!("testdata/formats/shcl_v1.0.0-beta2_to_v1.0.0.shcl"),
+			),
+			(
+				"v1.1.0 to v1.2.0",
+				include_str!("testdata/formats/shcl_v1.1.0_to_v1.2.0.shcl"),
+			),
+			("v2.0.0", include_str!("testdata/formats/shcl_v2.0.0.shcl")),
+		];
+		let unescape = |text: &str| {
+			let mut out = String::new();
+			let mut chars = text.chars();
+			while let Some(c) = chars.next() {
+				if c != '\\' {
+					out.push(c);
+					continue;
+				}
+				match chars.next() {
+					Some('t') => out.push('\t'),
+					Some('n') => out.push('\n'),
+					Some('r') => out.push('\r'),
+					Some(other) => out.push(other),
+					None => out.push('\\'),
+				}
+			}
+			out
+		};
+		let reads = include_str!("testdata/formats/reads.tsv").replace("\r\n", "\n");
+		// a monitor's size moves to the state file at the launch
+		let assert_reads = |text: &str, state: &str, release: &str| {
+			let (doc, state) = (shcl::Document::parse(text), shcl::Document::parse(state));
+			for line in reads.lines() {
+				let mut cells = line.split('\t');
+				let (Some(path), Some(kind)) = (cells.next(), cells.next()) else {
+					panic!("bad row {line:?}");
+				};
+				let want: Vec<String> = cells.map(unescape).collect();
+				let doc = if path.starts_with("window.monitors.") {
+					&state
+				} else {
+					&doc
+				};
+				let got = if kind == "a" {
+					doc.get_string_array(path)
+				} else {
+					doc.get_string(path).map(|value| vec![value])
+				};
+				assert_eq!(got.as_ref(), Ok(&want), "{path} from {release}:\n{text}");
+			}
+		};
+
+		let _guard = test_config_lock();
+		let _store = test_store_lock();
+		for (n, (release, old)) in RELEASES.into_iter().enumerate() {
+			let old = old.replace("\r\n", "\n");
+			let _ = take_conversion_loss();
+			let dir = format_test_dir(&format!("release_{n}"));
+			let path = dir.join("config.shcl");
+			std::fs::write(&path, &old).unwrap();
+			set_config_override(path.clone());
+
+			let s = load();
+			assert_eq!(take_conversion_loss(), None, "{release}: nothing lost");
+			let kept = backups_in(&dir, "config");
+			assert_eq!(kept.len(), 1, "{release}: {kept:?}");
+			assert!(is_backup_name(&kept[0], "config", 2), "{kept:?}");
+			assert_eq!(std::fs::read_to_string(dir.join(&kept[0])).unwrap(), old);
+			let now = std::fs::read_to_string(&path).unwrap();
+			assert_eq!(
+				shcl::format_version(&now),
+				Some(shcl::FORMAT_MAJOR),
+				"{release}:\n{now}"
+			);
+			assert!(config_complaints(&now).is_empty(), "{release}:\n{now}");
+			let state = std::fs::read_to_string(dir.join("state.shcl")).unwrap_or_default();
+			assert_reads(&now, &state, release);
+			let text = |s: &str| Some(Value::Text(s.to_string()));
+			assert_eq!(
+				crate::fields::get(&s, Key::BgImage),
+				text(r"C:\Users\me\Pictures\sea.jpg"),
+				"{release}"
+			);
+			assert_eq!(
+				crate::fields::get(&s, Key::StartupDirectory),
+				text(r"\\server\share\home"),
+				"{release}"
+			);
+			assert_eq!(
+				crate::fields::get(&s, Key::FontFamily),
+				text("Iosevka Term"),
+				"{release}"
+			);
+
+			let _ = load();
+			assert_eq!(
+				std::fs::read_to_string(&path).unwrap(),
+				now,
+				"{release}: settled"
+			);
+			assert_eq!(backups_in(&dir, "config").len(), 1, "{release}");
+			let _ = std::fs::remove_dir_all(&dir);
+		}
 	}
 
 	// A file that is not UTF-8 cannot be read by shcl at all. In an older format
@@ -14141,7 +14453,7 @@ mod tests {
 	fn a_save_keeps_a_commented_block_in_order() {
 		let text = "wallpaper:\n\topacity: 0.2\n\t# rotate:\n\t\t# enabled: true\n\tblur: 3\n";
 		let mut doc = shcl::Document::parse(text);
-		assert!(doc.set_int("wallpaper.blur", 4));
+		assert_eq!(doc.set_int("wallpaper.blur", 4), shcl::SetStatus::Ok);
 		assert_eq!(doc.to_canonical(), text.replace("blur: 3", "blur: 4"));
 	}
 
@@ -14161,7 +14473,7 @@ mod tests {
 		assert!(text.starts_with(body));
 		std::fs::write(&path, text).unwrap();
 		let mut doc = read_doc(&path).unwrap();
-		assert!(doc.set_int("window.columns", 100));
+		assert_eq!(doc.set_int("window.columns", 100), shcl::SetStatus::Ok);
 		assert!(write_doc(&path, &doc));
 		assert_eq!(
 			std::fs::read_to_string(&path).unwrap(),
@@ -15748,7 +16060,7 @@ mod tests {
 		let damaged = misplaced_image(default_config());
 		let saved = {
 			let mut doc = shcl::Document::parse(&damaged);
-			assert!(doc.set_float("font.size", 15.5));
+			assert_eq!(doc.set_float("font.size", 15.5), shcl::SetStatus::Ok);
 			doc.to_canonical()
 		};
 		let (a, b) = ("/home/x/Pictures/a.png", "/home/x/Pictures/b.png");
@@ -16335,7 +16647,8 @@ mod tests {
 		assert!(migrate_config_text(&format!("font:\n\t# family: \"{stale}\"\n")).is_none());
 		// a top-level dotted spelling refreshes too
 		assert!(migrate_config_text(&format!("font.family: \"{stale}\"\n")).is_some());
-		// a save swaps single quotes for double, so either reads as the old default
+		// a save before shcl 3.0.0-beta1 swapped single quotes for double, so either
+		// reads as the old default
 		let out = migrate_config_text(&format!("font:\n\tfamily: '{stale}'\n"))
 			.expect("a single-quoted stale default should be refreshed");
 		assert!(
@@ -16471,7 +16784,7 @@ mod tests {
 	// 	// what a Settings save of an unrelated value writes
 	// 	let saved = |t: &str| {
 	// 		let mut doc = parse_kept(t);
-	// 		assert!(doc.set_string("colors.background", "#010101"));
+	// 		assert_eq!(doc.set_string("colors.background", "#010101"), shcl::SetStatus::Ok);
 	// 		saved_text(&doc)
 	// 	};
 	// 	let column_0 =
@@ -16513,11 +16826,11 @@ mod tests {
 		for ending in ["\n", "\r\n"] {
 			let text = file.replace('\n', ending);
 			let mut font = parse_kept(&text);
-			assert!(font.set_float("font.size", 15.5));
+			assert_eq!(font.set_float("font.size", 15.5), shcl::SetStatus::Ok);
 			let (font, kept) = font.to_text_keep_lines();
 			assert!(kept, "the font size save keeps the lines: {font:?}");
 			let mut size = parse_kept(&text);
-			assert!(size.set_int("window.columns", 100));
+			assert_eq!(size.set_int("window.columns", 100), shcl::SetStatus::Ok);
 			let (size, kept) = size.to_text_keep_lines();
 			assert!(
 				!kept && size.contains("\n\t# highlight:"),
@@ -16539,7 +16852,10 @@ mod tests {
 		// a commented new name inside the block blocks it, before and after
 		let blocked = "colors:\n\tfocus: \"#112233\"\n\t# highlight: \"#aabbcc\"\n\tbackground: \"#000000\"\n";
 		let mut doc = parse_kept(blocked);
-		assert!(doc.set_string("colors.background", "#010101"));
+		assert_eq!(
+			doc.set_string("colors.background", "#010101"),
+			shcl::SetStatus::Ok
+		);
 		for doc in [load(blocked), load(&saved_text(&doc))] {
 			assert_eq!(doc.get_string("colors.focus").as_deref(), Ok("#112233"));
 			assert!(doc.get_string("colors.highlight").is_err());
@@ -16547,7 +16863,10 @@ mod tests {
 	}
 
 	// A Settings save may tidy quotes and indentation, and the launch after it
-	// must load every value as the launch before it did.
+	// must load every value as the launch before it did. Since shcl 3.0.0-beta1 a
+	// save keeps a font list's single quotes, and the font cases check that it
+	// still does: a save that swaps them again makes the refresh's either-quote
+	// match matter here.
 	// Test ID: dcfp6
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
@@ -16644,15 +16963,19 @@ mod tests {
 		let mut moved: Vec<String> = Vec::new();
 		for (what, text, reader, held) in cases {
 			let canonical = shcl::Document::parse(&text).to_canonical();
-			let respelled = if held {
-				text.contains("\n\t# x:\n\t\tfocus") && !canonical.contains("\n\t# x:\n\t\tfocus")
+			if held {
+				assert!(
+					text.contains("\n\t# x:\n\t\tfocus")
+						&& !canonical.contains("\n\t# x:\n\t\tfocus"),
+					"{what}: a save no longer respells this line, so the case proves nothing"
+				);
 			} else {
-				text.contains(&format!("'{stale}'")) && canonical.contains(&format!("\"{stale}\""))
-			};
-			assert!(
-				respelled,
-				"{what}: a save no longer respells this line, so the case proves nothing"
-			);
+				assert!(
+					text.contains(&format!("'{stale}'"))
+						&& canonical.contains(&format!("'{stale}'")),
+					"{what}: a save respells the quotes again, so the case needs another look"
+				);
+			}
 
 			std::fs::write(&path, &text).unwrap();
 			let launched = if held {
@@ -16762,14 +17085,14 @@ mod tests {
 			Settings::default().wallpaper_folder_raw,
 			WALLPAPER_DIR_TOKEN
 		);
-		let line = format!("folder: \"{}\"  ## Default", wallpaper_dir_escaped());
+		let line = format!("folder: \"{WALLPAPER_DIR_TOKEN}\"  ## Default");
 		assert!(
 			default_config().contains(&line),
 			"template says something else"
 		);
 		// the Windows spelling keeps its backslashes through a read, whatever
 		// box reads it
-		let doc = shcl::Document::parse("folder: \"%LOCALAPPDATA%\\\\silkterm\\\\wallpaper\"\n");
+		let doc = shcl::Document::parse("folder: \"%LOCALAPPDATA%\\silkterm\\wallpaper\"\n");
 		assert_eq!(
 			doc.get_string("folder").unwrap(),
 			r"%LOCALAPPDATA%\silkterm\wallpaper"
@@ -17069,10 +17392,7 @@ mod tests {
 		let out = migrate_config_text("wallpaper:\n\trotate:\n\t\t# folder: \"\"  ## Default\n")
 			.expect("the outgoing default should be refreshed");
 		assert!(
-			out.contains(&format!(
-				"# folder: \"{}\"  ## Default",
-				wallpaper_dir_escaped()
-			)),
+			out.contains(&format!("# folder: \"{WALLPAPER_DIR_TOKEN}\"  ## Default")),
 			"{out:?}"
 		);
 	}
@@ -17165,8 +17485,11 @@ mod tests {
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_save_keeps_nested_comment_layout() {
 		let mut doc = shcl::Document::parse(default_config());
-		assert!(doc.set_float("wallpaper.opacity", 0.5));
-		assert!(doc.set_bool("text.scrim.enabled", false));
+		assert_eq!(doc.set_float("wallpaper.opacity", 0.5), shcl::SetStatus::Ok);
+		assert_eq!(
+			doc.set_bool("text.scrim.enabled", false),
+			shcl::SetStatus::Ok
+		);
 		let out = doc.to_canonical();
 
 		let added: Vec<&str> = out
@@ -17556,7 +17879,7 @@ mod tests {
 			match leaf {
 				"family" => {
 					let stale = SUPERSEDED_FONT_STACKS[0];
-					// single quotes most: the save respells them
+					// single quotes most: a save before shcl 3.0.0-beta1 respelled them
 					match rng.below(6) {
 						0..=2 => format!("'{stale}'"),
 						3 => format!("\"{stale}\""),
@@ -17666,7 +17989,7 @@ mod tests {
 				return;
 			}
 			let mut doc = raw.clone();
-			if !doc.set_float("font.size", 15.5) {
+			if doc.set_float("font.size", 15.5) != shcl::SetStatus::Ok {
 				return;
 			}
 			save_check_as(&text, &raw, &doc.to_canonical());
@@ -18579,9 +18902,9 @@ mod tests {
 				);
 				// what the dialog's save would leave: shcl's setters, then canonical text
 				let mut saved = before.clone();
-				let set = lines
-					.check_next_run
-					.is_none_or(|flag| saved.set_bool("performance.check_next_run", flag));
+				let set = lines.check_next_run.is_none_or(|flag| {
+					saved.set_bool("performance.check_next_run", flag) == shcl::SetStatus::Ok
+				});
 				let saved_text = saved.to_canonical();
 				let saved = shcl::Document::parse(&saved_text);
 				let saved_migrated = migrated(&saved_text);
@@ -18650,6 +18973,10 @@ mod tests {
 	// setting, added a theme and set the shell list.
 	const BETA3_FIRST_LAUNCH: &str = include_str!("testdata/beta3_first_launch.shcl");
 	const BETA3_SAVED: &str = include_str!("testdata/beta3_saved.shcl");
+	// v1.0.0-beta2's, the same way, through the same shcl. It had no shell
+	// list, so the save names the default shell in `shell.default`.
+	const BETA2_FIRST_LAUNCH: &str = include_str!("testdata/beta2_first_launch.shcl");
+	const BETA2_SAVED: &str = include_str!("testdata/beta2_saved.shcl");
 
 	// Each row the beta3 save set, as it reads now. `blink_rate_ms: 400` was half
 	// a cycle, so 0.8 s.
@@ -18735,6 +19062,56 @@ mod tests {
 		for (key, want) in beta3_rows() {
 			assert_eq!(crate::fields::get(s, key), Some(want), "{key:?} {when}");
 		}
+		assert_old_save_look_kept(s, when);
+		let shells: Vec<_> = s
+			.shells
+			.iter()
+			.map(|e| {
+				(
+					e.slug.as_str(),
+					e.command.as_str(),
+					e.active,
+					e.comment.as_str(),
+					e.last_seen.as_str(),
+				)
+			})
+			.collect();
+		assert_eq!(
+			shells,
+			[
+				("bash", "/bin/bash", true, "", "2026-08-20"),
+				("zsh", "/usr/bin/zsh -l", false, "login shell", ""),
+			],
+			"{when}"
+		);
+	}
+
+	// What beta2 had no row for is left out, and its default shell is the top
+	// of the list now.
+	fn assert_beta2_saved_kept(s: &Settings, when: &str) {
+		let beta3_only = [
+			Key::TabRegularWidth,
+			Key::TabMaxWidth,
+			Key::StartupDirectory,
+			Key::ShellIntegration,
+		];
+		for (key, want) in beta3_rows() {
+			if !beta3_only.contains(&key) {
+				assert_eq!(crate::fields::get(s, key), Some(want), "{key:?} {when}");
+			}
+		}
+		assert_old_save_look_kept(s, when);
+		let top = s.shells.iter().find(|e| e.active);
+		assert_eq!(
+			top.map(|e| e.command.as_str()),
+			Some("/usr/bin/zsh -l"),
+			"{when}: {:?}",
+			s.shells
+		);
+	}
+
+	// What the beta2 and beta3 saves both set the same way.
+	fn assert_old_save_look_kept(s: &Settings, when: &str) {
 		// a look of its own, so the profile it comes up on is Custom, by hand
 		assert_eq!(
 			crate::profile::current(s),
@@ -18784,28 +19161,6 @@ mod tests {
 		assert_eq!(theme.dark.ansi[0], hex("#08b35b"), "{when}");
 		assert_eq!(theme.dark.ansi[15], hex("#4df37c"), "{when}");
 		assert_eq!(theme.light.ansi[15], hex("#56a6d8"), "{when}");
-
-		let shells: Vec<_> = s
-			.shells
-			.iter()
-			.map(|e| {
-				(
-					e.slug.as_str(),
-					e.command.as_str(),
-					e.active,
-					e.comment.as_str(),
-					e.last_seen.as_str(),
-				)
-			})
-			.collect();
-		assert_eq!(
-			shells,
-			[
-				("bash", "/bin/bash", true, "", "2026-08-20"),
-				("zsh", "/usr/bin/zsh -l", false, "login shell", ""),
-			],
-			"{when}"
-		);
 	}
 
 	// A file beta3 saved converts with every setting it held: the launch keeps
@@ -18815,12 +19170,25 @@ mod tests {
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_file_beta3_saved_keeps_every_setting() {
+		an_old_save_keeps_every_setting(BETA3_SAVED, "beta3_saved", assert_beta3_saved_kept);
+	}
+
+	// The same for a file beta2 saved, whose default shell moves to the top of
+	// the list.
+	// Test ID: deysv
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_file_beta2_saved_keeps_every_setting() {
+		an_old_save_keeps_every_setting(BETA2_SAVED, "beta2_saved", assert_beta2_saved_kept);
+	}
+
+	fn an_old_save_keeps_every_setting(old: &str, what: &str, assert_kept: fn(&Settings, &str)) {
 		let _guard = test_config_lock();
 		let _store = test_store_lock();
 		let _ = take_conversion_loss();
-		let dir = format_test_dir("beta3_saved");
+		let dir = format_test_dir(what);
 		let path = dir.join("config.shcl");
-		std::fs::write(&path, BETA3_SAVED.replace("\r\n", "\n")).unwrap();
+		std::fs::write(&path, old.replace("\r\n", "\n")).unwrap();
 		set_config_override(path.clone());
 
 		let s = load();
@@ -18835,13 +19203,13 @@ mod tests {
 			"{now}"
 		);
 		assert!(config_complaints(&now).is_empty(), "{now}");
-		assert_beta3_saved_kept(&s, "after the launch");
+		assert_kept(&s, "after the launch");
 
 		let mut edited = s.clone();
 		change(&mut edited, Key::Minimap, Value::Bool(false));
 		assert!(persist(&s, &edited));
 		let saved = reload_from_disk();
-		assert_beta3_saved_kept(&saved, "after a save");
+		assert_kept(&saved, "after a save");
 		assert_eq!(
 			crate::fields::get(&saved, Key::Minimap),
 			Some(Value::Bool(false))
@@ -18849,7 +19217,7 @@ mod tests {
 
 		let written = std::fs::read_to_string(&path).unwrap();
 		let again = load();
-		assert_beta3_saved_kept(&again, "on the next launch");
+		assert_kept(&again, "on the next launch");
 		assert_eq!(std::fs::read_to_string(&path).unwrap(), written, "settled");
 		assert_eq!(backups_in(&dir, "config").len(), 1);
 		let _ = std::fs::remove_dir_all(&dir);
@@ -18861,13 +19229,25 @@ mod tests {
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_file_beta3_wrote_on_first_launch_stays_automatic() {
+		an_old_template_stays_automatic(BETA3_FIRST_LAUNCH, "beta3_first");
+	}
+
+	// The same for the template beta2 wrote, which set the same lines.
+	// Test ID: deysw
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_file_beta2_wrote_on_first_launch_stays_automatic() {
+		an_old_template_stays_automatic(BETA2_FIRST_LAUNCH, "beta2_first");
+	}
+
+	fn an_old_template_stays_automatic(old: &str, what: &str) {
 		use Value::{Bool, Float, Int};
 		let _guard = test_config_lock();
 		let _store = test_store_lock();
 		let _ = take_conversion_loss();
-		let dir = format_test_dir("beta3_first");
+		let dir = format_test_dir(what);
 		let path = dir.join("config.shcl");
-		std::fs::write(&path, BETA3_FIRST_LAUNCH.replace("\r\n", "\n")).unwrap();
+		std::fs::write(&path, old.replace("\r\n", "\n")).unwrap();
 		set_config_override(path.clone());
 
 		let s = load();

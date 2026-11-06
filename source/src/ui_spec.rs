@@ -1242,7 +1242,7 @@ mod tests {
 	// Test ID: ddamr
 	#[test]
 	fn a_windows_group_cannot_contain_a_row_for_everyone() {
-		let bad = "tabs: \"Only\"\nrows:\n\tHead:\n\t\tkind: heading\n\t\tlabel: Head\n\t\ttab: Only\n\t\twindows: true\n\tMargin:\n\t\tlabel: x\n\t\tkind: slider\n\t\trange: 0, 1\n\t\tsetting: margin\n";
+		let bad = "tabs: \"Only\"\nrows:\n\tHead:\n\t\tkind: heading\n\t\tlabel: Head\n\t\ttab: Only\n\t\twindows: true\n\tMargin:\n\t\tlabel: x\n\t\tkind: slider\n\t\trange: [0, 1]\n\t\tsetting: margin\n";
 		let Err(problems) = parse(bad) else {
 			panic!("a shared row under a Windows-only heading must be reported")
 		};
@@ -1265,7 +1265,7 @@ mod tests {
 			("typed_max: 0.5", "below the range"),
 		] {
 			let text = format!(
-				"tabs: \"Only\"\nrows:\n\tHead:\n\t\tkind: heading\n\t\tlabel: Head\n\t\ttab: Only\n\tMargin:\n\t\tlabel: x\n\t\tkind: slider\n\t\trange: 0, 1\n\t\t{extra}\n\t\tsetting: margin\n"
+				"tabs: \"Only\"\nrows:\n\tHead:\n\t\tkind: heading\n\t\tlabel: Head\n\t\ttab: Only\n\tMargin:\n\t\tlabel: x\n\t\tkind: slider\n\t\trange: [0, 1]\n\t\t{extra}\n\t\tsetting: margin\n"
 			);
 			let Err(problems) = parse(&text) else {
 				panic!("{extra} was taken")
@@ -1336,7 +1336,7 @@ mod tests {
 		);
 		assert!(tab_tree(&["A", "A"]).is_err(), "a tab twice");
 		let head = "rows:\n\tHead:\n\t\tkind: heading\n\t\tlabel: Head\n\t\ttab: ";
-		let Err(problems) = parse(&format!("tabs: \"B\", \"B/C\"\n{head}B\n")) else {
+		let Err(problems) = parse(&format!("tabs: [\"B\", \"B/C\"]\n{head}B\n")) else {
 			panic!("a heading on a tab that holds tabs must be reported")
 		};
 		assert!(
@@ -1344,7 +1344,7 @@ mod tests {
 			"{problems:?}"
 		);
 		let Err(problems) = parse(&format!(
-			"tabs: \"B\", \"B/C\"\ntabs_side: left\n{head}B/C\n"
+			"tabs: [\"B\", \"B/C\"]\ntabs_side: left\n{head}B/C\n"
 		)) else {
 			panic!("the layout is missing")
 		};

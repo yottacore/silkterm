@@ -1,0 +1,15 @@
+font.family	s	Iosevka Term
+font.size	s	13.5
+window.columns	s	120
+window.monitors."1920x1080_100pct".columns	s	100
+window.monitors."1920x1080_100pct".rows	s	30
+wallpaper.image	s	C:\\Users\\me\\Pictures\\sea.jpg
+shell.startup_directory	s	\\\\server\\share\\home
+themes.mine.name	s	Mine # 2
+themes.mine.dark.background	s	#102030
+themes.mine.dark.ansi	a	#000000	#111111	#222222	#333333	#444444	#555555	#666666	#777777	#888888	#999999	#aaaaaa	#bbbbbb	#cccccc	#dddddd	#eeeeee	#ffffff
+shells.zsh.title	s	Zsh, login
+shells.zsh.command	s	/usr/bin/zsh -l
+shells.zsh.active	s	false
+shells.zsh.last_seen	s	2026-08-20
+shells.zsh.comment	s	it's a "login" shell\tz

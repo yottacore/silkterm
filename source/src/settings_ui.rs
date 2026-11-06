@@ -13765,6 +13765,66 @@ mod tests {
 		assert!(r.y >= d.rect.y && r.y + r.h <= d.rect.y + d.rect.h + 0.01);
 	}
 
+	// A tab's title sits at the same height in its box on every tab, the last
+	// as the first. The boxes and the titles come from two loops, so this reads
+	// what is handed to the renderer, in physical pixels, at whole and
+	// fractional scales.
+	// Test ID: deyxd
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_tab_title_sits_as_low_in_its_box_on_every_tab() {
+		let paths: Vec<&str> = tab_nodes().iter().map(|n| n.path).collect();
+		for side in [TabsSide::Left, TabsSide::Top] {
+			let _tabs = stand_in_tabs(&paths, side);
+			for scale in [1.0, 1.25, 1.5, 2.0] {
+				let mut d = mk_dialog_at(4000.0, scale);
+				// a short window too, which slides the list
+				for h in [d.size().1, 200.0 * scale] {
+					d.set_size(d.size().0, h);
+					for tab in [0, tab_titles().len() - 1] {
+						d.tab = tab;
+						let measure = |t: &str| chars7(t) * scale;
+						let (fixed, _) = d.rects(18.0 * scale, measure);
+						let texts = d.texts(18.0 * scale, measure);
+						let mut drops = Vec::new();
+						for (node, n) in tab_nodes().iter().enumerate() {
+							let r = d.rect_px(d.tab_rect(node));
+							// the strip clips a box part way out of it
+							let strip = d.rect_px(d.tab_strip());
+							if r.w <= 0.0 || r.y < strip.y || r.y + r.h > strip.y + strip.h {
+								continue;
+							}
+							let boxed = fixed.iter().any(|q| {
+								(q.pos[0] - r.x).abs() < 0.01
+									&& (q.pos[1] - r.y).abs() < 0.01
+									&& (q.size[1] - r.h).abs() < 0.01
+							});
+							assert!(
+								boxed,
+								"{side:?} at {scale}, {h} high: tab {node} has its box"
+							);
+							let title = texts
+								.iter()
+								.find(|t| t.text == n.title && t.x > r.x && t.x < r.x + r.w)
+								.unwrap_or_else(|| {
+									panic!("{side:?} at {scale}: tab {node} has its title")
+								});
+							drops.push((node, title.y - r.y));
+						}
+						let (_, first) = drops[0];
+						for &(node, drop) in &drops {
+							assert!(
+								(drop - first).abs() < 0.01,
+								"{side:?} at {scale}, {h} high: tab {node}'s title is {drop} \
+								 into its box, the first's {first}"
+							);
+						}
+					}
+				}
+			}
+		}
+	}
+
 	// The whole focus ring walked from the keyboard never leaves the tab: tabs
 	// are mouse-only and say where you are.
 	// Test ID: ddrjk
