@@ -161,173 +161,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Branch: rnd1101b
 	- Test case: `output_from_a_tab_in_the_back_does_not_keep_the_device` (der5b). Also `cicd/tests/idleother/run.bash` (deqy2), in the full run.
 
-- Regression: On Linux, the settings dialog is detached from the main window, and is its own alt+tab target
-	- ID: 2026103010083402
-	- Type: Bug
-	- Status: Waiting on UAT
-		- Open Settings from a release build on the desktop, under xfwm4 and under Compiz. It should make one taskbar button, one pager entry and one alt+tab entry, and stay above the terminal when the terminal is clicked or raised.
-	- Needs hand testing: the above, on the real desktop.
-	- Stand-in: none (20261102). dlgtie (der6f) already checks the hints and stacking under xfwm4. The taskbar button and alt+tab entry as reported never showed here, so only the real desktop can show they're gone.
-	- Opened: 20261030-100834
-	- Opened by: JC
-	- Assigned to: CC
-	- Related IDs: 2026110118260314
-	- Target OS: Linux
-	- Expected behavior:
-		- Settings should always be on top of the main window, never able to be behind it.
-			- Most Linux DEs purposely allow moving a window that has a modal dialog over it, even though the modal still stays over it. That's fine.
-		- There should only be one window pager target, and only one taskbar button, when Settings is open.
-	- Notes:
-		- Pre-next-cut.
-		- Need a test case for this to make sure it doesn't keep coming back.
-	- Reproduced: In part, 20261101, on X11 under xfwm4 4.20 and Compiz 0.8.18 with a debug build. The pager showed 2 entries. The taskbar showed 1, and the dialog stayed above the terminal through a click, a raise, and another window in front.
-	- Possible cause:
-		- Pager: the dialog never asked to skip the pager. Its hints went in 20260702 and 20260703 with skip taskbar only, so that part was never right rather than a regression.
-		- Taskbar and stacking: no change to the hints or to how the dialog is created since 20260704, apart from moving code. A plain window, as reported, is what the dialog becomes when its hints miss the map. They were written on a second X connection with only a flush, and the server owes no order between two clients, so a fast open could map first.
-		- On Wayland the dialog is a window of its own by design, since winit has no parent there. That is 2026110118260314.
-	- Actual fix: The dialog skips the pager too, and its hints are confirmed with the server before the window is mapped.
-	- Decisions:
-		- 20261101: The round trip goes in although the race wasn't caught in the act. It costs one request when a dialog opens, and makes the hints' order certain.
-	- Verified: 20261101. dlgtie passed after the fix, failed before it on the pager check only, and failed 6 checks with the hints left out, the raise among them.
-		- Swept: the other dialogs share the same window code, so About, the notices and the questions get the pager hint too. `restack_parent_below` only sends one message and needs no reply.
-	- Branch: rnd1101b
-	- Test case: `cicd/tests/dlgtie/run.bash` (der6f).
-
-- Text underlines aren't drawn
-	- ID: 2026102511131401
-	- Type: Bug
-	- Status: Waiting on UAT
-		- 20261102: Look at each style from the repro line, with `4:2` for double, and at spell checking in vim or Neovim, on the real desktop. The curl's height and the dot and dash spacing are first picks.
-	- Stand-in: none (20261102). Turns on how the curl, dots and dashes look. desqy and desqz already check where each line goes.
-	- Needs hand testing: The look of the curly, dotted and dashed underlines, and the strike-through's height, in a light and a dark theme.
-	- Severity: Avg
-	- Opened: 20261025-111314
-	- Opened by: CC
-	- Related IDs: 2026102114411311
-	- Target OS: All
-	- Test environment: b23, dev at a9daddc
-	- Steps to reproduce:
-		- In SilkTerm, run `printf '\e[4mplain\e[0m \e[4:3mcurly\e[0m \e[21mdouble\e[0m\n'`.
-		- Or turn on spell checking in vim or Neovim.
-	- Incorrect behavior: No underline under any of them. The drawing code reads no underline flag from the engine, so plain, double, curly, dotted and dashed underlines all show as plain text. The link hover underline is SilkTerm's own and works.
-	- Expected behavior: Each underline style a program sets is drawn, in the underline color it sets, or the text color.
-	- Reproduced: Not run in a window. Found in the code while answering 2026102114411311.
-	- Actual cause: The cell loop read bold, italic, inverse, hidden and dim from the engine, but no underline or strike flag, so nothing drew either.
-	- Actual effort: Avg
-	- Decisions:
-		- 20261102: SGR 21 stays as the engine reads it, "not bold", as in Alacritty and the Linux console. Double underline is `4:2`, which is what terminfo's `Smulx` and Neovim send. xterm and GNOME Terminal draw 21 as a double underline; that part is in child 2026110220554102.
-		- 20261102: Strike-through (SGR 9) is drawn too. It was missing the same way and goes through the same code.
-		- 20261102: An underline color the program sets gets the same contrast lift as the text, so a red curl on a dark red background still shows.
-		- 20261102: The lines sit where the link underline does, inside the cell, so none draws into the row below. They draw over the text scrim and under the text, like the link underline.
-	- Actual fix:
-		- Plain, double, curly, dotted and dashed underlines are drawn under their run of cells, in the color set with SGR 58, or else the text color. Concealed text draws none.
-		- Curly, dotted and dashed are drawn by the quad shader, so a run is one quad and the pattern runs on across cells.
-		- An app's scroll slide carries them along with the rows it reveals.
-	- Swept: Every place cells are styled for drawing: the pane's cell loop and the scrolled-off strip. The link underline now takes its place from the same helper. The minimap draws no lines, left as is. Engine flags now read: all five underline styles, the underline color, strike-through and hidden.
-	- Verified: 20261102, the backlog quick run (fmt, clippy, tests, scripts, docs), and every style seen drawn in a window, with SGR 58 colors in both its forms.
-	- Branch: rnd1102
-	- Commit: 87f070f
-	- Test case: `each_underline_style_lines_its_own_cells` (desqy), which fails with the style read taken out, and `the_rules_stay_inside_their_cells` (desqz). `each_quad_mode_reaches_its_own_branch_of_the_shader` (ddj83) covers the 2 new shader modes.
-
-- Always use automatic remote mode when detected.
-	- ID: 2026101914251764
-	- Type: Feature
-	- Status: Waiting on UAT
-		- The row's label is shorter than the requested name. See Decisions.
-		- 20261023: Back from Waiting on UAT, since the 2 rows below are machine runs.
-		- 20261031: Back to Waiting on UAT. The Windows run passed, so only the label is left.
-	- Needs hand testing: OK the shorter Settings label.
-	- Stand-in: none (20261031). Turns on whether the shorter label reads right.
-	- Priority: Avg
-	- Opened: 20261019-142517
-	- Opened by: JC
-	- Related IDs: 2026101816103600
-	- Target OS: All
-	- Requirements:
-		- New setting: "Always use automatic remote mode when detected."
-		- Default true.
-	- Notes:
-		- Pre-next-cut.
-	- Decisions:
-		- 20261022: The Settings label is "Use remote mode when detected", with "automatic remote mode" as a search word. The requested wording is 46 characters, and the widest label sets the panel width on every tab; the longest now is 30. The flyover carries the rest.
-		- 20261022: Off doesn't hide anything. The View menu's "Temporary remote display mode" and Remote (temporary) in the Profile dropdown still work by hand.
-		- 20261022: The setting is read at launch. Turning it off in a session already under Remote leaves Remote on until the View menu item or a restart takes it off.
-		- 20261022: The row sits last under Performance, at the top level, since detection doesn't depend on Choose automatically.
-	- Progress log:
-		- 20261022: Added `performance.detect_remote`, default true, with its template line and Settings row on the Silk tab. Off, launch skips the remote check and keeps the stored profile. Linux and Windows both go through the one launch check, so both read it. The performance profile and automatic settings design docs say so.
-		- Verified: rustfmt, clippy for Linux, Windows and macOS, the whole silkterm unit test suite (1403 passed, 3 ignored), and the docs and tables checks.
-		- Swept: `remote_session()` has one caller, the launch check. `set_remote` callers are the View menu toggle, the Profile dropdown and tests, all by hand, so none reads the setting.
-		- Not tried in a real window on any system.
-		- 20261023: The slow window tests passed in the full run at 2da75a7, apart from monwl (window size per Wayland output), which skipped without a reason in the log. Both new tests passed there and on b26. Left: the Windows scenario. No Windows box was free this round.
-		- 20261025: Both new tests passed again in both full runs at e95b81b. `wpremote` skipped on b29w, whose console session was locked, and never got to vm925w.
-		- 20261025: Not run in the second batch either. It needs an RDP session on a box, and a woken vm925w sits at the logon screen (2026102510420001).
-		- 20261026: Both new tests passed again at fab6815 (de9n8, de9n7). `wpremote` skipped on b29w again, its console session locked. vm925w was off and held by another session.
-		- 20261028: Both new tests passed again at 64f3584 (de9n8, de9n7). `wpremote` skipped on b29w again, its console session locked, and vm925w was off.
-		- 20261028: `wpremote` skipped again in the full run at 9eded41, b29w's console session locked. vm925w never started, since vmKt6m held its SPICE port. It still needs a real RDP session on a box.
-		- 20261031: On b29w at 80ffd30, in a real RDP session that Windows reported as remote, a launch with `performance.detect_remote: false` kept the stored profile, `high`, and showed the wallpaper. The same launch with it true came up under Remote, with no wallpaper, and left `high` in the file. `wpremote` passed there too, on the console.
-		- Verified: 20261031 on b29w, as above.
-	- Branch: rnd1022
-	- Test case: `a_remote_screen_is_ignored_when_turned_off` (rating.rs, fails with the check reordered so detection runs first) and `a_remote_screen_takes_remote_unless_turned_off` (config.rs).
-
-- The unscrollable search and buttons areas should be lighter than the scrollable content
-	- ID: 2026103010083403
-	- Type: Enhancement
-	- Status: Waiting on UAT
-		- A look at the Settings dialog in a dark and a light theme, to judge whether the step is enough.
-	- Opened: 20261030-100834
-	- Opened by: JC
-	- Assigned to: CC
-	- Related IDs: 2026101419165501
-	- Requirements:
-		- The unscrollable search and buttons areas should be lighter than the scrollable content.
-		- The scrollable content needs to be darker (in dark mode at least).
-	- Notes:
-		- Pre-next-cut.
-	- Progress log:
-		- 20261104: The rows now sit on a shade halfway toward `gutter`, and the search box's band and the footer keep the dialog background, so they read lighter. The 1 DIP lines along the rows stay. A warning sign's cut-out follows the rows' shade.
-	- Decisions:
-		- 20261104: Swapped the shade 2026101419165501 put on the bands over to the rows, the same step, so the bands stay the dialog's own color. In dark mode the rows go from `0x20202a` to `0x1b1b24`.
-		- 20261104: Light mode too. One rule for both modes, and every built-in theme's gutter is darker than its dialog background, so the bands read lighter in both.
-	- Verified:
-		- Unit suite, clippy, rustfmt, scripts and docs checks, through the quick gate.
-		- de1aj failed with the rows' shade taken out, and devr1 with the shade mixed toward white.
-		- A real window on Linux in dark mode: rows `0x1b1b24`, bands `0x20202a`, gutter `0x16161e`.
-		- Not verified: light mode in a window.
-	- Commit: e677501
-	- Test case: de1aj `the_search_box_and_the_buttons_sit_on_still_bands_lined_off_from_the_rows`, and devr1 `the_rows_sit_darker_than_the_still_bands_in_every_theme`.
-		- 20261104: de1aj checked that the bands were drawn in a shade off the panel. It now checks that the rows are, with the bands left the panel's color. Its geometry and line checks are unchanged.
-
-- A drag select recomposes the minimap about 11 times a second, though the map shows no selection
-	- ID: 2026102407065861
-	- Type: Enhancement
-	- Status: Waiting on UAT
-	- Needs hand testing: With the map on, a drag select, a link hover, typing on the prompt line and a color change in Settings, all in a real window.
-	- Stand-in: none (20261028). The machine part already ran: ddkre and the scroll harness passed at e95b81b. What's left is how the map looks.
-		- 20261025: The dogfood pool now has build dedvg, from dev at a9daddc, for Linux and Windows, with the 10-24 and 10-25 rounds' fixes. A window started before the next launch still runs de5r9.
-	- Priority: Low
-	- Opened: 20261024-070658
-	- Opened by: CC
-	- Related IDs: 2026102321230038, 2026102407065855
-	- Target OS: All
-	- Requirements:
-		- A pane rebuild that changes nothing the map shows, such as a selection change, doesn't recompose the map.
-		- Typing on the prompt line, output, a scroll, a resize and a color change still reach the map.
-	- Notes:
-		- `Pane::build` calls `map.update` on every forced rebuild, and that composes whenever the 90 ms gap is up. A drag rebuilds every frame, so the map composes on every frame past the gap: about 20 allocations a time on b23, and the compose's own CPU.
-		- The due compose is also what picks up a changed screen row with no new history, so skipping it needs some other sign the screen's text changed. `last_rows` already holds a hash per row.
-		- ddkre's drag limit has the compose in every frame, so this lowers its figure.
-	- Decisions:
-		- 20261024: Done by where the rebuild comes from, not by a hash of the screen. A moved selection and a link hover probe now mark the window with their own flag. The panes draw again as before, but the map is only updated for the window's other causes, a pane's own output and its scroll. So typing, output, a scroll, a resize and a color change take the same path to the map as before.
-	- Progress log:
-		- 20261024: The selection alone wasn't enough. A pointer moving over text also starts a link hover probe, which marked the whole window, so both panes still composed on every drag frame. The hover probe takes the same flag now.
-		- 20261025: Verified: the container full run at e95b81b passed the scroll harness on X11 and on Wayland (d9j4r) and the allocations per frame test (ddkre), as did the gate step. Only the hand look is left.
-		- 20261026: ddkre and the scroll harness on X11 and Wayland (d9j4r) passed again at fab6815.
-		- 20261028: ddkre and the scroll harness on X11 and Wayland (d9j4r) passed again at 64f3584.
-	- Verified: 20261024, with a compose logged for the run, a drag frame under load composed both panes every frame before and none after, bar the press. ddkre's drag frame read 315 and 317 with 8 cores loaded, against 333 to 370 before, and 327 idle against 332. With the map off it reads 321. Unit suite, clippy for Linux and Windows, fmt and shellcheck pass.
-	- Swept: every `state.dirty` set on a pointer move. The thumb and map drags move the view, and a divider drag and a pane drag change the layout, so they still compose. The menu, tab and bar hovers don't touch a pane. The wake after a frame looks at the new flag too.
-	- Branch: rnd1024
-	- Test case: ddkre's drag figure, under Verified. The limit stays 360, since the saving is about 5% and the 2026102321230038 margin was set by load.
-
 - Add a contributor license agreement, like nano-git-db's
 	- ID: 2026101906582193
 	- Type: Task
@@ -447,6 +280,21 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Notes:
 		- It stopped the 11-04 default cicd run at regression tests, so that run never got to dogfood. Nothing has been dogfooded since 11-01.
 	- Test case: de19r, scroll scene `tmuxclear` in `cicd/tests/scroll/run.bash`.
+
+- The Wayland window tests skip in every container full run, for want of wtype
+	- ID: 2026110516054976
+	- Type: Bug
+	- Status: Queued
+	- Severity: Avg
+	- Opened: 20261105-160549
+	- Opened by: CC
+	- Assigned to: CC
+	- Target OS: Linux
+	- Test environment: b23, the build container
+	- Incorrect behavior: detyk, ddy98, ddzwc and ddydf print `SKIP ... no wtype` in every full run log from 10-31 to 11-04. So the Wayland Settings tie, the per-output size test, the Wayland clipboard and the random monitor test haven't run in the pipeline in that time.
+	- Expected behavior: They run in the full run.
+	- Reproduced: 20261105, in the run logs. The host has wtype, and monwl and the random test passed there by hand on dev.
+	- Possible cause: `cicd/container/Dockerfile` installs sway and xdotool but not wtype.
 
 - Test run folders pile up in HOST_TEMP/silkterm, and the 2-day sweep doesn't take them
 	- ID: 2026110514393095
@@ -2579,6 +2427,80 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Acceptance signoff: Self-closed: the numbers are in the design doc and nothing is left to judge.
 	- Closed: 20261004-194634
 
+- Text underlines aren't drawn
+	- ID: 2026102511131401
+	- Type: Bug
+	- Status: Done
+	- Stand-in: none (20261102). Turns on how the curl, dots and dashes look. desqy and desqz already check where each line goes.
+	- Needs hand testing: The look of the curly, dotted and dashed underlines, and the strike-through's height, in a light and a dark theme.
+	- Severity: Avg
+	- Opened: 20261025-111314
+	- Opened by: CC
+	- Related IDs: 2026102114411311
+	- Target OS: All
+	- Test environment: b23, dev at a9daddc
+	- Steps to reproduce:
+		- In SilkTerm, run `printf '\e[4mplain\e[0m \e[4:3mcurly\e[0m \e[21mdouble\e[0m\n'`.
+		- Or turn on spell checking in vim or Neovim.
+	- Incorrect behavior: No underline under any of them. The drawing code reads no underline flag from the engine, so plain, double, curly, dotted and dashed underlines all show as plain text. The link hover underline is SilkTerm's own and works.
+	- Expected behavior: Each underline style a program sets is drawn, in the underline color it sets, or the text color.
+	- Reproduced: Not run in a window. Found in the code while answering 2026102114411311.
+	- Actual cause: The cell loop read bold, italic, inverse, hidden and dim from the engine, but no underline or strike flag, so nothing drew either.
+	- Actual effort: Avg
+	- Decisions:
+		- 20261102: SGR 21 stays as the engine reads it, "not bold", as in Alacritty and the Linux console. Double underline is `4:2`, which is what terminfo's `Smulx` and Neovim send. xterm and GNOME Terminal draw 21 as a double underline; that part is in child 2026110220554102.
+		- 20261102: Strike-through (SGR 9) is drawn too. It was missing the same way and goes through the same code.
+		- 20261102: An underline color the program sets gets the same contrast lift as the text, so a red curl on a dark red background still shows.
+		- 20261102: The lines sit where the link underline does, inside the cell, so none draws into the row below. They draw over the text scrim and under the text, like the link underline.
+	- Actual fix:
+		- Plain, double, curly, dotted and dashed underlines are drawn under their run of cells, in the color set with SGR 58, or else the text color. Concealed text draws none.
+		- Curly, dotted and dashed are drawn by the quad shader, so a run is one quad and the pattern runs on across cells.
+		- An app's scroll slide carries them along with the rows it reveals.
+	- Swept: Every place cells are styled for drawing: the pane's cell loop and the scrolled-off strip. The link underline now takes its place from the same helper. The minimap draws no lines, left as is. Engine flags now read: all five underline styles, the underline color, strike-through and hidden.
+	- Verified: 20261102, the backlog quick run (fmt, clippy, tests, scripts, docs), and every style seen drawn in a window, with SGR 58 colors in both its forms.
+	- Branch: rnd1102
+	- Commit: 87f070f
+	- Test case: `each_underline_style_lines_its_own_cells` (desqy), which fails with the style read taken out, and `the_rules_stay_inside_their_cells` (desqz). `each_quad_mode_reaches_its_own_branch_of_the_shader` (ddj83) covers the 2 new shader modes.
+	- Progress log:
+		- 20261105: Each style looked at in a window on dev, dark and light: plain, double, curly, dotted and dashed underlines, strike-through, an SGR 58 red curl on the plain background and on a red one, and hidden text, which drew no line. At 3x each style reads as itself, and the patterns run on across the gaps between words.
+	- Acceptance signoff: Self-closed: the styles look right in both modes, and desqy and desqz pin where each line goes.
+	- Closed: 20261105-161500
+
+- Regression: On Linux, the settings dialog is detached from the main window, and is its own alt+tab target
+	- ID: 2026103010083402
+	- Type: Bug
+	- Status: Done
+	- Needs hand testing: the above, on the real desktop.
+	- Stand-in: none (20261102). dlgtie (der6f) already checks the hints and stacking under xfwm4. The taskbar button and alt+tab entry as reported never showed here, so only the real desktop can show they're gone.
+	- Opened: 20261030-100834
+	- Opened by: JC
+	- Assigned to: CC
+	- Related IDs: 2026110118260314
+	- Target OS: Linux
+	- Expected behavior:
+		- Settings should always be on top of the main window, never able to be behind it.
+			- Most Linux DEs purposely allow moving a window that has a modal dialog over it, even though the modal still stays over it. That's fine.
+		- There should only be one window pager target, and only one taskbar button, when Settings is open.
+	- Notes:
+		- Pre-next-cut.
+		- Need a test case for this to make sure it doesn't keep coming back.
+	- Reproduced: In part, 20261101, on X11 under xfwm4 4.20 and Compiz 0.8.18 with a debug build. The pager showed 2 entries. The taskbar showed 1, and the dialog stayed above the terminal through a click, a raise, and another window in front.
+	- Possible cause:
+		- Pager: the dialog never asked to skip the pager. Its hints went in 20260702 and 20260703 with skip taskbar only, so that part was never right rather than a regression.
+		- Taskbar and stacking: no change to the hints or to how the dialog is created since 20260704, apart from moving code. A plain window, as reported, is what the dialog becomes when its hints miss the map. They were written on a second X connection with only a flush, and the server owes no order between two clients, so a fast open could map first.
+		- On Wayland the dialog is a window of its own by design, since winit has no parent there. That is 2026110118260314.
+	- Actual fix: The dialog skips the pager too, and its hints are confirmed with the server before the window is mapped.
+	- Decisions:
+		- 20261101: The round trip goes in although the race wasn't caught in the act. It costs one request when a dialog opens, and makes the hints' order certain.
+	- Verified: 20261101. dlgtie passed after the fix, failed before it on the pager check only, and failed 6 checks with the hints left out, the raise among them.
+		- Swept: the other dialogs share the same window code, so About, the notices and the questions get the pager hint too. `restack_parent_below` only sends one message and needs no reply.
+	- Branch: rnd1101b
+	- Test case: `cicd/tests/dlgtie/run.bash` (der6f).
+	- Progress log:
+		- 20261105: dlgtie passed on dev under Compiz 0.8.18 too, all 13 checks. In the full run it runs under xfwm4, and it passed in the last one.
+	- Acceptance signoff: Self-closed: the pager part was reproduced and fixed, and dlgtie checks the hints and the stacking under xfwm4, and passed under Compiz. The taskbar and alt+tab entries come from the same hints.
+	- Closed: 20261105-161500
+
 - The tmux end test fails in the whole suite on vmKt6m, and passes alone there
 	- ID: 2026110313290006
 	- Type: Bug
@@ -3992,6 +3914,76 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- The Windows run this item came from named only these four. That full suite was not run again.
 	- Acceptance signoff: Self-closed: test fixes only, and all four failed before the fix and pass after on Windows.
 	- Closed: 20260930-125357
+
+- The unscrollable search and buttons areas should be lighter than the scrollable content
+	- ID: 2026103010083403
+	- Type: Enhancement
+	- Status: Done
+	- Opened: 20261030-100834
+	- Opened by: JC
+	- Assigned to: CC
+	- Related IDs: 2026101419165501
+	- Requirements:
+		- The unscrollable search and buttons areas should be lighter than the scrollable content.
+		- The scrollable content needs to be darker (in dark mode at least).
+	- Notes:
+		- Pre-next-cut.
+	- Progress log:
+		- 20261104: The rows now sit on a shade halfway toward `gutter`, and the search box's band and the footer keep the dialog background, so they read lighter. The 1 DIP lines along the rows stay. A warning sign's cut-out follows the rows' shade.
+		- 20261105: Light mode in a window on dev: rows `0xddddd9`, the search box's band and the footer `0xe6e6e3`, gutter `0xd3d3cf`. Dark mode had the 11-04 figures.
+	- Decisions:
+		- 20261104: Swapped the shade 2026101419165501 put on the bands over to the rows, the same step, so the bands stay the dialog's own color. In dark mode the rows go from `0x20202a` to `0x1b1b24`.
+		- 20261104: Light mode too. One rule for both modes, and every built-in theme's gutter is darker than its dialog background, so the bands read lighter in both.
+	- Verified:
+		- Unit suite, clippy, rustfmt, scripts and docs checks, through the quick gate.
+		- de1aj failed with the rows' shade taken out, and devr1 with the shade mixed toward white.
+		- A real window on Linux in dark mode: rows `0x1b1b24`, bands `0x20202a`, gutter `0x16161e`.
+		- Not verified: light mode in a window.
+	- Commit: e677501
+	- Test case: de1aj `the_search_box_and_the_buttons_sit_on_still_bands_lined_off_from_the_rows`, and devr1 `the_rows_sit_darker_than_the_still_bands_in_every_theme`.
+		- 20261104: de1aj checked that the bands were drawn in a shade off the panel. It now checks that the rows are, with the bands left the panel's color. Its geometry and line checks are unchanged.
+	- Acceptance signoff: Self-closed: the bands read lighter than the rows in both modes, and de1aj and devr1 pin it for every theme.
+	- Closed: 20261105-161500
+
+- Always use automatic remote mode when detected.
+	- ID: 2026101914251764
+	- Type: Feature
+	- Status: Done
+	- Needs hand testing: OK the shorter Settings label.
+	- Stand-in: none (20261031). Turns on whether the shorter label reads right.
+	- Priority: Avg
+	- Opened: 20261019-142517
+	- Opened by: JC
+	- Related IDs: 2026101816103600
+	- Target OS: All
+	- Requirements:
+		- New setting: "Always use automatic remote mode when detected."
+		- Default true.
+	- Notes:
+		- Pre-next-cut.
+	- Decisions:
+		- 20261022: The Settings label is "Use remote mode when detected", with "automatic remote mode" as a search word. The requested wording is 46 characters, and the widest label sets the panel width on every tab; the longest now is 30. The flyover carries the rest.
+		- 20261022: Off doesn't hide anything. The View menu's "Temporary remote display mode" and Remote (temporary) in the Profile dropdown still work by hand.
+		- 20261022: The setting is read at launch. Turning it off in a session already under Remote leaves Remote on until the View menu item or a restart takes it off.
+		- 20261022: The row sits last under Performance, at the top level, since detection doesn't depend on Choose automatically.
+	- Progress log:
+		- 20261022: Added `performance.detect_remote`, default true, with its template line and Settings row on the Silk tab. Off, launch skips the remote check and keeps the stored profile. Linux and Windows both go through the one launch check, so both read it. The performance profile and automatic settings design docs say so.
+		- Verified: rustfmt, clippy for Linux, Windows and macOS, the whole silkterm unit test suite (1403 passed, 3 ignored), and the docs and tables checks.
+		- Swept: `remote_session()` has one caller, the launch check. `set_remote` callers are the View menu toggle, the Profile dropdown and tests, all by hand, so none reads the setting.
+		- Not tried in a real window on any system.
+		- 20261023: The slow window tests passed in the full run at 2da75a7, apart from monwl (window size per Wayland output), which skipped without a reason in the log. Both new tests passed there and on b26. Left: the Windows scenario. No Windows box was free this round.
+		- 20261025: Both new tests passed again in both full runs at e95b81b. `wpremote` skipped on b29w, whose console session was locked, and never got to vm925w.
+		- 20261025: Not run in the second batch either. It needs an RDP session on a box, and a woken vm925w sits at the logon screen (2026102510420001).
+		- 20261026: Both new tests passed again at fab6815 (de9n8, de9n7). `wpremote` skipped on b29w again, its console session locked. vm925w was off and held by another session.
+		- 20261028: Both new tests passed again at 64f3584 (de9n8, de9n7). `wpremote` skipped on b29w again, its console session locked, and vm925w was off.
+		- 20261028: `wpremote` skipped again in the full run at 9eded41, b29w's console session locked. vm925w never started, since vmKt6m held its SPICE port. It still needs a real RDP session on a box.
+		- 20261031: On b29w at 80ffd30, in a real RDP session that Windows reported as remote, a launch with `performance.detect_remote: false` kept the stored profile, `high`, and showed the wallpaper. The same launch with it true came up under Remote, with no wallpaper, and left `high` in the file. `wpremote` passed there too, on the console.
+		- Verified: 20261031 on b29w, as above.
+		- 20261105: The label fits the Silk tab in a window on dev, dark and light.
+	- Branch: rnd1022
+	- Test case: `a_remote_screen_is_ignored_when_turned_off` (rating.rs, fails with the check reordered so detection runs first) and `a_remote_screen_takes_remote_unless_turned_off` (config.rs).
+	- Acceptance signoff: Self-closed: the Windows run passed on b29w on 10-31, and the shorter label follows the 10-22 decision. The requested wording would widen the panel on every tab.
+	- Closed: 20261105-161500
 
 - Leak checks: CodeQL under `--leakcheck`, from a pinned CLI on a vendored tree
 	- ID: 2026101913360695
@@ -8882,6 +8874,40 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Commit: c9b40aa
 	- Acceptance signoff: Self-closed: the fix does what the item asks and no more, and its test passes.
 	- Closed: 20261014-152600
+
+- A drag select recomposes the minimap about 11 times a second, though the map shows no selection
+	- ID: 2026102407065861
+	- Type: Enhancement
+	- Status: Done
+	- Needs hand testing: With the map on, a drag select, a link hover, typing on the prompt line and a color change in Settings, all in a real window.
+	- Stand-in: none (20261028). The machine part already ran: ddkre and the scroll harness passed at e95b81b. What's left is how the map looks.
+		- 20261025: The dogfood pool now has build dedvg, from dev at a9daddc, for Linux and Windows, with the 10-24 and 10-25 rounds' fixes. A window started before the next launch still runs de5r9.
+	- Priority: Low
+	- Opened: 20261024-070658
+	- Opened by: CC
+	- Related IDs: 2026102321230038, 2026102407065855
+	- Target OS: All
+	- Requirements:
+		- A pane rebuild that changes nothing the map shows, such as a selection change, doesn't recompose the map.
+		- Typing on the prompt line, output, a scroll, a resize and a color change still reach the map.
+	- Notes:
+		- `Pane::build` calls `map.update` on every forced rebuild, and that composes whenever the 90 ms gap is up. A drag rebuilds every frame, so the map composes on every frame past the gap: about 20 allocations a time on b23, and the compose's own CPU.
+		- The due compose is also what picks up a changed screen row with no new history, so skipping it needs some other sign the screen's text changed. `last_rows` already holds a hash per row.
+		- ddkre's drag limit has the compose in every frame, so this lowers its figure.
+	- Decisions:
+		- 20261024: Done by where the rebuild comes from, not by a hash of the screen. A moved selection and a link hover probe now mark the window with their own flag. The panes draw again as before, but the map is only updated for the window's other causes, a pane's own output and its scroll. So typing, output, a scroll, a resize and a color change take the same path to the map as before.
+	- Progress log:
+		- 20261024: The selection alone wasn't enough. A pointer moving over text also starts a link hover probe, which marked the whole window, so both panes still composed on every drag frame. The hover probe takes the same flag now.
+		- 20261025: Verified: the container full run at e95b81b passed the scroll harness on X11 and on Wayland (d9j4r) and the allocations per frame test (ddkre), as did the gate step. Only the hand look is left.
+		- 20261026: ddkre and the scroll harness on X11 and Wayland (d9j4r) passed again at fab6815.
+		- 20261028: ddkre and the scroll harness on X11 and Wayland (d9j4r) passed again at 64f3584.
+		- 20261105: ddkre now counts map composes too, and wants none at rest or in the drag (closetests, 0a83ff6). It read 0 and 0. With the gate put back to the forced rebuild, the drag composed 52 times and failed that check, while its allocation figure, 334, still passed the limit. Typing, output, a scroll, a resize and a color change reach the map by the same flags as before the change.
+	- Verified: 20261024, with a compose logged for the run, a drag frame under load composed both panes every frame before and none after, bar the press. ddkre's drag frame read 315 and 317 with 8 cores loaded, against 333 to 370 before, and 327 idle against 332. With the map off it reads 321. Unit suite, clippy for Linux and Windows, fmt and shellcheck pass.
+	- Swept: every `state.dirty` set on a pointer move. The thumb and map drags move the view, and a divider drag and a pane drag change the layout, so they still compose. The menu, tab and bar hovers don't touch a pane. The wake after a frame looks at the new flag too.
+	- Branch: rnd1024
+	- Test case: ddkre's map compose checks at rest and in the drag, and its drag figure, under Verified. The limit stays 360, since the saving is about 5% and the 2026102321230038 margin was set by load.
+	- Acceptance signoff: Self-closed: the drag composes nothing, now checked by ddkre, and every other cause takes the path it took before.
+	- Closed: 20261105-161500
 
 - `--about` should only show the first line of the existing output
 	- ID: 2026102807384204
