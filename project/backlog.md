@@ -353,12 +353,18 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - Settings: Side-tabs: the lower the tab, the lower the text is within the tab
 	- ID: 2026110609500003
 	- Type: Bug
-	- Status: Queued
+	- Status: Waiting for answers
+		- Waits on the question in questions.md: a screenshot, and what was on screen when it showed.
 	- Opened: 20261106-095000
 	- Opened by: JC
 	- Assigned to: CC
 	- Notes:
 		- Pre-next-cut.
+	- Reproduced: No, 20261106. On Xvfb at scales 1, 1.25, 1.5, 1.75 and 2, and under headless sway on the RTX 3060 Ti at 1, 1.25 and 2, every tab's title sits the same distance above its box's bottom edge, sub-tabs included. A dev debug build and the 11-01 release build read the same.
+	- Progress log:
+		- 20261106: The title's height comes from its own tab's box, the same box that is drawn, so nothing in the layout can add up down the list. Both renderers in the frame get the same surface size.
+	- Test case: `a_tab_title_sits_as_low_in_its_box_on_every_tab` (deyxd), both sides, at 4 scales, tall and short windows. It fails when a title is moved a quarter pixel per tab. It passes on the current build.
+	- Branch: rnd1106
 
 - Integrate shcl v3.0.0-beta.1
 	- ID: 2026110609500004
