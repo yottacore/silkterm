@@ -326,6 +326,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Assigned to: CC
 	- Notes:
 		- Pre-next-cut.
+		- JC 2026-11-06: Must be able to ingest and convert all older shcl formats that have ever been published as [pre-]releases.
 	- Progress log:
 		- 20261106: On shcl 3.0.0-beta1 from crates.io. The git patch is gone, and SilkTerm, knobs and the knobs demo take the crate. deny.toml had no source exception for it.
 		- 20261106: Setters answer a `SetStatus` now, and `write_reason` is `check_set_path`.
@@ -365,6 +366,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Lines under a heading that doesn't read get no E018 now. So a current file whose heading isn't UTF-8 kept its layout, though its lines would move to the block above (ddf93).
 		- beta1 reads a 2.x `family:[One, Two]` line as the text `[One, Two]`, with no diagnostic, though `migrate` counts it lost. So the conversion counts one line fewer, and later launches no longer name it (`a_file_shcl_cannot_migrate_is_written_new`, `a_setting_the_conversion_cannot_keep_is_reported`).
 		- A dogfood file a b10c2009 build stamped Format 3 reads as current. Its comma lists, doubled backslashes and bare monitor keys set nothing. No release wrote one.
+		- JC 2026-11-06: Must be able to ingest and convert all older shcl formats that have ever been published as [pre-]releases.
 	- Progress log:
 		- 20261106: ddf93 fixed on the wip branch. Lines under a heading shcl refused count as unread again, as E018 had them. ddf93 failed before and passes after. The `family:[One, Two]` part and the dogfood files are left.
 	- Branch: wip/rnd1106-2026110609500004
