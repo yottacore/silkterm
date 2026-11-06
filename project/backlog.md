@@ -326,6 +326,46 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Assigned to: CC
 	- Notes:
 		- Pre-next-cut.
+	- Progress log:
+		- 20261106: On shcl 3.0.0-beta1 from crates.io. The git patch is gone, and SilkTerm, knobs and the knobs demo take the crate. deny.toml had no source exception for it.
+		- 20261106: Setters answer a `SetStatus` now, and `write_reason` is `check_set_path`.
+		- 20261106: Comma lists are gone. The Settings spec and the knobs demo spec write arrays in brackets. "Function, falloff" was a list to 2.x, and is now the label it was meant to be.
+		- 20261106: A backslash is plain text again. The Windows wallpaper folder goes back to single backslashes, and a commented line in the doubled spelling is refreshed at launch.
+		- 20261106: beta1 quotes a name that doesn't start with a letter, such as a monitor's size key. The launch reads a quoted name now, so a remembered size isn't called a misspelling.
+		- 20261106: 6 config tests still fail. Split into 2026110610154300 (quotes) and 2026110610154305 (conversion checks). The work waits on the wip branch until they pass.
+		- 20261106: Held items, checked on beta1: 2026100219054510 is still there (the value goes in as a new line at the end of the block). 2026100315553545: `Migration` still says nothing, but `upgrade()` closes the open raw block and gives E005 in its diagnostics.
+	- Decisions:
+		- 20261106: The requirement is `3.0.0-beta1`, not `=3.0.0-beta1`. The lock holds it at beta1.
+		- 20261106: Asserts given new values for the swap: dd5ga reads `"%LOCALAPPDATA%\silkterm\wallpaper"` with single backslashes (was doubled). dcbej's monitor key is quoted, as beta1 writes it (was bare). ddamr, ddp93 and ddrjm write their arrays in brackets (were comma lists).
+	- Branch: wip/rnd1106-2026110609500004
+	- Test case: dcbej (fails with the quoted key before the walker change), dd5ga, and the children's tests.
+
+- shcl 3.0.0-beta1: saves keep quotes, so the requote handling needs another look
+	- ID: 2026110610154300
+	- Type: Task
+	- Status: Queued
+	- Priority: High
+	- Opened: 20261106-101543
+	- Opened by: CC
+	- Parent ID: 2026110609500004
+	- Notes:
+		- beta1 never drops a value's quotes on a save. Three checks now say their case proves nothing: `a_save_that_requotes_a_value_changes_no_read`, `a_rating_is_refused_where_a_launch_step_reads_the_layout` and `a_settings_save_moves_no_value_at_the_next_launch`.
+		- Also look at SilkTerm's own comment scan, which still takes a backslash inside double quotes as an escape.
+	- Branch: wip/rnd1106-2026110609500004
+
+- shcl 3.0.0-beta1: the conversion checks miss what a beta1 load no longer reports
+	- ID: 2026110610154305
+	- Type: Task
+	- Status: Queued
+	- Priority: High
+	- Opened: 20261106-101543
+	- Opened by: CC
+	- Parent ID: 2026110609500004
+	- Notes:
+		- Lines under a heading that doesn't read get no E018 now. So a current file whose heading isn't UTF-8 keeps its layout, though its lines would move to the block above (`a_current_file_that_is_not_utf8_drops_only_those_lines`).
+		- beta1 reads a 2.x `family:[One, Two]` line as the text `[One, Two]`, with no diagnostic, though `migrate` counts it lost. So the conversion counts one line fewer, and later launches no longer name it (`a_file_shcl_cannot_migrate_is_written_new`, `a_setting_the_conversion_cannot_keep_is_reported`).
+		- A dogfood file a b10c2009 build stamped Format 3 reads as current. Its comma lists, doubled backslashes and bare monitor keys set nothing. No release wrote one.
+	- Branch: wip/rnd1106-2026110609500004
 
 - The Wayland window tests skip in every container full run, for want of wtype
 	- ID: 2026110516054976
