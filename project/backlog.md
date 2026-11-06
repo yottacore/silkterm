@@ -369,7 +369,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - shcl 3.0.0-beta1: the conversion checks miss what a beta1 load no longer reports
 	- ID: 2026110610154305
 	- Type: Task
-	- Status: Started
+	- Status: Done
 	- Priority: High
 	- Opened: 20261106-101543
 	- Opened by: CC
@@ -384,9 +384,19 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261106: A list given to a setting that takes one value sets nothing now, and the line counts as one that can't be read. Only a theme's `ansi` takes a list. So the `family:[One, Two]` line is counted when a file is written new, and named at every later launch, as before beta1. Before, it loaded as a font named "[One, Two]". ddf6d and dder4 pass again, and deyry fails without the change.
 		- 20261106: `cicd/tests/config-convert/run.bash` wanted the b10c2009 spellings for a 2.x backslash path and a theme's ANSI list. It wants beta1's now, single backslashes and the list in brackets.
 		- 20261106: The swap and these fixes are on rnd1106.
+		- 20261106: A file a b10c2009 dogfood build stamped Format 3 is converted where it stands, when only its comma lists and bare monitor keys fail to read, and every other line reads the same after. Doubled backslashes are halved. One with any other line beta1 refuses, or a path whose `\n` would become a line break, is left as it is. The launch keeps a copy, named for format 3 (deysd, deyse).
+		- 20261106: Published so far: shcl v1.0.0-beta1, v1.0.0-beta2 and v1.0.0-rc1 (pre-releases, tags only), v1.0.0, v1.1.0, v1.2.0 and v2.0.0 (also on crates.io), and v3.0.0-beta1. SilkTerm's releases are v1.0.0-beta2 and v1.0.0-beta3, both on shcl 1.2.0. SilkTerm v1.0.0-beta1 was never tagged or released, and wrote `config.toml`, not shcl.
+		- 20261106: Each shcl release before 3.0 wrote one SilkTerm config through its own crate and read it back. They write 4 different files, and all read the same values. After one launch each reads as it did, loses nothing, keeps its copy and settles (deyst). A v1.0.0-beta2 save and first-launch template convert as beta3's do, the default shell at the top of the list (deysv, deysw).
 	- Decisions:
 		- 20261106: A list where one value goes is an unread line, not a value of its own. That is how a beta1 file says it too, and it keeps the conversion's count and the launch's message as they were.
+		- 20261106: The fixtures for releases that write the same bytes are one file, named for the range. The release's own crate is what says what each line meant.
+		- 20261106: SilkTerm v1.0.0-beta1's `config.toml` gets no fixture, since it was never published and isn't shcl. Check entry filed.
 	- Branch: rnd1106
+	- Test case: ddf93, deyry, ddf6d, dder4, deysd, deyse, deyst (every shcl release before 3.0), deysv and deysw (SilkTerm v1.0.0-beta2), der3m and der3n (v1.0.0-beta3), and `cicd/tests/config-convert/run.bash` (ddf6j). deyst fails with the 2.x respelling skipped.
+	- Verified: The backlog quick run passes, all five areas, 1438 unit tests. `cicd/tests/config-convert/run.bash` passes, 113 checks. The test ID check passes.
+	- Swept: Every conversion goes through `upgrade`, and the launch converts before the state move reads the monitor sizes. The copy and the converted message for a dogfood file are in `keep_old_format_at` and `publish_keeping`.
+	- Acceptance signoff: Self-closed: every published format has a fixture that converts with its values. The left-out beta1 TOML has a Check entry.
+	- Closed: 20261106-112100
 
 - The Wayland window tests skip in every container full run, for want of wtype
 	- ID: 2026110516054976

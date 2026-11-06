@@ -2115,7 +2115,9 @@ fn publish_keeping(
 		return Ok(None);
 	};
 	// A file kept for its lines that are not UTF-8 is said by `write_config_keeping`.
-	if let Some(new) = shcl::format_version(text).filter(|new| *new > old) {
+	// One a build before beta1 stamped keeps its format number.
+	let decoded = || std::fs::read_to_string(&backup).is_ok();
+	if let Some(new) = shcl::format_version(text).filter(|new| *new > old || decoded()) {
 		eprintln!(
 			"{APP_NAME}: {} converted to SHCL format {new}; the old file is kept at {}",
 			path.display(),
@@ -2178,7 +2180,8 @@ fn keep_old_format_at(
 	};
 	let old = format_of(&String::from_utf8_lossy(&body));
 	let decodes = std::str::from_utf8(&body).is_ok();
-	if (new <= old && decodes) || body.iter().all(u8::is_ascii_whitespace) {
+	let beta = || std::str::from_utf8(&body).is_ok_and(|old| from_a_beta(old).is_some());
+	if (new <= old && decodes && !beta()) || body.iter().all(u8::is_ascii_whitespace) {
 		return Ok(None);
 	}
 	let stem = name.strip_suffix(".shcl").unwrap_or(&name);
@@ -6964,7 +6967,10 @@ fn upgrade(body: &[u8]) -> Upgrade {
 	// closes.
 	let stamped = shcl::migrate(text, true);
 	if stamped.current {
-		return Upgrade::Current;
+		return match from_a_beta(text) {
+			Some((text, lost)) => Upgrade::InPlace { text, lost },
+			None => Upgrade::Current,
+		};
 	}
 	if shcl::format_version(&stamped.text).is_none_or(|n| n < shcl::FORMAT_MAJOR) {
 		let respelled = shcl::migrate_unstamped(text, true).text;
@@ -6988,6 +6994,49 @@ fn upgrade(body: &[u8]) -> Upgrade {
 		text: with_own_look(text, out),
 		lost: migrated.lost,
 	}
+}
+
+// A 3.0 build of shcl from before beta1 (b10c2009, dogfood only) stamped Format
+// 3 too, in its own spellings: comma lists, doubled backslashes, bare monitor
+// keys. Where only such lines no longer read, shcl's `upgrade` takes the file
+// for 2.x. That is kept only when it loses nothing, and every line that still
+// reads reads the same after, or with its backslashes halved. So a beta1 file
+// with one comma list typed in never has the `\n` in a path turned into a line
+// break. The count is what the conversion could not carry.
+fn from_a_beta(text: &str) -> Option<(String, usize)> {
+	if shcl::format_version(text) != Some(shcl::FORMAT_MAJOR) {
+		return None;
+	}
+	// a comma list is E026 and a bare name not led by a letter E014; a line
+	// that does not read for any other reason is a beta1 file's own
+	let before = shcl::Document::parse(text);
+	let spellings = before
+		.diagnostics()
+		.iter()
+		.filter(|d| matches!(d.severity, shcl::Severity::Error))
+		.all(|d| matches!(d.code, "E026" | "E014"));
+	if !spellings {
+		return None;
+	}
+	let up = shcl::upgrade(text, true);
+	if up.current || up.ambiguous > 0 || up.lost > 0 || !up.errors_left.is_empty() {
+		return None;
+	}
+	let after = shcl::Document::parse(&up.text);
+	let unread = unreadable_lines(&before);
+	let kept = before
+		.fields()
+		.iter()
+		.filter(|field| !unread.contains(&field.line))
+		.all(|field| {
+			let (was, now) = (
+				before.get_string(&field.path),
+				after.get_string(&field.path),
+			);
+			was == now
+				|| matches!((&was, &now), (Ok(was), Ok(now)) if *was == now.replace('\\', "\\\\"))
+		});
+	kept.then_some((up.text, up.lost))
 }
 
 // A file from before the performance profiles (v1.0.0-beta3) drew exactly what
@@ -13582,6 +13631,201 @@ mod tests {
 		assert_eq!(next_launch_text(text), next_launch_text(&out));
 	}
 
+	// A file a dogfood build on shcl b10c2009 wrote says Format 3, in that
+	// build's spellings. It is converted where it stands: the comma list goes in
+	// brackets, the doubled backslashes are halved and the monitor key is quoted,
+	// and each still sets what it did. The launch keeps a copy, and the next one
+	// has nothing to do.
+	// Test ID: deysd
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_file_a_build_before_beta1_stamped_is_converted() {
+		let text = format!(
+			"## mine\nfont:\n\tsize: 13\nwallpaper:\n\timage: \"C:\\\\pics\\\\sea.jpg\"\n\
+			shell:\n\tstartup_directory: \"\\\\\\\\server\\\\share\"\n\
+			themes:\n\tmine:\n\t\tdark:\n\t\t\tansi: \"#000000\", \"#111111\"\n\
+			window:\n\tmonitors:\n\t\t1920x1080_100pct:\n\t\t\tcolumns: 120\n\n{SHCL_BANNER}"
+		);
+		let Upgrade::InPlace { text: out, lost } = upgrade(text.as_bytes()) else {
+			panic!("not converted:\n{text}");
+		};
+		assert_eq!(lost, 0);
+		let doc = shcl::Document::parse(&out);
+		assert_eq!(doc.lost_count(), 0, "{out}");
+		assert_eq!(
+			doc.get_string("wallpaper.image").as_deref(),
+			Ok(r"C:\pics\sea.jpg")
+		);
+		assert_eq!(
+			doc.get_string("shell.startup_directory").as_deref(),
+			Ok(r"\\server\share")
+		);
+		assert_eq!(
+			doc.get_string_array("themes.mine.dark.ansi"),
+			Ok(vec!["#000000".to_string(), "#111111".to_string()])
+		);
+		assert_eq!(
+			doc.get_int("window.monitors.\"1920x1080_100pct\".columns"),
+			Ok(120),
+			"{out}"
+		);
+		assert!(out.starts_with("## mine\n"), "{out}");
+		assert_eq!(shcl::format_version(&out), Some(shcl::FORMAT_MAJOR));
+		assert!(config_complaints(&out).is_empty(), "{out}");
+		assert_eq!(upgrade(out.as_bytes()), Upgrade::Current, "settled");
+
+		let dir = format_test_dir("fmtcopy_beta");
+		let path = dir.join("config.shcl");
+		std::fs::write(&path, &text).unwrap();
+		write_config_atomic(&path, &out).unwrap();
+		let copies = backups_in(&dir, "config");
+		assert_eq!(copies.len(), 1, "a copy is kept");
+		assert_eq!(std::fs::read_to_string(dir.join(&copies[0])).unwrap(), text);
+		write_config_atomic(&path, &out).unwrap();
+		assert_eq!(backups_in(&dir, "config").len(), 1, "and only once");
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
+	// A beta1 file in error is taken for 2.x only where that changes no line
+	// that reads now. A comma list typed into one beside a path holding `\n`,
+	// or a typo shcl can't place, leaves the file as it is.
+	// Test ID: deyse
+	#[test]
+	fn a_beta1_file_in_error_is_not_read_the_old_way() {
+		for text in [
+			format!(
+				"wallpaper:\n\timage: \"C:\\new\\sea.jpg\"\nfont:\n\tfamily: Iosevka, Hack\n{SHCL_BANNER}"
+			),
+			format!("wallpaper:\n\timage: \"C:\\x\\\" # mine\n\ttags: a, b\n{SHCL_BANNER}"),
+			format!(
+				"font:\n\tsize: 13\n\tbad line here\nwallpaper:\n\timage: \"C:\\new\"\n{SHCL_BANNER}"
+			),
+		] {
+			assert!(shcl::Document::parse(&text).error_count() > 0, "{text}");
+			assert_eq!(upgrade(text.as_bytes()), Upgrade::Current, "{text}");
+		}
+	}
+
+	// A config as each shcl release before 3.0 writes it, from v1.0.0-beta1 on.
+	// Releases that write the same bytes share a file. Each was written, and
+	// `reads.tsv` read back, by that release's own crate, and every release read
+	// the same values. After one launch every value reads as it did, nothing is
+	// lost, the old file is kept byte for byte, and the next launch changes
+	// nothing.
+	// Test ID: deyst
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_file_every_shcl_release_wrote_converts_with_its_values() {
+		const RELEASES: [(&str, &str); 4] = [
+			(
+				"v1.0.0-beta1",
+				include_str!("testdata/formats/shcl_v1.0.0-beta1.shcl"),
+			),
+			(
+				"v1.0.0-beta2 to v1.0.0",
+				include_str!("testdata/formats/shcl_v1.0.0-beta2_to_v1.0.0.shcl"),
+			),
+			(
+				"v1.1.0 to v1.2.0",
+				include_str!("testdata/formats/shcl_v1.1.0_to_v1.2.0.shcl"),
+			),
+			("v2.0.0", include_str!("testdata/formats/shcl_v2.0.0.shcl")),
+		];
+		let unescape = |text: &str| {
+			let mut out = String::new();
+			let mut chars = text.chars();
+			while let Some(c) = chars.next() {
+				if c != '\\' {
+					out.push(c);
+					continue;
+				}
+				match chars.next() {
+					Some('t') => out.push('\t'),
+					Some('n') => out.push('\n'),
+					Some('r') => out.push('\r'),
+					Some(other) => out.push(other),
+					None => out.push('\\'),
+				}
+			}
+			out
+		};
+		let reads = include_str!("testdata/formats/reads.tsv").replace("\r\n", "\n");
+		// a monitor's size moves to the state file at the launch
+		let assert_reads = |text: &str, state: &str, release: &str| {
+			let (doc, state) = (shcl::Document::parse(text), shcl::Document::parse(state));
+			for line in reads.lines() {
+				let mut cells = line.split('\t');
+				let (Some(path), Some(kind)) = (cells.next(), cells.next()) else {
+					panic!("bad row {line:?}");
+				};
+				let want: Vec<String> = cells.map(unescape).collect();
+				let doc = if path.starts_with("window.monitors.") {
+					&state
+				} else {
+					&doc
+				};
+				let got = if kind == "a" {
+					doc.get_string_array(path)
+				} else {
+					doc.get_string(path).map(|value| vec![value])
+				};
+				assert_eq!(got.as_ref(), Ok(&want), "{path} from {release}:\n{text}");
+			}
+		};
+
+		let _guard = test_config_lock();
+		let _store = test_store_lock();
+		for (n, (release, old)) in RELEASES.into_iter().enumerate() {
+			let old = old.replace("\r\n", "\n");
+			let _ = take_conversion_loss();
+			let dir = format_test_dir(&format!("release_{n}"));
+			let path = dir.join("config.shcl");
+			std::fs::write(&path, &old).unwrap();
+			set_config_override(path.clone());
+
+			let s = load();
+			assert_eq!(take_conversion_loss(), None, "{release}: nothing lost");
+			let kept = backups_in(&dir, "config");
+			assert_eq!(kept.len(), 1, "{release}: {kept:?}");
+			assert!(is_backup_name(&kept[0], "config", 2), "{kept:?}");
+			assert_eq!(std::fs::read_to_string(dir.join(&kept[0])).unwrap(), old);
+			let now = std::fs::read_to_string(&path).unwrap();
+			assert_eq!(
+				shcl::format_version(&now),
+				Some(shcl::FORMAT_MAJOR),
+				"{release}:\n{now}"
+			);
+			assert!(config_complaints(&now).is_empty(), "{release}:\n{now}");
+			let state = std::fs::read_to_string(dir.join("state.shcl")).unwrap_or_default();
+			assert_reads(&now, &state, release);
+			let text = |s: &str| Some(Value::Text(s.to_string()));
+			assert_eq!(
+				crate::fields::get(&s, Key::BgImage),
+				text(r"C:\Users\me\Pictures\sea.jpg"),
+				"{release}"
+			);
+			assert_eq!(
+				crate::fields::get(&s, Key::StartupDirectory),
+				text(r"\\server\share\home"),
+				"{release}"
+			);
+			assert_eq!(
+				crate::fields::get(&s, Key::FontFamily),
+				text("Iosevka Term"),
+				"{release}"
+			);
+
+			let _ = load();
+			assert_eq!(
+				std::fs::read_to_string(&path).unwrap(),
+				now,
+				"{release}: settled"
+			);
+			assert_eq!(backups_in(&dir, "config").len(), 1, "{release}");
+			let _ = std::fs::remove_dir_all(&dir);
+		}
+	}
+
 	// A file that is not UTF-8 cannot be read by shcl at all. In an older format
 	// it is kept byte for byte and written new, with the settings that still
 	// read, and the launch says what it could not carry, as for any conversion.
@@ -18729,6 +18973,10 @@ mod tests {
 	// setting, added a theme and set the shell list.
 	const BETA3_FIRST_LAUNCH: &str = include_str!("testdata/beta3_first_launch.shcl");
 	const BETA3_SAVED: &str = include_str!("testdata/beta3_saved.shcl");
+	// v1.0.0-beta2's, the same way, through the same shcl. It had no shell
+	// list, so the save names the default shell in `shell.default`.
+	const BETA2_FIRST_LAUNCH: &str = include_str!("testdata/beta2_first_launch.shcl");
+	const BETA2_SAVED: &str = include_str!("testdata/beta2_saved.shcl");
 
 	// Each row the beta3 save set, as it reads now. `blink_rate_ms: 400` was half
 	// a cycle, so 0.8 s.
@@ -18814,6 +19062,56 @@ mod tests {
 		for (key, want) in beta3_rows() {
 			assert_eq!(crate::fields::get(s, key), Some(want), "{key:?} {when}");
 		}
+		assert_old_save_look_kept(s, when);
+		let shells: Vec<_> = s
+			.shells
+			.iter()
+			.map(|e| {
+				(
+					e.slug.as_str(),
+					e.command.as_str(),
+					e.active,
+					e.comment.as_str(),
+					e.last_seen.as_str(),
+				)
+			})
+			.collect();
+		assert_eq!(
+			shells,
+			[
+				("bash", "/bin/bash", true, "", "2026-08-20"),
+				("zsh", "/usr/bin/zsh -l", false, "login shell", ""),
+			],
+			"{when}"
+		);
+	}
+
+	// What beta2 had no row for is left out, and its default shell is the top
+	// of the list now.
+	fn assert_beta2_saved_kept(s: &Settings, when: &str) {
+		let beta3_only = [
+			Key::TabRegularWidth,
+			Key::TabMaxWidth,
+			Key::StartupDirectory,
+			Key::ShellIntegration,
+		];
+		for (key, want) in beta3_rows() {
+			if !beta3_only.contains(&key) {
+				assert_eq!(crate::fields::get(s, key), Some(want), "{key:?} {when}");
+			}
+		}
+		assert_old_save_look_kept(s, when);
+		let top = s.shells.iter().find(|e| e.active);
+		assert_eq!(
+			top.map(|e| e.command.as_str()),
+			Some("/usr/bin/zsh -l"),
+			"{when}: {:?}",
+			s.shells
+		);
+	}
+
+	// What the beta2 and beta3 saves both set the same way.
+	fn assert_old_save_look_kept(s: &Settings, when: &str) {
 		// a look of its own, so the profile it comes up on is Custom, by hand
 		assert_eq!(
 			crate::profile::current(s),
@@ -18863,28 +19161,6 @@ mod tests {
 		assert_eq!(theme.dark.ansi[0], hex("#08b35b"), "{when}");
 		assert_eq!(theme.dark.ansi[15], hex("#4df37c"), "{when}");
 		assert_eq!(theme.light.ansi[15], hex("#56a6d8"), "{when}");
-
-		let shells: Vec<_> = s
-			.shells
-			.iter()
-			.map(|e| {
-				(
-					e.slug.as_str(),
-					e.command.as_str(),
-					e.active,
-					e.comment.as_str(),
-					e.last_seen.as_str(),
-				)
-			})
-			.collect();
-		assert_eq!(
-			shells,
-			[
-				("bash", "/bin/bash", true, "", "2026-08-20"),
-				("zsh", "/usr/bin/zsh -l", false, "login shell", ""),
-			],
-			"{when}"
-		);
 	}
 
 	// A file beta3 saved converts with every setting it held: the launch keeps
@@ -18894,12 +19170,25 @@ mod tests {
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_file_beta3_saved_keeps_every_setting() {
+		an_old_save_keeps_every_setting(BETA3_SAVED, "beta3_saved", assert_beta3_saved_kept);
+	}
+
+	// The same for a file beta2 saved, whose default shell moves to the top of
+	// the list.
+	// Test ID: deysv
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_file_beta2_saved_keeps_every_setting() {
+		an_old_save_keeps_every_setting(BETA2_SAVED, "beta2_saved", assert_beta2_saved_kept);
+	}
+
+	fn an_old_save_keeps_every_setting(old: &str, what: &str, assert_kept: fn(&Settings, &str)) {
 		let _guard = test_config_lock();
 		let _store = test_store_lock();
 		let _ = take_conversion_loss();
-		let dir = format_test_dir("beta3_saved");
+		let dir = format_test_dir(what);
 		let path = dir.join("config.shcl");
-		std::fs::write(&path, BETA3_SAVED.replace("\r\n", "\n")).unwrap();
+		std::fs::write(&path, old.replace("\r\n", "\n")).unwrap();
 		set_config_override(path.clone());
 
 		let s = load();
@@ -18914,13 +19203,13 @@ mod tests {
 			"{now}"
 		);
 		assert!(config_complaints(&now).is_empty(), "{now}");
-		assert_beta3_saved_kept(&s, "after the launch");
+		assert_kept(&s, "after the launch");
 
 		let mut edited = s.clone();
 		change(&mut edited, Key::Minimap, Value::Bool(false));
 		assert!(persist(&s, &edited));
 		let saved = reload_from_disk();
-		assert_beta3_saved_kept(&saved, "after a save");
+		assert_kept(&saved, "after a save");
 		assert_eq!(
 			crate::fields::get(&saved, Key::Minimap),
 			Some(Value::Bool(false))
@@ -18928,7 +19217,7 @@ mod tests {
 
 		let written = std::fs::read_to_string(&path).unwrap();
 		let again = load();
-		assert_beta3_saved_kept(&again, "on the next launch");
+		assert_kept(&again, "on the next launch");
 		assert_eq!(std::fs::read_to_string(&path).unwrap(), written, "settled");
 		assert_eq!(backups_in(&dir, "config").len(), 1);
 		let _ = std::fs::remove_dir_all(&dir);
@@ -18940,13 +19229,25 @@ mod tests {
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_file_beta3_wrote_on_first_launch_stays_automatic() {
+		an_old_template_stays_automatic(BETA3_FIRST_LAUNCH, "beta3_first");
+	}
+
+	// The same for the template beta2 wrote, which set the same lines.
+	// Test ID: deysw
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_file_beta2_wrote_on_first_launch_stays_automatic() {
+		an_old_template_stays_automatic(BETA2_FIRST_LAUNCH, "beta2_first");
+	}
+
+	fn an_old_template_stays_automatic(old: &str, what: &str) {
 		use Value::{Bool, Float, Int};
 		let _guard = test_config_lock();
 		let _store = test_store_lock();
 		let _ = take_conversion_loss();
-		let dir = format_test_dir("beta3_first");
+		let dir = format_test_dir(what);
 		let path = dir.join("config.shcl");
-		std::fs::write(&path, BETA3_FIRST_LAUNCH.replace("\r\n", "\n")).unwrap();
+		std::fs::write(&path, old.replace("\r\n", "\n")).unwrap();
 		set_config_override(path.clone());
 
 		let s = load();
