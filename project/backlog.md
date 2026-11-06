@@ -34,16 +34,21 @@ Going forward, new issues in the new template at the bottom of this file, will g
 
 ## Issues
 
-- Settings at scale 1.25 on a short screen: the vertical scrollbar pushes in a horizontal one and cuts off the revert arrows
-	- ID: 2026110613085833
+- Settings: Side-tabs: the lower the tab, the lower the text is within the tab
+	- ID: 2026110609500003
 	- Type: Bug
-	- Status: Queued
-	- Priority: Low
-	- Opened: 20261106-130858
-	- Opened by:
+	- Status: Waiting for answers
+		- Waits on the question in questions.md: a screenshot, and what was on screen when it showed.
+	- Opened: 20261106-095000
+	- Opened by: JC
+	- Assigned to: CC
+	- Notes:
+		- Pre-next-cut.
+	- Reproduced: No, 20261106. On Xvfb at scales 1, 1.25, 1.5, 1.75 and 2, and under headless sway on the RTX 3060 Ti at 1, 1.25 and 2, every tab's title sits the same distance above its box's bottom edge, sub-tabs included. A dev debug build and the 11-01 release build read the same.
 	- Progress log:
-		- Seen under headless sway at 1.25 with a 960 DIP tall screen, where the dialog opens with its height capped. At 1x on the same setup it fits. Found while working 2026110609500003.
-		- May be the expected result of the height cap. Check whether the content width should leave room for the scrollbar.
+		- 20261106: The title's height comes from its own tab's box, the same box that is drawn, so nothing in the layout can add up down the list. Both renderers in the frame get the same surface size.
+	- Test case: `a_tab_title_sits_as_low_in_its_box_on_every_tab` (deyxd), both sides, at 4 scales, tall and short windows. It fails when a title is moved a quarter pixel per tab. It passes on the current build.
+	- Branch: rnd1106
 
 - The window doesn't paint while the GPU is busy or short on memory, and stays blank after the load ends
 	- ID: 2026100312470535
@@ -139,6 +144,65 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Branch: rnd1101b
 	- Test case: `cicd/tests/herdback/run.bash` (deqx1), the window back where it was under xfwm4, and with no window manager. `a_window_herded_off_a_dark_monitor_takes_no_size` (deqwx). `a_herded_window_goes_back_once_its_monitor_is_lit` (der22). `monwake` (ddq75) and ddq74, changed. `two_rows_warn_and_each_mark_shows_the_rows_tip` (ddp7w), changed.
 	- Acceptance signoff: Waiting on the b23 look. deqx1 and der22 pass on rnd1101b.
+
+- "Minutes otherwise" still isn't taking effect
+	- ID: 2026110609500001
+	- Type: Bug
+	- Status: Waiting on UAT
+		- JC: on b23's desktop, leave the pointer resting over a SilkTerm window, work in another window, and see it let go after "Minutes otherwise".
+	- Needs hand testing: On b23 under xfwm4, a window unfocused with the pointer resting over it, while other programs' menus and window drags are used.
+	- Severity: High
+	- Opened: 20261106-095000
+	- Opened by: JC
+	- Assigned to: CC
+	- Related IDs: 2026103010083401
+	- Target OS: Linux
+	- Notes:
+		- Pre-next-cut.
+	- Reproduced: Yes, 20261106, headless under X11. The rig left out the pointer: nothing was ever over the window. With the pointer resting over an unfocused window and another program grabbing the pointer and letting it go every 8 s, the window never let go in 100 s. One grab after a release took the device back.
+		- Tried and ruled out, each let go at 62 to 65 s: cursor blink, the minimap, the hardware rating, every setting at its default, an interactive bash, xfwm4 with focus moved to an xterm, a second window on the same settings file, the pointer resting over it alone, and a window mapped and closed beside the pointer.
+	- Actual cause: Any pointer grab let go on the desktop, such as a menu, a window drag or a screen locker in another program, makes the X server tell the window under the pointer that it entered, with one move to where it already was. winit passes on every one. The idle clock took each as a person at the window, so the wait started over. The look after a move already ignored them, and counts the pointer only once it moves inside.
+	- Actual fix: The idle clock counts the pointer by that same rule. Being told it entered is not a sign of life. Moving inside the window still is.
+	- Decisions:
+		- 20261106: Shared the look-after-a-move rule rather than a second one of its own, so the two can't drift. On Wayland, where the compositor knows its pointer, entering still counts.
+		- 20261106: The rest of a window event's signs of life are unchanged, focus either way included.
+	- Progress log:
+		- 20261106: Verified: deqy2, with the pointer over the quiet window and grabbed every 8 s, fails on the build before the fix (never let go) and passes after it (63 s). After the release, a grab leaves it let go and a move over it brings it back. The quick gate, all five areas, passes.
+	- Swept: every `CursorEntered` and `CursorMoved` in `source`. The startup rating's banner check only blocks input. The dialogs' handlers are for windows that are never let go. The look after a move already had the rule.
+	- Branch: rnd1106
+	- Test case: `a_pointer_only_told_it_entered_is_not_a_sign_of_life` (deyts). Also `cicd/tests/idleother/run.bash` (deqy2), changed, in the full run.
+	- Stand-in: deqy2 (20261106). It now rests the pointer over the quiet window and grabs it every 8 s, which is the case found. What's left is b23's real desktop.
+
+- The monitor sleep and SilkTerm position bug is still there
+	- ID: 2026110609500002
+	- Type: Bug
+	- Status: Waiting on UAT
+		- A look on b23, in the hand testing row. The headless rig can't make an output read disconnected while it stays laid out.
+	- Needs hand testing: On b23, with a build from this branch and the window on the landscape monitor: let the screens sleep long enough that the HDMI one drops, wake them, and see the window back where it was, at its size. Started from a terminal with `SILK_MONDBG=1`, the sleep should log `noted` and `herded`, and no `take`.
+	- Severity: High
+	- Opened: 20261106-095000
+	- Opened by: JC
+	- Assigned to: CC
+	- Related IDs: 2026102807384201
+	- Target OS: Linux
+	- Test environment: b23, xfwm4 4.20, NVIDIA, HDMI landscape and DP portrait
+	- Version and build: dogfood of 20261105-150207, which has the earlier fix
+	- Reproduced: No. Found from b23's X server log and the GTK and xfwm4 sources.
+	- Actual cause:
+		- The HDMI monitor drops off as it sleeps. In 7 of 10 sleeps since 10-31 the X server went on laying it out, with its output read as disconnected, and nothing changed the layout until it woke. The other 3 took it out of the layout, which is the case deqx1 covers.
+		- GTK skips a disconnected output, so xfwm4 saw one monitor and herded the window off the HDMI one. SilkTerm read its monitors from the server's layout, where the HDMI one was still there, so the herd looked like the user's move. The window took the portrait monitor's size, and xfwm4 forgot where to put it back.
+		- The live state file holds a `3440x1440_100pct` size with no mm. That key comes only from a look while the HDMI output reads no size, which fits a look made while it was asleep.
+	- Notes:
+		- Pre-next-cut.
+		- Need to verify with a fresher build.
+	- Decisions:
+		- 20261106: On X11 a monitor counts as lit only while one of its outputs isn't read as disconnected, as GTK counts it. When every one reads disconnected, all are believed lit, as GTK then falls back to the whole screen.
+	- Actual fix: The X11 monitor list leaves out a monitor whose outputs all read disconnected. That one list feeds both the layout a herd is told by and the monitor a window is on, so the sleep now reads as a herd, which takes no size, and the put-back from 2026102807384201 waits for it. design.md says so under the per-monitor size.
+	- Swept: every reader of the server's monitor list, `layout` and the monitor under the window, both through `X11Screen::of`. winit's own list, used where the X server can't be asked, isn't read on X11.
+	- Verified: 20261106. deyvh passes, and fails with the disconnected check taken out. deqx1 passes all 20 checks. A probe with the landscape output turned off, as the HDMI one goes, put the window back under xfwm4 before and after.
+	- Test case: `a_monitor_whose_cable_reads_disconnected_is_dark` (deyvh). `cicd/tests/herdback/run.bash` (deqx1), unchanged, for the monitor taken out of the layout.
+	- Branch: rnd1106
+	- Stand-in: none (20261106). Xwayland under headless sway can't report an output as disconnected while it stays laid out, which is b23's usual sleep. deqx1 covers the output being taken out of the layout.
 
 - Regression: "Conserve resources", "Minutes otherwise" isn't working
 	- ID: 2026103010083401
@@ -270,197 +334,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Stalled until a cosmic-text release takes fontdb 0.24 or later, and winit's sctk-adwaita drops ab_glyph.
 	- Held for a cosmic-text release on fontdb 0.24 or later, and an sctk-adwaita without ab_glyph.
 
-- "Minutes otherwise" still isn't taking effect
-	- ID: 2026110609500001
-	- Type: Bug
-	- Status: Waiting on UAT
-		- JC: on b23's desktop, leave the pointer resting over a SilkTerm window, work in another window, and see it let go after "Minutes otherwise".
-	- Needs hand testing: On b23 under xfwm4, a window unfocused with the pointer resting over it, while other programs' menus and window drags are used.
-	- Severity: High
-	- Opened: 20261106-095000
-	- Opened by: JC
-	- Assigned to: CC
-	- Related IDs: 2026103010083401
-	- Target OS: Linux
-	- Notes:
-		- Pre-next-cut.
-	- Reproduced: Yes, 20261106, headless under X11. The rig left out the pointer: nothing was ever over the window. With the pointer resting over an unfocused window and another program grabbing the pointer and letting it go every 8 s, the window never let go in 100 s. One grab after a release took the device back.
-		- Tried and ruled out, each let go at 62 to 65 s: cursor blink, the minimap, the hardware rating, every setting at its default, an interactive bash, xfwm4 with focus moved to an xterm, a second window on the same settings file, the pointer resting over it alone, and a window mapped and closed beside the pointer.
-	- Actual cause: Any pointer grab let go on the desktop, such as a menu, a window drag or a screen locker in another program, makes the X server tell the window under the pointer that it entered, with one move to where it already was. winit passes on every one. The idle clock took each as a person at the window, so the wait started over. The look after a move already ignored them, and counts the pointer only once it moves inside.
-	- Actual fix: The idle clock counts the pointer by that same rule. Being told it entered is not a sign of life. Moving inside the window still is.
-	- Decisions:
-		- 20261106: Shared the look-after-a-move rule rather than a second one of its own, so the two can't drift. On Wayland, where the compositor knows its pointer, entering still counts.
-		- 20261106: The rest of a window event's signs of life are unchanged, focus either way included.
-	- Progress log:
-		- 20261106: Verified: deqy2, with the pointer over the quiet window and grabbed every 8 s, fails on the build before the fix (never let go) and passes after it (63 s). After the release, a grab leaves it let go and a move over it brings it back. The quick gate, all five areas, passes.
-	- Swept: every `CursorEntered` and `CursorMoved` in `source`. The startup rating's banner check only blocks input. The dialogs' handlers are for windows that are never let go. The look after a move already had the rule.
-	- Branch: rnd1106
-	- Test case: `a_pointer_only_told_it_entered_is_not_a_sign_of_life` (deyts). Also `cicd/tests/idleother/run.bash` (deqy2), changed, in the full run.
-
-- The monitor sleep and SilkTerm position bug is still there
-	- ID: 2026110609500002
-	- Type: Bug
-	- Status: Waiting on UAT
-		- A look on b23, in the hand testing row. The headless rig can't make an output read disconnected while it stays laid out.
-	- Needs hand testing: On b23, with a build from this branch and the window on the landscape monitor: let the screens sleep long enough that the HDMI one drops, wake them, and see the window back where it was, at its size. Started from a terminal with `SILK_MONDBG=1`, the sleep should log `noted` and `herded`, and no `take`.
-	- Severity: High
-	- Opened: 20261106-095000
-	- Opened by: JC
-	- Assigned to: CC
-	- Related IDs: 2026102807384201
-	- Target OS: Linux
-	- Test environment: b23, xfwm4 4.20, NVIDIA, HDMI landscape and DP portrait
-	- Version and build: dogfood of 20261105-150207, which has the earlier fix
-	- Reproduced: No. Found from b23's X server log and the GTK and xfwm4 sources.
-	- Actual cause:
-		- The HDMI monitor drops off as it sleeps. In 7 of 10 sleeps since 10-31 the X server went on laying it out, with its output read as disconnected, and nothing changed the layout until it woke. The other 3 took it out of the layout, which is the case deqx1 covers.
-		- GTK skips a disconnected output, so xfwm4 saw one monitor and herded the window off the HDMI one. SilkTerm read its monitors from the server's layout, where the HDMI one was still there, so the herd looked like the user's move. The window took the portrait monitor's size, and xfwm4 forgot where to put it back.
-		- The live state file holds a `3440x1440_100pct` size with no mm. That key comes only from a look while the HDMI output reads no size, which fits a look made while it was asleep.
-	- Notes:
-		- Pre-next-cut.
-		- Need to verify with a fresher build.
-	- Decisions:
-		- 20261106: On X11 a monitor counts as lit only while one of its outputs isn't read as disconnected, as GTK counts it. When every one reads disconnected, all are believed lit, as GTK then falls back to the whole screen.
-	- Actual fix: The X11 monitor list leaves out a monitor whose outputs all read disconnected. That one list feeds both the layout a herd is told by and the monitor a window is on, so the sleep now reads as a herd, which takes no size, and the put-back from 2026102807384201 waits for it. design.md says so under the per-monitor size.
-	- Swept: every reader of the server's monitor list, `layout` and the monitor under the window, both through `X11Screen::of`. winit's own list, used where the X server can't be asked, isn't read on X11.
-	- Verified: 20261106. deyvh passes, and fails with the disconnected check taken out. deqx1 passes all 20 checks. A probe with the landscape output turned off, as the HDMI one goes, put the window back under xfwm4 before and after.
-	- Test case: `a_monitor_whose_cable_reads_disconnected_is_dark` (deyvh). `cicd/tests/herdback/run.bash` (deqx1), unchanged, for the monitor taken out of the layout.
-	- Branch: rnd1106
-
-- Scroll scene tmuxclear fails under load: a clear inside tmux slides
-	- ID: 2026110514184921
-	- Type: Bug
-	- Status: Done
-	- Severity: High
-	- Opened: 20261105-141849
-	- Opened by: CC
-	- Assigned to: CC
-	- Target OS: Linux
-	- Test environment: b23, headless X11
-	- Version and build: dev at aeb0fc6
-	- Steps to reproduce:
-		- Load every core, such as 24 `nice -n 19` busy loops.
-		- `cicd/tests/scroll/run.bash --only tmuxclear` on a debug build.
-	- Incorrect behavior: `FAIL de19r scroll scene tmuxclear (X11), a clear slid: 2 frame(s)`. In the 11-04 16:31 default cicd run it was 5 frames, with the rest of the regression tests running beside it.
-	- Expected behavior: Every clear shows at once, under load too.
-	- Reproduced: 20261105, 2 of 2 with the cores loaded. Passed 3 of 3 with the box at load 12. It passed in every earlier run log, X11 and Wayland, back to 10-29.
-	- Possible cause: Not known yet. Either the clear really slides when the frames come slowly, which a user on a busy box would see, or the scene's timing doesn't hold up under load. Telling those apart comes first.
-	- Actual cause [Bug]:
-		- The scene's timing. A frame moves a slide on by at most 0.1 s, so with frames a second apart the bursts were still sliding when the clears came. A clear while a big slide still runs slides by design, per 2026101611321631's "Not covered". The failing frames were that leftover slide.
-		- With that fixed, a second gap: with no frame between a clear and the next fill, one frame held the pane scrolled away and then refilled. That is a burst, which slides.
-		- Telling them apart: 2 cores taken by busy loops, with the harness pinned there, gave a frame about a second. The old scene failed there, with the 4 bursts' slide at its 128-row cap under the clears. Spread across 32 cores, the same load passed twice.
-	- Notes:
-		- It stopped the 11-04 default cicd run at regression tests, so that run never got to dogfood. Nothing has been dogfooded since 11-01.
-	- Decisions:
-		- 20261106: Fixed in the scene, not the clear rule. On a box this slow a user who clears while output still slides sees it slide, which is the documented limit. The rule stays out of the way while a big slide runs so a flood in tmux keeps sliding.
-		- 20261106: A wait that runs out is a skip, not a pass or a fail, since the scene never got the screen it tests. altenter does the same.
-	- Actual fix [Bug]: After each fill, clear and mark, the scene waits up to 15 s for a frame drawn since then, at rest, in place of a fixed 0.8 s. A wait that runs out leaves a note, and the analyzer calls that run a skip.
-	- Verified: 20261106 on b23, debug build, harness pinned to 2 cores under 6 busy loops. The old scene failed 1 of 1, the first fix failed 2 of 10, and the final scene passed 4 of 4. With a 1 s wait it reported the skip. Quiet runs pass on X11 and Wayland. dcbdt passes. shellcheck, ruff, and `--backlog-run-quick` with all five areas pass.
-		- Swept: the other scenes on fixed pauses. The `clear` scene under the same load ran past an 85 s limit, so it is unverified there. It passed in every earlier full run.
-	- Branch: rnd1106
-	- Closed: 20261106-125200
-	- Test case: de19r, scroll scene `tmuxclear` in `cicd/tests/scroll/run.bash`.
-
-- Settings: Side-tabs: the lower the tab, the lower the text is within the tab
-	- ID: 2026110609500003
-	- Type: Bug
-	- Status: Waiting for answers
-		- Waits on the question in questions.md: a screenshot, and what was on screen when it showed.
-	- Opened: 20261106-095000
-	- Opened by: JC
-	- Assigned to: CC
-	- Notes:
-		- Pre-next-cut.
-	- Reproduced: No, 20261106. On Xvfb at scales 1, 1.25, 1.5, 1.75 and 2, and under headless sway on the RTX 3060 Ti at 1, 1.25 and 2, every tab's title sits the same distance above its box's bottom edge, sub-tabs included. A dev debug build and the 11-01 release build read the same.
-	- Progress log:
-		- 20261106: The title's height comes from its own tab's box, the same box that is drawn, so nothing in the layout can add up down the list. Both renderers in the frame get the same surface size.
-	- Test case: `a_tab_title_sits_as_low_in_its_box_on_every_tab` (deyxd), both sides, at 4 scales, tall and short windows. It fails when a title is moved a quarter pixel per tab. It passes on the current build.
-	- Branch: rnd1106
-
-- Integrate shcl v3.0.0-beta.1
-	- ID: 2026110609500004
-	- Type: Task
-	- Status: Done
-	- Priority: High
-	- Opened: 20261106-095000
-	- Opened by: JC
-	- Assigned to: CC
-	- Notes:
-		- Pre-next-cut.
-		- JC 2026-11-06: Must be able to ingest and convert all older shcl formats that have ever been published as [pre-]releases.
-	- Progress log:
-		- 20261106: On shcl 3.0.0-beta1 from crates.io. The git patch is gone, and SilkTerm, knobs and the knobs demo take the crate. deny.toml had no source exception for it.
-		- 20261106: Setters answer a `SetStatus` now, and `write_reason` is `check_set_path`.
-		- 20261106: Comma lists are gone. The Settings spec and the knobs demo spec write arrays in brackets. "Function, falloff" was a list to 2.x, and is now the label it was meant to be.
-		- 20261106: A backslash is plain text again. The Windows wallpaper folder goes back to single backslashes, and a commented line in the doubled spelling is refreshed at launch.
-		- 20261106: beta1 quotes a name that doesn't start with a letter, such as a monitor's size key. The launch reads a quoted name now, so a remembered size isn't called a misspelling.
-		- 20261106: 6 config tests failed after the swap. Split into 2026110610154300 (quotes) and 2026110610154305 (conversion checks). The work waited on the wip branch until they passed. All 6 pass now, and the swap is on rnd1106.
-		- 20261106: Held items, checked on beta1: 2026100219054510 is still there (the value goes in as a new line at the end of the block). 2026100315553545: `Migration` still says nothing, but `upgrade()` closes the open raw block and gives E005 in its diagnostics.
-	- Decisions:
-		- 20261106: The requirement is `3.0.0-beta1`, not `=3.0.0-beta1`. The lock holds it at beta1.
-		- 20261106: Asserts given new values for the swap: dd5ga reads `"%LOCALAPPDATA%\silkterm\wallpaper"` with single backslashes (was doubled). dcbej's monitor key is quoted, as beta1 writes it (was bare). ddamr, ddp93 and ddrjm write their arrays in brackets (were comma lists).
-	- Branch: wip/rnd1106-2026110609500004
-	- Test case: deysd, deyse, deyst, deysv, deysw, dcbej, ddf93, dd5ga, ddamr, ddp93, ddrjm, and cicd/tests/config-convert/run.bash
-	- Acceptance signoff: Self-closed: both children are Done and every published shcl format converts in deyst.
-	- Closed: 20261106-112227
-
-- shcl 3.0.0-beta1: saves keep quotes, so the requote handling needs another look
-	- ID: 2026110610154300
-	- Type: Task
-	- Status: Done
-	- Priority: High
-	- Opened: 20261106-101543
-	- Opened by: CC
-	- Parent ID: 2026110609500004
-	- Notes:
-		- beta1 never drops a value's quotes on a save. Three checks now say their case proves nothing: `a_save_that_requotes_a_value_changes_no_read`, `a_rating_is_refused_where_a_launch_step_reads_the_layout` and `a_settings_save_moves_no_value_at_the_next_launch`.
-		- Also look at SilkTerm's own comment scan, which still takes a backslash inside double quotes as an escape.
-	- Progress log:
-		- 20261106: beta1 still quotes a bare value with a space or a colon on a save, but never drops quotes or swaps one quote for the other. So the rating check still leaves the quoted flag out, and the either-quote match in the font list refresh only matters for a file an older save wrote.
-		- 20261106: The rating refusal check's own launch step now reads a bare value, which a save quotes, in place of a single-quoted one, which a save keeps now.
-		- 20261106: Both comment scans now ask shcl where the comment starts. A backslash is plain text, an apostrophe inside a bare value opens no quote, and a `#` against text opens a comment, as beta1 reads them. A note after a folder ending in a backslash was dropped when the value was rewritten.
-	- Decisions:
-		- 20261106: Asserts given new values for beta1's quoting: dcfck now wants no save to drop quotes (was: some save drops them). dcfp6's font list cases want a save to keep the single quotes (was: respell them double). Each fails if a later shcl changes quoting again, so the handling gets looked at then.
-		- 20261106: dcfp4's step reads `family: Old Mono` bare (was `'Old Mono'` in single quotes). The asserts are the same.
-	- Branch: rnd1106
-	- Test case: `a_save_that_requotes_a_value_changes_no_read` (dcfck), `a_rating_is_refused_where_a_launch_step_reads_the_layout` (dcfp4), `a_settings_save_moves_no_value_at_the_next_launch` (dcfp6), `a_note_after_a_folder_ending_in_a_backslash_is_kept` (deyrz). deyrz fails on the old scans and passes on the new ones.
-	- Verified: The backlog quick run passes, all five areas. `cicd/tests/config-convert/run.bash` passes, 113 checks.
-	- Swept: The comment scans in config.rs (`strip_trailing_comment`, `trailing_comment`) and every quote comment in the config tests. The tab text template's backslash is its own escape, not shcl's, and stays.
-	- Acceptance signoff: Self-closed: a mechanical follow-up of the swap, and its tests pass.
-	- Closed: 20261106-105600
-
-- shcl 3.0.0-beta1: the conversion checks miss what a beta1 load no longer reports
-	- ID: 2026110610154305
-	- Type: Task
-	- Status: Done
-	- Priority: High
-	- Opened: 20261106-101543
-	- Opened by: CC
-	- Parent ID: 2026110609500004
-	- Notes:
-		- Lines under a heading that doesn't read get no E018 now. So a current file whose heading isn't UTF-8 kept its layout, though its lines would move to the block above (ddf93).
-		- beta1 reads a 2.x `family:[One, Two]` line as the text `[One, Two]`, with no diagnostic, though `migrate` counts it lost. So the conversion counts one line fewer, and later launches no longer name it (`a_file_shcl_cannot_migrate_is_written_new`, `a_setting_the_conversion_cannot_keep_is_reported`).
-		- A dogfood file a b10c2009 build stamped Format 3 reads as current. Its comma lists, doubled backslashes and bare monitor keys set nothing. No release wrote one.
-		- JC 2026-11-06: Must be able to ingest and convert all older shcl formats that have ever been published as [pre-]releases.
-	- Progress log:
-		- 20261106: ddf93 fixed on the wip branch. Lines under a heading shcl refused count as unread again, as E018 had them. ddf93 failed before and passes after. The `family:[One, Two]` part and the dogfood files are left.
-		- 20261106: A list given to a setting that takes one value sets nothing now, and the line counts as one that can't be read. Only a theme's `ansi` takes a list. So the `family:[One, Two]` line is counted when a file is written new, and named at every later launch, as before beta1. Before, it loaded as a font named "[One, Two]". ddf6d and dder4 pass again, and deyry fails without the change.
-		- 20261106: `cicd/tests/config-convert/run.bash` wanted the b10c2009 spellings for a 2.x backslash path and a theme's ANSI list. It wants beta1's now, single backslashes and the list in brackets.
-		- 20261106: The swap and these fixes are on rnd1106.
-		- 20261106: A file a b10c2009 dogfood build stamped Format 3 is converted where it stands, when only its comma lists and bare monitor keys fail to read, and every other line reads the same after. Doubled backslashes are halved. One with any other line beta1 refuses, or a path whose `\n` would become a line break, is left as it is. The launch keeps a copy, named for format 3 (deysd, deyse).
-		- 20261106: Published so far: shcl v1.0.0-beta1, v1.0.0-beta2 and v1.0.0-rc1 (pre-releases, tags only), v1.0.0, v1.1.0, v1.2.0 and v2.0.0 (also on crates.io), and v3.0.0-beta1. SilkTerm's releases are v1.0.0-beta2 and v1.0.0-beta3, both on shcl 1.2.0. SilkTerm v1.0.0-beta1 was never tagged or released, and wrote `config.toml`, not shcl.
-		- 20261106: Each shcl release before 3.0 wrote one SilkTerm config through its own crate and read it back. They write 4 different files, and all read the same values. After one launch each reads as it did, loses nothing, keeps its copy and settles (deyst). A v1.0.0-beta2 save and first-launch template convert as beta3's do, the default shell at the top of the list (deysv, deysw).
-	- Decisions:
-		- 20261106: A list where one value goes is an unread line, not a value of its own. That is how a beta1 file says it too, and it keeps the conversion's count and the launch's message as they were.
-		- 20261106: The fixtures for releases that write the same bytes are one file, named for the range. The release's own crate is what says what each line meant.
-		- 20261106: SilkTerm v1.0.0-beta1's `config.toml` gets no fixture, since it was never published and isn't shcl. Check entry filed.
-	- Branch: rnd1106
-	- Test case: ddf93, deyry, ddf6d, dder4, deysd, deyse, deyst (every shcl release before 3.0), deysv and deysw (SilkTerm v1.0.0-beta2), der3m and der3n (v1.0.0-beta3), and `cicd/tests/config-convert/run.bash` (ddf6j). deyst fails with the 2.x respelling skipped.
-	- Verified: The backlog quick run passes, all five areas, 1438 unit tests. `cicd/tests/config-convert/run.bash` passes, 113 checks. The test ID check passes.
-	- Swept: Every conversion goes through `upgrade`, and the launch converts before the state move reads the monitor sizes. The copy and the converted message for a dogfood file are in `keep_old_format_at` and `publish_keeping`.
-	- Acceptance signoff: Self-closed: every published format has a fixture that converts with its values. The left-out beta1 TOML has a Check entry.
-	- Closed: 20261106-112100
-
 - The Wayland window tests skip in every container full run, for want of wtype
 	- ID: 2026110516054976
 	- Type: Bug
@@ -475,6 +348,17 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Expected behavior: They run in the full run.
 	- Reproduced: 20261105, in the run logs. The host has wtype, and monwl and the random test passed there by hand on dev.
 	- Possible cause: `cicd/container/Dockerfile` installs sway and xdotool but not wtype.
+
+- Settings at scale 1.25 on a short screen: the vertical scrollbar pushes in a horizontal one and cuts off the revert arrows
+	- ID: 2026110613085833
+	- Type: Bug
+	- Status: Queued
+	- Priority: Low
+	- Opened: 20261106-130858
+	- Opened by:
+	- Progress log:
+		- Seen under headless sway at 1.25 with a 960 DIP tall screen, where the dialog opens with its height capped. At 1x on the same setup it fits. Found while working 2026110609500003.
+		- May be the expected result of the height cap. Check whether the content width should leave room for the scrollbar.
 
 - Test run folders pile up in HOST_TEMP/silkterm, and the 2-day sweep doesn't take them
 	- ID: 2026110514393095
@@ -553,6 +437,40 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Branch: machang
 	- Test case: `a_hidden_window_that_cannot_draw_is_shown_anyway` (ddc9r), seen failing without the fix. The memory side has no unit test, since it needs a GPU.
 	- Closed: 20261001-155746
+
+- Scroll scene tmuxclear fails under load: a clear inside tmux slides
+	- ID: 2026110514184921
+	- Type: Bug
+	- Status: Done
+	- Severity: High
+	- Opened: 20261105-141849
+	- Opened by: CC
+	- Assigned to: CC
+	- Target OS: Linux
+	- Test environment: b23, headless X11
+	- Version and build: dev at aeb0fc6
+	- Steps to reproduce:
+		- Load every core, such as 24 `nice -n 19` busy loops.
+		- `cicd/tests/scroll/run.bash --only tmuxclear` on a debug build.
+	- Incorrect behavior: `FAIL de19r scroll scene tmuxclear (X11), a clear slid: 2 frame(s)`. In the 11-04 16:31 default cicd run it was 5 frames, with the rest of the regression tests running beside it.
+	- Expected behavior: Every clear shows at once, under load too.
+	- Reproduced: 20261105, 2 of 2 with the cores loaded. Passed 3 of 3 with the box at load 12. It passed in every earlier run log, X11 and Wayland, back to 10-29.
+	- Possible cause: Not known yet. Either the clear really slides when the frames come slowly, which a user on a busy box would see, or the scene's timing doesn't hold up under load. Telling those apart comes first.
+	- Actual cause [Bug]:
+		- The scene's timing. A frame moves a slide on by at most 0.1 s, so with frames a second apart the bursts were still sliding when the clears came. A clear while a big slide still runs slides by design, per 2026101611321631's "Not covered". The failing frames were that leftover slide.
+		- With that fixed, a second gap: with no frame between a clear and the next fill, one frame held the pane scrolled away and then refilled. That is a burst, which slides.
+		- Telling them apart: 2 cores taken by busy loops, with the harness pinned there, gave a frame about a second. The old scene failed there, with the 4 bursts' slide at its 128-row cap under the clears. Spread across 32 cores, the same load passed twice.
+	- Notes:
+		- It stopped the 11-04 default cicd run at regression tests, so that run never got to dogfood. Nothing has been dogfooded since 11-01.
+	- Decisions:
+		- 20261106: Fixed in the scene, not the clear rule. On a box this slow a user who clears while output still slides sees it slide, which is the documented limit. The rule stays out of the way while a big slide runs so a flood in tmux keeps sliding.
+		- 20261106: A wait that runs out is a skip, not a pass or a fail, since the scene never got the screen it tests. altenter does the same.
+	- Actual fix [Bug]: After each fill, clear and mark, the scene waits up to 15 s for a frame drawn since then, at rest, in place of a fixed 0.8 s. A wait that runs out leaves a note, and the analyzer calls that run a skip.
+	- Verified: 20261106 on b23, debug build, harness pinned to 2 cores under 6 busy loops. The old scene failed 1 of 1, the first fix failed 2 of 10, and the final scene passed 4 of 4. With a 1 s wait it reported the skip. Quiet runs pass on X11 and Wayland. dcbdt passes. shellcheck, ruff, and `--backlog-run-quick` with all five areas pass.
+		- Swept: the other scenes on fixed pauses. The `clear` scene under the same load ran past an 85 s limit, so it is unverified there. It passed in every earlier full run.
+	- Branch: rnd1106
+	- Closed: 20261106-125200
+	- Test case: de19r, scroll scene `tmuxclear` in `cicd/tests/scroll/run.bash`.
 
 - dd5nw fails its fDie check on every run, so every full run stops at step 4
 	- ID: 2026110119292010
@@ -1207,6 +1125,90 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Test case: engine harness (dd5nn), the dogfood copy and its start-of-run check. Seen to fail with the fail paths taken out.
 	- Acceptance signoff: Self-closed: the engine harness covers each fail path, and the script lints and the scripts quick run pass. `cicd-win.ps1` was linted and parsed here, but not run on a Windows box.
 	- Closed: 20261105-144000
+
+- Integrate shcl v3.0.0-beta.1
+	- ID: 2026110609500004
+	- Type: Task
+	- Status: Done
+	- Priority: High
+	- Opened: 20261106-095000
+	- Opened by: JC
+	- Assigned to: CC
+	- Notes:
+		- Pre-next-cut.
+		- JC 2026-11-06: Must be able to ingest and convert all older shcl formats that have ever been published as [pre-]releases.
+	- Progress log:
+		- 20261106: On shcl 3.0.0-beta1 from crates.io. The git patch is gone, and SilkTerm, knobs and the knobs demo take the crate. deny.toml had no source exception for it.
+		- 20261106: Setters answer a `SetStatus` now, and `write_reason` is `check_set_path`.
+		- 20261106: Comma lists are gone. The Settings spec and the knobs demo spec write arrays in brackets. "Function, falloff" was a list to 2.x, and is now the label it was meant to be.
+		- 20261106: A backslash is plain text again. The Windows wallpaper folder goes back to single backslashes, and a commented line in the doubled spelling is refreshed at launch.
+		- 20261106: beta1 quotes a name that doesn't start with a letter, such as a monitor's size key. The launch reads a quoted name now, so a remembered size isn't called a misspelling.
+		- 20261106: 6 config tests failed after the swap. Split into 2026110610154300 (quotes) and 2026110610154305 (conversion checks). The work waited on the wip branch until they passed. All 6 pass now, and the swap is on rnd1106.
+		- 20261106: Held items, checked on beta1: 2026100219054510 is still there (the value goes in as a new line at the end of the block). 2026100315553545: `Migration` still says nothing, but `upgrade()` closes the open raw block and gives E005 in its diagnostics.
+	- Decisions:
+		- 20261106: The requirement is `3.0.0-beta1`, not `=3.0.0-beta1`. The lock holds it at beta1.
+		- 20261106: Asserts given new values for the swap: dd5ga reads `"%LOCALAPPDATA%\silkterm\wallpaper"` with single backslashes (was doubled). dcbej's monitor key is quoted, as beta1 writes it (was bare). ddamr, ddp93 and ddrjm write their arrays in brackets (were comma lists).
+	- Branch: wip/rnd1106-2026110609500004
+	- Test case: deysd, deyse, deyst, deysv, deysw, dcbej, ddf93, dd5ga, ddamr, ddp93, ddrjm, and cicd/tests/config-convert/run.bash
+	- Acceptance signoff: Self-closed: both children are Done and every published shcl format converts in deyst.
+	- Closed: 20261106-112227
+
+- shcl 3.0.0-beta1: saves keep quotes, so the requote handling needs another look
+	- ID: 2026110610154300
+	- Type: Task
+	- Status: Done
+	- Priority: High
+	- Opened: 20261106-101543
+	- Opened by: CC
+	- Parent ID: 2026110609500004
+	- Notes:
+		- beta1 never drops a value's quotes on a save. Three checks now say their case proves nothing: `a_save_that_requotes_a_value_changes_no_read`, `a_rating_is_refused_where_a_launch_step_reads_the_layout` and `a_settings_save_moves_no_value_at_the_next_launch`.
+		- Also look at SilkTerm's own comment scan, which still takes a backslash inside double quotes as an escape.
+	- Progress log:
+		- 20261106: beta1 still quotes a bare value with a space or a colon on a save, but never drops quotes or swaps one quote for the other. So the rating check still leaves the quoted flag out, and the either-quote match in the font list refresh only matters for a file an older save wrote.
+		- 20261106: The rating refusal check's own launch step now reads a bare value, which a save quotes, in place of a single-quoted one, which a save keeps now.
+		- 20261106: Both comment scans now ask shcl where the comment starts. A backslash is plain text, an apostrophe inside a bare value opens no quote, and a `#` against text opens a comment, as beta1 reads them. A note after a folder ending in a backslash was dropped when the value was rewritten.
+	- Decisions:
+		- 20261106: Asserts given new values for beta1's quoting: dcfck now wants no save to drop quotes (was: some save drops them). dcfp6's font list cases want a save to keep the single quotes (was: respell them double). Each fails if a later shcl changes quoting again, so the handling gets looked at then.
+		- 20261106: dcfp4's step reads `family: Old Mono` bare (was `'Old Mono'` in single quotes). The asserts are the same.
+	- Branch: rnd1106
+	- Test case: `a_save_that_requotes_a_value_changes_no_read` (dcfck), `a_rating_is_refused_where_a_launch_step_reads_the_layout` (dcfp4), `a_settings_save_moves_no_value_at_the_next_launch` (dcfp6), `a_note_after_a_folder_ending_in_a_backslash_is_kept` (deyrz). deyrz fails on the old scans and passes on the new ones.
+	- Verified: The backlog quick run passes, all five areas. `cicd/tests/config-convert/run.bash` passes, 113 checks.
+	- Swept: The comment scans in config.rs (`strip_trailing_comment`, `trailing_comment`) and every quote comment in the config tests. The tab text template's backslash is its own escape, not shcl's, and stays.
+	- Acceptance signoff: Self-closed: a mechanical follow-up of the swap, and its tests pass.
+	- Closed: 20261106-105600
+
+- shcl 3.0.0-beta1: the conversion checks miss what a beta1 load no longer reports
+	- ID: 2026110610154305
+	- Type: Task
+	- Status: Done
+	- Priority: High
+	- Opened: 20261106-101543
+	- Opened by: CC
+	- Parent ID: 2026110609500004
+	- Notes:
+		- Lines under a heading that doesn't read get no E018 now. So a current file whose heading isn't UTF-8 kept its layout, though its lines would move to the block above (ddf93).
+		- beta1 reads a 2.x `family:[One, Two]` line as the text `[One, Two]`, with no diagnostic, though `migrate` counts it lost. So the conversion counts one line fewer, and later launches no longer name it (`a_file_shcl_cannot_migrate_is_written_new`, `a_setting_the_conversion_cannot_keep_is_reported`).
+		- A dogfood file a b10c2009 build stamped Format 3 reads as current. Its comma lists, doubled backslashes and bare monitor keys set nothing. No release wrote one.
+		- JC 2026-11-06: Must be able to ingest and convert all older shcl formats that have ever been published as [pre-]releases.
+	- Progress log:
+		- 20261106: ddf93 fixed on the wip branch. Lines under a heading shcl refused count as unread again, as E018 had them. ddf93 failed before and passes after. The `family:[One, Two]` part and the dogfood files are left.
+		- 20261106: A list given to a setting that takes one value sets nothing now, and the line counts as one that can't be read. Only a theme's `ansi` takes a list. So the `family:[One, Two]` line is counted when a file is written new, and named at every later launch, as before beta1. Before, it loaded as a font named "[One, Two]". ddf6d and dder4 pass again, and deyry fails without the change.
+		- 20261106: `cicd/tests/config-convert/run.bash` wanted the b10c2009 spellings for a 2.x backslash path and a theme's ANSI list. It wants beta1's now, single backslashes and the list in brackets.
+		- 20261106: The swap and these fixes are on rnd1106.
+		- 20261106: A file a b10c2009 dogfood build stamped Format 3 is converted where it stands, when only its comma lists and bare monitor keys fail to read, and every other line reads the same after. Doubled backslashes are halved. One with any other line beta1 refuses, or a path whose `\n` would become a line break, is left as it is. The launch keeps a copy, named for format 3 (deysd, deyse).
+		- 20261106: Published so far: shcl v1.0.0-beta1, v1.0.0-beta2 and v1.0.0-rc1 (pre-releases, tags only), v1.0.0, v1.1.0, v1.2.0 and v2.0.0 (also on crates.io), and v3.0.0-beta1. SilkTerm's releases are v1.0.0-beta2 and v1.0.0-beta3, both on shcl 1.2.0. SilkTerm v1.0.0-beta1 was never tagged or released, and wrote `config.toml`, not shcl.
+		- 20261106: Each shcl release before 3.0 wrote one SilkTerm config through its own crate and read it back. They write 4 different files, and all read the same values. After one launch each reads as it did, loses nothing, keeps its copy and settles (deyst). A v1.0.0-beta2 save and first-launch template convert as beta3's do, the default shell at the top of the list (deysv, deysw).
+	- Decisions:
+		- 20261106: A list where one value goes is an unread line, not a value of its own. That is how a beta1 file says it too, and it keeps the conversion's count and the launch's message as they were.
+		- 20261106: The fixtures for releases that write the same bytes are one file, named for the range. The release's own crate is what says what each line meant.
+		- 20261106: SilkTerm v1.0.0-beta1's `config.toml` gets no fixture, since it was never published and isn't shcl. Check entry filed.
+	- Branch: rnd1106
+	- Test case: ddf93, deyry, ddf6d, dder4, deysd, deyse, deyst (every shcl release before 3.0), deysv and deysw (SilkTerm v1.0.0-beta2), der3m and der3n (v1.0.0-beta3), and `cicd/tests/config-convert/run.bash` (ddf6j). deyst fails with the 2.x respelling skipped.
+	- Verified: The backlog quick run passes, all five areas, 1438 unit tests. `cicd/tests/config-convert/run.bash` passes, 113 checks. The test ID check passes.
+	- Swept: Every conversion goes through `upgrade`, and the launch converts before the state move reads the monitor sizes. The copy and the converted message for a dogfood file are in `keep_old_format_at` and `publish_keeping`.
+	- Acceptance signoff: Self-closed: every published format has a fixture that converts with its values. The left-out beta1 TOML has a Check entry.
+	- Closed: 20261106-112100
 
 - CICD reset: test IDs
 	- ID: 2026102416233810
