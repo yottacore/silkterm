@@ -34,6 +34,17 @@ Going forward, new issues in the new template at the bottom of this file, will g
 
 ## Issues
 
+- Settings at scale 1.25 on a short screen: the vertical scrollbar pushes in a horizontal one and cuts off the revert arrows
+	- ID: 2026110613085833
+	- Type: Bug
+	- Status: Queued
+	- Priority: Low
+	- Opened: 20261106-130858
+	- Opened by:
+	- Progress log:
+		- Seen under headless sway at 1.25 with a 960 DIP tall screen, where the dialog opens with its height capped. At 1x on the same setup it fits. Found while working 2026110609500003.
+		- May be the expected result of the height cap. Check whether the content width should leave room for the scrollbar.
+
 - The window doesn't paint while the GPU is busy or short on memory, and stays blank after the load ends
 	- ID: 2026100312470535
 	- Type: Bug
