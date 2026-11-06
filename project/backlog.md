@@ -259,6 +259,31 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Stalled until a cosmic-text release takes fontdb 0.24 or later, and winit's sctk-adwaita drops ab_glyph.
 	- Held for a cosmic-text release on fontdb 0.24 or later, and an sctk-adwaita without ab_glyph.
 
+- "Minutes otherwise" still isn't taking effect
+	- ID: 2026110609500001
+	- Type: Bug
+	- Status: Queued
+	- Severity: High
+	- Opened: 20261106-095000
+	- Opened by: JC
+	- Assigned to: CC
+	- Related IDs: 2026103010083401
+	- Notes:
+		- Pre-next-cut.
+
+- The monitor sleep and SilkTerm position bug is still there
+	- ID: 2026110609500002
+	- Type: Bug
+	- Status: Queued
+	- Severity: High
+	- Opened: 20261106-095000
+	- Opened by: JC
+	- Assigned to: CC
+	- Related IDs: 2026102807384201
+	- Notes:
+		- Pre-next-cut.
+		- Need to verify with a fresher build.
+
 - Scroll scene tmuxclear fails under load: a clear inside tmux slides
 	- ID: 2026110514184921
 	- Type: Bug
@@ -280,6 +305,27 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Notes:
 		- It stopped the 11-04 default cicd run at regression tests, so that run never got to dogfood. Nothing has been dogfooded since 11-01.
 	- Test case: de19r, scroll scene `tmuxclear` in `cicd/tests/scroll/run.bash`.
+
+- Settings: Side-tabs: the lower the tab, the lower the text is within the tab
+	- ID: 2026110609500003
+	- Type: Bug
+	- Status: Queued
+	- Opened: 20261106-095000
+	- Opened by: JC
+	- Assigned to: CC
+	- Notes:
+		- Pre-next-cut.
+
+- Integrate shcl v3.0.0-beta.1
+	- ID: 2026110609500004
+	- Type: Task
+	- Status: Queued
+	- Priority: High
+	- Opened: 20261106-095000
+	- Opened by: JC
+	- Assigned to: CC
+	- Notes:
+		- Pre-next-cut.
 
 - The Wayland window tests skip in every container full run, for want of wtype
 	- ID: 2026110516054976
