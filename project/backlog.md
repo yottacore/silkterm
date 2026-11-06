@@ -289,15 +289,32 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - The monitor sleep and SilkTerm position bug is still there
 	- ID: 2026110609500002
 	- Type: Bug
-	- Status: Queued
+	- Status: Waiting on UAT
+		- A look on b23, in the hand testing row. The headless rig can't make an output read disconnected while it stays laid out.
+	- Needs hand testing: On b23, with a build from this branch and the window on the landscape monitor: let the screens sleep long enough that the HDMI one drops, wake them, and see the window back where it was, at its size. Started from a terminal with `SILK_MONDBG=1`, the sleep should log `noted` and `herded`, and no `take`.
 	- Severity: High
 	- Opened: 20261106-095000
 	- Opened by: JC
 	- Assigned to: CC
 	- Related IDs: 2026102807384201
+	- Target OS: Linux
+	- Test environment: b23, xfwm4 4.20, NVIDIA, HDMI landscape and DP portrait
+	- Version and build: dogfood of 20261105-150207, which has the earlier fix
+	- Reproduced: No. Found from b23's X server log and the GTK and xfwm4 sources.
+	- Actual cause:
+		- The HDMI monitor drops off as it sleeps. In 7 of 10 sleeps since 10-31 the X server went on laying it out, with its output read as disconnected, and nothing changed the layout until it woke. The other 3 took it out of the layout, which is the case deqx1 covers.
+		- GTK skips a disconnected output, so xfwm4 saw one monitor and herded the window off the HDMI one. SilkTerm read its monitors from the server's layout, where the HDMI one was still there, so the herd looked like the user's move. The window took the portrait monitor's size, and xfwm4 forgot where to put it back.
+		- The live state file holds a `3440x1440_100pct` size with no mm. That key comes only from a look while the HDMI output reads no size, which fits a look made while it was asleep.
 	- Notes:
 		- Pre-next-cut.
 		- Need to verify with a fresher build.
+	- Decisions:
+		- 20261106: On X11 a monitor counts as lit only while one of its outputs isn't read as disconnected, as GTK counts it. When every one reads disconnected, all are believed lit, as GTK then falls back to the whole screen.
+	- Actual fix: The X11 monitor list leaves out a monitor whose outputs all read disconnected. That one list feeds both the layout a herd is told by and the monitor a window is on, so the sleep now reads as a herd, which takes no size, and the put-back from 2026102807384201 waits for it. design.md says so under the per-monitor size.
+	- Swept: every reader of the server's monitor list, `layout` and the monitor under the window, both through `X11Screen::of`. winit's own list, used where the X server can't be asked, isn't read on X11.
+	- Verified: 20261106. deyvh passes, and fails with the disconnected check taken out. deqx1 passes all 20 checks. A probe with the landscape output turned off, as the HDMI one goes, put the window back under xfwm4 before and after.
+	- Test case: `a_monitor_whose_cable_reads_disconnected_is_dark` (deyvh). `cicd/tests/herdback/run.bash` (deqx1), unchanged, for the monitor taken out of the layout.
+	- Branch: rnd1106
 
 - Scroll scene tmuxclear fails under load: a clear inside tmux slides
 	- ID: 2026110514184921

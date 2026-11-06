@@ -9,6 +9,8 @@
 //! there it is resolution and scale.
 
 use winit::window::Window;
+#[cfg(target_os = "linux")]
+use x11rb::protocol::randr::Connection;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MonitorId {
@@ -479,7 +481,7 @@ impl X11Screen {
 			.ok()?
 			.reply()
 			.ok()?;
-		let crtcs = resources
+		let laid = resources
 			.crtcs
 			.iter()
 			.filter_map(|&crtc| {
@@ -488,7 +490,23 @@ impl X11Screen {
 					.and_then(|cookie| cookie.reply().ok())
 			})
 			.filter(|info| info.mode != 0 && !info.outputs.is_empty())
+			.map(|info| {
+				let ends = info
+					.outputs
+					.iter()
+					.map(|&out| {
+						conn.randr_get_output_info(out, resources.config_timestamp)
+							.ok()
+							.and_then(|cookie| cookie.reply().ok())
+							.map_or(x11rb::protocol::randr::Connection::UNKNOWN, |reply| {
+								reply.connection
+							})
+					})
+					.collect();
+				(info, ends)
+			})
 			.collect();
+		let crtcs = lit_crtcs(laid);
 		Some(Self {
 			conn,
 			root,
@@ -497,6 +515,25 @@ impl X11Screen {
 			crtcs,
 		})
 	}
+}
+
+// The monitors laid out that are lit. One whose cable finds nothing on the
+// other end is dark, though the server can go on laying it out for hours:
+// b23's HDMI monitor sleeps that way. GTK, and so xfwm4, drop such a monitor
+// and herd its windows off it. Counted as lit, the herd read as the user's
+// move, the window took the other monitor's size, and xfwm4 never put it
+// back (2026110609500002). When the server calls every one disconnected,
+// none is taken as dark, as GTK falls back to the whole screen then.
+#[cfg(target_os = "linux")]
+fn lit_crtcs<T>(laid: Vec<(T, Vec<Connection>)>) -> Vec<T> {
+	let lit = |ends: &[Connection]| ends.iter().any(|&end| end != Connection::DISCONNECTED);
+	if !laid.iter().any(|(_, ends)| lit(ends)) {
+		return laid.into_iter().map(|(crtc, _)| crtc).collect();
+	}
+	laid.into_iter()
+		.filter(|(_, ends)| lit(ends))
+		.map(|(crtc, _)| crtc)
+		.collect()
 }
 
 #[cfg(target_os = "linux")]
@@ -906,6 +943,37 @@ pub fn snapped(_window: &Window) -> bool {
 #[cfg(test)]
 mod tests {
 	use super::*;
+
+	// b23's HDMI monitor asleep: still laid out, its cable reads disconnected.
+	// Test ID: deyvh
+	#[cfg(target_os = "linux")]
+	#[test]
+	fn a_monitor_whose_cable_reads_disconnected_is_dark() {
+		let (on, off, unsure) = (
+			Connection::CONNECTED,
+			Connection::DISCONNECTED,
+			Connection::UNKNOWN,
+		);
+		assert_eq!(
+			lit_crtcs(vec![("portrait", vec![on]), ("hdmi", vec![off])]),
+			["portrait"]
+		);
+		assert_eq!(
+			lit_crtcs(vec![("a", vec![on]), ("b", vec![unsure])]),
+			["a", "b"],
+			"a server that can't say is believed lit"
+		);
+		assert_eq!(
+			lit_crtcs(vec![("cloned", vec![off, on]), ("hdmi", vec![off])]),
+			["cloned"],
+			"lit while any of its outputs is"
+		);
+		assert_eq!(
+			lit_crtcs(vec![("a", vec![off]), ("b", vec![off])]),
+			["a", "b"],
+			"all disconnected is believed for none"
+		);
+	}
 
 	// Test ID: ddesk
 	#[test]
