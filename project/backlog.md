@@ -319,7 +319,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - Integrate shcl v3.0.0-beta.1
 	- ID: 2026110609500004
 	- Type: Task
-	- Status: Queued
+	- Status: Done
 	- Priority: High
 	- Opened: 20261106-095000
 	- Opened by: JC
@@ -339,7 +339,9 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261106: The requirement is `3.0.0-beta1`, not `=3.0.0-beta1`. The lock holds it at beta1.
 		- 20261106: Asserts given new values for the swap: dd5ga reads `"%LOCALAPPDATA%\silkterm\wallpaper"` with single backslashes (was doubled). dcbej's monitor key is quoted, as beta1 writes it (was bare). ddamr, ddp93 and ddrjm write their arrays in brackets (were comma lists).
 	- Branch: wip/rnd1106-2026110609500004
-	- Test case: dcbej (fails with the quoted key before the walker change), dd5ga, and the children's tests.
+	- Test case: deysd, deyse, deyst, deysv, deysw, dcbej, ddf93, dd5ga, ddamr, ddp93, ddrjm, and cicd/tests/config-convert/run.bash
+	- Acceptance signoff: Self-closed: both children are Done and every published shcl format converts in deyst.
+	- Closed: 20261106-112227
 
 - shcl 3.0.0-beta1: saves keep quotes, so the requote handling needs another look
 	- ID: 2026110610154300
