@@ -262,14 +262,29 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - "Minutes otherwise" still isn't taking effect
 	- ID: 2026110609500001
 	- Type: Bug
-	- Status: Queued
+	- Status: Waiting on UAT
+		- JC: on b23's desktop, leave the pointer resting over a SilkTerm window, work in another window, and see it let go after "Minutes otherwise".
+	- Needs hand testing: On b23 under xfwm4, a window unfocused with the pointer resting over it, while other programs' menus and window drags are used.
 	- Severity: High
 	- Opened: 20261106-095000
 	- Opened by: JC
 	- Assigned to: CC
 	- Related IDs: 2026103010083401
+	- Target OS: Linux
 	- Notes:
 		- Pre-next-cut.
+	- Reproduced: Yes, 20261106, headless under X11. The rig left out the pointer: nothing was ever over the window. With the pointer resting over an unfocused window and another program grabbing the pointer and letting it go every 8 s, the window never let go in 100 s. One grab after a release took the device back.
+		- Tried and ruled out, each let go at 62 to 65 s: cursor blink, the minimap, the hardware rating, every setting at its default, an interactive bash, xfwm4 with focus moved to an xterm, a second window on the same settings file, the pointer resting over it alone, and a window mapped and closed beside the pointer.
+	- Actual cause: Any pointer grab let go on the desktop, such as a menu, a window drag or a screen locker in another program, makes the X server tell the window under the pointer that it entered, with one move to where it already was. winit passes on every one. The idle clock took each as a person at the window, so the wait started over. The look after a move already ignored them, and counts the pointer only once it moves inside.
+	- Actual fix: The idle clock counts the pointer by that same rule. Being told it entered is not a sign of life. Moving inside the window still is.
+	- Decisions:
+		- 20261106: Shared the look-after-a-move rule rather than a second one of its own, so the two can't drift. On Wayland, where the compositor knows its pointer, entering still counts.
+		- 20261106: The rest of a window event's signs of life are unchanged, focus either way included.
+	- Progress log:
+		- 20261106: Verified: deqy2, with the pointer over the quiet window and grabbed every 8 s, fails on the build before the fix (never let go) and passes after it (63 s). After the release, a grab leaves it let go and a move over it brings it back. The quick gate, all five areas, passes.
+	- Swept: every `CursorEntered` and `CursorMoved` in `source`. The startup rating's banner check only blocks input. The dialogs' handlers are for windows that are never let go. The look after a move already had the rule.
+	- Branch: rnd1106
+	- Test case: `a_pointer_only_told_it_entered_is_not_a_sign_of_life` (deyts). Also `cicd/tests/idleother/run.bash` (deqy2), changed, in the full run.
 
 - The monitor sleep and SilkTerm position bug is still there
 	- ID: 2026110609500002
