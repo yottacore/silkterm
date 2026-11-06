@@ -19,7 +19,7 @@
 
 ## In order. "A/B" is tab B under tab A; a tab with tabs under it holds no
 ## rows of its own, and a heading below names the tab it is on by that path.
-tabs: "Silk", "Appearance", "Appearance/Themes", "Appearance/Background", "Appearance/Text", "Appearance/Cursor", "Movement", "Window", "Program", "Shell", "Keys"
+tabs: ["Silk", "Appearance", "Appearance/Themes", "Appearance/Background", "Appearance/Text", "Appearance/Cursor", "Movement", "Window", "Program", "Shell", "Keys"]
 
 ## top: a row of tabs across the top, where a tab's sub-tabs show in a second
 ## row only while it is the current one. left: a list down the left side with
@@ -217,19 +217,19 @@ rows:
 	Performance:
 		kind: heading
 		label: Performance
-		aliases: "speed", "fps"
+		aliases: ["speed", "fps"]
 		tab: Silk
 
 	PerfAuto:
 		label: Choose automatically
-		aliases: "benchmark", "hardware test"
+		aliases: ["benchmark", "hardware test"]
 		kind: toggle
 		setting: performance.automatic
 		help: "Test how fast this machine draws, and pick the profile it can run smoothly. If the display still falls behind, the profile drops a step until SilkTerm restarts, but never below Low."
 
 	PerfProfile:
 		label: Profile
-		aliases: "quality", "preset", "effects"
+		aliases: ["quality", "preset", "effects"]
 		kind: dropdown
 		setting: performance.profile
 		auto: PerfAuto
@@ -256,7 +256,7 @@ rows:
 	## Not under Choose automatically: Remote comes on at launch either way.
 	PerfDetectRemote:
 		label: Use remote mode when detected
-		aliases: "automatic remote mode", "remote desktop", "rdp", "vnc", "x forwarding"
+		aliases: ["automatic remote mode", "remote desktop", "rdp", "vnc", "x forwarding"]
 		kind: toggle
 		setting: performance.detect_remote
 		help: "Switch to the Remote (temporary) profile when SilkTerm starts on a remote screen, such as over Remote Desktop, VNC or X forwarding. Turned off, Temporary remote display mode on the View menu still switches it by hand."
@@ -269,7 +269,7 @@ rows:
 
 	TextScrim:
 		label: Text scrim
-		aliases: "halo", "glow", "text shadow"
+		aliases: ["halo", "glow", "text shadow"]
 		kind: toggle
 		setting: text.scrim.enabled
 		group: profile
@@ -279,7 +279,7 @@ rows:
 		## percent, where each 20% is one doubling of the finished halo's opacity
 		label: Strength %
 		kind: slider
-		range: 0, 100
+		range: [0, 100]
 		whole: true
 		setting: text.scrim.strength
 		gate: TextScrim
@@ -289,7 +289,7 @@ rows:
 	ScrimRadius:
 		label: Scrim radius px
 		kind: slider
-		range: 0, 20
+		range: [0, 20]
 		whole: true
 		setting: text.scrim.radius
 		gate: TextScrim
@@ -299,7 +299,7 @@ rows:
 	ScrimSoftness:
 		label: Softness %
 		kind: slider
-		range: 0, 100
+		range: [0, 100]
 		whole: true
 		setting: text.scrim.softness
 		gate: TextScrim
@@ -309,9 +309,9 @@ rows:
 	## The two together describe one curve, so they share a line. The label names
 	## both; each box says which of them it is by what it holds.
 	ScrimFunction:
-		label: Function, falloff
+		label: "Function, falloff"
 		kind: dropdown
-		options: "Distance field", "Distance transform", "Dilate + feather", "Gaussian [ugly]"
+		options: ["Distance field", "Distance transform", "Dilate + feather", "Gaussian [ugly]"]
 		setting: text.scrim.function
 		gate: TextScrim
 		group: profile
@@ -320,7 +320,7 @@ rows:
 	ScrimRamp:
 		label: ""
 		kind: dropdown
-		options: "Exponential", "Half-normal", "Logarithmic", "Sigmoid", "Linear"
+		options: ["Exponential", "Half-normal", "Logarithmic", "Sigmoid", "Linear"]
 		beside: true
 		setting: text.scrim.ramp
 		gate: TextScrim
@@ -330,7 +330,7 @@ rows:
 		## percent of the lightness range, not a WCAG ratio - see palette::readable
 		label: Minimum contrast %
 		kind: slider
-		range: 0, 60
+		range: [0, 60]
 		whole: true
 		indent: 1
 		setting: text.min_contrast
@@ -341,7 +341,7 @@ rows:
 		label: Outline px
 		aliases: "stroke"
 		kind: slider
-		range: 0, 4
+		range: [0, 4]
 		whole: true
 		setting: text.outline
 		group: profile
@@ -354,7 +354,7 @@ rows:
 
 	SmoothScroll:
 		label: Smooth scrolling
-		aliases: "animation", "easing"
+		aliases: ["animation", "easing"]
 		kind: toggle
 		setting: scroll.smooth
 		group: profile
@@ -367,7 +367,7 @@ rows:
 	ScrollEaseIn:
 		label: Ease-in %
 		kind: slider
-		range: 1, 100
+		range: [1, 100]
 		whole: true
 		setting: scroll.ease_in_ms
 		gate: SmoothScroll
@@ -377,7 +377,7 @@ rows:
 	ScrollRampUp:
 		label: Ramp-up %
 		kind: slider
-		range: 1, 100
+		range: [1, 100]
 		whole: true
 		setting: scroll.ramp_up_ms
 		gate: SmoothScroll
@@ -388,7 +388,7 @@ rows:
 		label: Single-screen speed %
 		aliases: "scroll speed"
 		kind: slider
-		range: 1, 100
+		range: [1, 100]
 		whole: true
 		setting: scroll.single_screen_tau_ms
 		gate: SmoothScroll
@@ -398,7 +398,7 @@ rows:
 	ScrollRampDown:
 		label: Ramp-down %
 		kind: slider
-		range: 1, 100
+		range: [1, 100]
 		whole: true
 		setting: scroll.ramp_down_ms
 		gate: SmoothScroll
@@ -408,7 +408,7 @@ rows:
 	ScrollEaseOut:
 		label: Ease-out %
 		kind: slider
-		range: 1, 100
+		range: [1, 100]
 		whole: true
 		setting: scroll.ease_out_ms
 		gate: SmoothScroll
@@ -422,21 +422,21 @@ rows:
 	Themes:
 		kind: heading
 		label: Themes
-		aliases: "colors", "colours", "palette", "color scheme"
+		aliases: ["colors", "colours", "palette", "color scheme"]
 		tab: Appearance/Themes
 
 	Theme:
 		label: Theme
-		aliases: "colors", "color scheme", "palette"
+		aliases: ["colors", "color scheme", "palette"]
 		kind: dropdown
 		setting: theme
 		help: "The color scheme the terminal and this dialog follow."
 
 	ThemeMode:
 		label: Mode
-		aliases: "dark mode", "light mode", "night mode"
+		aliases: ["dark mode", "light mode", "night mode"]
 		kind: dropdown
-		options: "Dark", "Light", "System"
+		options: ["Dark", "Light", "System"]
 		indent: 1
 		setting: theme_mode
 		help: "Which variant of the theme to use. System follows the desktop."
@@ -451,18 +451,18 @@ rows:
 	ThemeActions:
 		label: ""
 		kind: buttons
-		options: "Save", "Save as…", "Rename…", "Delete"
+		options: ["Save", "Save as…", "Rename…", "Delete"]
 		help: "Save keeps the colors below and the font under this theme's name. Only a saved theme can be renamed or deleted."
 
 	Colors:
 		kind: heading
 		label: Colors
-		aliases: "colours", "palette"
+		aliases: ["colours", "palette"]
 		tab: Appearance/Themes
 
 	ColBg:
 		label: Terminal background
-		aliases: "background color", "bg"
+		aliases: ["background color", "bg"]
 		kind: color
 		setting: colors.background
 		group: theme
@@ -476,7 +476,7 @@ rows:
 
 	ColFg:
 		label: Foreground
-		aliases: "text color", "fg"
+		aliases: ["text color", "fg"]
 		kind: color
 		setting: colors.foreground
 		auto: ColFromWallpaper
@@ -538,7 +538,7 @@ rows:
 
 	ColFocus:
 		label: Focus
-		aliases: "accent", "focus ring"
+		aliases: ["accent", "focus ring"]
 		kind: color
 		indent: 1
 		setting: colors.focus
@@ -554,7 +554,7 @@ rows:
 
 	ColScrollbarTrough:
 		label: Track
-		aliases: "trough", "scrollbar track"
+		aliases: ["trough", "scrollbar track"]
 		kind: color
 		indent: 1
 		setting: colors.scrollbar_trough
@@ -564,19 +564,19 @@ rows:
 	Background:
 		kind: heading
 		label: Background
-		aliases: "image", "picture"
+		aliases: ["image", "picture"]
 		tab: Appearance/Background
 
 	BgEnabled:
 		label: Wallpaper
-		aliases: "background image", "picture"
+		aliases: ["background image", "picture"]
 		kind: toggle
 		setting: wallpaper.enabled
 		group: profile
 
 	BgImage:
 		label: File or folder
-		aliases: "image", "picture", "path"
+		aliases: ["image", "picture", "path"]
 		kind: text
 		setting: wallpaper.image
 		gate: BgEnabled
@@ -585,9 +585,9 @@ rows:
 
 	BgFit:
 		label: Fit
-		aliases: "scale", "stretch", "fill"
+		aliases: ["scale", "stretch", "fill"]
 		kind: radio
-		options: "Stretch", "Zoom"
+		options: ["Stretch", "Zoom"]
 		setting: wallpaper.default_fit
 		gate: BgEnabled
 		help: "What to do when the image and the window are different shapes. An image with its own Fit tag overrides this."
@@ -601,7 +601,7 @@ rows:
 
 	BgRotate:
 		label: Rotate folder
-		aliases: "slideshow", "cycle"
+		aliases: ["slideshow", "cycle"]
 		kind: toggle
 		setting: wallpaper.rotate.enabled
 		gate: BgEnabled
@@ -609,9 +609,9 @@ rows:
 
 	BgOpacity:
 		label: Visibility %
-		aliases: "wallpaper opacity", "dim", "brightness"
+		aliases: ["wallpaper opacity", "dim", "brightness"]
 		kind: slider
-		range: 0, 100
+		range: [0, 100]
 		whole: true
 		setting: wallpaper.opacity
 		gate: BgEnabled
@@ -620,7 +620,7 @@ rows:
 	BgBlur:
 		label: Blur px
 		kind: slider
-		range: 0, 50
+		range: [0, 50]
 		typed_max: 100
 		whole: true
 		setting: wallpaper.blur
@@ -646,7 +646,7 @@ rows:
 	BgContrastSize:
 		label: Size %
 		kind: slider
-		range: 0, 100
+		range: [0, 100]
 		whole: true
 		setting: wallpaper.contrast_mask.size
 		gate: BgContrastMask
@@ -655,7 +655,7 @@ rows:
 	BgContrastStrength:
 		label: Strength %
 		kind: slider
-		range: 0, 100
+		range: [0, 100]
 		whole: true
 		setting: wallpaper.contrast_mask.strength
 		gate: BgContrastMask
@@ -664,7 +664,7 @@ rows:
 	BgContrastAuto:
 		label: Automask mix %
 		kind: slider
-		range: 0, 100
+		range: [0, 100]
 		whole: true
 		setting: wallpaper.contrast_mask.auto
 		gate: BgContrastMask
@@ -673,7 +673,7 @@ rows:
 	## Last on the tab, since it is the one that depends on the desktop.
 	Transparency:
 		label: Transparency
-		aliases: "see-through", "translucent", "transparent"
+		aliases: ["see-through", "translucent", "transparent"]
 		kind: toggle
 		setting: transparency.enabled
 		help: "See through the window to what's behind it. On Windows this takes effect at the next launch."
@@ -682,16 +682,16 @@ rows:
 
 	Opacity:
 		label: Opacity %
-		aliases: "transparency", "translucent"
+		aliases: ["transparency", "translucent"]
 		kind: slider
-		range: 0, 100
+		range: [0, 100]
 		whole: true
 		setting: transparency.opacity
 		gate: Transparency
 
 	BackdropBlur:
 		label: Blur-behind
-		aliases: "frosted glass", "acrylic"
+		aliases: ["frosted glass", "acrylic"]
 		kind: toggle
 		setting: transparency.blur_behind
 		gate: Transparency
@@ -712,14 +712,14 @@ rows:
 		label: Use system font
 		aliases: "desktop font"
 		kind: pair
-		options: "Face", "Size"
-		parts: SystemFont, SystemFontSize
-		setting: font.use_system_family, font.use_system_size
+		options: ["Face", "Size"]
+		parts: [SystemFont, SystemFontSize]
+		setting: [font.use_system_family, font.use_system_size]
 		help: "Follow the desktop's own monospace font, for the face and the size independently."
 
 	FontFamily:
 		label: Family
-		aliases: "font", "typeface", "font name"
+		aliases: ["font", "typeface", "font name"]
 		kind: text
 		setting: font.family
 		auto: SystemFont
@@ -728,9 +728,9 @@ rows:
 
 	FontSize:
 		label: Size
-		aliases: "font size", "text size", "zoom"
+		aliases: ["font size", "text size", "zoom"]
 		kind: slider
-		range: 6, 40
+		range: [6, 40]
 		typed_max: 128
 		whole: true
 		setting: font.size
@@ -739,9 +739,9 @@ rows:
 
 	LineHeight:
 		label: Line height
-		aliases: "line spacing", "leading"
+		aliases: ["line spacing", "leading"]
 		kind: slider
-		range: 0.8, 2
+		range: [0.8, 2]
 		typed_max: 4
 		setting: font.line_height_scale
 		help: "Space between lines, as a multiple of the font's own."
@@ -756,18 +756,18 @@ rows:
 
 	CursorHeight:
 		label: Height %
-		aliases: "cursor size", "caret"
+		aliases: ["cursor size", "caret"]
 		kind: slider
-		range: 1, 100
+		range: [1, 100]
 		whole: true
 		setting: cursor.size.height
 		help: "Cursor height as a percentage of the cell, measured up from the bottom."
 
 	CursorWidth:
 		label: Width %
-		aliases: "cursor size", "caret"
+		aliases: ["cursor size", "caret"]
 		kind: slider
-		range: 1, 100
+		range: [1, 100]
 		whole: true
 		setting: cursor.size.width
 		help: "Cursor width as a percentage of the cell, measured from the left."
@@ -776,7 +776,7 @@ rows:
 	## they can be set up first and come back as they were.
 	CursorBlinking:
 		label: Blink
-		aliases: "cursor blink", "flash"
+		aliases: ["cursor blink", "flash"]
 		kind: toggle
 		setting: cursor.blink
 		group: profile
@@ -786,7 +786,7 @@ rows:
 		label: Rate s
 		aliases: "blink speed"
 		kind: slider
-		range: 0.2, 6
+		range: [0.2, 6]
 		typed_max: 20
 		setting: cursor.blink_rate_s
 		gate: CursorBlinking
@@ -794,16 +794,16 @@ rows:
 
 	CursorAnimation:
 		label: Animation
-		aliases: "cursor trail", "smooth cursor"
+		aliases: ["cursor trail", "smooth cursor"]
 		kind: dropdown
-		options: "Phase", "Pulse vertical", "Pulse horizontal", "Pulse both"
+		options: ["Phase", "Pulse vertical", "Pulse horizontal", "Pulse both"]
 		setting: cursor.animation
 		gate: CursorBlinking
 
 	CursorResume:
 		label: Inactivity timer s
 		kind: slider
-		range: 0.1, 60
+		range: [0.1, 60]
 		typed_max: 3600
 		setting: cursor.animation_resume_s
 		gate: CursorBlinking
@@ -815,13 +815,13 @@ rows:
 		key: none
 		label: Visibility
 		kind: pair
-		options: "Scrim", "Outline"
-		parts: CursorScrim, CursorOutline
-		setting: cursor.scrim, cursor.outline
+		options: ["Scrim", "Outline"]
+		parts: [CursorScrim, CursorOutline]
+		setting: [cursor.scrim, cursor.outline]
 
 	CopyOnSelect:
 		label: Copy on select
-		aliases: "clipboard", "auto copy", "selection"
+		aliases: ["clipboard", "auto copy", "selection"]
 		kind: toggle
 		setting: shell.copy_on_select
 		help: "Put selected text on the clipboard as soon as it is selected."
@@ -835,9 +835,9 @@ rows:
 
 	WheelLines:
 		label: Wheel lines
-		aliases: "mouse wheel", "scroll speed"
+		aliases: ["mouse wheel", "scroll speed"]
 		kind: slider
-		range: 1, 10
+		range: [1, 10]
 		typed_max: 100
 		whole: true
 		setting: scroll.wheel_lines
@@ -845,14 +845,14 @@ rows:
 
 	Scrollbar:
 		label: Scrollbar
-		aliases: "scroll bar", "scrollback", "history"
+		aliases: ["scroll bar", "scrollback", "history"]
 		kind: toggle
 		setting: scroll.scrollbar.enabled
 
 	ScrollbarThickness:
 		label: Width px
 		kind: slider
-		range: 4, 64
+		range: [4, 64]
 		whole: true
 		setting: scroll.scrollbar.thickness
 		gate: Scrollbar
@@ -867,7 +867,7 @@ rows:
 
 	Minimap:
 		label: Minimap
-		aliases: "overview", "scrollback", "history"
+		aliases: ["overview", "scrollback", "history"]
 		kind: toggle
 		setting: scroll.minimap.enabled
 		help: "A small view of the whole scrollback beside the text. It takes up columns the text would have used."
@@ -875,7 +875,7 @@ rows:
 	MinimapWidth:
 		label: Width px
 		kind: slider
-		range: 24, 400
+		range: [24, 400]
 		whole: true
 		setting: scroll.minimap.width
 		gate: Minimap
@@ -906,9 +906,9 @@ rows:
 
 	Columns:
 		label: Columns
-		aliases: "width", "window width"
+		aliases: ["width", "window width"]
 		kind: slider
-		range: 20, 400
+		range: [20, 400]
 		typed_max: 1000
 		whole: true
 		setting: window.columns
@@ -917,9 +917,9 @@ rows:
 
 	Rows:
 		label: Rows
-		aliases: "height", "window height"
+		aliases: ["height", "window height"]
 		kind: slider
-		range: 6, 120
+		range: [6, 120]
 		typed_max: 1000
 		whole: true
 		setting: window.rows
@@ -934,7 +934,7 @@ rows:
 
 	ResizeOnZoom:
 		label: Resize window on zoom
-		aliases: "font size", "text zoom", "window size"
+		aliases: ["font size", "text zoom", "window size"]
 		kind: toggle
 		setting: window.resize_on_zoom
 		help: "Changing the font size from the keyboard or the View menu resizes the window to keep the same columns and rows. It stops at the edge of the screen, where the grid gets smaller as usual. A maximized or fullscreen window keeps its size."
@@ -942,7 +942,7 @@ rows:
 	TabRegularWidth:
 		label: Tab width regular %
 		kind: slider
-		range: 4, 100
+		range: [4, 100]
 		whole: true
 		setting: window.tab_regular_width_pct
 		help: "Normal tab width, as a percentage of the window. Tabs shrink below this when there are a lot of them."
@@ -950,7 +950,7 @@ rows:
 	TabMaxWidth:
 		label: Tab width max %
 		kind: slider
-		range: 4, 100
+		range: [4, 100]
 		whole: true
 		setting: window.tab_max_width_pct
 		help: "How far a tab may grow past its regular width when its text needs the room."
@@ -966,7 +966,7 @@ rows:
 		label: Margin px
 		aliases: "padding"
 		kind: slider
-		range: 0, 40
+		range: [0, 40]
 		typed_max: 200
 		whole: true
 		setting: window.margin
@@ -975,22 +975,22 @@ rows:
 	TabText:
 		kind: heading
 		label: Tab text
-		aliases: "tab title", "tab label"
+		aliases: ["tab title", "tab label"]
 		tab: Window
 
 	## The flyover is the only place the macros are listed, so it runs longer
 	## than a row's usually does.
 	TabTemplate:
 		label: Template
-		aliases: "macros", "tab name"
+		aliases: ["macros", "tab name"]
 		kind: text
 		setting: window.tab_text
-		help: "What each tab says. A macro between percent signs is replaced by its value:\n%USER_DEFINED%: a name typed on the tab\n%PROGRAM_DEFINED%: the title the running program sets\n%SHELL%: the shell's name\n%PROGRAM%: the program the shell is running\n%LAST_PROGRAM%: the program it ran last\n%CURRENT_DIRECTORY%: the shell's current directory\n\na || b shows a, or b when a comes out empty. { } groups without printing, and [ ] prints its brackets. A group whose macros all come out empty is left out with its text, and so is text between two parts unless both of them show. On a narrow tab the parts get shorter in a set order."
+		help: "What each tab says. A macro between percent signs is replaced by its value:◉NEWLINE◉%USER_DEFINED%: a name typed on the tab◉NEWLINE◉%PROGRAM_DEFINED%: the title the running program sets◉NEWLINE◉%SHELL%: the shell's name◉NEWLINE◉%PROGRAM%: the program the shell is running◉NEWLINE◉%LAST_PROGRAM%: the program it ran last◉NEWLINE◉%CURRENT_DIRECTORY%: the shell's current directory◉NEWLINE◉◉NEWLINE◉a || b shows a, or b when a comes out empty. { } groups without printing, and [ ] prints its brackets. A group whose macros all come out empty is left out with its text, and so is text between two parts unless both of them show. On a narrow tab the parts get shorter in a set order."
 
 	WindowTitle:
 		kind: heading
 		label: Window title
-		aliases: "title bar", "caption"
+		aliases: ["title bar", "caption"]
 		tab: Window
 
 	TitleShowsTab:
@@ -1002,19 +1002,19 @@ rows:
 	Hyperlinks:
 		kind: heading
 		label: Hyperlinks
-		aliases: "urls", "web addresses"
+		aliases: ["urls", "web addresses"]
 		tab: Window
 
 	HyperlinksEnabled:
 		key: Hyperlinks
 		label: Enabled
-		aliases: "hyperlinks", "links", "urls"
+		aliases: ["hyperlinks", "links", "urls"]
 		kind: toggle
 		setting: hyperlinks.enabled
 
 	LinkOpenCommand:
 		label: Open command
-		aliases: "browser", "url handler"
+		aliases: ["browser", "url handler"]
 		kind: text
 		setting: hyperlinks.open_command
 		gate: Hyperlinks
@@ -1030,16 +1030,16 @@ rows:
 	Tmux:
 		kind: heading
 		label: Tmux
-		aliases: "multiplexer", "persistent sessions"
+		aliases: ["multiplexer", "persistent sessions"]
 		tab: Program
 
 	TmuxNewSession:
 		label: Always run in new tmux session
-		aliases: "multiplexer", "detach", "persistent sessions"
+		aliases: ["multiplexer", "detach", "persistent sessions"]
 		kind: toggle
 		setting: shell.tmux.always_new_session
-		help: "Start each split in a new tmux session. New tab in tmux on the Tabs menu does it for a whole tab.\n\nPros:\n- If your desktop crashes, your CLI sessions survive.\n- You can connect to existing CLI sessions remotely.\n- You can reconnect from any other installed terminal."
-		warning: "\n\nCons:\n- Can't launch GUI programs without extra parameters.\n- The SilkTerm Minimap is not available.\n- SilkTerm can't adjust itself based on programs inside tmux, so you may see occasional weirdness with smooth-scrolling."
+		help: "Start each split in a new tmux session. New tab in tmux on the Tabs menu does it for a whole tab.◉NEWLINE◉◉NEWLINE◉Pros:◉NEWLINE◉- If your desktop crashes, your CLI sessions survive.◉NEWLINE◉- You can connect to existing CLI sessions remotely.◉NEWLINE◉- You can reconnect from any other installed terminal."
+		warning: "◉NEWLINE◉◉NEWLINE◉Cons:◉NEWLINE◉- Can't launch GUI programs without extra parameters.◉NEWLINE◉- The SilkTerm Minimap is not available.◉NEWLINE◉- SilkTerm can't adjust itself based on programs inside tmux, so you may see occasional weirdness with smooth-scrolling."
 
 	TmuxSessionName:
 		label: Session name template
@@ -1047,13 +1047,13 @@ rows:
 		kind: text
 		indent: 1
 		setting: shell.tmux.session_name
-		help: "What a new tmux session is called. A macro between percent signs is replaced by its value:\n%YYYYmmDD%: the date\n%HHMMSS%: the time\n%HHMMSSNN%: the time, to a hundredth of a second\n\nA name tmux already has gets a number on the end. Dots, colons and # become underscores, since tmux won't keep them."
+		help: "What a new tmux session is called. A macro between percent signs is replaced by its value:◉NEWLINE◉%YYYYmmDD%: the date◉NEWLINE◉%HHMMSS%: the time◉NEWLINE◉%HHMMSSNN%: the time, to a hundredth of a second◉NEWLINE◉◉NEWLINE◉A name tmux already has gets a number on the end. Dots, colons and # become underscores, since tmux won't keep them."
 
 	TmuxOnClose:
 		label: When closed
-		aliases: "detach", "kill session"
+		aliases: ["detach", "kill session"]
 		kind: radio
-		options: "Detach", "End", "Prompt"
+		options: ["Detach", "End", "Prompt"]
 		indent: 1
 		setting: shell.tmux.on_close
 		help: "What closing a tab or pane does to a tmux session SilkTerm started in it. Detach leaves it running, so it can be attached to again. End closes it and everything running in it."
@@ -1063,12 +1063,12 @@ rows:
 	ResourceUse:
 		kind: heading
 		label: Resource use
-		aliases: "memory", "power saving"
+		aliases: ["memory", "power saving"]
 		tab: Program
 
 	IdleRelease:
 		label: Free resources when idle
-		aliases: "memory", "sleep", "power saving"
+		aliases: ["memory", "sleep", "power saving"]
 		kind: toggle
 		setting: window.idle_release
 		help: "Free graphics memory while the window isn't being used, and get it back when it is. Programs in it keep running. Helps most with a lot of windows open, or a card low on memory."
@@ -1077,7 +1077,7 @@ rows:
 	IdleHiddenMin:
 		label: Minutes when hidden
 		kind: slider
-		range: 1, 1440
+		range: [1, 1440]
 		scale: log
 		typed_max: 10080  ## a week
 		whole: true
@@ -1088,7 +1088,7 @@ rows:
 	IdleMin:
 		label: Minutes otherwise
 		kind: slider
-		range: 1, 1440
+		range: [1, 1440]
 		scale: log
 		typed_max: 10080  ## a week
 		whole: true
@@ -1098,7 +1098,7 @@ rows:
 
 	SoftwareRendering:
 		label: Always use software rendering
-		aliases: "gpu", "graphics card"
+		aliases: ["gpu", "graphics card"]
 		kind: toggle
 		setting: window.software_rendering
 		not_macos: true
@@ -1109,7 +1109,7 @@ rows:
 	Shell:
 		kind: heading
 		label: Shell
-		aliases: "shells", "default shell", "command line"
+		aliases: ["shells", "default shell", "command line"]
 		tab: Shell
 
 	## The shells the Tabs menu offers under "New tab with shell", in the order it
@@ -1129,12 +1129,12 @@ rows:
 	StartupDir:
 		kind: heading
 		label: "Default startup directory"
-		aliases: "working directory", "start folder"
+		aliases: ["working directory", "start folder"]
 		tab: Shell
 
 	StartupDirectory:
 		label: Directory
-		aliases: "working directory", "cwd", "start folder"
+		aliases: ["working directory", "cwd", "start folder"]
 		kind: text
 		setting: shell.startup_directory
 		help: "Where a new shell starts when nothing else says. Accepts ~ and environment variables. --directory, an inherited directory and the launch directory all come first."
@@ -1157,7 +1157,7 @@ rows:
 
 	BashPrompt:
 		label: "Use git-aware Bash prompt"
-		aliases: "ps1", "git prompt"
+		aliases: ["ps1", "git prompt"]
 		kind: toggle
 		setting: shell.bash_prompt
 		help: "Use the x9ps1-git prompt in new bash panes. It shows the git branch and status, and replaces the .bashrc prompt without changing any file."
@@ -1169,7 +1169,7 @@ rows:
 	OpenWith:
 		kind: heading
 		label: "Open with SilkTerm"
-		aliases: "file types", "file associations"
+		aliases: ["file types", "file associations"]
 		tab: Shell
 		windows: true
 
@@ -1199,7 +1199,7 @@ rows:
 
 	OpenFolder:
 		label: "Folder menu"
-		aliases: "explorer", "right-click menu"
+		aliases: ["explorer", "right-click menu"]
 		kind: buttons
 		options: "Register"
 		windows: true
@@ -1216,7 +1216,7 @@ rows:
 	KeysFile:
 		kind: heading
 		label: File
-		aliases: "shortcuts", "hotkeys", "keyboard", "key bindings"
+		aliases: ["shortcuts", "hotkeys", "keyboard", "key bindings"]
 		tab: Keys
 
 	HotkeyNewWindow:
@@ -1226,7 +1226,7 @@ rows:
 
 	HotkeySettings:
 		label: "Settings"
-		aliases: "preferences", "options"
+		aliases: ["preferences", "options"]
 		kind: hotkey
 		setting: keys.settings
 
@@ -1260,13 +1260,13 @@ rows:
 
 	HotkeyFontBigger:
 		label: "Increase font size"
-		aliases: "zoom in", "larger"
+		aliases: ["zoom in", "larger"]
 		kind: hotkey
 		setting: keys.font_bigger
 
 	HotkeyFontSmaller:
 		label: "Decrease font size"
-		aliases: "zoom out", "smaller"
+		aliases: ["zoom out", "smaller"]
 		kind: hotkey
 		setting: keys.font_smaller
 

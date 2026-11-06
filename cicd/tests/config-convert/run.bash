@@ -181,7 +181,7 @@ echo "shcl 2.x, no Format line"
 fFixture shcl2 '## kept as written' 'font:' "${tab}size: 15" "${tab}family:[One, Two]" 'window:' "${tab}columns: 101" 'wallpaper:' "${tab}image: C:\\\\pics\\\\sea.jpg"
 fConverts shcl2 inplace 1
 fCheck "shcl2: values kept" fHas window.columns 101 "${work}/shcl2/config.shcl"
-fCheck "shcl2: a 2.x backslash path respelled" fHas wallpaper.image '"C:\\pics\\sea.jpg"' "${work}/shcl2/config.shcl"
+fCheck "shcl2: a 2.x backslash path respelled" fHas wallpaper.image '"C:\pics\sea.jpg"' "${work}/shcl2/config.shcl"
 
 echo "Format 2"
 fFixture format2 '## kept as written' 'font:' "${tab}size: 15" 'window:' "${tab}columns: 101" '' '##    Format   2'
@@ -198,7 +198,7 @@ fCheck "beta3: chosen by hand" fHas performance.automatic false "${b3}"
 fCheck "beta3: a scroll timing kept" fHas scroll.ease_in_ms 60 "${b3}"
 fCheck "beta3: blink_rate_ms is blink_rate_s" fHas cursor.blink_rate_s 0.8 "${b3}"
 fCheck "beta3: tab_min_width_pct is tab_regular_width_pct" fHas window.tab_regular_width_pct 10 "${b3}"
-fCheck "beta3: its theme's ANSI colors kept" fHas themes.mine.light.ansi '"#1166b6", "#af9e30", "#4dd5aa", "#ec0d23", "#8a449d", "#287c17", "#c6b390", "#64eb0a", "#032284", "#a159fe", "#3f9177", "#ddc8f1", "#7c006b", "#1a37e4", "#b86f5e", "#56a6d8"' "${b3}"
+fCheck "beta3: its theme's ANSI colors kept" fHas themes.mine.light.ansi '["#1166b6", "#af9e30", "#4dd5aa", "#ec0d23", "#8a449d", "#287c17", "#c6b390", "#64eb0a", "#032284", "#a159fe", "#3f9177", "#ddc8f1", "#7c006b", "#1a37e4", "#b86f5e", "#56a6d8"]' "${b3}"
 fCheck "beta3: its shell list kept" fHas shells.zsh.command '"/usr/bin/zsh -l"' "${b3}"
 
 echo "a file shcl cannot migrate"
@@ -328,3 +328,4 @@ echo "all passed"
 ##		- 20261003 JC: A current file that is not UTF-8.
 ##		- 20261003 JC: That file is written again without the lines, not left.
 ##		- 20261101 JC: A file v1.0.0-beta3 saved.
+##		- 20261106 JC: shcl 3.0.0-beta1 spellings: single backslashes, lists in brackets.

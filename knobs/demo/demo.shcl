@@ -42,7 +42,7 @@
 ##	             until restart and ignores changes, then a value for every
 ##	             member
 
-tabs: "Performance", "Background", "Look", "Look/Text", "Look/Colors", "Window", "Window/Size", "Window/Power"
+tabs: ["Performance", "Background", "Look", "Look/Text", "Look/Colors", "Window", "Window/Size", "Window/Power"]
 
 settings:
 
@@ -82,7 +82,7 @@ settings:
 		label: Tested profile
 		control: none
 		type: choice
-		options: max_silk, high, low, standard
+		options: [max_silk, high, low, standard]
 		store: state
 		path: performance.tested_profile
 		default: high
@@ -106,13 +106,13 @@ settings:
 		tab: Performance
 		control: slider
 		whole: true
-		range: 0, 100
+		range: [0, 100]
 		path: scroll.ease_in
 		default: 50
 		gate: smooth
 		group: perf
-		detents: 0, 50, 100
-		detent_labels: "Off", "Usual", "Most"
+		detents: [0, 50, 100]
+		detent_labels: ["Off", "Usual", "Most"]
 		tip: "How gently a scroll starts."
 
 	ramp_down:
@@ -120,7 +120,7 @@ settings:
 		tab: Performance
 		control: slider
 		whole: true
-		range: 0, 100
+		range: [0, 100]
 		scale: exp
 		path: scroll.ramp_down
 		default: 70
@@ -147,7 +147,7 @@ settings:
 		tab: Performance
 		control: slider
 		whole: true
-		range: 0, 100
+		range: [0, 100]
 		path: text.scrim.strength
 		default: 50
 		gate: scrim
@@ -159,7 +159,7 @@ settings:
 		tab: Performance
 		control: slider
 		whole: true
-		range: 0, 20
+		range: [0, 20]
 		path: text.scrim.radius
 		default: 6
 		gate: scrim
@@ -188,8 +188,8 @@ settings:
 		label: Fit
 		tab: Background
 		control: dropdown
-		options: zoom, stretch
-		option_labels: "Zoom", "Stretch"
+		options: [zoom, stretch]
+		option_labels: ["Zoom", "Stretch"]
 		path: wallpaper.fit
 		default: zoom
 		gate: wallpaper
@@ -199,14 +199,14 @@ settings:
 		label: Blur px
 		tab: Background
 		control: slider
-		range: 0, 64
+		range: [0, 64]
 		scale: log
 		path: wallpaper.blur
 		default: 8
 		gate: wallpaper
 		group: perf
-		detents: 0, 8, 32
-		detent_labels: "None", "Soft", "Heavy"
+		detents: [0, 8, 32]
+		detent_labels: ["None", "Soft", "Heavy"]
 		tip: "How much to blur the image. Log scale, so the low end is spread out."
 
 	blink:
@@ -248,7 +248,7 @@ settings:
 		label: Size
 		tab: Look/Text
 		control: number
-		range: 6, 72
+		range: [6, 72]
 		path: font.size
 		default: 12
 		auto: use_system_size
@@ -259,7 +259,7 @@ settings:
 		label: Line height
 		tab: Look/Text
 		control: slider
-		range: 0.8, 2
+		range: [0.8, 2]
 		path: font.line_height
 		default: 1
 		detents: 1
@@ -326,7 +326,7 @@ settings:
 		tab: Window/Size
 		control: number
 		whole: true
-		range: 20, 500
+		range: [20, 500]
 		path: window.columns
 		default: 160
 		auto: remember_size
@@ -338,7 +338,7 @@ settings:
 		tab: Window/Size
 		control: number
 		whole: true
-		range: 5, 200
+		range: [5, 200]
 		path: window.rows
 		default: 48
 		auto: remember_size
@@ -374,13 +374,13 @@ settings:
 		tab: Window/Power
 		control: slider
 		whole: true
-		range: 1, 10080
+		range: [1, 10080]
 		scale: log
 		path: window.idle_min
 		default: 5
 		gate: idle_release
-		detents: 5, 60, 1440, 10080
-		detent_labels: "5 min", "1 hour", "1 day", "1 week"
+		detents: [5, 60, 1440, 10080]
+		detent_labels: ["5 min", "1 hour", "1 day", "1 week"]
 		tip: "How long with nothing to draw before memory is given back."
 
 groups:

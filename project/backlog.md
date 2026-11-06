@@ -333,7 +333,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261106: Comma lists are gone. The Settings spec and the knobs demo spec write arrays in brackets. "Function, falloff" was a list to 2.x, and is now the label it was meant to be.
 		- 20261106: A backslash is plain text again. The Windows wallpaper folder goes back to single backslashes, and a commented line in the doubled spelling is refreshed at launch.
 		- 20261106: beta1 quotes a name that doesn't start with a letter, such as a monitor's size key. The launch reads a quoted name now, so a remembered size isn't called a misspelling.
-		- 20261106: 6 config tests failed after the swap. Split into 2026110610154300 (quotes) and 2026110610154305 (conversion checks). The work waits on the wip branch until they pass. 5 are left.
+		- 20261106: 6 config tests failed after the swap. Split into 2026110610154300 (quotes) and 2026110610154305 (conversion checks). The work waited on the wip branch until they passed. All 6 pass now, and the swap is on rnd1106.
 		- 20261106: Held items, checked on beta1: 2026100219054510 is still there (the value goes in as a new line at the end of the block). 2026100315553545: `Migration` still says nothing, but `upgrade()` closes the open raw block and gives E005 in its diagnostics.
 	- Decisions:
 		- 20261106: The requirement is `3.0.0-beta1`, not `=3.0.0-beta1`. The lock holds it at beta1.
@@ -344,7 +344,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - shcl 3.0.0-beta1: saves keep quotes, so the requote handling needs another look
 	- ID: 2026110610154300
 	- Type: Task
-	- Status: Queued
+	- Status: Done
 	- Priority: High
 	- Opened: 20261106-101543
 	- Opened by: CC
@@ -352,12 +352,24 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Notes:
 		- beta1 never drops a value's quotes on a save. Three checks now say their case proves nothing: `a_save_that_requotes_a_value_changes_no_read`, `a_rating_is_refused_where_a_launch_step_reads_the_layout` and `a_settings_save_moves_no_value_at_the_next_launch`.
 		- Also look at SilkTerm's own comment scan, which still takes a backslash inside double quotes as an escape.
-	- Branch: wip/rnd1106-2026110609500004
+	- Progress log:
+		- 20261106: beta1 still quotes a bare value with a space or a colon on a save, but never drops quotes or swaps one quote for the other. So the rating check still leaves the quoted flag out, and the either-quote match in the font list refresh only matters for a file an older save wrote.
+		- 20261106: The rating refusal check's own launch step now reads a bare value, which a save quotes, in place of a single-quoted one, which a save keeps now.
+		- 20261106: Both comment scans now ask shcl where the comment starts. A backslash is plain text, an apostrophe inside a bare value opens no quote, and a `#` against text opens a comment, as beta1 reads them. A note after a folder ending in a backslash was dropped when the value was rewritten.
+	- Decisions:
+		- 20261106: Asserts given new values for beta1's quoting: dcfck now wants no save to drop quotes (was: some save drops them). dcfp6's font list cases want a save to keep the single quotes (was: respell them double). Each fails if a later shcl changes quoting again, so the handling gets looked at then.
+		- 20261106: dcfp4's step reads `family: Old Mono` bare (was `'Old Mono'` in single quotes). The asserts are the same.
+	- Branch: rnd1106
+	- Test case: `a_save_that_requotes_a_value_changes_no_read` (dcfck), `a_rating_is_refused_where_a_launch_step_reads_the_layout` (dcfp4), `a_settings_save_moves_no_value_at_the_next_launch` (dcfp6), `a_note_after_a_folder_ending_in_a_backslash_is_kept` (deyrz). deyrz fails on the old scans and passes on the new ones.
+	- Verified: The backlog quick run passes, all five areas. `cicd/tests/config-convert/run.bash` passes, 113 checks.
+	- Swept: The comment scans in config.rs (`strip_trailing_comment`, `trailing_comment`) and every quote comment in the config tests. The tab text template's backslash is its own escape, not shcl's, and stays.
+	- Acceptance signoff: Self-closed: a mechanical follow-up of the swap, and its tests pass.
+	- Closed: 20261106-105600
 
 - shcl 3.0.0-beta1: the conversion checks miss what a beta1 load no longer reports
 	- ID: 2026110610154305
 	- Type: Task
-	- Status: Queued
+	- Status: Started
 	- Priority: High
 	- Opened: 20261106-101543
 	- Opened by: CC
@@ -369,7 +381,12 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- JC 2026-11-06: Must be able to ingest and convert all older shcl formats that have ever been published as [pre-]releases.
 	- Progress log:
 		- 20261106: ddf93 fixed on the wip branch. Lines under a heading shcl refused count as unread again, as E018 had them. ddf93 failed before and passes after. The `family:[One, Two]` part and the dogfood files are left.
-	- Branch: wip/rnd1106-2026110609500004
+		- 20261106: A list given to a setting that takes one value sets nothing now, and the line counts as one that can't be read. Only a theme's `ansi` takes a list. So the `family:[One, Two]` line is counted when a file is written new, and named at every later launch, as before beta1. Before, it loaded as a font named "[One, Two]". ddf6d and dder4 pass again, and deyry fails without the change.
+		- 20261106: `cicd/tests/config-convert/run.bash` wanted the b10c2009 spellings for a 2.x backslash path and a theme's ANSI list. It wants beta1's now, single backslashes and the list in brackets.
+		- 20261106: The swap and these fixes are on rnd1106.
+	- Decisions:
+		- 20261106: A list where one value goes is an unread line, not a value of its own. That is how a beta1 file says it too, and it keeps the conversion's count and the launch's message as they were.
+	- Branch: rnd1106
 
 - The Wayland window tests skip in every container full run, for want of wtype
 	- ID: 2026110516054976

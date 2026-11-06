@@ -72,10 +72,6 @@ x11-clipboard = { git = "https://github.com/jim-collier/x11-clipboard", branch =
 # standing so an older lock resolves.
 glyphon = { git = "https://github.com/jim-collier/glyphon", branch = "text-srgb-blend-0.11.0" }
 
-# shcl 3.0 ahead of its release. Its dev branch still says 2.0.0. Drop this once
-# 3.0.0-beta.1 is on crates.io.
-shcl = { git = "https://github.com/yottacore/shcl", branch = "dev" }
-
 # silk_asan and silk_tsan are set by the sanitizer runs (cicd/config.bash), for
 # the few tests that can't mean anything under them.
 [workspace.lints.rust]

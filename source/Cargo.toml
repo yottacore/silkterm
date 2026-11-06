@@ -82,7 +82,7 @@ anyhow = "1"
 # Config format. Zero dependencies, and its parser is forgiving by design: one
 # bad line yields a diagnostic instead of sinking the whole file, so the config
 # layer needs no hand-rolled error recovery of its own.
-shcl = "2.0.0"
+shcl = "3.0.0-beta1"
 knobs = { path = "../knobs" }
 copypasta = "0.10"
 image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }

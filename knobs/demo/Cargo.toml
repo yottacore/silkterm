@@ -15,9 +15,6 @@ publish = false
 knobs = { path = ".." }
 eframe = { version = "0.36", default-features = false, features = ["accesskit", "default_fonts", "glow", "wayland", "x11"] }
 
-[patch.crates-io]
-shcl = { git = "https://github.com/yottacore/shcl", rev = "b10c2009" }
-
 # Same as SilkTerm's workspace, which this sits outside of.
 [lints.clippy]
 pedantic = { level = "warn", priority = -1 }

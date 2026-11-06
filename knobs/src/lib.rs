@@ -1483,17 +1483,20 @@ impl Model {
 	}
 }
 
+// Every path is the spec's own, so a refusal is a spec bug.
 fn put(doc: &mut shcl::Document, path: &str, v: &Value) {
-	match v {
+	let status = match v {
 		Value::Bool(b) => doc.set_bool(path, *b),
 		Value::Int(i) => doc.set_int(path, *i),
 		Value::Float(f) => doc.set_float(path, *f),
 		Value::Text(t) => doc.set_string(path, t),
 	};
+	debug_assert_eq!(status, shcl::SetStatus::Ok, "{path}");
 }
 
 fn take(doc: &shcl::Document, path: &str, s: &Setting) -> Option<Value> {
-	if !doc.exists(path) {
+	// no knob takes a list, and `get_string` would hand one back as its text
+	if !doc.exists(path) || doc.kind(path) == shcl::ValueKind::Array {
 		return None;
 	}
 	match s.kind {
