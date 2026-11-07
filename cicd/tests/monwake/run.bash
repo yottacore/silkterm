@@ -120,8 +120,8 @@ printf '%s\n' 'performance:' $'\tautomatic: false' $'\tprofile: "custom"' \
 	'wallpaper:' $'\tenabled: false' \
 	'window:' $'\tremember_size: true' $'\tremember_per_monitor: true' \
 	$'\tremembered_columns: 70' $'\tremembered_rows: 22' $'\tmonitors:' \
-	$'\t\t1920x1080_100pct:' $'\t\t\tcolumns: 110' $'\t\t\trows: 20' $'\t\t\tfont_zoom: 0' \
-	$'\t\t1200x1920_100pct:' $'\t\t\tcolumns: 50' $'\t\t\trows: 45' $'\t\t\tfont_zoom: 0' \
+	$'\t\t\"1920x1080_100pct\":' $'\t\t\tcolumns: 110' $'\t\t\trows: 20' $'\t\t\tfont_zoom: 0' \
+	$'\t\t\"1200x1920_100pct\":' $'\t\t\tcolumns: 50' $'\t\t\trows: 45' $'\t\t\tfont_zoom: 0' \
 	>"${cfgHome}/silkterm/config.shcl"
 ## "<output> <width>x<height>" of the window, from sway.
 fWhere(){

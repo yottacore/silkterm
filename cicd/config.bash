@@ -262,6 +262,11 @@ NSIS_TEMPLATE="cicd/packaging/windows/installer.nsi.in"
 ## Mac and the Windows box, and exits 0 when it built or skipped and 1 when a job
 ## failed. Its output stays in the private repo. Empty, or --no-private, to skip.
 PRIVATE_RUNNER="${SILK_PRIVATE_RUNNER-$(cd "${root}/../.." && pwd)/silkterm-private/repo/cicd/run.bash}"
+## The private repo's own script tests, beside its runner. They run against
+## stand-ins, so they need no box and run even with --no-private. Empty when
+## that repo isn't checked out here.
+PRIVATE_TESTS="${PRIVATE_RUNNER:+${PRIVATE_RUNNER%/cicd/*}/cicd/tests}"
+[[ -d "${PRIVATE_TESTS}" ]] || PRIVATE_TESTS=""
 
 ## Stage 4: profiler (non-gating artifact, not a pass/fail test). Builds an
 ## optimized+symbols binary (cargo --profile $PROFILE_PROFILE --features

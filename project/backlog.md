@@ -274,20 +274,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Stalled until a cosmic-text release takes fontdb 0.24 or later, and winit's sctk-adwaita drops ab_glyph.
 	- Held for a cosmic-text release on fontdb 0.24 or later, and an sctk-adwaita without ab_glyph.
 
-- Window test fixtures write a monitor's key bare, which shcl 3.0 flags as E014
-	- ID: 2026110619310863
-	- Type: Bug
-	- Status: Queued
-	- Severity: Low
-	- Opened: 20261106-193108
-	- Opened by: CC
-	- Assigned to: CC
-	- Related IDs: 2026110516054976
-	- Target OS: Linux
-	- Incorrect behavior: dpirand, monwl, monwake, herdback and startsize seed `config.shcl` with names such as `1920x1200_150pct:` bare. shcl 3.0.0-beta1 reads them, but reports E014, error level, "field name needs quotes". So these tests start the program on a config with an error in it, which a user's file never has, since SilkTerm writes those names quoted.
-	- Expected behavior: The fixtures write the key the way SilkTerm does, in quotes, unless a test means to check a bare one.
-	- Reproduced: 20261106, shcl beta1's `diagnostics()` on such a file. Whether SilkTerm shows the error in the window there isn't checked.
-
 - Wayland: must use the Wayland clipboard, and minimize other X11 features
 	- ID: 2026101509024607
 	- Type: Bug
@@ -2571,6 +2557,25 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Test case: None for the figures, which are a measurement. `SILK_MEMDBG` is covered by `each_debug_switch_reads_its_own_variable` (ddf59). Its minimap count is pinned by `the_memory_count_covers_every_stored_row` (ddgtx), seen to fail with the stored rows left out.
 	- Acceptance signoff: Self-closed: the numbers are in the design doc and nothing is left to judge.
 	- Closed: 20261004-194634
+
+- Window test fixtures write a monitor's key bare, which shcl 3.0 flags as E014
+	- ID: 2026110619310863
+	- Type: Bug
+	- Status: Done
+	- Severity: Low
+	- Opened: 20261106-193108
+	- Opened by: CC
+	- Assigned to: CC
+	- Related IDs: 2026110516054976
+	- Target OS: Linux
+	- Incorrect behavior: dpirand, monwl, monwake, herdback and startsize seed `config.shcl` with names such as `1920x1200_150pct:` bare. shcl 3.0.0-beta1 reads them, but reports E014, error level, "field name needs quotes". So these tests start the program on a config with an error in it, which a user's file never has, since SilkTerm writes those names quoted.
+	- Expected behavior: The fixtures write the key the way SilkTerm does, in quotes, unless a test means to check a bare one.
+	- Reproduced: 20261106, shcl beta1's `diagnostics()` on such a file. Whether SilkTerm shows the error in the window there isn't checked.
+	- Actual fix: dpirand, monwl, monwake, herdback and startsize write the key in quotes. The script lint step greps every test fixture for a bare one and fails on it.
+	- Branch: rnd1107b
+	- Test case: The lint step's check, seen to catch a planted bare key. startsize passed with the quoted key.
+	- Acceptance signoff: Self-closed: the quick run passes with the check in, and the check fails on a bare key.
+	- Closed: 20261107-0920
 
 - Regression: "Conserve resources", "Minutes otherwise" isn't working
 	- ID: 2026103010083401

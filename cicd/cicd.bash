@@ -857,9 +857,9 @@ fContainerRun(){
 	gitCommon="$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null || true)"
 	[[ -z "${gitCommon}" || "${gitCommon}" == "${root}/"* ]] || mounts+=(-v "${gitCommon}:${gitCommon}")
 	## The private repo's test scripts, read only, so the test ID check inside
-	## sees them as it does here. Its runner stays out, as stage 6 is this side's.
-	privTests="${PRIVATE_RUNNER:+${PRIVATE_RUNNER%/cicd/*}/cicd/tests}"
-	[[ -z "${privTests}" || ! -d "${privTests}" ]] || privArgs=(-v "${privTests}:${privTests}:ro" -e "SILK_PRIVATE_RUNNER=${PRIVATE_RUNNER}")
+	## sees them as it does here, and its own tests run. Its runner stays out, as
+	## stage 6 is this side's.
+	[[ -z "${PRIVATE_TESTS}" ]] || privArgs=(-v "${PRIVATE_TESTS}:${PRIVATE_TESTS}:ro" -e "SILK_PRIVATE_RUNNER=${PRIVATE_TESTS%/cicd/*}/cicd/run.bash")
 	"${docker}" run "${rmArg[@]}" --init --shm-size 1g --cpus "${CICD_MAX_JOBS}" --cpu-shares 256 --name "${EXE_NAME}-${runName}-${step}" "${labels[@]}" "${mounts[@]}" "${privArgs[@]}" -w "${root}" \
 		-e "USER=${USER:-$(id -un)}" -e "CARGO_TARGET_DIR=${containerTarget}" -e "SILK_BUILD_MINUTES=${SILK_BUILD_MINUTES:-}" -e "SILK_RELEASE=${SILK_RELEASE:-0}" \
 		-e "CICD_MAX_JOBS=${CICD_MAX_JOBS}" -e "CICD_CORES=${CICD_CORES}" -e SILK_CICD_STEP_AT -e SILK_CICD_STEP_TOTAL -e XDG_RUNTIME_DIR=/tmp/xdg-runtime -e ZIG_GLOBAL_CACHE_DIR=/zig-cache "${zoneArgs[@]}" "${keepArgs[@]}" \
@@ -968,6 +968,12 @@ fLintScripts(){
 	else
 		fEcho "WARNING: shellcheck not installed; shell scripts not linted"
 	fi
+	## A config fixture writes a monitor's key in quotes, as the program does.
+	## Bare, shcl 3.0 reads it with an E014 error, which no user's file has, so
+	## the test would run on a config no user can have.
+	bareKeys="$(grep -rnE '(^|[^"0-9])[0-9]+x[0-9]+_[0-9]+pct:' "${root}/cicd/tests" --include='*.bash' --include='*.py' --include='*.ps1' || true)"
+	[[ -z "${bareKeys}" ]] || { fEcho_Clean "${bareKeys}"; fDie "a test fixture writes a monitor's key bare; quote it as the program does"; }
+	fEcho "OK: fixture monitor keys quoted"
 	## First-party PowerShell scripts, at warning level too.
 	if command -v pwsh >/dev/null 2>&1; then
 		psRc=0
@@ -1194,6 +1200,13 @@ fScriptTests(){
 	fRunTest cicd/tests/rotate/run.bash "log rotation"
 	## The guard every recursive removal goes through.
 	fRunTest cicd/tests/saferm/run.bash "safe removal"
+	## The private repo's own script tests, when it is checked out beside this
+	## one. Both run against stand-ins, so they need no box.
+	if [[ -n "${PRIVATE_TESTS}" ]]; then
+		privTests="$(realpath --relative-to="${root}" "${PRIVATE_TESTS}")"
+		fRunTest "${privTests}/hosts/run.bash" "private runner's boxes"
+		fRunTest "${privTests}/macsize/run.bash" "Mac build sizes"
+	fi
 	## One tool pin list for both pipelines, and the docs quoting it.
 	fRunTest cicd/tests/pins/run.bash "tool pins" "tool pin test failed"
 	fRunTest cicd/tests/jobs/run.bash "step jobs and priority" "step jobs test failed"
