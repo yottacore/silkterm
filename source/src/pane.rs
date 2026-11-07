@@ -4163,8 +4163,8 @@ impl PaneManager {
 				}
 				let rect = pane.rect;
 				let (cw, ch, cols, lines) = content_dims(rect, ctx);
-				pane.term
-					.resize(cols, lines, ctx.cell_w as u16, ctx.cell_h as u16);
+				let (cell_w, cell_h) = ctx.cell_told();
+				pane.term.resize(cols, lines, cell_w, cell_h);
 				ctx.resize_buffer(&mut pane.buffer, cw, text_buffer_h(ch, ctx.cell_h));
 				// a resize invalidates the strip's captured columns and the
 				// frame-old styled snapshot it fills from
@@ -4333,12 +4333,13 @@ fn spawn_pane(
 	};
 	let text = minimap::text_rect(rect, &config::settings(), ctx.scale, true);
 	let (cw, ch, cols, lines) = content_dims(text, ctx);
+	let (cell_w, cell_h) = ctx.cell_told();
 	let term = TermInstance::spawn(
 		id,
 		cols,
 		lines,
-		ctx.cell_w as u16,
-		ctx.cell_h as u16,
+		cell_w,
+		cell_h,
 		proxy.clone(),
 		argv,
 		cwd,

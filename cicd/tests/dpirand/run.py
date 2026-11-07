@@ -721,12 +721,17 @@ def key_of(arm: str, out: dict[str, Any], scale: float) -> str:
 ## step with the scale, so the grid goes by how far the cell grew against
 ## the scale: at font zoom -2 a cell is 9x18 at 100% and 19x38 at 200%, and
 ## 24 rows became 22 (2026101513385002). One more either way for the margins,
-## the chrome and the part of a cell the window had over.
+## the chrome and the part of a cell the window had over. The cell the shell
+## is told is a whole pixel, and the real one is within half a pixel of it:
+## at 125% a cell of 13.64 told as 13 made 130 columns look like 136 were
+## owed (2026101716374843).
 def drift_band(grid: Grid, was: tuple[tuple[int, int], float], now: tuple[tuple[int, int], float]) -> set[Grid]:
 	(cell_was, scale_was), (cell, scale) = was, now
 	spans = []
 	for n, c0, c1 in zip(grid, cell_was, cell, strict=True):
-		lo, hi = sorted((n, n * c0 * scale / (scale_was * c1)))
+		lo = n * max(c0 - 0.5, 1) * scale / (scale_was * (c1 + 0.5))
+		hi = n * (c0 + 0.5) * scale / (scale_was * max(c1 - 0.5, 1))
+		lo, hi = sorted((n, lo, hi))[0], sorted((n, lo, hi))[-1]
 		spans.append(range(max(1, math.floor(lo) - 1), math.ceil(hi) + 2))
 	return {(c, r) for c in spans[0] for r in spans[1]}
 
@@ -1801,4 +1806,5 @@ if __name__ == "__main__":
 ##		- 20261107: --keep keeps the run folder too, which took the kept cases with it.
 ##		  A look settles the grid after a scale change, so the drift is allowed
 ##		  only until one comes, and fullscreen and back onto another scale brings
-##		  the pointer back for it.
+##		  the pointer back for it. The drift band allows for the cell the shell
+##		  is told being a whole pixel.
