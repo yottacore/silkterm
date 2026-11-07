@@ -567,6 +567,13 @@ fn advance_cells(advance: f32, unit: f32) -> u8 {
 }
 
 impl TextCtx {
+	/// The cell as the shell is told it, in whole pixels. A cell is fractional,
+	/// and cut down it told the shell 13 for 13.64, so a picture sized by the
+	/// cell came out 5% small (2026101716374843).
+	pub fn cell_told(&self) -> (u16, u16) {
+		(nearest_px(self.cell_w), nearest_px(self.cell_h))
+	}
+
 	/// `SILK_MEMDBG`: rasterized glyphs kept on the heap, and the font faces known.
 	pub fn memdbg_line(&self) -> String {
 		let images = &self.swash_cache.image_cache;
@@ -1216,9 +1223,25 @@ fn shaped_ink(
 	})
 }
 
+// A fractional cell to the nearest whole pixel, for the shell.
+fn nearest_px(cell: f32) -> u16 {
+	cell.round().max(1.0) as u16
+}
+
 #[cfg(test)]
 mod tests {
 	use super::*;
+
+	// The shell's cell is the nearest pixel, not the pixel below: 13.64 cut
+	// down to 13 told a picture drawn by the cell to be 5% small.
+	// Test ID: df056
+	#[test]
+	fn the_shell_is_told_the_nearest_pixel_cell() {
+		assert_eq!(nearest_px(13.64), 14);
+		assert_eq!(nearest_px(13.4), 13);
+		assert_eq!(nearest_px(16.0), 16);
+		assert_eq!(nearest_px(0.2), 1, "never no cell at all");
+	}
 
 	// A family resolved again, as on every font change and new window, comes
 	// back as the copy already kept rather than one more leaked string.
