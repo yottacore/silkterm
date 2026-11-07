@@ -401,6 +401,8 @@ class Model:
 	zoom: int = 0
 	size_pinned: bool = False
 	font_pinned: bool = False
+	## a scale change left the size to the system, and no look has come since
+	drifted: bool = False
 	## Wayland: the outputs the window is on, in the order it entered them. A
 	## group entered at one time has no order the window can see.
 	entered: list[list[str]] = field(default_factory=list)
@@ -410,9 +412,12 @@ class Model:
 			return self.store[key]
 		return self.last
 
-	## What a look that names `key` leaves the window at.
-	def after_look(self, key: str | None) -> tuple[str | None, Grid, int]:
-		if key is None or key == self.belief:
+	## What a look that names `key` leaves the window at. A look that finds
+	## the window where it was leaves it be, unless a scale change left its
+	## size to the system since the last look: then it takes the monitor's
+	## size again (`settled`), as the grid drifted a cell or so.
+	def after_look(self, key: str | None, settled: bool = False) -> tuple[str | None, Grid, int]:
+		if key is None or (key == self.belief and not (settled and self.drifted)):
 			return self.belief, self.grid, self.zoom
 		if not (self.remember and self.per_monitor) or self.size_pinned:
 			return key, self.grid, self.zoom
@@ -865,6 +870,8 @@ class Case:
 		## outputs touched on the way, which a look after the drop may mix in
 		allowed = {**self.drag_names, **allowed}
 		outcomes = {k: model.after_look(k) for k in allowed}
+		if model.drifted:
+			outcomes[model.belief] = model.after_look(model.belief, settled=True)
 		grids = {o[1] for o in outcomes.values()}
 		rescaled = rescaled and self.drifts() and model.grid in grids
 		scales = {o["scale"] for o in self.rig.outputs()}
@@ -942,6 +949,8 @@ class Case:
 		named: str | None = trace_field(arrived[-1], "key") if arrived else None
 		if named == "-":
 			named = None
+		## found itself where it was, which settles a drift
+		stayed = bool(looked) and (named is None or named == model.belief)
 		if named is not None and named == model.belief:
 			named = None
 		if named is None and None not in allowed:
@@ -950,6 +959,8 @@ class Case:
 				raise CheckError(f"{what}: still counts itself on {model.belief}, want one of {list(allowed)}")
 			allowed = {None: allowed[model.belief]}
 			outcomes = {None: model.after_look(None)}
+		if stayed:
+			outcomes[None] = model.after_look(model.belief, settled=True)
 		if named not in allowed:
 			raise CheckError(f"{what}: counted itself on {named}, want one of {list(allowed)}")
 		key, grid, zoom = outcomes[named]
@@ -959,12 +970,16 @@ class Case:
 		if grid != got and capped:
 			self.allow(CAPPED, named)
 			grid = got
-		drifted = rescaled and grid == model.grid
+		## a look settles the grid: back where it was, or at the kept size
+		drifted = rescaled and grid == model.grid and not looked
 		if grid != got and not (drifted and drift(got)):
 			raise CheckError(f"{what}: named {named} but is at {got}, not {grid}")
 		if grid != got:
 			self.allow(rounding, named)
 			grid = got
+			model.drifted = True
+		if looked:
+			model.drifted = False
 		if takes and named is not None:
 			taken = trace_field(takes[-1], "zoom")
 			if taken != "-" and int(taken) != zoom:
@@ -1450,7 +1465,16 @@ class Case:
 						self.note(f"    {what}: put back on {','.join(primary) or '-'}, was mostly on {','.join(was_on) or '-'}")
 						self.track_entered(touched)
 						after_scale = outs[primary[0]]["scale"] if primary else before_scale
-						self.after_move(what, outs, primary, False, after_scale != before_scale)
+						rescaled = after_scale != before_scale
+						if plan.arm == "wayland" and rescaled:
+							## the key that took it fullscreen comes up after,
+							## which is the person back at the window, so it
+							## looks, as after a rescale step
+							self.pointer_back()
+							self.waiting = False
+							self.settle(what, self.names(outs, primary), True, True)
+						else:
+							self.after_move(what, outs, primary, False, rescaled)
 				if hovered:
 					self.park_pointer()
 			elif step.kind == "rescale":
@@ -1575,6 +1599,7 @@ class Case:
 		self.saves = step.persist or not (step.cli or step.font)
 		model.belief = None
 		model.entered = []
+		model.drifted = False
 		self.stale = None
 		self.waiting = False
 		self.owed = []
@@ -1745,7 +1770,7 @@ def main() -> int:
 		print(f"  known {n}x: {item}")
 	status = 1 if failed else 0
 	print(f"{len(failed)} failed: seeds {' '.join(map(str, failed))}" if failed else "all passed")
-	_testdir.end(status)
+	_testdir.end(status, keep=args.keep)
 	return status
 
 
@@ -1773,3 +1798,7 @@ if __name__ == "__main__":
 ##		  come at once.
 ##		- 20261106: A monitor's key in the state file is read with its quotes off,
 ##		  as shcl 3.0 writes a name led by a digit in quotes.
+##		- 20261107: --keep keeps the run folder too, which took the kept cases with it.
+##		  A look settles the grid after a scale change, so the drift is allowed
+##		  only until one comes, and fullscreen and back onto another scale brings
+##		  the pointer back for it.

@@ -83,16 +83,18 @@ def only_marks(folder: Path) -> bool:
 		return False
 
 
-def end(status: int) -> None:
+def end(status: int, keep: bool = False) -> None:
 	## Removes the folder make() made, when status is 0 or 3 (a skip), or it
-	## holds nothing else, and the folder still has this run's mark. Never
-	## raises, so it never changes how a script exits.
+	## holds nothing else, and the folder still has this run's mark. `keep`
+	## leaves a folder with files in it whatever the status, for a test asked
+	## to keep what passed. Never raises, so it never changes how a script
+	## exits.
 	global _owned
 	if _owned is None:
 		return
 	folder, token = _owned
 	_owned = None
-	if status not in (0, 3) and not only_marks(folder):
+	if (keep or status not in (0, 3)) and not only_marks(folder):
 		print(f"test files kept in {folder}", file=sys.stderr)
 		return
 	reason = _not_ours(folder, token)
@@ -145,3 +147,4 @@ def use() -> Path:
 ##		- 20261031: use() points TEMP and TMP at the folder too.
 ##		- 20261101: The folder is HOST_TEMP/silkterm/YYYYmmDD-HHMMSS_NNN, with a run.pid.
 ##		- 20261106: A skip, or a failed run that left nothing in it, removes it too.
+##		- 20261107: end() takes keep, for a run asked to keep what passed.

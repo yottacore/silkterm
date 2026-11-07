@@ -373,6 +373,7 @@ impl State {
 			moved_at,
 			pending_at,
 			herded,
+			std::mem::take(&mut self.watch.drifted),
 		);
 		mondbg(
 			match settled {
@@ -633,7 +634,9 @@ impl State {
 	/// Left to the system it went 69x33 to 67x32 (2026101513385000). Not when
 	/// the monitors changed, as an output's own scale does: that counts as a
 	/// move, and the take after it was undone by sway's late answer to this
-	/// resize.
+	/// resize. Where that look then finds the window on the monitor it was on,
+	/// it takes the monitor's size again, so the grid doesn't stay off by the
+	/// drift (2026101716374842).
 	/// Either way the panes are laid out for the size coming, not the old one,
 	/// or the shell is told a grid half or twice the size until the resize
 	/// arrives (2026101412311921).
@@ -650,6 +653,10 @@ impl State {
 		// not a move means a take just happened, since only a take sets that grace
 		let took = !self.rescale_moves(Instant::now());
 		let grid = (free && (took || self.keeps_size())).then(|| self.grid_at(w, h));
+		// Left to the system for another monitor's size to take over, and if
+		// the look finds none, the monitor's own size is taken again
+		// (2026101716374842).
+		self.watch.drifted = grid.is_none() && !self.keeps_size();
 		self.retext(scale);
 		let mut asked = None;
 		if let Some((cols, rows)) = grid {
@@ -1070,6 +1077,9 @@ pub(super) struct MonitorWatch {
 	// to be saved (`look_unseen`).
 	pub(super) set_on: Option<Vec<(i64, i64, i64, i64)>>,
 	pub(super) took: Option<Took>, // a take whose scale change hasn't come (`note_rescaled`)
+	// A scale change left the size to the system, and no look has settled
+	// where the window is since (`rescale`).
+	pub(super) drifted: bool,
 }
 
 /// Where a window is, and its inner size, in physical pixels.
@@ -1319,17 +1329,21 @@ enum Settle {
 // no size, since that is the window manager's move, which it undoes when the
 // monitor is back. xfwm4 forgets where to put a window back once the window
 // resizes itself, and left it straddling the two monitors (2026102807384201).
+// A window found on the monitor it was on, after a scale change left its
+// size to the system, arrives there again: the system kept its size on the
+// desktop, which is a grid a cell or so off (2026101716374842).
 fn settle(
 	kept_for: Option<&str>,
 	now_on: Option<&str>,
 	moved_at: Option<Instant>,
 	pending_at: Option<Instant>,
 	herded: bool,
+	drifted: bool,
 ) -> Settle {
 	let Some(now_on) = now_on else {
 		return Settle::Stay;
 	};
-	if kept_for.is_some_and(|kept| crate::monitor::same_monitor(kept, now_on)) {
+	if !drifted && kept_for.is_some_and(|kept| crate::monitor::same_monitor(kept, now_on)) {
 		return Settle::Stay;
 	}
 	let save_first = matches!((pending_at, moved_at), (Some(set), Some(moved)) if set < moved);
@@ -1653,12 +1667,12 @@ mod tests {
 		);
 		let (a, b) = (Some("2560x1440_125pct"), Some("1920x1080_100pct"));
 		assert_eq!(
-			settle(a, a, Some(moved), None, false),
+			settle(a, a, Some(moved), None, false, false),
 			Settle::Stay,
 			"same monitor"
 		);
 		assert_eq!(
-			settle(a, None, Some(moved), None, false),
+			settle(a, None, Some(moved), None, false, false),
 			Settle::Stay,
 			"monitor unknown"
 		);
@@ -1666,25 +1680,75 @@ mod tests {
 			save_first,
 			take_size,
 		};
-		assert_eq!(settle(a, b, Some(moved), None, false), arrive(false, true));
 		assert_eq!(
-			settle(a, b, Some(moved), Some(before), false),
+			settle(a, b, Some(moved), None, false, false),
+			arrive(false, true)
+		);
+		assert_eq!(
+			settle(a, b, Some(moved), Some(before), false, false),
 			arrive(true, true)
 		);
 		assert_eq!(
-			settle(a, b, Some(moved), Some(after), false),
+			settle(a, b, Some(moved), Some(after), false, false),
 			arrive(false, false)
 		);
 		// the first look after launch on Wayland, where the monitor was unknown
 		assert_eq!(
-			settle(None, b, Some(moved), None, false),
+			settle(None, b, Some(moved), None, false, false),
 			arrive(false, true)
 		);
 		// herded off a monitor that went dark
-		assert_eq!(settle(a, b, Some(moved), None, true), arrive(false, false));
 		assert_eq!(
-			settle(a, b, Some(moved), Some(before), true),
+			settle(a, b, Some(moved), None, true, false),
+			arrive(false, false)
+		);
+		assert_eq!(
+			settle(a, b, Some(moved), Some(before), true, false),
 			arrive(true, false)
+		);
+	}
+
+	// A scale change that counts as a move leaves the size to the system, in
+	// case another monitor's size takes over. Found still on its own monitor,
+	// the window takes that monitor's size again, since the system's size is a
+	// grid a cell off. Not over a size the user set since, and not on a
+	// monitor it can't name.
+	// Test ID: df03w
+	#[test]
+	fn a_scale_change_that_was_no_move_takes_the_monitors_size_again() {
+		let t0 = Instant::now();
+		let (before, moved, after) = (
+			t0,
+			t0 + Duration::from_millis(10),
+			t0 + Duration::from_millis(20),
+		);
+		let a = Some("2400x1350_125pct");
+		let arrive = |save_first, take_size| Settle::Arrive {
+			save_first,
+			take_size,
+		};
+		assert_eq!(
+			settle(a, a, Some(moved), None, false, true),
+			arrive(false, true)
+		);
+		assert_eq!(
+			settle(a, a, Some(moved), Some(before), false, true),
+			arrive(true, true),
+			"a size set before the change is saved first"
+		);
+		assert_eq!(
+			settle(a, a, Some(moved), Some(after), false, true),
+			arrive(false, false),
+			"a size set since is the user's"
+		);
+		assert_eq!(
+			settle(a, a, Some(moved), None, true, true),
+			arrive(false, false),
+			"herded"
+		);
+		assert_eq!(
+			settle(a, None, Some(moved), None, false, true),
+			Settle::Stay
 		);
 	}
 
@@ -1732,7 +1796,7 @@ mod tests {
 		assert!(move_counts(false, &[], || one.clone()));
 		assert!(super::herded(Some(portrait), &one));
 		assert_eq!(
-			settle(Some(p_cm), Some(l), at(0), None, true),
+			settle(Some(p_cm), Some(l), at(0), None, true, false),
 			Settle::Arrive {
 				save_first: false,
 				take_size: false
@@ -1744,7 +1808,10 @@ mod tests {
 		// put back 1.2 s in, inside the grace, with the portrait monitor lit
 		assert!(move_counts(true, &layout_then, || both.clone()));
 		assert!(!super::herded(Some(landscape), &both));
-		assert_eq!(settle(Some(l), Some(p_mm), at(1200), None, false), arrive);
+		assert_eq!(
+			settle(Some(l), Some(p_mm), at(1200), None, false, false),
+			arrive
+		);
 		assert_eq!(
 			remembered_window(&s, Some(p_mm)),
 			KeptWindow {
@@ -1755,7 +1822,7 @@ mod tests {
 		);
 		// read to the cm again without a move: the same monitor, so no resize
 		assert_eq!(
-			settle(Some(p_mm), Some(p_cm), at(5000), None, false),
+			settle(Some(p_mm), Some(p_cm), at(5000), None, false, false),
 			Settle::Stay
 		);
 	}
@@ -1784,14 +1851,14 @@ mod tests {
 		let (l, r) = (Some("2560x1440_100pct"), Some("1920x1080_100pct"));
 		let t0 = Instant::now();
 		assert_eq!(
-			settle(r, l, Some(t0), None, true),
+			settle(r, l, Some(t0), None, true, false),
 			Settle::Arrive {
 				save_first: false,
 				take_size: false
 			}
 		);
 		assert_eq!(
-			settle(l, r, Some(t0), None, false),
+			settle(l, r, Some(t0), None, false, false),
 			Settle::Arrive {
 				save_first: false,
 				take_size: true
