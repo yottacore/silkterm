@@ -56,13 +56,14 @@ pub(super) fn build_layout(
 	// `--directory` is resolved once per place it was written, not once per pane,
 	// so a path that isn't there is reported once however many panes inherit it.
 	let win_dir = cli.win.style.directory.as_deref().and_then(config::cli_dir);
-	let spawn = |text: &mut TextCtx, shell: Option<Vec<String>>, dir: Option<PathBuf>| {
-		let dir = dir.or_else(|| start.clone());
-		PaneManager::new(text, proxy, area, shell, dir, false).unwrap_or_else(|e| {
-			eprintln!("{}: failed to start shell: {e}", config::APP_NAME);
-			std::process::exit(2);
-		})
-	};
+	let spawn =
+		|text: &mut TextCtx, shell: Option<Vec<String>>, dir: Option<PathBuf>, in_tmux: bool| {
+			let dir = dir.or_else(|| start.clone());
+			PaneManager::new(text, proxy, area, shell, dir, in_tmux).unwrap_or_else(|e| {
+				eprintln!("{}: failed to start shell: {e}", config::APP_NAME);
+				std::process::exit(2);
+			})
+		};
 	// --keep-open cascades like the shell and the directory do
 	let hold = |pm: &mut PaneManager, id: PaneId, keep: bool| {
 		if let Some(p) = pm.panes.get_mut(&id) {
@@ -77,7 +78,10 @@ pub(super) fn build_layout(
 			cli.win.style.shell.as_ref(),
 			config::default_shell_argv,
 		);
-		let mut pm = spawn(text, shell, win_dir);
+		// a plain launch starts its pane as a new tab would, in tmux when the
+		// setting is on; a layout the command line asks for stays as written
+		let in_tmux = config::settings().tmux_new_session;
+		let mut pm = spawn(text, shell, win_dir, in_tmux);
 		let id = pm.focused;
 		hold(&mut pm, id, cli.win.style.keep_open.unwrap_or(false));
 		return vec![pm];
@@ -115,7 +119,7 @@ pub(super) fn build_layout(
 			.or(tab.style.keep_open)
 			.or(cli.win.style.keep_open)
 			.unwrap_or(false);
-		let mut pm = spawn(text, main_shell.clone(), main_dir.clone());
+		let mut pm = spawn(text, main_shell.clone(), main_dir.clone(), false);
 		let main_id = pm.focused;
 		hold(&mut pm, main_id, main_keep);
 		let mut handles: HashMap<String, PaneId> = HashMap::new();

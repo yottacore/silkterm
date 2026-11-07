@@ -804,7 +804,7 @@ class Case:
 		if store:
 			lines.append("\tmonitors:")
 			for key, kept in store.items():
-				lines += [f"\t\t{key}:", f"\t\t\tcolumns: {kept.cols}", f"\t\t\trows: {kept.rows}", f"\t\t\tfont_zoom: {kept.zoom}"]
+				lines += [f"\t\t\"{key}\":", f"\t\t\tcolumns: {kept.cols}", f"\t\t\trows: {kept.rows}", f"\t\t\tfont_zoom: {kept.zoom}"]
 		cfg = self.rig.home / ".config/silkterm"
 		cfg.mkdir(parents=True, exist_ok=True)
 		(cfg / "config.shcl").write_text("\n".join(lines) + "\n")

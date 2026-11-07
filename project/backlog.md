@@ -274,35 +274,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Stalled until a cosmic-text release takes fontdb 0.24 or later, and winit's sctk-adwaita drops ab_glyph.
 	- Held for a cosmic-text release on fontdb 0.24 or later, and an sctk-adwaita without ab_glyph.
 
-- A config rewrite for lines that aren't UTF-8 doesn't settle: fuzz seed 2069 fails ddf97, so every full run stops at step 4
-	- ID: 2026110618404009
-	- Type: Bug
-	- Status: Queued
-	- Priority: High
-	- Severity: High
-	- Opened: 20261106-184040
-	- Opened by:
-	- Related IDs: 2026110516054976
-	- Target OS: All
-	- Progress log:
-		- 20261107: Found by the rnd1107 full run at d1ff9ef, step 4. ddf97 a_rewrite_for_lines_that_are_not_utf8_settles, fuzz target config-dropped, seed 2069. Reproduce with SILK_FUZZ_SEED=2069 cargo test --bin silkterm a_rewrite_for_lines_that_are_not_utf8_settles.
-		- 20261107: Also fails on dev at 2ba0149, so it was there before the round. The upgrade of the written text comes back InPlace, not Current. The written text has a quoted key line ending in CR, from a garbled line holding an emoji value.
-		- 20261106: Not in rnd1107, filed after its gate step. The full run passed with --no-fuzz, so only the fuzz soak stops on it.
-
-- Window test fixtures write a monitor's key bare, which shcl 3.0 flags as E014
-	- ID: 2026110619310863
-	- Type: Bug
-	- Status: Queued
-	- Severity: Low
-	- Opened: 20261106-193108
-	- Opened by: CC
-	- Assigned to: CC
-	- Related IDs: 2026110516054976
-	- Target OS: Linux
-	- Incorrect behavior: dpirand, monwl, monwake, herdback and startsize seed `config.shcl` with names such as `1920x1200_150pct:` bare. shcl 3.0.0-beta1 reads them, but reports E014, error level, "field name needs quotes". So these tests start the program on a config with an error in it, which a user's file never has, since SilkTerm writes those names quoted.
-	- Expected behavior: The fixtures write the key the way SilkTerm does, in quotes, unless a test means to check a bare one.
-	- Reproduced: 20261106, shcl beta1's `diagnostics()` on such a file. Whether SilkTerm shows the error in the window there isn't checked.
-
 - Wayland: must use the Wayland clipboard, and minimize other X11 features
 	- ID: 2026101509024607
 	- Type: Bug
@@ -364,6 +335,27 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Branch: machang
 	- Test case: `a_hidden_window_that_cannot_draw_is_shown_anyway` (ddc9r), seen failing without the fix. The memory side has no unit test, since it needs a GPU.
 	- Closed: 20261001-155746
+
+- A config rewrite for lines that aren't UTF-8 doesn't settle: fuzz seed 2069 fails ddf97, so every full run stops at step 4
+	- ID: 2026110618404009
+	- Type: Bug
+	- Status: Done
+	- Priority: High
+	- Severity: High
+	- Opened: 20261106-184040
+	- Opened by:
+	- Related IDs: 2026110516054976
+	- Target OS: All
+	- Progress log:
+		- 20261107: Found by the rnd1107 full run at d1ff9ef, step 4. ddf97 a_rewrite_for_lines_that_are_not_utf8_settles, fuzz target config-dropped, seed 2069. Reproduce with SILK_FUZZ_SEED=2069 cargo test --bin silkterm a_rewrite_for_lines_that_are_not_utf8_settles.
+		- 20261107: Also fails on dev at 2ba0149, so it was there before the round. The upgrade of the written text comes back InPlace, not Current. The written text has a quoted key line ending in CR, from a garbled line holding an emoji value.
+		- 20261106: Not in rnd1107, filed after its gate step. The full run passed with --no-fuzz, so only the fuzz soak stops on it.
+	- Actual cause: A current file that isn't UTF-8 is written again in its own layout with the garbled lines left out, but a pre-beta1 spelling among the lines kept, here a bare digit-led key, stayed as it was. The next launch read that as a beta file and respelled it, so the file took 2 passes to settle.
+	- Actual fix: The kept rewrite runs the same respelling in its pass, and counts what that loses. The test allows a kept line to match its respelling.
+	- Branch: rnd1107b
+	- Test case: ddf97, seed 2069 and a 2 minute soak.
+	- Acceptance signoff: Self-closed: seed 2069 passes, 2 minute soak of ddf97 and 20 seconds of each config fuzz test pass.
+	- Closed: 20261107-0830
 
 - "Minutes otherwise" still isn't taking effect
 	- ID: 2026110609500001
@@ -2565,6 +2557,25 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Test case: None for the figures, which are a measurement. `SILK_MEMDBG` is covered by `each_debug_switch_reads_its_own_variable` (ddf59). Its minimap count is pinned by `the_memory_count_covers_every_stored_row` (ddgtx), seen to fail with the stored rows left out.
 	- Acceptance signoff: Self-closed: the numbers are in the design doc and nothing is left to judge.
 	- Closed: 20261004-194634
+
+- Window test fixtures write a monitor's key bare, which shcl 3.0 flags as E014
+	- ID: 2026110619310863
+	- Type: Bug
+	- Status: Done
+	- Severity: Low
+	- Opened: 20261106-193108
+	- Opened by: CC
+	- Assigned to: CC
+	- Related IDs: 2026110516054976
+	- Target OS: Linux
+	- Incorrect behavior: dpirand, monwl, monwake, herdback and startsize seed `config.shcl` with names such as `1920x1200_150pct:` bare. shcl 3.0.0-beta1 reads them, but reports E014, error level, "field name needs quotes". So these tests start the program on a config with an error in it, which a user's file never has, since SilkTerm writes those names quoted.
+	- Expected behavior: The fixtures write the key the way SilkTerm does, in quotes, unless a test means to check a bare one.
+	- Reproduced: 20261106, shcl beta1's `diagnostics()` on such a file. Whether SilkTerm shows the error in the window there isn't checked.
+	- Actual fix: dpirand, monwl, monwake, herdback and startsize write the key in quotes. The script lint step greps every test fixture for a bare one and fails on it.
+	- Branch: rnd1107b
+	- Test case: The lint step's check, seen to catch a planted bare key. startsize passed with the quoted key.
+	- Acceptance signoff: Self-closed: the quick run passes with the check in, and the check fails on a bare key.
+	- Closed: 20261107-0920
 
 - Regression: "Conserve resources", "Minutes otherwise" isn't working
 	- ID: 2026103010083401

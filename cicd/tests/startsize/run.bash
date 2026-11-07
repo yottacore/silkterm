@@ -132,7 +132,7 @@ fShowedAs(){  ## fShowedAs <case> <fullscreen|maximized|->
 }
 
 echo "remembered size, kept for this monitor (${screen})"
-fFixture kept 'window:' $'\tremembered_columns: 100' $'\tremembered_rows: 30' $'\tmonitors:' $'\t\t'"${screen}_100pct:" $'\t\t\tcolumns: 90' $'\t\t\trows: 28' $'\t\t\tfont_zoom: 0'
+fFixture kept 'window:' $'\tremembered_columns: 100' $'\tremembered_rows: 30' $'\tmonitors:' $'\t\t"'"${screen}_100pct"'":' $'\t\t\tcolumns: 90' $'\t\t\trows: 28' $'\t\t\tfont_zoom: 0'
 fWatch kept
 fCheck "kept: shows once, at one size" fShownOnce kept
 fCheck "kept: and saves no size" fSavedNoSize kept "remembered_columns: 100 remembered_rows: 30 columns: 90 rows: 28"

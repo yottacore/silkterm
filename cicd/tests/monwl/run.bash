@@ -160,11 +160,11 @@ printf '%s\n' 'performance:' $'\tautomatic: false' $'\tprofile: "custom"' \
 	'wallpaper:' $'\tenabled: false' 'scroll:' $'\tminimap:' $'\t\tenabled: false' \
 	'window:' $'\tremember_size: true' $'\tremember_per_monitor: true' \
 	$'\tremembered_columns: 70' $'\tremembered_rows: 22' $'\tmonitors:' \
-	$'\t\t1920x1080_100pct:' $'\t\t\tcolumns: 110' $'\t\t\trows: 20' $'\t\t\tfont_zoom: 0' \
-	$'\t\t2560x1600_200pct:' $'\t\t\tcolumns: 50' $'\t\t\trows: 30' $'\t\t\tfont_zoom: 0' \
-	$'\t\t1280x1024_100pct:' $'\t\t\tcolumns: 60' $'\t\t\trows: 35' $'\t\t\tfont_zoom: 4' \
-	$'\t\t1680x1050_100pct:' $'\t\t\tcolumns: 90' $'\t\t\trows: 25' $'\t\t\tfont_zoom: 0' \
-	$'\t\t1920x1200_150pct:' $'\t\t\tcolumns: 64' $'\t\t\trows: 28' $'\t\t\tfont_zoom: 0' \
+	$'\t\t\"1920x1080_100pct\":' $'\t\t\tcolumns: 110' $'\t\t\trows: 20' $'\t\t\tfont_zoom: 0' \
+	$'\t\t\"2560x1600_200pct\":' $'\t\t\tcolumns: 50' $'\t\t\trows: 30' $'\t\t\tfont_zoom: 0' \
+	$'\t\t\"1280x1024_100pct\":' $'\t\t\tcolumns: 60' $'\t\t\trows: 35' $'\t\t\tfont_zoom: 4' \
+	$'\t\t\"1680x1050_100pct\":' $'\t\t\tcolumns: 90' $'\t\t\trows: 25' $'\t\t\tfont_zoom: 0' \
+	$'\t\t\"1920x1200_150pct\":' $'\t\t\tcolumns: 64' $'\t\t\trows: 28' $'\t\t\tfont_zoom: 0' \
 	>"${cfgHome}/silkterm/config.shcl"
 
 ## The shell writes its own "rows columns" every tenth of a second, and on
