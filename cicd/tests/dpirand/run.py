@@ -679,6 +679,9 @@ class Rig:
 			depth = len(raw) - len(raw.lstrip("\t"))
 			del stack[depth:]
 			name, _, value = text.partition(":")
+			## shcl quotes a name not led by a letter, such as a monitor's key.
+			if len(name) >= 2 and name[0] == name[-1] and name[0] in "\"'":
+				name = name[1:-1]
 			if value.strip():
 				values[".".join([*stack, name])] = value.strip()
 			else:
@@ -1768,3 +1771,5 @@ if __name__ == "__main__":
 ##		  back from fullscreen onto another output or moved by key out of reach
 ##		  is judged as moved, and the first look after the monitors changed may
 ##		  come at once.
+##		- 20261106: A monitor's key in the state file is read with its quotes off,
+##		  as shcl 3.0 writes a name led by a digit in quotes.
