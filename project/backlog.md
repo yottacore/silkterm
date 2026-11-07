@@ -34,6 +34,21 @@ Going forward, new issues in the new template at the bottom of this file, will g
 
 ## Issues
 
+- Settings on Wayland: the height cap doesn't see the screen, so at 1.5 the window is taller than it
+	- ID: 2026110617385295
+	- Type: Bug
+	- Status: Queued
+	- Priority: Low
+	- Opened: 20261106-173852
+	- Opened by:
+	- Related IDs: 2026110613085833
+	- Target OS: Linux
+	- Test environment: headless sway, one 1600 x 1200 output
+	- Reproduced: 20261106. At scale 1.25 the height cap came out 1262.5 pixels, which is DLG_MAX_H alone, on a 1200 pixel tall output. At 1.5 the window asked for more than the output holds, and sway cut it down with the title bar off the top.
+	- Possible cause: on Wayland the work area and the monitor are unknown when Settings opens, and still unknown at the first scale change, so the caps fall back to DLG_MAX_H alone.
+	- Progress log:
+		- Found while working 2026110613085833. Not caused by that fix: the window it opens at is still 914 DIP tall, 1371 pixels at 1.5, past the screen before the fix too.
+
 - Settings: Side-tabs: the lower the tab, the lower the text is within the tab
 	- ID: 2026110609500003
 	- Type: Bug
@@ -362,13 +377,25 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - Settings at scale 1.25 on a short screen: the vertical scrollbar pushes in a horizontal one and cuts off the revert arrows
 	- ID: 2026110613085833
 	- Type: Bug
-	- Status: Queued
+	- Status: Done
 	- Priority: Low
 	- Opened: 20261106-130858
 	- Opened by:
+	- Target OS: All
+	- Reproduced: 20261106, under headless sway at 1.25 on a 1600 x 1200 output. Settings opened 1046 x 1143 pixels where its content wanted 1082 x 1170, so it scrolled both ways and the revert arrows were cut off. At 1x it fits.
+	- Actual cause: on Wayland the window opens at scale 1, sized to its content there, and learns the real scale after. The window keeps its DIP size through the change, but the content measures about 3% larger at 1.25, so it was left short on both sides. The height cap wasn't involved, and the vertical scrollbar sits in the panel's margin, so it takes no width from the rows.
 	- Progress log:
 		- Seen under headless sway at 1.25 with a 960 DIP tall screen, where the dialog opens with its height capped. At 1x on the same setup it fits. Found while working 2026110609500003.
 		- May be the expected result of the height cap. Check whether the content width should leave room for the scrollbar.
+		- 20261106: The first note's guess was off. The height wasn't capped: the cap came out 1262.5 pixels at 1.25. The new Wayland cap bug is 2026110617385295.
+	- Decisions:
+		- 20261106: The fix goes in the scale change, not the snap. The snap only settles within 12 DIP of the natural size, which a scale change can pass, and widening it would catch sizes the user dragged to.
+	- Actual fix: after a scale change, a window that sat on its content's size, or on the cap that held it under that, asks for the content's size at the new scale, capped again. Each side is judged on its own. A size the user dragged to is kept, and a maximized window is left to the window manager.
+	- Swept: every place the Settings window asks for a size. Open uses the content's size at the scale it opens at, and the snap and a resize already round up. About and the notice lay out again on a scale change and ask for their new size.
+	- Verified: under headless sway at 1.25 on the GPU, Settings now opens at its content's size, with no scrollbars and every revert arrow in view. At 1.5 the width fits and only the height scrolls, held by the output (2026110617385295). The dialog unit tests and the quick gate pass.
+	- Branch: rnd1107
+	- Test case: `a_window_on_its_natural_size_takes_the_new_one_after_a_scale_change` (dez60). It failed with the fix taken out.
+	- Closed: 20261106-174100
 
 - Test run folders pile up in HOST_TEMP/silkterm, and the 2-day sweep doesn't take them
 	- ID: 2026110514393095

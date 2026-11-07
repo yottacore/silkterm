@@ -994,13 +994,14 @@ impl DialogWin {
 	/// every value and unapplied edit stays put.
 	pub fn set_scale(&mut self, scale_factor: f64) {
 		let scale = config::display_scale(scale_factor);
-		if (scale - self.text.scale).abs() < 1e-4 {
+		let was = self.text.scale;
+		if (scale - was).abs() < 1e-4 {
 			return;
 		}
 		self.text = TextCtx::new(&self.gfx.device, &self.gfx.queue, self.gfx.format, scale);
 		match &mut self.content {
 			Content::About { .. } => self.rescale_about(),
-			Content::Settings(_) => self.rescale_settings(scale),
+			Content::Settings(_) => self.rescale_settings(was, scale),
 		}
 		self.window.request_redraw();
 	}
@@ -1029,14 +1030,20 @@ impl DialogWin {
 		}
 	}
 
-	fn rescale_settings(&mut self, scale: f32) {
+	fn rescale_settings(&mut self, was: f32, scale: f32) {
 		let chrome = crate::settings_ui::chrome_widths(&mut self.text, scale);
 		let (max_w, max_h) = Self::settings_caps(&self.window, self.parent, scale);
-		self.caps = (max_w, max_h);
+		let old_caps = std::mem::replace(&mut self.caps, (max_w, max_h));
 		let line_h = self.text.ui_line_h;
 		let Content::Settings(dialog) = &mut self.content else {
 			return;
 		};
+		// What the window followed at the old scale, in DIP: the content's own
+		// size, or the cap that held it under that. The text measures a little
+		// wider or narrower at another scale, so the content's size moves too.
+		let was = crate::settings_ui::sane_scale(was);
+		let (nat_w, nat_h) = dialog.natural_size();
+		let followed = (nat_w.min(old_caps.0) / was, nat_h.min(old_caps.1) / was);
 		dialog.rescale(line_h, chrome, max_w, max_h, scale);
 		// the floor is physical, so it was wrong the moment the factor moved
 		let (min_w, min_h) = dialog.min_size();
@@ -1053,7 +1060,13 @@ impl DialogWin {
 		// can still hold, since it holds fewer DIP at a higher scale.
 		let now = self.window.inner_size();
 		dialog.set_size(now.width as f32, now.height as f32);
-		let (want_w, want_h) = size_within_caps((now.width, now.height), (max_w, max_h));
+		let (want_w, want_h) = size_after_rescale(
+			(now.width, now.height),
+			crate::settings_ui::sane_scale(scale),
+			(!self.window.is_maximized()).then_some(followed),
+			dialog.natural_size(),
+			(max_w, max_h),
+		);
 		let want = winit::dpi::PhysicalSize::new(want_w, want_h);
 		// the natural size is a different number of pixels now, so let the snap
 		// have another go at whatever size we end up with
@@ -2313,6 +2326,47 @@ fn size_within_caps(now: (u32, u32), caps: (f32, f32)) -> (u32, u32) {
 	(cap(now.0, caps.0), cap(now.1, caps.1))
 }
 
+// The size a Settings window asks for after a scale change. One that sat on
+// the content's size, or on the cap that held it under that, takes the
+// content's size at the new scale, capped again. On Wayland the window opens
+// at scale 1 and learns its real scale after, so this is the first open there.
+// A size the user dragged to is kept, within the new caps. `followed` is in
+// DIP and None for a maximized window; the other sizes are physical.
+fn size_after_rescale(
+	now: (u32, u32),
+	scale: f32,
+	followed: Option<(f32, f32)>,
+	natural: (f32, f32),
+	caps: (f32, f32),
+) -> (u32, u32) {
+	let kept = size_within_caps(now, caps);
+	let Some(followed) = followed else {
+		return kept;
+	};
+	// a part pixel rounds up, as the snap does, unless the cap is what holds it
+	let fit = |nat: f32, cap: f32| {
+		if nat <= cap || !cap.is_finite() || cap < 1.0 {
+			nat.ceil() as u32
+		} else {
+			cap.round() as u32
+		}
+	};
+	// one DIP either way, for the rounding at both scales
+	let on = |px: u32, dip: f32| (px as f32 / scale - dip).abs() <= 1.0;
+	(
+		if on(now.0, followed.0) {
+			fit(natural.0, caps.0)
+		} else {
+			kept.0
+		},
+		if on(now.1, followed.1) {
+			fit(natural.1, caps.1)
+		} else {
+			kept.1
+		},
+	)
+}
+
 // Build the About content laid out at the window origin; returns
 // (lines, clickable links, (width, height)) in physical px.
 fn layout_about(
@@ -3019,7 +3073,7 @@ mod tests {
 	use super::{
 		ABOUT_PAD, AboutSource, DLG_DECOR_HEADROOM, DLG_MAX_H, DLG_SNAP, Rect, caps_from,
 		conversion_notice, dialog_origin, flip_cocoa_rect, layout_about, layout_source,
-		refusal_notice, size_within_caps, snap_to, tip_gate, usable_screen,
+		refusal_notice, size_after_rescale, size_within_caps, snap_to, tip_gate, usable_screen,
 	};
 	use crate::config;
 	use crate::text::{TextCtx, ui_attrs};
@@ -3366,6 +3420,61 @@ mod tests {
 		);
 		// a screen that measured as nothing is not a reason to shrink to nothing
 		assert_eq!(size_within_caps((800, 600), (0.0, 0.0)), (800, 600));
+	}
+
+	// On Wayland Settings opens at scale 1, sized to its content there, and then
+	// learns the real scale. The window keeps its DIP size, but the content
+	// measures a little larger at 1.25, so it was left short and scrolled both
+	// ways. A window that sat on its content's size, or on the cap under it,
+	// takes the content's new size. One the user dragged keeps its size.
+	// Test ID: dez60
+	#[test]
+	fn a_window_on_its_natural_size_takes_the_new_one_after_a_scale_change() {
+		let caps = (3.0e38, 1262.5);
+		// opened at 1x on 837 x 914, now 1046 x 1143 at 1.25, and the content
+		// wants 1082 x 1170 there
+		let natural = (1081.998, 1170.0);
+		assert_eq!(
+			size_after_rescale((1046, 1143), 1.25, Some((836.88, 914.0)), natural, caps),
+			(1082, 1170)
+		);
+		// dragged away from it on both sides: kept
+		assert_eq!(
+			size_after_rescale((1250, 1000), 1.25, Some((836.88, 914.0)), natural, caps),
+			(1250, 1000)
+		);
+		// each side on its own: the width was dragged, the height was not
+		assert_eq!(
+			size_after_rescale((1250, 1143), 1.25, Some((836.88, 914.0)), natural, caps),
+			(1250, 1170)
+		);
+		// held under its content by the cap, it follows the new cap
+		assert_eq!(
+			size_after_rescale(
+				(1046, 1263),
+				1.25,
+				Some((836.88, 1010.0)),
+				(1082.0, 1400.0),
+				(1920.0, 1200.0)
+			),
+			(1082, 1200)
+		);
+		// a maximized window is the window manager's, so only the caps apply
+		assert_eq!(
+			size_after_rescale((1046, 1143), 1.25, None, natural, caps),
+			(1046, 1143)
+		);
+		// what the screen leaves still wins over the content
+		assert_eq!(
+			size_after_rescale(
+				(1046, 1143),
+				1.25,
+				Some((836.88, 914.0)),
+				natural,
+				(1000.0, 1100.0)
+			),
+			(1000, 1100)
+		);
 	}
 
 	// A notice is whatever was laid out from a notice's paragraphs. Nothing else
