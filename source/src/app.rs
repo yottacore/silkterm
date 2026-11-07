@@ -381,6 +381,10 @@ const TAKE_SCALE_WAIT: Duration = Duration::from_secs(10);
 // A resize this soon after one the window asked for, or one the system made
 // for a new scale, is not the user's.
 const OWN_RESIZE_GRACE: Duration = Duration::from_millis(1500);
+// How long after the window asked for a size a resize back to the size before
+// it can be the compositor's late answer to that one (`late_answer`). A frame
+// drawn in software at 4000x2500 took 8 s, and the answer waits for a frame.
+const LATE_ANSWER_WAIT: Duration = Duration::from_secs(15);
 // How long after the window is genuinely on screen the background shell scan
 // starts (shells.rs). Long enough to be clear of the first prompt and whatever
 // the shell reads at startup, short enough that the Tabs menu has its list well
@@ -3862,6 +3866,7 @@ impl ApplicationHandler<UserEvent> for App {
 			set_on: None,
 			took: None,
 			drifted: false,
+			asked: None,
 		};
 		let menu_bar_h = if menu_bar {
 			text.ui_line_h + text.dip(MENU_BAR_VPAD)
@@ -4306,7 +4311,11 @@ impl ApplicationHandler<UserEvent> for App {
 				state.resize_surface(now.width, now.height);
 				state.note_wallpaper_size();
 				state.relayout_all();
-				state.save_window_size(size.width, size.height);
+				if state.late_answer(size.width, size.height) {
+					state.note_own_place();
+				} else {
+					state.save_window_size(size.width, size.height);
+				}
 				state.invalidate_prepared(); // scrim textures were just recreated
 				state.dirty = true;
 			}

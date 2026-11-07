@@ -5,8 +5,9 @@
 //! monitor checks after a move.
 
 use super::{
-	HERD_POLL, HERD_POLL_LATER, MONITOR_RECHECK, MONITOR_SETTLE, NO_OUTPUT_YET, OWN_RESIZE_GRACE,
-	PUT_BACK_WAIT, SAFE_MAX_DIM, SIZE_SAVE_DEBOUNCE, State, TAKE_SCALE_WAIT, save_live,
+	HERD_POLL, HERD_POLL_LATER, LATE_ANSWER_WAIT, MONITOR_RECHECK, MONITOR_SETTLE, NO_OUTPUT_YET,
+	OWN_RESIZE_GRACE, PUT_BACK_WAIT, SAFE_MAX_DIM, SIZE_SAVE_DEBOUNCE, State, TAKE_SCALE_WAIT,
+	save_live,
 };
 use crate::config;
 use std::time::{Duration, Instant};
@@ -450,7 +451,7 @@ impl State {
 	// The window's own resize after a look, such as a take, and the move it
 	// can cause. Noted at the look only, the place kept the size from before
 	// the take, and a put-back undid it.
-	fn note_own_place(&mut self) {
+	pub(super) fn note_own_place(&mut self) {
 		if self.watch.herd.is_none() && self.watch.check_at.is_none() {
 			self.watch.place = self.place_now();
 		}
@@ -685,14 +686,62 @@ impl State {
 		// A size the window can honor straight away answers here and sends no
 		// `Resized`, so this is the only chance to move everything the window
 		// event moves - the scrim included, which was left at the old size.
-		if (w, h) != self.surface_px
-			&& let Some(applied) = request_size(&self.window, want)
-		{
-			self.resize_surface(applied.width, applied.height);
-			self.invalidate_prepared();
+		if (w, h) != self.surface_px {
+			self.watch.asked = Some(Asked {
+				px: (w, h),
+				before: self.surface_px,
+				at: Instant::now(),
+				again: false,
+			});
+			if let Some(applied) = request_size(&self.window, want) {
+				self.resize_surface(applied.width, applied.height);
+				self.invalidate_prepared();
+			}
 		}
 		self.relayout_all();
 		self.dirty = true;
+	}
+
+	/// A compositor answers a size the window set for itself with a configure
+	/// for that size, once it sees a frame drawn at it. After a slow frame sway
+	/// sent one for the size from before a take, winit took it as given, and
+	/// the take was undone seconds later, with that size saved as the user's
+	/// (2026101417045856). On Wayland a resize back to exactly the size the
+	/// window had before its own request, soon after it, is that late answer:
+	/// the size is asked for once more, and the resize is not the user's.
+	/// True when this resize was that.
+	pub(super) fn late_answer(&mut self, w: u32, h: u32) -> bool {
+		let now = Instant::now();
+		let asked = self.watch.asked;
+		match late_answer(asked, (w, h), now, self.watch.positionless) {
+			Late::Other => {
+				self.watch.asked = None;
+				return false;
+			}
+			Late::None => return false,
+			Late::Again => {}
+		}
+		let asked = asked.unwrap_or_else(|| unreachable!("a late answer has a request"));
+		mondbg(
+			"again",
+			self.watch.key.as_deref(),
+			Some(self.grid_at(asked.px.0, asked.px.1)),
+			None,
+		);
+		self.watch.asked = Some(Asked {
+			again: true,
+			..asked
+		});
+		self.watch.ignore_resize_until = now + OWN_RESIZE_GRACE;
+		self.watch.ignore_moves_until = now + OWN_RESIZE_GRACE;
+		let want = winit::dpi::PhysicalSize::new(asked.px.0, asked.px.1);
+		if let Some(applied) = request_size(&self.window, want) {
+			self.resize_surface(applied.width, applied.height);
+			self.invalidate_prepared();
+			self.relayout_all();
+			self.dirty = true;
+		}
+		true
 	}
 
 	/// The grid each pane shows, which a font zoom keeps with `resize_on_zoom`
@@ -1080,6 +1129,38 @@ pub(super) struct MonitorWatch {
 	// A scale change left the size to the system, and no look has settled
 	// where the window is since (`rescale`).
 	pub(super) drifted: bool,
+	pub(super) asked: Option<Asked>, // the last size the window asked for (`late_answer`)
+}
+
+/// A size the window asked for itself, and the one it had before.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(super) struct Asked {
+	px: (u32, u32),
+	before: (u32, u32),
+	at: Instant,
+	again: bool, // asked for a second time already, so a third answer is let be
+}
+
+#[derive(Debug, PartialEq)]
+enum Late {
+	None,  // no request outstanding, or none that this can answer
+	Other, // the size asked for, or another one: the request is over
+	Again, // the size from before the request, soon after it: ask again
+}
+
+// Is a resize the compositor's late answer to the size before the window's
+// own request? Only where that was seen, on Wayland, and once per request.
+fn late_answer(asked: Option<Asked>, size: (u32, u32), now: Instant, positionless: bool) -> Late {
+	let Some(asked) = asked else {
+		return Late::None;
+	};
+	if !positionless || size == asked.px || asked.again {
+		return Late::Other;
+	}
+	if size == asked.before && now < asked.at + LATE_ANSWER_WAIT {
+		return Late::Again;
+	}
+	Late::Other
 }
 
 /// Where a window is, and its inner size, in physical pixels.
@@ -1461,10 +1542,64 @@ fn size_taken(
 #[cfg(test)]
 mod tests {
 	use super::{
-		Settle, cells_in, coming_px, fit_px, launch_maximized, look_again, move_counts, only_left,
-		remember_resize, resize_is_current, settle, size_taken, still_on, takes_scale, window_px,
+		Asked, Late, Settle, cells_in, coming_px, fit_px, late_answer, launch_maximized,
+		look_again, move_counts, only_left, remember_resize, resize_is_current, settle, size_taken,
+		still_on, takes_scale, window_px,
 	};
 	use std::time::{Duration, Instant};
+
+	// sway answers the size a window set for itself once a frame at it is up,
+	// and after a slow frame that answer came for the size before a take and
+	// undid it. A resize back to that size soon after the request is asked
+	// for again, once. The size asked for, any other size, a late one, or one
+	// on a platform with positions is not.
+	// Test ID: df05m
+	#[test]
+	fn a_late_answer_to_the_size_before_a_take_is_asked_for_again_once() {
+		let t0 = Instant::now();
+		let asked = Asked {
+			px: (3743, 2500),
+			before: (3706, 2488),
+			at: t0,
+			again: false,
+		};
+		let soon = t0 + Duration::from_secs(9);
+		assert_eq!(
+			late_answer(Some(asked), (3706, 2488), soon, true),
+			Late::Again
+		);
+		assert_eq!(
+			late_answer(Some(asked), (3743, 2500), soon, true),
+			Late::Other,
+			"arrived"
+		);
+		assert_eq!(
+			late_answer(Some(asked), (1800, 900), soon, true),
+			Late::Other,
+			"the user's"
+		);
+		assert_eq!(
+			late_answer(Some(asked), (3706, 2488), soon, false),
+			Late::Other,
+			"X11"
+		);
+		assert_eq!(late_answer(None, (3706, 2488), soon, true), Late::None);
+		let late = t0 + super::LATE_ANSWER_WAIT + Duration::from_secs(1);
+		assert_eq!(
+			late_answer(Some(asked), (3706, 2488), late, true),
+			Late::Other,
+			"too late"
+		);
+		let again = Asked {
+			again: true,
+			..asked
+		};
+		assert_eq!(
+			late_answer(Some(again), (3706, 2488), soon, true),
+			Late::Other,
+			"once"
+		);
+	}
 	// `window.rows: 1000` in the config, or --rows 1000, asked for a window taller
 	// than the device's largest texture. The GL path's offscreen is made at the
 	// window's size, and wgpu treats the refusal as fatal, so the launch died.
