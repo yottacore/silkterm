@@ -1038,7 +1038,7 @@ rows:
 		aliases: ["multiplexer", "detach", "persistent sessions"]
 		kind: toggle
 		setting: shell.tmux.always_new_session
-		help: "Start each split in a new tmux session. New tab in tmux on the Tabs menu does it for a whole tab.◉NEWLINE◉◉NEWLINE◉Pros:◉NEWLINE◉- If your desktop crashes, your CLI sessions survive.◉NEWLINE◉- You can connect to existing CLI sessions remotely.◉NEWLINE◉- You can reconnect from any other installed terminal."
+		help: "Start each new tab, split and plain launch in a new tmux session. New tab in tmux on the Tabs menu does it for one tab with this off.◉NEWLINE◉◉NEWLINE◉Pros:◉NEWLINE◉- If your desktop crashes, your CLI sessions survive.◉NEWLINE◉- You can connect to existing CLI sessions remotely.◉NEWLINE◉- You can reconnect from any other installed terminal."
 		warning: "◉NEWLINE◉◉NEWLINE◉Cons:◉NEWLINE◉- Can't launch GUI programs without extra parameters.◉NEWLINE◉- The SilkTerm Minimap is not available.◉NEWLINE◉- SilkTerm can't adjust itself based on programs inside tmux, so you may see occasional weirdness with smooth-scrolling."
 
 	TmuxSessionName:

@@ -1166,6 +1166,10 @@ fScriptTests(){
 	## A tab names a command that prints nothing, with the cursor not blinking.
 	## Exit 3 is a skip: no binary, display, dash, xdotool or xprop.
 	fRunTest_MaySkip cicd/tests/quiettab/run.bash "tab names a quiet command"
+	## With "Always run in new tmux session" on, a plain launch and a new tab
+	## each start a session, and a command-line layout starts none. Exit 3 is a
+	## skip: no binary, display, dash or xdotool.
+	fRunTest_MaySkip cicd/tests/tmuxalways/run.bash "tmux sessions for a launch and a new tab"
 	## An unfocused window on screen lets its device go after "Minutes
 	## otherwise", read from the file. About a minute. Exit 3 is a skip: no
 	## binary, display, dash, xdotool or xprop.

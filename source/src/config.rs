@@ -921,10 +921,10 @@ pub struct Settings {
 	pub shell_integration: bool,    // put the directory-reporting block in PowerShell profiles
 	pub bash_prompt: bool,          // give bash panes the x9ps1-git prompt (see integration.rs)
 	pub term: String,               // TERM for new panes; empty is xterm-256color
-	pub tmux_new_session: bool,     // a split starts in a tmux session of its own (tmux.rs)
-	pub tmux_session_name: String,  // that session's name, as a template
+	pub tmux_new_session: bool, // a new tab, split or plain launch starts in a tmux session of its own (tmux.rs)
+	pub tmux_session_name: String, // that session's name, as a template
 	pub tmux_on_close: crate::tmux::OnClose, // what closing such a pane does to its session
-	pub hyperlinks: bool,           // underline URLs in output on hover; Ctrl+click opens them
+	pub hyperlinks: bool,       // underline URLs in output on hover; Ctrl+click opens them
 	pub hyperlink_open_command: String, // opener for a clicked link; its default is the desktop's own
 	pub bg: [u8; 3],
 	pub fg: [u8; 3],
@@ -8407,9 +8407,10 @@ shell:
 
 	# copy_on_select: true  ## Default
 
-	## Start each split in a new tmux session of its own, so what runs in it
-	## survives the window closing and can be attached to again from anywhere.
-	## The Tabs menu's "New tab in tmux" does the same for a whole tab. The
+	## Start each new tab, split and plain launch in a new tmux session of its
+	## own, so what runs in it survives the window closing and can be attached
+	## to again from anywhere. A layout the command line asks for stays plain.
+	## The Tabs menu's "New tab in tmux" does it for one tab with this off. The
 	## name is a template, where YYYYmmDD is the date and HHMMSS or HHMMSSNN
 	## the time, the second one to a hundredth of a second, each in percent
 	## signs. on_close is what closing such a pane does to its session:

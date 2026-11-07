@@ -769,8 +769,9 @@ impl State {
 	/// `shell` is a shell picked by name from the Tabs menu; None inherits from
 	/// the pane that was active, as a plain new tab does. The directory is
 	/// inherited either way - picking a shell says nothing about where to start.
-	/// `in_tmux` starts the tab's pane in a tmux session of its own, which only
-	/// "New tab in tmux" asks for.
+	/// `in_tmux` starts the tab's pane in a tmux session of its own, as "New
+	/// tab in tmux" asks for. With "Always run in new tmux session" on, every
+	/// new tab gets one.
 	pub(super) fn new_tab_with(
 		&mut self,
 		proxy: &EventLoopProxy<UserEvent>,
@@ -778,6 +779,7 @@ impl State {
 		in_tmux: bool,
 	) {
 		self.commit_tab_edit();
+		let in_tmux = in_tmux || config::settings().tmux_new_session;
 		// area with the bar shown (we're about to have >1 tab); relayout_all fixes
 		// the exact rects right after, this is just the new pane's provisional box
 		let bar = self.menubar_h() + self.tab_bar_h();
