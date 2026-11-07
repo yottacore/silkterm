@@ -7123,15 +7123,24 @@ fn dropped(lossy: &str, garbled: &[usize]) -> Upgrade {
 	let after = line_readings(&kept);
 	let sets_something = after.iter().any(|reading| reading.active && reading.read);
 	if left_out.is_empty() || (before == after && sets_something) {
-		let lost = left_out
+		let mut lost = left_out
 			.iter()
 			.filter(|index| {
 				let line = all[**index].trim();
 				!line.is_empty() && !line.starts_with('#')
 			})
 			.count();
+		// a pre-beta1 spelling left in, such as a bare monitor key, would be
+		// respelled by the next launch, so it goes in the same pass
+		let text = match from_a_beta(&kept) {
+			Some((text, more)) => {
+				lost += more;
+				text
+			}
+			None => kept,
+		};
 		return Upgrade::Dropped {
-			text: kept,
+			text,
 			lost,
 			lines,
 			rewrite: Rewrite::Kept,
@@ -18496,8 +18505,8 @@ mod tests {
 		#[cfg_attr(miri, ignore = "too slow under Miri")]
 		fn a_rewrite_for_lines_that_are_not_utf8_settles() {
 			use super::super::{
-				Rewrite, SHCL_BANNER, Upgrade, format_of, garbled_indexes, unreadable_lines,
-				upgrade,
+				Rewrite, SHCL_BANNER, Upgrade, format_of, from_a_beta, garbled_indexes,
+				unreadable_lines, upgrade,
 			};
 			fuzz::soak("config-dropped", |seed| {
 				let mut rng = fuzz::Rng::new(seed);
@@ -18531,17 +18540,32 @@ mod tests {
 						);
 						match rewrite {
 							Rewrite::Kept => {
-								let mut left = shown
+								let left: Vec<&str> = shown
 									.split('\n')
 									.enumerate()
 									.filter(|(index, _)| !garbled.contains(index))
-									.map(|(_, line)| line);
+									.map(|(_, line)| line)
+									.collect();
+								// a pre-beta1 spelling among the lines kept is respelled
+								// in place, so a line may also match its respelling
+								let joined = left.join("\n");
+								let respelled_text =
+									from_a_beta(&joined).map(|(t, _)| t).unwrap_or_default();
+								let respelled: Vec<&str> = respelled_text.split('\n').collect();
+								let mut at = 0;
 								for line in text.split('\n') {
-									let banner = SHCL_BANNER.lines().any(|b| b == line.trim_end());
+									if SHCL_BANNER.lines().any(|b| b == line.trim_end()) {
+										continue;
+									}
+									let found = (at..left.len()).find(|&i| {
+										left[i] == line
+											|| respelled.get(i).is_some_and(|r| *r == line)
+									});
 									assert!(
-										banner || left.any(|l| l == line),
+										found.is_some(),
 										"{line:?} is new\nfile:\n{shown}\nwritten:\n{text}"
 									);
+									at = found.unwrap_or(at) + 1;
 								}
 							}
 							Rewrite::Template => {
