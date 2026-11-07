@@ -3861,6 +3861,7 @@ impl ApplicationHandler<UserEvent> for App {
 			take_owed: false,
 			set_on: None,
 			took: None,
+			drifted: false,
 		};
 		let menu_bar_h = if menu_bar {
 			text.ui_line_h + text.dip(MENU_BAR_VPAD)
