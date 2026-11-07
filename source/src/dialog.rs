@@ -198,6 +198,8 @@ pub struct DialogWin {
 	// the terminal window this dialog belongs to, so we can restack it beneath
 	// us when we're activated (see raise_parent).
 	parent: Option<RawWindowHandle>,
+	// the size of the terminal's monitor when this opened, logical pixels
+	parent_monitor: Option<(f32, f32)>,
 	// a resize snap has been asked for and not yet seen: see snap_to_natural
 	snapped: bool,
 	// what the screen leaves this window, physical pixels. The snap may not pull
@@ -222,6 +224,9 @@ impl std::fmt::Debug for DialogWin {
 #[derive(Debug, Clone, Copy)]
 pub struct Parent {
 	handle: RawWindowHandle,
+	// Logical pixels, by the window's own scale, since a Wayland output reports
+	// a whole number for a scale of 1.5. None when the window can't say.
+	monitor: Option<(f32, f32)>,
 	#[cfg(target_os = "linux")]
 	toplevel: Option<std::ptr::NonNull<std::ffi::c_void>>,
 }
@@ -231,6 +236,7 @@ impl Parent {
 		use winit::raw_window_handle::HasWindowHandle;
 		Some(Self {
 			handle: window.window_handle().ok()?.as_raw(),
+			monitor: monitor_size(window).map(|m| logical_size(m, window.scale_factor())),
 			#[cfg(target_os = "linux")]
 			toplevel: winit::platform::wayland::WindowExtWayland::xdg_toplevel(window),
 		})
@@ -399,6 +405,7 @@ impl DialogWin {
 			focus: crate::tip::Focus::default(),
 			shaped: ShapedText::default(),
 			parent: parent.map(Parent::handle),
+			parent_monitor: parent.and_then(|p| p.monitor),
 			snapped: false,
 			caps: (f32::MAX, f32::MAX),
 			mods: ModifiersState::empty(),
@@ -445,6 +452,7 @@ impl DialogWin {
 			focus: crate::tip::Focus::default(),
 			shaped: ShapedText::default(),
 			parent: parent.map(Parent::handle),
+			parent_monitor: parent.and_then(|p| p.monitor),
 			snapped: false,
 			caps: (f32::MAX, f32::MAX),
 			mods: ModifiersState::empty(),
@@ -496,6 +504,7 @@ impl DialogWin {
 			focus: crate::tip::Focus::default(),
 			shaped: ShapedText::default(),
 			parent: parent.map(Parent::handle),
+			parent_monitor: parent.and_then(|p| p.monitor),
 			snapped: false,
 			caps: (f32::MAX, f32::MAX),
 			mods: ModifiersState::empty(),
@@ -525,7 +534,13 @@ impl DialogWin {
 		// ~1010 DIP tall. A tab that doesn't fit scrolls instead of pushing the
 		// footer buttons off the bottom. SettingsDialog divides these by the scale
 		// factor on the way in, so every figure here is physical.
-		let (max_w, max_h) = Self::settings_caps(&window, parent.map(Parent::handle), scale);
+		let (max_w, max_h) = Self::settings_caps(
+			&window,
+			parent.map(Parent::handle),
+			parent.and_then(|p| p.monitor),
+			false,
+			scale,
+		);
 		// laid out at the origin
 		let mut dialog = SettingsDialog::new(0.0, 0.0, text.ui_line_h, chrome, max_w, max_h, scale);
 		dialog.start_from(base);
@@ -574,6 +589,7 @@ impl DialogWin {
 			focus: crate::tip::Focus::default(),
 			shaped: ShapedText::default(),
 			parent: parent.map(Parent::handle),
+			parent_monitor: parent.and_then(|p| p.monitor),
 			snapped: false,
 			caps: (max_w, max_h),
 			mods: ModifiersState::empty(),
@@ -1032,7 +1048,8 @@ impl DialogWin {
 
 	fn rescale_settings(&mut self, was: f32, scale: f32) {
 		let chrome = crate::settings_ui::chrome_widths(&mut self.text, scale);
-		let (max_w, max_h) = Self::settings_caps(&self.window, self.parent, scale);
+		let (max_w, max_h) =
+			Self::settings_caps(&self.window, self.parent, self.parent_monitor, true, scale);
 		let old_caps = std::mem::replace(&mut self.caps, (max_w, max_h));
 		let line_h = self.text.ui_line_h;
 		let Content::Settings(dialog) = &mut self.content else {
@@ -1127,15 +1144,26 @@ impl DialogWin {
 	// less the frame the WM puts round it, and no taller than DLG_MAX_H.
 	// The parent names the monitor. A dialog created hidden has never been placed,
 	// so asking which monitor IT is on answers for wherever the origin happens to
-	// be - the primary, not the screen the terminal is on.
-	fn settings_caps(window: &Window, parent: Option<RawWindowHandle>, scale: f32) -> (f32, f32) {
+	// be - the primary, not the screen the terminal is on. `placed` is false for
+	// that first measurement; see `pick_monitor` for what it changes.
+	fn settings_caps(
+		window: &Window,
+		parent: Option<RawWindowHandle>,
+		parent_monitor: Option<(f32, f32)>,
+		placed: bool,
+		scale: f32,
+	) -> (f32, f32) {
 		let work = parent
 			.and_then(work_area_of)
 			.or_else(|| work_area(window))
 			.map(|(_, _, w, h)| (w as f32, h as f32));
-		let monitor = window
-			.current_monitor()
-			.map(|m| (m.size().width as f32, m.size().height as f32));
+		// The terminal's monitor is kept in logical pixels and goes into this
+		// window's. On Wayland those are at scale 1 until the first scale change,
+		// so the window doesn't open taller than the screen.
+		let own = monitor_size(window).map(|(w, h)| (w as f32, h as f32));
+		let factor = window.scale_factor() as f32;
+		let parent = parent_monitor.map(|(w, h)| (w * factor, h * factor));
+		let monitor = pick_monitor(own, parent, placed);
 		caps_from(usable_screen(work, monitor), decor_extra(window), scale)
 	}
 
@@ -3013,6 +3041,43 @@ fn usable_screen(work: Option<(f32, f32)>, monitor: Option<(f32, f32)>) -> (f32,
 	}
 }
 
+// The monitor a window is on, physical pixels. None when it can't say, as a
+// Wayland window can't until the compositor has shown it on an output, or when
+// the output reports no mode.
+fn monitor_size(window: &Window) -> Option<(u32, u32)> {
+	let size = window.current_monitor()?.size();
+	(size.width > 0 && size.height > 0).then_some((size.width, size.height))
+}
+
+fn logical_size(physical: (u32, u32), factor: f64) -> (f32, f32) {
+	let factor = if factor > 0.0 && factor.is_finite() {
+		factor
+	} else {
+		1.0
+	};
+	(
+		(f64::from(physical.0) / factor) as f32,
+		(f64::from(physical.1) / factor) as f32,
+	)
+}
+
+// Which monitor a dialog's caps go by. Before it is placed, its own answer is
+// for wherever the origin is, and on Wayland there is none, so the terminal it
+// opens over comes first. Once placed it may have been dragged to another
+// monitor, so its own answer wins and the terminal's is the fallback. On
+// Wayland it may still have none at the first scale change.
+fn pick_monitor(
+	own: Option<(f32, f32)>,
+	parent: Option<(f32, f32)>,
+	placed: bool,
+) -> Option<(f32, f32)> {
+	if placed {
+		own.or(parent)
+	} else {
+		parent.or(own)
+	}
+}
+
 // The size caps, given what the screen leaves and what the frame costs. Split
 // out from the window so the arithmetic can be tested without one.
 fn caps_from(screen: (f32, f32), decor: (f32, f32), scale: f32) -> (f32, f32) {
@@ -3073,7 +3138,8 @@ mod tests {
 	use super::{
 		ABOUT_PAD, AboutSource, DLG_DECOR_HEADROOM, DLG_MAX_H, DLG_SNAP, Rect, caps_from,
 		conversion_notice, dialog_origin, flip_cocoa_rect, layout_about, layout_source,
-		refusal_notice, size_after_rescale, size_within_caps, snap_to, tip_gate, usable_screen,
+		logical_size, pick_monitor, refusal_notice, size_after_rescale, size_within_caps, snap_to,
+		tip_gate, usable_screen,
 	};
 	use crate::config;
 	use crate::text::{TextCtx, ui_attrs};
@@ -3327,6 +3393,36 @@ mod tests {
 				(1000.0 - DLG_DECOR_HEADROOM * scale).min(DLG_MAX_H * scale)
 			);
 		}
+	}
+
+	// On Wayland a dialog learns its output only once it is shown, after its
+	// first measurement and its first scale change. With only its own monitor to
+	// go by, the cap was DLG_MAX_H alone, and at 1.5 the window came out taller
+	// than a 1200 pixel screen.
+	// Test ID: dez6a
+	#[test]
+	fn a_dialog_that_cannot_name_its_monitor_goes_by_the_terminals() {
+		// A 1600 x 1200 output at 1.5 is 800 tall to a window still at scale 1.
+		let (w, h) = logical_size((1600, 1200), 1.5);
+		assert!((w - 1066.67).abs() < 0.01 && (h - 800.0).abs() < 0.01);
+		for (scale, screen_h) in [(1.0, 800.0), (1.5, 1200.0)] {
+			let terminal = Some((w * scale, h * scale));
+			assert_eq!(pick_monitor(None, terminal, false), terminal);
+			assert_eq!(pick_monitor(None, terminal, true), terminal);
+			let (_, cap) = caps_from(usable_screen(None, terminal), (0.0, 0.0), scale);
+			assert!(
+				cap < screen_h,
+				"at {scale} a cap of {cap} does not fit a screen {screen_h} tall"
+			);
+		}
+		let terminal = Some((1600.0, 1200.0));
+		// Not yet placed, its own answer is for the origin's monitor.
+		let origin = Some((3440.0, 1440.0));
+		assert_eq!(pick_monitor(origin, terminal, false), terminal);
+		// Placed, it may have been dragged to another one.
+		assert_eq!(pick_monitor(origin, terminal, true), origin);
+		assert_eq!(pick_monitor(origin, None, false), origin);
+		assert_eq!(pick_monitor(None, None, true), None);
 	}
 
 	// Test ID: dcd36

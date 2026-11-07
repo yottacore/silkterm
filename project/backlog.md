@@ -37,7 +37,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - Settings on Wayland: the height cap doesn't see the screen, so at 1.5 the window is taller than it
 	- ID: 2026110617385295
 	- Type: Bug
-	- Status: Queued
+	- Status: Done
 	- Priority: Low
 	- Opened: 20261106-173852
 	- Opened by:
@@ -48,6 +48,17 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Possible cause: on Wayland the work area and the monitor are unknown when Settings opens, and still unknown at the first scale change, so the caps fall back to DLG_MAX_H alone.
 	- Progress log:
 		- Found while working 2026110613085833. Not caused by that fix: the window it opens at is still 914 DIP tall, 1371 pixels at 1.5, past the screen before the fix too.
+		- 20261106: Under sway the title bar still sits a few pixels off the top: 6 at 1.5 and 2 at 1.25. Sway centers the window without its title bar, so half the room left for it goes below. The window and its title bar together fit the output.
+	- Actual cause: the caps asked only the dialog which monitor it was on. On Wayland a window can't say until it's shown on an output, so it had none at open or at the first scale change. At open the scale is also still 1, so a cap from the monitor's pixels would still be too tall.
+	- Decisions:
+		- 20261106: The terminal's monitor is noted when a dialog opens, in logical pixels by the terminal's scale, and turned into the dialog's pixels by its own scale. A Wayland output reports only a whole number for a scale of 1.5.
+		- 20261106: Before the dialog is placed, the terminal's monitor comes first on every platform, since the dialog's own answer is for wherever the origin is. After, the dialog's own comes first, since it may have been dragged to another monitor. The work area keeps its old order.
+	- Actual fix: Settings' caps take the terminal's monitor when the dialog can't name its own, or hasn't been placed yet. Under sway at 1.5 it opens 762 tall at scale 1 and stays 762 tall at 1.5 (1143 pixels), where the window was 800 tall with its title bar off the top before.
+	- Swept: every call that measures a monitor for a dialog. `settings_caps` was the only one. About and the notice aren't capped. The other `current_monitor` calls are for the terminal window, which is shown before it asks.
+	- Verified: 20261106, under headless sway on the GPU with one 1600 x 1200 output. At 1.5 Settings is 762 logical pixels tall where it was 800, and at 1.25 922 where it was 936. At 1 it is 914, its content's size, as before. dez6a fails with the old choice put back and passes with the fix. The dialog unit tests and the quick gate pass.
+	- Branch: rnd1107
+	- Test case: `a_dialog_that_cannot_name_its_monitor_goes_by_the_terminals` (dez6a).
+	- Closed: 20261106-175907
 
 - Settings: Side-tabs: the lower the tab, the lower the text is within the tab
 	- ID: 2026110609500003
