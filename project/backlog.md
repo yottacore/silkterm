@@ -34,6 +34,20 @@ Going forward, new issues in the new template at the bottom of this file, will g
 
 ## Issues
 
+- A config rewrite for lines that aren't UTF-8 doesn't settle: fuzz seed 2069 fails ddf97, so every full run stops at step 4
+	- ID: 2026110618404009
+	- Type: Bug
+	- Status: Queued
+	- Priority: High
+	- Severity: High
+	- Opened: 20261106-184040
+	- Opened by:
+	- Related IDs: 2026110516054976
+	- Target OS: All
+	- Progress log:
+		- 20261107: Found by the rnd1107 full run at d1ff9ef, step 4. ddf97 a_rewrite_for_lines_that_are_not_utf8_settles, fuzz target config-dropped, seed 2069. Reproduce with SILK_FUZZ_SEED=2069 cargo test --bin silkterm a_rewrite_for_lines_that_are_not_utf8_settles.
+		- 20261107: Also fails on dev at 2ba0149, so it was there before the round. The upgrade of the written text comes back InPlace, not Current. The written text has a quoted key line ending in CR, from a garbled line holding an emoji value.
+
 - Settings on Wayland: the height cap doesn't see the screen, so at 1.5 the window is taller than it
 	- ID: 2026110617385295
 	- Type: Bug
