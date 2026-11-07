@@ -5,7 +5,8 @@
 ##	- Purpose:
 ##		A failed test script's output reaches the run log, then its FAIL line, and
 ##		the failure line names the file that keeps it, when it outlives the run. A passing or skipped test
-##		stays quiet but for its PASS or SKIP line, which says why it skipped. Lifts
+##		stays quiet but for its PASS or SKIP line, which says why it skipped. In the
+##		image a skip for a missing tool fails instead. Lifts
 ##		fRunTest and its helpers out of cicd.bash as they stand and feeds them
 ##		scratch scripts that pass, fail and skip.
 ##	- Test ID: ddp9p
@@ -25,6 +26,9 @@ failures=0
 fCheck(){ local -r what="${1}"; shift; if "${@}"; then echo "  ok   ${what}"; else echo "  FAIL ${what}"; failures=$((failures + 1)); fi; }
 fNot(){ ! "${@}"; }
 
+## A run in the image sets this, and the cases below set it themselves.
+unset SILK_CICD_IN_CONTAINER
+
 work="$(mktemp -d "${TMPDIR:-/tmp}/silk-testout.XXXXXX")"
 fEnd(){ local -r rc=$?; fTestDir_Rm "${work}" || true; fTestDir_End "${rc}"; }
 trap fEnd EXIT
@@ -42,6 +46,8 @@ fScript pass.bash  'echo "pass-chatter"'
 fScript fail.bash  'echo "fail-clue-one"' 'echo "fail-clue-two"' 'exit 1'
 fScript skip.bash  'echo "skip-chatter"' 'exit 3'
 fScript skipwhy.bash  'echo "  skip: no frobnicator"' 'echo "skip-chatter"' 'echo "  skip: no widget either"' 'exit 3'
+fScript skiptool.bash  'echo "  skip: no wtype"' 'exit 3'
+fScript skipother.bash  'echo "  skip: no software Vulkan (/x/lvp.json)"' 'exit 3'
 fScript long.bash  'for ((i = 1; i <= 250; i++)); do echo "long-line-${i}"; done' 'exit 1'
 
 ## fRun <log> <function> <script>: one call in a subshell, as cicd would make
@@ -109,6 +115,23 @@ fCheck "and is the only line" test "$(grep -c . "${work}/skipwhy.log")" -eq 2
 fRun "${work}/skipgiven.log" fRunTest_MaySkip t/skip.bash "skipped three" "no thing to run"
 fCheck "with no why from the test, the one given" grep -qxF 'SKIP zzzzz skipped three, no thing to run' "${work}/skipgiven.log"
 
+##	In the image a skip for a missing tool is the recipe's bug, so it fails and
+##	names the recipe. Any other skip there is still a skip, and so is a missing
+##	tool here.
+SILK_CICD_IN_CONTAINER=1 fRun "${work}/imgtool.log" fRunTest_MaySkip t/skiptool.bash "tool one"
+fCheck "in the image a skip for a missing tool stops the run" test "${rc}" -ne 0
+fCheck "with a FAIL line" grep -qxF 'FAIL zzzzz tool one' "${work}/imgtool.log"
+fCheck "and a failure line naming the tool and the recipe" grep -qF 'FAILED: tool one: the image has no wtype; add it to cicd/container/Dockerfile (zzzzz)' "${work}/imgtool.log"
+fCheck "and no SKIP line" fNot grep -q '^SKIP ' "${work}/imgtool.log"
+SILK_CICD_IN_CONTAINER=1 fRun "${work}/imgother.log" fRunTest_MaySkip t/skipother.bash "other one"
+fCheck "another why in the image is still a skip" test "${rc}" -eq 0
+fCheck "with its SKIP line" grep -qxF 'SKIP zzzzz other one, no software Vulkan (/x/lvp.json)' "${work}/imgother.log"
+SILK_CICD_IN_CONTAINER=1 fRun "${work}/imggiven.log" fRunTest_MaySkip t/skip.bash "given one" "no thing"
+fCheck "and so is the why given, when the test gave none" grep -qxF 'SKIP zzzzz given one, no thing' "${work}/imggiven.log"
+fRun "${work}/hosttool.log" fRunTest_MaySkip t/skiptool.bash "tool one"
+fCheck "a missing tool here is a skip" test "${rc}" -eq 0
+fCheck "with its SKIP line" grep -qxF 'SKIP zzzzz tool one, no wtype' "${work}/hosttool.log"
+
 fRun "${work}/long.log" fRunTest t/long.bash "long one"
 fCheck "a long output shows its end" grep -q '^long-line-250$' "${work}/long.log"
 fCheck "and says how much was cut" grep -q '^last 200 of 250 lines of output:$' "${work}/long.log"
@@ -122,3 +145,4 @@ echo "all passed"
 ##		- 20261008 JC: Created.
 ##		- 20261028: PASS, FAIL and SKIP lines, and the why of a skip.
 ##		- 20261031: The failure line names the file only when it outlives the run.
+##		- 20261106: In the image a skip for a missing tool fails.

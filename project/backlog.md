@@ -337,7 +337,8 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - The Wayland window tests skip in every container full run, for want of wtype
 	- ID: 2026110516054976
 	- Type: Bug
-	- Status: Queued
+	- Status: Waiting on automated testing
+	- Needs local test suite run?: One container full run, `--backlog-run-full`, with PASS lines for detyk, ddy98, ddzwc and ddydf and no `no wtype` or `no foot` SKIP.
 	- Severity: Avg
 	- Opened: 20261105-160549
 	- Opened by: CC
@@ -348,6 +349,15 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Expected behavior: They run in the full run.
 	- Reproduced: 20261105, in the run logs. The host has wtype, and monwl and the random test passed there by hand on dev.
 	- Possible cause: `cicd/container/Dockerfile` installs sway and xdotool but not wtype.
+	- Actual cause: The image had no wtype, and no foot either, which the clipboard test needs next. A test that can't find a tool exits 3, and the pipeline read that as a skip in the image too, so nothing failed.
+	- Decisions:
+		- 20261106: wtype and foot go in a late apt layer of their own, as heaptrack did, so the toolchain layers above it aren't rebuilt.
+		- 20261106: In the image a `skip: no <tool>` now fails the run and names the recipe, since the image is meant to have every tool the tests use. Any other skip there, and a missing tool on the host, stay skips. The soak step already fails on exit 3 for the same reason.
+	- Actual fix: The recipe installs wtype and foot. `fRunTest_MaySkip` in `cicd.bash` fails a missing-tool skip inside the container. design.md says so under the pipeline in a container.
+	- Verified: 20261106. In the new image, against the container debug build of 11-05: dlgwl (detyk) 8 of 8, wlclip (ddzwc) passed, monwl (ddy98) 51 checks passed, dpirand (ddydf) 2 seeds in 45 s passed. dlgwl in the old image still says `skip: no wtype`. The new testout cases fail 4 of them on the old `cicd.bash` and pass on the new one. Engine test, shellcheck and the quick gate, all five areas.
+	- Swept: every `skip: no ...` message in `cicd/tests` and `cicd/utility`. Only the 4 Wayland tests skip for a tool in the container logs from 11-02 to 11-05. The other one-word ones (python-xlib, cargo-deny, gui-headless.bash) name what the image or the tree has.
+	- Test case: new cases in `cicd/tests/testout/run.bash` (ddp9p): a missing-tool skip in the image fails and names the recipe, other skips there and a missing tool on the host stay skips. detyk, ddy98, ddzwc and ddydf now run in the container.
+	- Branch: rnd1107
 
 - Settings at scale 1.25 on a short screen: the vertical scrollbar pushes in a horizontal one and cuts off the revert arrows
 	- ID: 2026110613085833

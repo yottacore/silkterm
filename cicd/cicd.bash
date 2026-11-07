@@ -338,7 +338,9 @@ fRunTest(){
 }
 ## fRunTest_MaySkip <script> <label> [why]: the same, for a test whose exit 3
 ## means it could not run. That is a SKIP line, with the last "skip: <why>" the
-## test printed, or else the why given.
+## test printed, or else the why given. In the image a "skip: no <tool>" fails
+## instead, since the image is meant to have every tool the tests use, and a
+## skip there went unseen for a week.
 fRunTest_MaySkip(){
 	local -r script="${1}" label="${2}" why="${3:-could not run}"
 	[[ -x "${root}/${script}" ]] || return 0
@@ -347,10 +349,15 @@ fRunTest_MaySkip(){
 	fEcho_Clean "${label} ..."
 	local rc=0 out said; out="$(fTestOut "${script}")"
 	"${root}/${script}" >"${out}" || rc=$?
+	if ((rc == 3)); then
+		said="$(sed -n 's/^[[:space:]]*skip: //p' "${out}" | tail -n 1)"
+		if [[ -n "${SILK_CICD_IN_CONTAINER:-}" && "${said}" =~ ^no\ [^[:space:]]+$ ]]; then
+			fTestOut_Fail "${out}" "${script}" "${label}" "${label}: the image has ${said}; add it to cicd/container/Dockerfile"
+		fi
+	fi
 	case "${rc}" in
 		0) rm -f "${out}"; fTestLine PASS "${script}" "${label}" ;;
-		3) said="$(sed -n 's/^[[:space:]]*skip: //p' "${out}" | tail -n 1)"; rm -f "${out}"
-		   fTestLine SKIP "${script}" "${label}" "${said:-${why}}" ;;
+		3) rm -f "${out}"; fTestLine SKIP "${script}" "${label}" "${said:-${why}}" ;;
 		*) fTestOut_Fail "${out}" "${script}" "${label}" "${label} test failed" ;;
 	esac
 }
