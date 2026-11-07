@@ -338,7 +338,7 @@ fMain(){
 		## publishes without the work.
 		if ! fGitRemote pull --ff-only; then
 			if ((didStash)) && ! git stash pop; then
-				fThrowError "git pull --ff-only failed, and putting the stashed work back conflicted. Resolve it, then 'git stash drop'. Nothing was committed or pushed."
+				fStashPopFailed "git pull --ff-only failed, and putting the stashed work back failed too"
 				return 1
 			fi
 			fThrowError "git pull --ff-only failed. The working tree is as it was. Nothing was committed or pushed."
@@ -348,12 +348,13 @@ fMain(){
 
 	## Stash pop. A conflict here leaves the tree with markers and keeps the
 	## stash entry; set -e treats git's exit 1 as a clean exit, so left alone it
-	## silently strands a half-merged tree. Catch it, say what to do, and stop
-	## before anything gets staged, committed, or pushed.
+	## silently strands a half-merged tree. A pulled file in the way of an
+	## untracked one fails it too, with that file only in the stash. Catch it,
+	## say what to do, and stop before anything gets staged, committed, or pushed.
 	if ((didStash)); then
 		fEcho; fEcho "git stash pop ..."
 		if ! git stash pop; then
-			fThrowError "stash pop conflicted after pull. Resolve the conflicts, then 'git stash drop', and re-run. Nothing was committed or pushed."
+			fStashPopFailed "stash pop failed after pull"
 			return 1
 		fi
 	fi
@@ -441,6 +442,43 @@ fAddLinkExcludes(){
 ## Git that talks to the remote goes through gitsby where it is installed, so the
 ## pull and push use the key and account the repo belongs to. Plain git without it.
 fGitRemote(){ if command -v gitsby >/dev/null 2>&1; then gitsby raw git "$@"; else git "$@"; fi; }
+
+## The untracked files in the newest stash that aren't back in the tree as
+## stashed, one per line. A pop that finds a pulled file in the way of one
+## leaves it out, and the stash is then its only copy.
+fStashLeftBehind(){
+	git rev-parse -q --verify 'stash@{0}^3' >/dev/null 2>&1 || return 0
+	(
+		cd "$(git rev-parse --show-toplevel)" || exit 0
+		local entry='' meta='' path='' want='' have=''
+		local -a paths=() wants=() haves=()
+		while IFS= read -r -d '' entry; do
+			meta="${entry%%$'\t'*}"; path="${entry#*$'\t'}"; want="${meta##* }"
+			if [[ "${meta}" == 120000* ]]; then
+				[[ -L "${path}" ]] && have="$(printf '%s' "$(readlink -- "${path}")" | git hash-object --stdin)" || have=''
+				[[ "${have}" == "${want}" ]] || printf '%s\n' "${path}"
+			elif [[ -f "${path}" && ! -L "${path}" && "${path}" != *$'\n'* ]]; then
+				paths+=("${path}"); wants+=("${want}")
+			else
+				printf '%s\n' "${path}"
+			fi
+		done < <(git ls-tree -r -z 'stash@{0}^3')
+		((${#paths[@]})) || exit 0
+		mapfile -t haves < <(printf '%s\n' "${paths[@]}" | git hash-object --stdin-paths)
+		for i in "${!paths[@]}"; do [[ "${haves[i]:-}" == "${wants[i]}" ]] || printf '%s\n' "${paths[i]}"; done
+	)
+}
+
+## After a failed 'git stash pop'. Dropping the stash is the advice only when
+## nothing in it is left out of the tree.
+fStashPopFailed(){
+	local -r what="${1}" left="$(fStashLeftBehind || true)"
+	if [[ -n "${left}" ]]; then
+		fThrowError "${what}: these untracked files weren't put back, since files of the same names are in the way:\n  ${left//$'\n'/$'\n'"  "}\nThey are still in 'stash@{0}' (auto-stash), which is now their only copy, so keep it. Copy each one out with 'git show \"stash@{0}^3:PATH\" > OTHERPATH', settle any conflicts in tracked files, and re-run. Nothing was committed or pushed."
+		return 1
+	fi
+	fThrowError "${what}: resolve the conflicts, then 'git stash drop', and re-run. Nothing was committed or pushed."
+}
 
 fAutoMessage(){
 	local -r helper="${meDir}/git-auto-msg.bash"
@@ -771,3 +809,6 @@ fMain  "${@}"
 ##		  installed.
 ##		- 20261004: Dir links inside the repo, and links back into the project, are
 ##		  left out of the backup. Linked asset packs had grown one to 72 GB.
+##		- 20261107: A failed stash pop names the untracked files it couldn't put
+##		  back and says to keep the stash, rather than advising a drop that
+##		  deletes their only copy.
