@@ -16,11 +16,13 @@
 set -euo pipefail
 meDir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=cicd/tests/_testdir.bash
-source "${meDir}/../_testdir.bash"; fTestDir_Use
+source "${meDir}/../_testdir.bash"
 root="$(cd "${meDir}/../../.." && pwd)"
 engine="${root}/cicd/cicd.bash"
+## Before fTestDir_Use moves TMPDIR: the guard it sources again reads its temp
+## root then, and with no HOST_TEMP it took the run's folder for the root.
 # shellcheck source=cicd/utility/include/sweep.bash
-source "${root}/cicd/utility/include/sweep.bash"
+source "${root}/cicd/utility/include/sweep.bash"; fTestDir_Use
 
 failures=0
 fCheck(){ local -r what="${1}"; shift; if "${@}"; then echo "  ok   ${what}"; else echo "  FAIL ${what}"; failures=$((failures + 1)); fi; }
@@ -215,16 +217,22 @@ fRunOld 20261001-000000_002 "$$" "3 days ago"
 fRunOld 20261001-000000_003 "${deadPid}" "1 day ago"
 fRunOld 20261001-000000_004 "" "3 days ago"
 fRunOld by-hand "${deadPid}" "3 days ago"
+## A test left a read-only folder in this one. Removing it partway took its
+## run.pid and left the rest for good.
+fRunOld 20261001-000000_006 "${deadPid}" "3 days ago"; mkdir -p "${r}/20261001-000000_006/ro/sub"; chmod 555 "${r}/20261001-000000_006/ro"; touch -d "3 days ago" "${r}/20261001-000000_006"
 mkdir -p "${work}/r/away/20261001-000000_005"; echo "${deadPid}" >"${work}/r/away/20261001-000000_005/run.pid"
 ln -s "${work}/r/away/20261001-000000_005" "${r}/20261001-000000_005"; touch -h -d "3 days ago" "${r}/20261001-000000_005"
 ## A test run alone that failed keeps its folder, made by the test helper in
 ## the same place, with the same name and run.pid.
-lone="$(env -u SILKTERM_TEST_DIR HOST_TEMP="${work}/r" bash -c 'source "$1"; fTestDir_Use; echo "${SILKTERM_TEST_DIR}"; exit 1' _ "${meDir}/../_testdir.bash" 2>/dev/null || true)"
+## It writes a file, since one with nothing but its marks in it goes at once.
+lone="$(env -u SILKTERM_TEST_DIR HOST_TEMP="${work}/r" bash -c 'source "$1"; fTestDir_Use; echo "${SILKTERM_TEST_DIR}"; echo x >"${SILKTERM_TEST_DIR}/out.txt"; exit 1' _ "${meDir}/../_testdir.bash" 2>/dev/null || true)"
 fCheck "a lone test run that fails keeps its folder in the same place" test -n "${lone}" -a "$(dirname "${lone}")" == "${r}" -a -f "${lone}/run.pid"
 [[ -z "${lone}" ]] || touch -d "3 days ago" "${lone}"
 fSweep_StaleRuns "${r}" 2 "stale run folders"
 fCheck "and once it's stale, the sweep takes it" test -n "${lone}" -a ! -e "${lone}"
 fCheck "a run folder over 2 days old, with no process from its run.pid left, goes" test ! -e "${r}/20261001-000000_001"
+fCheck "and one with a read-only folder inside goes whole" test ! -e "${r}/20261001-000000_006"
+[[ ! -d "${r}/20261001-000000_006/ro" ]] || chmod 755 "${r}/20261001-000000_006/ro"
 fCheck "one whose process is still there stays" test -f "${r}/20261001-000000_002/out.txt"
 fCheck "so does a younger one" test -f "${r}/20261001-000000_003/out.txt"
 fCheck "and one with no run.pid" test -f "${r}/20261001-000000_004/out.txt"
@@ -240,7 +248,9 @@ fCheck "the temp guard refuses an old test run folder right in HOST_TEMP" bash -
 ( __safeRmHost="${ht}"; __safeRmHostSet=1; fSweep_Ledger "${work}/r/old.ledger" 0 x own )
 fCheck "and the ledger takes them under their own parent" test ! -e "${ht}/test_silkterm_20261021-00000000" -a ! -e "${ht}/test_silkterm_20261022-00000000" -a ! -s "${work}/r/old.ledger"
 fCheck "the run sweeps stale run folders and empties the old ledgers" \
-	bash -c 'grep -qF "fSweep_StaleRuns \"\${runBase}\" \"\${CLEANUP_STALE_DAYS:-2}\"" "$1" && grep -qF "fOldLedger \"\${TARGET_DIR}/.cicd-test-folders\" \"old test run folders\" own" "$1"' _ "${engine}"
+	bash -c 'grep -qF "fSweep_StaleRuns \"\${runBase}\" \"\${CLEANUP_STALE_DAYS:-2}\"" "$1" && grep -qxF "	fStaleRuns" "$1" && grep -qF "fOldLedger \"\${TARGET_DIR}/.cicd-test-folders\" \"old test run folders\" own" "$1"' _ "${engine}"
+fCheck "and so does the backlog quick run, outside the container" \
+	bash -c 'sed -n "/^if ((gate)); then\$/,/^fi\$/p" "$1" | grep -qxF "	fStaleRuns" && sed -n "/^fStaleRuns(){/,/^}/p" "$1" | grep -qF "SILK_CICD_IN_CONTAINER"' _ "${engine}"
 
 ## G: the PowerShell side, for cicd-win.ps1's test folders on Windows.
 if command -v pwsh >/dev/null 2>&1; then
@@ -262,4 +272,6 @@ echo "all passed"
 ##		- 20261026 JC: The Zig cap by apparent size.
 ##		- 20261031: Run folders, stale after 2 days, and the old ledgers emptied.
 ##		- 20261101: A lone test run's kept folder goes with the stale run folders.
+##		- 20261106: The backlog quick run sweeps too, and a read-only folder inside
+##		  doesn't stop a stale one going whole.
 ##		- 20261102: The Miri dir, its sysroot in it, goes whole on a nightly bump.

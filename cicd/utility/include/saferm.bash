@@ -14,7 +14,8 @@
 ##		  HOST_TEMP is unset, that's TMPDIR or /tmp, as in Temp files.
 ##		- Both take one absolute path and refuse an empty one, "..", "//", a
 ##		  newline, a link, a path through a link, or one that isn't there. They
-##		  stay on one filesystem, and say nothing when the removal went.
+##		  stay on one filesystem, and say nothing when the removal went. A
+##		  read-only folder inside is opened first, so it can't stop the removal.
 ##	History: At bottom of file.
 
 ##	Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
@@ -58,9 +59,13 @@ fSafeRm_Do(){
 	if [[ -L "${p}" ]]; then printf 'safe-rm: refused, a link: %s\n' "${p}" >&2; return 1; fi
 	real="$(realpath -e -- "${p}" 2>/dev/null)" || { printf 'safe-rm: refused, not there: %s\n' "${p}" >&2; return 1; }
 	if [[ "${real}" != "${p}" ]]; then printf 'safe-rm: refused, goes through a link: %s\n' "${p}" >&2; return 1; fi
+	## A folder a test made read-only would stop rm partway, after it took the
+	## run.pid the stale sweep goes by. Each one is opened before find reads it.
+	find "${p}" -xdev -type d ! -perm -u=rwx -exec chmod u+rwx -- {} \; 2>/dev/null || true
 	rm -rf --one-file-system -- "${p}"
 }
 
 ##	History:
 ##		- 20261028 JC: Created.
 ##		- 20261031: HOST_TEMP itself and a whole project folder in it are refused.
+##		- 20261106: A read-only folder inside is opened first, so the tree goes whole.

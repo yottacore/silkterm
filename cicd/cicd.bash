@@ -681,6 +681,13 @@ fRunDir_End(){
 	fSweep_Note "the run's temp folder"
 	((! ${1:-0})) || echo "removed the run's temp folder ${dir}; --keep-temp keeps it" >&2
 }
+## fStaleRuns: run folders over 2 days old whose run.pid process is gone, which
+## a killed run or a failed lone test left. Every run outside the container
+## takes them, the backlog quick run too, since it's the one rounds run most.
+fStaleRuns(){
+	[[ -z "${SILK_CICD_IN_CONTAINER:-}" ]] || return 0
+	fSweep_StaleRuns "${runBase}" "${CLEANUP_STALE_DAYS:-2}" "stale run folders"
+}
 ## fDockerStart: the run has used docker, so its end tidies up after it.
 fDockerStart(){ dockerUsed=1; }
 ## fDockerBytes: the total of docker system df's sizes on stdin, which docker
@@ -1369,7 +1376,8 @@ fPlanSteps_Show(){
 
 ## --backlog-run-quick: the fast checks to run before a commit,
 ## every area or the ones named, fail-fast, nothing mutated, no artifacts,
-## log tee or publish. Each step reads the tree as it is.
+## log tee or publish. Each step reads the tree as it is. Its only cleanup is
+## its own folder and stale run folders.
 declare -A gateTitles=([fmt]="Format check" [clippy]="Lints" [tests]="Tests" [scripts]="Script lints" [docs]="Docs checks")
 ## Its steps are the areas named, and the rest are off.
 if ((gate)); then
@@ -1392,6 +1400,7 @@ fi
 if ((gate)); then
 	fRunDir_Make || fDie "could not make the run's folder"
 	trap 'rc=$?; fRunEnd "${rc}"' EXIT
+	fStaleRuns
 	if ((container)); then
 		fSection "Backlog quick run in ${containerImage}"
 		fContainerBuild "${containerImage}"
@@ -1708,7 +1717,7 @@ fOldLedger(){  ## fOldLedger <ledger> <what> [own]: empties it, then it goes.
 	[[ ! -f "${1}" || -s "${1}" ]] || rm -f -- "${1}"
 }
 if [[ -z "${SILK_CICD_IN_CONTAINER:-}" ]] && ((! noCleanup)); then
-	fSweep_StaleRuns "${runBase}" "${CLEANUP_STALE_DAYS:-2}" "stale run folders"
+	fStaleRuns
 	fOldLedger "${TARGET_DIR}/.cicd-test-folders" "old test run folders" own
 	if [[ -n "${containerTmpLedger}" ]]; then
 		fOldLedger "${containerTmpLedger}" "old container /tmp folders"
@@ -2456,6 +2465,7 @@ fEcho_Clean
 
 
 ##	History:
+##		- 2026-11-06: The backlog quick run removes stale run folders too.
 ##		- 2026-11-05: A build that can't be dogfooded fails the run, where it used to
 ##		              warn and pass. A dest that can't be written stops it at the
 ##		              start.

@@ -411,7 +411,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - Test run folders pile up in HOST_TEMP/silkterm, and the 2-day sweep doesn't take them
 	- ID: 2026110514393095
 	- Type: Bug
-	- Status: Queued
+	- Status: Done
 	- Severity: Low
 	- Opened: 20261105-143930
 	- Opened by: CC
@@ -421,8 +421,29 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Incorrect behavior: On 11-05 there were 28 run folders from 11-01 to 11-04, most holding only `.test_silkterm_owner` and `run.pid`. Folders from 11-02 were still there after the 11-04 default run.
 	- Expected behavior: Each run removes its folder at the end, and a run removes ones older than 2 days.
 	- Reproduced: No. On 11-05 the scroll harness run by hand and the engine harness each left a folder now and then, but not every time.
+		- 20261106: Yes. The scroll harness run alone with no binary skips, and leaves a folder with only those 2 files every time. 43 engine harness runs left none.
 	- Notes:
 		- Which tests leave them isn't known yet.
+	- Actual cause:
+		- A lone run that skipped (exit 3) or failed kept its folder. The scroll and engine harnesses, and others, remove their own work folder first, so what was kept held only the owner mark and `run.pid`.
+		- The stale sweep ran only in a default or full run, and rounds mostly run `--backlog-run-quick`. On 11-06 the sweep would have taken the 8 left from 11-03 and 11-04, but no such run had come.
+		- A read-only folder a test made (ddazx's locked bases) stopped the guard's `rm -rf` partway, after it took `run.pid`. The sweep never saw that folder again (`20261101-140811_001`).
+	- Actual fix:
+		- The test helpers (`_testdir.bash`, `.py`, `testdir.rs`) remove the folder on a skip too, and on a failure when nothing but the 2 marks is in it. `_testdir.ps1` has the second.
+		- `saferm.bash` and `saferm.py` open a read-only folder before removing, so the tree goes whole.
+		- `--backlog-run-quick` sweeps stale run folders too, outside the container.
+	- Decisions:
+		- 20261106: Exit 3 is the tests' skip code, so a skip removes its folder like a pass. A failed run's folder with any file in it still stays, per 2026103115564575.
+		- 20261106: `_testdir.ps1` takes only the empty folder rule, since no PowerShell test uses 3 for a skip. `saferm.ps1` and install.ps1's copy are left as they are, since no PowerShell test makes a read-only folder.
+		- 20261106: The quick run sweeps too, per `Temp files`' "each run", as `cicd-win.ps1` already does. It's one listing of one folder.
+		- 20261106: de5e9's lone failing run writes a file now, since one with nothing but its marks goes at once. Before, it wrote nothing.
+	- Verified: 20261106. ddazx passes (104 checks), and its 4 new cases failed 8 times against the old helpers and guards. de5e9 passes, with HOST_TEMP set and unset, and its 3 new checks failed against the old guard and `cicd.bash`. dde3v passes under pwsh, and its 2 new checks failed against the old `_testdir.ps1`. The scroll harness run alone with no binary left a folder with the old helper and none with the new. `--backlog-run-quick` passed every area, and its end line said it removed 8 stale run folders, the ones from 11-03 and 11-04.
+		- Swept: every copy of the helper (`_testdir.bash`, `.py`, `.ps1`, `testdir.rs`) and of the guard (`saferm.bash`, `.py`, `.ps1`, install.ps1's), every bash and Python caller of the helper for an end that reaches `fTestDir_End` or `end()`, and every place `cicd.bash` sweeps stale run folders.
+		- de5e9 run alone with no HOST_TEMP left its own folder too, since it sourced the guard again after its TMPDIR moved. It sources it first now.
+	- Branch: rnd1107
+	- Test case: ddazx (`cicd/tests/testdir/run.bash`, its skip, empty and read-only cases), de5e9 (`cicd/tests/cleanup/run.bash`), dde3v (`cicd/tests/testdir/remove.ps1`), dez6x in `testdir.rs`.
+	- Acceptance signoff: Self-closed: the tests fail against the old helpers, guard and pipeline.
+	- Closed: 20261106-182548
 
 - Wayland: must use the Wayland clipboard, and minimize other X11 features
 	- ID: 2026101509024607

@@ -5,7 +5,8 @@
 ##		empty is the folder, made if missing, and never removed; otherwise a fresh
 ##		0700 one is made and exported, so every test the caller starts shares it.
 ##		A script that made one calls end(<exit status>) right before it exits,
-##		which removes the folder on 0 and keeps it otherwise. rm(<path>) removes a
+##		which removes the folder on 0 or 3 (a skip) and keeps it otherwise, unless
+##		it holds nothing but its owner mark and run.pid. rm(<path>) removes a
 ##		folder tree inside it, as fTestDir_Rm does.
 ##	- History: At bottom of file.
 
@@ -70,15 +71,28 @@ def _not_ours(folder: Path, token: str) -> str:
 	return ""
 
 
+def only_marks(folder: Path) -> bool:
+	## True when folder holds nothing but the owner mark and run.pid.
+	try:
+		return (
+			folder.is_dir()
+			and not folder.is_symlink()
+			and all(e.name in (_MARKER, "run.pid") for e in os.scandir(folder))
+		)
+	except OSError:
+		return False
+
+
 def end(status: int) -> None:
-	## Removes the folder make() made, when status is 0 and the folder still has
-	## this run's mark. Never raises, so it never changes how a script exits.
+	## Removes the folder make() made, when status is 0 or 3 (a skip), or it
+	## holds nothing else, and the folder still has this run's mark. Never
+	## raises, so it never changes how a script exits.
 	global _owned
 	if _owned is None:
 		return
 	folder, token = _owned
 	_owned = None
-	if status != 0:
+	if status not in (0, 3) and not only_marks(folder):
 		print(f"test files kept in {folder}", file=sys.stderr)
 		return
 	reason = _not_ours(folder, token)
@@ -130,3 +144,4 @@ def use() -> Path:
 ##		- 20261031: Removals go through the safe removal guard, and rm() for a test's own folders.
 ##		- 20261031: use() points TEMP and TMP at the folder too.
 ##		- 20261101: The folder is HOST_TEMP/silkterm/YYYYmmDD-HHMMSS_NNN, with a run.pid.
+##		- 20261106: A skip, or a failed run that left nothing in it, removes it too.
