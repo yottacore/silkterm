@@ -91,6 +91,9 @@ def _walk(p: str, dev: int) -> None:
 		return
 	if st.st_dev != dev:
 		raise OSError(errno.EXDEV, "another filesystem, left in place", p)
+	## A folder a test made read-only would stop the walk partway.
+	if st.st_mode & stat.S_IRWXU != stat.S_IRWXU:
+		Path(p).chmod(st.st_mode | stat.S_IRWXU)
 	with os.scandir(p) as entries:
 		for entry in entries:
 			_walk(entry.path, dev)
@@ -99,3 +102,4 @@ def _walk(p: str, dev: int) -> None:
 
 ##	History:
 ##		- 20261031: Created.
+##		- 20261106: A read-only folder inside is opened first, so the tree goes whole.

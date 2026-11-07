@@ -80,6 +80,10 @@ fCheck 'a run that fails keeps it, in HOST_TEMP''s project folder' ($case.Code -
 fCheck 'with its PID in its run.pid' ((fOneStamped $case) -and (Get-Content -LiteralPath (Join-Path $case.Left[0].FullName 'run.pid') -TotalCount 1) -match '^\d+$')
 fCheck 'and says where' ($case.Out -match 'test files kept in')
 
+$case = fCase 'empty' "fTestDir_End 1`nexit 1"
+fCheck 'a run that fails with nothing but its marks in its folder removes it' ($case.Code -eq 1 -and $case.Left.Count -eq 0)
+fCheck 'and does not say it kept it' ($case.Out -notmatch 'test files kept in')
+
 $case = fCase 'nested' "function fQuit([int]`$Code) { fTestDir_End `$Code; exit `$Code }`nfQuit 0"
 fCheck 'fTestDir_End called from a function in the script removes it too' ($case.Code -eq 0 -and $case.Left.Count -eq 0)
 if ($case.Left.Count) { fShow $case }

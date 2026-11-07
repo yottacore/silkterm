@@ -160,6 +160,13 @@ RUN apt-get update \
 RUN : "${RUST_NIGHTLY:?}" \
 	&& /opt/cargo/bin/rustup component add --toolchain "${RUST_NIGHTLY}" miri
 
+# wtype types keys into sway for the Wayland window tests, and foot is the second
+# window the clipboard test keeps in front. Late as well, so adding them didn't
+# rebuild what's above.
+RUN apt-get update \
+	&& apt-get install -y --no-install-recommends wtype foot \
+	&& rm -rf /var/lib/apt/lists/*
+
 # The run drops to the caller's uid once it has a passwd entry (cicd.bash writes
 # one on the way in). /cache takes the named volume, which copies this dir's mode
 # when new, so anyone can write. The crate registry goes there, so the toolchain

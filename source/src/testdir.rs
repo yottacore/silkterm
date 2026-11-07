@@ -8,8 +8,8 @@
 //! run shares one. The scripts under cicd/tests keep the same contract in
 //! _testdir.bash, .py and .ps1. A folder this process made is removed when the
 //! run passes, and kept when a test panicked, for the pipeline's stale sweep
-//! to take once its process is gone. One named by `SILKTERM_TEST_DIR` is never
-//! removed.
+//! to take once its process is gone, unless it holds nothing but its marks.
+//! One named by `SILKTERM_TEST_DIR` is never removed.
 
 use std::cell::Cell;
 use std::io::{self, ErrorKind, Write};
@@ -152,13 +152,24 @@ fn remove_if_owned(dir: &Path, token: &str) -> Removal {
 	}
 }
 
+// Nothing in the folder but the owner mark and run.pid, so a failed run has
+// nothing there to look at.
+fn only_marks(dir: &Path) -> bool {
+	std::fs::read_dir(dir).is_ok_and(|entries| {
+		entries.into_iter().all(|entry| {
+			entry
+				.is_ok_and(|entry| entry.file_name() == OWNER_FILE || entry.file_name() == PID_FILE)
+		})
+	})
+}
+
 // Never eprintln! or unwrap here: a panic in an extern "C" function aborts.
 extern "C" fn remove_at_exit() {
 	let Some(owned) = OWNED.get() else {
 		return;
 	};
 	let mut stderr = io::stderr();
-	if PANICKED.load(Ordering::Relaxed) {
+	if PANICKED.load(Ordering::Relaxed) && !only_marks(&owned.dir) {
 		let _ = writeln!(stderr, "test files kept in {}", owned.dir.display());
 		return;
 	}
@@ -406,6 +417,20 @@ mod tests {
 			std::fs::read_to_string(dir.join(PID_FILE)).unwrap(),
 			format!("{}\n", std::process::id())
 		);
+		std::fs::remove_dir_all(&base).unwrap();
+	}
+
+	// Test ID: dez6x
+	#[test]
+	fn a_run_folder_with_nothing_but_its_marks_has_nothing_to_keep() {
+		let (base, dir, _) = marked_folder("marks");
+		assert!(only_marks(&dir));
+		std::fs::write(dir.join("left.log"), "x").unwrap();
+		assert!(!only_marks(&dir));
+		std::fs::remove_file(dir.join("left.log")).unwrap();
+		std::fs::create_dir(dir.join("silkterm-x")).unwrap();
+		assert!(!only_marks(&dir));
+		assert!(!only_marks(&base.join("not-there")));
 		std::fs::remove_dir_all(&base).unwrap();
 	}
 

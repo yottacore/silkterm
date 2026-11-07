@@ -8,12 +8,13 @@
 	tests and cicd-win.ps1.
 .DESCRIPTION
 	Dot-sourced; it defines fTestDir_Make, fTestDir_Use, fTestDir_Keep,
-	fTestDir_End, fTestDir_Remove and fTestDir_Sweep and runs nothing. Same
-	contract as _testdir.bash: SILKTERM_TEST_DIR set and not empty is the
-	folder, made if missing, and never removed; otherwise a fresh one is made,
+	fTestDir_End, fTestDir_OnlyMarks, fTestDir_Remove and fTestDir_Sweep and
+	runs nothing. Same contract as _testdir.bash: SILKTERM_TEST_DIR set and not
+	empty is the folder, made if missing, and never removed; otherwise a fresh one is made,
 	0700 off Windows, and exported, so every test the caller starts shares it. A
 	script that made one calls fTestDir_End <exit code> before every exit, which
-	removes the folder on 0 and keeps it otherwise.
+	removes the folder on 0 and keeps it otherwise, unless it holds nothing but
+	its owner mark and run.pid.
 
 	Sets no StrictMode, since dot-sourcing would set it for the caller. Every
 	caller sets Latest itself.
@@ -174,15 +175,28 @@ function fTestDir_Sweep {
 	return $gone
 }
 
+function fTestDir_OnlyMarks([string]$Dir) {
+	##	$true when $Dir holds nothing but the owner mark and run.pid.
+	try {
+		$info = [System.IO.DirectoryInfo]$Dir
+		if (-not $info.Exists -or ($info.Attributes -band [System.IO.FileAttributes]::ReparsePoint)) { return $false }
+		foreach ($entry in $info.EnumerateFileSystemInfos()) {
+			if ($entry.Name -cnotin '.test_silkterm_owner', 'run.pid') { return $false }
+		}
+		return $true
+	} catch { return $false }
+}
+
 function fTestDir_End {
-	##	Removes the folder fTestDir_Make made, when $Status is 0. Never throws, so
-	##	it never changes how a script exits.
+	##	Removes the folder fTestDir_Make made, when $Status is 0 or it holds
+	##	nothing but its marks. Never throws, so it never changes how a script
+	##	exits.
 	[CmdletBinding()]
 	param([int]$Status = 0)
 	$dir = $script:TestDirOwned
 	if (-not $dir) { return }
 	$script:TestDirOwned = $null
-	if ($Status -ne 0) { Write-Warning "test files kept in $dir"; return }
+	if ($Status -ne 0 -and -not (fTestDir_OnlyMarks $dir)) { Write-Warning "test files kept in $dir"; return }
 	$null = fTestDir_Remove -Dir $dir -Token $script:TestDirToken
 }
 
@@ -194,3 +208,4 @@ function fTestDir_End {
 ##		- 20261031: fTestDir_Use points TEMP and TMP at the folder on Linux and macOS too.
 ##		- 20261101: The folder is HOST_TEMP\silkterm\YYYYmmDD-HHMMSS_NNN, with a run.pid.
 ##		- 20261101: fTestDir_Record goes, since the pipeline sweeps stale run folders.
+##		- 20261106: A failed run that left nothing in its folder removes it too.

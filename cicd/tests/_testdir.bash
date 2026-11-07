@@ -4,15 +4,18 @@
 ##		The run's test folder, HOST_TEMP/silkterm/YYYYmmDD-HHMMSS_NNN with a
 ##		run.pid, as cicd.bash makes its own, that every file a test writes goes
 ##		under. Without HOST_TEMP it's under TMPDIR. Sourced; it defines fTestDir_Make,
-##		fTestDir_Use, fTestDir_Owned, fTestDir_Rm and fTestDir_End, plus the safe
-##		removal guard's fSafeRm and fSafeRm_Under, and runs nothing. The Rust tests
+##		fTestDir_Use, fTestDir_Owned, fTestDir_Rm, fTestDir_OnlyMarks and
+##		fTestDir_End, plus the safe removal guard's fSafeRm and fSafeRm_Under, and
+##		runs nothing. The Rust tests
 ##		(source/src/testdir.rs), _testdir.py and _testdir.ps1 keep the same contract:
 ##			- SILKTERM_TEST_DIR set and not empty: that is the folder, made if missing,
 ##			  and never removed.
 ##			- Otherwise a fresh one is made, 0700, and exported as SILKTERM_TEST_DIR
 ##			  so every test the caller starts shares it. The process that made it
-##			  removes it when it exits with 0, and keeps it otherwise, for the
-##			  pipeline's stale sweep to take once its run.pid is gone.
+##			  removes it when it exits with 0, or 3 for a skip, and keeps it
+##			  otherwise, for the pipeline's stale sweep to take once its run.pid
+##			  is gone. A kept one holding nothing but its owner mark and run.pid
+##			  goes anyway, since there's nothing in it to look at.
 ##		fTestDir_Make sets an EXIT trap that calls fTestDir_End. A caller that sets
 ##		its own EXIT trap afterward replaces it, so that trap takes $? first and
 ##		calls fTestDir_End "${rc}" last:
@@ -61,12 +64,12 @@ fTestDir_Make(){
 
 fTestDir_End(){
 	##	fTestDir_End <status>: removes the folder fTestDir_Make made, when status
-	##	is 0 and the folder still has this run's mark. Always returns 0, so it
-	##	never changes how a script exits.
+	##	is 0 or 3 (a skip), or it holds nothing else, and the folder still has
+	##	this run's mark. Always returns 0, so it never changes how a script exits.
 	local -r status="${1:-0}" dir="${__testDirOwned:-}"
 	[[ -n "${dir}" ]] || return 0
 	__testDirOwned=""
-	if [[ "${status}" != 0 ]]; then echo "test files kept in ${dir}" >&2; return 0; fi
+	if [[ "${status}" != 0 && "${status}" != 3 ]] && ! fTestDir_OnlyMarks "${dir}"; then echo "test files kept in ${dir}" >&2; return 0; fi
 	local reason="" line="" err=""
 	if [[ -L "${dir}" ]]; then reason="it is a link"
 	elif [[ ! -d "${dir}" ]]; then reason="not a folder"
@@ -81,6 +84,18 @@ fTestDir_End(){
 	up="$(realpath -e -- "${dir%/*}" 2>/dev/null)" && err="$(fSafeRm_Under "${up}" "${up}/${dir##*/}" 2>&1)" \
 		|| echo "test run folder: could not remove ${dir}${err:+: ${err}}" >&2
 	return 0
+}
+
+fTestDir_OnlyMarks(){
+	##	fTestDir_OnlyMarks <dir>: true when <dir> holds nothing but the owner mark
+	##	and run.pid.
+	##	Globs, not find, since some tests run with a PATH that has none.
+	local f
+	[[ -d "${1}" && ! -L "${1}" ]] || return 1
+	for f in "${1}"/* "${1}"/.[!.]* "${1}"/..?*; do
+		[[ -e "${f}" || -L "${f}" ]] || continue
+		[[ "${f##*/}" == "${__testDirMarker}" || "${f##*/}" == run.pid ]] || return 1
+	done
 }
 
 fTestDir_Rm(){
@@ -119,3 +134,4 @@ fTestDir_Use(){
 ##		- 20261031: fTestDir_Rm, and the folder goes through the safe removal guard.
 ##		- 20261031: fTestDir_Use points TEMP and TMP at the folder too.
 ##		- 20261101: The folder is HOST_TEMP/silkterm/YYYYmmDD-HHMMSS_NNN, with a run.pid.
+##		- 20261106: A skip, or a failed run that left nothing in it, removes it too.

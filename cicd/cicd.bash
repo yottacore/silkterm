@@ -338,7 +338,9 @@ fRunTest(){
 }
 ## fRunTest_MaySkip <script> <label> [why]: the same, for a test whose exit 3
 ## means it could not run. That is a SKIP line, with the last "skip: <why>" the
-## test printed, or else the why given.
+## test printed, or else the why given. In the image a "skip: no <tool>" fails
+## instead, since the image is meant to have every tool the tests use, and a
+## skip there went unseen for a week.
 fRunTest_MaySkip(){
 	local -r script="${1}" label="${2}" why="${3:-could not run}"
 	[[ -x "${root}/${script}" ]] || return 0
@@ -347,10 +349,15 @@ fRunTest_MaySkip(){
 	fEcho_Clean "${label} ..."
 	local rc=0 out said; out="$(fTestOut "${script}")"
 	"${root}/${script}" >"${out}" || rc=$?
+	if ((rc == 3)); then
+		said="$(sed -n 's/^[[:space:]]*skip: //p' "${out}" | tail -n 1)"
+		if [[ -n "${SILK_CICD_IN_CONTAINER:-}" && "${said}" =~ ^no\ [^[:space:]]+$ ]]; then
+			fTestOut_Fail "${out}" "${script}" "${label}" "${label}: the image has ${said}; add it to cicd/container/Dockerfile"
+		fi
+	fi
 	case "${rc}" in
 		0) rm -f "${out}"; fTestLine PASS "${script}" "${label}" ;;
-		3) said="$(sed -n 's/^[[:space:]]*skip: //p' "${out}" | tail -n 1)"; rm -f "${out}"
-		   fTestLine SKIP "${script}" "${label}" "${said:-${why}}" ;;
+		3) rm -f "${out}"; fTestLine SKIP "${script}" "${label}" "${said:-${why}}" ;;
 		*) fTestOut_Fail "${out}" "${script}" "${label}" "${label} test failed" ;;
 	esac
 }
@@ -673,6 +680,13 @@ fRunDir_End(){
 	kb="${kb%%[[:space:]]*}"; [[ ! "${kb}" =~ ^[0-9]+$ ]] || __sweepBytes+=$((kb * 1024))
 	fSweep_Note "the run's temp folder"
 	((! ${1:-0})) || echo "removed the run's temp folder ${dir}; --keep-temp keeps it" >&2
+}
+## fStaleRuns: run folders over 2 days old whose run.pid process is gone, which
+## a killed run or a failed lone test left. Every run outside the container
+## takes them, the backlog quick run too, since it's the one rounds run most.
+fStaleRuns(){
+	[[ -z "${SILK_CICD_IN_CONTAINER:-}" ]] || return 0
+	fSweep_StaleRuns "${runBase}" "${CLEANUP_STALE_DAYS:-2}" "stale run folders"
 }
 ## fDockerStart: the run has used docker, so its end tidies up after it.
 fDockerStart(){ dockerUsed=1; }
@@ -1362,7 +1376,8 @@ fPlanSteps_Show(){
 
 ## --backlog-run-quick: the fast checks to run before a commit,
 ## every area or the ones named, fail-fast, nothing mutated, no artifacts,
-## log tee or publish. Each step reads the tree as it is.
+## log tee or publish. Each step reads the tree as it is. Its only cleanup is
+## its own folder and stale run folders.
 declare -A gateTitles=([fmt]="Format check" [clippy]="Lints" [tests]="Tests" [scripts]="Script lints" [docs]="Docs checks")
 ## Its steps are the areas named, and the rest are off.
 if ((gate)); then
@@ -1385,6 +1400,7 @@ fi
 if ((gate)); then
 	fRunDir_Make || fDie "could not make the run's folder"
 	trap 'rc=$?; fRunEnd "${rc}"' EXIT
+	fStaleRuns
 	if ((container)); then
 		fSection "Backlog quick run in ${containerImage}"
 		fContainerBuild "${containerImage}"
@@ -1701,7 +1717,7 @@ fOldLedger(){  ## fOldLedger <ledger> <what> [own]: empties it, then it goes.
 	[[ ! -f "${1}" || -s "${1}" ]] || rm -f -- "${1}"
 }
 if [[ -z "${SILK_CICD_IN_CONTAINER:-}" ]] && ((! noCleanup)); then
-	fSweep_StaleRuns "${runBase}" "${CLEANUP_STALE_DAYS:-2}" "stale run folders"
+	fStaleRuns
 	fOldLedger "${TARGET_DIR}/.cicd-test-folders" "old test run folders" own
 	if [[ -n "${containerTmpLedger}" ]]; then
 		fOldLedger "${containerTmpLedger}" "old container /tmp folders"
@@ -2449,6 +2465,7 @@ fEcho_Clean
 
 
 ##	History:
+##		- 2026-11-06: The backlog quick run removes stale run folders too.
 ##		- 2026-11-05: A build that can't be dogfooded fails the run, where it used to
 ##		              warn and pass. A dest that can't be written stops it at the
 ##		              start.

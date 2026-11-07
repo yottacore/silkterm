@@ -273,10 +273,11 @@ fCheck "--keep-temp keeps the run folder of a gate that failed" test "${rc}" -ne
 fCheck "and says where" grep -qxF "kept the run's temp folder (--keep-temp): ${given}" "${work}/f/base3.log"
 
 
-##	G: each helper on its own. A pass removes the folder it made, a failure
-##	keeps it and says so, and a folder it was handed, one without its mark, or
-##	one swapped for a link is left. A link inside is removed as a link. Bash and
-##	Python here, PowerShell in remove.ps1.
+##	G: each helper on its own. A pass or a skip removes the folder it made, a
+##	failure keeps it and says so unless it left nothing in it, a read-only
+##	folder inside doesn't stop the removal, and a folder it was handed, one
+##	without its mark, or one swapped for a link is left. A link inside is
+##	removed as a link. Bash and Python here, PowerShell in remove.ps1.
 mkdir -p "${work}/g/outside"; echo x >"${work}/g/outside/file"
 ##	fChild <lang> <base> <code> [<given folder>]: the helper, then the code, in a
 ##	child whose temp dir is a fresh base. The code finds the folder in d.
@@ -296,6 +297,12 @@ declare -A gCode=(
 	[python/pass]='open(d + "/file", "w").write("x"); _testdir.end(0)'
 	[bash/fail]='echo x >"${d}/file"; exit 1'
 	[python/fail]='open(d + "/file", "w").write("x"); _testdir.end(1); sys.exit(1)'
+	[bash/skip]='echo x >"${d}/file"; exit 3'
+	[python/skip]='open(d + "/file", "w").write("x"); _testdir.end(3); sys.exit(3)'
+	[bash/empty]='exit 1'
+	[python/empty]='_testdir.end(1); sys.exit(1)'
+	[bash/locked]='mkdir -p "${d}/ro/sub"; echo x >"${d}/ro/sub/file"; chmod 555 "${d}/ro"; exit 0'
+	[python/locked]='os.makedirs(d + "/ro/sub"); open(d + "/ro/sub/file", "w").write("x"); os.chmod(d + "/ro", 0o555); _testdir.end(0)'
 	[bash/trap]='work="$(mktemp -d)"; trap '"'"'rc=$?; fTestDir_Rm "${work}" || true; fTestDir_End "${rc}"'"'"' EXIT; exit 0'
 	[bash/marker]='echo other >"${d}/.test_silkterm_owner"; exit 0'
 	[python/marker]='open(d + "/.test_silkterm_owner", "w").write("other\n"); _testdir.end(0)'
@@ -316,6 +323,13 @@ for lang in bash python; do
 	fChild "${lang}" "${g}-fail" "${gCode[${lang}/fail]}"
 	fCheck "keeps it when the run fails" fOneStamped "${g}-fail"
 	fCheck "and says where" grep -qF "test files kept in ${g}-fail/silkterm/" "${g}-fail.log"
+	fChild "${lang}" "${g}-skip" "${gCode[${lang}/skip]}"
+	fCheck "removes it when the run skips, with 3" fNoneLeft "${g}-skip"
+	fChild "${lang}" "${g}-empty" "${gCode[${lang}/empty]}"
+	fCheck "removes it when a failed run left nothing in it but its marks" fNoneLeft "${g}-empty"
+	fCheck "and doesn't say it kept it" bash -c '! grep -qF "test files kept in" "${1}"' _ "${g}-empty.log"
+	fChild "${lang}" "${g}-locked" "${gCode[${lang}/locked]}"
+	fCheck "removes it whole with a read-only folder inside" fNoneLeft "${g}-locked"
 	if [[ "${lang}" == bash ]]; then
 		fChild bash "${g}-trap" "${gCode[bash/trap]}"
 		fCheck "removes it from a caller's own EXIT trap in the documented form" fNoneLeft "${g}-trap"

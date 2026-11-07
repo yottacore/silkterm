@@ -7,7 +7,7 @@
 ##		- What a pipeline run leaves behind, and taking it away once it is stale.
 ##		  Source this. It defines functions and runs nothing.
 ##		- Run folders: one a killed run left goes after a few days, once no
-##		  process from its run.pid is left. A run taht ends has already removed
+##		  process from its run.pid is left. A run that ends has already removed
 ##		  its own.
 ##		- The ledgers older runs wrote, of a test run folder or the container's
 ##		  /tmp, each with the token in its owner mark. Only a folder whose mark
