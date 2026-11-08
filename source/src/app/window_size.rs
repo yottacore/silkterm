@@ -448,9 +448,9 @@ impl State {
 		});
 	}
 
-	// The window's own resize after a look, such as a take, and the move it
-	// can cause. Noted at the look only, the place kept the size from before
-	// the take, and a put-back undid it.
+	/// The window's own resize after a look, such as a take, and the move it
+	/// can cause. Noted at the look only, the place kept the size from before
+	/// the take, and a put-back undid it.
 	pub(super) fn note_own_place(&mut self) {
 		if self.watch.herd.is_none() && self.watch.check_at.is_none() {
 			self.watch.place = self.place_now();
