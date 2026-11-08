@@ -176,6 +176,26 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Branch: rnd1106
 	- Stand-in: none (20261106). Xwayland under headless sway can't report an output as disconnected while it stays laid out, which is b23's usual sleep. deqx1 covers the output being taken out of the layout.
 
+- The allocations per frame test once saw the minimap compose during a drag select
+	- ID: 2026110718055000
+	- Type: Bug
+	- Status: Can't reproduce
+	- Severity: Low
+	- Opened: 20261107-180550
+	- Opened by: CC
+	- Assigned to: CC
+	- Related IDs: 2026102407065861
+	- Target OS: All
+	- Test environment: b23, the pipeline's container run of 20261107 07:44
+	- Incorrect behavior: `cicd/tests/allocs/run.bash` (ddkre) failed with "drag: the map composed 1 times, none wanted". The drag read 82 frames and 4.9 pointer moves per frame, so the box was busy. Every other check passed. The run's folder went with the pipeline's cleanup.
+	- Expected behavior: A drag select composes the map 0 times.
+	- Reproduced: No, 20261107. 11 runs read 0 composes: 3 at load 12, 4 with 8 cores busy at nice 19, 2 with 16 busy at normal priority, and 2 more on the new build.
+	- Possible cause: Anything that marks the whole window between drag frames lets a due compose through. The timed ones are a refused or unpresented frame's retry, a parked cursor's wake, a deferred compose's wake, and a tab's program check. The refused frame fits a busy box best, since its retry redraws a selection frame as a full one. Not confirmed.
+	- Progress log:
+		- 20261107: With `SILK_ALLOCS=1`, each of those paths, plus a scrollbar hover change, a title change, a bell and a child gone, now prints a note. When either compose check fails, ddkre lists the notes in that span, with what each composing frame was drawn for, up to 20 lines. Seen working with the drag put back on the whole-window flag: 54 composes, each pair in a frame for rebuild+cursor.
+	- Branch: mapflake
+	- Test case: ddkre itself. The next failure names its cause in the run's output.
+
 - Add a contributor license agreement, like nano-git-db's
 	- ID: 2026101906582193
 	- Type: Task
