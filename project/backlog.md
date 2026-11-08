@@ -176,6 +176,21 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Branch: rnd1106
 	- Stand-in: none (20261106). Xwayland under headless sway can't report an output as disconnected while it stays laid out, which is b23's usual sleep. deqx1 covers the output being taken out of the layout.
 
+- The nano scroll scene on Wayland once saw st=2 while sliding
+	- ID: 2026110814224000
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261108-142240
+	- Opened by: CC
+	- Assigned to: CC
+	- Target OS: Linux
+	- Test environment: b23, a container run of the regression tests alone at 4eb15ae, load about 10.
+	- Incorrect behavior: `cicd/tests/scroll/run.bash` (d9j4v) failed with "scroll scene nano (Wayland), expected st=1 while sliding but saw st=2". The X11 nano scene and the other 13 Wayland scenes passed in the same run.
+	- Expected behavior: Every sliding frame of the nano scene reads st=1, under the title bar.
+	- Reproduced: No, 20261108. 5 runs of `--wayland --only nano` on the host passed, at load 8 to 10. Every kept full run log since 20261031 has it passing on both engines.
+	- Test case: d9j4v itself.
+
 - Add a contributor license agreement, like nano-git-db's
 	- ID: 2026101906582193
 	- Type: Task
