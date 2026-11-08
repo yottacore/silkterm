@@ -856,10 +856,11 @@ fContainerRun(){
 	[[ "${containerTarget}" == "${root}/"* ]] || mounts+=(-v "${containerTarget}:${containerTarget}")
 	gitCommon="$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null || true)"
 	[[ -z "${gitCommon}" || "${gitCommon}" == "${root}/"* ]] || mounts+=(-v "${gitCommon}:${gitCommon}")
-	## The private repo's test scripts, read only, so the test ID check inside
-	## sees them as it does here, and its own tests run. Its runner stays out, as
-	## stage 6 is this side's.
-	[[ -z "${PRIVATE_TESTS}" ]] || privArgs=(-v "${PRIVATE_TESTS}:${PRIVATE_TESTS}:ro" -e "SILK_PRIVATE_RUNNER=${PRIVATE_TESTS%/cicd/*}/cicd/run.bash")
+	## The private repo, read only, so the test ID check inside sees its tests as
+	## it does here, and they run. They read its runner, helpers and build
+	## scripts, so the whole repo goes in. The runner itself isn't run inside,
+	## as stage 6 is this side's.
+	[[ -z "${PRIVATE_TESTS}" ]] || privArgs=(-v "${PRIVATE_TESTS%/cicd/*}:${PRIVATE_TESTS%/cicd/*}:ro" -e "SILK_PRIVATE_RUNNER=${PRIVATE_TESTS%/cicd/*}/cicd/run.bash")
 	"${docker}" run "${rmArg[@]}" --init --shm-size 1g --cpus "${CICD_MAX_JOBS}" --cpu-shares 256 --name "${EXE_NAME}-${runName}-${step}" "${labels[@]}" "${mounts[@]}" "${privArgs[@]}" -w "${root}" \
 		-e "USER=${USER:-$(id -un)}" -e "CARGO_TARGET_DIR=${containerTarget}" -e "SILK_BUILD_MINUTES=${SILK_BUILD_MINUTES:-}" -e "SILK_RELEASE=${SILK_RELEASE:-0}" \
 		-e "CICD_MAX_JOBS=${CICD_MAX_JOBS}" -e "CICD_CORES=${CICD_CORES}" -e SILK_CICD_STEP_AT -e SILK_CICD_STEP_TOTAL -e XDG_RUNTIME_DIR=/tmp/xdg-runtime -e ZIG_GLOBAL_CACHE_DIR=/zig-cache "${zoneArgs[@]}" "${keepArgs[@]}" \
