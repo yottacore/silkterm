@@ -242,19 +242,19 @@ fCheck "and nothing else of this box" test "$(grep -o ' -v ' <<<"${runLine}" | w
 ## made here.
 (export TZ=Pacific/Chatham; fRun tz.log --container -y --no-sync --no-dogfood --no-publish --no-private --quick --no-fuzz)
 fCheck "this box's time zone goes in" grep -q -- ' -e TZ=Pacific/Chatham ' "${work}/tz.log"
-## The private repo's test scripts go in read only, for the test ID check, and
-## its runner stays here.
+## The private repo goes in read only, for the test ID check and its own tests,
+## and its runner runs only here.
 priv="${work}/private/repo"; mkdir -p "${priv}/cicd/tests/hosts"
 (export SILK_PRIVATE_RUNNER="${priv}/cicd/run.bash"; fRun priv.log --container -y --no-sync --no-dogfood --no-publish --quick --no-fuzz)
 privLine="$(grep '^run ' "${work}/priv.log" || true)"
-fCheck "the private repo's test scripts go in read only" bash -c '[[ "$1" == *" -v $2:$2:ro "* ]]' _ "${privLine}" "${priv}/cicd/tests"
+fCheck "the private repo goes in read only, since its tests read its scripts" bash -c '[[ "$1" == *" -v $2:$2:ro "* ]]' _ "${privLine}" "${priv}"
 fCheck "with the path the test ID check finds them by" bash -c '[[ "$1" == *" -e SILK_PRIVATE_RUNNER=$2 "* ]]' _ "${privLine}" "${priv}/cicd/run.bash"
 fCheck "and nothing else of it" test "$(grep -o ' -v ' <<<"${privLine}" | wc -l)" -eq 5
 (export SILK_PRIVATE_RUNNER="${priv}/cicd/run.bash"; fRun privoff.log --container -y --no-sync --no-dogfood --no-publish --no-private --quick --no-fuzz)
 ## Its tests need no box, so they go in under --no-private too. Only its runner
 ## stays off.
 privOffLine="$(grep '^run ' "${work}/privoff.log" || true)"
-fCheck "--no-private still hands in its tests" bash -c '[[ "$1" == *" -v $2:$2:ro "* ]]' _ "${privOffLine}" "${priv}/cicd/tests"
+fCheck "--no-private still hands in its tests" bash -c '[[ "$1" == *" -v $2:$2:ro "* ]]' _ "${privOffLine}" "${priv}"
 fCheck "the image was there, so nothing was built" fNot grep -q '^build ' "${work}/full.log"
 fCheck "the run here went on to the end" grep -q 'CI/CD: done' <<<"${out}"
 fCheck "with the container's stages marked done" grep -q 'OK: stages 1-6 in the container' <<<"${out}"
@@ -618,3 +618,4 @@ echo "all passed"
 ##		- 20261102: The Miri step, the miri component and --no-miri.
 ##		- 20261108: The private tests go in under --no-private too, and a runner
 ##		  handed down from a full run is dropped.
+##		- 20261108: The whole private repo goes in read only, not only its tests.
