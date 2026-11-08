@@ -21,6 +21,9 @@ source "${meDir}/../_testdir.bash"; fTestDir_Use
 root="$(cd "${meDir}/../../.." && pwd)"
 engine="${root}/cicd/cicd.bash"
 recipe="${root}/cicd/container/Dockerfile"
+## A full run hands the container the real private repo's runner, and the runs
+## here would mount its tests too. Only the private case below sets one.
+unset SILK_PRIVATE_RUNNER
 
 failures=0
 fCheck(){ local -r what="${1}"; shift; if "${@}"; then echo "  ok   ${what}"; else echo "  FAIL ${what}"; failures=$((failures + 1)); fi; }
@@ -248,7 +251,10 @@ fCheck "the private repo's test scripts go in read only" bash -c '[[ "$1" == *" 
 fCheck "with the path the test ID check finds them by" bash -c '[[ "$1" == *" -e SILK_PRIVATE_RUNNER=$2 "* ]]' _ "${privLine}" "${priv}/cicd/run.bash"
 fCheck "and nothing else of it" test "$(grep -o ' -v ' <<<"${privLine}" | wc -l)" -eq 5
 (export SILK_PRIVATE_RUNNER="${priv}/cicd/run.bash"; fRun privoff.log --container -y --no-sync --no-dogfood --no-publish --no-private --quick --no-fuzz)
-fCheck "--no-private leaves them out" fNot grep -q -- "${priv}" "${work}/privoff.log"
+## Its tests need no box, so they go in under --no-private too. Only its runner
+## stays off.
+privOffLine="$(grep '^run ' "${work}/privoff.log" || true)"
+fCheck "--no-private still hands in its tests" bash -c '[[ "$1" == *" -v $2:$2:ro "* ]]' _ "${privOffLine}" "${priv}/cicd/tests"
 fCheck "the image was there, so nothing was built" fNot grep -q '^build ' "${work}/full.log"
 fCheck "the run here went on to the end" grep -q 'CI/CD: done' <<<"${out}"
 fCheck "with the container's stages marked done" grep -q 'OK: stages 1-6 in the container' <<<"${out}"
@@ -610,3 +616,5 @@ echo "all passed"
 ##		- 20261031: The private repo's test scripts go in read only.
 ##		- 20261031: /tmp in the run's folder in HOST_TEMP, gone with it, failed or not.
 ##		- 20261102: The Miri step, the miri component and --no-miri.
+##		- 20261108: The private tests go in under --no-private too, and a runner
+##		  handed down from a full run is dropped.
