@@ -176,26 +176,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Branch: rnd1106
 	- Stand-in: none (20261106). Xwayland under headless sway can't report an output as disconnected while it stays laid out, which is b23's usual sleep. deqx1 covers the output being taken out of the layout.
 
-- The allocations per frame test once saw the minimap compose during a drag select
-	- ID: 2026110718055000
-	- Type: Bug
-	- Status: Can't reproduce
-	- Severity: Low
-	- Opened: 20261107-180550
-	- Opened by: CC
-	- Assigned to: CC
-	- Related IDs: 2026102407065861
-	- Target OS: All
-	- Test environment: b23, the pipeline's container run of 20261107 07:44
-	- Incorrect behavior: `cicd/tests/allocs/run.bash` (ddkre) failed with "drag: the map composed 1 times, none wanted". The drag read 82 frames and 4.9 pointer moves per frame, so the box was busy. Every other check passed. The run's folder went with the pipeline's cleanup.
-	- Expected behavior: A drag select composes the map 0 times.
-	- Reproduced: No, 20261107. 11 runs read 0 composes: 3 at load 12, 4 with 8 cores busy at nice 19, 2 with 16 busy at normal priority, and 2 more on the new build.
-	- Possible cause: Anything that marks the whole window between drag frames lets a due compose through. The timed ones are a refused or unpresented frame's retry, a parked cursor's wake, a deferred compose's wake, and a tab's program check. The refused frame fits a busy box best, since its retry redraws a selection frame as a full one. Not confirmed.
-	- Progress log:
-		- 20261107: With `SILK_ALLOCS=1`, each of those paths, plus a scrollbar hover change, a title change, a bell and a child gone, now prints a note. When either compose check fails, ddkre lists the notes in that span, with what each composing frame was drawn for, up to 20 lines. Seen working with the drag put back on the whole-window flag: 54 composes, each pair in a frame for rebuild+cursor.
-	- Branch: mapflake
-	- Test case: ddkre itself. The next failure names its cause in the run's output.
-
 - Add a contributor license agreement, like nano-git-db's
 	- ID: 2026101906582193
 	- Type: Task
@@ -2577,6 +2557,34 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Test case: None for the figures, which are a measurement. `SILK_MEMDBG` is covered by `each_debug_switch_reads_its_own_variable` (ddf59). Its minimap count is pinned by `the_memory_count_covers_every_stored_row` (ddgtx), seen to fail with the stored rows left out.
 	- Acceptance signoff: Self-closed: the numbers are in the design doc and nothing is left to judge.
 	- Closed: 20261004-194634
+
+- The allocations per frame test once saw the minimap compose during a drag select
+	- ID: 2026110718055000
+	- Type: Bug
+	- Status: Done
+	- Severity: Low
+	- Opened: 20261107-180550
+	- Opened by: CC
+	- Assigned to: CC
+	- Related IDs: 2026102407065861
+	- Target OS: All
+	- Test environment: b23, the pipeline's container run of 20261107 07:44
+	- Incorrect behavior: `cicd/tests/allocs/run.bash` (ddkre) failed with "drag: the map composed 1 times, none wanted". The drag read 82 frames and 4.9 pointer moves per frame, so the box was busy. Every other check passed. The run's folder went with the pipeline's cleanup.
+	- Expected behavior: A drag select composes the map 0 times.
+	- Reproduced: No, 20261107. 11 runs read 0 composes: 3 at load 12, 4 with 8 cores busy at nice 19, 2 with 16 busy at normal priority, and 2 more on the new build.
+		- 20261108: Seen again in the container full run at 20f4836, with the new notes: one "map composed" with nothing before it, and its frame's line past the end of the drag. Reproduced every time with the count read half a second after the mouse button comes up.
+	- Possible cause: Anything that marks the whole window between drag frames lets a due compose through. The timed ones are a refused or unpresented frame's retry, a parked cursor's wake, a deferred compose's wake, and a tab's program check. The refused frame fits a busy box best, since its retry redraws a selection frame as a full one. Not confirmed.
+	- Actual cause: A test fault. The drag's count was read right after the mouse button came up. Letting go redraws the whole window, which composes both panes' maps, and now and then that frame was drawn before the count was read. The drag itself composed nothing.
+	- Actual fix: ddkre reads the drag's count before it lets go of the button.
+	- Progress log:
+		- 20261107: With `SILK_ALLOCS=1`, each of those paths, plus a scrollbar hover change, a title change, a bell and a child gone, now prints a note. When either compose check fails, ddkre lists the notes in that span, with what each composing frame was drawn for, up to 20 lines. Seen working with the drag put back on the whole-window flag: 54 composes, each pair in a frame for rebuild+cursor.
+		- 20261108: Letting go composed the map twice, in a rebuild+cursor frame, in 3 of 3 runs with the count read 2 s after.
+	- Test case: ddkre itself.
+	- Verified: 20261108. With the old order and half a second between letting go and the count, ddkre failed with 2 composes. With the count first it passed 2 of 2.
+	- Branch: mapflake, mapup
+	- Commit: 428e035
+	- Acceptance signoff: Self-closed: the cause was reproduced on demand, and the reordered test can't count the release's frame.
+	- Closed: 20261108-123115
 
 - Window test fixtures write a monitor's key bare, which shcl 3.0 flags as E014
 	- ID: 2026110619310863
