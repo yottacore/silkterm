@@ -200,8 +200,10 @@ for step in $(seq 1 "${moves}"); do
 	fX xdotool mousemove --window "${window}" $((60 + step * 4)) 456
 	sleep 0.03
 done
-fX xdotool mouseup 1
+## Counted before the release, whose frame redraws the whole window and
+## composes the map. Read after it, that frame landed in the count now and then.
 to="$(fLines)"
+fX xdotool mouseup 1
 read -r dragFrames dragFrame dragTotal dragBetween < <(fMean "${from}" "${to}")
 dragPerMove="$(awk -v b="${dragBetween}" -v m="${moves}" 'BEGIN { printf "%.1f", b / m }')"
 dragMaps="$(fComposes "${from}" "${to}")"; dragFrom="${from}"; dragTo="${to}"
@@ -234,3 +236,4 @@ echo "all passed"
 ##		- 20261024 JC: The count at rest waits for frames drawn for the cursor alone.
 ##		- 20261105 JC: Neither the rest nor the drag may compose the minimap.
 ##		- 20261107 JC: A compose nobody wanted prints the notes before it.
+##		- 20261108 JC: The drag is counted up to the release, not past it.
