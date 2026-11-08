@@ -158,6 +158,14 @@ fMean(){
 fLines(){ wc -l <"${said}"; }
 ## Minimap composes over the same lines.
 fComposes(){ sed -n "$((${1} + 1)),${2}p" "${said}" | grep -cxF '[allocs] map composed' || true; }
+## The notes over the same lines, each compose with what its frame was drawn
+## for. A compose nobody wanted is one of these, and the run's folder may be
+## gone by the time anyone looks.
+fNotes(){
+	sed -n "$((${1} + 1)),${2}p" "${said}" | awk '
+		/^\[allocs\] frame / { if (open) { print "      in a frame for " $NF; open = 0 } next }
+		/^\[allocs\] / { sub(/^\[allocs\] /, ""); print "      " $0; open = ($0 == "map composed") }' | head -n 20 || true
+}
 ## The shell scan has been folded in, and the last few frames since were drawn
 ## for the cursor pulse and nothing else.
 fAtRest(){
@@ -180,7 +188,7 @@ from="$(fLines)"; countFrom="${SECONDS}"; sleep 4
 while (($(fMean "${from}" "$(fLines)" | cut -d' ' -f1) < idleWant && SECONDS - countFrom < 20)); do sleep 0.5; done
 to="$(fLines)"
 read -r idleFrames idleFrame idleTotal _ < <(fMean "${from}" "${to}")
-idleMaps="$(fComposes "${from}" "${to}")"
+idleMaps="$(fComposes "${from}" "${to}")"; idleFrom="${from}"; idleTo="${to}"
 echo "    at rest: ${idleFrames} frames, ${idleFrame} allocations drawing each, ${idleTotal} with what came before, ${idleMaps} map composes"
 
 moves=80
@@ -196,7 +204,7 @@ fX xdotool mouseup 1
 to="$(fLines)"
 read -r dragFrames dragFrame dragTotal dragBetween < <(fMean "${from}" "${to}")
 dragPerMove="$(awk -v b="${dragBetween}" -v m="${moves}" 'BEGIN { printf "%.1f", b / m }')"
-dragMaps="$(fComposes "${from}" "${to}")"
+dragMaps="$(fComposes "${from}" "${to}")"; dragFrom="${from}"; dragTo="${to}"
 echo "    drag: ${dragFrames} frames, ${dragFrame} allocations drawing each, ${dragTotal} with what came before, ${dragPerMove} per pointer move between frames, ${dragMaps} map composes"
 
 if ((idleFrames > 0 && idleTotal == 0)); then echo "  skip: this build counts no allocations (a release build?)"; exit 3; fi
@@ -209,6 +217,8 @@ if ((!report)); then
 		awk -v a="${dragPerMove}" -v l="${moveLimit}" 'BEGIN { exit !(a <= l) }'
 	fCheck "at rest: the map composed ${idleMaps} times, none wanted" test "${idleMaps}" -eq 0
 	fCheck "drag: the map composed ${dragMaps} times, none wanted" test "${dragMaps}" -eq 0
+	if ((idleMaps)); then echo "    at rest, what came before each compose:"; fNotes "${idleFrom}" "${idleTo}"; fi
+	if ((dragMaps)); then echo "    in the drag, what came before each compose:"; fNotes "${dragFrom}" "${dragTo}"; fi
 fi
 
 if ((failures)); then
@@ -223,3 +233,4 @@ echo "all passed"
 ##		- 20261024 JC: The counted drag moves along one row.
 ##		- 20261024 JC: The count at rest waits for frames drawn for the cursor alone.
 ##		- 20261105 JC: Neither the rest nor the drag may compose the minimap.
+##		- 20261107 JC: A compose nobody wanted prints the notes before it.

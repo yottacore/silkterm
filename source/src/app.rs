@@ -1029,6 +1029,7 @@ impl State {
 			}
 		}
 		if changed {
+			crate::perf::allocs_note("bar hover");
 			self.dirty = true;
 		}
 	}
@@ -2930,6 +2931,7 @@ impl State {
 					self.frame_retry
 						.missed(Instant::now(), FRAME_RETRY_FIRST, FRAME_RETRY_MAX);
 				idledbg(&format!("frame refused ({why:?}), again in {wait:?}"));
+				crate::perf::allocs_note("frame refused");
 				return false;
 			}
 		};
@@ -3262,6 +3264,7 @@ impl State {
 				.frame_retry
 				.missed(Instant::now(), FRAME_RETRY_FIRST, FRAME_RETRY_MAX);
 			idledbg(&format!("frame not presented, again in {wait:?}"));
+			crate::perf::allocs_note("frame not presented");
 		}
 		crate::perf::since(&crate::perf::SUBMIT_NS, submit);
 		crate::perf::painted();
@@ -4129,6 +4132,7 @@ impl ApplicationHandler<UserEvent> for App {
 				if let Some(p) = state.tabs.find_pane_mut(id) {
 					p.term.note_activity();
 					p.term.retask();
+					crate::perf::allocs_note("child gone");
 					state.dirty = true;
 				}
 			}
@@ -4150,6 +4154,7 @@ impl ApplicationHandler<UserEvent> for App {
 					// the same one on every prompt is common.
 					if p.title != said {
 						p.title = said;
+						crate::perf::allocs_note("title");
 						state.dirty = true;
 					}
 				}
@@ -4183,6 +4188,7 @@ impl ApplicationHandler<UserEvent> for App {
 			UserEvent::Bell => {
 				// Visual bell: brighten all text, then smoothly fade back (render).
 				state.bell_flash = 1.0;
+				crate::perf::allocs_note("bell");
 				state.dirty = true;
 			}
 			UserEvent::SetWallpaper(image) => state.lock_wallpaper(image),
@@ -5521,6 +5527,7 @@ impl ApplicationHandler<UserEvent> for App {
 			if let Some(wake) = pane.cursor_wake {
 				if wake_now >= wake {
 					pane.cursor_wake = None; // consumed - or an occluded window would spin on it
+					crate::perf::allocs_note("cursor wake");
 					state.dirty = true;
 				} else {
 					cursor_wake = Some(cursor_wake.map_or(wake, |w| w.min(wake)));
@@ -5530,6 +5537,7 @@ impl ApplicationHandler<UserEvent> for App {
 			// running out: due now, or wake for it
 			if let Some(wake) = pane.map_wake() {
 				if wake_now >= wake {
+					crate::perf::allocs_note("map wake");
 					state.dirty = true;
 				} else {
 					cursor_wake = Some(cursor_wake.map_or(wake, |w| w.min(wake)));
@@ -5538,6 +5546,7 @@ impl ApplicationHandler<UserEvent> for App {
 		}
 		// what a tab says about a program that started with nothing to draw
 		if state.tabs.recheck_tasks(wake_now) {
+			crate::perf::allocs_note("tab task moved");
 			state.dirty = true;
 		}
 		// copy-output: catch the focused pane's command finishing (see method)
@@ -5696,6 +5705,7 @@ impl ApplicationHandler<UserEvent> for App {
 			self.gpu_warm.release();
 		}
 		if !hidden && state.gpu.is_some() && state.frame_retry.take_due(Instant::now()) {
+			crate::perf::allocs_note("frame retry");
 			state.dirty = true;
 		}
 		// A pass that draws nothing pauses the watch too, or the next ease's first
