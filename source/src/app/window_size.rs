@@ -1434,9 +1434,13 @@ fn settle(
 	}
 }
 
-// Has the monitor the window was on at the last look gone, or changed?
+// Has the monitor the window was on at the last look gone dark? One still lit
+// at the same corner, at another size, changed its mode, scale or turn. On
+// X11 the window hears nothing of that, so the user's next drag off it was
+// taken for a herd and took no size, and the herd waited for a layout that
+// never came back.
 fn herded(home: Option<(i64, i64, i64, i64)>, layout: &[(i64, i64, i64, i64)]) -> bool {
-	home.is_some_and(|home| !layout.contains(&home))
+	home.is_some_and(|(x, y, _, _)| !layout.iter().any(|&(lx, ly, _, _)| (lx, ly) == (x, y)))
 }
 
 // Has the window only left outputs since, and is it still on one?
@@ -1966,7 +1970,8 @@ mod tests {
 	// onto the one left as the other goes dark, and puts each back where it was
 	// once it's lit again, unless the window resized itself in between. Then it
 	// stays where it was herded to, which was across the two. Only a monitor the
-	// window was on that has gone or changed makes a move a herd.
+	// window was on that has gone makes a move a herd. One that turned or was
+	// rescaled is still there, and a drag off it is the user's.
 	// Test ID: deqwx
 	#[test]
 	fn a_window_herded_off_a_dark_monitor_takes_no_size() {
@@ -1978,8 +1983,12 @@ mod tests {
 		assert!(herded(Some(right), &[left]), "right went dark");
 		assert!(herded(Some(right), &[]), "both dark");
 		assert!(
-			herded(Some(right), &[left, (2560, 0, 1080, 1920)]),
+			!herded(Some(right), &[left, (2560, 0, 1080, 1920)]),
 			"right turned"
+		);
+		assert!(
+			!herded(Some(right), &[left, (2560, 0, 1536, 864)]),
+			"right rescaled"
 		);
 		// herded onto left, which it now calls home, then put back on right
 		assert!(!herded(Some(left), &both));
