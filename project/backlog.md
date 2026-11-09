@@ -5915,7 +5915,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Assigned to: CC
 	- Target OS: All
 	- Requirements:
-		- Add "Bare window" back to right-click menu, under "Menu bar".
+		- Add "Bare window" back to the right-click menu, under "Menu bar".
 	- Notes:
 		- Pre-next-cut.
 	- Against: the old-format Done item "Second pass over the UI/UX style guide, reconciling it against what is built" took it off that menu. The UI/UX style guide's known deviations list it too, and needs the same change.
@@ -6203,7 +6203,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Related IDs: 2026100913394946
 	- Target OS: All
 	- Requirements:
-		- Restore my old font list that started with 'Monaspace Argon' (as now), but also included a long list that included Fira Code, Jetbrains, etc.
+		- Restore my old font list that started with 'Monaspace Argon' (as now), but also included a long list that included Fira Code, JetBrains, etc.
 	- Notes:
 		- Pre-next-cut.
 		- `DEFAULT_FONT_STACK` in config.rs still lists all 9 fonts.
@@ -9940,7 +9940,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Assigned to: CC
 	- Target OS: All
 	- Requirements:
-		- Verify or insure that builds clean up stale artifacts and side effects after they're done: caches, container cruft, tmp files, etc.
+		- Verify or ensure that builds clean up stale artifacts and side effects after they're done: caches, container cruft, tmp files, etc.
 	- Notes:
 		- Before the next cut.
 		- 20261022: Same request as 2026101909222600, opened the same morning and built that day as `sweep`. It waits on its full run there.
@@ -11270,7 +11270,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Opened: n/a
 	- Closed: 20260827-105239
 
-- ✅ The dreaded "Nano Bounce Bug" is back. Or I don't think ever *really* left. This will serve as the official bug report for it, but it is referenced elsewhere and I've taken multiple cracks at it - all unsuccessful and probably chasing red-herrings. It's obviously related in to smooth-scrolling.
+- ✅ The dreaded "Nano Bounce Bug" is back. Or I don't think ever *really* left. This will serve as the official bug report for it, but it is referenced elsewhere and I've taken multiple cracks at it - all unsuccessful and probably chasing red-herrings. It's obviously related to smooth-scrolling.
 	- Steps:
 		- Run nano. On any file, or with no file. Ideally, immediately after a long scroll (e.g. as part of a script. `n8git_backup-and-publish` triggers this reliably.
 		- Observe: It pops onto the screen, and "wobbles", "violently", for maybe a second or two. The wobbling is vertically up and down only.
@@ -11951,7 +11951,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- Observe: A menu can open, but nothing else.
 		- Switch to another application, then return.
 		- Observe: Menus work, until you right-click.
-		- Note that you may only to do this once or twice - until menu actions stop working permanently.
+		- Note that you may only have to do this once or twice - until menu actions stop working permanently.
 			- However, CTRL+Shift+T can open a new tab, and everything works fine for that tab.
 		- If you exit `muffer`, some things work and some things don't.
 			- Split vertical works
@@ -12176,7 +12176,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Done (20260807): fixed for the `irm … | iex` form the README advertises. That runs the script inside the caller's own shell, so 3 things behaved differently there. A failure closed their window, the script-block form couldn't resolve its own variables, and strict mode was left switched on in their session afterwards. The retired `-Arch` option also rejected its own default under that form, which is how it was found.
 	- Done (20260807): both scripts and the README section were published to `main`, so the advertised one-liners work ahead of the next release.
 
-	- A Bash >=3.2 script, and/or cross-platform PowerShell v7 script, that users can run as a one-liner from their shell - to download the latest stable or dev release, verify checksum, and install the executable. Idempotent; states its plan and asks before touching anything. Uses nice output, blank line at the start and end of script, and one blank line between major sections of output. Add something the contents below to README.md, under an "Installation" header, "Direct" subheader. (The primary install should be an installer.) Include the commands, and the install locations.
+	- A Bash >=3.2 script, and/or cross-platform PowerShell v7 script, that users can run as a one-liner from their shell - to download the latest stable or dev release, verify checksum, and install the executable. Idempotent; states its plan and asks before touching anything. Uses nice output, blank line at the start and end of script, and one blank line between major sections of output. Add something like the contents below to README.md, under an "Installation" header, "Direct" subheader. (The primary install should be an installer.) Include the commands, and the install locations.
 
 	- Bash installer (Linux, BSD, macOS, WSL)
 
@@ -15473,7 +15473,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- FlowTerm: Already an existing terminal
 		- Velumi: Many existing brands and .com
 		- FluxTerm: "Flux" is very crowded.
-		- GissaTerm: This project's first actual brand name, but doesn't flow off the tongue well. And sounds like some kind of incurable disease.
+		- GlissaTerm: This project's first actual brand name, but doesn't flow off the tongue well. And sounds like some kind of incurable disease.
 		- Glissando: Sounds like music software. Probably is, being a real musical term.
 		- Glidra: Sounds like something on a drug store shelf, or an enemy of Godzilla.
 		- Velumux: Meh. Doesn't seem memorable.
@@ -15639,7 +15639,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 
 - Notes:
 
-	- Only use rows that you actually need or expect will be filled in. Always fill in the title, ID, Type, Status, Opened and Created by.
+	- Only use rows that you actually need or expect will be filled in. Always fill in the title, ID, Type, Status, Opened, and Opened by.
 
 	- The ID is the local time to the hundredth of a second. Opened is when it was written down, which may differ. (Use a keyboard macro and possibly something like project 'zuid' to generate.)
 
