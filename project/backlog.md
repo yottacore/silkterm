@@ -5344,7 +5344,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- CI/CD has both `--leakcheck` and `--no-leakcheck`.
 		- A default run includes the leak checks.
 		- `--leakcheck` exists only to add them back in for something like `--quick`.
-		- `--no-leakcheck` is useful to exclude them from a default run, or with `--quiet`.
+		- `--no-leakcheck` is useful to exclude them from a default run.
 	- Notes:
 		- Before the next cut.
 	- Progress log:
@@ -9915,7 +9915,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Expected behavior: Smooth scrolling keeps working however long top runs.
 	- Notes:
 		- Pre-next-cut.
-		- It should probably be excluded, but the fact that this happens could indicate a bug with longer-running stuff, so let's not exclude it.
+		- `top` and `htop` used to smoothly animate disappearing and appearing lines. Now they don't. And even when the smooth animation worked in those programs, it would quit working after a while. It's not a high priority to get back, more of a nice-to-have.
 	- Reproduced: No, not as something that fades with time. On dev, top in a window on b23 slid as often after 24 minutes as in its first minute, with its list moved by arrow keys every 20 s. Minimizing until the GPU was let go and restoring didn't stop it, and neither did wheel scrolling.
 	- Possible cause: The load rather than SilkTerm. top runs on the normal screen and redraws every row each tick. Its list only shifts while some of the rows on screen are processes that used no CPU in the last tick, and a change in how many did moves them up or down. Once more processes use CPU than the window has rows, every visible row is re-sorted each tick, nothing on screen moves as a block, and the redraw cuts, as it should.
 		- With the load held low, then high, then low again, 24 of 43 redraws slid, then 0 of 51, then 14 of 36. A window showed the same: 32 slide steps, none, then 19.
@@ -10407,7 +10407,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- UAT 20260919-143007: This appears to be fixed. Upon return, the wallpaper blanks and comes back, and the window title says "resources restored".
 	- Closed: 20260919-152000
 
-- ✅ New text added to a screen with enough room to not have to scroll up to make new space, should never "smooth-scroll DOWN" from "beneath" the content above, last-line-first. (E.g. when pasting several lines of content at once.) It appear first-line-first. If it can all fit on the same screen without scrolling, maybe that means popping in fully-formed, all at once. That would be preferable to oddly scrolling in from beneath an invisible horizontal curtain, last-line-first. (Make this change gated to a global tunable in-code variable, so this behavior could be restored if desired. It does look kind of cool, it's just "wrong" from a "terminal experience" perspective.
+- ✅ New text added to a screen with enough room to not have to scroll up to make new space, should never "smooth-scroll DOWN" from "beneath" the content above, last-line-first. (E.g. when pasting several lines of content at once.) It should appear first-line-first. If it can all fit on the same screen without scrolling, maybe that means popping in fully-formed, all at once. That would be preferable to oddly scrolling in from beneath an invisible horizontal curtain, last-line-first. (Make this change gated to a global tunable in-code variable, so this behavior could be restored if desired. It does look kind of cool, it's just "wrong" from a "terminal experience" perspective.)
 	- Cause: an app that makes room for new lines, such as an input box that grows as a paste arrives, moves the rows under them down into blank rows. That read as a scroll down, so it slid.
 	- Fixed: a scroll down that only pushes off rows that were blank to the bottom of the screen pops in instead. `SLIDE_DOWN_INTO_ROOM` in `pane.rs` brings the slide back.
 	- Pinned by: 2 new harness scenes, dcvbd `paste` (repainted) and dcvbe `pasteil` (insert-line), plus 3 unit tests, dcvan, dcvam, and dcvb8. less and man scrolling back still ease.
@@ -13141,7 +13141,6 @@ Going forward, new issues in the new template at the bottom of this file will go
 							- Include search for more obscure third-party shells like YSH, NuShell, Fish, etc.
 							- Include "Powershell 7", if installed.
 							- Include programming shells like "Python 3".
-							- If bash is
 						- For Windows:
 							- Include if exists: "Powershell 7", PyCmd, "Legacy Powershell 5", "Legacy CMD.exe", NuShell, etc.
 							- Also include shells found in WSL1 and WSL2
@@ -13978,7 +13977,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Opened: 20260727-181302
 	- Closed: 20260731-111951
 
-- ✅ Take advantage of shcl's hierarchical capabilities, by nesting the config sections, rather than using 'parent_child: value' TOML style. Keep using empty lines for clarity. Comments for nested settings can follow the nesting. For example, rather than a bunch of 'wallpaper_*' settings, 'wallpaper' gets nested children. Tabs for nesting. You can erase and my own personal config for recreation at next post-compile start.
+- ✅ Take advantage of shcl's hierarchical capabilities, by nesting the config sections, rather than using 'parent_child: value' TOML style. Keep using empty lines for clarity. Comments for nested settings can follow the nesting. For example, rather than a bunch of 'wallpaper_*' settings, 'wallpaper' gets nested children. Tabs for nesting. You can erase my own personal config, for it to be recreated at the next start after a compile.
 	- Done: the whole config is nested blocks now: font, window, transparency, wallpaper with its rotation and contrast-mask children, text with its scrim, cursor with its size, then selection, shell, scroll and colors.
 		- It uses tabs for nesting, keeps blank lines, and indents comments with the setting they belong to.
 		- Each setting has a title line, a description, and a range line where one applies. A commented default line is marked as the default, and sections are divided the usual way.
@@ -15218,7 +15217,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Opened: 20260628-083740
 	- Closed: 20260629-214404
 
-- ✅ No hotkeys for pane management except. Minimal hotkeys overall, except for window, tab, menu, and clipboard management.
+- ✅ Minimal hotkeys overall, except for window, tab, menu, and clipboard management.
 	- Done: the pane hotkeys are gone - split, close pane, and cycle focus. Pane management is the Panes menu and the right-click menu now, and focus follows a click.
 		- What is left: fullscreen on the window, the tab keys for new, change and move, the menu keys, and the clipboard pair.
 	- Pinned by: `no_chord_splits_closes_or_cycles_panes` (now ddes9 `alt_shift_chords_split_and_close_panes_and_alt_arrows_move`, which kept its Ctrl and Ctrl+Shift checks when panes got Alt+Shift hotkeys).
