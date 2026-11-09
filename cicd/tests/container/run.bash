@@ -7,7 +7,8 @@
 ##		the recipe names only pinned versions and checks every download, the stage
 ##		options reach the run inside while the host options stay out, the binaries
 ##		that run made are picked up here, and a stand-in docker sees the engine
-##		start the container the right way and stop when it fails.
+##		start the container the right way, under the memory cap, and stop when
+##		it fails.
 ##	- Test ID: ddrp2
 ##	- History: At bottom of file.
 
@@ -24,6 +25,8 @@ recipe="${root}/cicd/container/Dockerfile"
 ## A full run hands the container the real private repo's runner, and the runs
 ## here would mount its tests too. Only the private case below sets one.
 unset SILK_PRIVATE_RUNNER
+## The memory cap: the default unless a case sets one.
+unset CICD_MEM_CAP
 
 failures=0
 fCheck(){ local -r what="${1}"; shift; if "${@}"; then echo "  ok   ${what}"; else echo "  FAIL ${what}"; failures=$((failures + 1)); fi; }
@@ -207,7 +210,9 @@ fRun(){  ## fRun <log name> <options...>: the engine from the copy; sets rc and 
 	local -r log="${work}/${1}"; shift
 	rm -f "${log}" "${log}.df"; export FAKE_LOG="${log}"
 	## Unset: inside the container both are set, and this is a run from outside.
-	rc=0; out="$(cd "${repo}" && env -u SILK_CICD_IN_CONTAINER -u CARGO_TARGET_DIR -u HOST_TEMP bash cicd/cicd.bash "${@}" 2>&1)" || rc=$?
+	## No systemd scope, which memcap (df2ss) checks, so each run is the same
+	## inside a pipeline's scope or not.
+	rc=0; out="$(cd "${repo}" && env -u SILK_CICD_IN_CONTAINER -u CARGO_TARGET_DIR -u HOST_TEMP -u SILK_CICD_MEM_SCOPE SILK_SYSTEMD_RUN="${work}/no-such-systemd-run" bash cicd/cicd.bash "${@}" 2>&1)" || rc=$?
 }
 ## Where the runs put their folders, with HOST_TEMP unset.
 runBase="$(realpath -m "${TMPDIR}")/silkterm"; runRe='[0-9]{8}-[0-9]{6}_[0-9]{3}'
@@ -229,6 +234,11 @@ fCheck "its /tmp a new folder in the run's folder" bash -c '[[ "$1" =~ \ -v\ $2/
 fCheck "which goes with it once the run passes" test -z "$(find "${runBase}" -mindepth 1 -maxdepth 1 2>/dev/null)"
 fCheck "the container is named for the run's folder and labeled as the pipeline's" bash -c '[[ "$1" =~ \ --name\ silkterm-('"${runRe}"')-engine\ --label\ dev\.project=silkterm\ --label\ dev\.run=('"${runRe}"')\  && "${BASH_REMATCH[1]}" == "${BASH_REMATCH[2]}" && "$1" == *" -v $2/${BASH_REMATCH[1]}/container-engine_"* ]]' _ "${runLine}" "${runBase}"
 fCheck "with --rm" bash -c '[[ "$1" == "run --rm --init "* ]]' _ "${runLine}"
+## The memory cap (2026-11-09): the default, a third of RAM from 4g to 32g, with
+## no swap, and the container first to the OOM killer.
+memKb="$(awk '/^MemTotal:/ { print $2 }' /proc/meminfo)"; memWant=$(( memKb / 3 / 1048576 ))
+((memWant <= 32)) || memWant=32; ((memWant >= 4)) || memWant=4
+fCheck "with the default memory cap, as much swap, and first to the OOM killer" bash -c '[[ "$1" == *" --memory $2g --memory-swap $2g --oom-score-adj 1000 "* ]]' _ "${runLine}" "${memWant}"
 fCheck "zig's cache on a volume of its own" bash -c '[[ "$1" == *" -v silkterm-zig-cache:/zig-cache "* && "$1" == *" -e ZIG_GLOBAL_CACHE_DIR=/zig-cache "* ]]' _ "${runLine}"
 fCheck "stamped with the zig that filled it" bash -c '[[ "$1" == *"zig version >\"/zig-cache/\${3}\""* && "$1" == *" _ $(id -u) $(id -g) .cicd-zig-version "* ]]' _ "${runLine}"
 fCheck "the target dir for both sides" bash -c '[[ "$1" == *" CARGO_TARGET_DIR=$2/target/container "* ]]' _ "${runLine}" "${repo}"
@@ -308,8 +318,25 @@ fCheck "--gate --container runs the backlog quick run inside, every area named" 
 fCheck "and says --gate is another name for it" grep -qx -- '--gate is another name for --backlog-run-quick' <<<"${out}"
 fCheck "and nothing else" test "${rc}" -eq 0 -a "$(grep -c '^run ' "${work}/gate.log")" -eq 1
 fCheck "with no log tee or plan" fNot grep -q 'Fail-fast' <<<"${out}"
-fCheck "the gate's container is named for the step" grep -qE '^run --rm --init --shm-size 1g --cpus [0-9]+ --cpu-shares 256 --name silkterm-'"${runRe}"'-gate ' "${work}/gate.log"
+## Commented out 20261109: the memory cap's flags sit before the name. Checked below.
+# fCheck "the gate's container is named for the step" grep -qE '^run --rm --init --shm-size 1g --cpus [0-9]+ --cpu-shares 256 --name silkterm-'"${runRe}"'-gate ' "${work}/gate.log"
+fCheck "the gate's container is named for the step, with the CPU and memory caps" grep -qE '^run --rm --init --shm-size 1g --cpus [0-9]+ --cpu-shares 256 --memory '"${memWant}"'g --memory-swap '"${memWant}"'g --oom-score-adj 1000 --name silkterm-'"${runRe}"'-gate ' "${work}/gate.log"
 fCheck "and the gate ends with the same cleanup" grep -q '^builder prune -f --filter until=168h' "${work}/gate.log"
+## CICD_MEM_CAP over the default, none for no cap, and a bad one stopping the run
+## before docker is asked anything. CodeQL inside the engine run gets 48g.
+memRun=(--container -y --no-sync --no-dogfood --no-publish --no-private --quick --no-fuzz)
+CICD_MEM_CAP=7g fRun mem7.log "${memRun[@]}"
+fCheck "CICD_MEM_CAP sets the cap, swap the same" bash -c '[[ "$1" == 0 && "$(grep "^run " "$2")" == *" --cpu-shares 256 --memory 7g --memory-swap 7g --oom-score-adj 1000 --name "* ]]' _ "${rc}" "${work}/mem7.log"
+CICD_MEM_CAP=none fRun memnone.log "${memRun[@]}"
+fCheck "none runs it with no cap" bash -c '[[ "$1" == 0 && "$(grep "^run " "$2")" == *" --cpu-shares 256 --name "* && "$(grep "^run " "$2")" != *" --memory"* && "$(grep "^run " "$2")" != *"--oom-score-adj"* ]]' _ "${rc}" "${work}/memnone.log"
+CICD_MEM_CAP=24GB fRun membad.log "${memRun[@]}"
+fCheck "a bad cap stops the run" test "${rc}" -ne 0
+fCheck "saying what it wants" grep -qF "CICD_MEM_CAP '24GB' isn't a size like 24g, or none" <<<"${out}"
+fCheck "before docker is asked anything" test ! -e "${work}/membad.log"
+fRun memcodeql.log "${memRun[@]}" --codeql
+fCheck "CodeQL in the engine run gives it 48g" grep -qE '^run .* --memory 48g --memory-swap 48g --oom-score-adj 1000 --name silkterm-[0-9_-]+-engine ' "${work}/memcodeql.log"
+CICD_MEM_CAP=7g fRun memcodeql7.log "${memRun[@]}" --codeql
+fCheck "and CICD_MEM_CAP still wins" grep -qE '^run .* --memory 7g --memory-swap 7g --oom-score-adj 1000 --name silkterm-[0-9_-]+-engine ' "${work}/memcodeql7.log"
 fRun quickareas.log --backlog-run-quick docs fmt --container
 fCheck "--backlog-run-quick takes the areas named into the container, in order" bash -c '[[ "$(grep "^run " "$1")" == *" $2/cicd/cicd.bash --backlog-run-quick docs fmt" ]]' _ "${work}/quickareas.log" "${repo}"
 
@@ -387,7 +414,9 @@ fCheck "but still prunes and removes its containers" bash -c 'grep -q "^builder 
 FAKE_VOLUMES="silkterm-cicd-cache silkterm-zig-cache silkterm-other" FAKE_TIDY="silkterm-cicd-cache|2147483649||0.16.0 silkterm-zig-cache|1000|0.15.1|0.16.0" \
 	fRun volgo.log --container -y --no-sync --no-dogfood --no-publish --no-private --quick
 fCheck "the volumes are only the pipeline's" grep -qx 'volume ls -q --filter label=dev.project=silkterm' "${work}/volgo.log"
-fCheck "read by a labeled container of the run's, read only" bash -c 'grep -qE "^run --label dev\.project=silkterm --label dev\.run=[0-9_-]+ --name silkterm-[0-9_-]+-tidy -v silkterm-cicd-cache:/v/silkterm-cicd-cache:ro -v silkterm-zig-cache:/v/silkterm-zig-cache:ro silkterm-cicd:" "$1"' _ "${work}/volgo.log"
+## Commented out 20261109: the tidy container takes the memory cap too. Checked below.
+# fCheck "read by a labeled container of the run's, read only" bash -c 'grep -qE "^run --label dev\.project=silkterm --label dev\.run=[0-9_-]+ --name silkterm-[0-9_-]+-tidy -v silkterm-cicd-cache:/v/silkterm-cicd-cache:ro -v silkterm-zig-cache:/v/silkterm-zig-cache:ro silkterm-cicd:" "$1"' _ "${work}/volgo.log"
+fCheck "read by a labeled container of the run's, read only, under the memory cap" bash -c 'grep -qE "^run --label dev\.project=silkterm --label dev\.run=[0-9_-]+ --memory $2g --memory-swap $2g --oom-score-adj 1000 --name silkterm-[0-9_-]+-tidy -v silkterm-cicd-cache:/v/silkterm-cicd-cache:ro -v silkterm-zig-cache:/v/silkterm-zig-cache:ro silkterm-cicd:" "$1"' _ "${work}/volgo.log" "${memWant}"
 fCheck "and removed before any volume is" bash -c 'awk "/^rm silkterm-[0-9_-]+-tidy$/ {t = NR} /^volume rm/ && !v {v = NR} END {exit !(t && v && t < v)}" "$1"' _ "${work}/volgo.log"
 fCheck "one over 2 GB goes" grep -qx 'volume rm silkterm-cicd-cache' "${work}/volgo.log"
 fCheck "the zig one another zig filled goes" grep -qx 'volume rm silkterm-zig-cache' "${work}/volgo.log"
@@ -619,3 +648,4 @@ echo "all passed"
 ##		- 20261108: The private tests go in under --no-private too, and a runner
 ##		  handed down from a full run is dropped.
 ##		- 20261108: The whole private repo goes in read only, not only its tests.
+##		- 20261109: The memory cap on the step and tidy containers.

@@ -126,6 +126,9 @@
 ##	   --list              print the steps and test IDs the other options would run,
 ##	                       and run nothing
 ##	  With no options every stage runs, in about an hour; --long adds the rest.
+##	  CICD_MEM_CAP caps each step's memory, such as 24g, or none for no cap. The
+##	  default is a third of RAM, 4g to 32g, and 48g for CodeQL. A step over it
+##	  is killed, and exits 137.
 ## - Reuse: copy the cicd/ directory into another project and edit config.bash.
 
 ##	History: At bottom of script.
@@ -141,6 +144,12 @@ set -Eeuo pipefail
 ## Find the repo root and load project config.
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 root="$(cd "${here}/.." && pwd)"   # the git repo root (cicd/..)
+## The memory cap (utility/include/memcap.bash), before anything starts: this
+## side runs again in a systemd scope under it, and each container takes it too.
+## A step killed at the cap exits 137.
+##  shellcheck source=cicd/utility/include/memcap.bash
+source "${here}/utility/include/memcap.bash"
+fMemCap_Scope "${BASH_SOURCE[0]}" "${@}" || exit 2
 export PATH="${HOME}/.cargo/bin:${HOME}/.local/bin:${PATH}"       ## rustup toolchain (cross targets, edition 2024) + zig must beat system rust.
 ## Stages 1-6 run in the image whenever docker is here, and --no-container runs them
 ## on this box. The container build uses its own target dir, and config.bash derives
@@ -753,13 +762,15 @@ fContainerVolumes(){
 	local name size stamped zigNow why seen=""
 	local -r capBytes=$(( ${CLEANUP_CACHE_CAP_MB:-2048} * 1048576 )) tidy="${EXE_NAME}-${runName}-tidy"
 	local -a ours=() mounts=() labels=()
+	fMemCap_DockerArgs || return 0
 	mapfile -t ours < <("${docker}" volume ls -q --filter "label=${projectLabel}" 2>/dev/null | grep -xF -e "${cacheVolume}" -e "${zigVolume}" || true)
 	((${#ours[@]})) || return 0
 	for name in "${ours[@]}"; do mounts+=(-v "${name}:/v/${name}:ro"); done
 	mapfile -t labels < <(fLabels)
 	## No --rm: it can return before the container is gone, which still holds the
 	## volumes. A plain rm waits.
-	seen="$("${docker}" run "${labels[@]}" --name "${tidy}" "${mounts[@]}" "${containerImage}" bash -c '
+	# shellcheck disable=2154  ## memCapArgs is set by memcap.bash's fMemCap_DockerArgs.
+	seen="$("${docker}" run "${labels[@]}" "${memCapArgs[@]}" --name "${tidy}" "${mounts[@]}" "${containerImage}" bash -c '
 		for d in /v/*; do
 			s=""; [[ -f "${d}/${1}" ]] && read -r s <"${d}/${1}"
 			printf "%s|%s|%s|%s\n" "${d##*/}" "$(du -sb "${d}" | cut -f1)" "${s}" "$(zig version)"
@@ -824,6 +835,15 @@ fContainerEnd_Work(){
 	after="$("${docker}" system df --format '{{.Type}}|{{.Size}}' 2>/dev/null | fDockerBytes || true)"
 	if [[ "${before}" =~ ^[0-9]+$ && "${after}" =~ ^[0-9]+$ ]] && ((before > after)); then echo "freed|$((before - after))"; fi
 }
+## fStepMem <step>: the step's own default memory cap, when it has one, which
+## CICD_MEM_CAP still overrides. CodeQL peaked at 32.1 GB in the 2 weeks to
+## 2026-11-09, over the general cap, so it gets 48g, and so does an engine run
+## that does it inside.
+fStepMem(){
+	if [[ "${1}" == codeql ]]; then echo 48g
+	elif [[ "${1}" == engine && -n "${CODEQL_SUITE:-}" ]] && ((${leakcheck:-0} && ${codeql:-0})); then echo 48g; fi
+	return 0
+}
 ## fContainerRun <image> <script> <options...>: a pipeline script in the container,
 ## the engine or the ASan run, against this tree. Its /tmp is a new folder in the
 ## run's folder, so the X sockets inside never meet this box's, and no lock or
@@ -839,6 +859,7 @@ fContainerRun(){
 	local -i rc=0
 	local -a labels=() rmArg=(--rm) keepArgs=() privArgs=()
 	step="${step%.bash}"; [[ "${1:-}" != --backlog-run-quick ]] || step=gate; [[ "${step}" != cicd ]] || step=engine
+	fMemCap_DockerArgs "$(fStepMem "${step}")" || return 1
 	## --keep-temp: a test folder handed in is never removed, so the run inside
 	## keeps its own too.
 	((! keepTemp)) || { rmArg=(); keepArgs=(-e "SILKTERM_TEST_DIR=/tmp/test_${EXE_NAME}_${step}"); }
@@ -861,7 +882,8 @@ fContainerRun(){
 	## scripts, so the whole repo goes in. The runner itself isn't run inside,
 	## as stage 6 is this side's.
 	[[ -z "${PRIVATE_TESTS}" ]] || privArgs=(-v "${PRIVATE_TESTS%/cicd/*}:${PRIVATE_TESTS%/cicd/*}:ro" -e "SILK_PRIVATE_RUNNER=${PRIVATE_TESTS%/cicd/*}/cicd/run.bash")
-	"${docker}" run "${rmArg[@]}" --init --shm-size 1g --cpus "${CICD_MAX_JOBS}" --cpu-shares 256 --name "${EXE_NAME}-${runName}-${step}" "${labels[@]}" "${mounts[@]}" "${privArgs[@]}" -w "${root}" \
+	# shellcheck disable=2154  ## memCapArgs is set by memcap.bash's fMemCap_DockerArgs.
+	"${docker}" run "${rmArg[@]}" --init --shm-size 1g --cpus "${CICD_MAX_JOBS}" --cpu-shares 256 "${memCapArgs[@]}" --name "${EXE_NAME}-${runName}-${step}" "${labels[@]}" "${mounts[@]}" "${privArgs[@]}" -w "${root}" \
 		-e "USER=${USER:-$(id -un)}" -e "CARGO_TARGET_DIR=${containerTarget}" -e "SILK_BUILD_MINUTES=${SILK_BUILD_MINUTES:-}" -e "SILK_RELEASE=${SILK_RELEASE:-0}" \
 		-e "CICD_MAX_JOBS=${CICD_MAX_JOBS}" -e "CICD_CORES=${CICD_CORES}" -e SILK_CICD_STEP_AT -e SILK_CICD_STEP_TOTAL -e XDG_RUNTIME_DIR=/tmp/xdg-runtime -e ZIG_GLOBAL_CACHE_DIR=/zig-cache "${zoneArgs[@]}" "${keepArgs[@]}" \
 		"${image}" bash -c 'echo "${USER}:x:${1}:${2}:${USER}:${HOME}:/bin/bash" >>/etc/passwd && echo "${USER}:x:${2}:" >>/etc/group \
@@ -1211,6 +1233,8 @@ fScriptTests(){
 	## One tool pin list for both pipelines, and the docs quoting it.
 	fRunTest cicd/tests/pins/run.bash "tool pins" "tool pin test failed"
 	fRunTest cicd/tests/jobs/run.bash "step jobs and priority" "step jobs test failed"
+	## The memory cap on each step, which keeps a runaway one from taking the box.
+	fRunTest cicd/tests/memcap/run.bash "step memory cap" "step memory cap test failed"
 	## The Mac CI's failed test names, which a split result line once hid.
 	fRunTest cicd/tests/ci-mac/run.bash "Mac CI failed test names"
 	## The PowerShell lint this stage gates on has to fail on a finding.
@@ -2483,6 +2507,8 @@ fEcho_Clean
 
 
 ##	History:
+##		- 2026-11-09: A memory cap with no swap, CICD_MEM_CAP: this side in a systemd
+##		              scope, and each container with --memory and --oom-score-adj.
 ##		- 2026-11-06: The backlog quick run removes stale run folders too.
 ##		- 2026-11-05: A build that can't be dogfooded fails the run, where it used to
 ##		              warn and pass. A dest that can't be written stops it at the
