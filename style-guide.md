@@ -52,7 +52,7 @@ The style reference for SilkTerm's code, scripts and commit messages. Where it c
 
 ## Naming
 
-- Use meaningful, searchable names. `upperBound` is easy to find and replace by hand, and a bare `ub` is not.
+- Use meaningful, searchable names. `upperBound` is easy to find and replace by hand, and a bare `ub` isn't.
 	- A name doesn't need to be long or globally unique. It needs to be clear and easy to find. Short conventional names are fine.
 
 - Single-letter loop counters and iterators (`for i in ...`) are fine when that is the idiomatic choice.
@@ -75,9 +75,9 @@ Edition 2024. Code should look the same from one file to the next, with one way 
 
 ### Ownership and borrowing
 
-- Borrow first. Don't use `.clone()` just to get past the borrow checker. Restructure or take a reference instead.
+- Borrow first. Don't use `.clone()` to get past the borrow checker. Restructure or take a reference instead.
 
-- If a clone is really needed, add a comment saying why.
+- If a clone is needed, add a comment saying why.
 
 - Avoid gratuitous `Rc<RefCell<...>>`.
 
@@ -85,7 +85,7 @@ Edition 2024. Code should look the same from one file to the next, with one way 
 
 ### Unsafe code
 
-- Every `unsafe` block and `unsafe impl` has a `// SAFETY:` comment right above it. It says why the block is sound here: what the call needs, and why that holds. Clippy refuses an unsafe block without one.
+- Every `unsafe` block and `unsafe impl` has a `// SAFETY:` comment right above it. It says why the block is sound here: what the call needs, and why that's true. Clippy refuses an unsafe block without one.
 
 - No `mem::forget` on a value that owns something, since what it owns is never freed. Clippy refuses it. Where the leak is the point, such as a test leaving a file behind the way a crash would, allow the lint at that line and give the reason.
 
@@ -101,15 +101,15 @@ Edition 2024. Code should look the same from one file to the next, with one way 
 
 - Collapse nested `if let` with `let`-else or, where it reads well, let-chains (`if let ... && ...`).
 
-- Prefer flat combinators like `map` and `and_then` on `Option` and `Result` when they read cleanly. Use `match` when there are really several arms.
+- Prefer flat combinators like `map` and `and_then` on `Option` and `Result` when they read cleanly. Use `match` when there are several arms.
 
 ### Types and abstraction
 
-- Model mutually-exclusive states with enums and exhaustive `match`, not boolean flags. Avoid a catch-all `_` arm unless it is truly needed.
+- Model mutually-exclusive states with enums and exhaustive `match` rather than boolean flags. Avoid a catch-all `_` arm unless it's needed.
 
 - Where it is cheap, use newtypes or typestate so invalid states can't be built.
 
-- Use traits and generics for abstraction, and `dyn` only when the types really differ. Prefer composition to class hierarchies.
+- Use traits and generics for abstraction, and `dyn` only when the types differ. Prefer composition to class hierarchies.
 
 - Derive `Debug`, `Clone`, `PartialEq` and the rest rather than writing them by hand. Every public type derives `Debug`.
 
@@ -117,15 +117,15 @@ Edition 2024. Code should look the same from one file to the next, with one way 
 
 - Prefer iterator chains over manual loops while they stay readable.
 
-- Break to a plain `for` loop when a chain would need more than about three combinators, or when clarity suffers.
+- Break to a plain `for` loop when a chain would need more than about 3 combinators, or when clarity suffers.
 
 ### Documentation
 
-- Document public items with `///`. A comment on anything declared `pub` is a `///` doc, never a plain `//`. A name that already says all there is to say needs no doc, since one would only repeat it. A note that covers a group of items is a plain `//` right above the group, with a blank line above the note, since a `///` only belongs to the one item below it.
+- Document public items with `///`. A comment on anything declared `pub` is a `///` doc, never a plain `//`. A name that already says all there is to say needs no doc, since one would only repeat it. A note about a group of items is a plain `//` right above the group, with a blank line above the note, since a `///` only belongs to the one item below it.
 
 - A file that opens with a comment about itself uses `//!` for it.
 
-- A lint reason goes in the attribute's `reason = "..."`, not in a comment above it.
+- A lint reason goes in the attribute's `reason = "..."` rather than in a comment above it.
 
 - Name things fully; no cryptic abbreviations.
 
@@ -149,11 +149,11 @@ Edition 2024. Code should look the same from one file to the next, with one way 
 
 - Scripts must pass PSScriptAnalyzer at warning level with those settings.
 
-- A command that takes three or more arguments gets them by name, and common parameters use their full names, `-ErrorAction` and not `-EA`. `cicd/utility/ps-lint.ps1` checks both, since PSScriptAnalyzer has no rule for either at warning level.
+- A command that takes 3 or more arguments gets them by name, and common parameters use their full names, such as `-ErrorAction` rather than `-EA`. `cicd/utility/ps-lint.ps1` checks both, since PSScriptAnalyzer has no rule for either at warning level.
 
 - Each script has comment-based help under its copyright lines, and sets `Set-StrictMode -Version Latest`. A file that is dot-sourced leaves StrictMode to the script that loads it. `source/src/shell_integration.ps1` has neither, since it is written into the user's own profile.
 
-- A list built in a loop is a `List[T]` or the loop's own output, not an array grown with `+=`.
+- A list built in a loop is a `List[T]` or the loop's own output, rather than an array grown with `+=`.
 
 - Indent with tabs. Spaces may follow the tabs to line up a continuation.
 
@@ -169,7 +169,7 @@ Edition 2024. Code should look the same from one file to the next, with one way 
 
 - An `except` names the errors it expects. Where catching everything is the point, the line says so with `# noqa: BLE001` and a short reason.
 
-- Indent with tabs, like the rest of the repo, not PEP 8's four spaces. Spaces may follow the tabs to line up a continuation. One older script uses spaces and is left as it is.
+- Indent with tabs, like the rest of the repo, rather than PEP 8's 4 spaces. Spaces may follow the tabs to line up a continuation. One older script uses spaces and is left as it is.
 
 - Scripts must pass ruff with the rules in `ruff.toml`, and mypy with `mypy.ini`.
 
@@ -177,7 +177,7 @@ Edition 2024. Code should look the same from one file to the next, with one way 
 
 - Rust is formatted by `rustfmt`. Run it and let its output win over hand formatting.
 
-- The project sets `rustfmt` to hard tabs at width four (`rustfmt.toml`). Tabs indent; spaces align. This is the one deliberate deviation from `rustfmt` defaults; everything else follows the defaults.
+- The project sets `rustfmt` to hard tabs at width 4 (`rustfmt.toml`). Tabs indent; spaces align. This is the one deliberate deviation from `rustfmt` defaults; everything else follows the defaults.
 
 - Protect intentional hand-formatted data tables (a color matrix, a layout table) from reflow with `#[rustfmt::skip]` rather than fighting the tool.
 

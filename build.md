@@ -1,10 +1,15 @@
+<!-- markdownlint-disable MD007 -- Unordered list indentation -->
+<!-- markdownlint-disable MD010 -- No hard tabs -->
+<!-- markdownlint-disable MD055 -- Table pipe style [Expected: leading_and_trailing; Actual: leading_only; Missing trailing pipe] -->
+<!-- markdownlint-disable MD041 -- First line in a file should be a top-level heading -->
+
 # Building SilkTerm
 
-SilkTerm is a Rust project using `wgpu` (GPU), `winit` (windowing), `glyphon` (text), and `alacritty_terminal` (VT parser + PTY). From an x86_64 Linux host it builds Linux x86_64/ARM64 and Windows x86_64/ARM64 (the latter three are cross-compiled); macOS is built natively on a Mac.
+SilkTerm is a Rust project using `wgpu` (GPU), `winit` (windowing), `glyphon` (text), and `alacritty_terminal` (VT parser + PTY). From an x86_64 Linux host it builds Linux x86_64/ARM64 and Windows x86_64/ARM64, and all but Linux x86_64 are cross-compiled. macOS is built natively on a Mac.
 
 ## Toolchain
 
-Requires a Rust toolchain, edition 2024. It needs rustc 1.96, the version `rust-toolchain.toml` pins. The code does not build on 1.94. `rustup` is the simplest way to manage targets:
+Requires a Rust toolchain, edition 2024. It needs rustc 1.96, the version `rust-toolchain.toml` pins. The code doesn't build on 1.94. `rustup` is the simplest way to manage targets:
 
 ~~~sh
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
@@ -34,7 +39,7 @@ Build:
 
 ~~~sh
 cargo build --release --target x86_64-pc-windows-gnu
-# -> target/x86_64-pc-windows-gnu/release/silkterm.exe
+	# -> target/x86_64-pc-windows-gnu/release/silkterm.exe
 ~~~
 
 The linker and a static-CRT flag are set in `.cargo/config.toml`, so the resulting `.exe` is self-contained (depends only on stock Windows system DLLs) and is a GUI binary (no console window in release builds).
@@ -53,34 +58,33 @@ It stages a private wineprefix, the exe, and its own `config.shcl` under `cicd/a
 
 One consequence: a wineprefix maps `Z:` to `/` (and further drives to raw `/dev` nodes) as symlinks under `prefix/dosdevices/`. Anything that walks the tree following symlinks therefore climbs out of the repo and into the whole filesystem. `cicd/config.bash` excludes `cicd/artifacts` from the backup for that reason - keep any new tree-walker off it too, or point it at `--exclude`.
 
-What this does and does not buy you:
+What this gets you, and what it doesn't:
 
-- Rendering, fonts, menus, tabs, dialogs, wallpaper and the scrim all work, on the real GPU (wgpu reaches the card through winevulkan). That covers most of what a Windows check is for.
+- Rendering, fonts, menus, tabs, dialogs, wallpaper and the scrim all work, on the real GPU, since wgpu gets to the card through winevulkan. That's most of what a Windows check is for.
 
-- The shell does not work. Wine's ConPTY is only half implemented: `CreatePseudoConsole` succeeds and the initial grid size is honored, but a child started with `PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE` never attaches to it, so no output reaches the grid. Expect a correctly drawn, empty terminal.
+- The shell doesn't work. Wine's ConPTY is only half implemented: `CreatePseudoConsole` succeeds and the initial grid size is honored, but a child started with `PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE` never attaches to it, so no output gets to the grid. Expect a correctly drawn, empty terminal.
 
-- `ResizePseudoConsole` is a stub returning `E_NOTIMPL`, and the terminal backend asserts that it returns `S_OK` - so the app would die on its first resize. The script builds a tiny `conpty.dll` (the backend prefers any loadable `conpty.dll` over kernel32) that passes create/close through to kernel32 and answers resize with `S_OK`. Microsoft's own `conpty.dll`/`OpenConsole.exe` fail earlier under wine, so there is nothing better to drop in.
+- `ResizePseudoConsole` is a stub returning `E_NOTIMPL`, and the terminal backend asserts that it returns `S_OK`, so the app would die on its first resize. The script builds a tiny `conpty.dll` that passes create and close through to kernel32 and returns `S_OK` for a resize. The backend prefers any `conpty.dll` it can load over kernel32. Microsoft's own `conpty.dll`/`OpenConsole.exe` fail earlier under wine, so there is nothing better to drop in.
 
-- Only the x86_64 build runs; wine on x86_64 cannot execute the ARM64 exe.
+- Only the x86_64 build runs; wine on x86_64 can't execute the ARM64 exe.
 
-A newer wine does not help, so there is no reason to chase one. Measured against wine 11.14 (staging): the shell is still dead - the pty pipe gets zero bytes and the child's output escapes to the parent, exactly as on 10.0. The one thing that does change is `ResizePseudoConsole`, which fakes success from wine 11.2 onward (still a stub, it resizes nothing) and so merely makes the shim above redundant. Wine 11.0 stable is not enough - it still returns `E_NOTIMPL`.
+A newer wine doesn't help, so there's no reason to chase one. On wine 11.14 staging the shell is still dead. The pty pipe gets zero bytes and the child's output escapes to the parent, exactly as on 10.0. The one thing that changes is `ResizePseudoConsole`, which fakes success from wine 11.2 onward, so the shim above isn't needed there. It's still a stub and resizes nothing. Wine 11.0 stable isn't enough, since it still returns `E_NOTIMPL`.
 
-To try a different wine anyway, put it first on `PATH`: the script calls `wine`/`wineboot` unqualified, so nothing else is needed. Give it its own prefix, since wine upgrades a prefix in place and an older wine will not take it back:
+To try a different wine anyway, put it first on `PATH`: the script calls `wine`/`wineboot` unqualified, so nothing else is needed. Give it its own prefix, since wine upgrades a prefix in place and an older wine won't take it back:
 
 ~~~sh
 PATH=/path/to/other-wine/bin:$PATH ./utility/run-windows-build-via-wine.bash --restage
 ~~~
 
-WineHQ provides Debian packages rather than tarballs, but they install self-contained under `/opt/wine-*`, so `dpkg -x wine-staging-amd64_*.deb <dir>` gives a runnable tree without touching the system wine.
+WineHQ publishes Debian packages rather than tarballs, but they install self-contained under `/opt/wine-*`, so `dpkg -x wine-staging-amd64_*.deb <dir>` gives a runnable tree without touching the system wine.
 
 ## ARM64 (Linux & Windows, cross-compile via cargo-zigbuild)
 
 `cargo-zigbuild` uses `zig` as a universal cross-linker, so ARM64 Linux and Windows build from an x86_64 Linux host with no per-target gcc/SDK.
 
-One-time setup:
+One-time setup, with zig 0.16.0 from its binary tarball. `pip install ziglang` also works.
 
 ~~~sh
-# zig 0.16.0 (binary tarball; `pip install ziglang` also works)
 curl -fsSL https://ziglang.org/download/0.16.0/zig-x86_64-linux-0.16.0.tar.xz | tar -xJ -C ~/.local
 ln -sf ~/.local/zig-x86_64-linux-0.16.0/zig ~/.local/bin/zig    # ~/.local/bin on PATH
 cargo install cargo-zigbuild
@@ -107,7 +111,7 @@ cargo build --release            # default target on a Windows host
 
 ## macOS (native)
 
-macOS is built natively on a Mac (cross-compiling Linux->macOS needs the Apple SDK and is not set up here). On a Mac:
+macOS is built natively on a Mac (cross-compiling Linux->macOS needs the Apple SDK and isn't set up here). On a Mac:
 
 ~~~sh
 cargo build --release
@@ -136,13 +140,13 @@ wgpu uses the Metal backend automatically. No extra system packages are needed b
 
 - `cicd/cicd.bash --backlog-run-quick` runs inside too.
 
-- A full run with `--no-container` still uses the image for three steps. The test suite under AddressSanitizer, under ThreadSanitizer with `--long`, and under Miri with `--leakcheck` or `--long`, need the nightly that `rust-toolchain.toml` dates, and only the image has it. `--no-asan`, `--no-tsan` and `--no-miri` skip those steps, and then the run needs no docker.
+- A full run with `--no-container` still uses the image for 3 steps. The test suite under AddressSanitizer, under ThreadSanitizer with `--long`, and under Miri with `--leakcheck` or `--long`, need the nightly that `rust-toolchain.toml` dates, and only the image has it. `--no-asan`, `--no-tsan` and `--no-miri` skip those steps, and then the run needs no docker.
 
 ## Formatting
 
 `rustfmt.toml` pins the style (`hard_tabs`). The hand-formatted data tables (the `Palette`/`Dlg` color matrices in `theme.rs`/`settings_ui.rs`, the About table in `dialog.rs`) have `#[rustfmt::skip]` so `cargo fmt` leaves them compact; everything else is rustfmt-canonical.
 
-A pre-commit hook (`utility/git-hooks/pre-commit`) reformats the staged `.rs` files on every commit so they never drift. It formats what is staged, not the file on disk, so a file with only some of its changes staged still commits only those; the working copy is reformatted as well where it has nothing unstaged to lose. Activate it once per clone:
+A pre-commit hook (`utility/git-hooks/pre-commit`) reformats the staged `.rs` files on every commit so they never drift. It formats what's staged rather than the file on disk, so a file with only some of its changes staged still commits only those; the working copy is reformatted as well where it has nothing unstaged to lose. Activate it once per clone:
 
 ~~~sh
 git config core.hooksPath utility/git-hooks

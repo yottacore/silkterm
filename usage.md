@@ -36,15 +36,15 @@ On first run SilkTerm writes a commented config file with all defaults, in the p
 | Windows | `%APPDATA%\silkterm\`                             | `%LOCALAPPDATA%\silkterm\wallpaper\`
 | macOS   | `~/Library/Application Support/silkterm/`         | beside the config
 
-Setting `XDG_CONFIG_HOME` overrides the platform default everywhere, and `--config PATH` overrides everything - an alternate config keeps its own wallpaper and history beside itself rather than sharing the defaults.
+Setting `XDG_CONFIG_HOME` overrides the platform default everywhere, and `--config PATH` overrides everything. An alternate config keeps its own wallpaper and history beside itself rather than sharing the defaults.
 
-Windows splits the two because settings are worth roaming between machines and a 60 MiB wallpaper pack is not. A pack already sitting beside the config still works; nothing has to be moved.
+Windows splits the 2 because settings are worth roaming between machines and a 60 MiB wallpaper pack isn't. A pack already sitting beside the config still works; nothing has to be moved.
 
 If making changes directly (rather than through Settings), you can apply them immediately with the "Reload config" menu item. Settings reads the file each time it opens, so it also shows what another SilkTerm window saved.
 
-Settings names are meant to read plainly, but a few of them - scrim, contrast mask, automask mix - are particular to SilkTerm. [glossary.md](glossary.md) defines those.
+Settings names are meant to read plainly, but a few of them are particular to SilkTerm, such as scrim, contrast mask, and automask mix. [glossary.md](glossary.md) defines those.
 
-To start over from the shipped defaults, run `silkterm --reset-config`. The old file is kept alongside as `config.shcl.bak` rather than deleted.
+To start over from the default settings, run `silkterm --reset-config`. The old file is kept alongside as `config.shcl.bak` rather than deleted.
 
 When an update converts the file to a newer format, the file as it was is kept alongside, named for the local time it was converted and the format it had, such as `config_backup_20261003-142233_format-v2.shcl`. Every older version is kept, and a file named with `--config` keeps its own name in front. A line the new format can't hold stays in the file as written, and SilkTerm puts up a notice saying how many there were and where the old file is. If the file can't be converted where it is, because it isn't UTF-8 text or the new format can't read it, SilkTerm writes a new one from the defaults with every setting it can still read, and the notice says how many it couldn't copy to the new file. A file already in the current format with lines that aren't UTF-8 text is written again without those lines, and kept alongside the same way. A notice names the lines and where the old file is.
 
@@ -89,7 +89,7 @@ On a narrow tab the parts give way in a set order. A program's own title goes fi
 
 A template that can't be read, such as one with a `{` and no `}`, is kept as typed, and tabs use the default until it's fixed. The row's flyover in Settings says what is wrong, and so does the launch.
 
-A config from before the template had four check boxes for this (`window.tab_shows_title`, `tab_shows_shell`, `tab_shows_program` and `tab_shows_directory`). The first launch of a newer SilkTerm swaps them for a template that says the same.
+A config from before the template had 4 check boxes for this: `window.tab_shows_title`, `tab_shows_shell`, `tab_shows_program`, and `tab_shows_directory`. The first launch of a newer SilkTerm swaps them for a template that says the same.
 
 ## Panes in tmux
 
@@ -101,7 +101,7 @@ SilkTerm can start a pane in a tmux session of its own, so what runs in it outli
 
 - The pane runs the same shell it would have otherwise, in the directory it would have started in. A split made from a pane in tmux starts where tmux says that pane is now.
 
-The session's name comes from a template, "Session name template" under the switch, or `shell.tmux.session_name` in the config. It works like the tab text template, with three macros:
+The session's name comes from a template, "Session name template" under the switch, or `shell.tmux.session_name` in the config. It works like the tab text template, with 3 macros:
 
 | Macro        | Value
 | :----------- | :-----------------------------------
@@ -109,7 +109,7 @@ The session's name comes from a template, "Session name template" under the swit
 | `%HHMMSS%`   | The time
 | `%HHMMSSNN%` | The time, to a hundredth of a second
 
-The default is `%YYYYmmDD%-%HHMMSSNN%`, such as `20261017-17332704`. tmux won't keep a `.` or `:` in a name, and treats `#` as the start of one of its own formats, so all three become `_`. A name tmux already has gets `-2`, `-3` and so on after it.
+The default is `%YYYYmmDD%-%HHMMSSNN%`, such as `20261017-17332704`. tmux won't keep a `.` or `:` in a name, and treats `#` as the start of one of its own formats, so all 3 become `_`. A name tmux already has gets `-2`, `-3` and so on after it.
 
 Closing a tab, a pane or the window does what "When closed" says to each session SilkTerm started in it:
 
@@ -117,9 +117,9 @@ Closing a tab, a pane or the window does what "When closed" says to each session
 
 - End closes the session, and everything running in it.
 
-- Prompt, the default, asks each time. The question has a "Don't ask me next time" box, which stores the answer given as the new setting.
+- Prompt, the default, asks each time. The question has a "Don't ask me next time" box, which saves the answer given as the new setting.
 
-End only ever closes the session SilkTerm started for that pane, found by the name it was given. If the session was renamed, or something else was switched to inside the pane, that one is left alone. A pane whose tmux leaves on its own, by a detach inside it or the session ending, just closes, with nothing asked.
+End only ever closes the session SilkTerm started for that pane, found by the name it was given. If the session was renamed, or something else was switched to inside the pane, that one is left alone. A pane whose tmux leaves on its own, by a detach inside it or the session ending, closes without asking anything.
 
 In the config:
 
@@ -227,11 +227,11 @@ A new tab, split or window starts in the directory the current pane is in. For m
 
 PowerShell is the exception: `Set-Location` moves PowerShell's own idea of where it is and leaves the process where it was launched, so there is nothing to read and a new pane would start in the launch directory.
 
-SilkTerm handles that one for you. A few seconds after launch it adds a small directory-reporting block to each PowerShell profile - and it will not touch a profile that already reports (a Windows Terminal setup, oh-my-posh, anything else), will not rewrite what is there (it appends, after saving a copy beside it), will not change your prompt, and will not put the block back if you delete it. A shell whose execution policy would refuse to load the profile is left alone and said so, rather than being handed a file it cannot read. Clear "Update PowerShell profiles" on the Shell tab of Settings, or set `shell.integration: false`, to switch it off before it ever runs.
+SilkTerm handles that one for you. A few seconds after launch it adds a small directory-reporting block to each PowerShell profile. It won't touch a profile that already reports, such as a Windows Terminal setup or oh-my-posh. It appends the block after saving a copy of the profile beside it, rather than rewriting what's there. It won't change your prompt, and it won't put the block back if you delete it. A shell whose execution policy would refuse to load the profile is left alone and a notice says so, rather than being handed a file it can't read. Clear "Update PowerShell profiles" on the Shell tab of Settings, or set `shell.integration: false`, to switch it off before it ever runs.
 
-Same story for a shell running behind `ssh` or in a container - that one is yours to set up, since the shell you are typing at is not the process SilkTerm started.
+A shell running behind `ssh` or in a container is yours to set up, since the shell you're typing at isn't the process SilkTerm started.
 
-[shell-integration.md](shell-integration.md) covers all of it, including the snippets for bash, zsh and fish.
+[shell-integration.md](shell-integration.md) explains all of it, and has the snippets for bash, zsh, and fish.
 
 ## Programs over ssh
 
@@ -261,9 +261,9 @@ The Shell tab of Settings has an "Open with SilkTerm" group, one row per kind of
 
 Register makes a double-click run that kind of file in SilkTerm. The pane stays open after the script ends, so its output and exit status can be read. It is for your account only and needs no administrator rights. The arrow at the end of the row puts back whatever was there before. Register again after moving SilkTerm.
 
-What it does not cover:
+What it doesn't change:
 
-- A console program started any other way, such as `cmd` from the Run box or a double-clicked `.exe`, still opens where it did. SilkTerm is not a replacement for Windows' default terminal setting.
+- A console program started any other way, such as `cmd` from the Run box or a double-clicked `.exe`, still opens where it did. SilkTerm isn't a replacement for Windows' default terminal setting.
 
 - A file type you picked an app for under "Open with" keeps that app, because Windows keeps that choice out of reach of other programs. Settings says so, and choosing SilkTerm there yourself is what changes it.
 

@@ -30,7 +30,7 @@
 
 ## Introduction
 
-Going forward, new issues in the new template at the bottom of this file, will go in the '## New format' section only. No more status emojis. Refer to '## Reference' for sort order. Issues in the old format (with status emojis) won't be refactored, but will continue to be worked until moved to closed, canceled, or deferred sections, and emojis updated. (Eventually this will all be moved to nano-git-db anyway. This new template is an intermediate effort to make issues going forward more structured and importable.)
+Going forward, new issues in the new template at the bottom of this file will go in the '## New format' section only. No more status emojis. Refer to '## Reference' for sort order. Issues in the old format (with status emojis) won't be refactored, but will continue to be worked until moved to closed, canceled, or deferred sections, and emojis updated. (Eventually this will all be moved to nano-git-db anyway. This new template is an intermediate effort to make issues going forward more structured and importable.)
 
 ## Issues
 
@@ -38,16 +38,16 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- ID: 2026110609500003
 	- Type: Bug
 	- Status: Waiting for answers
-		- Waits on the question in questions.md: a screenshot, and what was on screen when it showed.
+		- It waits on the question in questions.md, which asks for a screenshot and what was on screen when it showed.
 	- Opened: 20261106-095000
 	- Opened by: JC
 	- Assigned to: CC
 	- Notes:
 		- Pre-next-cut.
-	- Reproduced: No, 20261106. On Xvfb at scales 1, 1.25, 1.5, 1.75 and 2, and under headless sway on the RTX 3060 Ti at 1, 1.25 and 2, every tab's title sits the same distance above its box's bottom edge, sub-tabs included. A dev debug build and the 11-01 release build read the same.
+	- Reproduced: No, 20261106. On Xvfb at scales 1, 1.25, 1.5, 1.75, and 2, and under headless sway on the RTX 3060 Ti at 1, 1.25, and 2, every tab's title sits the same distance above its box's bottom edge, sub-tabs included. A dev debug build and the 11-01 release build read the same.
 	- Progress log:
 		- 20261106: The title's height comes from its own tab's box, the same box that is drawn, so nothing in the layout can add up down the list. Both renderers in the frame get the same surface size.
-	- Test case: `a_tab_title_sits_as_low_in_its_box_on_every_tab` (deyxd), both sides, at 4 scales, tall and short windows. It fails when a title is moved a quarter pixel per tab. It passes on the current build.
+	- Test case: `a_tab_title_sits_as_low_in_its_box_on_every_tab` (deyxd) runs on both sides, at 4 scales, in tall and short windows. It fails when a title is moved a quarter pixel per tab. It passes on the current build.
 	- Branch: rnd1106
 
 - The window doesn't paint while the GPU is busy or short on memory, and stays blank after the load ends
@@ -56,7 +56,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Status: Waiting on UAT
 		- 20261025: Only the look on b23's own desktop is left, which is a person's part.
 	- Stand-in: none (20261028). The blank window was seen only on b23's desktop, through the X11 GL swap and a virtual desktop switch. A headless display has neither, and the 10-03 tries on vm925w never reproduced it.
-	- Needs hand testing: A dogfood look on b23 with the GPU busy or nearly full. Move to another desktop and back, end the load, and leave the window alone. It should paint on its own. Try it once with "Free resources when idle" on and short idle times too. Started from a terminal with `SILK_IDLEDBG=1`, it prints any refused frame or rebuild.
+	- Needs hand testing: Take a dogfood look on b23 with the GPU busy or nearly full. Move to another desktop and back, end the load, and leave the window alone. It should paint on its own. Try it once with "Free resources when idle" on and short idle times too. Started from a terminal with `SILK_IDLEDBG=1`, it prints any refused frame or rebuild.
 		- 20261025: The dogfood pool now has build dedvg, from dev at a9daddc, for Linux and Windows, with the 10-24 and 10-25 rounds' fixes. A window started before the next launch still runs de5r9.
 	- Severity: High
 	- Opened: 20261003-124705
@@ -66,50 +66,50 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Target OS: All
 	- Test environment: b23
 	- Steps to reproduce:
-		- Have something else keep the GPU busy, or holding most of its memory.
+		- Have something else keep the GPU busy, or hold most of its memory.
 		- Move to another virtual desktop and back to one with a SilkTerm window.
 	- Incorrect behavior:
 		- SilkTerm doesn't paint. The only thing visible is the window frame, and other windows and the desktop behind the terminal area.
 		- When whatever was using the GPU ends, the blank window is still not repainted. Switching to a different virtual desktop and back repaints it.
 	- Expected behavior: The window paints as soon as the GPU can take the work, and never stays blank once the load is gone.
-	- Reproduced: No. Seen on b23 when moving between virtual desktops. Not known yet if a window left on screen would also stop painting.
+	- Reproduced: No. It was seen on b23 when moving between virtual desktops. It isn't known yet if a window left on screen would also stop painting.
 	- Possible cause: A frame that can't get its surface or GPU device under that load is dropped, and nothing tries again until the desktop asks for a redraw.
 	- Actual cause:
-		- A frame the GPU refused was dropped. The pass that asked for it had already cleared its redraw flag, so nothing asked again until the desktop sent another redraw. That covers a surface that timed out or went out of date, and on X11 a buffer swap that failed, whose error was ignored.
-		- A device that could not be built again after the idle release waited for the next key, click or focus change.
-		- Which one happened on b23 is not known. The terminal window always draws through GL on X11, so the failed swap and the rebuild are the likely ones. It is also not known whether "Free resources when idle" was on at the time.
+		- A frame the GPU refused was dropped. The pass that asked for it had already cleared its redraw flag, so nothing asked again until the desktop sent another redraw. That applies to a surface that timed out or went out of date, and on X11 a buffer swap that failed, whose error was ignored.
+		- A device that couldn't be built again after the idle release waited for the next key, click or focus change.
+		- Which one happened on b23 isn't known. The terminal window always draws through GL on X11, so the failed swap and the rebuild are the likely ones. It also isn't known whether "Free resources when idle" was on at the time.
 	- Notes:
 		- Before RC1.
 		- 20261003: At filing, b23's GPU had 7.7 GB of its 8 GB in use.
 		- 20261003: Settings and the notice window had the same gap, and get the same retry.
 		- 20261003: For 2026100312470540: a rebuild refused after the idle release now tries again by itself while the window shows, with a wait that grows to a few seconds.
-		- 20261003: Not covered. A GL error that arrives after the swap has returned is not seen. A GPU out of memory while getting a surface on the native path ends the program rather than blanking it, from wgpu's default error handler. wgpu wants a lost surface made again, and the code only reconfigures it, so a lost surface would keep being refused. While the GPU keeps timing out, each try can hold the window up for about a second inside wgpu.
-		- 20261004: Falling back to software rendering when the card cannot make a device is filed as 2026100418225504.
+		- 20261003: Some cases aren't handled. A GL error that arrives after the swap has returned isn't seen. A GPU out of memory while getting a surface on the native path ends the program rather than blanking it, from wgpu's default error handler. wgpu wants a lost surface made again, and the code only reconfigures it, so a lost surface would keep being refused. While the GPU keeps timing out, each try can stall the window for about a second inside wgpu.
+		- 20261004: Falling back to software rendering when the card can't make a device is filed as 2026100418225504.
 	- Actual fix: A refused frame is drawn again after a short wait that doubles up to a couple of seconds, and starts over once a frame gets through. A refused rebuild stays pending and is tried again the same way, with longer waits, while the window shows. A refused frame no longer keeps animation frames coming, so the wait is the only pace while the GPU says no.
 	- Progress log:
 		- 20261003: Verified: both new tests fail with the retry taken out and pass with it. The full unit suite, clippy for Linux and Windows, and fmt pass.
-		- 20261003: Verified: three refused rebuilds were tried again at about 0.25, 0.5 and 1 s, and the device came back with no input. Eight refused frames backed off from 16 ms to 2 s, and the window painted again with no input. An idle release and wake with nothing refused still works.
-		- 20261003: Tried on vm925w (RTX 2060, 6 GB) with another program keeping the GPU at 100% and holding 4.6 GB, then again with memory full until the driver refused more and longer GPU work. The build from just before the fix and the fixed build both kept painting: on screen while typed into, after minimize and restore, and after a move to another virtual desktop and back. Neither went blank. Both still showed the right picture 3 and 10 s after the load ended, with no input.
+		- 20261003: Verified: SilkTerm tried 3 refused rebuilds again at about 0.25, 0.5, and 1 s, and the device came back with no input. SilkTerm backed off 8 refused frames from 16 ms to 2 s, and the window painted again with no input. An idle release and wake with nothing refused still works.
+		- 20261003: Tried on vm925w (RTX 2060, 6 GB) with another program keeping the GPU at 100% and holding 4.6 GB, then again with memory full until the driver refused more and longer GPU work. The build from before the fix and the fixed build both kept painting: on screen while typed into, after minimize and restore, and after a move to another virtual desktop and back. Neither went blank. Both still showed the right picture 3 and 10 s after the load ended, with no input.
 		- 20261003: Same with Free resources when idle on and a 5 s idle time. The device was let go and built again under load each time, in about 1 s, and no rebuild was refused. The fixed build logged one refused frame now and then around a minimize, drawn again after 16 ms, never two in a row.
-		- 20261003: With Transparency on, which draws through DX12 on Windows, both builds did the same thing: a window restored without focus was let go after the idle time while still on screen, went black when the load ended, and stayed black until typed into. The fix does not change this, since a window let go on purpose needs no frame. Not tried without load: that run hung vm925w and did not finish.
+		- 20261003: With Transparency on, which draws through DX12 on Windows, both builds did the same thing: a window restored without focus was let go after the idle time while still on screen, went black when the load ended, and stayed black until typed into. The fix doesn't change this, since a window let go on purpose doesn't need a frame. It wasn't tried without load, because that run hung vm925w and didn't finish.
 		- 20261003: Also seen in both builds with Free resources when idle on, under load: after waking, the window sometimes showed only the last character of the prompt instead of the earlier text, until typed into.
-		- 20261003: Not covered: the Windows terminal draws through wgpu on Vulkan, or DX12 with Transparency, not the X11 GL swap b23 uses, so the failed swap path was never reached. vm925w has no WSL2, so there was no run through Mesa on the same GPU.
+		- 20261003: Not tested here. The Windows terminal draws through wgpu on Vulkan, or DX12 with Transparency, rather than the X11 GL swap b23 uses, so the failed swap path never ran. vm925w has no WSL2, so there was no run through Mesa on the same GPU.
 		- 20261003: The black window and the missing text seen in both builds are filed as 2026100319134501 and 2026100319134502.
-		- 20261023: Both tests passed in the full run at 2da75a7. The b23 look is not done yet. This round had no dogfood or desktop runs.
+		- 20261023: Both tests passed in the full run at 2da75a7. The b23 look isn't done yet. This round had no dogfood or desktop runs.
 		- 20261025: Both tests passed again in both full runs at e95b81b. The b23 look moved to the hand testing row, since it needs the visible desktop.
 		- 20261026: Both tests passed again in the full run at fab6815.
 		- 20261028: Both tests passed again in the full run at 64f3584.
-	- Swept: every frame and rebuild site. The terminal's acquire and GL swap in `render_with`, reached from both `about_to_wait` and the desktop's redraw. The dialog and notice windows' acquire and swap in `DialogWin::render`. `rebuild_gpu`, which the console-return heal also calls. `grep -n 'begin_frame\|end_frame\|Gfx::rebuild'` finds no others.
+	- Swept: every frame and rebuild site. They're the terminal's acquire and GL swap in `render_with`, called from both `about_to_wait` and the desktop's redraw, the dialog and notice windows' acquire and swap in `DialogWin::render`, and `rebuild_gpu`, which the console-return heal also calls. `grep -n 'begin_frame\|end_frame\|Gfx::rebuild'` finds no others.
 	- Branch: gpuload
 	- Commit: 8cb6a4d
 	- Test case: `a_refused_frame_is_drawn_again_on_a_backoff` (ddf4e) and `a_refused_rebuild_stays_pending_and_is_tried_again` (ddf4f). The GL swap result has no test, since it needs a real GL context.
-	- Note: 20261003, Free resources when idle was on for some of the windows that went blank and off for others. Which ones is not remembered, so both the frame path and the rebuild path stay suspects.
+	- Note: 20261003, Free resources when idle was on for some of the windows that went blank and off for others. Which ones isn't remembered, so both the frame path and the rebuild path stay suspects.
 
 - When two screens return after screen power sleep or off, SilkTerm seems to reposition itself in between them
 	- ID: 2026102807384201
 	- Type: Bug
 	- Status: Waiting on UAT
-		- A look on b23, in the hand testing row. The put-back for a window manager that never puts a window back has no real desktop to try it on here.
+		- It needs a look on b23, in the hand testing row. The put-back for a window manager that never puts a window back can't be tried on a real desktop here.
 	- Needs hand testing: On b23 under xfwm4, with the window on each monitor in turn: let both screens sleep, wake them, and see the window back where it was, at its size.
 	- Stand-in: none (20261102). deqx1 already stands in for the window manager's part headless. What's left needs b23's 2 real monitors going to sleep.
 	- Severity: High
@@ -121,7 +121,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Test environment: b23, xfwm4 4.20
 	- Incorrect behavior: When two screens return after screen power sleep or off, SilkTerm seems to reposition itself in between them.
 	- Expected behavior: It stays where it was. None of the other ~dozen application windows move, other terminals included.
-	- Reproduced: 20261101, headless, with two outputs under xfwm4. Turned off, the portrait output's window was moved onto the landscape one and took that one's size. Turned on again, the window stayed there, and an xterm beside it went back.
+	- Reproduced: 20261101, headless, with 2 outputs under xfwm4. When the portrait output was turned off, its window was moved onto the landscape one and took that one's size. When it was turned on again, the window stayed there, and an xterm beside it went back.
 	- Actual cause: xfwm4 notes where each window was as a monitor goes, and puts it back once the monitor returns, unless the window resized itself in between. SilkTerm took the size kept for the monitor it was herded onto, so xfwm4 left it where it had herded it. Since 2026100907341816 that took place even within a second of the move.
 	- Notes:
 		- Pre-next-cut.
@@ -130,17 +130,17 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261101: A window herded off a monitor that went dark, or changed, keeps its size and takes no other. It notes the monitor it is on, so a size the user sets there is kept for that one. This reverses 2026100907341816's choice that a herded window takes the other monitor's size. Other windows keep their size too.
 		- 20261101: A herd is told from a user's drag by the monitor the window was on at its last look being gone from the layout. Where the window can't say where it is, as on native Wayland, nothing changed.
 		- 20261101: Updated an assert, `monwake` (ddq75): "took the landscape size there" is now "kept its size there". In ddq74 the herd step now takes no size.
-		- 20261101: Back to Queued by the answer to the Check entry. A window can't jump between monitors each time they sleep. Two asks: add a warning to the per-monitor size tip text that the feature can fight the window manager when screens sleep and come back, with unexpected size and placement; and note the window's place and size when a screen goes dark, and if the user didn't move or resize it, put it back there when the screen returns.
+		- 20261101: Back to Queued by the answer to the Check entry. A window can't jump between monitors each time they sleep. It had 2 asks: add a warning to the per-monitor size tip text that the feature can fight the window manager when screens sleep and come back, with unexpected size and placement; and note the window's place and size when a screen goes dark, and if the user didn't move or resize it, put it back there when the screen returns.
 		- 20261101: The tip warning is the row's warning mark, as Transparency and the tmux switch have, so it shows on the label too.
 		- 20261101: The put-back runs only while per-monitor sizes are taking effect, since only then does SilkTerm move the window off where the window manager leaves it. The window manager gets 2 s first, so xfwm4, which puts windows back itself, is never fought. Moved or resized by the user while herded, the window is left alone.
-		- 20261101: Updated an assert, `two_rows_warn_and_each_mark_shows_the_rows_tip` (ddp7w): the warned rows were Transparency, the tmux switch and Free resources when idle, and Per monitor is now among them, on the Window tab.
+		- 20261101: Updated an assert, `two_rows_warn_and_each_mark_shows_the_rows_tip` (ddp7w): the warned rows were Transparency, the tmux switch, and Free resources when idle, and Per monitor is now among them, on the Window tab.
 	- Actual fix: The look after a move takes no monitor size when the monitor the window was on at the last look has left the layout. design.md says so under the per-monitor size. Since the second answer, the Per monitor tip warns that the feature can fight the window manager as screens sleep and wake. A herded window notes where it was and at what size. Once that monitor is back and the window manager has had 2 s, a window not there yet is put back, unless the user moved or resized it since.
 	- Swept: every call that resizes the main window. The monitor look is the only one made without the user, apart from the system's own resize for a new scale. The Settings and zoom resizes are the user's. Dialogs are placed once, when they open.
-		- 20261101: every place the window notes its place: each look, a size saved, and the window's own resize and the move it can cause. The put-back is skipped while a move is waiting to settle, a button is held, or the window is minimized, maximized or fullscreen.
-	- Verified: 20261101. deqx1 now also runs with no window manager, the herd made by hand: put back, and left alone when moved or resized while herded. The put-back case fails with the put-back taken out, and the resized case with the forget-on-resize taken out. The xfwm4 cases and monwake pass. The unit tests, clippy for Linux and Windows, fmt, script lints, docs and test IDs pass.
-		- The moved case passes either way here, since under Xwayland a look after a move waits for a sign the drag is over, and that wait holds the window too.
-		- 20261103: Run again with xfwm4 really gone (2026110315170584). The back case fails with the put-back taken out, and the resized case with the forget-on-resize taken out. The moved case still passes with the forget-on-move taken out, since its look after the move still waits for a sign the drag is over. With nothing taken out, all 19 checks pass.
-		- 20261103: The line above was run under an xfwm4 the desktop's session had started again (2026110318260287). Run again with none on the display (2026110319081175). The back case fails with the put-back taken out, the resized case with the forget-on-resize taken out, and the moved case with the forget-on-move taken out. Each failed only its own case. With nothing taken out, all 20 checks pass.
+		- 20261101: every place the window notes its place: each look, a size saved, and the window's own resize and the move it can cause. The put-back is skipped while a move is waiting to settle, a button is held, or the window is minimized, maximized, or fullscreen.
+	- Verified: 20261101. deqx1 now also runs with no window manager, with the herd made by hand. The window is put back, and left alone when moved or resized while herded. The put-back case fails with the put-back taken out, and the resized case with the forget-on-resize taken out. The xfwm4 cases and monwake pass. The unit tests, clippy for Linux and Windows, fmt, script lints, docs, and test IDs pass.
+		- The moved case passes either way here, since under Xwayland a look after a move waits for a sign the drag is over, and that wait keeps the window there too.
+		- 20261103: It was run again with xfwm4 gone (2026110315170584). The back case fails with the put-back taken out, and the resized case with the forget-on-resize taken out. The moved case still passes with the forget-on-move taken out, since its look after the move still waits for a sign the drag is over. With nothing taken out, all 19 checks pass.
+		- 20261103: The line above was run under an xfwm4 the desktop's session had started again (2026110318260287). It was run again with none on the display (2026110319081175). The back case fails with the put-back taken out, the resized case with the forget-on-resize taken out, and the moved case with the forget-on-move taken out. Each failed only its own case. With nothing taken out, all 20 checks pass.
 	- Branch: rnd1101b
 	- Test case: `cicd/tests/herdback/run.bash` (deqx1), the window back where it was under xfwm4, and with no window manager. `a_window_herded_off_a_dark_monitor_takes_no_size` (deqwx). `a_herded_window_goes_back_once_its_monitor_is_lit` (der22). `monwake` (ddq75) and ddq74, changed. `two_rows_warn_and_each_mark_shows_the_rows_tip` (ddp7w), changed.
 	- Acceptance signoff: Waiting on the b23 look. deqx1 and der22 pass on rnd1101b.
@@ -149,7 +149,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- ID: 2026110609500002
 	- Type: Bug
 	- Status: Waiting on UAT
-		- A look on b23, in the hand testing row. The headless rig can't make an output read disconnected while it stays laid out.
+		- It needs a look on b23, in the hand testing row. The headless rig can't make an output read disconnected while it stays laid out.
 	- Needs hand testing: On b23, with a build from this branch and the window on the landscape monitor: let the screens sleep long enough that the HDMI one drops, wake them, and see the window back where it was, at its size. Started from a terminal with `SILK_MONDBG=1`, the sleep should log `noted` and `herded`, and no `take`.
 	- Severity: High
 	- Opened: 20261106-095000
@@ -159,11 +159,11 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Target OS: Linux
 	- Test environment: b23, xfwm4 4.20, NVIDIA, HDMI landscape and DP portrait
 	- Version and build: dogfood of 20261105-150207, which has the earlier fix
-	- Reproduced: No. Found from b23's X server log and the GTK and xfwm4 sources.
+	- Reproduced: No. The cause was found from b23's X server log and the GTK and xfwm4 sources.
 	- Actual cause:
-		- The HDMI monitor drops off as it sleeps. In 7 of 10 sleeps since 10-31 the X server went on laying it out, with its output read as disconnected, and nothing changed the layout until it woke. The other 3 took it out of the layout, which is the case deqx1 covers.
+		- The HDMI monitor drops off as it sleeps. In 7 of 10 sleeps since 10-31 the X server went on laying it out, with its output read as disconnected, and nothing changed the layout until it woke. The other 3 took it out of the layout, which is the case deqx1 tests.
 		- GTK skips a disconnected output, so xfwm4 saw one monitor and herded the window off the HDMI one. SilkTerm read its monitors from the server's layout, where the HDMI one was still there, so the herd looked like the user's move. The window took the portrait monitor's size, and xfwm4 forgot where to put it back.
-		- The live state file holds a `3440x1440_100pct` size with no mm. That key comes only from a look while the HDMI output reads no size, which fits a look made while it was asleep.
+		- The live state file has a `3440x1440_100pct` size with no mm. That key comes only from a look while the HDMI output reads no size, which fits a look made while it was asleep.
 	- Notes:
 		- Pre-next-cut.
 		- Need to verify with a fresher build.
@@ -174,7 +174,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Verified: 20261106. deyvh passes, and fails with the disconnected check taken out. deqx1 passes all 20 checks. A probe with the landscape output turned off, as the HDMI one goes, put the window back under xfwm4 before and after.
 	- Test case: `a_monitor_whose_cable_reads_disconnected_is_dark` (deyvh). `cicd/tests/herdback/run.bash` (deqx1), unchanged, for the monitor taken out of the layout.
 	- Branch: rnd1106
-	- Stand-in: none (20261106). Xwayland under headless sway can't report an output as disconnected while it stays laid out, which is b23's usual sleep. deqx1 covers the output being taken out of the layout.
+	- Stand-in: none (20261106). Xwayland under headless sway can't report an output as disconnected while it stays laid out, which is b23's usual sleep. deqx1 tests the output being taken out of the layout.
 
 - The nano scroll scene on Wayland once saw st=2 while sliding
 	- ID: 2026110814224000
@@ -188,7 +188,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Test environment: b23, a container run of the regression tests alone at 4eb15ae, load about 10.
 	- Incorrect behavior: `cicd/tests/scroll/run.bash` (d9j4v) failed with "scroll scene nano (Wayland), expected st=1 while sliding but saw st=2". The X11 nano scene and the other 13 Wayland scenes passed in the same run.
 	- Expected behavior: Every sliding frame of the nano scene reads st=1, under the title bar.
-	- Reproduced: No, 20261108. 5 runs of `--wayland --only nano` on the host passed, at load 8 to 10. Every kept full run log since 20261031 has it passing on both engines.
+	- Reproduced: No, 20261108. On the host, 5 runs of `--wayland --only nano` passed, at load 8 to 10. Every kept full run log since 20261031 has it passing on both engines.
 	- Test case: d9j4v itself.
 
 - Add a contributor license agreement, like nano-git-db's
@@ -206,8 +206,8 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Notes:
 		- Pre-next-cut.
 	- Progress log:
-		- 20261019: `CLA.md`, a section in contributing.md, and `.github/workflows/cla.yml`, the same as nano-git-db's. Owner review on both files. The check still needs a first pull request from someone else to prove it.
-		- 20261023: Neither a full run nor Mac CI reaches `cla.yml`, which runs only on pull requests.
+		- 20261019: Added `CLA.md`, a section in contributing.md, and `.github/workflows/cla.yml`, the same as nano-git-db's. Both files need JC's review. The check still needs a first pull request from someone else to prove it.
+		- 20261023: Neither a full run nor Mac CI runs `cla.yml`, which runs only on pull requests.
 
 - Demo: the cursor goes to 50% width when the cursor size and animation change
 	- ID: 2026092812581720
@@ -223,9 +223,9 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Requirements:
 		- When changing the cursor size and animation, change to 50% width.
 	- Progress log:
-		- 20261022: The cursor scene now goes from the full block to a 50% wide one (`cursor.size.width` is percent of the cell), with the phase animation, in place of the 25% bar. `script.txt` says the same. The gif is not re-recorded, per the decision below.
-		- Verified: the demo test drives the cursor scene and finds width 50 and the phase animation; it failed with the old 25 and passes now. The python lint is clean on both files.
-		- Swept: `script.txt`, the recorder's config comment, scene comment and history, and the docs. Only the cursor scene sets the width on camera; the starting config keeps the 100 block.
+		- 20261022: The cursor scene now goes from the full block to a 50% wide one (`cursor.size.width` is percent of the cell), with the phase animation, in place of the 25% bar. `script.txt` says the same. The gif isn't re-recorded, per the decision below.
+		- Verified: the demo test drives the cursor scene and finds width 50 and the phase animation. It failed with the old 25, and passes now. The python lint is clean on both files.
+		- Swept: `script.txt`, the recorder's config comment, scene comment and history, and the docs. Only the cursor scene sets the width on camera. The starting config keeps the 100 block.
 		- 20261023: The demo recorder test (dcrxy) passed in the full run at 2da75a7.
 	- Decisions:
 		- 20260928: Held for the release, with the other demo recorder change.
@@ -245,14 +245,14 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- A file with `performance:` and under it `# profile: "max"  ## Default`. Load it keeping lines, set `performance.profile`, and save keeping lines.
 	- Incorrect behavior: the comment stays and the value goes in as a new line, so every line below moves down one.
 	- Expected behavior: the commented line is filled in where it is, so nothing below it moves.
-	- Reproduced: 20261001 on b23, on the real program with shcl b10c2009. The rating added `profile:` and `rated_hardware:` and kept the template's two commented lines. shcl's dev branch has nothing for it as of 20261002.
+	- Reproduced: 20261001 on b23, on the real program with shcl b10c2009. The rating added `profile:` and `rated_hardware:`, and kept the template's 2 commented lines. shcl's dev branch has nothing for it as of 20261002.
 	- Progress log:
-		- A rough edge, for shcl to look at. It is why a launch message about a bad line can name a line two short once the rating writes (2026100115322366).
+		- It's a rough edge, for shcl to look at. It's why a launch message about a bad line can name a line 2 short once the rating writes (2026100115322366).
 		- Stalled until a shcl beta has it.
-		- 20261007: Still present. Run against shcl dev d7903b73, not inferred: the step above with `set_string("performance.profile", "low")` writes `profile: low` as a new line above the commented one, and keeps the lines (5 in, 6 out). Nothing in shcl's changelog or log since b10c2009 is for it. No 3.0 beta is published; crates.io still has 2.0.0.
+		- 20261007: It's still there, run against shcl dev d7903b73 rather than inferred. The step above with `set_string("performance.profile", "low")` writes `profile: low` as a new line above the commented one, and keeps the lines (5 in, 6 out). Nothing in shcl's changelog or log since b10c2009 is for it. No 3.0 beta is published, and crates.io still has 2.0.0.
 	- Held for a shcl beta that fills in a commented default in place.
 
-- shcl: `migrate_unstamped` cannot say a migration did not finish
+- shcl: `migrate_unstamped` can't say a migration didn't finish
 	- ID: 2026100315553545
 	- Type: Task
 	- Status: Stalled
@@ -263,14 +263,14 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Steps to reproduce:
 		- `shcl::migrate_unstamped("notes: ```\nnever closed\n", true)`, at b10c2009 or dev e9e4a6c.
 	- Incorrect behavior: it returns `current: false`, `ambiguous: 0` and `lost: 0`, the same as a migration that finished. A program that then writes its own footer, which is what `migrate_unstamped` is for, puts the Format line inside the raw block, so the file never reads as current. Only the stamped `migrate` shows it, by leaving the Format line off.
-	- Expected behavior: `Migration` says when the migration could not finish, so the caller can tell without running the stamped call as well.
+	- Expected behavior: `Migration` says when the migration couldn't finish, so the caller can tell without running the stamped call as well.
 	- Reproduced: 20261003 on b23, through SilkTerm. A 2.x file with a raw block that never closed was converted in place and no copy of the old file was kept, because the result never read as a newer format.
 	- Progress log:
-		- A missing capability, and a silent wrong answer for a caller that writes its own footer. SilkTerm asks the stamped `migrate` as well, in `upgrade` in config.rs, and writes such a file new (2026100312470546).
-		- Also missing from the library: a whole-file conversion that keeps the old file. Only the CLI's `migrate --write` does that, as `config_old_v2.shcl`.
+		- It's a missing capability, and a silent wrong answer for a caller that writes its own footer. SilkTerm also calls the stamped `migrate`, in `upgrade` in config.rs, and writes such a file new (2026100312470546).
+		- The library also lacks a whole-file conversion that keeps the old file. Only the CLI's `migrate --write` does that, as `config_old_v2.shcl`.
 		- Stalled until a shcl beta has it.
-		- 20261007: Still present. Run against shcl dev d7903b73, not inferred: the step above still returns `current: false`, `ambiguous: 0`, `lost: 0`, and the stamped `migrate` still shows it only by leaving the Format line off. `Migration` has no new field. shcl's CLI `migrate` now refuses such a file with exit 7, by the same Format line check. No 3.0 beta is published; crates.io still has 2.0.0.
-		- API at the swap: shcl dev now has `upgrade()` and `upgrade_file()`, which convert a whole file with a timestamped backup, and close the open raw block and stamp it. The CLI backup is now `config_backup_<time>_format-v2.shcl`, not `config_old_v2.shcl`.
+		- 20261007: It's still there, run against shcl dev d7903b73 rather than inferred. The step above still returns `current: false`, `ambiguous: 0`, `lost: 0`, and the stamped `migrate` still shows it only by leaving the Format line off. `Migration` has no new field. shcl's CLI `migrate` now refuses such a file with exit 7, by the same Format line check. No 3.0 beta is published, and crates.io still has 2.0.0.
+		- API at the swap: shcl dev now has `upgrade()` and `upgrade_file()`, which convert a whole file with a timestamped backup, and close the open raw block and stamp it. The CLI backup is now `config_backup_<time>_format-v2.shcl` rather than `config_old_v2.shcl`.
 	- Held for a shcl beta whose Migration says when it couldn't finish.
 
 - ttf-parser is unmaintained, and the advisory scan ignores that until the crates that pull it in move off it
@@ -4954,7 +4954,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Decisions:
 		- 20261031: The check stays in this repo's ID tool rather than a copy in the private repo. The private repo has no check of its own, and one tool over both trees keeps the IDs unique across them.
 		- 20261031: Only the tests folder goes into the container, not the private runner, since stage 6 runs on this side.
-	- Verified: 20261031. dejjp passes, and 6 of its 7 new checks failed against the old tool. The 7th, an empty `SILK_PRIVATE_RUNNER`, passes on both by design. ddrp2 passes, and 3 of its 4 new checks failed against the old `cicd.bash`. With the old ID put back in the private host test, `test-id.py --check` and `--backlog-run-quick docs` in the container both refused it, and both pass on dehx0. The private host test (dehx0) passes. `--backlog-run-quick scripts docs` passed.
+	- Verified: 20261031. dejjp passes, and 6 of its 7 new checks failed against the old tool. The seventh, an empty `SILK_PRIVATE_RUNNER`, passes on both by design. ddrp2 passes, and 3 of its 4 new checks failed against the old `cicd.bash`. With the old ID put back in the private host test, `test-id.py --check` and `--backlog-run-quick docs` in the container both refused it, and both pass on dehx0. The private host test (dehx0) passes. `--backlog-run-quick scripts docs` passed.
 		- Swept: every place that reads test IDs from files, which is only `find_ids` in `test-id.py`, used by `--check` and new IDs. `--list` and `--annotate` read Rust tests only, and the private repo has none. No doc describes what the check covers.
 	- Branch: rnd1031
 	- Commit: silkterm-private f867b51
@@ -7466,7 +7466,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 			- The quick gate, all five areas.
 	- Branch: rnd1022, rnd1104
 	- Test case: `the_scroll_record_costs_a_full_screen_program_little` (dct9f), rewritten in place, same ID.
-	- 20261026: It failed again on Mac CI run 40263068770 at 0b16ae9, with keeping rows 10% over and pairs from 0.711 to 2.116. It passed when run again alone. Back to Queued, since a 7th failure makes it more than a one-off.
+	- 20261026: It failed again on Mac CI run 40263068770 at 0b16ae9, with keeping rows 10% over and pairs from 0.711 to 2.116. It passed when run again alone. Back to Queued, since a seventh failure makes it more than a one-off.
 	- 20261028: Failed again on Mac CI run 40744137399 at e809cca: keeping rows 21% more, pairs from 0.570 to 1.966. It passed run again alone. From ce3d9fb the Mac suite runs at 1 job, so nothing runs beside it, which tests the memory traffic guess.
 	- 20261028: Mac CI run 40750006918 at ce3d9fb, at 1 job, passed it. Median 1.034, pairs from 0.466 to 1.290.
 	- 20261103: The 19 Mac CI runs since ce3d9fb, all at 1 job, failed it twice: 40779983969 at a median of 1.126 and 40945628828 at 1.108. 41747375039 passed at 1.095. Pairs ran from 0.47 to 1.79 in the noisy runs, and from 0.98 to 1.15 in the quiet ones, such as 41581768957 and 40825948501, whose medians were 1.03. So with nothing beside it, the swings were still there.
@@ -9799,7 +9799,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- The 16 rows a profile sets follow the automatic settings design, with the Profile dropdown as their presets group control. This also brings the list and on or off controls the design describes.
 	- Notes:
 		- Before RC1.
-		- Today the profile is stored, "Choose automatically" picks it from a hardware test, a slow display steps it down for the session, Remote lays itself over it for the session, and the rows keep the user's own values under it for Custom to bring back. The design stores nothing for a group and keeps no value while automatic.
+		- Today the profile is stored, "Choose automatically" picks it from a hardware test, a slow display steps it down for the session, Remote lays itself over it for the session, and the rows keep the user's own values under it for Custom to bring back. Under the design nothing is stored for a group, and no value is kept while automatic.
 	- Progress log:
 		- 20261009: Q: Is automatic for each row the rated profile's value, so the step down and Remote still reach every row left automatic?
 			- JC asked for it in plainer words.
@@ -13265,7 +13265,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- ✅ General format (unless we already inherited one):
 		- Done: both `--option value` and `--option=value` are taken, and a bool takes true/t/yes/y/1 or false/f/no/n/0. Short forms exist only for `-h` and `-v` so far.
 		- `--option[=| ]value` | `-o value`
-		- `--unary-flag` | `--unary-flag[=| ]\(true|t|yes|y|Y|1|false|f|no|n|N|0\)` | `-u` | …etc.
+		- `--unary-flag` | `--unary-flag[=| ]\(true|t|yes|y|Y|1|false|f|no|n|N|0\)` | `-u` | ...etc.
 		- In other words, even unary flags can be treated as options, and important options have single unique "short" versions.
 		- Pinned by: d913y `window_opts`, dbh65 `a_directory_cascades_the_way_a_shell_does` and da708 `wallpaper_never_eats_the_next_option`.
 	- ✅ `--config[=| ]"alternate config file location"`
@@ -15673,19 +15673,19 @@ Template:
 	- Requirements  [Feature]:
 		- Hierarchical bulleted list.
 	- Steps to reproduce [Bug]:
-		- …
+		- ...
 	- Incorrect behavior [Bug]:
 	- Expected behavior [Bug]:
 	- Reproduced [Bug]: [No, or when, where and how]
 	- Possible cause [Bug]:
 	- Actual cause [Bug]:
-		- …
+		- ...
 	- Estimated effort: [High|Avg|Low]
 	- Actual effort: [High|Avg|Low]
 	- Progress log:
-		- …
+		- ...
 	- Decisions:
-		- …
+		- ...
 	- Actual fix [Bug]:
 	- Branch:
 	- Commit:
