@@ -3,13 +3,13 @@
 <!-- markdownlint-disable MD055 -- Table pipe style [Expected: leading_and_trailing; Actual: leading_only; Missing trailing pipe] -->
 <!-- markdownlint-disable MD041 -- First line in a file should be a top-level heading -->
 
-# Code of Conduct
+# Code of conduct
 
-## Our Pledge
+## Our pledge
 
 In the interest of fostering an open and welcoming environment, we as contributors and maintainers pledge to make participation in our project and our community a harassment-free experience for everyone, regardless of age, body size, disability, ethnicity, sex characteristics, gender identity and expression, level of experience, education, socio-economic status, nationality, personal appearance, race, religion, or sexual identity and orientation.
 
-## Our Standards
+## Our standards
 
 Examples of behavior that contributes to a positive environment for our community include:
 
@@ -35,7 +35,7 @@ Examples of unacceptable behavior include:
 
 * Other conduct which could reasonably be considered inappropriate in a professional setting
 
-## Our Responsibilities
+## Our responsibilities
 
 Project maintainers are responsible for clarifying and enforcing our standards of acceptable behavior and will take appropriate and fair corrective action in response to any instances of unacceptable behavior.
 

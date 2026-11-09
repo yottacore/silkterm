@@ -1,6 +1,6 @@
 <!-- markdownlint-disable MD041 -- First line in a file should be a top-level heading -->
 
-# Contributor License Agreement
+# Contributor license agreement
 
 Thank you for contributing to SilkTerm (the "Project"). To keep the Project's licensing clean, and to let the maintainer offer the Project under other licenses too, every contributor must agree to this Contributor License Agreement (the "Agreement") before their contribution can be merged. This Agreement protects you, the maintainer, and everyone who relies on the Project. It does not change your rights to use your own contributions for any other purpose.
 

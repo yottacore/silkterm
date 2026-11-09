@@ -364,8 +364,6 @@ Rules that go with them:
 
 Things the built interface does differently from the rules above. Each is a small work item rather than a design question.
 
-- `Paste Selection` keeps a capital S so that the accelerator has a letter to take. Documented as an exception, but a better fix would free a letter elsewhere.
-
 - `Copy on select` sits at the bottom of the Cursor tab, which isn't where its subject is. It was asked for there and a test pins it, so it stays until that changes.
 
 - On macOS the auto-copy switches show their state only in the Edit menu, rather than at a glance as the in-window bar shows them elsewhere. The bar's dimming of them while the window is in the background has no counterpart there either.

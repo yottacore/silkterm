@@ -4,7 +4,7 @@
 <!-- markdownlint-disable MD055 -- Table pipe style [Expected: leading_and_trailing; Actual: leading_only; Missing trailing pipe] -->
 <!-- markdownlint-disable MD041 -- First line in a file should be a top-level heading -->
 
-# Trademark Policy
+# Trademark policy
 
 **Short version:** the code is free; the name is not. You may fork and redistribute the software under its license, but you may not use our name or logo to identify your version, without written permission.
 

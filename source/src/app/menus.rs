@@ -187,11 +187,20 @@ pub(super) fn entry_accel(entry: &Entry) -> Option<(&str, usize)> {
 	}
 }
 
-// Byte offset of the accelerator letter: exact-case match first (so 'S' can
-// pick "Selection" in "Paste Selection"), else case-insensitive.
+// Byte offset of the accelerator letter: exact case first, then the start of
+// a word, then anywhere. Labels are sentence case, so 'S' in "Paste selection"
+// needs the word start rather than the 's' in "Paste".
 fn accel_at(label: &str, ch: char) -> Option<usize> {
 	label
 		.find(ch)
+		.or_else(|| {
+			let mut prev = None::<char>;
+			label.char_indices().find_map(|(i, c)| {
+				let starts_word = !prev.is_some_and(char::is_alphanumeric);
+				prev = Some(c);
+				(starts_word && c.eq_ignore_ascii_case(&ch)).then_some(i)
+			})
+		})
 		.or_else(|| label.to_ascii_lowercase().find(ch.to_ascii_lowercase()))
 }
 
@@ -363,7 +372,7 @@ fn edit_menu_items(copy_select: bool, copy_output: bool) -> Vec<Entry> {
 	vec![
 		entry_item_accel('C', "Copy", MenuAction::Copy),
 		entry_item_accel('P', "Paste", MenuAction::Paste),
-		entry_item_accel('S', "Paste Selection", MenuAction::PasteSelection),
+		entry_item_accel('S', "Paste selection", MenuAction::PasteSelection),
 		Entry::Sep,
 		entry_check(copy_select, "Copy on select", MenuAction::ToggleCopySelect),
 		entry_check(copy_output, "Copy on output", MenuAction::ToggleCopyOutput),
@@ -631,13 +640,13 @@ fn context_menu_items(on: CtxState, shells: &[ShellEntry]) -> Vec<Entry> {
 		]);
 	}
 	// no accelerator on the shell rows: this menu already spends every letter
-	// their labels offer - 'S' on "Paste Selection", 'H' on "Split
+	// their labels offer - 'S' on "Paste selection", 'H' on "Split
 	// horizontal", 'N' on "New tab" - and a duplicate would make the older
 	// item unreachable, since the first match wins
 	entries.extend([
 		entry_item_accel('C', "Copy", MenuAction::Copy),
 		entry_item_accel('P', "Paste", MenuAction::Paste),
-		entry_item_accel('S', "Paste Selection", MenuAction::PasteSelection),
+		entry_item_accel('S', "Paste selection", MenuAction::PasteSelection),
 		Entry::Sep,
 		entry_check(
 			on.copy_select,
@@ -1786,7 +1795,7 @@ mod tests {
 	}
 
 	// Sentence case: past the first letter, a capital is either the row's
-	// accelerator ("Paste Selection") or part of the shortcut. Shell titles in a
+	// accelerator ("Paste selection") or part of the shortcut. Shell titles in a
 	// flyout are names and keep theirs.
 	// Test ID: dd5pp
 	#[test]
@@ -2069,7 +2078,7 @@ mod tests {
 			(MenuAction::Paste, "Paste (Command+V)"),
 			(MenuAction::NewTab, "New tab (Command+T)"),
 			(MenuAction::Settings, "Settings\u{2026} (Command+,)"),
-			(MenuAction::PasteSelection, "Paste Selection"),
+			(MenuAction::PasteSelection, "Paste selection"),
 		] {
 			assert_eq!(label(&mac, action).as_deref(), Some(shown));
 		}
@@ -2267,8 +2276,10 @@ mod tests {
 	// Test ID: da9hh
 	#[test]
 	fn accel_prefers_exact_case_then_falls_back() {
-		// 'S' must pick "Selection", not the 's' in "Paste"
-		assert_eq!(accel_at("Paste Selection", 'S'), Some(6));
+		// 'S' must pick "selection", not the 's' in "Paste"
+		assert_eq!(accel_at("Paste selection", 'S'), Some(6));
+		// an exact-case match still wins over a word start
+		assert_eq!(accel_at("New tab with shell", 'w'), Some(2));
 		// no capital 'O' -> case-insensitive fallback finds "only"
 		assert_eq!(accel_at("Read-only", 'O'), Some(5));
 		assert_eq!(accel_at("Quit", 'x'), None);
