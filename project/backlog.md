@@ -448,6 +448,29 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Closed: 20261106-125200
 	- Test case: de19r, scroll scene `tmuxclear` in `cicd/tests/scroll/run.bash`.
 
+- ddydf fails seed 259913750, so the full run stops at step 5: on X11 a drag after a scale change takes no size
+	- ID: 2026110915071802
+	- Type: Bug
+	- Status: Done
+	- Severity: High
+	- Opened: 20261109-150718
+	- Opened by: JC
+	- Assigned to: CC
+	- Related IDs: 2026102807384201, 2026110609500002
+	- Target OS: Linux
+	- Incorrect behavior: The cicd run of 20261109-124912 failed ddydf on seed 259913750. On X11 with per monitor on, output 1 went to scale 1.25, then the window was dragged to output 2. It kept output 1's size, 115x23, where it should have taken output 2's, 122x18. The trace says `herded`, with no `take`.
+	- Expected behavior: A drag to another monitor takes that monitor's size, after a scale change on the one it left too.
+	- Reproduced: 20261109. The seed fails alone every time, on the host and in the container, with the 11-09 build.
+	- Actual cause: A herd was any look where the monitor the window was on last had gone from the layout or changed. A scale change in Xwayland gives that monitor another size at the same place, and an X11 window hears nothing of it, so the next look came after the user's drag and read as a herd. A herd takes no size, and its watch waited for the old layout, which never came back. A turned monitor did the same. It came in with the herd change of 11-01.
+	- Decisions:
+		- 20261109: A monitor counts as gone only when nothing is laid out at its corner any more. One still there at another size was turned, rescaled or given another mode. A window manager doesn't herd windows off a monitor that is still lit, so a move off it is the user's.
+	- Actual fix: `herded` looks for a monitor at the old one's corner, not for the same rectangle. design.md says so under the per-monitor size.
+	- Verified: 20261109. Seed 259913750 passes, and fails on the build from before. The cicd run's seeds from 259913747 and 7 more X11 cases pass. deqwx, changed, and the other herd and monitor unit tests pass. deqx1 (herdback) and ddq75 (monwake) pass.
+	- Test case: `a_window_herded_off_a_dark_monitor_takes_no_size` (deqwx), with a turned and a rescaled monitor no longer a herd. `cicd/tests/dpirand/run.py --seed 259913750` (ddydf).
+	- Branch: herdscale
+	- Acceptance signoff: Self-closed: the failing seed and the herd tests pass, and the sleep path is unchanged, since a dark monitor leaves nothing at its corner.
+	- Closed: 20261109-150718
+
 - dd5nw fails its fDie check on every run, so every full run stops at step 4
 	- ID: 2026110119292010
 	- Type: Bug
