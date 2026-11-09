@@ -7,7 +7,7 @@
 <!-- TOC ignore:true -->
 # Glossary
 
-Words SilkTerm uses in its settings, its menus, and its own documentation that are either specific to this program or easy to misread. Written for someone using SilkTerm, and for a developer who has just opened the source for the first time.
+Words SilkTerm uses in its settings, its menus, and its own documentation that are either specific to this program or easy to misread. It's written for someone using SilkTerm, and for a developer who has opened the source for the first time.
 
 Terminal jargon that any terminal shares is left out unless SilkTerm gives it a particular meaning.
 
@@ -85,23 +85,23 @@ The state of a setting the program works out for itself while the switch above i
 
 ## Bare window
 
-A view mode that hides the window frame, the menu bar and the tab strip together, leaving only panes. Toggling it back restores whichever of the three were showing before.
+A view mode that hides the window frame, the menu bar and the tab strip together, leaving only panes. Toggling it back restores whichever of the 3 were showing before.
 
 ## Build number
 
-A short code baked into every build, printed by `--version` and shown in Help > About. It counts whole minutes since the year 2000 and sorts in build order. Two builds of the same release version are told apart by it. A build that isn't a release also shows its date after the number, as `(YYYY-mm-DD)`, in the local time of whoever is looking.
+A short code baked into every build, printed by `--version` and shown in Help > About. It counts whole minutes since the year 2000 and sorts in build order. It tells 2 builds of the same release version apart. A build that isn't a release also shows its date after the number, as `(YYYY-mm-DD)`, in the local time of whoever is looking.
 
 ## Cell
 
-One character position in the terminal grid. The grid is a fixed number of cells wide and tall, and every measurement of the text - the cursor, the scroll offset, a selection - is in cells rather than pixels.
+One character position in the terminal grid. The grid is a fixed number of cells wide and tall, and every measurement of the text is in cells rather than pixels. That includes the cursor, the scroll offset, and a selection.
 
 ## Color picker
 
-The box a color chip opens on the Themes tab. A square sets saturation and brightness, the strip beside it sets the hue, and six boxes read and take the same color as percentages and as a hex value. Changes show on the row behind it as they are made, and Cancel puts the old color back.
+The box a color chip opens on the Themes tab. A square sets saturation and brightness, the strip beside it sets the hue, and 6 boxes read and take the same color as percentages and as a hex value. Changes show on the row behind it as they are made, and Cancel puts the old color back.
 
 ## Contrast mask
 
-A wallpaper treatment that quiets the image only where it would fight the text, leaving the rest of it alone. Its three settings are Size (how large an area each point is judged against), Strength (how far it may push the image down) and Automask mix.
+A wallpaper treatment that quiets the image only where it would fight the text, leaving the rest of it alone. Its 3 settings are Size, Strength, and Automask mix. Size is how large an area each point is judged against, and Strength is how far it may push the image down.
 
 The term itself comes from the early days of photography, and involves applying a blurred and inverted image as a luminosity mask, to reduce contrast.
 
@@ -123,11 +123,11 @@ A copy of a release build that SilkTerm's own developer runs day to day, install
 
 ## Ease-in, ramp-up, ramp-down, ease-out
 
-The four shape controls for smooth scrolling, in the order one burst of output unfolds: the view leaves a standstill, picks up speed, brakes as the output runs out, and settles on the final line. All four read the same direction, higher being faster or crisper.
+The 4 controls for how smooth scrolling feels, in the order one burst of output unfolds: the view leaves a standstill, picks up speed, brakes as the output runs out, and settles on the final line. All 4 read the same direction, with higher being faster or crisper.
 
 ## Falloff
 
-The curve the text scrim fades along as it moves away from the glyphs. Separate from *function*, which decides the halo's shape rather than its fade.
+The curve the text scrim fades along as it moves away from the glyphs. It's separate from *function*, which sets the halo's shape rather than its fade.
 
 ## Fit
 
@@ -135,15 +135,15 @@ What to do when a wallpaper image and the window are different shapes. Stretch d
 
 ## Flyover help
 
-The small box of explanation that appears when the pointer rests on a control. One rest delay is shared by every tip in the program, so nothing answers faster than anything else. Only controls whose label does not already explain them have one.
+The small box of explanation that appears when the pointer rests on a control. One rest delay is shared by every tip in the program, so no tip appears sooner than another. Only controls whose label doesn't already explain them have one.
 
 ## Focus
 
-The theme color that marks the one element the keyboard is on. Deliberately separate from *highlight*, and more vivid.
+The theme color that marks the one element the keyboard is on. It's kept separate from *highlight* on purpose, and is more vivid.
 
 ## Function
 
-How the text scrim's halo shape is computed from the glyphs. Four methods are offered; they differ in quality and in cost.
+How the text scrim's halo shape is computed from the glyphs. There are 4 methods, which differ in quality and in cost.
 
 ## Glyph
 
@@ -155,7 +155,7 @@ A titled section within a tab of the Settings dialog, separated by a rule and cl
 
 ## Gutter
 
-Chrome that holds no interactive element - the strip the Settings dialog's tabs sit on. It is a theme color of its own, recessed against the panel in both dark and light mode.
+Chrome that doesn't have any interactive element, such as the strip the Settings dialog's tabs sit on. It's a theme color of its own, recessed against the panel in both dark and light mode.
 
 ## Highlight
 
@@ -163,7 +163,7 @@ The theme color that marks several things at once: the live pane's ring, slider 
 
 ## Keep open
 
-A launch option that holds a pane open after its shell exits, saying how it ended and waiting for a key, instead of closing straight away.
+A launch option that keeps a pane open after its shell exits, saying how it ended and waiting for a key, instead of closing straight away.
 
 ## Layout tags
 
@@ -175,7 +175,7 @@ Opacity and Blur stored inside a wallpaper image file. When SilkTerm is set to h
 
 ## Max silk
 
-The performance profile with every effect at its shipped setting: smooth scrolling at the default feel, the wallpaper, the scrim, the cursor animation. The other profiles take things away from it. See *performance profile*.
+The performance profile with every effect at its default setting: smooth scrolling at the default feel, the wallpaper, the scrim, the cursor animation. The other profiles take things away from it. See *performance profile*.
 
 ## Minimum contrast
 
@@ -183,7 +183,7 @@ A floor on how close text may come to the background it sits on. Text below the 
 
 ## Output easing
 
-Scrolling that eases when a program prints, rather than jumping a line at a time. The view chases the newest line rather than snapping to it, and the speed of the chase is what the four ease and ramp settings shape.
+Scrolling that eases when a program prints, rather than jumping a line at a time. The view chases the newest line rather than snapping to it, and the 4 ease and ramp settings control the speed of the chase.
 
 ## Pane
 
@@ -195,7 +195,7 @@ The set of colors a theme defines: the terminal background, foreground and curso
 
 ## Performance profile
 
-One setting on the Silk tab that decides how much the look may cost. Custom uses your own values. Max silk, High, Low and Standard terminal each set the scrolling feel, the scrim, the cursor animation and the wallpaper for you, and the rows they set show the profile's values while one is chosen. Your own values stay in the file underneath, so choosing Custom puts them back. Those rows still take input: change one and the profile becomes Custom, keeping the values that were on screen. With "Choose automatically" on, a new graphics adapter starts at Max silk, or Low under software rendering, and the profile steps down one level whenever the display cannot keep up with a scroll. A step goes no lower than Low and lasts until SilkTerm restarts. Picking a profile by hand switches "Choose automatically" off, since the pick would otherwise be overwritten at the next launch; Remote (temporary) is the exception, because it lasts this session only.
+One setting on the Silk tab that decides how much the look may cost. Custom uses your own values. Max silk, High, Low and Standard terminal each set the scrolling feel, the scrim, the cursor animation and the wallpaper for you, and the rows they set show the profile's values while one is chosen. Your own values stay in the file underneath, so choosing Custom puts them back. Those rows still take input: change one and the profile becomes Custom, keeping the values that were on screen. With "Choose automatically" on, a new graphics adapter starts at Max silk, or Low under software rendering, and the profile steps down one level whenever the display can't keep up with a scroll. A step goes no lower than Low and lasts until SilkTerm restarts. Picking a profile by hand switches "Choose automatically" off, since the pick would otherwise be overwritten at the next launch; Remote (temporary) is the exception, because it lasts this session only.
 
 ## PTY
 
@@ -207,7 +207,7 @@ A per-pane switch that stops keystrokes reaching the shell. The pane still shows
 
 ## Revert
 
-The small arrow at the right edge of a Settings row. It puts the shipped default back for that one setting.
+The small arrow at the right edge of a Settings row. It puts the default back for that one setting.
 
 ## Scrim
 
@@ -219,7 +219,7 @@ The lines that have scrolled off the top of the screen and are kept for reading 
 
 ## Shell integration
 
-A small block SilkTerm can add to a shell's own startup file so the shell reports where it is. That is what lets a new tab or split open in the directory the pane was actually sitting in, rather than where the pane started.
+A small block SilkTerm can add to a shell's own startup file so the shell reports where it is. That is what lets a new tab or split open in the directory the pane was in, rather than where the pane started.
 
 ## Single-screen speed
 
@@ -235,7 +235,7 @@ A run of Settings rows that belong to the row above them, shown by indenting the
 
 ## Tab strip
 
-The row of tabs under the menu bar. Each tab is as wide as its own label needs, and the tab in front takes whatever the row can spare, so it spells its label out while the others fall back to a shorter form. When they no longer fit, the strip pages rather than shrinking them to nothing.
+The row of tabs under the menu bar. Each tab is as wide as its own label needs, and the tab in front takes whatever the row can spare, so it shows its full label while the others fall back to a shorter form. When they no longer fit, the strip pages rather than shrinking them to nothing.
 
 ## Tab text
 
@@ -247,13 +247,13 @@ A switch on the Themes tab that takes the text and cursor colors from the pictur
 
 ## Text outline
 
-A crisp one-to-four pixel outline drawn hard against the glyphs, on top of the scrim. Cheaper and harder-edged than the scrim, and useful with it or without it.
+A crisp outline, 1 to 4 pixels wide, drawn hard against the glyphs on top of the scrim. It's cheaper and harder-edged than the scrim, and useful with or without it.
 
 ## Theme and mode
 
 A theme is a pair of palettes, one dark and one light. The mode picks which of the pair is in use: Dark, Light, or System, which follows the desktop.
 
-Four themes ship: SilkTerm, Matrix, Retro Amber and Pastel.
+SilkTerm comes with 4 themes: SilkTerm, Matrix, Retro Amber, and Pastel.
 
 Change a color and the Theme dropdown reads `[unsaved]`, since what is on screen is no longer the theme it was. Save folds the change into the theme and the name comes back. Picking the theme again instead puts its own colors back.
 

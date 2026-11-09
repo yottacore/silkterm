@@ -6,35 +6,35 @@
 
 # Shell integration
 
-SilkTerm opens a new tab, split or window in the directory the current pane is in. To do that it has to know where that pane's shell is, and for most shells it can simply ask the operating system - it reads the shell process's own working directory, and nothing needs setting up.
+SilkTerm opens a new tab, split or window in the directory the current pane is in. To do that it has to know where that pane's shell is, and for most shells it asks the operating system. It reads the shell process's own working directory, and nothing needs setting up.
 
-Some shells never tell the operating system where they are. PowerShell is an example. `Set-Location` moves PowerShell's own idea of where it is and leaves the process itself in the directory it was launched in, so there is nothing to read. The same applies to any session where the shell you are typing at is not the process SilkTerm started - an `ssh` session, a container, a REPL that keeps its own location.
+Some shells never tell the operating system where they are. PowerShell is an example. `Set-Location` moves PowerShell's own idea of where it is and leaves the process itself in the directory it was launched in, so there is nothing to read. The same applies to any session where the shell you're typing at isn't the process SilkTerm started, such as an `ssh` session, a container, or a REPL that keeps its own location.
 
-The fix is the same one every terminal uses: have the shell say where it is, in a short escape sequence. SilkTerm listens for two spellings and takes either.
+The fix is the same one every terminal uses: have the shell say where it is, in a short escape sequence. SilkTerm listens for 2 forms of it and takes either.
 
-- **OSC 7**, a `file://` URL - what the unix shells emit, and what GNOME Terminal, WezTerm, kitty and others read.
+- **OSC 7**, a `file://` URL. It's what the unix shells emit, and what GNOME Terminal, WezTerm, kitty and others read.
 
-- **OSC 9;9**, a plain path - the ConEmu spelling that Windows Terminal documents. A PowerShell profile already set up for Windows Terminal works here unchanged.
+- **OSC 9;9**, a plain path. It's the ConEmu form that Windows Terminal documents. A PowerShell profile already set up for Windows Terminal works here unchanged.
 
-What the shell reports wins over what the operating system can see. A reported directory that no longer exists on this machine is ignored, and the operating system's answer stands instead - which is also what rejects a path reported from the far side of an `ssh`, since an OSC 7 URL naming another machine is never believed.
+What the shell reports wins over what the operating system can see. A reported directory that no longer exists on this machine is ignored, and what the operating system says is used instead. That's also what rejects a path reported from the far side of an `ssh`, since an OSC 7 URL naming another machine is never believed.
 
 ## PowerShell: SilkTerm does this for you
 
 A few seconds after launch, SilkTerm looks for the PowerShells you have installed and adds the block below to each one's profile. You don't have to do anything, and it happens once.
 
-What it will not do:
+What it won't do:
 
-- **Touch a profile that already reports.** Its own marker, or any other OSC 7 / OSC 9;9 already in the file - a Windows Terminal setup, oh-my-posh, anything - means somebody has this in hand, and the file is left exactly as it is.
+- **Touch a profile that already reports.** Its own marker, or any other OSC 7 or OSC 9;9 already in the file, means somebody has this in hand, and the file is left exactly as it is. A Windows Terminal setup or oh-my-posh both count.
 
-- **Rewrite what is there.** The block is appended, after a copy of the profile is saved beside it as `Microsoft.PowerShell_profile.ps1.silkterm-backup`. Everything above and below the two markers stays exactly as you wrote it.
+- **Rewrite what is there.** The block is appended, after a copy of the profile is saved beside it as `Microsoft.PowerShell_profile.ps1.silkterm-backup`. Everything above and below the 2 markers stays exactly as you wrote it.
 
-- **Put it back.** Deleting the block is how you switch it off. Nothing restores it - a note beside your usual config records which profiles were written to, so an empty one is left alone. A launch with `--config` reads and keeps the same note, since the profiles are the same whichever config it uses.
+- **Put it back.** Deleting the block is how you switch it off. Nothing restores it, because a note beside your usual config records which profiles were written to, so an empty one is left alone. A launch with `--config` reads and keeps the same note, since the profiles are the same whichever config it uses.
 
-- **Replace a prompt you chose.** If your prompt is still the one PowerShell comes with, the block swaps in a git-aware one (below). If it is anything else, including oh-my-posh, starship or a `prompt` function of your own, it is left alone: on PowerShell 6+ the prompt is not touched at all, and on Windows PowerShell 5.1, which has no other hook, yours is wrapped rather than replaced.
+- **Replace a prompt you chose.** If your prompt is still the one PowerShell comes with, the block swaps in a git-aware one (below). If it's anything else, including oh-my-posh, starship, or a `prompt` function of your own, it's left alone. On PowerShell 6+ the prompt isn't touched at all, and on Windows PowerShell 5.1, which has no other hook, yours is wrapped rather than replaced.
 
-- **Write a file the shell would refuse to read.** If PowerShell's execution policy blocks script files, the block would only turn every launch into a red execution-policy error, so the profile is left alone and a line says which shell and why. Windows PowerShell 5.1 is commonly in that state; `Get-ExecutionPolicy` shows it, and `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` is the usual fix - your call to make, not SilkTerm's.
+- **Write a file the shell would refuse to read.** If PowerShell's execution policy blocks script files, the block would only turn every launch into a red execution-policy error, so the profile is left alone and a line says which shell and why. Windows PowerShell 5.1 is commonly in that state; `Get-ExecutionPolicy` shows it, and `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` is the usual fix. That's your call to make rather than SilkTerm's.
 
-One thing it *will* do: keep the block itself up to date. It gains things over time - the git-aware prompt is one - and only the text between the two markers is ever rewritten. If you want to change what the block does, copy it out below the markers and edit that copy, or your edits will be replaced on a later launch.
+One thing it *will* do: keep the block itself up to date. It gains things over time, such as the git-aware prompt, and only the text between the 2 markers is ever rewritten. If you want to change what the block does, copy it out below the markers and edit that copy, or your edits will be replaced on a later launch.
 
 To switch the whole thing off before it ever runs, set `shell.integration: false` in the config, or clear "Update PowerShell profiles" on the Shell tab of Settings.
 
@@ -67,7 +67,7 @@ It costs one `git` call per prompt, a few more the first time a branch is seen, 
 
 The look is a port of [x9ps1-git](https://github.com/jim-collier/x9ps1-git), the bash prompt described further down, so a PowerShell pane and a bash pane read the same. It is one block rather than a script on disk because a script would mean starting a process for every prompt.
 
-This is the block, if you would rather paste it in yourself (`notepad $PROFILE`, creating the file if it is not there):
+This is the block, if you'd rather paste it in yourself. Use `notepad $PROFILE`, and create the file if it isn't there:
 
 ~~~powershell
 # >>> SilkTerm shell integration >>>
@@ -274,14 +274,13 @@ if ($Host.Name -eq 'ConsoleHost' -and -not [Console]::IsOutputRedirected) {
 # <<< SilkTerm shell integration <<<
 ~~~
 
-The guard on the first line is what keeps it out of your way: it reports only in an interactive console session whose output is not redirected, so `pwsh -File build.ps1 > log.txt` gets a clean log rather than escape sequences in it.
+The guard on the first line keeps it out of your way. It reports only in an interactive console session whose output isn't redirected, so `pwsh -File build.ps1 > log.txt` gets a clean log rather than escape sequences in it.
 
 ## bash
 
-Nothing to set up - bash moves its own process, so SilkTerm can ask the operating system. Add this only if you want a pane behind `ssh`, `sudo -i` or a container to report as well:
+Nothing to set up, since bash moves its own process and SilkTerm can ask the operating system. Add this to `~/.bashrc` only if you want a pane behind `ssh`, `sudo -i`, or a container to report as well:
 
 ~~~bash
-# ~/.bashrc
 PROMPT_COMMAND='printf "\033]7;file://%s%s\033\\" "$HOSTNAME" "$PWD"'
 ~~~
 
@@ -291,39 +290,38 @@ Paths with characters that need escaping in a URL are supposed to be percent-enc
 
 ### A git-aware bash prompt
 
-A separate thing, and the only other setup SilkTerm does for a shell. It is off until "Use git-aware Bash prompt" is checked on the Shell tab of Settings, or `shell.bash_prompt: true` is set in the config. Then a bash pane gets a prompt that shows the branch you are on, whether the working tree is clean, and how far ahead or behind its tracking branch it is - updated after every command, and out of the way in a directory that is not a git project.
+This is separate, and it's the only other setup SilkTerm does for a shell. It's off until "Use git-aware Bash prompt" is checked on the Shell tab of Settings, or `shell.bash_prompt: true` is set in the config. Then a bash pane gets a prompt that shows the branch you are on, whether the working tree is clean, and how far ahead or behind its tracking branch it is. It's updated after every command, and stays out of the way in a directory that isn't a git project.
 
-It is not an install:
+It isn't an install:
 
 - Nothing is written into `.bashrc` or any other file of yours. The prompt is handed to the pane as `PROMPT_COMMAND` in its environment.
 
 - The script is sourced into the pane's shell once, which defines a few `fX9ps1Git_` functions and nothing else. Outside a git project a prompt then starts no process, and inside one it runs git twice.
 
-- It sets `PS1` before every prompt, so it replaces a `PS1` set in `.bashrc`. If you set `PROMPT_COMMAND` yourself - directly, or through starship, oh-my-posh or `/etc/profile.d/vte.sh` - yours runs instead, and you will not see this one.
+- It sets `PS1` before every prompt, so it replaces a `PS1` set in `.bashrc`. If you set `PROMPT_COMMAND` yourself, directly or through starship, oh-my-posh, or `/etc/profile.d/vte.sh`, yours runs instead and you won't see this one.
 
-- It reaches bash panes only, and only ones SilkTerm started. A shell you `ssh` into, or a `sudo -i`, keeps whatever prompt it has.
+- It's for bash panes only, and only ones SilkTerm started. A shell you `ssh` into, or a `sudo -i`, keeps whatever prompt it has.
 
 - `X9PS1_STANDARD=1` in a pane puts the ordinary Debian-style prompt back for that session.
 
-Clear the checkbox again, or set `shell.bash_prompt: false`, to switch it off. The script itself is written beside the config as `x9ps1-git`, and is a copy of [x9ps1-git](https://github.com/jim-collier/x9ps1-git) (MIT) - usable on its own from a `PATH` directory if you want it in every terminal rather than this one.
+Clear the checkbox again, or set `shell.bash_prompt: false`, to switch it off. The script itself is written beside the config as `x9ps1-git`, and is a copy of [x9ps1-git](https://github.com/jim-collier/x9ps1-git) (MIT). It can be used on its own from a `PATH` directory if you want it in every terminal rather than this one.
 
 ## zsh
 
-Same story as bash - nothing needed locally:
+Same as bash, with nothing needed locally. For a remote pane, add this to `~/.zshrc`:
 
 ~~~zsh
-# ~/.zshrc
 precmd() { printf "\033]7;file://%s%s\033\\" "$HOST" "$PWD" }
 ~~~
 
 ## fish
 
-Nothing to do - fish emits OSC 7 on its own.
+Nothing to do, since fish emits OSC 7 on its own.
 
 ## cmd.exe
 
-Nothing to do - `cd` moves the process itself, so the operating system can answer.
+Nothing to do. `cd` moves the process itself, so the operating system knows where it is.
 
 ## Checking it works
 
-`cd` somewhere, then split the pane (or open a new tab). The new pane should start in the same directory. If it starts where the old pane was *launched* instead, the sequence is not reaching us - check that the block is in the profile that shell actually loads (`$PROFILE` prints its path), and that nothing later in the file replaces the prompt on 5.1.
+`cd` somewhere, then split the pane or open a new tab. The new pane should start in the same directory. If it starts where the old pane was *launched* instead, SilkTerm isn't getting the sequence. Check that the block is in the profile that shell actually loads (`$PROFILE` prints its path), and that nothing later in the file replaces the prompt on 5.1.

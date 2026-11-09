@@ -77,7 +77,7 @@ SilkTerm™ is a hardware-accelerated terminal for Linux, Windows and macOS that
 
 ### Why smooth-scrolling output
 
-All other terminal emulators in existence at the time this was written, currently snap scrolling output to fixed lines. Nothing can appear in-between those lines (except when mouse-scrolling on some terminals).
+All other terminal emulators in existence at the time this was written currently snap scrolling output to fixed lines. Nothing can appear in-between those lines (except when mouse-scrolling on some terminals).
 
 For output that can be sporadic - e.g. something scrolling slowly one line at a time sometimes, then jumping several lines at once other times (e.g. while watching a live log file with `tail -f`) - [the eye/brain combo can struggle to track the output](https://www.youtube.com/watch?v=yQaC-ZzTf78), and you get "lost" trying to follow it.
 
@@ -105,7 +105,7 @@ SilkTerm's smooth-scrolling output is a joy to work with. You really have to try
 
 ### Why text scrim
 
-A text *scrim* is a subtle halo drawn behind each glyph - usually of the opposite luminosity to the text - purely as a readability aid. It's the same technique graphic designers use, sometimes called as "outer glow". (And is different from angled "drop-shadow", which is a creative effect.)
+A text *scrim* is a subtle halo drawn behind each glyph - usually of the opposite luminosity to the text - purely as a readability aid. It's the same technique graphic designers use, sometimes called "outer glow". (And is different from angled "drop-shadow", which is a creative effect.)
 
 SilkTerm calls it a "scrim" because that's its whole job: keeping text legible, not decoration. (Though this isn't a hard-and-fast graphic design "rule" - there's lots of overlap in both directions.)
 
@@ -217,8 +217,7 @@ The 102 wallpapers SilkTerm was built and tuned against are in [`filesystem/home
 
 [![Wallpaper pack](assets/wallpaper-gallery.jpg)](https://yottacore.github.io/silkterm/wallpapers/)
 
-Click the sheet for the [browsable gallery](https://yottacore.github.io/silkterm/wallpapers/) - any wallpaper opens full size in place, the arrow keys page through them, and each one shows its credit and license underneath.
-To fetch them, see [Wallpaper pack](install.md#wallpaper-pack) in install.md.
+Click the sheet for the [browsable gallery](https://yottacore.github.io/silkterm/wallpapers/) - any wallpaper opens full size in place, the arrow keys page through them, and each one shows its credit and license underneath. To fetch them, see [Wallpaper pack](install.md#wallpaper-pack) in install.md.
 
 SilkTerm Pro (coming soon) can rotate through them on its own. The free version can too, with a wrapper that picks one at random each launch:
 
@@ -244,7 +243,7 @@ Smooth scrolling isn't useful if the terminal falls behind the moment something 
 
 ## Getting and using
 
-[install.md](install.md) covers the packages and installers, the one-line install scripts, building it yourself, and setting up a development environment. [usage.md](usage.md) covers configuration, the [command line](usage.md#command-line), shell integration, and opening scripts and folders on Windows.
+[install.md](install.md) explains the packages and installers, the one-line install scripts, building it yourself, and setting up a development environment. [usage.md](usage.md) explains configuration, the [command line](usage.md#command-line), shell integration, and opening scripts and folders on Windows.
 
 Settings are in one commented [SHCL](https://github.com/yottacore/shcl) file, written with every default on first run. A few lines of it:
 

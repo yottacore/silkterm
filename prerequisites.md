@@ -6,23 +6,23 @@
 
 # Development prerequisites
 
-What to install before you can develop and build SilkTerm, per OS. Once these are in place, [build.md](build.md) has the actual build commands (native + cross), and the CI/CD pipelines (`cicd/cicd.bash` on Linux, `cicd/cicd-win.ps1` on Windows) drive the full lint/test/build/package flow.
+What to install before you can develop and build SilkTerm, per OS. Once these are in place, [build.md](build.md) has the native and cross build commands, and the CI/CD pipelines (`cicd/cicd.bash` on Linux, `cicd/cicd-win.ps1` on Windows) drive the full lint/test/build/package flow.
 
 SilkTerm is a Rust project, edition 2024, built and tested on rustc 1.96. The toolchain channel is pinned in `rust-toolchain.toml` (1.96.0 + rustfmt/clippy + the cross targets); `rustup`-routed cargo picks it up automatically on first build.
 
 ## Windows (native)
 
-The Windows box builds and dogfoods natively. Ship target is the **gnu** ABI (self-contained, matches the Linux cross-build); **msvc** is handy for local debugging. The pipeline builds both, so set up both.
+The Windows box builds and dogfoods natively. The release target is the **gnu** ABI, which is self-contained and matches the Linux cross-build. **msvc** is handy for local debugging. The pipeline builds both, so set up both.
 
 ### PowerShell 7
 
-The Windows pipeline (`cicd/cicd-win.ps1`) and the dogfood launcher (`n8runterm.ps1`, run through the `runterm` wrappers) require **PowerShell 7+** (`pwsh`), not Windows PowerShell 5.1. The launcher is one PowerShell script on every platform now, so Linux and macOS need `pwsh` too.
+The Windows pipeline (`cicd/cicd-win.ps1`) and the dogfood launcher (`n8runterm.ps1`, run through the `runterm` wrappers) require **PowerShell 7+** (`pwsh`) rather than Windows PowerShell 5.1. The launcher is one PowerShell script on every platform now, so Linux and macOS need `pwsh` too.
 
 ~~~powershell
 choco install powershell-core
 ~~~
 
-Scripts here are unsigned local files, so clear the execution policy once (CurrentUser scope, no admin; PS7 and 5.1 keep separate policies - set it from `pwsh`):
+Scripts here are unsigned local files, so clear the execution policy once, for CurrentUser and without admin. PS7 and 5.1 keep separate policies, so set it from `pwsh`:
 
 ~~~powershell
 Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
@@ -66,7 +66,7 @@ The msvc target needs the VC++ build tools; rustc finds `link.exe` automatically
 choco install visualstudio2022-workload-vctools
 ~~~
 
-### NSIS (optional - installers)
+### NSIS (optional, for installers)
 
 Only needed if you want the pipeline to build the Windows installer `.exe` (stage 5):
 
@@ -101,7 +101,7 @@ pwsh cicd\cicd-win.ps1 -BacklogRunQuick  # fmt check, lint, test; cicd.bash's ot
 pwsh cicd\cicd-win.ps1                   # + ARM64 (if set up), installers, dogfood, publish
 ~~~
 
-Or a bare build - see [build.md](build.md#windows-native-msvc).
+Or do a bare build, as in [build.md](build.md#windows-native-msvc).
 
 ## Linux (native, and cross-build host)
 
@@ -113,7 +113,7 @@ Linux x86_64 is the primary dev target and the host that cross-builds Windows + 
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 ~~~
 
-Running needs a Vulkan/GL-capable GPU under X11 or Wayland - on a Debian desktop the usual Mesa/Vulkan packages are already present.
+Running needs a Vulkan/GL-capable GPU under X11 or Wayland. On a Debian desktop the usual Mesa/Vulkan packages are already installed.
 
 ### Cross toolchains
 
@@ -133,7 +133,7 @@ A full run needs docker either way, for the test suite under AddressSanitizer, u
 
 ## macOS (native)
 
-macOS builds natively on a Mac (there's no Linux->macOS cross set up here - it needs the Apple SDK).
+macOS builds natively on a Mac. There's no Linux->macOS cross build set up here, since it needs the Apple SDK.
 
 ~~~sh
 xcode-select --install

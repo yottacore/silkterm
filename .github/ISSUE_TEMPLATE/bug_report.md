@@ -24,7 +24,8 @@ A clear and concise description of what the bug is.
 
 **Desktop (please complete the following information):**
 
- - OS: 
-- Architecture: 
+- OS:
+
+- Architecture:
 
 **Additional context**
