@@ -15,7 +15,7 @@
 - [Goal](#goal)
 - [Feature designs](#feature-designs)
 - [Architecture](#architecture)
-	- [Language / Stack Decision](#language--stack-decision)
+	- [Language / stack decision](#language--stack-decision)
 	- [Logical code organization](#logical-code-organization)
 	- [API (alacritty_terminal)](#api-alacritty_terminal)
 	- [Smooth scrolling](#smooth-scrolling)
@@ -31,7 +31,7 @@
 	- [The shell list and how it is filled](#the-shell-list-and-how-it-is-filled)
 	- [What a pane's shell inherits](#what-a-panes-shell-inherits)
 	- [One tip system, 4 places that draw it (2026-08-30)](#one-tip-system-4-places-that-draw-it-2026-08-30)
-	- [Render Loop Sketch](#render-loop-sketch)
+	- [Render loop sketch](#render-loop-sketch)
 	- [Speed](#speed)
 	- [The About box says how long the session has been up (2026-09-20)](#the-about-box-says-how-long-the-session-has-been-up-2026-09-20)
 	- [A character handed to the window is typing (2026-09-09)](#a-character-handed-to-the-window-is-typing-2026-09-09)
@@ -97,7 +97,7 @@ Each of these has its own design doc, which is the source of truth for that feat
 
 ## Architecture
 
-### Language / Stack Decision
+### Language / stack decision
 
 Rust plus the `alacritty_terminal` crate, not a fork of the Alacritty application. The crate brings the PTY, the parser and the grid, and SilkTerm builds only the renderer. There are 3 crates on small patched branches, one per published release. Why, what is used and how the patches are carried: [The terminal engine and patched crates](design_docs/20260930-151451_alacritty-fork.md).
 
@@ -259,7 +259,7 @@ A setting the program can work out for itself is stored as a value set by hand o
 
 - The tab's tip goes away after 30 seconds, and comes back only once the pointer has left the tab and returned (2026-09-22). The pointer is often left on the strip after picking a tab, and the tip then covered the top of the pane for as long as it sat there. `window.tab_tip_max_s` sets the time, and 0 keeps it up. The other tips close when the pointer moves on, which it does almost at once in a menu or a dialog.
 
-- A menu row gets a tip only when its label doesn't already say what it does. Copy and New tab explain themselves; Paste Selection, Read-only, and Bare window don't. A tip on every row is noise a reader learns to skip past, which costs the ones that matter.
+- A menu row gets a tip only when its label doesn't already say what it does. Copy and New tab explain themselves; Paste selection, Read-only, and Bare window don't. A tip on every row is noise a reader learns to skip past, which costs the ones that matter.
 
 - A tip's box is its own color, derived from the chrome it hangs off rather than taken from it (2026-09-20). The default menu background is the inactive tab's own bytes, so a tab tip filled with it drew as a tab that had grown downward, and a menu row's tip had the same fault against the popup beside it. Both now fill with the menu background lifted by the step the strip puts between an inactive and an active tab, then warmed, since every tab color leans faintly blue. The border and the text are taken from the same 2 colors. The dialogs already did this with the button shade against their panel.
 	- The request suggested 2 more colors on the Themes tab, and that wasn't done. There are 12 editable colors, each with one job, and the chrome already handles this kind of question with derived shades. Menu hover, border, and separator are all shades of the menu color, so a custom menu color stays coherent. A tip that could be set apart from its own menu would be one more pair to keep readable.
@@ -269,7 +269,7 @@ A setting the program can work out for itself is stored as a value set by hand o
 
 - A window without the focus shows no tips, and one that is up goes when the focus leaves (2026-10-13). When the focus comes back, tips wait for the pointer to move. A tip popping up under a pointer left resting on a control, the moment the window came back, would come out of nowhere.
 
-### Render Loop Sketch
+### Render loop sketch
 
 - Frame: advance lerp -> cross-boundary check -> sync crate offset -> translate render -> draw cells (+overscan rows).
 
@@ -359,7 +359,7 @@ Building it found 3 defects, all fixed with it. A program could put control char
 
 - The config file itself is a deliberate exception. Window size, font metrics and theme all come from it, and the window is held hidden until it can open at its final size. Reading it later would only trade a small local read for a visible resize flash.
 
-- The same pattern is intended for shell discovery when that arrives: draw first, scan for installed shells afterwards, fold in what was found.
+- Shell discovery follows the same pattern. The window draws first, the scan for installed shells starts a few seconds after the wallpaper is on screen, and what it finds is folded into the shell list. See [The shell list and how it is filled](#the-shell-list-and-how-it-is-filled).
 
 ### Releasing resources
 
@@ -599,7 +599,7 @@ Double-clicking a tab renames it in place. The strip has always drawn what the s
 
 - The edit starts with what the tab already says, all of it selected, so typing replaces it and any other key edits it. Enter or Tab keeps the change, Escape drops it, and a click anywhere else keeps it. Selection, Home and End, and paste all work; a pasted newline becomes a space, since a tab is one line high.
 	- 20261002: The box edits as a Settings text box does, with the same keys on each platform: copy, cut, paste and select all, moving and erasing by words, and Shift to select. A click places the caret, a drag selects, a double-click takes a word and a third click the whole name. Right-click opens Cut, Copy, Paste, Delete and Select all, and a middle-click pastes the primary selection.
-	- 20261002: Opening a menu leaves the rename up. Copy, Paste and Paste Selection there act on the name, as Edit > Copy and Paste on the macOS menu bar do. Any other pick keeps the change first, as a click elsewhere does.
+	- 20261002: Opening a menu leaves the rename up. Copy, Paste and Paste selection there act on the name, as Edit > Copy and Paste on the macOS menu bar do. Any other pick keeps the change first, as a click elsewhere does.
 
 - Committing a blank title, or one that matches what the tab would have said on its own, puts it back to naming the shell. Those are the 2 ways out of a hand-typed title, and neither needs a control of its own.
 

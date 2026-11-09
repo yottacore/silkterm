@@ -5,7 +5,7 @@
 <!-- markdownlint-disable MD041 -- First line in a file should be a top-level heading -->
 
 <!-- TOC ignore:true -->
-# Human-Accountable AI: Guidelines for Software Projects
+# Human-accountable AI: guidelines for software projects
 
 Where AI is allowed near this project, where it isn't, and who is accountable either way.
 

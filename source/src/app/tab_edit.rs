@@ -257,7 +257,7 @@ fn tab_edit_menu_items(selected: bool, has_text: bool, can_paste: bool) -> Vec<E
 }
 
 // A menu pick that goes to a tab being renamed rather than to the pane: the
-// rename's own rows, and Copy, Paste and Paste Selection from any menu, as in
+// rename's own rows, and Copy, Paste and Paste selection from any menu, as in
 // any text box with the focus.
 fn tab_edit_takes(action: MenuAction) -> bool {
 	matches!(
@@ -387,7 +387,7 @@ impl State {
 		self.dirty = true;
 	}
 
-	/// A middle-click on the name, or Paste Selection from a menu: the primary
+	/// A middle-click on the name, or Paste selection from a menu: the primary
 	/// selection where there is one, else the clipboard.
 	pub(super) fn tab_edit_paste_primary(&mut self) {
 		if let Some(text) = self.clipboard.get_primary() {
@@ -687,7 +687,7 @@ mod tests {
 		assert_eq!((edit.text.as_str(), edit.caret), ("x", 1));
 	}
 
-	// Copy, Paste and Paste Selection from any menu go to a tab being renamed,
+	// Copy, Paste and Paste selection from any menu go to a tab being renamed,
 	// and so do the rename's own rows. Anything else ends the rename. Its own
 	// menu leaves out rows with nothing to act on.
 	// Test ID: dde0v
