@@ -176,21 +176,6 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Branch: rnd1106
 	- Stand-in: none (20261106). Xwayland under headless sway can't report an output as disconnected while it stays laid out, which is b23's usual sleep. deqx1 tests the output being taken out of the layout.
 
-- The nano scroll scene on Wayland once saw st=2 while sliding
-	- ID: 2026110814224000
-	- Type: Bug
-	- Status: Queued
-	- Severity: Low
-	- Opened: 20261108-142240
-	- Opened by: CC
-	- Assigned to: CC
-	- Target OS: Linux
-	- Test environment: b23, a container run of the regression tests alone at 4eb15ae, load about 10.
-	- Incorrect behavior: `cicd/tests/scroll/run.bash` (d9j4v) failed with "scroll scene nano (Wayland), expected st=1 while sliding but saw st=2". The X11 nano scene and the other 13 Wayland scenes passed in the same run.
-	- Expected behavior: Every sliding frame of the nano scene reads st=1, under the title bar.
-	- Reproduced: No, 20261108. On the host, 5 runs of `--wayland --only nano` passed, at load 8 to 10. Every kept full run log since 20261031 has it passing on both engines.
-	- Test case: d9j4v itself.
-
 - Add a contributor license agreement, like nano-git-db's
 	- ID: 2026101906582193
 	- Type: Task
@@ -288,6 +273,33 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- 20261019: Still stuck upstream. `cargo update --dry-run` moves none of fontdb, cosmic-text, ab_glyph, sctk-adwaita, glyphon or winit, and ttf-parser 0.25.1 still comes in both ways. On crates.io, fontdb 0.24.0 drops it, but the newest cosmic-text, 0.19.0, still asks for fontdb 0.23. sctk-adwaita 0.12.0 still pulls in ab_glyph. Even glyphon 0.12, a breaking bump, still brings cosmic-text 0.19.
 		- Stalled until a cosmic-text release takes fontdb 0.24 or later, and winit's sctk-adwaita drops ab_glyph.
 	- Held for a cosmic-text release on fontdb 0.24 or later, and an sctk-adwaita without ab_glyph.
+
+- The nano scroll scene on Wayland once saw st=2 while sliding
+	- ID: 2026110814224000
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261108-142240
+	- Opened by: CC
+	- Assigned to: CC
+	- Target OS: Linux
+	- Test environment: b23, a container run of the regression tests alone at 4eb15ae, load about 10.
+	- Incorrect behavior: `cicd/tests/scroll/run.bash` (d9j4v) failed with "scroll scene nano (Wayland), expected st=1 while sliding but saw st=2". The X11 nano scene and the other 13 Wayland scenes passed in the same run.
+	- Expected behavior: Every sliding frame of the nano scene reads st=1, under the title bar.
+	- Reproduced: No, 20261108. On the host, 5 runs of `--wayland --only nano` passed, at load 8 to 10. Every kept full run log since 20261031 has it passing on both engines.
+	- Test case: d9j4v itself.
+
+- `top` and `htop` no longer smoothly animate disappearing and appearing lines
+	- ID: 2026110912460474
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261109-124604
+	- Opened by: JC
+	- Related IDs: 2026101310563310
+	- Incorrect behavior: `top` and `htop` used to smoothly animate disappearing and appearing lines. Now they don't. And even when the smooth animation worked in those programs, it would quit working after a while.
+	- Notes:
+		- It's not a high priority to get back, more of a nice-to-have.
 
 - Wayland: must use the Wayland clipboard, and minimize other X11 features
 	- ID: 2026101509024607
