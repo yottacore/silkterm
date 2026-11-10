@@ -285,6 +285,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Notes:
 		- Pre-next-cut.
 		- It used to, many builds ago, but hasn't now for over a week.
+	- Target OS: Linux, seen on X11.
 
 - Import a v1.0.0-beta1 `config.toml`
 	- ID: 2026110920480399
