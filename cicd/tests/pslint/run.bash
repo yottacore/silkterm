@@ -41,9 +41,9 @@ printf 'function Frob-Thing { param([string]$Name) $Name }\nFrob-Thing -Name x\n
 printf 'if ($true) {\n    Get-Date\n}\n' >"${work}/spaces.ps1"
 ## Tabs, then spaces to line up a continuation, and a here-string whose text starts with spaces.
 printf 'if ($true) {\n\t$x = (1 -eq 1) -and\n\t     (2 -eq 2)\n\t$x\n}\n$t = @"\n    text\n"@\n$t\n' >"${work}/aligned.ps1"
-## Three arguments by position, to a cmdlet and to a function of our own.
+## There are 3 arguments by position, to a cmdlet and to a function of our own.
 printf "Join-Path 'a' 'b' 'c'\nfunction fThree { param([string]\$One, [string]\$Two, [string]\$Three) \$One + \$Two + \$Three }\nfThree 'a' 'b' 'c'\n" >"${work}/positional.ps1"
-## Two by position is fine, and a program's arguments are its own.
+## Passing 2 by position is fine, and a program's arguments are its own.
 printf "Join-Path 'a' 'b'\nfunction fThree { param([string]\$One, [string]\$Two, [string]\$Three) \$One + \$Two + \$Three }\nfThree 'a' 'b' -Three 'c'\ngit -C 'a' log -n 1\n" >"${work}/twopos.ps1"
 ## A non-ASCII comment, and a BOM.
 printf '# caf\xc3\xa9\nGet-Date\n' >"${work}/nonascii.ps1"

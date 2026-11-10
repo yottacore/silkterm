@@ -109,7 +109,7 @@ mod tests {
 	}
 
 	// The engine loaded conpty.dll by bare name. The fix is in the engine fork,
-	// so an engine update is what would bring this back. The rule above would
+	// so an engine update could bring this back. The rule above would
 	// hide it in the program, so this one runs without it.
 	// Test ID: ddycw
 	#[test]

@@ -6,9 +6,10 @@
 ##		  the container image, which has the pinned CodeQL bundle.
 ##		- CodeQL reports only on source inside the database's root, so a copy of the
 ##		  workspace and its vendored crates goes under the target dir first, and
-##		  the crates go in as source, not just their signatures. Build scripts,
-##		  proc macros and dev or build dependencies are scanned too, since cargo
-##		  needs them, but their results are dropped by path (2026101714015789).
+##		  the crates go in as source rather than only their signatures. Build
+##		  scripts, proc macros, and dev or build dependencies are scanned too,
+##		  since cargo needs them, but their results are dropped by path
+##		  (2026101714015789).
 ##		- Any result left fails the run, unless cicd/codeql-suppressions.txt names
 ##		  it with the backlog item that fixes it. The SARIF goes to OUT_DIR.
 ##	- Syntax: cicd/utility/codeql.bash <out dir> <stamp>
@@ -43,13 +44,13 @@ tgt="$(realpath -m -- "${CARGO_TARGET_DIR:-${root}/target}")"
 work="${tgt}/codeql"
 src="${work}/src"; db="${work}/db"
 raw="${work}/results.sarif"; sarif="${outDir}/codeql_${stamp}.sarif"
-mkdir -p "${outDir}" || fDie "could not make ${outDir}"
+mkdir -p "${outDir}" || fDie "couldn't make ${outDir}"
 
 ## The last run's copy goes first, so a crate dropped from the lock can't linger.
 ## Only a folder this script marked as its own.
 if [[ -e "${work}" ]]; then
 	[[ -f "${work}/.silkterm-codeql" ]] || fDie "${work} is there but not ours; leaving it"
-	fSafeRm_Under "${tgt}" "${work}" || fDie "could not clear ${work}"
+	fSafeRm_Under "${tgt}" "${work}" || fDie "couldn't clear ${work}"
 fi
 mkdir -p "${src}" && : >"${work}/.silkterm-codeql"
 cp -a Cargo.toml Cargo.lock rust-toolchain.toml .cargo source knobs "${src}/"

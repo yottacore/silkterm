@@ -2,7 +2,7 @@
 // Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
 
 //! The tab strip: each tab's label and width, its hover tip, and opening,
-//! closing and moving tabs.
+//! closing, and moving tabs.
 
 use super::{
 	CHROME_HAIRLINE, State, TAB_CLOSE_M, TAB_CLOSE_W, TAB_EDIT_INSET, TAB_EDIT_PAD, TAB_TIP_GAP,
@@ -80,7 +80,7 @@ struct TabLabel {
 pub(super) struct TabLabels {
 	tabs: Vec<Option<TabLabel>>,
 	// What every entry was built against. Any settings change is a new snapshot,
-	// and any font, zoom or scale change a new text context.
+	// and any font, zoom, or scale change a new text context.
 	settings: Option<Arc<config::Settings>>,
 	text: u64,
 	// moves whenever an entry does, so the layout knows to measure again
@@ -152,7 +152,7 @@ impl TabLabels {
 
 // Everything a tab could say, longest form first (see tabtitle): the tab text
 // template filled in with the name typed on the tab or given by `--title`, the
-// program's own title, and the shell's FRIENDLY name - what the Shells list
+// program's own title, and the shell's friendly name - what the Shells list
 // calls it, which is the name the user themselves gave it - plus whatever that
 // shell has to report: the command it is running, the last one it ran, or,
 // having run nothing at all, where it is.
@@ -230,7 +230,7 @@ impl Tabs {
 		self.active = move_tab(&mut self.list, self.active, fwd);
 	}
 	/// Every pane's look at what runs that has come due, in any tab, since a
-	/// tab in the back names its shell's program too. True when an answer moved.
+	/// tab in the back names its shell's program too. True when an answer changed.
 	pub(super) fn recheck_tasks(&mut self, now: std::time::Instant) -> bool {
 		let mut moved = false;
 		for pane in self.list.iter_mut().flat_map(|pm| pm.panes.values_mut()) {
@@ -274,7 +274,7 @@ fn active_after_close(active: usize, index: usize, len: usize, opener: Option<us
 	active.min(len.saturating_sub(1))
 }
 
-// Put a new tab just right of the active one, or at the end, and answer where
+// Put a new tab just right of the active one, or at the end, and return where
 // it went. It becomes the active tab either way.
 fn insert_tab<T>(list: &mut Vec<T>, active: usize, tab: T, beside: bool) -> usize {
 	let at = if beside {
@@ -286,7 +286,7 @@ fn insert_tab<T>(list: &mut Vec<T>, active: usize, tab: T, beside: bool) -> usiz
 	at
 }
 
-// Swap the tab at `i` with its neighbour and answer where it went, so the
+// Swap the tab at `i` with its neighbor and return where it went, so the
 // active tab follows. Past either end it trades places with the far one.
 fn move_tab<T>(list: &mut [T], i: usize, forward: bool) -> usize {
 	if list.len() < 2 {
@@ -344,10 +344,9 @@ pub(super) fn tab_edit_box(
 	}
 }
 
-/// How much of a tab its title actually gets: the button less its own inset on
-/// both sides and the close-button column it must never run under. The draw and
-/// the fit read the one rule, or a title is shortened to a width it is not then
-/// given.
+/// How much of a tab its title gets: the button less its own inset on both sides
+/// and the close-button column it must never run under. The draw and the fit read
+/// the one rule, or a title is shortened to a width it isn't then given.
 pub(super) fn tab_title_w(tab_w: f32, scale: f32) -> f32 {
 	let pad = config::dip(TAB_TITLE_PAD, scale);
 	(tab_w - 2.0 * pad - config::dip(TAB_CLOSE_W, scale)).max(config::dip(8.0, scale))
@@ -356,14 +355,14 @@ pub(super) fn tab_title_w(tab_w: f32, scale: f32) -> f32 {
 // The command line behind a tab, for naming the shell it runs. Every pane
 // resolves its own at spawn (see `spawn_pane`), so None here means nothing is
 // switched on at all and the engine picked its own default - which we have no
-// way to name, and must not GUESS at from the list: guessing is what had a pane
-// running PowerShell labelled Command Prompt.
+// way to name, and must not guess at from the list: guessing is what had a pane
+// running PowerShell labeled Command Prompt.
 fn tab_command_line(command: Option<&[String]>) -> String {
 	command.map_or_else(String::new, crate::shells::command_line)
 }
 
 /// A tab's hover tip: what it runs, how it was started, where it is, and how
-/// long it has been open - the three of those a tab is too narrow to say, plus
+/// long it has been open - the 3 of those a tab is too narrow to say, plus
 /// the one it never says. The lines are built on a timer rather than per frame:
 /// naming the shell resolves its program on the filesystem, and the clock at the
 /// bottom has to tick anyway.
@@ -418,11 +417,11 @@ impl State {
 			.map(|tab| tab.as_ref().map(|tab| tab.demand).unwrap_or_default())
 			.collect();
 		let floors: Vec<f32> = demands.iter().map(|d| d.floor).collect();
-		// Bring the active tab onto the page when it CHANGES - and only then, so
+		// Bring the active tab onto the page when it changes - and only then, so
 		// a page the wheel moved to stays put. Driven from the change rather than
 		// from each of the many places that set `tabs.active`, so no path misses
 		// it. `tab_first` is otherwise only a preference, clamped on read, so
-		// opening or closing a tab cannot strand it.
+		// opening or closing a tab can't strand it.
 		if self.tab_followed != self.tabs.active {
 			self.tab_followed = self.tabs.active;
 			self.tab_first =
@@ -470,7 +469,7 @@ impl State {
 		};
 	}
 
-	// What the strip was measured from. A mouse move is not on the list, which
+	// What the strip was measured from. A mouse move isn't on the list, which
 	// is the point of having one.
 	fn tab_layout_key(&self) -> (u32, usize, usize, usize, u32, u64) {
 		(
@@ -524,7 +523,7 @@ impl State {
 	}
 
 	/// Which tab a pointer at `x` is over - the inverse of `tab_box`, and the only
-	/// thing the two hit tests may use.
+	/// thing the 2 hit tests may use.
 	pub(super) fn tab_at(&mut self, x: f32) -> Option<usize> {
 		self.tab_layout().at_x(x)
 	}
@@ -561,7 +560,7 @@ impl State {
 	}
 
 	// What tab `index`'s label is made from, or None for no such tab. A rename
-	// in progress is the whole label, so the shell is not asked. A title of the
+	// in progress is the whole label, so the shell isn't asked. A title of the
 	// tab's own is only one of the parts, since the template says where it goes.
 	fn label_facts(&mut self, index: usize) -> Option<LabelFacts> {
 		let edit = self
@@ -661,8 +660,8 @@ impl State {
 	}
 
 	// What a tip says, as key/value pairs padded to one column (tabtitle::tip_lines).
-	// The path is shown WHOLE here - the tab is where it gets shortened, and the tip
-	// is the place to look when the short form was not enough. A value that carries
+	// The path is shown whole here - the tab is where it gets shortened, and the tip
+	// is the place to look when the short form wasn't enough. A value that has
 	// a space or a quote is quoted, so its edges are never in doubt.
 	fn tab_tip_lines(&mut self, index: usize) -> Vec<String> {
 		let Some(pm) = self.tabs.list.get_mut(index) else {
@@ -695,7 +694,7 @@ impl State {
 		if !command_line.is_empty() {
 			rows.push(("Shell command", quoted(&command_line)));
 		}
-		// Only what is running NOW. A tab already says so itself, but it says it in
+		// Only what is running now. A tab already says so itself, but it says it in
 		// the width it has left; the tip has the whole name.
 		if let crate::term::Task::Running(program) = task {
 			rows.push(("Running", quoted(&program)));
@@ -704,7 +703,7 @@ impl State {
 			"Current path",
 			cwd.map_or_else(
 				// not a value, so it takes no quotes - a directory called
-				// "(not reported)" is not what this line is saying
+				// "(not reported)" isn't what this line means
 				|| "(not reported)".to_string(),
 				|dir| {
 					quoted(
@@ -729,10 +728,10 @@ impl State {
 	}
 
 	/// The tip's box, and where each of its lines sits inside it. Measured in the
-	/// TERMINAL font, which is the one thing in the chrome that is: the lines are a
+	/// terminal font, which is the one thing in the chrome that is: the lines are a
 	/// key/value table padded with spaces, and spaces align nothing in a
 	/// proportional face. The box fits the longest line rather than guessing; it
-	/// hangs off its own TAB rather than off the pointer, so it does not jitter as
+	/// hangs off its own tab rather than off the pointer, so it doesn't jitter as
 	/// the pointer moves about inside one, and it is pushed back inside the window
 	/// rather than being allowed to run off the right edge.
 	pub(super) fn tab_tip_layout(&mut self) -> Option<(Rect, Vec<(f32, f32, String)>)> {
@@ -781,7 +780,7 @@ impl State {
 		self.commit_tab_edit();
 		let in_tmux = in_tmux || config::settings().tmux_new_session;
 		// area with the bar shown (we're about to have >1 tab); relayout_all fixes
-		// the exact rects right after, this is just the new pane's provisional box
+		// the exact rects right after, this is the new pane's provisional box
 		let bar = self.menubar_h() + self.tab_bar_h();
 		let area = Rect {
 			x: 0.0,
@@ -790,7 +789,7 @@ impl State {
 			h: (self.surface_px.1 as f32 - bar).max(1.0),
 		};
 		// inherit shell + directory from the pane that was active when the tab
-		// was opened; a default-shell pane carries None -> still the default
+		// was opened; a default-shell pane has None -> still the default
 		let (cmd, cwd) = self
 			.tabs
 			.list
@@ -934,7 +933,7 @@ mod tests {
 		let settings = label_settings("Work shell");
 		let tabs: Vec<_> = (0..3).map(label_tab).collect();
 		let mut labels = super::TabLabels::default();
-		// four seconds at 60 frames a second
+		// 4 seconds at 60 frames a second
 		let built: usize = (0..240)
 			.map(|_| label_frame(&mut labels, &tabs, &settings, &mut text))
 			.sum();
@@ -945,7 +944,7 @@ mod tests {
 	}
 
 	// Whatever a label shows makes that tab build again, and only that tab: its
-	// title, task, folder, rename or own title. The settings and the font make
+	// title, task, folder, rename, or own title. The settings and the font make
 	// every tab build. A move the strip missed would show a stale label until
 	// something else happened.
 	// Test ID: ddgft
@@ -1034,7 +1033,7 @@ mod tests {
 		let mut one = vec![0];
 		assert_eq!(insert_tab(&mut one, 0, 1, true), 1);
 
-		// closing: of four left, as (active, closed, opener)
+		// closing: of 4 left, as (active, closed, opener)
 		assert_eq!(active_after_close(2, 0, 4, None), 1, "an earlier tab");
 		assert_eq!(active_after_close(2, 3, 4, None), 2, "a later tab");
 		assert_eq!(active_after_close(2, 2, 4, None), 2, "the one in its place");
@@ -1095,9 +1094,9 @@ mod tests {
 	}
 
 	// Build a popup by hand, the way the geometry tests need it - no window, no
-	// text context, just the numbers `row_top`/`item_at`/`step` are made of.
-	// The width a title is FITTED to and the width the buffer is SHAPED at are
-	// the same number by construction - shorten a path to a width the tab does not
+	// text context, only the numbers `row_top`/`item_at`/`step` are made of.
+	// The width a title is fitted to and the width the buffer is shaped at are
+	// the same number by construction - shorten a path to a width the tab doesn't
 	// then give it and the last component is clipped anyway, which is the whole
 	// thing the shortening exists to avoid.
 	// Test ID: dbjdw
@@ -1122,15 +1121,15 @@ mod tests {
 		}
 	}
 
-	// A tab may only name the shell it can SEE. A pane resolves its own command
+	// A tab may only name the shell it can see. A pane resolves its own command
 	// at spawn, so an unresolved one means nothing was switched on and the engine
-	// chose for itself - and a guess from the list is exactly what had a pane
-	// running PowerShell labelled Command Prompt.
+	// chose for itself - and a guess from the list is what had a pane
+	// running PowerShell labeled Command Prompt.
 	// Test ID: dbjdx
 	#[test]
 	fn a_tab_names_only_the_shell_it_can_see() {
 		assert_eq!(tab_command_line(None), "");
-		// An argument holding a space survives the round trip back into one line,
+		// An argument with a space survives the round trip back into one line,
 		// so the name lookup splits it the same way the launch did.
 		let argv = vec!["C:/Program Files/x.exe".to_string(), "a b".to_string()];
 		assert_eq!(

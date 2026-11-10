@@ -3,8 +3,8 @@
 ##	- Purpose:
 ##		Counts the heap allocations the window thread makes per frame, with
 ##		the program at rest and during a drag select, and fails past a limit.
-##		The window has two tabs, a split pane and the halo on, so the tab
-##		strip, both panes and the scrim are all in every frame.
+##		The window has 2 tabs, a split pane, and the halo on, so the tab
+##		strip, both panes, and the scrim are all in every frame.
 ##			- At rest: the cursor pulse redraws and nothing else changes.
 ##			- Drag: the pointer held down, taken down a pane's rows, then moved
 ##			  along the last one.
@@ -13,7 +13,7 @@
 ##	- Syntax: run.bash [--bin PATH] [--report]   (default: the debug build)
 ##		--report prints the figures and checks no limit.
 ##	- Exit: 0 passed, 1 a check failed, 3 nothing ran (no debug binary,
-##	  display, window manager or xdotool).
+##	  display, window manager, or xdotool).
 ##	- Test ID: ddkre
 ##	- History: At bottom of file.
 
@@ -35,7 +35,7 @@ headless="${root}/cicd/utility/gui-headless.bash"
 ## the frame lists were kept, 167 after; drag 382 and 340. Between frames in
 ## a drag, about 2.5 per move (20261010). A driver update can move the floor,
 ## so read the figures with --report before moving a limit.
-## The drag frame still had two shares that grow with load (20261024). The
+## The drag frame still had 2 shares that grow with load (20261024). The
 ## minimap recomposes once its gap is up, so on every third frame or so on an
 ## idle box and every frame on a busy one, about 20 each. And each row the
 ## selection newly covers costs about 17, and a slow frame folds more of them.
@@ -201,7 +201,7 @@ for step in $(seq 1 "${moves}"); do
 	sleep 0.03
 done
 ## Counted before the release, whose frame redraws the whole window and
-## composes the map. Read after it, that frame landed in the count now and then.
+## composes the map. Read after it, that frame got into the count now and then.
 to="$(fLines)"
 fX xdotool mouseup 1
 read -r dragFrames dragFrame dragTotal dragBetween < <(fMean "${from}" "${to}")

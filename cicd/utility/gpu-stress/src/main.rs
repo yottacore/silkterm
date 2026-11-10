@@ -11,7 +11,7 @@
 //! asks wgpu to refuse past that percent of the budget the driver reports, and
 //! takes chunks until it does. --busy is the share of time a compute shader
 //! keeps the GPU working, 0 to 1. Ends after --secs, or once the stop file
-//! exists, and prints what it holds every two seconds.
+//! exists, and prints how much it has taken every 2 seconds.
 
 use std::io::Write;
 use std::path::PathBuf;
@@ -78,8 +78,8 @@ fn parse() -> Opts {
 	opts
 }
 
-// Every invocation spins on dependent multiply-adds, so the work cannot be
-// folded away, and writes one word so it cannot be dropped either.
+// Every invocation spins on dependent multiply-adds, so the work can't be
+// folded away, and writes one word so it can't be dropped either.
 const SHADER: &str = r"
 struct Params { iters: u32, pad0: u32, pad1: u32, pad2: u32 }
 @group(0) @binding(0) var<uniform> params: Params;
@@ -177,7 +177,7 @@ impl Burner {
 	}
 
 	// Steer the loop count so one dispatch lasts about `target`. Kept well under
-	// the two seconds Windows allows before it resets the GPU.
+	// the 2 seconds Windows allows before it resets the GPU.
 	fn steer(&mut self, took: Duration, target: Duration) {
 		let ratio = target.as_secs_f64() / took.as_secs_f64().max(1e-4);
 		let next = (f64::from(self.iters) * ratio.clamp(0.5, 2.0)).round();
@@ -186,7 +186,7 @@ impl Burner {
 }
 
 // Take memory chunk by chunk until the target, a refusal, or the budget line.
-// Each chunk is cleared on the GPU so its pages are really there.
+// Each chunk is cleared on the GPU so its pages are resident.
 fn fill(
 	device: &wgpu::Device,
 	queue: &wgpu::Queue,

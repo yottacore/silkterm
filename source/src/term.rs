@@ -36,7 +36,7 @@ pub enum UserEvent {
 	// control socket: another window on the same settings file saved it
 	PeerSaved,
 	// wallpaper worker (wallpaper.rs): decoded pixels, ready to upload. Boxed -
-	// it carries a whole image, and every other variant is small.
+	// it has a whole image, and every other variant is small.
 	WallpaperReady(Box<crate::wallpaper::Loaded>),
 	// shell scan (shells.rs): the stored shell list with whatever the scan found
 	// folded in.
@@ -62,13 +62,13 @@ const COALESCE_WAKEUPS: bool = true;
 ///
 /// The engine finishes a read cycle roughly every 900 bytes under a flood, and
 /// each cycle used to become its own window event: measured on 32 MiB of output,
-/// about 20,000 of them, costing 2.5 SECONDS of main-thread CPU inside the OS
+/// about 20,000 of them, costing 2.5 seconds of main-thread CPU inside the OS
 /// message pump alone - more than the parsing and the drawing put together, for
 /// a message that says nothing but "look again".
 ///
-/// Nothing is lost by folding them. The notice carries no payload: whenever the
-/// window gets round to one it reads the grid as it stands, so a queue of twenty
-/// identical notices produced twenty identical reads. `handled` is cleared BEFORE
+/// Nothing is lost by folding them. The notice has no payload: whenever the
+/// window gets round to one it reads the grid as it stands, so a queue of 20
+/// identical notices produced 20 identical reads. `handled` is cleared before
 /// the window acts on it, so a cycle that arrives mid-handling posts a fresh notice
 /// rather than being dropped.
 #[derive(Debug, Default)]
@@ -128,8 +128,8 @@ pub fn focus_report(mode: TermMode, gained: bool) -> Option<&'static [u8]> {
 	Some(if gained { b"\x1b[I" } else { b"\x1b[O" })
 }
 
-// The bytes a query event owes the program, or None where there is no answer.
-// The event carries its own formatter; all this supplies is the value.
+// The bytes a query event sends back to the program, or None where there is no
+// answer. The event has its own formatter; all this supplies is the value.
 fn query_reply(event: &Event, size: WindowSize) -> Option<Vec<u8>> {
 	match event {
 		Event::ColorRequest(index, format) => {
@@ -142,8 +142,8 @@ fn query_reply(event: &Event, size: WindowSize) -> Option<Vec<u8>> {
 
 // The color a program is asking about, for OSC 4 / 10 / 11 / 12. Indices below
 // 256 are the palette; above that are the crate's named slots, of which we can
-// answer the three that matter. Answers from the settings rather than from the
-// term's own table, which this thread cannot reach - a program that set the
+// answer the 3 that matter. Answers from the settings rather than from the
+// term's own table, which this thread can't get to - a program that set the
 // color itself with OSC therefore reads back the theme's, which is wrong only
 // in the rare case where it set one and then asked.
 fn requested_color(index: usize) -> Option<alacritty_terminal::vte::ansi::Rgb> {
@@ -192,8 +192,8 @@ fn status_text(status: std::process::ExitStatus) -> String {
 }
 
 // The one text a program can hand the window at any size. The engine fork keeps
-// 2 KiB of a title as well, and this holds the same line here, so an engine
-// update cannot quietly take it away.
+// 2 KiB of a title as well, and this sets the same limit here, so an engine
+// update can't quietly take it away.
 const TITLE_MAX_BYTES: usize = 2048;
 
 fn capped_title(mut title: String) -> String {
@@ -234,7 +234,7 @@ impl EventListener for EventProxy {
 			Event::ClipboardStore(kind, text) if text.len() <= CLIPBOARD_STORE_MAX => self
 				.proxy
 				.send_event(UserEvent::ClipboardStore(self.id, kind, text)),
-			// Replies the terminal owes the program. Dropping these left anything
+			// Replies the terminal sends back to the program. Dropping these left anything
 			// asking for the background color or the text area size waiting out
 			// its timeout on every start and then guessing.
 			ref query @ (Event::ColorRequest(..) | Event::TextAreaSizeRequest(..)) => {
@@ -250,9 +250,9 @@ impl EventListener for EventProxy {
 	}
 }
 
-// The grid a pane asks for, held to what the engine can take. The engine
-// documents two columns as its least, since a wide character needs both, but
-// does not enforce it: one column panics on a CJK character or an emoji, and
+// The grid a pane asks for, limited to what the engine can take. The engine
+// documents 2 columns as its least, since a wide character needs both, but
+// doesn't enforce it: one column panics on a CJK character or an emoji, and
 // shrinking wide text to one column reflows without end.
 fn grid_dims(cols: usize, lines: usize) -> TermDimensions {
 	TermDimensions {
@@ -322,8 +322,8 @@ pub struct TermInstance {
 	cell: (u16, u16),
 	sender: EventLoopSender,
 	io: Option<std::thread::JoinHandle<()>>,
-	// where the shell last SAID it is (OSC 7 / OSC 9;9, see cwd.rs) - the only
-	// answer for a shell whose location the OS cannot see, PowerShell above all
+	// where the shell last said it is (OSC 7 / OSC 9;9, see cwd.rs) - the only
+	// answer for a shell whose location the OS can't see, PowerShell above all
 	reported_cwd: crate::cwd::Reported,
 	// for tab titles: the PTY master fd, which names the foreground process group.
 	#[cfg(unix)]
@@ -331,8 +331,8 @@ pub struct TermInstance {
 	#[cfg(unix)]
 	shell_pid: u32,
 	// The last command this shell ran, so an idle tab can still say what it was
-	// doing. Both platforms answer "what is running" differently and both keep
-	// this the same way.
+	// doing. Both platforms work out "what is running" differently, and both
+	// store this the same way.
 	last_program: Option<String>,
 	// throttles the per-frame task probe (see task())
 	task_cache: Option<(std::time::Instant, Task)>,
@@ -350,7 +350,7 @@ pub struct TermInstance {
 	tmux_client: bool,
 	// windows: the shell process, for the child-process probe that stands in
 	// for a foreground process group (see at_shell_prompt) and for the PEB read,
-	// plus that probe's answer for as long as it holds (see note_activity).
+	// plus that probe's answer for as long as it's valid (see note_activity).
 	// The inner Option is the running command's name.
 	#[cfg(windows)]
 	shell: ShellProc,
@@ -434,7 +434,7 @@ impl TermInstance {
 		};
 		#[cfg(unix)]
 		let shell_pid = pty.child().id();
-		// Windows has no master fd; the ConPTY child watcher carries the shell pid.
+		// Windows has no master fd; the ConPTY child watcher has the shell pid.
 		#[cfg(windows)]
 		let shell_pid = pty
 			.child_watcher()
@@ -450,7 +450,7 @@ impl TermInstance {
 		let event_loop = EventLoop::new(term.clone(), event_proxy, pty, false, false)?;
 		let sender = event_loop.channel();
 		let handle = event_loop.spawn();
-		// wrap the join handle so we don't carry its tuple return type around
+		// wrap the join handle so its tuple return type isn't passed around
 		let io = std::thread::spawn(move || {
 			let _ = handle.join();
 		});
@@ -490,7 +490,7 @@ impl TermInstance {
 	/// most recently, which is what an idle tab reports instead. A shell that has
 	/// never run anything is Idle, and the tab shows its directory instead.
 	///
-	/// Both platforms answer this, by quite different means - a foreground process
+	/// Both platforms work this out, by quite different means - a foreground process
 	/// group on unix, a live child process on Windows (see `at_shell_prompt`) - and
 	/// both are throttled the same way: render asks per tab per frame, and paying
 	/// for a probe on every idle blink frame added up.
@@ -516,7 +516,7 @@ impl TermInstance {
 		task
 	}
 
-	/// Makes the next `task()` look again rather than answer from its cache.
+	/// Makes the next `task()` look again rather than use its cache.
 	/// A program has usually just started when the screen changes under it.
 	pub fn retask(&mut self) {
 		self.task_cache = None;
@@ -533,7 +533,7 @@ impl TermInstance {
 		)
 	}
 
-	/// Look again past both caches. True when the answer moved, so the tab
+	/// Look again past both caches. True when the answer changed, so the tab
 	/// wants drawing.
 	pub fn recheck_task(&mut self) -> bool {
 		let before = self.task_cache.as_ref().map(|(_, task)| task.clone());
@@ -546,7 +546,7 @@ impl TermInstance {
 	}
 
 	// The foreground process group is the shell's own while it sits at its prompt,
-	// and a command's while one runs - so a pgid that is neither answers None.
+	// and a command's while one runs - so a pgid that is neither gives None.
 	// A pipeline's group is named for a first stage that may have exited, so the
 	// stage on screen is looked for first (see front.rs).
 	#[cfg(unix)]
@@ -574,7 +574,7 @@ impl TermInstance {
 	}
 
 	/// What runs in the pane tmux shows, when the program in front is a tmux
-	/// client. None until tmux has answered, or where it cannot be asked.
+	/// client. None until tmux has answered, or where it can't be asked.
 	#[cfg(unix)]
 	pub fn tmux_inner(&mut self, now: std::time::Instant) -> Option<crate::front::Inner> {
 		let client = self.front_pid?;
@@ -610,7 +610,7 @@ impl TermInstance {
 
 	/// The shell's current directory, for a new tab/split to start in.
 	///
-	/// What the shell SAID wins over what the OS can see, and that order is the
+	/// What the shell said wins over what the OS can see, and that order is the
 	/// point: a shell reporting its directory is answering the question directly,
 	/// while the OS can only see where the process itself sits - which for
 	/// PowerShell is the launch directory forever. A report that no longer names
@@ -646,11 +646,11 @@ impl TermInstance {
 
 	// Windows keeps a process's current directory in its own address space
 	// rather than anywhere the OS will hand out, so the answer is read from the
-	// shell's PEB (see peb_cwd). What that CAN'T see is a shell that keeps its
+	// shell's PEB (see peb_cwd). What that can't see is a shell that keeps its
 	// own idea of "where I am" and never tells the OS: measured on this box,
 	// PowerShell 7 and Windows PowerShell 5.1 both leave the process directory
 	// at the launch directory across a `Set-Location`, so a PowerShell pane
-	// reports where it started. cmd.exe, Git Bash and MSYS2 all call
+	// reports where it started. cmd.exe, Git Bash, and MSYS2 all call
 	// SetCurrentDirectory and read back correctly, Git Bash once it is read
 	// past its launcher (see ShellProc).
 	#[cfg(windows)]
@@ -658,7 +658,7 @@ impl TermInstance {
 		peb_cwd(self.shell.current().0)
 	}
 
-	// Neither /proc nor a PEB: only what a shell reports can answer here.
+	// Neither /proc nor a PEB: only what a shell reports counts here.
 	#[cfg(not(any(unix, windows)))]
 	#[allow(clippy::unused_self)]
 	fn os_cwd(&self) -> Option<std::path::PathBuf> {
@@ -668,7 +668,7 @@ impl TermInstance {
 	/// Is the shell itself (not a spawned command) the terminal's foreground
 	/// process? Drives copy-output's command start/end detection. On unix that is
 	/// the foreground process group: the fg pgid equals the shell's while at the
-	/// prompt, and a command's while it runs. Windows answers the same question a
+	/// prompt, and a command's while it runs. Windows works out the same thing a
 	/// different way, below.
 	#[cfg(unix)]
 	pub fn at_shell_prompt(&self) -> bool {
@@ -678,13 +678,13 @@ impl TermInstance {
 	}
 	/// A Windows console has no foreground process group, so the stand-in is "does
 	/// the shell have a live child?" - measured on this box: a command the shell
-	/// launches is its DIRECT child and is gone again by the time the prompt
-	/// returns, while the console host (conhost/OpenConsole) hangs off OUR process,
+	/// launches is its direct child and is gone again by the time the prompt
+	/// returns, while the console host (conhost/OpenConsole) hangs off our process,
 	/// never the shell's. A shell builtin spawns nothing, which reads as "at the
 	/// prompt" throughout - right, since its output ends when the prompt returns.
 	/// A background job (PowerShell's Start-Job) does read as a command still
 	/// running; Windows offers nothing that tells one from a foreground command.
-	/// The only way to ask is a walk of the whole process table, and that is not
+	/// The only way to ask is a walk of the whole process table, and that isn't
 	/// cheap - 6.4ms per scan measured here, release and debug alike, across 237
 	/// processes - so the answer is cached until the terminal next stirs (see
 	/// `note_activity`) instead of being taken per event-loop pass. Callers only
@@ -695,8 +695,8 @@ impl TermInstance {
 		self.command_child().is_none()
 	}
 
-	// The name of the command the shell is running, if any - the one scan answers
-	// both questions, so a tab title costs nothing on top of copy-output's.
+	// The name of the command the shell is running, if any - one scan is enough
+	// for both questions, so a tab title costs nothing on top of copy-output's.
 	#[cfg(windows)]
 	fn command_child(&self) -> Option<String> {
 		let (pid, started) = self.shell.current();
@@ -729,7 +729,7 @@ impl TermInstance {
 		answer
 	}
 
-	/// Windows: the cached at-prompt answer holds only until the terminal next
+	/// Windows: the cached at-prompt answer is good only until the terminal next
 	/// stirs. Both halves matter - anything typed can start a command, and a
 	/// command that ends brings the prompt back with it, so its own last act is
 	/// PTY output. One that cmd doesn't wait for ends after the prompt, so the
@@ -827,38 +827,38 @@ fn join_for(io: std::thread::JoinHandle<()>, wait: std::time::Duration) -> bool 
 	true
 }
 
-// Variables the launching shell keeps for ITSELF, which must not ride along
+// Variables the launching shell keeps for itself, which must not ride along
 // into a different shell.
 //
 // A terminal hands its child whatever environment it was launched with, and for
 // anything the user exported that is exactly right. A shell's own private
-// bookkeeping is not: pwsh 7 PREPENDS its own module directories to
+// bookkeeping isn't: pwsh 7 prepends its own module directories to
 // PSModulePath in its process, so a Windows PowerShell 5.1 pane opened anywhere
-// below one resolves PSReadLine to pwsh's copy instead of its own, and cannot
+// below one resolves PSReadLine to pwsh's copy instead of its own, and can't
 // load it - the 5.1 copy is signed as a Windows OS component and is exempt from
-// a Restricted execution policy while the pwsh 7 copy is not, so 5.1 starts
+// a Restricted execution policy while the pwsh 7 copy isn't, so 5.1 starts
 // with "Cannot load PSReadline module." and no line editing. Measured on this
 // box; it reproduces in a bare cmd.exe launched from pwsh, with no terminal
-// involved at all. PSExecutionPolicyPreference is the same shape - pwsh's
-// -ExecutionPolicy sets it and EVERY descendant inherits it, so a pane can run
+// involved at all. PSExecutionPolicyPreference is the same problem - pwsh's
+// -ExecutionPolicy sets it and every descendant inherits it, so a pane can run
 // under a policy nobody chose for it.
 //
 // pwsh runs on Linux and macOS too and mutates the same variable there, and a
 // side-by-side install (a distro pwsh beside a preview, or a Homebrew one beside
-// the .pkg) is the same collision as 5.1-below-7 - so the list is not
+// the .pkg) is the same collision as 5.1-below-7 - so the list isn't
 // platform-split. OLDPWD earns its place on every platform for a different
 // reason: it is the launching shell's own `cd -` target, and a pane opens
 // somewhere else entirely, so inheriting it points `cd -` at a directory the
 // user was never in.
 //
-// What is deliberately NOT here: VIRTUAL_ENV and CONDA_*, which a user activates
-// and then WANTS a pane to keep (and which cannot be dropped honestly anyway -
+// What's left out on purpose: VIRTUAL_ENV and CONDA_*, which a user activates
+// and then wants a pane to keep (and which can't be dropped cleanly anyway -
 // the matching PATH edits would stay, leaving a half-activated environment);
 // SHLVL, which is a real nesting count every shell agrees on rather than one
 // shell's private state.
 //
-// A name may only join this list if a desktop session NEVER sets it - see
-// session_env below, whose unix arm cannot tell the difference.
+// A name may only join this list if a desktop session never sets it - see
+// session_env below, whose unix arm can't tell the difference.
 const SHELL_PRIVATE_ENV: &[&str] = &["PSModulePath", "PSExecutionPolicyPreference", "OLDPWD"];
 
 /// Put the shell-private variables back to what a freshly launched process would
@@ -867,10 +867,10 @@ const SHELL_PRIVATE_ENV: &[&str] = &["PSModulePath", "PSExecutionPolicyPreferenc
 /// throw away the user's own exports, which is the one thing inheriting from a
 /// shell is for.
 ///
-/// Called ONCE from main, before any thread exists: an environment write is
+/// Called once from main, before any thread exists: an environment write is
 /// process-global and unsound beside a reader. Doing it to our own environment
-/// rather than per spawn is what makes it cover every path at once - the first
-/// pane, a split, a new tab, a new window, the shell scan and the PowerShell the
+/// rather than per spawn is what makes it apply to every path at once - the first
+/// pane, a split, a new tab, a new window, the shell scan, and the PowerShell the
 /// profile installer starts.
 pub fn sanitize_shell_env() {
 	// No answer means leave the environment alone. A pane that starts with a
@@ -881,7 +881,7 @@ pub fn sanitize_shell_env() {
 	let inherited: std::collections::HashMap<String, String> = std::env::vars().collect();
 	for (name, value) in env_fixups(SHELL_PRIVATE_ENV, &session, &inherited) {
 		// SAFETY: single-threaded here - this runs at the top of main, before the
-		// event loop, any worker thread or any PTY exists.
+		// event loop, any worker thread, or any PTY exists.
 		unsafe {
 			match value {
 				Some(want) => std::env::set_var(&name, want),
@@ -903,7 +903,7 @@ fn env_fixups(
 	inherited: &std::collections::HashMap<String, String>,
 ) -> Vec<(String, Option<String>)> {
 	// Windows environment names are case-insensitive, and a block keeps whatever
-	// spelling set it first, so the two sides can disagree on case alone.
+	// spelling set it first, so both sides can disagree on case alone.
 	let find = |vars: &std::collections::HashMap<String, String>, name: &str| {
 		vars.iter()
 			.find(|(key, _)| key.eq_ignore_ascii_case(name))
@@ -924,8 +924,8 @@ fn env_fixups(
 
 // The environment a freshly launched process would see - machine plus user,
 // merged the way the desktop composes it, so it stays right on a box whose
-// PowerShell lives somewhere unusual or whose variables come from domain
-// policy. NULL as the token yields SYSTEM variables only, so the process token
+// PowerShell is installed somewhere unusual or whose variables come from domain
+// policy. NULL as the token yields system variables only, so the process token
 // is required.
 #[cfg(windows)]
 fn session_env() -> Option<std::collections::HashMap<String, String>> {
@@ -954,8 +954,8 @@ fn session_env() -> Option<std::collections::HashMap<String, String>> {
 		// A machine variable is stored as REG_EXPAND_SZ and comes back with its
 		// references intact - PSModulePath really is spelled
 		// "%ProgramFiles%\\WindowsPowerShell\\Modules" here - so a shell handed one
-		// raw would search a directory that does not exist. Windows expands them
-		// once when it composes an environment; so does this, against the SESSION
+		// raw would search a directory that doesn't exist. Windows expands them
+		// once when it composes an environment; so does this, against the session
 		// block rather than our own, since ours is the thing being replaced.
 		let vars = raw
 			.iter()
@@ -969,11 +969,11 @@ fn session_env() -> Option<std::collections::HashMap<String, String>> {
 // freshly launched program would see, because the answer is composed by PAM, the
 // session manager and the login shell between them and is never recorded
 // anywhere afterwards. But every name on the list above is one a desktop session
-// does not set, so the answer for those IS the empty set, and each of them is
+// doesn't set, so the answer for those is the empty set, and each of them is
 // dropped rather than reset. That is the whole reason the list may only ever
-// carry variables a session never sets: a name that a login profile legitimately
+// have variables a session never sets: a name that a login profile legitimately
 // exports would be dropped here rather than restored, and nothing on this
-// platform could tell the two apart.
+// platform could tell them apart.
 #[cfg(not(windows))]
 // The Option is the Windows arm's failure, kept so both arms read the same.
 #[allow(clippy::unnecessary_wraps)]
@@ -983,12 +983,12 @@ fn session_env() -> Option<std::collections::HashMap<String, String>> {
 
 // Copy an environment block out of the OS's memory so the parsing above it can
 // be an ordinary function over a slice. Safety: `block` must be a live block
-// that ends in two NULs, as CreateEnvironmentBlock makes.
+// that ends in 2 NULs, as CreateEnvironmentBlock makes.
 #[cfg(windows)]
 unsafe fn read_env_block(block: *const u16) -> Vec<u16> {
 	let mut len = 0;
-	// two NULs in a row close the block
-	// SAFETY: the walk stops at the two NULs, so no read passes the block's end.
+	// a double NUL closes the block
+	// SAFETY: the walk stops at the double NUL, so no read passes the block's end.
 	while unsafe { *block.add(len) } != 0 || unsafe { *block.add(len + 1) } != 0 {
 		len += 1;
 	}
@@ -997,7 +997,7 @@ unsafe fn read_env_block(block: *const u16) -> Vec<u16> {
 }
 
 // One pass of %NAME% substitution, the way Windows expands a REG_EXPAND_SZ when
-// it builds an environment: a name it does not know is left standing rather than
+// it builds an environment: a name it doesn't know is left standing rather than
 // blanked, and a lone % is a literal.
 #[cfg_attr(not(windows), allow(dead_code))]
 fn expand_refs(value: &str, vars: &std::collections::HashMap<String, String>) -> String {
@@ -1105,7 +1105,7 @@ fn proc_comm(pid: u32) -> Option<String> {
 /// it is the first 16 bytes of the name.
 #[cfg(target_os = "macos")]
 pub(crate) fn proc_comm(pid: u32) -> Option<String> {
-	// <sys/proc_info.h>; the libc this builds against does not have it yet
+	// <sys/proc_info.h>; the libc this builds against doesn't have it yet
 	const PROC_PIDT_SHORTBSDINFO: libc::c_int = 13;
 	let pid = libc::c_int::try_from(pid).ok().filter(|&pid| pid > 0)?;
 	let size = libc::c_int::try_from(std::mem::size_of::<BsdShortInfo>()).ok()?;
@@ -1127,7 +1127,7 @@ pub(crate) fn proc_comm(pid: u32) -> Option<String> {
 	named(&String::from_utf8_lossy(&comm))
 }
 
-// `struct proc_bsdshortinfo` from <sys/proc_info.h>, which libc does not carry.
+// `struct proc_bsdshortinfo` from <sys/proc_info.h>, which libc doesn't have.
 #[cfg(target_os = "macos")]
 #[derive(Default)]
 #[repr(C)]
@@ -1164,11 +1164,11 @@ fn program_name(comm: &str) -> &str {
 
 // Does a process-table row belong to a command this shell launched? Windows
 // recycles pids aggressively and a row keeps whatever parent id it was born
-// with, so the parent id ALONE can name an unrelated long-lived process whose
+// with, so the parent id alone can name an unrelated long-lived process whose
 // creator's pid the shell later inherited - which would read as a command that
 // never finishes and would silently kill copy-output for that pane. A child
-// cannot predate its parent, so the start times settle it. An unknown child
-// start time (a process we may not open, so never one of ours) answers no; an
+// can't predate its parent, so the start times settle it. An unknown child
+// start time (a process we may not open, so never one of ours) counts as no; an
 // unknown shell start time has nothing to compare against, so the parent id
 // stands on its own.
 #[cfg_attr(not(windows), allow(dead_code))]
@@ -1177,7 +1177,7 @@ fn is_command_child(child_started: Option<u64>, shell_started: u64) -> bool {
 }
 
 // Windows: the name of `shell_pid`'s live child process, if it has one. The
-// name is the executable's, without its extension, which is the same shape
+// name is the executable's, without its extension, which is the same form
 // unix reports through /proc comm. The probe itself goes through find_child,
 // since it watches what it found.
 #[cfg(all(windows, test))]
@@ -1186,7 +1186,7 @@ fn command_child_name(shell_pid: u32, shell_started: u64) -> Option<String> {
 }
 
 // Windows: the first live child of `parent` that `pick` takes, by its raw exe
-// name, as pid, exe name and start time (0 when unknown). Walks the process
+// name, as pid, exe name, and start time (0 when unknown). Walks the process
 // table - there is no narrower query - and stops at the first hit.
 #[cfg(windows)]
 fn find_child(
@@ -1229,9 +1229,9 @@ fn find_child(
 
 // Git for Windows installs bin\bash.exe adn bin\sh.exe as launchers: each sets
 // up the environment, starts usr\bin\<same name> as its child and waits. So
-// the pid a pane holds is the launcher's, which never moves and is always
+// the pid a pane has is the launcher's, which never moves and is always
 // "running" the real shell. The layout is what gives it away: MSYS2 and
-// Cygwin have no usr\bin\bash.exe one level up from their bash. Answers the
+// Cygwin have no usr\bin\bash.exe one level up from their bash. Returns the
 // exe name the real shell runs under.
 #[cfg_attr(not(windows), allow(dead_code))]
 fn launcher_target(image: &std::path::Path) -> Option<String> {
@@ -1465,7 +1465,7 @@ fn exe_file_name(raw: &[u16]) -> String {
 
 // A PROCESSENTRY32W name (NUL-padded UTF-16) as the bare program name a tab
 // shows: no directory, no extension. An empty or unreadable name still has to
-// answer something, or a running command would read as an idle prompt.
+// return something, or a running command would read as an idle prompt.
 #[cfg(windows)]
 fn exe_display_name(raw: &[u16]) -> String {
 	let name = exe_file_name(raw);
@@ -1514,7 +1514,7 @@ fn handle_start_time(process: windows_sys::Win32::Foundation::HANDLE) -> Option<
 		dwLowDateTime: 0,
 		dwHighDateTime: 0,
 	}; 3];
-	// SAFETY: an open process handle and four live FILETIMEs to write.
+	// SAFETY: an open process handle and 4 live FILETIMEs to write.
 	let ok = unsafe {
 		GetProcessTimes(
 			process,
@@ -1528,9 +1528,9 @@ fn handle_start_time(process: windows_sys::Win32::Foundation::HANDLE) -> Option<
 }
 
 // Windows: a process's current directory, out of its own PEB. There is no API
-// that answers this for another process - GetCurrentDirectory only ever reports
+// that returns this for another process - GetCurrentDirectory only ever reports
 // the caller's - so the walk is: ProcessBasicInformation for the PEB address,
-// then two reads across it. Both offsets are undocumented but have been fixed
+// then 2 reads across it. Both offsets are undocumented but have been fixed
 // since Vista, and the result is checked with is_dir() before it is believed,
 // so a layout that ever did move degrades to "don't know" rather than to a
 // wrong directory.
@@ -1588,7 +1588,7 @@ fn peb_cwd(shell_pid: u32) -> Option<std::path::PathBuf> {
 			(&raw mut dos_path).cast::<c_void>(),
 			size_of::<UnicodeString>(),
 		);
-		// Length is in BYTES, and a path is UTF-16 - halve it for the buffer.
+		// Length is in bytes, and a path is UTF-16 - halve it for the buffer.
 		let chars = usize::from(dos_path.length) / 2;
 		let mut wide = vec![0u16; chars];
 		let ok = ok
@@ -1610,16 +1610,16 @@ fn peb_cwd(shell_pid: u32) -> Option<std::path::PathBuf> {
 }
 
 // The 32-bit PEB is laid out differently and no 32-bit Windows target is built,
-// so it answers "don't know" rather than reading the wrong offsets.
+// so it returns "don't know" rather than reading the wrong offsets.
 #[cfg(all(windows, not(target_pointer_width = "64")))]
 fn peb_cwd(_shell_pid: u32) -> Option<std::path::PathBuf> {
 	None
 }
 
-// The two structures the walk reads, declared here rather than taken from
-// windows-sys because they describe ANOTHER process's memory: what matters is
+// The 2 structures the walk reads, declared here rather than taken from
+// windows-sys because they describe another process's memory: what matters is
 // the 64-bit layout of the process being read, which is fixed, and declaring
-// them costs less than a windows-sys feature pulled in for two fields.
+// them costs less than a windows-sys feature pulled in for 2 fields.
 #[cfg(all(windows, target_pointer_width = "64"))]
 #[repr(C)]
 struct ProcessBasicInfo {
@@ -1642,16 +1642,16 @@ struct UnicodeString {
 	buffer: u64,
 }
 
-// A directory a shell reported is not always usable as the next shell's
+// A directory a shell reported isn't always usable as the next shell's
 // working directory. A pane inside a WSL distribution reports a posix path,
 // which Windows either rejects or - worse - resolves against the current
 // drive, which is how a new tab came up in a garbled /tmp.
 fn usable_cwd(dir: Option<std::path::PathBuf>) -> Option<std::path::PathBuf> {
 	// Every source of a pane's directory funnels through here: the reported one,
-	// the one on the command line, the one in the config. A relative path is not
+	// the one on the command line, the one in the config. A relative path isn't
 	// a directory anyone chose - it resolves against wherever SilkTerm itself was
 	// started, which is nowhere the person can see. A posix path on Windows is the
-	// other half of the same rule; that one arrives from a WSL pane reporting
+	// other half of the same rule; that one comes from a WSL pane reporting
 	// where it is, and it names a real directory in the wrong filesystem.
 	dir.filter(|dir| dir.is_absolute())
 }
@@ -1666,7 +1666,7 @@ fn pane_options(
 	let mut opts = tty::Options::default();
 	// The argv is split already, so Windows has to get it back whole: a spaced
 	// program path ran a planted program in front of it, and a spaced --cd
-	// reached WSL as two words. Unix never joins the words at all.
+	// got to WSL as 2 words. Unix never joins the words at all.
 	#[cfg(windows)]
 	{
 		opts.escape_args = true;
@@ -1702,13 +1702,13 @@ fn pane_options(
 // Every host has this entry, a stock Mac included.
 const DEFAULT_TERM: &str = "xterm-256color";
 
-// wsl.exe launches the shell inside the distribution, which does not inherit
+// wsl.exe launches the shell inside the distribution, which doesn't inherit
 // the Windows working directory. --cd is how it is told, and it takes a
 // Windows path or a posix one, so whichever spelling the source pane reported
 // can go straight through. Options have to come before the command, hence the
 // insert rather than a push. None where there is nothing to do.
 fn wsl_cd(argv: &[String], dir: &std::path::Path) -> Option<Vec<String>> {
-	// split on both separators: a Windows path reaches this on any platform, and
+	// split on both separators: a Windows path can get here on any platform, and
 	// Path would hand back the whole string for one on unix
 	let first = argv.first()?;
 	let prog = first
@@ -1799,7 +1799,7 @@ mod tests {
 		assert_eq!(next_task_look(Some(stirred), Some(before)), Some(first));
 	}
 
-	// tmux, editors over ssh and muffer's auto-copy all set the clipboard with
+	// tmux, editors over ssh, and muffer's auto-copy all set the clipboard with
 	// OSC 52, and whether the engine passes a store on is its config's call. A
 	// default that moved would quietly break copying again, or start answering
 	// reads.
@@ -1843,7 +1843,7 @@ mod tests {
 		);
 	}
 
-	// fish, vim and muffer ask for focus changes, and got nothing.
+	// fish, vim, and muffer ask for focus changes, and got nothing.
 	// Test ID: ddxkd
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
@@ -1938,7 +1938,7 @@ mod tests {
 		assert_eq!(capped_title("~/src".into()), "~/src");
 	}
 
-	// A pane narrowed below two cells asked the engine for one column, where a
+	// A pane narrowed below 2 cells asked the engine for one column, where a
 	// wide character panicked and wide text already on screen reflowed until
 	// memory ran out.
 	// Test ID: dcrw9
@@ -2093,8 +2093,8 @@ mod tests {
 	}
 
 	// ssh hands TERM to the far side as-is, and a host with no alacritty entry
-	// refused nano. A TERM set in the config has to reach the program itself,
-	// and an empty one has to be xterm-256color whatever this process holds.
+	// refused nano. A TERM set in the config has to get to the program itself,
+	// and an empty one has to be xterm-256color whatever this process has.
 	// Test ID: de9kn
 	#[cfg(unix)]
 	#[test]
@@ -2107,7 +2107,7 @@ mod tests {
 		use alacritty_terminal::tty;
 
 		let seen_by_program = |term_name: &str| {
-			// What the environment holds, not the shell's $TERM: bash, which is
+			// What the environment has, not the shell's $TERM: bash, which is
 			// /bin/sh on macOS, makes up an unexported TERM=dumb when none came in.
 			let probe = "printf \"<%s>\" \"$(/usr/bin/printenv TERM)\"; sleep 0.2";
 			let argv = ["/bin/sh", "-c", probe].map(String::from);
@@ -2137,7 +2137,7 @@ mod tests {
 		assert_eq!(seen_by_program("xterm-256color"), "xterm-256color");
 		assert_eq!(seen_by_program("vt220"), "vt220");
 		// Set on the pane itself, since setup_env puts alacritty in this
-		// process's TERM where the entry exists, and a test run may hold any.
+		// process's TERM where the entry exists, and a test run may have any.
 		let empty = super::pane_options(None, None, false, "");
 		assert_eq!(
 			empty.env.get("TERM").map(String::as_str),
@@ -2152,8 +2152,8 @@ mod tests {
 	}
 
 	// A program that asks what color the background is (neovim, delta, termbg on
-	// every start) used to get nothing back and wait out its timeout. The three
-	// named slots and the whole palette answer now; anything else does not.
+	// every start) used to get nothing back and wait out its timeout. The 3
+	// named slots and the whole palette are answered now; anything else isn't.
 	// Test ID: dcbdr
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
@@ -2285,7 +2285,7 @@ mod tests {
 		assert_eq!(st(9), "signal 9");
 	}
 
-	// Folding the notices may never LOSE one: the window clears the gate before
+	// Folding the notices may never lose one: the window clears the gate before
 	// it looks at the grid, so a read cycle that arrives mid-handling posts again.
 	// Test ID: dbekc
 	#[test]
@@ -2375,7 +2375,7 @@ mod tests {
 
 	// Windows has no /proc, so a new tab or split can only inherit a directory
 	// if the shell's own PEB can be read - and the point is the directory it is
-	// in NOW. A process that never moves must read back where it was started
+	// in now. A process that never moves must read back where it was started
 	// (that half is deterministic), and one that calls SetCurrentDirectory - as
 	// cmd.exe's `cd` does - must read back the new place, not the old one.
 	// Test ID: dbhak
@@ -2390,12 +2390,12 @@ mod tests {
 		let started_in = crate::testdir::run_dir().to_path_buf();
 		let moved_to = std::path::PathBuf::from(r"C:\Windows");
 
-		// Each shell is held open on its own stdin pipe, and runs NOTHING. That is
-		// load-bearing rather than tidy: `Child::kill` is TerminateProcess, which
-		// ends one process and never its tree, so the old `cmd /c ping ...` left the
-		// ping behind every time this test ran. They do not exit on their own either
+		// Each shell is held open on its own stdin pipe, and runs nothing. That
+		// matters, since `Child::kill` is TerminateProcess, which ends one process
+		// and never its tree, so the old `cmd /c ping ...` left the ping behind
+		// every time this test ran. They don't exit on their own either
 		// (measured: alive for days at 0% CPU, 2 MB apiece), so they accumulate one
-		// or two per `cargo test` - fifteen had piled up before anyone counted. A
+		// or two per `cargo test` - 15 had piled up before anyone counted. A
 		// cmd.exe waiting on a pipe is the same shell doing the same `cd` with no
 		// grandchild under it to strand.
 		let hold = |dir: &std::path::Path| {
@@ -2432,11 +2432,11 @@ mod tests {
 			std::thread::sleep(std::time::Duration::from_millis(50));
 		}
 		let stayed = peb_cwd(still.id());
-		// killed BEFORE the assertions, so a failing assert still cleans up after
-		// itself - these two wait forever otherwise, being fed by a pipe
+		// killed before the assertions, so a failing assert still cleans up after
+		// itself - these 2 wait forever otherwise, being fed by a pipe
 		let _ = still.kill();
 		let _ = roams.kill();
-		// reaped, or the test leaves two zombies behind it
+		// reaped, or the test leaves 2 zombies behind it
 		let _ = still.wait();
 		let _ = roams.wait();
 
@@ -2657,7 +2657,7 @@ mod tests {
 
 	// A tab names the program in the foreground: the terminal's foreground
 	// process group, looked up by its leader. On a Mac that lookup read /proc,
-	// which is not there, so no tab ever named anything. Started by full path:
+	// which isn't there, so no tab ever named anything. Started by full path:
 	// a Mac names the file a link points to, and a `sleep` found on PATH can be
 	// a link to GNU's `gsleep`.
 	// Test ID: ddg92
@@ -2716,10 +2716,10 @@ mod tests {
 			.collect()
 	}
 
-	// A shell's private bookkeeping must not decide how a DIFFERENT shell starts.
+	// A shell's private bookkeeping must not change how a different shell starts.
 	// pwsh 7 prepends its own module directories to PSModulePath in its process,
 	// so a Windows PowerShell 5.1 pane opened below one finds pwsh's PSReadLine
-	// ahead of its own, cannot load it, and starts with no line editing.
+	// ahead of its own, can't load it, and starts with no line editing.
 	// Test ID: dbjjh
 	#[test]
 	fn a_shell_private_variable_is_put_back_to_the_session_value() {
@@ -2741,7 +2741,7 @@ mod tests {
 	}
 
 	// pwsh's -ExecutionPolicy sets this and every descendant inherits it. The
-	// session never sets it, so neither should a pane - and that means DROPPING
+	// session never sets it, so neither should a pane - and that means dropping
 	// it, not handing the shell an empty one to read.
 	// Test ID: dbjjj
 	#[test]
@@ -2755,7 +2755,7 @@ mod tests {
 	}
 
 	// Launched from the desktop rather than from a shell, the inherited
-	// environment already IS the session one. That is the ordinary case and it
+	// environment already is the session one. That is the ordinary case and it
 	// must write nothing at all.
 	// Test ID: dbjjk
 	#[test]
@@ -2776,8 +2776,8 @@ mod tests {
 	}
 
 	// Windows environment names are case-insensitive and a block keeps whichever
-	// spelling set it first, so the two sides can differ by case alone - which is
-	// not a difference and must not read as one.
+	// spelling set it first, so both sides can differ by case alone - which
+	// isn't a difference and must not read as one.
 	// Test ID: dbjjn
 	#[test]
 	fn a_name_that_differs_only_in_case_is_the_same_variable() {
@@ -2787,7 +2787,7 @@ mod tests {
 	}
 
 	// The block is NUL-separated NAME=VALUE closed by a second NUL, and it also
-	// carries the hidden per-drive entries Windows keeps, whose NAME begins with
+	// has the hidden per-drive entries Windows keeps, whose NAME begins with
 	// '=' - so the separator can never be the first character.
 	// Test ID: dbjjp
 	#[test]
@@ -2810,7 +2810,7 @@ mod tests {
 
 	// PSModulePath is stored as REG_EXPAND_SZ, so the session block hands it over
 	// spelled with its references intact. A shell given that raw would search a
-	// directory that does not exist - and an unknown name has to survive rather
+	// directory that doesn't exist - and an unknown name has to survive rather
 	// than collapse to nothing, which would silently shorten a search path.
 	// Test ID: dbjjq
 	#[test]
@@ -2825,8 +2825,8 @@ mod tests {
 	}
 
 	// The unix arm has no way to ask what a freshly launched program would see, so
-	// it answers with the empty set and every listed variable is DROPPED. That is
-	// only honest because nothing on the list is a variable a session sets - and it
+	// it returns the empty set and every listed variable is dropped. That's
+	// only correct because nothing on the list is a variable a session sets - and it
 	// is the same path Windows takes for a variable its session block lacks.
 	// Test ID: dbjjr
 	#[test]
@@ -2850,9 +2850,9 @@ mod tests {
 	// comes from further away than that: a file, a remote host, a build log. The
 	// terminal answers a few of the questions such a stream can ask, and those
 	// answers go back down the pty as if the user had typed them - so an answer
-	// that could carry a newline, or the program's own text, would let the program
-	// run a command nobody typed. That is the oldest hole in terminal emulators
-	// and it is the one thing worth hammering hardest.
+	// that could contain a newline, or the program's own text, would let the program
+	// run a command nobody typed. That is the oldest hole in terminal emulators,
+	// so it gets the hardest testing.
 	mod fuzz {
 		use alacritty_terminal::event::{Event, EventListener, WindowSize};
 		use alacritty_terminal::grid::Dimensions;
@@ -2866,12 +2866,12 @@ mod tests {
 		const COLS: usize = 20;
 		const LINES: usize = 8;
 		const HISTORY: usize = 200;
-		// Planted in every title, icon name and clipboard the stream sets. Nothing
+		// Planted in every title, icon name, and clipboard the stream sets. Nothing
 		// the generator emits can produce it by chance.
 		const MARKER: &str = "kQ7marker7Qk";
 
 		// Stands in for the real listener, and forwards exactly what it forwards:
-		// the engine's own replies, plus the two queries we answer ourselves.
+		// the engine's own replies, plus the 2 queries we answer ourselves.
 		// Everything else - the clipboard included - is dropped on the floor.
 		#[derive(Clone, Default)]
 		struct Replies(Arc<Mutex<Vec<u8>>>);
@@ -2921,12 +2921,12 @@ mod tests {
 			// A reply the program can steer is a command the user never typed.
 			assert!(
 				!shown.contains(MARKER),
-				"a reply carried the program's own text: {shown:?}"
+				"a reply had the program's own text: {shown:?}"
 			);
-			// And a reply that can carry a line ending submits itself.
+			// And a reply that can contain a line ending submits itself.
 			assert!(
 				!said.iter().any(|&b| matches!(b, b'\n' | b'\r' | 0)),
-				"a reply carried a line ending: {shown:?}"
+				"a reply had a line ending: {shown:?}"
 			);
 			// Nothing we answer is long. An unbounded one would be a way to flood
 			// the shell's input as well as a way to hide something in it.

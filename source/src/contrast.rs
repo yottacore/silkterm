@@ -50,7 +50,7 @@ fn size_to_radius(size: f32, max_dim: u32) -> u32 {
 
 // Mean |luma gradient| over the image, mapped to a saturating 0..1 busyness.
 // Flat image -> 0; lots of high-frequency detail -> toward 1. `scale` is the
-// image's size against the one BUSY_K was tuned on: a pixel of an image held
+// image's size against the one BUSY_K was tuned on: a pixel of an image shown
 // smaller spans more of the picture, so its steps are bigger.
 fn busyness(px: &[[f32; 3]], w: usize, h: usize, scale: f32) -> f32 {
 	if w < 2 || h < 2 {
@@ -89,7 +89,7 @@ fn auto_params(busy: f32) -> (f32, f32) {
 }
 
 // Separable box mean (radius r) via per-row/col prefix sums, edge-clamped and
-// count-normalized so borders average only the samples they actually have.
+// count-normalized so borders average only the samples they have.
 // O(pixels) regardless of radius. f64 accumulation avoids large-sum drift.
 fn box_mean(src: &[[f32; 3]], w: usize, h: usize, r: usize) -> Vec<[f32; 3]> {
 	if r == 0 {
@@ -129,7 +129,7 @@ fn box_mean(src: &[[f32; 3]], w: usize, h: usize, r: usize) -> Vec<[f32; 3]> {
 
 /// Flatten the image's contrast in place. `img` is linear-light RGBA f32; alpha
 /// is left untouched. No-op when the effective strength or size comes out at zero.
-/// `scale` is what the wallpaper is held at against its full size, so a smaller
+/// `scale` is the wallpaper's drawn size against its full size, so a smaller
 /// copy of the same picture reads as busy as the whole one.
 pub fn apply(img: &mut Linear, size: f32, strength: f32, auto: f32, scale: f32) {
 	let (w, h) = (img.width() as usize, img.height() as usize);

@@ -105,7 +105,7 @@ function fStage {
 	Remove-Item env:SILKTERM_TEST_DIR -ErrorAction SilentlyContinue
 	fTestDir_Make
 	##	Made by this account, written by that one. Inheritance usually gives them
-	##	the folder already; this does not depend on it.
+	##	the folder already; this doesn't depend on it.
 	icacls $env:SILKTERM_TEST_DIR /grant "*${sid}:(OI)(CI)M" /Q | Out-Null
 	if ($LASTEXITCODE) { throw "cannot give $who the run folder $env:SILKTERM_TEST_DIR" }
 	"RUNFOR $who"

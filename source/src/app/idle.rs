@@ -86,11 +86,11 @@ impl IdleClock {
 		newly
 	}
 
-	// A shell printing. Output nobody can see does not keep a hidden window's
+	// A shell printing. Output nobody can see doesn't keep a hidden window's
 	// device, or a program that prints forever would hold it for good. Output
 	// in the tab in front is still owed at the reveal, so the window shows
 	// what changed once it can be seen. A tab in the back is out of sight
-	// either way, and nothing it prints changes the picture, so it is not owed
+	// either way, and nothing it prints changes the picture, so it isn't owed
 	// the device: that would take it back and let it go again once per wait
 	// for as long as the tab prints. Switching to the tab is input, which
 	// brings it back.
@@ -113,7 +113,7 @@ const REBUILD_RETRY_MAX: Duration = Duration::from_secs(5);
 /// What the window title says about the device. Nothing normally, a note while
 /// it is let go, another while it comes back, and a last one for a few seconds
 /// after. The wallpaper is the last thing a rebuild waits on, and the only part
-/// slow enough for anyone to see, so coming back lasts until it answers.
+/// slow enough for anyone to see, so coming back lasts until it arrives.
 /// Any rebuild counts, a return to this console as much as the idle release.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(super) enum Conserve {
@@ -161,10 +161,10 @@ struct Idle {
 }
 
 // When an idle window may let its device go, or None while something keeps
-// it: the switch off, the window not yet shown, a rating owed or running, or a
-// window on screen that has focus or would go blank without its device. Two
-// waits, because a hidden window is known to be out of sight while a merely
-// unfocused one may be on a second monitor being read.
+// it: the switch off, the window not yet shown, a rating due or running, or a
+// window on screen that has focus or would go blank without its device. There
+// are 2 waits, because a hidden window is known to be out of sight while a
+// merely unfocused one may be on a second monitor being read.
 fn release_deadline(cfg: &config::Settings, idle: &Idle) -> Option<Instant> {
 	let rule = idle_rule(cfg);
 	if kept_by(&rule, idle).is_some() {
@@ -308,13 +308,13 @@ fn trim_heap() {}
 /// mmap threshold starts at 128 KB but moves: freeing a mapped buffer raises it
 /// to that buffer's size, after which a wallpaper's decode (several buffers of
 /// megabytes each) is carved out of the thread's own arena and stays resident
-/// there once freed, because `malloc_trim` never shrinks an arena that is not
+/// there once freed, because `malloc_trim` never shrinks an arena that isn't
 /// the main one. Measured on a 1920x993 wallpaper: about 40 MB kept per decode,
 /// one per rebuild after an idle release, and the first decode's 50 MB kept for
 /// the life of every window. Setting the threshold pins it. 4 MB keeps a
 /// frame's own vectors in the arena on any grid and puts only the image buffers
 /// on the mapping path. Pinning it also stops the trim threshold moving, so
-/// that is set too, high enough that the main heap's top is not given back and
+/// that is set too, high enough that the main heap's top isn't given back and
 /// asked for again around every frame. Called before the first thread exists,
 /// like the environment fixes.
 #[cfg(all(target_os = "linux", target_env = "gnu"))]
@@ -351,7 +351,7 @@ fn freeze_frame(was_hidden: bool, hidden: bool) -> Frame {
 // Nothing of the window is on screen. A window with no area counts, since on
 // Windows a restore stops answering minimized a moment before its size comes
 // back, and a device rebuilt then took 1x1 as the window's size. The grid
-// shrank to two columns with it, and the console host's reflow lost the screen.
+// shrank to 2 columns with it, and the console host's reflow lost the screen.
 fn window_hidden(
 	revealed: bool,
 	occluded: bool,
@@ -364,10 +364,10 @@ fn window_hidden(
 // How long a minimized answer stands. On X11 the answer is a property read
 // the loop waits on, and winit reports no event when a window is minimized.
 // Events that come with a restore forget the answer (`restore_sign`), so a
-// reveal is not held up by it.
+// reveal isn't held up by it.
 const MINIMIZED_RECHECK: Duration = Duration::from_millis(250);
 
-/// An event a restore brings. The WM's redraw is one, and it reaches
+/// An event a restore brings. The WM's redraw is one, and it gets to
 /// `freeze_sync` before `about_to_wait` does (G89), so it must see the
 /// window as shown, not a minimized answer from before.
 pub(super) fn restore_sign(event: &WindowEvent) -> bool {
@@ -383,13 +383,13 @@ pub(super) fn restore_sign(event: &WindowEvent) -> bool {
 /// Whether an event is a person at the window, for the idle clock. The pointer
 /// counts once it is over the window by the rule the look after a move uses
 /// (`note_presence`), not on being told it entered: on X11 a pointer grab let
-/// go by any program on the desktop, such as a menu, a window drag or a screen
+/// go by any program on the desktop, such as a menu, a window drag, or a screen
 /// locker, tells the window under a pointer at rest that it entered, with one
 /// move to where it already was. That kept the wait from ever running out
 /// there, and took a released device back for nobody.
 ///
 /// Focus counts only as a change. On X11, coming back to the desktop that
-/// holds an unfocused window tells it it lost focus, which it never had.
+/// has an unfocused window tells it it lost focus, which it never had.
 /// `focused` is the window's focus before this event. The answer names the
 /// sign for `SILK_IDLEDBG`.
 pub(super) fn sign_of_life(
@@ -450,7 +450,7 @@ impl State {
 		})
 	}
 
-	/// The freeze edge, owned in one place because both render entry points reach
+	/// The freeze edge, owned in one place because both render entry points call
 	/// it: on restore the WM's own redraw arrives before `about_to_wait` runs, so
 	/// whichever gets here first has to be the one that catches up - otherwise that
 	/// frame banks the whole backlog into the ease before anything cuts it.
@@ -469,9 +469,9 @@ impl State {
 	/// minimized/occluded window builds nothing - so the reveal is one dirty
 	/// catch-up frame, hard-cut so the gap closes instantly instead of easing in
 	/// (that ease is the bounce class, and it also reads as output arriving now).
-	/// Every pane is cut, not just the ones flagged dirty: the flag is cleared by
+	/// Every pane is cut, not only the ones flagged dirty: the flag is cleared by
 	/// whichever build got there first, so it answers "is a rebuild owed", not
-	/// "did the grid move while nobody was looking". A pane that really did sit
+	/// "did the grid move while nobody was looking". A pane that did sit
 	/// still is snapping a scroll already at rest.
 	pub(super) fn freeze_catchup(&mut self) {
 		for pane in self.tabs.cur_mut().panes.values_mut() {
@@ -579,7 +579,7 @@ impl State {
 	}
 
 	/// Let the device and everything on it go. The window stays, the shells run
-	/// on and the grid keeps up; only drawing stops, and `rebuild_gpu` is the
+	/// on, and the grid keeps up; only drawing stops, and `rebuild_gpu` is the
 	/// way back. What the CPU held only for the device's sake goes too: the
 	/// rasterized glyphs, the shaped chrome.
 	pub(super) fn release_gpu(&mut self) {
@@ -601,7 +601,7 @@ impl State {
 		idledbg(&format!("device released in {:?}", start.elapsed()));
 	}
 
-	/// The device again, on the same window, and everything that lived on it
+	/// The device again, on the same window, and everything that was on it
 	/// built afresh. The wallpaper is prepared again from the file rather than
 	/// kept, as after a VT switch (`recover_gpu`), and its small stand-in shows
 	/// from the first frame until it arrives. A failure leaves the window
@@ -617,7 +617,7 @@ impl State {
 			Err(e) => {
 				if self.idle.rebuild_failed(Instant::now()) {
 					eprintln!(
-						"{}: could not bring the GPU device back ({e}); trying again",
+						"{}: couldn't bring the GPU device back ({e}); trying again",
 						config::APP_NAME
 					);
 				}
@@ -667,7 +667,7 @@ impl State {
 	/// Everything on the device again, after a return to this console. The whole
 	/// device when nothing else shares it, since a switch can spoil any texture
 	/// and `recover_gpu` only knows the text and the wallpaper. An open dialog's
-	/// context cannot outlive the terminal's on X11, so that case stays partial.
+	/// context can't outlive the terminal's on X11, so that case stays partial.
 	pub(super) fn heal_gpu(&mut self, dialog_open: bool) {
 		if self.gpu.is_none() {
 			return; // a released window rebuilds from nothing anyway
@@ -684,7 +684,7 @@ impl State {
 	/// in gfx.rs). Re-upload everything that was uploaded once: fresh glyph
 	/// atlases + chrome via `rebuild_text`, and the wallpaper. `rebuild_text` also drops
 	/// the prepared/scrim signatures, so the next frame rebuilds the scrim source
-	/// instead of reusing a texture that no longer holds anything.
+	/// instead of reusing a texture that's now empty.
 	pub(super) fn recover_gpu(&mut self) {
 		if self.gpu.is_none() {
 			return; // nothing uploaded to lose; the rebuild starts from nothing anyway
@@ -739,7 +739,7 @@ mod tests {
 		assert!(!life(&WindowEvent::RedrawRequested, true));
 	}
 
-	// Focus counts only as a change. Coming back to the desktop that holds an
+	// Focus counts only as a change. Coming back to the desktop that has an
 	// unfocused window on X11 tells it it lost focus, which took a released
 	// device back with nobody there (2026111010491300).
 	// Test ID: df4dh
@@ -903,7 +903,7 @@ mod tests {
 	}
 
 	// The idle release: off by default, never while the window has focus on
-	// screen, and a covered window waits the shorter of the two times. Everything
+	// screen, and a covered window waits the shorter of the 2 times. Everything
 	// that vetoes it is a None, since a deadline that then had to be checked
 	// again elsewhere is how a veto gets forgotten.
 	// Test ID: dcr6f
@@ -919,7 +919,7 @@ mod tests {
 			since,
 			keeps_picture: true,
 		};
-		// The release shipped off until 2026100312470540 turned it on by default,
+		// The release was off until 2026100312470540 turned it on by default,
 		// which `idle_release_defaults_on` pins now.
 		// let mut cfg = config::Settings::default();
 		// assert!(
@@ -1015,7 +1015,7 @@ mod tests {
 			kept_by(&rule, &blanks),
 			Some("on screen, and would go blank")
 		);
-		// out of sight, neither focus nor the picture holds it
+		// out of sight, neither focus nor the picture keeps it
 		let hidden = Idle {
 			hidden: true,
 			focused: true,
@@ -1166,7 +1166,7 @@ mod tests {
 
 	// A Windows restore stops answering minimized a moment before the size
 	// comes back. A rebuild in that gap read the 0x0 client area, took 1x1 as
-	// the window's size, and the grid went to two columns; the console host's
+	// the window's size, and the grid went to 2 columns; the console host's
 	// reflow then left only the prompt's last character on screen.
 	// Test ID: ddga9
 	#[test]
@@ -1219,7 +1219,7 @@ mod tests {
 	// A program printing now and then in a tab in the back kept an unfocused
 	// window on screen from ever letting go after "Minutes otherwise". Only
 	// the tab in front counts while the window shows, and a released window
-	// is not owed its device for a tab nobody sees.
+	// isn't owed its device for a tab nobody sees.
 	// Test ID: der5b
 	#[test]
 	fn output_from_a_tab_in_the_back_does_not_keep_the_device() {

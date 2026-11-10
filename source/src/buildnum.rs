@@ -7,11 +7,11 @@
 // could never be trusted for, since every producer stamps that differently.
 //
 // build.rs include!s this file, so the number baked into the binary and the tests
-// below are the same code. That is why nothing here has a `use` line and why the
+// below are the same code. That's why nothing here has a `use` line and why the
 // module is only compiled into the crate under cfg(test): at run time the answer
 // is already a string in the environment (config::BUILD_ID).
 
-// Crockford's alphabet, lowercase. No i, l, o or u, so nothing in a build number
+// Crockford's alphabet, lowercase. No i, l, o, or u, so nothing in a build number
 // copied out of a bug report can be read back as a digit or as another letter.
 const CROCKFORD_LOWER: &[u8; 32] = b"0123456789abcdefghjkmnpqrstvwxyz";
 
@@ -89,7 +89,7 @@ mod tests {
 	#[test]
 	fn a_build_number_decodes_back_to_the_minute_it_was_built() {
 		// Round-trip every digit position through a hand-rolled decode, so an
-		// encoder that quietly reversed itself would not pass.
+		// encoder that quietly reversed itself wouldn't pass.
 		let decode = |text: &str| -> u64 {
 			text.bytes().fold(0u64, |sum, byte| {
 				let digit = CROCKFORD_LOWER.iter().position(|c| *c == byte).unwrap();
@@ -136,7 +136,7 @@ mod tests {
 	// Test ID: dbsdj
 	#[test]
 	fn the_number_stays_five_characters_for_the_life_of_this_program() {
-		// 32^5 minutes past 2000 is partway through 2063; anything sooner is five
+		// 32^5 minutes past 2000 is partway through 2063; anything sooner is 5
 		// characters, which is what the About panel and the release notes assume.
 		let year_2026 = EPOCH_2000_UNIX + 26 * 365 * 86_400;
 		let year_2060 = EPOCH_2000_UNIX + 60 * 365 * 86_400;
@@ -334,7 +334,7 @@ mod tests {
 	}
 
 	// A copyright line's text after "Copyright ": the sign, the year or span,
-	// then the holder. Answers whether it is the Bubbles form, or why it is
+	// then the holder. Returns whether it's the Bubbles form, or why it's
 	// neither form. PowerShell files are ASCII, so theirs is "(C)" with no ID.
 	fn copyright_form(text: &str, marker: &str, ascii: bool) -> Result<bool, String> {
 		let plain = ascii && text.starts_with("(C) ");
@@ -371,7 +371,7 @@ mod tests {
 		text.starts_with("Copyright ©") || text.starts_with("Copyright (")
 	}
 
-	// What is wrong with one script's header and History, if anything.
+	// What's wrong with one script's header and History, if anything.
 	fn script_header_faults(lines: &[&str], cmd: bool, ps1: bool, marker: &str) -> Vec<String> {
 		let at = lines
 			.iter()
@@ -470,7 +470,7 @@ mod tests {
 	#[cfg_attr(miri, ignore = "Miri can't start a process")]
 	fn every_script_has_the_license_header_with_history_at_the_bottom() {
 		// shell_integration.ps1 is written whole into a user's PowerShell
-		// profile, so it names no license there. It ships inside the binary,
+		// profile, so it names no license there. It's built into the binary,
 		// which does.
 		const EXEMPT: &[&str] = &["source/src/shell_integration.ps1"];
 		let crate_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));

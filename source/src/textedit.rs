@@ -105,7 +105,7 @@ pub fn caret_from_click(text: &str, rel_x: f32, measure: &mut impl FnMut(&str) -
 	}
 }
 
-/// How far an arrow or an erase key reaches from the caret: one character,
+/// How far an arrow or an erase key goes from the caret: one character,
 /// one word, or all the way to that end.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Reach {

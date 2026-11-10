@@ -14,7 +14,7 @@ use winit::event_loop::EventLoopProxy;
 
 // A pane's shell, most specific first: its own --shell, the pane it splits, its
 // tab's, the window's, then the default. The first pane of a tab has no split
-// source, and a window with no tabs given has only the last two.
+// source, and a window with no tabs given has only the last 2.
 fn pane_shell(
 	explicit: Option<&Vec<String>>,
 	split_source: Option<&Vec<String>>,
@@ -31,7 +31,7 @@ fn pane_shell(
 }
 
 // A new pane's direction: its own, else the one the pane it splits was given,
-// which carries down the chain. None leaves it to `default_dir`.
+// which passes down the chain. None leaves it to `default_dir`.
 fn pane_split_dir(
 	explicit: Option<crate::cli::Dir4>,
 	split_source: Option<crate::cli::Dir4>,
@@ -223,7 +223,7 @@ pub(super) fn build_layout(
 	out
 }
 
-/// A reload rereads the file, and the file never held what the command line gave
+/// A reload rereads the file, and the file never had what the command line gave
 /// at launch, so that goes back on first. The session's own state goes on after,
 /// which lets a wallpaper set through the socket since launch beat the one the
 /// launch named.
@@ -348,8 +348,8 @@ mod tests {
 				.any(|(name, value)| name == config::ENV_DIR_HANDED_DOWN && value.is_some())
 		};
 
-		// built from home so it is absolute on every platform; "/x/alt.shcl" is
-		// not on Windows, where it came back as C:\x\alt.shcl
+		// built from home so it is absolute on every platform; "/x/alt.shcl"
+		// isn't on Windows, where it came back as C:\x\alt.shcl
 		let alt = home.join("alt.shcl");
 		let cmd = new_window_command(exe, Some(&home), Some(&alt));
 		assert_eq!(args(&cmd), ["--config", &*alt.to_string_lossy()]);
@@ -374,7 +374,7 @@ mod tests {
 	}
 
 	// Reload config dropped the font and colors given on the command line, while
-	// a value the command line did not name has to come from the file.
+	// a value the command line didn't name has to come from the file.
 	// Test ID: dcq7e
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]

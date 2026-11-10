@@ -3,7 +3,7 @@
 #  shellcheck disable=2016  ## 'Expressions don't expand in single quotes.' The PowerShell being matched needs literal '$'.
 
 ##	- Purpose:
-##		Four things the Windows scenario harness got wrong, checked without a box.
+##		There are 4 things the Windows scenario harness got wrong, checked without a box.
 ##		It ran whatever binary the box last built, so a result could be for an
 ##		older commit. Its cleanup stopped every process named silkterm, on
 ##		boxes other people use. It kept its files outside the temp folder. And it
@@ -76,7 +76,7 @@ fCheck "the scenario runs the binary sent, not the box's own build" fRunsSent
 fCheck "the result names the commit tested" fNamesCommit
 
 ## Where it all goes: one run folder in the console user's temp folder, made
-## on the box, since that user's temp folder is not the ssh account's.
+## on the box, since that user's temp folder isn't the ssh account's.
 runDir='C:\Users\wintest\AppData\Local\Temp\silkterm\20260101-000000_001'
 fStaged(){ [[ -f "${work}/stage.ps1" ]] && grep -q '^function fTestDir_Make' "${work}/stage.ps1" ;}
 fSentThere(){ grep -qFx "push ${work}/silkterm.exe ${runDir}\silkterm.exe" "${work}/calls" ;}
@@ -94,7 +94,7 @@ fCheck "nothing the harness sends uses a folder outside it" fNoOtherFolder
 ## The run folder on the box goes once the run is over, pass or fail, and only
 ## by the helper's checks against the stage's token. --keep keeps it. The local
 ## run folder goes too, so the first pass, before the hold, must not make one.
-## HOST_TEMP is unset, as in the container, so the run folder lands in the temp
+## HOST_TEMP is unset, as in the container, so the run folder goes in the temp
 ## dir checked and not the real HOST_TEMP.
 fSweeps(){ find "${1}" -maxdepth 1 -name 'sweep-*.ps1' | wc -l ;}
 fCheck "--keep leaves the folder on the box" test "$(fSweeps "${work}")" -eq 0
@@ -122,7 +122,7 @@ out="$(STUB_SWEPT=$'WARNING: test run folder: left it in place: no owner mark\nN
 	"${meDir}/run.bash" smoke 2>&1)" || true
 fCheck "a sweep that removed nothing says so, and why" bash -c 'grep -qFx "wingui: box: run folder not removed:" <<< "$1" && grep -qF "no owner mark" <<< "$1"' _ "${out}"
 
-## What the run sends lands in the box's jobs folder under its own name, so each
+## What the run sends goes in the box's jobs folder under its own name, so each
 ## script is named for the run, and the sweep takes them by that name, itself too.
 runId="$(sed -n 's/^run .*silkrig_\([0-9]*-[0-9]*\)_stage\.ps1$/\1/p' "${work}/swept/calls" | head -1)"
 fNamed(){ grep -qE "^run .*/silkrig_${runId}_stage\.ps1$" "${1}" && grep -qE "^run .*/silkrig_${runId}_smoke\.ps1$" "${1}" && grep -qE "^run .*/silkrig_${runId}_sweep\.ps1$" "${1}" ;}
@@ -193,7 +193,7 @@ fCheck "with no box up, the run passes" test "${rc}" -eq 0
 fCheck "and says it skipped" grep -qFx "wingui: no box up, skipped" <<< "${out}"
 fCheck "without sending or running anything" bash -c '! grep -qE "^(push|run) " "$1"' _ "${work}/calls-down"
 
-## The cleanup. Two processes named silkterm: one a run started, with a child of
+## The cleanup. There are 2 processes named silkterm: one a run started, with a child of
 ## its own, and one somebody else's. Only the first two may stop.
 if command -v pwsh >/dev/null 2>&1; then
 	mkdir -p "${work}/ours" "${work}/theirs"
@@ -227,7 +227,7 @@ PS
 	fNoNameKill(){ ! grep -qF -- '-Name silkterm' "${meDir}/_run.ps1" "${meDir}/run.bash" ;}
 	fCheck "neither cleanup stops processes by name" fNoNameKill
 
-	## A listed pid handed on to a process this user cannot read. Its start time
+	## A listed pid handed on to a process this user can't read. Its start time
 	## comes back empty, and on vm925w the stop threw on it and the verdict was lost.
 	cat > "${work}/unreadable.ps1" <<PS
 function Get-Process { [CmdletBinding()] param([int] \$Id)
@@ -253,7 +253,7 @@ else
 	echo "  skip the cleanup half: pwsh not found"
 fi
 
-## A user's temp folder from what the registry holds, unexpanded, against
+## A user's temp folder from what the registry has, unexpanded, against
 ## their profile and never the ssh account's.
 if command -v pwsh >/dev/null 2>&1; then
 	cat > "${work}/usertemp.ps1" <<PS

@@ -36,7 +36,7 @@ pub enum WpProbe {
 }
 
 // The probe block edge. 64 keeps bytes_per_row (side*4 = 256) copy-aligned;
-// images smaller than this in either dimension just skip the probe.
+// images smaller than this in either dimension skip the probe.
 const PROBE_SIDE: u32 = 64;
 const PROBE_BYTES: usize = (PROBE_SIDE * PROBE_SIDE * 4) as usize;
 
@@ -57,11 +57,11 @@ pub struct ImageRenderer {
 	standin: bool,
 	// last resolution written to the uniform (skip the per-frame re-write)
 	last: std::cell::Cell<(f32, f32, crate::visibility::Mix, [f32; 4])>,
-	// VT-switch loss probe: this texture is a REAL casualty of a VRAM purge
-	// (it is sampled every frame, so it lives hot in video memory - unlike a
-	// synthetic sentinel, which the driver can keep restorable elsewhere). A
+	// VT-switch loss probe: this texture is lost for real in a VRAM purge,
+	// since it's sampled every frame and stays resident in video memory. A
+	// synthetic sentinel can be kept restorable elsewhere by the driver. A
 	// center block of the uploaded pixels is kept CPU-side and read back on the
-	// probe tick; a mismatch means the purge hit us.
+	// probe tick, and a mismatch means the purge hit it.
 	texture: wgpu::Texture,
 	probe_at: Option<(u32, u32)>, // block origin; None = image too small, probe disabled
 	probe_ref: Vec<u8>,
@@ -243,7 +243,7 @@ impl ImageRenderer {
 
 		// Reference block from the image center (corners are more likely to be a
 		// flat color a zero-wipe could coincidentally match). The probe runs on
-		// GL only, and GL cannot copy a compressed texture out (wgpu-hal skips
+		// GL only, and GL can't copy a compressed texture out (wgpu-hal skips
 		// it and the read would come back zeros), so a BC picture has none. The
 		// sentinels and the VT watcher still stand.
 		let probe_at = (blocks.is_none() && width >= PROBE_SIDE && height >= PROBE_SIDE)
@@ -296,7 +296,7 @@ impl ImageRenderer {
 	}
 
 	/// Whether a window this size would hold the picture at another size. Until
-	/// it is prepared again, the one held now is drawn scaled.
+	/// it's prepared again, the one held now is drawn scaled.
 	pub fn needs_resize(&self, window: (u32, u32)) -> bool {
 		!self.standin && self.sizing.held(window) != self.held
 	}
@@ -320,8 +320,8 @@ impl ImageRenderer {
 		)
 	}
 
-	/// What the slider (or the image's own tag) asked for, which is not always what
-	/// gets drawn - see `set_look`.
+	/// What the slider (or the image's own tag) asked for, which isn't always what
+	/// gets drawn. See `set_look`.
 	pub fn opacity(&self) -> f32 {
 		self.opacity
 	}
@@ -382,7 +382,7 @@ impl ImageRenderer {
 		)
 	}
 
-	/// Poll an in-flight probe. Lost is not reseeded here - on loss the caller
+	/// Poll an in-flight probe. Lost isn't reseeded here. On loss the caller
 	/// reloads the wallpaper wholesale (`recover_gpu`), replacing this instance.
 	pub fn vram_check_poll(&mut self, device: &wgpu::Device) -> Option<WpProbe> {
 		let probe_ref = &self.probe_ref;
@@ -458,7 +458,7 @@ fn dec(c: vec3<f32>) -> vec3<f32> {
     return select(pow((cl + 0.055) / 1.055, vec3<f32>(2.4)), cl / 12.92, cl <= vec3<f32>(0.04045));
 }
 
-// A cubic B-spline from four bilinear taps. A stand-in is a few texels
+// A cubic B-spline from 4 bilinear taps. A stand-in is a few texels
 // stretched over the window, and a plain bilinear stretch shows their grid.
 fn smooth_sample(uv: vec2<f32>) -> vec4<f32> {
     let size = vec2<f32>(textureDimensions(tex));
@@ -514,10 +514,10 @@ fn fs(@builtin(position) frag: vec4<f32>) -> @location(0) vec4<f32> {
     }
     // Light mode. The eye reads a power curve, not linear light, so the same
     // linear alpha that shows a picture over black shows almost nothing over
-    // white - mix in the curve instead. That needs the background color, which a
-    // hardware blend cannot supply, so this writes the pane fill itself and the
-    // caller clips it to the pane.
-    // (No double quotes anywhere in here - the whole shader is one raw literal.)
+    // white, so the curve is mixed in instead. That needs the background
+    // color, which a hardware blend can't supply. This writes the pane fill
+    // itself and the caller clips it to the pane.
+    // No double quotes anywhere in here, since the whole shader is one raw literal.
     let filled = c.rgb + u.bg.rgb * (1.0 - c.a); // the picture's own holes
     let e = vec3<f32>(1.0 / 2.4);
     let lo = pow(max(u.bg.rgb, vec3<f32>(0.0)), e);
@@ -544,7 +544,7 @@ mod tests {
 		assert_eq!(PROBE_BYTES as u64 % wgpu::COPY_BUFFER_ALIGNMENT, 0);
 	}
 
-	// A shader edit that does not compile only shows up at pipeline creation,
+	// A shader edit that doesn't compile only shows up at pipeline creation,
 	// in a window.
 	// Test ID: ddj6n
 	#[test]

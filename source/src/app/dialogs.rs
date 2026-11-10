@@ -51,7 +51,7 @@ impl App {
 					d.set_focus(true);
 				}
 				// keep the terminal directly beneath us when we're activated, so
-				// nothing stays wedged between the two (Compiz doesn't do this). Do
+				// nothing stays wedged between the 2 (Compiz doesn't do this). Do
 				// it now and arm delayed retries - the WM's own raise/animation of
 				// the dialog can keep re-stacking for a while and re-bury the
 				// terminal. We don't disarm on focus-out: the restack only positions
@@ -109,7 +109,7 @@ impl App {
 							self.dialog_dirty = true;
 						}
 						MouseButton::Right => {
-							// gray the menu's Paste when the clipboard holds nothing
+							// gray the menu's Paste when the clipboard is empty
 							let paste_ok = self.state.as_mut().is_some_and(|s| {
 								s.clipboard.get_clipboard().is_some_and(|t| !t.is_empty())
 							});
@@ -232,8 +232,8 @@ impl App {
 		};
 		let win = state.window.outer_size();
 		let dlg = dialog.window.outer_size();
-		// the terminal's monitor, not the dialog's: the dialog has not been
-		// placed yet, so its own answer is for wherever the origin is
+		// the terminal's monitor, not the dialog's: the dialog hasn't been
+		// placed yet, so its own is wherever the origin is
 		let work = {
 			use winit::raw_window_handle::HasWindowHandle;
 			state
@@ -275,7 +275,7 @@ impl App {
 
 	// Drop the dialog window, remembering a Settings view on the way out so a
 	// reopen within SETTINGS_RESUME picks up where it left off. Every close goes
-	// through here - Cancel, OK, Esc and the window's own close button alike.
+	// through here - Cancel, OK, Esc, and the window's own close button alike.
 	fn close_dialog(&mut self) {
 		if let Some(view) = self
 			.dialog
@@ -292,7 +292,7 @@ impl App {
 	}
 
 	/// Events for the notice window. A notice has one button, so everything
-	/// that means OK or close closes it. The tmux question has three, and a box.
+	/// that means OK or close closes it. The tmux question has 3, and a box.
 	pub(super) fn handle_notice_event(&mut self, event: WindowEvent) {
 		use crate::dialog::DialogAction as DA;
 		let Some(n) = self.notice.as_mut() else {
@@ -363,7 +363,7 @@ impl App {
 	}
 
 	/// While a notice is up, the windows under it take no input, and a click on
-	/// one brings the notice forward: the same rule a dialog holds the terminal to.
+	/// one brings the notice forward: the same rule a dialog applies to the terminal.
 	pub(super) fn notice_holds(&self, event: &WindowEvent) -> bool {
 		let Some(n) = &self.notice else {
 			return false;
@@ -383,7 +383,7 @@ impl App {
 		}
 	}
 
-	/// Put an owed notice up, once nothing is saying one already. In front of
+	/// Put a waiting notice up, once no other one is showing. In front of
 	/// Settings when that is open, since an OK there is the usual way to meet it.
 	pub(super) fn show_notice(&mut self, event_loop: &ActiveEventLoop) {
 		#[cfg(target_os = "windows")]
@@ -441,13 +441,13 @@ impl App {
 		match action {
 			DA::OpenUrl(u) => open_url(&u),
 			DA::Close => self.close_dialog(),
-			// only the tmux question answers this way, and it is never Settings
+			// only the tmux question is answered this way, and it is never Settings
 			DA::Tmux { .. } => {}
 			DA::Apply => {
 				self.apply_dialog_settings();
 			}
 			DA::ApplyAndClose => {
-				// Only close on OK if the save worked or cannot; if the file looked
+				// Only close on OK if the save worked or can't; if the file looked
 				// open elsewhere the change applied live but wasn't written, so we
 				// keep the dialog up to try again (the FYI went to stderr).
 				if self.apply_dialog_settings() {
@@ -482,7 +482,7 @@ impl App {
 			}
 			// Reverted-to-default keys: after persist wrote the diffs, comment
 			// them back out so the file returns to the template's default line.
-			// Skip when the write was deferred (revert_keys would just no-op busy).
+			// Skip when the write was deferred (revert_keys would no-op busy).
 			if wrote {
 				if let Some(reverted) = self
 					.dialog
@@ -496,7 +496,7 @@ impl App {
 			// the live state (without this, re-selecting the open-time value - e.g.
 			// Bg fit back to Stretch - reads as "no change" and isn't re-applied).
 			// When another window saved while these changes were in hand, the file
-			// now holds both, and both the window and the dialog take it from there.
+			// now has both, and both the window and the dialog take it from there.
 			if let Some(d) = self.dialog.as_mut() {
 				let behind = wrote && d.take_behind();
 				d.commit_baseline();
@@ -576,7 +576,7 @@ fn no_device_words(macos: bool, why: &str) -> (String, String) {
 	)
 }
 
-/// The launch could not make a device on any adapter. A launch from Finder
+/// The launch couldn't make a device on any adapter. A launch from Finder
 /// shows no stderr, so macOS says it in an alert as well.
 pub(super) fn no_device(e: &anyhow::Error) -> ! {
 	let (headline, detail) = no_device_words(cfg!(target_os = "macos"), &format!("{e:#}"));
@@ -629,7 +629,7 @@ mod tests {
 	}
 
 	// A save nobody asked for can be refused at every resize, so it is said once
-	// a session for each file. An OK in Settings that could not save is said
+	// a session for each file. An OK in Settings that couldn't save is said
 	// every time, or the button would seem to do nothing.
 	// Test ID: dct5j
 	#[test]

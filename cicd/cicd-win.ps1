@@ -58,12 +58,12 @@
 	The fast checks only, then exit: every area, or the ones named after it.
 	Areas: fmt (cargo fmt --check), clippy (clippy and cargo-deny, advisory
 	here), tests (cargo test), scripts (the PowerShell lint), docs (cicd.bash
-	only, so under -Wsl). No sync, dogfood, publish or prompt.
+	only, so under -Wsl). No sync, dogfood, publish, or prompt.
 .PARAMETER Gate
 	Another name for -BacklogRunQuick.
 .PARAMETER BacklogRunFull
 	Every check of the default run, with the format checked, not rewritten; no
-	sync, dogfood or publish, and no prompt.
+	sync, dogfood, or publish, and no prompt.
 .PARAMETER MergeGate
 	The same checks, before a merge to main.
 .PARAMETER Ci
@@ -92,11 +92,11 @@
 	Skip the PowerShell lint. Under -Wsl the Linux half skips all of its script
 	lints (cicd.bash --no-script-lint).
 .PARAMETER NoDeny
-	Skip cargo-deny: the advisory scan, and the license, ban and source checks.
+	Skip cargo-deny: the advisory scan, and the license, ban, and source checks.
 	Under -Wsl the Linux half skips its own (cicd.bash --no-deny).
 .PARAMETER NoScriptTests
 	Skip stage 3's test scripts: the installer, test run folder removal,
-	launcher and safe removal tests. Under -Wsl the Linux half skips the ones
+	launcher, and safe removal tests. Under -Wsl the Linux half skips the ones
 	under cicd/tests (cicd.bash --no-script-tests).
 .PARAMETER NoRelease
 	Skip the release builds and their checks, and with them the packages and
@@ -104,7 +104,7 @@
 	does the same (cicd.bash --no-release).
 .PARAMETER NoCleanup
 	Leave what earlier runs left: stale run folders and the old ledger's. The
-	run's own folder still goes, as -KeepTemp decides. Under -Wsl the Linux half
+	run's own folder still goes, unless -KeepTemp is given. Under -Wsl the Linux half
 	leaves its own (cicd.bash --no-cleanup).
 .PARAMETER NoScrub
 	-Wsl only: the Linux half skips the content scrub (cicd.bash --no-scrub).
@@ -206,7 +206,7 @@ $ErrorActionPreference = "Stop"
 ## native exit from throwing so those reads work regardless of the caller's shell.
 $PSNativeCommandUseErrorActionPreference = $false
 ## Low priority for the whole run, set here so every child inherits it.
-try { (Get-Process -Id $PID).PriorityClass = 'BelowNormal' } catch { Write-Warning "could not lower the priority: $_" }
+try { (Get-Process -Id $PID).PriorityClass = 'BelowNormal' } catch { Write-Warning "couldn't lower the priority: $_" }
 
 if ($Help) {
 	Get-Help -Name $PSCommandPath -Detailed
@@ -256,9 +256,9 @@ $VersionManifest = Join-Path $Root "source\Cargo.toml"
 ## (see fArmSkipReason); otherwise they warn-skip. os-arch feeds the artifact
 ## name (<exe>-<version>-<os-arch>.exe).
 ##
-## No arm64 msvc row: gnullvm is the shipped ARM64 binary, and the only reason to
+## No arm64 msvc row: gnullvm is the released ARM64 binary, and the only reason to
 ## keep an msvc build is local debugging, which an x86_64 box can't do to an ARM64
-## exe anyway. Add it back on a machine that can actually run one.
+## exe anyway. Add it back on a machine that can run one.
 $Targets = @(
 	[pscustomobject]@{ Arch="x86_64"; Tk="msvc";    Triple="x86_64-pc-windows-msvc";     OsArch="windows-x86_64-msvc";    Builder="build";    Arm=$false }
 	[pscustomobject]@{ Arch="x86_64"; Tk="gnu";     Triple="x86_64-pc-windows-gnu";      OsArch="windows-x86_64-gnu";     Builder="build";    Arm=$false }
@@ -310,8 +310,8 @@ $script:JobsLast = 0
 $QuickAreas  = @('fmt', 'clippy', 'tests', 'scripts', 'docs')
 $QuickTitles = @{ fmt = 'Format check'; clippy = 'Lints (advisory)'; tests = 'Tests'; scripts = 'Script lints (advisory)'; docs = 'Docs checks' }
 
-## Where the toolchains live. cargo/rustup first, then the mingw linker for the
-## gnu target (matches the memory'd build setup).
+## Where the toolchains are. cargo/rustup first, then the mingw linker for the
+## gnu target.
 $CargoBin  = Join-Path $env:USERPROFILE ".cargo\bin"
 $MingwBin  = "C:\ProgramData\mingw64\mingw64\bin"
 
@@ -401,7 +401,7 @@ function fSetJobs {
 	$env:CARGO_BUILD_JOBS  = "$jobs"
 	$env:RUST_TEST_THREADS = "$jobs"
 	$class = if ($Hard) { 'Idle' } else { 'BelowNormal' }
-	try { (Get-Process -Id $PID).PriorityClass = $class } catch { fWarn "could not set the priority to ${class}: $_" }
+	try { (Get-Process -Id $PID).PriorityClass = $class } catch { fWarn "couldn't set the priority to ${class}: $_" }
 	if ($script:JobsLast -ne $jobs) { fNote "jobs: $jobs of $Cores CPUs$(if ($why) { " ($why)" })"; $script:JobsLast = $jobs }
 }
 function fWarn     { param([string]$Msg); fEcho "WARNING: $Msg" }
@@ -585,7 +585,7 @@ function fCleanupLine {
 	fNote "cleanup: removed ${list}; $size freed"
 }
 
-## cargo test, with each result line as PASS, FAIL or SKIP, test ID and name.
+## cargo test, with each result line as PASS, FAIL, or SKIP, test ID and name.
 ## With no python here it runs as is.
 function fCargoTest {
 	$py = fPython
@@ -597,11 +597,11 @@ function fCargoTest {
 ## test run folder, so both go back afterward for the builds that follow.
 function fInstallerTests {
 	fTestDir_Keep {
-		## install.ps1's signature check, with the OpenSSH that ships on Windows.
+		## install.ps1's signature check, with the OpenSSH that comes with Windows.
 		fScriptTest -What "installer signing" -Script "cicd\tests\release\verify-sign.ps1" -InProcess
 		## ...and its temp folder step, where the shared temp folder is the one it guards against.
 		fScriptTest -What "installer temp folder" -Script "cicd\tests\install\tempdir.ps1" -InProcess
-		## ...and a real install, upgrade and repair, under both PowerShells.
+		## ...and a real install, upgrade, and repair, under both PowerShells.
 		foreach ($shell in @("pwsh", "powershell")) {
 			fScriptTest -What "installer on Windows ($shell)" -Script "cicd\tests\install\windows.ps1" -Params @{ Shell = $shell } -InProcess
 		}
@@ -622,7 +622,7 @@ function fScriptTests {
 }
 
 ## -List: the Rust tests cargo test runs, as ID and name, from the script
-## cicd.bash asks. It needs python.
+## cicd.bash uses. It needs python.
 function fListRustTests {
 	$lines = @()
 	$py = fPython
@@ -723,7 +723,7 @@ function fArmSkipReason {
 	return $null
 }
 
-## Where cargo actually puts a build. config.bash's rule: nothing may assume
+## Where cargo puts a build. config.bash's rule: nothing may assume
 ## 'target', or a stage builds and then looks for its binary where it was never
 ## put. An absolute CARGO_TARGET_DIR is taken as it stands.
 function fTargetDir {
@@ -733,12 +733,12 @@ function fTargetDir {
 	return (Join-Path $Root $td)
 }
 
-## Panic locations and generated bindings carry the build box's paths, which put
-## the profile folder and account name into every binary and made builds differ
-## between boxes. The same remap cicd.bash writes: a cfg(all()) entry is joined
-## with the per-target flags in .cargo/config.toml, where RUSTFLAGS would replace
-## them, and later entries win, so the target dir comes after the root it
-## usually sits in. Basic TOML strings, since a profile folder can hold a quote.
+## Panic locations and generated bindings contain the build box's paths, which
+## put the profile folder and account name into every binary and made builds
+## differ between boxes. The same remap cicd.bash writes: a cfg(all()) entry is
+## joined with the per-target flags in .cargo/config.toml, where RUSTFLAGS would
+## replace them, and later entries win, so the target dir comes after the root
+## it's usually in. Basic TOML strings, since a profile folder can contain a quote.
 function fRemapConfig {
 	$targetDir = fTargetDir
 	New-Item -ItemType Directory -Path $targetDir -Force | Out-Null
@@ -777,7 +777,7 @@ function fRotateLogs {
 function fBuildTarget {
 	param([Parameter(Mandatory)][pscustomobject]$Target)
 
-	## The plan decided whether it builds here, and says why not.
+	## The plan already checked whether it builds here, and says why not.
 	if (-not (fStepOpen "Release build: $($Target.OsArch)")) { return $null }
 	fSetJobs
 	$exe = Join-Path (fTargetDir) "$($Target.Triple)\release\$ExeName.exe"
@@ -811,7 +811,7 @@ function fBuildTarget {
 function fCollectArtifacts {
 	param([Parameter(Mandatory)][array]$Built, [Parameter(Mandatory)][string]$Ver)
 	if ((Test-Path -LiteralPath $ReleaseArtifactDir) -and -not (fSafeRm_Under (Join-Path $Root "cicd\artifacts") $ReleaseArtifactDir)) {
-		fDie "could not clear $ReleaseArtifactDir (above)"
+		fDie "couldn't clear $ReleaseArtifactDir (above)"
 	}
 	New-Item -ItemType Directory -Path $ReleaseArtifactDir -Force | Out-Null
 	foreach ($b in $Built) {
@@ -844,7 +844,7 @@ function fBuildPackages {
 	foreach ($b in $Built) {
 		$out = Join-Path $ReleaseArtifactDir "$ExeName-$Ver-$($b.OsArch)-setup.exe"
 		$nsi = [System.IO.Path]::GetTempFileName() + ".nsi"
-		## Four numbers for the version block: the release, less any pre-release tag.
+		## The version block takes 4 numbers: the release, less any pre-release tag.
 		(Get-Content -Raw -LiteralPath $NsisTemplate).
 			Replace("@VERSION@", $Ver).
 			Replace("@ARCH@",    $b.OsArch).
@@ -881,13 +881,13 @@ function fDogfood {
 
 	if (-not (Test-Path -LiteralPath $DogfoodDir)) {
 		try { New-Item -ItemType Directory -Path $DogfoodDir -Force -ErrorAction Stop | Out-Null }
-		catch { fDie "could not make the dogfood dir $DogfoodDir; -NoDogfood skips the copy" }
+		catch { fDie "couldn't make the dogfood dir $DogfoodDir; -NoDogfood skips the copy" }
 	}
 	$dst = Join-Path $DogfoodDir $DogfoodFixedExe
 	## A running copy is locked on Windows. The launcher runs its own copy from the
 	## versions folder, so this one is running only when started by hand.
 	try { Copy-Item -LiteralPath $pick.Exe -Destination $dst -Force -ErrorAction Stop }
-	catch { fDie "could not replace $dst, which may be running; close it and run again ($($_.Exception.Message))" }
+	catch { fDie "couldn't replace $dst, which may be running; close it and run again ($($_.Exception.Message))" }
 	Set-Content -LiteralPath "$dst.tag" -Value "$($pick.Tk)wwi" -Encoding ascii
 
 	$icon = Join-Path $Root $DogfoodIcon
@@ -898,9 +898,9 @@ function fDogfood {
 	fEcho "OK: dogfood ($($pick.Tk); $why) -> $dst"
 }
 
-## git calls that reach the git host go through gitsby where its executable is on
+## git calls to the git host go through gitsby where its executable is on
 ## PATH, so they act as the account this folder belongs to, the same as cicd.bash.
-## Only the executable: the script and cmd forms do not pass arguments through
+## Only the executable: the script and cmd forms don't pass arguments through
 ## intact. Plain git otherwise.
 function fRemoteGit {
 	if (Get-Command gitsby -CommandType Application -ErrorAction SilentlyContinue) { & gitsby raw git @args }
@@ -909,7 +909,7 @@ function fRemoteGit {
 
 ## Stash local changes, tracked and untracked, when there are any. True when a
 ## stash was made, so the caller knows to pop it. git's own lines go to the
-## host, or they would ride out in the answer.
+## host, or they'd end up in the return value.
 function fStashIfDirty {
 	[OutputType([bool])]
 	param()
@@ -1019,7 +1019,7 @@ function fPublish {
 }
 
 ## Advisory lint pass: clippy can't gate on Windows (Unix-gated ctl code emits
-## dead_code, so -D warnings never passes), so run it plain and just report.
+## dead_code, so -D warnings never passes), so run it plain and report.
 function fLintClippy {
 	if (Get-Command cargo-clippy -ErrorAction SilentlyContinue) {
 		$saved = $env:CARGO_TARGET_DIR
@@ -1032,7 +1032,7 @@ function fLintClippy {
 	} else { fNote "clippy skipped (component not installed)" }
 }
 
-## cargo-deny's license, ban and source checks, advisory too.
+## cargo-deny's license, ban, and source checks, advisory too.
 function fLintDeny {
 	if (Get-Command cargo-deny -ErrorAction SilentlyContinue) {
 		& cargo deny check licenses bans sources
@@ -1112,7 +1112,7 @@ function fLeftOut {
 ## evict each other's artifacts on every run. It has to point somewhere native.
 
 ## WSL2 distribution names, the default one first. WSL_UTF8 stops `wsl --list`
-## answering in UTF-16, which arrives here full of NULs and parses as nothing.
+## writing UTF-16, which comes back full of NULs and parses as nothing.
 function fWslDistros {
 	if (-not (Get-Command wsl.exe -ErrorAction SilentlyContinue)) { return @() }
 	$saved = $env:WSL_UTF8
@@ -1132,8 +1132,8 @@ function fWslDistros {
 }
 
 ## The distro's HOME if it can run the Linux pipeline, else $null. cicd.bash puts
-## ~/.cargo/bin and ~/.local/bin on PATH itself, so cargo is the only thing worth
-## proving before handing over.
+## ~/.cargo/bin and ~/.local/bin on PATH itself, so cargo is the only thing to
+## check before handing over.
 function fWslHome {
 	param([string]$Distro)
 	$homeDir = & wsl.exe -d $Distro -e printenv HOME 2>$null
@@ -1184,8 +1184,8 @@ function fWslArgs {
 	return , $cicdArgs.ToArray()
 }
 
-## Anything environmental warn-skips (no WSL, no toolchain, tree not visible); an
-## actual failure of the Linux pipeline aborts the run like any other stage.
+## Anything environmental warn-skips (no WSL, no toolchain, tree not visible); a
+## real failure of the Linux pipeline aborts the run like any other stage.
 function fWslLinuxHalf {
 	$distro = $WslDistro
 	if (-not $distro) { $distro = fWslDistros | Select-Object -First 1 }
@@ -1195,7 +1195,7 @@ function fWslLinuxHalf {
 	if (-not $wslHome) { fWarn "Linux half skipped: $distro has no rustup cargo (see prerequisites.md)"; return }
 
 	$wslRepo = & wsl.exe -d $distro -e wslpath -a -u $Root 2>$null
-	if ($LASTEXITCODE -ne 0 -or -not $wslRepo) { fWarn "Linux half skipped: $distro cannot see $Root"; return }
+	if ($LASTEXITCODE -ne 0 -or -not $wslRepo) { fWarn "Linux half skipped: $distro can't see $Root"; return }
 	$wslRepo = "$wslRepo".Trim()
 
 	## A script this side checked out CRLF dies under Linux as "$'\r': command not
@@ -1213,7 +1213,7 @@ function fWslLinuxHalf {
 		return
 	}
 
-	## Keyed by app so two projects delegating from one box don't share a dir.
+	## Keyed by app so 2 projects delegating from one box don't share a dir.
 	$wslTarget = "$wslHome/.cache/$AppName-wsl-target"
 
 	$cicdArgs = fWslArgs
@@ -1252,7 +1252,7 @@ function fPlanSteps {
 
 
 ## -BacklogRunQuick: the fast checks to run before a commit, every area or the
-## ones named, then exit. Nothing is rewritten, built for release or published.
+## ones named, then exit. Nothing is rewritten, built for release, or published.
 function fQuickRun {
 	$run = @(if ($Areas.Count) { $Areas } else { $QuickAreas })
 	$script:StepsOn.Clear(); $script:StepsOff.Clear()
@@ -1321,7 +1321,7 @@ function fMain {
 	fEcho_Clean
 	fEcho_Clean "$AppName Windows CI/CD"
 	fEcho_Clean
-	if ($FullRunName) { fEcho_Clean "Run .........: $FullRunName, every check of the default run$(if ($Long) { ' and -Long' }); no sync, dogfood, publish or prompt" }
+	if ($FullRunName) { fEcho_Clean "Run .........: $FullRunName, every check of the default run$(if ($Long) { ' and -Long' }); no sync, dogfood, publish, or prompt" }
 	fEcho_Clean "Repo root ...: $Root"
 	fEcho_Clean "Jobs ........: $CicdMaxJobs of $Cores cores"
 	fEcho_Clean "Remote sync .: $(if ($NoSync) { '(skipped)' } else { 'fetch + fast-forward check' })"
@@ -1333,7 +1333,7 @@ function fMain {
 	fEcho_Clean "Packages ....: $(if ($NoRelease) { '(skipped -NoRelease)' } elseif ($NoPackage -or $Quick) { '(skipped)' } else { 'NSIS installers (if makensis present)' })"
 	if ($Wsl) { fEcho_Clean "Linux half ..: WSL2 (.deb/.rpm, profiler, scroll harness)" }
 	else {
-		## Say it is available rather than leaving it to be found in the help.
+		## So -Wsl shows in the plan, not only in the help.
 		$wslSeen = fWslDistros | Select-Object -First 1
 		if ($wslSeen) { fEcho_Clean "Linux half ..: (not requested - $wslSeen is here, -Wsl adds it)" }
 		else          { fEcho_Clean "Linux half ..: (no WSL2 on this box)" }
@@ -1435,7 +1435,7 @@ function fMain {
 		$null = fStepOpen 'Release artifacts'
 		if (-not $built) { fDie "no release binaries were produced" }
 		foreach ($b in $built) {
-			if (fHasLocalPaths $b.Exe) { fDie "$($b.Exe) still holds a local path ($env:USERPROFILE or $Root)" }
+			if (fHasLocalPaths $b.Exe) { fDie "$($b.Exe) still has a local path ($env:USERPROFILE or $Root)" }
 		}
 		fEcho "OK: no local paths in $($built.Count) binary(s)"
 		$ver = fVersion
@@ -1480,8 +1480,8 @@ try {
 ##		              to warn and pass.
 ##		- 2026-11-04: An off option for each part cicd.bash has one for:
 ##		  -NoRustTests, -NoClippy, -NoScriptLint, -NoDeny, -NoScriptTests,
-##		  -NoRelease and -NoCleanup, each passed on to the Linux half, and
-##		  -NoScrub, -NoDocs, -NoScroll and -NoWingui for the Linux half only.
+##		  -NoRelease, and -NoCleanup, each passed on to the Linux half, and
+##		  -NoScrub, -NoDocs, -NoScroll, and -NoWingui for the Linux half only.
 ##		- 2026-11-01: One cleanup line at the end, what went and about what it
 ##		  freed, the run's own folder included.
 ##		- 2026-11-01: The run's folder is HOST_TEMP\silkterm\YYYYmmDD-HHMMSS_NNN,
@@ -1496,7 +1496,7 @@ try {
 ##		  stamped Starting line numbered of the steps this run takes, and a PASS
 ##		  or FAIL line. The plan lists the steps turned off and why.
 ##		- 2026-10-28: cicd.bash's runs: -BacklogRunQuick with its areas,
-##		  -BacklogRunFull, -MergeGate, -Long, -NoContainer, -KeepTemp and -List.
+##		  -BacklogRunFull, -MergeGate, -Long, -NoContainer, -KeepTemp, and -List.
 ##		  -Gate and -Ci are other names, -Slow too. The Linux half gets each.
 ##		  The release artifacts folder is cleared through the safe removal guard.
 ##		- 2026-10-26: Jobs per step, a quarter when busy, at BelowNormal, or Idle

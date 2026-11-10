@@ -21,7 +21,7 @@
 ##		   prompt       - a shell prompt drawn with insert- and delete-line shows in place
 ##		   clear        - every way a shell clears the screen shows at once, nothing eases
 ##		   tmuxclear    - a clear inside tmux, drawn as its pane scrolled away, shows at once
-##		Plain shell-output easing is covered by the library tests (cargo test); the
+##		Plain shell-output easing is tested by the library tests (cargo test); the
 ##		"jumping / re-listing / bottom-up" symptoms map to those monotonicity checks.
 ##		Scenes self-scroll on a timer - no key injection (unreliable here), so the
 ##		result is deterministic. --real also smoke-tests the actual apps (best effort).
@@ -45,7 +45,7 @@
 ##		(<engine>), <what the check found>". Each scene's ID is the first word of
 ##		its row in the scenes table below.
 ##	- Exit: 0 all pass (a skipped scene beside passes is still 0), 1 a regression
-##		was measured, 3 nothing ran (no binary, python3, display or cage).
+##		was measured, 3 nothing ran (no binary, python3, display, or cage).
 ##	- Notes: uses cicd/utility/gui-headless.bash (:98, never :0). Kills only the
 ##		binary it launched (PID + /proc/PID/exe path checked), never by name.
 ##	- Test ID: d9j4r
@@ -114,7 +114,7 @@ scenes=(
 	## no scrollback behind it, so the view must be at rest - frac 0 on every frame.
 	"dcg0w altenter altenter still -1"
 	## muffer's shape: new transcript lines ease in above a block it redraws in
-	## place, which must hold still (three block rows plus the blank cursor row).
+	## place, which must hold still (3 block rows plus the blank cursor row).
 	"dcg3w chrome chrome pinned -1 4"
 	## apt's progress bar with the scrollback full: the lines above the bar still ease,
 	## and the bar's row is held.
@@ -126,7 +126,7 @@ scenes=(
 	"dcvbe pasteil pasteil popin -1"
 	## A shell under ble.sh: its prompt comes back after each command, drawn with
 	## insert- and delete-line under the cursor, and is redrawn in place now and
-	## then. It shows where it lands rather than sliding out from under the output.
+	## then. It shows where it ends up rather than sliding out from under the output.
 	"ddyq6 prompt prompt popin -1"
 	## clear, tput clear, Ctrl+L and a reset over a full screen, with the scrollback
 	## full and then nearly empty: each shows at once, with nothing easing.
@@ -160,7 +160,7 @@ if ((listing)); then
 fi
 
 ## gui-headless.bash reads its display from here and defaults to :99 without it.
-## cicd only exported this from the profiler stage, so a run that reached here
+## cicd only exported this from the profiler stage, so a run that got here
 ## without that started Xvfb on :99, ran SilkTerm on :98, and every scene skipped.
 export CICD_HEADLESS_DISPLAY="${display}"
 
@@ -179,7 +179,7 @@ if [[ -z "${bin}" ]]; then
 fi
 
 ## Environment preconditions -> skip (non-fatal) unless --strict. A skip exits 3,
-## not 0, so cicd cannot print OK for a run that measured nothing.
+## not 0, so cicd can't print OK for a run that measured nothing.
 skip=""
 [[ -n "${bin}" && -x "${bin}" ]] || skip="no SilkTerm binary (build it first, or pass --bin)"
 [[ -z "${skip}" ]] && ! command -v python3 >/dev/null 2>&1 && skip="python3 not found"
@@ -320,8 +320,8 @@ fRunScene(){
 	## GL warmup under llvmpipe swings widely with machine load (cicd runs this while
 	## the release + cross builds may still be busy), so a fixed sleep can expire before
 	## a single frame renders = a false "0 trace frames" skip. Poll until the scene is
-	## actually producing frames, then stop; bounded by a generous ceiling so a truly
-	## dead binary still exits. The scene self-scrolls forever, so more wall time just
+	## producing frames, then stop; bounded by a generous ceiling so a
+	## dead binary still exits. The scene self-scrolls forever, so more wall time only
 	## means more frames - never a hang.
 	local want=60 ceiling=$((settle + capture + 60)) frames=0 doneAt=0 lead=0 marked=0
 	SECONDS=0
@@ -330,7 +330,7 @@ fRunScene(){
 		## The chrome scene prints its history and then sleeps before the loop
 		## under test starts. A renderer quick off the mark traces that burst
 		## easing, with no block on screen to hold, and it used to fill most of
-		## the frames judged. Count only what comes after, taken just before the
+		## the frames judged. Count only what comes after, taken right before the
 		## loop can have started.
 		if [[ "${mode}" == pinned ]] && ((! marked && SECONDS >= settle - 1)); then
 			lead=$(fTraceFrames "${trace}"); marked=1
@@ -377,7 +377,7 @@ for row in "${scenes[@]}"; do fRunScene ${row}; done
 
 ## Best-effort real-app smoke (never fails the suite): prove the real apps render
 ## under SilkTerm (enter alt-screen, no hang) - regresses e.g. the cosmic-text hang
-## and the alt-screen enter/exit hard-cut. No key injection, so it does not assert
+## and the alt-screen enter/exit hard-cut. No key injection, so it doesn't assert
 ## scroll correctness - that is what the deterministic scenes above are for.
 fRealSmoke(){
 	local app="${1}" exe; exe="$(command -v "${app}" 2>/dev/null || true)"
@@ -423,4 +423,4 @@ exit "${rc}"
 ##		- 20261014 JC: prompt scene.
 ##		- 20261016 JC: tmuxclear scene.
 ##		- 20261028: The rule is 79 wide, as cicd.bash has it.
-##		- 20261028: Each scene has a test ID and one PASS, FAIL or SKIP line. --list.
+##		- 20261028: Each scene has a test ID and one PASS, FAIL, or SKIP line. --list.

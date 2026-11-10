@@ -3,8 +3,8 @@
 
 <#
 .SYNOPSIS
-	A settings file with a line that cannot be read cannot be saved either, and
-	on Windows the only word of it went to a console a release build does not
+	A settings file with a line that can't be read can't be saved either, and
+	on Windows the only word of it went to a console a release build doesn't
 	have.
 .DESCRIPTION
 	Now a standard message box says so, a few seconds after launch, when the
@@ -27,7 +27,7 @@ function fText([IntPtr]$H) { $sb = New-Object System.Text.StringBuilder 2048; [v
 function fClass([IntPtr]$H) { $sb = New-Object System.Text.StringBuilder 256; [void][SilkBox.Win]::GetClassNameW($h, $sb, 256); $sb.ToString() }
 
 $cfg = Join-Path $OutDir "savenotice-config.shcl"
-##	The margin line steps back to a depth nothing uses, so the reader cannot place
+##	The margin line steps back to a depth nothing uses, so the reader can't place
 ##	it. shcl writes such a line back as it was, and saves go through beside it,
 ##	unless the save falls back to the canonical form. A shells block written twice
 ##	makes the shell scan's save do that.
@@ -51,7 +51,7 @@ if (fCheck "a message box came up for the refused save" ($box -ne [IntPtr]::Zero
 	fNote "the file has $($onDisk.Count) lines, the bad one at $at"
 	[void](fCheck "it is titled as the notice" ($title -eq 'Settings not saved'))
 	##	The launch has filled in the missing settings by then, so the bad line has moved down.
-	[void](fCheck "it names the file and the line as the file has it" ($body.Contains($cfg) -and $body -like "*Line $at cannot be read*"))
+	[void](fCheck "it names the file and the line as the file has it" ($body.Contains($cfg) -and $body -like "*Line $at can't be read*"))
 	[void](fShot $box "notice")
 	[void](fCheck "the settings file was left as it was" (@(Get-Content $cfg) -contains "`tmargin: 4"))
 }

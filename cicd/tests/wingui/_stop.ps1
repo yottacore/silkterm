@@ -25,7 +25,7 @@ $ours = foreach ($line in Get-Content $List) {
 	##	A pid is handed out again once its process ends, so the start time has to
 	##	match too. Within a second, since off Windows it is worked out from the
 	##	uptime and moves a little between two asks. A start time that reads empty
-	##	is a process this user cannot see into, so the pid went to someone else.
+	##	is a process this user can't see into, so the pid went to someone else.
 	if ($p -and $p.StartTime -and [math]::Abs($p.StartTime.ToUniversalTime().Ticks - [long]$ticks) -lt [TimeSpan]::TicksPerSecond) { $p }
 }
 $all = Get-Process

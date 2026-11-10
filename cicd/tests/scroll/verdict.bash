@@ -30,7 +30,7 @@ fScrollVerdict(){
 }
 
 ## fTraceFrames <trace>
-## Echoes how many frames a trace holds, 0 for none or no file. `grep -c`
+## Echoes how many frames a trace has, 0 for none or no file. `grep -c`
 ## prints 0 and exits 1 on no match, so `|| echo 0` after it printed 0 twice.
 fTraceFrames(){
 	local n; n="$(grep -c SCROLLDBG "${1}" 2>/dev/null || true)"

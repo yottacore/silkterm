@@ -5,12 +5,12 @@
 ##		and runs quiet programs from a scene shell. Each prints nothing while it
 ##		runs, so nothing else asks for a frame. The window title follows the
 ##		tab, and it has to name each one while it runs.
-##			- Each starts just after a frame was drawn, some at once and some a
+##			- Each starts right after a frame was drawn, some at once and some a
 ##			  little later. The tab kept what it saw then for a short while, and
 ##			  with no later frame it never said the program's name.
 ##	- Syntax: run.bash [--bin PATH]   (default: the debug build, then release)
 ##	- Exit: 0 passed, 1 a check failed, 3 nothing ran (no binary, display,
-##	  dash, xdotool or xprop).
+##	  dash, xdotool, or xprop).
 ##	- Test ID: ddydc
 ##	- History: At bottom of file.
 
@@ -99,7 +99,7 @@ fi
 
 home="${work}/home"
 mkdir -p "${home}" "${work}/bin"
-## No blink, no wallpaper and no minimap, so a frame comes only from what the
+## No blink, no wallpaper, and no minimap, so a frame comes only from what the
 ## scene prints.
 printf '%s\n' 'performance:' $'\tautomatic: false' $'\tprofile: "custom"' 'window:' $'\tremember_per_monitor: false' \
 	'cursor:' $'\tblink: false' 'wallpaper:' $'\tenabled: false' 'scroll:' $'\tminimap:' $'\t\tenabled: false' >"${work}/config.shcl"
@@ -116,7 +116,7 @@ set -m
 i=0
 for delay in "$@"; do
 	step "gap$i"
-	## a frame, drawn just before the program starts, with the shell in front
+	## a frame, drawn right before the program starts, with the shell in front
 	printf .
 	set +m; sleep "$delay"; set -m
 	step "hush$i"

@@ -4,8 +4,8 @@
 ##		Test IDs. An ID is the time a test was written, as whole minutes since
 ##		2000-01-01 00:00 UTC, in lowercase Crockford base 32, such as "decp8"
 ##		for 2026-10-24 22:00 UTC. Tests made in one minute take the next free
-##		minutes, and an ID never changes once given. A Rust test carries it
-##		on a "// Test ID:" line just above its attributes; a test script carries
+##		minutes, and an ID never changes once given. A Rust test has it
+##		on a "// Test ID:" line just above its attributes; a test script has
 ##		it on a "Test ID:" line in its header comment. A script that runs cases
 ##		of its own, such as the scroll harness's scenes, gives each its ID as
 ##		the first word of its row in a case table, listed in CASE_TABLES. Each
@@ -17,7 +17,7 @@
 ##		test-id.py --at WHEN [N]  the same for a past time, "YYYY-MM-DD HH:MM" local
 ##		test-id.py --decode ID    the time an ID stands for
 ##		test-id.py --check        every test has a well-formed ID and no two share one
-##		test-id.py --annotate     copy cargo test output, each result line as PASS, FAIL or SKIP, ID, name
+##		test-id.py --annotate     copy cargo test output, each result line as PASS, FAIL, or SKIP, ID, name
 ##		test-id.py --run CMD...   the same over CMD's output, exiting with its status
 ##		test-id.py --list         every Rust test, as ID and name
 ##	Exit: 0 fine, 1 --check found a problem, 2 bad arguments.
@@ -56,7 +56,7 @@ FN_LINE_RE = re.compile(r"^(\t*)(?:pub(?:\([^)]*\))?\s+)?fn\s")
 STATUS = {"ok": "PASS", "FAILED": "FAIL", "ignored": "SKIP"}
 SCRIPT_EXTS = {".bash", ".py", ".ps1"}
 
-## Scripts under cicd/tests that are not tests themselves: drivers, fixtures
+## Scripts under cicd/tests that aren't tests themselves: drivers, fixtures,
 ## and pieces the tests call. A name starting with "_" is one too.
 NOT_TESTS = {
 	"install/stubrun.ps1",
@@ -130,8 +130,8 @@ def script_tests(root: Path = ROOT) -> Iterator[Path]:
 
 def rust_tests() -> Iterator[tuple[str, str | None, str]]:
 	##	Every Rust test as (where, id or None, name as cargo prints it). A
-	##	test's ID sits above its whole attribute block, so a #[cfg] ahead of
-	##	#[test] does not hide it. The module path comes from the indent of each
+	##	test's ID is above its whole attribute block, so a #[cfg] ahead of
+	##	#[test] doesn't hide it. The module path comes from the indent of each
 	##	"mod x {", which rustfmt keeps exact, and a file in a module's own folder
 	##	under src/ starts with that folder's path.
 	for path in rust_files():
@@ -375,7 +375,7 @@ if __name__ == "__main__":
 ##		- 20261026: --list, for cicd.bash --list.
 ##		- 20261028: IDs in whole minutes, in Crockford base 32. The base 62
 ##		  millisecond IDs were converted once, from the times they stood for.
-##		- 20261028: --annotate prints PASS, FAIL or SKIP lines. --run, for
+##		- 20261028: --annotate prints PASS, FAIL, or SKIP lines. --run, for
 ##		  cicd-win.ps1.
 ##		- 20261028: --check takes the scroll harness's scenes, each with an
 ##		  ID of its own, and refuses 2 fuzz targets in one test.

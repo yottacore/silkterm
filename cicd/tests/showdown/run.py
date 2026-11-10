@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 
 ##	- Purpose:
-##		The showdown table in comparison.md only holds figures measured the same way as the
-##		rows beside them. A quick run, a scaled run and a run at another grid each
+##		The showdown table in comparison.md only has figures measured the same way as the
+##		rows beside them. A quick run, a scaled run, and a run at another grid each
 ##		used to rewrite their row anyway. This drives both table writers with the
 ##		terminal and the measuring faked out, against a scratch copy. It also
 ##		checks the rigs find the build where CARGO_TARGET_DIR puts it, and that
@@ -213,7 +213,7 @@ check("the size writer on its own defaults to comparison.md",
 	'default="comparison.md"' in (UTILITY / "include/showdown-readme.py").read_text(encoding="utf-8"))
 
 ## The rigs and the wine launcher find the build under CARGO_TARGET_DIR. Nothing
-## here may start a display: sway, Xvfb and xdpyinfo are stubs that fail.
+## here may start a display: sway, Xvfb, and xdpyinfo are stubs that fail.
 target = scratch / "elsewhere"
 (target / "release").mkdir(parents=True)
 stubs = scratch / "stubs"
@@ -356,7 +356,7 @@ else:
 	bash('"$1" --term silkterm --no-save --reps 1', speed)
 	check("the speed rig removes what it made", not any(work.iterdir()), str(list(work.iterdir())))
 
-## The size rig's +candy row: shipped settings with the profile pinned, and the rig
+## The size rig's +candy row: released settings with the profile pinned, and the rig
 ## says which profile ran. A row whose profile moved is refused.
 record.unlink(missing_ok=True)
 got = bash('source "$1" && fMain --term silkterm --settle 1 --keep', str(size_rig))
@@ -379,7 +379,7 @@ if kept and kept.name.startswith("sizebench.") and kept.parent == work:
 	_testdir.rm(kept)
 
 ## Note 9 in comparison.md names the rig behind each group of columns. Each has
-## to be the rig its script really is. A missing note fails both checks.
+## to be the rig its script is. A missing note fails both checks.
 notes = (REPO / "comparison.md").read_text(encoding="utf-8")
 note9 = next((ln for ln in notes.splitlines() if ln.startswith("<sub><sup>9</sup>")), "")
 speed_rig = (UTILITY / "include/termbench-run.bash").read_text(encoding="utf-8")
@@ -400,7 +400,7 @@ print("all passed")
 ##	History:
 ##		- 20260917 JC: Created.
 ##		- 20260918 JC: Both rigs start SilkTerm on settings of their own.
-##		- 20260926 JC: Payloads, scene weights and cell rates.
+##		- 20260926 JC: Payloads, scene weights, and cell rates.
 ##		- 20260930 JC: The size rig keeps its folder under the temp dir it was given. The fake
 ##		  compositor binds its sockets by name.
 ##		- 20261014 JC: Note 9 is read from comparison.md.

@@ -155,14 +155,14 @@ function fCheck([string]$What, [bool]$Ok) {
 
 function fNote([string]$Text) { $script:checks.Add("  note $text") }
 
-##	Whether anyone could actually see or type into this desktop. A locked session
+##	Whether anyone could see or type into this desktop. A locked session
 ##	still runs windows and still answers PrintWindow, but screen grabs come back
 ##	black and injected input goes to the lock screen - so a scenario that needs
 ##	either must stop rather than quietly measure nothing.
 ##	Windows keeps the answer itself, so ask for it first. Reading it off the lock
 ##	screen went wrong: once the display sleeps, a locked session has nothing in
 ##	front and LockApp sits suspended, which is also how it lingers after an unlock.
-##	The other two tests stay for a build that does not report the state. The
+##	The other two tests stay for a build that doesn't report the state. The
 ##	desktop name catches the old style of lock, which hands input to Winlogon.
 function fSessionUsable {
 	if ((fLockState) -eq "locked") { return $false }
@@ -233,8 +233,8 @@ function fWaitWindow([System.Diagnostics.Process]$P, [int]$Seconds = 30) {
 	[IntPtr]::Zero
 }
 
-##	A window the process owns that is not the one already known - the dialog is a
-##	second window in the same process, so it cannot be found by pid alone.
+##	A window the process owns that isn't the one already known - the dialog is a
+##	second window in the same process, so it can't be found by pid alone.
 function fWaitOther([System.Diagnostics.Process]$P, [IntPtr]$Known, [int]$Seconds = 20) {
 	for ($i = 0; $i -lt ($seconds * 4); $i++) {
 		foreach ($h in [SilkEnum]::All([uint32]$p.Id)) {
@@ -286,7 +286,7 @@ function fFocus([IntPtr]$H) {
 		if ($theirs -ne 0 -and $theirs -ne $mine) { [void][Silk.Win]::AttachThreadInput($mine, $theirs, $false) }
 		Start-Sleep -Milliseconds 400
 		##	Any window of ours in front counts. The app owns more than one, and the
-		##	handle Windows reports is not always the one we went looking for.
+		##	handle Windows reports isn't always the one we went looking for.
 		if (fForegroundIsOurs $h) { return $true }
 	}
 	$false
@@ -302,7 +302,7 @@ function fForegroundIsOurs([IntPtr]$H) {
 	$want -ne 0 -and $want -eq $got
 }
 
-##	What actually has the foreground, for when it is not us.
+##	What has the foreground, for when it isn't us.
 function fForeground {
 	$fg = [Silk.Win]::GetForegroundWindow()
 	if ($fg -eq [IntPtr]::Zero) { return "nothing has the foreground" }
@@ -342,8 +342,8 @@ $script:vks = @{
 ##	Literal text, typed through the keyboard layout the way a keyboard does.
 function fSend([string]$Text) { [SilkKeys]::Text($text); Start-Sleep -Milliseconds 250 }
 
-##	The other way a character reaches a window: handed over whole instead of
-##	typed. The touch keyboard, text expanders and some accessibility tools all
+##	The other way a character gets to a window: handed over whole instead of
+##	typed. The touch keyboard, text expanders, and some accessibility tools all
 ##	send the characters their layout has no key for this way.
 function fSendChars([string]$Text) { [SilkKeys]::TextUnicode($text); Start-Sleep -Milliseconds 400 }
 
@@ -385,7 +385,7 @@ function fShot([IntPtr]$H, [string]$Name) {
 		$g.ReleaseHdc($dc)
 		$how = "printwindow"
 	}
-	##	Two boxes pull into one directory, so the name has to say which box.
+	##	The boxes pull into one directory, so the name has to say which box.
 	if ($script:shotDir) {
 		New-Item -ItemType Directory -Force -Path $script:shotDir | Out-Null
 		$bmp.Save((Join-Path $script:shotDir "$env:COMPUTERNAME-$name.png"), [System.Drawing.Imaging.ImageFormat]::Png)
@@ -393,7 +393,7 @@ function fShot([IntPtr]$H, [string]$Name) {
 	$bmp | Add-Member -NotePropertyName How -NotePropertyValue $how -PassThru
 }
 
-##	Fraction of sampled pixels carrying any light. A window that came up but never
+##	Fraction of sampled pixels with any light. A window that came up but never
 ##	drew reads near zero, which is the difference between a real capture and the
 ##	black rectangle a locked session hands back.
 function fInk([System.Drawing.Bitmap]$Bmp, [int]$Step = 4) {
@@ -425,9 +425,9 @@ function fDiff([System.Drawing.Bitmap]$A, [System.Drawing.Bitmap]$B, [int]$Step 
 	if ($seen -eq 0) { 0.0 } else { [math]::Round($moved / $seen, 4) }
 }
 
-##	One value out of a written config, and whether the file actually says it. A
-##	setting left at its shipped default stays commented in the template, so a
-##	scenario that cannot tell those apart reads an empty answer and calls it a bug.
+##	One value out of a written config, and whether the file says it. A
+##	setting left at its default stays commented in the template, so a
+##	scenario that can't tell those apart reads an empty answer and calls it a bug.
 function fSetting([string]$Path, [string]$Dotted) {
 	if (-not (Test-Path $path)) { return @{ value = $null; source = "no file" } }
 	$block, $leaf = $dotted -split '\.', 2

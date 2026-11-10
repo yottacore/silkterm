@@ -78,7 +78,7 @@ for n in 1 2; do
 	fBleClear
 	tput clear
 	fFill "after tput ${n}"
-	## the scrollback now holds one screen
+	## the scrollback now has one screen
 	printf '\033[H\033[2J'
 	fFill "after ctrl-l again ${n}"
 	printf '\033c'

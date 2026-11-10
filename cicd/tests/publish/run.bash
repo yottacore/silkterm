@@ -55,7 +55,7 @@ fUpstream(){  ## fUpstream <name> <line1>: another clone pushes a change to line
 }
 fLastMsg(){ git -C "${work}/${1}/remote.git" log -1 --format=%B main; }
 
-## The exclude list reaches rar through the publisher's own reader, one argument
+## The exclude list is passed to rar through the publisher's own reader, one argument
 ## per line. A value that would have run a command under the old eval is only a
 ## pattern. The stub rar writes down what it was given and archives nothing.
 stubs="${work}/stubs"
@@ -82,7 +82,7 @@ fCheck "every line becomes one argument" grep -qFx -- "-x\$(touch '${canary}')" 
 fCheck "and the first is the pattern it was given" grep -qFx -- "-x*/ok" "${work}/rar-args"
 fCheck "nothing in the value ran" test ! -e "${canary}"
 
-## The shipped list and the reader still agree.
+## The released list and the reader still agree.
 shipped="$(bash -c 'source "$1" && printf "%s" "${GIT_BACKUP_AND_PUBLISH_RAR_EXCLUDES}"' _ "${config}")"
 fRarArgs shipped "${shipped}"
 fCheck "the shipped excludes reach rar" grep -qFx -- "-x*/forks" "${work}/rar-args"

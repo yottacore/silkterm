@@ -4,7 +4,7 @@
 <!-- TOC ignore:true -->
 # Using SilkTerm
 
-Where the config lives, what a tab says, panes in tmux, the command line, shell integration, programs over ssh, and opening scripts and folders on Windows.
+This page explains where the config is, what a tab says, panes in tmux, the command line, shell integration, programs over ssh, and opening scripts and folders on Windows.
 
 <!-- TOC ignore:true -->
 ## Table of contents
@@ -38,7 +38,7 @@ On first run SilkTerm writes a commented config file with all defaults, in the p
 
 Setting `XDG_CONFIG_HOME` overrides the platform default everywhere, and `--config PATH` overrides everything. An alternate config keeps its own wallpaper and history beside itself rather than sharing the defaults.
 
-Windows splits the 2 because settings are worth roaming between machines and a 60 MiB wallpaper pack isn't. A pack already sitting beside the config still works; nothing has to be moved.
+On Windows the 2 are split, because settings are worth roaming between machines, but a 60 MiB wallpaper pack isn't. A pack that's already beside the config still works, and nothing has to be moved.
 
 If making changes directly (rather than through Settings), you can apply them immediately with the "Reload config" menu item. Settings reads the file each time it opens, so it also shows what another SilkTerm window saved.
 
@@ -46,9 +46,9 @@ Settings names are meant to read plainly, but a few of them are particular to Si
 
 To start over from the default settings, run `silkterm --reset-config`. The old file is kept alongside as `config.shcl.bak` rather than deleted.
 
-When an update converts the file to a newer format, the file as it was is kept alongside, named for the local time it was converted and the format it had, such as `config_backup_20261003-142233_format-v2.shcl`. Every older version is kept, and a file named with `--config` keeps its own name in front. A line the new format can't hold stays in the file as written, and SilkTerm puts up a notice saying how many there were and where the old file is. If the file can't be converted where it is, because it isn't UTF-8 text or the new format can't read it, SilkTerm writes a new one from the defaults with every setting it can still read, and the notice says how many it couldn't copy to the new file. A file already in the current format with lines that aren't UTF-8 text is written again without those lines, and kept alongside the same way. A notice names the lines and where the old file is.
+When an update converts the file to a newer format, the file as it was is kept alongside, named for the local time it was converted and the format it had, such as `config_backup_20261003-142233_format-v2.shcl`. Every older version is kept, and a file named with `--config` keeps its own name in front. A line that the new format can't represent stays in the file as written, and SilkTerm puts up a notice saying how many there were and where the old file is. If the file can't be converted where it is, because it isn't UTF-8 text or the new format can't read it, SilkTerm writes a new one from the defaults with every setting it can still read, and the notice says how many it couldn't copy to the new file. A file already in the current format with lines that aren't UTF-8 text is written again without those lines, and kept alongside the same way. A notice names the lines and where the old file is.
 
-Drop a few images into a `wallpaper` folder next to the config and SilkTerm picks one each launch, favoring whatever it hasn't shown lately. Naming a wallpaper in the config, or passing one on the command line, takes precedence. The [wallpaper pack](install.md#wallpaper-pack) is a ready-made folder to start from.
+Drop a few images into a `wallpaper` folder next to the config and SilkTerm picks one each launch, and favors whatever it hasn't shown lately. Naming a wallpaper in the config, or passing one on the command line, takes precedence. The [wallpaper pack](install.md#wallpaper-pack) is a ready-made folder to start from.
 
 ## Tab text
 
@@ -71,13 +71,13 @@ The rest of it:
 
 - A group whose macros all come out empty is left out, with its text.
 
-- Text between two parts shows only when both sides show something, so a separator doesn't hang off the end when the part after it is missing. A choice with no macro in it, such as the `-` in `{[%PROGRAM%] || -}`, counts as text here. To keep text with one macro, put the two in a group: `{(%SHELL%)}`.
+- Text between 2 parts shows only when both sides show something, so a separator doesn't hang off the end when the part after it is missing. A choice without a macro in it, such as the `-` in `{[%PROGRAM%] || -}`, counts as text here. To keep text with one macro, put the 2 in a group: `{(%SHELL%)}`.
 
-- Spaces at either end of the template, a group or a choice don't count, and a run of spaces shows as one. Tabs and line breaks are ignored.
+- Spaces at either end of the template, a group, or a choice don't count, and a run of spaces shows as one. Tabs and line breaks are ignored.
 
 - A backslash makes the next character plain text, such as `\%` or `\{`.
 
-- Macro names don't care about case.
+- Macro names aren't case-sensitive.
 
 The default reads `Bash [vim] ~/src/` while vim runs, `Bash [last: vim] ~/src/` once it's done, and `Bash - ~/src/` before anything has run:
 
@@ -85,15 +85,15 @@ The default reads `Bash [vim] ~/src/` while vim runs, `Bash [last: vim] ~/src/` 
 %USER_DEFINED% || %PROGRAM_DEFINED% || { %SHELL% {[{ %PROGRAM% || last: %LAST_PROGRAM% }] || -} %CURRENT_DIRECTORY% }
 ~~~
 
-On a narrow tab the parts give way in a set order. A program's own title goes first, then the shell's name gets shorter, the program's name is cut, the directory is shortened, the program goes, then the directory, and what is left is the shortest form of the shell's name. A name typed on the tab never shortens. A tab with nothing to say names its shell.
+On a narrow tab the parts give way in a set order. A program's own title goes first, then the shell's name gets shorter, the program's name is cut, the directory is shortened, the program goes, then the directory, and what's left is the shortest form of the shell's name. A name typed on the tab never shortens. A tab that doesn't have anything else to show names its shell.
 
-A template that can't be read, such as one with a `{` and no `}`, is kept as typed, and tabs use the default until it's fixed. The row's flyover in Settings says what is wrong, and so does the launch.
+A template that can't be read, such as one with a `{` and no `}`, is kept as typed, and tabs use the default until it's fixed. The row's flyover in Settings says what's wrong, and so does a message at launch.
 
 A config from before the template had 4 check boxes for this: `window.tab_shows_title`, `tab_shows_shell`, `tab_shows_program`, and `tab_shows_directory`. The first launch of a newer SilkTerm swaps them for a template that says the same.
 
 ## Panes in tmux
 
-SilkTerm can start a pane in a tmux session of its own, so what runs in it outlives the window. If the desktop crashes, the session is still there, and it can be attached to again from SilkTerm, another terminal, or over ssh. It needs tmux 3.2 or later, so it isn't there on Windows. Where tmux can't be found, the rows below are grayed in Settings and the menu row is left out.
+SilkTerm can start a pane in a tmux session of its own, so what runs in it outlives the window. If the desktop crashes, the session is still there, and it can be attached to again from SilkTerm, another terminal, or over ssh. It needs tmux 3.2 or later, so it isn't available on Windows. Where tmux can't be found, the rows below are grayed in Settings and the menu row is left out.
 
 - "Always run in new tmux session", under Tmux on the Program tab of Settings, starts each split in a new session. A new tab, and the window's first pane, still start the plain shell.
 
@@ -109,9 +109,9 @@ The session's name comes from a template, "Session name template" under the swit
 | `%HHMMSS%`   | The time
 | `%HHMMSSNN%` | The time, to a hundredth of a second
 
-The default is `%YYYYmmDD%-%HHMMSSNN%`, such as `20261017-17332704`. tmux won't keep a `.` or `:` in a name, and treats `#` as the start of one of its own formats, so all 3 become `_`. A name tmux already has gets `-2`, `-3` and so on after it.
+The default is `%YYYYmmDD%-%HHMMSSNN%`, such as `20261017-17332704`. tmux won't keep a `.` or `:` in a name, and treats `#` as the start of one of its own formats, so all 3 become `_`. A name tmux already has gets `-2`, `-3`, and so on after it.
 
-Closing a tab, a pane or the window does what "When closed" says to each session SilkTerm started in it:
+Closing a tab, a pane, or the window does what "When closed" says to each session SilkTerm started in it:
 
 - Detach leaves the session running, to attach to later.
 
@@ -119,7 +119,7 @@ Closing a tab, a pane or the window does what "When closed" says to each session
 
 - Prompt, the default, asks each time. The question has a "Don't ask me next time" box, which saves the answer given as the new setting.
 
-End only ever closes the session SilkTerm started for that pane, found by the name it was given. If the session was renamed, or something else was switched to inside the pane, that one is left alone. A pane whose tmux leaves on its own, by a detach inside it or the session ending, closes without asking anything.
+End only ever closes the session SilkTerm started for that pane, found by the name it was given. If the session was renamed, or something else was switched to inside the pane, that one is left alone. A pane whose tmux exits on its own, through a detach inside it or the session ending, closes without asking.
 
 In the config:
 
@@ -150,12 +150,12 @@ The first opens a window 120 cells wide and 40 high, running fish. The second sp
 These print something and exit. No window opens, and they can go anywhere on the line.
 
 | Option                     | What it does
-| :------------------------- | :-----------------------------------------------------
+| :------------------------- | :------------------------------------------------------
 | `--help`, `-h`             | The version line and the option list.
 | `--syntax`                 | The option list on its own.
-| `--about`                  | Version, build and renderer details, for a bug report.
+| `--about`                  | Version, build, and renderer details, for a bug report.
 | `--donate`                 | How to support SilkTerm.
-| `--version`, `--ver`, `-v` | Name, version and build on one line, for scripts.
+| `--version`, `--ver`, `-v` | Name, version, and build on one line, for scripts.
 
 ### Window options
 
@@ -176,9 +176,9 @@ These go before any tab or pane.
 
 A BOOL can be `yes` or `no`, `true` or `false`, or `1` or `0`. Leaving it off means yes.
 
-`--software-rendering` does what Always use software rendering in Settings does, for that run, and saves nothing. `--software-rendering=no` draws on the graphics card for the run even with the setting on. macOS has no software renderer, so there it says so and uses the card.
+`--software-rendering` does what Always use software rendering in Settings does, for that run, and saves nothing. `--software-rendering=no` draws on the graphics card for the run even with the setting on. macOS doesn't have a software renderer, so there it says so and uses the card.
 
-A window opened with `--columns`, `--rows`, `--pixel-width`, `--pixel-height`, `--font-size` or `--font-name` doesn't remember its size, font zoom or maximized state, even after a resize. It does again once each of those is changed in Settings, where the pixel sizes count as Columns and Rows. With `--persist` it remembers them as usual from the start.
+A window opened with `--columns`, `--rows`, `--pixel-width`, `--pixel-height`, `--font-size`, or `--font-name` doesn't remember its size, font zoom, or maximized state, even after a resize. It does again once each of those is changed in Settings, where the pixel sizes count as Columns and Rows. With `--persist` it remembers them as usual from the start.
 
 ### Control
 
@@ -223,9 +223,9 @@ These apply to whatever came last on the line: the window, a tab, or a pane. A t
 
 ## Shell integration
 
-A new tab, split or window starts in the directory the current pane is in. For most shells that needs nothing set up - SilkTerm reads the shell process's own directory.
+A new tab, split, or window starts in the directory the current pane is in. For most shells that doesn't need any setup, because SilkTerm reads the shell process's own directory.
 
-PowerShell is the exception: `Set-Location` moves PowerShell's own idea of where it is and leaves the process where it was launched, so there is nothing to read and a new pane would start in the launch directory.
+PowerShell is the exception. `Set-Location` changes PowerShell's own idea of where it is, but leaves the process in the directory it was launched in. So there isn't anything to read, and a new pane would start in the launch directory.
 
 SilkTerm handles that one for you. A few seconds after launch it adds a small directory-reporting block to each PowerShell profile. It won't touch a profile that already reports, such as a Windows Terminal setup or oh-my-posh. It appends the block after saving a copy of the profile beside it, rather than rewriting what's there. It won't change your prompt, and it won't put the block back if you delete it. A shell whose execution policy would refuse to load the profile is left alone and a notice says so, rather than being handed a file it can't read. Clear "Update PowerShell profiles" on the Shell tab of Settings, or set `shell.integration: false`, to switch it off before it ever runs.
 
@@ -235,9 +235,9 @@ A shell running behind `ssh` or in a container is yours to set up, since the she
 
 ## Programs over ssh
 
-SilkTerm tells programs what kind of terminal they are in through `TERM`. Each pane gets `TERM=xterm-256color` and `COLORTERM=truecolor`. `ssh` sends the same `TERM` to the other host, and every host has the xterm-256color entry, so `nano`, `less` and other full-screen programs work there with nothing set up first.
+SilkTerm tells programs what kind of terminal they are in through `TERM`. Each pane gets `TERM=xterm-256color` and `COLORTERM=truecolor`. `ssh` sends the same `TERM` to the other host, and every host has the xterm-256color entry, so `nano`, `less`, and other full-screen programs work there without any setup first.
 
-SilkTerm's terminal engine comes from Alacritty, and the alacritty entry describes a few extras that xterm-256color doesn't, such as curly underlines. To use it, set `shell.term: alacritty` in the config. Every new pane then gets that instead, here and over ssh. A host that has never had the alacritty entry, such as a stock Mac, then says "'alacritty': unknown terminal type." Copy the entry to that host. It goes in your home folder there, so it needs no admin rights:
+SilkTerm's terminal engine comes from Alacritty, and the alacritty entry describes a few extras that xterm-256color doesn't, such as curly underlines. To use it, set `shell.term: alacritty` in the config. Every new pane then gets that instead, here and over ssh. A host that has never had the alacritty entry, such as a stock Mac, then says "'alacritty': unknown terminal type." Copy the entry to that host. It goes in your home folder there, so it doesn't need admin rights:
 
 ~~~sh
 infocmp -x alacritty | ssh HOST 'cat > /tmp/alacritty.ti && tic -x -o ~/.terminfo /tmp/alacritty.ti && rm /tmp/alacritty.ti'
@@ -245,7 +245,7 @@ infocmp -x alacritty | ssh HOST 'cat > /tmp/alacritty.ti && tic -x -o ~/.terminf
 
 On macOS `sudo` keeps `HOME`, so a program run with `sudo` finds it too. Linux usually sets `HOME` to root's, so there root needs its own copy.
 
-A program in the pane you're using can set the clipboard, such as tmux or an editor over ssh. On Wayland only the window with the keyboard may set it, so a copy a program makes while the SilkTerm window doesn't have focus waits, and goes to the clipboard when the window gets focus back. If it made more than one meanwhile, the last one wins. X11, macOS and Windows take it at once.
+A program in the pane you're using can set the clipboard, such as tmux or an editor over ssh. On Wayland only the window with the keyboard may set it, so a copy a program makes while the SilkTerm window doesn't have focus waits, and goes to the clipboard when the window gets focus back. If it made more than one meanwhile, the last one wins. X11, macOS, and Windows take it at once.
 
 ## Opening scripts and folders on Windows
 
@@ -253,13 +253,13 @@ The Shell tab of Settings has an "Open with SilkTerm" group, one row per kind of
 
 - Batch files: `.bat` and `.cmd`.
 
-- PowerShell scripts: `.ps1`, with PowerShell 7 if it is installed and Windows PowerShell if not.
+- PowerShell scripts: `.ps1`, with PowerShell 7 if it's installed and Windows PowerShell if not.
 
 - VBScript files: `.vbs`, through the console script host, so their messages print in the pane.
 
-- Folder menu: an "Open in SilkTerm" entry for folders and drives. On Windows 11 it is under "Show more options".
+- Folder menu: an "Open in SilkTerm" entry for folders and drives. On Windows 11 it's under "Show more options".
 
-Register makes a double-click run that kind of file in SilkTerm. The pane stays open after the script ends, so its output and exit status can be read. It is for your account only and needs no administrator rights. The arrow at the end of the row puts back whatever was there before. Register again after moving SilkTerm.
+Register makes a double-click run that kind of file in SilkTerm. The pane stays open after the script ends, so its output and exit status can be read. It's for your account only, and doesn't need administrator rights. The arrow at the end of the row puts back whatever was there before. Register again after moving SilkTerm.
 
 What it doesn't change:
 

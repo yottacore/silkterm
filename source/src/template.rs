@@ -9,10 +9,10 @@
 //! - `{ }` groups without printing, and `[ ]` prints its brackets.
 //! - A group whose macros all come out empty is left out, with its text.
 //! - `a || b` is `a`, or `b` when `a` comes out empty.
-//! - Text between two parts shows only when both sides show a value. A choice
+//! - Text between 2 parts shows only when both sides show a value. A choice
 //!   that is only text counts as text here, which is what lets a separator
 //!   stand in for a part that is missing.
-//! - Tabs, line breaks and other control characters are ignored, spaces at either
+//! - Tabs, line breaks, and other control characters are ignored, spaces at either
 //!   end of the template, a group or a choice are too, and a run of spaces
 //!   shows as one.
 //! - A backslash makes the character after it plain text: `\%`, `\{`, `\|`.
@@ -33,7 +33,7 @@ pub struct Template {
 	root: Vec<Seq>,
 }
 
-// One choice: a run of text, macros and groups.
+// One choice: a run of text, macros, and groups.
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct Seq {
 	items: Vec<Item>,
@@ -51,7 +51,7 @@ enum Item {
 	},
 }
 
-/// What is wrong with a template. `at` counts characters from 1, the way a
+/// What's wrong with a template. `at` counts characters from 1, the way a
 /// person counts along the text.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Error {
@@ -162,7 +162,7 @@ impl Parser<'_> {
 			self.pos += 1;
 			match c {
 				'\\' => {
-					// a backslash at the very end has nothing to make plain, so it is
+					// a backslash at the very end has nothing to make plain, so it's
 					// plain itself
 					let plain = self.chars.get(self.pos).copied().unwrap_or('\\');
 					self.pos = (self.pos + 1).min(self.chars.len());
@@ -449,7 +449,7 @@ mod tests {
 		assert_eq!(run(dash, ["", "vim", ""]), "[vim]");
 		assert_eq!(run(dash, ["sh", "vim", ""]), "sh [vim]");
 		assert_eq!(run(dash, ["", "", ""]), "");
-		// a missing part between two that show leaves one space
+		// a missing part between 2 that show leaves one space
 		assert_eq!(run("%A% %B% - %C%", ["sh", "", "~/"]), "sh - ~/");
 		assert_eq!(run("%A% / %B%", ["a", "", ""]), "a");
 		assert_eq!(run("%A% / %B%", ["", "b", ""]), "b");
@@ -487,7 +487,7 @@ mod tests {
 		assert_eq!(run("% a %", ["x", "", ""]), "x");
 	}
 
-	// Whatever a config file holds, reading it and filling it in finishes, and
+	// Whatever a config file contains, reading it and filling it in finishes, and
 	// what comes out has no control characters in it.
 	mod fuzz {
 		use super::super::Template;

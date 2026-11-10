@@ -5,7 +5,7 @@
 ##	- Purpose:
 ##		The Linux ARM64 build's smoke run. Copy it to the arm64 Linux box, run
 ##		--version there, and check the first line starts with what the caller
-##		expects, such as the native build's name, version and build number. Only
+##		expects, such as the native build's name, version, and build number. Only
 ##		a run on real arm64 shows the cross build starts at all.
 ##	- Syntax:
 ##		arm-smoke.bash <binary> <expected start of the first line>

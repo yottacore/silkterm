@@ -33,7 +33,7 @@ else
 	work="$(mktemp -d)"
 	trap 'rc=$?; fTestDir_Rm "${work}" || true; fTestDir_End "${rc}"' EXIT
 
-	## A stand-in repository holding nothing but the template and icon the step reads.
+	## A stand-in repository with nothing but the template and icon the step reads.
 	fakeRoot="${work}/repo"
 	mkdir -p "${fakeRoot}/cicd/packaging/windows" "${fakeRoot}/source/assets"
 	cp "${realRoot}/cicd/packaging/windows/installer.nsi.in" "${fakeRoot}/cicd/packaging/windows/"
@@ -69,7 +69,7 @@ else
 	fRunStep "target/x86_64-pc-windows-gnu/release/silkterm.exe" "${work}/art-rel"
 	fCheck "a relative target dir still makes the installer" test -f "${setup}"
 
-	## It carries the program's icon, not the stock one, and a version block.
+	## It has the program's icon, not the stock one, and a version block.
 	fHasIcon(){ python3 - "${1}" "${realRoot}/source/assets/icon.ico" <<'PY'
 import struct, sys
 exe, ico = (open(p, "rb").read() for p in sys.argv[1:3])
@@ -92,7 +92,7 @@ fi
 
 ## The release collection and the Linux packages, lifted out of cicd.bash with
 ## fReleaseExpects and fWriteSums. The binaries are stand-ins, and so are cargo
-## and the two package tools, so what is checked is the names, the calls and
+## and the two package tools, so what is checked is the names, the calls, and
 ## the checksums.
 pkgWork="$(mktemp -d)"
 trap 'rc=$?; fTestDir_Rm "${work:-}" || true; fTestDir_Rm "${pkgWork}" || true; fTestDir_End "${rc}"' EXIT
@@ -180,7 +180,7 @@ fCheck "Windows x86_64 links with no timestamp" fLinkFlag x86_64-pc-windows-gnu 
 fCheck "Windows ARM64 links reproducibly" fLinkFlag aarch64-pc-windows-gnullvm "link-arg=-Wl,-Brepro"
 
 ## The Linux packages' icons are the program's own, the images inside icon.ico,
-## so the two cannot drift apart.
+## so the two can't drift apart.
 fIconsMatch(){ python3 - "${realRoot}" <<'PY'
 import struct, sys
 root = sys.argv[1]

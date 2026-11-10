@@ -3,7 +3,7 @@
 
 <#
 .SYNOPSIS
-	What a Windows box has: host, account, GPUs, tools and sessions.
+	What a Windows box has: host, account, GPUs, tools, and sessions.
 .DESCRIPTION
 	Read-only. The sandbox line needs admin to say more than unknown.
 .NOTES

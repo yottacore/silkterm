@@ -86,8 +86,8 @@ fn one_seed() -> Option<u64> {
 }
 
 /// Run `case` over seeds: `MIN_CASES` of them at least, then on while the budget
-/// holds out. A panic is caught so the
-/// report names the seed that caused it, which is the whole reproduction recipe.
+/// holds out. A panic is caught so the report names the seed that caused it,
+/// which is the whole reproduction recipe.
 pub fn soak(name: &str, mut case: impl FnMut(u64)) {
 	if let Some(seed) = one_seed() {
 		case(seed);
@@ -118,7 +118,7 @@ fn corpus_dir(target: &str) -> PathBuf {
 	.join(target)
 }
 
-/// Saved cases for one target: anything a fuzz run once broke, kept so it is
+/// Saved cases for one target: anything a fuzz run once broke, kept so it's
 /// replayed on every run afterwards. An empty or missing directory is normal.
 pub fn corpus(target: &str) -> Vec<Vec<u8>> {
 	let Ok(entries) = std::fs::read_dir(corpus_dir(target)) else {
@@ -279,8 +279,8 @@ fn csi(rng: &mut Rng, out: &mut Vec<u8>) {
 	}
 }
 
-// The OSC numbers that carry meaning here: the titles, the color queries, the
-// two ways a shell reports where it is, hyperlinks, and the clipboard.
+// The OSC numbers that mean something here: the titles, the color queries, the
+// 2 ways a shell reports where it is, hyperlinks, and the clipboard.
 #[rustfmt::skip]
 const OSC_NUMBERS: [&str; 18] = [
 	"0", "1", "2", "4", "7", "8", "9", "10", "11", "12", "52", "104", "110",
@@ -307,7 +307,7 @@ fn osc(rng: &mut Rng, out: &mut Vec<u8>) {
 	}
 }
 
-// DCS, APC, PM and SOS: strings the terminal is meant to swallow whole.
+// DCS, APC, PM, and SOS: strings the terminal is meant to swallow whole.
 fn string_sequence(rng: &mut Rng, out: &mut Vec<u8>) {
 	out.push(0x1b);
 	out.push(*rng.pick(b"P_^X"));

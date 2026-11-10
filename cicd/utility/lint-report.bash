@@ -14,7 +14,7 @@
 ##		lint-report.bash [--check] [--force] [--no-mark] [--dir DIR] [--file LOG]
 ##		  --check     gate on the .lint-seen marker; print SEEN and stop if not newer
 ##		  --force     with --check, report even if already seen
-##		  --no-mark   with --check, do not update the marker
+##		  --no-mark   with --check, don't update the marker
 ##		  --dir DIR   log directory (default: cicd/artifacts/lint next to this script)
 ##		  --file LOG  report on this log instead of the newest in DIR
 ##	Exit: 0 normal, 2 skip (no dir / no logs).
@@ -29,7 +29,7 @@
 set -Eeuo pipefail
 
 meDir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-dir="${meDir}/../artifacts/lint"        ## this script lives in cicd/utility -> cicd/artifacts/lint
+dir="${meDir}/../artifacts/lint"        ## this script is in cicd/utility -> cicd/artifacts/lint
 file=""; check=0; force=0; noMark=0
 
 while (($#)); do case "${1}" in
@@ -77,15 +77,15 @@ fi
 ##	Record the marker now (before printing the body) so a caller that pipes stdout
 ##	to head/less and closes it early still records the look.
 if ((check)) && ((! noMark)) && [[ -n "${ts}" ]]; then
-	printf '%s\n' "${ts}" > "${marker}" 2>/dev/null || echo "lint-report: could not write marker: ${marker}" >&2
+	printf '%s\n' "${ts}" > "${marker}" 2>/dev/null || echo "lint-report: couldn't write marker: ${marker}" >&2
 fi
 
-##	Distil warnings/advisories. rustc/clippy/cargo-deny all say "warning"; deny adds
+##	Distill warnings/advisories. rustc/clippy/cargo-deny all say "warning"; deny adds
 ##	RUSTSEC ids + vulnerable/unmaintained/yanked. Hard errors only appear in a failed
 ##	run's log (a passing run aborts on the first error). Drop the "0 warnings" noise,
-##	and test result lines, whose test names can hold any of these words: each test's
-##	"PASS|FAIL|SKIP <ID> <name>", and plain libtest's "test <name> ... ok" from the
-##	b26 runner. A skip is a test that could not run, not a warning.
+##	and test result lines, whose test names can contain any of these words: each
+##	test's "PASS|FAIL|SKIP <ID> <name>", and plain libtest's "test <name> ... ok" from
+##	the b26 runner. A skip is a test that couldn't run, not a warning.
 warns="$(grep -inE 'warning|rustsec-|vulnerab|unmaintained|yanked|error\[' "${log}" 2>/dev/null \
 	| grep -viE 'generated 0 warnings|: 0 warnings|no warnings|0 warnings emitted' \
 	| grep -vE '^[0-9]+:((PASS|FAIL|SKIP) ([0-9a-hjkmnp-tv-z]{5}|-----) [^ ]|test [A-Za-z0-9_:]+ \.\.\. (ok|ignored)$)' || true)"
@@ -105,4 +105,4 @@ fi
 ##		- 20260709: Created.
 ##		- 20261003: Test result lines no longer count as warnings.
 ##		- 20261028: Test IDs in the new 5-character form.
-##		- 20261028: One PASS, FAIL or SKIP line per test.
+##		- 20261028: One PASS, FAIL, or SKIP line per test.

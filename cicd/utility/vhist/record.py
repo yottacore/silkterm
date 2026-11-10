@@ -9,7 +9,7 @@
 ##		that program as input.
 ##	Syntax:
 ##		record.py APP OUT [--cols N] [--rows N] [--lines N]
-##		APP is less, vim, nano or htop. OUT gets the chunks, each a 4-byte
+##		APP is less, vim, nano, or htop. OUT gets the chunks, each a 4-byte
 ##		little-endian double for when it was read, in seconds from the start, a
 ##		4-byte little-endian length, and then the bytes.
 ##	Exit: 0 fine, 2 bad arguments.

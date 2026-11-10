@@ -30,7 +30,7 @@ mod fields;
 mod fileassoc;
 mod front;
 // Adversarial input generators, shared by the fuzz targets that sit beside the
-// code they hammer. Test-only, so nothing of it reaches a shipped binary.
+// code they hammer. Test-only, so none of it is built into a release binary.
 #[cfg(test)]
 mod fuzz;
 mod gfx;
@@ -137,7 +137,7 @@ fn main() -> anyhow::Result<()> {
 	}
 	// CLI-only flags: print and exit, before anything reads a config or opens a
 	// window. All but --version and --about are padded with a blank line either
-	// side so the block stands clear of the prompts above and below it; those two
+	// side so the block stands clear of the prompts above and below it; those 2
 	// stay flush.
 	if let Some(info) = cli.info {
 		match info {

@@ -44,11 +44,11 @@ EXE_NAME="silkterm"
 ## Stage 1: format the source in place before anything is compiled or tested.
 ## Empty it (FMT_CMD=()) when reusing the pipeline in a non-Rust project.
 FMT_CMD=(cargo fmt)
-## Non-mutating variant for --backlog-run-quick, --fmt-check and the full runs
+## Non-mutating variant for --backlog-run-quick, --fmt-check, and the full runs
 ## (fails on drift instead of rewriting).
 FMT_CHECK_CMD=(cargo fmt --check)
 
-## Pinned helper tools, "name|version|command..." each. The list lives in
+## Pinned helper tools, "name|version|command..." each. The list is in
 ## tool-pins.txt beside this file, which cicd-win.ps1 reads too; the engine warns
 ## (non-gating) when an installed tool has drifted from its pin.
 TOOL_PINS=()
@@ -119,7 +119,7 @@ ADVISORY_CMD=(cargo deny check advisories -D warnings)
 ## and never refreshes them, so a crate yanked since a box last resolved looks
 ## fine there (2026102518563500). A dry-run update revalidates the entry of every
 ## locked crate and writes nothing to the lock. Gating: offline means a yank can't
-## be seen, so it fails, and net.offline=false keeps CARGO_NET_OFFLINE from
+## be seen, so it fails, and net.offline=false stops CARGO_NET_OFFLINE from
 ## turning it into a quiet pass.
 INDEX_REFRESH_CMD=(cargo update --dry-run --quiet --config net.offline=false)
 
@@ -151,7 +151,7 @@ TSAN_SUPPRESSIONS="cicd/tsan-suppressions.txt"
 ## so it runs only under --leakcheck or --long, and --no-miri skips it there;
 ## empty () disables it. Isolation is off, since the tests read the clock and the
 ## test folder. cargo miri builds into miri/ under the target dir, and Miri's
-## sysroot goes in there too, so one dir named for the nightly holds both.
+## sysroot goes in there too, so one dir named for the nightly contains both.
 ## The sysroot's path is absolute, since cargo runs each test binary from its
 ## crate's dir.
 MIRI_DIR="miri-${SANITIZER_TOOLCHAIN#nightly-}"
@@ -189,7 +189,7 @@ CODEQL_SUPPRESSIONS="cicd/codeql-suppressions.txt"
 ## Stage 3: per-monitor window size on random layouts and steps
 ## (cicd/tests/dpirand/run.py), as seconds of cases. A case is about 30 s on the
 ## debug build, and seeds start from the clock, so each run tries new ones. Skipped
-## under --quick; 0 skips it too. 150 runs about 5 cases.
+## under --quick; 0 skips it too. A value of 150 runs about 5 cases.
 DPIRAND_SECS=150
 
 ## Stage 3 (last): headless scroll regression harness. Slow (a private Xvfb + GL
@@ -205,8 +205,8 @@ SCROLL_HARNESS=(cicd/tests/scroll/run.bash)
 ## Empty () to disable. Extra scenario names may be listed after run.bash.
 WINGUI_HARNESS=(cicd/tests/wingui/run.bash smoke injchar settingsdlg perfladder pathannounce consolemsg savenotice openwith softrender newwin gbtitle conmap cmdgui conload quiettab wpremote)
 
-## Stage 3: what the dogfood launcher does to files it did not create. Needs pwsh;
-## skipped with a warning where it is missing. Empty () to disable.
+## Stage 3: what the dogfood launcher does to files it didn't create. Needs pwsh;
+## skipped with a warning where it's missing. Empty () to disable.
 LAUNCHER_HARNESS=(cicd/tests/launcher/run.ps1)
 
 ## Also run the harness a second time under a headless Wayland compositor (cage), to
@@ -256,7 +256,7 @@ PACKAGE_ENABLE=1
 NSIS_TEMPLATE="cicd/packaging/windows/installer.nsi.in"
 
 ## Stage 6, after the packages: the macOS build and the Microsoft Store bundle.
-## Both need signing material that stays out of this repo, so their scripts live
+## Both need signing material that stays out of this repo, so their scripts are
 ## in a private one. They run only when that repo is checked out at this path and
 ## has its runner, which takes --public <this repo>, does its own waiting on the
 ## Mac and the Windows box, and exits 0 when it built or skipped and 1 when a job
@@ -333,7 +333,7 @@ DOGFOOD_DESTS=(
 	"linux-x86_64|${EXE_NAME}|${HOME}/synced/0-0/common/exec/app/linux"
 	"windows-x86_64|${EXE_NAME}.exe|${HOME}/synced/0-0/common/exec/app/mswin"
 	## ARM64 builds are released but not dogfooded: an app dir is per-OS, so only
-	## one binary can hold the name, and both boxes here are x86_64.
+	## one binary can have the name, and both boxes here are x86_64.
 	## The Mac build comes back from the private runner as one universal binary.
 	"macos-universal|${EXE_NAME}|${HOME}/synced/0-0/common/exec/app/macos"
 )
@@ -348,7 +348,7 @@ DOGFOOD_ICON="source/assets/logo.png"
 # DOGFOOD_TAG="gnulli"
 
 ## Signing the release. A checksum file fetched from the same place as the
-## artifact it covers proves the download was not corrupted in transit, which TLS
+## artifact it covers proves the download wasn't corrupted in transit, which TLS
 ## already gave; a signature is what says the release came from here.
 ##
 ## The private key never goes in the repo. To set one up once:
@@ -364,7 +364,7 @@ RELEASE_SIGN_NAMESPACE="silkterm-release"
 GIT_PUBLISH=(cicd/utility/n8git_backup-and-publish)
 
 ## Extra backup excludes for this project, on top of the publisher's own. Those
-## already cover cicd/artifacts scratch (logs, profiling, GUI captures, the
+## already exclude cicd/artifacts scratch (logs, profiling, GUI captures, the
 ## size-comparison downloads), a wineprefix's dosdevices and drive_c, which map
 ## Z: to '/', private/source, and every 0_archive. cicd/artifacts/release stays
 ## in: the packages and installers there exist nowhere else. A pattern naming a
@@ -379,7 +379,7 @@ GIT_PUBLISH=(cicd/utility/n8git_backup-and-publish)
 ## target/mmap-bench is the minimap rig's scratch: a 32 MiB flood file it makes
 ## on demand, plus one log per run.
 ##
-## Everything else under target/ that is not a final build is scratch too: the
+## Everything else under target/ that isn't a final build is scratch too: the
 ## before and after builds kept for a comparison, their captures, and a docs
 ## backup from the 09-15 history rewrite. source/target and the clipboard-race
 ## test crate's target are stray lint and test builds, and target/darwin is a
@@ -388,9 +388,9 @@ GIT_PUBLISH=(cicd/utility/n8git_backup-and-publish)
 ## builds under the sanitizers and Miri. A new scratch dir under target/ needs a
 ## line here.
 ##
-## The wallpaper originals (about 350 MB) and duplicates (80 MB) sit behind the
+## The wallpaper originals (about 350 MB) and duplicates (80 MB) are behind the
 ## private/wallpaper/source symlink, which rar follows. The originals are the
-## full-size sources the shipped pack is made from, and both are kept in their
+## full-size sources the released pack is made from, and both are kept in their
 ## own tree outside this project.
 ##
 ## One rar pattern per line, no '-x' prefix and no shell quoting: the publish

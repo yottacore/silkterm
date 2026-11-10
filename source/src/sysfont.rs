@@ -286,8 +286,8 @@ mod platform {
 	mod tests {
 		use super::{interface_from, is_xfce, monospace_from};
 
-		// gsettings answers on an Xfce box too, with GNOME's defaults for keys
-		// nobody set, so the desktop decides which store is asked first.
+		// gsettings returns values on an Xfce box too, with GNOME's defaults for
+		// keys nobody set, so the desktop decides which store is asked first.
 		// Test ID: dcrcr
 		#[test]
 		fn the_desktop_decides_which_font_store_answers_first() {
@@ -351,8 +351,8 @@ mod platform {
 		Some(String::from_utf8(out.stdout).ok()?.trim().to_string())
 	}
 
-	// AppKit answers with its default when nobody has set NSFixedPitchFontSize,
-	// which the defaults key alone does not.
+	// AppKit returns its default when nobody has set NSFixedPitchFontSize,
+	// which the defaults key alone doesn't.
 	fn fixed_pitch_size() -> Option<f32> {
 		objc2::rc::autoreleasepool(|_| {
 			let font = NSFont::userFixedPitchFontOfSize(0.0)?;

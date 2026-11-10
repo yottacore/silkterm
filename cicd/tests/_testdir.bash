@@ -14,7 +14,7 @@
 ##			  so every test the caller starts shares it. The process that made it
 ##			  removes it when it exits with 0, or 3 for a skip, and keeps it
 ##			  otherwise, for the pipeline's stale sweep to take once its run.pid
-##			  is gone. A kept one holding nothing but its owner mark and run.pid
+##			  is gone. A kept one with nothing but its owner mark and run.pid
 ##			  goes anyway, since there's nothing in it to look at.
 ##		fTestDir_Make sets an EXIT trap that calls fTestDir_End. A caller that sets
 ##		its own EXIT trap afterward replaces it, so that trap takes $? first and
@@ -31,7 +31,7 @@ __testDirHere="${BASH_SOURCE[0]%/*}"; [[ "${__testDirHere}" != "${BASH_SOURCE[0]
 source "${__testDirHere}/../utility/include/saferm.bash"
 
 fTestDir_Make(){
-	##	Sets and exports SILKTERM_TEST_DIR. Returns 1, with the reason on stderr, when it cannot.
+	##	Sets and exports SILKTERM_TEST_DIR. Returns 1, with the reason on stderr, when it can't.
 	if [[ -n "${SILKTERM_TEST_DIR:-}" ]]; then
 		## Tested first, since some tests start others with a PATH that has no mkdir.
 		if [[ ! -d "${SILKTERM_TEST_DIR}" ]] && ! mkdir -p -- "${SILKTERM_TEST_DIR}"; then echo "test run folder: cannot make '${SILKTERM_TEST_DIR}'" >&2; return 1; fi
@@ -64,7 +64,7 @@ fTestDir_Make(){
 
 fTestDir_End(){
 	##	fTestDir_End <status>: removes the folder fTestDir_Make made, when status
-	##	is 0 or 3 (a skip), or it holds nothing else, and the folder still has
+	##	is 0 or 3 (a skip), or it has nothing else, and the folder still has
 	##	this run's mark. Always returns 0, so it never changes how a script exits.
 	local -r status="${1:-0}" dir="${__testDirOwned:-}"
 	[[ -n "${dir}" ]] || return 0
@@ -87,7 +87,7 @@ fTestDir_End(){
 }
 
 fTestDir_OnlyMarks(){
-	##	fTestDir_OnlyMarks <dir>: true when <dir> holds nothing but the owner mark
+	##	fTestDir_OnlyMarks <dir>: true when <dir> has nothing but the owner mark
 	##	and run.pid.
 	##	Globs, not find, since some tests run with a PATH that has none.
 	local f

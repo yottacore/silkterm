@@ -13,7 +13,7 @@
 use std::{env, fs, path::Path};
 
 // The build number generator, shared with the crate so the number baked in here
-// and the tests over there can't be two different implementations.
+// and the tests over there can't be 2 different implementations.
 include!("src/buildnum.rs");
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -98,7 +98,7 @@ fn cargo_env(name: &str) -> String {
 // which is the point. The list is BUILD_INPUTS in buildnum.rs, where a test keeps
 // it covering every file the code includes.
 //
-// SILK_BUILD_MINUTES pins the value. cicd sets it once per run so all four target
+// SILK_BUILD_MINUTES pins the value. cicd sets it once per run so all 4 target
 // builds report one build instead of one per link, minutes apart.
 fn emit_build_number() {
 	for input in BUILD_INPUTS {
@@ -205,8 +205,8 @@ fn windres_candidates(arch: &str) -> Vec<(String, &'static str)> {
 		(format!("{triple}-windres"), bfd),
 		("windres".to_string(), bfd),
 	];
-	// Debian ships llvm-windres under a version suffix and nothing else, so there
-	// is no plain name to call and the versions have to be found on PATH.
+	// Debian packages llvm-windres under a version suffix and nothing else, so
+	// there is no plain name to call and the versions have to be found on PATH.
 	let mut llvm: Vec<(u32, String)> = Vec::new();
 	for dir in env::split_paths(&env::var_os("PATH").unwrap_or_default()) {
 		let Ok(entries) = fs::read_dir(&dir) else {

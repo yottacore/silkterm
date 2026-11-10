@@ -7,10 +7,10 @@
 ##		Every file a test writes goes under one folder per run,
 ##		HOST_TEMP/silkterm/YYYYmmDD-HHMMSS_NNN. This runs the Rust suite and a set
 ##		of script tests with the temp dir read-only, so a write anywhere but the
-##		run folder fails. It also checks that the Bash, Python and PowerShell
+##		run folder fails. It also checks that the Bash, Python, and PowerShell
 ##		helpers make the same folder, that cicd.bash makes its own in
 ##		HOST_TEMP/silkterm with TMPDIR pointed at it and removes it at the end,
-##		and guards the sites it cannot run from here. A run removes the
+##		and guards the sites it can't run from here. A run removes the
 ##		folder it made when it passes, keeps it when it fails, and never removes
 ##		one it was handed, one without its mark, or anything a link points to.
 ##	- Test ID: ddazx
@@ -171,7 +171,7 @@ for lang in "${langs[@]}"; do
 	fCheck "and nothing else is made" test -z "$(ls -A "${base}")"
 done
 
-##	E: guards for the sites A and C cannot run, such as cfg(windows) tests and
+##	E: guards for the sites A and C can't run, such as cfg(windows) tests and
 ##	the display-bound scripts. The list is the one the test ID check uses, plus
 ##	the wingui driver. The other wingui scripts run on the remote box, which
 ##	has an item of its own.
@@ -192,7 +192,7 @@ for rel in "${scripts[@]}"; do
 	grep -qE 'fTestDir_Use|_testdir\.use\(\)' "${tests}/${rel}" || skipped+=" ${rel}"
 done
 fCheck "every script test that makes scratch uses the run folder${skipped:+ (not:${skipped})}" test -z "${skipped}"
-##	A guard for what C2 cannot run. The pipelines are on the list too.
+##	A guard for what C2 can't run. The pipelines are on the list too.
 unended=""
 for rel in "${scripts[@]}" ../cicd.bash ../cicd-win.ps1; do
 	[[ "${rel}" == wingui/* && "${rel}" != wingui/harness-test.bash && "${rel}" != wingui/run.bash ]] && continue
@@ -221,7 +221,7 @@ boxSpecific="$(git -C "${root}" grep -n '/m''nt/' -- cicd source utility || true
 fCheck "nothing box-specific is in the repo" test -z "${boxSpecific}"
 
 ##	F: cicd.bash makes its run folder before its gate, in HOST_TEMP/silkterm,
-##	points TMPDIR, TEMP and TMP at it, and removes it at the end, failed or not.
+##	points TMPDIR, TEMP, and TMP at it, and removes it at the end, failed or not.
 ##	A stand-in cargo records what the test step is handed, whether the folder
 ##	was there then, and its run.pid. HOST_TEMP is unset, so TMPDIR stands in.
 home="${work}/f/home"; mkdir -p "${home}/.cargo/bin" "${work}/f/base"

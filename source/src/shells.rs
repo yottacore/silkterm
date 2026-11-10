@@ -6,20 +6,20 @@
 //! The list the Tabs menu offers lives in the config (`shells.*`), so a title,
 //! an order or a disabled entry survives a launch and stays the user's. What
 //! this module adds is the part nobody wants to type: after the window is up and
-//! settled, look around for the shells that are actually installed and fold the
+//! settled, look around for the shells that are installed and fold the
 //! new ones in.
 //!
-//! None of it may sit between launch and the first frame. A PATH scan stats every
-//! directory on the user's PATH - any of which can be a mount that answers slowly
-//! or never - and the Windows side reads the registry as well. So the window
-//! starts with whatever the config already holds, and a scan arrives later as
-//! `UserEvent::ShellsReady`. Same shape as the wallpaper pipeline, deliberately:
-//! a thread per request, and the result is folded in on the winit thread.
+//! None of it can run between launch and the first frame. A PATH scan stats every
+//! directory on the user's PATH, and any of them can be a mount that responds
+//! slowly or never. The Windows side reads the registry as well. So the window
+//! starts with whatever the config already has, and a scan arrives later as
+//! `UserEvent::ShellsReady`. It works the same way as the wallpaper pipeline: a
+//! thread per request, and the result is folded in on the winit thread.
 //!
-//! Two rules decide what a scan is allowed to do to a stored list, and they are
-//! deliberately lopsided (see `merge`): it may ADD a shell it found, and it may
-//! switch OFF one whose program has gone. It never switches one on and never
-//! rewrites a command line - those are the user's, and a scan has no way to tell
+//! A scan is held to 2 rules for what it may do to a stored list, and they're
+//! deliberately lopsided (see `merge`): it may add a shell it found, and it may
+//! switch off one whose program has gone. It never switches one on and never
+//! rewrites a command line. Those are the user's, and a scan has no way to tell
 //! a deliberate "no thanks" from a program that happened to be missing.
 
 use std::path::{Path, PathBuf};
@@ -32,7 +32,7 @@ use crate::term::UserEvent;
 /// One shell the Tabs menu can offer, as stored under `shells.<slug>` in the
 /// config. `slug` is the config key and never changes once written; `title` is
 /// what the menu shows and the user may rename freely. `active` is the user's
-/// switch - an inactive entry stays in the file and stays out of the menu.
+/// switch. An inactive entry stays in the file and stays out of the menu.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ShellEntry {
 	pub slug: String,
@@ -41,7 +41,7 @@ pub struct ShellEntry {
 	pub active: bool,
 	pub comment: String,
 	/// The last date a scan found this shell's program installed, YYYY-MM-DD.
-	/// Empty means no scan has ever seen it - a hand-written entry, or one that
+	/// Empty means no scan has ever seen it, such as a hand-written entry, or one that
 	/// was already switched off when the field was added.
 	pub last_seen: String,
 }
@@ -50,9 +50,9 @@ pub struct ShellEntry {
 /// and then by `seq`/title, so the order is stated once, in one place, instead of
 /// falling out of the sequence the detection happens to run in.
 ///
-/// It only ever decides an INITIAL population and where a newly-found shell is
-/// offered - `merge` keeps a stored list's own order whole, because that order is
-/// the user's (the Shell tab exists to set it). So changing anything here reaches
+/// It only sets the initial population and where a newly-found shell is
+/// offered. `merge` keeps a stored list's own order whole, because that order is
+/// the user's (the Shell tab exists to set it). So changing anything here changes
 /// a fresh config and nobody's existing one.
 #[cfg_attr(
 	unix,
@@ -73,13 +73,13 @@ pub enum Group {
 	// The modern cross-platform shells, alphabetically among themselves.
 	Modern,
 	// WSL distributions, each version alphabetically among its own. Both are
-	// offered when both exist - a WSL1 distribution is installed and usable, and
-	// hiding one because a newer-generation one exists beside it is not something
-	// a scan gets to decide.
+	// offered when both exist. A WSL1 distribution is installed and usable, and a
+	// scan has no business hiding one because a newer-generation one exists
+	// beside it.
 	Wsl2,
 	Wsl1,
-	// The POSIX environments' bashes (MSYS2, Git for Windows, Cygwin) - one
-	// curated order, since they are three builds of the same shell.
+	// The POSIX environments' bashes (MSYS2, Git for Windows, Cygwin), in one
+	// curated order, since they're 3 builds of the same shell.
 	PosixEnv,
 	PyCmd,
 	// Language REPLs people do use as a shell, alphabetically.
@@ -113,9 +113,9 @@ pub struct Found {
 	pub title: String,
 	pub command: String,
 	pub comment: String,
-	/// Almost everything found is offered switched ON - it is installed, so it is
+	/// Almost everything found is offered switched on. It's installed, so it's
 	/// presumably wanted. A variant that only exists as an alternative to another
-	/// entry arrives OFF instead, so the list gains a row rather than a surprise.
+	/// entry arrives off instead, so the list gains a row rather than a surprise.
 	pub active: bool,
 	// Where this sits in the offered order, and its position inside its own group
 	// where that group is curated rather than alphabetical.
@@ -149,8 +149,8 @@ impl Found {
 	}
 
 	// What a find sorts on. An alphabetical group ignores `seq` outright, so a
-	// table position cannot quietly override the order that group is meant to be
-	// in; the title is folded to lowercase so "YSH" does not sort above "elvish".
+	// table position can't quietly override the order that group is meant to be
+	// in; the title is folded to lowercase so "YSH" doesn't sort above "elvish".
 	fn order(&self) -> (Group, u32, String) {
 		let seq = if self.group.alphabetical() {
 			0
@@ -170,24 +170,24 @@ pub fn spawn(proxy: &EventLoopProxy<UserEvent>) {
 		.name("shells".into())
 		.spawn(move || {
 			let found = detect();
-			// PowerShell cannot be asked where it is, so it is offered a way to
-			// say - on this thread, since it means starting one (integration.rs)
+			// PowerShell can't be asked where it is, so it gets a way to report it
+			// on this thread, since that means starting one (integration.rs)
 			crate::integration::install(&found);
 			let _ = proxy.send_event(UserEvent::ShellsReady(found));
 		});
 	if let Err(e) = spawned {
-		eprintln!("{}: could not start shell scan: {e}", config::APP_NAME);
+		eprintln!("{}: couldn't start shell scan: {e}", config::APP_NAME);
 	}
 }
 
 /// Fold a scan's findings into the stored list, in place and conservatively.
 ///
-/// The stored order is kept whole (it is the menu's order, and the future Shells
+/// The stored order is kept whole (it's the menu's order, and the future Shells
 /// tab lets the user set it); anything new goes at the end. `active` only ever
-/// falls: an entry whose program cannot be found is switched off rather than
+/// falls: an entry whose program can't be found is switched off rather than
 /// deleted, so a shell that is merely uninstalled keeps its title, its flags and
-/// its place. It is NOT switched back on if the program returns - a scan cannot
-/// tell that from a switch the user turned off on purpose.
+/// its place. It isn't switched back on if the program returns, since a scan
+/// can't tell that from a switch the user turned off on purpose.
 pub fn merge(stored: &[ShellEntry], found: &[Found]) -> Vec<ShellEntry> {
 	merge_with(stored, found, &which, &today())
 }
@@ -198,14 +198,14 @@ fn merge_with(
 	resolve: &dyn Fn(&str) -> Option<PathBuf>,
 	today: &str,
 ) -> Vec<ShellEntry> {
-	// One identity per stored entry, resolved once: where its program actually
+	// One identity per stored entry, resolved once: where its program
 	// is (None = not installed), its bare name, and its arguments.
 	//
-	// A list that already holds duplicates keeps holding them, because a scan
-	// only ever adds - so the rule that stops a second copy being added has to
-	// also be able to take one out. A row naming the same installed file as a row
+	// A list that already has duplicates keeps them, because a scan only ever
+	// adds. So the rule that stops a second copy being added has to also be
+	// able to take one out. A row naming the same installed file as a row
 	// above it is dropped here; the one above stays, with its title, its place
-	// and its flags. That is the only kind of deletion anything here does.
+	// and its flags. That's the only kind of deletion anything here does.
 	let mut kept: Vec<(ShellEntry, Option<Ident>)> = Vec::with_capacity(stored.len());
 	for entry in stored {
 		let id = Ident::of(&entry.command, resolve);
@@ -249,7 +249,7 @@ fn merge_with(
 }
 
 /// Today's date as YYYY-MM-DD, UTC. A "last seen" only ever has to be readable
-/// and comparable by eye, so a plain date is the whole of it - no clock, no zone,
+/// and comparable by eye, so a plain date is enough, with no clock, no zone,
 /// and nothing worth pulling a calendar crate in for.
 pub fn today() -> String {
 	let secs = std::time::SystemTime::now()
@@ -260,7 +260,7 @@ pub fn today() -> String {
 }
 
 // Days since 1970-01-01 -> (year, month, day). Hinnant's civil_from_days: the
-// era arithmetic makes the 400-year leap cycle exact, so there is no table and
+// era arithmetic makes the 400-year leap cycle exact, so there's no table and
 // no special case for February.
 fn civil_from_days(days: i64) -> (i64, u32, u32) {
 	let shifted = days + 719_468; // re-base on 0000-03-01, so leap day falls last
@@ -280,7 +280,7 @@ fn civil_from_days(days: i64) -> (i64, u32, u32) {
 	(if month <= 2 { year + 1 } else { year }, month, day)
 }
 
-// What makes two command lines "the same shell". `exe` is where the program
+// What makes 2 command lines "the same shell". `exe` is where the program
 // resolved to right now (absolute, lowercased on Windows), `base` its bare name.
 struct Ident {
 	exe: Option<PathBuf>,
@@ -288,9 +288,9 @@ struct Ident {
 	args: Vec<String>,
 }
 
-// Flags that change how a shell LOOKS and nothing about what it is, so two
+// Flags that change how a shell looks and nothing about what it is, so 2
 // commands differing only by one of these are the same shell. Everything else
-// stays part of the identity - that is what keeps a `--norc` twin a separate
+// stays part of the identity. That's what keeps a `--norc` twin a separate
 // entry from the shell it twins. Without this, adding `-NoLogo` to the table
 // would add a second PowerShell beside every stored one on the next scan,
 // which is the exact duplicate-entry mess this list already had once.
@@ -313,12 +313,12 @@ impl Ident {
 	// Same name, same arguments, and either both programs resolve to the same
 	// file or the stored one resolves nowhere. That last arm is what keeps a
 	// reinstall from adding a duplicate beside the disabled entry it belongs to;
-	// two shells that are BOTH installed stay distinct on their paths, so Git
+	// 2 shells that are both installed stay distinct on their paths, so Git
 	// Bash, MSYS2 bash and Cygwin bash never collapse together.
 	//
 	// The name has to match as well as the file, because /bin/sh is usually a
-	// link to dash or bash and it is not the same shell as the one it links to -
-	// a shell reads its own name and behaves differently under it.
+	// link to dash or bash and it isn't the same shell as the one it links to,
+	// since a shell reads its own name and behaves differently under it.
 	fn same(&self, other: &Self) -> bool {
 		if self.args != other.args || self.base != other.base {
 			return false;
@@ -330,9 +330,9 @@ impl Ident {
 		}
 	}
 
-	// The strict half of `same`, for taking a duplicate OUT of a stored list:
+	// The strict half of `same`, for taking a duplicate out of a stored list:
 	// both programs have to be installed and be the same file. The fallback for
-	// a program that is gone must not apply here. It is right for "do not add a
+	// a program that is gone mustn't apply here. It's right for "don't add a
 	// second copy of this", but it matches anything sharing a name, so using it
 	// to delete would take out an installed shell on behalf of an entry whose
 	// own program is missing.
@@ -343,15 +343,15 @@ impl Ident {
 	}
 }
 
-/// Do two command lines name the same shell? Same rule the scan folds on, so a
+/// Do 2 command lines name the same shell? Same rule the scan folds on, so a
 /// caller outside this module gets the same answer: a bare name is looked up
 /// before comparing, and a stored entry whose program has gone falls back to its
-/// bare name. Asked in both directions because that fallback is one-sided.
+/// bare name. Checked in both directions because that fallback is one-sided.
 ///
 /// `adopt_default_shell` is what needs it. The retired `shell.default` was
-/// routinely a bare name (`pwsh`) where the scanned list already carried the full
-/// path to the same file, and comparing those as STRINGS put a second copy of one
-/// shell at the top of the list - which is then the default shell, twice over.
+/// routinely a bare name (`pwsh`) where the scanned list already had the full
+/// path to the same file, and comparing those as strings put a second copy of one
+/// shell at the top of the list, which is then the default shell, twice over.
 pub fn same_command(a: &str, b: &str) -> bool {
 	same_command_with(a, b, &which)
 }
@@ -364,7 +364,7 @@ fn same_command_with(a: &str, b: &str, resolve: &dyn Fn(&str) -> Option<PathBuf>
 }
 
 /// An argv back as one command line, quoted the way this module's own tables
-/// write one - so `friendly` can be asked about a pane launched from the CLI,
+/// write one, so `friendly` can be called for a pane launched from the CLI,
 /// where the shell arrives already split.
 pub fn command_line(argv: &[String]) -> String {
 	argv.iter()
@@ -379,16 +379,16 @@ pub fn command_line(argv: &[String]) -> String {
 		.join(" ")
 }
 
-/// What a tab calls the shell it is running. The stored list is the authority -
+/// What a tab calls the shell it's running. The stored list comes first, since
 /// the user renamed those titles, so "Windows PowerShell 5 (relaxed)" is what
-/// their tab should say - and only where nothing matches does the program's own
+/// their tab should say. Only where nothing matches does the program's own
 /// name stand in. Matching goes through `same_command`, not string equality, for
 /// the reason that rule exists at all: the pane may have been launched with a
-/// bare `pwsh` where the list carries the full path to the same file.
+/// bare `pwsh` where the list has the full path to the same file.
 pub fn friendly(command: &str, stored: &[ShellEntry]) -> String {
-	// Answering costs a PATH search and two canonicalize calls per stored entry,
-	// and a tab asks again whenever its task or folder moves, and its tip twice a
-	// second. The answer only moves when the stored list does, so it is kept
+	// Each lookup costs a PATH search and 2 canonicalize calls per stored entry,
+	// and a tab asks again whenever its task or folder changes, and its tip twice
+	// a second. The result only changes when the stored list does, so it's cached
 	// against the list's own content.
 	let stamp = list_stamp(stored);
 	let mut memo = crate::locks::lock(&FRIENDLY_MEMO);
@@ -417,7 +417,7 @@ static FRIENDLY_MEMO: std::sync::Mutex<Option<(u64, std::collections::HashMap<St
 	std::sync::Mutex::new(None);
 
 // What the stored list looks like, for the memo to notice a change. Only the
-// two fields `friendly` reads matter.
+// 2 fields `friendly` reads matter.
 fn list_stamp(stored: &[ShellEntry]) -> u64 {
 	use std::hash::{Hash, Hasher};
 	let mut h = std::collections::hash_map::DefaultHasher::new();
@@ -444,10 +444,10 @@ fn friendly_uncached(command: &str, stored: &[ShellEntry]) -> String {
 		.unwrap_or_else(|| "Shell".to_string())
 }
 
-/// A list entry for a command line the list does not carry yet: the Settings
+/// A list entry for a command line the list doesn't have yet: the Settings
 /// dialog's "Add", and the one-time adoption of the old `shell.default`. The
-/// title is the program's own name, tidied - the user renames it if they want
-/// something else - and the key is made unique against what is already stored.
+/// title is the program's own name, tidied (the user renames it if they want
+/// something else), and the key is made unique against what is already stored.
 /// `last_seen` stays empty: no scan has vouched for this one.
 pub fn adopted(command: &str, existing: &[ShellEntry]) -> ShellEntry {
 	let title = crate::cli::shell_split(command)
@@ -465,9 +465,9 @@ pub fn adopted(command: &str, existing: &[ShellEntry]) -> ShellEntry {
 	}
 }
 
-// Config key for a new entry: the title, folded to something a config file can
-// hold, made unique against what is already in the list. It never changes after
-// this - a retitle rewrites one line, the way a theme rename does.
+// Config key for a new entry: the title, folded to something that works as a
+// config key, made unique against what is already in the list. It never
+// changes after this. A retitle rewrites one line, the way a theme rename does.
 fn unique_slug(title: &str, existing: &[ShellEntry]) -> String {
 	let mut base: String = title
 		.chars()
@@ -494,12 +494,12 @@ fn unique_slug(title: &str, existing: &[ShellEntry]) -> String {
 		.unwrap_or(base)
 }
 
-// Follow a resolved path to the real file, and case-fold it on Windows where two
+// Follow a resolved path to the real file, and case-fold it on Windows where 2
 // spellings name one file. Following the links is what stops one shell being
 // offered several times: /bin is a symlink to /usr/bin on most Linux
 // distributions and /etc/shells lists both spellings, and a package that puts
-// its program under /opt links to it from /usr/bin. A path that does not resolve
-// is kept as it stands - the tests hand out paths that were never on disk.
+// its program under /opt links to it from /usr/bin. A path that doesn't resolve
+// is kept as it stands, since the tests hand out paths that were never on disk.
 fn norm(path: &Path) -> PathBuf {
 	let real = std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
 	if cfg!(windows) {
@@ -521,11 +521,11 @@ fn base_name(prog: &str) -> String {
 	name.strip_suffix(".exe").unwrap_or(&name).to_string()
 }
 
-/// Where `prog` would run from, or None if it is not installed. A name with a
+/// Where `prog` would run from, or None if it isn't installed. A name with a
 /// separator in it is taken literally (that is the user saying where); a bare
-/// name is looked up on PATH, honouring PATHEXT on Windows.
-/// Counts every PATH search, so a test can hold the frame path to a number
-/// rather than to a stopwatch.
+/// name is looked up on PATH, honoring PATHEXT on Windows.
+/// Counts every PATH search, so a test can check the frame path against a number
+/// rather than a stopwatch.
 pub static PATH_SEARCHES: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 
 pub fn which(prog: &str) -> Option<PathBuf> {
@@ -552,8 +552,8 @@ fn which_in(prog: &str, path: &std::ffi::OsStr, runs: &dyn Fn(&Path) -> bool) ->
 	};
 	let mut visited: Vec<PathBuf> = Vec::new();
 	for dir in std::env::split_paths(path) {
-		// One directory under several names is normal - /bin and /usr/bin are the
-		// same place on most Linux distributions - and a lookup that finds nothing
+		// One directory under several names is normal, since /bin and /usr/bin are
+		// the same place on most Linux distributions, and a lookup that finds nothing
 		// pays a stat for every spelling.
 		let real = std::fs::canonicalize(&dir).unwrap_or_else(|_| dir.clone());
 		if visited.contains(&real) {
@@ -574,8 +574,8 @@ fn which_in(prog: &str, path: &std::ffi::OsStr, runs: &dyn Fn(&Path) -> bool) ->
 	None
 }
 
-// A Store app alias answers is_file() whether or not its app is installed, and
-// the WindowsApps folder holding them is on PATH by default. App Installer puts
+// A Store app alias passes is_file() whether or not its app is installed, and
+// the WindowsApps folder containing them is on PATH by default. App Installer puts
 // down python and python3 on every machine, and all they do is say Python is
 // missing. A Store-installed Python's own alias runs, so it still counts.
 fn runnable(path: &Path) -> bool {
@@ -628,8 +628,8 @@ fn is_install_prompt(_path: &Path) -> bool {
 	false
 }
 
-// An app alias's reparse data: the tag, two header words, a version, then
-// NUL-ended UTF-16 strings - the package, the app id and the program it starts.
+// An app alias's reparse data: the tag, 2 header words, a version, then
+// NUL-ended UTF-16 strings: the package, the app id and the program it starts.
 // App Installer's prompts start a "...Redirector.exe" of its own, while winget,
 // also App Installer's, starts winget.exe and is real.
 #[cfg(any(windows, test))]
@@ -673,8 +673,8 @@ fn quoted(path: &Path) -> String {
 }
 
 // The flag that starts a shell without reading its startup files, and the words
-// to put in its title. Only the default shell gets this twin - it is the one a
-// user reaches for when their own rc file is what they are debugging.
+// to put in its title. Only the default shell gets this twin, since it's the one
+// a user reaches for when their own rc file is what they're debugging.
 fn no_startup_file(base: &str) -> Option<(&'static str, &'static str)> {
 	Some(match base {
 		"bash" => ("--norc", "no rc"),
@@ -703,8 +703,8 @@ fn pretty(base: &str) -> String {
 }
 
 // Where a program found by its bare name belongs in the order, and its position
-// inside a curated group. Anything the table does not name is an ordinary system
-// shell - that is what /etc/shells turns up.
+// inside a curated group. Anything the table doesn't name is an ordinary system
+// shell, since that's what /etc/shells turns up.
 fn known_group(base: &str) -> (Group, u32) {
 	for (seq, (exe, _, _, group)) in KNOWN.iter().enumerate() {
 		if *exe == base {
@@ -765,7 +765,7 @@ const KNOWN: &[(&str, &str, &str, Group)] = &[
 #[cfg(not(unix))]
 const KNOWN: &[(&str, &str, &str, Group)] = KNOWN_WINDOWS;
 
-// Named apart so the installer's shortcut list can be held to it from any box.
+// Named apart so the installer's shortcut list can be checked against it from any box.
 #[cfg(any(not(unix), test))]
 const KNOWN_WINDOWS: &[(&str, &str, &str, Group)] = &[
 	("pwsh", "PowerShell 7", "", Group::Pwsh7),
@@ -802,7 +802,7 @@ const KNOWN_WINDOWS: &[(&str, &str, &str, Group)] = &[
 	(
 		"powershell",
 		"Windows PowerShell 5",
-		"the 5.1 shell that ships with Windows",
+		"the 5.1 shell that comes with Windows",
 		Group::WinPs5,
 	),
 ];
@@ -810,7 +810,7 @@ const KNOWN_WINDOWS: &[(&str, &str, &str, Group)] = &[
 // A shell offered with the flags it reads better with. Only presentation: the
 // PowerShells print a copyright banner (and 7 an occasional update notice)
 // before their first prompt, which is noise in a terminal that opens a new tab
-// per thought. Nothing here may change how a shell BEHAVES - every such flag
+// per thought. Nothing here may change how a shell behaves. Every such flag
 // belongs in COSMETIC_FLAGS too, or the next scan adds a duplicate.
 fn launch(command: &str, program: &str) -> String {
 	match base_name(program).as_str() {
@@ -828,7 +828,7 @@ pub fn detect() -> Vec<Found> {
 }
 
 // The scan with its lookups passed in, so a test can install every shell the
-// table knows and read the order a fresh list really arrives in, or hand two
+// table knows and read the order a fresh list arrives in, or hand 2
 // shells of one name any version it likes.
 fn detect_with(
 	login: Option<String>,
@@ -844,7 +844,7 @@ fn detect_with(
 		if id.exe.is_none() {
 			return;
 		}
-		// One file reached two ways, through a link or a linked folder, is one
+		// One file reached 2 ways, through a link or a linked folder, is one
 		// shell. It is offered under whichever spelling is shorter.
 		if let Some((kept, _)) = finds.iter_mut().find(|(_, seen)| seen.same(&id)) {
 			if program_len(&hit.command) < program_len(&kept.command) {
@@ -855,13 +855,13 @@ fn detect_with(
 		finds.push((hit, id));
 	};
 
-	// On unix the user's own shell leads - and that is load-bearing rather than
-	// merely tidy, because an initial population becomes the list verbatim and the
-	// top of the list IS the default shell (config::default_shell_argv). So the
-	// terminal opens on the shell the user logs in with, without their having to
-	// say so. It is also the one, and the only one, that gets the twin that skips
-	// its startup files. Windows has no user shell, so ComSpec takes its ordinary
-	// place in the order instead of the top of it.
+	// On unix the user's own shell leads. That matters, because an initial
+	// population becomes the list verbatim and the top of the list is the
+	// default shell (config::default_shell_argv). So the terminal opens on the
+	// shell the user logs in with, without their having to say so. It's also the
+	// only one that gets the twin that skips its startup files. Windows has no
+	// user shell, so ComSpec takes its ordinary place in the order instead of the
+	// top of it.
 	let mut twin = None;
 	if let Some(login) = login {
 		let base = base_name(&login);
@@ -888,12 +888,12 @@ fn detect_with(
 	}
 	let mut out = apart_by_name(finds, version);
 	// The twin is made from the login shell as it came out of the steps above,
-	// so it runs the same spelling and carries the same version in its name.
+	// so it runs the same spelling and has the same version in its name.
 	// `apart_by_name` keeps the first find of a name where it was, so the login
 	// shell is still first.
 	if let (Some((flag, note, at)), Some(login)) = (twin, out.first()) {
-		// Switched OFF: it is what you reach for when your own rc file is the
-		// thing you are debugging, not what you want a second copy of in the
+		// Switched off: it's what you reach for when your own rc file is the
+		// thing you're debugging, not what you want a second copy of in the
 		// menu every day.
 		let twin = Found::dormant(
 			&format!("{} ({note})", login.title),
@@ -910,7 +910,7 @@ fn detect_with(
 }
 
 // How long the program in a command line is as written, for picking the shorter
-// of two spellings of one file.
+// of 2 spellings of one file.
 fn program_len(command: &str) -> usize {
 	crate::cli::shell_split(command)
 		.ok()
@@ -918,11 +918,11 @@ fn program_len(command: &str) -> usize {
 		.unwrap_or(usize::MAX)
 }
 
-// Two finds with one name that are different files, such as Apple's bash in
+// A pair of finds with one name that are different files, such as Apple's bash in
 // /bin and a newer one from Homebrew. Where they report the same version they
 // are one shell installed twice, and the shorter path is offered, in the place
 // of whichever came first. Where they differ, each gets its version in its name
-// so the menu can tell them apart. A shell that will not say keeps its name as
+// so the menu can tell them apart. A shell that won't say keeps its name as
 // it is. Only a shared name is asked about, so a scan with no clash starts
 // nothing.
 fn apart_by_name(
@@ -991,7 +991,7 @@ fn versioned(title: &str, version: &str) -> String {
 const VERSION_WAIT: std::time::Duration = std::time::Duration::from_secs(2);
 
 // A shell's version, from what it prints for `--version`. The output is read on
-// a thread of its own, since a program that never closes it would otherwise hold
+// a thread of its own, since a program that never closes it would otherwise stall
 // the scan; that thread is left behind rather than waited for.
 fn probe_version(program: &Path, wait: std::time::Duration) -> Option<String> {
 	use std::io::Read;
@@ -1030,7 +1030,7 @@ fn probe_version(program: &Path, wait: std::time::Duration) -> Option<String> {
 
 // The first dotted number in a version banner, without any build tail: "GNU
 // bash, version 5.2.37(1)-release" is 5.2.37, and Node's "v20.11.1" is
-// 20.11.1. A word with digits only inside it, such as "darwin23.0", is not one.
+// 20.11.1. A word with digits only inside it, such as "darwin23.0", isn't one.
 fn parse_version(text: &str) -> Option<String> {
 	text.split_whitespace().find_map(|word| {
 		let word = word.strip_prefix(['v', 'V']).unwrap_or(word);
@@ -1045,7 +1045,7 @@ fn parse_version(text: &str) -> Option<String> {
 
 // A scan on a box where every shell the table knows is installed, bash is the
 // login shell, and nothing else turns up. Each program resolves to a path that
-// does not exist, so nothing on the test box can merge two of them.
+// doesn't exist, so nothing on the test box can merge 2 of them.
 #[cfg(test)]
 pub(crate) fn detect_every_known() -> Vec<Found> {
 	let installed = |prog: &str| Some(Path::new("/silk-test/bin").join(base_name(prog)));
@@ -1057,8 +1057,9 @@ pub(crate) fn detect_every_known() -> Vec<Found> {
 }
 
 // Where the login shell and its startup-file-free twin belong. Both arms compile
-// on both platforms - a `cfg` here would make Login/LoginNoRc look unconstructed
-// on Windows, and it is worth being able to read the whole rule from either box.
+// on both platforms, since a `cfg` here would make Login/LoginNoRc look
+// unconstructed on Windows, and it's worth being able to read the whole rule
+// from either box.
 fn login_groups(base: &str) -> ((Group, u32), (Group, u32)) {
 	if cfg!(unix) {
 		((Group::Login, 0), (Group::LoginNoRc, 0))
@@ -1116,7 +1117,7 @@ fn windows_fixed_shells(root: &Path) -> Vec<Found> {
 		(
 			r"System32\WindowsPowerShell\v1.0\powershell.exe",
 			"Windows PowerShell 5",
-			"the 5.1 shell that ships with Windows",
+			"the 5.1 shell that comes with Windows",
 			Group::WinPs5,
 		),
 		(r"System32\cmd.exe", "Windows Cmd", "", Group::Legacy),
@@ -1126,10 +1127,10 @@ fn windows_fixed_shells(root: &Path) -> Vec<Found> {
 			out.push(Found::new(title, launch(&quoted(&path), rel), comment).in_group(group, 0));
 		}
 	}
-	// Windows PowerShell 5.1 ships at a policy that refuses to run script
-	// files, so it loads no profile - which is why it cannot report where it
+	// Windows PowerShell 5.1 comes with a policy that refuses to run script
+	// files, so it loads no profile, which is why it can't report where it
 	// is (see integration.rs). This entry relaxes that for its own session
-	// only, nothing written anywhere. It arrives switched OFF because it is
+	// only, nothing written anywhere. It arrives switched off because it's
 	// a security setting: an alternative to reach for, not a default.
 	let ps51 = root.join(r"System32\WindowsPowerShell\v1.0\powershell.exe");
 	if ps51.is_file() {
@@ -1154,15 +1155,15 @@ fn platform_extras() -> Vec<Found> {
 	if let Ok(root) = std::env::var("SystemRoot") {
 		out.extend(windows_fixed_shells(Path::new(&root)));
 	}
-	// The POSIX environments each ship their own bash. They share a name and
-	// nothing else, so each is offered under the environment it belongs to - and
-	// they are named for it, since "Bash" alone would be three identical rows.
+	// The POSIX environments each come with their own bash. They share a name and
+	// nothing else, so each is offered under the environment it belongs to, and
+	// they're named for it, since "Bash" alone would be 3 identical rows.
 	//
 	// Git for Windows is the exception that has to be handled: it installs the
-	// same shell under two names (bin\bash.exe wraps usr\bin\bash.exe) and a
+	// same shell under 2 names (bin\bash.exe wraps usr\bin\bash.exe) and a
 	// 64-bit box reports one Program Files directory under more than one
 	// variable, so both spellings are real files and nothing downstream can tell
-	// they are one shell. Take the first hit and stop.
+	// they're one shell. Take the first hit and stop.
 	let git_bash = program_files()
 		.iter()
 		.flat_map(|base| [r"Git\bin\bash.exe", r"Git\usr\bin\bash.exe"].map(|rel| base.join(rel)))
@@ -1177,9 +1178,9 @@ fn platform_extras() -> Vec<Found> {
 			.in_group(Group::PosixEnv, 1),
 		);
 	}
-	// PyCmd ships as a zip that is extracted wherever the user likes, so it is
-	// normally nowhere near PATH - the table above finds it only for someone who
-	// put it there deliberately. Program Files is where it usually sits.
+	// PyCmd comes as a zip that is extracted wherever the user likes, so it's
+	// normally nowhere near PATH, and the table above finds it only for someone who
+	// put it there deliberately. Program Files is where it usually is.
 	let pycmd = program_files()
 		.iter()
 		.map(|base| base.join(r"PyCmd\PyCmd.exe"))
@@ -1206,11 +1207,11 @@ fn platform_extras() -> Vec<Found> {
 		}
 	}
 	// WSL distributions, read from the registry rather than by asking wsl.exe:
-	// a WSL2 distribution lives in a virtual disk, and listing them must not be
-	// the thing that boots the virtual machine. What is offered is the whole
-	// distribution, with no shell named - its own default runs, and the user can
+	// a WSL2 distribution is stored in a virtual disk, and listing them mustn't be
+	// what boots the virtual machine. What is offered is the whole
+	// distribution, with no shell named. Its own default runs, and the user can
 	// add flags to the entry if they want a particular one. The generation is
-	// part of the title because it is the whole difference between two rows that
+	// part of the title because it's the whole difference between 2 rows that
 	// would otherwise read identically, and it decides which sorts first.
 	for (name, wsl2) in wsl_distributions() {
 		let title = format!("WSL{}; {name}", if wsl2 { 2 } else { 1 });
@@ -1235,11 +1236,11 @@ fn program_files() -> Vec<PathBuf> {
 // Installed WSL distributions, by name, with whether each runs on WSL2. Nothing
 // is launched: the keys are written when a distribution is registered.
 //
-// The generation is bit 3 of the distribution's `Flags` value. Note the `Version`
-// value beside it is NOT it - that is the registration format's version, and it
+// The generation is bit 3 of the distribution's `Flags` value. The `Version`
+// value beside it isn't it. That's the registration format's version, and it
 // reads 2 for a WSL1 distribution as happily as for a WSL2 one (measured). A
-// distribution whose flags cannot be read is reported as WSL1, which is the
-// older behaviour and puts it lower in the list rather than claiming something
+// distribution whose flags can't be read is reported as WSL1, which is the
+// older behavior and puts it lower in the list rather than claiming something
 // about it that was never established.
 #[cfg(windows)]
 fn wsl_distributions() -> Vec<(String, bool)> {
@@ -1297,8 +1298,8 @@ fn wsl_distributions() -> Vec<(String, bool)> {
 		let mut kind = 0u32;
 		let mut buf = [0u16; 256];
 		let mut bytes = std::mem::size_of_val(&buf) as u32;
-		// SAFETY: `bytes` is the buffer's size in BYTES, which is what the
-		// registry wants here - unlike RegEnumKeyExW's count of characters.
+		// SAFETY: `bytes` is the buffer's size in bytes, which is what the
+		// registry wants here, unlike RegEnumKeyExW's count of characters.
 		let read = unsafe {
 			RegQueryValueExW(
 				distro,
@@ -1402,7 +1403,7 @@ mod tests {
 			!alias_is_install_prompt(&store_python),
 			"a Store Python runs"
 		);
-		// another kind of reparse point, or data cut short, is not a prompt
+		// another kind of reparse point, or data cut short, isn't a prompt
 		let mut symlink = prompt.clone();
 		symlink[..4].copy_from_slice(&0xA000_000Cu32.to_le_bytes());
 		assert!(!alias_is_install_prompt(&symlink));
@@ -1450,10 +1451,10 @@ mod tests {
 	}
 
 	// The whole offered order, in one assertion: this is what the Tabs menu looks
-	// like on a fresh install, so a group that moved - or one that quietly stopped
-	// sorting alphabetically - is a visible change and not an implementation
-	// detail. Elvish carries a LATER table position than YSH on purpose: inside an
-	// alphabetical group the title decides and the table position must not leak in.
+	// like on a fresh install, so a group that moved, or one that quietly stopped
+	// sorting alphabetically, is a visible change and not an implementation
+	// detail. Elvish has a later table position than YSH on purpose: inside an
+	// alphabetical group the title decides and the table position mustn't leak in.
 	// The tab strip asks this once per tab per frame, and each answer used to walk
 	// the stored list resolving every entry through the filesystem. A numeric gate
 	// rather than a stopwatch: repeats cost no searches at all.
@@ -1537,7 +1538,7 @@ mod tests {
 	}
 
 	// The top of the list is the default shell (config::default_shell_argv), so on
-	// unix nothing may sort above the user's own - and its startup-file-free twin
+	// unix nothing may sort above the user's own, and its startup-file-free twin
 	// has to stay directly under it rather than sorting off among the others.
 	// Test ID: dbjn9
 	#[test]
@@ -1603,7 +1604,7 @@ mod tests {
 		);
 	}
 
-	// The 5.1 that ships with Windows is found under the system root, and the
+	// The 5.1 that comes with Windows is found under the system root, and the
 	// entry that relaxes its execution policy arrives switched off.
 	// Test ID: dd5nj
 	#[test]
@@ -1645,8 +1646,8 @@ mod tests {
 	}
 
 	// The installer writes one start-menu shortcut per shell it finds, by the
-	// names and flags a scan would offer. Nothing else holds the two lists
-	// together.
+	// names and flags a scan would offer. Nothing else keeps the 2 lists in
+	// step.
 	// Test ID: dd5nk
 	#[test]
 	fn the_installer_offers_the_shells_a_windows_scan_would() {
@@ -1688,7 +1689,7 @@ mod tests {
 	}
 
 	// A curated group keeps its table order even when that disagrees with the
-	// alphabet - the three POSIX-environment bashes are one shell built three
+	// alphabet. The 3 POSIX-environment bashes are one shell built 3
 	// ways, and MSYS2's full one is the one to reach for first.
 	// Test ID: dbjna
 	#[test]
@@ -1705,12 +1706,12 @@ mod tests {
 	}
 
 	// The table is where each shell's place is declared, so the places the order
-	// names outright are worth holding to it.
+	// names outright are worth checking against it.
 	// Test ID: dbjnb
 	#[test]
 	fn the_table_puts_each_named_shell_where_the_order_says() {
 		if cfg!(unix) {
-			// no shell leads on merit here - the user's own does, whatever it is
+			// no shell leads on merit here; the user's own does, whatever it is
 			assert_eq!(known_group("pwsh").0, Group::Modern);
 			assert_eq!(known_group("nu").0, Group::Modern);
 			assert_eq!(known_group("bash").0, Group::Legacy);
@@ -1724,7 +1725,7 @@ mod tests {
 			assert_eq!(known_group("cmd").0, Group::Legacy);
 			assert_eq!(known_group("powershell").0, Group::WinPs5);
 		}
-		// anything the table does not name is an ordinary system shell
+		// anything the table doesn't name is an ordinary system shell
 		assert_eq!(known_group("some-new-shell").0, Group::Legacy);
 	}
 
@@ -1772,7 +1773,7 @@ mod tests {
 	}
 
 	// The lopsided half: a scan adds, and it switches off. It must never switch
-	// one back on - it cannot tell a returning program from a deliberate "no".
+	// one back on, since it can't tell a returning program from a deliberate "no".
 	// Test ID: dbeqd
 	#[test]
 	fn a_scan_never_switches_a_shell_back_on() {
@@ -1792,10 +1793,10 @@ mod tests {
 		assert_eq!(out.len(), 1, "the bare name resolves to the stored path");
 	}
 
-	// Adding a banner flag to the table must not add a SECOND PowerShell beside
+	// Adding a banner flag to the table mustn't add a second PowerShell beside
 	// everyone's stored one, so a flag that changes only how a shell looks is
-	// left out of what makes it that shell. The stored command is not rewritten
-	// either - a scan never touches one - so an existing entry keeps its banner
+	// left out of what makes it that shell. The stored command isn't rewritten
+	// either, since a scan never touches one, so an existing entry keeps its banner
 	// until the user says otherwise.
 	// Test ID: dbjbp
 	#[test]
@@ -1812,14 +1813,14 @@ mod tests {
 			out[0].command, "/opt/ps/pwsh",
 			"the stored command was rewritten"
 		);
-		// spelled either way round, and case does not matter
+		// spelled either way around, and case doesn't matter
 		let stored = vec![entry("pwsh", "/opt/ps/pwsh -nologo", true)];
 		let found = vec![Found::new("PowerShell 7", "/opt/ps/pwsh".into(), "")];
 		assert_eq!(
 			merged(&stored, &found, &installed(&["/opt/ps/pwsh"])).len(),
 			1
 		);
-		// and a flag that changes BEHAVIOUR still makes a separate entry
+		// and a flag that changes behavior still makes a separate entry
 		let stored = vec![entry("pwsh", "/opt/ps/pwsh -NoLogo", true)];
 		let found = vec![Found::new(
 			"relaxed",
@@ -1832,9 +1833,9 @@ mod tests {
 		);
 	}
 
-	// Something offered as an alternative to another entry arrives switched OFF:
+	// Something offered as an alternative to another entry arrives switched off:
 	// a list that grows a row is fine, one that grows a row the user has to
-	// notice and turn back off is not.
+	// notice and turn back off isn't.
 	// Test ID: dbjbq
 	#[test]
 	fn a_dormant_find_arrives_switched_off() {
@@ -1842,7 +1843,7 @@ mod tests {
 		let out = merged(&[], &found, &installed(&["/opt/ps/pwsh"]));
 		assert_eq!(out.len(), 1);
 		assert!(!out[0].active, "it should arrive switched off");
-		// ...and everything else still arrives switched on
+		// and everything else still arrives switched on
 		let found = vec![Found::new("Bash", "/bin/bash".into(), "")];
 		assert!(merged(&[], &found, &installed(&["/bin/bash"]))[0].active);
 	}
@@ -1861,7 +1862,7 @@ mod tests {
 
 	// The duplicate-shell bug this module had for months: /bin is a symlink to
 	// /usr/bin on most Linux distributions, /etc/shells lists both spellings, and
-	// the list came out with two of everything. Following the links is what fixes
+	// the list came out with 2 of everything. Following the links is what fixes
 	// it, so the test needs real ones on disk.
 	// Test ID: dbxgn
 	#[cfg(unix)]
@@ -1888,8 +1889,8 @@ mod tests {
 		let _ = std::fs::remove_dir_all(&dir);
 	}
 
-	// ...but a link is not always the shell it points at. /bin/sh is dash or bash
-	// on nearly every box, and it is a different shell from either: a shell reads
+	// But a link isn't always the shell it points at. /bin/sh is dash or bash
+	// on nearly every box, and it's a different shell from either: a shell reads
 	// the name it was started under and behaves differently under it.
 	// Test ID: dbxgp
 	#[cfg(unix)]
@@ -1912,7 +1913,7 @@ mod tests {
 		let _ = std::fs::remove_dir_all(&dir);
 	}
 
-	// The half that reaches a config someone already has. A scan only adds, so a
+	// The half that matters for a config someone already has. A scan only adds, so a
 	// list that grew duplicates before the rule above existed would keep them
 	// forever unless the merge can take one out.
 	// Test ID: dbxgq
@@ -1929,7 +1930,7 @@ mod tests {
 	}
 
 	// A row only goes when the row it duplicates is installed too. Otherwise an
-	// entry whose program is gone - which matches anything sharing its name -
+	// entry whose program is gone, which matches anything sharing its name,
 	// would take out the working shell below it.
 	// Test ID: dbxgr
 	#[test]
@@ -1948,7 +1949,7 @@ mod tests {
 		assert!(out[1].active);
 	}
 
-	// Three environments ship a program called bash and they are not the same
+	// There are 3 environments with a program called bash, and they aren't the same
 	// shell. Matching on the resolved path is what keeps them apart.
 	// Test ID: dbeqg
 	#[test]
@@ -1964,7 +1965,7 @@ mod tests {
 	}
 
 	// A shell that was uninstalled and put back must re-arm the entry it belongs
-	// to rather than sitting beside it as a second copy - which is what a strict
+	// to rather than sitting beside it as a second copy, which is what a strict
 	// path match would do, since the disabled entry resolves nowhere.
 	// Test ID: dbeqh
 	#[test]
@@ -1976,8 +1977,8 @@ mod tests {
 		assert_eq!(out.len(), 1, "no duplicate beside the disabled entry");
 	}
 
-	// Initial population IS the scan's order, and detect() leads with the login
-	// shell - which is what puts the user's own shell at the top, where the top
+	// The initial population is the scan's order, and detect() leads with the login
+	// shell, which is what puts the user's own shell at the top, where the top
 	// means "the default". Nothing may quietly sort or group the findings.
 	// Test ID: dbfs2
 	#[test]
@@ -2034,10 +2035,10 @@ mod tests {
 		assert!(out.is_empty());
 	}
 
-	// A table key is looked up under the name the CODE will have by then, which
-	// is a base name - lowercased on Windows, `.exe` stripped. A mixed-case key
+	// A table key is looked up under the name the code will have by then, which
+	// is a base name: lowercased on Windows, `.exe` stripped. A mixed-case key
 	// therefore can never be found, and the shell it names silently loses its
-	// friendly title. PyCmd shipped spelled "PyCmd" and did exactly that.
+	// friendly title. PyCmd went out spelled "PyCmd" and did exactly that.
 	// Test ID: dbg0w
 	#[test]
 	fn a_known_shell_can_be_found_under_its_own_name() {
@@ -2051,8 +2052,8 @@ mod tests {
 	}
 
 	// The identity `adopt_default_shell` needs: a bare name and the full path to
-	// the same file are one shell, and the question has to answer the same way
-	// round either way, because the resolves-nowhere fallback is one-sided.
+	// the same file are one shell, and the check has to come out the same
+	// either way around, because the resolves-nowhere fallback is one-sided.
 	// Test ID: dbg0x
 	#[test]
 	fn a_bare_name_and_its_full_path_are_one_shell() {
@@ -2070,7 +2071,7 @@ mod tests {
 		assert!(!same_command_with("ghost", "/opt/ps/pwsh", &real));
 	}
 
-	// The twin exists for the shell the user actually logs in with, so the flag
+	// The twin exists for the shell the user logs in with, so the flag
 	// has to be the right one per shell rather than bash's spelling for all.
 	// Test ID: dbeqn
 	#[test]
@@ -2079,15 +2080,15 @@ mod tests {
 		assert_eq!(no_startup_file("zsh").map(|f| f.0), Some("--no-rcs"));
 		assert_eq!(no_startup_file("pwsh").map(|f| f.0), Some("-NoProfile"));
 		assert_eq!(no_startup_file("dash"), None, "dash has no such flag");
-		// cmd.exe is deliberately not on the list. It is the Windows login shell
-		// (ComSpec), so it would get a twin on every Windows box - and an AutoRun
+		// cmd.exe is deliberately not on the list. It's the Windows login shell
+		// (ComSpec), so it would get a twin on every Windows box, and an AutoRun
 		// is rare enough that a second "Command Prompt" in everyone's Tabs menu
-		// costs more than it is worth.
+		// costs more than it's worth.
 		assert_eq!(no_startup_file("cmd"), None, "cmd.exe gets no twin");
 	}
 
 	// The stamp is what makes the "Active" column trustworthy: a shell switched
-	// off carries the date it was last there, so the switch is explicable.
+	// off has the date it was last there, so the switch is explicable.
 	// Test ID: dbfs4
 	#[test]
 	fn a_scan_dates_what_it_found_and_leaves_what_it_did_not() {
@@ -2111,7 +2112,7 @@ mod tests {
 		assert_eq!(out[0].last_seen, NOW);
 	}
 
-	// The epoch, a leap day, and a century that is not a leap year - the three
+	// The epoch, a leap day, and a century that isn't a leap year, the 3
 	// places the era arithmetic can go wrong.
 	// Test ID: dbfs6
 	#[test]
@@ -2174,9 +2175,9 @@ mod tests {
 	}
 
 	// The Mac case: Apple's bash in /bin and a newer one from Homebrew, found
-	// once on PATH and once in /etc/shells. Two versions, so each name says
-	// which, and only the two that share a name are asked.
-	// Unix only: it finds the newer bash on PATH, and the Windows table does not
+	// once on PATH and once in /etc/shells. There are 2 versions, so each name
+	// says which, and only the 2 that share a name are asked.
+	// Unix only: it finds the newer bash on PATH, and the Windows table doesn't
 	// look for bash there. ddkea runs the same merge on Windows.
 	// Test ID: ddg73
 	#[cfg(unix)]
@@ -2219,7 +2220,7 @@ mod tests {
 
 	// One version installed twice is one shell, offered at the shorter path. It
 	// keeps the place of the one found first, here the login shell's, so the
-	// default shell does not move, and its twin follows the path.
+	// default shell doesn't move, and its twin follows the path.
 	// Unix only, as is the next one: the login shell leads and gets its twin
 	// there, and Windows has no login shell (see `login_groups`).
 	// Test ID: ddg74
@@ -2242,7 +2243,7 @@ mod tests {
 		assert_eq!(titled(&found, "Bash").len(), 1);
 	}
 
-	// A login shell with its version in its name, and a shell that will not say
+	// A login shell with its version in its name, and a shell that won't say
 	// what version it is. The twin reads as its shell does, and the silent one
 	// keeps its name rather than being guessed at or dropped.
 	// Test ID: ddg75
@@ -2288,7 +2289,7 @@ mod tests {
 		.collect()
 	}
 
-	// The Windows case: two MSYS2 installs, both found under one name. No login
+	// The Windows case: 2 MSYS2 installs, both found under one name. No login
 	// shell and nothing found by bare name, so it runs the same on every box.
 	// Test ID: ddkea
 	#[test]
@@ -2324,8 +2325,8 @@ mod tests {
 	}
 
 	// A link and the file it points at are one shell, offered under the shorter
-	// path whichever of the two that is. Nothing is asked its version, since the
-	// two are already known to be one file.
+	// path whichever of the 2 that is. Nothing is asked its version, since the
+	// 2 are already known to be one file.
 	// Test ID: ddg76
 	#[cfg(unix)]
 	#[test]
@@ -2415,7 +2416,7 @@ mod tests {
 
 	// The probe reads what a program prints, and a program that never finishes
 	// is given up on at the limit, not waited for. Its child keeps the output
-	// open past that, which is the case that would hold the scan.
+	// open past that, which is the case that would stall the scan.
 	// Test ID: ddg78
 	#[cfg(unix)]
 	#[test]

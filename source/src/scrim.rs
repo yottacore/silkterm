@@ -4,31 +4,32 @@
 //! Text readability scrim: a background-colored halo behind glyphs so text stays
 //! legible over a light/busy background image or a near-transparent terminal. The
 //! scene's text is rendered to a coverage texture, turned into a halo by one of
-//! four functions, and composited UNDER the crisp text, colored per-pixel by a
-//! `bgcolor` map so a glyph's halo takes ITS cell's bg color (a glyph on a
+//! 4 functions, and composited under the crisp text, colored per-pixel by a
+//! `bgcolor` map so a glyph's halo takes its cell's bg color (a glyph on a
 //! one-off colored cell isn't smeared with the global bg color).
 //!
-//! Two passes build the halo in `halo_a` (the text layer stays crisp for the border). Gaussian
-//! (legacy, corners recede) is a separable sum-blur; the distance functions (dilate
-//! / sdf / dt) are a separable, bounded Euclidean/Chebyshev distance transform so
-//! corners stay full - pass a = per-column 1D distance, pass b = row combine. The
-//! composite maps the blurred coverage OR the distance (through a falloff curve) to
-//! the per-pixel bg color, plus a thin dilated outline of the crisp coverage.
+//! The halo is built in `halo_a` in 2 passes, and the text layer stays crisp for
+//! the border. Gaussian (legacy, corners recede) is a separable sum-blur. The
+//! distance functions (dilate / sdf / dt) are a separable, bounded
+//! Euclidean/Chebyshev distance transform so corners stay full: pass a is a
+//! per-column 1D distance, and pass b combines rows. The composite maps the
+//! blurred coverage or the distance (through a falloff curve) to the per-pixel bg
+//! color, plus a thin dilated outline of the crisp coverage.
 //!
-//! `text` <- crisp TEXT coverage; `cursor` <- crisp CURSOR coverage (kept apart so
-//! the cursor can join the halo and the outline independently, each by its own
-//! flag; the first pass folds the cursor in when `cursor_scrim`, the composite samples
-//! both to add the border when `cursor_outline`).
+//! `text` <- crisp text coverage, `cursor` <- crisp cursor coverage. They're kept
+//! apart so the cursor can join the halo and the outline independently, each by
+//! its own flag. The first pass folds the cursor in when `cursor_scrim`, and the
+//! composite samples both to add the border when `cursor_outline`.
 
 use crate::config::Choice;
 use crate::gfx::{RectInstance, RectRenderer};
 
 /// Each layer stores only what is read back from it. Only alpha of the text
-/// coverage is read, but glyphon writes the glyph's color too, so the text keeps
-/// four 8-bit channels, the precision the glyph atlas has anyway. The cursor
+/// coverage is read, but glyphon writes the glyph's color too, so the text has
+/// 4 channels of 8 bits, the precision the glyph atlas has anyway. The cursor
 /// quads are ours and draw white, so their coverage ends up in one red channel. The
-/// blur layers hold blurred coverage or a distance in px, which bands in 8 bits
-/// (see the reducing resources design doc). The color map holds opaque cell
+/// blur layers store blurred coverage or a distance in px, which bands in 8 bits
+/// (see the reducing resources design doc). The color map has opaque cell
 /// colors that came from sRGB bytes, so it stores them sRGB encoded and gives
 /// them back exactly. The encode is done here rather than by an sRGB format,
 /// because the GL path never turns sRGB writes on: an sRGB target there stores
@@ -64,7 +65,7 @@ struct CompU {
 	ramp: f32,      // falloff curve (distance path transfer)
 	radius: f32,    // distance path: halo extent in px (normalizes the distance)
 	strength: f32,  // doublings of the finished halo alpha, 0..5 (0 = as built)
-	// 0 = outline only: the blur did not run, so the halo texture is stale.
+	// 0 = outline only: the blur didn't run, so the halo texture is stale.
 	halo: f32,
 	// 1 = redraw each alpha off `curve` (`visibility::HaloMatch`). 0 leaves it as
 	// asked, which is all dark mode gets.
@@ -107,18 +108,19 @@ impl Layer {
 	}
 }
 
-// The layers sized together: the crisp ones by whether anything draws, the two
+// The layers sized together: the crisp ones by whether anything draws, the 2
 // blur layers by whether the halo does.
 struct Layers {
 	text: Layer,   // crisp text coverage (kept for the border pass)
 	halo_a: Layer, // the finished halo
 	halo_b: Layer, // the first pass's output
 	// crisp cursor coverage, separate from the text so cursor_scrim (halo) and
-	// cursor_outline (border) are independent toggles - folded into the halo by
-	// the blur and into the border by the composite, each gated by its own flag.
+	// cursor_outline (border) are independent toggles. The blur folds it into the
+	// halo and the composite into the border, each gated by its own flag.
 	cursor: Layer,
 	// per-pixel scrim color: cleared to the global bg, with per-cell bg rects drawn
-	// over it, so a glyph's halo takes ITS cell's bg color (not always the global).
+	// over it, so a glyph's halo takes its cell's bg color rather than always the
+	// global one.
 	bgcolor: Layer,
 }
 
@@ -144,9 +146,9 @@ pub struct Scrim {
 	dist_a_pipe: wgpu::RenderPipeline,
 	dist_b_pipe: wgpu::RenderPipeline,
 	blur_bgl: wgpu::BindGroupLayout,
-	// one uniform PER direction: all queue.write_buffer calls are applied before
-	// the command buffer runs, so a single shared buffer would give BOTH passes
-	// the last-written dir (-> vertical blur twice, no horizontal). Two buffers fix it.
+	// one uniform per direction: all queue.write_buffer calls are applied before
+	// the command buffer runs, so a single shared buffer would give both passes
+	// the last-written dir (-> vertical blur twice, no horizontal).
 	blur_u_h: wgpu::Buffer,
 	blur_u_v: wgpu::Buffer,
 	blur_t2b: wgpu::BindGroup, // sample text (uses blur_u_h), write halo_b
@@ -157,17 +159,17 @@ pub struct Scrim {
 	comp_bind: wgpu::BindGroup, // sample halo_a + bgcolor (rgb) + text (border)
 	bg_rects: RectRenderer,
 	// cursor quads drawn into the cursor layer. Separate renderer: bg_rects'
-	// instance buffer is uploaded for the bgcolor map in the SAME encoder, and a
-	// second upload would clobber the first (queue writes all arrive before the
-	// command buffer runs - same rule as the blur uniforms above).
+	// instance buffer is uploaded for the bgcolor map in the same encoder, and a
+	// second upload would clobber the first. Queue writes are all applied before
+	// the command buffer runs, the same as for the blur uniforms above.
 	cursor_rects: RectRenderer,
 	cursor_count: u32,
 	white_cursors: Vec<RectInstance>,
 	encoded_cells: Vec<RectInstance>,
-	// what is allocated, and what the surface actually is. With the scrim and the
-	// outline both off nothing here draws, so the layers are allocated at one
-	// pixel instead - and it falls hardest on the machines the Low and Standard
-	// profiles exist for. With the halo off, the two blur layers are too.
+	// what is allocated, and what the surface is. With the scrim and the outline
+	// both off nothing here draws, so the layers are allocated at one pixel
+	// instead. The cost falls hardest on the machines the Low and Standard
+	// profiles exist for. With the halo off, the 2 blur layers are too.
 	w: u32,
 	h: u32,
 	halo_size: (u32, u32),
@@ -182,7 +184,7 @@ impl std::fmt::Debug for Scrim {
 	}
 }
 
-/// What draws this frame, which decides what is worth allocating.
+/// What draws this frame, and so what's worth allocating.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Use {
 	Nothing,
@@ -231,7 +233,7 @@ impl Choice for Ramp {
 
 	// the older spellings still parse: "s" was renamed to "sigmoid" (which is
 	// what a smoothstep is), and the falloff's "gaussian" to "half_normal" so
-	// it stops reading like the gaussian BLUR the function list also offers.
+	// it stops reading like the gaussian blur the function list also offers.
 	fn parse(text: &str) -> Option<Self> {
 		let text = text.trim();
 		if text.eq_ignore_ascii_case("s") {
@@ -295,7 +297,7 @@ impl Function {
 }
 
 /// The widest halo the distance passes can measure. They tap at most `DIST_MAX`
-/// pixels, and the composite divides by the extent it is given - so an extent past
+/// pixels, and the composite divides by the extent it's given, so an extent past
 /// this made every pixel of every pane come out at full halo, a flat plate of
 /// background color. Both halves read the same number now.
 pub const EXT_MAX: f32 = 40.0;
@@ -305,7 +307,7 @@ pub fn clamp_ext(ext: f32) -> f32 {
 }
 
 // How big the crisp layers and the blur layers should be. One pixel for what
-// does not draw: at full screen each layer is many megabytes of VRAM.
+// doesn't draw: at full screen each layer is many megabytes of VRAM.
 fn alloc_size(what: Use, surface: (u32, u32)) -> ((u32, u32), (u32, u32)) {
 	match what {
 		Use::Nothing => ((1, 1), (1, 1)),
@@ -432,7 +434,7 @@ impl Scrim {
 		}
 	}
 
-	/// Answers whether anything was reallocated, which is the caller's cue that
+	/// Returns whether anything was reallocated, which is the caller's cue that
 	/// this frame's prepared set is stale.
 	pub fn set_use(&mut self, device: &wgpu::Device, what: Use) -> bool {
 		if what == self.use_ {
@@ -482,10 +484,10 @@ impl Scrim {
 	/// Build the per-pixel scrim-color map: clear to the global bg color, then draw
 	/// the per-cell bg rects (opaque) over it. A glyph's halo then takes its own
 	/// cell's bg color instead of always the global one. The alpha channel doubles
-	/// as an "own-bg" mask - cleared to 0, the opaque cell rects write 1, so the blur
-	/// can drop coverage from cells that already carry a solid bg (reverse video,
-	/// colored bg, selection): they have full contrast, so a halo there is only
-	/// artifact (nano's reverse header cast a jumping drop-shadow). See `fs_blur`.
+	/// as an "own-bg" mask. It's cleared to 0 and the opaque cell rects write 1, so
+	/// the blur can drop coverage from cells that already have a solid bg (reverse
+	/// video, colored bg, selection). They have full contrast, so a halo there is
+	/// only artifact (nano's reverse header cast a jumping drop-shadow). See `fs_blur`.
 	pub fn render_bgcolor(
 		&mut self,
 		device: &wgpu::Device,
@@ -575,15 +577,15 @@ impl Scrim {
 		}
 	}
 
-	/// Two separable passes producing the scrim in `halo_a`; the text layer keeps
+	/// Builds the scrim in `halo_a` in 2 separable passes; the text layer keeps
 	/// the crisp coverage for the border pass. `function` picks the path: gaussian
 	/// runs the legacy sum-blur (H text->halo_b, V halo_b->halo_a) shaped by
 	/// `ramp`; the distance paths (dilate / sdf / dt) run a separable
 	/// Euclidean/Chebyshev distance transform (pass a = per-column 1D distance,
 	/// pass b = row combine) into `halo_a`, bounded to `radius`. `sigma` = gaussian
 	/// blur sigma; `radius` = distance extent. `cursor` (0/1) folds the cursor
-	/// coverage in - only in the first pass (the second reads `halo_b`, which
-	/// already carries it, so its flag stays 0).
+	/// coverage in, only in the first pass. The second reads `halo_b`, which
+	/// already has it, so its flag stays 0.
 	pub fn blur(
 		&self,
 		queue: &wgpu::Queue,
@@ -911,7 +913,7 @@ fn vs(@builtin(vertex_index) i: u32) -> VsOut {
     return o;
 }
 
-// scalar pads (NOT vec3, which would force 16-byte alignment and mismatch the
+// scalar pads (not vec3, which would force 16-byte alignment and mismatch the
 // 48-byte Rust struct)
 struct BlurU { resolution: vec2<f32>, dir: vec2<f32>, sigma: f32, ramp: f32, cursor: f32, radius: f32, metric: f32, source: f32, _p1: f32, _p2: f32 };
 @group(0) @binding(0) var<uniform> bu: BlurU;
@@ -947,11 +949,11 @@ fn falloff(td: f32, ramp: f32) -> f32 {
 }
 
 // separable gaussian [ugly] blur; fixed 25 taps scaled by sigma so any radius is
-// ~3sigma-covered. Corners recede (a round kernel) - the distance paths fix that.
+// ~3sigma-covered. Corners recede (a round kernel), which the distance paths fix.
 //
 // Each tap is gated by `keep` = 1 - own-bg mask, so coverage sitting over a cell
 // with its own solid bg (reverse video, colored bg, selection) contributes to no
-// pixel's halo. Gating the SOURCE coverage (not the final pixel) is what stops a
+// pixel's halo. Gating the source coverage (not the final pixel) is what stops a
 // reverse-video header's glyphs from bleeding a halo below the bar - the artifact
 // that read as a drop-shadow jumping with the app-scroll slide.
 @fragment
@@ -979,7 +981,7 @@ fn fs_blur(in: VsOut) -> @location(0) vec4<f32> {
 
 // Distance transform, pass a: per-column 1D distance to the nearest coverage seed
 // within `radius`, scanning vertically. A seed is coverage (text + folded cursor)
-// that is NOT on an own-bg cell (same gating as fs_blur). Stored in .r; saturates
+// that isn't on an own-bg cell (same gating as fs_blur). Stored in .r; saturates
 // at radius (beyond it the halo is zero anyway, so no bigger value is needed).
 @fragment
 fn fs_dist_a(in: VsOut) -> @location(0) vec4<f32> {
@@ -999,7 +1001,7 @@ fn fs_dist_a(in: VsOut) -> @location(0) vec4<f32> {
 
 // Distance transform, pass b: combine the per-column distances horizontally into
 // the final 2D distance. `metric` picks euclidean (round, corners stay full) or
-// chebyshev (square growth - the dilation look). Bounded to `radius`.
+// chebyshev (square growth, the dilation look). Bounded to `radius`.
 @fragment
 fn fs_dist_b(in: VsOut) -> @location(0) vec4<f32> {
     let texel = 1.0 / bu.resolution;
@@ -1031,7 +1033,7 @@ fn srgb_decode(c: vec3<f32>) -> vec3<f32> {
     return select(pow((c + 0.055) / 1.055, vec3<f32>(2.4)), c / 12.92, c <= vec3<f32>(0.04045));
 }
 
-// Light mode's halo alpha, read off the twelve points visibility::halo_match
+// Light mode's halo alpha, read off the 12 points visibility::halo_match
 // solved for this picture, joined by straight lines. They are spaced by how far
 // dark mode's halo moves a picture rather than by alpha, which is where the
 // curve bends. The Rust side reads them the same way in HaloMatch::alpha.
@@ -1046,12 +1048,12 @@ fn matched_alpha(a: f32) -> f32 {
 
 // color the scrim coverage per-pixel by the local bg color; premultiplied.
 // border: dilate the crisp coverage by border_px (8 taps; linear sampling keeps
-// it antialiased) and take the union with the scrim - a solid bg-colored plate
-// hugging each glyph. The crisp text draws over its interior, so what remains
-// visible is the thin outline around the letterforms. Each border tap is gated by
-// the own-bg mask (bgtex.a) too, matching fs_blur, so an own-bg glyph casts no
-// outline (the blurred halo is already masked at its source). The cursor coverage
-// joins the outline source only when cu.cursor is 1.
+// it antialiased) and take the union with the scrim, which gives a solid
+// bg-colored plate around each glyph. The crisp text draws over its interior,
+// so what remains visible is the thin outline around the letterforms. Each
+// border tap is gated by the own-bg mask (bgtex.a) too, matching fs_blur, so
+// an own-bg glyph casts no outline (the blurred halo is already masked at its
+// source). The cursor coverage joins the outline source only when cu.cursor is 1.
 fn border_tap(uv: vec2<f32>) -> f32 {
     // the cursor's own coverage is only wanted when the cursor outline is on
     var cov = textureSample(ttex, gsamp, uv).a;
@@ -1078,15 +1080,15 @@ fn fs_comp(in: VsOut) -> @location(0) vec4<f32> {
     }
     // Strength: double the halo alpha cu.strength times over (0 = leave it as
     // built). Clamping after the multiply is what makes it read as bolder rather
-    // than merely brighter - the core saturates first and the solid part grows
-    // outward along the falloff, so the plate thickens instead of the edge moving.
-    // (No double quotes anywhere in here - the whole shader is one raw literal.)
+    // than brighter. The core saturates first and the solid part grows outward
+    // along the falloff, so the plate thickens instead of the edge moving.
+    // No double quotes anywhere in here, since the whole shader is one raw literal.
     ga = clamp(ga * exp2(cu.strength), 0.0, 1.0) * cu.halo;
     let rgb = srgb_decode(textureSample(bgtex, gsamp, in.uv).rgb);
     let texel = 1.0 / cu.resolution;
-    // Eight taps, three samples each. They were run on every pixel of every frame
-    // and multiplied by zero at the end; cu.border_px is uniform, so skipping
-    // them is a uniform branch.
+    // Each of the 8 taps takes 3 samples. They were run on every pixel of every
+    // frame and multiplied by zero at the end; cu.border_px is uniform, so
+    // skipping them is a uniform branch.
     var border = 0.0;
     if (cu.border_px > 0.001) {
         let r = max(cu.border_px, 0.0001);
@@ -1119,7 +1121,7 @@ mod tests {
 	use crate::config::Choice;
 
 	// The shader tells the curves apart by `ramp < N`, and each branch names its
-	// curve in a comment. Every curve's number has to land in its own branch.
+	// curve in a comment. Every curve's number has to fall in its own branch.
 	// Test ID: ddj81
 	#[test]
 	fn each_ramp_code_reaches_the_shader_branch_for_that_curve() {
@@ -1192,7 +1194,7 @@ mod tests {
 				assert_eq!(code >= harden, function == Function::Dt, "{function:?}");
 			}
 		}
-		// the shader cannot tell two paths with one number apart
+		// the shader can't tell 2 paths with one number apart
 		let codes: Vec<f32> = Function::ALL.iter().map(|f| f.code()).collect();
 		assert!(
 			codes
@@ -1202,8 +1204,8 @@ mod tests {
 	}
 
 	// The exponential arm's exponent, mirrored so the curve can be checked
-	// without a GPU. The shader owns the number and the test below holds the
-	// two against each other.
+	// without a GPU. The shader owns the number and the test below checks the
+	// 2 against each other.
 	const EXP_K: f32 = 6.0;
 
 	fn exp_falloff(t: f32) -> f32 {
@@ -1227,10 +1229,10 @@ mod tests {
 			+ pixels(halo) * 2 * texel(HALO_FMT)
 	}
 
-	// The scrim used to build its five full-screen textures whether or not it drew
+	// The scrim used to build its 5 full-screen textures whether or not it drew
 	// anything, and it falls hardest on the machines the Low and Standard profiles
 	// exist for.
-	// The outline's eight taps are three texture samples each, on every pixel of
+	// The outline's 8 taps are 3 texture samples each, on every pixel of
 	// every frame, and the result was multiplied by zero when the outline was off.
 	// Test ID: dcbep
 	#[test]
@@ -1256,7 +1258,7 @@ mod tests {
 
 	// Past the tap window the distance saturates while the composite kept dividing
 	// by the extent it was given, so every pixel came out at full halo - a flat
-	// plate of background color over every pane. The slider cannot reach it; the
+	// plate of background color over every pane. The slider can't reach it; the
 	// config file can.
 	// Test ID: dcbe6
 	#[test]
@@ -1266,7 +1268,7 @@ mod tests {
 			WGSL.contains(&format!("const DIST_MAX: i32 = {};", EXT_MAX as i32)),
 			"EXT_MAX and the shader's tap window have drifted apart"
 		);
-		// the shipped default, doubled: unchanged
+		// the default, doubled: unchanged
 		assert!((clamp_ext(5.0 * 2.0) - 10.0).abs() < f32::EPSILON);
 		// the slider's own ceiling, doubled: exactly the tap window
 		assert!((clamp_ext(20.0 * 2.0) - EXT_MAX).abs() < f32::EPSILON);
@@ -1288,7 +1290,7 @@ mod tests {
 		);
 		assert!((exp_falloff(0.0) - 1.0).abs() < 1e-6);
 		assert_eq!(exp_falloff(1.0), 0.0);
-		// a quarter of the way out it is already under a quarter, and halfway
+		// a quarter of the way out it's already under a quarter, and halfway
 		// out there is almost nothing left
 		assert!(exp_falloff(0.25) < 0.25, "{}", exp_falloff(0.25));
 		assert!(exp_falloff(0.5) < 0.1, "{}", exp_falloff(0.5));
@@ -1300,7 +1302,7 @@ mod tests {
 		}
 	}
 
-	// A shader edit that does not compile only shows up at pipeline creation, in
+	// A shader edit that doesn't compile only shows up at pipeline creation, in
 	// a window. This catches it here, with no GPU.
 	// Test ID: ddj1q
 	#[test]
@@ -1345,19 +1347,19 @@ mod tests {
 	fn nothing_drawing_costs_no_memory() {
 		let uhd = (3840, 2160);
 		assert_eq!(alloc_size(Use::Halo, uhd), (uhd, uhd));
-		// was: assert!(bytes(..) > 200 << 20, "the real cost") - the layers were
+		// was: assert!(bytes(..) > 200 << 20, "the real cost"). The layers were
 		// made smaller (2026100418225502), so the full set at 4K is about 100 MiB
 		assert!(bytes(Use::Halo, uhd) > 100 << 20, "the real cost");
 		assert!(
 			bytes(Use::Nothing, uhd) < 1 << 10,
 			"switched off it should cost nothing"
 		);
-		// the outline alone never runs the blur, so its two layers stay a pixel
+		// the outline alone never runs the blur, so its 2 layers stay a pixel
 		assert_eq!(alloc_size(Use::OutlineOnly, uhd), (uhd, (1, 1)));
 	}
 
-	// Five Rgba16Float layers were 40 bytes a pixel, 150 MiB of a 268 MiB window
-	// at 2560x1440. Each layer keeps only the channels and precision read back.
+	// The 5 Rgba16Float layers were 40 bytes a pixel, 150 MiB of a 268 MiB window
+	// at 2560x1440. Each layer stores only the channels and precision read back.
 	// Test ID: ddgy9
 	#[test]
 	fn the_scrim_costs_at_most_13_bytes_a_pixel() {

@@ -11,7 +11,7 @@
 
 	The check reads a marker variable rather than PATH. Windows leaves the user
 	PATH out of every new environment once the machine one is long enough, and
-	on b29w it is, so PATH could not show the difference there. The marker is
+	on b29w it is, so PATH couldn't show the difference there. The marker is
 	written straight to the registry the way the PATH is, so it shows whether
 	the shell rebuilt its copy after the install.
 .NOTES

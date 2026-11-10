@@ -94,11 +94,11 @@ if [[ -z "${WINGUI_RAN:-}" ]]; then WINGUI_RAN="$(mktemp)"; ownRan=1; fi
 # shellcheck source=cicd/tests/_testdir.bash
 source "${meDir}/../_testdir.bash"; fTestDir_Use
 
-##	The harness ships itself rather than coming from the remote clone, which is
+##	The harness sends itself rather than coming from the remote clone, which is
 ##	pinned to origin/dev - otherwise every edit here would need a push before it
 ##	could be run once.
 bundle="$(mktemp --suffix=.tgz)"
-##	Every script sent lands in the box's jobs folder under its own name, so each
+##	Every script sent goes in the box's jobs folder under its own name, so each
 ##	is named for this run, and the sweep takes them all by that name.
 runId="$(date +%Y%m%d%H%M%S)-$$"
 scripts="$(mktemp -d)"
@@ -344,7 +344,7 @@ fBox(){
 			if ! fRun "${box}" "${scenario}" | sed 's/^/  /'; then boxFailed=1; fi
 			echo "${scenario}" >>"${WINGUI_RAN}"
 		done
-		##	Shots are the whole point of a graphical test, so bring them home.
+		##	A graphical test is judged on its shots, so fetch them.
 		if ((! keep)); then
 			mkdir -p "${shotDir}"
 			"${winRemote}" --host "${box}" --optional pull "${runDir}\\out\\shots" "${shotDir}" >/dev/null 2>&1 || true

@@ -2,8 +2,8 @@
 
 ##	- Purpose:
 ##		The scroll harness once printed OK and exited zero after running no scenes
-##		at all, and stayed that way through a release. This holds its exit code to
-##		what actually happened, and the trace checks to what they are there to
+##		at all, and stayed that way through a release. This checks its exit code against
+##		what happened, and the trace checks against what they are there to
 ##		catch. Nothing here needs a display.
 ##	- Test ID: dcbdt
 ##	- History: At bottom of file.
@@ -102,7 +102,7 @@ fAnalyze "a note does not excuse an ease left running" 1 still "0 0 0.5 0
 0 0 0.4 1" --note "${noteDir}/gaveup.note"
 rm -f "${noteDir}/gaveup.note"; rmdir "${noteDir}"
 
-## frame counts, for a trace with frames, one with none and no trace at all
+## frame counts, for a trace with frames, one with none, and no trace at all
 fCount(){
 	local -r what="${1}" want="${2}" file="${3}"
 	local got

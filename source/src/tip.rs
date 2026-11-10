@@ -20,7 +20,7 @@ use crate::pane::Rect;
 /// would read as a different kind of thing.
 pub const DELAY: Duration = Duration::from_millis(600);
 
-// The box itself, DIP (see `config::dip`). One set for every tip the two dialogs
+// The box itself, DIP (see `config::dip`). One set for every tip the 2 dialogs
 // draw: a box that sat closer to its control in one window than in the other
 // would read as a different kind of thing, the same argument as the delay.
 pub const PAD_X: f32 = 8.0;
@@ -220,7 +220,7 @@ impl<T> Default for Dwell<T> {
 
 impl<T: Copy + PartialEq> Dwell<T> {
 	/// Point at something, or at nothing. The clock runs on while the target is
-	/// unchanged, and restarts when it is not. True means the caller has to
+	/// unchanged, and restarts when it isn't. True means the caller has to
 	/// redraw: a tip that was up is now pointing somewhere else, or at nothing.
 	pub fn point_at(&mut self, target: Option<T>) -> bool {
 		match (target, &self.over) {
@@ -245,7 +245,7 @@ impl<T: Copy + PartialEq> Dwell<T> {
 		(Instant::now().duration_since(*since) >= DELAY).then_some(*target)
 	}
 
-	/// `ripe`, for a tip that should not stay up forever. After `limit` it goes
+	/// `ripe`, for a tip that shouldn't stay up forever. After `limit` it goes
 	/// down, and stays down until the pointer leaves and comes back, since only
 	/// a new target restarts the clock. A zero limit never takes it down.
 	pub fn ripe_for(&self, limit: Duration) -> Option<T> {
@@ -277,7 +277,7 @@ mod tests {
 		Rect { x, y, w, h }
 	}
 
-	// Six pixels a character is enough to make the arithmetic obvious.
+	// A width of 6 pixels a character is enough to make the arithmetic obvious.
 	fn measure(s: &str) -> f32 {
 		s.chars().count() as f32 * 6.0
 	}
@@ -330,7 +330,7 @@ mod tests {
 		);
 	}
 
-	// A tip that cannot fit below what it describes flips above it, rather than
+	// A tip that can't fit below what it describes flips above it, rather than
 	// clamping into the bottom edge and covering it.
 	// Test ID: dbzek
 	#[test]

@@ -2,7 +2,7 @@
 
 ##	- Purpose:
 ##		Launches the real program on the private display with the built-in
-##		wallpaper, and reads what it holds through SILK_MEMDBG. The picture is
+##		wallpaper, and reads what it keeps through SILK_MEMDBG. The picture is
 ##		held at the size the window draws it at, not the image's own size, and
 ##		a resize prepares it again once the resizing stops.
 ##			- At launch, at the window's size.

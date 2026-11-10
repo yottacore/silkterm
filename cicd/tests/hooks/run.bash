@@ -42,7 +42,7 @@ git -C "${repo}" config user.email "hooks@example.invalid"
 git -C "${repo}" config core.hooksPath "${hooks}"
 cp "${root}/rustfmt.toml" "${repo}/rustfmt.toml" 2>/dev/null || true
 
-## Two functions, so one change can be staged and the other left behind. Both are
+## There are 2 functions, so one change can be staged and the other left behind. Both are
 ## written badly enough that rustfmt has something to do.
 cat > "${repo}/a.rs" <<'EOF'
 fn one() -> i32 {
@@ -87,7 +87,7 @@ fCheck "the committed hunk was formatted" \
 	bash -c 'printf "%s\n" "$1" | grep -Fxq "fn one() -> i32 {"' _ "${committed}"
 
 ## A file whose changes are all staged still gets its working copy formatted, so
-## the tree does not read as dirty the moment the commit lands.
+## the tree doesn't read as dirty the moment the commit is made.
 cat > "${repo}/b.rs" <<'EOF'
 fn three( ) -> i32 {
       3
@@ -142,7 +142,7 @@ printf 'good\n' > "${clone}/verdict"   # the fix, left uncommitted
 fCheck "a push is refused for a commit that fails, whatever the tree holds" \
 	bash -c '! git -C "$1" push -q origin main 2>/dev/null' _ "${clone}"
 
-## A fresh version, so this case does not depend on whether the one above pushed.
+## A fresh version, so this case doesn't depend on whether the one above pushed.
 printf 'version = "9.0.1"\n' > "${clone}/source/Cargo.toml"
 printf '[![Release](Release-9.0.1-blue)]\n' > "${clone}/README.md"
 git -C "${clone}" add -A
@@ -247,7 +247,7 @@ echo "  hooks: ok"
 ##		20260917  Created for code review 20260914 items 48 and 51 (F80, F83): the
 ##		          pre-commit formatter staged a partly staged file whole, and the
 ##		          pre-push gate read the working tree rather than the commit.
-##		20260918  A file with mod lines, which the formatter could not commit.
-##		20260926  The release guard: badge, lower or equal version, pre-releases.
+##		20260918  A file with mod lines, which the formatter couldn't commit.
+##		20260926  The release guard: badge, lower or equal version, and pre-releases.
 ##		20261028  The merge gate, and docs going to main without it or the version
 ##		          guard. Every file a build or test reads stays gated.

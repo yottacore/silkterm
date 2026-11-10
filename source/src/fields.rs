@@ -15,12 +15,12 @@ use std::sync::{Arc, OnceLock};
 pub struct Field {
 	pub key: Key,
 	get: fn(&Settings) -> Value,
-	// false when the value is not one the field takes
+	// false when the value isn't one the field takes
 	put: fn(&mut Settings, &Value) -> bool,
 }
 
 // A float the way the file writes it, so 0.95 comes back as 0.95 and a
-// preset's 41.0 equals a slider that landed on 41.
+// preset's 41.0 equals a slider that stopped at 41.
 fn float(x: f32) -> Value {
 	Value::Float((f64::from(x) * 1000.0).round() / 1000.0)
 }
@@ -123,7 +123,7 @@ macro_rules! line {
 
 use config::limits;
 
-/// Every setting knobs keeps, in no order that matters.
+/// Every setting knobs stores, in no order that matters.
 #[rustfmt::skip]
 pub static FIELDS: &[Field] = &[
 	flag!(PerfAuto, performance_automatic),
@@ -254,7 +254,7 @@ pub fn get(settings: &Settings, key: Key) -> Option<Value> {
 	field(key).map(|f| (f.get)(settings))
 }
 
-/// A value set by hand, or held for the run, rather than the default.
+/// A value set by hand, or set for the run, rather than the default.
 pub fn by_hand(settings: &Settings, key: Key) -> bool {
 	let values = &settings.model.values;
 	values.own.contains_key(key.name()) || values.held.contains_key(key.name())
@@ -274,7 +274,7 @@ pub const THEME_KEYS: [Key; 10] = [
 	Key::ColGutter,
 ];
 
-/// The font rows a saved theme keeps, in the order `theme::ThemeFont` has them.
+/// The font rows a saved theme has, in the order `theme::ThemeFont` has them.
 pub const THEME_FONT_KEYS: [Key; 3] = [Key::FontFamily, Key::FontSize, Key::LineHeight];
 
 /// The knobs id of the profile and the theme.
@@ -438,7 +438,7 @@ fn normal(key: Key, v: &Value, scratch: &mut Settings) -> Option<Value> {
 /// empty is no value where a rule or a switch has one to give.
 pub fn load(config: &shcl::Document) -> knobs::Model {
 	let mut m = knobs::Model::load_docs(Arc::clone(spec()), config, &shcl::Document::new());
-	// "none" was how a file said no blink before `cursor.blink`. It is no
+	// "none" was how a file said no blink before `cursor.blink`. It's no
 	// animation, so the model never takes it in.
 	let animation = spec()
 		.get(Key::CursorAnimation.name())
@@ -503,7 +503,7 @@ pub fn load(config: &shcl::Document) -> knobs::Model {
 	m
 }
 
-/// What the program answers for a rule, and the themes as presets.
+/// What the program gives for a rule, and the themes as presets.
 #[derive(Debug)]
 pub struct Env<'a> {
 	settings: &'a Settings,
@@ -514,7 +514,7 @@ pub struct Env<'a> {
 }
 
 impl<'a> Env<'a> {
-	/// Settings fields knobs keeps are read off the model, since `settings`
+	/// Settings fields knobs stores are read off the model, since `settings`
 	/// may not be filled from it yet.
 	pub fn new(settings: &'a Settings, monitor: Option<&'a str>) -> Env<'a> {
 		let plain = |key: Key| settings.model.value(key.name(), &knobs::NoEnv);
@@ -684,7 +684,7 @@ pub fn reset(settings: &mut Settings, key: Key, monitor: Option<&str>) {
 	}
 }
 
-// The font a saved theme keeps, as the rows' values. A built-in has none.
+// The font a saved theme has, as the rows' values. A built-in has none.
 fn theme_font(settings: &Settings, name: &str) -> Vec<(Key, Value)> {
 	let Some(theme) = crate::theme::find_user(&settings.user_themes, name) else {
 		return Vec::new();

@@ -53,7 +53,7 @@ function fCheck { param([string]$What, [bool]$Ok)
 	if ($Ok) { Write-Host "  ok   $What" } else { Write-Host "  FAIL $What"; $script:failures++ }
 }
 
-##	Run logs: 35 from earlier runs, named by time, among files that are not run
+##	Run logs: 35 from earlier runs, named by time, among files that aren't run
 ##	logs. The newest 29 stay, so with the new one there are 30.
 $logs = Join-Path $Work 'logs'
 New-Item -ItemType Directory -Path $logs -Force | Out-Null
@@ -227,7 +227,7 @@ fCheck 'and what they held goes to what the cleanup line says it freed' ($script
 fCheck 'with no ledger, nothing' ((fOldLedger $oldLedger) -eq 0)
 
 ##	The run's one cleanup line, as cicd.bash prints it: each kind with its count,
-##	or just named, and about what it freed.
+##	or only named, and about what it freed.
 $script:notes.Clear()
 $script:CleanupKinds = [ordered]@{}
 $script:CleanupDue = $false
@@ -502,7 +502,7 @@ exit 0
 ##		- 20261028: The steps, the ones turned off, and each step's lines.
 ##		- 20261028: The PASS and FAIL lines of a test script.
 ##		- 20261101: The run folder goes in the project's folder, and HOST_TEMP is unset for it.
-##		- 20261101: The run's folder, its end, the stale sweep and the old ledger.
+##		- 20261101: The run's folder, its end, the stale sweep, and the old ledger.
 ##		- 20261101: The one cleanup line at the end.
 ##		- 20261104: The parts' off options: what stage 3 runs, the plan, -List,
 ##		  -NoRelease and -NoCleanup, and what the Linux half gets.

@@ -19,9 +19,9 @@ use crate::term::UserEvent;
 
 pub const ENV_SOCK: &str = "SILKTERM_SOCKET";
 
-/// Holds the endpoint and the marker other windows find it by, so both go
-/// away with the process. The drop only covers a clean return from main, so
-/// `remove_on_any_exit` covers the socket for the rest, and a marker left
+/// Owns the endpoint and the marker other windows find it by, so both go
+/// away with the process. The drop only handles a clean return from main, so
+/// `remove_on_any_exit` handles the socket for the rest, and a marker left
 /// behind is cleared by the next save that finds nobody answering.
 #[derive(Debug)]
 pub struct CtlServer {
@@ -50,7 +50,7 @@ pub fn endpoint(pid: u32) -> PathBuf {
 }
 
 // Other windows on this settings file find this one through its marker, left
-// once the endpoint answers.
+// once the endpoint accepts connections.
 fn join_peers() -> Option<crate::peers::Marker> {
 	let dir = crate::peers::meeting_dir(crate::peers::own_key()?)?;
 	crate::peers::join(&dir, std::process::id())
@@ -79,7 +79,7 @@ fn respond(
 	let Some(reply) = handle(line.trim_end()) else {
 		return false;
 	};
-	// a window telling of a save does not wait for this
+	// a window telling of a save doesn't wait for this
 	let _ = reader
 		.into_inner()
 		.write_all(format!("{reply}\n").as_bytes());
@@ -88,7 +88,7 @@ fn respond(
 
 /// Bind the socket, export `SILKTERM_SOCKET`, and serve commands on a background
 /// thread. Call before any PTY spawns so shells inherit the variable. Failure is
-/// non-fatal (the app just isn't remotely controllable).
+/// non-fatal (the app then isn't remotely controllable).
 #[cfg(unix)]
 pub fn serve(proxy: EventLoopProxy<UserEvent>) -> Option<CtlServer> {
 	let path = endpoint(std::process::id());
@@ -214,7 +214,7 @@ mod pipe {
 	}
 
 	/// One served connection. Its reply is flushed before the drop
-	/// disconnects, since a disconnect throws away what the client has not read.
+	/// disconnects, since a disconnect throws away what the client hasn't read.
 	#[derive(Debug)]
 	pub(super) struct Served(pub(super) OwnedHandle);
 
@@ -245,7 +245,7 @@ mod pipe {
 	}
 }
 
-// The path as C text, leaked, so a signal handler can reach it with nothing but
+// The path as C text, leaked, so a signal handler can read it with nothing but
 // an atomic load.
 #[cfg(unix)]
 static SOCK_C_PATH: std::sync::atomic::AtomicPtr<libc::c_char> =
@@ -273,7 +273,7 @@ extern "C" fn unlink_and_die(signal: libc::c_int) {
 }
 
 // A window that ended any other way than a clean return left its socket file:
-// `process::exit` when the first shell or the window could not start, SIGTERM or
+// `process::exit` when the first shell or the window couldn't start, SIGTERM or
 // SIGHUP, and a panic, which a release build turns into an abort. exit() runs
 // atexit handlers, an abort runs only the panic hook, and a signal runs neither.
 #[cfg(unix)]
@@ -324,7 +324,7 @@ fn parse(line: &str, own_key: Option<&str>) -> anyhow::Result<UserEvent> {
 	}
 }
 
-/// Hand one line to process `pid` and do not wait for the answer.
+/// Hand one line to process `pid` and don't wait for the answer.
 pub fn poke(pid: u32, line: &str) -> Told {
 	poke_at(&endpoint(pid), line)
 }
@@ -458,11 +458,12 @@ mod tests {
 		assert!(parse("saved\tabc", None).is_err());
 	}
 
-	// What a save sends reaches a listening window, a socket nobody listens on
-	// any more reads as gone, and a command from a shell gets its reply. Driven in a child copy of this test binary
-	// (`poke_child` below) started inside the folder, which binds and pokes by
-	// bare name: a full path under the run folder can pass the limit on a Unix
-	// socket path, 103 bytes on a Mac and 107 on Linux.
+	// What a save sends gets to a listening window, a socket nobody listens on any
+	// more reads as gone, and a command from a shell gets its reply. Driven in a
+	// child copy of this test binary (`poke_child` below) started inside the
+	// folder, which binds and pokes by bare name: a full path under the run folder
+	// can pass the limit on a Unix socket path, 103 bytes on a Mac and 107 on
+	// Linux.
 	// Test ID: ddwnc
 	#[cfg(unix)]
 	#[test]
@@ -623,7 +624,7 @@ mod tests {
 			Some("sighup") => unsafe {
 				libc::raise(libc::SIGHUP);
 			},
-			// a panic that cannot unwind aborts, as every panic does in a release
+			// a panic that can't unwind aborts, as every panic does in a release
 			// build, and nothing but the panic hook runs
 			Some("abort") => no_unwind(),
 			_ => {}

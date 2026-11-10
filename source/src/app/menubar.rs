@@ -12,7 +12,7 @@ use crate::pane::{CopyKind, Rect};
 use crate::term::PaneId;
 use crate::text::TextCtx;
 
-/// macOS has no in-window menu bar, since the system menu bar carries the same
+/// macOS has no in-window menu bar, since the system menu bar has the same
 /// menus and a second bar would break the Mac's own menu contract. `--hide-menu`
 /// is accepted there and does nothing. Elsewhere it outranks the saved setting.
 pub(super) fn menu_bar_at_launch(hide_menu: Option<bool>, saved: bool, mac: bool) -> bool {
@@ -66,7 +66,7 @@ struct CopyMetrics {
 
 /// Where menu-bar buffer `i` is drawn: (left, clip left, clip right, top). The
 /// titles come first, then the right-aligned copy-mode labels, and at a narrow
-/// width some of those are not there at all.
+/// width some of those aren't there at all.
 ///
 /// Everything on this bar sits on ONE baseline. The copy labels used to center
 /// their full ink box, which reads better on its own but left them half a
@@ -89,7 +89,7 @@ pub(super) fn menubar_text_slot(
 }
 
 // The widest arrangement that still clears `titles_right`, or None when even the
-// bare boxes cannot. Ordered widest first: whole thing, then without the lead-in,
+// bare boxes can't. Ordered widest first: whole thing, then without the lead-in,
 // then boxes alone.
 fn copybox_fit(m: &CopyMetrics, titles_right: f32) -> Option<CopyBoxes> {
 	[[true; 3], [false, true, true], [false; 3]]
@@ -173,7 +173,7 @@ impl State {
 	/// The "Copy on [ ] select [ ] output" pair on the right of the menu bar. The
 	/// user has to be able to see when the focused pane is auto-copying, so the
 	/// cluster sheds parts rather than shrinking: the lead-in goes first, then the
-	/// two words, and only when even the boxes cannot clear the menu titles does
+	/// 2 words, and only when even the boxes can't clear the menu titles does
 	/// the whole thing go (None). Overlapping text says less about the copy state
 	/// than a clean absence does. It comes back on its own as the window widens.
 	/// `label_x/label_w` index-match `COPYBOX_LABELS`.
@@ -210,7 +210,7 @@ impl State {
 		None
 	}
 
-	/// Flip one of a pane's two auto-copy triggers. The two are independent and can
+	/// Flip one of a pane's 2 auto-copy triggers. The 2 are independent and can
 	/// both be on; nothing else is touched (other panes/tabs/windows keep theirs -
 	/// only the focused pane of the active tab actually copies, gated at copy time).
 	/// A toggle from a context menu on an unfocused pane focuses it so the menu-bar
@@ -279,10 +279,9 @@ mod tests {
 		let _ = std::fs::remove_dir_all(&dir);
 	}
 
-	// The chrome shares a coordinate space with the terminal grid, so nothing
 	// A narrow window used to draw "Copy on:" straight over "Panes" and "Help" -
 	// both there, neither readable. The cluster sheds parts instead, and the
-	// checkboxes are the last thing to go because they carry the state.
+	// checkboxes are the last thing to go because they show the state.
 	// Test ID: dbsya
 	#[test]
 	fn the_copy_cluster_sheds_parts_before_it_reaches_the_menu_titles() {
@@ -307,8 +306,8 @@ mod tests {
 		assert_eq!(shown_at(330.0), None, "and then the cluster itself");
 	}
 
-	// A word that is not drawn cannot be aimed at, so the box has to answer for
-	// itself - otherwise the narrow arrangement has a dead checkbox.
+	// A word that isn't drawn can't be aimed at, so the box has to take the
+	// click itself, or the narrow arrangement has a dead checkbox.
 	// Test ID: dbsyb
 	#[test]
 	fn a_checkbox_with_no_word_is_still_clickable() {
@@ -367,7 +366,7 @@ mod tests {
 
 	// The titles and the copy labels beside them are one row of text, so they
 	// sit on one baseline. The labels once centered their whole ink box instead
-	// and rode half a descent higher.
+	// and sat half a descent higher.
 	// Test ID: dd5qp
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
@@ -392,7 +391,7 @@ mod tests {
 		for label in 0..3 {
 			assert_eq!(top(layout.len() + label), Some(title), "copy label {label}");
 		}
-		// a label with no room is not drawn at all
+		// a label with no room isn't drawn at all
 		let narrow = CopyBoxes {
 			shown: [false, true, true],
 			..cb

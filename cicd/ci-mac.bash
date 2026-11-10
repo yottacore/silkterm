@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 ##	- Purpose:
-##		Build, lint and test on a Mac, using nothing specific to a git host. A hosted
+##		Build, lint, and test on a Mac, using nothing specific to a git host. A hosted
 ##		runner calls this, and so can anyone on a Mac by hand. It runs every step
 ##		and reports them all, so one failure doesn't hide the next.
 ##			- What the Mac is: architecture, macOS version, and the graphics
@@ -108,7 +108,7 @@ fTest(){
 ## fFailedNames <log>: each failed test once. With --nocapture a test's own
 ## output can split "test <name> ..." from its FAILED, so the names come from
 ## the list each binary ends with. Only its last "failures:" block counts, since
-## the one before it holds captured output.
+## the one before it has captured output.
 fFailedNames(){
 	awk '/^failures:$/{list=""; on=1; next}
 		on && /^    [^ ]/{sub(/^    /, ""); list=list $0 "\n"; next}
@@ -153,7 +153,7 @@ fSkips(){
 }
 
 ## A timing test prints what it measured as "measured: ...", pass or fail, so
-## each run shows how close to its limit this machine sits.
+## each run shows how close to its limit this machine is.
 fMeasured(){
 	grep -o 'measured:.*' "${logDir}/test.log" 2>/dev/null | head -n 20
 	return 0

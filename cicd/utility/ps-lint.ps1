@@ -10,7 +10,7 @@
 	Runs PSScriptAnalyzer at warning level with the rules in
 	cicd/PSScriptAnalyzerSettings.psd1, then checks what it has no rule for:
 	indentation is tabs, the file is ASCII with no byte-order mark, no
-	PowerShell command takes three or more arguments by position, and no common
+	PowerShell command takes 3 or more arguments by position, and no common
 	parameter goes by its alias (-EA and the like).
 	One line per finding. cicd.bash gates on it, and cicd-win.ps1 runs it as
 	advice.
@@ -19,7 +19,7 @@
 .EXAMPLE
 	pwsh -File cicd/utility/ps-lint.ps1 install.ps1
 .NOTES
-	Exit: 0 clean, 1 findings, 2 PSScriptAnalyzer is not installed.
+	Exit: 0 clean, 1 findings, 2 PSScriptAnalyzer isn't installed.
 	History: At bottom of file.
 #>
 

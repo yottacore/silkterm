@@ -2,9 +2,9 @@
 // Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
 
 //! The shells grid spans the whole content width rather than starting at the
-//! control column: there is no label beside it, and the command it holds is the
+//! control column: there is no label beside it, and the command in it is the
 //! one value in the dialog that is routinely too long to read. Columns are laid
-//! out from BOTH ends - the fixed ones from the right, the name from the left -
+//! out from both ends - the fixed ones from the right, the name from the left -
 //! and the command takes whatever is left between them, so a wider panel widens
 //! the column that needs it.
 
@@ -17,15 +17,15 @@ use crate::gfx::{QuadMode, RectInstance};
 use crate::pane::Rect;
 use crate::ui_spec::Kind;
 
-// The two column titles whose columns are sized to fit them, and what the date
-// column shows for a shell no scan has seen. `chrome_widths` measures all three.
+// The 2 column titles whose columns are sized to fit them, and what the date
+// column shows for a shell no scan has seen. `chrome_widths` measures all 3.
 pub(super) const SEEN_TITLE: &str = "Last seen";
 pub(super) const ACTIVE_TITLE: &str = "Active";
 pub(super) const NEVER_SEEN: &str = "never";
 
 /// The fixed columns' widths and the gap between columns, in DIP, at one UI line
 /// height. Both the panel's floor and the columns themselves read this, so the
-/// two cannot disagree. The name and the gap grow with the font the way a label
+/// 2 can't disagree. The name and the gap grow with the font the way a label
 /// gap does; the date and Active columns are measured, and Active is never
 /// narrower than its checkbox.
 #[derive(Debug)]
@@ -53,9 +53,9 @@ impl ShellWidths {
 /// its line. `Add` is the single stop past the last entry, so a grid of `n`
 /// entries has `n * ShellPart::COUNT + 1` stops.
 ///
-/// The grip is deliberately NOT one of them. Reordering is a mouse gesture now,
+/// The grip is deliberately not one of them. Reordering is a mouse gesture now,
 /// so a Tab through the grid walks the values and nothing else; there is no stop
-/// that draws a control the keyboard cannot work.
+/// that draws a control the keyboard can't work.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub(super) enum ShellPart {
 	Name,
@@ -78,7 +78,7 @@ impl ShellPart {
 }
 
 /// Left edge of every column on a shells line, plus the width of the one column
-/// that is not fixed. The fixed columns are placed from BOTH ends and the command
+/// that isn't fixed. The fixed columns are placed from both ends and the command
 /// takes whatever is left between them, so a wider panel widens the one value
 /// that is routinely too long to read.
 #[derive(Debug)]
@@ -99,7 +99,7 @@ pub(super) struct ShellCols {
 #[derive(Debug)]
 pub(super) struct ShellDrag {
 	pub(super) at: usize,
-	/// where inside the line the pointer took hold, so it does not jump on grab
+	/// where inside the line the pointer took hold, so it doesn't jump on grab
 	pub(super) grab_dy: f32,
 }
 
@@ -154,7 +154,7 @@ impl SettingsDialog {
 		}
 	}
 
-	// Dropping an entry is the one grid action that cannot be undone by doing the
+	// Dropping an entry is the one grid action that can't be undone by doing the
 	// opposite, so it asks - the same box the theme delete uses.
 	fn shell_confirm_remove(&mut self, shell_index: usize) {
 		let Some(entry) = self.edited.shells.get(shell_index) else {
@@ -178,7 +178,7 @@ impl SettingsDialog {
 	/// has changed nothing still has nothing changed - the same reasoning that
 	/// keeps the list out of an ordinary Apply diff. Anything they have already
 	/// done to the list (a rename, a reorder, a removal) is what the merge folds
-	/// INTO, so none of it is undone; a scan only ever appends and switches off.
+	/// into, so none of it is undone; a scan only ever appends and switches off.
 	pub fn fold_shells(&mut self, found: &[crate::shells::Found]) {
 		self.orig.shells = crate::shells::merge(&self.orig.shells, found);
 		self.edited.shells = crate::shells::merge(&self.edited.shells, found);
@@ -208,7 +208,7 @@ impl SettingsDialog {
 		ShellWidths::at(self.line_h, self.seen_w, self.active_w)
 	}
 
-	// The two icon columns follow the UI font the way the checkboxes do, so a
+	// The 2 icon columns follow the UI font the way the checkboxes do, so a
 	// bigger desktop font gets a bigger grab handle rather than a fiddlier one.
 	fn shell_grip_w(&self) -> f32 {
 		lay().shell_grip * self.ui_scale()
@@ -220,7 +220,7 @@ impl SettingsDialog {
 
 	/// x of each column's left edge, plus the command column's width. Remove sits
 	/// between the command and the read-only date rather than at the end of the
-	/// line: it is the one control here that doing the opposite cannot undo, so
+	/// line: it is the one control here that doing the opposite can't undo, so
 	/// it is deliberately kept off the right-hand edge the pointer travels down.
 	pub(super) fn shell_cols(&self) -> ShellCols {
 		let l = lay();
@@ -339,7 +339,7 @@ impl SettingsDialog {
 	}
 
 	/// Move one entry to another place in the list - the whole point of the grip.
-	/// The list IS the order the Tabs menu offers, and its first switched-on line
+	/// The list is the order the Tabs menu offers, and its first switched-on line
 	/// is the default shell, so a reorder is a real edit and not a view setting.
 	pub(super) fn shell_move_to(&mut self, from: usize, to: usize) {
 		let last = self.edited.shells.len().saturating_sub(1);
@@ -352,8 +352,8 @@ impl SettingsDialog {
 	}
 
 	/// Where a pointer at `y` wants the dragged line to sit. Measured from the
-	/// line's own TOP - the pointer keeps whatever offset inside the grip it took
-	/// hold at - and rounded, so an entry changes place once it has travelled half
+	/// line's own top - the pointer keeps whatever offset inside the grip it took
+	/// hold at - and rounded, so an entry changes place once it has traveled half
 	/// a line rather than a whole one.
 	///
 	/// Both ends are clamped and neither needs a branch: a float-to-integer `as`
@@ -398,7 +398,7 @@ impl SettingsDialog {
 		y: f32,
 		measure: &mut impl FnMut(&str) -> f32,
 	) -> bool {
-		// The grip first, and outside the part walk: it is not a keyboard stop,
+		// The grip first, and outside the part walk: it isn't a keyboard stop,
 		// so there is no part index that names it.
 		for shell_index in 0..self.edited.shells.len() {
 			if self.shell_grip_box(i, shell_index).contains(x, y) {
@@ -468,10 +468,10 @@ impl SettingsDialog {
 		None
 	}
 
-	/// The grid's own quads: the two field boxes and the checkbox per entry, the
-	/// five icon buttons, and the Add button. The arrows are shader-drawn (mode 3
+	/// The grid's own quads: the 2 field boxes and the checkbox per entry, the
+	/// 5 icon buttons, and the Add button. The arrows are shader-drawn (mode 3
 	/// with a quarter-turn) for the same reason the tab close mark is - no
-	/// interface font can be relied on to carry one, and a glyph's own metrics
+	/// interface font can be relied on to have one, and a glyph's own metrics
 	/// decide where it goes.
 	pub(super) fn shell_rects(
 		&self,
@@ -534,7 +534,7 @@ impl SettingsDialog {
 					colors.handle,
 				));
 			}
-			// The grip: three stacked bars, the shape every reorderable list uses.
+			// The grip: 3 stacked bars, the shape every reorderable list uses.
 			// No box and no border around it - it is a texture to grab, not a
 			// button to press, and drawing it as one would invite a click that
 			// does nothing. Plain quads, so it costs no shader mode at all.
@@ -588,8 +588,8 @@ mod tests {
 	use crate::gfx::QuadMode;
 	use crate::ui_spec::Kind;
 
-	// The shells grid is one spec row carrying two editable fields per entry, and
-	// the right-click handler walked spec rows - so those two were the only fields
+	// The shells grid is one spec row with 2 editable fields per entry, and
+	// the right-click handler walked spec rows - so those 2 were the only fields
 	// in the dialog with no menu, while the Menu key worked on them.
 	// Test ID: dcbek
 	#[test]
@@ -604,7 +604,7 @@ mod tests {
 			.expect("the shells grid");
 		d.tab = d.specs[i].tab;
 		// its own entry: the live config decides what is in the list otherwise,
-		// and another test can be holding a config override while this runs
+		// and another test can have a config override in place while this runs
 		d.edited.shells = vec![crate::shells::ShellEntry {
 			slug: "bash".into(),
 			title: "Bash".into(),
@@ -684,7 +684,7 @@ mod tests {
 	}
 
 	// Reordering left the keyboard when the arrows did, so the grip must not be a
-	// stop - a ring sitting on a control that Space cannot work is worse than no
+	// stop - a ring sitting on a control that Space can't work is worse than no
 	// ring at all. Nothing in the grid is grayed any more either.
 	// Test ID: dbg0s
 	#[test]
@@ -710,7 +710,7 @@ mod tests {
 
 	// The grip's whole job. Dragging is live - the list reorders under the
 	// pointer rather than on release - so each step of the gesture is asserted,
-	// not just where it ended up.
+	// not only where it ended up.
 	// Test ID: dbg0t
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
@@ -727,7 +727,7 @@ mod tests {
 			d.shell_mouse_down(i, x, y, &mut measure),
 			"the grip did not take the press"
 		);
-		// less than half a line is not yet a move
+		// less than half a line isn't yet a move
 		d.mouse_move_dip(x, y + line * 0.4, &mut measure);
 		assert_eq!(titles(&d), ["Shell 0", "Shell 1", "Shell 2"]);
 		// past half, it swaps with the line below
@@ -748,7 +748,7 @@ mod tests {
 
 	// Dragged the other way, and off the top: the first line is as far as it
 	// goes. The arithmetic is in f32 and ends on a usize, so this is the test
-	// that says the saturating cast is being RELIED on rather than tolerated.
+	// that says the saturating cast is being relied on rather than tolerated.
 	// Test ID: dbg0v
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
@@ -765,7 +765,7 @@ mod tests {
 		d.mouse_up_dip(x, y);
 	}
 
-	// The command is REQUIRED: emptying the field cannot be what stores an entry
+	// The command is required: emptying the field can't be what stores an entry
 	// that names nothing to run. The stored value stands and the box shows it
 	// again, which is the whole rule at the field.
 	// Test ID: dbfrw
@@ -781,14 +781,14 @@ mod tests {
 			d.edited.shells[1].command, "/bin/sh1",
 			"an emptied field leaves the stored command standing"
 		);
-		// a real value does apply, so the guard is not simply inert
+		// a real value does apply, so the guard isn't inert
 		d.insert_str("/usr/bin/fish");
 		assert_eq!(d.edited.shells[1].command, "/usr/bin/fish");
 		assert_eq!(d.edited.shells[0].command, "/bin/sh0", "and only that one");
 	}
 
 	// A name edit applies to the entry it was opened for, not on the row index -
-	// the two are different numbers here, which is the whole point of the
+	// the 2 are different numbers here, which is the whole point of the
 	// pseudo-row scheme.
 	// Test ID: dbfrx
 	#[test]
@@ -826,7 +826,7 @@ mod tests {
 		);
 	}
 
-	// Removing is the one grid action doing the opposite cannot undo, so it asks
+	// Removing is the one grid action doing the opposite can't undo, so it asks
 	// first - and asking must not remove anything by itself.
 	// Test ID: dbfrz
 	#[test]
@@ -889,10 +889,10 @@ mod tests {
 		}
 	}
 
-	// The look of the two changed columns, asserted in the quads themselves,
+	// The look of the 2 changed columns, asserted in the quads themselves,
 	// because the geometry tests above pass just as happily on a grid that draws
-	// the old arrows. Three things: the grip is three bars and not a button, the
-	// remove mark is drawn in the danger colour and not the text colour, and no
+	// the old arrows. There are 3 checks: the grip is 3 bars and not a button, the
+	// remove mark is drawn in the danger color and not the text color, and no
 	// arrow survives anywhere in the grid.
 	// Test ID: dbg14
 	#[test]
@@ -905,7 +905,7 @@ mod tests {
 		let danger = super::super::config::srgb_f32(super::super::dlg().danger);
 		let dim = super::super::config::srgb_f32(super::super::dlg().dim);
 
-		// the X: one per line, in the danger colour, inside the remove box
+		// the X: one per line, in the danger color, inside the remove box
 		let marks: Vec<_> = rows
 			.iter()
 			.filter(|r| r.mode() == QuadMode::CloseMark)
@@ -914,7 +914,7 @@ mod tests {
 		for (k, mark) in marks.iter().enumerate() {
 			assert_eq!(
 				mark.color, danger,
-				"the remove mark is not the danger colour"
+				"the remove mark is not the danger color"
 			);
 			assert_ne!(
 				mark.color,
@@ -925,7 +925,7 @@ mod tests {
 			assert!((mark.pos[0] - box_r.x).abs() < 0.01, "mark off its own box");
 		}
 
-		// the grip: three bars of one width, stacked inside the grip column
+		// the grip: 3 bars of one width, stacked inside the grip column
 		for k in 0..2 {
 			let grip = d.shell_grip_box(i, k);
 			let bars: Vec<_> = rows
@@ -962,7 +962,7 @@ mod tests {
 
 	// The draw path has no other cover, and it is where a new control kind fails
 	// silently: a grid that renders nothing at all still passes every geometry
-	// test above. So this walks what would actually be handed to the renderer.
+	// test above. So this walks what would be handed to the renderer.
 	// Test ID: dbfs7
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
@@ -1011,7 +1011,7 @@ mod tests {
 		);
 	}
 
-	// An entry being edited shows the BUFFER, not the stored value - the field
+	// An entry being edited shows the buffer, not the stored value - the field
 	// would otherwise look inert while it is typed into.
 	// Test ID: dbfs8
 	#[test]
@@ -1028,7 +1028,7 @@ mod tests {
 		assert!(said.contains(&"Shell 0"), "and the other line is untouched");
 	}
 
-	// A scan that arrives while the dialog is open moves BOTH copies, so it does not
+	// A scan that arrives while the dialog is open moves both copies, so it doesn't
 	// read as an edit the user made - and it folds into what they have already
 	// done rather than replacing it.
 	// Test ID: dbfs1

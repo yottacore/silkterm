@@ -35,7 +35,7 @@
 ##		the window did may save a size.
 ##	- Syntax: run.bash [--bin PATH]   (default: the debug build, then release)
 ##	- Exit: 0 passed, 1 a check failed, 3 nothing ran (no binary, sway,
-##	  wtype, python3 or software Vulkan).
+##	  wtype, python3, or software Vulkan).
 ##	- Test ID: ddy98
 ##	- History: At bottom of file.
 

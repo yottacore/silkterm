@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 
 ##	- Purpose:
-##		win-remote.bash reaches the Windows boxes over ssh. A box can answer on
+##		win-remote.bash connects to the Windows boxes over ssh. A box can answer on
 ##		one of several addresses, and one that is off is the normal case, so the
 ##		runner has to try each address, step over a box that is down, and fail
-##		only when nothing answers and the caller did not say that was fine. Run
+##		only when nothing answers and the caller didn't say that was fine. Run
 ##		against a stand-in ssh and scp on PATH and a host list of its own.
 ##	- Test ID: dd5nr
 ##	- History: At bottom of file.
@@ -27,7 +27,7 @@ trap 'rc=$?; fTestDir_Rm "${work}" || true; fTestDir_End "${rc}"' EXIT
 
 ## An ssh that answers for every address not listed in STUB_DOWN, and notes each
 ## command it was given; an scp that does the same for its target. Neither ever
-## reaches the network.
+## touches the network.
 stubs="${work}/stubs"
 mkdir -p "${stubs}"
 cat >"${stubs}/ssh" <<'STUB'
@@ -49,7 +49,7 @@ exit 0
 STUB
 chmod +x "${stubs}/ssh" "${stubs}/scp"
 
-## Two boxes, the first on two addresses, the way the laptop is on wired or wifi.
+## There are 2 boxes, the first on 2 addresses, the way the laptop is on wired or wifi.
 conf="${work}/winrig.conf"
 printf '# a comment\nboxa 192.0.2.10,192.0.2.11\nboxb 192.0.2.20\n' >"${conf}"
 printf 'Write-Output hi\n' >"${work}/job.ps1"

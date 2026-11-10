@@ -4,7 +4,7 @@
 
 ##	Purpose:
 ##		Render the two browsable views of the shipped wallpaper pack.
-##		  1. The README contact sheet: every image centre-cropped to one tile size and
+##		  1. The README contact sheet: every image center-cropped to one tile size and
 ##		     tiled into a single JPEG, so the README costs one request, not one per image.
 ##		  2. The Pages gallery under docs/: a thumbnail grid whose tiles open the full
 ##		     image in place, with prev/next paging. Full images are NOT copied - the
@@ -40,7 +40,7 @@
 set -Eeuo pipefail
 
 meDir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-repoDir="${meDir}/../.."                      ## this script lives in cicd/utility
+repoDir="${meDir}/../.."                      ## this script is in cicd/utility
 #  shellcheck source=cicd/utility/include/saferm.bash
 source "${meDir}/include/saferm.bash"
 src="${repoDir}/filesystem/home/.config/silkterm/wallpaper"
@@ -83,12 +83,12 @@ declare -i thumbW="${thumb%%x*}" thumbH="${thumb##*x}"
 ((thumbW > 0 && thumbH > 0))           || fSkip "bad --thumb: ${thumb}"
 if ((doPage)) && [[ ! -r "${template}" ]]; then fSkip "no page template: ${template}"; fi
 
-##	ffmpeg on Windows is a native binary and cannot read an MSYS path, so hand it a
+##	ffmpeg on Windows is a native binary and can't read an MSYS path, so hand it a
 ##	native one where cygpath exists. A no-op everywhere else.
 fNativePath() { if command -v cygpath >/dev/null; then cygpath -w "${1}"; else printf '%s' "${1}"; fi; }
 
-##	One image, filled and centre-cropped to a fixed box. The pack's own XMP anchors
-##	are all 50%,50%, so a centre crop is what each image asks for anyway.
+##	One image, filled and center-cropped to a fixed box. The pack's own XMP anchors
+##	are all 50%,50%, so a center crop is what each image asks for anyway.
 fCrop() {
 	local -r from="${1}" to="${2}"; local -ri w="${3}" h="${4}" q="${5}"
 	ffmpeg -y -v error -i "$(fNativePath "${from}")" \
@@ -108,9 +108,9 @@ declare -i count="${#images[@]}"
 declare -i rows=$(( (count + cols - 1) / cols ))
 
 ##	Both views are rendered from one list in one run, so the page's records say
-##	what the sheet holds too. The sheet itself can only be checked by its size:
-##	a row count that does not fit the pack is a stale sheet, though a change
-##	within one row is not caught.
+##	what the sheet contains too. The sheet itself can only be checked by its size:
+##	a row count that doesn't fit the pack is a stale sheet, though a change
+##	within one row isn't caught.
 if ((doCheck)); then
 	page="${docs}/wallpapers/index.html"
 	[[ -r "${page}" ]] || { echo "wallpaper-gallery: no gallery page at ${page}" >&2; exit 1; }
@@ -172,8 +172,8 @@ if ((doSheet)); then
 	done
 	fEcho "Rendered ${i} sheet tiles"
 
-	##	The last row is short whenever the count does not divide evenly; those cells
-	##	come out as the padding colour.
+	##	The last row is short whenever the count doesn't divide evenly; those cells
+	##	come out as the padding color.
 	ffmpeg -y -v error -framerate 1 -i "$(fNativePath "${tmpDir}")/%03d.jpg" \
 		-filter_complex "tile=${cols}x${rows}:margin=6:padding=6:color=#14141a" \
 		-frames:v 1 -q:v "${quality}" "$(fNativePath "${out}")"
@@ -199,7 +199,7 @@ if ((doPage)); then
 
 	##	Provenance, joined on the file name. The table's columns are, in order:
 	##	confidence, stars, file name, original name, original date, source URL,
-	##	copyright, licence - and a leading empty field, since the row starts with '|'.
+	##	copyright, license - and a leading empty field, since the row starts with '|'.
 	if [[ -r "${attrib}" ]]; then
 		awk -F'|' 'NF>=14 && $4 ~ /\.(jpg|jpeg|png)[[:space:]\r]*$/ {
 			n=$4; u=$7; c=$8; l=$9
@@ -219,7 +219,7 @@ if ((doPage)); then
 	printf '%s\n' "${images[@]}" | sed 's:.*/::' > "${tmpDir}/names.txt"
 
 	##	One JSON record per image: file name, title, slug (which is what a permalink
-	##	names, so it survives the pack being reordered), credit, licence, source URL.
+	##	names, so it survives the pack being reordered), credit, license, source URL.
 	##	Only " and \ need escaping; the text travels as UTF-8 either way. An image
 	##	with no attribution row is REPORTED - that is how the table goes stale.
 	awk -F'\t' '

@@ -151,7 +151,7 @@ fPress "ctrl+win+left"
 Start-Sleep -Seconds 3
 fStep "back, window cloaked: $(fCloaked $h)"
 [void](fGrab "vd-back")
-##	The extra desktop goes again: over to it and close it, which lands back here.
+##	The extra desktop goes again: over to it and close it, which ends up back here.
 fPress "ctrl+win+right"
 Start-Sleep -Seconds 1
 fPress "ctrl+win+f4"

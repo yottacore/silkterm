@@ -7,7 +7,7 @@
 .DESCRIPTION
 	Git's bin\bash.exe starts the real bash as its child and waits, so the
 	pane's own process never moved and the title kept the folder the pane
-	started in. Skipped where Git for Windows is not installed.
+	started in. Skipped where Git for Windows isn't installed.
 .NOTES
 	History: At bottom of file.
 #>
@@ -32,7 +32,7 @@ New-Item -ItemType Directory -Force -Path $start | Out-Null
 foreach ($prompt in @("false", "true")) {
 	$cfg = Join-Path $OutDir "gbtitle-$prompt.shcl"
 	fFreshConfig $cfg @("shell:", "`tbash_prompt: $prompt")
-	##	One string, so the quoted program path reaches --shell as the shell list writes it.
+	##	One string, so the quoted program path is passed to --shell as the shell list writes it.
 	$line = "--config=`"$cfg`" --columns 100 --rows 30 --directory `"$start`" --shell `"\`"$gitBash\`"`""
 	$p = fStartSilk -Exe $Exe -SilkArgs @($line) -EnvVars @{}
 	$h = fWaitWindow $p 40

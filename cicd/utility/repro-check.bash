@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 ##	- Purpose:
-##		Build one commit twice, from two clones in different folders, the way
+##		Build one commit twice, from 2 clones in different folders, the way
 ##		cicd.bash builds a release, and compare the binaries. The same commit has
 ##		to give the same bytes wherever it is built, or a published checksum
 ##		says nothing about the source it names.
@@ -9,7 +9,7 @@
 ##		The commit defaults to HEAD, and the target to this box's own. A target is
 ##		built with the command config.bash gives it, zigbuild for the ARM ones.
 ##		--keep leaves both clones under target/ to look into.
-##	- Exit: 0 the two are identical, 1 they differ, 2 usage or a failed build.
+##	- Exit: 0 both are identical, 1 they differ, 2 usage or a failed build.
 ##	- History: At bottom of file.
 
 ##	Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
@@ -60,8 +60,8 @@ work="$(mktemp -d "${tgt}/repro.XXXXXX")"
 fCleanup(){ if ((keep)); then echo "kept: ${work}"; else fSafeRm_Under "${tgt}" "${work}"; fi; }
 trap fCleanup EXIT
 
-## Two folders of different depth and length, so a path that leaks in shows as a
-## difference rather than cancelling out.
+## The 2 folders differ in depth and length, so a path that leaks in shows as a
+## difference rather than canceling out.
 sides=("${work}/a" "${work}/second/checkout-b")
 fJobs_LowPriority; fJobs
 

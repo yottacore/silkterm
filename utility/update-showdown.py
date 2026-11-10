@@ -5,29 +5,29 @@
 ##		that feeds it, because the parts are easy to run inconsistently: they measure
 ##		different things, at different grid sizes, on different displays.
 ##
-##		Two ways in:
+##		There are 2 ways in:
 ##
-##		THIS TERMINAL, any OS. Measures whatever terminal you are sitting in - speed,
+##		THIS TERMINAL, any OS. Measures whatever terminal you're sitting in - speed,
 ##		then size and memory - and writes its row. Needs nothing but Python 3 and a
-##		tty, so it is the only way to measure the terminals that exist solely on
+##		tty, so it's the only way to measure the terminals that exist solely on
 ##		Windows or macOS. This is what you get if you name no terminal. Size the window
 ##		to 100x30 first, or the size half will refuse; pass --label with the table's
 ##		row name, or it will measure but not write.
 ##
 ##		THE RIGS, Linux only. Bring up a display, launch a named terminal into it, fit
-##		it to a fixed grid, measure, tear down. Two of them:
+##		it to a fixed grid, measure, tear down. There are 2:
 ##
 ##		  speed  include/termbench-run.bash   160x42, headless sway on the real GPU
 ##		  size   include/sizebench-run.bash   100x30, private Xvfb
 ##
-##		The grids differ deliberately and must not be unified: the speed figure wants a
+##		The grids differ on purpose and mustn't be unified: the speed figure wants a
 ##		realistic working grid, while memory scales with the surface, so the size rows
 ##		are taken small and identical. The same SilkTerm binary reads 38 MiB heavier at
 ##		its default geometry than at 100x30.
 ##
-##		Nothing is published unless it is comparable. Re-measure a terminal already in
+##		Nothing is published unless it's comparable. Re-measure a terminal already in
 ##		the table before adding a new one: the rig reproduced SilkTerm's speed within
-##		0.6% and its memory within 1.3%, and a figure taken any other way does not
+##		0.6% and its memory within 1.3%, and a figure taken any other way doesn't
 ##		belong beside the existing rows. Figures from a second machine are a separate
 ##		question again - see include/showdown-readme.md on calibrating one.
 ##
@@ -78,10 +78,10 @@ TERMS = [
 
 LETTERBOX = "-" * 78
 
-#	The grids the two halves of the table are measured at. They differ on purpose - speed
-#	wants a realistic working grid, memory has to be pinned small and identical - so one
-#	window cannot serve both, and measuring at the wrong one quietly produces a figure that
-#	does not belong in the column.
+#	The grids the 2 halves of the table are measured at. They differ on purpose. Speed
+#	wants a realistic working grid, and memory has to be pinned small and identical, so one
+#	window can't do both, and measuring at the wrong one quietly produces a figure that
+#	doesn't belong in the column.
 SPEED_GRID = (160, 42)
 SIZE_GRID = (100, 30)
 
@@ -134,7 +134,7 @@ def run_plain(cmd: list[str]) -> bool:
 	try:
 		return subprocess.call(cmd) == 0
 	except OSError as err:
-		echo(f"WARNING: could not run {Path(cmd[0]).name}: {err}")
+		echo(f"WARNING: couldn't run {Path(cmd[0]).name}: {err}")
 		return False
 
 
@@ -148,7 +148,7 @@ def run_capturing(cmd: list[str]) -> list[str]:
 		proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
 		                        text=True, bufsize=1)
 	except OSError as err:
-		echo(f"WARNING: could not run {Path(cmd[0]).name}: {err}")
+		echo(f"WARNING: couldn't run {Path(cmd[0]).name}: {err}")
 		return []
 	lines = []
 	#	Leaving the block closes the pipe and waits for the child.
@@ -179,7 +179,7 @@ def speed_grid_ok(any_size: bool) -> bool:
 	"""The throughput tool measures whatever window it is given, so check here.
 
 	The rig fits every terminal to the same grid before measuring; on this path there is no
-	rig to do it, and a run at another size records a figure that looks fine and is not
+	rig to do it, and a run at another size records a figure that looks fine but isn't
 	comparable with the rows beside it.
 	"""
 	got = terminal_grid()
@@ -188,7 +188,7 @@ def speed_grid_ok(any_size: bool) -> bool:
 	shown = f"{got[0]}x{got[1]}" if got else "unknown"
 	msg = f"speed rows are measured at {SPEED_GRID[0]}x{SPEED_GRID[1]} and this window is {shown}"
 	if any_size:
-		echo(f"WARNING: {msg} - the figure will not be comparable")
+		echo(f"WARNING: {msg} - the figure won't be comparable")
 		return True
 	echo(f"SKIPPED: {msg} - resize and run again")
 	return False
@@ -228,7 +228,7 @@ def write_size_row(row: str, file_deps: float, mem: float) -> bool:
 	                   "--doc", str(TABLE_DOC), "--terminal", row,
 	                   "--file-deps", f"{file_deps:.1f}", "--mem", f"{mem:.1f}"])
 	if not wrote:
-		echo(f"WARNING: could not write the {row} row")
+		echo(f"WARNING: couldn't write the {row} row")
 	return wrote
 
 
@@ -265,7 +265,7 @@ def measure_speed(key: str, row: str, reps: int, write_readme: bool) -> None:
 
 
 def measure_size(key: str, row: str, write_readme: bool) -> tuple[float, float] | None:
-	"""File+deps and Mem in MiB, or None if the rig could not say."""
+	"""File+deps and Mem in MiB, or None if the rig couldn't say."""
 	got = read_result(run_capturing(
 		[str(INCLUDE / "sizebench-run.bash"), "--term", key]))
 	if not got:
@@ -328,7 +328,7 @@ def main(argv: list[str]) -> int:
 
 	keys = [k for k, _, _ in TERMS] if args.all else list(args.term)
 	if args.here and keys:
-		die("--here measures the terminal you are in, so it takes no --term")
+		die("--here measures the terminal you're in, so it takes no --term")
 
 	write_readme = not args.no_readme
 
@@ -338,7 +338,7 @@ def main(argv: list[str]) -> int:
 		do_speed = not args.size_only
 		do_size = not args.speed_only
 
-		#	One window cannot be both grids, so asking for both means doing whichever this
+		#	One window can't be both grids, so asking for both means doing whichever this
 		#	window is already set up for rather than silently taking one of them wrong.
 		if do_speed and do_size and not args.any_size:
 			got = terminal_grid()
@@ -357,7 +357,7 @@ def main(argv: list[str]) -> int:
 		ok = True
 		if do_speed:
 			if args.quick:
-				echo("NOTE: a quick run is aggregated separately and never reaches the table")
+				echo("NOTE: a quick run is aggregated separately and never goes in the table")
 			section("Speed: this terminal")
 			ok = speed_grid_ok(args.any_size) and measure_here(
 				args.reps, args.quick, args.label, write_readme, publish)
@@ -368,7 +368,7 @@ def main(argv: list[str]) -> int:
 		if publish and ok:
 			echo(f"{TABLE_DOC.name} updated - check the diff before committing")
 		elif write_readme and not publish:
-			echo(f"{TABLE_DOC.name} not touched - a {'quick' if args.quick else '--any-size'} run is not comparable with the table")
+			echo(f"{TABLE_DOC.name} not touched - a {'quick' if args.quick else '--any-size'} run isn't comparable with the table")
 		else:
 			echo("nothing written")
 		echo_clean()

@@ -5,7 +5,7 @@
 ##		would quietly delete old ones, so this fills a scratch folder with two
 ##		years of dated files, rotates it at a fixed time, and checks what is left:
 ##		the first file, the newest few, and the last file of each recent hour,
-##		day, week and month, about thirty in all, and nothing else touched.
+##		day, week, and month, about 30 in all, and nothing else touched.
 ##	- Test ID: dd5nq
 ##	- History: At bottom of file.
 
@@ -33,8 +33,8 @@ export TZ=UTC
 export GFS_NOW
 GFS_NOW="$(date -d '2026-09-26 12:30:00' +%s)"
 
-## 200 runs: 80 over the last three days, about an hour apart, and 120 spread
-## over the two years before that.
+## 200 runs: 80 over the last 3 days, about an hour apart, and 120 spread
+## over the 2 years before that.
 dir="${work}/logs"
 mkdir -p "${dir}"
 declare -a stamps=()
@@ -43,7 +43,7 @@ for ((i = 0; i < 120; i++)); do stamps+=("$(date -d "@$((GFS_NOW - 3 * 86400 - i
 for s in "${stamps[@]}"; do : >"${dir}/run_${s}.log"; done
 printf '%s\n' "${stamps[@]}" >"${work}/stamps.txt"
 
-## Neighbours the rotation must leave alone: another prefix, another extension,
+## Neighbors the rotation must leave alone: another prefix, another extension,
 ## and a name with no date at all.
 echo a >"${dir}/flame_20250101-000000.svg"
 echo b >"${dir}/run_20250101-000000.txt"

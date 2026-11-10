@@ -4,7 +4,7 @@
 
 ##	Purpose:
 ##		- The memory cap a pipeline step runs under, so one that runs away is
-##		  killed alone and the desktop is not. Source this.
+##		  killed alone and the desktop isn't. Source this.
 ##		- CICD_MEM_CAP sets it: a docker size such as 24g, or none for no cap.
 ##		  Anything else stops the run before it starts anything. The default is
 ##		  a third of RAM, from 4g to 32g, or a step's own when it has one.
@@ -14,7 +14,7 @@
 ##		- fMemCap_Scope <script> [args]...: runs the script again in a systemd
 ##		  user scope with the cap, no swap, and first in line for the OOM killer,
 ##		  when there is a systemd user manager. Elsewhere, and in the container,
-##		  it does nothing. The scope covers this side's steps; a container is a
+##		  it does nothing. The scope applies to this side's steps; a container is a
 ##		  child of dockerd, not of the scope, so it takes the flags as well.
 ##		- A step over the cap is killed, and exits 137.
 ##		- Why: on 2026-11-08 another project's CI container took 67 GB plus 18 GB

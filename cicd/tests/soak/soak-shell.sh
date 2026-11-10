@@ -1,6 +1,6 @@
 #!/bin/sh
 # The soak test's shell: no rc files, no user config. Each line typed is noted
-# in SOAK_TYPED with this shell's pid, so the test knows which pane it reached,
+# in SOAK_TYPED with this shell's pid, so the test knows which pane it got to,
 # and answered with a screenful, so the scrollback fills and moves.
 #
 # Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]

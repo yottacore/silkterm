@@ -9,8 +9,8 @@
 .SYNOPSIS
 	Launch the newest SilkTerm dogfood build, passing through any arguments.
 .DESCRIPTION
-	One implementation for Linux, Windows and macOS; the 'runterm' wrappers
-	beside it just call this with pwsh.
+	One implementation for Linux, Windows, and macOS; the 'runterm' wrappers
+	beside it call this with pwsh.
 
 	One source per platform: the synced app dir that cicd installs into. A
 	build made on any box arrives there over Dropbox, so there is no network
@@ -18,13 +18,13 @@
 
 	Copies go in a versions folder next to a '<program>' symlink pointing at
 	the newest, so a plain 'silkterm' on PATH (and a .desktop Icon=) always
-	reaches the current build without being rewritten.
+	runs the current build without being rewritten.
 
 	Copies are named '<prefix>_<YYYYMMDD-HHMMSS>_<tag>_<role>', where the stamp
 	is the build's own mtime and the tag says what the binary is. Copies of one
-	build do not agree on mtime (cicd dates its copy and Dropbox restamps what
-	it syncs), so what keeps a build to one copy is the byte comparison, not
-	the stamp.
+	build don't agree on mtime (cicd dates its copy and Dropbox restamps what
+	it syncs), so the byte comparison limits a build to one copy, not the
+	stamp.
 
 	The folder is GFS-rotated every run: newest and oldest always, then the
 	last few, then a widening time spread (day, week, month, year). It keeps
@@ -32,13 +32,13 @@
 	running is never deleted.
 
 	Windows runs the whole launcher elevated (self-elevates via UAC), so the
-	copy, the symlink and the launched terminal all get admin rights - a
-	filtered token has no SeCreateSymbolicLinkPrivilege and cannot make the
+	copy, the symlink, and the launched terminal all get admin rights. A
+	filtered token has no SeCreateSymbolicLinkPrivilege and can't make the
 	symlink at all. '--no-admin' opts out.
 
 	Reports a failure in a dialog when launched from a shortcut (or with
-	'--gui'), since a click's console just flashes shut. '--admin',
-	'--no-admin' and '--gui' are consumed here; everything else forwards.
+	'--gui'), since a click's console flashes shut. '--admin',
+	'--no-admin', and '--gui' are consumed here; everything else is passed on.
 
 	With no build held and no source reachable, falls back to the first
 	installed terminal from a per-platform list.
@@ -69,10 +69,9 @@ $IconName      = "$ProgramName.png"
 $HomeDir = if ($env:HOME) { $env:HOME } else { $env:USERPROFILE }
 
 ## Where a build comes from: the synced app dir cicd installs into. One entry per
-## platform today, kept as a list so a second location is a one-line change. First
-## one that exists wins.
+## platform today, kept as a list so a second location is a one-line change.
 ## First one that exists wins. 'synced' is a junction to Dropbox, and on Windows
-## it reads as an EMPTY directory - Dropbox's filter driver does not populate
+## it reads as an EMPTY directory - Dropbox's filter driver doesn't populate
 ## through it - so the real spelling has to be listed as well.
 $SourceDirs = switch ($Platform) {
 	"windows" { @(
@@ -112,7 +111,7 @@ $KeepBytes  = 1GB
 ## How many of each period tier may be taken. Without a cap the daily picks eat the
 ## whole budget on a box that builds every day, and the older end of the spread -
 ## the point of keeping any of this - never gets a slot. These sum to the budget,
-## so which tiers actually survive is decided by the order they are asked in.
+## so the order they're asked in picks which tiers survive.
 $PeriodKeep = @{ day = 3; week = 2; month = 2; year = 1 }
 
 ## Per-run decision log beside the versions folder, so a console that closes can't
@@ -120,13 +119,13 @@ $PeriodKeep = @{ day = 3; week = 2; month = 2; year = 1 }
 $RunLog        = Join-Path $InstallRoot "runterm.log"
 $RunLogMaxSize = 256KB
 
-## Where the Windows Start menu entry was last found, when it is not at the
+## Where the Windows Start menu entry was last found, when it isn't at the
 ## default place. See fFindStartMenuLink.
 $MenuNote = Join-Path $InstallRoot "runterm.menu"
 
 ## Fallback terminals, in preference order, for when nothing is held and no source
-## answers. Ours keeps the tagged title; the rest are launched plainly, since
-## SilkTerm's own options would not parse for them.
+## exists. Ours keeps the tagged title; the rest are launched plainly, since
+## SilkTerm's own options wouldn't parse for them.
 $FallbackTerminals = switch ($Platform) {
 	"windows" { @(
 		@{ Exe = "silkterm.exe"; Silk = $true  }
@@ -220,7 +219,7 @@ function fSourceDir {
 
 
 ## Copy the source build in as '<prefix>_<stamp>_<tag>' when it is newer than the
-## newest copy held. No-op when the source is missing or we are already current.
+## newest copy held. No-op when the source is missing or we're already current.
 function fCopyIfNewer {
 
 	$dir = fSourceDir
@@ -240,7 +239,7 @@ function fCopyIfNewer {
 	$tag    = fBuildTag -SourceDir $dir
 	$newest = fNewestHeld
 
-	## The held stamp comes out of a file name, so it carries whole seconds only.
+	## The held stamp comes out of a file name, so it has whole seconds only.
 	## Compare at that precision: a source mtime with a fraction (cp -p from cargo's
 	## output has one) otherwise always reads as newer, and every launch falls
 	## through to hashing the whole binary to find the copy it already holds.
@@ -252,7 +251,7 @@ function fCopyIfNewer {
 
 	## A build we already hold keeps looking new, because no two copies of it agree
 	## on mtime. Settle it on the bytes, then take the source's stamp so the cheap
-	## test above answers it next run without reading the whole binary.
+	## test above settles it next run without reading the whole binary.
 	$twin = fHeldMatching -SrcPath $src
 	if ($twin) {
 		[void](fRenameHeld -Version $twin -Stamp $stamp -Tag $twin.Tag -Role $twin.Role `
@@ -300,7 +299,7 @@ function fBuildTag {
 
 
 ## Every copy held, as objects { File, Name, Stamp, Tag, Role }. Only names matching
-## our own spec, so a neighbour that merely shares the dir is never touched.
+## our own spec, so a neighbor that merely shares the dir is never touched.
 function fHeldVersions {
 	$rx = "^$([regex]::Escape($DogfoodPrefix))_(?<stamp>\d{8}-\d{6})_(?<tag>[a-z0-9]+)" +
 	      "(?:_(?<role>[a-z]+))?$([regex]::Escape($ExeSuffix))$"
@@ -328,8 +327,8 @@ function fNewestHeld {
 
 
 ## The copy holding byte-for-byte the same build as $SrcPath, or $null. Size is the
-## cheap discriminator - two builds almost never match on it - so the hash only runs
-## when one does.
+## cheap discriminator, since builds almost never match on it, so the hash only
+## runs when one does.
 function fHeldMatching {
 	param([Parameter(Mandatory)][string]$SrcPath)
 
@@ -430,8 +429,8 @@ function fRotate {
 		$keep.Add($version)
 	}
 
-	## Anything not selected goes, unless it is running - a window open on a build
-	## must not have its binary deleted out from under it. The process list opens
+	## Anything not selected goes, unless it's running. A window open on a build
+	## mustn't have its binary deleted out from under it. The process list opens
 	## every process on the box, so it is read only once something is due to go.
 	$deleted = 0
 	$running = $null
@@ -479,7 +478,7 @@ function fRotate {
 }
 
 
-## The bucket a build falls in for one period unit. Two builds share a key when
+## The bucket a build falls in for one period unit. Builds share a key when
 ## they fall in the same hour/day/week/month/year.
 function fPeriodKey {
 	param(
@@ -544,7 +543,7 @@ function fUpdateLatestLink {
 	$existing = Get-Item -LiteralPath $LatestLink -Force -ErrorAction SilentlyContinue
 	if ($existing -and $existing.LinkTarget -eq $Target) { return }
 
-	## A real file here is not necessarily ours: install.bash puts a release build
+	## A real file here isn't necessarily ours: install.bash puts a release build
 	## at this exact path, and this used to delete it with no prompt and no backup.
 	## Only a symlink, or a copy of one of our own pool builds, may be replaced.
 	if ($existing -and -not $existing.LinkTarget -and -not (fIsPoolCopy $existing)) {
@@ -568,7 +567,7 @@ function fUpdateLatestLink {
 
 
 ## Keep the icon beside the symlink current, so a .desktop entry pointing at it
-## follows whatever the newest build ships. Nothing to do if the source has none.
+## follows whatever icon the newest build has. Nothing to do if the source has none.
 function fUpdateIcon {
 	$dir = fSourceDir
 	if (-not $dir) { return }
@@ -630,7 +629,7 @@ function fWriteMacApp {
 	$icns     = Join-Path $contents "Resources/silkterm.icns"
 
 	## Started from the Finder, it gets launchd's bare PATH, which has neither
-	## Homebrew nor ~/.local/bin, so the wrapper would not find pwsh. With no build
+	## Homebrew nor ~/.local/bin, so the wrapper wouldn't find pwsh. With no build
 	## held, the wrapper runs as usual and falls back to another terminal.
 	$q = { param([string]$s) "'" + ($s -replace "'", "'\''") + "'" }
 	$wantScript = @'
@@ -706,7 +705,7 @@ function fWriteDesktopEntry {
 		"GenericName=Terminal"
 		"Comment=Smooth-scrolling GPU terminal with split panes"
 		## Exec= is read twice: the desktop-entry string rules first, then the Exec
-		## quoting rules on top, so a backslash ends up as four and a literal '%'
+		## quoting rules on top, so a backslash ends up as 4 and a literal '%'
 		## has to be doubled or it reads as a field code.
 		('Exec="' + (($Wrapper -replace '([\\"`$])', '\$1' -replace '\\', '\\' -replace '%', '%%')) + '"')
 		"Icon=$IconPath"
@@ -731,7 +730,7 @@ function fWriteDesktopEntry {
 
 
 ## The Windows equivalent. The icon comes from the symlink itself, which is a real
-## Windows binary and carries its own - so it tracks the build with no .ico to keep
+## Windows binary and has its own, so it tracks the build with no .ico to keep
 ## in step.
 function fWriteStartMenuLink {
 	param([Parameter(Mandatory)][string]$Wrapper)
@@ -760,13 +759,13 @@ function fWriteStartMenuLink {
 
 
 ## The menu entry that already runs the wrapper, else $Default. Adopted wherever
-## it was filed - these menus get organised by hand, and writing our own name
-## beside one the user already put in a folder of terminals just leaves two of
-## everything. Quick Launch is deliberately not searched: a taskbar pin is not a
+## it was filed. These menus get organized by hand, and writing our own name
+## beside one the user already put in a folder of terminals leaves 2 of
+## everything. Quick Launch isn't searched, since a taskbar pin isn't a
 ## menu entry.
 ## Where it was found is kept in $MenuNote, so a launch opens one or two
 ## shortcuts. Walking both Start menus opens every one of them, a few hundred on
-## a normal box, and only happens when neither known place answers.
+## a normal box, and only happens when neither known place has it.
 function fFindStartMenuLink {
 	param(
 		[Parameter(Mandatory)][object]$Shell,
@@ -828,7 +827,7 @@ function fLaunchSilkTerm {
 
 ## Fall back to whatever terminal is installed, in $FallbackTerminals order. Ours
 ## keeps the tagged title; the rest get no arguments, since SilkTerm's options
-## would not parse for them.
+## wouldn't parse for them.
 function fLaunchFallbackTerminal {
 	param([string[]]$PassArgs)
 
@@ -858,7 +857,7 @@ function fFindOnPath {
 ## Join arguments into one command line the way CommandLineToArgvW reads it back,
 ## which is also how .NET splits a command line on Linux and macOS. Start-Process
 ## joins a list with spaces and escapes nothing, so wrapping a spaced argument in
-## quotes is not enough: an argument holding a quote gets cut in two, an empty one
+## quotes isn't enough: an argument with a quote gets cut in 2, an empty one
 ## vanishes, and a trailing backslash eats the closing quote.
 function fJoinArgs {
 	param([string[]]$ArgList)
@@ -882,7 +881,7 @@ function fJoinArgs {
 
 
 ## Launch a terminal in its own process, elevated when $RunAsAdmin. Returns the
-## Process so a caller can stop this exact instance by PID - matching on a name or
+## Process so a caller can stop this exact instance by PID. Matching on a name or
 ## a pattern risks hitting a copy started somewhere else.
 function fStartTerminal {
 	param(
@@ -917,7 +916,7 @@ function fEnsureDir {
 ## Informational note to the host and the run log.
 function fNote { param([string]$Msg); fLog $Msg; Write-Host "runterm: $Msg" }
 
-## Non-fatal note. Pass -Gui to also surface it in the end-of-run dialog (the
+## Non-fatal note. Pass -Gui to also show it in the end-of-run dialog (the
 ## shortcut case, where the console flashes shut); reserved for real problems.
 function fWarn {
 	param([string]$Msg, [switch]$Gui)
@@ -960,8 +959,8 @@ function fTrimLog {
 
 
 ## Remove any mark-of-the-web this script picked up from the sync layer. An
-## unsigned script carrying one is refused under RemoteSigned, which silently kills
-## a shortcut click - the body never runs, so nothing copies and nothing logs. This
+## unsigned script with one is refused under RemoteSigned, which silently kills
+## a shortcut click. The body never runs, so nothing copies and nothing logs. This
 ## only helps the NEXT run; the current one already cleared the policy to be here.
 function fSelfHealMotw {
 	try {
@@ -999,8 +998,8 @@ function fLaunchedFromShortcut {
 }
 
 
-## Show a modal message box. Never throws - feedback must not be the thing that
-## breaks a launch; a no-op where WinForms cannot load.
+## Show a modal message box. Never throws, since feedback mustn't be the thing
+## that breaks a launch; a no-op where WinForms can't load.
 function fGuiShow {
 	param(
 		[Parameter(Mandatory)][string]$Msg,
@@ -1023,12 +1022,12 @@ function fGuiShow {
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-## Problems worth surfacing at the end, shown in a dialog when launched from a
+## Problems to show at the end, shown in a dialog when launched from a
 ## shortcut. Must exist before any fWarn -Gui / fFail can run.
 $script:RunWarnings = @()
 
 ## Consume our own flags; forward everything else to the terminal.
-##   --no-admin  run without elevating (Windows only; elsewhere there is nothing
+##   --no-admin  run without elevating (Windows only; elsewhere there's nothing
 ##               to elevate and the flag is accepted and ignored).
 ##   --gui       force the failure dialog on; auto-on for a shortcut click.
 ##   --install-only  copy, rotate and refresh the menu entry, then stop without
@@ -1052,8 +1051,8 @@ $script:GuiFeedback = $forceGui -or (fLaunchedFromShortcut)
 
 ## Self-elevate: relaunch the whole script elevated and hand off, so the copy, the
 ## symlink and the launched terminal all run high-integrity. Minimized, because the
-## relaunch has no console of its own to reuse. The relaunch carries '--gui' - its
-## parent is the UAC broker, not Explorer, so it cannot re-detect the shortcut. A
+## relaunch has no console of its own to reuse. The relaunch passes '--gui'. Its
+## parent is the UAC broker, not Explorer, so it can't re-detect the shortcut. A
 ## declined consent does NOT abort: we fall through and run unelevated so there is
 ## still a terminal, with a dialog saying it may be stale.
 if ($Platform -eq "windows" -and $wantAdmin -and -not (fIsElevated)) {
@@ -1086,7 +1085,7 @@ if ($script:GuiFeedback -and $script:RunWarnings.Count) {
 ##		- 2026-11-09: The macOS app runs the file the symlink points at, not a link to it.
 ##		- 2026-10-06: The parent process comes from pwsh, not WMI. The process
 ##		  list is read only when a copy is due to go, and the Start menus are
-##		  searched only when the entry is not where it was last found.
+##		  searched only when the entry isn't where it was last found.
 ##		- 2026-10-06: Help block; no array growth in loops.
 ##		- 2026-10-01: An app in ~/Applications is the menu entry on a Mac. It runs
 ##		  the build in its own process, so the Dock sees one program.

@@ -1,12 +1,16 @@
+<!-- markdownlint-disable MD033 -- No inline html -->
+<!-- markdownlint-disable MD055 -- Table pipe style [Expected: leading_and_trailing; Actual: leading_only; Missing trailing pipe] -->
+<!-- markdownlint-disable MD041 -- First line in a file should be a top-level heading -->
+
 # Source attribution
 
-Provenance for every image in the collection. Sorted by match confidence, highest first, so settled entries lead and open ones collect at the bottom.
+This is the provenance for every image in the collection. It's sorted by match confidence, highest first, so settled entries come first and open ones end up at the bottom.
 
-Most of these sit in `010_origs`. The newest ones are staged in `005_new/master` until the next pass moves them across; they are listed here all the same, since the provenance travels with the file rather than the folder.
+Most of these are in `010_origs`. The newest ones are staged in `005_new/master` until they're moved across, but they're listed here anyway, since the provenance goes with the file rather than the folder.
 
-This was three lists until now - the folder itself, the `@jc` set and the `@tt` set, each in its own subfolder. The images and their tables are merged here. The `@jc` rows were built from the files' own metadata, since that set never had a table of its own.
+This used to be 3 lists, for the folder itself, the `@jc` set, and the `@tt` set, each in its own subfolder. The images and their tables are merged here now. The `@jc` rows were built from the files' own metadata, since that set never had a table of its own.
 
-Each image also carries this information in its own metadata:
+Each image also has this information in its own metadata:
 
 - `ObjectName`/`Headline`/`Title` for the title
 
@@ -16,7 +20,7 @@ Each image also carries this information in its own metadata:
 
 - `CopyrightNotice`/`Rights`
 
-- `UsageTerms` for the licence
+- `UsageTerms` for the license
 
 - `CreatorWorkURL` for the source URL
 
@@ -24,25 +28,25 @@ Each image also carries this information in its own metadata:
 
 - `Caption-Abstract`/`Description` for the comments
 
-- `Instructions` for the provenance trail (original URL, original source filename, original filesystem name, licensed yes/no, match confidence, legal status, and the copyright and rating values that were there before this pass)
+- `Instructions` for the provenance trail (original URL, original source filename, original filesystem name, licensed yes/no, match confidence, legal status, and the copyright and rating values the file had before)
 
-- `wallpaper:Fit` and `wallpaper:Anchor` for how the image wants to be laid out, and `wallpaper:Opacity` and `wallpaper:Blur` for how strongly it wants to show - see below
+- `wallpaper:Fit` and `wallpaper:Anchor` for how the image is laid out, and `wallpaper:Opacity` and `wallpaper:Blur` for how strongly it shows, as described below
 
 ## Layout and look tags
 
-Four XMP fields tell a wallpaper how it should fill a screen that is not its own shape, and how strongly it wants to show. They live in a `wallpaper` namespace (`https://github.com/jim-collier/xmp/wallpaper/1.0/`), named for what they describe rather than for any one program, so other tools can read and write them too.
+There are 4 XMP fields that set how a wallpaper fills a screen that isn't its own shape, and how strongly it shows. They're in a `wallpaper` namespace (`https://github.com/jim-collier/xmp/wallpaper/1.0/`), named for what they describe rather than for any one program, so other tools can read and write them too.
 
-- `Fit` is `zoom` or `stretch`. `zoom` fills the screen while keeping the aspect ratio and crops the overhang; `stretch` distorts to fit exactly and never crops.
+- `Fit` is `zoom` or `stretch`. `zoom` fills the screen while keeping the aspect ratio and crops the overhang. `stretch` distorts to fit exactly and never crops.
 
-- `Anchor` is `<horizontal>%, <vertical>%` - 0% is left/top, 100% is right/bottom. It picks which part of the image survives a `zoom` crop, and is ignored under `stretch`. Everything here is `50%, 50%`.
+- `Anchor` is `<horizontal>%, <vertical>%`, where 0% is left or top and 100% is right or bottom. It picks which part of the image survives a `zoom` crop, and is ignored under `stretch`. Everything here is `50%, 50%`.
 
-`zoom` is the safe default and is what anything with a real subject gets: people, animals, plants, planets, a brand mark, or circles and squares that would read as squashed. `stretch` is for the images with nothing in them to distort - gradients, stripes, blurs, soft abstracts.
+`zoom` is the safe default, and it's used for anything with a real subject, such as people, animals, plants, planets, a brand mark, or circles and squares that would look squashed. `stretch` is for the images that don't have anything in them to distort, such as gradients, stripes, blurs, and soft abstracts.
 
-- `Opacity` is how strongly the image shows through, `0%` to `100%`. `Blur` is a Gaussian sigma in pixels. Where present they take the place of the viewer's own two settings for that image, so a busy image can sit quieter, or a soft gradient can skip the blur. Everything here carries the program defaults: `10%` and `10`.
+- `Opacity` is how strongly the image shows through, `0%` to `100%`. `Blur` is a Gaussian sigma in pixels. Where they're set, they replace the viewer's own 2 settings for that image, so a busy image can be quieter, or a soft gradient can skip the blur. Everything here has the program defaults, `10%` and `10`.
 
 ## Legend
 
-1. **%**: confidence that the match to the named original source is correct. 90+ means an identifier in the filename resolved directly to a source page, or the file is original work carrying its own provenance. 50-89 means strong corroboration (a watermark, a signature, a credit carried by an intermediary) but no single decisive link. Below 50 is informed inference. 0 means no source was found and the row records only what the image is.
+1. **%**: confidence that the match to the named original source is correct. A score of 90+ means an identifier in the filename resolved directly to a source page, or the file is original work with its own provenance. A score of 50-89 means strong corroboration, such as a watermark, a signature, or a credit from an intermediary, but no single decisive link. Below 50 is informed inference. A score of 0 means no source was found and the row records only what the image is.
 
 2. **Stars**: the star rating written into each file, with the legality confidence it came from in brackets. See below.
 
@@ -50,27 +54,27 @@ Four XMP fields tell a wallpaper how it should fill a screen that is not its own
 
 4. **Free free?**: explicitly free to use with or without attribution.
 
-5. **Licensed?**: a licence for non-commercial use has been obtained. This is `N` for everything not already public domain or original work; nothing was purchased or requested as part of this pass.
+5. **Licensed?**: a license for non-commercial use has been obtained. This is `N` for everything that isn't already public domain or original work, since nothing was purchased or requested.
 
 6. **Fit**: the layout tag written into the file. See above.
 
-`?` in the three licence columns means the terms could not be established, which is not the same as permissive - treat it as unresolved.
+A `?` in the 3 license columns means the terms couldn't be established. That isn't the same as permissive, so treat it as unresolved.
 
 ## Ratings
 
-The star rating encodes "legality confidence": how confident it is that using the image is legally permitted - mapped proportionally onto 1 to 5. It is not a quality rating and it is not the match confidence in the first column; a file can be certainly identified and still certainly unusable.
+The star rating is the "legality confidence", meaning the confidence that using the image is legally permitted, mapped proportionally onto 1 to 5. It isn't a quality rating, and it isn't the match confidence in the first column either. A file can be identified for certain and still be certainly unusable.
 
-The scale is anchored at 25% for 1 star and 100% for 5 stars. Values here run 25% to 100%. Every rating that was in place before this pass is preserved in each file's `Instructions`.
+The scale is anchored at 25% for 1 star and 100% for 5 stars. Values here run 25% to 100%. Each file's earlier rating is saved in its `Instructions`.
 
 | Stars | Meaning
 | :---: | :------------------------------------------------------------------------------------------------------------------
-| 5     | Free licence, public domain, original work with permissive license - use and redistribution permitted
-| 4     | Free licence with conditions (non-commercial, share-alike) - use permitted
+| 5     | Free license, public domain, original work with permissive license - use and redistribution permitted
+| 4     | Free license with conditions (non-commercial, share-alike) - use permitted
 | 3     | Published as a downloadable wallpaper by a named rights holder; personal use reasonable, redistribution not granted
-| 2     | Terms not established, or a vendor/brand asset carrying no licence grant
+| 2     | Terms not established, or a vendor or brand asset without any license grant
 | 1     | Explicitly prohibited, paid-only, or third-party character IP
 
-The two artist sets behave differently from the rest. Their licence is granted rather than guessed at, so what varies is how firmly each file is tied to its author and what third-party material sits inside the artwork - a licence from an artist covers that artist's own composition and cannot grant anyone else's rights. The `@jc` files that drop to 2 stars are the ones built over someone else's material (a screensaver, a stock background, virtual panoramas created from in-game screenshots), not files with a weak attribution.
+The 2 artist sets are different from the rest. Their license is granted rather than guessed at, so what varies is how firmly each file is tied to its author and what third-party material is inside the artwork. A license from an artist applies to that artist's own composition and can't grant anyone else's rights. The `@jc` files that drop to 2 stars are the ones built over someone else's material, such as a screensaver, a stock background, or virtual panoramas created from in-game screenshots, rather than files with a weak attribution.
 
 Most of the non-'@' branded images are 2 stars. For the majority of these files the terms were never established in spite of a good deal of effort made, often due to dead URLs from reverse image searches. The earliest *live* hits are almost always wallpaper aggregators with permissive license terms.
 
@@ -192,19 +196,19 @@ Most of the non-'@' branded images are 2 stars. For the majority of these files 
 
 ## Least usable
 
-No 1-star files remain here - all four have been moved out. The floor is 2 stars.
+There aren't any 1-star files left here, since all 4 were moved out. The floor is 2 stars.
 
-Vendor and brand assets (Razer) sit at 2 stars rather than 1: the scale reserves 1 star for material that is explicitly prohibited or carries a third-party mark, while an unlicensed vendor asset is only unestablished. That distinction is what kept them here.
+Vendor and brand assets, such as Razer's, are at 2 stars rather than 1. On this scale 1 star is for material that's explicitly prohibited or has a third-party mark, but an unlicensed vendor asset is only unestablished. That's why they're still here.
 
-The 2-star `@jc` files are a different case again - the composition is Author's work and the licence is real, but each is built over material someone else owns, so the grant does not reach the whole image.
+The 2-star `@jc` files are a different case again. The composition is Author's work and the license is real, but each is built over material someone else owns, so the grant doesn't apply to the whole image.
 
 ## Most usable
 
-5 stars - free licence, public domain, or original work. Thirty files:
+These 30 files have 5 stars, for a free license, public domain, or original work:
 
-- The eighteen `@jc` originals - seven photographs and two POV-Ray renders under CC BY 4.0, plus six generated images and a 2013 composite. Six of the generated ones are CC0.
+- The 18 `@jc` originals, which are 7 photographs and 2 POV-Ray renders under CC BY 4.0, plus 6 generated images and a 2013 composite. Of the generated ones, 6 are CC0.
 
-- The four `@tt` generated images - CC0 1.0. `two cattle dogs` is the only one with nothing third-party in it at all; the two beach scenes carry a third-party character and a third-party vehicle design, which CC0 does not reach.
+- The 4 `@tt` generated images, under CC0 1.0. `two cattle dogs` is the only one without anything third-party in it. The 2 beach scenes have a third-party character and a third-party vehicle design, which CC0 doesn't apply to.
 
 - `Blue Marble; astro; Earth, South America closer; @jc enhance.jpg` (95%) - NASA public domain.
 
@@ -222,9 +226,9 @@ The 2-star `@jc` files are a different case again - the composition is Author's 
 
 - `Van Gogh; The Starry Night.jpg` (100%) - Public domain.
 
-4 stars - free licence with conditions. Twenty-five files:
+These 25 files have 4 stars, for a free license with conditions:
 
-- The twenty `@tt` images under CC BY-SA 4.0. Attribution is required and adaptations must carry the same licence.
+- The 20 `@tt` images under CC BY-SA 4.0. Attribution is required, and adaptations must use the same license.
 
 - `DeviantArt; BlackDiamondOne; Seven Colors.jpg` (85%) - CC BY-NC-ND 3.0.
 
@@ -238,37 +242,37 @@ The 2-star `@jc` files are a different case again - the composition is Author's 
 
 ## Open
 
-- `Razer; Rainbow Spectrum` carries a `WALLPAPERSWIDE.COM` watermark, so this copy came through that aggregator. A clean original is on razer.com/wallpapers, which would settle both the watermark and the provenance.
+- `Razer; Rainbow Spectrum` has a `WALLPAPERSWIDE.COM` watermark, so this copy came through that aggregator. A clean original from razer.com/wallpapers would settle both the watermark and the provenance.
 
-- `unknown; light streaks` - authorship is unresolved. The original filename carried a capture stamp and an iPhone 7, which reads like original work, but it's not. Unknown.
+- `unknown; light streaks` - authorship is unresolved. The original filename had a capture stamp and an iPhone 7, which reads like original work, but it's not. Unknown.
 
-- `@jc; art; rainbow gradient` carries an own-work claim but no metadata came with the file, and its original name (`0053.jpg`) belongs to the numbered unattributed batch here. The claim may be wrong.
+- `@jc; art; rainbow gradient` has an own-work claim, but no metadata came with the file, and its original name (`0053.jpg`) belongs to the numbered unattributed batch here. The claim may be wrong.
 
-- The four Alphacoders files record only who uploaded them, never who made them. That chain does not lead anywhere, so their originals would have to be found some other way. (Most reverse-image search to earliest links that 404, with next earliest links being permissive wallpaper sites.)
+- The 4 Alphacoders files record only who uploaded them, never who made them. That chain doesn't lead anywhere, so their originals would have to be found some other way. (Most reverse-image searches lead to earliest links that 404, with next earliest links being permissive wallpaper sites.)
 
-- The locally numbered files and several hash-named files have no recoverable provenance - re-hosting stripped it before they were saved.
+- The locally numbered files and several hash-named files don't have any recoverable provenance, since re-hosting stripped it before they were saved.
 
-- `Marina Dolgopolova; autumn lake shore` - the credit came from the aggregator rather than from the artist, so it is reported, not verified.
+- `Marina Dolgopolova; autumn lake shore` - the credit came from the aggregator rather than from the artist, so it's reported rather than verified.
 
-- Fifteen `@tt` files carry no credit inside them; the attribution rests on the filename prefix plus a confirmation. That is the same class of evidence that misattributed a Microsoft wallpaper here, so it is recorded as 85% rather than treated as settled.
+- There are 15 `@tt` files without any credit inside them, so the attribution depends on the filename prefix plus a confirmation. A Microsoft wallpaper here was once misattributed on the same kind of evidence, so it's recorded as 85% rather than treated as settled.
 
-- `@tt; win; 2015; 10; dark teal` carried `all rights reserved` in its own pre-pass metadata.
+- `@tt; win; 2015; 10; dark teal` had `all rights reserved` in its own earlier metadata.
 
-- `@tt; art; abstract; color streaks` has an unknown author under it. The CC BY-SA grant covers the compositing work, not the base image.
+- `@tt; art; abstract; color streaks` is built over an image by an unknown author. The CC BY-SA grant applies to the compositing work rather than the base image.
 
-- Much of the `@tt` set is built around Microsoft, Arch, Ubuntu and Apple marks. The licence covers the composition; the marks belong to their owners and are not licensed by it. This matters for redistribution, not for private use.
+- Much of the `@tt` set is built around Microsoft, Arch, Ubuntu, and Apple marks. The license applies to the composition, but the marks belong to their owners and aren't licensed by it. That's a concern for redistribution rather than private use.
 
 ## Moved out
 
-Twenty-one files were removed as legally problematic and their rows dropped from the table above. Each still carries its own provenance metadata, so nothing was lost.
+There were 21 files removed as legally problematic, and their rows were dropped from the table above. Each still has its own provenance metadata, so nothing was lost.
 
-- Eleven DeviantArt all-rights-reserved entries.
+- DeviantArt all-rights-reserved entries, 11 of them.
 
 - `InterfaceLIFT; After Rain` - personal use only, site retired.
 
-- `Microsoft; Office; world map, orange`, `Microsoft; Windows Vista; Grass`, `Microsoft; Plus 95; Science, lunar surface with splatter` - bundled or promotional Microsoft assets, no redistribution licence.
+- `Microsoft; Office; world map, orange`, `Microsoft; Windows Vista; Grass`, `Microsoft; Plus 95; Science, lunar surface with splatter` - bundled or promotional Microsoft assets, no redistribution license.
 
-- `Razer; Chroma Crystals` - brand asset carrying an aggregator watermark.
+- `Razer; Chroma Crystals` - brand asset with an aggregator watermark.
 
 - `vivo; V9; gradient abstract`, `Xiaomi; MIUI 9; material` - bundled device wallpapers, no redistribution license.
 

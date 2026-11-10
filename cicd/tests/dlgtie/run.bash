@@ -10,7 +10,7 @@
 ##			  and another program's window coming in front and going back.
 ##	- Syntax: run.bash [--bin PATH]   (default: the debug build, then release)
 ##	- Exit: 0 passed, 1 a check failed, 3 nothing ran (no binary, display,
-##	  window manager, xdotool or xprop).
+##	  window manager, xdotool, or xprop).
 ##	- Test ID: der6f
 ##	- History: At bottom of file.
 
@@ -150,7 +150,7 @@ fOne(){ [[ "$(fEntries "${1}")" == 1 ]]; }
 fCheck "one taskbar entry with Settings open ($(fEntries _NET_WM_STATE_SKIP_TASKBAR))" fOne _NET_WM_STATE_SKIP_TASKBAR
 fCheck "one pager entry with Settings open ($(fEntries _NET_WM_STATE_SKIP_PAGER))" fOne _NET_WM_STATE_SKIP_PAGER
 
-## The dialog sits above the terminal in the stack, and holds the focus.
+## The dialog sits above the terminal in the stack, and has the focus.
 fAbove(){
 	local order
 	order="$(fX xprop -root _NET_CLIENT_LIST_STACKING 2>/dev/null | sed 's/.*# //; s/,/ /g')"

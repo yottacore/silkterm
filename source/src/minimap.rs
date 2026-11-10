@@ -30,9 +30,9 @@ const MIN_HANDLE: f32 = 14.0;
 const MAX_LINE_PX: f32 = 1.5;
 // What the densest glyph contributes to its pixel. Every other character gets
 // a share of it, per `ink_share`, and that variation is what keeps a run of
-// text from reading as a slab - so this no longer has to hold back to do it.
+// text from reading as a slab, so this no longer has to be held back for that.
 const INK: f32 = 1.0;
-// A text line does not fill its own height, and the gap above and below is
+// A text line doesn't fill its own height, and the gap above and below is
 // what keeps a page of text from reading as one block. This is the ink's share
 // of the line at the tallest a line ever draws.
 const BAND: f32 = 0.5;
@@ -40,11 +40,11 @@ const BAND: f32 = 0.5;
 const BAND_TOP: f32 = 0.1;
 // Line heights the band ramps between. Under the first there is no room for a
 // gap and the line is taken whole; over the second it gets the full BAND. The
-// pair sits below one pixel so a line near the cap lands across two pixel rows
+// pair sits below one pixel so a line near the cap falls across 2 pixel rows
 // at partial coverage rather than filling one.
 const BAND_FLOOR: f32 = 0.6;
 const BAND_FULL: f32 = 1.2;
-// A pixel row's ink is what actually fell in it, so mostly blank lines read
+// A pixel row's ink is what fell in it, so mostly blank lines read
 // dimmer than a solid page. One line among many still has to be findable, so
 // it never falls below this share of its own strength.
 const LONE: f32 = 0.45;
@@ -65,7 +65,7 @@ const COMPOSE_SHARE: u32 = 20;
 const RESYNC_MS: u64 = 400;
 // Cells one compose may rasterize from history, about 4 ms here. A deep
 // scrollback under a flood, or rebuilt whole, is more than a compose can read
-// without stopping the terminal: 100,000 lines took 150 ms. Past this, one
+// without stopping the terminal: a rebuild of 100,000 lines took 150 ms. Past this, one
 // line stands in for its neighbors until later composes have the time.
 const RASTER_CELLS: usize = 300_000;
 
@@ -74,7 +74,7 @@ const RASTER_CELLS: usize = 300_000;
 const SPAN_MIN: f32 = 0.01;
 
 // Rasterized buffer line: one RGBA byte group per preview pixel, straight
-// (not premultiplied) - the shader premultiplies in linear light.
+// (not premultiplied), since the shader premultiplies in linear light.
 type Row = Vec<u8>;
 
 // How much of a unit tent centered on `at` falls between x0 and x1. The tent
@@ -155,7 +155,7 @@ pub fn screen_modes_from(host: PtyHost, mode: TermMode) -> TermMode {
 // and every change of mind is a resize it has to redraw for.
 const HOLD: Duration = Duration::from_secs(1);
 
-/// Holds `draws_own_screen` over a short lapse by the same program. A new
+/// Keeps `draws_own_screen` set over a short lapse by the same program. A new
 /// program, or none, starts it over at once, so the column is back as soon as
 /// the shell is.
 #[derive(Debug, Default)]
@@ -198,7 +198,7 @@ impl Hold {
 /// alt screen, or a picture of its own redraws on the main one, and the room is
 /// better spent on text. Some programs do their own scrolling in a way the map
 /// can still follow, and the setting names those. A program with nothing to
-/// compare against (Windows cannot always say what is running) is treated as
+/// compare against (Windows can't always tell what's running) is treated as
 /// not listed.
 pub fn wanted(cfg: &config::Settings, own_screen: bool, program: Option<&str>) -> bool {
 	if !own_screen {
@@ -245,10 +245,10 @@ pub fn text_rect(full: Rect, cfg: &config::Settings, scale: f32, wanted: bool) -
 }
 
 // How tall one buffer line draws. Capped, so a buffer shorter than the column
-// simply does not reach the bottom of it. The cap is scaled but deliberately
-// not rounded to whole pixels: a line has to be able to sit at a fraction of
-// one, or its ink band lands inside a single pixel row and a page of text
-// goes back to reading as a slab.
+// doesn't reach the bottom of it. The cap is scaled but deliberately not
+// rounded to whole pixels: a line has to be able to sit at a fraction of one,
+// or its ink band falls inside a single pixel row and a page of text goes
+// back to reading as a slab.
 fn line_px(track_h: f32, total: usize, scale: f32) -> f32 {
 	if total == 0 {
 		return 0.0;
@@ -260,7 +260,7 @@ fn line_px(track_h: f32, total: usize, scale: f32) -> f32 {
 // is the scroll model's lines-back-from-the-bottom, the same number the
 // scrollbar rides. Both the height and the offset are measured at the map's
 // own pitch, so the marker covers the lines the image draws under it. The
-// image stops at `shown`, since under a flood the eased text has not reached
+// image stops at `shown`, since under a flood the eased text hasn't reached
 // the rest, and measuring the marker against the whole buffer instead left it
 // drifting above the lines it stood for (F148).
 fn handle_span(
@@ -273,7 +273,7 @@ fn handle_span(
 ) -> (f32, f32) {
 	let pitch = line_px(track_h, shown, scale);
 	let used = pitch * shown as f32;
-	let covers = rows as f32 * pitch; // what the viewport really takes up
+	let covers = rows as f32 * pitch; // what the viewport takes up
 	let h = covers.max(config::dip(MIN_HANDLE, scale)).min(used);
 	// A deep buffer puts the viewport under the height floor. A marker taller
 	// than the lines it stands for grows both ways from their middle, so it
@@ -350,7 +350,7 @@ pub fn hit(g: &Geom, x: f32, y: f32) -> Option<Hit> {
 /// The scroll position a click at `y` should center the viewport on. The bottom
 /// of the map stands for the newest output as well as the last line it drew, so
 /// a click there means the bottom of the buffer rather than the line the trim
-/// stopped on. That is also what makes both ends of the track reachable where
+/// stopped on. That's also what makes both ends of the track reachable where
 /// the marker is shorter than the viewport it stands for.
 pub fn center_on(g: &Geom, total: usize, shown: usize, rows: usize, y: f32, scale: f32) -> f32 {
 	let per_px = lines_per_px(g.preview.h, shown, scale);
@@ -370,7 +370,7 @@ pub fn center_on(g: &Geom, total: usize, shown: usize, rows: usize, y: f32, scal
 /// Drag: the pointer has moved from where it grabbed the marker, so the view
 /// moves the matching number of lines from where it sat then. `grab` is that
 /// pointer y and that position. Reading the marker's drawn top back instead
-/// cannot work, because the height floor makes the marker taller than the lines
+/// can't work, because the height floor makes the marker taller than the lines
 /// it covers on a deep buffer, so its top is a rounded reading of the position
 /// rather than the position itself.
 pub fn drag_to(
@@ -396,13 +396,13 @@ pub fn drag_to(
 /// Rasterizing reads the grid, so it runs here under the term lock, and the
 /// budget bounds it. The rows and the pixel work live in `store`, and a whole
 /// compose over a deep scrollback takes the store to a thread of its own,
-/// since at a million lines it is most of a second. While the store is away
-/// the builds only count, and what they owe it goes along with the next one.
+/// since at a million lines it's most of a second. While the store is away
+/// the builds only count, and their pending edits go along with the next one.
 #[derive(Default)]
 pub struct Minimap {
 	store: Store,
 	job: Option<Job>,
-	// when to look for that thread's answer again
+	// when to look for that thread's result again
 	poll_at: Option<Instant>,
 	took: Duration, // how long the last compose on its own thread ran
 	// One per history row the store has: a stand-in copied from a neighbor,
@@ -421,13 +421,13 @@ pub struct Minimap {
 	// the contrast memo, kept from one plan to the next
 	readable: palette::Readable,
 	hist: usize, // history lines the cache accounts for
-	// Buffer lines the map actually draws: the whole buffer less the lines the
-	// eased text has not reached yet. Under a flood the view sits behind the
+	// Buffer lines the map draws: the whole buffer less the lines the
+	// eased text hasn't reached yet. Under a flood the view sits behind the
 	// newest output, and drawing past it would put lines in the column that
-	// are not on screen. 0 until the first compose, which is what
+	// aren't on screen. 0 until the first compose, which is what
 	// `shown_lines` falls back on.
 	shown: usize,
-	// The newest `fresh` of those are not rasterized yet. A build only counts
+	// The newest `fresh` of those aren't rasterized yet. A build only counts
 	// them and the compose does the work, because under a flood most lines
 	// leave history before any compose shows them, and the build holds the
 	// term lock the PTY reader waits on.
@@ -436,7 +436,7 @@ pub struct Minimap {
 	cols: usize,
 	lines: usize,
 	// composed image, `img_w` px wide by `img_h` tall, straight RGBA. Its own
-	// width, not `width`, which the next compose will use: the two differ from
+	// width, not `width`, which the next compose will use: the 2 differ from
 	// the moment the column is resized until that compose, and a caller that
 	// believed `width` uploaded a short buffer as a wider texture.
 	img: Vec<u8>,
@@ -447,8 +447,8 @@ pub struct Minimap {
 	img_total: usize,
 	img_scale: f32,
 	pub rev: u64, // bumped on every compose, so the renderer can skip re-uploads
-	// rows changed since the last compose, and the compose was throttled out -
-	// the pane reports this as animation so the frame after picks it up
+	// rows changed since the last compose, and the compose was throttled out,
+	// so the pane reports this as animation and the frame after picks it up
 	pending: bool,
 	last_compose: Option<Instant>,
 	spent: Duration, // how long the last compose took
@@ -468,7 +468,7 @@ pub struct Minimap {
 	here_px: Option<usize>,
 }
 
-// The store holds a raster for every history row, so leave it out.
+// The store has a raster for every history row, so leave it out.
 impl std::fmt::Debug for Minimap {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		f.debug_struct("Minimap")
@@ -497,7 +497,7 @@ struct Job {
 	whole: bool,
 }
 
-// One compose: the edits the builds since the last one owe the store, the
+// One compose: the edits the builds since the last one left for the store, the
 // rows rasterized for it, and the image to make.
 #[derive(Default)]
 struct Plan {
@@ -525,7 +525,7 @@ impl Plan {
 		self.full && self.total * self.width > limit
 	}
 
-	// The plan without its rows, which is all that is needed to show the
+	// The plan without its rows, which is all that's needed to show the
 	// image it made.
 	fn numbers(&self) -> Plan {
 		Plan {
@@ -549,12 +549,12 @@ struct Acc {
 	alpha: Vec<f32>,
 	// Lines that fall wholly inside the pixel row, added up as integers per
 	// color plane: red, green and blue times alpha, then alpha. `peak` is the
-	// strongest alpha. Flushed into the three above.
+	// strongest alpha. Flushed into the 3 above.
 	sum: Vec<u32>,
 	peak: Vec<u32>,
 }
 
-// Whole lines added up before a flush, so `Acc::sum` cannot overflow.
+// Whole lines added up before a flush, so `Acc::sum` can't overflow.
 const WHOLE_MAX: usize = 65_000;
 
 // How often to look again for a compose that has run past what the last one
@@ -582,7 +582,7 @@ impl Store {
 }
 
 impl Minimap {
-	/// What the cache holds on the heap, for `SILK_MEMDBG`. A store that is away on
+	/// What the cache has on the heap, for `SILK_MEMDBG`. A store that is away on
 	/// a compose thread counts as empty until it comes back.
 	pub fn heap_bytes(&self) -> usize {
 		let row_head = std::mem::size_of::<Row>();
@@ -601,10 +601,10 @@ impl Minimap {
 	}
 
 	/// How many buffer lines the column maps, for the callers that place the
-	/// marker and turn a click back into a scroll position. It is what the last
+	/// marker and turn a click back into a scroll position. It's what the last
 	/// compose drew, not what the ease is doing right now, or the marker would
 	/// be measured against a picture nobody composed. Before the first compose
-	/// there is nothing to ask, so it is the whole buffer.
+	/// there's nothing to go on, so it's the whole buffer.
 	pub fn shown_lines(&self, hist: usize, lines: usize) -> usize {
 		if self.shown == 0 {
 			hist + lines
@@ -619,9 +619,9 @@ impl Minimap {
 		*self = Self::default();
 	}
 
-	/// Fold this build's grid into the cache and recompose if it is time.
+	/// Fold this build's grid into the cache and recompose if it's time.
 	/// `advanced` is the count of lines that entered history since the last
-	/// build - the same number the output ease rides. `lag` is how far behind
+	/// build, the same number the output ease rides. `lag` is how far behind
 	/// the newest output the eased view still sits, in whole lines, which is
 	/// where the map has to stop, and `draining` is whether that lag is still
 	/// falling.
@@ -712,8 +712,8 @@ impl Minimap {
 			// nothing.
 			crate::perf::allocs_note("map composed");
 			// A whole redraw, after a screen swap, a resize or a resync, costs
-			// far more than the ordinary ones after it. Twenty times its cost
-			// left the map standing still for seconds, so the wait follows the
+			// far more than the ordinary ones after it. A wait of 20 times its
+			// cost left the map standing still for seconds, so the wait follows the
 			// ordinary cost.
 			let whole = self.fresh >= self.hist;
 			let began = Instant::now();
@@ -733,8 +733,8 @@ impl Minimap {
 				self.spent = began.elapsed();
 			}
 		} else if !collected {
-			// Inside the throttle: a compose is owed only for what this build
-			// folded. Owing one regardless had two panes trading wakes for
+			// Inside the throttle: a compose is due only for what this build
+			// folded. Asking for one regardless had 2 panes trading wakes for
 			// good, each one's compose frame putting the other inside its gap.
 			self.pending = self.owed(draining);
 			return;
@@ -742,19 +742,19 @@ impl Minimap {
 		self.pending = self.owed(draining);
 	}
 
-	// Whether another compose is owed once this one is drawn. Short of the
-	// bottom AND the lag is still falling, so the ease drains on its own and
+	// Whether another compose is due once this one is drawn. Short of the
+	// bottom and the lag is still falling, so the ease drains on its own and
 	// the map has to follow it down even if no more output arrives. `pending`
 	// drives the build gate and the timed wake, so this is the whole
-	// mechanism - and it is why the drain half matters. A view parked in the
-	// scrollback freezes the lag, and owing a compose there asked for a frame
+	// mechanism, and it's why the drain half matters. A view parked in the
+	// scrollback freezes the lag, and a compose due there asked for a frame
 	// and a full recompose several times a second for as long as the pane sat
-	// there (F155). Stand-ins left to replace owe one too, and that runs out.
+	// there (F155). Stand-ins left to replace make one due too, and that runs out.
 	fn owed(&self, draining: bool) -> bool {
 		(draining && self.shown < self.hist + self.lines) || self.rough_n > 0 || self.moved
 	}
 
-	/// A compose is owed. The build gate reads this so the next pass pays it,
+	/// A compose is due. The build gate reads this so the next pass pays it,
 	/// rather than leaving the map a step behind once output stops.
 	pub fn pending(&self) -> bool {
 		self.pending
@@ -800,7 +800,7 @@ impl Minimap {
 	}
 
 	// Take the store back from a compose that has finished on its thread.
-	// Answers whether one did.
+	// Returns whether one did.
 	fn collect(&mut self, now: Instant) -> bool {
 		let Some(job) = self.job.take_if(|job| job.thread.is_finished()) else {
 			if self.job.is_some() {
@@ -822,7 +822,7 @@ impl Minimap {
 		true
 	}
 
-	// The store did not come back, so the next build rebuilds the cache.
+	// The store didn't come back, so the next build rebuilds the cache.
 	fn lost(&mut self) {
 		self.store = Store::default();
 		self.job = None;
@@ -951,7 +951,7 @@ impl Minimap {
 			// A cell spreads over a tent a pixel wide each side, not over the one
 			// pixel it happens to fall in. At the ratios a column runs at, that
 			// pixel alternates between cells as you go along the line, and the
-			// cell grid beats against the pixel grid into a comb that is not in
+			// cell grid beats against the pixel grid into a comb that isn't in
 			// the text. The end cells reach past the edge so the first and last
 			// pixel are covered as fully as the rest.
 			let x0 = if c == 0 { -2.0 } else { c as f32 * per_cell };
@@ -978,7 +978,7 @@ impl Minimap {
 
 	// One grid line to one strip of preview pixels. Blank cells are skipped
 	// before any color is resolved, which is most of a terminal buffer.
-	// Answers whether the line laid down any ink at all.
+	// Returns whether the line laid down any ink at all.
 	fn fill(
 		&mut self,
 		grid: &Grid<Cell>,
@@ -1001,7 +1001,7 @@ impl Minimap {
 		let (spans, span_at) = (&self.spans, &self.span_at);
 		// A line is mostly runs of one style, so the last cell's colors are kept
 		// rather than resolved again. The character's own share is cheap and
-		// varies cell to cell, so it is not part of the key.
+		// varies cell to cell, so it isn't part of the key.
 		let mut last: Option<(Style, Ink)> = None;
 		for (c, cell) in row.iter().take(self.cols).enumerate() {
 			if blank(cell) {
@@ -1048,7 +1048,7 @@ impl Minimap {
 	}
 
 	// Where a line's ink sits inside the `lh` pixels the line occupies, as
-	// (offset, height). Ramped between whole-line and BAND so the map does not
+	// (offset, height). Ramped between whole-line and BAND so the map doesn't
 	// change brightness as a growing buffer compresses its lines.
 	fn band(lh: f32) -> (f32, f32) {
 		let t = ((lh - BAND_FLOOR) / (BAND_FULL - BAND_FLOOR)).clamp(0.0, 1.0);
@@ -1057,7 +1057,7 @@ impl Minimap {
 }
 
 impl Store {
-	// Make the edits the plan carries, then compose.
+	// Make the edits in the plan, then compose.
 	fn run(&mut self, plan: &mut Plan) {
 		for _ in 0..self.screen {
 			if let Some(row) = self.rows.pop_back() {
@@ -1080,7 +1080,7 @@ impl Store {
 			}
 			self.rows.push_back(row);
 		}
-		// the rows replaced, newest first, as runs, so two far apart do not
+		// the rows replaced, newest first, as runs, so 2 far apart don't
 		// redo everything between them
 		let mut runs: Vec<Range<usize>> = Vec::new();
 		for (i, mut row) in plan.refined.drain(..) {
@@ -1112,9 +1112,9 @@ impl Store {
 
 	// Squash the cached rows into the column image: the pixel rows that rows
 	// `lines` fall in. Each pixel row is worked out on its own, so redoing a
-	// few matches what a whole compose draws there. Colour is the average of
-	// the lines that actually have ink, so a lone red line is not washed out
-	// by its blank neighbours; how bright the pixel gets is how much ink fell
+	// few matches what a whole compose draws there. Color is the average of
+	// the lines that have ink, so a lone red line isn't washed out
+	// by its blank neighbors; how bright the pixel gets is how much ink fell
 	// in it.
 	fn compose(&mut self, lines: Range<usize>, plan: &Plan, scale: f32) {
 		let (width, img_h) = (plan.width, plan.img_h);
@@ -1134,11 +1134,11 @@ impl Store {
 		// A line is spread over a tent a pixel each side rather than clipped to
 		// the pixel row it falls in. A box leaves the line grid beating against
 		// the pixel grid, and at these pitches the beat is slow enough to draw
-		// broad bands down the column that are not in the text. Under
+		// broad bands down the column that aren't in the text. Under
 		// BAND_FLOOR a pixel row already averages more than a whole line, the
 		// gap between lines is switched off and the column is even anyway, so
-		// the box is kept there - the wider filter would cost three times as
-		// much on the deep buffer where a compose is already the expensive one.
+		// the box is kept there. The wider filter would cost 3 times as much
+		// on the deep buffer where a compose is already the expensive one.
 		let soft = lh >= BAND_FLOOR;
 		let reach = if soft { 1.0 } else { 0.0 };
 		let py0 = (lines.start as f32 * lh - reach - 1.0).floor().max(0.0) as usize;
@@ -1159,7 +1159,7 @@ impl Store {
 				let row = &self.rows[i];
 				// Most lines of a deep buffer fall wholly inside their pixel row
 				// and all take the same share, so those add up as integers and
-				// the share is applied once. That is most of the cost of a
+				// the share is applied once. That's most of the cost of a
 				// compose at depth.
 				if !soft && top >= y0 && top + band_h <= y1 {
 					acc.add_whole(row);
@@ -1270,7 +1270,7 @@ struct Style {
 	flags: Flags,
 }
 
-// A style's two resolved colors, kept so a run of one style resolves once and
+// A style's 2 resolved colors, kept so a run of one style resolves once and
 // each cell in it only has to mix its own character's share in.
 #[derive(Clone, Copy)]
 struct Ink {
@@ -1319,7 +1319,7 @@ fn paint(
 // How much of its cell a character inks, against the densest ones at 1.0.
 // Flat ink is what made a run of text read as a bar; a period and a hash are
 // nothing alike from across the room. Eyeballed from a monospace face rather
-// than measured, since the map is a hint and the face is not known here.
+// than measured, since the map is a hint and the face isn't known here.
 #[rustfmt::skip]
 const INK_SHARE: [f32; 95] = [
 	// ' '   !     "     #     $     %     &     '     (     )     *     +
@@ -1754,7 +1754,7 @@ mod tests {
 		fn send_event(&self, _e: Event) {}
 	}
 
-	// A grid with the cursor still on its first row, so what is written lands
+	// A grid with the cursor still on its first row, so what's written goes
 	// at the top and the rows under it stay blank.
 	fn fresh_term(cols: usize, lines: usize, scrollback: usize) -> (Term<VoidListener>, Processor) {
 		let cfg = TermConfig {
@@ -1780,7 +1780,7 @@ mod tests {
 	fn styled_line(rng: &mut Rng, cols: usize) -> String {
 		let mut out = String::from("\r");
 		for _ in 0..rng.below(cols) {
-			// writing to a String cannot fail
+			// writing to a String can't fail
 			let _ = match rng.below(12) {
 				0 => write!(out, "\x1b[{}m", 30 + rng.below(8)),
 				1 => write!(out, "\x1b[{}m", 40 + rng.below(8)),
@@ -1818,11 +1818,11 @@ mod tests {
 	}
 
 	// A full-screen program draws on its own screen, which has no scroll buffer,
-	// so the column steps aside - unless the program is one that was named.
+	// so the column steps aside, unless the program is one that was named.
 	// A page of identical lines has to compose to an evenly lit column. The
 	// gap drawn between lines beats against the pixel grid, and at these
 	// pitches the beat is slow enough to read as broad bands running down the
-	// column that are not in the text at all.
+	// column that aren't in the text at all.
 	// Test ID: dcwng
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
@@ -1856,7 +1856,7 @@ mod tests {
 			);
 			let lh = line_px(img_h as f32, map.shown, 1.0);
 			// the screen it started on is pushed up ahead of the page, and the
-			// screen it ends on sits below it, so measure between the two
+			// screen it ends on sits below it, so measure between the 2
 			let from = (lh * (lines + 1) as f32) as usize;
 			let used = (lh * (map.shown - lines) as f32) as usize;
 			let rows: Vec<f32> = (from..used - 2)
@@ -1872,9 +1872,9 @@ mod tests {
 		}
 	}
 
-	// The same across the column. Cells do not line up with pixels either, and
+	// The same across the column. Cells don't line up with pixels either, and
 	// a filter no wider than one pixel leaves the cell grid beating against
-	// them - a comb down the column that is not in the text.
+	// them, which is a comb down the column that isn't in the text.
 	// Test ID: dcwnh
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
@@ -1899,7 +1899,7 @@ mod tests {
 			&mut palette::Readable::default(),
 			&mut strip,
 		);
-		// a five-pixel average holds no cell-scale detail, so what is left in
+		// a 5-pixel average has no cell-scale detail, so what's left in
 		// it is the slow beat
 		let smooth: Vec<f32> = (4..width - 4)
 			.map(|x| {
@@ -1923,7 +1923,7 @@ mod tests {
 	fn a_full_screen_program_takes_the_column_unless_it_is_named() {
 		let mut s = cfg(true, 100.0);
 		s.minimap_tui_whitelist = "less tmux screen".to_string();
-		// nothing full-screen is running, so it does not matter what is
+		// nothing full-screen is running, so it doesn't matter what is
 		assert!(wanted(&s, false, None));
 		assert!(wanted(&s, false, Some("vim")));
 		// on the alt screen only the named ones keep it
@@ -1931,7 +1931,7 @@ mod tests {
 		assert!(wanted(&s, true, Some("tmux")));
 		assert!(!wanted(&s, true, Some("vim")));
 		assert!(!wanted(&s, true, Some("nano")));
-		// a program nobody can name is not one that was named
+		// a program nobody can name isn't one that was named
 		assert!(!wanted(&s, true, None));
 		// either spelling of the same program, on either platform
 		assert!(wanted(&s, true, Some("LESS.EXE")));
@@ -2127,11 +2127,11 @@ mod tests {
 	// Test ID: dc0b3
 	#[test]
 	fn a_short_buffer_does_not_stretch_to_fill() {
-		// 50 lines in a 600px column: capped, so well short of the 600
+		// a 600px column with 50 lines: capped, so well short of the 600
 		let lh = line_px(600.0, 50, 1.0);
 		assert_eq!(lh, MAX_LINE_PX);
 		assert!(lh * 50.0 < 300.0);
-		// 10,000 lines compress instead
+		// with 10,000 lines it compresses instead
 		assert!(line_px(600.0, 10_000, 1.0) < 0.1);
 	}
 
@@ -2164,7 +2164,7 @@ mod tests {
 				(still - pos).abs() < 1e-3,
 				"{pos} moved to {still} on its own"
 			);
-			// ten lines' worth of pixels up the column is ten lines back
+			// 10 lines' worth of pixels up the column is 10 lines back
 			let want = (pos + 10.0).min((total - rows) as f32);
 			let moved = drag_to(&g, total, total, rows, (y, pos), y - 10.0 * pitch, 1.0);
 			assert!(
@@ -2177,7 +2177,7 @@ mod tests {
 	// The marker covers the lines that are on screen. Under a flood the map
 	// stops where the eased text has reached, and measuring the marker against
 	// the whole buffer instead left it well above those lines, with a click in
-	// the column landing off center (F148). Where the height floor makes the
+	// the column ending up off center (F148). Where the height floor makes the
 	// marker taller than the rows it stands for, it grows from their middle,
 	// so the slack is half that excess and no more.
 	// Test ID: dcwmn
@@ -2214,14 +2214,14 @@ mod tests {
 
 	// A grab stores the pointer and the position it stood for, and the first
 	// drag event feeds the same pointer back, so it has to come out unmoved.
-	// Where it does not, a press and one pixel of movement scrolls the view on
+	// Where it doesn't, a press and one pixel of movement scrolls the view on
 	// its own.
 	// Test ID: dcvj1
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_marker_reads_back_the_position_it_was_drawn_at() {
 		let track = 900.0;
-		// a full screen, a screen holding only a prompt at two history depths,
+		// a full screen, a screen holding only a prompt at 2 history depths,
 		// and a deep buffer where the height floor eats most of the travel
 		for &(total, shown, rows) in &[
 			(1000, 1000, 48),
@@ -2291,7 +2291,7 @@ mod tests {
 	// Test ID: dc0b7
 	#[test]
 	fn a_line_composes_where_the_mapping_puts_it() {
-		// 100 lines in a 200px column, line 40 the only red one
+		// a 200px column with 100 lines, line 40 the only red one
 		let width = 8;
 		let mut rows: Vec<Row> = (0..100).map(|_| row(width, 4, [0, 200, 0])).collect();
 		rows[40] = row(width, 4, [200, 0, 0]);
@@ -2318,7 +2318,7 @@ mod tests {
 		let mut map = Minimap::default();
 		map.seed(width, rows);
 		map.compose(400, 1.0);
-		// 50 lines at the capped height fill a fraction of the 400
+		// at the capped height, 50 lines fill a fraction of the 400
 		let used = (line_px(400.0, 50, 1.0) * 50.0) as usize;
 		assert!(used < 200);
 		assert!(map.pixel(0, used - 1)[3] > 0);
@@ -2328,7 +2328,7 @@ mod tests {
 	// Test ID: dc0b9
 	#[test]
 	fn one_inked_line_among_many_still_shows() {
-		// 5,000 lines into 500px: 10 lines to a pixel row, and the single red one
+		// 500px for 5,000 lines: 10 lines to a pixel row, and the single red one
 		// must keep its color and stay findable, dimmer than a solid page
 		let width = 4;
 		let mut rows: Vec<Row> = (0..5000).map(|_| vec![0u8; width * 4]).collect();
@@ -2367,7 +2367,7 @@ mod tests {
 
 	// Under a flood most lines leave history before any compose shows them, and
 	// the build that folds them in holds the term lock the PTY reader waits on.
-	// So a build that does not compose rasterizes nothing, and a compose does no
+	// So a build that doesn't compose rasterizes nothing, and a compose does no
 	// more than the history and the screen, however much output went by.
 	// Test ID: dcvct
 	#[test]
@@ -2417,7 +2417,7 @@ mod tests {
 		}
 		// a second of frames; how many composes depends on how long each took
 		assert!((2..=13).contains(&composes), "{composes} composes");
-		// 30,000 lines went by
+		// by now 30,000 lines went by
 		assert!(
 			map.rastered <= composes * (scrollback + lines),
 			"{}",
@@ -2474,7 +2474,7 @@ mod tests {
 	}
 
 	// A 445 ms whole redraw at 30,000 lines held the next 22 ms one back for
-	// nearly nine seconds.
+	// nearly 9 seconds.
 	// Test ID: dd829
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
@@ -2592,7 +2592,7 @@ mod tests {
 	// A stand-in is only there until a compose has the time, and once the
 	// output stops every line is drawn from itself: the image ends up the one
 	// a cache with no budget makes. The composes that replace them redo only
-	// the pixel rows they touch, so this also holds that to a whole compose,
+	// the pixel rows they touch, so this also checks that against a whole compose,
 	// under both filters.
 	// Test ID: dd8fr
 	#[test]
@@ -2656,7 +2656,7 @@ mod tests {
 
 	// The column's width can change between composes, and the image is still
 	// the one composed at the old width. A caller that took the new width made
-	// a texture the pixels could not fill, and wgpu killed the window.
+	// a texture the pixels couldn't fill, and wgpu killed the window.
 	// Test ID: dcvdh
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
@@ -2797,7 +2797,7 @@ mod tests {
 		}
 	}
 
-	// A character is not a flat block. A period inks a fraction of its cell and
+	// A character isn't a flat block. A period inks a fraction of its cell and
 	// a hash most of it, and that difference is what stops a run of text
 	// reading as one bar.
 	// Test ID: dcvh8
@@ -2852,8 +2852,8 @@ mod tests {
 	}
 
 	// At the capped height a line's ink is a band narrower than a pixel, so it
-	// falls across two pixel rows at part strength rather than filling one.
-	// That is what a page of text looks like from across the room.
+	// falls across 2 pixel rows at part strength rather than filling one.
+	// That's what a page of text looks like from across the room.
 	// Test ID: dcvh9
 	#[test]
 	fn a_line_at_the_cap_is_softer_than_a_solid_row() {
@@ -2878,7 +2878,7 @@ mod tests {
 	}
 
 	// Under a flood the eased view sits behind the newest output. The map stops
-	// where the view has reached, so the column shows nothing the text has not.
+	// where the view has reached, so the column shows nothing the text hasn't.
 	// With the ease at rest it draws the whole buffer again.
 	// Test ID: dcvny
 	#[test]
@@ -2887,8 +2887,8 @@ mod tests {
 		let settings = config::Settings::default();
 		let (cols, lines) = (40, 48);
 		let (width, img_h) = (16, 300);
-		// Short enough that lines draw at the capped height, so a trim actually
-		// shortens the column rather than just compressing it less.
+		// Short enough that lines draw at the capped height, so a trim shortens
+		// the column rather than compressing it less.
 		let compose = |lag: usize| {
 			let (mut term, mut parser) = live_term(cols, lines, 1000);
 			parser.advance(&mut term, "x\r\n".repeat(100).as_bytes());
@@ -2969,7 +2969,7 @@ mod tests {
 		assert_eq!(back, hist as f32);
 	}
 
-	// The other reading of the same backlog sentence, which shipped for a day
+	// The other reading of the same backlog sentence, which was in for a day
 	// and is out again (SR1): the map used to stop at the last screen row with
 	// ink, so the blank rows under a short prompt took no track. They are part
 	// of the buffer, and the marker reaches over them.
@@ -2980,8 +2980,8 @@ mod tests {
 		let settings = config::Settings::default();
 		let (cols, lines) = (40, 48);
 		let (width, img_h) = (16, 300);
-		// 100 lines of output, then a clear - which pushes the screen it erases
-		// into history - and a prompt alone on the top row.
+		// output of 100 lines, then a clear, which pushes the screen it erases
+		// into history, and a prompt alone on the top row.
 		let (mut term, mut parser) = fresh_term(cols, lines, 1000);
 		parser.advance(&mut term, "x\r\n".repeat(100).as_bytes());
 		parser.advance(&mut term, b"\x1b[H\x1b[2J");
@@ -3083,8 +3083,8 @@ mod tests {
 	}
 
 	// F155. A view parked in the scrollback freezes the lag, so no later compose
-	// can draw anything new. Owing one anyway had `wake()` asking app.rs for a
-	// frame and a full recompose about eleven times a second for as long as the
+	// can draw anything new. Marking one due anyway had `wake()` asking app.rs for a
+	// frame and a full recompose about 11 times a second for as long as the
 	// pane sat there, with no output and nobody touching it.
 	// Test ID: dcwdk
 	#[test]
@@ -3117,9 +3117,9 @@ mod tests {
 		let (mut term, mut parser) = live_term(cols, lines, 10_000);
 		parser.advance(&mut term, "x\r\n".repeat(2000).as_bytes());
 		let start = Instant::now();
-		// Well past the throttle, whose gap is the larger of 90 ms and twenty
+		// Well past the throttle, whose gap is the larger of 90 ms and 20
 		// times the last compose. At a step near the floor this test read a
-		// deferred compose as an owed one and went red on a busy box (F158).
+		// deferred compose as a due one and went red on a busy box (F158).
 		let drive = |map: &mut Minimap, draining: bool, step: u64| {
 			map.update(
 				term.grid(),
@@ -3138,7 +3138,7 @@ mod tests {
 			);
 		};
 
-		// parked: one compose settles it and nothing more is owed, however long
+		// parked: one compose settles it and nothing more is due, however long
 		// the pane sits there
 		let mut map = Minimap::default();
 		for step in 0..50 {
@@ -3152,17 +3152,17 @@ mod tests {
 		);
 
 		// and the control: the same short map while the ease is still draining
-		// does owe one, or it would never follow the ease down
+		// does need one, or it would never follow the ease down
 		let mut draining = Minimap::default();
 		drive(&mut draining, true, 0);
 		assert!(draining.pending(), "a draining lag owes a compose");
 		assert!(draining.wake().is_some(), "a draining lag asks for a frame");
 	}
 
-	// A build that lands inside the throttle with nothing new owes nothing.
-	// Marking one owed anyway gave two panes a wake each about half a gap
+	// A build that falls inside the throttle with nothing new needs no compose.
+	// Marking one due anyway gave 2 panes a wake each about half a gap
 	// apart: each one's compose frame rebuilt the other inside its gap, which
-	// owed a compose, which woke the window, which rebuilt the first inside
+	// made a compose due, which woke the window, which rebuilt the first inside
 	// its gap. Every frame had both panes shaped again, at rest, for good.
 	// Test ID: ddrhw
 	#[test]
@@ -3200,7 +3200,7 @@ mod tests {
 		assert!(!map.pending(), "a build inside the gap owed a compose");
 		assert!(map.wake().is_none(), "and asked for a frame");
 
-		// the control: output folded inside the gap does owe the compose that
+		// the control: output folded inside the gap does need the compose that
 		// will draw it
 		let mut fed = Minimap::default();
 		drive(&mut fed, 0, 0);
@@ -3218,7 +3218,7 @@ mod tests {
 		assert_eq!(to_u8(255.0), 255);
 	}
 
-	// Rasterizing late must not change what is drawn: every compose matches the
+	// Rasterizing late mustn't change what's drawn: every compose matches the
 	// one a fresh cache makes from the same grid, whatever went by in between.
 	// Test ID: dcvcw
 	#[test]
@@ -3309,7 +3309,7 @@ mod tests {
 	fn a_line_under_a_pixel_keeps_its_whole_height() {
 		assert_eq!(Minimap::band(0.4), (0.0, 0.4));
 		assert_eq!(Minimap::band(0.5), (0.0, 0.5));
-		// at the cap the ink is a band, so it falls across two pixel rows
+		// at the cap the ink is a band, so it falls across 2 pixel rows
 		let (top, h) = Minimap::band(MAX_LINE_PX);
 		assert!(top > 0.0 && h < MAX_LINE_PX * 0.75);
 		assert!(

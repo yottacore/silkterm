@@ -15,7 +15,7 @@
 ##		  only fonts and a private wineprefix, both handled here.
 ##		- Everything goes in cicd/artifacts/win-run/ (gitignored): the wineprefix, a
 ##		  copy of the exe, its own config.shcl, and the run log. The real ~/.wine and
-##		  ~/.config/silkterm are never touched, so a Windows-side config rewrite cannot
+##		  ~/.config/silkterm are never touched, so a Windows-side config rewrite can't
 ##		  disturb the Linux build's settings.
 ##		- The exe is re-copied every run, so a fresh cross-build is picked up
 ##		  automatically. --restage rebuilds the wineprefix itself (after a wine upgrade).
@@ -23,35 +23,35 @@
 ##		  first, matched on its exact staged path - so a silkterm started from anywhere
 ##		  else (notably the Linux dogfood build) is left alone. wineserver is shared with
 ##		  any other wine app and is never touched.
-##	What works, and what does not (measured against wine 10.0):
+##	What works, and what doesn't (measured against wine 10.0):
 ##		- Works: the window, the GPU path (wgpu picks up the real card through
 ##		  winevulkan), fonts, menu/tab chrome, dialogs, wallpaper, scrim.
-##		- Does not work: the shell. Wine's ConPTY is half implemented -
+##		- Doesn't work: the shell. Wine's ConPTY is half implemented -
 ##		  CreatePseudoConsole succeeds and the initial size is honored (conhost starts
 ##		  headless at the right grid), but a child spawned with
-##		  PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE does not actually attach to it, so no
-##		  child output ever reaches the grid. Expect a live, correctly drawn, empty
+##		  PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE doesn't attach to it, so no
+##		  child output ever gets to the grid. Expect a live, correctly drawn, empty
 ##		  terminal. Good for looking at the Windows build, not for driving it.
 ##		- Because of that, the default shell is a keep-alive rather than a real one:
 ##		  cmd.exe finds no usable console, exits immediately, and takes the window with
-##		  it (the terminal quits when its last pane's command ends). A child that simply
-##		  stays running holds the window open so there is something to look at. Pass
-##		  --shell cmd.exe to get the real thing back once wine can carry the I/O.
+##		  it (the terminal quits when its last pane's command ends). A child that
+##		  stays running keeps the window open so there's something to look at. Pass
+##		  --shell cmd.exe to get the real thing back once wine passes the I/O through.
 ##		- ResizePseudoConsole is a stub returning E_NOTIMPL, and the terminal backend
 ##		  asserts the result is S_OK - so the app used to die on its first resize. The
 ##		  small conpty.dll built here (fBuildConptyShim) forwards create/close to
-##		  kernel32 and answers resize with S_OK, which is what keeps it alive. It needs
+##		  kernel32 and returns S_OK for a resize, which keeps it alive. It needs
 ##		  mingw; without mingw the app still starts but dies on the first resize.
 ##		- Microsoft's own conpty.dll + OpenConsole.exe (the ConPTY nuget) were tried and
 ##		  fail earlier still - CreatePseudoConsole returns 0xd000000d - so there is no
 ##		  better implementation to drop in, and dropping one in would be worse: the
-##		  backend prefers any loadable conpty.dll over kernel32 and does not fall back
+##		  backend prefers any loadable conpty.dll over kernel32 and doesn't fall back
 ##		  when it fails.
-##		- A newer wine does not help either. Measured on 11.14: the pty pipe still gets
-##		  zero bytes. Only ResizePseudoConsole changes - it fakes success from 11.2 on,
-##		  which just makes the shim redundant. To try another wine put it first on PATH
+##		- A newer wine doesn't help either. Measured on 11.14: the pty pipe still gets
+##		  0 bytes. Only ResizePseudoConsole changes - it fakes success from 11.2 on,
+##		  which makes the shim redundant. To try another wine put it first on PATH
 ##		  (wine/wineboot are called unqualified) and pass --restage for its own prefix.
-##		- Only the x86_64 build runs; wine on x86_64 cannot execute the ARM64 exe.
+##		- Only the x86_64 build runs; wine on x86_64 can't execute the ARM64 exe.
 ##		- Wine's menu builder is turned off for every wine call here. Left on, it
 ##		  registers file types and menu entries on the desktop that point into the
 ##		  staged prefix, and they go dead when the prefix is rebuilt.
@@ -104,8 +104,8 @@ declare -ar hostFontDirs=(
 	"${HOME}/.fonts"
 )
 
-## Keep-alive stand-in for a shell: a child that just stays running, so the window
-## stays up. A loopback ping is the one long-lived thing every wineprefix ships.
+## Keep-alive stand-in for a shell: a child that stays running, so the window
+## stays up. A loopback ping is the one long-lived thing every wineprefix has.
 declare -r  keepAliveShell="ping -n 100000 127.0.0.1"
 
 ## Runtime options, overridable by flags.
@@ -157,7 +157,7 @@ fShowHelp(){
 ## Newest Windows exe from the candidate list (an explicit --exe wins outright).
 fResolveExe(){
 	if [[ -n "${optExe}" ]]; then
-		[[ -f "${optExe}" ]] || fDie "--exe '${optExe}' does not exist"
+		[[ -f "${optExe}" ]] || fDie "--exe '${optExe}' doesn't exist"
 		echo "${optExe}"
 		return 0
 	fi
@@ -183,7 +183,7 @@ fStagePrefix(){
 		|| fDie "wineboot failed - see ${logFile}"
 }
 
-## A fresh wineprefix ships no fonts at all, and the text stack aborts with
+## A fresh wineprefix has no fonts at all, and the text stack aborts with
 ## 'no default font found' when it can see none. Symlinking the host trees in is
 ## enough, and keeps the staged copy small.
 fLinkFonts(){
@@ -199,7 +199,7 @@ fLinkFonts(){
 
 ## conpty.dll shim - see the Purpose block. The backend loads any conpty.dll next
 ## to the exe in preference to kernel32, which is the hook used here: create and
-## close go straight back to kernel32 (both work under wine), and resize answers
+## close go straight back to kernel32 (both work under wine), and resize returns
 ## S_OK instead of wine's E_NOTIMPL, which the backend would assert on.
 ## Consequence: a resize is silently not forwarded to the child, which costs
 ## nothing here because the child never attaches to the pseudoconsole anyway.
@@ -215,7 +215,7 @@ fBuildConptyShim(){
 	fi
 
 	## Written to a scratch file first and only moved into place when it differs, so
-	## an unchanged source keeps its mtime and the dll below is not rebuilt every run.
+	## an unchanged source keeps its mtime and the dll below isn't rebuilt every run.
 	local -r shimNew="${shimSrc}.new"
 	cat > "${shimNew}" <<-'EOF'
 		/* See run-windows-build-via-wine.bash (fBuildConptyShim) for why this exists. */
@@ -277,7 +277,7 @@ fBuildConptyShim(){
 ## path (Z:\...\app\silkterm.exe) while the launcher stub keeps the unix one, so
 ## every separator becomes a regex '.' and the one pattern catches both spellings.
 ## pkill returns 1 when nothing matched, which is fine. wineserver is shared with
-## any other wine app and is deliberately left alone.
+## any other wine app and is left alone on purpose.
 fStagedExePattern(){ printf '%s' "${stagedExe}" | sed 's/[][\\.^$*+?(){}|]/\\&/g; s#/#.#g'; }
 
 ## The keep-alive child outlives the app: it never attached to the pseudoconsole, so
@@ -295,7 +295,7 @@ fKillPrevious(){
 }
 
 ## Did it survive startup? A command that ends straight away takes the window with
-## it, which otherwise just looks like nothing happened.
+## it, which otherwise looks like nothing happened.
 fReportOutcome(){
 	sleep 10   ## GPU + font bring-up under wine takes a few seconds
 	if pgrep -f "$(fStagedExePattern)" >/dev/null 2>&1; then
@@ -324,7 +324,7 @@ fLaunch(){
 	(( ${#passThrough[@]} )) && launchArgs+=("${passThrough[@]}")
 
 	fEcho "Launching the Windows build under wine (DISPLAY=${DISPLAY}, shell=${optShell})"
-	fEcho "Note: wine's ConPTY does not carry child I/O - expect an empty grid"
+	fEcho "Note: wine's ConPTY doesn't pass child I/O through - expect an empty grid"
 
 	if (( optAttach )); then
 		wine "${stagedExe}" "${launchArgs[@]}"
@@ -332,7 +332,7 @@ fLaunch(){
 	fi
 
 	## Detach: new session, no controlling tty, own fds - so this script returns at
-	## once and the app outlives it. The log path rides an env var to keep quotes off
+	## once and the app outlives it. The log path goes in an env var to keep quotes off
 	## argv, matching the sister launcher.
 	fEcho "Log: ${logFile}"
 	WINE_LOG="${logFile}" setsid /bin/sh -c \
@@ -350,7 +350,7 @@ fLaunch(){
 fMain(){
 	fParseArgs "${@}"
 
-	command -v wine >/dev/null 2>&1 || fDie "wine is not installed"
+	command -v wine >/dev/null 2>&1 || fDie "wine isn't installed"
 
 	## Before wineboot as well as the run, since a new prefix registers its own set.
 	export WINEDLLOVERRIDES="${WINEDLLOVERRIDES:+${WINEDLLOVERRIDES};}winemenubuilder.exe=d"

@@ -96,7 +96,7 @@ struct Dlg {
 	panel_bg: [u8; 3],
 	panel_border: [u8; 3],
 	gutter: [u8; 3], // the strip the tabs stand on
-	tab_bg: [u8; 3], // a tab that is not the current one
+	tab_bg: [u8; 3], // a tab that isn't the current one
 	tab_hl: [u8; 3], // the current tab: a lighter gray, deliberately not an accent
 	track: [u8; 3],
 	handle: [u8; 3],
@@ -139,7 +139,7 @@ impl Dlg {
 		mix3(self.panel_bg, self.gutter, 0.5)
 	}
 }
-// sRGB-space blend of two colors (selection highlight = field bg toward accent)
+// sRGB-space blend of 2 colors (selection highlight = field bg toward accent)
 fn mix3(a: [u8; 3], b: [u8; 3], t: f32) -> [u8; 3] {
 	let mut out = [0u8; 3];
 	for k in 0..3 {
@@ -177,7 +177,7 @@ fn dlg() -> Dlg {
 		LIGHT_DLG
 	};
 	let settings = config::settings();
-	// The two attention colors are themable and mean different things (see
+	// The 2 attention colors are themable and mean different things (see
 	// theme.rs). `highlight` paints everything that calls attention at once -
 	// slider handles, the scrollbar, revert arrows, the default button - and the
 	// button fill is a dimmed version of it, mixed toward the panel so a pressed
@@ -227,7 +227,7 @@ pub fn dialog_focus() -> [u8; 3] {
 // stored as milliseconds. Logarithmic: a time constant is felt by ratio, and a
 // linear map wastes most of the travel on values that look identical (the old
 // 300ms floor was why the slow end read as a no-op - barely below the 230ms
-// default). Each range spans two decades around the value its segment was
+// default). Each range spans 2 decades around the value its segment was
 // first tuned to, so a default anywhere in it still leaves room to
 // move either way.
 fn log_pos(v: f32, min: f32, max: f32) -> f32 {
@@ -251,7 +251,7 @@ const TAU_MIN: f32 = 10.0;
 const TAU_MAX: f32 = 1000.0;
 // A fraction the config stores as 0..1 reads as a whole percent in the dialog:
 // nobody thinks in 0.35. Only the display moves - the file keeps the decimal,
-// so the two are the same transform in opposite directions and every default
+// so the 2 are the same transform in opposite directions and every default
 // comparison happens on the same side of it.
 fn to_percent(fraction: f32) -> f32 {
 	fraction * 100.0
@@ -272,7 +272,7 @@ const EASE_IN_MAX: f32 = 800.0;
 // Chase doubling period: 30ms is a near-instant ramp, 3s barely ramps at all.
 const RAMP_UP_MIN: f32 = 30.0;
 const RAMP_UP_MAX: f32 = 3000.0;
-// Wind-down halving period, the same two-decade span as the ramp up.
+// Wind-down halving period, the same 2-decade span as the ramp up.
 const RAMP_DOWN_MIN: f32 = 45.0;
 const RAMP_DOWN_MAX: f32 = 4500.0;
 // Tail duration: 13ms is an abrupt stop, 1.3s a long float-in.
@@ -283,7 +283,7 @@ const EASE_OUT_MAX: f32 = 1300.0;
 // kinds: `keys_of!(toggle | radio)`. Each accessor names its own kind's keys
 // one by one and the rest through this, so a key added to `ui_spec` or left
 // out of an accessor fails to compile instead of falling to a catch-all.
-// `every_row_kind_matches_its_key_list` holds the lists against the rows.
+// `every_row_kind_matches_its_key_list` checks the lists against the rows.
 // Built up in one pass rather than one macro per kind, which clippy reads as
 // nested or-patterns.
 macro_rules! keys_of {
@@ -436,7 +436,7 @@ macro_rules! keys_of {
 			| Key::HotkeyFocusDown
 		] $($rest)*)
 	};
-	// headings and two-setting rows (`None`), the theme buttons, the shells
+	// headings and 2-setting rows (`None`), the theme buttons, the shells
 	// list, which is a list rather than one value, and values with no row
 	(@ [$($acc:tt)*] valueless $($rest:ident)*) => {
 		keys_of!(@ [$($acc)*
@@ -459,7 +459,7 @@ macro_rules! keys_of {
 }
 
 /// A slider's value in the dialog's own units, read from `settings`. One list for the
-/// shown value and the default, so the two cannot disagree on a transform.
+/// shown value and the default, so the 2 can't disagree on a transform.
 pub(crate) fn slider_of(settings: &Settings, key: Key) -> f32 {
 	match key {
 		Key::Opacity => to_percent(settings.opacity),
@@ -522,7 +522,7 @@ const fn no_tmux_tip(found: bool) -> Option<&'static str> {
 	}
 }
 
-// A switch's state in `settings`, for the shown value, the default and the revert.
+// A switch's state in `settings`, for the shown value, the default, and the revert.
 fn toggle_of(settings: &Settings, key: Key) -> bool {
 	match key {
 		Key::PerfAuto => settings.performance_automatic,
@@ -617,7 +617,7 @@ const REVERT_INSET: f32 = 4.0;
 // What a hotkey row's box says while it waits for the new chord.
 const CAPTURE_PROMPT: &str = "Press keys - Esc cancels, Backspace turns off";
 
-// Clear space between the parts of a line that carries several controls, DIP.
+// Clear space between the parts of a line with several controls, DIP.
 const PAIR_GAP: f32 = 12.0;
 // Between a label and the box it names, either side of it, DIP. Grows with the
 // font through `font_gap`.
@@ -626,7 +626,7 @@ const PART_LABEL_GAP: f32 = 6.0;
 // PART_LABEL_GAP, so each label reads with its own box. Grows with the font too,
 // or a big font's label gap creeps up on it.
 const PACK_GAP: f32 = 24.0;
-// The UI line height, DIP, the two gaps above were drawn at: the 11 pt default
+// The UI line height, DIP, the 2 gaps above were drawn at: the 11 pt default
 // interface font. A taller line widens them in step and a shorter one leaves
 // them be. The shells grid's name column and column gap go by it too.
 const GAPS_DRAWN_AT: f32 = 20.0;
@@ -690,10 +690,10 @@ fn border(out: &mut Vec<RectInstance>, r: Rect, t: f32, color: [u8; 3]) {
 	out.push(quad(r.x + r.w, r.y, t, r.h, color));
 }
 
-// What holds keyboard focus: the search box, one control within a row, or a
+// What has keyboard focus: the search box, one control within a row, or a
 // footer button (index into `buttons()`: 0 = Cancel, 1 = Apply, 2 = OK).
 // `Row(i, part)` names a row and which of its focusable sub-controls (part 0
-// for a plain control; sliders and the combined cursor row expose two parts).
+// for a plain control; sliders and the combined cursor row expose 2 parts).
 // Tab walks parts then buttons.
 #[derive(Clone, Copy, PartialEq, Debug)]
 enum Focus {
@@ -730,7 +730,7 @@ struct EditState {
 	blink_t: f32, // seconds since the last caret/text activity (drives the blink)
 	// (cur, sel, buf.len()) at the last animate pass - a change resets the blink
 	last_sig: (usize, Option<usize>, usize),
-	// "File or folder" only: which of the two the field was opened on. Fixed for
+	// "File or folder" only: which of the 2 the field was opened on. Fixed for
 	// the life of the field, or emptying the box on the way to typing an image
 	// sends the rest of the typing to the folder.
 	wallpaper_folder: bool,
@@ -951,20 +951,20 @@ fn assoc_slot(assoc: Assoc) -> usize {
 }
 
 // The prompt's text field, the shells grid's own fields, the color picker's
-// six value boxes and the search box are the dialog's ONE open edit, so every
+// 6 value boxes and the search box are the dialog's one open edit, so every
 // bit of field behavior - selection, word ops, the clipboard, the caret ease,
 // the right-click menu - works in all of them without a second copy. None
 // belongs to a spec row, so each borrows an index no row can have: every
-// `specs[edit.row]` comparison in this module simply never matches one, and the
-// four places that INDEX specs by it each carry their own guard.
+// `specs[edit.row]` comparison in this module never matches one, and the
+// 4 places that index specs by it each have their own guard.
 const PSEUDO_ROW: usize = usize::MAX / 2;
 const PROMPT_ROW: usize = usize::MAX;
-// Two per shell entry, counting down: name, then command.
+// Each shell entry gets 2, counting down: name, then command.
 const SHELL_ROW_BASE: usize = usize::MAX - 1;
-// The picker box's six value boxes, counting up from the base. The grid counts
-// down from the other end, so the two ranges cannot meet.
+// The picker box's 6 value boxes, counting up from the base. The grid counts
+// down from the other end, so the 2 ranges can't meet.
 const PICK_ROW_BASE: usize = PSEUDO_ROW;
-// Past the picker's six, and far below where the grid's could reach.
+// Past the picker's 6, and far below where the grid's could reach.
 const SEARCH_ROW: usize = PSEUDO_ROW + 64;
 
 // Which value box a pseudo row stands for, if it is one of the picker's.
@@ -990,7 +990,7 @@ fn shell_field_row(entry: usize, command: bool) -> usize {
 }
 
 // Open field context menu: anchor point, keyboard-highlighted item, and whether
-// the clipboard held text when it opened (grays Paste).
+// the clipboard had text when it opened (grays Paste).
 struct EMenu {
 	x: f32,
 	y: f32,
@@ -1012,7 +1012,7 @@ pub struct TextItem {
 	pub band: Option<Rect>, // when set, center the capitals in this band instead (tabs, buttons)
 }
 
-/// Parts of a line drawn bold, a step larger and in another color: what a
+/// Parts of a line drawn bold, a step larger, and in another color: what a
 /// search matched, in each result.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Marks {
@@ -1041,11 +1041,11 @@ impl TextItem {
 
 // The row tops from the last walk down a tab, and what that walk started from.
 // A frame asks for a row's top from every rect helper, so `row_y` walks again
-// only when the tab, its first top, the line height or the shell count moves.
+// only when the tab, its first top, the line height, or the shell count moves.
 #[derive(Default)]
 struct RowTops {
 	walked: Option<(usize, u32, u32, usize)>,
-	tops: Vec<f32>, // by spec index; a row the tab does not draw has `end`
+	tops: Vec<f32>, // by spec index; a row the tab doesn't draw has `end`
 	end: f32,
 }
 
@@ -1058,10 +1058,10 @@ thread_local! {
 pub struct SettingsDialog {
 	orig: Settings,
 	edited: Settings,
-	// another window saved while this one held changes (`follow_file`)
+	// another window saved while this one had changes (`follow_file`)
 	behind: bool,
 	#[cfg(test)]
-	defaults: Settings, // the shipped values, for the tests' own checks
+	defaults: Settings, // the default values, for the tests' own checks
 	reverted: Vec<&'static str>, // config keys reverted this session -> comment out on Apply
 	rect: Rect,
 	// What the content wants, DIP. The window can be shorter or narrower than
@@ -1091,7 +1091,7 @@ pub struct SettingsDialog {
 	// (that hotkey, the chord, the one that has it now). Kept to say so on the
 	// row that lost it, since the bindings no longer see a clash.
 	moved: Vec<(Hotkey, Chord, Hotkey)>,
-	// Chords are spoken the Mac's way. Held so a test can ask for either.
+	// Chords are spoken the Mac's way. Stored so a test can ask for either.
 	mac: bool,
 	edit_drag: Option<usize>, // field row being drag-selected with the mouse
 	select_all_on_up: bool, // a fresh single-click field entry: select all on release unless it became a drag
@@ -1106,7 +1106,7 @@ pub struct SettingsDialog {
 	// The monitor the window is on, for the automatic size's rule.
 	monitor: Option<String>,
 	// Whether the desktop says when a window is minimized or covered. Wayland
-	// does not, so the hidden wait never applies there.
+	// doesn't, so the hidden wait never applies there.
 	sees_hidden: bool,
 	// Whether tmux can be run here, for the tmux rows. Read when the dialog
 	// opens, since the rows ask on every frame.
@@ -1140,12 +1140,12 @@ pub struct SettingsDialog {
 	active_w: f32,
 	pick_label_w: f32,
 	pick_field_w: f32,
-	// DIP -> physical pixel factor for the window this dialog lives in. Every
+	// DIP -> physical pixel factor for the window this dialog is in. Every
 	// measurement in here is a DIP; this is applied only at the boundary.
 	scale: f32,
 }
 
-// Three whole copies of the settings would bury the rest.
+// Only the tab, since 3 whole copies of the settings would bury the rest.
 impl std::fmt::Debug for SettingsDialog {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		f.debug_struct("SettingsDialog")
@@ -1156,7 +1156,7 @@ impl std::fmt::Debug for SettingsDialog {
 
 impl SettingsDialog {
 	// `shells` is the length of the stored list: the grid is one spec row and n
-	// lines on screen, so it is the one kind whose height is not a constant.
+	// lines on screen, so it is the one kind whose height isn't a constant.
 	fn row_h_for(kind: &Kind, line_h: f32, shells: usize) -> f32 {
 		let line = lay().row_height.max(line_h + lay().row_pad);
 		match kind {
@@ -1175,13 +1175,13 @@ impl SettingsDialog {
 	fn row_h(&self, kind: &Kind) -> f32 {
 		Self::row_h_for(kind, self.line_h, self.edited.shells.len())
 	}
-	// The height of an ordinary row. Every boxed control centers in THIS, not in
-	// the `row_height` floor - at a large UI font the two are far apart, and
+	// The height of an ordinary row. Every boxed control centers in this, not in
+	// the `row_height` floor - at a large UI font the 2 are far apart, and
 	// centering in the floor leaves the controls riding high in their rows.
 	fn line_row_h(&self) -> f32 {
 		lay().row_height.max(self.line_h + lay().row_pad)
 	}
-	// How tall row `i` LOOKS. A row drawn beside another shares that row's line,
+	// How tall row `i` looks. A row drawn beside another shares that row's line,
 	// so it stands a line tall even though it advances the walk by nothing.
 	fn row_screen_h(&self, i: usize) -> f32 {
 		if self.specs[i].beside {
@@ -1211,14 +1211,14 @@ impl SettingsDialog {
 	}
 
 	// A heading that only repeats its own tab's title says nothing the tab strip
-	// has not already said, so it takes no space and draws nothing. It stays in
+	// hasn't already said, so it takes no space and draws nothing. It stays in
 	// the declarations because a heading is also what assigns the rows under it
 	// to a tab - deleting it there would orphan them.
 	fn header_is_tab_title(spec: &Spec) -> bool {
 		matches!(spec.kind, Kind::Header(label) if tab_titles().get(spec.tab) == Some(&label))
 	}
 
-	// The rows one tab actually draws, in order.
+	// The rows one tab draws, in order.
 	fn visible(specs: &[Spec], tab: usize) -> impl Iterator<Item = (usize, &Spec)> {
 		specs
 			.iter()
@@ -1236,13 +1236,13 @@ impl SettingsDialog {
 			.skip(i + 1)
 			.filter(move |(_, spec)| spec.tab == tab && !Self::header_is_tab_title(spec))
 	}
-	// The next row DOWN from `i`, skipping anything that shares `i`'s own line.
+	// The next row down from `i`, skipping anything that shares `i`'s own line.
 	fn next_row(specs: &[Spec], i: usize, tab: usize) -> Option<&Spec> {
 		Self::after(specs, i, tab)
 			.find(|(_, spec)| !spec.beside)
 			.map(|(_, spec)| spec)
 	}
-	// The row drawn beside `i`, when there is one. The second of the pair carries
+	// The row drawn beside `i`, when there is one. The second of the pair has
 	// the line's height, which is what keeps `row_y` returning the same y for both.
 	fn paired_with(specs: &[Spec], i: usize, tab: usize) -> Option<usize> {
 		Self::after(specs, i, tab)
@@ -1291,7 +1291,7 @@ impl SettingsDialog {
 		!Self::packs(specs, i) || (!specs[i].beside && Self::lead_keeps_column(specs, i))
 	}
 	// Where part `k` of the packed line led by `lead` puts its label and its box,
-	// in from the line's left edge. A warning mark rides with its label.
+	// in from the line's left edge. A warning mark moves with its label.
 	fn packed_at(
 		specs: &[Spec],
 		lead: usize,
@@ -1353,8 +1353,8 @@ impl SettingsDialog {
 			.fold(0.0f32, f32::max)
 	}
 	// A row leads a sub-group when the row drawn under it is indented further.
-	// Read off the indentation rather than declared a second time, so the two
-	// cannot disagree.
+	// Read off the indentation rather than declared a second time, so the 2
+	// can't disagree.
 	fn leads_subgroup(specs: &[Spec], i: usize, tab: usize) -> bool {
 		// half a line leads nothing, and its own indent means nothing either
 		!specs[i].beside
@@ -1648,7 +1648,7 @@ impl SettingsDialog {
 		self.pick_field_w = chrome.pick_field_w;
 		self.tab_ws = chrome.tab_ws;
 		self.label_ws = chrome.label_ws;
-		// The screen holds fewer DIP at a higher scale, so the window may no
+		// The screen has fewer DIP at a higher scale, so the window may no
 		// longer fit what it was dragged to.
 		let (min_w, min_h) = Self::min_size_dip(self.line_h, self.btn_w, self.side_off());
 		self.rect.w = self.rect.w.min(max_w.max(min_w)).max(min_w);
@@ -1702,7 +1702,7 @@ impl SettingsDialog {
 	}
 
 	/// The pointer/measurement boundary. Pointer positions arrive in physical
-	/// pixels and the caller's text measurement answers in them too, so both are
+	/// pixels and the caller's text measurement returns them too, so both are
 	/// divided down before any of the layout below sees them.
 	pub fn mouse_down(&mut self, x: f32, y: f32, measure: &mut impl FnMut(&str) -> f32) -> Action {
 		let s = self.scale;
@@ -1788,9 +1788,9 @@ impl SettingsDialog {
 	// the strip and the buttons; only it scrolls (chrome stays put).
 	//
 	// The tabs stand on a gutter strip that runs the panel's full width, and the
-	// line closing that strip is what they stand ON - so a tab is shorter than a
+	// line closing that strip is what they stand on - so a tab is shorter than a
 	// footer button (it is chrome, not a control) and the strip's height is
-	// simply the drop from the panel edge plus that tab. A tab under another
+	// the drop from the panel edge plus that tab. A tab under another
 	// adds a row to the strip while its parent is current. Down the left side
 	// the same gutter is a list instead, every tab in it, each as wide as the
 	// list, with sub-tabs stepped in under their parent.
@@ -1913,9 +1913,9 @@ impl SettingsDialog {
 			+ lay().tab_gap * shown.len().saturating_sub(1) as f32
 	}
 	// Where a tab sits, and where the whole strip does. The strip has an offset of
-	// its own rather than riding the rows' sideways scroll: a tab panned off the
-	// window could not be clicked at all, and the tabs are how you leave a tab
-	// that will not fit. It moves only far enough to keep the current one in view.
+	// its own rather than following the rows' sideways scroll: a tab panned off the
+	// window couldn't be clicked at all, and the tabs are how you leave a tab
+	// that won't fit. It moves only far enough to keep the current one in view.
 	fn tab_scroll(&self, row: usize) -> f32 {
 		let shown = self.shown_in_row(row);
 		let over = (self.row_w(&shown) - self.rect.w).max(0.0);
@@ -1946,8 +1946,8 @@ impl SettingsDialog {
 			lay().tab_top * 2.0 + (self.tab_h() + lay().tab_gap) * (cur + 1) as f32 - lay().tab_gap;
 		(bottom - self.rect.h).clamp(0.0, over)
 	}
-	// Where tab `node` sits. Empty when it is not on show, which across the top
-	// is every sub-tab of a tab that is not current.
+	// Where tab `node` sits. Empty when it isn't on show, which across the top
+	// is every sub-tab of a tab that isn't current.
 	fn tab_rect(&self, node: usize) -> Rect {
 		let n = &tab_nodes()[node];
 		let none = Rect {
@@ -2022,7 +2022,7 @@ impl SettingsDialog {
 				.max(0.0),
 		}
 	}
-	// The footer under the rows: its line, the clear space and the buttons.
+	// The footer under the rows: its line, the clear space, and the buttons.
 	fn footer_h_for(line_h: f32) -> f32 {
 		1.0 + lay().buttons_gap + Self::btn_h_for(line_h) + lay().pad
 	}
@@ -2077,7 +2077,7 @@ impl SettingsDialog {
 		(self.content_h() - self.viewport().h).max(0.0)
 	}
 
-	// The smallest useful window: the three footer buttons have to fit across it,
+	// The smallest useful window: the 3 footer buttons have to fit across it,
 	// and a couple of rows have to be left above them to be worth scrolling.
 	fn min_size_dip(line_h: f32, btn_w: f32, side_off: f32) -> (f32, f32) {
 		let l = lay();
@@ -2098,7 +2098,7 @@ impl SettingsDialog {
 		(self.rect.w - self.side_off()).max(self.natural.0 - self.side_off())
 	}
 	// Left edge of the laid-out content, which is the rows' own left edge until
-	// the window is too narrow to hold it.
+	// the window is too narrow to fit it.
 	fn content_x(&self) -> f32 {
 		self.rows_x0() - self.hscroll
 	}
@@ -2235,7 +2235,7 @@ impl SettingsDialog {
 			|| self.drag.is_some()
 			|| self.shell_drag.is_some()
 	}
-	/// Whether another window saved while this one held changes, cleared.
+	/// Whether another window saved while this one had changes, cleared.
 	pub fn take_behind(&mut self) -> bool {
 		std::mem::take(&mut self.behind)
 	}
@@ -2248,7 +2248,7 @@ impl SettingsDialog {
 	}
 	/// The main window's monitor and the size it was last given, which the
 	/// automatic size shows. Both copies take the size, as a shell scan is
-	/// folded, so it does not read as an edit. True when anything moved.
+	/// folded, so it doesn't read as an edit. True when anything moved.
 	pub fn follow_window(&mut self, monitor: Option<&str>, live: &Settings) -> bool {
 		let kept = |s: &Settings| {
 			(
@@ -2277,7 +2277,7 @@ impl SettingsDialog {
 		moved || resized
 	}
 	/// A restored view comes from a dialog that no longer exists, so nothing about
-	/// its geometry can be assumed: the UI font, screen height or field set may all
+	/// its geometry can be assumed: the UI font, screen height, or field set may all
 	/// have changed since. Clamp rather than trust.
 	pub fn restore(&mut self, view: View) {
 		if view.tab >= tab_titles().len() {
@@ -2406,11 +2406,11 @@ impl SettingsDialog {
 		self.focus_ring().into_iter().find(|&f| f != Focus::Search)
 	}
 	// The full Tab order for the active tab: each enabled sub-control (a slider's
-	// track then its field, a Dual row's two checkboxes, else the single
-	// control), then the three footer buttons (Cancel / Apply / OK), always
+	// track then its field, a Dual row's 2 checkboxes, else the single
+	// control), then the 3 footer buttons (Cancel / Apply / OK), always
 	// reachable. While the search list covers the rows it is the box and the
 	// buttons. Otherwise the box is outside the walk, as the tabs are: Ctrl+F or
-	// a click reaches it, and Tab from it goes on to the first control.
+	// a click focuses it, and Tab from it goes on to the first control.
 	fn focus_ring(&self) -> Vec<Focus> {
 		let mut ring = Vec::new();
 		if self.searching() {
@@ -2515,7 +2515,7 @@ impl SettingsDialog {
 		};
 		let vp = self.viewport();
 		// The shells grid is one row and many lines, and a long one is taller
-		// than the viewport - so it is the focused CONTROL that has to come into
+		// than the viewport - so it is the focused control that has to come into
 		// view there, not the row, which may not fit at all.
 		let (top, bottom) = if matches!(self.specs[i].kind, Kind::ShellList) {
 			let r = self.shell_stop_rect(i, part);
@@ -2530,7 +2530,7 @@ impl SettingsDialog {
 			self.scroll += bottom - (vp.y + vp.h); // row below -> scroll up
 		}
 		self.scroll = self.scroll.clamp(0.0, self.max_scroll());
-		// and sideways, for a window too narrow to hold the whole row
+		// and sideways, for a window too narrow to fit the whole row
 		if self.max_hscroll() > 0.0 {
 			let ctl = self.focus_ctl_rect(i, part);
 			if ctl.x < vp.x {
@@ -2715,7 +2715,7 @@ impl SettingsDialog {
 			return;
 		}
 		// in the prompt box, the field owns Left/Right while it has focus and the
-		// two buttons share them otherwise
+		// 2 buttons share them otherwise
 		if let Some(prompt) = self.prompt.as_ref() {
 			if prompt.focus != PromptFocus::Field {
 				self.prompt_focus_move(dir > 0);
@@ -2922,8 +2922,8 @@ impl SettingsDialog {
 			_ => None,
 		}
 	}
-	// The hotkey a row's setting is, found through the declarations so the two
-	// cannot disagree.
+	// The hotkey a row's setting is, found through the declarations so the 2
+	// can't disagree.
 	fn hotkey_for_key(&self, key: Key) -> Option<Hotkey> {
 		let at = self.specs.iter().position(|spec| spec.key == key)?;
 		self.hotkey_of(at)
@@ -3002,7 +3002,7 @@ impl SettingsDialog {
 		self.capture_refused = None;
 	}
 	/// A key press while a hotkey row waits. Escape on its own leaves the row as
-	/// it was, and Backspace or Delete on its own turns the hotkey off. Answers
+	/// it was, and Backspace or Delete on its own turns the hotkey off. Returns
 	/// whether the press was taken, so the caller sends it nowhere else.
 	pub fn capture_key(&mut self, key: &winit::keyboard::Key, mods: ModifiersState) -> bool {
 		use winit::keyboard::{Key as Pressed, NamedKey};
@@ -3130,8 +3130,8 @@ impl SettingsDialog {
 			h: 6.0,
 		}
 	}
-	// The color chip stands as tall as the hex field beside it, so the pair reads
-	// as one control rather than two of different sizes.
+	// The color chip is as tall as the hex field beside it, so the pair reads
+	// as one control rather than 2 of different sizes.
 	fn swatch(&self, i: usize) -> Rect {
 		let h = self.field_h();
 		Rect {
@@ -3284,7 +3284,7 @@ impl SettingsDialog {
 		}
 	}
 	// Number of focusable sub-controls in row `i` (0 for a header). Sliders and
-	// the Dual (cursor) row expose two; every other control is a single part.
+	// the Dual (cursor) row expose 2; every other control is a single part.
 	fn parts_of(&self, i: usize) -> u16 {
 		match self.specs[i].kind {
 			Kind::Header(_) => 0,
@@ -3374,7 +3374,7 @@ impl SettingsDialog {
 		}))
 	}
 	// Settings to write a value in, one at a time: `v` put into `key`'s field,
-	// or the shipped one where there is none.
+	// or the default one where there is none.
 	fn scratch_with<R>(key: Key, v: Option<&knobs::Value>, read: impl FnOnce(&Settings) -> R) -> R {
 		thread_local! {
 			static SCRATCH: std::cell::RefCell<Option<Settings>> =
@@ -3430,7 +3430,7 @@ impl SettingsDialog {
 		}
 	}
 	// What row `i` shows for `key` and what it shows by default, written the
-	// way the row writes them. None for anything that holds no value.
+	// way the row writes them. None for anything without a value.
 	fn value_pair(&self, i: usize, key: Key) -> Option<(String, String)> {
 		match self.specs[i].kind {
 			Kind::Header(_) | Kind::Buttons(_) | Kind::ShellList => None,
@@ -3466,7 +3466,7 @@ impl SettingsDialog {
 	// (text, anchor rect to hang the tip box under).
 	fn hover_tip_dip(&self, mx: f32, my: f32) -> Option<(Cow<'static, str>, Rect)> {
 		// A box covers the panel, or a popup owns the pointer until it closes, so
-		// nothing behind either answers.
+		// nothing behind either responds.
 		if self.overlay_open() {
 			return None;
 		}
@@ -3514,7 +3514,7 @@ impl SettingsDialog {
 				Kind::Hotkey(_) => self.textbox(i),
 				_ => self.checkbox(i),
 			};
-			// Everything on the row answers with its one tip: the label, a
+			// Everything on the row shows its one tip: the label, a
 			// warning mark, each option's label and every control, up to the
 			// revert column (2026100812334387). Only the arrow has its own.
 			let hit = if matches!(self.specs[i].kind, Kind::ShellList) {
@@ -3541,8 +3541,8 @@ impl SettingsDialog {
 			if !hit.contains(mx, my) {
 				continue;
 			}
-			// a pair is two settings under one label, and either half can be
-			// grayed by the desktop alone, so each box answers for its own
+			// a pair is 2 settings under one label, and either half can be
+			// grayed by the desktop alone, so each box shows its own
 			let (key, anchor) = match self.specs[i].kind {
 				Kind::ShellList => (self.specs[i].key, hit),
 				Kind::Dual { keys, .. } if mx >= self.dual_box(i, 1).x => {
@@ -3607,7 +3607,7 @@ impl SettingsDialog {
 	}
 	// A ring around a box and the labels after it, `y`/`h` from the box. Those
 	// labels are a line of text, and at a large font the line is the taller of
-	// the two (2026100817355494).
+	// the 2 (2026100817355494).
 	fn with_label_line(&self, i: usize, y: f32, h: f32) -> (f32, f32) {
 		if h >= self.line_h {
 			return (y, h);
@@ -3616,8 +3616,8 @@ impl SettingsDialog {
 	}
 	// Does the keyboard ring sit exactly on a control's own outline? For a boxed
 	// control it does, and then the box must not draw its border as well - a
-	// field ringed twice reads as two outlines for one control. A color row is
-	// the near miss: its ring spans the chip AND the hex field, so it stays a
+	// field ringed twice reads as 2 outlines for one control. A color row is
+	// the near miss: its ring spans the chip and the hex field, so it stays a
 	// couple of pixels out and only the hex field's own border stands down.
 	fn ring_is_the_box(&self, i: usize, part: u16) -> bool {
 		match self.specs[i].kind {
@@ -3625,8 +3625,8 @@ impl SettingsDialog {
 				true
 			}
 			Kind::Slider { .. } => part == 1,
-			// the two fields and the Add button are boxes; the checkbox and the
-			// icon buttons are not, so they keep the ring a couple of pixels out
+			// the 2 fields and the Add button are boxes; the checkbox and the
+			// icon buttons aren't, so they keep the ring a couple of pixels out
 			Kind::ShellList => matches!(
 				shell_stop(part, self.edited.shells.len()),
 				ShellStop::Add | ShellStop::Entry(_, ShellPart::Name | ShellPart::Command)
@@ -3655,7 +3655,7 @@ impl SettingsDialog {
 				_ => true,
 			}
 	}
-	// Every setting one revert arrow answers for: the row's own, both halves of a
+	// Every setting one revert arrow resets: the row's own, both halves of a
 	// Dual, and every row drawn beside it on its line.
 	fn row_keys(&self, i: usize) -> Vec<Key> {
 		let own = |i: usize| match self.specs[i].kind {
@@ -3671,7 +3671,7 @@ impl SettingsDialog {
 		}
 		keys
 	}
-	// Revert a whole row - every key the row's own arrow covers.
+	// Revert a whole row - every key the row's own arrow resets.
 	fn row_revert(&mut self, i: usize) {
 		if let Some(assoc) = assoc_of(self.specs[i].key) {
 			self.assoc_set(assoc, false);
@@ -3735,7 +3735,7 @@ impl SettingsDialog {
 		self.assoc_refresh();
 		let say = match done {
 			Err(why) => Some((
-				"Windows did not take the change".to_string(),
+				"Windows didn't take the change".to_string(),
 				format!("{why:#}"),
 			)),
 			Ok(()) if on => {
@@ -3765,7 +3765,7 @@ impl SettingsDialog {
 	}
 
 	// One of a Buttons row's push-buttons. They start at the control column, so
-	// they line up under whatever the row above them holds.
+	// they line up under whatever the row above them has.
 	fn row_btn_rect(&self, i: usize, part: u16) -> Rect {
 		let h = self.btn_h();
 		Rect {
@@ -3781,7 +3781,7 @@ impl SettingsDialog {
 	// display - Apply still writes `edited`, so Custom finds everything intact.
 	// A profile sets the governed fields from its own values alone and leaves
 	// every other field as it was, so a governed row reads the profile's values
-	// and any other row reads `edited`, with nothing copied. That holds only
+	// and any other row reads `edited`, with nothing copied. That's true only
 	// while no row's value is read from both kinds of field;
 	// `a_shown_value_is_the_profile_laid_over_the_settings` checks every key.
 	// A change made here. The row's field is set first, the way each accessor
@@ -3911,7 +3911,7 @@ impl SettingsDialog {
 		match key {
 			Key::PerfAuto => {
 				// the step belongs to the automatic choice, so it goes when that does
-				// and does not carry over into one freshly switched on
+				// and isn't kept for one freshly switched on
 				if self.edited.performance_automatic != on {
 					self.edited.stepped_profile = None;
 				}
@@ -4041,7 +4041,7 @@ impl SettingsDialog {
 				}
 			}
 			keys_of!(slider | toggle | color | text | hotkey | valueless | assoc) => {}
-			// answered by `choices` above
+			// handled by `choices` above
 			Key::PerfProfile | Key::Theme => return,
 		}
 		self.commit(key);
@@ -4090,7 +4090,7 @@ impl SettingsDialog {
 	}
 	// Is this setting at its default? Drives the revert icon's state.
 	fn is_default(&self, key: Key) -> bool {
-		// set in the file is not default, even to the shipped chord: a chord set
+		// set in the file isn't default, even to the default chord: a chord set
 		// there takes priority over one a hotkey has by default
 		if let Some(hotkey) = self.hotkey_for_key(key) {
 			return self.edited.keys.own(hotkey).is_none();
@@ -4103,7 +4103,7 @@ impl SettingsDialog {
 			// nothing to put back until Register has saved something
 			keys_of!(assoc) => assoc_of(key).is_none_or(|assoc| !self.assoc_on[assoc_slot(assoc)]),
 			_ if fields::field(key).is_some() => !self.can_reset(key),
-			// buttons, headings and the shells list hold nothing to revert
+			// buttons, headings, and the shells list have nothing to revert
 			_ => true,
 		}
 	}
@@ -4272,8 +4272,8 @@ impl SettingsDialog {
 				return Action::None;
 			}
 		}
-		// the sideways bar, the same two gestures. Its grab band is the whole strip
-		// it sits in, so an 8 DIP bar is not an 8 DIP target.
+		// the sideways bar, the same 2 gestures. Its grab band is the whole strip
+		// it sits in, so an 8 DIP bar isn't an 8 DIP target.
 		if let Some(thumb) = self.hthumb() {
 			let track = self.htrack();
 			let band = Rect {
@@ -4314,10 +4314,10 @@ impl SettingsDialog {
 				return Action::None;
 			}
 			// A grayed control takes no click. This used to sit inside each arm, and
-			// the color, text and radio arms were the three that never got it - so
+			// the color, text, and radio arms were the 3 that never got it - so
 			// a control the dialog draws as inert still changed its setting. The
-			// three whose parts gray separately keep their own per-part check. A
-			// pair row's key is only its FIRST part, so gating the whole row on
+			// 3 whose parts gray separately keep their own per-part check. A
+			// pair row's key is only its first part, so gating the whole row on
 			// that key took the click away from a live second part.
 			if !matches!(
 				self.specs[i].kind,
@@ -4474,12 +4474,12 @@ impl SettingsDialog {
 	// click starts a drag-selection.
 	// `row` is the edit's own index - a spec row, or one of the pseudo rows the
 	// grid's fields use - and `focus` is the spec row and part the ring goes on.
-	// For every field but the grid's they are the same row; for those two they
-	// cannot be, since no spec row draws them.
+	// For every field but the grid's they are the same row; for those 2 they
+	// can't be, since no spec row draws them.
 	fn field_click(
 		&mut self,
 		row: usize,
-		// None for the prompt box, which is not a row and must never reach the
+		// None for the prompt box, which isn't a row and must never reach the
 		// focus ring: the ring indexes `specs` with whatever it is given.
 		focus: Option<(usize, u16)>,
 		field: Rect,
@@ -4619,9 +4619,9 @@ impl SettingsDialog {
 			if self.specs[i].tab != self.tab || Self::header_is_tab_title(&self.specs[i]) {
 				continue;
 			}
-			// The shells grid is one spec row holding two editable fields per
+			// The shells grid is one spec row with 2 editable fields per
 			// entry, so the field under the pointer has to be found the way the
-			// press handler finds it. Without this the two fields were the only
+			// press handler finds it. Without this the 2 fields were the only
 			// ones in the dialog with no right-click menu, while the Menu key
 			// worked on them.
 			if matches!(self.specs[i].kind, Kind::ShellList) {
@@ -4882,7 +4882,7 @@ impl SettingsDialog {
 	// Release: end any slider/thumb drag, and fire an armed button's action only if
 	// the cursor is still over it (a press that drifted off cancels).
 	fn mouse_up_dip(&mut self, x: f32, y: f32) -> Action {
-		// A release that ends a grip drag is not a click on anything: the list was
+		// A release that ends a grip drag isn't a click on anything: the list was
 		// reordered as the pointer moved, and there is nothing left to fire.
 		if self.shell_drag.take().is_some() {
 			return Action::None;
@@ -4953,7 +4953,7 @@ impl SettingsDialog {
 		// The delete confirmation has no field of its own, so without the prompt
 		// test this would open the row sitting behind the box and edit that.
 		if self.edit.is_none() {
-			// the picker's own boxes are open whenever they hold focus, so there
+			// the picker's own boxes are open whenever they have focus, so there
 			// is nothing here for a keystroke to fall through to
 			if self.pick.is_some() {
 				return;
@@ -5040,7 +5040,7 @@ impl SettingsDialog {
 		true
 	}
 	/// Paste: run the text through the same per-field validation, one char at a
-	/// time (invalid chars are dropped, length caps hold).
+	/// time (invalid chars are dropped, length caps still apply).
 	pub fn insert_str(&mut self, text: &str) {
 		let mut changed = false;
 		for c in text.chars() {
@@ -5202,8 +5202,8 @@ impl SettingsDialog {
 				return;
 			};
 			if command {
-				// The command is REQUIRED, and this is where that is enforced:
-				// a blank buffer simply isn't written, so committing an emptied
+				// The command is required, and this is where that is enforced:
+				// a blank buffer isn't written, so committing an emptied
 				// field leaves the stored command standing and the box shows it
 				// again. (An entry that never got one is dropped on the way out
 				// of the dialog - see `app::apply_settings_values`.)
@@ -5239,9 +5239,9 @@ impl SettingsDialog {
 		self.emenu = None;
 	}
 
-	/// Esc cancels the dialog. A menu, a popup or the prompt box eats it first.
+	/// Esc cancels the dialog. A menu, a popup, or the prompt box eats it first.
 	///
-	/// An open field does not. Closing the field was all it used to do, and since
+	/// An open field doesn't. Closing the field was all it used to do, and since
 	/// a typed value applies as it is typed there was nothing to take back - so
 	/// the press bought a lost caret and a second Esc. Now that walking onto a
 	/// field opens it, that would have been every field on the way past.
@@ -5303,7 +5303,7 @@ impl SettingsDialog {
 			Action::None
 		} else if self.edit.is_some() {
 			// Enter in a field is the dialog's OK, the way it is in any other
-			// dialog. It used to close the field and stop there, so OK took two
+			// dialog. It used to close the field and stop there, so OK took 2
 			// presses. Values apply as they are typed, so closing the field first
 			// only drops the caret.
 			self.commit_edit();
@@ -5428,7 +5428,7 @@ impl SettingsDialog {
 		fixed.push(quad(foot.x, foot.y, foot.w, 1.0, colors.panel_border));
 		// The tab strip: a recessed gutter closed off by a rule, with the tabs
 		// standing on that rule. The current one is a lighter gray rather than an
-		// accent - it says "you are here", which is not the same job as the
+		// accent - it says "you are here", which isn't the same job as the
 		// highlight color's "look at this".
 		let gut = self.gutter_rect();
 		fixed.push(quad(gut.x, gut.y, gut.w, gut.h, colors.gutter));
@@ -5783,7 +5783,7 @@ impl SettingsDialog {
 
 	// A triangle with an exclamation mark cut out of it, in the label's color. All
 	// quads, for the same reason as the grid's icons: no interface font can be
-	// relied on to carry the sign. Not red, since red is only for removal.
+	// relied on to have the sign. Not red, since red is only for removal.
 	fn warning_quads(
 		&self,
 		colors: &Dlg,
@@ -5848,7 +5848,7 @@ impl SettingsDialog {
 			});
 		}
 		self.search_texts(&colors, &mut out);
-		// row text clips to the scroll viewport so it can't ride over the chrome
+		// row text clips to the scroll viewport so it can't draw over the chrome
 		let vp = self.viewport();
 		let rows_shown = !self.searching();
 		for i in (0..self.specs.len()).filter(|_| rows_shown) {
@@ -5868,7 +5868,7 @@ impl SettingsDialog {
 			}
 			let off = self.disabled(self.specs[i].key);
 			let label_color = if off { colors.dim } else { colors.text };
-			// a half-line whose control says what it is carries no label at all
+			// a half-line whose control says what it is has no label at all
 			if !self.specs[i].label.is_empty() {
 				out.push(TextItem {
 					color: label_color,
@@ -6045,7 +6045,7 @@ impl SettingsDialog {
 					let cols = self.shell_cols();
 					// Column titles, once, above the whole grid. The grip and the
 					// remove button get none: neither is a value, and a title over
-					// either would read as a column of data that is not there.
+					// either would read as a column of data that isn't there.
 					let head_y = self.shell_head_y(i);
 					for (title, tx) in [
 						("Name", cols.name),
@@ -6252,7 +6252,7 @@ pub fn sane_scale(scale: f32) -> f32 {
 /// The chrome's text, measured in the UI font. `chrome_widths` fills it in
 /// physical pixels; `new` and `rescale` take it whole and turn it into DIP once,
 /// through `in_dip`, which is also where each declared floor applies. A column
-/// that holds text belongs here, or it stays one size while its text grows
+/// with text belongs here, or it stays one size while its text grows
 /// (2026100818102267).
 #[derive(Debug, Clone, Default)]
 pub struct Chrome {
@@ -6297,7 +6297,7 @@ impl Chrome {
 /// column widths at the current UI font, so the dialog sizes to the real text (a
 /// wide serif or a big desktop size never truncates).
 ///
-/// This measures against the text context, so it works in PHYSICAL pixels - which
+/// This measures against the text context, so it works in physical pixels - which
 /// is why every layout constant it reads converts through `config::dip` at its use
 /// site, the way the main window's chrome does. Adding a raw DIP number to a
 /// physical measurement here is a live bug: `SettingsDialog::new` divides the whole
@@ -6462,7 +6462,7 @@ pub fn wallpaper_changed(old: &Settings, new: &Settings) -> bool {
 		|| old.wallpaper_contrast_mask_size != new.wallpaper_contrast_mask_size
 		|| old.wallpaper_contrast_mask_strength != new.wallpaper_contrast_mask_strength
 		|| old.wallpaper_contrast_mask_auto != new.wallpaper_contrast_mask_auto
-		// a profile change can move how small a blurred picture is held
+		// a profile change can move how small a blurred picture is stored
 		|| crate::wallpaper::per_sigma(old) != crate::wallpaper::per_sigma(new)
 		// and whether it goes up as BC1 or BC7
 		|| crate::wallpaper::packing(old) != crate::wallpaper::packing(new)
@@ -6530,7 +6530,7 @@ mod tests {
 			.unwrap_or_else(|| panic!("no {title} tab"))
 	}
 	// Everything a real dialog is handed arrives in physical pixels, so a scale
-	// of 2 means twice the line height, label width, tab widths and height cap.
+	// of 2 means twice the line height, label width, tab widths, and height cap.
 	fn mk_dialog_at(max_h: f32, scale: f32) -> SettingsDialog {
 		let mut d = SettingsDialog::new(
 			0.0,
@@ -6571,8 +6571,8 @@ mod tests {
 		}
 	}
 	// The dialog opens on the live config (G6), so a tuned value there showed up
-	// in a tip or a toggle. The tests start from the shipped values instead. The
-	// rows a profile governs answer with its values while one is chosen; the
+	// in a tip or a toggle. The tests start from the default values instead. The
+	// rows a profile governs show its values while one is chosen; the
 	// tests drive the rows themselves, so they start from Custom.
 	fn at_defaults(d: &mut SettingsDialog) {
 		d.start_from(d.defaults.clone());
@@ -6583,7 +6583,7 @@ mod tests {
 	// A scale change is a boundary change and nothing else. The layout is solved
 	// in DIP, so the same window comes out the same apparent size on a monitor at
 	// another scale - and the values and unapplied edits have to still be there,
-	// which is the whole reason the dialog is not rebuilt for one.
+	// which is the whole reason the dialog isn't rebuilt for one.
 	// Test ID: dcvf7
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
@@ -6634,7 +6634,7 @@ mod tests {
 	// A maximized or tiled window keeps its physical size through a scale change,
 	// so the window manager sends no resize and nothing else tells the dialog it
 	// is now claiming twice the pixels the window has. Handing it the size the
-	// window really measures is what puts the two back in step.
+	// window measures is what puts the 2 back in step.
 	// Test ID: dcwhs
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
@@ -6676,7 +6676,7 @@ mod tests {
 
 	// A tab's title is drawn `tab_pad / 2` inside its own box, and the box is only
 	// as wide as the title plus `tab_pad` - so the pad on both sides of that sum has
-	// to be the SAME pad. Mixing a physical measurement with a raw DIP constant
+	// to be the same pad. Mixing a physical measurement with a raw DIP constant
 	// halves the box's share of it at 2x (flush right) and takes two thirds of it
 	// at 3x (the title runs past the box).
 	// Test ID: dbjn7
@@ -6813,7 +6813,7 @@ mod tests {
 	}
 
 	// Too narrow, and the rows keep their natural width and slide sideways under
-	// the window instead of being cut down to fit it. The bar that does it lives
+	// the window instead of being cut down to fit it. The bar that does it is
 	// in the clear space above the footer, so showing it costs the rows nothing.
 	// Test ID: dcd38
 	#[test]
@@ -6888,9 +6888,9 @@ mod tests {
 		);
 	}
 
-	// Commented out 20261006: a line may hold more than two rows now
+	// Commented out 20261006: a line may have more than 2 rows now
 	// (2026100614510984), and this read every row followed by a `beside` one as
-	// a line's first, which the tab text line's middle rows are not. Replaced by
+	// a line's first, which the tab text line's middle rows aren't. Replaced by
 	// `a_shared_line_puts_its_parts_side_by_side` (ddkfs), which checks the same
 	// things for every part of every line.
 	// // A row declared `beside` shares the line above it: same y, and the two split
@@ -6931,7 +6931,7 @@ mod tests {
 
 	// Every row declared `beside` shares its line's y, and the line's parts sit
 	// in order without touching, each with room to draw in. One revert arrow,
-	// on the first row, answers for every setting on the line.
+	// on the first row, resets every setting on the line.
 	// Test ID: ddkfs
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
@@ -6972,7 +6972,7 @@ mod tests {
 				);
 			}
 		}
-		// Commented out 20261017: the tab text line, the one with four parts, is
+		// Commented out 20261017: the tab text line, the one with 4 parts, is
 		// one template row now (2026101611405210).
 		// assert!(lines >= 3, "expected shared lines, saw {lines}");
 		// assert!(widest >= 4, "the tab text line has four parts");
@@ -6982,7 +6982,7 @@ mod tests {
 
 	// The tab text is one text row. What is typed is kept as typed, even a
 	// template that can't be read, whose tip then says what is wrong with it. An
-	// emptied box goes back to the shipped template, and the tip names every
+	// emptied box goes back to the default template, and the tip names every
 	// macro the tab knows.
 	// Test ID: de2zh
 	#[test]
@@ -7029,8 +7029,8 @@ mod tests {
 		assert_eq!(tip(&d), help);
 	}
 
-	// Commented out 20261017: the four Tab text toggles are gone, replaced by the
-	// one template row (2026101611405210). What these held the toggles to is
+	// Commented out 20261017: the 4 Tab text toggles are gone, replaced by the
+	// one template row (2026101611405210). What these checked on the toggles is
 	// still checked for the packed line that is left, by
 	// `a_shared_line_puts_its_parts_side_by_side` and
 	// `a_line_of_toggles_packs_each_label_against_its_box_off_the_column`.
@@ -7172,7 +7172,7 @@ mod tests {
 
 	// One setting, one tip, wherever on its row the pointer rests: its label, a
 	// warning mark, each option's label and every part of its control. A pair
-	// is two settings under one label, so each half answers for its own. The
+	// is 2 settings under one label, so each half has its own. The
 	// revert arrow is the one part that may say something else.
 	// Test ID: ddp7v
 	#[test]
@@ -7246,8 +7246,8 @@ mod tests {
 		}
 	}
 
-	// Commented out 20261017: the tab text line of four toggles is one template
-	// row now (2026101611405210), and a text row's box is held to the panel by
+	// Commented out 20261017: the tab text line of 4 toggles is one template
+	// row now (2026101611405210), and a text row's box is checked against the panel by
 	// the generic layout tests.
 	// // At its natural width the panel fits the whole line: each label ends before
 	// // its own box, each box inside its part, and the last before the arrow. Also
@@ -7384,7 +7384,7 @@ mod tests {
 	// after it. A line alone under its heading starts the first label at the
 	// label edge, Tab text's. One in a group with other rows keeps its first box
 	// in the control column, under theirs, as the hardware check line does
-	// (2026100812334385). A click, the focus ring and the tip all follow the box
+	// (2026100812334385). A click, the focus ring, and the tip all follow the box
 	// where it is drawn. A line of anything else still splits the control column.
 	// Test ID: ddp8a
 	#[test]
@@ -7469,7 +7469,7 @@ mod tests {
 			// assert!(packed >= 2, "the tab text and re-test lines, saw {packed}");
 			assert!(packed >= 1, "the re-test line, saw {packed}");
 			assert!(split >= 1, "the scrim dropdown pair, saw {split}");
-			// by name, so a reshuffle of the spec cannot quietly flip either one
+			// by name, so a reshuffle of the spec can't quietly flip either one
 			assert_eq!(kept, [Key::PerfCheckHardware], "{scale}");
 			let row = |key: Key| d.specs.iter().position(|s| s.key == key).expect("row");
 			d.tab = d.specs[row(Key::PerfAuto)].tab;
@@ -7593,7 +7593,7 @@ mod tests {
 	}
 
 	// Every square box grows at the radio's rate from its own floor. At a large
-	// font a checkbox, a pair's box, a packed toggle and a radio box are one size,
+	// font a checkbox, a pair's box, a packed toggle, and a radio box are one size,
 	// and at the default font each keeps the size it always had.
 	// Test ID: ddpc0
 	#[test]
@@ -7740,8 +7740,8 @@ mod tests {
 		}
 	}
 
-	// A pair shares one revert arrow, so a profile showing the FIRST half must not
-	// silence the arrow for the second - which is not governed and can still be
+	// A pair shares one revert arrow, so a profile showing the first half must not
+	// silence the arrow for the second - which isn't governed and can still be
 	// off its default with no other way back.
 	// Test ID: dcwqt
 	#[test]
@@ -7776,10 +7776,10 @@ mod tests {
 		assert!(d.is_default(ramp), "and it undid it");
 	}
 
-	// The tab strip is chrome. It travels only far enough to keep the current tab
+	// The tab strip is chrome. It moves only far enough to keep the current tab
 	// in view, and never with the rows' sideways scroll - a tab panned off the
-	// window edge could not be clicked, which is how you leave a tab that will
-	// not fit. Both sides, over SilkTerm's own tabs.
+	// window edge couldn't be clicked, which is how you leave a tab that won't
+	// fit. Both sides, over SilkTerm's own tabs.
 	// Test ID: dcd48
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
@@ -7810,7 +7810,7 @@ mod tests {
 		}
 	}
 
-	// A pair is worth having only if it is shorter than the two rows it replaces.
+	// A pair is worth having only if it is shorter than the 2 rows it replaces.
 	// Test ID: dcd3b
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
@@ -7955,7 +7955,7 @@ mod tests {
 	}
 
 	// A sub-group's leader is set off from whatever sat above it, the way a
-	// heading is - but its own members are not, or the run would not read as one.
+	// heading is - but its own members aren't, or the run wouldn't read as one.
 	// Test ID: davbc
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
@@ -7972,7 +7972,7 @@ mod tests {
 				let leads = SettingsDialog::leads_subgroup(d.specs, i, tab);
 				let after_header = prev.is_some_and(|p| matches!(p.kind, super::Kind::Header(_)));
 				if matches!(d.specs[i].kind, super::Kind::Header(_)) {
-					continue; // headings carry their own gap, tested elsewhere
+					continue; // headings have their own gap, tested elsewhere
 				}
 				if leads && prev.is_some() && !after_header {
 					leaders += 1;
@@ -7985,7 +7985,7 @@ mod tests {
 		assert!(leaders >= 3, "expected several sub-groups, saw {leaders}");
 	}
 
-	// Change whatever a row edits, whichever kind it is, to something it is not.
+	// Change whatever a row edits, whichever kind it is, to something it isn't.
 	fn nudge(d: &mut SettingsDialog, i: usize, key: Key) {
 		match d.specs[i].kind {
 			super::Kind::Slider { min, max, int, .. } => {
@@ -8048,7 +8048,7 @@ mod tests {
 	// A row whose setting the writer never writes is a dead end: the change
 	// applies for the session and is gone at relaunch, with nothing anywhere to
 	// say so. Both scrollbar colors did exactly that from the day the bar
-	// shipped, so the check is generic - every row, saved and read back.
+	// was added, so the check is generic - every row, saved and read back.
 	// Test ID: davbd
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
@@ -8220,7 +8220,7 @@ mod tests {
 				d.moved.clear();
 				d.reverted.clear();
 				let want = row_value(&d, at, key);
-				// picking Custom by hand moved the profile's two rows already
+				// picking Custom by hand moved the profile's 2 rows already
 				let at_default = d.is_default(key);
 				if at_default {
 					nudge(&mut d, at, key);
@@ -8231,7 +8231,7 @@ mod tests {
 				assert!(d.is_default(key), "{key:?} is not default after its revert");
 				// The base is Custom on purpose, so the rows show their own values.
 				// An edit under a switch turned it off, and the arrow leaves it
-				// off, so that row shows the shipped value.
+				// off, so that row shows the default value.
 				if at_default && super::ui().rel(key).auto.is_none() {
 					assert_eq!(row_value(&d, at, key), want, "{key:?} did not go back");
 				}
@@ -8279,9 +8279,9 @@ mod tests {
 		assert!(checked > 100, "only {checked} keys checked");
 	}
 
-	// The rule for a tip is not a quota, it is whether the tip says anything the
-	// label does not. A dialog of rendering settings carries one on most of its
-	// rows because a name cannot say what a falloff curve does to the picture; a
+	// The rule for a tip is whether the tip says anything the label doesn't,
+	// rather than a quota. A dialog of rendering settings has one on most of its
+	// rows because a name can't say what a falloff curve does to the picture; a
 	// tip that only reworded its label would be the thing to delete.
 	// Test ID: dcbf1
 	#[test]
@@ -8356,7 +8356,7 @@ mod tests {
 	}
 
 	// A control the dialog draws as inert must not act on a click. The check used
-	// to sit inside each arm of the press handler, and the color, text and radio
+	// to sit inside each arm of the press handler, and the color, text, and radio
 	// arms never got it - so a grayed field still changed its setting, and the
 	// font Family field switched off "use the system font" as a side effect.
 	// Rows that only count while a switch above them is on stay live with every
@@ -8791,7 +8791,7 @@ mod tests {
 		assert!(d.is_default(Key::BgImage));
 	}
 
-	// A tip ends with the value in use and the shipped one where the two
+	// A tip ends with the value in use and the default where the 2
 	// differ, after a blank line, written the way the row writes them. At the
 	// default it has neither, and an auto setting keeps its state line instead.
 	// Test ID: ddqbv
@@ -9016,7 +9016,7 @@ mod tests {
 		assert!(!d.disabled(Key::PerfProfile));
 	}
 
-	// Nothing is drawn from the pointer itself, so a move is owed a frame only
+	// Nothing is drawn from the pointer itself, so a move needs a frame only
 	// when it changed something that is: the item lit in an open dropdown, a
 	// dragged slider's value. dialog.rs draws nothing for any other move.
 	// Test ID: ddgh0
@@ -9073,7 +9073,7 @@ mod tests {
 	}
 
 	// Every button's caption centers its capitals in the button, the way the
-	// tab titles do, and a button is tall enough for that: the footer's three,
+	// tab titles do, and a button is tall enough for that: the footer's 3,
 	// the buttons in a row and the shell list's Add, on every tab.
 	// Test ID: df4cx
 	#[test]
@@ -9228,7 +9228,7 @@ mod tests {
 	}
 
 	// The colors come from the live settings, behind a lock. Each of a frame's
-	// three drawing calls builds them once and hands them down, rather than
+	// 3 drawing calls builds them once and hands them down, rather than
 	// every quad asking again.
 	// Test ID: ddggc
 	#[test]
@@ -9377,7 +9377,7 @@ mod tests {
 	}
 
 	// A 0..1 fraction reads as a whole percent and is stored as the decimal. The
-	// two directions have to be exact inverses: a revert that came a hair off
+	// 2 directions have to be exact inverses: a revert that came a hair off
 	// its own default would leave the arrow lit with nothing to undo.
 	// Test ID: davbe
 	#[test]
@@ -9408,7 +9408,7 @@ mod tests {
 			assert!(d.is_default(key), "{}", spec.label);
 			assert_eq!(d.get_f32(key), d.default_f32(key), "{}", spec.label);
 		}
-		// and the decimal really is what reaches the settings the app runs on
+		// and the decimal is what goes into the settings the app runs on
 		d.set_f32(Key::Opacity, 35.0);
 		assert_eq!(d.edited.opacity, 0.35);
 		d.set_f32(Key::BgContrastSize, 100.0);
@@ -9432,7 +9432,7 @@ mod tests {
 			if redundant.is_none() {
 				continue;
 			}
-			// the first row that IS drawn starts at the top of the viewport,
+			// the first row that is drawn starts at the top of the viewport,
 			// past only the rows' own padding, so the heading left no gap
 			let first = (0..d.specs.len())
 				.find(|&j| {
@@ -9453,7 +9453,7 @@ mod tests {
 				.filter(|s| s.tab == tab && !SettingsDialog::header_is_tab_title(s))
 				// Changed 20261006: a shared line is drawn once, so a row with
 				// others beside it counts once (2026100614510984). This summed
-				// every row whole, which held only while no tab with a hidden
+				// every row whole, which worked only while no tab with a hidden
 				// heading had a shared line:
 				//     .map(|s| SettingsDialog::row_h_for(&s.kind, d.line_h, shells))
 				.map(|s| {
@@ -9461,9 +9461,9 @@ mod tests {
 					SettingsDialog::row_advance(d.specs, i, tab, d.line_h, shells)
 				})
 				.sum();
-			// the surplus over the rows is the declared gaps and NOTHING else -
+			// the surplus over the rows is the declared gaps and nothing else -
 			// stated exactly rather than bounded by a heading's height, so
-			// retuning header_gap cannot quietly turn this into a near miss
+			// retuning header_gap can't quietly turn this into a near miss
 			let mut gaps = 0.0;
 			let mut prev = None;
 			for (i, s) in SettingsDialog::visible(d.specs, tab) {
@@ -9503,7 +9503,7 @@ mod tests {
 			.position(|s| s.key == key)
 			.expect("a file-type row");
 		d.tab = d.specs[i].tab;
-		// the Shell tab is not what sizes the dialog, so its last rows may need
+		// the Shell tab isn't what sizes the dialog, so its last rows may need
 		// scrolling to
 		d.focus = Some(super::Focus::Row(i, 0));
 		d.scroll_focus_into_view();
@@ -9651,7 +9651,7 @@ mod tests {
 			.expect("a shells grid");
 		assert_eq!(tab_titles()[grid.tab], "Shell");
 		// The tab is the grid, its headings, the startup directory the grid's own
-		// default shell starts in, the two switches for what SilkTerm sets up in a
+		// default shell starts in, the 2 switches for what SilkTerm sets up in a
 		// shell it starts, and on Windows the script types it opens - nothing else
 		// belongs beside them.
 		for spec in ui.specs.iter().filter(|s| s.tab == grid.tab) {
@@ -9665,7 +9665,7 @@ mod tests {
 				spec.label
 			);
 		}
-		// and the directory reads BELOW the list it applies to
+		// and the directory reads below the list it applies to
 		let dir = ui
 			.specs
 			.iter()
@@ -9757,7 +9757,7 @@ mod tests {
 		d.key_tab(); // from nothing -> the first control on the tab
 		assert_eq!(d.focus, Some(Focus::Row(f[0], 0)));
 		// the smooth-scroll master toggle is a single stop; each slider under it
-		// is two (track, then numeric field)
+		// is 2 (track, then numeric field)
 		d.focus = Some(Focus::Row(f[at], 0));
 		d.key_tab();
 		assert_eq!(d.focus, Some(Focus::Row(f[at + 1], 0)));
@@ -9765,7 +9765,7 @@ mod tests {
 		assert_eq!(d.focus, Some(Focus::Row(f[at + 1], 1)));
 		d.key_tab();
 		assert_eq!(d.focus, Some(Focus::Row(f[at + 2], 0)));
-		// after the LAST control the ring visits the three footer buttons
+		// after the last control the ring visits the 3 footer buttons
 		let last = *f.last().unwrap();
 		d.focus = Some(super::Focus::Row(last, d.parts_of(last) - 1));
 		d.key_tab();
@@ -9946,7 +9946,7 @@ mod tests {
 	// 		assert!(!d.disabled(Key::FontFamily));
 	// 	} else {
 	// 		assert!(!d.disabled(Key::SystemFont));
-	// 		// live, so the row explains what it does rather than why it cannot
+	// 		// live, so the row explains what it does rather than why it can't
 	// 		assert_ne!(
 	// 			d.hover_tip(bx.x + 2.0, bx.y + 2.0).map(|(tip, _)| tip_text(tip)),
 	// 			Some("The desktop reports no monospace font to follow.")
@@ -10057,7 +10057,7 @@ mod tests {
 		d.key_space();
 		assert_eq!(d.open, Some(i));
 		assert_eq!(d.pending, 0);
-		// Down moves the highlight but does not commit yet
+		// Down moves the highlight but doesn't commit yet
 		d.key_vertical(true);
 		assert_eq!(d.pending, 1);
 		assert_eq!(
@@ -10222,7 +10222,7 @@ mod tests {
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_scrolling_feel_sliders_round_trip_and_run_the_right_way() {
 		// A slider that reads back as something else is the "setting does
-		// nothing" bug in its quietest form. Also pins the DIRECTION of every
+		// nothing" bug in its quietest form. Also pins the direction of every
 		// feel slider: higher = faster, whichever way each is stored
 		// underneath.
 		let mut d = mk_dialog(4000.0);
@@ -10447,7 +10447,7 @@ mod tests {
 
 	// A number typed past the slider's end is kept, up to the row's cap. The
 	// handle parks at the end, the box shows the number, and a press on the
-	// parked handle does not throw it away. Below the slider still clamps.
+	// parked handle doesn't throw it away. Below the slider still clamps.
 	// Test ID: ddp90
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
@@ -10510,7 +10510,8 @@ mod tests {
 	}
 
 	// A number typed past a slider has to show whole in its box, so a decimal
-	// drops places as its whole part grows. 3600 seconds showed "3600.00", cut off.
+	// drops places as its whole part grows. At 3600 seconds it showed
+	// "3600.00", cut off.
 	// Test ID: ddp98
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
@@ -10639,7 +10640,7 @@ mod tests {
 	}
 
 	// A box wider than the floor comes out of the panel, so the sliders keep their
-	// length, and the floor holds when every number fits. Wide footer buttons make
+	// length, and the floor stays when every number fits. Wide footer buttons make
 	// the panel's own floor the widest thing, as a wide font's labels can.
 	// Test ID: ddpa6
 	#[test]
@@ -10846,7 +10847,7 @@ mod tests {
 		);
 	}
 
-	// All four tab chords, in both directions, and the plain keys they must not
+	// All 4 tab chords, in both directions, and the plain keys they must not
 	// steal: Tab alone walks controls, and PageUp/PageDown alone do nothing here.
 	// Test ID: dava2
 	#[test]
@@ -10870,7 +10871,7 @@ mod tests {
 		d.key_page(false);
 		assert_eq!(d.tab, last);
 
-		// without Ctrl these are not tab keys at all
+		// without Ctrl these aren't tab keys at all
 		d.tab = 1;
 		d.set_mods(false, false, false);
 		d.key_page(true);
@@ -10922,7 +10923,7 @@ mod tests {
 	fn slider_field_typing_starts_fresh_and_rejects_letters() {
 		use super::{Focus, Key};
 		let mut d = mk_dialog(2000.0);
-		// Line height: a slider that really is a decimal, so the dot is legal
+		// Line height: a slider that's a decimal, so the dot is legal
 		let i = d
 			.specs
 			.iter()
@@ -10954,7 +10955,7 @@ mod tests {
 	}
 
 	// "File or folder" says where the picture comes from. With Rotate folder on
-	// that is the folder, shipped as the usual place; with it off, the image. A
+	// that is the folder, the usual place by default; with it off, the image. A
 	// named image wins at run time, so it shows whichever way the switch is set.
 	// Test ID: dd5ge
 	#[test]
@@ -11111,7 +11112,7 @@ mod tests {
 
 	// A text box on a Mac moves by words with Option, goes to either end with
 	// Command, and types nothing with Command or Control held. Command+Shift+[
-	// and ] reach the tabs through the menu bar.
+	// and ] switch tabs through the menu bar.
 	// Test ID: dde0d
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
@@ -11451,7 +11452,7 @@ mod tests {
 	// 		.position(|s| matches!(s.key, Key::SystemFont))
 	// 		.unwrap();
 	// 	d.tab = d.specs[i].tab;
-	// 	// the desktop names a size to follow but no family: Face grays, Size does not
+	// 	// the desktop names a size to follow but no family: Face grays, Size doesn't
 	// 	d.os_font = crate::sysfont::Monospace {
 	// 		family: None,
 	// 		size_pt: Some(9.0),
@@ -11638,7 +11639,7 @@ mod tests {
 		let _ = std::fs::remove_dir_all(&dir);
 	}
 
-	// The outline is drawn by the scrim pass but is not the halo: it takes input
+	// The outline is drawn by the scrim pass but isn't the halo: it takes input
 	// with the scrim off, and the cursor may join it either way.
 	// Test ID: dc7fv
 	#[test]
@@ -11679,7 +11680,7 @@ mod tests {
 		);
 	}
 
-	// Remote is a profile the file never holds: picking it raises the session
+	// Remote is a profile the file never stores: picking it raises the session
 	// override over the stored profile, and any other pick lowers it again.
 	// Test ID: dc7fw
 	#[test]
@@ -11716,7 +11717,7 @@ mod tests {
 
 	// A step the display watch took shows in the dropdown and reads as a change,
 	// so the arrow offers the way back. A hand pick lifts it, and picking the
-	// profile the file already holds writes only the automatic switch.
+	// profile the file already has writes only the automatic switch.
 	// Test ID: dcf3x
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
@@ -11759,7 +11760,7 @@ mod tests {
 		);
 		assert!(d.row_is_default(row));
 		assert!(config::persist(&d.orig, &d.edited));
-		// The file already held Max, so its profile line is left alone. Until
+		// The file already had Max, so its profile line is left alone. Until
 		// naming one switched the automatic choice off, nothing was written:
 		//     assert_eq!(read_to_string(&path).unwrap(), before, "...");
 		assert_eq!(
@@ -11841,7 +11842,7 @@ mod tests {
 		let (mut d, i, _) = mk_long_text_edit('y');
 		let want = d.edit.as_ref().unwrap().buf.clone();
 		d.edit = None;
-		// just inside the box's right end, which held an x for an automatic
+		// just inside the box's right end, which had an x for an automatic
 		// value until 2026100913394950
 		let f = d.textbox(i);
 		click(
@@ -11988,7 +11989,7 @@ mod tests {
 		assert_eq!(d.key_enter(), Action::Ok);
 	}
 
-	// While the wallpaper picks the text colors, the two rows show them like any
+	// While the wallpaper picks the text colors, the 2 rows show them like any
 	// automatic value and stay live. What is stored stays the person's own, so
 	// a save writes nothing of the derived pair.
 	// Test ID: dcww4
@@ -12075,7 +12076,7 @@ mod tests {
 		d
 	}
 
-	// The colors of the quads that are exactly one of the four edges `border`
+	// The colors of the quads that are exactly one of the 4 edges `border`
 	// draws round `r`, `t` thick.
 	fn edge_colors(quads: &[crate::gfx::RectInstance], r: super::Rect, t: f32) -> Vec<[f32; 4]> {
 		let edges = [
@@ -12198,7 +12199,7 @@ mod tests {
 	}
 
 	// A heading's text sits at the top of its row and the rule near the bottom,
-	// and the two stay apart whatever the interface font.
+	// and the 2 stay apart whatever the interface font.
 	// Test ID: dd5qt
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
@@ -12261,7 +12262,7 @@ mod tests {
 	}
 
 	// An open dropdown or field menu owns the pointer: a click anywhere only
-	// closes it. So the rows it lies over don't answer with their tips from
+	// closes it. So the rows it lies over don't show their tips from
 	// under it, and neither does anything else while it's up (2026100913394952).
 	// Test ID: ddwja
 	#[test]
@@ -12361,7 +12362,7 @@ mod tests {
 
 	// Which tab a row is on and which sub-group it belongs to is the design. The
 	// completeness test only asks that each row exists, so this pins the rest,
-	// by key so a relabel does not move it.
+	// by key so a relabel doesn't move it.
 	// Test ID: dd5qx
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
@@ -12498,7 +12499,7 @@ mod tests {
 			);
 		}
 		// the whole Cursor tab, in order; the scrim and outline pair has no key
-		// of its own, so it answers by its first part
+		// of its own, so it goes by its first part
 		let cursor = specs[at(Key::CursorBlinking)].tab;
 		assert_eq!(tab_titles()[cursor], "Cursor");
 		let rows: Vec<&str> = specs
@@ -12749,7 +12750,7 @@ mod tests {
 		assert_eq!(d.edit.as_ref().unwrap().buf, "DejaVu S");
 	}
 
-	// Transparency and its two rows are the last group on the Background tab,
+	// Transparency and its 2 rows are the last group on the Background tab,
 	// after everything that works whatever the desktop.
 	// Test ID: ddeqg
 	#[test]
@@ -12841,7 +12842,7 @@ mod tests {
 
 	// Commented out 20261008: a row now has one tip, shown over its label, its
 	// mark and its control alike (2026100812334388), so a mark no longer
-	// answers with text of its own. Replaced by
+	// shows text of its own. Replaced by
 	// `two_rows_warn_and_each_mark_shows_the_rows_tip` (ddp7w), which checks
 	// the same things with the row's tip over the mark.
 	// // Two rows carry a warning mark: Transparency on the Background tab, and
@@ -12939,10 +12940,10 @@ mod tests {
 	// 	}
 	// }
 
-	// Two rows have a warning mark: Transparency on the Background tab, and
+	// A warning mark is on 2 rows: Transparency on the Background tab, and
 	// "Free resources when idle" on the Window tab. Each draws one triangle after
 	// its label, clear of its checkbox. The mark's text ends the row's one tip,
-	// which shows over the label, the mark and the checkbox. No other tab draws
+	// which shows over the label, the mark, and the checkbox. No other tab draws
 	// a mark.
 	// How many rows on `tab` draw a warning mark.
 	fn warned_on(d: &SettingsDialog, tab: usize) -> usize {
@@ -13122,7 +13123,7 @@ mod tests {
 	// }
 
 	// "Resource use" is the last group on the Program tab: the idle switch
-	// with its two waits under it, then software rendering at the switch's
+	// with its 2 waits under it, then software rendering at the switch's
 	// depth. Anything else on the tab goes above it.
 	// Test ID: de1am
 	#[test]
@@ -13192,7 +13193,7 @@ mod tests {
 		);
 	}
 
-	// Where tmux can't be run, all three rows gray and say why, and the
+	// Where tmux can't be run, all 3 rows gray and say why, and the
 	// switch can't be turned on.
 	// Test ID: de30r
 	#[test]
@@ -13319,7 +13320,7 @@ mod tests {
 	}
 
 	// A hotkey row waits for the next chord only once asked, takes every key
-	// while it waits, and ends on a chord, on Escape or on Backspace.
+	// while it waits, and ends on a chord, on Escape, or on Backspace.
 	// Test ID: ddev0
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
@@ -13330,7 +13331,7 @@ mod tests {
 		let i = row_of(&d, Key::HotkeySplitRight);
 		let ctrl_alt = ModifiersState::CONTROL.union(ModifiersState::ALT);
 		let typed = |text: &str| Pressed::Character(text.into());
-		// walking onto it by keyboard does not start it, or Tab could never leave
+		// walking onto it by keyboard doesn't start it, or Tab could never leave
 		d.focus = Some(super::Focus::Row(i - 1, 0));
 		d.key_tab();
 		assert_eq!(d.focus, Some(super::Focus::Row(i, 0)));
@@ -13345,7 +13346,7 @@ mod tests {
 		assert_eq!(d.capture, Some(i), "a modifier alone is not the chord");
 		assert!(d.capture_key(&typed("r"), ModifiersState::empty()));
 		assert_eq!(d.capture, Some(i), "a bare letter is refused");
-		assert!(shown_on(&d, i).contains("R needs Ctrl, Alt or Super held"));
+		assert!(shown_on(&d, i).contains("R needs Ctrl, Alt, or Super held"));
 		assert!(d.capture_key(&Pressed::Named(NamedKey::Tab), ModifiersState::CONTROL));
 		assert_eq!(
 			d.capture, None,
@@ -13377,7 +13378,7 @@ mod tests {
 		assert_eq!(d.edited.keys.own(Hotkey::SplitRight), Some(&[][..]));
 		let (shown, off, _) = d.hotkey_text(i);
 		assert_eq!((shown.as_str(), off), ("Off", true));
-		// the revert arrow puts the shipped chord back and queues the line
+		// the revert arrow puts the default chord back and queues the line
 		d.row_revert(i);
 		assert!(d.is_default(Key::HotkeySplitRight));
 		assert_eq!(shown_on(&d, i), "Alt+Shift+Plus | ");
@@ -13442,7 +13443,7 @@ mod tests {
 		assert!(d.capture_key(&Pressed::Character("e".into()), ModifiersState::ALT));
 		assert_eq!(shown_on(&d, right), "Off | ");
 
-		// two set the same way in the file are both named
+		// a pair set the same way in the file are both named
 		d.edited.keys = crate::keys::Bindings::with(
 			false,
 			&[
@@ -13485,7 +13486,7 @@ mod tests {
 		);
 		d.capture_start(right);
 		assert!(d.capture_key(&Pressed::Character("r".into()), ModifiersState::empty()));
-		assert!(shown_on(&d, right).contains("R needs Control, Option or Command held"));
+		assert!(shown_on(&d, right).contains("R needs Control, Option, or Command held"));
 		let option_command = ModifiersState::SUPER.union(ModifiersState::ALT);
 		assert!(d.capture_key(&Pressed::Character("r".into()), option_command));
 		assert_eq!(shown_on(&d, right), "Option+Command+R | ");
@@ -13565,7 +13566,7 @@ mod tests {
 		config::revert_keys(&d.take_reverted());
 		let saved = std::fs::read_to_string(&path).unwrap();
 		// only the hotkey that was set is in the file; the one that lost a
-		// chord to it is not
+		// chord to it isn't
 		let active = |text: &str| -> Vec<String> {
 			text.lines()
 				.map(str::trim)
@@ -13625,7 +13626,7 @@ mod tests {
 	}
 
 	// A tree of the test's own over the real leaves, on the side asked for; both
-	// go back when the guard drops. Two parents, where SilkTerm's own has one.
+	// go back when the guard drops. It has 2 parents, where SilkTerm's own has one.
 	const NESTED: &[&str] = &[
 		"Silk",
 		"Look",
@@ -13642,7 +13643,7 @@ mod tests {
 	];
 	struct TabsStandIn;
 	fn stand_in_tabs(paths: &[&str], side: TabsSide) -> TabsStandIn {
-		// one copy per distinct tree, held where a leak check can still reach it
+		// one copy per distinct tree, kept where a leak check can still find it
 		static TREES: std::sync::Mutex<Vec<&'static [super::TabNode]>> =
 			std::sync::Mutex::new(Vec::new());
 		let (nodes, leaves) = crate::ui_spec::tab_tree(paths).expect("a valid tree");
@@ -13832,7 +13833,7 @@ mod tests {
 	}
 
 	// A tab's title sits at the same height in its box on every tab, the last
-	// as the first. The boxes and the titles come from two loops, so this reads
+	// as the first. The boxes and the titles come from 2 loops, so this reads
 	// what is handed to the renderer, in physical pixels, at whole and
 	// fractional scales.
 	// Test ID: deyxd
@@ -13910,7 +13911,7 @@ mod tests {
 		assert_eq!(d.focus, None);
 	}
 
-	// SilkTerm's own tabs: a list down the left, with Appearance over the four
+	// SilkTerm's own tabs: a list down the left, with Appearance over the 4
 	// that change how the text and its backdrop look.
 	// Test ID: ddwk0
 	#[test]
@@ -13939,7 +13940,7 @@ mod tests {
 				("Keys", 0),
 			]
 		);
-		// Appearance holds no rows; a click on it opens Themes, its first,
+		// Appearance has no rows; a click on it opens Themes, its first,
 		// and from under it stays put, since it already reads as current
 		let mut d = mk_dialog(2000.0);
 		assert_eq!(d.tab, 0);
@@ -13955,7 +13956,7 @@ mod tests {
 	}
 
 	// The search box's band and the footer's hold still while the rows scroll,
-	// and each is a shade off the rows with a line along them. That holds on a
+	// and each is a shade off the rows with a line along them. That's true on a
 	// tab that scrolls and on one that doesn't, so no tab looks different for
 	// it (2026101419165501). The rows are the darker side (2026103010083403).
 	// Test ID: de1aj
@@ -14043,7 +14044,7 @@ mod tests {
 		}
 	}
 
-	// The still bands read lighter than the rows they hold, in both modes of
+	// The still bands read lighter than the rows between them, in both modes of
 	// every built-in theme (2026103010083403).
 	// Test ID: devr1
 	#[test]

@@ -4,7 +4,7 @@
 ##	- Purpose:
 ##		What a run removes of what earlier runs left, and what it never touches.
 ##		Stale folders and build dirs are planted next to fresh ones, and next to
-##		things the pipeline did not make: another run's folder, a link, a folder
+##		things the pipeline didn't make: another run's folder, a link, a folder
 ##		nobody wrote down, a scratch dir under target/. Only the stale ones the
 ##		pipeline made may go.
 ##	- Test ID: de5e9
@@ -32,7 +32,7 @@ work="$(mktemp -d "${TMPDIR:-/tmp}/silk-cleanup.XXXXXX")"
 fEnd(){ local -r rc=$?; fTestDir_Rm "${work}" || true; fTestDir_End "${rc}"; }
 trap fEnd EXIT
 
-## A: the test run folders failed runs kept. Eight written down, oldest first.
+## A: the test run folders failed runs kept. There are 8 written down, oldest first.
 ## 2 has another run's mark, 3 is gone already, 4 was swapped for a link, and 99
 ## was never written down.
 base="${work}/a"; ledger="${work}/a.ledger"; mkdir -p "${base}" "${work}/elsewhere"
@@ -55,7 +55,7 @@ fCheck "the ledger keeps only what it kept" test "$(cut -f2 "${ledger}" | paste 
 fCheck "and the summary counts what went" grep -qE '^cleanup: removed 2 old test run folders; (about [0-9]+ MB|under 1 MB) freed$' <<<"$(fSweep_Summary)"
 fSweep_Ledger "${ledger}" 3 "old test run folders" 2>/dev/null
 fCheck "a second sweep removes nothing more" test -d "$(fDir 6)" -a -d "$(fDir 7)" -a -d "$(fDir 8)" -a -d "$(fDir 2)"
-## A folder this user does not own. /proc/1 stands in, since only root can
+## A folder this user doesn't own. /proc/1 stands in, since only root can
 ## make one, and nothing can remove it, should the check ever slip.
 printf '/proc/1\ttok-root\n' >"${work}/root.ledger"
 fCheck "a folder this user does not own is never taken" grep -q "not this user's" <<<"$(fSweep_Ledger "${work}/root.ledger" 0 x 2>&1)"
@@ -69,7 +69,7 @@ fCheck "another does not" test -n "$(fSweep_NotOurs "${made}" "${token}x")"
 fCheck "and no token does not" test -n "$(fSweep_NotOurs "${made}" "")"
 
 ## C: a toolchain change. Cargo's dirs on the list go; a dir on the list cargo
-## did not make, a link, and a scratch dir off the list stay.
+## didn't make, a link, and a scratch dir off the list stay.
 t="${work}/c"
 fCargo(){ mkdir -p "${1}/.fingerprint" "${1}/deps"; echo x >"${1}/deps/libx.rlib"; }
 fTag(){ mkdir -p "${1}"; echo "Signature: 8a477f597d28d172789f06886806bc55" >"${1}/CACHEDIR.TAG"; }
@@ -91,7 +91,7 @@ fCheck "nor a link, nor what it points to" test -L "${t}/profiling" -a -f "${wor
 fCheck "nor a scratch dir off the list" test -f "${t}/darwin/CACHEDIR.TAG"
 fCheck "and the new toolchain is written down" test "$(cat "${t}/.cicd-toolchain")" = key-2
 
-## D: a build dir a run wrote down that the next one does not name, as a cross
+## D: a build dir a run wrote down that the next one doesn't name, as a cross
 ## target dropped from the config.
 t="${work}/d"
 fCargo "${t}/debug"; fCargo "${t}/aarch64-unknown-linux-gnu/release"; fCargo "${t}/mmap-bench"

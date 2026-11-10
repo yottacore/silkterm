@@ -2,7 +2,7 @@
 
 ##	- Purpose:
 ##		The release notes' download table: OS in rows, architecture in columns,
-##		each cell linking only the files that are really uploaded, under the
+##		each cell linking only the files that are uploaded, under the
 ##		names GitHub gives them.
 ##	- Test ID: ddgbk
 ##	- History: At bottom of file.

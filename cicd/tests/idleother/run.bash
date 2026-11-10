@@ -17,10 +17,10 @@
 ##			- Moving the pointer over it brings it back.
 ##		The wait is the setting's own, read from the file, so no idle override
 ##		is set: SILK_IDLE_SECS would stand in for both waits and hide a setting
-##		that never reaches the release.
+##		that never gets into the release.
 ##	- Syntax: run.bash [--bin PATH]   (default: the debug build, then release)
 ##	- Exit: 0 passed, 1 a check failed, 3 nothing ran (no binary, display,
-##	  dash, xdotool, xprop or python-xlib).
+##	  dash, xdotool, xprop, or python-xlib).
 ##	- Test ID: deqy2
 ##	- History: At bottom of file.
 
@@ -101,7 +101,7 @@ fLeftovers(){
 }
 
 ## No window manager on purpose: winit reports the window unfocused at once,
-## and nothing ever focuses it, minimizes it or covers it.
+## and nothing ever focuses it, minimizes it, or covers it.
 export CICD_HEADLESS_DISPLAY="${CICD_HEADLESS_DISPLAY:-:98}"
 display="${CICD_HEADLESS_DISPLAY}"
 auth="/tmp/cicd-gui-headless-${USER:-$(id -un)}/Xauthority-${display#:}"
@@ -111,7 +111,7 @@ if [[ "${status}" == *"no Xvfb"* ]]; then
 	startedDisplay=1
 fi
 
-## No blink, wallpaper or minimap, so nothing but the idle release changes the
+## No blink, wallpaper, or minimap, so nothing but the idle release changes the
 ## window, and no rating run to put the release off.
 printf '%s\n' 'performance:' $'\tautomatic: false' $'\tprofile: "custom"' \
 	'window:' $'\tremember_per_monitor: false' $'\tidle_release: true' $'\tidle_release_hidden_min: 60' $'\tidle_release_min: 1' \
@@ -211,6 +211,6 @@ echo "all passed"
 ##		- 20261101 JC: Created.
 ##		- 20261102 JC: A second window, printing in a tab in the back.
 ##		- 20261102 JC: Each title read from its own window, and the printing
-##		  tab really in the back.
+##		  tab in the back.
 ##		- 20261106 JC: The pointer over the quiet window, grabbed and let go by
 ##		  another program during the wait and after the release.

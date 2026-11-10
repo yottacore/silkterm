@@ -4,7 +4,7 @@
 
 ##	- Purpose:
 ##		ci-mac.bash names every test that failed, even when a test's own output
-##		splits "test <name> ..." from its FAILED, and runs just those again.
+##		splits "test <name> ..." from its FAILED, and runs only those again.
 ##		Lifts fFailedNames and fWhyFailed out of ci-mac.bash as they stand and
 ##		feeds them logs in the shapes cargo test writes, with cargo stood in for.
 ##	- Test ID: desrb
@@ -31,7 +31,7 @@ lifted="$(fLift fFailedNames; fLift fWhyFailed)"
 eval "${lifted}"
 cargo(){ echo "cargo ${*}"; }
 
-## One thread: a test's output and its panic land between "test <name> ..." and FAILED.
+## One thread: a test's output and its panic end up between "test <name> ..." and FAILED.
 cat > "${work}/split.log" <<'E'
 running 3 tests
 test tests::ok_one ... measured: fine
@@ -60,7 +60,7 @@ test result: FAILED. 1 passed; 2 failed; 0 ignored; 0 measured; 0 filtered out; 
 error: test failed, to rerun pass `--lib`
 E
 
-## Two threads and two binaries, each with its own list, and one name on its result line.
+## Here there are 2 threads and 2 binaries, each with its own list, and one name on its result line.
 cat > "${work}/two.log" <<'E'
 running 2 tests
 
@@ -89,7 +89,7 @@ failures:
 test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 E
 
-## Captured output, whose first failures block holds an indented line that isn't a name.
+## Captured output, whose first failures block has an indented line that isn't a name.
 cat > "${work}/captured.log" <<'E'
 running 1 test
 other_bin_fail --- FAILED

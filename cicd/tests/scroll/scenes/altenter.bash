@@ -7,7 +7,7 @@
 ## did that only on a quiet box: on a busy one the first frame came after the swap
 ## and nothing eased at all. A wait that runs out leaves a note, and the analyzer
 ## calls the run a skip. The nano-shaped paint that follows is held still, so every
-## alt-screen frame should carry a zero fraction.
+## alt-screen frame should have a zero fraction.
 ## POSIX sh (dash).
 
 ##	History: At bottom of file.
@@ -24,7 +24,7 @@ note="${SILK_SCENE_NOTE:-}"
 sleep "${settle}"
 seq 1 400 | sed 's/^/output line /'
 if [ -n "${trace}" ]; then
-	## a normal-screen frame is traced only while it carries a fraction
+	## a normal-screen frame is traced only while it has a fraction
 	deadline=$(($(date +%s) + easeWait))
 	until grep -qE 'frac=0\.([1-9]|0[3-9])[0-9]* alt=0' "${trace}" 2>/dev/null; do
 		if [ "$(date +%s)" -ge "${deadline}" ]; then

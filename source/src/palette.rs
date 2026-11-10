@@ -230,7 +230,7 @@ mod tests {
 	}
 
 	// The HIDDEN attribute sets fg to bg, and a program can do the same by hand.
-	// Either way it is on purpose.
+	// Either way it's on purpose.
 	// Test ID: dbzcm
 	#[test]
 	fn text_hidden_in_the_background_color_stays_hidden() {
@@ -297,7 +297,7 @@ mod tests {
 			assert_eq!(memo.get(fg, bg, 0.30), readable(fg, bg, 0.30));
 			assert_eq!(memo.get(fg, bg, 0.30), readable(fg, bg, 0.30)); // now cached
 		}
-		// A changed threshold must not be answered from the old entries.
+		// A changed threshold must not reuse the old entries.
 		for (fg, bg) in pairs {
 			assert_eq!(memo.get(fg, bg, 0.50), readable(fg, bg, 0.50));
 		}

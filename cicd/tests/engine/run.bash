@@ -5,7 +5,7 @@
 ##	- Purpose:
 ##		Pieces of cicd.bash that decide what a run does, lifted out of the file as
 ##		they stand and run on their own: the build retry, the dogfood tag, the
-##		option parser, the running-copy check, the build number and the host line.
+##		option parser, the running-copy check, the build number, and the host line.
 ##	- Test ID: dd5nn
 ##	- History: At bottom of file.
 
@@ -35,7 +35,7 @@ fEcho(){ echo "    ${*}"; }
 fDie(){ echo "DIE: ${*}"; exit 1; }
 
 ## The build retry. rustc has crashed inside LLVM twice in a row, so the one
-## rebuild the profiler stage first had was not enough.
+## rebuild the profiler stage first had wasn't enough.
 eval "$(fLift '^fRetryBuild(){' '^}')"
 counter="${work}/tries"
 fFlaky(){ local n; n=$(( $(cat "${counter}") + 1 )); echo "${n}" >"${counter}"; ((n > ${1})); }
@@ -731,7 +731,7 @@ fCheck "which says --no-remote left it out" test "$(fArmPlan 1 "x|linux-arm64|y"
 fCheck "or that there's no ARM64 build" test "$(fArmPlan 0 "x|linux-x86_64|y")" = "ARM64 smoke run .....: (no Linux ARM64 build)"
 
 ## The release stage's check for this box's paths. Every published binary once
-## held the home folder and account name, from panic locations.
+## had the home folder and account name, from panic locations.
 eval "$(grep '^fHasLocalPaths(){' "${engine}")"
 fPaths(){ local HOME="${work}/home/someone" root="${work}/src/silkterm"; fHasLocalPaths "${1}"; }
 printf 'x\0panicked at %s/src/silkterm/source/src/main.rs\0' "${work}" >"${work}/bin-root"

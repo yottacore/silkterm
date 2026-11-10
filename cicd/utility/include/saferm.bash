@@ -23,12 +23,12 @@
 ##		https://mit-license.org/
 ##	SPDX-License-Identifier: MIT
 
-##	Resolved once, since macOS's temp folder sits behind the /var link.
+##	Resolved once, since macOS's temp folder is behind the /var link.
 ## A caller under set -e with no realpath on PATH, like the scroll verdict test, must still load.
 ## fSafeRm needs realpath anyway, so it refuses every path there.
 __safeRmHost="$(realpath -m -- "${HOST_TEMP:-${TMPDIR:-/tmp}}" 2>/dev/null)" || __safeRmHost=""
 __safeRmOwn="${__safeRmHost%/}/${EXE_NAME:-silkterm}"
-##	Without HOST_TEMP the root is /tmp, and the short socket folders sit right in it.
+##	Without HOST_TEMP the root is /tmp, and the short socket folders are right in it.
 __safeRmHostSet="${HOST_TEMP:+1}"
 
 fSafeRm(){ fSafeRm_Do "" "${@}"; }

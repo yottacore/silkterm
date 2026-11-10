@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 
 ##	Purpose:
-##		Rebuild the table of contents in every .md that carries one, and fail on any
+##		Rebuild the table of contents in every .md that has one, and fail on any
 ##		difference. The editor's TOC extension writes these blocks; this reproduces
-##		its output so a heading added by hand cannot leave the TOC behind.
+##		its output so a heading added by hand can't leave the TOC behind.
 ##	Syntax:
 ##		run.py [--fix] [--root DIR] [FILE ...]
 ##		  --fix       write the rebuilt block instead of reporting
-##		  --root DIR  repository root (default: three levels above this script)
+##		  --root DIR  repository root (default: 3 levels above this script)
 ##	Exit: 0 all TOCs current, 1 one or more differ.
 ##	Test ID: dcwrr
 
@@ -27,8 +27,8 @@ BEGIN = "<!-- TOC -->"
 END = "<!-- /TOC -->"
 IGNORE = "TOC ignore:true"
 
-## Lowercase, keep letters, digits, spaces, hyphens and underscores, spaces to
-## hyphens. The extension keeps underscores, which the written-down rule does not
+## Lowercase, keep letters, digits, spaces, hyphens, and underscores, spaces to
+## hyphens. The extension keeps underscores, which the written-down rule doesn't
 ## mention - see #api-alacritty_terminal in design.md.
 def anchor(text: str) -> str:
 	kept = [c for c in text.lower() if c.isalnum() or c in " -_"]
@@ -70,7 +70,7 @@ def toc_block(lines: list[str]) -> list[str]:
 	return out
 
 
-## Two headings with the same text share an anchor, so one of the links goes to the
+## Headings with the same text share an anchor, so one of the links goes to the
 ## wrong place. No markdown linter catches it.
 def clashes(lines: list[str]) -> dict[str, list[str]]:
 	seen: dict[str, list[str]] = {}

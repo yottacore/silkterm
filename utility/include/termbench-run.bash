@@ -15,7 +15,7 @@
 ##
 ##		The rig matters more than it looks. Measured 20260730: software GL halves
 ##		SilkTerm (45 vs 88 MB/s on ascii) and VirtualGL still costs ~14%, while
-##		CPU-rendered terminals do not move at all. A table built from mixed rigs can
+##		CPU-rendered terminals don't move at all. A table built from mixed rigs can
 ##		therefore rank the wrong terminal first. Every published row comes from one rig.
 ##	- Syntax:
 ##		termbench-run.bash --term KEY [options]
@@ -32,7 +32,7 @@
 ##
 ##		Shortening a run: use --reps, never --scale. Fewer repetitions of the same
 ##		payloads leaves the measured rate directly comparable and only widens the
-##		confidence interval. Shrinking the payload does not: Hyper reads 32 MB/s at
+##		confidence interval. Shrinking the payload doesn't: Hyper reads 32 MB/s at
 ##		--scale 0.05 but ~3 MB/s at full size, a 10x difference. Watch the CV% column;
 ##		a run that got stepped on by other desktop activity shows up there.
 
@@ -78,9 +78,9 @@ trap fCleanup EXIT INT TERM
 ##•••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
 
 ##	Every entry launches its terminal with SCENE as the shell/command, unstyled and
-##	on a throwaway account (fPrivateAccount), so nothing personal reaches a published
+##	on a throwaway account (fPrivateAccount), so nothing personal affects a published
 ##	run and nothing under the measuring account's home changes. Keys marked awkward
-##	need a hook the terminal does not offer directly - see showdown-readme.md.
+##	need a hook the terminal doesn't offer directly. See showdown-readme.md.
 fListTerms(){
 	fEcho_Clean "  silkterm    this tree's release build, as shipped"
 	fEcho_Clean "  silkplain   same binary, every optional effect off"
@@ -90,7 +90,7 @@ fListTerms(){
 	fEcho_Clean "  xfce4 gnome terminator                  (distro packages)"
 	fEcho_Clean "  xterm       X11 only, so it runs on a private X server (see showdown-readme.md)"
 	fEcho_Clean "  tabby       needs the AppImage extracted (see showdown-readme.md)"
-	fEcho_Clean "  (no hyper: it never answers the barrier, so it cannot be timed)"
+	fEcho_Clean "  (no hyper: it never answers the barrier, so it can't be timed)"
 }
 
 ##	Alacritty reads the user's own config unless pointed elsewhere, and defaults TERM to
@@ -104,12 +104,12 @@ fWriteAlacrittyConfig(){
 }
 
 ##	SilkTerm with every optional effect off. Only the overrides are written; the loader
-##	backfills the rest, so this cannot go stale as new settings are added.
+##	backfills the rest, so this can't go stale as new settings are added.
 fWritePlainConfig(){
 	cp "${_here}/termbench-plain.shcl" "${_work}/plain.shcl"
 }
 
-##	SilkTerm as shipped, with the automatic profile pinned off so a slow renderer cannot
+##	SilkTerm as released, with the automatic profile pinned off so a slow renderer can't
 ##	turn the effects down under the row that claims them.
 fWriteCandyConfig(){
 	cp "${_here}/termbench-candy.shcl" "${_work}/candy.shcl"
@@ -140,15 +140,15 @@ fLaunch(){
 
 ##	A headless sway on the real card. Headless means no monitor and no interference with
 ##	whatever is on the actual desktop, while still handing the client a native Vulkan
-##	context on the discrete GPU - which is the whole point over Xvfb software GL.
+##	context on the discrete GPU, which is the reason to use it over Xvfb software GL.
 fStartRig(){
-	command -v sway >/dev/null 2>&1 || fDie "sway is not installed - see showdown-readme.md"
+	command -v sway >/dev/null 2>&1 || fDie "sway isn't installed - see showdown-readme.md"
 	printf 'default_border none\ndefault_floating_border none\ngaps inner 0\ngaps outer 0\n' > "${_work}/sway.cfg"
 
 	local runtimeDir="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
 	## Identify our socket by age, not by which names are new: a compositor that was
 	## killed leaves its socket behind and the next one reuses the same name, so a
-	## set-difference finds nothing. Nothing is deleted - a live session may own one.
+	## set-difference finds nothing. Nothing is deleted, since a live session may own one.
 	local -i startedAt=$(( $(date +%s) - 1 ))
 
 	env -u DISPLAY WLR_BACKENDS=headless WLR_LIBINPUT_NO_DEVICES=1 \
@@ -191,11 +191,11 @@ fStartRig(){
 }
 
 ##	The compositor tiles its only client to the whole output, so the grid is steered by
-##	the output mode instead of by each terminal's own geometry flags - which is what
-##	makes one fitter work for every terminal.
+##	the output mode instead of by each terminal's own geometry flags. That way one
+##	fitter works for every terminal.
 fResizeOutput(){ swaymsg output HEADLESS-1 mode "${1}x${2}" >/dev/null 2>&1 || true; }
 
-##	Terminals that draw only on X11 and are measured on an X server of their own rather
+##	Terminals that draw only on X11, measured on an X server of their own rather
 ##	than through the compositor's Xwayland. xterm reads about a third slower through
 ##	Xwayland (18 MB/s of ASCII against 28 on an X server, 20260929), and its row came
 ##	from X11. It draws on the CPU, so a software X server costs it nothing.
@@ -204,7 +204,7 @@ declare -r x11Terms=" xterm "
 ##	A private X server on a number nobody else is using. One already there is refused
 ##	rather than reused, since it could be somebody else's.
 fStartX11(){
-	command -v Xvfb >/dev/null 2>&1 || fDie "Xvfb is not installed (package xvfb)"
+	command -v Xvfb >/dev/null 2>&1 || fDie "Xvfb isn't installed (package xvfb)"
 	if DISPLAY="${xDisplayNum}" xdpyinfo >/dev/null 2>&1 || [[ -e "/tmp/.X${xDisplayNum#:}-lock" ]]; then
 		fDie "${xDisplayNum} is already in use; pick another with --display"
 	fi
@@ -374,9 +374,9 @@ case "${termKey}" in
 esac
 
 ## A run whose scenes never answered the device-attributes query timed a timeout, not
-## throughput, and must not reach the table.
+## throughput, and mustn't go in the table.
 if /usr/bin/grep -q "sync NONE" "${outFile}" 2>/dev/null; then
-	fEcho "WARNING: this terminal never answered the barrier - the figures are not comparable"
+	fEcho "WARNING: this terminal never answered the barrier - the figures aren't comparable"
 fi
 
 if ((_keepRig)); then

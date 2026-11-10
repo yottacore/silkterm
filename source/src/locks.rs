@@ -4,12 +4,12 @@
 //! The one way a std lock is taken here.
 //!
 //! A lock is poisoned only by a panic while it is held, and the release
-//! profile builds with `panic = "abort"`, so a shipped build never sees one.
+//! profile builds with `panic = "abort"`, so a release build never sees one.
 //! Tests and debug builds unwind, and there a poisoned lock is taken as it
 //! stands: every value behind one is set or taken whole, so a panicking
-//! holder cannot leave it half written, and one failed test should not fail
+//! holder can't leave it half written, and one failed test shouldn't fail
 //! every test after it. The engine's term lock is a `FairMutex`, which has no
-//! poison, and is not taken through here (G2).
+//! poison, and isn't taken through here (G2).
 
 use std::sync::{Mutex, MutexGuard, PoisonError, RwLock, RwLockReadGuard, RwLockWriteGuard};
 

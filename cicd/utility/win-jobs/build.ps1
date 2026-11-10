@@ -5,7 +5,7 @@
 .SYNOPSIS
 	Release build of the clone on a Windows box.
 .DESCRIPTION
-	Prints the exit code, the time taken and the binary's size.
+	Prints the exit code, the time taken, and the binary's size.
 .NOTES
 	Run by win-remote.bash job, which writes _env.ps1 beside it.
 	History: At bottom of file.

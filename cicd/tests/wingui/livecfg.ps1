@@ -8,7 +8,7 @@
 .DESCRIPTION
 	The same checks as cicd/tests/livecfg on Linux, over named pipes:
 	- View > Minimap in window A saves. A's minimap comes on, B keeps its
-	  own, C's does not change, and nobody picks a new wallpaper.
+	  own, C's doesn't change, and nobody picks a new wallpaper.
 	- A new wallpaper folder written by hand, then --reload-settings sent to A.
 	  A and B both pick from the new folder; C picks nothing.
 	- B ended without warning, the way Task Manager does it. The next save in
@@ -38,7 +38,7 @@ $dir = Join-Path $OutDir "livecfg"
 fClearOut $dir
 [void](New-Item -ItemType Directory -Path $dir -Force)
 
-##	Two folders of pictures that look nothing alike, so a pick can be told by name.
+##	A couple of folders of pictures that look nothing alike, so a pick can be told by name.
 function fPictures([string]$Folder, [string]$Prefix, [string[]]$Colors) {
 	[void](New-Item -ItemType Directory -Path $folder -Force)
 	$n = 0
@@ -95,7 +95,7 @@ function fHistory([string]$Config) {
 	if (Test-Path $h) { (Get-Content $h -Raw) } else { "" }
 }
 
-##	The meeting folder holding this window's marker.
+##	The meeting folder with this window's marker.
 function fMarkers([int]$Id) {
 	foreach ($d in (Get-ChildItem $env:TEMP -Directory -Filter "silkterm-*" -ErrorAction SilentlyContinue)) {
 		if (Test-Path (Join-Path $d.FullName "$id")) { return $d.FullName }
@@ -219,7 +219,7 @@ $shots3 = @{}
 foreach ($name in @("b", "c")) { $shots3[$name] = fSettled $wins[$name] "${name}3" }
 $picks = @((fHistory $shared) -split "`r?`n" | Where-Object { $_ -match 'two\d+\.png' })
 fNote "picks from the new folder: $($picks.Count)"
-##	each window picks on its own, and two picks can land on one name
+##	each window picks on its own, and 2 picks can end up on one name
 fSeen "the new folder was picked from" ($picks.Count -ge 1)
 fSeen "b shows a picture from it" ((fDiff $shots2.b $shots3.b) -gt 0)
 fSeen "c does not" ((fDiff $shots2.c $shots3.c) -eq 0)
@@ -257,7 +257,7 @@ if ($typing) {
 	}
 } else { fNote "not checked while locked: d started with the saved minimap" }
 
-##	--wallpaper typed into a shell inside e, on a file of its own, reaches e
+##	--wallpaper typed into a shell inside e, on a file of its own, gets to e
 ##	alone through the pipe name the shell got from it. cmd clears the screen
 ##	before each shot, so only the picture can differ.
 if ($typing) {

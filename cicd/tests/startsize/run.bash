@@ -98,7 +98,7 @@ fFixture(){  ## fFixture <case> <line>...
 	printf '%s\n' 'performance:' $'\tautomatic: false' $'\tprofile: "custom"' "${@}" >"${dir}/config.shcl"
 }
 
-## Prints the watcher's lines: one per change of size, map state or maximized.
+## Prints the watcher's lines: one per change of size, map state, or maximized.
 fWatch(){  ## fWatch <case> [option]...
 	local -r dir="${work}/${1}"; shift
 	DISPLAY="${display}" XAUTHORITY="${auth}" LIBGL_ALWAYS_SOFTWARE=1 \
@@ -137,7 +137,7 @@ fWatch kept
 fCheck "kept: shows once, at one size" fShownOnce kept
 fCheck "kept: and saves no size" fSavedNoSize kept "remembered_columns: 100 remembered_rows: 30 columns: 90 rows: 28"
 
-## Three launches: a request that misses the map can still win the race to
+## It takes 3 launches: a request that misses the map can still win the race to
 ## the window manager now and then, and one lucky launch would pass.
 echo "last closed maximized"
 for try in 1 2 3; do

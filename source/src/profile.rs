@@ -2,14 +2,14 @@
 // Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
 
 //! Performance profiles: one setting that decides how much the look is allowed
-//! to cost, and the rating that picks it on a machine that cannot keep up.
+//! to cost, and the rating that picks it on a machine that can't keep up.
 //!
 //! A profile is a preset group in `settings_ui.shcl` (`groups: profile`), and the
 //! model in `Settings` decides which one is in force and what each row shows.
 //! Custom is the person's own values. See the automatic settings design doc.
 //!
 //! The rating watches how a scroll ease is paced. A display that keeps its
-//! refresh rate paces one frame per refresh; one that cannot stretches every
+//! refresh rate paces one frame per refresh; one that can't stretches every
 //! frame, and a run of stretched frames steps the profile down, no further than
 //! Low and only for the session. It never steps back up within one: a lighter
 //! profile renders less, so a fast-looking run under it says nothing about the
@@ -64,7 +64,7 @@ impl Profile {
 		}
 	}
 
-	/// An unknown spelling reads as the shipped default, the way every other
+	/// An unknown spelling reads as the default, the way every other
 	/// named option in the config does.
 	pub fn parse(text: &str) -> Profile {
 		Profile::ALL
@@ -83,7 +83,7 @@ impl Profile {
 	}
 
 	/// The next cheaper profile, or None at the bottom. Custom has no neighbor:
-	/// the user's own values are not on the ladder.
+	/// the user's own values aren't on the ladder.
 	pub fn lower(self) -> Option<Profile> {
 		match self {
 			Profile::Max => Some(Profile::High),
@@ -101,7 +101,7 @@ impl Profile {
 	}
 }
 
-/// The profile in force: Remote while it is on, else the pick, which is the
+/// The profile in force: Remote while it's on, else the pick, which is the
 /// machine's with any step the display watch took while Choose automatically
 /// is on.
 pub fn current(settings: &Settings) -> Profile {
@@ -127,7 +127,7 @@ pub fn set_remote(settings: &mut Settings, on: bool) {
 }
 
 /// Names the adapter closely enough that a new card or a switch to software
-/// rendering reads as new hardware, and a driver update does not.
+/// rendering reads as new hardware, and a driver update doesn't.
 pub fn fingerprint(info: &wgpu::AdapterInfo) -> String {
 	format!(
 		"{} ({:?}, {:?})",
@@ -138,7 +138,7 @@ pub fn fingerprint(info: &wgpu::AdapterInfo) -> String {
 }
 
 // The names a driver gives itself when there is no card behind it. wgpu reports
-// most of these as DeviceType::Cpu already; the ones that do not are the remote
+// most of these as DeviceType::Cpu already; the ones that don't are the remote
 // and virtual display drivers, which is exactly where the pick was going wrong.
 const SOFTWARE_ADAPTERS: &[&str] = &[
 	"llvmpipe",
@@ -160,7 +160,7 @@ pub fn software_adapter(info: &wgpu::AdapterInfo) -> bool {
 }
 
 /// Is the screen this window draws to somewhere else? Every frame is then encoded
-/// and shipped over a network, so what the graphics card can do says nothing about
+/// and sent over a network, so what the graphics card can do says nothing about
 /// what the person sees, and timing it would only ever flatter the machine. A
 /// remote session takes the Remote profile for as long as it lasts and writes
 /// nothing down, so the console keeps the rating it had.
@@ -170,9 +170,9 @@ pub fn remote_session() -> bool {
 		// SM_REMOTESESSION. The station name is the backstop for a session the
 		// metric misses, a service-hosted one in particular. It's asked of the
 		// session as it is now: SESSIONNAME is fixed at logon, so after an RDP
-		// logon moved to the console, Explorer still hands down RDP-Tcp#N.
+		// logon moved to the console, Explorer still passes down RDP-Tcp#N.
 		const SM_REMOTESESSION: i32 = 0x1000;
-		// SAFETY: takes an index and no pointer, and answers 0 for one it does not know.
+		// SAFETY: takes an index and no pointer, and returns 0 for one it doesn't know.
 		let metric = unsafe {
 			windows_sys::Win32::UI::WindowsAndMessaging::GetSystemMetrics(SM_REMOTESESSION)
 		};
@@ -207,7 +207,7 @@ fn station_name() -> Option<String> {
 	};
 	let mut buf: windows_sys::core::PWSTR = std::ptr::null_mut();
 	let mut bytes: u32 = 0;
-	// SAFETY: both out pointers are locals. On success the buffer holds `bytes`
+	// SAFETY: both out pointers are locals. On success the buffer contains `bytes`
 	// bytes of UTF-16 and is freed below, the way the call asks.
 	unsafe {
 		if WTSQuerySessionInformationW(
@@ -228,11 +228,11 @@ fn station_name() -> Option<String> {
 	}
 }
 
-// Does this DISPLAY reach its screen over a network? ":0" and "unix:0" are
-// local; "somebox:0" is not, and neither is "localhost:10.0", which is what
-// ssh -X sets. X servers stopped listening on TCP by default years ago, so a
-// display on localhost is a tunnel, and one that is not still never draws on
-// this machine's card directly.
+// Does this DISPLAY draw over a network? ":0" and "unix:0" are local;
+// "somebox:0" isn't, and neither is "localhost:10.0", which is what ssh -X
+// sets. X servers stopped listening on TCP by default years ago, so a display
+// on localhost is a tunnel, and one that isn't still never draws on this
+// machine's card directly.
 #[cfg(not(windows))]
 fn forwarded_display(display: &str) -> bool {
 	let host = display.split(':').next().unwrap_or("");
@@ -256,15 +256,15 @@ fn machine_parts() -> String {
 
 // What a written rating means. Hashed into the id, so a change here re-rates
 // every machine once. 2: a step-down is no longer written, and a profile
-// written by one before could not be told apart from a measured answer.
+// written by one before couldn't be told apart from a measured answer.
 const RATING_VERSION: u32 = 2;
 
 /// Everything the pick depends on, as one short id: the processor, the graphics
 /// adapter and how much memory there is. Change any of them and the machine has
-/// to be rated again. Hashed rather than spelled out, so the config carries no
-/// description of the box it is on.
+/// to be rated again. Hashed rather than spelled out, so the config has no
+/// description of the box it's on.
 pub fn hardware_id(info: &wgpu::AdapterInfo) -> String {
-	// the worker starts with the process and answers in microseconds; reading it
+	// the worker starts with the process and finishes in microseconds; reading it
 	// here rather than waiting is the cheaper way to handle "not yet"
 	let machine = MACHINE.get().cloned().unwrap_or_else(machine_parts);
 	let parts = format!("r{RATING_VERSION}|{machine}|{}", fingerprint(info));
@@ -276,7 +276,7 @@ pub fn hardware_id(info: &wgpu::AdapterInfo) -> String {
 }
 
 // The processor's own name where the OS offers one, plus how many cores are
-// usable. The count alone would miss a swap between two chips of one size, and
+// usable. The count alone would miss a swap between 2 chips of one size, and
 // the name alone misses a core count the OS was told to restrict.
 fn cpu_name() -> String {
 	let threads = std::thread::available_parallelism().map_or(0, std::num::NonZero::get);
@@ -296,7 +296,7 @@ fn cpu_name() -> String {
 }
 
 // Installed memory in whole GiB. Rounded, so the few MiB a driver or a firmware
-// update reserves does not read as new hardware.
+// update reserves doesn't read as new hardware.
 fn memory_gib() -> u64 {
 	#[cfg(windows)]
 	{
@@ -313,8 +313,8 @@ fn memory_gib() -> u64 {
 	}
 	#[cfg(not(windows))]
 	{
-		// SAFETY: sysconf takes a name and no pointer, and answers -1 for one it
-		// does not know.
+		// SAFETY: sysconf takes a name and no pointer, and returns -1 for one it
+		// doesn't know.
 		let pages = unsafe { libc::sysconf(libc::_SC_PHYS_PAGES) };
 		// SAFETY: as above.
 		let page = unsafe { libc::sysconf(libc::_SC_PAGESIZE) };
@@ -327,7 +327,7 @@ fn memory_gib() -> u64 {
 }
 
 /// Where a machine starts before anything is measured, and where it stays when
-/// there is nothing worth measuring: an adapter with no card behind it is not
+/// there is nothing worth measuring: an adapter with no card behind it isn't
 /// going to hold any rung above Low.
 pub fn first_pick(info: &wgpu::AdapterInfo) -> Profile {
 	if software_adapter(info) {
@@ -347,9 +347,9 @@ pub fn worth_measuring(info: &wgpu::AdapterInfo) -> bool {
 // A short measured run over the ladder, in place of guessing from the adapter's
 // name. Each rung gets a moment of full-rate frames with its own settings live,
 // and the first whose median frame period fits the display's budget is the
-// answer. Standard is not timed on the way down: if Low cannot hold the rate,
-// nothing below it is in question. It is timed once where a rung stalls, to tell
-// a slow machine from a display that is not drawing (see `Step::Stalled`).
+// answer. Standard isn't timed on the way down: if Low can't hold the rate,
+// nothing below it is in question. It's timed once where a rung stalls, to tell
+// a slow machine from a display that isn't drawing (see `Step::Stalled`).
 const BENCH_WARMUP: usize = 3; // frames discarded while a rung's settings settle
 const BENCH_FRAMES: usize = 40; // frames measured per rung...
 const BENCH_RUNG_MS: f32 = 800.0; // ...or this long, whichever comes first
@@ -362,9 +362,9 @@ const BENCH_MIN_FRAMES: usize = 5; // never judge a rung on fewer than this
 /// for a foregone answer), and the watch refuses to count such a frame at all -
 /// a monitor asleep under the NVIDIA driver paces a GL client at 1 fps.
 ///
-/// The bench used to answer Standard there and save it, which left a machine
+/// The bench used to return Standard there and save it, which left a machine
 /// rated with its monitor asleep on Standard from then on. Not saving on a stall
-/// would test a truly slow machine at every launch. So a stall is settled by
+/// would test a slow machine at every launch. So a stall is settled by
 /// timing Standard, which has no effects to pay for: a slow machine draws that
 /// well enough and gets Standard, and a display that still stalls is what is
 /// pacing the frames, so nothing is learned and nothing is saved.
@@ -416,7 +416,7 @@ impl Bench {
 			.unwrap_or(Profile::Standard)
 	}
 
-	/// A frame went out; answer what to do next.
+	/// A frame went out; return what to do next.
 	pub fn note(&mut self, now: Instant, budget_ms: f32) -> Step {
 		self.seen += 1;
 		if self.seen <= BENCH_WARMUP {
@@ -469,14 +469,14 @@ pub const WINDOW: usize = 48;
 
 /// How far past the refresh period a frame may run before it counts as a miss:
 /// half again, so the occasional stretched frame of a busy desktop passes and
-/// a display dropping every third frame does not.
+/// a display dropping every third frame doesn't.
 pub fn budget_ms(refresh_hz: f32) -> f32 {
 	1000.0 / refresh_hz.max(1.0) * 1.5
 }
 
 /// The budget of the monitor the window is on now. A window can be dragged to a
 /// monitor with another rate, and a budget kept from launch then reads every
-/// frame on a slower one as a miss. Asked again four times a second rather than
+/// frame on a slower one as a miss. Asked again 4 times a second rather than
 /// every frame, since on Windows the answer comes from enumerating display
 /// modes. That is too few frames at the old budget to fill half a window.
 #[derive(Debug)]
@@ -530,7 +530,7 @@ impl Rating {
 
 	/// A frame just went out while an ease was running. Only the gap to the
 	/// previous such frame is a period; the first after a pause is a start. A gap
-	/// past the stall ceiling is not a slow frame, and the frames either side of
+	/// past the stall ceiling isn't a slow frame, and the frames either side of
 	/// it were paced under the same condition, so the window goes with it.
 	pub fn note(&mut self, now: Instant, budget_ms: f32) {
 		if self
@@ -677,7 +677,7 @@ mod tests {
 	}
 
 	// An RDP logon moved to the console keeps the Explorer it started with, and
-	// that Explorer hands RDP-Tcp#N down to everything launched from it. Read as
+	// that Explorer passes RDP-Tcp#N down to everything launched from it. Read as
 	// a remote screen, that took the wallpaper off every launch.
 	// Test ID: de5by
 	#[cfg(windows)]
@@ -703,8 +703,8 @@ mod tests {
 		assert!(!remote, "a console session read as remote from SESSIONNAME");
 	}
 
-	// Frames at `period` ms until the run answers, so a whole run can be walked
-	// without a clock.
+	// Frames at `period` ms until the run has an answer, so a whole run can be
+	// walked without a clock.
 	fn run_bench(period: f32, budget_ms: f32) -> (Profile, Vec<Profile>) {
 		let (pick, rungs) = run_bench_by(|_| period, budget_ms);
 		(pick.expect("the run stalled"), rungs)
@@ -767,8 +767,8 @@ mod tests {
 
 	// A monitor asleep paces every frame at about one a second, whatever is being
 	// drawn. The run used to read that as a hopeless machine and save Standard,
-	// which has no wallpaper, for every launch after. A stall that Standard does
-	// not cure says nothing about the machine, so the run gives no answer.
+	// which has no wallpaper, for every launch after. A stall that Standard doesn't
+	// cure says nothing about the machine, so the run gives no answer.
 	// Test ID: dctb1
 	#[test]
 	fn a_display_that_is_not_drawing_gives_no_rating() {
@@ -1010,7 +1010,7 @@ mod tests {
 		}
 		assert_eq!(r.verdict(budget), Some(false));
 		assert_eq!(r.verdict(budget), None, "the window was spent");
-		// a long gap while paused is not a period
+		// a long gap while paused isn't a period
 		r.pause();
 		t += Duration::from_secs(5);
 		for _ in 0..=WINDOW {
@@ -1028,8 +1028,8 @@ mod tests {
 		}
 	}
 
-	// A monitor asleep under the NVIDIA driver paces a GL client at 1 fps. That
-	// is forty times a 60 Hz budget, and it stepped a desktop down to Standard
+	// A monitor asleep under the NVIDIA driver paces a GL client at 1 fps. That's
+	// 40 times a 60 Hz budget, and it stepped a desktop down to Standard
 	// overnight.
 	// Test ID: dcf3k
 	#[test]

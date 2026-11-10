@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 // Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
 
-//! Where a burst of output actually goes (`SILK_PERF=1`).
+//! Where a burst of output goes (`SILK_PERF=1`).
 //!
 //! Throughput on Windows reads as one number - "it takes N seconds to swallow a
 //! large `cat`" - and that number is the sum of three parties: the console host
@@ -36,7 +36,7 @@ macro_rules! counters {
 counters!(
 	WAKEUPS,    // output notices delivered to the window (UserEvent::Wakeup)
 	PASSES,     // about_to_wait passes (one per event-loop iteration)
-	FRAMES,     // frames actually rendered
+	FRAMES,     // frames rendered
 	BUILD_NS,   // Pane::build, summed over panes
 	RENDER_NS,  // State::render, whole frame including build
 	NOTE_NS,    // per-wakeup bookkeeping (note_output/note_history)
@@ -74,7 +74,7 @@ pub fn since(counter: &AtomicU64, mark: Option<Instant>) {
 }
 
 /// Time a block into a counter. Cheap enough to leave in the hot path: without
-/// the flag it is a load and a branch, no clock read at all.
+/// the flag it's a load and a branch, no clock read at all.
 pub fn timed<T>(counter: &AtomicU64, body: impl FnOnce() -> T) -> T {
 	if !on() {
 		return body();
@@ -90,7 +90,7 @@ pub fn timed<T>(counter: &AtomicU64, body: impl FnOnce() -> T) -> T {
 // time and no CPU, so a wall-clock render figure on its own cannot say whether
 // the main thread is working or waiting.
 #[cfg(windows)]
-#[allow(clippy::unnecessary_wraps)] // the other platforms answer None
+#[allow(clippy::unnecessary_wraps)] // the other platforms return None
 fn cpu_seconds() -> Option<(f64, f64)> {
 	use std::ptr::from_mut;
 	use windows_sys::Win32::Foundation::FILETIME;
@@ -188,14 +188,14 @@ pub fn report() {
 	}
 }
 
-/// Keypress to pixel (`SILK_LATENCY=1`), timed over three legs rather than as
+/// Keypress to pixel (`SILK_LATENCY=1`), timed over 3 legs rather than as
 /// one number: getting the key to the pty, the shell echoing it back, and us
-/// putting that on screen. Only the last leg is ours, and a single total cannot
-/// say which of the three is the slow one.
+/// putting that on screen. Only the last leg is ours, and a single total can't
+/// say which of the 3 is the slow one.
 ///
-/// Two things it cannot do. Nothing after `present` returns is visible from in
+/// It can't do 2 things. Nothing after `present` returns is visible from in
 /// here, so the compositor and the display are missing and a figure is a floor,
-/// not the whole wait. And it cannot tell a shell's echo from output nobody
+/// not the whole wait. And it can't tell a shell's echo from output nobody
 /// typed for, so it belongs at a settled prompt; anything still unanswered after
 /// `LATENCY_WINDOW` is dropped rather than reported as a very slow keystroke.
 pub fn latency_on() -> bool {
@@ -238,7 +238,7 @@ pub fn typed(key: Option<Instant>, pane: u64) {
 }
 
 /// Output arrived from the pane that was typed at. Only the first notice counts:
-/// a shell that answers in several reads is still one echo.
+/// a shell that replies in several reads is still one echo.
 pub fn echoed(pane: u64) {
 	if !latency_on() {
 		return;
@@ -337,7 +337,7 @@ fn latency_report() {
 }
 
 // Heap allocations made on the calling thread. Counted only in a debug build,
-// which is never shipped; a release build keeps the plain allocator and every
+// which is never released; a release build uses the plain allocator and every
 // count reads 0. The heap-growth test puts dhat under the count, since a
 // process has one global allocator.
 #[cfg(debug_assertions)]
@@ -448,7 +448,7 @@ impl std::fmt::Display for FrameCause {
 
 /// `SILK_ALLOCS=1`: a one-off launch step the window thread did between frames.
 /// The shell scan's fold rewrites the config, tens of thousands of allocations,
-/// and on a busy box it lands seconds later than on an idle one.
+/// and on a busy box it runs seconds later than on an idle one.
 pub fn allocs_note(what: &str) {
 	if allocs_on() {
 		eprintln!("[allocs] {what}");

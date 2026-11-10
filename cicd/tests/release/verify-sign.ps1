@@ -63,7 +63,7 @@ $rc = 1
 try {
 	$text = [System.IO.File]::ReadAllText((Resolve-Path -LiteralPath $Installer).Path)
 	##	The installer's own function, its failure path and its identity and
-	##	namespace, lifted from the file so the test cannot drift from it.
+	##	namespace, lifted from the file so the test can't drift from it.
 	function fLift {
 		param([string]$Name)
 		$m = [regex]::Match($text, "(?ms)^function $Name \{\r?\n.*?^\}\r?$")
@@ -88,7 +88,7 @@ try {
 	$pubkey = ([System.IO.File]::ReadAllText("$key.pub")).Trim()
 
 	##	What the installer sees: a download folder standing in for the release
-	##	page, and a working folder holding the checksums file it fetched.
+	##	page, and a working folder with the checksums file it fetched.
 	$dl   = Join-Path $work 'dl'
 	$tag  = 'v0.0.0-test'
 	$inst = Join-Path $work 'inst'

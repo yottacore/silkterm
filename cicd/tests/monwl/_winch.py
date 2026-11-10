@@ -22,7 +22,7 @@ from pathlib import Path
 
 def main() -> int:
 	quiet = "--quiet" in sys.argv[2:]
-	## Read in the handler, written by the loop: a write from a handler can land
+	## Read in the handler, written by the loop: a write from a handler can happen
 	## inside one the loop is making.
 	sizes: list[str] = []
 

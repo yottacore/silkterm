@@ -15,15 +15,15 @@ use crate::config;
 
 // Concrete family name behind `Family::Monospace`, re-resolved on each TextCtx
 // build (so the Settings font field / "Use system font" apply live). cosmic-text
-// picks the best face *per query*, so a BOLD run can end up in a different family
+// picks the best face per query, so a bold run can end up in a different family
 // than the regular run; pinning one name keeps every weight in it. `Attrs` needs
 // a 'static name, so the resolved string goes through `intern`.
 static MONO_FAMILY: RwLock<Option<&'static str>> = RwLock::new(None);
-// Nearest-to-Bold weight the pinned mono family actually ships. Terminal bold
-// runs request THIS, not a literal 700: a mono family with no bold face would
-// otherwise eject the whole run into a proportional bold fallback, whose
-// advances set_monospace_width can't snap - skewing space-based alignment (the
-// muffer startup screen, box-drawing, etc.). Mirrors chrome's UI_WEIGHT_BOLD.
+// Nearest-to-Bold weight the pinned mono family has. Terminal bold runs request
+// this rather than a literal 700, or a mono family without a bold face would
+// eject the whole run into a proportional bold fallback. set_monospace_width
+// can't snap its advances, which skews space-based alignment (the muffer
+// startup screen, box-drawing, etc.). Mirrors chrome's UI_WEIGHT_BOLD.
 static MONO_WEIGHT_BOLD: std::sync::atomic::AtomicU16 = std::sync::atomic::AtomicU16::new(700);
 
 static MONO_PINNED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
@@ -83,14 +83,14 @@ fn pin_mono_family(fs: &FontSystem) {
 /// brightness, and how much of the correction to apply.
 ///
 /// Coverage is blended in linear light, so a half covered pixel comes out near
-/// three quarters brightness whichever way round the two colors are. On a dark
+/// three quarters brightness whichever way round the colors are. On a dark
 /// background that reads as a strong edge; on a light one it is almost no ink at
 /// all, and the thin parts of every letter go with it. Only text darker than what
 /// is behind it needs the correction - the other way round is already heavy
-/// enough - and that side is decided on Oklab lightness, the measure minimum
+/// enough - and that side is picked by Oklab lightness, the measure minimum
 /// contrast uses.
 ///
-/// One alpha serves all three channels, so the curve is built from grays of the
+/// One alpha is used for all 3 channels, so the curve is built from grays of the
 /// pair's own brightness. A glyph in some other color takes the same curve, which
 /// is off by up to about 20 levels on its partly covered pixels and always in the
 /// direction of more ink.
@@ -121,7 +121,7 @@ fn gray_of(c: [u8; 3]) -> f32 {
 }
 
 /// Weight a terminal bold cell should request: the closest weight to Bold the
-/// pinned mono family really ships. Use instead of a literal `Weight::BOLD`, which
+/// pinned mono family has. Use instead of a literal `Weight::BOLD`, which
 /// kicks the family out (into a proportional fallback) when it has no bold face.
 pub fn mono_bold_weight() -> glyphon::Weight {
 	use std::sync::atomic::Ordering;
@@ -140,16 +140,16 @@ pub fn mono_attrs() -> Attrs<'static> {
 }
 
 // Concrete family + style behind chrome's `ui_attrs`, pinned alongside the mono
-// family. Chrome follows the DESKTOP interface font - family, weight and slant -
+// family. Chrome follows the desktop interface font's family, weight, and slant,
 // serif or not (for example "GentiumAlt Bold"); a sans is only the fallback
 // when no desktop setting is readable.
 //
 // The weights are pinned as exact face weights, not the desktop's nominal ones:
 // cosmic-text only uses the requested family when a face matches the requested
-// weight EXACTLY (its fallback filters font_weight_diff == 0), so asking for
-// Bold in a family that ships no bold face silently swaps in a bold fallback
-// sans - the family must win over the weight. It also compares family names
-// case-SENSITIVELY, so the db's own spelling is what gets pinned.
+// weight exactly (its fallback filters font_weight_diff == 0), so asking for
+// Bold in a family without a bold face silently swaps in a bold fallback sans.
+// The family must win over the weight. It also compares family names
+// case-sensitively, so the db's own spelling is what gets pinned.
 static UI_FAMILY: RwLock<Option<&'static str>> = RwLock::new(None);
 static UI_WEIGHT: std::sync::atomic::AtomicU16 = std::sync::atomic::AtomicU16::new(400);
 static UI_WEIGHT_BOLD: std::sync::atomic::AtomicU16 = std::sync::atomic::AtomicU16::new(700);
@@ -160,7 +160,7 @@ fn ui_family() -> Option<&'static str> {
 	*crate::locks::read(&UI_FAMILY)
 }
 
-// Nearest face the family actually has to (weight, slant); None when the family
+// Nearest face the family has to (weight, slant); None when the family
 // has no faces at all (shouldn't happen for a db-validated name).
 fn nearest_face(
 	db: &fontdb::Database,
@@ -199,7 +199,7 @@ fn pin_ui_family(fs: &FontSystem) {
 	let sys_font = crate::sysfont::interface();
 	let name = resolve_ui_family(fs).map(intern);
 	*crate::locks::write(&UI_FAMILY) = name;
-	// honor the desktop's weight/slant only when its family actually resolved
+	// honor the desktop's weight/slant only when its family resolved
 	// (a fallback sans shouldn't inherit "Bold" meant for another face)
 	let using_sys = match (name, &sys_font.family) {
 		(Some(resolved), Some(family)) => resolved.eq_ignore_ascii_case(family),
@@ -226,7 +226,7 @@ fn pin_ui_family(fs: &FontSystem) {
 	UI_PINNED.store(true, Ordering::Release);
 }
 
-// Chrome ascent/descent scaled to `ui_px`, read the SAME way cosmic-text does
+// Chrome ascent/descent scaled to `ui_px`, read the same way cosmic-text does
 // (`ui_px * ascent/units_per_em`), so `ui_text_top` predicts the real baseline.
 // A proportional fallback if the pinned face can't be read.
 fn ui_vmetrics(fs: &mut FontSystem, ui_px: f32) -> (f32, f32, f32) {
@@ -286,9 +286,9 @@ fn ui_baseline_in_buf(ui_line_h: f32, vmetrics: (f32, f32)) -> f32 {
 // Buffer `top` that centers chrome text's visible box in a bar
 // `[bar_top, bar_top+bar_h]`. Chrome titles (File/Edit/tab names) have no
 // descenders but do have ascenders (l/d/h/i), so their visible extent is
-// ascender-top..baseline; centering THAT (not cap..baseline) is what actually
-// looks balanced - cap-centering leaves the empty descent reading as space
-// below. The rare descender then just dips into the natural descent room.
+// ascender-top..baseline. Centering that rather than cap..baseline is what
+// looks balanced, since cap-centering leaves the empty descent reading as space
+// below. The rare descender then dips into the natural descent room.
 // Buffer `top` that centers chrome text's capitals in a bar, with the baseline
 // on a whole pixel. Sentence-case labels, like the settings tabs, take this:
 // line-box centering moves with each font's ascent and descent split, and a
@@ -309,9 +309,9 @@ fn ui_visible_center_top(ui_line_h: f32, vmetrics: (f32, f32), bar_top: f32, bar
 	bar_top + bar_h / 2.0 - ui_baseline_in_buf(ui_line_h, vmetrics) + ascent / 2.0
 }
 
-// Buffer `top` that centers chrome text's FULL ink box (ascender-top to
+// Buffer `top` that centers chrome text's full ink box (ascender-top to
 // descender-bottom) in a bar. For a tab title - a path, so mostly lowercase and
-// slashes - the descenders carry as much weight as the caps, and the
+// slashes - the descenders matter as much as the caps, and the
 // ascender..baseline rule above leaves them hanging on the bottom edge.
 fn ui_ink_center_top(ui_line_h: f32, vmetrics: (f32, f32), bar_top: f32, bar_h: f32) -> f32 {
 	let (ascent, descent) = vmetrics;
@@ -319,7 +319,7 @@ fn ui_ink_center_top(ui_line_h: f32, vmetrics: (f32, f32), bar_top: f32, bar_h: 
 }
 
 /// Emphasis weight for chrome (dialog titles, section headers): the closest
-/// weight to Bold the pinned family really ships. Use this instead of a literal
+/// weight to Bold the pinned family has. Use this instead of a literal
 /// `Weight::BOLD`, which kicks the whole family out when no 700 face exists.
 pub fn ui_bold_weight() -> glyphon::Weight {
 	use std::sync::atomic::Ordering;
@@ -415,7 +415,7 @@ fn mono_candidates(os_family: Option<&str>, family: &str) -> Vec<String> {
 }
 
 // Resolve the monospace family to pin for every weight: the first family from
-// `mono_candidates` that is actually installed, else whatever `Family::Monospace`
+// `mono_candidates` that is installed, else whatever `Family::Monospace`
 // maps to. Validated against the db so a bad name doesn't silently fall back to
 // an unrelated font.
 fn resolve_mono_family(fs: &FontSystem) -> Option<String> {
@@ -461,7 +461,7 @@ fn resolve_mono_family_in(fs: &FontSystem, family: &str) -> Option<String> {
 pub struct TextCtx {
 	pub font_system: FontSystem,
 	pub swash_cache: SwashCache,
-	// The half that lives on the device. Absent while the window has let its
+	// The half that's made on the device. Absent while the window has let its
 	// GPU go (see app/idle.rs, `release_gpu`); the metrics and the font system stay,
 	// since layout and input keep asking for them.
 	gpu: Option<TextGpu>,
@@ -481,7 +481,7 @@ pub struct TextCtx {
 	/// physical-px inset between content and pane edge
 	pub margin: f32,
 	pub metrics: Metrics,
-	/// Chrome (menus/tabs/dialogs) renders at the DESKTOP interface font size,
+	/// Chrome (menus/tabs/dialogs) renders at the desktop interface font size,
 	/// independent of the terminal font size; bars and rows size from this.
 	pub ui_line_h: f32,
 	ui_metrics: Metrics,
@@ -508,7 +508,7 @@ pub struct TextCtx {
 	// turns that into a lookup. Bounded (cleared) so dynamic tab titles can't
 	// grow it without limit.
 	ui_measure_cache: HashMap<String, f32>,
-	/// Which context this is. A font, size or scale change builds a new one, so
+	/// Which context this is. A font, size, or scale change builds a new one, so
 	/// anything measured with the old one can tell it is stale by this alone.
 	pub generation: u64,
 }
@@ -536,7 +536,7 @@ struct TextGpu {
 	// separate renderer for the context-menu overlay (second pass, on top)
 	overlay: TextRenderer,
 	// and one for flyover tips, drawn last of all, so no menu or list text can
-	// land on a tip's box
+	// be drawn over a tip's box
 	tip: TextRenderer,
 	// separate renderer for the scrim source pass: pane text only (no chrome), and
 	// panes may substitute a de-bolded buffer (text_scrim_regular_weight)
@@ -566,10 +566,10 @@ impl TextGpu {
 		let cache = Cache::new(device);
 		let mut atlas = TextAtlas::new(device, queue, &cache, format);
 		// The scrim text pass renders into its own coverage texture
-		// (crate::scrim::TEXT_FMT), so its glyphon renderer must target THAT format.
+		// (crate::scrim::TEXT_FMT), so its glyphon renderer must target that format.
 		// A shared atlas targets the window's format, and wgpu rejects it as
 		// "incompatible color attachments" on the first scrim frame. One Cache backs
-		// both atlases (it's built to serve multiple target formats).
+		// both atlases (it supports multiple target formats).
 		let mut scrim_atlas = TextAtlas::new(device, queue, &cache, crate::scrim::TEXT_FMT);
 		let mut viewport = Viewport::new(device, &cache);
 		// Acts only where `set_text_blend` turns the correction on.
@@ -599,7 +599,7 @@ impl TextGpu {
 }
 
 // Round a glyph's advance to whole cells, `unit` being the face's own advance
-// for an ASCII cell. A face that reports nothing usable answers 1, so an
+// for an ASCII cell. A face that reports nothing usable gets 1, so an
 // unmeasurable font behaves the way it always did.
 fn advance_cells(advance: f32, unit: f32) -> u8 {
 	if unit <= 0.0 {
@@ -753,9 +753,9 @@ impl TextCtx {
 
 	/// Can `ch` ride the shared row buffer, given the grid puts it in `cells`
 	/// columns? ASCII always can. Coverage alone isn't enough: a monospace face
-	/// can carry a double-width char (emoji, fullwidth punctuation) at its
+	/// can have a double-width char (emoji, fullwidth punctuation) at its
 	/// ordinary single advance, and then one glyph eats one column of layout
-	/// where the grid gave it two - every later glyph
+	/// where the grid gave it 2. Every later glyph
 	/// on the row sits a cell left of the grid position its background, cursor
 	/// and any per-cell glyph still use. Demanding the advance match the grid
 	/// sends those to the per-cell path, which fits them to their real box.
@@ -792,13 +792,13 @@ impl TextCtx {
 
 	/// Color glyph for `ch`, with the design box a caller fits to the cell. None
 	/// for anything no installed color font paints - i.e. almost everything.
-	/// Gated by the caller (`color_emoji`), which already holds the settings.
+	/// Gated by the caller (`color_emoji`), which already has the settings.
 	pub fn color_metrics(&mut self, ch: char) -> Option<ColorMetrics> {
 		self.color_glyphs.metrics(self.font_system.db(), ch)
 	}
 
 	/// Build the raster for a placed color glyph. Done here, during the frame
-	/// build, because `prepare` holds the `FontSystem` (the font bytes) mutably.
+	/// build, because `prepare` borrows the `FontSystem` (the font bytes) mutably.
 	pub fn color_warm(&mut self, id: u16, w: u16, h: u16) {
 		self.color_glyphs.warm(self.font_system.db(), id, w, h);
 	}
@@ -830,7 +830,7 @@ impl TextCtx {
 	pub fn fill_glyph(&mut self, buf: &mut Buffer, ch: char, attrs: &Attrs) -> (f32, f32, f32) {
 		// Where the terminal font puts the baseline in this line box. A fallback
 		// face has its own ascent, so its glyph sits a pixel or two off the text
-		// beside it - which is what made a check mark and a cross from two faces
+		// beside it - which is what made a check mark and a cross from 2 faces
 		// read as misaligned. Shaping an 'x' first is the cheap way to ask, and it
 		// is paid once per distinct glyph (the caller caches the buffer).
 		let want = self.shape_ink(buf, 'x', attrs).map(|ink| ink.baseline);
@@ -904,7 +904,7 @@ impl TextCtx {
 		shaped_ink(&mut self.font_system, &mut self.swash_cache, buf, ch, attrs)
 	}
 
-	/// `top` for a chrome text buffer so its VISIBLE box (cap-top to baseline)
+	/// `top` for a chrome text buffer so its visible box (cap-top to baseline)
 	/// centers in a bar of height `bar_h` at `bar_top`. Uses the real font
 	/// metrics, so it stays centered across font/size changes - unlike the old
 	/// hand-tuned per-bar padding, which left menu titles (no descenders) riding
@@ -930,7 +930,7 @@ impl TextCtx {
 		ui_ink_center_top(self.ui_line_h, self.ui_vmetrics, bar_top, bar_h)
 	}
 
-	/// How far to drop a chrome buffer that a caller centered by its LINE box, so
+	/// How far to drop a chrome buffer that a caller centered by its line box, so
 	/// what ends up centered is the text's visible box instead. Same rule as
 	/// `ui_text_top`, as an offset for callers doing their own arithmetic.
 	pub fn ui_center_dy(&self) -> f32 {
@@ -958,7 +958,7 @@ impl TextCtx {
 		w
 	}
 
-	/// Width in px of `text` in the TERMINAL font. The tab hover tip is the one
+	/// Width in px of `text` in the terminal font. The tab hover tip is the one
 	/// piece of chrome that uses it: its lines are key/value pairs padded to a
 	/// column with spaces, which only aligns in a monospace face. Uncached - the
 	/// tip keeps its width until its lines change (`TabTip` in app/tabs.rs).
@@ -1014,7 +1014,7 @@ impl TextCtx {
 	}
 
 	/// Set the coverage correction for every renderer sharing this context. Cheap
-	/// per frame: the uniform is only rewritten when the value moves.
+	/// per frame: the uniform is only rewritten when the value changes.
 	pub fn set_text_blend(&mut self, queue: &wgpu::Queue, blend: (f32, f32, f32)) {
 		self.gpu()
 			.viewport
@@ -1190,15 +1190,15 @@ fn cell_metrics(font_size: f32, scale: f32) -> Metrics {
 	)
 }
 
-// Measure the per-cell advance the *render* buffer actually produces. We shape
+// Measure the per-cell advance the render buffer produces. We shape
 // with `Shaping::Advanced` (what panes use) over a long run so per-glyph hinting
-// rounding averages out. The result is intentionally NOT rounded: cosmic-text's
+// rounding averages out. The result isn't rounded, on purpose. cosmic-text's
 // `set_monospace_width` only snaps advances for fonts that report a monospace
 // em-width, so for many system fonts the real pitch is the font's natural
 // advance (~fractional). Rounding cell_w away from that pitch made the cursor,
 // cell backgrounds, and per-cell fallback glyphs (all placed at col*cell_w)
-// drift right of the text, worsening with column count. Matching the real pitch
-// keeps the drift sub-pixel (bounded by hinting, not accumulating).
+// drift right of the text, worse with each column. At the real pitch the
+// drift stays under a pixel (bounded by hinting, not accumulating).
 fn measure_cell(fs: &mut FontSystem, metrics: Metrics) -> f32 {
 	measure_cell_in(fs, metrics, &mono_attrs())
 }
@@ -1244,7 +1244,7 @@ struct Ink {
 	width: f32,
 	left: f32,
 	painted: bool,
-	// where the FACE put the baseline in the line box, which is not where the
+	// where the face put the baseline in the line box, which isn't where the
 	// terminal font puts it - see fill_glyph
 	baseline: f32,
 }
@@ -1326,7 +1326,7 @@ mod tests {
 		let (black, white) = ([0, 0, 0], [255, 255, 255]);
 		assert_eq!(text_blend(black, white, 1.0).2, 1.0);
 		assert_eq!(text_blend(white, black, 1.0).2, 0.0);
-		// a light theme's real pair, not just the extremes
+		// a light theme's real pair, as well as the extremes
 		assert_eq!(
 			text_blend([0x30, 0x2c, 0x28], [0xf2, 0xef, 0xe9], 1.0).2,
 			1.0
@@ -1335,7 +1335,7 @@ mod tests {
 			text_blend([0xd8, 0xd4, 0xcc], [0x1c, 0x1c, 0x22], 1.0).2,
 			0.0
 		);
-		// nothing to correct where the two are the same
+		// nothing to correct where both are the same
 		assert_eq!(text_blend(white, white, 1.0).2, 0.0);
 		// the setting off means the shader takes its old path either way
 		assert_eq!(text_blend(black, white, 0.0).2, 0.0);
@@ -1348,7 +1348,7 @@ mod tests {
 	}
 
 	// The pair the curve is built from spans the real pair's own brightness, and
-	// the shader divides by the gap between the two - so a dark-on-light pair has
+	// the shader divides by the gap between them - so a dark-on-light pair has
 	// to come back the darker one first.
 	// Test ID: dcxyt
 	#[test]
@@ -1414,10 +1414,10 @@ mod tests {
 		}
 	}
 
-	// A monospace face routinely carries a double-width char at its ordinary
+	// A monospace face routinely has a double-width char at its ordinary
 	// single advance (Monaspace Argon does it for 53 of them, emoji included).
 	// Whole cells is what the row buffer lays out in, so the rounding has to
-	// report that honestly rather than call anything close enough.
+	// report that exactly rather than call anything close enough.
 	// Test ID: daq4p
 	#[test]
 	fn a_single_advance_never_reads_as_two_cells() {
@@ -1447,7 +1447,7 @@ mod tests {
 		let set = mono_candidates(Some("OS Mono"), "Alpha, Beta");
 		assert_eq!(set[..3], ["Alpha", "Beta", "OS Mono"]);
 		assert!(set.ends_with(&builtin), "built-in stack must back it up");
-		// automatic hands the desktop's own family in, and it is not tried twice
+		// automatic hands the desktop's own family in, and it isn't tried twice
 		let automatic = mono_candidates(Some("OS Mono"), "OS Mono");
 		assert_eq!(automatic[0], "OS Mono");
 		assert_eq!(
@@ -1503,7 +1503,7 @@ mod tests {
 
 	// A pinned mono family falls back to a color emoji face that rasterizes to
 	// nothing, which drew every emoji as an empty cell. The generic-monospace
-	// retry must find a face that actually paints.
+	// retry must find a face that paints.
 	// Test ID: daeaa
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
@@ -1565,7 +1565,7 @@ mod tests {
 
 	// A cap-centered label has as much room over its capitals as under its
 	// baseline, give or take the half pixel the snap moves it, and the baseline
-	// lands on a whole pixel even when the bar doesn't.
+	// is on a whole pixel even when the bar isn't.
 	// Test ID: df452
 	#[test]
 	fn chrome_caps_center_in_bar_on_a_whole_pixel() {
@@ -1666,7 +1666,7 @@ mod tests {
 			return;
 		};
 		attrs.weight = mono_bold_weight();
-		// the pinned weight must be one the family actually ships
+		// the pinned weight must be one the family has
 		let shipped: Vec<u16> = fs
 			.db()
 			.faces()
@@ -1736,7 +1736,7 @@ mod tests {
 	// The glow is drawn from a copy of the text with bold taken out. Where bold
 	// shapes wider than the cell (some Windows faces ignore the fixed pitch),
 	// that copy drifts from the text along the line, so it is used only when a
-	// bold run lands on the cell pitch exactly.
+	// bold run matches the cell pitch exactly.
 	// Test ID: dd5qk
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
@@ -1754,7 +1754,7 @@ mod tests {
 	}
 
 	// A size set at a font from the command line is saved for the font the
-	// next launch has, measured here, so the two must agree for the font in
+	// next launch has, measured here, so both must agree for the font in
 	// use or a grid saved at it would drift.
 	// Test ID: ddyz8
 	#[test]
@@ -1768,9 +1768,9 @@ mod tests {
 		assert!(w > ctx.cell_w && h > ctx.cell_h);
 	}
 
-	// A mono face can carry a double-width char at its ordinary one-cell advance.
+	// A mono face can have a double-width char at its ordinary one-cell advance.
 	// Laid out in the shared row buffer it takes one column where the grid gave
-	// it two, and everything after it on the row sits a cell to the left. Only a
+	// it 2, and everything after it on the row sits a cell to the left. Only a
 	// char whose advance matches the grid's cell count may ride the row buffer.
 	// Test ID: dd5qm
 	#[test]
@@ -1782,7 +1782,7 @@ mod tests {
 			return;
 		}
 		assert!(ctx.covered_at('A', 1));
-		// chars the grid gives two cells
+		// chars the grid gives 2 cells
 		let wide = [
 			'\u{FF01}', '\u{FF21}', '\u{2705}', '\u{26A1}', '\u{231B}', '\u{2615}', '\u{4E2D}',
 		];
@@ -1800,7 +1800,7 @@ mod tests {
 		);
 	}
 
-	// Attrs read before the first text context used to carry the generic family
+	// Attrs read before the first text context used to have the generic family
 	// and default weights, so a test that took them first measured dialog text in
 	// a fallback face while the layout used the desktop's. Checked in a child copy
 	// of this test binary, where no other test has built a context yet.

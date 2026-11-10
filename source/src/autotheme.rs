@@ -3,8 +3,8 @@
 
 //! Text and cursor colors taken from the wallpaper (`colors.from_wallpaper`).
 //!
-//! Two halves, decided separately, because harmony and legibility are unrelated
-//! problems and solving them with one number solves neither:
+//! There are 2 halves, decided separately, because harmony and legibility are
+//! unrelated problems and solving them with one number solves neither:
 //!
 //! - **Lightness** comes from how bright the background actually gets. A photo's
 //!   brightness varies per cell, so the average says nothing useful: white text
@@ -14,8 +14,8 @@
 //!   low chroma. The cursor takes a further third of the circle, the way every
 //!   built-in theme's cursor already sits against its foreground.
 //!
-//! The work splits over two threads. `summarize` runs on the wallpaper worker,
-//! where the prepared pixels are, and reduces an image to six numbers. `derive`
+//! The work splits over 2 threads. `summarize` runs on the wallpaper worker,
+//! where the prepared pixels are, and reduces an image to 6 numbers. `derive`
 //! is pure and runs wherever the live settings are, so a theme change re-colors
 //! the text with no second decode.
 //!
@@ -31,7 +31,7 @@ use crate::palette::{from_oklab, to_oklab, to_oklab_linear};
 
 // The summary grid. One sample per terminal cell is the right footprint, since
 // a glyph covers a cell and that average is what its legibility is decided by.
-// Finer sampling chases single bright specks: measured over the shipped pack,
+// Finer sampling chases single bright specks: measured over the bundled pack,
 // 300x80 moves the bright-end percentile by at most 0.015 Oklab L against this,
 // and a quarter of that grid moves it by 0.13.
 const GRID_W: usize = 150;
@@ -45,8 +45,8 @@ const LO_PCT: f32 = 0.05;
 
 // A tint, not a color. Body text over a photo wants a cast; a saturated
 // foreground is tiring to read and is what makes a complement "vibrate" against
-// its ground. Holds every theme to the same gentle tint, so a monochrome theme's
-// vivid foreground does not come back as vivid yellow.
+// its ground. Limits every theme to the same gentle tint, so a monochrome theme's
+// vivid foreground doesn't come back as vivid yellow.
 const MAX_CHROMA: f32 = 0.06;
 
 // Below this mean chroma an image has no hue worth complementing - six of the
@@ -61,7 +61,7 @@ const CURSOR_ROTATE: f32 = 120.0;
 pub const SPREAD: usize = 16;
 
 /// What one image is worth to the derivation. A handful of numbers, so the live
-/// settings can hold it and re-derive on a theme change without decoding anything.
+/// settings can store it and re-derive on a theme change without decoding anything.
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub struct Summary {
 	// Per-cell linear luma at the bright and dark ends, alpha premultiplied.
@@ -72,11 +72,11 @@ pub struct Summary {
 	pub luma_mean: f32,
 	/// Each linear channel of the same grid at SPREAD evenly spaced quantiles,
 	/// darkest first, taken one channel at a time. The halo match averages over
-	/// these, since an average over the picture is not the picture's average once
+	/// these, since an average over the picture isn't the picture's average once
 	/// the sRGB curve is applied, and both renderers work a channel at a time
 	/// (`visibility::halo_match`).
 	pub spread: [[f32; 3]; SPREAD],
-	/// Mean alpha, so the share of a cell the image does not cover can be given
+	/// Mean alpha, so the share of a cell the image doesn't cover can be given
 	/// back to the background color. 1.0 for every ordinary photo.
 	pub alpha: f32,
 
@@ -86,12 +86,12 @@ pub struct Summary {
 	pub chroma: f32,
 	/// The visibility this image is drawn at, its own tag folded in already. Baked
 	/// in rather than read live because changing the slider reloads the wallpaper
-	/// anyway, where changing the theme does not.
+	/// anyway, where changing the theme doesn't.
 	pub opacity: f32,
 }
 
 /// Reduce a prepared wallpaper to a `Summary`. `opacity` is what the image will
-/// actually be drawn at.
+/// be drawn at.
 pub fn summarize(img: &image::RgbaImage, opacity: f32) -> Summary {
 	let (w, h) = (img.width() as usize, img.height() as usize);
 	let mut sum = vec![[0.0f32; 4]; GRID_W * GRID_H];
@@ -138,7 +138,7 @@ pub fn summarize(img: &image::RgbaImage, opacity: f32) -> Summary {
 		}
 		let n = n as f32;
 		let rgb = [bin[0] / n, bin[1] / n, bin[2] / n];
-		// luma rather than Oklab L because it is affine under the alpha composite,
+		// luma rather than Oklab L because it's affine under the alpha composite,
 		// which is what lets a percentile taken on the image alone survive being
 		// composited over a background color later
 		lumas.push(rgb[0] * LUMA[0] + rgb[1] * LUMA[1] + rgb[2] * LUMA[2]);
@@ -199,7 +199,7 @@ fn pct(sorted: &[f32], p: f32) -> f32 {
 	sorted[i.min(sorted.len() - 1)]
 }
 
-// The hue whose 30-degree neighborhood carries the most chroma. The window is
+// The hue whose 30-degree neighborhood has the most chroma. The window is
 // what stops a gradient from splitting its own weight across a dozen bins.
 fn dominant_hue(hist: &[f32; 360]) -> f32 {
 	let mut best = (0.0f32, 0usize);
@@ -215,7 +215,7 @@ fn dominant_hue(hist: &[f32; 360]) -> f32 {
 	best.1 as f32
 }
 
-// A gray's Oklab lightness from its linear luma. The three L coefficients sum to
+// A gray's Oklab lightness from its linear luma. The 3 L coefficients sum to
 // 1, so for a neutral the whole transform is one cube root.
 fn gray_lightness(luma: f32) -> f32 {
 	luma.max(0.0).cbrt()
@@ -277,7 +277,8 @@ fn field_luma(sum: &Summary, image_luma: f32, bg: [u8; 3], mix: crate::visibilit
 	mix.field(filled, bg)
 }
 
-// The cursor whose plate lands on `plate_target` over a field of `behind_luma`.
+// The cursor whose plate comes out at `plate_target` over a field of
+// `behind_luma`.
 //
 // It has to be searched rather than solved. The plate is blended in linear light,
 // the floor is measured in Oklab lightness, and a tinted color's luma is not its
@@ -457,7 +458,7 @@ mod tests {
 		assert!(sum.luma_lo < 0.01, "and the rest the dark end: {sum:?}");
 	}
 
-	// A mean color cannot answer this: red and cyan in equal measure average to
+	// A mean color doesn't work here: red and cyan in equal measure average to
 	// gray, and the mean hue is then whichever way the rounding fell.
 	// Test ID: dcwvj
 	#[test]
@@ -541,7 +542,7 @@ mod tests {
 	}
 
 	// A dark image must not make the text dimmer than the theme's own. Without
-	// the floor at the theme's foreground, a near-black wallpaper would answer
+	// the floor at the theme's foreground, a near-black wallpaper would give
 	// mid-gray text and read as the wallpaper spoiling the theme.
 	// Test ID: dcwvp
 	#[test]
@@ -556,7 +557,7 @@ mod tests {
 		);
 	}
 
-	// The hue half. A blue picture has to answer warm text, whatever the theme's
+	// The hue half. A blue picture has to give warm text, whatever the theme's
 	// own foreground was.
 	// Test ID: dcwvq
 	#[test]
@@ -569,8 +570,8 @@ mod tests {
 		assert!(warm[2] > warm[0], "warm image -> cool text, got {warm:?}");
 	}
 
-	// Six of the shipped pack have no hue worth complementing. Inventing one from
-	// that little chroma would swing the text about between two gray images.
+	// Of the bundled pack, 6 have no hue worth complementing. Inventing one from
+	// that little chroma would swing the text about between 2 gray images.
 	// Test ID: dcwvr
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
@@ -583,8 +584,8 @@ mod tests {
 		assert!(off < 10.0, "hue {got} should have stayed near {want}");
 	}
 
-	// The tint cap. Matrix's foreground is chroma 0.25, and carrying that to a
-	// complementary hue is what made a green theme answer pure yellow.
+	// The tint cap. Matrix's foreground is chroma 0.25, and moving that to a
+	// complementary hue is what made a green theme give pure yellow.
 	// Test ID: dcwvs
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
@@ -605,7 +606,7 @@ mod tests {
 
 	// Light mode draws the picture at a higher alpha than the slider reads, so the
 	// field the text is placed against is darker than the number alone suggests.
-	// Same colours, same picture, same slider - only the mode moves. A dark
+	// Same colors, same picture, same slider - only the mode moves. A dark
 	// picture turned well up, because below that the field stays bright enough
 	// that the theme's own foreground wins either way.
 	// Test ID: dcx40
@@ -631,7 +632,7 @@ mod tests {
 	}
 
 	// What `derive` will place its colors against, so the test models the field the
-	// code really uses rather than one of its own.
+	// code uses rather than one of its own.
 	fn mix(settings: &Settings, sum: &Summary) -> crate::visibility::Mix {
 		crate::visibility::wallpaper_mix(settings, sum.opacity, Some(sum.picture()))
 	}
@@ -712,7 +713,7 @@ mod tests {
 		assert!(worst < 0.04, "the neutral field costs {worst} Oklab L");
 	}
 
-	// The shipped config turns this on, and the wallpaper is on too, so a fresh
+	// The default config turns this on, and the wallpaper is on too, so a fresh
 	// install re-colors its text without anyone visiting the Themes tab.
 	// Test ID: dcx1r
 	#[test]
@@ -775,7 +776,7 @@ mod tests {
 		assert_eq!((s.fg, s.cursor), (SILK_FG, SILK_CURSOR));
 	}
 
-	// A summary is six numbers so that a theme change can re-derive with no
+	// A summary is 6 numbers so that a theme change can re-derive with no
 	// decode. That only works if the background is read live.
 	// Test ID: dcwvy
 	#[test]

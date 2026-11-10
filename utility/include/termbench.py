@@ -1,77 +1,77 @@
 #!/usr/bin/env python3
 
 ##	Purpose:
-##		Measure how fast a terminal emulator actually draws text. Runs on any
+##		Measure how fast a terminal emulator draws text. Runs on any
 ##		terminal, any OS, needs nothing but Python 3.8+ and a tty.
 ##
-##		Five scenes, each a long stream of one UTF-8 width class, because that is
+##		There are 5 scenes, each a long stream of one UTF-8 width class, because that's
 ##		what separates a fast terminal from a slow one: 1-byte ASCII takes the
 ##		renderer's fast path, 2-byte stays in the primary font, 3-byte goes
 ##		double-width, and 4-byte emoji fall out of the mono font entirely into
-##		fallback and color-glyph paths. A fifth scene mixes all four with color
-##		and attribute changes. ASCII is tested four times as often as the wide
+##		fallback and color-glyph paths. A fifth scene mixes all 4 with color
+##		and attribute changes. ASCII is tested 4 times as often as the wide
 ##		classes and 2-byte twice, so the overall score leans the way real output
 ##		does.
 ##
-##		Two things make the numbers mean something:
+##		A couple of things make the numbers mean something:
 ##
 ##		SYNCHRONIZED TIMING. write() returns when the pty accepted the bytes, not
 ##		when the terminal drew them, so timing a bare write measures the kernel
 ##		buffer and reports nonsense (a terminal that reads greedily and renders
 ##		later looks infinitely fast). Every run therefore ends with a Primary DA
 ##		query and the clock stops on the reply, which a terminal can only send
-##		after parsing everything queued before it. Caveat worth knowing: that is
-##		a parser barrier. Terminals that render on another thread can still have
-##		frames in flight when they answer. Reps run back to back with no gap, so
+##		after parsing everything queued before it. That's only a parser
+##		barrier, though. Terminals that render on another thread can still have
+##		frames in flight when they reply. Reps run back to back with no gap, so
 ##		deferred work falls inside the next rep and comes out in the average, but
 ##		a single rep can flatter an asynchronous renderer.
 ##
 ##		ON WINDOWS THE BARRIER IS ANSWERED BY THE CONSOLE HOST, NOT THE TERMINAL.
 ##		ConPTY parses the child's output itself and replies on its own account:
 ##		measured, the reply is a DEC-level "ESC[?61;..." and the query never
-##		reaches the terminal at all, so a terminal that would have answered
+##		gets to the terminal at all, so a terminal that would have answered
 ##		"ESC[?6c" never sees one. A Windows figure is therefore the whole chain
 ##		- console host plus terminal, coupled through the pipe between them -
 ##		and not the terminal on its own. It also puts a low ceiling on every
 ##		Windows row: a consumer that reads the bytes and throws them away
 ##		measures the same figure as a real terminal, to within a percent.
 ##
-##		CELLS PER SECOND, not just MB/s. Megabytes reward ASCII for being narrow
+##		CELLS PER SECOND, as well as MB/s. Megabytes reward ASCII for being narrow
 ##		and flatter emoji for being wide: at one point 2-byte text measured
 ##		faster than ASCII in MB/s while being slower per character. Cells per
-##		second says which actually moved more screen, and the score uses it.
+##		second says which moved more screen, and the score uses it.
 ##
-##		WHAT THIS IS, PRECISELY: throughput under flood - how fast a terminal
-##		swallows output and keeps up. It is not a glyph rasterization rate. Only
-##		a screenful of cells is ever visible, so most of the stream is parsed,
-##		stored and scrolled past without being drawn, and terminals that render
-##		on another thread overlap what drawing they do with the next read. That
-##		is the honest shape of the question "why does it bog down when something
-##		dumps a lot of text", which is what this exists to answer.
+##		WHAT THIS IS: throughput under flood - how fast a terminal reads output
+##		and keeps up, rather than a glyph rasterization rate. Only a screenful of
+##		cells is ever visible, so most of the stream is parsed, stored, and
+##		scrolled past without being drawn, and terminals that render on another
+##		thread overlap what drawing they do with the next read. That matches the
+##		question "why does it bog down when something dumps a lot of text", which
+##		is what this exists to answer.
 ##
 ##		The payload is deterministic: identical bytes on every machine and every
-##		run, from a fixed seed, so two terminals are always compared on exactly
+##		run, from a fixed seed, so any 2 terminals are always compared on exactly
 ##		the same work. It is generated into memory before the clock starts and
 ##		written in 1 MB blocks, so the harness is never the thing being measured
 ##		- the report proves that with a write-to-null ceiling.
 ##
 ##		Results append to a data file under the user's data directory and build a
 ##		history table: every terminal that has ever been benchmarked here, by name
-##		and version, newest five builds each. Where the tool sits in a SilkTerm
+##		and version, newest 5 builds each. Where the tool is in a SilkTerm
 ##		checkout it also refreshes the speed columns of the shootout table in
 ##		comparison.md, latest build per terminal only, leaving the size and memory
 ##		columns beside them untouched.
 ##
-##		Deliberately not tested: combining marks, ZWJ emoji sequences, variation
-##		selectors and RTL. All four make the cell count ambiguous, and an
+##		Not tested on purpose: combining marks, ZWJ emoji sequences, variation
+##		selectors, and RTL. All 4 make the cell count ambiguous, and an
 ##		ambiguous denominator is worse than a missing scene.
 ##
 ##	Usage:
-##		Normally reached through utility/update-showdown.py, which runs this in the
-##		terminal you are sitting in and then writes the row. Standalone:
+##		Normally run through utility/update-showdown.py, which runs this in the
+##		terminal you're sitting in and then writes the row. Standalone:
 ##
-##		utility/include/termbench.py                 full run, about two minutes
-##		utility/include/termbench.py --quick         about thirty seconds
+##		utility/include/termbench.py                 full run, about 2 minutes
+##		utility/include/termbench.py --quick         about 30 seconds
 ##		utility/include/termbench.py --history       print the table, measure nothing
 ##		utility/include/termbench.py --label 'name/build'
 ##
@@ -107,12 +107,12 @@ APP = "silkterm-bench"
 PAYLOAD_VERSION = 1
 DATA_FILE = "results.jsonl"
 
-# The table lives in comparison.md now; the names stayed.
+# The table is in comparison.md now; the names stayed.
 TABLE_DOC = "comparison.md"
 README_BEGIN = "<!-- termbench:begin -->"
 README_END = "<!-- termbench:end -->"
 # The table's rows were all taken this way, and a figure taken any other way
-# does not belong beside them. update-showdown.py's SPEED_GRID is the same grid.
+# doesn't belong beside them. update-showdown.py's SPEED_GRID is the same grid.
 TABLE_GRID = "160x42"
 TABLE_LINE_CELLS = 80
 
@@ -159,7 +159,7 @@ CJK_SPANS = [
 ]
 
 # Single-codepoint, default-emoji-presentation, all covered by Noto Color
-# Emoji and its peers. No sequences, so every one is exactly two cells.
+# Emoji and its peers. No sequences, so every one is exactly 2 cells.
 EMOJI_SPANS = [
 	(0x1F300, 0x1F320), (0x1F330, 0x1F393), (0x1F3A0, 0x1F3CA),
 	(0x1F400, 0x1F43E), (0x1F440, 0x1F4FC), (0x1F600, 0x1F64F),
@@ -215,9 +215,9 @@ class Scene:
 
 
 # Sized individually, not by one shared scale, so that a single rep of each
-# costs about the same wall time: emoji run roughly twenty times slower per
+# costs about the same wall time: emoji run roughly 20 times slower per
 # byte than ASCII, so equal payloads would spend the whole run on emoji. The
-# figures come from measuring xfce4-terminal and put a full run near two
+# figures come from measuring xfce4-terminal and put a full run near 2
 # minutes there; --scale moves all of them together.
 SCENES = [
 	Scene("ascii", "1-byte", 4, 100),
@@ -227,7 +227,7 @@ SCENES = [
 	Scene("mixed", "mixed",  1, 44),
 ]
 
-# Runs per scene are this times the scene's weight, so ASCII is measured four
+# Runs per scene are this times the scene's weight, so ASCII is measured 4
 # times as often as the wide classes. Both modes use the same payloads, so the
 # rates are directly comparable and only the confidence differs.
 REPS_FULL = 12
@@ -301,7 +301,7 @@ def _build_uniform(cls: str, target_bytes: int, line_cells: int) -> tuple[bytes,
 
 
 # Foreground colors cycled through the mixed scene. Chosen to include the
-# 16-color, 256-color and 24-bit paths, since terminals treat them
+# 16-color, 256-color, and 24-bit paths, since terminals treat them
 # differently, plus bold and reverse for the attribute path.
 MIXED_SGR = [
 	"\x1b[0m", "\x1b[1m", "\x1b[31m", "\x1b[1;32m", "\x1b[38;5;208m",
@@ -312,7 +312,7 @@ MIXED_SGR = [
 
 # Share of each line's cells given to each width class. Roughly the shape of
 # real polyglot output, and fixed shares are what guarantee every class
-# actually appears - an earlier draft ordered segments by hand and the emoji
+# appears. An earlier draft ordered segments by hand and the emoji
 # never fitted, so the mixed scene quietly tested no 4-byte characters at all.
 MIXED_BUDGET = [
 	("ascii", 0.50), ("latin", 0.15), ("symbol", 0.08),
@@ -412,7 +412,7 @@ class Console:
 			try:
 				termios.tcsetattr(fd, termios.TCSADRAIN, saved)
 			except termios.error:
-				pass  # the tty went away under us, so there is nothing to put back
+				pass  # the tty went away under us, so there's nothing to put back
 		elif self._win and sys.platform == "win32":
 			import ctypes
 			k = ctypes.windll.kernel32
@@ -425,7 +425,7 @@ class Console:
 		import termios
 		import tty
 		fd = sys.stdin.fileno()
-		#	termios.error is not an OSError, and the caller cannot name it on Windows.
+		#	termios.error isn't an OSError, and the caller can't name it on Windows.
 		try:
 			saved = termios.tcgetattr(fd)
 			self._posix = (fd, saved)
@@ -451,7 +451,7 @@ class Console:
 		k.SetConsoleMode(hout, mout.value | 0x0004)
 		msvcrt.setmode(sys.stdout.fileno(), os.O_BINARY)
 
-	# -- output ---------------------------------------------------------------
+	# Output
 
 	@staticmethod
 	def write(blob: bytes) -> None:
@@ -465,7 +465,7 @@ class Console:
 	def emit(text: str) -> None:
 		Console.write(text.encode("utf-8"))
 
-	# -- input ----------------------------------------------------------------
+	# Input
 
 	def drain(self) -> None:
 		"""Throw away anything already pending so a stale reply can't fool us."""
@@ -513,7 +513,7 @@ class Console:
 
 	def sync(self, timeout: float = SYNC_TIMEOUT, drain: bool = True) -> bool:
 		"""
-		Primary DA. The terminal cannot answer until it has parsed everything
+		Primary DA. The terminal can't reply until it has parsed everything
 		queued ahead of it, which is what turns a write into a measurement.
 		Pass drain=False inside a timed section: draining first costs a poll
 		timeout, which on a short scene is several percent of the measurement.
@@ -575,7 +575,7 @@ SHELLISH = {"bash", "sh", "dash", "zsh", "fish", "ksh", "csh", "tcsh", "python",
 
 
 def _ancestor_terminal() -> str:
-	"""Walk up the process tree until something that is not a shell shows up."""
+	"""Walk up the process tree until something that isn't a shell shows up."""
 	pid = os.getpid()
 	for _ in range(12):
 		pid = _ppid_of(pid)
@@ -604,7 +604,7 @@ def _run_version(exe: str, flag: str) -> str:
 
 
 def _clean_name(text: str) -> str:
-	"""Trim a version banner's leading words down to just the product name."""
+	"""Trim a version banner's leading words down to the product name."""
 	name = text.strip().strip("#:-()\t ")
 	name = re.sub(r"[\s:(-]*\bversion\b[\s:(-]*$", "", name, flags=re.I)
 	return name.strip("#:-()\t ")[:40]
@@ -612,8 +612,8 @@ def _clean_name(text: str) -> str:
 
 def _probe_version(exe: str, base: str) -> tuple[str, str]:
 	"""
-	(name, version) from the program itself. Only output carrying a real version
-	token is believed: xterm answers --version with 'bad command line option' and
+	(name, version) from the program itself. Only output with a real version
+	token is believed: xterm prints 'bad command line option' for --version and
 	terminator with a complaint about DISPLAY, and taking either at face value
 	would put an error message in the results table as the terminal's name.
 	"""
@@ -650,7 +650,7 @@ def _is_system(exe: str) -> bool:
 
 
 def _silkterm_exe() -> str:
-	"""SilkTerm exports its control socket, and the socket carries its pid."""
+	"""SilkTerm exports its control socket, and the socket name includes its pid."""
 	sock = os.environ.get("SILKTERM_SOCKET", "")
 	got = re.search(r"silkterm-ctl-(\d+)\.sock", sock)
 	if not got:
@@ -669,8 +669,8 @@ def identify(console: Console) -> tuple[str, str, str]:
 			base = base[:-4]
 		# "xfce4-terminal 1.2.0 (Xfce 4.20)" -> name from the leading words.
 		name, version = _probe_version(exe, base)
-		# wezterm-gui answers --version with a placeholder and gnome-terminal-server not
-		# at all. The command that starts each one knows.
+		# wezterm-gui prints a placeholder for --version and gnome-terminal-server prints
+		# nothing. The command that starts each one has the real version.
 		for suffix in ("-gui", "-server"):
 			if version or not base.endswith(suffix):
 				continue
@@ -681,7 +681,7 @@ def identify(console: Console) -> tuple[str, str, str]:
 				name, version = _probe_version(found, launcher)
 
 	if not name:
-		# XTVERSION: not everything answers, but when it does it is definitive.
+		# XTVERSION: not everything replies, but when it does it's definitive.
 		reply = console.query("\x1b[>0q", b"\x1b\\", 0.35) if console.ok else b""
 		got = re.search(rb"\x1bP>\|([^\x1b]+)", reply)
 		if got:
@@ -703,7 +703,7 @@ def identify(console: Console) -> tuple[str, str, str]:
 		name = os.environ.get("TERM", "unknown")
 
 	# A development build reports the same version string every time it is
-	# rebuilt, so those get a build stamp; packaged terminals do not need one.
+	# rebuilt, so those get a build stamp; packaged terminals don't need one.
 	build = version or "unknown"
 	if exe and not _is_system(exe):
 		stamp = _stamp_for(exe)
@@ -788,7 +788,7 @@ def run_scene(console: Console, scene: Scene, blob: bytes, reps: int, quiet: boo
 
 	for _ in range(reps):
 		# Known state: cursor home, screen and scrollback clear, so every rep
-		# starts the same way and the scrollback regime cannot drift.
+		# starts the same way and the scrollback regime can't drift.
 		console.emit("\x1b[0m\x1b[H\x1b[2J\x1b[3J")
 		console.sync(5.0)
 		console.drain()
@@ -878,7 +878,7 @@ def aggregate(records: list[dict[str, Any]], mode: str, line_cells: int) -> tupl
 		row["per"] = per
 		row["score"] = score_of(per)
 		# Without the device-attributes barrier a scene only timed how fast the
-		# terminal accepted bytes, which is not the same measurement as the rest.
+		# terminal accepted bytes, which isn't the same measurement as the rest.
 		row["synced"] = all(r.get("synced") for r in per.values())
 		out.append(row)
 	return out, skipped
@@ -960,7 +960,7 @@ def report(term: str, build: str, grid: str, mode: str, scale: float, per: dict[
 	peak = max(r["mbs"] for r in per.values()) * 1e6
 	ratio = (ceiling / peak) if peak else 0.0
 	out.append(f"harness ceiling {ceiling / 1e9:.1f} GB/s to a sink - {ratio:.0f}x the terminal's best, "
-	           "so the tool is not what was measured")
+	           "so the tool isn't what was measured")
 	out.append(f"total {elapsed:.1f}s")
 	return "\n".join(out)
 
@@ -974,7 +974,7 @@ def readme_path() -> str:
 
 	Walks up rather than assuming a depth: the tool has lived at utility/ and now at
 	utility/include/, and a fixed one-level guess silently stops refreshing the table
-	the moment it moves - no error, just a column that quietly goes stale.
+	the moment it moves. There's no error, only a column that quietly goes stale.
 	"""
 	for here in list(Path(__file__).absolute().parent.parents)[:4]:
 		guess = here / TABLE_DOC
@@ -1048,7 +1048,7 @@ def readme_table(existing: str, rows: list[dict[str, Any]]) -> str:
 
 	Scored rows are re-sorted into the slots scored rows already occupy, so a
 	row with no speed figure (a variant of another entry, say) keeps its place
-	instead of being shuffled off by rows it cannot be compared with.
+	instead of being shuffled off by rows it can't be compared with.
 	"""
 	parsed = _split_table(existing)
 	if not parsed:
@@ -1090,7 +1090,7 @@ def readme_table(existing: str, rows: list[dict[str, Any]]) -> str:
 		cells[at] = f"**{row['score'] / 1000.0:.1f}**"
 
 	# A terminal measured for the first time joins the scored block rather than
-	# sitting under the unscored tail, where the ranking below could not reach it.
+	# sitting under the unscored tail, where the ranking below would skip it.
 	scored = [i for i, cells in enumerate(data) if _score_of(cells, at) is not None]
 	cut = max(scored) + 1 if scored else len(data)
 	data[cut:cut] = fresh
@@ -1146,8 +1146,8 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
 	ap.add_argument("--history", action="store_true", help="print the table and exit")
 	ap.add_argument("--out", default="",
 	                help="also write the report to this file (stdout is the tty)")
-	ap.add_argument("--no-save", action="store_true", help="do not record the result")
-	ap.add_argument("--no-readme", action="store_true", help="do not touch comparison.md")
+	ap.add_argument("--no-save", action="store_true", help="don't record the result")
+	ap.add_argument("--no-readme", action="store_true", help="don't touch comparison.md")
 	ap.add_argument("--json", action="store_true", help="emit this run as JSON too")
 	return ap.parse_args(argv)
 
@@ -1171,7 +1171,7 @@ def main(argv: list[str]) -> int:
 
 	if not sys.stdout.isatty() or not sys.stdin.isatty():
 		print("termbench needs a real terminal on both stdin and stdout "
-		      "(it times the terminal's reply, which a pipe cannot give).",
+		      "(it times the terminal's reply, which a pipe can't give).",
 		      file=sys.stderr)
 		return 2
 
@@ -1268,7 +1268,7 @@ def main(argv: list[str]) -> int:
 				if args.json:
 					fh.write(json.dumps(records, indent=1, sort_keys=True) + "\n")
 		except OSError as err:
-			print(f"could not write {args.out}: {err}", file=sys.stderr)
+			print(f"couldn't write {args.out}: {err}", file=sys.stderr)
 	return 0
 
 

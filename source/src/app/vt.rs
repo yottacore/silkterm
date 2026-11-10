@@ -67,10 +67,10 @@ impl VtHeal {
 
 /// Watch the active virtual console (/sys/class/tty/tty0/active). A VT switch
 /// away and back breaks sampling of long-lived textures in ways the readback
-/// probes cannot see (field logs: every witness read back intact across a switch
+/// probes can't see (field logs: every witness read back intact across a switch
 /// that blacked the window - the driver restores readback contents while the
 /// sampled copies stay garbage). So detect the switch itself: the value at spawn
-/// is the console this display lives on; when the file returns to it after being
+/// is the console this display is on; when the file returns to it after being
 /// elsewhere, send `VtSwitched` so the sampled textures are rebuilt. Only returns
 /// are signaled - a rebuild done while parked on another console could itself be
 /// purged on the way back. `SILK_VTFILE` overrides the watched path so a headless
@@ -104,7 +104,7 @@ pub(super) fn spawn_vt_watch(proxy: EventLoopProxy<UserEvent>) -> bool {
 	true
 }
 
-// The console this display lives on, and the one seen last.
+// The console this display is on, and the one seen last.
 #[cfg(any(target_os = "linux", test))]
 struct VtWatch {
 	home: String,
@@ -143,7 +143,7 @@ mod tests {
 	fn a_return_to_this_console_is_healed_again_once_settled() {
 		let back = Instant::now();
 		let mut heal = VtHeal::default();
-		assert!(!heal.due(back), "nothing owed before a switch");
+		assert!(!heal.due(back), "nothing due before a switch");
 		heal.returned(back);
 		assert!(!heal.due(back), "the first heal is the event's own");
 		assert!(!heal.due(back + VT_SETTLE / 2));

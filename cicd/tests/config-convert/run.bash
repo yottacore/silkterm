@@ -3,18 +3,18 @@
 ##	- Purpose:
 ##		Converts config files in the old formats with the real program and checks
 ##		the converted file, the copy of the old one, and what the launch says
-##		about settings it could not keep. Each launch runs with no display, so it
+##		about settings it couldn't keep. Each launch runs with no display, so it
 ##		reads and converts the file and then stops where the window would open.
 ##			- A pre-nesting flat file, converted to the nested layout.
 ##			- A shcl 2.x file with no Format line, and one stamped Format 2, both
 ##			  converted in place with their comments.
 ##			- What v1.0.0-beta3 saved, every setting changed, converted in place
 ##			  with its values, and its look on the Custom profile.
-##			- One shcl cannot migrate (a raw block that never closes) and one it
-##			  cannot read (not UTF-8), each written new from the template with the
+##			- One shcl can't migrate (a raw block that never closes) and one it
+##			  can't read (not UTF-8), each written new from the template with the
 ##			  settings that still read.
 ##		A second launch on each must change nothing. A file in the current format
-##		that is not UTF-8 is written again without the lines that do not decode,
+##		that isn't UTF-8 is written again without the lines that don't decode,
 ##		kept the same way, and the launch says which lines went. Where Xvfb is
 ##		installed, launches on the private display check that lost settings, and
 ##		dropped lines, bring up the notice window too.
@@ -290,7 +290,7 @@ echo "the notice window"
 if fDisplay; then
 	fFixture notice 'font:' "${tab}size: 15" "${tab}family:[One, Two]" 'notes: ```' 'never closed'
 	fNotice notice 'Settings not converted'
-	## Off since a current file that is not UTF-8 is written again without the
+	## Off since a current file that isn't UTF-8 is written again without the
 	## line (2026100315581313), so no save is refused and the notice is the
 	## rewritten one, checked below.
 	## ## The launch says it even when nothing tries to save. A first launch has
@@ -325,7 +325,7 @@ echo "all passed"
 
 ##	History:
 ##		- 20261003 JC: Created.
-##		- 20261003 JC: A current file that is not UTF-8.
+##		- 20261003 JC: A current file that isn't UTF-8.
 ##		- 20261003 JC: That file is written again without the lines, not left.
 ##		- 20261101 JC: A file v1.0.0-beta3 saved.
 ##		- 20261106 JC: shcl 3.0.0-beta1 spellings: single backslashes, lists in brackets.

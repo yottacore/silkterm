@@ -152,7 +152,7 @@ impl Probe {
 			region = self.region.clone();
 		}
 		// a row at the region's edge that reads the same after a scroll is chrome
-		// the program draws again (less's prompt), as the slide's bands hold it
+		// the program draws again (less's prompt), as the slide's bands treat it
 		if shift != 0 && self.last_text.len() == text.len() && region.len() > 2 {
 			let edge = |i: usize| !text[i].is_empty() && text[i] == self.last_text[i];
 			if edge(region.end - 1) {
@@ -190,7 +190,7 @@ impl Probe {
 		}
 		if shift == 0 {
 			// a frame that changed with no scroll waits until it stops changing, so
-			// a repaint caught half drawn is not written over good rows
+			// a repaint caught half drawn isn't written over good rows
 			if changed && !quiet {
 				self.pending = Some(text);
 			} else if changed {
@@ -497,7 +497,7 @@ fn transcript_scene(lines: usize, repaint: bool) -> (Vec<Vec<u8>>, usize) {
 	for _ in 0..20 {
 		add(&mut chunks, &mut newest, 1);
 	}
-	// a long tool output lands in one repaint
+	// a long tool output comes in one repaint
 	newest += 40;
 	chunks.push(paint(1, newest));
 	for _ in 0..20 {
@@ -519,7 +519,7 @@ fn a_transcript_scrolled_by_region_is_rebuilt_whole() {
 		let printed = printed_numbers(&joined(&chunks), 'M');
 		let s = score(&probe.rows, &printed, 'M');
 		// every line that was ever on screen is kept, in order, once, with no
-		// header, box or pill left in the transcript; the rows the long output
+		// header, box, or pill left in the transcript; the rows the long output
 		// jumped past were never drawn, so they are the one gap
 		let never_drawn = 40 - height;
 		let missing = printed.len() - s.kept;

@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 
 ##	- Purpose:
-##		Software rendering on an X server that cannot make shared pixmaps, as
-##		NVIDIA's cannot. Mesa's software Vulkan used them anyway there, and
+##		Software rendering on an X server that can't make shared pixmaps, as
+##		NVIDIA's can't. Mesa's software Vulkan used them anyway there, and
 ##		winit died of the X errors that followed. The server here is headless
 ##		sway's Xwayland behind _noshm_proxy.py, which answers as such a server.
 ##			- Launched with software rendering on, the window draws and
@@ -11,7 +11,7 @@
 ##			  takes its new device with no X error.
 ##	- Syntax: run.bash [--bin PATH]   (default: the debug build, then release)
 ##	- Exit: 0 passed, 1 a check failed, 3 nothing ran (no binary, sway,
-##	  Xwayland with DRI3, render node, python-xlib, xdotool, xwd or ImageMagick).
+##	  Xwayland with DRI3, render node, python-xlib, xdotool, xwd, or ImageMagick).
 ##	- Test ID: ddkex
 ##	- History: At bottom of file.
 

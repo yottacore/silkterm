@@ -65,7 +65,7 @@ def main() -> int:
 				if window is None:
 					time.sleep(0.002)
 					continue
-			## One sample is three requests, and the window manager can resize
+			## One sample is 3 requests, and the window manager can resize
 			## the window between them. A shown window read with the size it had
 			## while hidden looks like a jump that never happened, or hides one.
 			disp.grab_server()

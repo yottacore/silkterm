@@ -3,13 +3,13 @@
 ## This file IS the dialog: which rows exist, in what order, under which
 ## heading, on which tab, what each one edits, and when each is grayed out.
 ## It is compiled into the binary, so an edit needs a rebuild - and the tests
-## fail if a row names a setting the code does not know, or leaves one out.
+## fail if a row names a setting the code doesn't know, or leaves one out.
 ##
 ## Measurements are DIP: a CSS pixel, 1/96 inch. The layout is solved in that
 ## space and multiplied by the display's scale factor on the way to the
 ## screen, so these numbers mean the same physical size at any DPI.
 ##
-## What is NOT here: how a value is read, written or formatted. Those go
+## What isn't here: how a value is read, written, or formatted. Those go
 ## through typed fields with transforms (a stored millisecond becomes a 1..100
 ## slider, a fraction becomes a percent), which is code, not data.
 
@@ -17,7 +17,7 @@
 ## Tabs
 ## •••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
 
-## In order. "A/B" is tab B under tab A; a tab with tabs under it holds no
+## In order. "A/B" is tab B under tab A; a tab with tabs under it has no
 ## rows of its own, and a heading below names the tab it is on by that path.
 tabs: ["Silk", "Appearance", "Appearance/Themes", "Appearance/Background", "Appearance/Text", "Appearance/Cursor", "Movement", "Window", "Program", "Shell", "Keys"]
 
@@ -33,13 +33,13 @@ tabs_side: left
 ## Nearly every measurement here is a FLOOR, not a fixed size: content that
 ## needs more room gets it (a wide label pushes the panel wider, a tall UI font
 ## makes rows taller). So a value set too small loses to the content and one
-## set too large just gives a roomier dialog - neither can break the layout.
+## set too large gives a roomier dialog - neither can break the layout.
 
 layout:
 
 	## Panel
 	width: 540                 ## floor; the widest label, button row or top tab strip wins
-	pad: 18                    ## margin inside all four panel edges
+	pad: 18                    ## margin inside all 4 panel edges
 	tabs_gap: 10               ## tab strip -> first row
 	buttons_gap: 18            ## the footer's top line -> footer buttons
 	search_gap: 18             ## search box -> the line under it
@@ -64,12 +64,12 @@ layout:
 	value_width: 56            ## floor; every slider's field grows to the longest number one shows
 	radio_box: 16              ## radio indicator square; grows with the UI line from base_line_height
 	radio_pitch: 96            ## per radio option: box + label + gap
-	dual_pitch: 118            ## per checkbox + label pair on a two-part row
+	dual_pitch: 118            ## per checkbox + label pair on a 2-part row
 	dropdown_width: 208        ## collapsed dropdown box (fits its longest option)
 	dropdown_pair_width: 150   ## floor for each half of a two-dropdown row
 	dropdown_item_pad: 8       ## popup row grows to the UI line height plus this
 	dropdown_item_min: 24
-	base_line_height: 19       ## the UI line height the four pitches above were drawn for
+	base_line_height: 19       ## the UI line height the 4 pitches above were drawn for
 
 	## Editable fields
 	field_height: 26           ## floor; a field grows to the UI line height plus field_pad_v twice
@@ -114,7 +114,7 @@ layout:
 	## Scrollbar (shown only when a tab is taller than the panel)
 	scrollbar_width: 8
 	scrollbar_inset: 5         ## gap between the bar and the panel edge. The bar
-	                           ## lives in the panel's own padding, so this has to
+	                           ## uses the panel's own padding, so this has to
 	                           ## leave room between it and content that fills that
 	                           ## padding - the Shell tab's last column does.
 	scrollbar_thumb_min: 24
@@ -151,7 +151,7 @@ icons:
 ## spells it; `kind: heading` starts a GROUP and says which tab it goes on,
 ## and every row after it belongs to that group.
 ##
-## A SUB-GROUP is not declared. It is a row followed by rows at a greater
+## A SUB-GROUP isn't declared. It is a row followed by rows at a greater
 ## `indent:` - the leader's own label stays put and its members' labels step
 ## right, so the run reads as belonging to it. Only labels move; every control
 ## keeps its column. A row back at the shallower depth ends the sub-group.
@@ -178,22 +178,22 @@ icons:
 ##            own width; in a group with other rows its first box keeps the
 ##            control column.
 ## options:   the choices, in order, for radio / dropdown / pair
-## parts:     the two settings a `pair` row carries, one per option
-## key:       only when the row's name cannot be the setting's - because a
+## parts:     the 2 settings a `pair` row edits, one per option
+## key:       only when the row's name can't be the setting's - because a
 ##            heading already took that name, or because the row edits no
 ##            single setting of its own (`key: none`)
 ## gate:      the checkbox this row only counts under. The row never grays,
 ##            and changing it turns the checkbox on.
 ## auto:      the checkbox that makes this row automatic, with `rule:` for
-##            where the value then comes from, which the code answers. A value
+##            where the value then comes from, which the code works out. A value
 ##            set by hand is kept for when the checkbox goes off again.
 ## rule:      with no `auto:`, the rule gives the default instead.
 ## group:     the profile or theme this row belongs to, from `groups:` at the
 ##            end. While a preset is in force the row shows its value, and a
 ##            change to it is kept apart from the person's own, as a "*" one.
-## help:      flyover text, for a control whose label does not explain it
+## help:      flyover text, for a control whose label doesn't explain it
 ## revert_help: flyover for the revert arrow, where it does more than put the
-##            shipped default back
+##            default back
 ## windows:   true for a row that exists only on Windows. On a heading it takes
 ##            the whole group, and every row in it has to say so as well.
 ## not_macos: true for a row the macOS build can never use, left out there.
@@ -210,7 +210,7 @@ rows:
 
 	## ---------------------------------------------------------------------- Silk
 
-	## The profile sets rows in the two sections below and on the Background
+	## The profile sets rows in the 2 sections below and on the Background
 	## and Cursor tabs (`group: profile`). While a preset is in force they show
 	## its values, and changing one shows the profile as "High *" and leaves
 	## the Custom values alone.
@@ -237,13 +237,13 @@ rows:
 		help: "Which effects to use, from Max silk with all of them to Standard terminal with none. Picking one turns off Choose automatically. Remote (temporary) doesn't, and only lasts until SilkTerm restarts."
 
 	## The label stays short because the widest one on any tab sets the panel's
-	## width, and the flyover carries what it leaves out.
+	## width, and the flyover has what it leaves out.
 	PerfCheckHardware:
 		label: Check for hardware change
 		kind: toggle
 		setting: performance.check_hardware
 		gate: PerfAuto
-		help: "Test the machine again when its processor, graphics card or memory changes. The test takes a few seconds. Only used with Choose automatically on."
+		help: "Test the machine again when its processor, graphics card, or memory changes. The test takes a few seconds. Only used with Choose automatically on."
 
 	PerfCheckNext:
 		label: Re-test next run
@@ -259,7 +259,7 @@ rows:
 		aliases: ["automatic remote mode", "remote desktop", "rdp", "vnc", "x forwarding"]
 		kind: toggle
 		setting: performance.detect_remote
-		help: "Switch to the Remote (temporary) profile when SilkTerm starts on a remote screen, such as over Remote Desktop, VNC or X forwarding. Turned off, Temporary remote display mode on the View menu still switches it by hand."
+		help: "Switch to the Remote (temporary) profile when SilkTerm starts on a remote screen, such as over Remote Desktop, VNC, or X forwarding. Turned off, Temporary remote display mode on the View menu still switches it by hand."
 
 	TextReadability:
 		kind: heading
@@ -306,8 +306,8 @@ rows:
 		group: profile
 		help: "How gradually the scrim fades at its edge."
 
-	## The two together describe one curve, so they share a line. The label names
-	## both; each box says which of them it is by what it holds.
+	## The 2 together describe one curve, so they share a line. The label names
+	## both; each box says which of them it is by what it shows.
 	ScrimFunction:
 		label: "Function, falloff"
 		kind: dropdown
@@ -360,8 +360,8 @@ rows:
 		group: profile
 		help: "Scroll smoothly instead of jumping a whole line at a time."
 
-	## The five below are ordered as one output burst unfolds: it leaves rest,
-	## accelerates, tops out, winds down, stops. All five read the same way -
+	## The 5 below are ordered as one output burst unfolds: it leaves rest,
+	## accelerates, tops out, winds down, stops. All 5 read the same way -
 	## higher is faster.
 
 	ScrollEaseIn:
@@ -418,7 +418,7 @@ rows:
 	## -------------------------------------------------------------------- Themes
 
 	## A heading whose label is its own tab's title says nothing the tab strip
-	## has not, so it draws nothing - but it still assigns the rows below it.
+	## hasn't, so it draws nothing - but it still assigns the rows below it.
 	Themes:
 		kind: heading
 		label: Themes
@@ -534,7 +534,7 @@ rows:
 		indent: 1
 		setting: colors.highlight
 		group: theme
-		help: "Used for the active pane's border, slider handles, revert arrows and the default button."
+		help: "Used for the active pane's border, slider handles, revert arrows, and the default button."
 
 	ColFocus:
 		label: Focus
@@ -810,8 +810,8 @@ rows:
 		help: "How long after the last keystroke before the cursor animates again. Program output doesn't reset it."
 
 	CursorVisibility:
-		## Two independent switches sharing one label; the row itself edits
-		## nothing, so its own name is not a setting.
+		## One label over 2 independent switches. The row itself edits
+		## nothing, so its own name isn't a setting.
 		key: none
 		label: Visibility
 		kind: pair
@@ -985,7 +985,7 @@ rows:
 		aliases: ["macros", "tab name"]
 		kind: text
 		setting: window.tab_text
-		help: "What each tab says. A macro between percent signs is replaced by its value:◉NEWLINE◉%USER_DEFINED%: a name typed on the tab◉NEWLINE◉%PROGRAM_DEFINED%: the title the running program sets◉NEWLINE◉%SHELL%: the shell's name◉NEWLINE◉%PROGRAM%: the program the shell is running◉NEWLINE◉%LAST_PROGRAM%: the program it ran last◉NEWLINE◉%CURRENT_DIRECTORY%: the shell's current directory◉NEWLINE◉◉NEWLINE◉a || b shows a, or b when a comes out empty. { } groups without printing, and [ ] prints its brackets. A group whose macros all come out empty is left out with its text, and so is text between two parts unless both of them show. On a narrow tab the parts get shorter in a set order."
+		help: "What each tab says. A macro between percent signs is replaced by its value:◉NEWLINE◉%USER_DEFINED%: a name typed on the tab◉NEWLINE◉%PROGRAM_DEFINED%: the title the running program sets◉NEWLINE◉%SHELL%: the shell's name◉NEWLINE◉%PROGRAM%: the program the shell is running◉NEWLINE◉%LAST_PROGRAM%: the program it ran last◉NEWLINE◉%CURRENT_DIRECTORY%: the shell's current directory◉NEWLINE◉◉NEWLINE◉a || b shows a, or b when a comes out empty. { } groups without printing, and [ ] prints its brackets. A group whose macros all come out empty is left out with its text, and so is text between 2 parts unless both of them show. On a narrow tab the parts get shorter in a set order."
 
 	WindowTitle:
 		kind: heading
@@ -1025,7 +1025,7 @@ rows:
 
 	## A split, or a tab from the Tabs menu's "New tab in tmux", in a tmux
 	## session of its own. Grayed where tmux can't be found, which is always
-	## on Windows. The two rows under the switch count for that menu row too,
+	## on Windows. The 2 rows under the switch count for that menu row too,
 	## so they aren't gated by it.
 	Tmux:
 		kind: heading
@@ -1038,7 +1038,7 @@ rows:
 		aliases: ["multiplexer", "detach", "persistent sessions"]
 		kind: toggle
 		setting: shell.tmux.always_new_session
-		help: "Start each new tab, split and plain launch in a new tmux session. New tab in tmux on the Tabs menu does it for one tab with this off.◉NEWLINE◉◉NEWLINE◉Pros:◉NEWLINE◉- If your desktop crashes, your CLI sessions survive.◉NEWLINE◉- You can connect to existing CLI sessions remotely.◉NEWLINE◉- You can reconnect from any other installed terminal."
+		help: "Start each new tab, split, and plain launch in a new tmux session. New tab in tmux on the Tabs menu does it for one tab with this off.◉NEWLINE◉◉NEWLINE◉Pros:◉NEWLINE◉- If your desktop crashes, your CLI sessions survive.◉NEWLINE◉- You can connect to existing CLI sessions remotely.◉NEWLINE◉- You can reconnect from any other installed terminal."
 		warning: "◉NEWLINE◉◉NEWLINE◉Cons:◉NEWLINE◉- Can't launch GUI programs without extra parameters.◉NEWLINE◉- The SilkTerm Minimap is not available.◉NEWLINE◉- SilkTerm can't adjust itself based on programs inside tmux, so you may see occasional weirdness with smooth-scrolling."
 
 	TmuxSessionName:
@@ -1047,7 +1047,7 @@ rows:
 		kind: text
 		indent: 1
 		setting: shell.tmux.session_name
-		help: "What a new tmux session is called. A macro between percent signs is replaced by its value:◉NEWLINE◉%YYYYmmDD%: the date◉NEWLINE◉%HHMMSS%: the time◉NEWLINE◉%HHMMSSNN%: the time, to a hundredth of a second◉NEWLINE◉◉NEWLINE◉A name tmux already has gets a number on the end. Dots, colons and # become underscores, since tmux won't keep them."
+		help: "What a new tmux session is called. A macro between percent signs is replaced by its value:◉NEWLINE◉%YYYYmmDD%: the date◉NEWLINE◉%HHMMSS%: the time◉NEWLINE◉%HHMMSSNN%: the time, to a hundredth of a second◉NEWLINE◉◉NEWLINE◉A name tmux already has gets a number on the end. Dots, colons, and # become underscores, since tmux won't keep them."
 
 	TmuxOnClose:
 		label: When closed
@@ -1119,7 +1119,7 @@ rows:
 	Shells:
 		label: ""
 		kind: shells
-		help: "The top shell that's turned on is used for new tabs, panes and windows."
+		help: "The top shell that's turned on is used for new tabs, panes, and windows."
 
 	## The lowest-precedence answer to "where does this shell start". A new tab,
 	## pane or window inherits the directory of the pane it came from, and a
@@ -1137,10 +1137,10 @@ rows:
 		aliases: ["working directory", "cwd", "start folder"]
 		kind: text
 		setting: shell.startup_directory
-		help: "Where a new shell starts when nothing else says. Accepts ~ and environment variables. --directory, an inherited directory and the launch directory all come first."
+		help: "Where a new shell starts when nothing else says. Accepts ~ and environment variables. --directory, an inherited directory, and the launch directory all come first."
 
-	## The two things SilkTerm sets up in a shell it starts. PowerShell is the
-	## one shell that cannot be asked where it is - it keeps its location to
+	## The 2 things SilkTerm sets up in a shell it starts. PowerShell is the
+	## one shell that can't be asked where it is - it keeps its location to
 	## itself - so it is offered a block for its profile that says so, and a
 	## profile that already reports is left alone. The bash prompt is an offer
 	## through the environment; an rc file with a prompt of its own wins.
@@ -1153,7 +1153,7 @@ rows:
 		label: "Update PowerShell profiles"
 		kind: toggle
 		setting: shell.integration
-		help: "Add a block to each PowerShell profile, so new tabs, panes and windows open in that shell's current directory. A profile that already does this is left alone. Delete the block to stop it for good."
+		help: "Add a block to each PowerShell profile, so new tabs, panes, and windows open in that shell's current directory. A profile that already does this is left alone. Delete the block to stop it for good."
 
 	BashPrompt:
 		label: "Use git-aware Bash prompt"
@@ -1164,7 +1164,7 @@ rows:
 
 	## What Explorer opens a file type with, per user. Register writes it and
 	## saves what was there; the revert arrow puts that back. Both act at once,
-	## so Cancel does not undo them. Neither is a setting in the config file:
+	## so Cancel doesn't undo them. Neither is a setting in the config file:
 	## the registry is the state, and the arrow is lit while it says SilkTerm.
 	OpenWith:
 		kind: heading
@@ -1203,7 +1203,7 @@ rows:
 		kind: buttons
 		options: "Register"
 		windows: true
-		help: "Add Open in SilkTerm to the right-click menu for folders, drives and folder backgrounds. On Windows 11 it's under Show more options."
+		help: "Add Open in SilkTerm to the right-click menu for folders, drives, and folder backgrounds. On Windows 11 it's under Show more options."
 		revert_help: "Take Open in SilkTerm off the folder menu."
 
 
@@ -1403,7 +1403,7 @@ groups:
 		noun: profile
 		custom: Custom
 		presets:
-			## the shipped defaults, every one
+			## the built-in defaults, every one
 			max:
 				label: Max silk
 				SmoothScroll: true

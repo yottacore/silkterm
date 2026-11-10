@@ -38,13 +38,13 @@ source "${root}/cicd/tests/_testdir.bash"
 [[ -n "${SANITIZER_TOOLCHAIN}" ]] || fDie "no nightly named in rust-toolchain.toml"
 rustup toolchain list 2>/dev/null | grep -q "^${SANITIZER_TOOLCHAIN}" \
 	|| fDie "${SANITIZER_TOOLCHAIN} isn't installed here; cicd.bash runs this in the container image"
-fTestDir_Make || fDie "could not make the test run folder"
+fTestDir_Make || fDie "couldn't make the test run folder"
 fJobs_LowPriority; fJobs hard
 
 symbolizer="$(command -v llvm-symbolizer || true)"
 [[ -n "${symbolizer}" ]] || symbolizer="$(compgen -G '/usr/lib/llvm-*/bin/llvm-symbolizer' | sort -V | tail -n 1 || true)"
-## Set whole, so nothing inherited turns reports off. Every report, not just the
-## first, so one run lists them all.
+## Set whole, so nothing inherited turns reports off. Every report rather than
+## only the first, so one run lists them all.
 export TSAN_OPTIONS="halt_on_error=0:second_deadlock_stack=1:suppressions=${root}/${TSAN_SUPPRESSIONS}${symbolizer:+:external_symbolizer_path=${symbolizer}}"
 
 ## fTsan_Reports <output file>: each report, under the test binary it came from,
@@ -65,7 +65,7 @@ rc=0; "${TSAN_CMD[@]}" --manifest-path cicd/tests/sanitizer-canary/Cargo.toml >"
 if ((rc == 0)) || ! grep -q 'WARNING: ThreadSanitizer: data race' "${canaryOut}" || ! grep -q 'races_on_purpose' "${canaryOut}"; then
 	tail -n 80 "${canaryOut}"
 	fEcho_Clean "FAIL debjk TSan canary caught"
-	fDie "the canary's race was not reported by name, so a race in the suite could pass too (output in ${canaryOut})"
+	fDie "the canary's race wasn't reported by name, so a race in the suite could pass too (output in ${canaryOut})"
 fi
 fEcho_Clean "PASS debjk TSan canary caught"
 

@@ -3,10 +3,10 @@
 
 ##	- Purpose:
 ##		utility/rename.bash renames the project. It used to rewrite only
-##		Cargo.toml, the Rust sources and the Markdown docs, and to rename no file
+##		Cargo.toml, the Rust sources, and the Markdown docs, and to rename no file
 ##		at all - so the resource template build.rs reads by name kept the old
 ##		name, and every Windows build of the renamed tree failed in its build
-##		script. The pipeline, the packaging and the installers kept it too.
+##		script. The pipeline, the packaging, and the installers kept it too.
 ##		This clones the repository, renames the clone, and checks that nothing a
 ##		build reads by name went missing and that the old name is gone.
 ##	- Test ID: dcrrk
@@ -68,8 +68,8 @@ done < <(
 )
 fCheck "every include! still names a file that is there" test "${missing}" -eq 0
 
-##	A file the sweep missed still carries the old name. Cargo.lock is left for
-##	cargo to regenerate, and the script cannot rewrite itself.
+##	A file the sweep missed still has the old name. Cargo.lock is left for
+##	cargo to regenerate, and the script can't rewrite itself.
 left="$(cd "${clone}" && git grep -lI -e SilkTerm -e silkterm -- . \
 	':(exclude)Cargo.lock' ':(exclude)utility/rename.bash' || true)"
 fCheck "no tracked text file still carries the old name" test -z "${left}"

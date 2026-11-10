@@ -19,7 +19,7 @@
 ##		resized by hand while herded, it must stay where it was left.
 ##	- Syntax: run.bash [--bin PATH]   (default: the debug build, then release)
 ##	- Exit: 0 passed, 1 a check failed, 3 nothing ran (no binary, sway,
-##	  Xwayland, xfwm4, xdotool, xrandr or python-xlib).
+##	  Xwayland, xfwm4, xdotool, xrandr, or python-xlib).
 ##	- Test ID: deqx1
 ##	- History: At bottom of file.
 
@@ -214,7 +214,7 @@ fMonitors(){
 	return 0
 }
 
-## A window of its own for each dance, so one that ends wrong cannot spoil the next.
+## A window of its own for each dance, so one that ends wrong can't spoil the next.
 fDance(){  ## fDance <seconds the portrait output stays off>
 	local -r off="${1}"
 	local id="" start="" herded final
@@ -283,7 +283,7 @@ fDanceBare(){  ## fDanceBare back|moved|resized
 	sleep 2
 	herded="$(fWhere "${id}")"
 	case "${how}" in
-		## the look after it has to run, or it holds the window and the put-back
+		## the look after it has to run, or it keeps the window and the put-back
 		## would never come either way
 		moved) fMove "${id}" 1500 600; fBack "${id}"; sleep 2 ;;
 		resized) fX xdotool windowsize "${id}" 700 500; sleep 2 ;;

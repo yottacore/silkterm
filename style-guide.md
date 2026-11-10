@@ -5,7 +5,7 @@
 <!-- TOC ignore:true -->
 # Style guide
 
-The style reference for SilkTerm's code, scripts and commit messages. Where it conflicts with a language's own idioms or its formatter, those win. See [Formatting](#formatting).
+The style reference for SilkTerm's code, scripts, and commit messages. Where it conflicts with a language's own idioms or its formatter, those win. See [Formatting](#formatting).
 
 <!-- TOC ignore:true -->
 ## Table of contents
@@ -55,7 +55,7 @@ The style reference for SilkTerm's code, scripts and commit messages. Where it c
 - Use meaningful, searchable names. `upperBound` is easy to find and replace by hand, and a bare `ub` isn't.
 	- A name doesn't need to be long or globally unique. It needs to be clear and easy to find. Short conventional names are fine.
 
-- Single-letter loop counters and iterators (`for i in ...`) are fine when that is the idiomatic choice.
+- Single-letter loop counters and iterators (`for i in ...`) are fine when that's the idiomatic choice.
 
 - Follow the language's canonical case and word-order conventions (snake_case in Rust).
 
@@ -67,7 +67,7 @@ Edition 2024. Code should look the same from one file to the next, with one way 
 
 - Errors are values. Return `Result<T, E>` and propagate with `?`.
 
-- No `panic!`, `unwrap()` or `expect()` outside tests, except where a case can't happen. Then say why in a short comment. Clippy refuses `unwrap()` and `expect()` there.
+- No `panic!`, `unwrap()`, or `expect()` outside tests, except where a case can't happen. Then say why in a short comment. Clippy refuses `unwrap()` and `expect()` there.
 
 - Prefer `thiserror` for library-style error types and `anyhow` for application-level error handling.
 	- SilkTerm is an application, so a function that can fail returns `anyhow::Result`, with `.context()` naming the file or step. Print one with `{e:#}`, or the reason under the context is lost.
@@ -93,9 +93,9 @@ Edition 2024. Code should look the same from one file to the next, with one way 
 
 - Return early to keep the happy path at minimum indentation. Use guard clauses.
 
-- `let ... else { return ... }` for "extract or bail".
+- Use `let ... else { return ... }` for "extract or bail".
 
-- `?` to propagate instead of nesting `match` or `if let`.
+- Use `?` to propagate instead of nesting `match` or `if let`.
 
 - No `else` after a `return`.
 
@@ -105,13 +105,13 @@ Edition 2024. Code should look the same from one file to the next, with one way 
 
 ### Types and abstraction
 
-- Model mutually-exclusive states with enums and exhaustive `match` rather than boolean flags. Avoid a catch-all `_` arm unless it's needed.
+- Model mutually exclusive states with enums and exhaustive `match` rather than boolean flags. Avoid a catch-all `_` arm unless it's needed.
 
-- Where it is cheap, use newtypes or typestate so invalid states can't be built.
+- Where it's cheap, use newtypes or typestate so invalid states can't be built.
 
 - Use traits and generics for abstraction, and `dyn` only when the types differ. Prefer composition to class hierarchies.
 
-- Derive `Debug`, `Clone`, `PartialEq` and the rest rather than writing them by hand. Every public type derives `Debug`.
+- Derive `Debug`, `Clone`, `PartialEq`, and the rest rather than writing them by hand. Every public type derives `Debug`.
 
 ### Iterators
 
@@ -121,13 +121,13 @@ Edition 2024. Code should look the same from one file to the next, with one way 
 
 ### Documentation
 
-- Document public items with `///`. A comment on anything declared `pub` is a `///` doc, never a plain `//`. A name that already says all there is to say needs no doc, since one would only repeat it. A note about a group of items is a plain `//` right above the group, with a blank line above the note, since a `///` only belongs to the one item below it.
+- Document public items with `///`. A comment on anything declared `pub` is a `///` doc, never a plain `//`. A name that already says all there is to say doesn't need a doc, since one would only repeat it. A note about a group of items is a plain `//` right above the group, with a blank line above the note, since a `///` only belongs to the one item below it.
 
 - A file that opens with a comment about itself uses `//!` for it.
 
 - A lint reason goes in the attribute's `reason = "..."` rather than in a comment above it.
 
-- Name things fully; no cryptic abbreviations.
+- Name things fully, without cryptic abbreviations.
 
 ## Bash
 
@@ -141,7 +141,7 @@ Edition 2024. Code should look the same from one file to the next, with one way 
 
 - Indent with tabs. There is no formatter, but scripts must pass `shellcheck` at warning level.
 
-- `cicd/utility/bash-style.bash` checks the braces, the brackets and the function names. Scripts shared with other projects are left out of it. A script run by sh or dash keeps `[ ]`, since it has no `[[ ]]`.
+- `cicd/utility/bash-style.bash` checks the braces, the brackets, and the function names. Scripts shared with other projects are left out of it. A script run by sh or dash keeps `[ ]`, since it doesn't have `[[ ]]`.
 
 ## PowerShell
 
@@ -149,9 +149,9 @@ Edition 2024. Code should look the same from one file to the next, with one way 
 
 - Scripts must pass PSScriptAnalyzer at warning level with those settings.
 
-- A command that takes 3 or more arguments gets them by name, and common parameters use their full names, such as `-ErrorAction` rather than `-EA`. `cicd/utility/ps-lint.ps1` checks both, since PSScriptAnalyzer has no rule for either at warning level.
+- A command that takes 3 or more arguments gets them by name, and common parameters use their full names, such as `-ErrorAction` rather than `-EA`. `cicd/utility/ps-lint.ps1` checks both, since PSScriptAnalyzer doesn't have a rule for either at warning level.
 
-- Each script has comment-based help under its copyright lines, and sets `Set-StrictMode -Version Latest`. A file that is dot-sourced leaves StrictMode to the script that loads it. `source/src/shell_integration.ps1` has neither, since it is written into the user's own profile.
+- Each script has comment-based help under its copyright lines, and sets `Set-StrictMode -Version Latest`. A file that is dot-sourced leaves StrictMode to the script that loads it. `source/src/shell_integration.ps1` has neither, since it's written into the user's own profile.
 
 - A list built in a loop is a `List[T]` or the loop's own output, rather than an array grown with `+=`.
 
@@ -177,13 +177,13 @@ Edition 2024. Code should look the same from one file to the next, with one way 
 
 - Rust is formatted by `rustfmt`. Run it and let its output win over hand formatting.
 
-- The project sets `rustfmt` to hard tabs at width 4 (`rustfmt.toml`). Tabs indent; spaces align. This is the one deliberate deviation from `rustfmt` defaults; everything else follows the defaults.
+- The project sets `rustfmt` to hard tabs at width 4 (`rustfmt.toml`). Tabs indent, and spaces align. This is the one deliberate change from the `rustfmt` defaults, and everything else follows them.
 
 - Protect intentional hand-formatted data tables (a color matrix, a layout table) from reflow with `#[rustfmt::skip]` rather than fighting the tool.
 
 - Code is expected to pass `clippy`. The build gate runs `clippy -D warnings`. Writing to the stricter `clippy::pedantic` bar is encouraged.
 
-- Bash, PowerShell and Python scripts must pass shellcheck, PSScriptAnalyzer and ruff.
+- Bash, PowerShell, and Python scripts must pass shellcheck, PSScriptAnalyzer, and ruff.
 
 ## Commit messages
 

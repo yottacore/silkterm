@@ -36,7 +36,7 @@ impl SettingsDialog {
 		pick::geom(self.rect, &self.pick_metrics())
 	}
 
-	/// A chip opened. The box holds the color as HSV from here on, and the row
+	/// A chip opened. The box stores the color as HSV from here on, and the row
 	/// behind it follows every change - so the swatch, and the window under the
 	/// dialog, show what is being chosen while it is chosen.
 	pub(super) fn pick_open(&mut self, i: usize) {
@@ -101,7 +101,7 @@ impl SettingsDialog {
 
 	// After the arrows moved a value box's number: rewrite what it shows and
 	// reselect it, so stepping keeps working and a commit sees the new number.
-	// Typing does NOT come through here - it owns the buffer.
+	// Typing doesn't come through here, since it owns the buffer.
 	fn pick_refresh_field(&mut self) {
 		let hsv = self.pick.as_ref().map(|p| p.hsv);
 		let open = self.edit.as_ref().and_then(|e| pick_field_of(e.row));
@@ -142,7 +142,7 @@ impl SettingsDialog {
 	}
 
 	/// Arrow keys. The square and the strip take them as direct adjustment, a
-	/// value box steps its number, and the two buttons pass them on as focus moves.
+	/// value box steps its number, and the 2 buttons pass them on as focus moves.
 	/// dir is +1 for Right/Down.
 	pub(super) fn pick_arrow(&mut self, dir: i32, vertical: bool) {
 		let Some(picker) = self.pick.as_ref() else {
@@ -293,7 +293,7 @@ impl SettingsDialog {
 		});
 
 		// The square mixes toward the hue in sRGB, so its `color` is the hue in
-		// sRGB rather than the linear every other quad carries (see RectInstance).
+		// sRGB rather than the linear every other quad uses (see RectInstance).
 		let hue = pick::hue_rgb(picker.hsv.h);
 		rects.push(RectInstance {
 			pos: [g.square.x, g.square.y],
@@ -324,7 +324,7 @@ impl SettingsDialog {
 		rects.push(disc(mx, my, d, ink));
 		rects.push(disc(mx, my, d - 4.0, rgb));
 		// The strip is full-chroma at every point, so its marker is plain black
-		// and white rather than a theme color that could land on its own hue.
+		// and white rather than a theme color that could match its own hue.
 		let hy = g.hue_y(picker.hsv);
 		rects.push(quad(
 			g.strip.x - 2.0,
@@ -529,7 +529,7 @@ mod tests {
 				"Alt+{c} must not reach OK"
 			);
 		}
-		d.char_input('f'); // the square holds focus, so this types nowhere
+		d.char_input('f'); // the square has focus, so this types nowhere
 		d.wheel(0.0, -400.0);
 		d.mouse_down_dip(d.rect.x + 2.0, d.rect.y + d.rect.h - 2.0, &mut m);
 		d.mouse_right(d.rect.x + 4.0, d.rect.y + d.rect.h - 4.0, true, &mut m);
@@ -544,9 +544,9 @@ mod tests {
 		assert_eq!(d.pick.as_ref().map(|p| p.row), Some(i));
 	}
 
-	// The box's six value boxes borrow row indices no row can have, at the far
+	// The box's 6 value boxes borrow row indices no row can have, at the far
 	// end from the ones the shells grid borrows. Either range reading the other's
-	// would edit a shell that is not there.
+	// would edit a shell that isn't there.
 	// Test ID: dcx0p
 	#[test]
 	fn a_value_box_is_never_mistaken_for_a_shells_field() {
@@ -559,7 +559,7 @@ mod tests {
 				"{f:?} read as a shell"
 			);
 		}
-		// and the grid's own rows are not value boxes
+		// and the grid's own rows aren't value boxes
 		for entry in 0..4 {
 			for command in [false, true] {
 				let row = super::super::shell_field_row(entry, command);
@@ -575,7 +575,7 @@ mod tests {
 	}
 
 	// Tab walks the box, a value box opens with its number selected on the way
-	// past, and what is typed into it reaches the row behind.
+	// past, and what is typed into it goes to the row behind.
 	// Test ID: dcx0q
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
@@ -636,7 +636,7 @@ mod tests {
 			pick::Field::Hex.text(d.pick.as_ref().unwrap().hsv),
 			"#ff66cc"
 		);
-		// junk never reaches the box, let alone the row: only the digit goes in,
+		// junk never gets into the box, let alone the row: only the digit goes in,
 		// and it replaces the selection the way the first keystroke should
 		d.select_all();
 		d.insert_str("zz9");
@@ -656,7 +656,7 @@ mod tests {
 			s: 0.5,
 			v: 0.5,
 		});
-		d.key_horizontal(1); // the square holds focus: Right raises saturation
+		d.key_horizontal(1); // the square has focus: Right raises saturation
 		assert!((d.pick.as_ref().unwrap().hsv.s - 0.51).abs() < 1e-4);
 		d.key_vertical(false); // Up raises brightness
 		assert!((d.pick.as_ref().unwrap().hsv.v - 0.51).abs() < 1e-4);
@@ -689,7 +689,7 @@ mod tests {
 		assert_eq!(d.pick.as_ref().unwrap().hsv.v, held);
 	}
 
-	// The keyboard reaches the chip, and walking onto it neither opens a field
+	// The keyboard gets to the chip, and walking onto it neither opens a field
 	// nor opens the picker by itself.
 	// Test ID: dcx0t
 	#[test]
@@ -732,7 +732,7 @@ mod tests {
 		let _ = d.rects_dip(d.line_h, &mut m);
 		let (quads, texts) = d.overlay_dip(&mut m);
 		assert!(d.overlay_open(), "the box needs the second pass");
-		// the square and the strip are the two quads only this box draws
+		// the square and the strip are the 2 quads only this box draws
 		assert_eq!(
 			quads
 				.iter()

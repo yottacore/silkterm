@@ -11,7 +11,7 @@
 	host. A folder's menu entry has to hand the folder over as %V.
 
 	The keys are written here the way Register writes them, plus a config of its
-	own, and removed again whatever happens. Only keys this account did not
+	own, and removed again whatever happens. Only keys this account didn't
 	already have are touched.
 .NOTES
 	History: At bottom of file.

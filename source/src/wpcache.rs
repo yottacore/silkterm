@@ -2,12 +2,12 @@
 // Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
 
 //! Prepared wallpapers kept on disk, so a launch, a return to a picture in
-//! rotation, a resize or a wake from the idle release reads a small file
+//! rotation, a resize, or a wake from the idle release reads a small file
 //! rather than blurring the original again. A picture the GPU gets as BC1 or
 //! BC7 is kept as those blocks, which go back up wiht no decode or encode.
-//! One held plain is kept as JPEG. Every SilkTerm process on the box shares the
-//! folder: an entry is written to a temp file and renamed into place, and one
-//! that does not read back whole is removed and made again.
+//! One the GPU gets plain is kept as JPEG. Every SilkTerm process on the box
+//! shares the folder: an entry is written to a temp file and renamed into
+//! place, and one that doesn't read back whole is removed and made again.
 
 use std::io::Write;
 use std::path::Path;
@@ -75,7 +75,7 @@ impl Key {
 
 	/// A file as it is now: where it is, its length, when it last changed and,
 	/// on Unix, which file it is, so a picture swapped in under the same name
-	/// is told apart. None when it cannot be read.
+	/// is told apart. None when it can't be read.
 	pub fn push_file(&mut self, path: &Path) -> Option<()> {
 		let meta = std::fs::metadata(path)
 			.ok()
@@ -112,7 +112,7 @@ impl Key {
 	}
 }
 
-/// FNV-1a. Stable across builds, which std's hasher does not promise; the whole
+/// FNV-1a. Stable across builds, which std's hasher doesn't promise; the whole
 /// key is checked on read, so a collision costs a miss and nothing more.
 pub(crate) fn fnv(bytes: &[u8]) -> u64 {
 	bytes.iter().fold(0xcbf2_9ce4_8422_2325, |hash, &byte| {
@@ -140,7 +140,7 @@ pub enum Stored {
 }
 
 impl Stored {
-	/// The picture's size, and how it is kept, for the debug line.
+	/// The picture's size, and how it's kept, for the debug line.
 	pub fn describe(&self) -> ((u32, u32), &'static str) {
 		match self {
 			Stored::Blocks(size, blocks) => (*size, blocks.packing.name()),
@@ -155,7 +155,7 @@ const AS_BC1: u32 = 2;
 const AS_BC7: u32 = 3;
 
 /// The nearest kept copy for `key` within 5% of `want`'s pixel count. A copy
-/// that does not read back whole is removed and the next one tried.
+/// that doesn't read back whole is removed and the next one tried.
 pub fn find(dir: &Path, key: &Key, want: (u32, u32)) -> Option<Kept> {
 	let prefix = key.prefix();
 	let wanted = pixels(want);
@@ -169,7 +169,7 @@ pub fn find(dir: &Path, key: &Key, want: (u32, u32)) -> Option<Kept> {
 			(off <= NEAR).then_some((size, off))
 		})
 		.collect();
-	// nearest first, and the larger of two as near, since shrinking looks better
+	// nearest first, and the larger of 2 as near, since shrinking looks better
 	near.sort_by(|(a, a_off), (b, b_off)| {
 		a_off
 			.total_cmp(b_off)
@@ -301,7 +301,7 @@ fn read_summary(at: &mut Reader) -> Option<Summary> {
 }
 
 /// Keep `stored` for `key`, then prune the folder back under `limit`. A plain
-/// picture with any transparency is not kept, since a JPEG has no alpha.
+/// picture with any transparency isn't kept, since a JPEG has no alpha.
 pub fn store(
 	dir: &Path,
 	key: &Key,
@@ -367,8 +367,8 @@ pub fn store(
 	Ok(true)
 }
 
-// A copy this build can read starts with its magic. One that cannot be
-// opened is left alone, since it may be another process's rename landing.
+// A copy this build can read starts with its magic. One that can't be opened
+// is left alone, since it may be another process's rename in progress.
 fn current_format(path: &Path) -> bool {
 	use std::io::Read;
 	let mut head = [0u8; 8];
@@ -496,7 +496,7 @@ mod tests {
 		assert!(worst <= 4, "off by {worst} levels");
 		// another key never reads it, even one that names the same file
 		assert!(find(&dir, &self::key("b"), (300, 200)).is_none());
-		// a picture with any transparency is not kept, since JPEG has none
+		// a picture with any transparency isn't kept, since JPEG has none
 		let mut clear = picture((40, 40));
 		clear.put_pixel(3, 3, image::Rgba([0, 0, 0, 128]));
 		assert!(!store(&dir, &self::key("c"), &Stored::Jpeg(clear), &summary, LIMIT).unwrap());
@@ -514,7 +514,7 @@ mod tests {
 		blocks_come_back(Packing::Bc1);
 	}
 
-	// The same for BC7, and the copy says which it is.
+	// The same for BC7, and the copy records which it is.
 	// Test ID: ddmbd
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
@@ -597,7 +597,7 @@ mod tests {
 		assert_eq!(kept_size(&dir, &key, (1000, 500)), Some((1000, 500)));
 		assert_eq!(kept_size(&dir, &key, (1020, 510)), Some((1020, 510)));
 		assert_eq!(kept_size(&dir, &key, (1010, 505)), Some((1000, 500)));
-		// as near to 1000x500 as to 1020x510: the larger of the two
+		// as near to 1000x500 as to 1020x510: the larger of the 2
 		assert_eq!(kept_size(&dir, &key, (5101, 100)), Some((1020, 510)));
 		// 4.9% under the smallest
 		assert_eq!(kept_size(&dir, &key, (976, 488)), Some((1000, 500)));
@@ -710,7 +710,7 @@ mod tests {
 			keep(&dir, &key, size);
 			assert!(find(&dir, &key, size).is_some(), "{what}: not replaced");
 		}
-		// a damaged copy does not stop a good one near it being used
+		// a damaged copy doesn't stop a good one near it being used
 		std::fs::write(&path, b"x").unwrap();
 		keep(&dir, &key, (202, 101));
 		assert_eq!(kept_size(&dir, &key, size), Some((202, 101)));

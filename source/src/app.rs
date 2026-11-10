@@ -86,7 +86,7 @@ pub struct App {
 	// context, so it can be larger than the main window.
 	dialog: Option<crate::dialog::DialogWin>,
 	dialog_dirty: bool,
-	// A save that could not be written, waiting to be said, and the notice
+	// A save that couldn't be written, waiting to be said, and the notice
 	// saying it or the one below. It is its own window so it can stand over an
 	// open Settings.
 	// Windows shows the system's message box instead, and `notice` stays None.
@@ -95,7 +95,7 @@ pub struct App {
 	notice_owed: Option<config::Refusal>,
 	// the close the tmux question in `notice` is about
 	asking: Option<closing::Closing>,
-	// settings a conversion of the file could not keep, said the same way
+	// settings a conversion of the file couldn't keep, said the same way
 	loss_owed: Option<config::ConversionLoss>,
 	// files already reported this session (see notice_due)
 	told: Vec<std::path::PathBuf>,
@@ -218,16 +218,16 @@ impl App {
 	}
 }
 
-// The background shell scan came back (shells.rs). It reports what it FOUND;
+// The background shell scan came back (shells.rs). It reports what it found;
 // the fold into the stored list happens here, on the winit thread, against the
-// list as it stands right now - so a scan cannot carry a snapshot that went
+// list as it stands right now - so a scan can't bring a snapshot that went
 // stale while it ran. Nothing on screen changes (menus are built when they
 // open), so this only has to put the list in the live settings and in the file.
 // A scan that found nothing new compares equal and writes nothing at all; if the
 // config looks open in another program the write is skipped and the list still
 // applies for this session.
 //
-// A Settings dialog open at that moment is folded into as well, on BOTH of its
+// A Settings dialog open at that moment is folded into as well, on both of its
 // copies - see `Dialog::fold_shells`.
 fn fold_shells(found: &[crate::shells::Found]) {
 	save_live(|live| {
@@ -260,7 +260,7 @@ fn set_live(edit: impl FnOnce(&mut config::Settings)) {
 	config::update(new);
 }
 
-// The same, and what changed written to the file. `edit` answers false to leave
+// The same, and what changed written to the file. `edit` returns false to leave
 // both alone. A config open in another program skips the write, and the
 // session keeps the value anyway.
 fn save_live(edit: impl FnOnce(&mut config::Settings) -> bool) {
@@ -274,7 +274,7 @@ fn save_live(edit: impl FnOnce(&mut config::Settings) -> bool) {
 
 // argv for the stored shell at `index`. None when the list moved under an open
 // menu, in which case the new tab falls back to the default shell rather than
-// running something the user did not pick.
+// running something the user didn't pick.
 fn shell_argv(index: usize) -> Option<Vec<String>> {
 	let command = config::settings().shells.get(index)?.command.clone();
 	config::command_argv(&command)
@@ -352,11 +352,11 @@ const TAB_BAR_VPAD: f32 = 6.0; // text is metric-centered in the bar; descenders
 const BELL_TAU_S: f32 = 0.18; // visual-bell flash fade time-constant (~0.8s to settle)
 // Text scrim "Strength" is a percent; this much of it is one doubling of the
 // finished halo's alpha. The scrim design doc and the dialog's comment both quote the
-// number, and a test holds them to it.
+// number, and a test checks them against it.
 const SCRIM_PCT_PER_DOUBLING: f32 = 20.0;
 // Freeze knob (one line rolls it back): a minimized window builds no frames -
 // PTY reading never stops - and catches up in one hard-cut frame on restore.
-// Covers WMs that never report Occluded for an iconified window.
+// For WMs that never report Occluded for an iconified window.
 const FREEZE_MINIMIZED: bool = true;
 // Warm knob (one line rolls it back): build the dialogs' GPU context on a worker
 // thread once the terminal is up, instead of on the click that opens one. Off
@@ -376,41 +376,41 @@ const PUT_BACK_WAIT: Duration = Duration::from_secs(2);
 // software rendering can take seconds to draw (2026101411504818).
 const NO_OUTPUT_YET: Duration = Duration::from_secs(10);
 // The scale a window's own take brings comes once a frame at the new size is
-// up, which software rendering took over 4 s to get there (2026101614100002).
+// up, which took over 4 s with software rendering (2026101614100002).
 const TAKE_SCALE_WAIT: Duration = Duration::from_secs(10);
 // A resize this soon after one the window asked for, or one the system made
-// for a new scale, is not the user's.
+// for a new scale, isn't the user's.
 const OWN_RESIZE_GRACE: Duration = Duration::from_millis(1500);
 // How long after the window asked for a size a resize back to the size before
 // it can be the compositor's late answer to that one (`late_answer`). A frame
 // drawn in software at 4000x2500 took 8 s, and the answer waits for a frame.
 const LATE_ANSWER_WAIT: Duration = Duration::from_secs(15);
-// How long after the window is genuinely on screen the background shell scan
+// How long after the window is on screen the background shell scan
 // starts (shells.rs). Long enough to be clear of the first prompt and whatever
 // the shell reads at startup, short enough that the Tabs menu has its list well
 // before anyone opens it.
 const SHELL_SCAN_DELAY: Duration = Duration::from_secs(3);
 // The scan waits for the wallpaper to be on screen (see `wp_shown`), and a
-// wallpaper on a share that never answers would otherwise hold it off for the
+// wallpaper on a share that never responds would otherwise put it off for the
 // life of the window - leaving the Tabs menu with no shells in it. This is the
 // backstop, measured from the reveal.
 const SHELL_SCAN_MAX_WAIT: Duration = Duration::from_secs(20);
 // The performance benchmark waits for the wallpaper too: it is one of the
 // things being timed, and starting before it is on screen would rate a lighter
 // window than the one that ends up in front of the person. The backstop is for
-// an image on a share that never answers.
+// an image on a share that never responds.
 const BENCH_DELAY: Duration = Duration::from_millis(600);
 const BENCH_MAX_WAIT: Duration = Duration::from_secs(10);
 // The banner goes up as soon as a run is due, so the wait for the wallpaper
 // happens behind it rather than in front of a window that then stops taking
-// input. And it stays up this long at least: a run that answers on the first
-// rung is over in under a second, which is not enough time to notice a box has
+// input. And it stays up this long at least: a run that settles on the first
+// rung is over in under a second, which isn't enough time to notice a box has
 // appeared, let alone read it.
 const BENCH_BANNER_MIN: Duration = Duration::from_secs(4);
 const MEMDBG_IVL: Duration = Duration::from_secs(2); // SILK_MEMDBG: how often to look for a change
 const VRAM_CHECK_IVL: Duration = Duration::from_secs(2); // GL sentinel probe tick (VT-switch texture loss)
 // How long a resize has to be still before the wallpaper is prepared again at
-// the new size. Until then the one held is drawn scaled.
+// the new size. Until then the one it has is drawn scaled.
 const WP_RESIZE_WAIT: Duration = Duration::from_millis(500);
 const CAPTURE_SETTLE: Duration = Duration::from_millis(120); // copy-output: idle-at-prompt debounce marking a command done
 // Chrome geometry, all DIP (see config::dip).
@@ -428,7 +428,7 @@ const TAB_CLOSE_M: f32 = 6.0; // balanced top/right/bottom margin around the clo
 const TAB_TITLE_PAD: f32 = 8.0; // tab title's left inset
 const TAB_EDIT_INSET: f32 = 4.0; // rename box's inset inside the tab button
 const TAB_EDIT_PAD: f32 = 4.0; // text inset inside the rename box (INSET + PAD == TAB_TITLE_PAD,
-// so the label does not move when a rename starts)
+// so the label doesn't move when a rename starts)
 const TAB_GAP: f32 = 1.0; // gap between adjacent tab buttons (each side of the seam)
 const TAB_TOP_PAD: f32 = 2.0; // tab button's inset from the top of the bar
 const CHROME_HAIRLINE: f32 = 1.0; // 1px rules: accelerator underlines, menu/checkbox borders
@@ -447,7 +447,7 @@ const IGNORE_KEYS_WHILE_UNFOCUSED: bool = true;
 
 // Winit replays every key already held down whenever focus changes, flagged
 // `is_synthetic`, so an app can track what is physically pressed. That is
-// state, not typing - and on X11 the replay arrives BEFORE winit re-queries the
+// state, not typing - and on X11 the replay arrives before winit re-queries the
 // modifiers, so a held Ctrl+Alt+Arrow comes back through it as a bare arrow.
 fn key_is_typed(state: ElementState, is_synthetic: bool) -> bool {
 	state == ElementState::Pressed && !is_synthetic
@@ -512,8 +512,8 @@ pub(crate) fn env_flag(flag: EnvFlag) -> bool {
 // It exists for the demo recorder, which samples the X screen at a fixed rate.
 // Whatever paces the app has to divide that rate evenly or frames fall off the
 // sampling grid on a strict period - a source of 60 into a capture of 50 drops
-// one frame in six, so every fifth stored frame carries two frames of travel,
-// and a regular hitch like that is exactly what reads as the picture jumping.
+// one frame in 6, so every fifth stored frame has 2 frames of travel,
+// and a regular hitch like that is what reads as the picture jumping.
 // Pinning the source to the capture rate takes the host's refresh rate out of
 // the answer entirely. Also useful for measuring a fixed frame budget.
 fn max_fps() -> Option<f64> {
@@ -551,7 +551,7 @@ fn reveal_due(drawn_at_size: bool, past_deadline: bool, occluded: bool) -> bool 
 	occluded || past_deadline || drawn_at_size
 }
 
-// Next frame on a FIXED schedule, not `now + interval` - the latter adds each
+// Next frame on a fixed schedule, not `now + interval` - the latter adds each
 // frame's own render time to the period and runs slow. Falling behind resyncs
 // rather than trying to catch up in a burst.
 fn pace_frame(next: &mut Option<Instant>, ivl: Duration) -> ControlFlow {
@@ -564,7 +564,7 @@ fn pace_frame(next: &mut Option<Instant>, ivl: Duration) -> ControlFlow {
 	ControlFlow::WaitUntil(at)
 }
 
-// `flow`, woken by `wake` as well: a wait takes the earlier of the two, and a
+// `flow`, woken by `wake` as well: a wait takes the earlier of the 2, and a
 // loop already polling has nothing to add.
 fn wake_by(flow: ControlFlow, wake: Option<Instant>) -> ControlFlow {
 	match (flow, wake) {
@@ -593,7 +593,7 @@ impl PaneWakes for Pane {
 
 // The earliest pane wake still ahead of `now`, read after the frame, since
 // drawing is what sets them. One already due is left out: the pass before the
-// frame acts on those, and a window that is not drawing would spin on one.
+// frame acts on those, and a window that isn't drawing would spin on one.
 fn pane_wake<'a, P: PaneWakes + 'a>(
 	panes: impl IntoIterator<Item = &'a P>,
 	now: Instant,
@@ -606,14 +606,14 @@ fn pane_wake<'a, P: PaneWakes + 'a>(
 		.min()
 }
 
-// Two presses on a tab this close together are a double-click.
+// A double-click is 2 presses on a tab this close together.
 const TAB_DBL_CLICK: Duration = Duration::from_millis(400);
 
 const MENU_BAR: [&str; 6] = ["File", "Edit", "View", "Tabs", "Panes", "Help"];
 
 const COPYBOX_LABELS: [&str; 3] = ["Copy on:", "select", "output"]; // menu-bar auto-copy checkboxes
 
-// Everything that lives on the GPU device, held together so an idle window can
+// Everything on the GPU device, kept together so an idle window can
 // let the whole lot go at once and take it back later (see `release_gpu`).
 struct Gpu {
 	gfx: Gfx,
@@ -672,7 +672,7 @@ struct State {
 	// A Ctrl+press hit a hyperlink: the release over the same link opens it,
 	// a release anywhere else drops it (drag off to cancel, like the tab close
 	// button). The URL is captured at press time - output can scroll it away in
-	// between - and `menu_link` is the same for the right-click menu's two items.
+	// between - and `menu_link` is the same for the right-click menu's 2 items.
 	link_arm: Option<(PaneId, String)>,
 	menu_link: Option<String>,
 	cursor_icon: CursorIcon,
@@ -684,15 +684,15 @@ struct State {
 	frame_budget: crate::profile::FrameBudget,
 	// The startup benchmark: a run in flight, and when one is due. While a run
 	// is in flight the window renders flat out. bench_banner is when the banner
-	// went up, which is earlier than either - it covers the wait as well as the
+	// went up, which is earlier than either - it's up for the wait as well as the
 	// run, and the window takes no input for as long as it is up (bench_layout).
 	bench: Option<crate::profile::Bench>,
 	bench_at: Option<Instant>,
 	bench_cap: Option<Instant>,
 	bench_banner: Option<Instant>,
-	// Set while a run is owed or in flight; written down with the answer.
+	// Set while a run is due or in flight; written down with the answer.
 	bench_id: Option<String>,
-	// Why the answer was not kept, while the banner says so.
+	// Why the answer wasn't kept, while the banner says so.
 	bench_kept: Option<config::Kept>,
 	// The profile in force before the run, to go back to if it gives no answer,
 	// and whether it gave none (the banner says that instead).
@@ -733,7 +733,7 @@ struct State {
 	// no tips of any kind while the window is in the background
 	tip_focus: crate::tip::Focus,
 	// The tab last opened beside the active one, and that tab, each by a pane
-	// it held then. Closing the new one goes back (see `active_after_close`).
+	// it had then. Closing the new one goes back (see `active_after_close`).
 	tab_opener: Option<(PaneId, PaneId)>,
 	tab_first: usize,                  // tab the strip is paged to (clamped on read)
 	tab_followed: usize,               // active tab the page last followed (see rebuild_tab_layout)
@@ -744,7 +744,7 @@ struct State {
 	tab_dbl: Option<(Instant, usize)>, // last tab-strip click, for the double
 	decorated: bool,                   // window frame shown (winit has no getter, so track it)
 	menu_bar: bool,                    // window menu bar (File/Edit/...) shown
-	bare: bool, // frame, menu bar and tab strip all off at once (View > Bare window); never written
+	bare: bool, // frame, menu bar, and tab strip all off at once (View > Bare window); never written
 	bare_saved: (bool, bool), // (decorated, menu_bar) from before bare, to put back
 	bar_open: Option<usize>, // which top-level menu's dropdown is open, if any
 	quit: bool, // set by File->Quit; the event handler exits after applying
@@ -759,7 +759,7 @@ struct State {
 	chrome: Option<ChromeCache>, // shaped menu/tab text, reused across frames
 	chrome_rev: u64, // bumped whenever a chrome buffer is (re)shaped
 	// Signature of everything feeding the prepared text set, from the last frame
-	// that actually prepared. A pure cursor frame matches it, and then both
+	// that prepared. A pure cursor frame matches it, and then both
 	// glyphon prepares (the bulk of per-frame CPU) and the atlas trim are skipped
 	// - the retained vertex buffers are still correct. None = must prepare.
 	text_sig: Option<u64>,
@@ -769,7 +769,7 @@ struct State {
 	// the text alone (the cursor has its own coverage texture), so a cursor-only
 	// frame reuses it instead of re-rendering and re-blurring the whole window.
 	scrim_sig: Option<u64>,
-	// light mode's halo curve, solved again only when its inputs move
+	// light mode's halo curve, solved again only when its inputs change
 	halo_memo: crate::visibility::HaloMemo,
 	// the lists render_with fills, kept for the next frame
 	frame_bufs: FrameBufs,
@@ -778,7 +778,7 @@ struct State {
 	// since a restore stops reporting minimized before the size comes back.
 	no_area: bool,
 	// The window still shows its last frame once its device is gone (see
-	// `release_deadline`). A Windows window with no redirection bitmap does not.
+	// `release_deadline`). A Windows window with no redirection bitmap doesn't.
 	keeps_picture: bool,
 	// last cycle's hidden answer; its false edge is the unfreeze - one dirty
 	// catch-up frame, hard-cut. Written only by freeze_sync, which both render
@@ -789,7 +789,7 @@ struct State {
 	// otherwise, which is every ordinary run. See `max_fps`.
 	next_frame: Option<Instant>,
 	// Rotation state as of the last scan; the folder itself, the shuffle history
-	// and the picking all live in the worker (wallpaper.rs), so nothing here reads
+	// and the picking are all in the worker (wallpaper.rs), so nothing here reads
 	// the filesystem.
 	wp_count: usize, // images the last scan found (<2 = nothing to rotate to)
 	wp_current: Option<PathBuf>, // image showing now, so order mode advances from it
@@ -800,7 +800,7 @@ struct State {
 	saves_told: u64,
 	reread_untold: bool,
 	// The window options the command line gave at launch, folded in again after a
-	// reload so a reread file does not drop them.
+	// reload so a reread file doesn't drop them.
 	cli_style: crate::cli::Style,
 	cli_size: window_size::CliSize, // the rest of what it gave that sets the size
 	// Request stamp, shared with the workers: a result with an older one is
@@ -813,9 +813,9 @@ struct State {
 	// A few KiB of the picture showing, kept through an idle release and drawn
 	// at the rebuild until the real one is prepared again (`rebuild_gpu`).
 	wp_standin: Option<crate::wallpaper::Prepared>,
-	// A worker has answered - with an image, or with the news that there is none.
+	// A worker has finished, with an image or with none.
 	wp_answered: bool,
-	// ...and a frame has been drawn since, so whatever it said is ON SCREEN. This
+	// ...and a frame has been drawn since, so whatever it said is on screen. This
 	// is what the shell scan waits for: the scan is filesystem and registry work
 	// and the wallpaper is hundreds of ms of decode and blur off-thread, so letting
 	// them overlap puts a stall between the window appearing and the wallpaper
@@ -936,7 +936,7 @@ impl State {
 			return;
 		}
 		// An app watching the pointer owns it: no underline flickering through a
-		// TUI that uses the mouse itself. This has to key on the app's MODE, not on
+		// TUI that uses the mouse itself. This has to key on the app's mode, not on
 		// whether this particular event was reported - the report is throttled to
 		// cell changes, so a pointer that settles inside one cell would slip
 		// through and underline anyway. Shift is the local-action bypass, the same
@@ -961,7 +961,7 @@ impl State {
 	}
 
 	// Whether the pointer is over an underlined link - the pane's own hover state,
-	// so this is only the pointer shape's question. Anything that ACTS on a link
+	// so this is only the pointer shape's question. Anything that acts on a link
 	// re-scans through link_at_pointer instead of trusting a frame-old answer.
 	fn hovering_link(&self) -> bool {
 		let (x, y) = self.mouse;
@@ -986,7 +986,7 @@ impl State {
 	}
 
 	// One owner for the pointer shape: a drag beats a divider, a divider beats a
-	// link. Called from the pointer move AND from the frame, since a link found
+	// link. Called from the pointer move and from the frame, since a link found
 	// under a pointer that has stopped moving still has to change the cursor.
 	fn sync_cursor_icon(&mut self) {
 		let (x, y) = self.mouse;
@@ -1011,7 +1011,7 @@ impl State {
 	}
 
 	// Refresh every pane's scrollbar-hover flag from the pointer. Only the pane the
-	// pointer is actually over can be hovered, so this also clears the one it just
+	// pointer is over can be hovered, so this also clears the one it just
 	// left. Marks dirty only on a change - the fade is what needs the frames, and
 	// this runs on every mouse move.
 	fn update_bar_hover(&mut self, x: f32, y: f32) {
@@ -1037,7 +1037,7 @@ impl State {
 
 	// Mouse reporting: forward a button press/release to the pane under the cursor
 	// when the app has mouse tracking on (see `input::press_is_reported` for what
-	// stays local). Returns true when the event was reported (and should not be
+	// stays local). Returns true when the event was reported (and shouldn't be
 	// handled locally). Records the held button for drag + release.
 	fn report_mouse_button(&mut self, button: MouseButton, state: ElementState) -> bool {
 		let Some(btn) = input::mouse_btn_of(button) else {
@@ -1245,7 +1245,7 @@ impl State {
 	}
 
 	// What the window title says after the app name - see tabtitle::window_suffix
-	// for the order the three sources come in.
+	// for the order the 3 sources come in.
 	fn title_suffix(&mut self) -> Option<String> {
 		let typed = self.tabs.cur().title_override.clone();
 		let program = self.pane_title();
@@ -1275,7 +1275,7 @@ impl State {
 	// The window title (taskbar / alt-tab): a CLI --title override verbatim, else
 	// the app name (with the dogfood build when this is one) and whatever the
 	// active tab has to say. Called on tab/focus change and each rendered frame;
-	// set_title only fires when the string actually changed (avoids WM flicker).
+	// set_title only fires when the string changed (avoids WM flicker).
 	fn update_title(&mut self) {
 		let custom = self.win_title.clone();
 		// A --title is the whole answer, so nothing else is worked out.
@@ -1303,7 +1303,7 @@ impl State {
 			.unwrap_or_else(|| config::settings().opacity)
 	}
 
-	// relayout every tab (not just the active one) - needed when the tab bar
+	// relayout every tab (not only the active one) - needed when the tab bar
 	// appears/disappears (1<->2 tabs) and the pane area changes.
 	fn relayout_all(&mut self) {
 		self.relayout_all_in(self.surface_px);
@@ -1348,7 +1348,7 @@ impl State {
 		}
 	}
 
-	// A pane whose shell has gone: close just that pane, then its tab, then the
+	// A pane whose shell has gone: close only that pane, then its tab, then the
 	// window. Mirrors the Close-Pane menu cascade. The pane can be in any tab -
 	// a background tab's shell exits the same way.
 	fn close_dead_pane(&mut self, id: PaneId) {
@@ -1375,7 +1375,7 @@ impl State {
 
 	// A popup acts on the pane it was opened for. A shell ending closes that pane,
 	// and can take its tab with it, so the popup goes too rather than standing
-	// open over a pane that is not there.
+	// open over a pane that isn't there.
 	fn forget_dead_menu(&mut self) {
 		let Some(menu) = &self.menu else {
 			return;
@@ -1393,8 +1393,8 @@ impl State {
 	}
 
 	// --keep-open: the shell is gone but the pane stays, saying how it ended and
-	// waiting for a key. Answers whether the pane is being held, so the caller
-	// knows not to close it. ChildExit carries the status and Exit follows with
+	// waiting for a key. Returns whether the pane is being held, so the caller
+	// knows not to close it. ChildExit has the status and Exit follows with
 	// nothing, so the second call finds it already held and leaves it alone.
 	fn hold_dead_pane(&mut self, id: PaneId, status: &str) -> bool {
 		let Some(p) = self
@@ -1486,12 +1486,12 @@ impl State {
 	fn apply_settings_values(&mut self, orig: &config::Settings, edited: config::Settings) -> bool {
 		// The Shells tab edits the list now, so this is the one path allowed to
 		// write it - and it is the dialog's copy that wins. The baseline is the
-		// LIVE list rather than the dialog's own `orig`: a scan that arrived while
+		// live list rather than the dialog's own `orig`: a scan that arrived while
 		// the dialog was open has already been folded into both of its copies
-		// (Dialog::fold_shells), so the two agree, and taking the live one is what
-		// keeps them honest if they ever do not. They do not when another window
+		// (Dialog::fold_shells), so the 2 agree, and taking the live one is what
+		// keeps them in step if they ever don't. They don't when another window
 		// changed the list after this one loaded; the dialog's list is then
-		// written whole, and it already holds that change.
+		// written whole, and it already has that change.
 		//
 		// An entry with no command names nothing to run, so it is dropped here
 		// rather than written - that is the whole of the grid's "Command is
@@ -1564,7 +1564,7 @@ impl State {
 
 	/// Another window on this settings file saved it: take what it says now, as
 	/// a reload does, but leave what is this window's own. Its size, its view
-	/// switches, what the state file holds, and a picture rotation chose all
+	/// switches, what the state file has, and a picture rotation chose all
 	/// stay, unless the save moved the picture or its folder.
 	pub(super) fn follow_peer(&mut self) {
 		self.tell_peers_if_due();
@@ -1578,7 +1578,7 @@ impl State {
 		config::keep_window_state(&live, &mut fresh);
 		config::keep_window_view(&live, &mut fresh);
 		self.apply_as(&live, fresh, Applied::Peer);
-		// what the reread itself wrote, a launch step catching up, is not news
+		// what the reread itself wrote, a launch step catching up, isn't news
 		self.saves_told = config::saves();
 	}
 
@@ -1652,7 +1652,7 @@ impl State {
 				.attach_gpu(&gpu.gfx.device, &gpu.gfx.queue, gpu.gfx.format);
 		}
 		self.chrome = None; // cached chrome buffers are tied to the old FontSystem
-		self.invalidate_prepared(); // fresh atlases hold nothing to reuse
+		self.invalidate_prepared(); // fresh atlases have nothing to reuse
 		for pm in &mut self.tabs.list {
 			pm.rebuild_buffers(&mut self.text);
 		}
@@ -1690,13 +1690,13 @@ impl State {
 				}
 			}
 		}
-		// What changed is judged on the LIVE values, before and after: a
+		// What changed is judged on the live values, before and after: a
 		// performance profile sets the wallpaper and the halo on top of the
 		// stored settings, so the dialog's own diff can be empty while the
 		// picture changes completely.
 		let before = config::settings();
 		let mut edited = edited;
-		// a step, a measured rung or Remote reaches the fields through the rules
+		// a step, a measured rung, or Remote gets to the fields through the rules
 		crate::fields::fill(&mut edited, None);
 		config::update(edited);
 		let after = config::settings();
@@ -1841,7 +1841,7 @@ impl State {
 		}
 		let bell = self.bell_flash;
 
-		// translucent background only when the surface supports it AND the user has
+		// translucent background only when the surface supports it and the user has
 		// Transparency on - and it only ever affects the bg, never text/chrome.
 		let bg_alpha = if gpu.gfx.transparent && cfg.transparent_background {
 			self.opacity()
@@ -1894,7 +1894,7 @@ impl State {
 				animating = true;
 			}
 			let rect = pane.rect;
-			// scope the expensive re-shape to panes that actually changed: fresh
+			// scope the expensive re-shape to panes that changed: fresh
 			// PTY output (content_dirty), an active scroll ease, or a global
 			// cause (bell flash, chrome/UI change) - idle siblings reuse their
 			// cached frame instead of re-shaping at the busy pane's rate
@@ -1956,7 +1956,7 @@ impl State {
 			}
 		}
 		// Focus ring only distinguishes panes when there's more than one; with a
-		// single pane it's just an unwanted border line around the whole content
+		// single pane it's an unwanted border line around the whole content
 		// (the user wants background all the way to the edge), so skip it.
 		if self.tabs.cur().panes.len() > 1 {
 			if let Some(p) = self.tabs.cur().panes.get(&self.tabs.cur().focused) {
@@ -1999,13 +1999,13 @@ impl State {
 
 		// cursor quads also feed the scrim's cursor-coverage texture (its own tex,
 		// so cursor_scrim/cursor_outline gate it independently); the cursor still
-		// draws crisp ABOVE the composite below. Collect them whenever the scrim is
+		// draws crisp above the composite below. Collect them whenever the scrim is
 		// on - the shader flags decide whether they reach the halo and/or outline.
 		if scrim_on {
 			scrim_cursors.extend(cursors.iter().map(|(_, q)| *q));
 		}
 
-		// Hyperlink underlines sit with the cursor, AFTER the scrim composite - they
+		// Hyperlink underlines sit with the cursor, after the scrim composite - they
 		// are chrome about the text, not a cell background. Filed with the bg quads
 		// they were painted over by the halo, which is densest right under the
 		// glyphs, so a solid rule came out as a barcode tracing the letterforms.
@@ -2071,7 +2071,7 @@ impl State {
 				}
 			}
 			// always-visible copy-mode checkboxes (right side): outlines always,
-			// filled per the focused pane's two independent triggers, so the state
+			// filled per the focused pane's 2 independent triggers, so the state
 			// is never hidden. Dimmed when this window isn't focused - the flags
 			// stay set, but nothing copies until it regains focus.
 			let fp = self.tabs.cur().panes.get(&self.tabs.cur().focused);
@@ -2242,7 +2242,7 @@ impl State {
 		};
 
 		// context menu quads (drawn in a second pass, on top of everything). A
-		// submenu is just another popup in the same pass, drawn after its parent.
+		// submenu is another popup in the same pass, drawn after its parent.
 		let menu_range = if let Some(root) = &self.menu {
 			let start = instances.len() as u32;
 			for menu in root.chain() {
@@ -2281,7 +2281,7 @@ impl State {
 				}
 				// the arrow marking a row that opens a submenu, drawn rather than set
 				// in text: a font's own metrics decide where a glyph sits, and there
-				// is no arrow every interface font carries (same reason as the tab
+				// is no arrow every interface font has (same reason as the tab
 				// close mark)
 				for (i, entry) in menu.entries.iter().enumerate() {
 					if matches!(entry, Entry::Sub { .. }) {
@@ -2331,7 +2331,7 @@ impl State {
 		// A tip's box, in a layer of its own after the menus, so it sits over
 		// everything - a pane's own text and an open menu's alike. A menu tip
 		// flips to the left of a submenu at the right edge, which puts it over
-		// the parent menu. The tab strip's and a menu row's are the same two
+		// the parent menu. The tab strip's and a menu row's are the same 2
 		// quads; only what they say and where they sit differ.
 		let tip_layout = self.tab_tip_layout();
 		let menu_tip = self.menu_tip_layout();
@@ -2351,7 +2351,7 @@ impl State {
 					});
 				}
 				// Flyover help has its own fill, a warmed lift off the menu color, so a
-				// tip does not read as more of the chrome it hangs off. The banner is
+				// tip doesn't read as more of the chrome it hangs off. The banner is
 				// a modal notice rather than a tip, so it keeps the menu's.
 				let tip_edge = config::tip_border_of(menu_bg_rgb);
 				let tip_fill = config::tip_bg_of(menu_bg_rgb);
@@ -2524,7 +2524,7 @@ impl State {
 
 		// All rect instances and the bg-image shader work in absolute
 		// framebuffer pixels (matching the glyphon viewport), so the resolution
-		// is the whole window - NOT the content `area`, which is shorter by the
+		// is the whole window - not the content `area`, which is shorter by the
 		// menu/tab bars and would shift cell bg + cursor down relative to text.
 		let (frame_w, frame_h) = (gpu.gfx.config.width as f32, gpu.gfx.config.height as f32);
 		self.text
@@ -2676,8 +2676,8 @@ impl State {
 
 			if let Err(e) = self.text.prepare(&gpu.gfx.device, &gpu.gfx.queue, areas) {
 				// Atlas full (after a long session of varied glyphs). The normal per-frame
-				// trim is at the END of render, below this early return - so without
-				// trimming here the atlas never recovers and ALL text goes black for good
+				// trim is at the end of render, below this early return - so without
+				// trimming here the atlas never recovers and all text goes black for good
 				// (cursor/cell-bg quads use a separate renderer, so they still show). Trim
 				// now to free space; the next frame re-prepares with room and recovers.
 				eprintln!(
@@ -2694,11 +2694,11 @@ impl State {
 			if scrim_on {
 				let mut scrim_areas: Vec<TextArea> = Vec::new();
 				for p in self.tabs.cur().panes.values() {
-					// scrim follows the current frame's slide, INCLUDING the scrolled-off
+					// scrim follows the current frame's slide, including the scrolled-off
 					// strip filling the reveal gap - without it the strip's text (e.g. the
 					// row just below a static header) loses its readability halo mid-slide
 					// and the halo "pops" when the slide settles, reading as a shadow that
-					// jumps at the band boundary. The strip holds only region rows, so it
+					// jumps at the band boundary. The strip has only region rows, so it
 					// is always scrim-safe (no furniture to guard out of the scrim).
 					let draw = p.draw();
 					match &draw.slide {
@@ -2802,7 +2802,7 @@ impl State {
 				self.overlay_sig = Some(overlay_sig);
 				// (left, top, buffer) collected first so the borrow of self.text ends.
 				// Tips and the banner go to a renderer of their own, drawn after the
-				// menus, so no menu text lands on a tip's box.
+				// menus, so no menu text draws on a tip's box.
 				let mut specs: Vec<(f32, f32, Buffer)> = Vec::new();
 				let mut tip_specs: Vec<(f32, f32, Buffer)> = Vec::new();
 				let mut attrs = crate::text::ui_attrs();
@@ -2924,10 +2924,10 @@ impl State {
 					) {
 					self.reveal_window();
 				}
-				// The pass already cleared what asked for this frame, so it is owed
+				// The pass already cleared what asked for this frame, so it's asked for
 				// here or nothing asks again until the desktop does (a busy or full
 				// GPU times out the acquire). The backoff paces the retry, not the
-				// animation, so a surface that keeps refusing cannot spin.
+				// animation, so a surface that keeps refusing can't spin.
 				let wait =
 					self.frame_retry
 						.missed(Instant::now(), FRAME_RETRY_FIRST, FRAME_RETRY_MAX);
@@ -2970,7 +2970,7 @@ impl State {
 		// distance paths measure the halo extent in px; keep it a touch wider than
 		// the (sigma-based) gaussian look so switching functions doesn't shrink it.
 		let scrim_ext = crate::scrim::clamp_ext(cfg.text_scrim_radius * 2.0);
-		// The halo is built from the text alone - the cursor lives in its own
+		// The halo is built from the text alone - the cursor is in its own
 		// coverage texture and only joins at the blur (cursor_scrim) or the
 		// composite (cursor_outline). So when the text is unchanged the color map,
 		// the text-coverage pass and the blur can all be reused from last frame;
@@ -3051,7 +3051,7 @@ impl State {
 
 		{
 			let divider = config::srgb_f32(config::DIVIDER);
-			// transparent base only when the background is actually see-through
+			// transparent base only when the background is see-through
 			// (same gate as bg_alpha): pane-gap dividers then show the desktop.
 			// Otherwise the clear must be opaque - the X11 window is always an
 			// ARGB visual, so any alpha<1 pixel (the 1px divider slits, AA edges
@@ -3151,10 +3151,10 @@ impl State {
 					halo_match,
 				);
 				// The scrim is a full-frame blur - each glyph's halo spreads ~scrim_ext
-				// px every direction. Composite it PER-PANE, clipped per-side: an edge that
-				// borders ANOTHER pane (internal divider) clips at the content edge (rect
+				// px every direction. Composite it per pane, clipped per-side: an edge that
+				// borders another pane (internal divider) clips at the content edge (rect
 				// inset by the margin) so the halo can't reach the inter-pane gutter - the
-				// "garbage around split lines"; an edge at the WINDOW border clips at the rect
+				// "garbage around split lines"; an edge at the window border clips at the rect
 				// edge so the outer halo still fills the window margin. The gutter (margin +
 				// gap + margin) is wider than the halo reach, so no pane's halo touches a
 				// neighbor's content region.
@@ -3281,9 +3281,9 @@ impl State {
 				self.reveal_window();
 			}
 		}
-		// This frame carried whatever the wallpaper worker answered, so the scan's
-		// clock starts from HERE rather than from the reveal - a wallpaper that took
-		// two seconds to decode used to have the scan running underneath it. Only
+		// This frame showed whatever the wallpaper worker returned, so the scan's
+		// clock starts from here rather than from the reveal - a wallpaper that took
+		// 2 seconds to decode used to have the scan running underneath it. Only
 		// ever pushed back, never re-armed: once the scan has gone (shell_scan_at
 		// cleared, which the backstop guarantees) a late wallpaper must not start a
 		// second one.
@@ -3329,7 +3329,7 @@ fn rect_inst(x: f32, y: f32, w: f32, h: f32, color: [u8; 3]) -> RectInstance {
 	}
 }
 
-// The close-"X" mark: a shader-drawn quad (mode 1) whose two diagonal bars
+// The close-"X" mark: a shader-drawn quad (mode 1) whose 2 diagonal bars
 // center exactly in `cb` at any size/DPI. Stroke scales with the box.
 fn close_x_inst(cb: Rect, color: [u8; 3]) -> RectInstance {
 	RectInstance {
@@ -3340,7 +3340,7 @@ fn close_x_inst(cb: Rect, color: [u8; 3]) -> RectInstance {
 	}
 }
 
-// The submenu arrow: a shader-drawn quad (mode 3) holding a right-pointing
+// The submenu arrow: a shader-drawn quad (mode 3) with a right-pointing
 // triangle that centers exactly in `at` at any size and DPI.
 fn sub_arrow_inst(at: Rect, color: [u8; 3]) -> RectInstance {
 	RectInstance {
@@ -3534,7 +3534,7 @@ fn set_blur_behind(_window: &Window, _enable: bool) {}
 
 // The initial _NET_WM_STATE of a window not mapped yet. EWMH has a client
 // set the property itself then, since a window manager ignores a state
-// message for a window it does not manage yet.
+// message for a window it doesn't manage yet.
 #[cfg(target_os = "linux")]
 fn preset_wm_state(window: &Window, states: &[&[u8]]) {
 	use raw_window_handle::{HasWindowHandle, RawWindowHandle};
@@ -3583,7 +3583,7 @@ fn preset_wm_state(_window: &Window, _states: &[&[u8]]) {}
 
 // wgpu's guaranteed floor for max_texture_dimension_2d. The window is born
 // before the device exists, so a birth size is held to the floor, and the
-// grid-derived resize after it to what the device actually reports.
+// grid-derived resize after it to what the device reports.
 const SAFE_MAX_DIM: u32 = 8192;
 
 /// The window/taskbar icon, decoded from the bundled logo (downscaled so the
@@ -3629,7 +3629,7 @@ fn open_link(url: &str) {
 		""
 	};
 	if let Err(e) = crate::links::open(url, command) {
-		eprintln!("{}: could not open {url}: {e}", config::APP_NAME);
+		eprintln!("{}: couldn't open {url}: {e}", config::APP_NAME);
 	}
 }
 
@@ -3703,10 +3703,10 @@ impl ApplicationHandler<UserEvent> for App {
 		);
 		let win_title = cli_win.title.clone();
 		let win_opacity = cli_win.opacity;
-		// When both pixel dims are given, the window must be BORN at that size, not
+		// When both pixel dims are given, the window must be born at that size, not
 		// resized into it: some EGL presents (VirtualGL's, for one) latch the surface
 		// size at creation and never see later resizes, leaving a stale-offset blit.
-		// Held to the floor every device meets, since the real limit is not known
+		// Held to the floor every device meets, since the real limit isn't known
 		// until one exists; the grid-derived resize below uses that limit.
 		let initial_size: winit::dpi::Size = match (cli_win.pixel_width, cli_win.pixel_height) {
 			(Some(w), Some(h)) => {
@@ -3720,7 +3720,7 @@ impl ApplicationHandler<UserEvent> for App {
 		// track, so it sits still across workspace switches. Alpha only reaches the
 		// screen there through the composited DX12 path (Gfx::new_composited), so
 		// an always-transparent window buys nothing when Transparency is off. Ask
-		// for it only when it's actually in use; X11/Wayland always request it so
+		// for it only when it's in use; X11/Wayland always request it so
 		// the live toggle works (no such side effect there).
 		let want_transparent =
 			!cfg!(windows) || config::settings().transparent_background || win_opacity.is_some();
@@ -3738,7 +3738,7 @@ impl ApplicationHandler<UserEvent> for App {
 		let attrs = with_app_id(attrs); // stable WM_CLASS/app_id
 		// The composited swapchain (Gfx::new_composited) wants no redirection
 		// surface under it: with one, the desktop manager composes that surface
-		// too, and winit's blur-behind hack for it is not needed either.
+		// too, and winit's blur-behind hack for it isn't needed either.
 		#[cfg(windows)]
 		let attrs = {
 			use winit::platform::windows::WindowAttributesExtWindows;
@@ -3750,7 +3750,7 @@ impl ApplicationHandler<UserEvent> for App {
 		// size and paints - visible on X11/Wayland as well as Windows.
 		let attrs = attrs.with_visible(false);
 
-		// On X11 the wgpu surface can't do per-pixel alpha, so we ALWAYS take the
+		// On X11 the wgpu surface can't do per-pixel alpha, so we always take the
 		// glutin GL path there (transparent-capable backend), regardless of the
 		// current Transparency setting - that way the toggle works live without a
 		// relaunch (the bg alpha is gated per-frame, not the backend). Off-X11 the
@@ -3770,7 +3770,7 @@ impl ApplicationHandler<UserEvent> for App {
 						);
 					}
 					let window = Arc::new(event_loop.create_window(attrs).unwrap_or_else(|e| {
-						eprintln!("{}: could not create a window: {e}", config::APP_NAME);
+						eprintln!("{}: couldn't create a window: {e}", config::APP_NAME);
 						std::process::exit(2);
 					}));
 					#[cfg(windows)]
@@ -3788,7 +3788,7 @@ impl ApplicationHandler<UserEvent> for App {
 		// System theme mode: seed the OS dark/light bit before the first frame so a
 		// system-mode theme resolves to the right palette immediately (no flash).
 		config::reapply_for_os(!matches!(window.theme(), Some(winit::window::Theme::Light)));
-		// New hardware starts the performance profile over, and answers with the id
+		// New hardware starts the performance profile over, and returns the id
 		// to write down if the pick is worth measuring rather than assuming.
 		remote_override_at_launch();
 		let (bench_id, software_step) = if gfx.drawn.instead_of_card() {
@@ -3966,7 +3966,7 @@ impl ApplicationHandler<UserEvent> for App {
 				gfx,
 				rects,
 				minimap,
-				// filled in when the worker answers; the window is not held up for it
+				// filled in when the worker finishes; the window isn't held up for it
 				wallpaper_img: None,
 				scrim,
 			}),
@@ -4115,8 +4115,8 @@ impl ApplicationHandler<UserEvent> for App {
 				crate::perf::bump(&crate::perf::WAKEUPS);
 				crate::perf::echoed(id);
 				// output easing is triggered in Pane::build when the screen
-				// actually scrolls, not on every content change. Only the pane
-				// that produced output is marked; a background tab's flag just
+				// scrolls, not on every content change. Only the pane
+				// that produced output is marked; a background tab's flag
 				// waits until its tab is shown (the switch forces a rebuild).
 				crate::perf::timed(&crate::perf::NOTE_NS, || {
 					if let Some(p) = state.tabs.find_pane_mut(id) {
@@ -4128,7 +4128,7 @@ impl ApplicationHandler<UserEvent> for App {
 						p.note_history();
 					}
 				});
-				state.note_output(id); // a shell that prints is not idle, if seen
+				state.note_output(id); // a shell that prints isn't idle, if seen
 			}
 			UserEvent::ChildGone(id) => {
 				if let Some(p) = state.tabs.find_pane_mut(id) {
@@ -4139,8 +4139,8 @@ impl ApplicationHandler<UserEvent> for App {
 				}
 			}
 			UserEvent::PtyWrite(id, bytes) => {
-				// a reply the terminal owes the program (cursor position, device
-				// attributes), not something the user sent - so read-only does not
+				// a reply the terminal has to send the program (cursor position, device
+				// attributes), not something the user sent - so read-only doesn't
 				// withhold it, and this is the one direct write left in this file
 				if let Some(p) = state.tabs.find_pane(id) {
 					p.term.write(bytes);
@@ -4150,9 +4150,9 @@ impl ApplicationHandler<UserEvent> for App {
 				if let Some(p) = state.tabs.find_pane_mut(id) {
 					// The one place a program's own title arrives.
 					let said = crate::tabtitle::plain(&title);
-					// Any tab's label can carry it now, not just the one in front,
-					// so a background pane's title has to reach the strip too. Only
-					// a title that actually moved costs a frame: a shell that sets
+					// Any tab's label can show it now, not only the one in front,
+					// so a background pane's title has to get to the strip too. Only
+					// a title that changed costs a frame: a shell that sets
 					// the same one on every prompt is common.
 					if p.title != said {
 						p.title = said;
@@ -4180,7 +4180,7 @@ impl ApplicationHandler<UserEvent> for App {
 				state.hold_dead_pane(id, &status);
 			}
 			UserEvent::Exit(id) => {
-				// A shell exited: close just its pane, not the whole app - unless
+				// A shell exited: close only its pane, not the whole app - unless
 				// --keep-open asked for the pane to stay and say how it ended.
 				if !state.hold_dead_pane(id, "unknown") {
 					state.close_dead_pane(id);
@@ -4205,8 +4205,8 @@ impl ApplicationHandler<UserEvent> for App {
 			// a pick from the macOS menu bar, run as the in-window menu runs one
 			UserEvent::Menu(action) => {
 				// with a dialog or notice up this only brings it forward, as a
-				// click in the window does, so a second Settings cannot replace
-				// the one open. Copy, Paste and the tab rows are Command+C, V and
+				// click in the window does, so a second Settings can't replace
+				// the one open. Copy, Paste, and the tab rows are Command+C, V and
 				// Shift+[ ] there, so they go to the dialog.
 				if let Some(n) = &self.notice {
 					n.window.focus_window();
@@ -4372,14 +4372,14 @@ impl ApplicationHandler<UserEvent> for App {
 				state.focused = focused;
 				state.clipboard.focus_changed(focused);
 				if !focused {
-					state.commit_tab_edit(); // a rename does not outlive the window's focus
+					state.commit_tab_edit(); // a rename doesn't outlive the window's focus
 				}
 				state.tip_focus = state.tip_focus.changed(focused);
 				// a tab tip up now goes; the menu's follows at the next update_tips
 				let (x, y) = state.mouse;
 				state.note_tab_hover(x, y);
 				// repaint: focus-dependent chrome (copybox dim) and the refocus
-				// poke that resumes a long-idle-parked cursor both live in render
+				// poke that resumes a long-idle-parked cursor are both in render
 				state.dirty = true;
 				// Regaining focus is the likely first moment back from a VT
 				// switch/suspend - probe the GPU uploads now, not at the slow tick.
@@ -4413,7 +4413,7 @@ impl ApplicationHandler<UserEvent> for App {
 			}
 
 			WindowEvent::CursorLeft { .. } => {
-				// no pointer, no hover underline and no tab tip
+				// no pointer, no hover underline, and no tab tip
 				state.update_link_hover(None);
 				state.note_tab_hover(f32::MIN, f32::MIN);
 			}
@@ -4508,13 +4508,13 @@ impl ApplicationHandler<UserEvent> for App {
 				..
 			} => {
 				// First, since every branch below reads the button: a Ctrl+click
-				// on a Mac must reach the rename menu, and must not be reported
-				// to an app tracking the mouse, as a right press is not.
+				// on a Mac must go to the rename menu, and must not be reported
+				// to an app tracking the mouse, as a right press isn't.
 				let button = input::acting_button(button, state.mods, cfg!(target_os = "macos"));
 				let (x, y) = state.mouse;
 				// A rename ends wherever the next click goes, unless it goes back to
 				// the tab being renamed (the tab-strip branch below handles a left
-				// press there) or to a menu, whose Copy and Paste reach the name.
+				// press there) or to a menu, whose Copy and Paste act on the name.
 				if state.tab_edit.is_some() {
 					let on_edited = state.tab_bar_visible()
 						&& y >= state.menubar_h()
@@ -4588,7 +4588,7 @@ impl ApplicationHandler<UserEvent> for App {
 						state.tab_bar_h(),
 					) {
 					if let Some(i) = state.tab_at(x) {
-						// press in the close-button column only ARMS the close (the
+						// press in the close-button column only arms the close (the
 						// button lights up); the close itself fires on release over
 						// the same box, so a slipped press can be dragged off to
 						// cancel - standard button feel. Elsewhere selects the tab.
@@ -4629,7 +4629,7 @@ impl ApplicationHandler<UserEvent> for App {
 				}
 				// A visible scrollbar takes the click before anything else - including a
 				// mouse-tracking app, the same way the right-click menu does. `bar_hit`
-				// answers None whenever the bar is faded out, so an invisible bar never
+				// returns None whenever the bar is faded out, so an invisible bar never
 				// steals a click that belonged to the text under it.
 				if button == MouseButton::Left && state.menu.is_none() {
 					let cfg = config::settings();
@@ -4712,7 +4712,7 @@ impl ApplicationHandler<UserEvent> for App {
 							// Ctrl+click a link, Command+click on a Mac: arm here, open
 							// on the release over the same link, so a slipped press can
 							// be dragged off to cancel. The same key elsewhere still
-							// starts a block selection - only a press ON a link is taken.
+							// starts a block selection - only a press on a link is taken.
 							state.focus_at(x, y);
 							state.link_arm = Some((id, link.url));
 						} else {
@@ -4804,7 +4804,7 @@ impl ApplicationHandler<UserEvent> for App {
 			}
 
 			// a mouse-tracking app owns the pointer: report the release we opened.
-			// Only for the SAME button as the reported press - releasing a different
+			// Only for the same button as the reported press - releasing a different
 			// one must not clear the held state (the app would see an unbalanced
 			// press) nor steal that button's local release handling below.
 			WindowEvent::MouseInput {
@@ -5026,7 +5026,7 @@ impl ApplicationHandler<UserEvent> for App {
 				// A character handed to the window instead of typed at it arrives
 				// with no key named; fill the key in so the rest of this reads it.
 				let key = input::name_typed(key);
-				// see IGNORE_KEYS_WHILE_UNFOCUSED. A copy types nothing, so it cannot be
+				// see IGNORE_KEYS_WHILE_UNFOCUSED. A copy types nothing, so it can't be
 				// the bare arrow that gate is for, and a flag lagging the WM must not
 				// eat it while right-click Copy works.
 				if IGNORE_KEYS_WHILE_UNFOCUSED && !state.focused {
@@ -5040,7 +5040,7 @@ impl ApplicationHandler<UserEvent> for App {
 				// An open menu (context menu / menu-bar dropdown) captures the
 				// navigation keys - they drive the menu, not the terminal pane.
 				if state.menu.is_some() {
-					// Every one of these drives the INNERMOST open popup - with a
+					// Every one of these drives the innermost open popup - with a
 					// submenu standing open, that is the submenu.
 					match &key.logical_key {
 						Key::Named(NamedKey::Escape) => {
@@ -5086,7 +5086,7 @@ impl ApplicationHandler<UserEvent> for App {
 								state.menu_activate(row, &self.proxy);
 							}
 						}
-						// accelerator: a letter activates the item carrying it (the
+						// accelerator: a letter activates the item with it (the
 						// underlined letter; unique per menu, some items have none)
 						Key::Character(typed) => {
 							let ch = typed.chars().next().map(|c| c.to_ascii_lowercase());
@@ -5113,7 +5113,7 @@ impl ApplicationHandler<UserEvent> for App {
 					return;
 				}
 				// A tab rename takes every key while it is up: the tab strip is the
-				// only thing on screen accepting typing, so nothing reaches the shell.
+				// only thing on screen accepting typing, so nothing goes to the shell.
 				if state.tab_edit.is_some() {
 					state.tab_edit_key(&key.logical_key);
 					state.dirty = true;
@@ -5288,7 +5288,7 @@ impl ApplicationHandler<UserEvent> for App {
 		crate::perf::bump(&crate::perf::PASSES);
 		let _t = crate::perf::Span::new(&crate::perf::PASS_NS);
 		// One place to act on `quit`, so every path that sets it exits - menus,
-		// hotkeys, and the tab-close box all reach here on the next pass.
+		// hotkeys, and the tab-close box all get here on the next pass.
 		if self.state.as_ref().is_some_and(|state| state.quit) {
 			event_loop.exit();
 			return;
@@ -5320,7 +5320,7 @@ impl ApplicationHandler<UserEvent> for App {
 			}
 		}
 
-		// Warm the dialogs' GPU context once the terminal is genuinely on screen,
+		// Warm the dialogs' GPU context once the terminal is on screen,
 		// so building it can't slow the path to the first frame. Idempotent.
 		if WARM_DIALOG_GPU
 			&& self
@@ -5336,7 +5336,7 @@ impl ApplicationHandler<UserEvent> for App {
 			self.memdbg_report();
 		}
 
-		// Look for installed shells, once, a little after the window is genuinely
+		// Look for installed shells, once, a little after the window is
 		// on screen. A PATH scan stats every directory the user has on it and the
 		// Windows side reads the registry, so it runs on its own thread and comes
 		// back as UserEvent::ShellsReady.
@@ -5421,7 +5421,7 @@ impl ApplicationHandler<UserEvent> for App {
 			}
 		}
 		// a dialog with an animating field edit (view scroll / caret / blink) or a
-		// tip coming due gets its frame when it is owed one, not on every pass,
+		// tip coming due gets its frame when it is due one, not on every pass,
 		// or each pointer move would draw it again (see dlg_wake below)
 		if self
 			.dialog
@@ -5452,7 +5452,7 @@ impl ApplicationHandler<UserEvent> for App {
 				);
 			}
 		}
-		// A save that could not be written. Asked for from Settings, it was
+		// A save that couldn't be written. Asked for from Settings, it was
 		// taken there already (apply_dialog_settings); anything here is one of
 		// the saves nobody asked for.
 		if let Some(refusal) = config::take_refusal() {
@@ -5585,9 +5585,9 @@ impl ApplicationHandler<UserEvent> for App {
 				vramdbg("SILK_VRAMLOSS: sentinels + wallpaper clobbered");
 			}
 			// Poll both probes; either detecting loss triggers the one rebuild.
-			// Field logs showed EVERY witness - synthetic sentinels AND the
+			// Field logs showed every witness - synthetic sentinels and the
 			// wallpaper's own uploaded block - reading back intact across a real
-			// purge that blacked the window, so readback cannot be the primary
+			// purge that blacked the window, so readback can't be the primary
 			// detector. Kept for the diagnostic trail and as a fallback.
 			let mut lost = None;
 			match gpu.gfx.vram_check_poll() {
@@ -5598,7 +5598,7 @@ impl ApplicationHandler<UserEvent> for App {
 						if rendered { "gone" } else { "ok" }
 					));
 				}
-				// not logged: every window every two seconds filled the log's
+				// not logged: every window every 2 seconds filled the log's
 				// cap within a day, and it then missed the switches it was for
 				Some(VramProbe::Intact) | None => {}
 				Some(VramProbe::MapFailed) => {
@@ -5658,7 +5658,7 @@ impl ApplicationHandler<UserEvent> for App {
 				state.dirty = true;
 			}
 		}
-		// A run renders flat out: the periods between frames ARE the measurement.
+		// A run renders flat out: the periods between frames are the measurement.
 		if state.bench.is_some() {
 			state.dirty = true;
 		}
@@ -5677,7 +5677,7 @@ impl ApplicationHandler<UserEvent> for App {
 		// A window that let its device go takes it back the moment it is wanted
 		// on screen, and not before: output into a hidden one waits for the
 		// reveal. One left alone for long enough lets it go, unless a dialog is
-		// up (on X11 the dialog's context cannot outlive the terminal's).
+		// up (on X11 the dialog's context can't outlive the terminal's).
 		let dialog_up = self.dialog.is_some() || self.notice.is_some();
 		// Software rendering turned on or off: the device goes and comes back
 		// on what the setting now asks, the dialogs' context with it. Not while
@@ -5726,7 +5726,7 @@ impl ApplicationHandler<UserEvent> for App {
 			|| cursor_anim
 			|| bell_anim
 		{
-			// UI/chrome changes and the bell force ALL panes to re-shape; fresh
+			// UI/chrome changes and the bell force all panes to re-shape; fresh
 			// output and scroll eases are scoped per pane inside render (a pure
 			// cursor-animation frame lets every pane reuse its cached frame).
 			let map = state.dirty || bell_anim;
@@ -5798,8 +5798,8 @@ impl ApplicationHandler<UserEvent> for App {
 				ControlFlow::WaitUntil(Instant::now() + Duration::from_millis(5))
 			} else if animating {
 				// a lone idle cursor blink is capped to ~30fps so it isn't
-				// re-rendering every frame just to pulse - but a pinned rate
-				// covers the cursor too, or a scene where the cursor is the only
+				// re-rendering every frame only to pulse - but a pinned rate
+				// applies to the cursor too, or a scene where the cursor is the only
 				// thing moving samples off the grid the rest of the run is on
 				match pace {
 					Some(ivl) => pace_frame(&mut state.next_frame, ivl),
@@ -5848,8 +5848,8 @@ impl ApplicationHandler<UserEvent> for App {
 		// keep the loop waking while dialog-raise retries are pending
 		let flow = wake_by(flow, raise_wake);
 		// Read after the frame, since the frame and the rating step after it can
-		// set a wake or owe another frame: a cursor that parks, a minimap compose
-		// that owes another, the window revealed, a rating ended. Read before,
+		// set a wake or need another frame: a cursor that parks, a minimap compose
+		// that needs another, the window revealed, a rating ended. Read before,
 		// each waited for some unrelated event.
 		if let Some(wake) = pane_wake(state.tabs.cur().panes.values(), Instant::now()) {
 			cursor_wake = Some(cursor_wake.map_or(wake, |w| w.min(wake)));
@@ -6023,7 +6023,7 @@ mod tests {
 
 	// The strength scale went from 10% to 20% per doubling in August and design.md
 	// kept the old numbers for weeks, with nothing to catch it. Both places that
-	// quote the number are held against the code now.
+	// quote the number are checked against the code now.
 	// Test ID: dcwxg
 	#[test]
 	fn the_docs_quote_the_scrim_strength_scale_the_code_uses() {
@@ -6108,7 +6108,7 @@ mod tests {
 		);
 	}
 
-	// The window starts hidden and is shown once a frame is drawn. Metal will not
+	// The window starts hidden and is shown once a frame is drawn. Metal won't
 	// hand a hidden window a frame, so waiting for one hung the Mac build.
 	// Test ID: ddc9r
 	#[test]
@@ -6121,9 +6121,9 @@ mod tests {
 
 	// Read-only means the pane takes nothing the user's hands sent. Typing and
 	// paste were on that list; the mouse reports and the wheel's alt-screen
-	// cursor keys were not, so one notch sent arrow keys to the job the pane said
+	// cursor keys weren't, so one notch sent arrow keys to the job the pane said
 	// it was protecting. Everything user-driven goes through `write_input` now,
-	// and the only direct write left is the reply the terminal owes the program.
+	// and the only direct write left is the reply the terminal has to send the program.
 	// Test ID: dcbd7
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
@@ -6160,7 +6160,7 @@ mod tests {
 	}
 
 	// converts it at a boundary the way the Settings dialog does - every piece
-	// scales at its own use site, and a piece that misses out is exactly the
+	// scales at its own use site, and a piece that misses out is the
 	// defect this pass fixed (chrome thinning out as the display's DPI rises).
 	// So: the same geometry at 2x must come out at twice the size, everywhere.
 	// Test ID: dbenf
@@ -6234,7 +6234,7 @@ mod tests {
 
 	// The demo capture samples on a fixed clock, so a pinned rate that drifts is
 	// worse than none: it would wander off the sampling grid instead of sitting
-	// on it. Each frame's deadline therefore has to come from the LAST DEADLINE,
+	// on it. Each frame's deadline therefore has to come from the last deadline,
 	// never from "now" - which is the whole of what this pins.
 	// Test ID: db6z2
 	#[test]

@@ -22,7 +22,7 @@ pub struct MonitorId {
 
 impl MonitorId {
 	/// The monitor the window is on now, at the scale the window is drawn at.
-	/// None when the platform cannot say, which on Wayland is the case until
+	/// None when the platform can't say, which on Wayland is the case until
 	/// the window has been shown.
 	pub fn of_window(window: &Window) -> Option<Self> {
 		Self::find(window, false)
@@ -70,7 +70,7 @@ impl MonitorId {
 	}
 
 	/// `2560x1440_125pct`, with `_597x336mm` after it when the size is known.
-	/// It is the monitor's name in the config file, so it keeps to what SHCL
+	/// It's the monitor's name in the config file, so it sticks to what SHCL
 	/// allows in a bare name: letters, digits, `-` and `_`.
 	pub fn key(&self) -> String {
 		let key = format!("{}x{}_{}pct", self.width, self.height, self.scale_pct);
@@ -105,7 +105,7 @@ impl MonitorId {
 	}
 
 	/// The same monitor, read again? An EDID gives the size twice, to the mm
-	/// and in whole cm, and the X server hands over either one. Which one can
+	/// and in whole cm, and the X server returns either one. Which one can
 	/// change across a power save: b23's portrait monitor has read as both
 	/// 401x641 and 400x640 mm.
 	pub fn same_as(&self, other: &Self) -> bool {
@@ -124,7 +124,7 @@ impl MonitorId {
 // Under a cm either way, which is all the rounding to whole cm can move it.
 const MM_SLACK: u32 = 10;
 
-/// Do two monitor keys name the same monitor? See `MonitorId::same_as`.
+/// Do 2 monitor keys name the same monitor? See `MonitorId::same_as`.
 pub fn same_monitor(a: &str, b: &str) -> bool {
 	a == b
 		|| MonitorId::from_key(a)
@@ -215,7 +215,7 @@ fn logical_size(window: &Window, scale: f64) -> (f64, f64) {
 // The monitor whose scale the window is drawn at. On Wayland winit's current
 // monitor is the first output the window entered and still touches, while the
 // scale is the one of the output most of it is on. Dropped with a sliver left
-// on another output, the two differ, and the key read one output's resolution
+// on another output, the 2 differ, and the key read one output's resolution
 // at the other's scale (2026101409220514). Elsewhere they agree. On Wayland
 // this is the fallback, for when winit's own state can't be read.
 fn drawn_on(window: &Window, scale: f64) -> Option<winit::monitor::MonitorHandle> {
@@ -265,7 +265,7 @@ impl Laid {
 // Of the outputs a Wayland window is on, first entered first, the one it is
 // drawn for: the first when it is at the window's scale, as on the other
 // path, else the only one at that scale, else the only one of those most of a
-// window this size could be on while it touches the rest. Between two at
+// window this size could be on while it touches the rest. Between 2 at
 // 100% with a 200% output first, that's the one it's on, which the other path
 // couldn't say.
 #[cfg_attr(not(any(target_os = "linux", test)), allow(dead_code))]
@@ -334,7 +334,7 @@ impl Placed {
 
 // The monitor a window is drawn for when `first` is at another scale: of the
 // ones at the window's scale, the only one most of a window this size could
-// be on while it still touches `first`. None when that is not one, which
+// be on while it still touches `first`. None when that isn't one, which
 // keeps the window's size.
 fn other_at_scale(
 	first: usize,
@@ -360,7 +360,7 @@ fn other_at_scale(
 
 // Could most of a window this size be on monitor `on`, while it touches each
 // of `touch`? Tried at places a step apart, with `on` and `touch` grown by
-// half a step and the rest shrunk by as much, so a place between two tries is
+// half a step and the rest shrunk by as much, so a place between 2 tries is
 // never missed. Where a monitor's size is a guess, it is taken at its largest
 // where that helps `on`, and at its smallest where it doesn't.
 fn could_be_most_on(
@@ -463,7 +463,7 @@ struct X11Screen {
 
 #[cfg(target_os = "linux")]
 impl X11Screen {
-	// None when the window is not an X11 one, or the server will not say.
+	// None when the window isn't an X11 one, or the server won't say.
 	fn of(window: &Window) -> Option<Self> {
 		use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 		use x11rb::connection::Connection;
@@ -588,9 +588,9 @@ fn x11_monitor_under(window: &Window, at_pointer: bool) -> Option<Option<PxMm>> 
 }
 
 // The outputs a Wayland window is on and where each is in the layout, read
-// from winit's own toolkit state on its own connection. winit hands out only
+// from winit's own toolkit state on its own connection. winit gives only
 // the first output and each one's scale rounded up to a whole number, so 125%,
-// 150% and 200% all read 2 (2026101411554909). The toolkit keeps the rest, as
+// 150% and 200% all read 2 (2026101411554909). The toolkit stores the rest, as
 // user data on winit's surface and outputs, which is where winit's own
 // `current_monitor` reads the first from. None when the window isn't a
 // Wayland one or that state can't be read, as when winit moves to another
@@ -679,7 +679,7 @@ fn monitor_under(
 		.map(|(index, _)| index)
 }
 
-// Shared area of two (x, y, width, height) rectangles.
+// Shared area of 2 (x, y, width, height) rectangles.
 fn overlap(a: (i64, i64, i64, i64), b: (i64, i64, i64, i64)) -> i64 {
 	let w = (a.0 + a.2).min(b.0 + b.2) - a.0.max(b.0);
 	let h = (a.1 + a.3).min(b.1 + b.3) - a.1.max(b.1);
@@ -724,7 +724,7 @@ fn physical_mm(monitor: &winit::monitor::MonitorHandle) -> Option<(u32, u32)> {
 	let subkey = edid_key(&String::from_utf16_lossy(&device.DeviceID[..len]))?;
 	let (subkey, value) = (wide(&subkey), wide("EDID"));
 	// Asked twice, since an EDID with extension blocks is longer than the
-	// first block, which is all that is read from it.
+	// first block, which is all that's read from it.
 	let read = |data: *mut u8, size: &mut u32| {
 		// SAFETY: `data` is null or has room for `size` bytes, and both strings end in 0.
 		unsafe {
@@ -752,7 +752,7 @@ fn physical_mm(monitor: &winit::monitor::MonitorHandle) -> Option<(u32, u32)> {
 }
 
 // `\\?\DISPLAY#DEL40F4#5&1a2b&0&UID4352#{e6f07b5f-...}` names the monitor's
-// key under Enum, where Windows keeps the EDID it read.
+// key under Enum, where Windows stores the EDID it read.
 #[cfg_attr(not(any(windows, test)), allow(dead_code))]
 fn edid_key(interface: &str) -> Option<String> {
 	let mut parts = interface.strip_prefix(r"\\?\")?.split('#');
@@ -778,7 +778,7 @@ fn physical_mm(monitor: &winit::monitor::MonitorHandle) -> Option<(u32, u32)> {
 	unsafe extern "C" {
 		fn CGDisplayScreenSize(display: u32) -> CgSize;
 	}
-	// SAFETY: takes a display id by value; an unknown one answers zero.
+	// SAFETY: takes a display id by value; an unknown one returns zero.
 	let size = unsafe { CGDisplayScreenSize(monitor.native_id()) };
 	if !(size.width.is_finite() && size.height.is_finite()) {
 		return None;
@@ -831,7 +831,7 @@ pub fn button_held(window: &Window) -> Option<bool> {
 }
 
 #[cfg(windows)]
-#[allow(clippy::unnecessary_wraps)] // Linux answers None
+#[allow(clippy::unnecessary_wraps)] // Linux returns None
 pub fn button_held(_window: &Window) -> Option<bool> {
 	use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
 		GetAsyncKeyState, VK_LBUTTON, VK_RBUTTON,
@@ -845,13 +845,13 @@ pub fn button_held(_window: &Window) -> Option<bool> {
 }
 
 #[cfg(target_os = "macos")]
-#[allow(clippy::unnecessary_wraps)] // Linux answers None
+#[allow(clippy::unnecessary_wraps)] // Linux returns None
 pub fn button_held(_window: &Window) -> Option<bool> {
 	Some(objc2_app_kit::NSEvent::pressedMouseButtons() != 0)
 }
 
 #[cfg(not(any(target_os = "linux", windows, target_os = "macos")))]
-#[allow(clippy::unnecessary_wraps)] // Linux answers None
+#[allow(clippy::unnecessary_wraps)] // Linux returns None
 pub fn button_held(_window: &Window) -> Option<bool> {
 	Some(false)
 }
@@ -919,7 +919,7 @@ pub fn snapped(window: &Window) -> bool {
 	let arranged = ARRANGED.get_or_init(|| {
 		let name: Vec<u16> = "user32.dll".encode_utf16().chain([0]).collect();
 		// SAFETY: user32 is loaded in any process with a window, and a missing
-		// export answers None. The signature is the documented one.
+		// export gives None. The signature is the documented one.
 		unsafe {
 			let module = GetModuleHandleW(name.as_ptr());
 			if module.is_null() {
@@ -1102,7 +1102,7 @@ mod tests {
 			"the sliver drop"
 		);
 		// Back the other way, either 100% output could be it, since a 200%
-		// output may be a 150% one and reach further.
+		// output may be a 150% one and extend further.
 		assert_eq!(other_at_scale(1, &all, 1.0, window), None);
 		// a 150% output says 2, and its window is drawn at 1.5
 		let frac = placed((3840, 0), (2560, 1440), 2.0);
@@ -1112,7 +1112,7 @@ mod tests {
 			None,
 			"none at that scale"
 		);
-		// Two at 200% and the first at 100% between them: only the one the
+		// With 2 at 200% and the first at 100% between them: only the one the
 		// window can reach. The far one is past another 100% output.
 		let left = placed((0, 0), (2560, 1600), 2.0);
 		let mid = placed((1280, 0), (1920, 1080), 1.0);
@@ -1136,7 +1136,7 @@ mod tests {
 	}
 
 	// winit reads a 125%, a 150% and a 200% output all as 2, so a window
-	// astride two of them was named for one at the other's scale, a monitor
+	// astride 2 of them was named for one at the other's scale, a monitor
 	// that isn't there (2026101411554909). The outputs it is on, with their
 	// sizes in the layout, tell them apart.
 	// Test ID: de01p
@@ -1504,7 +1504,7 @@ mod tests {
 			}
 		}
 
-		// Read from the outputs the window is on, a window astride any two is
+		// Read from the outputs the window is on, a window astride any 2 is
 		// named for the one most of it is on, or for none when more than one
 		// at its scale could be. Never another.
 		// Test ID: de01r
@@ -1536,7 +1536,7 @@ mod tests {
 			);
 		}
 
-		// The generator still reaches each way of naming one.
+		// The generator still produces each way of naming one.
 		// Test ID: ddyds
 		#[test]
 		fn the_layout_generator_reaches_every_branch() {

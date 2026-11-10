@@ -6,14 +6,14 @@
 ##		is a pure function of one seed:
 ##			- A headless sway layout of 2 to 4 outputs, each at its own
 ##			  resolution and scale, whole or fractional, placed edge to edge.
-##			- The two switches, the last size anywhere, and sizes kept for some
+##			- The 2 switches, the last size anywhere, and sizes kept for some
 ##			  of the outputs, each with a font zoom, and now and then one for a
 ##			  monitor that isn't there.
 ##			- Native Wayland, or X11 through Xwayland.
 ##			- A launch on one output, maybe with a size or a font size on the
 ##			  command line, and maybe --persist with it, then moves,
 ##			  drags, drops with a sliver left on another output, resizes, font
-##			  zooms, scale changes and relaunches.
+##			  zooms, scale changes, and relaunches.
 ##		After each step the model says which monitor the window should count
 ##		itself on, and which size and font zoom it should take there, and the
 ##		shell inside says what it got. Nothing may change while a drag is held.
@@ -29,10 +29,10 @@
 ##		--secs S   run cases until S seconds are used, one at least;
 ##		           SILK_DPIRAND_SECS too (default 60)
 ##		--plan N   print the plans of N cases from --seed and run none
-##		-v         print every case's steps, not just a failed one's
-##		--keep     keep every case's folder, not just a failed one's
+##		-v         print every case's steps, not only a failed one's
+##		--keep     keep every case's folder, not only a failed one's
 ##	- Exit: 0 passed, 1 a case failed (its seed is printed), 2 bad arguments,
-##	  3 nothing ran (no binary, sway, wtype, xdotool or software Vulkan).
+##	  3 nothing ran (no binary, sway, wtype, xdotool, or software Vulkan).
 ##	- Test ID: ddydf
 ##	- History: At bottom of file.
 
@@ -90,7 +90,7 @@ CAPPED = "sway holds a floating window to the size of the whole layout"
 TOLD_NOTHING = "a Wayland window is told nothing of a move"
 ## Wayland and Xwayland show a window no button held on the compositor's title
 ## bar, so a move with the pointer away could be a drag held still. The look
-## waits for the pointer back over the window, a key or focus.
+## waits for the pointer back over the window, a key, or focus.
 WAITS = "a window that can't see the buttons waits for the person after a move"
 ## A resize that takes a Wayland window off an output is told to it once a
 ## frame at the new size is up, which in software can come after the size is
@@ -724,7 +724,7 @@ def key_of(arm: str, out: dict[str, Any], scale: float) -> str:
 ## the chrome and the part of a cell the window had over. The cell the shell
 ## is told is a whole pixel, and the real one is within half a pixel of it:
 ## at 125% a cell of 13.64 told as 13 made 130 columns look like 136 were
-## owed (2026101716374843).
+## still needed (2026101716374843).
 def drift_band(grid: Grid, was: tuple[tuple[int, int], float], now: tuple[tuple[int, int], float]) -> set[Grid]:
 	(cell_was, scale_was), (cell, scale) = was, now
 	spans = []
@@ -753,7 +753,7 @@ class Case:
 		self.touched: list[str] = []
 		self.font: int | None = None
 		self.stale: str | None = None
-		## a look put off until the pointer, a key or focus comes back
+		## a look put off until the pointer, a key, or focus comes back
 		self.waiting = False
 		## a look while fullscreen, whose size is taken once back
 		self.owed: list[str] = []
@@ -969,7 +969,7 @@ class Case:
 		if named not in allowed:
 			raise CheckError(f"{what}: counted itself on {named}, want one of {list(allowed)}")
 		key, grid, zoom = outcomes[named]
-		## sway holds a floating window to the size of the whole layout
+		## sway limits a floating window to the size of the whole layout
 		lw, lh = self.rig.extent()
 		capped = (win.rect[2] >= lw - 4 or win.rect[3] + win.deco >= lh - 4) and got[0] <= grid[0] and got[1] <= grid[1]
 		if grid != got and capped:
@@ -1617,7 +1617,7 @@ class Case:
 			raise CheckError(f"{what}: no open line in the trace")
 		## what came after the open is the look's, for settle
 		rig.unread = trace[trace.index(opened[0]) + 1:]
-		## The open itself: where it is not known yet on Wayland, and where the
+		## The open itself: where it isn't known yet on Wayland, and where the
 		## pointer is on X11, which may be another monitor than the window's.
 		grid_at_open = trace_field(opened[0], "grid")
 		model.belief = None if trace_field(opened[0], "key") == "-" else trace_field(opened[0], "key")

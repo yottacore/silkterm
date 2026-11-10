@@ -6,7 +6,7 @@
 ##	  against the release's checksums file, and installs it. Idempotent: states
 ##	  its plan, asks before touching anything, and does nothing when the
 ##	  installed binary is already current.
-##	- Reusable: everything project-specific lives in the settings block below.
+##	- Reusable: everything project-specific is in the settings block below.
 ##	- Syntax:
 ##	  bash <(curl -fsSL https://raw.githubusercontent.com/yottacore/silkterm/main/install.bash) [options]
 ##	- Options: --release stable|dev, --target user|system, --yes, --version, --help.
@@ -31,7 +31,7 @@ appComment="Smooth-scrolling GPU terminal with split panes"
 
 ##	Release asset names. {exe} {version} {os} {arch} {ext} are substituted; {ext}
 ##	is ".exe" on Windows and empty elsewhere. {os} is linux/macos/freebsd/windows,
-##	{arch} is x86_64/arm64 - match whatever the release actually publishes.
+##	{arch} is x86_64/arm64 - match whatever the release publishes.
 assetPattern="{exe}-{version}-{os}-{arch}{ext}"
 sumsPattern="{exe}-{version}-sha256sums.txt"
 
@@ -65,7 +65,7 @@ function fHelp() {
 ${appName} installer ${installerVersion}
 
 Downloads the newest ${appName} release from GitHub, checks its sha256, and
-installs it. It prints what it is about to do and asks first, and it does
+installs it. It prints what it's about to do and asks first, and it does
 nothing at all when the installed copy is already current.
 
 Usage:
@@ -80,8 +80,8 @@ Options:
   --version              print this installer's version and exit
   --help, -h             this text
 
-The operating system, the CPU architecture and the matching release asset are
-all detected - there is nothing to pass for them.
+The operating system, the CPU architecture, and the matching release asset are
+all detected, so there's nothing to pass for them.
 
 EOF
 }
@@ -103,8 +103,8 @@ function fGet() {
 	fi
 }
 
-##	fApi <url> <outfile> - an API call, carrying the optional token. Only the API
-##	is rate-limited per IP; release downloads are not, so they stay anonymous.
+##	fApi <url> <outfile> - an API call, with the optional token. Only the API
+##	is rate-limited per IP; release downloads aren't, so they stay anonymous.
 ##	The body is kept whatever the status, since GitHub says why in it, and
 ##	anything else worth showing goes to <outfile>.err. Fails on any non-2xx.
 ##	Https on the first request and on every redirect after it. Without this a
@@ -124,8 +124,8 @@ function fAuthInit() {
 	authDir="$(mktemp -d 2>/dev/null)" || return 1
 	chmod 700 "${authDir}" 2>/dev/null
 	authFile="${authDir}/auth"
-	##	The two tools read their own config format, and only curl's takes
-	##	quotes - wget's rc keeps everything after the '=' verbatim.
+	##	curl and wget read their own config formats, and only curl's takes
+	##	quotes - wget's rc takes everything after the '=' verbatim.
 	if [[ "${dlTool}" = "curl" ]]; then
 		( umask 077; printf 'header = "Authorization: Bearer %s"\n' "${apiToken}" >"${authFile}" )
 	else
@@ -167,33 +167,33 @@ function fGetShown() {
 
 ##	The release signing key, as one allowed_signers line. Empty until a key is
 ##	generated (see cicd/config.bash), and then the checksums file is only trusted
-##	when it carries a good signature by this key - which is what turns the check
-##	below from "the download was not corrupted" into "this came from the author".
+##	when it has a good signature by this key. That turns the check below
+##	from "the download wasn't corrupted" into "this came from the author".
 releaseSignPubkey=""
 releaseSignIdentity="releases@silkterm"
 releaseSignNamespace="silkterm-release"
 
-##	Verify the checksums file against the pinned key. Everything else is covered
-##	by the checksums, so this one signature covers the whole release.
+##	Verify the checksums file against the pinned key. The checksums vouch for
+##	everything else, so this one signature is enough for the whole release.
 function fVerifySignature() {
 	local dir="${1}" sums="${2}" tag="${3}"
 	if [[ -z "${releaseSignPubkey}" ]]; then
-		echo "Note: this release is not signed; the download is checked against its checksums only."
+		echo "Note: this release isn't signed; the download is checked against its checksums only."
 		return 0
 	fi
 	command -v ssh-keygen >/dev/null 2>&1 \
 		|| fFail "ssh-keygen not found, and this release is signed" \
 			"Install OpenSSH (openssh-client) and re-run."
 	fGet "${dlBase}/${tag}/${sums}.sig" "${dir}/${sums}.sig" \
-		|| fFail "release ${tag} carries no signature (${sums}.sig)" \
+		|| fFail "release ${tag} doesn't have a signature (${sums}.sig)" \
 			"This installer only accepts signed releases." \
 			"Release page: https://github.com/${ownerRepo}/releases/tag/${tag}"
 	printf '%s %s\n' "${releaseSignIdentity}" "${releaseSignPubkey}" > "${dir}/allowed_signers"
 	ssh-keygen -Y verify -f "${dir}/allowed_signers" -I "${releaseSignIdentity}" \
 		-n "${releaseSignNamespace}" -s "${dir}/${sums}.sig" < "${dir}/${sums}" >/dev/null 2>&1 \
-		|| fFail "the release signature does not verify - NOT installing" \
-			"The checksums file was not signed by the release key." \
-			"Do not use this download; report it."
+		|| fFail "the release signature doesn't verify - NOT installing" \
+			"The checksums file wasn't signed by the release key." \
+			"Don't use this download; report it."
 	echo "Signature OK."
 }
 
@@ -208,10 +208,10 @@ function fSha256() {
 }
 
 ##	One line per release in a GitHub API list: tag, draft or -, pre or full.
-##	Without jq: the body goes onto one line (JSON strings hold no raw newline),
-##	then each "tag_name" starts a new one. A release's "draft" and "prerelease"
-##	come after its tag and before the next release's, so each line carries its
-##	own. An escaped quote in a release's notes cannot match, since the pattern
+##	Without jq: the body goes onto one line (JSON strings can't contain a raw
+##	newline), then each "tag_name" starts a new one. A release's "draft" and
+##	"prerelease" come after its tag and before the next release's, so each line
+##	has its own. An escaped quote in a release's notes can't match, since the pattern
 ##	needs a bare quote after the name.
 function fReleaseRows() {
 	tr -d '\r\n' | sed 's/"tag_name"/\
@@ -225,7 +225,7 @@ function fReleaseRows() {
 }
 
 ##	fFieldCmp <a> <b> - prints -1, 0 or 1 for one dotted field. Numbers compare
-##	as numbers and sort below words. Two words with the same letters and a
+##	as numbers and sort below words. Words with the same letters and a
 ##	trailing number compare by that number, so beta10 is above beta3.
 function fFieldCmp() {
 	local a="${1}" b="${2}" num='^[0-9]+$' word='^([^0-9]*)([0-9]+)$'
@@ -302,18 +302,18 @@ function fCanWrite() {
 }
 
 ##	Exec= is read twice: the desktop-entry string rules first, then the Exec
-##	quoting rules on top. So a backslash in the path ends up as four, a quote,
-##	backtick or '$' as two-plus-itself, and a literal '%' has to be doubled or it
+##	quoting rules on top. So a backslash in the path ends up as 4, a quote,
+##	backtick, or '$' as 2 plus itself, and a literal '%' has to be doubled or it
 ##	reads as a field code. The whole value is quoted, which is what a space needs.
 function fDesktopExec() {
 	printf '%s' "${1}" | sed -e 's/[\\"`$]/\\&/g' -e 's/\\/\\\\/g' -e 's/%/%%/g'
 }
 
-##	fPathNote <dir> <file> - how to run it when <dir> is not on PATH.
+##	fPathNote <dir> <file> - how to run it when <dir> isn't on PATH.
 function fPathNote() {
 	case ":${PATH}:" in *":${1}:"*) return 0 ;; esac
 	echo
-	echo "Note: ${1} is not on your PATH, so '${exeName}' won't be found by name yet."
+	echo "Note: ${1} isn't on your PATH, so '${exeName}' won't be found by name yet."
 	echo "  Add it with:  echo 'export PATH=\"${1}:\$PATH\"' >> ~/.profile"
 	echo "  Until then, run it in full:  ${2}"
 }
@@ -327,7 +327,7 @@ function fCleanup() {
 	[[ -z "${authDir}" ]] || rm -rf "${authDir}"
 }
 
-##	0 = yes, 1 = no, 2 = could not ask at all.
+##	0 = yes, 1 = no, 2 = couldn't ask at all.
 ##	The terminal comes FIRST because the `curl ... | bash` form leaves the script
 ##	itself sitting on stdin - reading the answer from there would eat the script.
 ##	Falling back to stdin is what keeps a piped `echo y | ...` working.
@@ -364,8 +364,8 @@ function fMain() {
 	case "$(fLower "$(uname -m 2>/dev/null || echo unknown)")" in
 		x86_64|amd64|x64)            archToken="x86_64" ;;
 		aarch64|arm64)               archToken="arm64" ;;
-		i386|i486|i586|i686)         osProblem="32-bit x86 is not supported" ;;
-		arm*)                        osProblem="32-bit ARM is not supported" ;;
+		i386|i486|i586|i686)         osProblem="32-bit x86 isn't supported" ;;
+		arm*)                        osProblem="32-bit ARM isn't supported" ;;
 		*)                           osProblem="unrecognized CPU architecture: $(uname -m 2>/dev/null)" ;;
 	esac
 
@@ -413,13 +413,13 @@ function fMain() {
 	##	ordinary exit so the EXIT trap gets its turn; bash skips it otherwise.
 	trap fCleanup EXIT
 	trap 'exit 130' HUP INT TERM
-	fAuthInit || fFail "could not create a temporary directory"
+	fAuthInit || fFail "couldn't create a temporary directory"
 
-	tmpDir="$(mktemp -d 2>/dev/null)" || fFail "could not create a temporary directory"
+	tmpDir="$(mktemp -d 2>/dev/null)" || fFail "couldn't create a temporary directory"
 
 	##	Resolve the release tag: the highest version in the release list, drafts
 	##	skipped. Stable wants a full release, and takes the newest pre-release
-	##	only when the list holds none, which is what makes a project with only
+	##	only when the list doesn't have any, which is what makes a project with only
 	##	betas installable. A failed call is an error, never "no release".
 	echo "Looking up the newest ${release} release of ${appName} ..."
 	local tag="" listFile="${tmpDir}/releases.json"
@@ -428,7 +428,7 @@ function fMain() {
 			fFail "GitHub's API rate limit is exhausted for this IP" \
 				"Wait an hour, or set GITHUB_TOKEN to a personal access token and re-run."
 		fi
-		fFail "could not read the release list from github.com/${ownerRepo}" \
+		fFail "couldn't read the release list from github.com/${ownerRepo}" \
 			"Check your network or HTTPS_PROXY, and that the repository still exists." \
 			"Detail: $(paste -sd ' ' - 2>/dev/null <"${listFile}.err")"
 	fi
@@ -447,13 +447,13 @@ function fMain() {
 	##	Work out the asset name for this platform
 	local asset sums
 	asset="${assetPattern}"
-	##	'|' as the delimiter, so a value carrying a '/' cannot break the script.
+	##	'|' as the delimiter, so a value with a '/' can't break the script.
 	asset="$(echo "${asset}" | sed -e "s|{exe}|${exeName}|g" -e "s|{version}|${version}|g" \
 		-e "s|{os}|${osToken}|g" -e "s|{arch}|${archToken}|g" -e "s|{ext}|${exeExt}|g")"
 	sums="$(echo "${sumsPattern}" | sed -e "s|{exe}|${exeName}|g" -e "s|{version}|${version}|g")"
 
-	##	Pull the checksums first: it is small, it says which platforms this
-	##	release actually carries, and its hash lets an already-current install
+	##	Pull the checksums first: it's small, it lists the platforms this
+	##	release has, and its hash lets an already-current install
 	##	finish without downloading the binary at all.
 	fGet "${dlBase}/${tag}/${sums}" "${tmpDir}/${sums}" 2>/dev/null \
 		|| fFail "release ${tag} has no checksums file (${sums})" \
@@ -468,7 +468,7 @@ function fMain() {
 		echo >&2
 		echo "Error: release ${tag} has no build for ${osToken}-${archToken}." >&2
 		echo "  Expected asset: ${asset}" >&2
-		echo "  What it does carry:" >&2
+		echo "  What it does have:" >&2
 		awk '{ name = $2; sub(/^\*/, "", name); print "    " name }' "${tmpDir}/${sums}" >&2
 		echo "  Building from source: https://github.com/${ownerRepo}#build-it-yourself" >&2
 		echo >&2
@@ -485,7 +485,7 @@ function fMain() {
 		appDir="/usr/local/share/applications"
 		if [[ "$(id -u)" != "0" ]]; then
 			command -v sudo >/dev/null 2>&1 \
-				|| fFail "a system install needs root, and sudo is not installed" \
+				|| fFail "a system install needs root, and sudo isn't installed" \
 					"Re-run as root, or use --target user to install under \$HOME instead."
 			sudoCmd="sudo"
 		fi
@@ -539,7 +539,7 @@ function fMain() {
 		local answered=0
 		fConfirm "Proceed?" || answered=$?
 		if [[ "${answered}" = "2" ]]; then
-			fFail "there is no terminal here to ask for confirmation" \
+			fFail "there's no terminal here to ask for confirmation" \
 				"Re-run with --yes to install without being asked."
 		fi
 		if [[ "${answered}" != "0" ]]; then
@@ -564,18 +564,18 @@ function fMain() {
 		fi
 		echo "Checksum OK."
 
-		##	Install. Land beside the target and rename into place: a rename is atomic,
+		##	Install. Stage beside the target and rename into place: a rename is atomic,
 		##	and it replaces a binary that is currently RUNNING (a straight copy over
 		##	one fails with ETXTBSY).
 		echo
 		echo "Installing ..."
 		local staged="${destDir}/.${exeName}.new.$$"
-		${sudoCmd} mkdir -p "${destDir}" || fFail "could not create ${destDir}"
-		${sudoCmd} cp "${tmpDir}/${asset}" "${staged}" || fFail "could not write to ${destDir}"
+		${sudoCmd} mkdir -p "${destDir}" || fFail "couldn't create ${destDir}"
+		${sudoCmd} cp "${tmpDir}/${asset}" "${staged}" || fFail "couldn't write to ${destDir}"
 		${sudoCmd} chmod 0755 "${staged}"
 		${sudoCmd} mv -f "${staged}" "${destFile}" || {
 			${sudoCmd} rm -f "${staged}"
-			fFail "could not replace ${destFile}"
+			fFail "couldn't replace ${destFile}"
 		}
 	fi
 
@@ -598,7 +598,7 @@ function fMain() {
 			&& ${sudoCmd} cp "${tmpDir}/${exeName}.desktop" "${appDir}/${exeName}.desktop" 2>/dev/null; then
 			${sudoCmd} chmod 0644 "${appDir}/${exeName}.desktop"
 		else
-			echo "Note: could not write the desktop launcher to ${appDir} (the program itself installed fine)."
+			echo "Note: couldn't write the desktop launcher to ${appDir} (the program itself installed fine)."
 		fi
 	fi
 

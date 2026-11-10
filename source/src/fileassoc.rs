@@ -6,12 +6,12 @@
 //!
 //! Windows' own default terminal setting was ruled out: it hands over a console
 //! session that is already running, through COM, and needs Windows Terminal
-//! installed to do it. An association just starts SilkTerm with the file.
+//! installed to do it. An association starts SilkTerm with the file.
 //!
 //! Registering overrides one value per file type in HKCU, over the system's
-//! entry in HKLM. Windows reads the two as one tree, and a value HKCU does not
+//! entry in HKLM. Windows reads the 2 as one tree, and a value HKCU doesn't
 //! have still comes from HKLM, so only the open command changes. What each
-//! value held before is saved under `Software\SilkTerm\Associations`, which is
+//! value had before is saved under `Software\SilkTerm\Associations`, which is
 //! how "put back" can restore it exactly. A value somebody else changed after
 //! us is theirs, and put back leaves it alone.
 //!
@@ -44,7 +44,7 @@ impl Assoc {
 		}
 	}
 
-	// The file types, with the program ID Windows ships for each. The ID is read
+	// The file types, with the program ID Windows uses for each. The ID is read
 	// from HKCR at registration, and this is only the fallback.
 	fn types(self) -> &'static [(&'static str, &'static str)] {
 		match self {
@@ -80,8 +80,8 @@ pub trait Store {
 	fn set(&mut self, key: &str, name: &str, value: &Value) -> anyhow::Result<()>;
 	fn delete(&mut self, key: &str, name: &str) -> anyhow::Result<()>;
 	fn exists(&self, key: &str) -> bool;
-	// Remove the key if nothing is left in it. Not an error when it is gone
-	// already or still holds something.
+	// Remove the key if nothing is left in it. Not an error when it's gone
+	// already or still has something.
 	fn prune(&mut self, key: &str) -> anyhow::Result<()>;
 }
 
@@ -109,7 +109,7 @@ fn quoted(exe: &Path) -> String {
 }
 
 // The command a double-click runs. `--open` takes everything after it, so the
-// file's own arguments (`%*`) reach the script.
+// file's own arguments (`%*`) are passed to the script.
 fn open_command(exe: &Path) -> String {
 	format!("{} --keep-open --open \"%1\" %*", quoted(exe))
 }
@@ -213,7 +213,7 @@ pub fn register(assoc: Assoc, exe: &Path, store: &mut dyn Store) -> anyhow::Resu
 	let state = state_key(assoc);
 	let todo = entries(assoc, exe, store);
 	for (i, e) in todo.iter().enumerate() {
-		// the first key on the way down that is not there yet is ours to remove
+		// the first key on the way down that isn't there yet is ours to remove
 		let made = first_missing(&e.key, store);
 		let before = store.get(&e.key, &e.name);
 		store.set(&state, &format!("key{i}"), &Value::sz(&e.key))?;
@@ -266,7 +266,7 @@ pub fn unregister(assoc: Assoc, store: &mut dyn Store) -> anyhow::Result<()> {
 			}
 		}
 	}
-	// state first, then the two parents it may have been the last thing in
+	// state first, then the 2 parents it may have been the last thing in
 	for name in
 		["count"]
 			.into_iter()
@@ -488,7 +488,7 @@ mod registry {
 				)
 			};
 			if status != ERROR_SUCCESS {
-				return Err(fail("cannot create", key, status));
+				return Err(fail("can't create", key, status));
 			}
 			let handle = Key(handle);
 			let name = wide(name);
@@ -511,7 +511,7 @@ mod registry {
 			if status == ERROR_SUCCESS {
 				Ok(())
 			} else {
-				Err(fail("cannot write", key, status))
+				Err(fail("can't write", key, status))
 			}
 		}
 
@@ -525,7 +525,7 @@ mod registry {
 			if status == ERROR_SUCCESS || status == ERROR_FILE_NOT_FOUND {
 				Ok(())
 			} else {
-				Err(fail("cannot delete from", key, status))
+				Err(fail("can't delete from", key, status))
 			}
 		}
 
@@ -538,7 +538,7 @@ mod registry {
 				return Ok(());
 			};
 			let (mut subkeys, mut values) = (0u32, 0u32);
-			// SAFETY: only the two counts are asked for; every other out pointer is null.
+			// SAFETY: only the 2 counts are asked for; every other out pointer is null.
 			let status = unsafe {
 				RegQueryInfoKeyW(
 					handle.0,
@@ -568,7 +568,7 @@ mod registry {
 			if status == ERROR_SUCCESS || status == ERROR_FILE_NOT_FOUND {
 				Ok(())
 			} else {
-				Err(fail("cannot remove", key, status))
+				Err(fail("can't remove", key, status))
 			}
 		}
 	}
@@ -902,7 +902,7 @@ mod tests {
 			reg.set(r"HKCR\.silkterm-test", "", &Value::sz("x"))
 				.is_err()
 		);
-		// the merged view answers for a type every Windows has
+		// the merged view has an entry for a type every Windows has
 		assert!(reg.get(r"HKCR\.bat", "").is_some());
 	}
 }

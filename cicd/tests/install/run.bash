@@ -4,7 +4,7 @@
 ##		Hygiene the installers and the headless rig have to keep: no secret on a
 ##		command line, no plain-http redirect, no adopting a directory somebody
 ##		else made in a shared temp folder, no token file left behind, and a menu
-##		launcher that still works from a path holding a space.
+##		launcher that still works from a path with a space in it.
 ##		The last two run install.bash for real, against a stand-in release served
 ##		by a curl on PATH, in a scratch home and temp folder.
 ##	- Test ID: dcbdz
@@ -47,7 +47,7 @@ trap 'rc=$?; fTestDir_Rm "${work}" || true; fTestDir_End "${rc}"' EXIT
 
 ## A stand-in release: for each version, a program that records that it ran
 ## and a line naming its version, plus the checksums file the installer
-## verifies it against. The release list the API serves is written per case.
+## verifies it against. The release list the API returns is written per case.
 ## fReleaseElf makes each program a copy of sleep instead, since only a running
 ## binary, not a script, makes a copy over it fail with "text file busy".
 fRelease() {
@@ -70,7 +70,7 @@ relDir="${work}/release"
 fRelease "${relDir}" 9.9.9
 printf '[{"tag_name":"v9.9.9","draft":false,"prerelease":false}]\n' > "${relDir}/releases.json"
 
-## A curl that serves it. Takes the URL, -o and -w, ignores the rest, and notes
+## A curl that returns it. Takes the URL, -o and -w, ignores the rest, and notes
 ## each --config so the token check can see the file was still passed that way.
 ## STUB_API_CODE is the status the API answers with.
 stubDir="${work}/stub"
@@ -101,7 +101,7 @@ chmod +x "${stubDir}/curl"
 
 ## Run an installer in a home and temp folder of its own. $1 is the home, the
 ## rest are extra environment, and what it printed goes to out.log there.
-## INSTALLER is bash or ps1, and STUB_DIR, STUB_API_CODE and INSTALL_ARGS pick
+## INSTALLER is bash or ps1, and STUB_DIR, STUB_API_CODE, and INSTALL_ARGS pick
 ## the case. Returns the installer's status; install.ps1 run as a script block
 ## has none, so there an "Error:" line is the failure.
 pwshDir="$(dirname "$(readlink -f "$(command -v pwsh 2>/dev/null || echo /nonexistent)")")"
@@ -137,7 +137,7 @@ fCheck "the token file does not outlast the run" \
 fCheck "and the token was still passed in a file, not on a command line" \
 	fPresent '^config ' "${tokenHome}/.tmp/calls.log"
 
-## install.bash's own escaping rule, lifted out of the file so the test cannot
+## install.bash's own escaping rule, lifted out of the file so the test can't
 ## drift from it, against the shared case list.
 bad=0
 lifted="$(sed -n '/^function fDesktopExec()/,/^}/p' "${root}/install.bash")"
@@ -157,8 +157,8 @@ else
 fi
 fCheck "install.bash escapes Exec the way both rule sets read it" test "${bad}" -eq 0
 
-## A menu launcher from a home holding a space. The desktop entry format splits
-## Exec at spaces, so an unquoted path gives an entry the desktop cannot load.
+## A menu launcher from a home with a space in it. The desktop entry format splits
+## Exec at spaces, so an unquoted path gives an entry the desktop can't load.
 spacedHome="${work}/home dir"
 fInstall "${spacedHome}" || true
 entry="${spacedHome}/.local/share/applications/silkterm.desktop"
@@ -286,12 +286,12 @@ for opt in --release --target; do
 	fCheck "bash: and names the option" fSaid "${h}" "${opt} needs a value"
 done
 
-## install.ps1 without -Yes, where it cannot ask. It used to say "Aborted" and
+## install.ps1 without -Yes, where it can't ask. It used to say "Aborted" and
 ## succeed. Read-Host throws under -NonInteractive, and with a terminal on stdin
 ## nothing else gives it away, so that case runs under a pty.
 if command -v pwsh >/dev/null 2>&1; then
 	fAsked(){
-		fSaid "${1}" "Error: there is no terminal here to ask for confirmation" &&
+		fSaid "${1}" "Error: there's no terminal here to ask for confirmation" &&
 			fSaid "${1}" "Re-run with -Yes" && [[ ! -e "${1}/.local/bin/silkterm" ]]
 	}
 	h="${work}/ps1-no-yes-devnull"
@@ -312,7 +312,7 @@ if command -v pwsh >/dev/null 2>&1; then
 fi
 
 ## install.ps1 writes the same entry, and its Exec goes through the same rule.
-## Its own block is lifted out of the file, so the two cannot drift apart.
+## Its own block is lifted out of the file, so the two can't drift apart.
 if command -v pwsh >/dev/null 2>&1; then
 	rc=0
 	pwsh -NoProfile -File "${meDir}/desktop-entry.ps1" || rc=$?
@@ -322,7 +322,7 @@ else
 fi
 
 ## The headless rig's run directory: predictable name, so it must refuse anything
-## it does not own. Driven for real, in a sandbox of its own.
+## it doesn't own. Driven for real, in a sandbox of its own.
 headless="${root}/cicd/utility/gui-headless.bash"
 sandboxUser="silktest-$$-${RANDOM}"
 runDir="/tmp/cicd-gui-headless-${sandboxUser}"
@@ -341,7 +341,7 @@ fCheck "one of our own is used" test "${rc}" -eq 0
 fCheck "and is not readable by anyone else" test "$(stat -c %a "${runDir}")" = "700"
 fSafeRm "${runDir}"
 
-## The rig's display: a number it did not start, a pid file whose pid is now
+## The rig's display: a number it didn't start, a pid file whose pid is now
 ## something else, and a second run's stop. Each on a free number, with the
 ## sandbox's own run directory.
 fFreeDisplay(){ local n; for n in $(seq "${1}" 299); do [[ -e "/tmp/.X${n}-lock" || -e "/tmp/.X11-unix/X${n}" ]] || { echo "${n}"; return 0; }; done; return 1; }
@@ -350,7 +350,7 @@ if command -v Xvfb >/dev/null && command -v xdpyinfo >/dev/null; then
 	mkdir -p "${runDir}"; chmod 700 "${runDir}"
 	fRig(){ USER="${sandboxUser}" CICD_HEADLESS_DISPLAY=":${1}" CICD_HEADLESS_SIZE=320x200x24 "${headless}" "${@:2}"; }
 
-	## Taken: someone else's server already holds the number.
+	## Taken: someone else's server already has the number.
 	n="$(fFreeDisplay 250)"
 	Xvfb ":${n}" -screen 0 640x480x24 -nolisten tcp >/dev/null 2>&1 &
 	foreign=$!
@@ -361,7 +361,7 @@ if command -v Xvfb >/dev/null && command -v xdpyinfo >/dev/null; then
 	fCheck "and the other server is left alone" test -d "/proc/${foreign}"
 	kill "${foreign}" 2>/dev/null || true; fGone "${foreign}" || true
 
-	## Stale: the pid file names a process that is not our server.
+	## Stale: the pid file names a process that isn't our server.
 	n="$(fFreeDisplay 250)"
 	sleep 60 &
 	decoy=$!
@@ -371,7 +371,7 @@ if command -v Xvfb >/dev/null && command -v xdpyinfo >/dev/null; then
 	fCheck "and stop leaves its process alone" test -d "/proc/${decoy}"
 	kill "${decoy}" 2>/dev/null || true
 
-	## Two runs: the one that started the server keeps it until it stops it.
+	## A pair of runs: the one that started the server keeps it until it stops it.
 	n="$(fFreeDisplay 250)"
 	gate="$(mktemp -d)"
 	bash -c 'USER="$1" CICD_HEADLESS_DISPLAY=":$2" "$3" start >/dev/null 2>&1; touch "$4/up"; while [[ ! -e "$4/go" ]]; do sleep 0.1; done; USER="$1" CICD_HEADLESS_DISPLAY=":$2" "$3" stop >/dev/null 2>&1' \
@@ -398,9 +398,9 @@ echo "all passed"
 
 ##	History:
 ##		- 20260908 JC: Created.
-##		- 20260917 JC: The rig's display: taken, stale and shared.
+##		- 20260917 JC: The rig's display: taken, stale, and shared.
 ##		- 20260925 JC: Which release is picked, API failures, and a re-run that
 ##		               puts back a missing launcher.
 ##		- 20260926 JC: A release list as one object, an option with no value, and
-##		               install.ps1 without -Yes where it cannot ask.
+##		               install.ps1 without -Yes where it can't ask.
 ##		- 20261028 JC: A download that fails its checksum installs nothing.

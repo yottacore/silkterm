@@ -5,13 +5,13 @@
 ##		and checks it's tied to the terminal window:
 ##			- Its toplevel names the terminal's as its parent.
 ##			- sway reads it as a dialog, so it floats above the tiled terminal
-##			  rather than taking half the screen, and holds the focus.
+##			  rather than taking half the screen, and has the focus.
 ##			- Where the compositor offers xdg-dialog, the dialog asks to be
 ##			  modal, and lets go of that before its toplevel when closed.
 ##			  Where it doesn't, it says so, and checks nothing is asked.
 ##	- Syntax: run.bash [--bin PATH]   (default: the debug build, then release)
 ##	- Exit: 0 passed, 1 a check failed, 3 nothing ran (no binary, sway,
-##	  wtype, python3 or software Vulkan).
+##	  wtype, python3, or software Vulkan).
 ##	- Test ID: detyk
 ##	- History: At bottom of file.
 

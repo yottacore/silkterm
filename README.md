@@ -41,7 +41,7 @@
 
 </div>
 
-SilkTerm™ is a hardware-accelerated terminal for Linux, Windows and macOS that scrolls new output smoothly, a pixel at a time, instead of jumping whole lines. Fast output isn't held back; the scroll speeds up to keep pace. It also has an animated cursor, a text halo that keeps text readable over a wallpaper or a see-through window, tabs and split panes. One executable, written in Rust.
+SilkTerm™ is a hardware-accelerated terminal for Linux, Windows, and macOS that scrolls new output smoothly, a pixel at a time, instead of jumping whole lines. Fast output isn't held back; the scroll speeds up to keep pace. It also has an animated cursor, a text halo that keeps text readable over a wallpaper or a see-through window, tabs, and split panes. One executable, written in Rust.
 
 <!--
 <table style="border: none; border-collapse: collapse;">
@@ -175,7 +175,7 @@ Text can be particularly hard to read, for example when using light text on a no
 
 - **True-color, 256-color, and 16-color text support**, as well as standard bold & italic.
 
-- **Read-only output toggle**. Typing and paste stop reaching the program. Select and copy still work.
+- **Read-only output toggle**. Typing and paste are no longer sent to the program. Select and copy still work.
 
 - **Clickable links**. Hover a URL to underline it, Ctrl+click to open it (Command+click on macOS), or use the right-click menu. Only known-safe schemes are ever treated as links, and an app that has taken over the mouse keeps it.
 
@@ -245,7 +245,7 @@ Smooth scrolling isn't useful if the terminal falls behind the moment something 
 
 [install.md](install.md) explains the packages and installers, the one-line install scripts, building it yourself, and setting up a development environment. [usage.md](usage.md) explains configuration, the [command line](usage.md#command-line), shell integration, and opening scripts and folders on Windows.
 
-Settings are in one commented [SHCL](https://github.com/yottacore/shcl) file, written with every default on first run. A few lines of it:
+Settings are in one commented [SHCL](https://github.com/yottacore/shcl) file, which is written with every default on the first run. A few lines of it:
 
 ~~~shcl
 theme: SilkTerm
@@ -261,7 +261,7 @@ A setting commented out with `#`, like `enabled` above, is at its default. Remov
 
 ## Contributing
 
-Bug reports, feature ideas, and pull requests are welcome. Pull requests need a signed [CLA](CLA.md). See [contributing.md](contributing.md) for how to get started, the [style guide](style-guide.md) for naming, comments, Rust conventions, and formatting, and the [UI/UX style guide](project/uiux-style-guide.md) for anything that changes what the program shows on screen. [glossary.md](glossary.md) defines the terms the settings and the design docs lean on.
+Bug reports, feature ideas, and pull requests are welcome. Pull requests need a signed [CLA](CLA.md). See [contributing.md](contributing.md) for how to get started, the [style guide](style-guide.md) for naming, comments, Rust conventions, and formatting, and the [UI/UX style guide](project/uiux-style-guide.md) for anything that changes what the program shows on screen. [glossary.md](glossary.md) defines the terms used in the settings and the design docs.
 
 ## Support SilkTerm
 

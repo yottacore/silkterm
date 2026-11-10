@@ -7,7 +7,7 @@
 ##		may a table of contents. README.md and style-guide.md had run bullets
 ##		together for months.
 ##		Also no banner rule, such as `// ---- name ----`, in any .rs git tracks.
-##		The style guide allows none, and fifteen had divided three files.
+##		The style guide allows none, and 15 had divided 3 files.
 ##		And a comment on anything declared `pub` outside the tests is a `///`
 ##		doc, and a file's opening comment is `//!`. Most were plain `//`.
 ##		Except a label over a group: a `//` on an item whose next line is
@@ -15,7 +15,7 @@
 ##		belong to the first item only.
 ##	Syntax:
 ##		run.py [--root DIR] [FILE ...]
-##		  --root DIR  repository root (default: three levels above this script)
+##		  --root DIR  repository root (default: 3 levels above this script)
 ##		  With no FILE, every .md git tracks, then every .rs for banner rules
 ##		  and doc comments.
 ##	Exit: 0 all clean, 1 one or more problems.
@@ -37,7 +37,7 @@ TOC_END = "<!-- /TOC -->"
 TOC_IGNORE = "<!-- TOC ignore:true -->"
 BULLET = re.compile(r"^[-*+] ")
 HEADING = re.compile(r"^#{1,6} ")
-##	A comment line that opens on a run of four or more of one rule character.
+##	A comment line that opens on a run of 4 or more of one rule character.
 ##	A box drawn in a comment opens on a corner, so it passes.
 BANNER = re.compile(r"^\s*//[/!]?\s*([-=*#~_+•])\1{3,}")
 ##	An item or a field declared `pub`, at any visibility. A `pub use` or a
@@ -49,7 +49,7 @@ PUB = re.compile(
 MOD_DECL = re.compile(r"^\s*pub(\([^)]*\))?\s+mod\s+\w+\s*;")
 CFG_TEST = re.compile(r"^\s*#\[cfg\((all\()?test\b")
 LICENSE = ("// SPDX-License-Identifier:", "// Copyright")
-##	build.rs pulls this one in with include!, where an inner doc cannot go.
+##	build.rs pulls this one in with include!, where an inner doc can't go.
 NO_INNER_DOC = {"buildnum.rs"}
 
 

@@ -8,7 +8,7 @@
 <#
 .SYNOPSIS
 	Drive n8runterm.ps1 in a sandboxed HOME and check what it does to files it
-	did not create.
+	didn't create.
 .DESCRIPTION
 	install.bash puts a release build at the same path the launcher wants for
 	its symlink, and the launcher used to delete it.
@@ -53,7 +53,7 @@ function fBareSandbox {
 	return $root
 }
 
-## A sandbox home with a source dir holding one "build".
+## A sandbox home with a source dir with one "build".
 function fSandbox {
 	$root = fBareSandbox
 	$src  = Join-Path $root "synced/0-0/common/exec/app/linux"
@@ -73,7 +73,7 @@ function fUseHome { param([string]$Home_)
 	$env:APPDATA = Join-Path $Home_ "AppData/Roaming"
 }
 
-## Where the launcher puts the pool, the symlink and its log.
+## Where the launcher puts the pool, the symlink, and its log.
 function fBin { param([string]$Home_)
 	if ($IsWindows) { return (Join-Path $Home_ "AppData/Local/Programs") }
 	return (Join-Path $Home_ ".local/bin")
@@ -241,8 +241,8 @@ try {
 	fDropSandbox $root
 
 	## The held stamp is a name in whole seconds. Compared against a source mtime
-	## carrying a fraction, it always read as older, so every launch hashed the
-	## whole binary to rediscover the copy it was already holding.
+	## with a fraction, it always read as older, so every launch hashed the
+	## whole binary to rediscover the copy it already had.
 	Write-Host "a source whose mtime has a fraction is still recognised"
 	$root = fSandbox
 	$src = Join-Path $root "synced/0-0/common/exec/app/linux/silkterm"
@@ -346,7 +346,7 @@ try {
 	fRun $root
 	$held = @(fHeld $root)
 	$bytes = ($held | Measure-Object -Property Length -Sum).Sum
-	## Five are kept whatever they weigh; at 150 MB a sixth still fits and a seventh does not.
+	## The newest 5 are kept whatever they weigh; at 150 MB a sixth still fits and a seventh doesn't.
 	fCheck "six of ten are kept ($($held.Count))" ($held.Count -eq 6)
 	fCheck "within 1 GB" ($bytes -le 1GB)
 	fDropSandbox $root
@@ -381,7 +381,7 @@ try {
 	fCheck "and the symlink points at it" ($held.Count -eq 1 -and (fLinkTarget $root) -eq $held[0].FullName)
 	fDropSandbox $root
 
-	## PATH holds nothing but a stand-in terminal that records what it was handed.
+	## PATH has nothing but a stand-in terminal that records what it was handed.
 	if (-not $IsWindows) {
 		Write-Host "no build anywhere falls back to an installed terminal"
 		$root = fBareSandbox
@@ -416,5 +416,5 @@ fTestDir_End 0
 ##		- 2026-10-06: Help block.
 ##		- 2026-09-28: LOCALAPPDATA and APPDATA are sandboxed too.
 ##		- 2026-09-26: Pool cases: copy and decline, rotation, the byte cap, the
-##		  swept leftover, the Dropbox spelling, the title and the fallback.
+##		  swept leftover, the Dropbox spelling, the title, and the fallback.
 ##		- 2026-09-08: Created.
