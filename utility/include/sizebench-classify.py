@@ -1103,11 +1103,13 @@ def check_grid(strict: bool) -> bool:
 def selftest(be: Backend) -> int:
 	"""Measure this process, where the answer can be checked against something else.
 
-	There is no published row on Windows to reproduce, which is how a new rig is normally
-	validated, so this stands in for it: for a single process the unique footprint is
-	its resident set, and the 2 are arrived at by completely different routes. They won't
-	match exactly, since the resident set moves while it's being read, but a real error in
-	the page walk shows up as a wrong order of magnitude, not a few percent.
+	A new rig is normally validated by reproducing a published row. This stood in for
+	that before any Windows row was published, and conhost and Windows Terminal have
+	been since 20260818. It still checks the page walk on its own. For a single process
+	the unique footprint is its resident set, and the 2 are arrived at by completely
+	different routes. They won't match exactly, since the resident set moves while it's
+	being read, but a real error in the page walk shows up as a wrong order of
+	magnitude, not a few percent.
 	"""
 	pid = os.getpid()
 	rows = be.regions(pid)
