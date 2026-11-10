@@ -20,6 +20,8 @@ use winit::event::WindowEvent;
 pub(super) struct IdleClock {
 	since: Instant,
 	wake_owed: bool,
+	// owed only to answer the desktop's repaint, and let go again once drawn
+	repaint: bool,
 	// a rebuild the GPU refused, tried again on this
 	retry: Retry,
 }
@@ -29,6 +31,7 @@ impl IdleClock {
 		IdleClock {
 			since: Instant::now(),
 			wake_owed: false,
+			repaint: false,
 			retry: Retry::default(),
 		}
 	}
@@ -63,7 +66,18 @@ impl IdleClock {
 	// A sign of life. True when it is the one that makes the device owed.
 	fn active(&mut self, released: bool) -> bool {
 		self.since = Instant::now();
+		self.repaint = false;
 		self.owe(released)
+	}
+
+	// The desktop wants pixels, with nobody known to be there: X11 drops a
+	// window's pixels while it is on another desktop. The device is owed for
+	// one frame and the wait isn't started over. Owed already, as for output
+	// at the reveal, it stays a whole wake. True when this makes it owed.
+	fn repaint(&mut self, released: bool) -> bool {
+		let newly = self.owe(released);
+		self.repaint |= newly;
+		newly
 	}
 
 	pub(super) fn owe(&mut self, released: bool) -> bool {
@@ -476,6 +490,28 @@ impl State {
 		}
 	}
 
+	/// The desktop asks a window that let its device go for pixels. One that
+	/// keeps its picture takes the device back only for that frame
+	/// (`repaint_done`). One that goes blank without it wakes for good.
+	pub(super) fn note_repaint(&mut self) {
+		if !self.keeps_picture {
+			self.note_active("redraw request");
+		} else if self.idle.repaint(self.gpu.is_none()) {
+			idledbg("wake: redraw request, for one frame");
+		}
+	}
+
+	/// A device taken back only to repaint has drawn its frame with the
+	/// wallpaper, and can go again. The wallpaper is the last thing a rebuild
+	/// waits on, and a frame drawn before it would leave the stand-in up.
+	pub(super) fn repaint_done(&self) -> bool {
+		self.idle.repaint
+			&& self.gpu.is_some()
+			&& matches!(self.conserve, Conserve::Restored(_))
+			&& !self.dirty
+			&& self.frame_retry.at.is_none()
+	}
+
 	/// Shown again after being out of sight. Nobody is known to be there, so
 	/// the wait isn't started over, and a window that let its device go keeps
 	/// its last frame up until something on screen changes (output it was owed
@@ -556,6 +592,7 @@ impl State {
 		self.invalidate_prepared();
 		self.rebirth = Some(gpu.release());
 		self.idle.rebuilt();
+		self.idle.repaint = false;
 		self.frame_retry = Retry::default();
 		// no frame draws while released, so nothing else would update the title
 		self.conserve = Conserve::Saving;
@@ -608,7 +645,10 @@ impl State {
 			scrim,
 		});
 		self.idle.rebuilt();
-		self.idle.since = Instant::now();
+		// back only to repaint: nobody is known to be there, so the wait runs on
+		if !self.idle.repaint {
+			self.idle.since = Instant::now();
+		}
 		self.vram_next = Instant::now() + VRAM_CHECK_IVL;
 		// the window may have been resized while there was no surface to follow
 		self.relayout_all();
@@ -733,6 +773,35 @@ mod tests {
 		assert!(!clock.wake_owed);
 		assert!(clock.output(true, true, true), "the tab in front");
 		assert!(clock.wake_owed);
+	}
+
+	// The desktop's repaint takes a released device back for one frame, with
+	// the wait left running, so it can be let go again once drawn. A sign of
+	// life in that time makes it a whole wake, and so does a device already
+	// owed, as for output while the window was hidden.
+	// Test ID: df4e2
+	#[test]
+	fn a_repaint_takes_the_device_back_for_one_frame() {
+		let long_ago = Instant::now()
+			.checked_sub(Duration::from_secs(1))
+			.expect("a second of uptime");
+		let mut clock = IdleClock::new();
+		clock.since = long_ago;
+		assert!(clock.repaint(true));
+		assert!(clock.wake_owed && clock.repaint);
+		assert_eq!(clock.since, long_ago, "a repaint started the wait over");
+		clock.active(true);
+		assert!(!clock.repaint, "a sign of life during it");
+		let mut owed = IdleClock::new();
+		owed.output(true, true, true);
+		assert!(!owed.repaint(true));
+		assert!(!owed.repaint, "owed for output already");
+		let mut kept = IdleClock::new();
+		assert!(!kept.repaint(false));
+		assert!(
+			!kept.wake_owed && !kept.repaint,
+			"a window that has its device"
+		);
 	}
 
 	// SILK_IDLE_SECS is read once per process. The idle rule is asked twice on
@@ -1121,6 +1190,7 @@ mod tests {
 		let mut clock = IdleClock {
 			since: long_ago,
 			wake_owed: false,
+			repaint: false,
 			retry: Retry::default(),
 		};
 		assert!(!clock.output(false, true, true));
@@ -1137,6 +1207,7 @@ mod tests {
 		let mut seen = IdleClock {
 			since: long_ago,
 			wake_owed: false,
+			repaint: false,
 			retry: Retry::default(),
 		};
 		assert!(!seen.output(false, false, true));
@@ -1158,6 +1229,7 @@ mod tests {
 		let mut clock = IdleClock {
 			since: long_ago,
 			wake_owed: false,
+			repaint: false,
 			retry: Retry::default(),
 		};
 		assert!(!clock.output(false, false, false));

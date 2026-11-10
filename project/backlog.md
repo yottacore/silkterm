@@ -280,6 +280,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Type: Bug
 	- Status: Waiting for answers
 		- 20261110: A run on b23's own desktop with `SILK_IDLEDBG=1` names what holds it. See the question in questions.md.
+		- 20261110: Likely the desktop switch in 2026111010491300, now fixed. A look on the next dogfood build may be enough to close it.
 	- Severity: Critical
 	- Opened: 20261110-095601
 	- Opened by: JC
@@ -333,8 +334,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 - Resources are restored when coming back to the XFCE4 desktop that holds a SilkTerm, with no focus and no pointer over it
 	- ID: 2026111010491300
 	- Type: Bug
-	- Status: Waiting for answers
-		- 20261110: Which way a released window gets its picture back. See questions.md.
+	- Status: Done
 	- Opened: 20261110-104913
 	- Opened by: JC
 	- Notes:
@@ -350,15 +350,21 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- 20261110: Work it next, ahead of the beta1 import.
 		- 20261110: If the window can be seen, and has updated content, that new content should be visible. If it's in motion, it should wake back up.
 		- 20261110: Unless it's completely hidden (e.g. minimized, completely obscured, on a tab that isn't visible, the screen is blank or locked, or on a desktop that isn't visible).
+		- 20261110: How it gets its picture back after the switch: A, repaint and let go.
 	- Reproduced: Yes, 20261110, on Xvfb with xfwm4, compositing on and off. Switching away and back woke a released, unfocused, partly covered window 3 ways at once: it was told it lost focus, which it never had, it was shown again, and the desktop asked for a repaint.
 	- Actual cause: Each of the 3 counted as a sign of life.
 	- Progress log:
 		- 20261110: Focus counts only as a change now, and being shown again counts only for a window that would go blank without its device. With those 2 gone, the window stayed released through the switch but came back black: X11 doesn't keep a window's pixels while it's on another desktop. So the desktop's repaint request still takes the device back, and that's the one wake left on a switch.
 		- 20261110: Output in a tab in the back is no longer owed at the reveal, per the answer above. der5b's old assertion is commented out with the reason.
+		- 20261110: Done as answered. The desktop's repaint takes the device back for one frame, without starting the wait over, and it goes again once the frame with the wallpaper is up. On the switch it was back in saving mode about 60 ms later, with the same picture as before to the pixel, wallpaper or not, compositing on and off. A sign of life in that time, or output it was owed while hidden, makes it a whole wake.
+		- 20261110: Verified: deskswitch fails on the 20261110-101009 build (woken by the switch), and its picture check fails with the repaint taken out (230496 pixels differ, a black window). It passed 4 of 4 after the fix.
+	- Actual fix: Focus counts only as a change, being shown again counts only for a window that goes blank without its device, and the desktop's repaint takes the device back for one frame only.
 	- Decisions:
-		- 20261110: The repaint request stays a wake until the window can show its last frame without a device. See the question in questions.md.
-	- Branch: deskwake
-	- Test case: `focus_is_a_sign_of_life_only_as_a_change` (df4dh), `hidden_output_is_owed_only_from_the_tab_in_front` (df4dj). Each fails on the old rule.
+		- 20261110: A copy of the last frame put back with X11's plain 2D drawing was turned down for repaint and let go, by the answer above.
+	- Branch: deskwake, repaint
+	- Test case: `focus_is_a_sign_of_life_only_as_a_change` (df4dh), `hidden_output_is_owed_only_from_the_tab_in_front` (df4dj), `a_repaint_takes_the_device_back_for_one_frame` (df4e2). Also `cicd/tests/deskswitch/run.bash` (df4e3), in the full run.
+	- Acceptance signoff: Self-closed: reproduced under xfwm4 with compositing on and off, deskswitch fails before the fix and passes after, and the picture after the switch matches the one before.
+	- Closed: 20261110-112700
 
 - Wayland: must use the Wayland clipboard, and minimize other X11 features
 	- ID: 2026101509024607

@@ -5260,7 +5260,7 @@ impl ApplicationHandler<UserEvent> for App {
 				// the rebuild is done where every other wake is (about_to_wait),
 				// and the frame with it.
 				if state.gpu.is_none() {
-					state.note_active("redraw request");
+					state.note_repaint();
 					return;
 				}
 				let _ = state.render(true, true);
@@ -5812,6 +5812,13 @@ impl ApplicationHandler<UserEvent> for App {
 			state.rating.pause();
 			ControlFlow::Wait
 		};
+		// A device taken back only for the desktop's repaint goes again once
+		// that frame is up (2026111010491300).
+		if !dialog_up && state.repaint_done() {
+			idledbg("repainted, letting the device go again");
+			state.release_gpu();
+			self.gpu_warm.release();
+		}
 		// A move between monitors is looked at once it has settled, before the
 		// size is saved, so the size goes to the monitor the window ended on.
 		state.check_monitor();

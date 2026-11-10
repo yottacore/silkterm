@@ -1203,6 +1203,7 @@ fScriptTests(){
 	## otherwise", read from the file. About a minute. Exit 3 is a skip: no
 	## binary, display, dash, xdotool or xprop.
 	((quick)) || fRunTest_MaySkip cicd/tests/idleother/run.bash "idle release after Minutes otherwise"
+	((quick)) || fRunTest_MaySkip cicd/tests/deskswitch/run.bash "idle release through a desktop switch"
 	## Heap allocations per frame at rest and in a drag select, against a limit.
 	## Exit 3 is a skip: no debug binary, display, window manager or xdotool.
 	fRunTest_MaySkip cicd/tests/allocs/run.bash "allocations per frame"
