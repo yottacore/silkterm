@@ -330,6 +330,22 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Notes:
 		- The top cost is still the shape plan being built again on each call, inside harfrust.
 
+- Resources are restored when coming back to the XFCE4 desktop that holds a SilkTerm, with no focus and no pointer over it
+	- ID: 2026111010491300
+	- Type: Bug
+	- Status: Queued
+	- Opened: 20261110-104913
+	- Opened by: JC
+	- Notes:
+		- Pre-next-cut.
+	- Target OS: Linux, XFCE4.
+	- Version and build: df4bm
+	- Steps to reproduce:
+		- Use XFCE4's multiple desktop feature, and come back to the desktop that holds a SilkTerm.
+		- The mouse never moves over SilkTerm, and it is behind other windows and does not have focus.
+	- Incorrect behavior: Resources are restored.
+	- Expected behavior: It needs to stay in resource-saving mode, until it gets the focus. Not even moving the mouse over it should wake it up, unless that gives it the focus (as some WMs do).
+
 - Wayland: must use the Wayland clipboard, and minimize other X11 features
 	- ID: 2026101509024607
 	- Type: Bug
