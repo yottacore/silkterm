@@ -34,28 +34,11 @@ Going forward, new issues in the new template at the bottom of this file will go
 
 ## Issues
 
-- knobs' spec checks let a relation loop, case-only twins, a NaN range, and a text chooser through
-	- ID: 2026110919171131
-	- Type: Bug
-	- Status: Queued
-	- Priority: Low
-	- Opened: 20261109-191711
-	- Opened by:
-	- Related IDs: tukzmon:2026110709074419
-	- Steps to reproduce: Load a spec with any of the 4 cases below.
-	- Incorrect behavior: Each parses clean. A loop through a setting's auto switch, its rule's state value, or its group's chooser overflows the stack at the first read. Paths that differ only in case pass, and shcl folds them onto one key, so a round trip loses a value. Dropdown options that differ only in case pass, and the second can't be picked. A NaN range end or detent passes, and then every number is in range. A group chooser of type text takes any text as a pick.
-	- Expected behavior: Each is refused when the spec loads. Spec::valid also refuses a NaN value, since its range check lets one past.
-	- Possible cause: check_links compares paths with case and never looks for NaN, read loops, or the chooser's type.
-	- Estimated effort: Low
-	- Progress log:
-		- tukzmon fixed it in commit 5fcb1e7 (tests df399 to df39c). Its copy now has Presets and Indent enums, so the patch needs those parts adapted here.
-	- Origin: Found in tukzmon's copy of knobs by its 2026-11-07 code review. The same checks are missing here, in check_links in knobs/src/lib.rs.
-
 - Settings: Side-tabs: the lower the tab, the lower the text is within the tab
 	- ID: 2026110609500003
 	- Type: Bug
 	- Status: Waiting for answers
-		- It waits on the question in questions.md, which asks for a screenshot and what was on screen when it showed.
+		- 20261109: The screenshot came in. It waits on the follow-up in questions.md, which asks whether to center the titles on their caps.
 	- Opened: 20261106-095000
 	- Opened by: JC
 	- Assigned to: CC
@@ -64,6 +47,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Reproduced: No, 20261106. On Xvfb at scales 1, 1.25, 1.5, 1.75, and 2, and under headless sway on the RTX 3060 Ti at 1, 1.25, and 2, every tab's title sits the same distance above its box's bottom edge, sub-tabs included. A dev debug build and the 11-01 release build read the same.
 	- Progress log:
 		- 20261106: The title's height comes from its own tab's box, the same box that is drawn, so nothing in the layout can add up down the list. Both renderers in the frame get the same surface size.
+		- 20261109: Measured the screenshot from Silk down to Keys. Every box is 29 px tall, and every baseline sits 8 px above the box's bottom edge, so nothing moves down the list. What changes is the letters. A title with a tall letter (Silk, Themes, Background, Window, Shell) starts 8 px below the box top. One without (Appearance, Text, Cursor, Movement, Program, Keys) starts 11 px down, so it looks low. The titles are centered from the top of a tall letter to the baseline, the same as the main window's menu and tab titles.
 	- Test case: `a_tab_title_sits_as_low_in_its_box_on_every_tab` (deyxd) runs on both sides, at 4 scales, in tall and short windows. It fails when a title is moved a quarter pixel per tab. It passes on the current build.
 	- Branch: rnd1106
 
@@ -193,6 +177,23 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Branch: rnd1106
 	- Stand-in: none (20261106). Xwayland under headless sway can't report an output as disconnected while it stays laid out, which is b23's usual sleep. deqx1 tests the output being taken out of the layout.
 
+- `top` and `htop` no longer smoothly animate disappearing and appearing lines
+	- ID: 2026110912460474
+	- Type: Bug
+	- Status: Can't reproduce
+		- 20261109: Lines that go away still slide on today's dev. Waits for a yes or no on the notes below.
+	- Severity: Low
+	- Opened: 20261109-124604
+	- Opened by: JC
+	- Related IDs: 2026101310563310
+	- Incorrect behavior: `top` and `htop` used to smoothly animate disappearing and appearing lines. Now they don't. And even when the smooth animation worked in those programs, it would quit working after a while.
+	- Notes:
+		- It's not a high priority to get back, more of a nice-to-have.
+	- Reproduced: No, 20261109, on b23 in a headless window. top showed 20 idle processes, one killed every 4 s, so the rows under it moved up. Today's dev slid 3 times and the 11-01 release 4 times. Neither slid for the first 4 kills, where only 2 to 8 rows moved.
+	- Possible cause: A shift must account for two thirds of the rows that changed. top rewrites up to 5 header rows every tick, and on a busy box many process rows change their numbers too. A small move, or a busy tick, is then cut. That rule dates from 08-01 and keeps a list program that rewrites rows above a footer it pushes down from sliding, so loosening it for top would bring that back. 2026101310563310 found the same about load.
+	- Branch: rnd1109
+	- Test case: None, since no code changed.
+
 - Add a contributor license agreement, like nano-git-db's
 	- ID: 2026101906582193
 	- Type: Task
@@ -291,32 +292,34 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- Stalled until a cosmic-text release takes fontdb 0.24 or later, and winit's sctk-adwaita drops ab_glyph.
 	- Held for a cosmic-text release on fontdb 0.24 or later, and an sctk-adwaita without ab_glyph.
 
-- The nano scroll scene on Wayland once saw st=2 while sliding
-	- ID: 2026110814224000
-	- Type: Bug
+- Import a v1.0.0-beta1 `config.toml`
+	- ID: 2026110920480399
+	- Type: Feature
 	- Status: Queued
-	- Severity: Low
-	- Opened: 20261108-142240
-	- Opened by: CC
-	- Assigned to: CC
-	- Target OS: Linux
-	- Test environment: b23, a container run of the regression tests alone at 4eb15ae, load about 10.
-	- Incorrect behavior: `cicd/tests/scroll/run.bash` (d9j4v) failed with "scroll scene nano (Wayland), expected st=1 while sliding but saw st=2". The X11 nano scene and the other 13 Wayland scenes passed in the same run.
-	- Expected behavior: Every sliding frame of the nano scene reads st=1, under the title bar.
-	- Reproduced: No, 20261108. On the host, 5 runs of `--wayland --only nano` passed, at load 8 to 10. Every kept full run log since 20261031 has it passing on both engines.
-	- Test case: d9j4v itself.
-
-- `top` and `htop` no longer smoothly animate disappearing and appearing lines
-	- ID: 2026110912460474
-	- Type: Bug
-	- Status: Queued
-	- Severity: Low
-	- Opened: 20261109-124604
+	- Priority: Avg
+	- Opened: 20261109-204804
 	- Opened by: JC
-	- Related IDs: 2026101310563310
-	- Incorrect behavior: `top` and `htop` used to smoothly animate disappearing and appearing lines. Now they don't. And even when the smooth animation worked in those programs, it would quit working after a while.
+	- Related IDs: 2026110610154305
+	- Target OS: All
+	- Requirements:
+		- When there's no `config.shcl` but there is a beta1 `config.toml`, its values are read into the new shcl config.
+		- It happens once. The old file is kept, renamed, the same way a too-old config is.
+		- A key the current build doesn't know is skipped, and a bad value falls back to the default.
+	- Origin: The answer to the Check on 2026110610154305 in questions.md, "Yes we must be able to import toml too."
+
+- Profiler: text shaping read 80.4% at 327d97e, against about 50% on the card in late October
+	- ID: 2026110920480499
+	- Type: Task
+	- Status: Queued
+	- Priority: Low
+	- Opened: 20261109-204804
+	- Opened by: CC
+	- Target OS: Linux
+	- Requirements:
+		- Run the profile on the card at 327d97e and at 0b16ae9 or fab6815, back to back, so both see the same clock.
+		- If the old build still reads about 50%, find what made shaping cost more. If both read about 80%, find what made the rest cost less, and note it as no action.
 	- Notes:
-		- It's not a high priority to get back, more of a nice-to-have.
+		- The top cost is still the shape plan being built again on each call, inside harfrust.
 
 - Wayland: must use the Wayland clipboard, and minimize other X11 features
 	- ID: 2026101509024607
@@ -2624,6 +2627,52 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Test case: None for the figures, which are a measurement. `SILK_MEMDBG` is covered by `each_debug_switch_reads_its_own_variable` (ddf59). Its minimap count is pinned by `the_memory_count_covers_every_stored_row` (ddgtx), seen to fail with the stored rows left out.
 	- Acceptance signoff: Self-closed: the numbers are in the design doc and nothing is left to judge.
 	- Closed: 20261004-194634
+
+- knobs' spec checks let a relation loop, case-only twins, a NaN range, and a text chooser through
+	- ID: 2026110919171131
+	- Type: Bug
+	- Status: Done
+	- Severity: Low
+	- Opened: 20261109-191711
+	- Opened by:
+	- Related IDs: tukzmon:2026110709074419
+	- Steps to reproduce: Load a spec with any of the 4 cases below.
+	- Incorrect behavior: Each parses clean. A loop through a setting's auto switch, its rule's state value, or its group's chooser overflows the stack at the first read. Paths that differ only in case pass, and shcl folds them onto one key, so a round trip loses a value. Dropdown options that differ only in case pass, and the second can't be picked. A NaN range end or detent passes, and then every number is in range. A group chooser of type text takes any text as a pick.
+	- Expected behavior: Each is refused when the spec loads. Spec::valid also refuses a NaN value, since its range check lets one past.
+	- Possible cause: check_links compares paths with case and never looks for NaN, read loops, or the chooser's type.
+	- Estimated effort: Low
+	- Actual effort: Low
+	- Progress log:
+		- tukzmon fixed it in commit 5fcb1e7 (tests df399 to df39c). Its copy now has Presets and Indent enums, so the patch needs those parts adapted here.
+		- 20261109: Ported. The Presets and Indent enums weren't needed here, since the chooser check keys on from_program as the rest of check_links does.
+	- Actual fix [Bug]: check_links folds case on paths, refuses NaN range ends and detents, refuses option twins, refuses a chooser that isn't a choice, and walks the reads Model::value makes for a loop. Spec::valid refuses a NaN value.
+	- Branch: rnd1109
+	- Test case: df3k1 to df3k4 in knobs/src/tests.rs. Each fails on the old code. The settings spec and its dialog tests still pass.
+	- Acceptance signoff: Self-closed: the spec checks have tests that fail without them, and the real settings spec still loads.
+	- Closed: 20261109-205600
+	- Origin: Found in tukzmon's copy of knobs by its 2026-11-07 code review. The same checks are missing here, in check_links in knobs/src/lib.rs.
+
+- The nano scroll scene on Wayland once saw st=2 while sliding
+	- ID: 2026110814224000
+	- Type: Bug
+	- Status: Done
+	- Severity: Low
+	- Opened: 20261108-142240
+	- Opened by: CC
+	- Assigned to: CC
+	- Target OS: Linux
+	- Test environment: b23, a container run of the regression tests alone at 4eb15ae, load about 10.
+	- Incorrect behavior: `cicd/tests/scroll/run.bash` (d9j4v) failed with "scroll scene nano (Wayland), expected st=1 while sliding but saw st=2". The X11 nano scene and the other 13 Wayland scenes passed in the same run.
+	- Expected behavior: Every sliding frame of the nano scene reads st=1, under the title bar.
+	- Reproduced: No, 20261108. On the host, 5 runs of `--wayland --only nano` passed, at load 8 to 10. Every kept full run log since 20261031 has it passing on both engines. Yes, 20261109, every time, on Wayland with the debug build, by holding the scene for 0.5 s after the first region row of its first scroll step.
+	- Actual cause [Bug]: The scene wrote its frame one row at a time. A frame drawn between those writes on the first step of a slide had the first region row already moved and the rest not. On the next frame that row read the same as before, so it was held as part of the top band, and the bands stay frozen for the whole slide.
+	- Actual fix [Bug]: The full-redraw shapes (less, vim, nano, muffer) write each frame at once, as curses does and as the pill shape already did.
+	- Progress log:
+		- 20261109: The same hold mid-slide passed, since the bands are only measured on a slide's first step. A real app that redraws row by row over a slow link could have one row held for a slide the same way. Not seen.
+	- Branch: rnd1109
+	- Test case: d9j4v itself. With the hold put in, it failed before the fix and passed after. less, vim, nano, and muffer pass on X11 and Wayland without it.
+	- Acceptance signoff: Self-closed: the cause was made to happen on purpose, and the fix stops it.
+	- Closed: 20261109-210500
 
 - The allocations per frame test once saw the minimap compose during a drag select
 	- ID: 2026110718055000

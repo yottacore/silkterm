@@ -308,18 +308,20 @@ impl Spec {
 
 	fn check_links(&self) -> Vec<String> {
 		let mut errs = Vec::new();
-		let mut paths: BTreeMap<(&str, Store), &str> = BTreeMap::new();
+		// shcl folds case, so A.b and a.b would be one key in the file
+		let mut paths: BTreeMap<(String, Store), &str> = BTreeMap::new();
 		for s in &self.settings {
 			let id = &s.id;
 			if PRESET_WORDS.contains(&id.as_str()) {
 				errs.push(format!("{id}: that id is taken by presets"));
 			}
 			if s.control != Control::Heading {
+				let folded = s.path.to_ascii_lowercase();
 				if s.path.is_empty() {
 					errs.push(format!("{id}: no path"));
-				} else if s.path == "kept" || s.path.starts_with("kept.") {
+				} else if folded == "kept" || folded.starts_with("kept.") {
 					errs.push(format!("{id}: kept is where set-aside values go"));
-				} else if let Some(other) = paths.insert((s.path.as_str(), s.store), id) {
+				} else if let Some(other) = paths.insert((folded, s.store), id) {
 					errs.push(format!("{id}: path {} is {other}'s too", s.path));
 				}
 				if let Err(e) = self.valid(s, &s.default) {
@@ -362,17 +364,29 @@ impl Spec {
 					errs.push(format!("{id}: a chooser can't be in a group"));
 				}
 			}
-			if s.control == Control::Slider
+			if s.min.is_nan() || s.max.is_nan() {
+				errs.push(format!("{id}: a range end is not a number"));
+			} else if s.control == Control::Slider
 				&& !(s.min < s.max && s.min.is_finite() && s.max.is_finite())
 			{
 				errs.push(format!("{id}: a slider needs a range"));
 			}
 			for d in &s.detents {
-				if d.value < s.min || d.value > s.max {
+				if d.value.is_nan() || d.value < s.min || d.value > s.max {
 					errs.push(format!("{id}: detent {} is out of range", d.value));
 				}
 			}
+			// a choice is matched without case, so a twin could never be picked
+			for (i, (k, _)) in s.options.iter().enumerate() {
+				if let Some((twin, _)) = s.options[..i]
+					.iter()
+					.find(|(t, _)| t.eq_ignore_ascii_case(k))
+				{
+					errs.push(format!("{id}: options {twin} and {k} are one"));
+				}
+			}
 		}
+		errs.extend(self.read_loops());
 		// gates can chain, but not in a loop
 		for s in &self.settings {
 			let mut at = s.gate.clone();
@@ -388,6 +402,9 @@ impl Spec {
 		}
 		for g in &self.groups {
 			match self.get(&g.chooser) {
+				Some(c) if c.control == Control::Dropdown && c.kind != Kind::Choice => {
+					errs.push(format!("group {}: chooser {} is not a choice", g.id, c.id));
+				}
 				Some(c) if c.control == Control::Dropdown => {
 					if !g.from_program
 						&& g.preset(c.default.as_text()).is_none()
@@ -403,6 +420,88 @@ impl Spec {
 			}
 			if g.presets.is_empty() && !g.from_program {
 				errs.push(format!("group {}: no presets", g.id));
+			}
+		}
+		errs
+	}
+
+	// What Model::value reads to work out a setting's value: its switch, the
+	// state value its rule names, and its group's chooser. A state value is
+	// read from its file.
+	fn reads<'a>(&'a self, s: &'a Setting) -> impl Iterator<Item = &'a str> {
+		let from = match &s.rule {
+			Some(Rule::State(from)) => Some(from.as_str()),
+			Some(Rule::Named(_)) | None => None,
+		};
+		let chooser = s.group.as_deref().and_then(|g| self.group(g));
+		let reads = match s.store {
+			Store::Config => [s.auto.as_deref(), from, chooser.map(|g| g.chooser.as_str())],
+			Store::State => [None; 3],
+		};
+		reads.into_iter().flatten()
+	}
+
+	// A loop through those would recurse until the stack runs out.
+	fn read_loops(&self) -> Vec<String> {
+		#[derive(Clone, Copy, PartialEq)]
+		enum Mark {
+			New,
+			Open,
+			Done,
+		}
+		let index: BTreeMap<&str, usize> = self
+			.settings
+			.iter()
+			.enumerate()
+			.map(|(i, s)| (s.id.as_str(), i))
+			.collect();
+		let reads: Vec<Vec<usize>> = self
+			.settings
+			.iter()
+			.map(|s| {
+				self.reads(s)
+					.filter_map(|id| index.get(id).copied())
+					.collect()
+			})
+			.collect();
+		let mut mark = vec![Mark::New; self.settings.len()];
+		let mut errs = Vec::new();
+		for start in 0..self.settings.len() {
+			if mark[start] != Mark::New {
+				continue;
+			}
+			mark[start] = Mark::Open;
+			// each setting on the way down, with the next of its reads to try
+			let mut path = vec![(start, 0)];
+			while let Some(top) = path.last_mut() {
+				let at = top.0;
+				let Some(&next) = reads[at].get(top.1) else {
+					mark[at] = Mark::Done;
+					path.pop();
+					continue;
+				};
+				top.1 += 1;
+				match mark[next] {
+					Mark::New => {
+						mark[next] = Mark::Open;
+						path.push((next, 0));
+					}
+					Mark::Open => {
+						// an open one is on the path, so this always finds it
+						let from = path.iter().position(|&(i, _)| i == next).unwrap_or(0);
+						let mut names: Vec<&str> = path[from..]
+							.iter()
+							.map(|&(i, _)| self.settings[i].id.as_str())
+							.collect();
+						names.push(&self.settings[next].id);
+						errs.push(format!(
+							"{}: reading it goes round in a loop, {}",
+							self.settings[next].id,
+							names.join(" -> ")
+						));
+					}
+					Mark::Done => {}
+				}
 			}
 		}
 		errs
@@ -439,7 +538,7 @@ impl Spec {
 	/// Why the value doesn't fit.
 	pub fn valid(&self, s: &Setting, v: &Value) -> Result<Value, String> {
 		let in_range = |x: f64| {
-			if x < s.min || x > s.max {
+			if x.is_nan() || x < s.min || x > s.max {
 				Err(format!(
 					"{} is outside {}..{}",
 					Value::Float(x).show(),

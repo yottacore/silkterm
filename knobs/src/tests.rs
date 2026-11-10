@@ -78,6 +78,99 @@ fn a_bad_spec_names_every_mistake() {
 	assert!(all.contains("y: no tab"), "{all}");
 }
 
+// One group, whose chooser is pick and whose one member is sw.
+const SMALL: &str = "tabs: [\"A\"]
+settings:
+	pick:
+		label: Pick
+		tab: A
+		control: dropdown
+		path: a.pick
+		default: one
+	sw:
+		label: Switch
+		tab: A
+		control: checkbox
+		path: a.sw
+		group: g
+	n:
+		label: N
+		tab: A
+		control: number
+		path: a.n
+		range: [0, 10]
+groups:
+	g:
+		chooser: pick
+		presets:
+			one:
+				sw: true
+";
+
+fn small_errs(from: &str, to: &str) -> String {
+	assert!(SMALL.contains(from), "{from}");
+	Spec::parse(&SMALL.replace(from, to))
+		.err()
+		.unwrap_or_default()
+		.join("\n")
+}
+
+// Test ID: df3k1
+#[test]
+fn a_chooser_switched_by_its_own_member_is_a_loop() {
+	assert_eq!(Spec::parse(SMALL).err(), None);
+	// reading pick reads sw, its switch, and sw reads pick, its group's chooser
+	let all = small_errs(
+		"\t\tdefault: one\n",
+		"\t\tdefault: one\n\t\tauto: sw\n\t\trule: pick_rule\n",
+	);
+	assert!(
+		all.contains("pick: reading it goes round in a loop, pick -> sw -> pick"),
+		"{all}"
+	);
+}
+
+// Test ID: df3k2
+#[test]
+fn paths_and_options_that_differ_only_in_case_are_twins() {
+	let all = small_errs("path: a.sw", "path: A.Pick");
+	assert!(all.contains("sw: path A.Pick is pick's too"), "{all}");
+	let all = small_errs("path: a.sw", "path: Kept.sw");
+	assert!(
+		all.contains("sw: kept is where set-aside values go"),
+		"{all}"
+	);
+	let all = small_errs(
+		"\t\tcontrol: number\n",
+		"\t\tcontrol: dropdown\n\t\toptions: [\"low\", \"Low\"]\n\t\tdefault: low\n",
+	);
+	assert!(all.contains("n: options low and Low are one"), "{all}");
+}
+
+// Test ID: df3k3
+#[test]
+fn a_range_end_detent_or_value_that_isnt_a_number_is_refused() {
+	let all = small_errs("range: [0, 10]", "range: [nan, 10]");
+	assert!(all.contains("n: a range end is not a number"), "{all}");
+	let all = small_errs("range: [0, 10]", "range: [0, nan]");
+	assert!(all.contains("n: a range end is not a number"), "{all}");
+	let all = small_errs("range: [0, 10]", "range: [0, 10]\n\t\tdetents: [nan, 5]");
+	assert!(all.contains("n: detent NaN is out of range"), "{all}");
+	let spec = Spec::parse(SMALL).unwrap();
+	assert!(spec.valid(spec.at("n"), &Value::Float(f64::NAN)).is_err());
+	assert!(spec.valid(spec.at("n"), &Value::Float(5.0)).is_ok());
+}
+
+// Test ID: df3k4
+#[test]
+fn a_chooser_holds_a_choice() {
+	let all = small_errs("\t\tdefault: one\n", "\t\tdefault: one\n\t\ttype: text\n");
+	assert!(
+		all.contains("group g: chooser pick is not a choice"),
+		"{all}"
+	);
+}
+
 // Test ID: ddqpv
 #[test]
 #[cfg_attr(miri, ignore = "too slow under Miri")]
