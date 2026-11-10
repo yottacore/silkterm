@@ -73,20 +73,20 @@ impl IdleClock {
 	}
 
 	// A shell printing. Output nobody can see does not keep a hidden window's
-	// device, or a program that prints forever would hold it for good. It is
-	// still owed at the reveal, so a desktop that says nothing about showing
-	// the window again cannot leave old pixels up. A tab in the back of a
-	// window on screen is out of sight the same way, but nothing it prints
-	// changes the picture, so it is not owed the device either: that would
-	// take it back and let it go again once per wait for as long as the tab
-	// prints. Switching to the tab is input, which brings it back.
+	// device, or a program that prints forever would hold it for good. Output
+	// in the tab in front is still owed at the reveal, so the window shows
+	// what changed once it can be seen. A tab in the back is out of sight
+	// either way, and nothing it prints changes the picture, so it is not owed
+	// the device: that would take it back and let it go again once per wait
+	// for as long as the tab prints. Switching to the tab is input, which
+	// brings it back.
 	fn output(&mut self, released: bool, hidden: bool, in_front: bool) -> bool {
-		if hidden {
-			self.owe(released)
-		} else if in_front {
-			self.active(released)
-		} else {
+		if !in_front {
 			false
+		} else if hidden {
+			self.owe(released)
+		} else {
+			self.active(released)
 		}
 	}
 }
@@ -373,16 +373,27 @@ pub(super) fn restore_sign(event: &WindowEvent) -> bool {
 /// locker, tells the window under a pointer at rest that it entered, with one
 /// move to where it already was. That kept the wait from ever running out
 /// there, and took a released device back for nobody.
-pub(super) fn sign_of_life(event: &WindowEvent, pointer_over: bool) -> bool {
+///
+/// Focus counts only as a change. On X11, coming back to the desktop that
+/// holds an unfocused window tells it it lost focus, which it never had.
+/// `focused` is the window's focus before this event. The answer names the
+/// sign for `SILK_IDLEDBG`.
+pub(super) fn sign_of_life(
+	event: &WindowEvent,
+	pointer_over: bool,
+	focused: bool,
+) -> Option<&'static str> {
 	match event {
-		WindowEvent::CursorMoved { .. } | WindowEvent::CursorEntered { .. } => pointer_over,
+		WindowEvent::CursorMoved { .. } | WindowEvent::CursorEntered { .. } => {
+			pointer_over.then_some("pointer")
+		}
+		WindowEvent::Focused(now) => (*now != focused).then_some("focus"),
 		WindowEvent::KeyboardInput { .. }
 		| WindowEvent::MouseInput { .. }
 		| WindowEvent::MouseWheel { .. }
 		| WindowEvent::Touch(_)
-		| WindowEvent::Ime(_)
-		| WindowEvent::Focused(_) => true,
-		_ => false,
+		| WindowEvent::Ime(_) => Some("input"),
+		_ => None,
 	}
 }
 
@@ -434,10 +445,7 @@ impl State {
 		let frame = freeze_frame(self.was_hidden, hidden);
 		if frame == Frame::CatchUp {
 			self.freeze_catchup();
-			// Being shown again is a sign of life. Windows sends no occlusion
-			// events, and its repaint on a restore can come before the size
-			// does, while the window still counts as hidden.
-			self.note_active("shown");
+			self.note_shown();
 		}
 		self.was_hidden = hidden;
 		frame == Frame::Skip
@@ -465,6 +473,19 @@ impl State {
 			idledbg(&format!("wake: {why}"));
 		} else {
 			self.idle_trace.restart(why);
+		}
+	}
+
+	/// Shown again after being out of sight. Nobody is known to be there, so
+	/// the wait isn't started over, and a window that let its device go keeps
+	/// its last frame up until something on screen changes (output it was owed
+	/// while hidden is owed now). A window that goes blank without its device
+	/// takes it back. Windows sends no occlusion events, and its repaint on a
+	/// restore can come before the size does, so this is called from the
+	/// catch-up edge as well as on an occlusion event.
+	pub(super) fn note_shown(&mut self) {
+		if !self.keeps_picture {
+			self.note_active("shown");
 		}
 	}
 
@@ -660,15 +681,14 @@ mod tests {
 			device_id,
 			position: winit::dpi::PhysicalPosition::new(10.0, 10.0),
 		};
-		assert!(!sign_of_life(&entered, false));
-		assert!(!sign_of_life(&moved, false));
-		assert!(sign_of_life(&moved, true));
+		let life = |e: &WindowEvent, over: bool| sign_of_life(e, over, false).is_some();
+		assert!(!life(&entered, false));
+		assert!(!life(&moved, false));
+		assert!(life(&moved, true));
 		// Wayland's compositor knows its pointer, so an enter there is over
-		assert!(sign_of_life(&entered, true));
-		assert!(!sign_of_life(&WindowEvent::CursorLeft { device_id }, true));
-		assert!(sign_of_life(&WindowEvent::Focused(false), false));
-		assert!(sign_of_life(&WindowEvent::Focused(true), false));
-		assert!(sign_of_life(
+		assert!(life(&entered, true));
+		assert!(!life(&WindowEvent::CursorLeft { device_id }, true));
+		assert!(life(
 			&WindowEvent::MouseInput {
 				device_id,
 				state: winit::event::ElementState::Pressed,
@@ -676,7 +696,43 @@ mod tests {
 			},
 			false
 		));
-		assert!(!sign_of_life(&WindowEvent::RedrawRequested, true));
+		assert!(!life(&WindowEvent::RedrawRequested, true));
+	}
+
+	// Focus counts only as a change. Coming back to the desktop that holds an
+	// unfocused window on X11 tells it it lost focus, which took a released
+	// device back with nobody there (2026111010491300).
+	// Test ID: df4dh
+	#[test]
+	fn focus_is_a_sign_of_life_only_as_a_change() {
+		use super::sign_of_life;
+		use winit::event::WindowEvent;
+		assert_eq!(
+			sign_of_life(&WindowEvent::Focused(true), false, false),
+			Some("focus")
+		);
+		assert_eq!(
+			sign_of_life(&WindowEvent::Focused(false), false, true),
+			Some("focus")
+		);
+		assert_eq!(
+			sign_of_life(&WindowEvent::Focused(false), false, false),
+			None
+		);
+		assert_eq!(sign_of_life(&WindowEvent::Focused(true), false, true), None);
+	}
+
+	// A released window is owed its device at the reveal only for output it
+	// can show: the tab in front. A tab in the back printing while the window
+	// was hidden changes nothing anyone will see.
+	// Test ID: df4dj
+	#[test]
+	fn hidden_output_is_owed_only_from_the_tab_in_front() {
+		let mut clock = IdleClock::new();
+		assert!(!clock.output(true, true, false), "a tab in the back");
+		assert!(!clock.wake_owed);
+		assert!(clock.output(true, true, true), "the tab in front");
+		assert!(clock.wake_owed);
 	}
 
 	// SILK_IDLE_SECS is read once per process. The idle rule is asked twice on
@@ -1111,9 +1167,13 @@ mod tests {
 		);
 		assert!(!clock.output(true, false, false));
 		assert!(!clock.wake_owed, "a tab in the back took the device back");
-		// hidden, it is owed at the reveal, whichever tab printed
-		assert!(clock.output(true, true, false));
-		assert!(clock.wake_owed);
+		// Hidden, it was owed at the reveal whichever tab printed. Since
+		// 2026111010491300 only the tab in front is, since a tab in the back
+		// can't be seen after the reveal either (df4dj pins that).
+		// assert!(clock.output(true, true, false));
+		// assert!(clock.wake_owed);
+		assert!(!clock.output(true, true, false));
+		assert!(!clock.wake_owed);
 		assert_eq!(clock.since, long_ago);
 	}
 
