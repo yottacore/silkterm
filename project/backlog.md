@@ -55,7 +55,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- ID: 2026110609500003
 	- Type: Bug
 	- Status: Waiting for answers
-		- It waits on the question in questions.md, which asks for a screenshot and what was on screen when it showed.
+		- 20261109: The screenshot came in. It waits on the follow-up in questions.md, which asks whether to center the titles on their caps.
 	- Opened: 20261106-095000
 	- Opened by: JC
 	- Assigned to: CC
@@ -64,6 +64,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Reproduced: No, 20261106. On Xvfb at scales 1, 1.25, 1.5, 1.75, and 2, and under headless sway on the RTX 3060 Ti at 1, 1.25, and 2, every tab's title sits the same distance above its box's bottom edge, sub-tabs included. A dev debug build and the 11-01 release build read the same.
 	- Progress log:
 		- 20261106: The title's height comes from its own tab's box, the same box that is drawn, so nothing in the layout can add up down the list. Both renderers in the frame get the same surface size.
+		- 20261109: Measured the screenshot from Silk down to Keys. Every box is 29 px tall, and every baseline sits 8 px above the box's bottom edge, so nothing moves down the list. What changes is the letters. A title with a tall letter (Silk, Themes, Background, Window, Shell) starts 8 px below the box top. One without (Appearance, Text, Cursor, Movement, Program, Keys) starts 11 px down, so it looks low. The titles are centered from the top of a tall letter to the baseline, the same as the main window's menu and tab titles.
 	- Test case: `a_tab_title_sits_as_low_in_its_box_on_every_tab` (deyxd) runs on both sides, at 4 scales, in tall and short windows. It fails when a title is moved a quarter pixel per tab. It passes on the current build.
 	- Branch: rnd1106
 
@@ -291,6 +292,21 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- Stalled until a cosmic-text release takes fontdb 0.24 or later, and winit's sctk-adwaita drops ab_glyph.
 	- Held for a cosmic-text release on fontdb 0.24 or later, and an sctk-adwaita without ab_glyph.
 
+- Import a v1.0.0-beta1 `config.toml`
+	- ID: 2026110920480399
+	- Type: Feature
+	- Status: Queued
+	- Priority: Avg
+	- Opened: 20261109-204804
+	- Opened by: JC
+	- Related IDs: 2026110610154305
+	- Target OS: All
+	- Requirements:
+		- When there's no `config.shcl` but there is a beta1 `config.toml`, its values are read into the new shcl config.
+		- It happens once. The old file is kept, renamed, the same way a too-old config is.
+		- A key the current build doesn't know is skipped, and a bad value falls back to the default.
+	- Origin: The answer to the Check on 2026110610154305 in questions.md, "Yes we must be able to import toml too."
+
 - The nano scroll scene on Wayland once saw st=2 while sliding
 	- ID: 2026110814224000
 	- Type: Bug
@@ -317,6 +333,20 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Incorrect behavior: `top` and `htop` used to smoothly animate disappearing and appearing lines. Now they don't. And even when the smooth animation worked in those programs, it would quit working after a while.
 	- Notes:
 		- It's not a high priority to get back, more of a nice-to-have.
+
+- Profiler: text shaping read 80.4% at 327d97e, against about 50% on the card in late October
+	- ID: 2026110920480499
+	- Type: Task
+	- Status: Queued
+	- Priority: Low
+	- Opened: 20261109-204804
+	- Opened by: CC
+	- Target OS: Linux
+	- Requirements:
+		- Run the profile on the card at 327d97e and at 0b16ae9 or fab6815, back to back, so both see the same clock.
+		- If the old build still reads about 50%, find what made shaping cost more. If both read about 80%, find what made the rest cost less, and note it as no action.
+	- Notes:
+		- The top cost is still the shape plan being built again on each call, inside harfrust.
 
 - Wayland: must use the Wayland clipboard, and minimize other X11 features
 	- ID: 2026101509024607
