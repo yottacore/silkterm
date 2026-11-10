@@ -236,6 +236,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- It's a rough edge, for shcl to look at. It's why a launch message about a bad line can name a line 2 short once the rating writes (2026100115322366).
 		- It's stalled until a shcl beta has a fix.
 		- 20261007: It's still there, run against shcl dev d7903b73 rather than inferred. The step above with `set_string("performance.profile", "low")` writes `profile: low` as a new line above the commented one, and keeps the commented line, so 5 lines in become 6 out. Nothing in shcl's changelog or log since b10c2009 is for it. There isn't a 3.0 beta yet, and crates.io still has 2.0.0.
+		- 20261110: Still there on shcl 3.0.0-beta1 and shcl dev 4901ecac. The new line goes at the end of the block now. shcl has it as 2026102910482345, deferred to v4, and a note with this repro was added there.
 	- It's held for a shcl beta that fills in a commented default in place.
 
 - shcl: `migrate_unstamped` can't say a migration didn't finish
@@ -257,6 +258,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- It's stalled until a shcl beta has it.
 		- 20261007: It's still there, run against shcl dev d7903b73 rather than inferred. The step above still returns `current: false`, `ambiguous: 0`, `lost: 0`, and the stamped `migrate` still shows it only by leaving the Format line off. `Migration` doesn't have a new field. shcl's CLI `migrate` now refuses such a file with exit 7, by the same Format line check. There isn't a 3.0 beta yet, and crates.io still has 2.0.0.
 		- shcl dev now has `upgrade()` and `upgrade_file()` for the swap. They convert a whole file with a timestamped backup, close the open raw block, and stamp it. The CLI backup is now `config_backup_<time>_format-v2.shcl` rather than `config_old_v2.shcl`.
+		- 20261110: Still there on shcl 3.0.0-beta1 and shcl dev 4901ecac. Filed in shcl's backlog as 2026111014552300.
 	- It's held for a shcl beta whose `Migration` says when it couldn't finish.
 
 - ttf-parser is unmaintained, and the advisory scan ignores that until the crates that pull it in move off it
