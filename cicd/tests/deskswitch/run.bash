@@ -117,13 +117,17 @@ if [[ -n "${win}" ]]; then
 	fX xdotool mousemove 1000 700 2>/dev/null || true
 	## until SilkTerm isn't the active window, since a map that is slow under
 	## load left it focused, and it never let go
-	logo=""; unfocused=0
+	logo=""; active=""; unfocused=0
 	for _ in {1..20}; do
 		sleep 0.5
 		[[ -n "${logo}" ]] || logo="$(fX xdotool search --classname "^xlogo$" 2>/dev/null | tail -n 1 || true)"
 		[[ -n "${logo}" ]] || continue
+		## SilkTerm first, so it hears it lost focus. Under load xlogo could map
+		## first and SilkTerm never get focus at all (2026111011350600).
+		fX xdotool windowactivate --sync "${win}" 2>/dev/null || true
 		fX xdotool windowactivate "${logo}" 2>/dev/null || true
-		if [[ "$(fX xdotool getactivewindow 2>/dev/null || true)" != "${win}" ]]; then unfocused=1; break; fi
+		active="$(fX xdotool getactivewindow 2>/dev/null || true)"
+		if [[ -n "${active}" && "${active}" != "${win}" ]]; then unfocused=1; break; fi
 	done
 	if fWaitReleased 40; then
 		releasedFirst=1
@@ -152,6 +156,7 @@ fCheck "it shows the same picture as before the switch ($(cat "${work}/differ" 2
 fCheck "focusing it brings it back" test "${backOnFocus}" = 1
 
 if ((failures)); then
+	echo "  SilkTerm ${win:-none}, xlogo ${logo:-none}, active ${active:-none}"
 	echo "  said:"; sed 's/^/      /' "${work}/said" 2>/dev/null || true
 	echo "${failures} failed"; exit 1
 fi
