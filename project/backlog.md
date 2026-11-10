@@ -290,21 +290,6 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- A key the current build doesn't know is skipped, and a bad value falls back to the default.
 	- Origin: The answer to the Check on 2026110610154305 in questions.md, "Yes we must be able to import toml too."
 
-- The nano scroll scene on Wayland once saw st=2 while sliding
-	- ID: 2026110814224000
-	- Type: Bug
-	- Status: Queued
-	- Severity: Low
-	- Opened: 20261108-142240
-	- Opened by: CC
-	- Assigned to: CC
-	- Target OS: Linux
-	- Test environment: b23, a container run of the regression tests alone at 4eb15ae, load about 10.
-	- Incorrect behavior: `cicd/tests/scroll/run.bash` (d9j4v) failed with "scroll scene nano (Wayland), expected st=1 while sliding but saw st=2". The X11 nano scene and the other 13 Wayland scenes passed in the same run.
-	- Expected behavior: Every sliding frame of the nano scene reads st=1, under the title bar.
-	- Reproduced: No, 20261108. On the host, 5 runs of `--wayland --only nano` passed, at load 8 to 10. Every kept full run log since 20261031 has it passing on both engines.
-	- Test case: d9j4v itself.
-
 - `top` and `htop` no longer smoothly animate disappearing and appearing lines
 	- ID: 2026110912460474
 	- Type: Bug
@@ -2661,6 +2646,28 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Acceptance signoff: Self-closed: the spec checks have tests that fail without them, and the real settings spec still loads.
 	- Closed: 20261109-205600
 	- Origin: Found in tukzmon's copy of knobs by its 2026-11-07 code review. The same checks are missing here, in check_links in knobs/src/lib.rs.
+
+- The nano scroll scene on Wayland once saw st=2 while sliding
+	- ID: 2026110814224000
+	- Type: Bug
+	- Status: Done
+	- Severity: Low
+	- Opened: 20261108-142240
+	- Opened by: CC
+	- Assigned to: CC
+	- Target OS: Linux
+	- Test environment: b23, a container run of the regression tests alone at 4eb15ae, load about 10.
+	- Incorrect behavior: `cicd/tests/scroll/run.bash` (d9j4v) failed with "scroll scene nano (Wayland), expected st=1 while sliding but saw st=2". The X11 nano scene and the other 13 Wayland scenes passed in the same run.
+	- Expected behavior: Every sliding frame of the nano scene reads st=1, under the title bar.
+	- Reproduced: No, 20261108. On the host, 5 runs of `--wayland --only nano` passed, at load 8 to 10. Every kept full run log since 20261031 has it passing on both engines. Yes, 20261109, every time, on Wayland with the debug build, by holding the scene for 0.5 s after the first region row of its first scroll step.
+	- Actual cause [Bug]: The scene wrote its frame one row at a time. A frame drawn between those writes on the first step of a slide had the first region row already moved and the rest not. On the next frame that row read the same as before, so it was held as part of the top band, and the bands stay frozen for the whole slide.
+	- Actual fix [Bug]: The full-redraw shapes (less, vim, nano, muffer) write each frame at once, as curses does and as the pill shape already did.
+	- Progress log:
+		- 20261109: The same hold mid-slide passed, since the bands are only measured on a slide's first step. A real app that redraws row by row over a slow link could have one row held for a slide the same way. Not seen.
+	- Branch: rnd1109
+	- Test case: d9j4v itself. With the hold put in, it failed before the fix and passed after. less, vim, nano, and muffer pass on X11 and Wayland without it.
+	- Acceptance signoff: Self-closed: the cause was made to happen on purpose, and the fix stops it.
+	- Closed: 20261109-210500
 
 - The allocations per frame test once saw the minimap compose during a drag select
 	- ID: 2026110718055000

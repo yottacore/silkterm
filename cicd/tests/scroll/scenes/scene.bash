@@ -209,30 +209,35 @@ while :; do
 	case "${rows}" in ''|*[!0-9]*) rows=30 ;; esac
 	[ "${rows}" -ge 10 ] || rows=30
 
-	## static top band (title bar / header): constant across frames
-	r=1
-	while [ "${r}" -le "${top}" ]; do
-		printf '\033[%d;1H\033[7m  header line %d (static)  \033[0m\033[K' "${r}" "${r}"
-		r=$((r + 1))
-	done
+	## The whole frame goes out in one write, as curses sends a refresh, so a
+	## build can't fall between rows and catch the first one already moved.
+	frame=$(
+		## static top band (title bar / header): constant across frames
+		r=1
+		while [ "${r}" -le "${top}" ]; do
+			printf '\033[%d;1H\033[7m  header line %d (static)  \033[0m\033[K' "${r}" "${r}"
+			r=$((r + 1))
+		done
 
-	## scrolling middle region: the value at a fixed row grows by 1 each frame, so
-	## the content moves up one line per step (a clean forward translate).
-	r=$((top + 1))
-	midbot=$((rows - bot))
-	while [ "${r}" -le "${midbot}" ]; do
-		printf '\033[%d;1H  line %06d  the quick brown fox jumps\033[K' "${r}" "$((n + r))"
-		r=$((r + 1))
-	done
+		## scrolling middle region: the value at a fixed row grows by 1 each frame, so
+		## the content moves up one line per step (a clean forward translate).
+		r=$((top + 1))
+		midbot=$((rows - bot))
+		while [ "${r}" -le "${midbot}" ]; do
+			printf '\033[%d;1H  line %06d  the quick brown fox jumps\033[K' "${r}" "$((n + r))"
+			r=$((r + 1))
+		done
 
-	## static bottom band (status / help): constant across frames
-	r=$((rows - bot + 1))
-	while [ "${r}" -le "${rows}" ]; do
-		printf '\033[%d;1H\033[7m  status/help line (static)  \033[0m\033[K' "${r}"
-		r=$((r + 1))
-	done
+		## static bottom band (status / help): constant across frames
+		r=$((rows - bot + 1))
+		while [ "${r}" -le "${rows}" ]; do
+			printf '\033[%d;1H\033[7m  status/help line (static)  \033[0m\033[K' "${r}"
+			r=$((r + 1))
+		done
 
-	printf '\033[%d;1H' "${rows}"   ## park the cursor (harmless)
+		printf '\033[%d;1H' "${rows}"   ## park the cursor (harmless)
+	)
+	printf '%s' "${frame}"
 	n=$((n + 1))
 	sleep "${step}"
 done
@@ -240,3 +245,4 @@ done
 ##	History:
 ##		- 20260706 JC: Created.
 ##		- 20261014 JC: prompt shape.
+##		- 20261109 JC: full-redraw shapes write each frame at once.
