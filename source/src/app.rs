@@ -834,6 +834,7 @@ struct State {
 	// the session's step to Low is this window's, for a software device
 	software_step: bool,
 	idle: IdleClock,
+	idle_trace: idle::IdleTrace,
 	// a frame the surface refused, drawn again on this (see `Retry`)
 	frame_retry: Retry,
 	conserve: Conserve,
@@ -4078,6 +4079,7 @@ impl ApplicationHandler<UserEvent> for App {
 			drawn,
 			software_step,
 			idle: IdleClock::new(),
+			idle_trace: idle::IdleTrace::default(),
 			frame_retry: Retry::default(),
 			conserve: Conserve::Off,
 			vt_heal: VtHeal::default(),
@@ -5689,6 +5691,9 @@ impl ApplicationHandler<UserEvent> for App {
 			state.release_gpu();
 			self.gpu_warm.release();
 			state.idle.owe(true);
+		}
+		if env_flag(EnvFlag::IdleDbg) {
+			state.trace_hold(&config::settings(), dialog_up);
 		}
 		if state.gpu.is_none() {
 			if state.idle.rebuild_due(hidden, Instant::now()) {
