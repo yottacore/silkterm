@@ -615,8 +615,8 @@ function fUpdateShortcut {
 
 ## macOS has no menu files. An app in ~/Applications is what Spotlight, Launchpad
 ## and the Dock find. Its program is a script that has the launcher copy and
-## rotate, then runs the build in its own process through a link inside the
-## bundle. So the terminal IS the app: one Dock icon, which can be kept there.
+## rotate, then runs the build the symlink points at in its own process. So
+## the terminal IS the app: one Dock icon, which can be kept there.
 ## Started by the launcher instead, it would be a second program with no bundle,
 ## and the Dock would show the app quitting and a nameless one appearing.
 function fWriteMacApp {
@@ -636,11 +636,11 @@ function fWriteMacApp {
 	$wantScript = @'
 #!/bin/bash
 export PATH="$HOME/.local/bin:/usr/local/bin:/opt/homebrew/bin:$PATH"
-here="$(cd "$(dirname "$0")" && pwd)"
 @WRAPPER@ --install-only >/dev/null 2>&1
-held="$(basename "$(readlink @LATEST@)")"
-if [ -x "$here/silkterm" ] && [[ "$held" =~ ^@PREFIX@_([0-9]{8}-[0-9]{6})_([a-z0-9]+) ]]; then
-	exec "$here/silkterm" "--title=SilkTerm [dogfood ${BASH_REMATCH[2]} ${BASH_REMATCH[1]}]" "$@"
+real="$(readlink @LATEST@)"
+held="$(basename "$real")"
+if [[ "$real" == /* && -x "$real" && "$held" =~ ^@PREFIX@_([0-9]{8}-[0-9]{6})_([a-z0-9]+) ]]; then
+	exec "$real" "--title=SilkTerm [dogfood ${BASH_REMATCH[2]} ${BASH_REMATCH[1]}]" "$@"
 fi
 exec @WRAPPER@ "$@"
 '@.TrimEnd().Replace("@WRAPPER@", (& $q $Wrapper)).Replace("@LATEST@", (& $q $LatestLink)).Replace("@PREFIX@", $DogfoodPrefix)
@@ -665,7 +665,7 @@ exec @WRAPPER@ "$@"
 	$iconDue    = (Test-Path -LiteralPath $IconPath) -and -not (Test-Path -LiteralPath $icns)
 	if ($haveScript -and $haveScript.TrimEnd() -eq $wantScript -and
 	    $havePlist -and $havePlist.TrimEnd() -eq $wantPlist -and
-	    $haveLink -and $haveLink.LinkTarget -eq $LatestLink -and -not $iconDue) { return }
+	    -not $haveLink -and -not $iconDue) { return }
 
 	try {
 		fEnsureDir (Split-Path -Parent $script)
@@ -673,8 +673,9 @@ exec @WRAPPER@ "$@"
 		Set-Content -LiteralPath $script -Value $wantScript -Encoding utf8
 		Set-Content -LiteralPath $plist  -Value $wantPlist  -Encoding utf8
 		& chmod 755 $script
+		## Older bundles ran the build through a link here, a link to a link. The
+		## script reads the symlink itself now.
 		if ($haveLink) { Remove-Item -LiteralPath $link -Force }
-		New-Item -ItemType SymbolicLink -Path $link -Target $LatestLink | Out-Null
 		## The logo is wider than it is tall, and an icon has to be square. The
 		## padding sips adds is transparent.
 		if (Test-Path -LiteralPath $IconPath) {
@@ -1082,6 +1083,7 @@ if ($script:GuiFeedback -and $script:RunWarnings.Count) {
 
 
 ##	History:
+##		- 2026-11-09: The macOS app runs the file the symlink points at, not a link to it.
 ##		- 2026-10-06: The parent process comes from pwsh, not WMI. The process
 ##		  list is read only when a copy is due to go, and the Start menus are
 ##		  searched only when the entry is not where it was last found.
