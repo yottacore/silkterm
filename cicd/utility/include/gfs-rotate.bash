@@ -211,7 +211,7 @@ gfs_rotate(){
 
 ## Check if sourced
 declare -i isSourced_t6wq5=0; [[ "${BASH_SOURCE[0]}" == "${0}" ]] || isSourced_t6wq5=1
-((isSourced_t6wq5)) || { echo -e "\nError in $(basename "${BASH_SOURCE[0]}"): This script is meant to be 'sourced' from within another script.\n"; exit "${ERRNUM_MSG_ALREADY_SHOWN}"; }
+((isSourced_t6wq5)) || { printf '\nError in %s: This script is meant to be sourced from within another script.\n\n' "${BASH_SOURCE[0]##*/}" >&2; exit "${ERRNUM_MSG_ALREADY_SHOWN}"; }
 
 
 ##	History:
