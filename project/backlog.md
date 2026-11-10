@@ -316,6 +316,17 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Notes:
 		- The top cost is still the shape plan being built again on each call, inside harfrust.
 
+- Button text could get the same vertical-centering rules as Settings tabs
+	- ID: 2026111010152330
+	- Type: Enhancement
+	- Status: Queued
+	- Priority: Low
+	- Opened: 20261110-101523
+	- Opened by: JC
+	- Related IDs: 2026110609500003
+	- Notes:
+		- Pre-next-cut.
+
 - Wayland: must use the Wayland clipboard, and minimize other X11 features
 	- ID: 2026101509024607
 	- Type: Bug
