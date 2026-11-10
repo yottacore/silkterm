@@ -163,7 +163,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 - `top` and `htop` no longer smoothly animate disappearing and appearing lines
 	- ID: 2026110912460474
 	- Type: Bug
-	- Status: Can't reproduce
+	- Status: Done
 		- 20261109: Lines that go away still slide on today's dev. It's waiting for a yes or no on the notes below.
 	- Severity: Low
 	- Opened: 20261109-124604
@@ -280,9 +280,10 @@ Going forward, new issues in the new template at the bottom of this file will go
 - The "Minutes otherwise" release of resources still isn't working
 	- ID: 2026111009560100
 	- Type: Bug
-	- Status: Waiting for answers
+	- Status: Reopened
 		- 20261110: A run on b23's own desktop with `SILK_IDLEDBG=1` would show what stops the release. See the question in questions.md.
 		- 20261110: It's likely the desktop switch in 2026111010491300, which is fixed now. A look on the next dogfood build may be enough to close it.
+		- 20261110-142723: It almost works. Moving the mouse over in released window still wakes it up though, even though it remains unfocused and partially behind other windows.
 	- Severity: Critical
 	- Opened: 20261110-095601
 	- Opened by: JC
