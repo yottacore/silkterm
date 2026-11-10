@@ -331,6 +331,24 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Notes:
 		- The top cost is still the shape plan being built again on each call, inside harfrust.
 
+- A window that never gets focus thinks it has it, and never lets its device go
+	- ID: 2026111011350600
+	- Type: Bug
+	- Status: Queued
+	- Severity: Avg
+	- Opened: 20261110-113506
+	- Opened by: CC
+	- Related IDs: 2026111010491300
+	- Target OS: Linux, seen on X11 under xfwm4.
+	- Test environment: b23, Xvfb with xfwm4, 16 cores busy.
+	- Steps to reproduce:
+		- Start SilkTerm, and map another window before the window manager gives SilkTerm focus, so it never does.
+		- Leave both alone past "Minutes otherwise".
+	- Incorrect behavior: `SILK_IDLEDBG=1` says "kept: focused on screen" for good, while the other window is the active one.
+	- Expected behavior: A window that was never focused counts as unfocused.
+	- Reproduced: Yes, 20261110, 2 of 9 runs of deskswitch with the cores loaded, before its setup focused SilkTerm first.
+	- Possible cause: The window starts with its focus flag set, and only a focus event clears it. A window that never had focus gets no focus-out.
+
 - Resources are restored when coming back to the XFCE4 desktop that holds a SilkTerm, with no focus and no pointer over it
 	- ID: 2026111010491300
 	- Type: Bug
