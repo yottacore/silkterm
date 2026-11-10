@@ -3616,16 +3616,17 @@ mod tests {
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn each_button_caption_centers_its_capitals_in_the_button() {
-		let mut sources = vec![AboutSource::About(Box::new(adapter()))];
-		#[cfg(not(target_os = "windows"))]
-		sources.extend([
+		let sources = [
+			AboutSource::About(Box::new(adapter())),
+			#[cfg(not(target_os = "windows"))]
 			AboutSource::Notice(vec!["Something to say.".into()]),
+			#[cfg(not(target_os = "windows"))]
 			AboutSource::Ask(super::Ask {
 				paras: vec!["A question.".into()],
 				remember: false,
 				focus: super::AskPart::Detach,
 			}),
-		]);
+		];
 		for scale in [1.0, 1.5] {
 			let mut text = TextCtx::new_cpu(scale);
 			let floor = crate::text::ui_band_floor(text.ui_line_h);
