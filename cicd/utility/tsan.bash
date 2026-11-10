@@ -3,8 +3,8 @@
 ##	- Purpose:
 ##		- The test suite under ThreadSanitizer, as TSAN_CMD in config.bash has it,
 ##		  on the dated nightly that only the container image installs. cicd.bash
-##		  runs it there, on every full run, after the ASan run and also the leak
-##		  checks.
+##		  runs it there under --long only, after the ASan run and also the leak
+##		  checks. --no-tsan skips it.
 ##		- The sanitizer canary goes first, under the same settings and
 ##		  suppressions. Its data race has to be reported by name, or the suite run
 ##		  would prove nothing.

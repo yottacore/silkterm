@@ -272,7 +272,7 @@ There are 2 traps in driving a terminal from outside, and both produce a plausib
 
 ### What the Windows accounting does differently
 
-The 2 collectors take the same measurement by different routes: the module list stands in for the mapped library set, mapped regions plus their resident pages for `smaps`, and PE imports for `DT_NEEDED`. The self-check (`sizebench-classify.py --selftest`) measures the running process both ways and compares, which takes the place of the reproduce gate, since there isn't a published Windows row to reproduce yet.
+The 2 collectors take the same measurement by different routes: the module list stands in for the mapped library set, mapped regions plus their resident pages for `smaps`, and PE imports for `DT_NEEDED`. The self-check (`sizebench-classify.py --selftest`) measures the running process both ways and compares. It took the place of the reproduce gate while there wasn't a published Windows row. Both Windows rows have been published since 20260818, so a new Windows row should reproduce one of them first, the same as on Linux.
 
 One difference is real and deliberate. "Beyond a base OS" means only the C runtime on Linux, because a desktop library there is something you installed. On Windows everything under System32 comes with the machine, so it's excluded by path. A Win32 terminal therefore shows a much smaller File+deps than a GTK one, and that's true rather than an artifact. But it means the 2 platforms' File+deps figures measure slightly different things, on top of everything below.
 
