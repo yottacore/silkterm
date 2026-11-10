@@ -177,6 +177,23 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Branch: rnd1106
 	- Stand-in: none (20261106). Xwayland under headless sway can't report an output as disconnected while it stays laid out, which is b23's usual sleep. deqx1 tests the output being taken out of the layout.
 
+- `top` and `htop` no longer smoothly animate disappearing and appearing lines
+	- ID: 2026110912460474
+	- Type: Bug
+	- Status: Can't reproduce
+		- 20261109: Lines that go away still slide on today's dev. Waits for a yes or no on the notes below.
+	- Severity: Low
+	- Opened: 20261109-124604
+	- Opened by: JC
+	- Related IDs: 2026101310563310
+	- Incorrect behavior: `top` and `htop` used to smoothly animate disappearing and appearing lines. Now they don't. And even when the smooth animation worked in those programs, it would quit working after a while.
+	- Notes:
+		- It's not a high priority to get back, more of a nice-to-have.
+	- Reproduced: No, 20261109, on b23 in a headless window. top showed 20 idle processes, one killed every 4 s, so the rows under it moved up. Today's dev slid 3 times and the 11-01 release 4 times. Neither slid for the first 4 kills, where only 2 to 8 rows moved.
+	- Possible cause: A shift must account for two thirds of the rows that changed. top rewrites up to 5 header rows every tick, and on a busy box many process rows change their numbers too. A small move, or a busy tick, is then cut. That rule dates from 08-01 and keeps a list program that rewrites rows above a footer it pushes down from sliding, so loosening it for top would bring that back. 2026101310563310 found the same about load.
+	- Branch: rnd1109
+	- Test case: None, since no code changed.
+
 - Add a contributor license agreement, like nano-git-db's
 	- ID: 2026101906582193
 	- Type: Task
@@ -289,18 +306,6 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- It happens once. The old file is kept, renamed, the same way a too-old config is.
 		- A key the current build doesn't know is skipped, and a bad value falls back to the default.
 	- Origin: The answer to the Check on 2026110610154305 in questions.md, "Yes we must be able to import toml too."
-
-- `top` and `htop` no longer smoothly animate disappearing and appearing lines
-	- ID: 2026110912460474
-	- Type: Bug
-	- Status: Queued
-	- Severity: Low
-	- Opened: 20261109-124604
-	- Opened by: JC
-	- Related IDs: 2026101310563310
-	- Incorrect behavior: `top` and `htop` used to smoothly animate disappearing and appearing lines. Now they don't. And even when the smooth animation worked in those programs, it would quit working after a while.
-	- Notes:
-		- It's not a high priority to get back, more of a nice-to-have.
 
 - Profiler: text shaping read 80.4% at 327d97e, against about 50% on the card in late October
 	- ID: 2026110920480499
