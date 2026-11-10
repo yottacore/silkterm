@@ -330,17 +330,6 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Notes:
 		- The top cost is still the shape plan being built again on each call, inside harfrust.
 
-- Button text could get the same vertical-centering rules as Settings tabs
-	- ID: 2026111010152330
-	- Type: Enhancement
-	- Status: Queued
-	- Priority: Low
-	- Opened: 20261110-101523
-	- Opened by: JC
-	- Related IDs: 2026110609500003
-	- Notes:
-		- Pre-next-cut.
-
 - Wayland: must use the Wayland clipboard, and minimize other X11 features
 	- ID: 2026101509024607
 	- Type: Bug
@@ -2647,6 +2636,27 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Test case: None for the figures, which are a measurement. `SILK_MEMDBG` is covered by `each_debug_switch_reads_its_own_variable` (ddf59). Its minimap count is pinned by `the_memory_count_covers_every_stored_row` (ddgtx), seen to fail with the stored rows left out.
 	- Acceptance signoff: Self-closed: the numbers are in the design doc and nothing is left to judge.
 	- Closed: 20261004-194634
+
+- Button text could get the same vertical-centering rules as Settings tabs
+	- ID: 2026111010152330
+	- Type: Enhancement
+	- Status: Done
+	- Priority: Low
+	- Opened: 20261110-101523
+	- Opened by: JC
+	- Assigned to: CC
+	- Related IDs: 2026110609500003
+	- Notes:
+		- Pre-next-cut.
+	- Actual fix: Every dialog button's caption centers on its capitals, by the side tabs' rule: the Settings footer, the buttons in a row, the shell list's Add, About's Support, the notice's OK and the tmux question's buttons. A button grows when the font's descent needs more room, the same way a tab does.
+	- Progress log:
+		- 20261110: Checked in a captured Settings dialog at scale 1. In the OK button the capitals had 14 rows above and 11 below. Now they have 12 above and 13 below, with the baseline snapped to a whole pixel.
+	- Decisions:
+		- 20261110: The main tab bar and the menu bar keep their own rules, per the 11-10 call on 2026110609500003. Their buttons hold paths and menu titles, not sentence-case captions.
+	- Branch: btncap
+	- Test case: `every_button_caption_centers_in_its_button` (df4cx) walks every Settings tab at 2 scales. `each_button_caption_centers_its_capitals_in_the_button` (df4cw) covers About, the notice and the tmux question. Each fails with the band taken off one button.
+	- Acceptance signoff: Self-closed: measured in a captured dialog, and its tests fail without it.
+	- Closed: 20261110-104200
 
 - Settings: Side-tabs: the lower the tab, the lower the text is within the tab
 	- ID: 2026110609500003
