@@ -41,9 +41,9 @@
 //! - It runs on the shell-scan thread, well after the window is up, because it
 //!   asks PowerShell itself where its profile is - which means starting one.
 //!
-//! The block also carries the prompt, rather than pointing at a script written
+//! The block also includes the prompt, rather than pointing at a script written
 //! beside the config the way the bash half does. A prompt is drawn after every
-//! command, and on Windows starting a process that often is not free.
+//! command, and on Windows starting a process that often isn't free.
 //!
 //! The bash half is a much smaller thing, and deliberately so. It is off by
 //! default. When on, bash picks up `PROMPT_COMMAND` from its environment, and
@@ -142,8 +142,8 @@ fn is_powershell(program: &str) -> bool {
 }
 
 // A program's name with no directory, lowercased and `.exe` dropped. Unlike
-// `shells::base_name` this splits on both separators on every platform, since
-// a Windows path reaches it on any of them and Path would hand back the whole
+// `shells::base_name` this splits on both separators on every platform, since a
+// Windows path is passed to it on any of them and Path would return the whole
 // string for one on unix.
 fn program_base(program: &str) -> String {
 	let base = program
@@ -176,12 +176,12 @@ pub fn install(found: &[Found]) {
 				&policy
 			};
 			eprintln!(
-				"{}: {program} will not run profile scripts ({answer}), so its profile was left alone - see shell-integration.md",
+				"{}: {program} won't run profile scripts ({answer}), so its profile was left alone - see shell-integration.md",
 				config::APP_NAME
 			);
 			continue;
 		}
-		// two PowerShells can share a profile; only look at each file once
+		// 2 PowerShells can share a profile; only look at each file once
 		if done.contains(&profile) {
 			continue;
 		}
@@ -227,7 +227,7 @@ fn query_shell(program: &str, query: &str) -> Option<(PathBuf, String)> {
 	parse_answer(&String::from_utf8_lossy(&output.stdout))
 }
 
-// Anything that is not the hex this asked for writes nothing, since a guess at
+// Anything that isn't the hex this asked for writes nothing, since a guess at
 // a path is how a profile nobody loads gets created.
 fn parse_answer(answer: &str) -> Option<(PathBuf, String)> {
 	let mut lines = answer
@@ -252,7 +252,7 @@ fn parse_answer(answer: &str) -> Option<(PathBuf, String)> {
 // profile the shell then refuses to run is worse than none at all: measured
 // here, Windows PowerShell 5.1 sits at Restricted, and a profile written for it
 // turned every launch into a red execution-policy error. An answer we do not
-// recognise - including no answer at all - is treated as "no": the cost of
+// recognize - including no answer at all - is treated as "no": the cost of
 // being wrong that way is a feature that does not switch itself on, against an
 // error on somebody's every prompt.
 fn policy_runs_scripts(policy: &str) -> bool {
@@ -282,17 +282,17 @@ pub fn refreshed_block(profile: &str, newline: &str) -> Option<String> {
 }
 
 // What is in a profile now, ready to be edited. `Ok(None)` is "nothing there
-// yet". An error means the file is not ours to touch: a profile that does not
+// yet". An error means the file isn't ours to touch: a profile that doesn't
 // decode as UTF-8 used to arrive here as an empty string, and appending to that
 // replaced the whole file. Windows PowerShell 5.1 writes UTF-16 by default, so
-// that is an ordinary profile rather than a broken one.
+// that's an ordinary profile rather than a broken one.
 fn read_profile(profile: &Path) -> anyhow::Result<Option<String>> {
 	match std::fs::read(profile) {
 		Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
-		Err(e) => Err(e).with_context(|| format!("could not read {}", profile.display())),
+		Err(e) => Err(e).with_context(|| format!("couldn't read {}", profile.display())),
 		Ok(bytes) => String::from_utf8(bytes).map(Some).map_err(|_| {
 			anyhow::anyhow!(
-				"{} is not UTF-8 - left it alone, add the block by hand (see shell-integration.md)",
+				"{} isn't UTF-8 - left it alone, add the block by hand (see shell-integration.md)",
 				profile.display()
 			)
 		}),
@@ -311,7 +311,7 @@ fn backup_once(profile: &Path, existing: &str) -> bool {
 	let backup = profile.with_extension("ps1.silkterm-backup");
 	let refuse = |why: String| {
 		eprintln!(
-			"{}: could not back up {}: {why} - left it alone",
+			"{}: couldn't back up {}: {why} - left it alone",
 			config::APP_NAME,
 			profile.display()
 		);
@@ -319,7 +319,7 @@ fn backup_once(profile: &Path, existing: &str) -> bool {
 	};
 	match std::fs::symlink_metadata(&backup) {
 		Ok(meta) if meta.is_file() => return true,
-		Ok(_) => return refuse(format!("{} is not a plain file", backup.display())),
+		Ok(_) => return refuse(format!("{} isn't a plain file", backup.display())),
 		Err(_) => {}
 	}
 	let mut opts = std::fs::OpenOptions::new();
@@ -342,24 +342,24 @@ fn backup_once(profile: &Path, existing: &str) -> bool {
 	true
 }
 
-// The settings file's writer: an interrupted write cannot leave a profile
+// The settings file's writer: an interrupted write can't leave a profile
 // half-replaced, a linked profile is written through its link, the mode is kept,
 // and no link at a temp name is written through. A read-only profile is somebody
 // saying no, so it is refused rather than replaced.
 fn write_atomic(path: &Path, text: &str) -> anyhow::Result<()> {
 	if std::fs::metadata(path).is_ok_and(|meta| meta.permissions().readonly()) {
-		anyhow::bail!("could not write {}: it is read-only", path.display());
+		anyhow::bail!("couldn't write {}: it's read-only", path.display());
 	}
 	config::write_config_atomic(path, text)
-		.with_context(|| format!("could not write {}", path.display()))
+		.with_context(|| format!("couldn't write {}", path.display()))
 }
 
 // Profiles we have written to before, one path per line.
 //
 // Deleting the block is documented as how to switch this off, and without a note
-// of our own it was not: with the block gone there is no marker and no reporting
+// of our own it wasn't: with the block gone there is no marker and no reporting
 // sequence, so the next launch put it straight back. A profile on this list that
-// no longer carries the block was emptied on purpose.
+// no longer has the block was emptied on purpose.
 //
 // The profiles are the account's, so the note is too. Kept beside a `--config`
 // file, a launch with one found no note and put a deleted block back.
@@ -412,7 +412,7 @@ fn install_into_with(profile: &Path, record: Option<&Path>) {
 		}
 	};
 	// a profile is read by the platform's own shell, so it gets the platform's
-	// line ending rather than whatever the compiled-in copy carries
+	// line ending rather than whatever the compiled-in copy has
 	let newline = if cfg!(windows) { CRLF } else { LF };
 	// already ours: the only thing left to do is bring it up to date
 	if existing.contains(MARKER) {
@@ -465,8 +465,9 @@ fn install_into_with(profile: &Path, record: Option<&Path>) {
 
 // The prompt script itself, compiled in so the binary is the one source of it.
 // x9ps1-git is a separate MIT project of the same author; this is a copy of its
-// `bin/x9ps1-git`, and the version it carries is in its own header. One change:
-// its host color table is cut to a commented example, so no machine names ship.
+// `bin/x9ps1-git`, and the version it has is in its own header. One change: its
+// host color table is cut to a commented example, so no machine names are
+// included.
 const BASH_PROMPT: &str = include_str!("x9ps1-git.bash");
 
 // What the script is called once it is on disk. No extension, because it is
@@ -474,7 +475,7 @@ const BASH_PROMPT: &str = include_str!("x9ps1-git.bash");
 const BASH_PROMPT_FILE: &str = "x9ps1-git";
 
 // Is this program bash? Same base-name matching as `is_powershell`, so Git Bash
-// and a full path both answer yes, while `sh` (which may well be dash) does not.
+// and a full path both answer yes, while `sh` (which may well be dash) doesn't.
 fn is_bash(program: &str) -> bool {
 	program_base(program) == "bash"
 }
@@ -502,7 +503,7 @@ fn prompt_command(path: &Path) -> String {
 const BASH_PROMPT_FN: &str = "fX9ps1Git_SetPs1";
 
 // Put the script in the data directory, once per run, and say where it is.
-// Rewritten whenever it differs, so an updated SilkTerm carries an updated
+// Rewritten whenever it differs, so an updated SilkTerm comes with an updated
 // prompt rather than leaving the first copy standing forever.
 fn bash_prompt_path() -> Option<&'static Path> {
 	static PATH: std::sync::OnceLock<Option<PathBuf>> = std::sync::OnceLock::new();
@@ -520,7 +521,7 @@ fn bash_prompt_path() -> Option<&'static Path> {
 			Ok(()) => Some(path),
 			Err(e) => {
 				eprintln!(
-					"{}: could not write {}: {e}",
+					"{}: couldn't write {}: {e}",
 					config::APP_NAME,
 					path.display()
 				);
@@ -532,7 +533,7 @@ fn bash_prompt_path() -> Option<&'static Path> {
 }
 
 /// The environment a pane about to run `command` should start with, on top of
-/// what it inherits. Empty for anything that is not bash, and for a bash pane
+/// what it inherits. Empty for anything that isn't bash, and for a bash pane
 /// when the setting is off.
 pub fn pane_env(command: Option<&[String]>) -> Vec<(String, String)> {
 	if !config::settings().bash_prompt {
@@ -593,7 +594,7 @@ mod tests {
 		assert!(!is_bash("wsl.exe"));
 	}
 
-	// A profile that cannot be read is named first, then the reason, which is
+	// A profile that can't be read is named first, then the reason, which is
 	// the source error kept under it.
 	// Test ID: ddkte
 	#[test]
@@ -603,14 +604,14 @@ mod tests {
 		std::fs::create_dir_all(&dir).unwrap();
 		// a folder at the profile's name reads as an error everywhere
 		let said = format!("{:#}", super::read_profile(&dir).expect_err("a folder"));
-		let head = format!("could not read {}: ", dir.display());
+		let head = format!("couldn't read {}: ", dir.display());
 		assert!(said.starts_with(&head) && said.len() > head.len(), "{said}");
 		let _ = std::fs::remove_dir_all(&dir);
 	}
 
-	// Windows answers in the console's code page, so a path is only believed as
-	// the hex the query asks for. An empty profile gives an empty first line, and
-	// the policy that then comes first is not hex.
+	// Windows writes the answer in the console's code page, so a path is only
+	// believed as the hex the query asks for. An empty profile gives an empty
+	// first line, and the policy that then comes first is not hex.
 	// Test ID: dcqa4
 	#[test]
 	fn a_profile_path_is_read_from_its_hex_and_nothing_else() {
@@ -703,7 +704,7 @@ mod tests {
 	}
 
 	// The compiled-in copy is what gets written out and then run by bash, so a
-	// truncated or mangled vendoring should not reach anybody's prompt.
+	// truncated or mangled vendoring shouldn't end up in anybody's prompt.
 	// Commented out 20261006: `fMain` was renamed, since the script is now
 	// sourced into the pane's shell and a bare name could clobber the user's
 	// own (2026100314050019). ddkjk checks for the function the pane calls.
@@ -879,7 +880,7 @@ mod tests {
 		// No remote at all
 		git(&dir, &["init", "-q", "-b", "lonebranch", "lone"]);
 
-		// A clone whose remote is not origin, two ahead of its upstream and one behind
+		// A clone whose remote isn't origin, 2 ahead of its upstream and one behind
 		let up = dir.join("up.git");
 		let up_str = up.to_string_lossy().into_owned();
 		git(&dir, &["init", "-q", "--bare", "-b", "main", "up.git"]);
@@ -954,7 +955,7 @@ mod tests {
 	// interactive bash. Outside a git working tree a prompt is a function call
 	// and nothing more; inside one it runs git twice. The old form started 5 and
 	// 13. Counted as the difference between 2 prompts and 12, so the shell's own
-	// start is left out. Needs strace, so it is skipped where that cannot run.
+	// start is left out. Needs strace, so it's skipped where that can't run.
 	// Test ID: ddkjm
 	#[cfg(unix)]
 	#[test]
@@ -1066,9 +1067,9 @@ mod tests {
 		);
 	}
 
-	// No font a Mac ships has U+1F846, so the second line in a repository
-	// started with an empty box there. bash takes OSTYPE from the environment
-	// when it is set, which lets either side run anywhere.
+	// No font that comes with a Mac has U+1F846, so the second line in a
+	// repository started with an empty box there. bash takes OSTYPE from the
+	// environment when it is set, which lets either side run anywhere.
 	// Test ID: ddmm3
 	#[cfg(unix)]
 	#[test]
@@ -1115,7 +1116,7 @@ mod tests {
 		);
 	}
 
-	// A profile is a script run at every shell start, and it often holds tokens.
+	// A profile is a script run at every shell start, and it often contains tokens.
 	// The write used to replace a linked profile with a copy at the umask's mode,
 	// and wrote through a link left at its temp or backup name.
 	// Test ID: dcq9n
@@ -1240,7 +1241,7 @@ mod tests {
 	}
 
 	// Runs the block the way a profile does, where a PowerShell is installed. The
-	// hook holds a delegate that `&` cannot call, so an earlier handler broke every
+	// hook stores a delegate that `&` can't call, so an earlier handler broke every
 	// directory change, and a second load wrapped its own wrapper. Both arms are
 	// run: the 5.1 one by forcing the test that picks it.
 	// Test ID: dcq9r
@@ -1351,8 +1352,8 @@ Write-Host \"COLOR=$global:__SilkTermHostColor\"",
 		// No remote at all
 		git(&dir, &["init", "-q", "-b", "lonebranch", "lone"]);
 
-		// A clone whose remote is not origin, two ahead of its upstream and one behind,
-		// with an origin added after that the branch does not track
+		// A clone whose remote isn't origin, 2 ahead of its upstream and one behind,
+		// with an origin added after that the branch doesn't track
 		let up = dir.join("up.git");
 		let up_str = up.to_string_lossy().into_owned();
 		git(&dir, &["init", "-q", "--bare", "-b", "main", "up.git"]);
@@ -1459,11 +1460,11 @@ Write-Host \"COLOR=$global:__SilkTermHostColor\"",
 		// a file with no trailing newline still gets the block on its own line
 		let joined = with_block("Set-Alias ll Get-ChildItem", "\n");
 		assert!(joined.contains("Get-ChildItem\n\n# >>> SilkTerm"));
-		// and an empty profile is just the block
+		// and an empty profile is only the block
 		assert_eq!(with_block("   \n", "\n"), SNIPPET.replace("\r\n", "\n"));
 	}
 
-	// PowerShell 5.1 writes UTF-16 by default, so a profile that does not decode
+	// PowerShell 5.1 writes UTF-16 by default, so a profile that doesn't decode
 	// as UTF-8 is an ordinary one. It used to read back as an empty string, which
 	// skipped the backup and replaced the file with the block alone.
 	// Test ID: dcbcz
@@ -1496,8 +1497,8 @@ Write-Host \"COLOR=$global:__SilkTermHostColor\"",
 		let _ = std::fs::remove_dir_all(&dir);
 	}
 
-	// Deleting the block is documented as how to switch this off, in four places
-	// including the block's own first line. It was not: with the block gone there
+	// Deleting the block is documented as how to switch this off, in 4 places
+	// including the block's own first line. It wasn't: with the block gone there
 	// was no marker to match and the next launch put it straight back.
 	// Test ID: dcbe2
 	#[test]
@@ -1536,7 +1537,7 @@ Write-Host \"COLOR=$global:__SilkTermHostColor\"",
 		let _ = std::fs::remove_dir_all(&dir);
 	}
 
-	// The whole of what a launch does to a file that is not ours: keep a copy,
+	// The whole of what a launch does to a file that isn't ours: keep a copy,
 	// follow what is there, and never do it twice.
 	// Test ID: dbj7x
 	#[test]
@@ -1563,7 +1564,7 @@ Write-Host \"COLOR=$global:__SilkTermHostColor\"",
 			"the copy beside it is the file as it was"
 		);
 
-		// a second launch is a no-op, and cannot overwrite the copy either
+		// a second launch is a no-op, and can't overwrite the copy either
 		std::fs::write(&profile, format!("{after}# a line the user added\n")).unwrap();
 		super::install_into_with(&profile, Some(&record));
 		let twice = std::fs::read_to_string(&profile).expect("read profile");
@@ -1578,7 +1579,7 @@ Write-Host \"COLOR=$global:__SilkTermHostColor\"",
 			"the copy was overwritten"
 		);
 
-		// and a profile that never existed is created with just the block
+		// and a profile that never existed is created with only the block
 		let fresh = dir.join("fresh").join("Microsoft.PowerShell_profile.ps1");
 		super::install_into_with(&fresh, Some(&record));
 		assert!(
@@ -1589,7 +1590,7 @@ Write-Host \"COLOR=$global:__SilkTermHostColor\"",
 		let _ = std::fs::remove_dir_all(&dir);
 	}
 
-	// A block in a profile the shell will not run is worse than no block: it is
+	// A block in a profile the shell won't run is worse than no block: it's
 	// an execution-policy error on every launch, which is what a first cut of
 	// this did to Windows PowerShell 5.1 on the box it was written on.
 	// Test ID: dbj7y
@@ -1604,7 +1605,7 @@ Write-Host \"COLOR=$global:__SilkTermHostColor\"",
 	}
 
 	// Only PowerShell needs this: every other shell moves its own process, so
-	// the OS can be asked. A full path answers the same as a bare name.
+	// the OS can be asked. A full path gives the same answer as a bare name.
 	// Test ID: dbj7z
 	#[test]
 	fn only_the_powershells_are_offered_a_profile() {
@@ -1667,7 +1668,7 @@ Write-Host \"COLOR=$global:__SilkTermHostColor\"",
 
 	// A profile with no byte-order mark is read as ANSI by Windows PowerShell
 	// 5.1, so a single accented character or box-drawing glyph in here arrives
-	// mangled on the one version that cannot be told otherwise.
+	// mangled on the one version that can't be told otherwise.
 	// Test ID: dbzfa
 	#[test]
 	fn the_block_is_plain_ascii() {
@@ -1676,7 +1677,7 @@ Write-Host \"COLOR=$global:__SilkTermHostColor\"",
 	}
 
 	// The prompt is part of the block rather than a script beside it, and both
-	// halves of the version split have to reach it.
+	// halves of the version split have to be in it.
 	// Test ID: dbzfb
 	#[test]
 	fn the_block_has_the_prompt() {
@@ -1701,7 +1702,7 @@ Write-Host \"COLOR=$global:__SilkTermHostColor\"",
 	}
 
 	// The block people are told to paste in by hand has to be the block that
-	// gets installed, or one of the two quietly stops being true.
+	// gets installed, or one of the 2 quietly stops being true.
 	// Test ID: dbj80
 	#[test]
 	fn the_documented_snippet_is_the_one_that_is_installed() {
@@ -1714,7 +1715,7 @@ Write-Host \"COLOR=$global:__SilkTermHostColor\"",
 	}
 
 	// Both prompts go into other people's shells, so a host color table may only
-	// show an example. A real machine name in a live line would ship with them.
+	// show an example. A real machine name in a live line would go out with them.
 	// Test ID: ddf3x
 	#[test]
 	fn the_bundled_prompts_color_no_named_machine() {

@@ -15,13 +15,13 @@ use std::collections::HashSet;
 use std::sync::{Mutex, OnceLock};
 
 // Every setting the dialog can address. Declared here so exhaustive matches
-// still fail to compile when one is added or removed; the file is held against
+// still fail to compile when one is added or removed; the file is checked against
 // `Key::ALL` by test instead, which is the only way to catch an omission.
 macro_rules! keys {
 	($($name:ident),* $(,)?) => {
 		#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 		pub enum Key {
-			None, // headings, and a row that carries two settings rather than one
+			None, // headings, and a row that has 2 settings rather than one
 			$($name),*
 		}
 		impl Key {
@@ -121,7 +121,7 @@ pub struct Spec {
 	pub key: Key,
 	pub kind: Kind,
 	pub tab: usize,
-	/// Flyover text for a control whose purpose is not obvious from its label.
+	/// Flyover text for a control whose purpose isn't obvious from its label.
 	/// Empty means the row explains itself and gets no tip.
 	pub help: &'static str,
 	/// Sub-group depth. Only the LABEL moves; the controls stay in their column,
@@ -136,7 +136,7 @@ pub struct Spec {
 	/// the way the first row's does.
 	pub beside: bool,
 	/// Flyover for the revert arrow, where it does something other than put the
-	/// shipped default back.
+	/// default back.
 	pub revert_help: &'static str,
 	/// Only in the Windows build. Test builds keep it everywhere, so its layout
 	/// and behavior are tested on every platform.
@@ -146,7 +146,7 @@ pub struct Spec {
 	pub not_macos: bool,
 	/// Draws a warning mark after the label, for a row that may not work
 	/// everywhere. Empty means no mark. `pick_warnings` puts the text on the
-	/// end of `help`, since the row's one tip answers over the mark too.
+	/// end of `help`, since the row's one tip is shown over the mark too.
 	pub warning: &'static str,
 	/// The mark's text in the Windows build, in place of `warning`. Moved
 	/// over by `pick_warnings`, so the dialog only ever reads `warning`.
@@ -200,8 +200,8 @@ pub enum TabsSide {
 
 /// One tab in the strip, in the order declared. `tabs:` lists paths, "A/B"
 /// being B under A, so the tree is a flat list where a child follows its
-/// parent. Rows live on the leaves only: `leaf` is the index among them, the
-/// one a `Spec::tab` holds, and None for a tab that only holds other tabs.
+/// parent. Rows go on the leaves only: `leaf` is the index among them, the
+/// one a `Spec::tab` stores, and None for a tab that only contains other tabs.
 #[derive(Debug, Clone, PartialEq)]
 pub struct TabNode {
 	pub title: &'static str,
@@ -253,7 +253,7 @@ pub fn tab_tree(paths: &[&str]) -> Result<(Vec<TabNode>, Vec<&'static str>), Vec
 			leaf: None,
 		});
 	}
-	// a tab nothing sits under holds the rows
+	// a tab nothing sits under has the rows
 	let mut leaves = Vec::new();
 	for i in 0..nodes.len() {
 		if !nodes.iter().any(|n| n.parent == Some(i)) {
@@ -335,7 +335,7 @@ pub struct Layout {
 }
 
 /// Flyover text for the footer buttons, which are chrome rather than settings and
-/// so have no row of their own to carry it.
+/// so have no row of their own to show it.
 #[derive(Debug)]
 pub struct Help {
 	pub cancel: &'static str,
@@ -372,7 +372,7 @@ pub struct Ui {
 
 impl Ui {
 	/// Config path(s) behind a setting, for revert's comment-out. Empty for a
-	/// heading, or for a row that carries no setting of its own.
+	/// heading, or for a row that has no setting of its own.
 	pub fn settings_of(&self, key: Key) -> &'static [&'static str] {
 		self.settings
 			.iter()
@@ -404,7 +404,7 @@ pub fn ui() -> &'static Ui {
 			ui
 		}
 		// Unreachable in a tested build: the document is compiled in, so it
-		// cannot vary at runtime and the test below reads the same bytes.
+		// can't vary at runtime and the test below reads the same bytes.
 		Err(problems) => panic!("settings_ui.shcl: {}", problems.join("; ")),
 	})
 }
@@ -425,7 +425,7 @@ fn keep_platform(specs: &mut Vec<Spec>, windows: bool, macos: bool) {
 	specs.retain(|spec| (windows || !spec.windows) && !(macos && spec.not_macos));
 }
 
-// A row has one tip, shown over its label, its mark and its controls alike, so
+// A row has one tip, shown over its label, its mark, and its controls alike, so
 // the mark's text goes on the end of it (2026100812334388).
 fn pick_warnings(specs: &mut [Spec], windows: bool) {
 	for spec in specs {
@@ -721,13 +721,13 @@ fn parse(text: &str) -> Result<Ui, Vec<String>> {
 				continue;
 			}
 		};
-		// a pair row already filed its two parts above, and neither a buttons row
-		// nor the shells grid holds a value of its own
+		// a pair row already filed its 2 parts above, and neither a buttons row
+		// nor the shells grid has a value of its own
 		if key != Key::None
 			&& !matches!(kind, Kind::Dual { .. } | Kind::Buttons(_) | Kind::ShellList)
 		{
 			// A text box may stand for more than one setting, as "File or folder"
-			// does, so a revert comments out each. Anything else holds one value.
+			// does, so a revert comments out each. Anything else has one value.
 			match (paths.len(), &kind) {
 				(1, _) | (2.., Kind::Text) => settings.push((key, keep_all(paths))),
 				_ => problems.push(format!("rows.{name}: needs exactly one setting path")),
@@ -736,8 +736,8 @@ fn parse(text: &str) -> Result<Ui, Vec<String>> {
 		let beside = doc.get_bool(&at("beside")).unwrap_or(false);
 		// A shared line needs an ordinary row above it to share, or another row
 		// already beside one, and every part has to be something that fits on one
-		// line. A row whose height is not a constant (the grid) or that holds no
-		// value (a heading) is not.
+		// line. A row whose height isn't a constant (the grid) or that has no
+		// value (a heading) isn't.
 		let one_line = |kind: &Kind| {
 			!matches!(
 				kind,
@@ -765,7 +765,7 @@ fn parse(text: &str) -> Result<Ui, Vec<String>> {
 		let warning = doc.get_string(&at("warning")).unwrap_or_default();
 		let windows_warning = doc.get_string(&at("windows_warning")).unwrap_or_default();
 		// the mark sits after the label in the label column, which a heading and
-		// half a line do not have
+		// half a line don't have
 		if !(warning.is_empty() && windows_warning.is_empty())
 			&& (label.is_empty() || beside || matches!(kind, Kind::Header(_)))
 		{
@@ -1129,7 +1129,7 @@ mod tests {
 	}
 
 	// A warning mark sits after a label in the label column, so a row with no
-	// label there cannot carry one.
+	// label there can't have one.
 	// Test ID: ddeqk
 	#[test]
 	fn a_warning_needs_a_label_of_its_own() {
@@ -1142,7 +1142,7 @@ mod tests {
 		};
 		assert!(
 			!problems.iter().any(|p| p.contains("warning")),
-			"a labelled row may warn: {problems:?}"
+			"a labeled row may warn: {problems:?}"
 		);
 		for bad in [
 			format!("{head}\t\twarning: \"Careful.\"\n{margin}"),
@@ -1254,7 +1254,7 @@ mod tests {
 		);
 	}
 
-	// A slider's scale and typed cap are refused when they cannot mean anything,
+	// A slider's scale and typed cap are refused when they can't mean anything,
 	// rather than quietly read as linear or as no cap.
 	// Test ID: ddp93
 	#[test]

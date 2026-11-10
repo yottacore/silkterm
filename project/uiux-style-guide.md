@@ -5,11 +5,11 @@
 <!-- TOC ignore:true -->
 # UI/UX style guide
 
-How SilkTerm's own interface is meant to look and behave. It covers the menu bar, the right-click menu, the Settings dialog, the About box, and the chrome around the panes. It says nothing about the terminal grid itself, which is the program's output rather than its interface.
+How SilkTerm's own interface is meant to look and behave. It's about the menu bar, the right-click menu, the Settings dialog, the About box, and the chrome around the panes. It says nothing about the terminal grid itself, which is the program's output rather than its interface.
 
 These rules follow what's already built, tidied where they contradicted each other. Where the code and this file disagree, the file is the intent. See [Known deviations](#known-deviations) for the ones that are known and still open.
 
-For prose, comments, naming, and Rust conventions, see [`style-guide.md`](../style-guide.md). That guide governs what gets written about the program; this one governs what the program shows.
+For prose, comments, naming, and Rust conventions, see [`style-guide.md`](../style-guide.md). That guide is for what gets written about the program, and this one is for what the program shows.
 
 <!-- TOC ignore:true -->
 ## Table of contents
@@ -39,7 +39,7 @@ For prose, comments, naming, and Rust conventions, see [`style-guide.md`](../sty
 
 - A terminal is a tool someone stares at all day. Chrome should be quiet and still, and stay out of the way of the text.
 
-- Nothing in the interface may block the first frame. Anything slow runs on a worker and appears when it is ready.
+- Nothing in the interface may block the first frame. Anything slow runs on a worker thread and appears when it is ready.
 
 - Prefer deriving a piece of state over storing it. If the file on disk or the thing on screen already implies the answer, compute it.
 
@@ -49,18 +49,18 @@ For prose, comments, naming, and Rust conventions, see [`style-guide.md`](../sty
 
 ## Words
 
-- Sentence case everywhere. Menu titles, menu items, tab names, headings, labels, buttons. Only proper nouns and product names keep their capitals ("PowerShell 7", "Nushell", "SilkTerm").
+- Sentence case everywhere. That goes for menu titles, menu items, tab names, headings, labels, and buttons. Only proper nouns and product names keep their capitals ("PowerShell 7", "Nushell", "SilkTerm").
 
-- No trailing colon on a label that stands in its own column, because the layout already separates it from its control. A colon is right where a label and its value share one line, such as the About box's `Renderer: ...`, the tab flyover's table, the menu bar's `Copy on:` lead-in.
+- No trailing colon on a label that stands in its own column, because the layout already separates it from its control. A colon is right where a label and its value share one line, such as the About box's `Renderer: ...`, the tab flyover's table, and the menu bar's `Copy on:` lead-in.
 
 - No terminating punctuation on a label or a button caption. The About box's `Support SilkTerm!` is the one exception, and it's deliberate. An ask for money reads badly flattened into a filing label.
 
-- An item that opens a further dialog ends in a single ellipsis character, no space before it: `Settings…`, `About…`, `Save as…`. An item that only asks for confirmation doesn't.
+- An item that opens a further dialog ends in a single ellipsis character, with no space before it: `Settings…`, `About…`, `Save as…`. An item that only asks for confirmation doesn't.
 
 - Units go on the end of the label, separated by a space, with no brackets: `Opacity %`, `Blur px`, `Rate s`. The value beside the control shows the number alone.
 
 - Keyboard shortcuts shown in a menu go in parentheses at the end of the item, written with `+` between every part and no spaces: `Copy (Ctrl+Shift+C)`, `Fullscreen (F11)`.
-	- On macOS a row with a Command chord shows that chord instead, with the modifiers in Apple's order: `Copy (Command+C)`, `Fullscreen (Control+Command+F)`. The system menu bar draws the chord itself, so its labels have none.
+	- On macOS a row with a Command chord shows that chord instead, with the modifiers in Apple's order: `Copy (Command+C)`, `Fullscreen (Control+Command+F)`. The system menu bar draws the chord itself, so its labels don't have one.
 
 - Say what a thing is rather than what the code calls it. "File or folder", not "Path". "Visibility", not "Alpha". "Handle" and "Track", not "Thumb" and "Trough".
 
@@ -72,18 +72,18 @@ For prose, comments, naming, and Rust conventions, see [`style-guide.md`](../sty
 
 - The menu bar's dropdowns and the right-click menu over a pane draw from the same entry list and the same renderer.
 
-- The menu bar is File, Edit, View, Tabs, Panes, Help. A new action goes in the menu whose noun it acts on.
+- The menu bar is File, Edit, View, Tabs, Panes, and Help. A new action goes in the menu whose noun it acts on.
 
-- On macOS the same menus go in the system menu bar, after an app menu with About, Settings…, Hide and Quit. There is no in-window bar there at all, so View has no Menu bar row and `--hide-menu` does nothing. File gains New window. Help is left off, since About was its only row. Each row with an Apple standard shortcut takes its Command chord.
+- On macOS the same menus go in the system menu bar, after an app menu with About, Settings…, Hide, and Quit. There isn't any in-window bar there, so View doesn't have a Menu bar row and `--hide-menu` does nothing. File gains New window. Help is left off, since About was its only row. Each row with an Apple standard shortcut takes its Command chord.
 	- A Window menu comes last, with Minimize, Zoom, Show previous tab, Show next tab, and Bring all to front. macOS adds the list of open windows under them. Each window is its own process, so that list has only the one window and its dialogs.
 
 - The right side of the menu bar has the focused pane's 2 auto-copy checkboxes, so their state is visible without opening anything. It's the only thing on the bar that isn't a menu. When the window narrows it sheds its lead-in, then its words, then itself, rather than overlapping the titles.
 
-- On macOS the 2 auto-copy switches are the Copy on select and Copy on output rows in Edit, checked to follow the focused pane. The system menu bar has no place for a control that isn't a menu.
+- On macOS the 2 auto-copy switches are the Copy on select and Copy on output rows in Edit, checked to follow the focused pane. The system menu bar doesn't have a place for a control that isn't a menu.
 
-- The right-click menu is the pane's own menu. It's a selection from the bar rather than a copy of it. It has the actions worth reaching without traveling, plus items that only make sense at the pointer, such as the 2 link actions that appear only when the click was on a link. It also has 2 window-chrome rows, Menu bar and Bare window under it, because with the bar hidden nothing else can bring it back or leave a bare window.
+- The right-click menu is the pane's own menu. It's a selection from the bar rather than a copy of it. It has the actions worth having without a trip to the bar, plus items that only make sense at the pointer, such as the 2 link actions that appear only when the click was on a link. It also has 2 window-chrome rows, Menu bar and Bare window under it, because with the bar hidden nothing else can bring it back or leave a bare window.
 
-- On macOS the right-click menu has no Menu bar row, since there is no in-window bar to bring back.
+- On macOS the right-click menu doesn't have a Menu bar row, since there isn't an in-window bar to bring back.
 
 - Order within a menu: the most-used action first, related actions adjacent, destructive actions last in their group.
 
@@ -106,23 +106,23 @@ The dialog is declared in `settings_ui.shcl`, which is the file to edit when add
 
 - Tabs run down the left side, on the gutter strip, each as wide as the list, with a line along its right dividing it from the rows. SilkTerm's are Silk, Appearance, Movement, Window, Program, Shell, and Keys, with Themes, Background, Text, and Cursor under Appearance. The dialog code can put them left to right along the top instead, standing on the line that divides the strip from the rows below.
 
-- A tab may contain tabs. Down the side they are always listed, stepped in under it. Across the top its sub-tabs show in a row under the strip only while it is current. The current tab and the tab it sits under both read as current. A click on the parent opens its first sub-tab, and does nothing while one of them is already open. Any depth works, though more than 2 levels is poor design.
+- A tab may contain tabs. Down the side they are always listed, stepped in under it. Across the top its sub-tabs show in a row under the strip only while it is current. The current tab and the tab it's under both read as current. A click on the parent opens its first sub-tab, and does nothing while one of them is already open. Any depth works, though more than 2 levels is poor design.
 
-- Tabs take no keyboard focus. They are clicked, or changed with the tab chords, and otherwise say where you are.
+- Tabs don't take keyboard focus. They're clicked, or changed with the tab chords, and otherwise show where the user is.
 
 - A tab is about one subject. The ceiling is about 7, and past that the subject is probably 2 subjects.
 
 ### Search
 
-- A search box sits between the tabs and the rows, and stays put when the rows scroll. Empty, it shows `Search (Ctrl+F)`.
+- A search box is between the tabs and the rows, and stays put when the rows scroll. Empty, it shows `Search (Ctrl+F)`.
 
 - With text in it, a list of matches takes the place of the rows. Label matches come first, then matches on a row's aliases, then loose ones such as a typo. An empty list says so in one line.
 
 - A match reads as a path, with ⏵ between the parts: `Appearance ⏵ Text ⏵ Font ⏵ Family`. The heading is left out where it only repeats the tab's title. An alias that found the row follows in parentheses. The matched text is bold, a step larger, and in the highlight color.
 
-- Picking one goes to its row, scrolls it into view, marks it for a moment in the highlight color and puts the keyboard on it. The box empties.
+- Picking one goes to its row, scrolls it into view, marks it for a moment in the highlight color, and puts the keyboard focus on it. The box empties.
 
-- Aliases are for words people search by that the label doesn't have, such as "typeface" for Family. One already in the label is noise.
+- Aliases are for words people search by that the label doesn't have, such as "typeface" for Family. An alias that's already in the label is noise.
 
 - A tab's first heading may repeat the tab's own name, in which case it draws nothing. It stays in the declarations because a heading is also what assigns the rows under it to a tab.
 
@@ -135,37 +135,37 @@ The dialog is declared in `settings_ui.shcl`, which is the file to edit when add
 - Only labels indent. Every control stays in its column, whatever the depth.
 	- A shared line of toggles is the one exception, under Rows.
 
-- A sub-group's leader is usually the switch that decides whether its members do anything. Members stay live and indented when it is off, so they can be set up first, and changing one turns the switch on. A switch whose members get values of the program's own while it is on works the other way round, below.
+- A sub-group's leader is usually the switch that sets whether its members do anything. Members stay live and indented when it is off, so they can be set up first, and changing one turns the switch on. A switch whose members get values of the program's own while it is on works the other way round, below.
 
 ### Rows
 
-- One row edits one setting, and its label names that setting in plain words.
+- Each row edits one setting, and its label names that setting in plain words.
 
-- A pair of rows may share a line where neither earns one of its own and the 2 belong together. The upper one keeps the label column, and its label has to name both halves. The lower one is declared `beside`, takes the right half of the control column, and has its own label only if its control doesn't say what it is. One revert control at the end of the line works for both.
-	- A run of toggles may share one line the same way. That line leaves the label and control columns. It starts where the first label would, each label sits right before its own box, the first one's too, and a wider gap comes before the next label. Both gaps grow with the interface font, so a large one keeps each label clear of its box. Where the line shares its group with other rows, as the Silk tab's hardware check line does, its first box stays in the control column under theirs and only the toggles after it pack. Each toggle has its own flyover, and the first one's label names only itself, since the rest name themselves. The one revert control at the end of the line puts back all of them.
+- A pair of rows may share a line where neither earns one of its own and the 2 belong together. The upper one keeps the label column, and its label has to name both halves. The lower one is declared `beside`, takes the right half of the control column, and has its own label only if its control doesn't say what it is. A single revert control at the end of the line works for both.
+	- A run of toggles may share one line the same way. That line leaves the label and control columns. It starts where the first label would, each label is right before its own box, the first one's too, and a wider gap comes before the next label. Both gaps grow with the interface font, so a large one keeps each label clear of its box. Where the line shares its group with other rows, as the Silk tab's hardware check line does, its first box stays in the control column under theirs and only the toggles after it pack. Each toggle has its own flyover, and the first one's label names only itself, since the rest name themselves. The one revert control at the end of the line puts back all of them.
 
-- Row kinds are: heading, toggle, slider, color, text, radio, dropdown, pair, hotkey, buttons, and shells. The last 2 are one-offs. A `buttons` row has no value and acts on the row above it; `shells` is the Shell tab's grid, one declared row that draws a line per stored shell. A new kind needs a reason no existing kind covers.
+- Row kinds are: heading, toggle, slider, color, text, radio, dropdown, pair, hotkey, buttons, and shells. The last 2 are one-offs. A `buttons` row doesn't have a value and acts on the row above it. `shells` is the Shell tab's grid, one declared row that draws a line per stored shell. A new kind needs a reason that no existing kind handles.
 	- A row or a whole group that only applies to one platform is declared with `windows: true` and left out of every other build. Rows aren't grayed for that, since a control that can never work there is noise.
 	- A row that can't work on the desktop it is running on is grayed instead, with a flyover saying why. "Minutes when hidden" is grayed on Wayland, which never tells a window it is hidden.
 
 - A slider has a number field beside it, and the field is the way to enter an exact value.
 	- A slider whose range spans orders of magnitude, such as the 2 idle waits, has a log track, so each doubling gets the same travel.
-	- A row with no % and no limit of its own takes a typed number past the slider's end, up to a cap set per row. The handle waits at the end and the field shows the number. Below the slider's start still clamps.
+	- A row without a % or a limit of its own takes a typed number past the slider's end, up to a cap set per row. The handle stays at the end and the field shows the number. Below the slider's start still clamps.
 	- Every slider's field is one width, wide enough for the longest number any slider can show in the interface font, so the sliders all end in one column. At an ordinary font that is the floor, and nothing moves.
 
-- A color row has a chip and a hex field, and they are 2 separate stops. The chip opens the picker; the hex field takes a value that is already known.
+- A color row has a chip and a hex field, and they are 2 separate stops. The chip opens the picker, and the hex field takes a value that is already known.
 
 - A fraction stored as 0..1 is shown as a whole percent. The file stores the decimal.
 
-- Every row with a value has a revert control at the right edge, which puts the default back. A heading, a `buttons` row, and the shells grid don't have a single value, so none of them has a revert control.
+- Every row with a value has a revert control at the right edge, which puts the default back. A heading, a `buttons` row, and the shells grid don't have a single value, so they don't have a revert control.
 	- The Windows file-type rows are the exception. Each is a `buttons` row whose Register writes the registry at once, and its revert control puts back what Register replaced. The arrow is lit while the registry names SilkTerm, and its flyover says what it puts back.
 
-- Every row must actually write what it edits. A row whose setting is never persisted is worse than no row, because the change appears to take and then vanishes at the next launch.
+- Every row must write what it edits. A row whose setting is never persisted is worse than no row, because the change appears to take and then vanishes at the next launch.
 
-- Why a row is grayed out beats what it does, so a row grayed by the machine says so in its flyover in place of its usual text. A row grayed by another setting says nothing extra, because the switch that did it is the row above. A row set by a preset isn't grayed at all. It takes input, and its flyover says it is showing the preset's value.
+- Why a row is grayed out beats what it does, so a row grayed by the machine says so in its flyover in place of its usual text. A row grayed by another setting doesn't say anything extra, because the switch that did it is the row above. A row set by a preset isn't grayed at all. It takes input, and its flyover says it is showing the preset's value.
 
 - A setting the program can work out for itself has a switch above it, as [Settings with an automatic value](design_docs/20261008-180516_automatic_settings.md) describes. "Use system font" over Family and Size is one.
-	- It is never grayed for being automatic, and has no mark or style of its own. While the switch is on, its box shows the value in use.
+	- It is never grayed for being automatic, and doesn't have a mark or style of its own. While the switch is on, its box shows the value in use.
 	- A value typed, dragged, or stepped to turns the switch off. The other rows under it keep what they show.
 	- Turning the switch on sets the values typed under it aside, and turning it off brings them back.
 	- A few settings have a rule and no switch. They're Open command, whose rule is the desktop's opener, and File or folder, with the usual folder or the built-in picture. With no value set, the rule's answer is the default, and the revert control puts it back.
@@ -176,7 +176,7 @@ The dialog is declared in `settings_ui.shcl`, which is the file to edit when add
 
 - A row that may not work on every desktop has a warning mark after its label, which is a small triangle in the label's color, never red. What the row depends on goes at the end of the row's flyover, which shows over the mark like the rest of the row.
 	- A row that keeps a window from giving its graphics memory back gets one too, as Transparency does on Windows. So does "Free resources when idle", since some graphics drivers have trouble with it.
-	- A mark says only what applies where it is shown. Transparency's memory note is in the Windows build alone, since only there is a window in view with Transparency on never let go.
+	- A mark says only what applies where it is shown. Transparency's memory note is in the Windows build alone, since only there does a visible window with Transparency on never give its memory back.
 
 ### The color picker
 
@@ -184,7 +184,7 @@ The dialog is declared in `settings_ui.shcl`, which is the file to edit when add
 
 - The box is titled with the row's own label, so it is plain which color is being chosen.
 
-- The value boxes are Red %, Green %, Blue %, Brightness %, Saturation % and Hex, top to bottom. There isn't a hue box, since the strip is the hue control.
+- The value boxes are Red %, Green %, Blue %, Brightness %, Saturation %, and Hex, top to bottom. There isn't a hue box, since the strip is the hue control.
 
 - Changes show on the row behind the box as they are made. Cancel puts back what the row had when the box opened.
 
@@ -194,7 +194,7 @@ The dialog is declared in `settings_ui.shcl`, which is the file to edit when add
 
 ## Buttons and prompts
 
-- Footer buttons sit at the bottom right, in the order Cancel, Apply, OK, left to right. OK is the default and is marked as such.
+- Footer buttons are at the bottom right, in the order Cancel, Apply, OK, left to right. OK is the default and is marked as such.
 
 - The footer stands well clear of the rows above it, about twice the gap between 2 ordinary rows. It is the one place a stray click is expensive, so it must not read as another row.
 
@@ -218,11 +218,11 @@ The dialog is declared in `settings_ui.shcl`, which is the file to edit when add
 
 There are 4 kinds: a Settings row, a menu item, a link or button in the About box, and a tab in the strip. They share the rest delay, the wrapping, and the placement rules, and nothing else. Each is drawn by its own caller, in its own font.
 
-- One rest delay for every tip in the program. A menu that showed its tip faster than the tab strip would read as a different kind of thing.
+- There's one rest delay for every tip in the program. A menu that showed its tip faster than the tab strip would read as a different kind of thing.
 
-- A row's tip shows wherever the pointer rests on that row: its label, a warning mark, each option's label and every part of its control. The revert control is the one part with a tip of its own. A pair, such as Visibility's Scrim and Outline on the Cursor tab, is 2 settings, so each half has its own. A packed line of toggles is separate settings too, and each has its own tip.
+- A row's tip shows wherever the pointer rests on that row: its label, a warning mark, each option's label, and every part of its control. The revert control is the one part with a tip of its own. A pair, such as Visibility's Scrim and Outline on the Cursor tab, is 2 settings, so each half has its own. A packed line of toggles is separate settings too, and each has its own tip.
 
-- A row whose value is automatic or comes from a preset ends its tip, after a blank line, with one line on where the value comes from: `Automatic.`, `Automatic. Your value, 14, is kept for later.`, `From the High profile.` or `Changed. The High profile's value is 50.` A dropdown with a `*` names the rows changed under it.
+- A row whose value is automatic or comes from a preset ends its tip, after a blank line, with one line on where the value comes from: `Automatic.`, `Automatic. Your value, 14, is kept for later.`, `From the High profile.`, or `Changed. The High profile's value is 50.` A dropdown with a `*` names the rows changed under it.
 
 - Any other row with a value ends its tip with `Current value: ...` and `Default value: ...` on 2 lines, after a blank line where text comes before them, but only while the 2 differ. They are written the way the row writes them: the number in its box, On or Off, the option's own words, a color's hex. A row with a line on where its value comes from gets neither.
 
@@ -230,9 +230,9 @@ There are 4 kinds: a Settings row, a menu item, a link or button in the About bo
 
 - A tip that explains a control is prose, with 1 to 3 complete sentences, each ending in a period. Usually 2 is enough, and a third has to answer the obvious follow-on question rather than pad.
 
-- The tab strip's tip is the exception, and it isn't prose at all. It reports facts about a tab as an aligned `Key: value` table, in the terminal font, because spaces align nothing in a proportional one.
+- The tab strip's tip is the exception, and it isn't prose at all. It reports facts about a tab as an aligned `Key: value` table, in the terminal font, because spaces don't align anything in a proportional one.
 
-- A tip's box stands off whatever it hangs from. In the main window that is a warmed lift off the menu color, since the default menu background is the inactive tab's own; in the dialogs it is the button shade against the panel. None of it is separately editable: the tip follows the menu or the panel color it is derived from.
+- A tip's box stands off whatever it hangs from. In the main window that is a warmed lift off the menu color, since the default menu background is the inactive tab's own. In the dialogs it's the button shade against the panel. None of it can be edited separately, since the tip follows the menu or the panel color it is derived from.
 
 - Text wraps to the panel, so a longer sentence or a larger interface font can't push it off an edge.
 
@@ -240,9 +240,9 @@ There are 4 kinds: a Settings row, a menu item, a link or button in the About bo
 
 - A tip never has an action, a link, or anything the pointer has to reach.
 
-- A tip sits on top of everything else in its window, an open list or menu included. While a dropdown or a field menu is open, nothing behind it shows a tip.
+- A tip is drawn on top of everything else in its window, an open list or menu included. While a dropdown or a field menu is open, nothing behind it shows a tip.
 
-- A window without the focus shows no tips, and a tip already up goes away. When the focus comes back, tips wait for the pointer to move.
+- A window without the focus doesn't show any tips, and a tip already up goes away. When the focus comes back, tips wait for the pointer to move.
 
 ## Layout and measurement
 
@@ -252,25 +252,25 @@ There are 4 kinds: a Settings row, a menu item, a link or button in the About bo
 	- The Settings dialog solves its whole layout in DIP and converts once at the boundary. It has a real layout pass, and a stray conversion inside it would be scaled again on the way out.
 	- The main window's chrome and the About box convert each constant where it is used. Neither has a layout pass to convert at the end of, and inventing a second coordinate space for a handful of numbers would cost more than it saved.
 
-- Measurements are floors rather than fixed sizes. Content that needs more room gets it. A wide label pushes the panel wider, and a taller interface font makes rows taller. A number set too small loses to the content; one set too large gives a roomier dialog. Neither can break the layout.
+- Measurements are floors rather than fixed sizes. Content that needs more room gets it. A wide label pushes the panel wider, and a taller interface font makes rows taller. A number set too small loses to the content. One set too large gives a roomier dialog. Neither can break the layout.
 
 - Chrome sizes off the interface font rather than a constant. Changing the desktop font size must move everything together.
 	- A column that contains text is measured in the interface font, with its declared width as the floor. That goes for the revert control, the Shell tab's date and Active columns, and the color picker's labels and value boxes. Where the text can't be known ahead, as with a shell's name, the column grows in step with the UI line height above the 11 pt default's, the same as the gap beside a label.
 
-- Text is centered on its visible ink box rather than its line box. Curated single-line labels center on ascender-to-baseline; anything that may have descenders, such as a path, centers on ascent plus descent.
+- Text is centered on its visible ink box rather than its line box. Curated single-line labels center on ascender-to-baseline. Anything that may have descenders, such as a path, centers on ascent plus descent.
 
 - A focused boxed control draws exactly one outline.
 
-- A pixel-valued setting steps in whole pixels. Only line height keeps decimals.
+- A pixel-valued setting steps in whole pixels. Only line height has decimals.
 
 - The dialog opens at the size its tallest tab wants, or at what the screen leaves, whichever is smaller. The Shell tab is left out of that, since its list grows with each shell and scrolls instead. The Keys tab is left out too, since its list of hotkeys is long and scrolls. The screen's share is the work area, which is what a window can occupy once the taskbar and any docks have taken theirs, less the frame the window manager puts around it. A monitor's full height isn't that, and using it is how the footer buttons end up behind a taskbar.
 
 - It can be resized. A resize that passes within a few pixels of the default size settles on it, and the size it is left at is used again for the rest of the session. Nothing about it is written to the config, so a new run opens at the default size again.
 
-- Too short and the rows scroll; too narrow and they scroll sideways. The tab strip and the footer buttons stay out of the vertical scroll, so there is always a way out of the dialog and always a way to another tab.
+- If it's too short the rows scroll, and if it's too narrow they scroll sideways. The tab strip and the footer buttons stay out of the vertical scroll, so there is always a way out of the dialog and always a way to another tab.
 	- The rows that scroll are a shade toward `gutter`, so the search box's band and the footer read lighter than them. Each band has a 1 DIP line along the rows, so they don't read as rows. They look the same on every tab, whether it scrolls or not, since a look that came and went from tab to tab would only be noise.
 
-- Controls in the middle of a row are variable width and take whatever the window's width leaves them. What's fixed is what lines up. Labels and the left edge of every control align on the left, and the revert control, a slider's number field and a text control's own right edge align on the right.
+- Controls in the middle of a row are variable width and take whatever the window's width leaves them. What's fixed is what lines up. Labels and the left edge of every control align on the left, and the revert control, a slider's number field, and a text control's own right edge align on the right.
 
 ## Color roles
 
@@ -286,14 +286,14 @@ Chrome:
 
 - `menu_background`, `menu_foreground`: the menu bar and its dropdowns.
 
-- `gutter`: chrome without any interactive element, such as the strip the dialog's tabs sit on. Recessed against the panel in both modes.
+- `gutter`: chrome without any interactive element, such as the strip the dialog's tabs are on. It's recessed against the panel in both modes.
 	- Halfway between it and `dialog_background` is the shade under the dialog's scrolling rows, darker than the still bands around them, the search box's and the footer's. It isn't editable on its own.
 
 Attention:
 
 - `highlight`: marks several things at once, including the live pane's ring, slider handles, revert icons, and the default button. It stays calm because it is everywhere.
 
-- `focus`: marks the one element the keyboard is on. More vivid than `highlight`, and well away from it in hue.
+- `focus`: marks the one element the keyboard is on. It's more vivid than `highlight`, and well away from it in hue.
 
 Scrollbar, outside the theme:
 
@@ -301,7 +301,7 @@ Scrollbar, outside the theme:
 
 Rules that go with them:
 
-- Don't collapse `highlight` and `focus` back into one color. They answer different questions.
+- Don't collapse `highlight` and `focus` back into one color. They mean different things.
 
 - Chrome defaults are neutral and shared by every built-in theme. A theme may override them, but a terminal palette that repainted the menu bar would fight the desktop.
 
@@ -314,8 +314,8 @@ Rules that go with them:
 - Program shortcuts take Ctrl+Shift where the plain Ctrl form belongs to the shell. Plain Ctrl is used only where nothing sensible would want it.
 	- Ctrl+Shift+C copy, Ctrl+Shift+V paste.
 	- Ctrl+Shift+T new tab, Ctrl+Shift+W or Ctrl+F4 close tab, Ctrl+Shift+N new window.
-	- Ctrl+PageUp and Ctrl+PageDown walk the tabs; add Shift to move the tab along.
-	- Ctrl+Plus, Ctrl+Minus and Ctrl+0 size the font for this session.
+	- Ctrl+PageUp and Ctrl+PageDown walk the tabs, and with Shift they move the tab along.
+	- Ctrl+Plus, Ctrl+Minus, and Ctrl+0 size the font for this session.
 	- Ctrl+, opens Settings. F11 is fullscreen.
 
 - Panes take Alt+Shift chords and Alt+arrows, as in Windows Terminal.
@@ -326,7 +326,7 @@ Rules that go with them:
 	- Command+N new window, Command+T new tab, Command+W close tab.
 	- Command+C copy, Command+V paste.
 	- Command+Shift+[ and Command+Shift+] walk the tabs. So do Command+PageUp and Command+PageDown, and Shift with those 2 moves the tab along.
-	- Command+Plus, Command+Minus and Command+0 size the font.
+	- Command+Plus, Command+Minus, and Command+0 size the font.
 	- Command+, opens Settings, Control+Command+F is fullscreen, Command+Q quits. Command+H and Option+Command+H hide, and Command+M minimizes.
 	- Command+D splits right and Command+Shift+D splits down, and Command+Option+arrows move between panes, as in iTerm2. Option+Command+W closes the pane, since Command+W closes the tab.
 	- Command+click opens a link, and Command held at a press selects a block.
@@ -343,16 +343,16 @@ Rules that go with them:
 
 - Inside a dialog, Tab and Shift+Tab move focus, Ctrl+Tab and Ctrl+PgUp/PgDn change tab, Enter is OK, and Escape is Cancel. That's true with a field open, too. Enter closes it and takes OK, Escape cancels. Neither takes a second press.
 	- A tab's sub-tabs are walked before the next tab, and the macOS chords below take the same walk.
-	- A row on the Keys tab waits for a new chord after Enter, Space, or a click on its box, and every key goes to it until one comes. Escape leaves the row as it was, and Backspace or Delete on its own turns the hotkey off. A key that would stop typing at the shell is refused, with what it needs held. A chord another hotkey had is said on both rows, the way the launch says it about the file.
+	- A row on the Keys tab waits for a new chord after Enter, Space, or a click on its box, and every key goes to it until one comes. Escape leaves the row as it was, and Backspace or Delete on its own turns the hotkey off. A key that would stop typing at the shell is refused, with what it needs held. A chord another hotkey had is reported on both rows, the way the launch reports it about the file.
 	- On macOS Command+Shift+[ and ] change tab, and so do Command+PgUp/PgDn. Ctrl+Tab moves focus like Tab, since Command+Tab belongs to the system.
 	- Ctrl+F goes to the search box, Command+F on macOS. In it, Up and Down walk the list of matches and Enter goes to the one picked. Escape empties the box first, and is Cancel only once the box is empty. While the box is empty it is outside the Tab walk, as the tabs are.
 	- A text box on macOS takes the Mac's own keys: Command+C, X, V, and A, Option to move or erase by words, Command+Left and Right for either end, and Command+Backspace to erase to the start.
 
-- A tab being renamed is a text box too, with the same keys as one in a dialog. Its right-click menu has Cut, Copy, Paste, Delete, and Select all. While it is up, Copy, Paste, and Paste Selection on any menu act on the name.
+- A tab being renamed is a text box too, with the same keys as one in a dialog. Its right-click menu has Cut, Copy, Paste, Delete, and Select all. While it is up, Copy, Paste, and Paste selection on any menu act on the name.
 
 - A text, color, or number box opens with its value selected as soon as focus arrives, by key or by click, so typing replaces it.
 
-- In a number box, Up and Down step the value by a hundredth of its range, or a tenth with Shift held, whether the box is open or merely focused. Left and Right move the caret while it is open, and step the value while it isn't.
+- In a number box, Up and Down step the value by a hundredth of its range, or a tenth with Shift held, whether the box is open or only focused. Left and Right move the caret while it is open, and step the value while it isn't.
 	- On a log slider the step is that share of the track, so it is the same ratio anywhere along it, and never less than 1 for a whole number.
 	- A step never takes a value further past the slider's end than it already is. Up stops at the end, and Down from a typed number steps down from that number.
 
@@ -364,15 +364,15 @@ Rules that go with them:
 
 Things the built interface does differently from the rules above. Each is a small work item rather than a design question.
 
-- `Copy on select` sits at the bottom of the Cursor tab, which isn't where its subject is. It was asked for there and a test pins it, so it stays until that changes.
+- `Copy on select` is at the bottom of the Cursor tab, which isn't where its subject is. It was asked for there and a test pins it, so it stays until that changes.
 
-- On macOS the auto-copy switches show their state only in the Edit menu, rather than at a glance as the in-window bar shows them elsewhere. The bar's dimming of them while the window is in the background has no counterpart there either.
+- On macOS the auto-copy switches show their state only in the Edit menu, rather than at a glance as the in-window bar shows them elsewhere. The bar's dimming of them while the window is in the background doesn't have a counterpart there either.
 
-- The right-click menu no longer offers Fullscreen or Window frame, so with the menu bar hidden they are reachable only by F11 or by putting the bar back. Acceptable while Menu bar stays on that menu, but worth another look if the bar is ever hidden by default. A hidden bar is saved now, so new windows open without it too.
+- The right-click menu no longer offers Fullscreen or Window frame, so with the menu bar hidden they are reachable only by F11 or by putting the bar back. That's acceptable while Menu bar stays on that menu, but it's worth another look if the bar is ever hidden by default. A hidden bar is saved now, so new windows open without it too.
 
 - `Gaussian [ugly]` says out loud that it is the worse option, which no other control does. It is the baseline the other 3 scrim functions are compared against, and the label was asked for.
 
-- The About box pads its `Key: value` lines with extra spaces, which line nothing up in a proportional font. Cosmetic, and shared with the text `--about` prints.
+- The About box pads its `Key: value` lines with extra spaces, which don't line anything up in a proportional font. It's cosmetic, and the text `--about` prints has it too.
 
 - The Silk tab made 8, one past the ceiling above, before Appearance took in 4 tabs and left 6 at the top level. Its subject is what the look costs, which is a stretch over 3 sections: the profile, text readability, and the scrolling feel. It was put first because the profile governs most of what is under it. Emptying those sections out left the Text tab with only the font, and the Movement tab with only the wheel and the scrollbar.
 

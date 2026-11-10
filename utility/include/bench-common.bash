@@ -6,8 +6,8 @@
 #  shellcheck disable=2086  ## Integer pids need no quoting.
 
 ##	- Purpose:
-##		Shared helpers for the two shootout rigs (termbench-run.bash, sizebench-run.bash).
-##		Sourced, never run. The wrapper above them is Python and carries its own copy of
+##		Shared helpers for the 2 shootout rigs (termbench-run.bash, sizebench-run.bash).
+##		Sourced, never run. The wrapper above them is Python and has its own copy of
 ##		the same output style.
 ##
 ##		Output matches the house style used by cicd.bash: fEcho prints a bracketed status
@@ -64,8 +64,9 @@ fFindTerm(){
 }
 
 ##	Every process started on a throwaway account (fPrivateAccount): the launched tree, plus
-##	whatever carries the account's HOME. A service the private bus starts is not the bus's
-##	child, since dbus-daemon forks twice, so the tree alone misses GNOME Terminal's server.
+##	whatever has the account's HOME in its environment. A service the private bus starts
+##	isn't the bus's child, since dbus-daemon forks twice, so the tree alone misses GNOME
+##	Terminal's server.
 ##	HOME alone misses Electron, which writes its process title over its environment.
 fOwnedPids(){
 	local -r home="${1}" launched="${2:-0}"
@@ -98,8 +99,8 @@ fOwnedRoot(){
 }
 
 ##	The grid a terminal reports from inside, as "rows cols", once it has settled. A report
-##	can predate the resize it is meant to answer (80x24 from a window not yet tiled), so
-##	a size is taken only once two reports in a row agree.
+##	can predate the resize it's meant to follow (80x24 from a window not yet tiled), so
+##	a size is taken only once 2 reports in a row agree.
 fReadGrid(){
 	local -r reportFile="${1}"
 	local seen="" again=""
@@ -125,7 +126,7 @@ fFitGrid(){
 	local -i w=${5} h=${6} pass=0 gotC=0 gotR=0
 	## A proportional step can hop over the answer and come back (43 rows, 41, 43 ...)
 	## when a cell is near 20 pixels, which a new account's default font made routine.
-	## When two passes in a row land close on either side, the next try is the middle
+	## When 2 passes in a row end up close on either side, the next try is the middle
 	## of them. Far apart, the proportional step is the better guess.
 	## Only the pass before counts: the first report can predate the window's tiling.
 	local -i prevW=0 prevH=0 prevC=0 prevR=0 nextW=0 nextH=0
@@ -151,7 +152,7 @@ fFitGrid(){
 		prevW=${w}; prevH=${h}; prevC=${gotC}; prevR=${gotR}
 		w=${nextW}; h=${nextH}
 	done
-	fDie "could not fit ${wantC}x${wantR} (stopped at ${gotC}x${gotR})"
+	fDie "couldn't fit ${wantC}x${wantR} (stopped at ${gotC}x${gotR})"
 }
 
 ##	A launched pid plus everything under it. Diffing the system-wide process list instead
@@ -173,20 +174,20 @@ fCollectTree(){
 
 ##	A terminal under test runs as it would on a new account: a home, the XDG folders
 ##	and a session bus that the rig makes and removes. The measuring account's own
-##	settings then cannot reach a published figure, and a terminal that writes its
+##	settings then can't affect a published figure, and a terminal that writes its
 ##	settings on launch writes them here. GNOME Terminal and xfce4-terminal keep theirs
 ##	behind the session bus, which is why the bus is part of it. XDG_RUNTIME_DIR is left
 ##	alone, since the compositor's socket is in it.
 ##
 ##	The bus starts only the services a terminal keeps its settings in. With the whole
 ##	desktop's set on offer, a GTK program asks for the desktop portal, the portal asks
-##	for the keyring, the keyring cannot be reached from here, and GNOME Terminal's
+##	for the keyring, the keyring can't be reached from here, and GNOME Terminal's
 ##	server sits in that until its own launcher gives up on it.
 ##	Usage: fPrivateAccount <dir>, then: env "${_privateEnv[@]}" "${_privateBus[@]}" <terminal...>
 declare -a _privateEnv=() _privateBus=()
 fPrivateAccount(){
 	local -r home="${1}"
-	command -v dbus-run-session >/dev/null 2>&1 || fDie "dbus-run-session is not installed (package dbus-daemon)"
+	command -v dbus-run-session >/dev/null 2>&1 || fDie "dbus-run-session isn't installed (package dbus-daemon)"
 	mkdir -p "${home}/.config" "${home}/.local/share" "${home}/.local/state" "${home}/.cache" "${home}/.bus"
 	local service=""
 	for service in org.gnome.Terminal ca.desrt.dconf org.xfce.Xfconf; do

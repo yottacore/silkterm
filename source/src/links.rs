@@ -4,17 +4,17 @@
 //! Hyperlinks in terminal output: find URLs in a row of grid text, and hand one
 //! to the desktop's handler.
 //!
-//! Detection is allowlisted BY SCHEME and that is load-bearing twice over: it
-//! keeps the false-positive rate near zero (a bare word with a slash in it is not
-//! a link), and it is what stops `javascript:` / `data:` from ever reaching the
-//! opener. A scheme absent from SCHEMES is not a link, so it cannot be opened.
+//! Detection is allowlisted by scheme, for 2 reasons. False positives stay near
+//! zero, since a bare word with a slash in it isn't a link. And `javascript:` and
+//! `data:` never get as far as the opener. A scheme missing from SCHEMES isn't a
+//! link, so it can't be opened.
 
 use std::io;
 use std::process::{Command, Stdio};
 
 // (scheme, needs "//"). Ordered longest-first within a family so "https" is
-// tested before "http" - every candidate is tried anyway, but the order keeps
-// the common case one comparison.
+// tested before "http". Every candidate is tried anyway, but this way the
+// common case takes one comparison.
 const SCHEMES: [(&str, bool); 8] = [
 	("https", true),
 	("http", true),
@@ -26,10 +26,10 @@ const SCHEMES: [(&str, bool); 8] = [
 	("mailto", false),
 ];
 
-// Characters a URL may carry. ASCII only: percent-encoding covers the rest, and
-// admitting non-ASCII would swallow the CJK sentence that follows a link. The
-// exclusions are the delimiters RFC 3986 leaves out plus the quotes a shell
-// wraps a URL in.
+// Characters allowed in a URL. ASCII only, since percent-encoding handles the
+// rest, and admitting non-ASCII would swallow the CJK sentence that follows a
+// link. The exclusions are the delimiters RFC 3986 leaves out plus the quotes a
+// shell wraps a URL in.
 fn is_url_char(c: char) -> bool {
 	c.is_ascii_graphic()
 		&& !matches!(
@@ -183,12 +183,12 @@ pub fn desktop_opener() -> &'static str {
 
 // The program that hands a URL to the desktop, and the URL as one plain argument.
 //
-// Windows deliberately does not go through `cmd /C start`. cmd's parser sees the
+// Windows doesn't go through `cmd /C start`, on purpose. cmd's parser sees the
 // whole command line before argument quoting means anything, and it expands
-// percent variables before it processes any escaping - so a URL printed by a
-// remote host could carry a variable in, and an expanded value holding `&` would
-// start a second command. Terminal output is untrusted, and there is no escape
-// that survives that order. explorer takes its arguments the ordinary way.
+// percent variables before it processes any escaping. So a URL printed by a
+// remote host could bring a variable in, and an expanded value containing `&`
+// would start a second command. Terminal output is untrusted, and there is no
+// escape that survives that order. explorer takes its arguments the ordinary way.
 fn opener_argv(host: Host, url: &str) -> (&'static str, String) {
 	let program = match host {
 		Host::Windows => "explorer.exe",
@@ -213,11 +213,11 @@ mod tests {
 		s.chars().collect()
 	}
 
-	// Terminal output is untrusted, and the Windows opener used to go through cmd
-	// - whose parser reads the command line before argument quoting means
-	// anything, and expands percent variables before any escaping is processed.
-	// Nothing escapes a URL for that, so nothing tries: every platform hands the
-	// URL to its own opener as one plain argument.
+	// Terminal output is untrusted, and the Windows opener used to go through cmd.
+	// Its parser reads the command line before argument quoting means anything,
+	// and expands percent variables before any escaping is processed. No escaping
+	// survives that, so every platform hands the URL to its own opener as one
+	// plain argument.
 	// Test ID: dcbe8
 	#[test]
 	fn a_url_reaches_the_opener_exactly_as_it_was_printed() {
@@ -248,7 +248,7 @@ mod tests {
 		let (start, end, url) = find_at(&text, 10).expect("link");
 		assert_eq!(url, "https://example.com/a?b=1&c=2");
 		assert_eq!((start, end), (4, 33));
-		// every cell of the span answers with the same span
+		// every cell of the span returns the same span
 		for hit in start..end {
 			assert_eq!(find_at(&text, hit).map(|l| l.2), Some(url.clone()));
 		}
@@ -282,8 +282,8 @@ mod tests {
 		);
 	}
 
-	// The allowlist is the security boundary, not a convenience: a scheme that
-	// isn't listed must never become clickable.
+	// The allowlist is the security boundary. A scheme that isn't listed must
+	// never become clickable.
 	// Test ID: dattz
 	#[test]
 	fn only_allowlisted_schemes_are_links() {
@@ -322,8 +322,8 @@ mod tests {
 
 	// A hostile scheme is the whole reason detection is allowlisted, so it gets a
 	// directed test as well as the fuzz below. These are the ones that turn a
-	// printed line into code: two of them run script in a browser, one runs it in
-	// the Windows shell, and the rest reach a handler no terminal should offer.
+	// printed line into code. Of these, 2 run script in a browser, one runs it in
+	// the Windows shell, and the rest open a handler no terminal should offer.
 	// Test ID: dcdjb
 	#[test]
 	fn a_hostile_scheme_never_becomes_a_link() {
@@ -353,7 +353,7 @@ mod tests {
 	// A printed line is untrusted text, and the only thing standing between it and
 	// a process launch is the scan below. So the scan gets hammered: whatever it
 	// hands back must be a whole allowlisted URL, taken verbatim out of the row,
-	// and made of nothing but the characters a URL may carry.
+	// and made of nothing but the characters allowed in a URL.
 	mod fuzz {
 		use super::super::{SCHEMES, find_at, is_url_char};
 		use crate::fuzz;
@@ -411,7 +411,7 @@ mod tests {
 				);
 				assert!(
 					url.chars().skip_while(|&c| c != ':').all(is_url_char),
-					"{url:?} carries a character a url may not"
+					"{url:?} has a character a url may not"
 				);
 			}
 		}

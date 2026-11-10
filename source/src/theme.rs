@@ -11,7 +11,7 @@
 //! A theme the user saves from the Settings dialog is a `UserTheme`: the same
 //! (dark, light) pair, stored whole in `config.shcl` under `themes.<slug>` and
 //! resolved ahead of the built-ins, so one may take a built-in's name and stand
-//! in for it until it is deleted.
+//! in for it until it's deleted.
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Palette {
@@ -102,7 +102,7 @@ pub struct UserTheme {
 	pub font: ThemeFont,
 }
 
-/// The font a saved theme keeps, one for both variants. A theme saved before
+/// The font a saved theme has, one for both variants. A theme saved before
 /// themes had fonts has none, and a hand-edited one may have only some.
 #[derive(Clone, PartialEq, Debug, Default)]
 pub struct ThemeFont {
@@ -173,7 +173,7 @@ const SILK_DARK: Palette = Palette {
 // so they were eased about a third of the way back. A dark theme's sit 0.60 to
 // 0.77 over black, but much past that a yellow or a cyan has no color left.
 // Chroma stayed up, so each reads as a color rather than a muddier copy. The
-// two monochrome themes move their whole set together, keeping the spread that
+// 2 monochrome themes move their whole set together, keeping the spread that
 // is all they have to tell colors apart.
 #[rustfmt::skip]
 const SILK_LIGHT: Palette = Palette {
@@ -439,7 +439,7 @@ mod tests {
 		}
 	}
 
-	// The pair only works if the two read as different signals. A theme that let
+	// The pair only works if the 2 read as different signals. A theme that let
 	// them converge would draw the focused control and everything merely
 	// highlighted in the same color, which is the whole point of splitting them.
 	// Test ID: dava3
@@ -481,8 +481,8 @@ mod tests {
 	}
 
 	// A flyover tip lifts its box off the menu background, which moves it toward
-	// the menu's own text. The gap is still wide at the shipped colors, but a
-	// theme that overrode the menu pair could land somewhere the lift makes
+	// the menu's own text. The gap is still wide at the default colors, but a
+	// theme that overrode the menu pair could end up somewhere the lift makes
 	// unreadable, and nothing repaints chrome at run time.
 	// Test ID: dcwfp
 	#[test]
@@ -502,7 +502,7 @@ mod tests {
 		}
 	}
 
-	// The floor the renderer holds this palette's text to at the shipped setting.
+	// The floor the renderer holds this palette's text to at the default setting.
 	fn floor_of(pal: &Palette) -> f32 {
 		let floor = crate::config::Settings::default().text_min_contrast;
 		crate::config::min_contrast_for(pal.fg, pal.bg, floor)
@@ -558,7 +558,8 @@ mod tests {
 
 	// A light theme's plate used to sit 0.12 to 0.20 Oklab L off its background,
 	// against 0.20 to 0.42 in dark mode, because pale text left it no room. The
-	// light text is darker now and the plate stronger, and this holds the room.
+	// light text is darker now and the plate stronger, and this checks the room
+	// stays.
 	// Test ID: dd9ny
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
@@ -614,7 +615,7 @@ mod tests {
 		0.2126 * f32::from(c[0]) + 0.7152 * f32::from(c[1]) + 0.0722 * f32::from(c[2])
 	}
 
-	// The three the project started with. Matrix and Retro Amber are monochrome,
+	// The 3 the project started with. Matrix and Retro Amber are monochrome,
 	// and a color that wandered off the hue would break that in either mode.
 	// Test ID: dd5my
 	#[test]

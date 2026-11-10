@@ -5,8 +5,8 @@
 //! gets drawn. Both are authored amounts - a person moved a slider - and neither
 //! survives being handed straight to the renderer.
 //!
-//! Two things get in the way, and both are the same shape: the number a person
-//! picks is perceptual, and what the renderer wants is not.
+//! There are 2 things in the way, and both are the same kind of problem: the
+//! number a person picks is perceptual, and what the renderer wants isn't.
 //!
 //! - **The mode.** A linear-light blend is what the program has always drawn,
 //!   and sRGB's curve is steep at the bottom and flat at the top, so the same
@@ -22,29 +22,29 @@
 //!   has to be drawn as it is.
 //!
 //! The scrim's halo blends against the destination through the pipeline's blend
-//! state and cannot read it, so it is matched against the picture's average
+//! state and can't read it, so it's matched against the picture's average
 //! instead: light mode redraws each halo alpha at whatever moves that field as
 //! far as dark mode's halo moves dark mode's.
 //!
 //! The measure throughout is a transfer curve taken on Rec.709 luma. Luma
-//! because it is affine under the alpha composite, so one number stands in for a
-//! whole blend; a curve because linear light is not what the eye reads.
+//! because it's affine under the alpha composite, so one number stands in for a
+//! whole blend; a curve because linear light isn't what the eye reads.
 
 use crate::config::{self, LUMA, Settings};
 
-// Where the transfer curve's slope is read when the two modes are compared, as
-// a linear luma. Measured over the shipped pack of 104: median 0.129, mean
+// Where the transfer curve's slope is read when the 2 modes are compared, as
+// a linear luma. Measured over the bundled pack of 104: median 0.129, mean
 // 0.141, quartiles 0.062 and 0.193. A picture far from this one is out by a few
 // points, not by a factor.
 const WALLPAPER_LUMA: f32 = 0.13;
 
 // The transfer curve the mix happens in. A pure power rather than sRGB's own,
-// because sRGB's `- 0.055` term does not cancel: over a black background the
+// because sRGB's `- 0.055` term doesn't cancel: over a black background the
 // power curve makes the mix exactly the linear blend it replaces, and sRGB's
-// would lift the black by eight levels.
+// would lift the black by 8 levels.
 const MIX_GAMMA: f32 = 2.4;
 
-// The picture the visibility ramp measures against: the shipped pack's median
+// The picture the visibility ramp measures against: the bundled pack's median
 // overall brightness and median bright end, as linear luma. A picture matching
 // these is drawn at exactly what the slider says.
 const REF_MEAN: f32 = 0.124;
@@ -95,8 +95,8 @@ fn slope(at: f32) -> f32 {
 //
 // Over pure black it works out at exactly `alpha^(1/2.4)`, which is why dark
 // mode has never needed any of this: black leaves the blend a pure scale of the
-// encoded picture, and a scale cannot touch contrast. A dark theme whose
-// background is not black delivers less, and this says how much less.
+// encoded picture, and a scale can't touch contrast. A dark theme whose
+// background isn't black delivers less, and this says how much less.
 fn encoded_scale(alpha: f32, bg: f32) -> f32 {
 	alpha * slope(alpha * WALLPAPER_LUMA + (1.0 - alpha) * bg) / slope(WALLPAPER_LUMA)
 }
@@ -150,14 +150,14 @@ pub struct Mix {
 	pub amount: f32,
 	/// False is the linear-light blend the program has always drawn, and is what
 	/// dark mode gets. True mixes the background and the picture in a power curve,
-	/// which needs the background color and so cannot be a hardware blend.
+	/// which needs the background color and so can't be a hardware blend.
 	pub perceptual: bool,
 }
 
 impl Mix {
 	/// The field a glyph sits on, as a linear luma, for a picture of `picture`
 	/// over a background of `bg`. The renderer's own blend in one number, so the
-	/// derived text colors are placed against what will really be there.
+	/// derived text colors are placed against what will be there.
 	pub fn field(self, picture: f32, bg: f32) -> f32 {
 		if !self.perceptual {
 			return bg + (picture - bg) * self.amount;
@@ -192,7 +192,7 @@ pub fn wallpaper_mix(settings: &Settings, slider: f32, picture: Option<(f32, f32
 /// How many points the light-mode halo curve is solved at. They are spaced
 /// evenly in how far dark mode's halo moves a picture, which is
 /// `1 - (1 - alpha)^(1/2.4)` of its distance from black, rather than evenly in
-/// alpha: that is where the curve bends, and in those terms it is close to a
+/// alpha: that's where the curve bends, and in those terms it's close to a
 /// straight line. The shader joins the points with straight lines.
 pub const HALO_NODES: usize = 12;
 
@@ -211,7 +211,7 @@ fn halo_node(k: usize) -> f32 {
 /// average picture, with the outline left at full strength. sRGB's curve is
 /// steep near black and flat near white, so dark mode's halo builds slowly and
 /// light mode's fast, and the gap is widest over the dark parts of a picture,
-/// which light mode shows far more of. A gain could not follow either.
+/// which light mode shows far more of. A gain couldn't follow either.
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub struct HaloMatch {
 	pub curve: [f32; HALO_NODES],
@@ -219,7 +219,7 @@ pub struct HaloMatch {
 
 impl HaloMatch {
 	// What the shader draws for `asked`. It reads the same numbers the same
-	// way, so this is what the tests hold.
+	// way, so this is what the tests check.
 	#[cfg(test)]
 	pub fn alpha(&self, asked: f32) -> f32 {
 		let reach = 1.0 - (1.0 - asked.clamp(0.0, 1.0)).powf(1.0 / MIX_GAMMA);
@@ -246,7 +246,7 @@ fn moved(fields: &[[f32; 3]], bg: [f32; 3], alpha: f32) -> f32 {
 /// brightness is `picture` and whose linear channels run `spread` (the summary's
 /// quantiles). None leaves the halo as asked: dark mode is the reference, and
 /// with no picture up the halo sits on the background color it is made of. A
-/// picture not summarized yet stands in as a gray at the shipped pack's median.
+/// picture not summarized yet stands in as a gray at the bundled pack's median.
 pub fn halo_match(
 	settings: &Settings,
 	slider: f32,
@@ -284,7 +284,7 @@ pub fn halo_match(
 	let mut curve = [0.0f32; HALO_NODES];
 	for (k, node) in curve.iter_mut().enumerate().skip(1) {
 		let want = moved(&dark, dark_bg, halo_node(k));
-		// a light field that cannot move that far is simply covered
+		// a light field that can't move that far is covered
 		if reach <= want {
 			*node = 1.0;
 			continue;
@@ -413,7 +413,7 @@ mod tests {
 	}
 
 	// The whole reason the mix is a pure power curve rather than sRGB's own. Over
-	// a black background the two are the same arithmetic, so a dark theme could
+	// a black background the 2 are the same arithmetic, so a dark theme could
 	// take either path and draw the same pixels.
 	// Test ID: dcx6h
 	#[test]
@@ -435,7 +435,7 @@ mod tests {
 	}
 
 	// What the slider means, in both modes: this much of the picture's own
-	// contrast reaches the screen.
+	// contrast is shown on screen.
 	fn contrast_on_screen(mix: Mix, bg: f32) -> f32 {
 		config::from_linear(mix.field(HI, bg)) - config::from_linear(mix.field(LO, bg))
 	}
@@ -480,7 +480,7 @@ mod tests {
 		);
 	}
 
-	// A dark theme whose background is not black already shows less picture, so
+	// A dark theme whose background isn't black already shows less picture, so
 	// its light mode shows less too. Self-consistent rather than uniform.
 	// Test ID: dcx6m
 	#[test]
@@ -593,7 +593,7 @@ mod tests {
 						let want = moved(&dark, dark_bg, a);
 						let drawn = m.alpha(a);
 						let got = moved(&light, light_bg, drawn);
-						// within a level, or full where light mode cannot reach that far
+						// within a level, or full where light mode can't reach that far
 						assert!(
 							(got - want).abs() < 1.0 / 255.0 || (drawn >= 1.0 && got < want),
 							"{name} {picture:?} {v} at {a}: wanted {}, got {}",
@@ -651,7 +651,7 @@ mod tests {
 		}
 	}
 
-	// The memo answers what a fresh solve would, and solves again when anything
+	// The memo returns what a fresh solve would, and solves again when anything
 	// it is keyed on moves.
 	// Test ID: ddj1t
 	#[test]
@@ -740,7 +740,7 @@ mod tests {
 				"bright at {v}"
 			);
 		}
-		// and the two modes disagree about which picture that is
+		// and the 2 modes disagree about which picture that is
 		assert!(
 			standout(
 				BRIGHT,

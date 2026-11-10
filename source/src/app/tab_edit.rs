@@ -32,8 +32,8 @@ pub(super) struct TabEdit {
 	pub(super) anchor: usize,
 	/// a press in the box is held, so moving drags the selection
 	pub(super) dragging: bool,
-	// the last press on the box and how many came in a row: two take a word,
-	// three the whole name
+	// the last press on the box and how many came in a row: 2 take a word,
+	// 3 the whole name
 	clicks: Option<(Instant, u32)>,
 }
 
@@ -88,7 +88,7 @@ impl TabEdit {
 	}
 
 	// Backspace (back = true) or Delete, as far as `reach`. With a selection,
-	// either just clears it.
+	// either clears it.
 	fn erase(&mut self, back: bool, reach: Reach) {
 		let (mut from, mut to) = self.range();
 		if from == to {
@@ -104,7 +104,7 @@ impl TabEdit {
 	}
 
 	// Move the caret and either drag the selection with it or drop it. A plain
-	// step out of a selection lands on that side of it.
+	// step out of a selection stops on that side of it.
 	fn move_caret(&mut self, to: Caret, select: bool) {
 		let (from, end) = self.range();
 		let collapse = !select && from != end;
@@ -119,9 +119,9 @@ impl TabEdit {
 		}
 	}
 
-	/// A press in the box at byte offset `at`. Shift carries the selection there;
-	/// otherwise one press places the caret, two take the word and three the
-	/// whole name.
+	/// A press in the box at byte offset `at`. Shift extends the selection there;
+	/// otherwise one press places the caret, 2 take the word, and 3 the whole
+	/// name.
 	pub(super) fn press(&mut self, at: usize, now: Instant, extend: bool) {
 		let clicks = match self.clicks {
 			Some((when, n)) if now.duration_since(when) < TAB_DBL_CLICK => n + 1,
@@ -257,7 +257,7 @@ fn tab_edit_menu_items(selected: bool, has_text: bool, can_paste: bool) -> Vec<E
 }
 
 // A menu pick that goes to a tab being renamed rather than to the pane: the
-// rename's own rows, and Copy, Paste and Paste selection from any menu, as in
+// rename's own rows, and Copy, Paste, and Paste selection from any menu, as in
 // any text box with the focus.
 fn tab_edit_takes(action: MenuAction) -> bool {
 	matches!(
@@ -285,7 +285,7 @@ impl State {
 		// begun by a double-click, so one more press is the third
 		edit.clicks = Some((Instant::now(), 2));
 		self.tab_edit = Some(edit);
-		// the pointer has not moved, so the tip would come straight back
+		// the pointer hasn't moved, so the tip would come straight back
 		self.tab_hover.point_at(None);
 		self.tab_tip = None;
 		self.dirty = true;
@@ -331,7 +331,7 @@ impl State {
 	}
 
 	/// A key while a rename is up. Every key is the rename's, so nothing typed
-	/// reaches the shell.
+	/// goes to the shell.
 	pub(super) fn tab_edit_key(&mut self, key: &Key) {
 		let keys = input::edit_keys(self.mods, cfg!(target_os = "macos"));
 		let selected = self
@@ -358,7 +358,7 @@ impl State {
 		}
 	}
 
-	// Cut, Copy, Paste, Delete or Select all on the name being typed.
+	// Cut, Copy, Paste, Delete, or Select all on the name being typed.
 	fn tab_edit_cmd(&mut self, cmd: EditCmd) {
 		let Some(edit) = self.tab_edit.as_mut() else {
 			return;
@@ -483,7 +483,7 @@ mod tests {
 		);
 	}
 
-	// A tab title is renamed by byte offset over text that need not be ASCII, so
+	// A tab title is renamed by byte offset over text that might not be ASCII, so
 	// every move and every erase has to fall on a character boundary or the
 	// string operations panic.
 	// Test ID: dbz70
@@ -491,7 +491,7 @@ mod tests {
 	fn renaming_a_tab_stays_on_character_boundaries() {
 		let mut edit = TabEdit::new(0, "naïve".to_string());
 		edit.caret = 0;
-		// past the two-byte i-with-diaeresis and back
+		// past the 2-byte i-with-diaeresis and back
 		for _ in 0..3 {
 			edit.move_caret(Caret::Right(Reach::Char), false);
 		}
@@ -634,8 +634,8 @@ mod tests {
 		);
 	}
 
-	// The name edits as a Settings box does: one press places the caret, two
-	// take a word, three the whole name, Shift extends and a held press drags.
+	// The name edits as a Settings box does: one press places the caret, 2
+	// take a word, 3 the whole name, Shift extends, and a held press drags.
 	// A paste is one line.
 	// Test ID: dde0t
 	#[test]
@@ -668,7 +668,7 @@ mod tests {
 		assert_eq!(edit.selected(), Some(" server"), "Shift extends");
 		assert!(edit.dragging);
 
-		// a plain step out of a selection lands on its edge
+		// a plain step out of a selection stops at its edge
 		edit.move_caret(Caret::Left(Reach::Char), false);
 		assert_eq!((edit.caret, edit.selected()), (5, None));
 		edit.move_caret(Caret::Right(Reach::Word), true);
@@ -687,7 +687,7 @@ mod tests {
 		assert_eq!((edit.text.as_str(), edit.caret), ("x", 1));
 	}
 
-	// Copy, Paste and Paste selection from any menu go to a tab being renamed,
+	// Copy, Paste, and Paste selection from any menu go to a tab being renamed,
 	// and so do the rename's own rows. Anything else ends the rename. Its own
 	// menu leaves out rows with nothing to act on.
 	// Test ID: dde0v

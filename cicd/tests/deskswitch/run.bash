@@ -12,7 +12,7 @@
 ##			- Focusing it brings it back.
 ##	- Syntax: run.bash [--bin PATH]   (default: the debug build, then release)
 ##	- Exit: 0 passed, 1 a check failed, 3 nothing ran (no binary, display,
-##	  window manager, xdotool, xprop, xlogo or ImageMagick).
+##	  window manager, xdotool, xprop, xlogo, or ImageMagick).
 ##	- Test ID: df4e3
 ##	- History: At bottom of file.
 
@@ -104,7 +104,7 @@ done
 fTitle(){ fX xprop -id "${win}" _NET_WM_NAME 2>/dev/null || true; }
 fReleased(){ [[ "$(fTitle)" == *"(resource conservation mode)"* ]]; }
 fWaitReleased(){ local _; for _ in $(seq 1 "${1}"); do fReleased && return 0; sleep 0.5; done; return 1; }
-## The whole screen, the window and what is around it.
+## The whole screen, the window, and what is around it.
 fShot(){ fX import -window root "${work}/${1}.png" 2>/dev/null; }
 
 unfocused=0; releasedFirst=0; stillReleased=0; sameShot=0; repainted=0; backOnFocus=0

@@ -10,8 +10,8 @@
 #  shellcheck disable=2029  ## 'Note that, unescaped, this expands on the client side.' That is the intent - the remote paths are built here.
 
 ##	Purpose:
-##		Run builds, tests and other jobs on the Windows boxes over ssh, from here.
-##		Several platform bugs only exist on Windows and cannot be reproduced on this
+##		Run builds, tests, and other jobs on the Windows boxes over ssh, from here.
+##		Several platform bugs only exist on Windows and can't be reproduced on this
 ##		box at all, so the alternative is doing it by hand on the other machine.
 ##	Syntax:
 ##		win-remote.bash [--host <name>] [--as <user>] [--optional] hosts
@@ -34,7 +34,7 @@
 ##		--optional drops the first of those, so nothing reachable is a skip rather
 ##		than a failure. Every cicd caller passes it: the boxes are somebody's desk
 ##		and a laptop, so one being off is the normal case, not a broken build. A job
-##		that actually ran and failed still fails, with or without it.
+##		that ran and failed still fails, with or without it.
 ##		Jobs run against a clone the remote keeps at origin/dev; it is reset, not
 ##		merged, so local edits there are discarded. Uncommitted work here does not
 ##		reach it - push first. --ref names a different branch, which is how a fix
@@ -48,12 +48,12 @@
 ##		Other sessions on this machine may share the boxes. A line '@lock <command>' in
 ##		the host config names a host lock, and then everything but hosts waits for the
 ##		selected boxes through it, unless the caller already holds them. A lock that is
-##		missing, cannot run, or does not know a box is passed over. WINRIG_LOCK_WAIT
+##		missing, can't run, or doesn't know a box is passed over. WINRIG_LOCK_WAIT
 ##		caps the wait in seconds. A line '@vmstate <command>' names the VM state
 ##		helper, which holds the boxes through the same lock, wakes a VM that is
 ##		paused or off, and puts it back the way it was found once the job is done.
 ##		hold runs a local command with the boxes held, for a caller that makes several
-##		calls in a row and cannot have another session get in between them.
+##		calls in a row and can't have another session get in between them.
 ##		With --optional, each box is held and run on in turn, and one that another
 ##		session holds past the wait is skipped. WINRIG_LOCK_WAIT defaults to 100 there.
 ##	Exit: 0 ok, 1 job or connection failure, 2 usage / no config, 3 the lock's wait ran out.
@@ -177,7 +177,7 @@ PS
 }
 
 ##	Walk the selected hosts, skipping whatever is down. A skipped host is a warning;
-##	only a job that actually ran and failed, or nothing reachable at all, is an error.
+##	only a job that ran and failed, or nothing reachable at all, is an error.
 fOverHosts() {
 	local fn="${1}"
 	local -i up=0 bad=0
@@ -267,7 +267,7 @@ runScript=""
 declare -a runArgs=()
 fDoRun() { fRunScript "${1}" "${runScript}" "${runArgs[@]}"; }
 
-##	--ref only reaches the clone through sync. A job silently running against
+##	--ref only takes effect through sync. A job silently running against
 ##	whatever was there last is how a fix looks verified when it was never built.
 fNoRef() { [[ -z "${refGiven}" ]] || fFail "--ref belongs to sync - sync with it first, then run this" 2 ;}
 
@@ -349,7 +349,7 @@ case "${cmd}" in
 	push)
 		fNoRef
 		##	One file to an absolute path, its folder made first. For a build made
-		##	here, which the clone on the box would not have.
+		##	here, which the clone on the box wouldn't have.
 		src="${1:-}"; abs="${2:-}"
 		[[ -f "${src}" && -n "${abs}" ]] || fFail "push needs <local-file> <remote-abs-path>" 2
 		parent="${abs%\\*}"

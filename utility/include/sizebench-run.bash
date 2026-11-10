@@ -11,7 +11,7 @@
 ##
 ##		Reproduce a published row before trusting a new one. This rig reproduced
 ##		SilkTerm's memory within 1.3% and its excluded-driver figure within 0.4% of the
-##		numbers already in the table; anything measured a different way is not comparable
+##		numbers already in the table; anything measured a different way isn't comparable
 ##		with them. Window size is the trap - the same binary reads 38 MiB heavier at its
 ##		default geometry than at the table's 100x30 grid.
 ##	- Syntax:
@@ -51,8 +51,8 @@ source "${scriptDir}/bench-common.bash"                            ## fEcho, fKi
 #•••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
 
 fCleanup() {
-	## The launched tree as well as the measured one: a private session bus sits above
-	## the terminal and is not part of its figure.
+	## The launched tree as well as the measured one: a private session bus runs above
+	## the terminal and isn't part of its figure.
 	local -a launched=()
 	if [[ -n "${_work}" ]]; then mapfile -t launched < <(fOwnedPids "${_work}/home" "${_rootPid}"); fi
 	fKillPids "${_termPids[@]:-0}" "${launched[@]:-0}"
@@ -158,7 +158,7 @@ fLaunch() {
 				>"${_work}/term.log" 2>&1 &
 			;;
 		xterm)
-			## X toolkit option, one dash - '--geometry' is not accepted.
+			## X toolkit option, one dash - '--geometry' isn't accepted.
 			"${bin}" -geometry "${cols}x${rows}" -e /bin/dash -c 'exec sleep 1000000' \
 				>"${_work}/term.log" 2>&1 &
 			;;
@@ -170,9 +170,9 @@ fLaunch() {
 			"${bin}" --geometry "${cols}x${rows}" -e "/bin/dash -c 'exec sleep 1000000'" \
 				>"${_work}/term.log" 2>&1 &
 			;;
-		## These four start on a throwaway account and session bus, as on the speed rig.
+		## These 4 start on a throwaway account and session bus, as on the speed rig.
 		## GNOME Terminal would otherwise hand the window to a server already running on
-		## the desktop's bus, and the Electron two write their settings under HOME.
+		## the desktop's bus, and the 2 Electron ones write their settings under HOME.
 		gnome|wezterm|tabby|hyper)
 			local -r home="${_work}/home"
 			fPrivateAccount "${home}"
@@ -202,7 +202,7 @@ fLaunch() {
 	printf '%s' "$!"
 }
 
-##	The root of an extracted AppImage the binary sits in: the folder holding AppRun, a
+##	The root of an extracted AppImage the binary is in: the folder with AppRun, a
 ##	few levels up at most. The WezTerm and Electron bundles are measured that way.
 fAppDir() {
 	local dir=""
@@ -237,7 +237,7 @@ fFindWindow() {
 	return 0
 }
 
-##	The Electron two take no grid on the command line, so their window is resized until
+##	The 2 Electron ones take no grid on the command line, so their window is resized until
 ##	the shell inside reports it.
 fResizeWindow() {
 	DISPLAY="${display}" xdotool windowsize "${_winId}" "${1}" "${2}" >/dev/null 2>&1 || true
@@ -283,7 +283,7 @@ fMain() {
 		Xvfb "${display}" -screen 0 "${screen}" -nolisten tcp >"${_work}/xvfb.log" 2>&1 &
 		_xvfbPid=$!
 		sleep 2
-		DISPLAY="${display}" xdpyinfo >/dev/null 2>&1 || fDie "could not start Xvfb on ${display}"
+		DISPLAY="${display}" xdpyinfo >/dev/null 2>&1 || fDie "couldn't start Xvfb on ${display}"
 		fEcho "started Xvfb on ${display} (pid ${_xvfbPid})"
 	else
 		fEcho "reusing the display already on ${display}"

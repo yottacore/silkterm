@@ -7,7 +7,7 @@
 ##		its shell, splits it, types into the new pane, closes the pane, opens
 ##		and closes the Settings dialog, opens a second window, types into it and
 ##		closes it, then closes the tab. heaptrack sees every allocation in the
-##		process, the graphics driver and the other C libraries included.
+##		process, the graphics driver, and the other C libraries included.
 ##		Every shell is soak-shell.sh, from --shell adn the test config's shell
 ##		list, with HOME and the XDG dirs in the run's own folder.
 ##	- Syntax: run.bash [--bin PATH] [--rounds N] [--out DIR] [--stamp STAMP] [--plant]
@@ -19,7 +19,7 @@
 ##		--plant   preload plant.c, which leaks 64 KiB per child started; the
 ##		          test must then fail
 ##	- Exit: 0 passed, 1 a check failed, 3 nothing ran (no binary, display,
-##	  window manager, xdotool, heaptrack, zstd, python3 or gcc for --plant).
+##	  window manager, xdotool, heaptrack, zstd, python3, or gcc for --plant).
 ##	- Test ID: der46
 ##	- History: At bottom of file.
 

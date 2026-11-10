@@ -8,7 +8,7 @@
 ##		- fEcho "msg" -> "[ msg ]" status line; fEcho_Clean "msg" -> plain line, and
 ##		  a bare call collapses repeated blanks. fSection draws the leading-blank +
 ##		  rule letterbox before a major stage header; fStep_Start and fStep_End
-##		  wrap a counted step in its Starting and PASS, SKIP or FAIL lines; fDie
+##		  wrap a counted step in its Starting and PASS, SKIP, or FAIL lines; fDie
 ##		  prints a fatal line to stderr, closes an open step as FAIL, and exits.
 ##	History: At bottom of file.
 

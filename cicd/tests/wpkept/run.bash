@@ -2,13 +2,13 @@
 
 ##	- Purpose:
 ##		Launches the real program on the private display with the built-in
-##		wallpaper, three times over the same home folder, and reads what it
+##		wallpaper, 3 times over the same home folder, and reads what it
 ##		says through SILK_MEMDBG. The prepared picture is kept on disk and the
 ##		next launch reads it back.
 ##			- The first launch prepares it and keeps a copy in the platform's
 ##			  cache folder, not beside the settings.
 ##			- The second uses the copy and prepares nothing.
-##			- A copy cut short is not used, and is written again.
+##			- A copy cut short isn't used, and is written again.
 ##			- With --config, copies go beside that config instead.
 ##			- A light blur leaves the picture held by the window, so the GPU
 ##			  gets it as BC1 and the copy is those blocks.

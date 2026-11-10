@@ -2,7 +2,7 @@
 // Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
 
 //! BC7 for the wallpaper: a byte a texel in graphics memory, twice BC1 and a
-//! quarter of plain. Mostly mode 6: each 4x4 block keeps 2 colors at 7 bits
+//! quarter of plain. Mostly mode 6: each 4x4 block stores 2 colors at 7 bits
 //! plus a shared low bit and picks one of 16 points between them per texel,
 //! where BC1 has 4 points between 5:6:5 ends, so a slow gradient no longer
 //! steps at the block edges. Opaque only, so both alpha ends are 255, the low
@@ -18,7 +18,7 @@ use crate::bc1::Texel;
 /// Bytes per 4x4 block.
 pub const BLOCK_BYTES: usize = 16;
 
-// Where each point sits between the two ends, in 64ths. Fixed by the format.
+// Where each point sits between the 2 ends, in 64ths. Fixed by the format.
 const SIXTEEN: [i32; 16] = [0, 4, 9, 13, 17, 21, 26, 30, 34, 38, 43, 47, 51, 55, 60, 64];
 const FOUR: [i32; 4] = [0, 21, 43, 64];
 
@@ -46,7 +46,7 @@ pub fn len_for(size: (u32, u32)) -> usize {
 	crate::bc1::blocks_in(size) * BLOCK_BYTES
 }
 
-/// Blocks in rows, left to right, the same walk as BC1. The alpha is not
+/// Blocks in rows, left to right, the same walk as BC1. The alpha isn't
 /// read.
 pub fn encode(rgba: &image::RgbaImage) -> Vec<u8> {
 	crate::bc1::encode_blocks(rgba, BLOCK_BYTES, &|block, out| {
@@ -66,7 +66,7 @@ pub fn decode(blocks: &[u8], (w, h): (u32, u32)) -> Option<image::RgbaImage> {
 		let bits = u128::from_le_bytes(block.try_into().ok()?);
 		let field = |at: u32, len: u32| ((bits >> at) & ((1 << len) - 1)) as i32;
 		// the mode is the number of zero bits before the first one; mode 5's
-		// next 2 bits turn a channel round, which this never does
+		// next 2 bits turn a channel around, which this never does
 		let texels: [[i32; 4]; 16] = if bits & 0x7f == 0x40 {
 			let low = [field(63, 1), field(64, 1)];
 			let ends = [0, 1]
@@ -253,7 +253,7 @@ impl Encoded {
 				put(255, 8);
 				put(255, 8);
 			}
-			// 127 with the low bit set is 255
+			// with the low bit set, 127 is 255
 			Mode::Six => {
 				put(127, 7);
 				put(127, 7);
@@ -342,8 +342,8 @@ fn along(mode: Mode, block: &[Texel; 16], [hi, lo]: [[f32; 3]; 2]) -> Encoded {
 	best
 }
 
-// Each texel is a known blend of the two ends, so the ends that fit best are
-// least squares in two unknowns a channel.
+// Each texel is a known blend of the 2 ends, so the ends that fit best are
+// least squares in 2 unknowns a channel.
 fn refit(block: &[Texel; 16], from: Encoded) -> Option<Encoded> {
 	let weights = from.mode.weights();
 	let (mut aa, mut ab, mut bb) = (0.0f32, 0.0f32, 0.0f32);
@@ -391,7 +391,7 @@ mod tests {
 		sum as f64 / (3 * a.width() * a.height()) as f64
 	}
 
-	// Every byte value comes back as it was but 0, which odd ends cannot
+	// Every byte value comes back as it was but 0, which odd ends can't
 	// reach, and the alpha stays opaque.
 	// Test ID: ddmb9
 	#[test]

@@ -113,7 +113,7 @@ try {
 	$running.Kill(); $running.WaitForExit(); $running = $null
 	fCheck 'leaving nothing staged behind' (-not (Get-ChildItem -LiteralPath $destDir -Filter '.silkterm-new-*' -Force))
 
-	##	The copy moved aside goes at the next upgrade, once nothing holds it.
+	##	The copy moved aside goes at the next upgrade, once nothing has it open.
 	fRelease '9.9.10'
 	$null = fInstall
 	fCheck 'the next upgrade removes the old copy' ((fInstalled '9.9.10') -and -not (Get-ChildItem -LiteralPath $destDir -Filter 'silkterm.exe.old-*' -Force))
@@ -134,7 +134,7 @@ try {
 	$env:STUB_API_CODE = '500'
 	$out = fInstall
 	$env:STUB_API_CODE = $null
-	fCheck 'a failed API call stops the install' ($out -match '(?m)^Error: could not read the release list')
+	fCheck 'a failed API call stops the install' ($out -match '(?m)^Error: couldn''t read the release list')
 	fCheck 'and is not read as no full release' ($out -notmatch 'No full release')
 	fCheck 'no run leaves its download folder' (-not (Get-ChildItem -LiteralPath ([System.IO.Path]::GetTempPath()) -Filter 'silkterm-install-*' -Force))
 } finally {

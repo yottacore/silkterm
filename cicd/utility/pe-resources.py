@@ -3,7 +3,7 @@
 ##	- Purpose:
 ##		Say what is in a Windows binary's resource directory, so a build that
 ##		quietly stopped embedding its icon or its version block gets caught. A
-##		missing resource is not a link error and shows up nowhere else.
+##		missing resource isn't a link error and shows up nowhere else.
 ##	- Syntax:
 ##		pe-resources.py [--require icon,version] <file.exe> ...
 ##	- Exit: 0 all required resources present, 1 something is missing, 2 bad usage.

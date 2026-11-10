@@ -199,7 +199,7 @@ fLink $behind $base
 $gone = fDir (Join-Path $base "parent${sep}gone")
 fCheck 'a parent behind a link is refused' (fRefused { fSafeRm_Under (Join-Path $behind 'parent') (Join-Path $behind "parent${sep}gone") } 'goes through a link')
 
-##	install.ps1 runs alone, by irm | iex too, so it carries a copy, on 5.1 as
+##	install.ps1 runs alone, by irm | iex too, so it has a copy, on 5.1 as
 ##	well. The temp folder the system hands it can sit behind a link, as macOS's
 ##	/var does, so that copy looks for links only below the parent.
 $installer = Join-Path $PSScriptRoot '../../../install.ps1'
@@ -217,7 +217,7 @@ if ($def) {
 }
 if ($win) { [System.IO.Directory]::Delete($behind, $false) } else { [System.IO.File]::Delete($behind) }
 
-##	The link goes first, so the cleanup cannot reach the victim through it.
+##	The link goes first, so the cleanup can't reach the victim through it.
 if ($win) { [System.IO.Directory]::Delete($link, $false) } else { [System.IO.File]::Delete($link) }
 $done = fSafeRm $work
 if (-not $done -or (Test-Path -LiteralPath $work)) { Write-Warning "left $work" }

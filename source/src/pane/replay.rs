@@ -2,9 +2,9 @@
 // Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
 
 //! The scroll half of `Pane::build`, frame by frame over fed bytes, with no
-//! window: the output ease, the engine's scroll record and the row-print
+//! window: the output ease, the engine's scroll record, and the row-print
 //! detector, each through the helpers build calls, in build's order. A change
-//! to that order in build wants the same change here.
+//! to that order in build needs the same change here.
 //!
 //! The tests pin the prompt-slide class (2026101415085143 and the items it
 //! names) on bytes ble.sh and bash wrote, with the prompt text made up.
@@ -31,7 +31,7 @@ impl EventListener for Quiet {
 	fn send_event(&self, _: Event) {}
 }
 
-// What one frame decided.
+// What happened in one frame.
 #[derive(Debug, Clone, Copy, Default)]
 struct Frame {
 	// the signed step a region slide took this frame, 0 for none
@@ -94,7 +94,7 @@ impl Replay {
 		}
 	}
 
-	// Bytes in with no frame drawn, as when a read lands mid-build.
+	// Bytes in with no frame drawn, as when a read comes in mid-build.
 	fn feed(&mut self, bytes: &[u8]) {
 		self.parser.advance(&mut self.term, bytes);
 	}
@@ -276,7 +276,7 @@ impl Replay {
 	}
 }
 
-// The x9ps1-git prompt in a git repo, as ble.sh draws it. Two rows.
+// The x9ps1-git prompt in a git repo, as ble.sh draws it, on 2 rows.
 const TOP: &str = "\x1b[0;36m12:00:00\x1b(B\x1b[m user@host:~/repo [ main ]";
 const BOTTOM: &str = "-> $ ";
 
@@ -313,7 +313,7 @@ fn lines_of(n: usize, tag: &str) -> String {
 	})
 }
 
-// One command the way the two reads usually fall: Enter and the output in one
+// One command the way the 2 reads usually fall: Enter and the output in one
 // frame, ble.sh's prompt in the next.
 fn run(r: &mut Replay, cmd: &str, out: &str) -> (Frame, Frame) {
 	let first = r.frame(&format!("{}{out}", accept(cmd)));
@@ -369,10 +369,10 @@ fn blesh_redrawing_its_prompt_pops_in() {
 	let _g = config::test_store_lock();
 	config::update(config::Settings::default());
 	let (cols, lines) = (60usize, 20usize);
-	// half empty, the prompt two rows and one row above the bottom, and full,
+	// half empty, the prompt 2 rows and one row above the bottom, and full,
 	// each redrawn in place and after a program that drew on the alt screen.
 	// One row above the bottom is the case 2026101415085143 found: the old
-	// prompt is erased before the rows move, and the row under it is not room.
+	// prompt is erased before the rows move, and the row under it isn't room.
 	for filled in [3usize, lines - 4, lines - 3, lines + 10] {
 		let mut r = Replay::new(cols, lines, 10_000);
 		r.frame(&format!("{}{TOP}\r\r\r\n{BOTTOM}", lines_of(filled, "row")));
@@ -656,8 +656,8 @@ fn a_clear_inside_tmux_shows_at_once() {
 #[test]
 #[cfg_attr(miri, ignore = "too slow under Miri")]
 fn output_inside_tmux_still_slides() {
-	// What 2026101611321631 had to keep: a burst scrolls the pane away whole
-	// too, and a line at a time scrolls it by one.
+	// What had to keep working after 2026101611321631: a burst scrolls the
+	// pane away whole too, and a line at a time scrolls it by one.
 	let _g = config::test_store_lock();
 	config::update(config::Settings::default());
 	let (cols, lines) = (100usize, 30usize);

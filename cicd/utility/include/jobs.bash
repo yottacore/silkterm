@@ -6,7 +6,7 @@
 ##		- fJobs [hard]: before each step. Half the CPUs, or a quarter when the box
 ##		  is busy (1-minute load over half the CPUs) or the step is hard on the
 ##		  machine (sanitizers, leak checks, CodeQL, fuzzing). Never under 1. Sets
-##		  and exports CICD_MAX_JOBS, CARGO_BUILD_JOBS and RUST_TEST_THREADS.
+##		  and exports CICD_MAX_JOBS, CARGO_BUILD_JOBS, and RUST_TEST_THREADS.
 ##		- A CICD_MAX_JOBS already set, by config.bash or by the run that started
 ##		  this one, is the ceiling. CICD_CORES does the same for the CPU count, so a
 ##		  run in a container with --cpus still counts the box's CPUs.

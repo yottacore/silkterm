@@ -7,20 +7,20 @@
 
 """Install size and resident memory of a running terminal, with the graphics stack split out.
 
-Reads a whole process tree and answers two questions:
+Reads a whole process tree and works out 2 figures:
 
   File+deps  the executable plus every shared library it needs beyond a base OS
   Mem        unique resident footprint - private pages summed, shared mappings counted once
 
-Both leave out the GPU driver, which is not the terminal's cost: it is shared with the
+Both leave out the GPU driver, which isn't the terminal's cost: it's shared with the
 compositor and every other accelerated program, and it dwarfs everything else (libLLVM
 alone is over 120 MiB on this box). A terminal that draws on the CPU pays none of it, so
 counting it would make the table measure the driver instead of the terminal.
 
-Two things here are easy to get wrong and were got wrong the first time round:
+A couple of things here are easy to get wrong and were got wrong the first time around:
 
   * A static dependency list understates any program that loads libraries at runtime. ldd
-    lists three for SilkTerm; the running process maps sixty-four. Always read a live
+    lists 3 for SilkTerm; the running process maps 64. Always read a live
     process, and use the static list only to work out what pulled what in.
 
   * Classifying the driver by name misses what the driver pulls in - libstdc++ and libxml2
@@ -30,9 +30,9 @@ Two things here are easy to get wrong and were got wrong the first time round:
     the app's however many other things also happen to want it.
 
 The accounting above the collectors is platform-neutral; only the reading of a live
-process is not. Linux reads /proc, Windows asks the process API for its modules, its
-mapped regions and which of their pages are resident and shared. The two are the same
-measurement, but they are NOT comparable figures - see --help on that.
+process isn't. Linux reads /proc, and Windows asks the process API for its modules, its
+mapped regions, and which of their pages are resident and shared. The 2 are the same
+measurement, but they're NOT comparable figures. See --help on that.
 """
 
 import argparse
@@ -49,11 +49,11 @@ from typing import Any, Protocol
 MIB = 1048576.0
 
 #	The grid every row in the table is measured at. Memory scales with the surface, so a
-#	figure taken at another size does not belong in the same column: the same SilkTerm
+#	figure taken at another size doesn't belong in the same column: the same SilkTerm
 #	binary reads 38 MiB heavier at its default geometry than at this one.
 GRID = (100, 30)
 
-#	What measure() answers, as --json prints it.
+#	What measure() returns, as --json prints it.
 Result = dict[str, Any]
 
 
@@ -118,7 +118,7 @@ def measure(pids: list[int], exe_paths: list[str], be: Collector, verbose: bool 
 		by_name.setdefault(be.base_name(p), p)
 
 	def resolve(name: str) -> str | None:
-		"""Prefer the copy this process actually mapped, so a bundled lib wins over a system one."""
+		"""Prefer the copy this process mapped, so a bundled lib wins over a system one."""
 		hit = by_name.get(be.base_name(name))
 		return hit if hit else be.find_library(name)
 
@@ -127,8 +127,8 @@ def measure(pids: list[int], exe_paths: list[str], be: Collector, verbose: bool 
 	# not to the terminal: billing them makes a row that no other machine reproduces. The
 	# test is self-calibrating rather than a name list: a library none of the tree's own
 	# binaries import, which is nonetheless mapped into this tool's process as well, is
-	# being injected into everything. Anything genuinely imported stays whoever else maps it.
-	# Windows only for now, deliberately: every published row was measured on Linux, and
+	# being injected into everything. Anything the tree imports stays, whoever else maps it.
+	# Windows only for now, on purpose: every published row was measured on Linux, and
 	# the rule there could only move one. Extending it needs a published row reproduced
 	# first, which is the gate every change to this accounting goes through.
 	injected: set[str] = set()
@@ -396,12 +396,12 @@ def _win_paths() -> tuple[str, ...]:
 class WindowsBackend:
 	"""Reads a live process through the process API.
 
-	Deliberately the same shape as the Linux collector: module list in place of the mapped
+	Laid out the same as the Linux collector: module list in place of the mapped
 	library set, mapped regions plus their resident pages in place of smaps, PE imports in
-	place of DT_NEEDED. What differs is what counts as the base OS - on Linux that is only
+	place of DT_NEEDED. What differs is what counts as the base OS. On Linux that's only
 	the C runtime, because a desktop library is something you installed, while on Windows
-	everything under System32 ships with the machine. That difference is real, but it means
-	the two platforms' File+deps figures answer slightly different questions.
+	everything under System32 comes with the machine. That means the 2 platforms'
+	File+deps figures measure slightly different things.
 	"""
 
 	name = "windows"
@@ -415,7 +415,7 @@ class WindowsBackend:
 		self._needed: dict[str, list[str]] = {}
 		self._sys_dirs = _win_paths()
 		#	WinDLL is only in ctypes on Windows, where this runs, so a check on Linux
-		#	cannot see it.
+		#	can't see it.
 		self._k32 = ctypes.WinDLL("kernel32", use_last_error=True)  # type: ignore[attr-defined]
 		self._psapi = ctypes.WinDLL("psapi", use_last_error=True)  # type: ignore[attr-defined]
 		self._page = 4096
@@ -423,7 +423,7 @@ class WindowsBackend:
 		self._handles: dict[int, int | None] = {}
 		self._declare()
 
-	#	--- API declarations -------------------------------------------------------------
+	#	API declarations
 
 	def _declare(self) -> None:
 		#	The same modules as self.ct and self.wt, named here so the structs below
@@ -492,15 +492,15 @@ class WindowsBackend:
 		self.MBI, self.WSEX, self.PE32, self.SYSINFO = (
 			MEMORY_BASIC_INFORMATION, WS_EX_INFO, PROCESSENTRY32W, SYSTEM_INFO)
 
-		#	These layouts are a contract with the OS, and getting one wrong does not fail -
-		#	it reads neighboring bytes and reports confident nonsense. Check the documented
+		#	These layouts are a contract with the OS, and getting one wrong doesn't fail.
+		#	It reads neighboring bytes and reports confident nonsense. Check the documented
 		#	sizes up front so a bad declaration says so instead.
 		if ct.sizeof(ct.c_void_p) == 8:
 			for cls, want in ((MEMORY_BASIC_INFORMATION, 48), (WS_EX_INFO, 16),
 			                  (PROCESSENTRY32W, 568), (SYSTEM_INFO, 48)):
 				if ct.sizeof(cls) != want:
 					raise SystemExit(f"{cls.__name__} came out {ct.sizeof(cls)} bytes, expected {want} - the struct "
-					                 "declaration does not match this Windows")
+					                 "declaration doesn't match this Windows")
 
 		k32.OpenProcess.argtypes = [wt.DWORD, wt.BOOL, wt.DWORD]
 		k32.OpenProcess.restype = wt.HANDLE
@@ -538,7 +538,7 @@ class WindowsBackend:
 		if info.dwPageSize:
 			self._page = int(info.dwPageSize)
 
-	#	--- handles ----------------------------------------------------------------------
+	#	Handles
 
 	PROCESS_QUERY_INFORMATION = 0x0400
 	PROCESS_VM_READ = 0x0010
@@ -561,9 +561,9 @@ class WindowsBackend:
 				self._k32.CloseHandle(handle)
 		self._handles.clear()
 
-	#	--- naming -----------------------------------------------------------------------
+	#	Naming
 
-	#	abspath, since it also folds ".." away, which Path.absolute() does not.
+	#	abspath, since it also folds ".." away, which Path.absolute() doesn't.
 	def norm(self, path: str) -> str:
 		return os.path.normcase(os.path.abspath(path)) if path else ""  # noqa: PTH100
 
@@ -580,10 +580,10 @@ class WindowsBackend:
 		return bool(WIN_GFX_RE.match(self.base_name(path)))
 
 	def is_base_os(self, path: str) -> bool:
-		"""Ships with the machine, so installing a terminal does not bring it with it.
+		"""Comes with the machine, so installing a terminal doesn't bring it along.
 
-		Path-based rather than a name list: System32 holds well over two thousand DLLs and
-		any list of them goes stale. This is where Windows and Linux genuinely differ -
+		Path-based rather than a name list: System32 has well over 2000 DLLs and
+		any list of them goes stale. This is where Windows and Linux really differ.
 		user32 and gdi32 are the OS, whereas their Linux counterparts are packages.
 		"""
 		low = self.norm(path)
@@ -601,7 +601,7 @@ class WindowsBackend:
 			self._needed[path] = pe_imports(path)
 		return self._needed[path]
 
-	#	--- reading a process ------------------------------------------------------------
+	#	Reading a process
 
 	def _device_map(self) -> dict[str, str]:
 		"""\\Device\\HarddiskVolume3 -> C:, so mapped names can be opened and stat'd."""
@@ -654,7 +654,7 @@ class WindowsBackend:
 	def regions(self, pid: int) -> list[tuple[str, int, int]]:
 		"""Per-region private and shared resident bytes, keyed by backing file.
 
-		A region's pages are looked up in the working set: a page that is not valid is not
+		A region's pages are looked up in the working set: a page that isn't valid isn't
 		resident and costs nothing, and one flagged shared is charged once across the tree
 		rather than to each process holding it.
 		"""
@@ -754,10 +754,10 @@ class WindowsBackend:
 	def console_owner(self) -> int:
 		"""Whichever process owns this console window, or 0.
 
-		The ancestor walk cannot find a classic console on its own: conhost is attached to
+		The ancestor walk can't find a classic console on its own: conhost is attached to
 		the console program as a CHILD, not a parent, so walking up from here goes straight
 		past it to the shell and out to the desktop. Asking the console window who owns it
-		is the only way round that, and it answers for the modern hosts too.
+		is the only way around that, and it works for the modern hosts too.
 		"""
 		ct, wt = self.ct, self.wt
 		try:
@@ -907,7 +907,7 @@ SHELLISH = {"bash", "sh", "dash", "zsh", "fish", "ksh", "csh", "tcsh", "python",
             "pwsh", "powershell", "cmd", "conhost", "openconsole", "login", "su", "sudo",
             "env", "screen", "script", "py", "winpty", "sizebench-classify.py"}
 
-# Console hosts, which draw a window but are not the thing you installed.
+# Console hosts, which draw a window but aren't the thing you installed.
 CONSOLE_HOSTS = {"conhost", "openconsole"}
 
 #	Anything that could be running this tool rather than being measured by it.
@@ -934,7 +934,7 @@ def tree_of(be: Backend, root: int) -> list[int]:
 def find_terminal(be: Backend) -> tuple[list[int], str]:
 	"""(pids, exe) for the terminal drawing this session, or ([], '').
 
-	Three shapes to cope with. A terminal that spawns the shell is an ancestor, so walking
+	There are 3 cases to cope with. A terminal that spawns the shell is an ancestor, so walking
 	up the tree finds it. A classic Windows console is the other way round - the host hangs
 	off the console program as a child - so walking up goes straight past it to the desktop,
 	and the console window has to be asked who owns it instead. A modern host sits between
@@ -942,7 +942,7 @@ def find_terminal(be: Backend) -> tuple[list[int], str]:
 
 	Whatever is found, this process and anything it started are dropped again. The measuring
 	tool is inside the tree it is measuring, and billing a terminal for the interpreter that
-	happens to be reading it would add tens of MiB that no other row carries.
+	happens to be reading it would add tens of MiB that no other row has.
 	"""
 	pids: list[int] = []
 	exe = ""
@@ -950,7 +950,7 @@ def find_terminal(be: Backend) -> tuple[list[int], str]:
 	owner = be.console_owner() if hasattr(be, "console_owner") else 0
 	program = owner
 	if owner and stem_of(be.exe_of(owner)) not in CONSOLE_HOSTS:
-		#	Windows 11 answers this query with the console PROGRAM, not the host, so the
+		#	Windows 11 returns the console PROGRAM for this query, not the host, so the
 		#	host has to be found beside it: a child where the system attached one, a parent
 		#	where it was launched explicitly. Only adjacent - walking further up leaves the
 		#	session entirely and ends up on whatever started it.
@@ -978,7 +978,7 @@ def find_terminal(be: Backend) -> tuple[list[int], str]:
 		else:
 			#	No host beside it, so nothing came between: the terminal spawned this
 			#	program itself and sits above it. Walk up past the shells to the window
-			#	process, which is what actually draws - stopping at the program would
+			#	process, which is what draws. Stopping at the program would
 			#	measure the shell and call it the terminal.
 			up = be.parent_of(owner)
 			for _ in range(8):
@@ -1009,7 +1009,7 @@ def find_terminal(be: Backend) -> tuple[list[int], str]:
 	mine = set(tree_of(be, os.getpid()))
 	#	The wrapper runs this script, so the interpreter above is part of the measuring
 	#	tool too and has to go the same way its child does - billing a terminal for it adds
-	#	about 19 MiB that no rig-measured row carries. Only interpreters are dropped, so the
+	#	about 19 MiB that no rig-measured row has. Only interpreters are dropped, so the
 	#	walk stops at the shell, which the terminal is entitled to.
 	runner = be.parent_of(os.getpid())
 	while runner > 1 and stem_of(be.exe_of(runner)) in INTERPRETERS:
@@ -1021,12 +1021,12 @@ def find_terminal(be: Backend) -> tuple[list[int], str]:
 def console_grid() -> tuple[int, int] | None:
 	"""(columns, rows) straight from the console, on Windows only.
 
-	Asking the standard streams cannot work here. The wrapper reads this script through a
+	Asking the standard streams can't work here. The wrapper reads this script through a
 	pipe with stderr folded into it, and stdin is an input handle, which no grid query
-	answers - so all three fail and the run is refused however the window is sized. CONOUT$
-	is the screen buffer itself and answers whatever the streams have been redirected to.
-	Python's own get_terminal_size cannot be used on it: on Windows it resolves a file
-	descriptor back to one of the three standard handles, so any other one is rejected.
+	works on. So all 3 fail and the run is refused however the window is sized. CONOUT$
+	is the screen buffer itself and works whatever the streams have been redirected to.
+	Python's own get_terminal_size can't be used on it: on Windows it resolves a file
+	descriptor back to one of the 3 standard handles, so any other one is rejected.
 	"""
 	import ctypes
 	from ctypes import wintypes
@@ -1058,7 +1058,7 @@ def console_grid() -> tuple[int, int] | None:
 def terminal_grid() -> tuple[int, int] | None:
 	"""(columns, rows) from whichever standard stream is still a terminal.
 
-	All three are tried because the wrapper reads this script's output through a pipe, and
+	All 3 are tried because the wrapper reads this script's output through a pipe, and
 	asking only stdout would then report no terminal at all and refuse every run.
 	"""
 	if os.name == "nt":
@@ -1088,7 +1088,7 @@ def check_grid(strict: bool) -> bool:
 		return True
 	shown = f"{got[0]}x{got[1]}" if got else "unknown"
 	msg = (f"this terminal is {shown}, and the table's rows are all measured at {GRID[0]}x{GRID[1]} - memory "
-	       "scales with the surface, so a figure taken at another size is not comparable")
+	       "scales with the surface, so a figure taken at another size isn't comparable")
 	if strict:
 		print(f"REFUSED: {msg}", file=sys.stderr)
 		return False
@@ -1104,9 +1104,9 @@ def selftest(be: Backend) -> int:
 	"""Measure this process, where the answer can be checked against something else.
 
 	There is no published row on Windows to reproduce, which is how a new rig is normally
-	validated, so this stands in for it: for a single process the unique footprint is just
-	its resident set, and the two are arrived at by completely different routes. They will
-	not match exactly - the resident set moves while it is being read - but a real error in
+	validated, so this stands in for it: for a single process the unique footprint is
+	its resident set, and the 2 are arrived at by completely different routes. They won't
+	match exactly, since the resident set moves while it's being read, but a real error in
 	the page walk shows up as a wrong order of magnitude, not a few percent.
 	"""
 	pid = os.getpid()
@@ -1220,13 +1220,13 @@ def main() -> int:
 			return 2
 		pids, exe = find_terminal(be)
 		if not pids:
-			print("could not work out which terminal is drawing this session",
+			print("couldn't work out which terminal is drawing this session",
 			      file=sys.stderr)
 			return 2
 		if not exes:
 			exes = [exe] if exe else []
 		#	Say what was picked: a wrong guess here is the difference between measuring the
-		#	terminal and measuring the desktop, and it is not visible in the numbers.
+		#	terminal and measuring the desktop, and it isn't visible in the numbers.
 		print(f"  found          {exe or '(unnamed)'}")
 	elif not pids:
 		print("give the terminal's pids, or --here to find them", file=sys.stderr)

@@ -18,7 +18,7 @@ use std::time::{Duration, Instant, SystemTime};
 const SPEC: &str = include_str!("../demo.shcl");
 const INDENT: f32 = 18.0;
 
-// What the desktop would answer, set by hand in the side panel.
+// What the desktop would report, set by hand in the side panel.
 struct Desk {
 	font: String,
 	size: f64,

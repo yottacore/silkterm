@@ -9,7 +9,7 @@
 ##		where it keeps its size, since that move was sway's. The portrait
 ##		output is turned on again and sway puts the window back. It must end
 ##		at the portrait size.
-##			- Turned on just after the window's look on the landscape output, and
+##			- Turned on right after the window's look on the landscape output, and
 ##			  again 0.8 s after. Both were inside the grace after the window's
 ##			  own resize, where a move back was dropped (2026100907341816).
 ##			- A herded window took the landscape size until 2026102807384201.
@@ -143,7 +143,7 @@ fLeaves(){  ## fLeaves <where> <tenths>
 	return 1
 }
 
-## A window of its own for each dance, so one that ends wrong cannot spoil the next.
+## A window of its own for each dance, so one that ends wrong can't spoil the next.
 fDance(){  ## fDance <seconds to wait after the look on the landscape output>
 	local -r wait="${1}"
 	local portrait herded landscape final

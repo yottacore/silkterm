@@ -5,10 +5,10 @@
 //! `run.pid`, the way the pipeline makes its own, that every file a test writes
 //! goes under. Without `HOST_TEMP` it's under the temp dir. A runner that sets
 //! `SILKTERM_TEST_DIR` hands its own folder down instead, so a whole pipeline
-//! run shares one. The scripts under cicd/tests keep the same contract in
+//! run shares one. The scripts under cicd/tests follow the same contract in
 //! _testdir.bash, .py and .ps1. A folder this process made is removed when the
 //! run passes, and kept when a test panicked, for the pipeline's stale sweep
-//! to take once its process is gone, unless it holds nothing but its marks.
+//! to take once its process is gone, unless it contains nothing but its marks.
 //! One named by `SILKTERM_TEST_DIR` is never removed.
 
 use std::cell::Cell;
@@ -82,7 +82,7 @@ pub fn run_dir() -> &'static Path {
 }
 
 /// `catch_unwind` for a test that panics on purpose. The panic hook runs
-/// before anything catches, so it cannot tell a caught panic from a failed
+/// before anything catches, so it can't tell a caught panic from a failed
 /// test, and a bare `catch_unwind` in a test keeps a passing run's folder.
 pub fn catch_expected_panic<R>(
 	body: impl FnOnce() -> R + std::panic::UnwindSafe,
@@ -369,7 +369,7 @@ mod tests {
 				assert!(character.is_ascii_digit(), "{stamp}");
 			}
 		}
-		// Asked twice in case the minute turns over between the two reads.
+		// Asked twice in case the minute turns over between the 2 reads.
 		for last_try in [false, true] {
 			let ours = local_stamp();
 			let clock = clock_minute();

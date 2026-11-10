@@ -60,7 +60,7 @@ for row in "${rows[@]}"; do
 	read -r name addr <<<"${row}"
 	echo "== ${name} (${addr})"
 	##	The password is empty on purpose: this is a throwaway test account, and the
-	##	box only allows it because blank-password logon is not restricted there.
+	##	box only allows it because blank-password logon isn't restricted there.
 	DISPLAY="${display}" sdl-freerdp "/v:${addr}" "/u:${account}" /p: /cert:ignore /w:1280 /h:720 \
 		>/dev/null 2>&1 &
 	rdpPid=$!

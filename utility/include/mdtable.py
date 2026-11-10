@@ -9,7 +9,7 @@
 
 A leading pipe and no trailing one, cells padded so the columns line up, and every
 column's alignment spelled out, so a plain dash row comes back as left. Shared by the
-two tools that write the showdown table in comparison.md, so they cannot drift apart.
+2 tools that write the showdown table in comparison.md, so they can't drift apart.
 """
 
 from collections.abc import Iterable, Sequence
@@ -26,7 +26,7 @@ def split_row(line: str) -> list[str]:
 
 
 def _kind(align: str) -> str:
-	"""left, right or center, from one cell of the alignment row."""
+	"""left, right, or center, from one cell of the alignment row."""
 	if len(align) > 1 and align.startswith(":") and align.endswith(":"):
 		return "center"
 	return "right" if align.endswith(":") else "left"
@@ -41,7 +41,7 @@ def _rule(kind: str, width: int) -> str:
 
 
 def render(head: Sequence[str], align: Sequence[str], data: Iterable[Sequence[str]]) -> list[str]:
-	"""Lines of a table from its header, alignment row and data rows."""
+	"""Lines of a table from its header, alignment row, and data rows."""
 	cols = len(head)
 	rows = [list(head)] + [list(r) + [""] * (cols - len(r)) for r in data]
 	kind = [_kind(align[i] if i < len(align) else "") for i in range(cols)]

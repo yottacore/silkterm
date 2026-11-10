@@ -4,14 +4,14 @@
 //! Per-image tags, read out of the wallpaper file's own XMP packet:
 //! `wallpaper:Fit` (stretch|zoom) and `wallpaper:Anchor` ("50%, 50%") for layout,
 //! `wallpaper:Opacity` ("10%") and `wallpaper:Blur` (sigma in px, "10") for how
-//! it wants to show. An image that knows it must not be distorted, or that it is
-//! too busy to sit at the usual strength, can say so instead of the one global
-//! setting deciding for the whole collection.
+//! it's shown. An image that mustn't be distorted, or is too busy to show at
+//! the usual strength, can be tagged that way instead of one global setting
+//! applying to the whole collection.
 //!
-//! No XML parser and no new crate: the packet is reached through the container's
+//! No XML parser and no new crate: the packet is found through the container's
 //! own segment/chunk table, then the properties are picked out of the text.
-//! Anything unrecognised yields None and the caller keeps its own default - a
-//! wallpaper must still load when its metadata is missing or malformed.
+//! Anything unrecognized returns None and the caller keeps its own default,
+//! since a wallpaper must still load when its metadata is missing or malformed.
 
 use crate::config::Fit;
 use std::fs::File;
@@ -19,14 +19,14 @@ use std::io::{Read, Seek, SeekFrom};
 use std::path::Path;
 
 // Namespace prefix as written into the files. The URI is
-// https://github.com/jim-collier/xmp/wallpaper/1.0/ - deliberately named for
-// what the tags describe, not for this program, so other tools can write them
-// too. Matched on the prefix alone, which is what a writer emits and what a
+// https://github.com/jim-collier/xmp/wallpaper/1.0/, named for what the tags
+// describe rather than for this program, so other tools can write them too.
+// Matched on the prefix alone, which is what a writer emits and what a
 // re-serialize preserves.
 const NS: &str = "wallpaper:";
 
 // Both writers put XMP in the header (before SOS / before IDAT), so these only
-// bound a malformed or hostile file - never a real one.
+// bound a malformed or hostile file, never a real one.
 const MAX_SCAN: u64 = 1 << 20;
 const MAX_PACKET: u64 = 1 << 20;
 
@@ -36,7 +36,7 @@ pub struct Tags {
 	/// x, y in 0.0..=1.0; 0 is left/top, 1 is right/bottom. Zoom only.
 	pub anchor: Option<[f32; 2]>,
 
-	// Same units as the two settings they replace: visibility 0..1, blur sigma
+	// Same units as the 2 settings they replace: visibility 0..1, blur sigma
 	// in px. A tagged image takes these over the sliders.
 	pub opacity: Option<f32>,
 	pub blur: Option<f32>,
@@ -66,9 +66,9 @@ fn packet(path: &Path) -> Option<String> {
 	String::from_utf8(raw).ok()
 }
 
-// PNG: walk the chunk table for the uncompressed iTXt that carries XMP. A
-// zTXt/compressed one is skipped rather than inflated - nothing writes XMP that
-// way, and carrying an inflate for it would not pay for itself.
+// PNG: walk the chunk table for the uncompressed iTXt that has the XMP. A
+// zTXt/compressed one is skipped rather than inflated. Nothing writes XMP that
+// way, and an inflate for it wouldn't pay for itself.
 fn png(file: &mut File) -> Option<Vec<u8>> {
 	const KEYWORD: &[u8] = b"XML:com.adobe.xmp\0";
 	file.seek(SeekFrom::Start(8)).ok()?;
@@ -106,9 +106,9 @@ fn png(file: &mut File) -> Option<Vec<u8>> {
 	}
 }
 
-// JPEG: walk the marker segments for the APP1 whose payload carries the XMP
-// signature. Only the main packet - an extended (>64KB) one holds overflow
-// properties, never these two.
+// JPEG: walk the marker segments for the APP1 whose payload has the XMP
+// signature. Only the main packet, since an extended (>64KB) one has overflow
+// properties, never these 2.
 fn jpeg(file: &mut File) -> Option<Vec<u8>> {
 	const SIG: &[u8] = b"http://ns.adobe.com/xap/1.0/\0";
 	file.seek(SeekFrom::Start(2)).ok()?;
@@ -176,7 +176,7 @@ fn parse_fit(value: &str) -> Option<Fit> {
 	}
 }
 
-// "<h>%, <v>%" - the trailing % is optional so a bare "50, 50" still reads.
+// "<h>%, <v>%", where the trailing % is optional so a bare "50, 50" still parses.
 fn parse_anchor(value: &str) -> Option<[f32; 2]> {
 	let mut parts = value.split(',');
 	let x = parse_percent(parts.next()?)?;
@@ -228,7 +228,7 @@ mod tests {
 	}
 
 	// Chunk/segment walking is the part that can silently stop finding tags after
-	// an edit, so both containers get driven end to end. Bodies are synthetic but
+	// an edit, so both containers are tested end to end. Bodies are synthetic but
 	// laid out exactly as a writer emits them; CRCs are never checked.
 	fn png_file(packet: &str) -> Vec<u8> {
 		let mut text = b"XML:com.adobe.xmp\0\0\0\0\0".to_vec();
@@ -292,7 +292,7 @@ mod tests {
 	fn anchor_accepts_the_written_form_and_rejects_junk() {
 		assert_eq!(parse_anchor("50%, 50%"), Some([0.5, 0.5]));
 		assert_eq!(parse_anchor("0,100"), Some([0.0, 1.0]));
-		// out of range is clamped, not dropped - the intent is still readable
+		// out of range is clamped rather than dropped, since the intent is still clear
 		assert_eq!(parse_anchor("-20%, 300%"), Some([0.0, 1.0]));
 		for junk in ["50%", "50%, 50%, 50%", "left, top", "", "%,%"] {
 			assert_eq!(parse_anchor(junk), None, "{junk} should not parse");
@@ -300,7 +300,7 @@ mod tests {
 	}
 
 	// A missing or unreadable tag must leave the caller on its own default
-	// rather than forcing one - that is what keeps the global setting meaningful.
+	// rather than forcing one. That's what keeps the global setting meaningful.
 	// Test ID: dapzs
 	#[test]
 	fn unknown_values_yield_nothing_to_apply() {
@@ -332,8 +332,8 @@ mod tests {
 
 	// A wallpaper is somebody else's file, and a rotation folder is a folder of
 	// them. The chunk walk below reads lengths out of the file and uses them to
-	// size a read, so a corrupt or hostile image must not be able to take the
-	// wallpaper worker down with it - which in a release build takes the process.
+	// size a read, so a corrupt or hostile image mustn't be able to take the
+	// wallpaper worker down with it, which in a release build takes the process.
 	mod fuzz {
 		use super::super::{Tags, read};
 		use crate::fuzz;
@@ -344,7 +344,7 @@ mod tests {
 		const PNG: [u8; 8] = [0x89, b'P', b'N', b'G', 0x0d, 0x0a, 0x1a, 0x0a];
 		const JPEG: [u8; 2] = [0xff, 0xd8];
 
-		// A packet laid out the way a writer lays one out, holding values no writer
+		// A packet laid out the way a writer lays one out, with values no writer
 		// would. Nothing else a generator makes gets as far as the value parsers.
 		fn tagged(rng: &mut fuzz::Rng) -> Vec<u8> {
 			#[rustfmt::skip]
@@ -389,8 +389,8 @@ mod tests {
 			}
 			for _ in 0..=rng.below(20) {
 				match rng.below(5) {
-					// A chunk header: four bytes of length, four of type. A length
-					// that lies about what follows is the case worth reaching.
+					// A chunk header: 4 bytes of length, 4 of type. A length
+					// that lies about what follows is the case to test.
 					0..=2 => {
 						let len = *rng.pick(&[0u32, 1, 8, 0xffff, 0x7fff_ffff, 0xffff_ffff]);
 						out.extend_from_slice(&len.to_be_bytes());

@@ -65,7 +65,7 @@ pub(crate) enum MenuAction {
 }
 
 impl MenuAction {
-	/// The flyover for a row that needs one. Most do not: "Copy" and "New tab"
+	/// The flyover for a row that needs one. Most don't: "Copy" and "New tab"
 	/// say what they do, and a tip on every row would be noise the reader has to
 	/// learn to ignore. Empty means no tip.
 	pub(crate) fn help(self) -> &'static str {
@@ -83,7 +83,7 @@ impl MenuAction {
 				"Ignore typing in this pane, so a long job can't be stopped by accident."
 			}
 			MenuAction::ToggleFrame => {
-				"The title bar and border. Off also hides the minimize, maximize and close buttons."
+				"The title bar and border. Off also hides the minimize, maximize, and close buttons."
 			}
 			MenuAction::ToggleMenuBar => {
 				"The menu bar. With it off, right-click a pane for the same menu."
@@ -95,7 +95,7 @@ impl MenuAction {
 				"Show a small view of the whole scrollback beside the text. It takes up columns the text would have used."
 			}
 			MenuAction::ToggleBare => {
-				"Hide the title bar, menu bar and tab strip at once. Choose it again to bring back what was showing."
+				"Hide the title bar, menu bar, and tab strip at once. Choose it again to bring back what was showing."
 			}
 			MenuAction::ToggleRemote => {
 				"Run as a plain terminal for a remote screen, where the effects are lost anyway. Turns on by itself when a remote session is found, and off at the next launch."
@@ -127,8 +127,8 @@ pub(crate) enum Entry {
 		accel: Option<usize>,
 	},
 	// A row that opens a menu of its own to the right instead of doing
-	// something. It carries its own items, so the popup can be built the moment
-	// the pointer reaches the row.
+	// something. It has its own items, so the popup can be built the moment
+	// the pointer gets to the row.
 	Sub {
 		label: String,
 		accel: Option<usize>,
@@ -137,9 +137,9 @@ pub(crate) enum Entry {
 	Sep,
 }
 
-/// The text a row draws, if it draws any - a separator does not. Item and Sub
+/// The text a row draws, if it draws any - a separator doesn't. Item and Sub
 /// rows are laid out and measured identically, so everything that walks a menu
-/// asks here rather than matching the two arms itself.
+/// asks here rather than matching the 2 arms itself.
 pub(super) fn entry_label(entry: &Entry) -> Option<&str> {
 	match entry {
 		Entry::Item { label, .. } | Entry::Sub { label, .. } => Some(label),
@@ -147,10 +147,10 @@ pub(super) fn entry_label(entry: &Entry) -> Option<&str> {
 	}
 }
 
-/// The first accelerator letter two rows of one menu both claim, if any.
+/// The first accelerator letter 2 rows of one menu both claim, if any.
 ///
-/// Typing a letter picks the FIRST row carrying it, so a duplicate does not read
-/// as a duplicate - it silently makes the LATER row unreachable from the
+/// Typing a letter picks the first row with it, so a duplicate doesn't read
+/// as a duplicate - it silently makes the later row unreachable from the
 /// keyboard, which is why this is asserted where a menu is built rather than
 /// left to be noticed.
 pub(super) fn accel_clash(entries: &[Entry]) -> Option<char> {
@@ -220,8 +220,8 @@ pub(super) fn entry_item_accel(ch: char, label: &str, action: MenuAction) -> Ent
 		accel: accel_at(label, ch),
 	}
 }
-// `ch` is optional because accelerators have to be unique WITHIN a menu, and a
-// row that appears in two of them cannot always spell it the same way.
+// `ch` is optional because accelerators have to be unique within a menu, and a
+// row that appears in 2 of them can't always use the same letter.
 fn entry_sub(ch: Option<char>, label: &str, items: Vec<Entry>) -> Entry {
 	Entry::Sub {
 		label: label.into(),
@@ -249,8 +249,8 @@ fn entry_check_accel(ch: char, on: bool, label: &str, action: MenuAction) -> Ent
 // A "... with shell" row, or nothing at all while there is no shell to put
 // under it - an empty flyout is worse than no row. The stored list supplies the
 // titles and the order; only the active entries are offered, and the action
-// carries the index into the WHOLE list so a disabled entry between two active
-// ones cannot shift what a click runs.
+// has the index into the whole list so a disabled entry between 2 active
+// ones can't shift what a click runs.
 fn shell_submenu(
 	shells: &[ShellEntry],
 	accel: Option<char>,
@@ -337,7 +337,7 @@ fn next_wallpaper_row() -> Entry {
 	entry_item_accel('x', "Next wallpaper", MenuAction::NextWallpaper)
 }
 
-// The three shell rows: a new tab, and a split either way.
+// The 3 shell rows: a new tab, and a split either way.
 fn new_tab_shells(shells: &[ShellEntry], accel: Option<char>) -> Vec<Entry> {
 	shell_submenu(shells, accel, "New tab with shell", MenuAction::NewTabShell)
 }
@@ -569,13 +569,13 @@ pub(crate) fn mac_entries(entries: Vec<Entry>) -> Vec<Entry> {
 	without_rows(entries, |action| action == MenuAction::ToggleMenuBar)
 }
 
-// Every row turned on, and two shells, so each menu shows all it can.
+// Every row turned on, and 2 shells, so each menu shows all it can.
 #[cfg(test)]
 pub(crate) fn sample_window_menus() -> Vec<(&'static str, Vec<Entry>)> {
 	sample_window_menus_copying(true, true)
 }
 
-// The same, with the focused pane's two copy modes as given.
+// The same, with the focused pane's 2 copy modes as given.
 #[cfg(test)]
 pub(crate) fn sample_window_menus_copying(
 	copy_select: bool,
@@ -618,7 +618,7 @@ pub(crate) fn sample_window_menus_with(
 // over. The checkmark fields read as ViewState's do.
 #[derive(Clone, Copy)]
 struct CtxState {
-	// a link under the click; its two rows are left out otherwise
+	// a link under the click; its 2 rows are left out otherwise
 	link: bool,
 	read_only: bool,
 	copy_select: bool,
@@ -630,7 +630,7 @@ struct CtxState {
 
 fn context_menu_items(on: CtxState, shells: &[ShellEntry]) -> Vec<Entry> {
 	let mut entries = Vec::new();
-	// A link under the click gets its two items at the top, and only then -
+	// A link under the click gets its 2 items at the top, and only then -
 	// they'd be dead weight on every other right-click.
 	if on.link {
 		entries.extend([
@@ -674,7 +674,7 @@ fn context_menu_items(on: CtxState, shells: &[ShellEntry]) -> Vec<Entry> {
 		entry_item("Close pane", MenuAction::Close),
 		// The window-chrome rows worth repeating here: with the bar hidden this
 		// menu is the only way back to it, or out of a bare window. The rest
-		// live on View.
+		// are on View.
 		Entry::Sep,
 		entry_check_accel('M', on.menu_bar, "Menu bar", MenuAction::ToggleMenuBar),
 		entry_check_accel('B', on.bare, "Bare window", MenuAction::ToggleBare),
@@ -693,7 +693,7 @@ fn context_menu_items(on: CtxState, shells: &[ShellEntry]) -> Vec<Entry> {
 // A popup's own DIP measurements at one scale factor: the padding above the
 // first item and below the last, and the height of a separator row. Resolved
 // once when the menu is built (see `popup`) so the draw and both hit tests read
-// the same numbers without carrying a TextCtx into the geometry.
+// the same numbers without passing a TextCtx into the geometry.
 fn menu_metrics(scale: f32) -> (f32, f32) {
 	(
 		config::dip(config::MENU_ITEM_PAD_Y, scale),
@@ -802,7 +802,7 @@ impl ContextMenu {
 
 impl State {
 	/// The menu row a tip would describe: the innermost open popup that the
-	/// pointer is actually on (a parent keeps its highlight on the row its
+	/// pointer is on (a parent keeps its highlight on the row its
 	/// submenu hangs off, so the deepest hovered one is the right answer), and
 	/// only when that row has something to say, in a window with the focus.
 	pub(super) fn menu_tip_target(&self) -> Option<(usize, usize)> {
@@ -954,9 +954,9 @@ impl State {
 	}
 
 	// Open the submenu on row `row` of the open popup, or close whatever was
-	// standing open if that row does not have one.
+	// standing open if that row doesn't have one.
 	//
-	// It goes to the RIGHT of the parent, never overlapping it, with its first
+	// It goes to the right of the parent, never overlapping it, with its first
 	// row lined up on the parent row - which is what lets the pointer rule stay
 	// as simple as it is: moving right off the row leaves the parent entirely,
 	// so nothing else can claim the hover on the way in. It flips to the left
@@ -1046,7 +1046,7 @@ impl State {
 		};
 		let entry = chain[depth].entries[row].clone();
 		match entry {
-			// only the root popup carries submenus, so a deeper one cannot open
+			// only the root popup has submenus, so a deeper one can't open
 			Entry::Sub { .. } => {
 				if depth == 0 {
 					self.open_submenu(row);
@@ -1096,7 +1096,7 @@ impl State {
 	}
 
 	/// The highlighted row of the open popup when it is one that opens a submenu
-	/// and has not opened it yet - i.e. what Right arrow would enter.
+	/// and hasn't opened it yet - i.e. what Right arrow would enter.
 	pub(super) fn submenu_row(&self) -> Option<usize> {
 		let menu = self.menu.as_ref()?;
 		if menu.sub.is_some() {
@@ -1120,7 +1120,7 @@ impl State {
 	}
 
 	// What the menu-bar dropdowns show: the View checkmarks, and the focused
-	// pane's two copy modes.
+	// pane's 2 copy modes.
 	fn bar_state(&self) -> (ViewState, bool, bool) {
 		let p = self.tabs.cur().panes.get(&self.tabs.cur().focused);
 		let settings = config::settings();
@@ -1368,8 +1368,8 @@ mod tests {
 		}
 	}
 
-	// A letter picks the first row carrying it, so a menu that spends one twice
-	// does not read as ambiguous - it quietly makes the later row unreachable.
+	// A letter picks the first row with it, so a menu that spends one twice
+	// doesn't read as ambiguous - it quietly makes the later row unreachable.
 	// Every menu is checked for this where it is built.
 	// Test ID: dbeqq
 	#[test]
@@ -1381,15 +1381,15 @@ mod tests {
 		];
 		assert_eq!(accel_clash(&rows), None);
 		// 'w' again, which is what the View menu would have done had the submenu
-		// row spelled its accelerator the way the Tabs menu's does
+		// row picked its accelerator the way the Tabs menu's does
 		let mut clashing = rows;
 		clashing.insert(1, entry_sub(Some('w'), "New tab with shell", vec![]));
 		assert_eq!(accel_clash(&clashing), Some('w'));
 	}
 
 	// A submenu row is an ordinary row to the pointer and to the keyboard - only
-	// what ACTIVATING it does is different. Treating it as a separator instead
-	// (which is what the old two-arm matches did) leaves it unhoverable and
+	// what activating it does is different. Treating it as a separator instead
+	// (which is what the old 2-arm matches did) leaves it unhoverable and
 	// unreachable, i.e. an item nothing can ever pick.
 	// Test ID: dbeq9
 	#[test]
@@ -1412,7 +1412,7 @@ mod tests {
 			None,
 			"a separator still is not"
 		);
-		// down from the first row reaches it, and carries on past it
+		// down from the first row gets to it, and goes on past it
 		assert_eq!(menu.step(Some(0), 1), Some(1));
 		assert_eq!(menu.step(Some(1), 1), Some(3), "the separator is skipped");
 		assert_eq!(menu.step(Some(3), -1), Some(1));
@@ -1455,7 +1455,7 @@ mod tests {
 	}
 
 	// A dropdown resolves its own padding and separator height from DIP once, at
-	// the moment it is built, so the draw and the two hit tests read one set of
+	// the moment it is built, so the draw and the 2 hit tests read one set of
 	// numbers. Whatever the display does to them, `item_at` and `row_top` have to
 	// keep agreeing - a menu whose rows are drawn one place and clicked another
 	// is the failure this guards.
@@ -1520,8 +1520,8 @@ mod tests {
 
 	// The style guide asks every View toggle to name the thing and be checked
 	// while that thing is on, so a reader can take the whole column one way. A
-	// "Hide ..." caption checked when the thing is GONE reads backwards next to
-	// its neighbours, which is what this stops coming back.
+	// "Hide ..." caption checked when the thing is gone reads backwards next to
+	// its neighbors, which is what this stops coming back.
 	// Test ID: dc3q1
 	#[test]
 	fn every_view_toggle_is_checked_while_its_subject_is_on() {
@@ -1668,7 +1668,7 @@ mod tests {
 		out
 	}
 
-	// A disabled entry sits between the two active ones, so an index that
+	// A disabled entry sits between the 2 active ones, so an index that
 	// counted only the offered rows would show.
 	fn three_shells() -> Vec<ShellEntry> {
 		vec![
@@ -1723,7 +1723,7 @@ mod tests {
 	}
 
 	// Build time only checks a menu's letters in a debug build, and only when
-	// that menu is opened. This holds every one of them to it.
+	// that menu is opened. This checks every one of them.
 	// Test ID: dd5pk
 	#[test]
 	fn no_menu_spends_an_accelerator_twice() {
@@ -1734,7 +1734,7 @@ mod tests {
 		}
 	}
 
-	// Keys are spelled as words, so "Ctrl+=" or "Ctrl++" cannot come back.
+	// Keys are spelled as words, so "Ctrl+=" or "Ctrl++" can't come back.
 	// Ctrl+, keeps its comma: the style guide spells it that way too.
 	// Test ID: dd5pm
 	#[test]
@@ -1770,7 +1770,7 @@ mod tests {
 	}
 
 	// A row that opens a prompt or a dialog ends in the one ellipsis character,
-	// never three dots.
+	// never 3 dots.
 	// Test ID: dd5pn
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
@@ -2263,7 +2263,7 @@ mod tests {
 				"{label}"
 			);
 		}
-		// both rows sit under the two plain splits on the Panes menu
+		// both rows sit under the 2 plain splits on the Panes menu
 		let panes = panes_menu_items(&shells);
 		assert!(matches!(
 			panes[2..4],

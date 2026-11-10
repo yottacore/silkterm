@@ -4,7 +4,7 @@
 ##	- Purpose:
 ##		The guard every recursive removal in the pipeline goes through. A wrong
 ##		answer here deletes something that was never ours, so this plants
-##		folders, links and odd paths beside each other and checks only the ones
+##		folders, links, and odd paths beside each other and checks only the ones
 ##		it may take go. The cases outside a tmp folder run under the target dir,
 ##		whose real path has none.
 ##	- Test ID: dehwp
@@ -141,7 +141,7 @@ fCheck "so does cicd/artifacts itself" fRefused fClear "${work}/repo" cicd/artif
 fCheck "and it stays" test -f "${work}/repo/cicd/artifacts/lint"
 
 ## Every recursive removal in a bash file in cicd/ goes through it: the
-## pipeline, the tests and the utilities. A bash file is a .bash or .sh, or one
+## pipeline, the tests, and the utilities. A bash file is a .bash or .sh, or one
 ## whose first line names bash or sh. The tracked ones, as the lint takes them.
 fBare(){
 	grep -HnE "(^|[;&|{(\`'\"[:space:]])(command +|\\\\)?rm( +-[A-Za-z]+)* +(-[A-Za-z]*[rR]|--recursive)" "${@}" /dev/null \
@@ -218,7 +218,7 @@ echo "all passed"
 ##	History:
 ##		- 20261028 JC: Created.
 ##		- 20261028: The PowerShell copy, and cicd-win.ps1 through it.
-##		- 20261031: Every PowerShell script, the test scripts and install.ps1 too.
+##		- 20261031: Every PowerShell script, the test scripts, and install.ps1 too.
 ##		- 20261031: Every bash file in cicd/, and the tests' own fTestDir_Rm.
 ##		- 20261031: HOST_TEMP itself and a whole project folder in it.
 ##		- 20261031: The Python copy, and every Python file in cicd/ through it.

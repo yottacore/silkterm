@@ -33,7 +33,7 @@ struct Line {
 }
 
 // A clickable region in the About box. `button` links draw a filled box behind
-// their label (the Support button); plain links are just colored text. A link
+// their label (the Support button); plain links are colored text. A link
 // with a `tooltip` shows that text as a flyover while the cursor is over it -
 // used so the Support button can reveal the URL it opens without baking it into
 // the label.
@@ -191,7 +191,7 @@ pub struct DialogWin {
 	// what the pointer is resting on, and since when: flyover help waits the same
 	// DELAY here as it does in the tab strip and the menus
 	tip: crate::tip::Dwell<Rect>,
-	// the tip the last frame drew, so a dwell that ripens between frames is owed one
+	// the tip the last frame drew, so a dwell that ripens between frames is due one
 	tip_drawn: Option<Rect>,
 	// no tips while the window is in the background
 	focus: crate::tip::Focus,
@@ -204,10 +204,10 @@ pub struct DialogWin {
 	// a resize snap has been asked for and not yet seen: see snap_to_natural
 	snapped: bool,
 	// what the screen leaves this window, physical pixels. The snap may not pull
-	// it back past this. Unbounded for About, which cannot be resized.
+	// it back past this. Unbounded for About, which can't be resized.
 	caps: (f32, f32),
-	// The held keys, as this window last reported them. They live and die with
-	// the window: a closing macOS window never hears its keys let go, and one
+	// The held keys, as this window last reported them. They go with the
+	// window: a closing macOS window never hears its keys let go, and one
 	// that gains the focus is told nothing until a key changes.
 	mods: ModifiersState,
 }
@@ -221,7 +221,7 @@ impl std::fmt::Debug for DialogWin {
 }
 
 /// The window a dialog belongs to. On Wayland the tie goes on its
-/// `xdg_toplevel`, which the raw handle doesn't carry.
+/// `xdg_toplevel`, which the raw handle doesn't have.
 #[derive(Debug, Clone, Copy)]
 pub struct Parent {
 	handle: RawWindowHandle,
@@ -298,7 +298,7 @@ impl DialogWin {
 				h.ceil().max(1.0) as u32,
 			));
 		// Tie the dialog to the terminal window so the WM keeps it above its
-		// parent and groups them. Windows: MUST be owner semantics, not winit's
+		// parent and groups them. Windows: must be owner semantics, not winit's
 		// generic parent_window - that creates a WS_CHILD window there, which
 		// embeds the dialog inside the terminal's client area (clipped when the
 		// dialog is bigger than the terminal) and never gets its own keyboard
@@ -306,7 +306,7 @@ impl DialogWin {
 		// takes focus normally, and stays off the taskbar. macOS: parent_window
 		// is child-window-of semantics, which is what we want there. X11:
 		// parent_window means literal X reparenting (an embedded child, unmanaged
-		// by the WM), so DON'T pass it there; WM_TRANSIENT_FOR is set after
+		// by the WM), so don't pass it there; WM_TRANSIENT_FOR is set after
 		// creation instead (below). Wayland: winit has no parent at all, so
 		// xdg_toplevel.set_parent goes on the raw toplevel, also below.
 		#[cfg(target_os = "windows")]
@@ -320,7 +320,7 @@ impl DialogWin {
 			attrs = unsafe { attrs.with_parent_window(handle) };
 		}
 		// X11: create unmapped so WM_TRANSIENT_FOR + the modal/dialog hints are all
-		// set BEFORE the WM maps the window and fixes its stacking group. A post-map
+		// set before the WM maps the window and fixes its stacking group. A post-map
 		// property write is read too late by Compiz et al - that's why re-selecting
 		// the dialog raised it alone and left the parent buried. The caller shows the
 		// window after the final resize (see new_about / new_settings).
@@ -352,7 +352,7 @@ impl DialogWin {
 				crate::gfx::wanted(),
 			)?,
 		};
-		// adopt the size winit actually gave us
+		// adopt the size winit gave us
 		let size = window.inner_size();
 		gfx.resize(size.width, size.height);
 		let scale = config::display_scale(window.scale_factor());
@@ -460,7 +460,7 @@ impl DialogWin {
 		})
 	}
 
-	/// The question closing a tab, pane or window with a pane in tmux asks:
+	/// The question closing a tab, pane, or window with a pane in tmux asks:
 	/// detach from the sessions, end them, or don't close.
 	#[cfg(not(target_os = "windows"))]
 	pub fn new_ask(
@@ -530,7 +530,7 @@ impl DialogWin {
 			Self::make(el, "Settings".into(), 560.0, 800.0, true, parent, warm)?;
 		let scale = config::display_scale(window.scale_factor());
 		let chrome = crate::settings_ui::chrome_widths(&mut text, scale);
-		// Cap the window to the part of the screen it can actually occupy - the
+		// Cap the window to the part of the screen it can occupy - the
 		// monitor minus the taskbar, minus the frame the WM puts round it - and to
 		// ~1010 DIP tall. A tab that doesn't fit scrolls instead of pushing the
 		// footer buttons off the bottom. SettingsDialog divides these by the scale
@@ -613,7 +613,7 @@ impl DialogWin {
 	}
 
 	/// Whether an Apply has to read the file back, since another window saved
-	/// while this one held changes.
+	/// while this one had changes.
 	pub fn take_behind(&mut self) -> bool {
 		match &mut self.content {
 			Content::Settings(dialog) => dialog.take_behind(),
@@ -622,8 +622,8 @@ impl DialogWin {
 	}
 
 	/// A background shell scan arrived while this dialog was open. Fold it into the
-	/// settings BOTH copies hold: the edited one so the user sees what turned up,
-	/// and the baseline so the fold does not read as an edit they made.
+	/// settings both copies have: the edited one so the user sees what turned up,
+	/// and the baseline so the fold doesn't read as an edit they made.
 	pub fn fold_shells(&mut self, found: &[crate::shells::Found]) {
 		if let Content::Settings(dialog) = &mut self.content {
 			dialog.fold_shells(found);
@@ -680,7 +680,7 @@ impl DialogWin {
 		}
 	}
 
-	/// True when the move changed what the window shows, so it is owed a frame.
+	/// True when the move changed what the window shows, so it needs a frame.
 	pub fn set_cursor(&mut self, x: f32, y: f32) -> bool {
 		let from = std::mem::replace(&mut self.mouse, (x, y));
 		// some platforms report the pointer where it was as focus changes
@@ -745,7 +745,7 @@ impl DialogWin {
 	}
 
 	/// Right mouse button: pop the field context menu (Settings only). `paste_ok`
-	/// grays the Paste item when the clipboard holds nothing.
+	/// grays the Paste item when the clipboard is empty.
 	pub fn mouse_right(&mut self, paste_ok: bool) {
 		let (mx, my) = self.mouse;
 		if let Content::Settings(dialog) = &mut self.content {
@@ -979,7 +979,7 @@ impl DialogWin {
 		}
 	}
 
-	/// When the loop next owes this dialog a frame with no input: the next step
+	/// When the loop next has to draw this dialog with no input: the next step
 	/// of a field edit's animation (view scroll, caret ease, blink), or a resting
 	/// pointer's tip coming due.
 	pub fn wake_at(&self) -> Option<std::time::Instant> {
@@ -1006,7 +1006,7 @@ impl DialogWin {
 	}
 
 	/// DPI/scale changed under an open dialog: dragged to a monitor at another
-	/// scale, or the desktop's scaling moved. Only the boundary follows - the text
+	/// scale, or the desktop's scaling changed. Only the boundary follows - the text
 	/// context rasterizes at the new size and the chrome is measured again - while
 	/// every value and unapplied edit stays put.
 	pub fn set_scale(&mut self, scale_factor: f64) {
@@ -1023,7 +1023,7 @@ impl DialogWin {
 		self.window.request_redraw();
 	}
 
-	// About and the notice hold no layout of their own to adjust, so they are
+	// About and the notice have no layout of their own to adjust, so they are
 	// laid out again from what they were built from and the window asked for the
 	// size that comes back. Neither can be resized, so there is nothing else to
 	// keep in step.
@@ -1070,12 +1070,12 @@ impl DialogWin {
 				min_w.ceil() as u32,
 				min_h.ceil() as u32,
 			)));
-		// Nothing guarantees a Resized. winit keeps the LOGICAL size, so an
+		// Nothing guarantees a Resized. winit keeps the logical size, so an
 		// ordinary window gets one with the new physical size - but a maximized or
 		// tiled window keeps its physical size and sends nothing, and the layout
 		// would then be drawn at the new scale inside the old window. Hand the
-		// dialog what the window really measures, then ask for a size the screen
-		// can still hold, since it holds fewer DIP at a higher scale.
+		// dialog what the window measures, then ask for a size that still fits
+		// the screen, since it fits fewer DIP at a higher scale.
 		let now = self.window.inner_size();
 		dialog.set_size(now.width as f32, now.height as f32);
 		let (want_w, want_h) = size_after_rescale(
@@ -1110,7 +1110,7 @@ impl DialogWin {
 		}
 		let snap = DLG_SNAP * config::display_scale(self.window.scale_factor());
 		let (nat_w, nat_h) = dialog.natural_size();
-		// Only toward a size the screen can hold. Snapping back to one it cannot is
+		// Only toward a size that fits the screen. Snapping back to one that doesn't is
 		// how the footer buttons end up behind the taskbar again.
 		let want_w = if nat_w <= self.caps.0 {
 			snap_to(w, nat_w, snap)
@@ -1144,7 +1144,7 @@ impl DialogWin {
 	// How big the Settings window may be: the part of the screen it can occupy,
 	// less the frame the WM puts round it, and no taller than DLG_MAX_H.
 	// The parent names the monitor. A dialog created hidden has never been placed,
-	// so asking which monitor IT is on answers for wherever the origin happens to
+	// so asking which monitor it is on answers for wherever the origin happens to
 	// be - the primary, not the screen the terminal is on. `placed` is false for
 	// that first measurement; see `pick_monitor` for what it changes.
 	fn settings_caps(
@@ -1361,7 +1361,7 @@ struct Scene {
 	rect_split: usize,
 	rows_end: usize,
 	scissor_vp: Option<Rect>,
-	// an open dropdown, field menu, prompt or picker, drawn on top in a second pass
+	// an open dropdown, field menu, prompt, or picker, drawn on top in a second pass
 	overlay_range: Option<(u32, u32)>,
 	// a tip, drawn last of all, over the overlay too
 	tip_range: Option<(u32, u32)>,
@@ -1374,11 +1374,11 @@ struct Scene {
 // a frame costs, and a frame mostly shows what the last one did. A buffer is
 // found again by everything shaping reads: the text, its attrs (font, weight,
 // color) and its line box. Where it sits and what clips it are given when it
-// is drawn, so neither needs a new shape. What a frame does not ask for is
+// is drawn, so neither needs a new shape. What a frame doesn't ask for is
 // dropped at the next one.
 #[derive(Default)]
 struct ShapedText {
-	// the text context these were shaped in; a font, size or scale change
+	// the text context these were shaped in; a font, size, or scale change
 	// builds a new one, and nothing shaped in the old one is any use
 	generation: u64,
 	// this frame's buffers, in the order first asked for
@@ -1394,7 +1394,7 @@ struct ShapeKey {
 	attrs: Attrs<'static>,
 	// the buffer's height, as bits, since an f32 has no Hash
 	height: u32,
-	// marked spans, their color and their size as bits
+	// marked spans, their color, and their size as bits
 	marks: Option<(Vec<(usize, usize)>, [u8; 3], u32)>,
 }
 
@@ -1432,7 +1432,7 @@ impl ShapedText {
 		self.marked(text, line, attrs, None, width, height)
 	}
 
-	// The same, with some of the line drawn bold, larger and in another color.
+	// The same, with some of the line drawn bold, larger, and in another color.
 	fn marked(
 		&mut self,
 		text: &mut TextCtx,
@@ -1624,7 +1624,7 @@ fn pointer_moved(
 
 // Everything one frame draws, worked out with no surface, and the tip it drew.
 // Flyover help waits for the pointer to rest, the same as the tab strip and the
-// menus do. A dialog that answered the moment the pointer crossed a control
+// menus do. A dialog that showed one the moment the pointer crossed a control
 // would read as a different kind of tip. The wake the wait asks for is read
 // through `wake_at`, since a move can start it between frames.
 fn compose(
@@ -1648,9 +1648,9 @@ fn compose(
 	(scene(content, text, shaped, mouse, tip, size), drawn)
 }
 
-// Whether a dialog is owed a frame with no input. A tip that ripened since the
-// last frame counts even once its wake has passed, since `Dwell::wake` stops
-// answering when the time is up.
+// Whether a dialog is due a frame with no input. A tip that ripened since the
+// last frame counts even once its wake has passed, since `Dwell::wake` returns
+// nothing once the time is up.
 fn frame_due(
 	wake: Option<std::time::Instant>,
 	dwell: &crate::tip::Dwell<Rect>,
@@ -1834,9 +1834,9 @@ fn scene(
 			}
 			// flyover: what a control does, or why it is grayed out. A small box
 			// under it, in a layer of its own drawn after everything else, so no
-			// row, list or picker text lands on it. It WRAPS - a sentence long enough
+			// row, list, or picker text draws over it. It wraps - a sentence long enough
 			// to outrun the panel would otherwise be clamped to the edge and run
-			// off it, and the panel's width is not ours to grow.
+			// off it, and the panel's width isn't ours to grow.
 			if let Some((tip, anchor)) = tip {
 				let scale = text.scale;
 				let avail = crate::tip::wrap_budget(w as f32, scale);
@@ -1935,7 +1935,7 @@ fn ask_quads(ask: &Ask, links: &[AboutLink], text: &TextCtx, rects: &mut Vec<Rec
 	}
 }
 
-// Four quads round `r`, `t` thick, drawn inside it.
+// The 4 quads round `r`, `t` thick, drawn inside it.
 #[cfg_attr(target_os = "windows", allow(dead_code))]
 fn ring(rects: &mut Vec<RectInstance>, r: Rect, t: f32, color: [u8; 3]) {
 	rects.push(quad(r.x, r.y, r.w, t, color));
@@ -1948,7 +1948,7 @@ fn ring(rects: &mut Vec<RectInstance>, r: Rect, t: f32, color: [u8; 3]) {
 // WM_TRANSIENT_FOR (winit has no API for it there; its parent_window means
 // literal X reparenting), plus the EWMH dialog type and the MODAL / SKIP_TASKBAR /
 // SKIP_PAGER states. That gives the standard Linux modal behavior (kept off the
-// taskbar, pager and alt+tab, stacked above and raised with its parent, retains
+// taskbar, pager, and alt+tab, stacked above and raised with its parent, retains
 // focus) without any input tricks. Same throwaway-connection pattern as
 // app::set_blur_behind. No-op off X11.
 #[cfg(target_os = "linux")]
@@ -2024,8 +2024,8 @@ fn set_transient_for(window: &Window, parent: Option<&RawWindowHandle>) {
 	add_state(modal);
 	add_state(skip);
 	add_state(skip_pager);
-	// A round trip, not just a flush: winit maps the window on its own
-	// connection, and the server owes no order between two clients. A map read
+	// A round trip, not only a flush: winit maps the window on its own
+	// connection, and the server guarantees no order between 2 clients. A map read
 	// first comes up as a plain window.
 	if let Ok(cookie) = conn.get_input_focus() {
 		let _ = cookie.reply();
@@ -2208,7 +2208,7 @@ mod wl_guest {
 
 // Keep the parent (terminal) window directly below `dialog` in the stack, via an
 // EWMH _NET_RESTACK_WINDOW client message to the root window. xfwm4/GNOME raise a
-// transient's parent with it automatically; Compiz does not, so when the dialog
+// transient's parent with it automatically; Compiz doesn't, so when the dialog
 // is re-activated after another window came forward, the terminal stays buried
 // behind that window - this slots it back just beneath the dialog. The message
 // goes to root (the only stacking path Compiz honors for a managed window: it
@@ -2254,7 +2254,7 @@ fn restack_parent_below(dialog: &Window, parent: Option<&RawWindowHandle>, dbg: 
 	let _ = conn.flush();
 
 	if dbg {
-		// read back where the WM actually put things (parent should end up right
+		// read back where the WM put things (parent should end up right
 		// below dialog). Prints "term below dialog" or the offending gap.
 		let order = atom(b"_NET_CLIENT_LIST_STACKING")
 			.and_then(|prop| {
@@ -2286,7 +2286,7 @@ fn on_wayland(el: &ActiveEventLoop) -> bool {
 		.is_ok_and(|handle| matches!(handle.as_raw(), RawDisplayHandle::Wayland(_)))
 }
 
-// Field context-menu command against the active edit; the clipboard glue lives
+// Field context-menu command against the active edit; the clipboard glue is
 // here (settings_ui stays clipboard-free). The Ctrl+letter shortcuts, Command on
 // a Mac, come here too.
 fn edit_cmd(
@@ -2344,7 +2344,7 @@ const ABOUT_BORDER: f32 = 1.0; // 1px rule around the Support button
 // tip.rs - both windows draw the same box.
 
 // The size to ask the window for after a change of display scale: the pixels it
-// has now, held to what the screen can still hold. A screen holds fewer DIP at a
+// has now, kept to what still fits the screen. A screen fits fewer DIP at a
 // higher scale, so a window dragged from a wide monitor to a smaller one at a
 // higher scale comes out taller than the screen with its footer buttons under
 // the taskbar.
@@ -2376,7 +2376,7 @@ fn size_after_rescale(
 	let Some(followed) = followed else {
 		return kept;
 	};
-	// a part pixel rounds up, as the snap does, unless the cap is what holds it
+	// a part pixel rounds up, as the snap does, unless the cap is what limits it
 	let fit = |nat: f32, cap: f32| {
 		if nat <= cap || !cap.is_finite() || cap < 1.0 {
 			nat.ceil() as u32
@@ -2545,7 +2545,7 @@ fn layout_source(
 	}
 }
 
-// "Line 3", "Lines 3 and 40", or "A line" when shcl could not say which.
+// "Line 3", "Lines 3 and 40", or "A line" when shcl couldn't say which.
 fn line_names(lines: &[usize], lost: usize) -> String {
 	match lines {
 		[] if lost == 1 => "A line".to_string(),
@@ -2566,7 +2566,7 @@ fn line_names(lines: &[usize], lost: usize) -> String {
 }
 
 /// A notice's window title and its paragraphs. The path is a paragraph of its
-/// own, since it is the one part that cannot be wrapped at a space.
+/// own, since it is the one part that can't be wrapped at a space.
 pub fn refusal_notice(refusal: &config::Refusal) -> (String, Vec<String>) {
 	let which = line_names(&refusal.lines, refusal.lost);
 	let many = refusal.lines.len() > 1 || (refusal.lines.is_empty() && refusal.lost > 1);
@@ -2574,10 +2574,10 @@ pub fn refusal_notice(refusal: &config::Refusal) -> (String, Vec<String>) {
 	(
 		"Settings not saved".to_string(),
 		vec![
-			format!("{} cannot save its settings file.", config::APP_NAME),
+			format!("{} can't save its settings file.", config::APP_NAME),
 			refusal.path.display().to_string(),
-			format!("{which} cannot be read, and saving now would delete {it}."),
-			"Until that is fixed, changes such as the window size, new shells and anything set in Settings are used now but not kept.".to_string(),
+			format!("{which} can't be read, and saving now would delete {it}."),
+			"Until that's fixed, changes such as the window size, new shells, and anything set in Settings are used but not kept.".to_string(),
 		],
 	)
 }
@@ -2589,19 +2589,19 @@ pub fn conversion_notice(loss: &config::ConversionLoss) -> (String, Vec<String>)
 		(config::Converted::Dropped(rewrite), _) => return dropped_notice(loss, rewrite),
 		(config::Converted::InPlace, 1) => (
 			"converted its settings file to a new format.",
-			"One setting could not be converted and now does nothing.".to_string(),
+			"One setting couldn't be converted and now does nothing.".to_string(),
 		),
 		(config::Converted::InPlace, n) => (
 			"converted its settings file to a new format.",
-			format!("{n} settings could not be converted and now do nothing."),
+			format!("{n} settings couldn't be converted and now do nothing."),
 		),
 		(config::Converted::Rewritten, 1) => (
-			"could not convert its settings file to the new format, so it wrote a new one.",
-			"One setting could not be copied to the new file.".to_string(),
+			"couldn't convert its settings file to the new format, so it wrote a new one.",
+			"One setting couldn't be copied to the new file.".to_string(),
 		),
 		(config::Converted::Rewritten, n) => (
-			"could not convert its settings file to the new format, so it wrote a new one.",
-			format!("{n} settings could not be copied to the new file."),
+			"couldn't convert its settings file to the new format, so it wrote a new one.",
+			format!("{n} settings couldn't be copied to the new file."),
 		),
 	};
 	let mut paras = vec![
@@ -2621,7 +2621,7 @@ fn backup_para(loss: &config::ConversionLoss) -> Option<String> {
 	))
 }
 
-// A current settings file with lines that are not UTF-8 was written again
+// A current settings file with lines that aren't UTF-8 was written again
 // without them. Some editors show such a line as if nothing were wrong, so the
 // notice names each one, and the copy that still has them.
 fn dropped_notice(
@@ -2639,16 +2639,16 @@ fn dropped_notice(
 	let carried = match (rewrite, loss.lost) {
 		(config::Rewrite::Kept, _) | (config::Rewrite::Template, 0) => String::new(),
 		(config::Rewrite::Template, 1) => {
-			" One setting could not be copied to the new file.".to_string()
+			" One setting couldn't be copied to the new file.".to_string()
 		}
 		(config::Rewrite::Template, n) => {
-			format!(" {n} settings could not be copied to the new file.")
+			format!(" {n} settings couldn't be copied to the new file.")
 		}
 	};
 	let gone = format!("{which} {were} left out.{carried}");
 	let mut paras = vec![
 		format!(
-			"{} found text that is not UTF-8 in its settings file, and {done}.",
+			"{} found text that isn't UTF-8 in its settings file, and {done}.",
 			config::APP_NAME
 		),
 		loss.path.display().to_string(),
@@ -2670,9 +2670,9 @@ const ASK_BOX_GAP: f32 = 8.0; // check box -> its label
 #[cfg(not(target_os = "windows"))]
 const ASK_BTN_GAP: f32 = 10.0; // between the question's buttons
 
-// Paragraphs wrapped at word breaks to NOTICE_WRAP: each row's text, its color
+// Paragraphs wrapped at word breaks to NOTICE_WRAP: each row's text, its color,
 // and the gap above it. The paragraph at `path` is a path, which sits right
-// under the sentence before it, breaks after a separator and shows dimmed.
+// under the sentence before it, breaks after a separator, and shows dimmed.
 #[cfg(not(target_os = "windows"))]
 fn wrap_paras(
 	text: &mut TextCtx,
@@ -2724,7 +2724,7 @@ fn wrap_paras(
 }
 
 // The tmux question laid out at the window origin: its paragraphs, the "Don't
-// ask me next time" box, and Cancel, End and Detach at the bottom right with
+// ask me next time" box, and Cancel, End, and Detach at the bottom right with
 // Detach the default. Physical px, like the notice.
 #[cfg(not(target_os = "windows"))]
 fn layout_ask(text: &mut TextCtx, ask: &Ask) -> (Vec<Line>, Vec<AboutLink>, (f32, f32)) {
@@ -2898,11 +2898,11 @@ fn layout_notice(text: &mut TextCtx, paras: &[String]) -> (Vec<Line>, Vec<AboutL
 	(lines, links, (content_w + pad * 2.0, y + pad))
 }
 
-/// The part of the screen a window can actually occupy: the monitor minus the
+/// The part of the screen a window can occupy: the monitor minus the
 /// taskbar/panels/docks. winit has no API for it, so each platform is asked in
 /// its own way and anything else falls back to the whole monitor. Physical
 /// pixels, screen coordinates. Takes a handle rather than a window because the
-/// window that WANTS the answer is often not the one to ask - see `settings_caps`.
+/// window that wants the answer often isn't the one to ask - see `settings_caps`.
 #[cfg(target_os = "windows")]
 pub fn work_area_of(handle: RawWindowHandle) -> Option<(i32, i32, i32, i32)> {
 	use windows_sys::Win32::Graphics::Gdi::{
@@ -2929,8 +2929,8 @@ pub fn work_area_of(handle: RawWindowHandle) -> Option<(i32, i32, i32, i32)> {
 	}
 }
 
-/// X11 publishes it as _`NET_WORKAREA` on the root window - four CARDINALs per
-/// virtual desktop, so the current desktop picks the entry. It covers the whole
+/// X11 publishes it as _`NET_WORKAREA` on the root window - 4 CARDINALs per
+/// virtual desktop, so the current desktop picks the entry. It spans the whole
 /// virtual screen rather than one monitor, which is as much as the protocol
 /// offers, so `usable_screen` treats it as a cap rather than an answer. Wayland
 /// has no equivalent and returns None.
@@ -2985,7 +2985,7 @@ pub fn work_area_of(handle: RawWindowHandle) -> Option<(i32, i32, i32, i32)> {
 	};
 	let mtm = MainThreadMarker::new()?;
 	// SAFETY: an AppKit handle names the window's live NSView, and the marker
-	// above proves this is the main thread, the only one AppKit answers on.
+	// above proves this is the main thread, the only one AppKit runs on.
 	let view: &NSView = unsafe { h.ns_view.cast::<NSView>().as_ref() };
 	let screen = view.window()?.screen()?;
 	// Cocoa's origin is the bottom-left of the first screen, the one with the
@@ -3052,8 +3052,8 @@ pub fn work_area(window: &Window) -> Option<(i32, i32, i32, i32)> {
 }
 
 // The screen a dialog may use. The work area is what a window can occupy once
-// the taskbar has had its share, but on X11 it covers every monitor at once, so
-// it is a cap rather than an answer: the smaller of the two is what one window
+// the taskbar has had its share, but on X11 it spans every monitor at once, so
+// it is a cap rather than an answer: the smaller of the 2 is what one window
 // gets. The monitor alone still counts whatever the taskbar has taken.
 fn usable_screen(work: Option<(f32, f32)>, monitor: Option<(f32, f32)>) -> (f32, f32) {
 	match (work, monitor) {
@@ -3140,7 +3140,7 @@ fn decor_extra(window: &Window) -> (f32, f32) {
 
 // What a dialog draws a tip for this frame, and when the loop has to come back
 // to raise one. Split out of `render` because the drawing needs a surface and
-// the decision does not.
+// the decision doesn't.
 fn tip_gate(
 	dwell: &mut crate::tip::Dwell<Rect>,
 	over: Option<Rect>,
@@ -3187,7 +3187,7 @@ mod tests {
 		assert_eq!(paras[1], "/home/me/.config/silkterm/config.shcl");
 		assert_eq!(
 			paras[2],
-			"2 settings could not be converted and now do nothing."
+			"2 settings couldn't be converted and now do nothing."
 		);
 		assert_eq!(
 			paras[3],
@@ -3196,12 +3196,12 @@ mod tests {
 		let (_, one) = said(1, None);
 		assert_eq!(
 			one[2],
-			"One setting could not be converted and now does nothing."
+			"One setting couldn't be converted and now does nothing."
 		);
 		assert_eq!(one.len(), 3, "no copy, nothing said about one");
 	}
 
-	// A file that could not be converted in place was written new, and its
+	// A file that couldn't be converted in place was written new, and its
 	// notice says so, with what was left behind and the copy that still has it.
 	// Test ID: ddf6h
 	#[test]
@@ -3222,15 +3222,15 @@ mod tests {
 		assert_eq!(
 			paras[0],
 			format!(
-				"{} could not convert its settings file to the new format, so it wrote a new one.",
+				"{} couldn't convert its settings file to the new format, so it wrote a new one.",
 				config::APP_NAME
 			)
 		);
-		assert_eq!(paras[2], "3 settings could not be copied to the new file.");
+		assert_eq!(paras[2], "3 settings couldn't be copied to the new file.");
 		assert!(paras[3].ends_with("config_backup_20261003-142233_format-v2.shcl."));
 		assert_eq!(
 			said(1).1[2],
-			"One setting could not be copied to the new file."
+			"One setting couldn't be copied to the new file."
 		);
 	}
 
@@ -3251,28 +3251,28 @@ mod tests {
 		assert_eq!(paras[1], "/home/me/.config/silkterm/config.shcl");
 		assert_eq!(
 			paras[2],
-			"Line 12 cannot be read, and saving now would delete it."
+			"Line 12 can't be read, and saving now would delete it."
 		);
 		assert!(paras[3].contains("not kept"));
 		assert_eq!(
 			said(&[3, 40], 2).1[2],
-			"Lines 3 and 40 cannot be read, and saving now would delete them."
+			"Lines 3 and 40 can't be read, and saving now would delete them."
 		);
 		assert_eq!(
 			said(&[1, 2, 3, 4, 5, 6, 7], 7).1[2],
-			"Lines 1, 2, 3, 4, 5 and 2 more cannot be read, and saving now would delete them."
+			"Lines 1, 2, 3, 4, 5 and 2 more can't be read, and saving now would delete them."
 		);
 		assert_eq!(
 			said(&[], 1).1[2],
-			"A line cannot be read, and saving now would delete it."
+			"A line can't be read, and saving now would delete it."
 		);
 		assert_eq!(
 			said(&[], 3).1[2],
-			"3 lines cannot be read, and saving now would delete them."
+			"3 lines can't be read, and saving now would delete them."
 		);
 	}
 
-	// Off since a current file that is not UTF-8 is written again without those
+	// Off since a current file that isn't UTF-8 is written again without those
 	// lines (2026100315581313), so no save is refused for them and `Refusal` no
 	// longer says why. `a_notice_for_dropped_lines_names_them_and_the_copy` covers
 	// the notice now.
@@ -3301,9 +3301,9 @@ mod tests {
 	// 	);
 	// }
 
-	// A file written again without lines that are not UTF-8 says which lines
+	// A file written again without lines that aren't UTF-8 says which lines
 	// went and where the copy that has them is. One that had to start from the
-	// template also says what it could not carry.
+	// template also says what it couldn't copy.
 	// Test ID: ddf92
 	#[test]
 	fn a_notice_for_dropped_lines_names_them_and_the_copy() {
@@ -3324,7 +3324,7 @@ mod tests {
 			paras,
 			vec![
 				format!(
-					"{} found text that is not UTF-8 in its settings file, and wrote the file again without it.",
+					"{} found text that isn't UTF-8 in its settings file, and wrote the file again without it.",
 					config::APP_NAME
 				),
 				"/home/me/.config/silkterm/config.shcl".to_string(),
@@ -3336,13 +3336,13 @@ mod tests {
 		assert_eq!(
 			paras[0],
 			format!(
-				"{} found text that is not UTF-8 in its settings file, and wrote a new one from the defaults, with every setting it could still read.",
+				"{} found text that isn't UTF-8 in its settings file, and wrote a new one from the defaults, with every setting it could still read.",
 				config::APP_NAME
 			)
 		);
 		assert_eq!(
 			paras[2],
-			"Lines 3 and 40 were left out. 2 settings could not be copied to the new file."
+			"Lines 3 and 40 were left out. 2 settings couldn't be copied to the new file."
 		);
 		assert_eq!(
 			said(&[3], 0, config::Rewrite::Template).1[2],
@@ -3520,14 +3520,14 @@ mod tests {
 	}
 
 	// A scale change leaves the window at the pixels it already had, and the
-	// screen holds fewer DIP at the higher scale. Nothing else pulls the window
+	// screen fits fewer DIP at the higher scale. Nothing else pulls the window
 	// back onto it.
 	// Test ID: dcwhr
 	#[test]
 	fn a_window_is_capped_to_what_the_screen_can_fit_at_the_new_scale() {
 		// inside the caps: left exactly as it is, no resize asked for
 		assert_eq!(size_within_caps((800, 600), (1920.0, 1080.0)), (800, 600));
-		// taller than the screen now holds: pulled back, width untouched
+		// taller than the screen now fits: pulled back, width untouched
 		assert_eq!(size_within_caps((800, 1400), (1920.0, 1080.0)), (800, 1080));
 		// and both, dragged to a smaller monitor at a higher scale
 		assert_eq!(size_within_caps((2000, 1400), (1280.0, 700.0)), (1280, 700));
@@ -3536,7 +3536,7 @@ mod tests {
 			size_within_caps((800, 600), (f32::MAX, f32::MAX)),
 			(800, 600)
 		);
-		// a screen that measured as nothing is not a reason to shrink to nothing
+		// a screen that measured as nothing isn't a reason to shrink to nothing
 		assert_eq!(size_within_caps((800, 600), (0.0, 0.0)), (800, 600));
 	}
 
@@ -3561,7 +3561,7 @@ mod tests {
 			size_after_rescale((1250, 1000), 1.25, Some((836.88, 914.0)), natural, caps),
 			(1250, 1000)
 		);
-		// each side on its own: the width was dragged, the height was not
+		// each side on its own: the width was dragged, the height wasn't
 		assert_eq!(
 			size_after_rescale((1250, 1143), 1.25, Some((836.88, 914.0)), natural, caps),
 			(1250, 1170)
@@ -3596,7 +3596,7 @@ mod tests {
 	}
 
 	// A notice is whatever was laid out from a notice's paragraphs. Nothing else
-	// says so, so the box's title, focus and OK all follow its source.
+	// says so, so the box's title, focus, and OK all follow its source.
 	// Test ID: ddj86
 	#[test]
 	fn only_a_notice_source_is_a_notice() {
@@ -3611,7 +3611,7 @@ mod tests {
 
 	// A button's caption centers its capitals in the button, as a Settings tab
 	// title does, and the button is tall enough for that with the descenders
-	// clear. Every box with buttons: About, a notice and the tmux question.
+	// clear. Every box with buttons: About, a notice, and the tmux question.
 	// Test ID: df4cw
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
@@ -3649,7 +3649,7 @@ mod tests {
 	}
 
 	// The Support button opens the donation page and shows its address as a
-	// flyover, and the box is wide enough that the flyover is not cut off.
+	// flyover, and the box is wide enough that the flyover isn't cut off.
 	// Test ID: dd5ne
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
@@ -3863,8 +3863,8 @@ mod tests {
 		}
 	}
 
-	// What a frame shapes is exactly the text the last frame did not have, as
-	// tabs, values, scrolling and the window's width change under it. A move or
+	// What a frame shapes is exactly the text the last frame didn't have, as
+	// tabs, values, scrolling, and the window's width change under it. A move or
 	// a new clip is the same text somewhere else.
 	// Test ID: ddgh2
 	#[test]
@@ -4004,8 +4004,8 @@ mod tests {
 	}
 
 	// A kept buffer is found by everything shaping reads. A new color, weight,
-	// font or line box shapes again, and so does a new text context, which is
-	// what a font, size or scale change makes. A new width lays the kept shape
+	// font, or line box shapes again, and so does a new text context, which is
+	// what a font, size, or scale change makes. A new width lays the kept shape
 	// out again, the same as a fresh one.
 	// Test ID: ddgh3
 	#[test]
@@ -4048,7 +4048,7 @@ mod tests {
 		assert_eq!(unique.len(), asks.len());
 		let (_, shapes) = ask_all(&mut shaped, &mut text, 800.0);
 		assert_eq!(shapes, 0, "the same asks a frame later shaped again");
-		// asked twice in one frame: one buffer serves both
+		// asked twice in one frame: one buffer is used for both
 		let again = shaped.buffer(&mut text, "Label", &base, 800.0, line_h);
 		assert_eq!(
 			again,
@@ -4089,7 +4089,7 @@ mod tests {
 	}
 
 	// The layers render draws, in order: the rects each one draws and the text
-	// drawn over them. A layer's text lands on top of every rect in it, whatever
+	// drawn over them. A layer's text draws on top of every rect in it, whatever
 	// order the rects come in.
 	fn passes(scene: &super::Scene) -> Vec<(std::ops::Range<u32>, Vec<&super::Placed>)> {
 		let first = scene.rect_split.max(scene.rows_end) as u32;
@@ -4112,7 +4112,7 @@ mod tests {
 	}
 
 	// Asserts a tip is the last thing a frame draws, alone in its pass, so no
-	// other text can land on top of its box.
+	// other text can draw on top of its box.
 	fn assert_tip_on_top(scene: &super::Scene, shaped: &super::ShapedText, tip: &str, what: &str) {
 		let passes = passes(scene);
 		let (rects, texts) = passes.last().unwrap();
@@ -4142,8 +4142,8 @@ mod tests {
 	}
 
 	// A tip draws over everything a dialog shows: an open dropdown's list, a
-	// field menu, the color picker and the About text alike. The list's text once
-	// shared the tip's pass and landed on top of its box (2026100913394952).
+	// field menu, the color picker, and the About text alike. The list's text once
+	// shared the tip's pass and was drawn on top of its box (2026100913394952).
 	// Test ID: ddwjb
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
@@ -4307,9 +4307,9 @@ mod tests {
 	}
 
 	// A pointer move draws nothing unless something drawn moved with it: a
-	// lit button, or a tip going away. A tip coming due is owed its frame by
-	// the clock, not by the next move, and it is owed it even once the dwell's
-	// wake has passed, since the wake stops answering then.
+	// lit button, or a tip going away. A tip coming due gets its frame from
+	// the clock, not from the next move, and it gets it even once the dwell's
+	// wake has passed, since the wake returns nothing then.
 	// Test ID: ddgh5
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]

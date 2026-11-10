@@ -11,7 +11,7 @@ use crate::config;
 use std::time::{Duration, Instant};
 
 // A rotation folder with nothing picked from it has to be read, or the request
-// answers with no picture at all: a configured folder owns the wallpaper and
+// comes back with no picture at all: a configured folder owns the wallpaper and
 // suppresses the built-in stand-in, so there is nothing left to show. A
 // command-line wallpaper is exempt, since it keeps rotation out of the session.
 fn needs_folder_read(
@@ -55,8 +55,8 @@ impl State {
 
 	/// Hand the wallpaper to a worker thread and carry on drawing. `scan` also
 	/// (re)reads the rotation folder and picks from it. Nothing here waits: the
-	/// folder, the image and its tags can all live on a share that answers slowly,
-	/// which is precisely why none of it runs on this thread.
+	/// folder, the image, and its tags can all be on a slow share, which is why
+	/// none of it runs on this thread.
 	pub(super) fn request_wallpaper(&mut self, scan: bool) {
 		self.post_wallpaper(scan, None);
 	}
@@ -130,7 +130,7 @@ impl State {
 	/// Wallpaper rotation: unless a wallpaper came in on the command line (a
 	/// deliberate choice for this session, which leaves rotation out of it
 	/// entirely), scan the folder and pick one. The timer arms when the scan
-	/// answers - only then do we know whether there is anything to rotate through.
+	/// comes back - only then do we know whether there is anything to rotate through.
 	pub(super) fn init_wallpaper(&mut self, lock: bool) {
 		self.wp_locked = lock;
 		self.request_wallpaper(!lock);
@@ -158,7 +158,7 @@ impl State {
 		}
 		// A request still working (an image slower to prepare than the interval,
 		// or a folder on a slow share) is left to finish. Its arrival re-arms the
-		// timer, or brings the tick back if it was not a rotation itself.
+		// timer, or brings the tick back if it wasn't a rotation itself.
 		if !self.wp_pacing.tick() {
 			self.wp_next = None;
 			return;
@@ -177,15 +177,15 @@ impl State {
 			self.wp_next = Some(Instant::now());
 		}
 		if loaded.scanned {
-			// a scan is authoritative about rotation: no pick means the folder holds
-			// nothing (or went away), so the timer goes with it
+			// a scan is authoritative about rotation: no pick means the folder is
+			// empty (or went away), so the timer goes with it
 			self.wp_count = 0;
 			self.wp_current = None;
 			self.wp_next = None;
 			if let Some(rot) = &loaded.rotation {
 				self.wp_count = rot.count;
 				self.wp_current = Some(rot.current.clone());
-				// live-only: nothing about the pick reaches config.shcl, and the
+				// live-only: nothing about the pick is written to config.shcl, and the
 				// image setting stays automatic, since the folder chose it
 				set_live(|live| live.wallpaper = Some(rot.current.clone()));
 				let ivl = config::settings().wallpaper_rotate_interval_s;
@@ -195,7 +195,7 @@ impl State {
 		}
 		// The derived text and cursor colors follow the picture (autotheme.rs), so
 		// what this one is worth goes live with it. Session state: none of it
-		// reaches the file, the same as a rotated pick.
+		// is written to the file, the same as a rotated pick.
 		let summary = loaded.image.as_ref().map(|img| img.summary);
 		if config::settings().wallpaper_summary != summary {
 			set_live(|live| {
@@ -207,7 +207,7 @@ impl State {
 			self.chrome = None;
 		}
 		// A window without a device drops the pixels: the rebuild asks for the
-		// wallpaper again, and decoding it twice beats holding a copy of it.
+		// wallpaper again, and decoding it twice beats keeping a copy of it.
 		// The stand-in is kept either way, so it is always the newest picture.
 		self.wp_standin = loaded.standin;
 		if self.conserve == Conserve::Restoring {
@@ -220,8 +220,8 @@ impl State {
 		}
 		// prepared for the size the window had when it was asked for
 		self.note_wallpaper_size();
-		// Answered either way: an empty result is the news that there is no
-		// wallpaper to wait for, which settles the question just as well.
+		// Answered either way: an empty result means there's no wallpaper to
+		// wait for.
 		self.wp_answered = true;
 		self.conserve.wallpaper_answered(Instant::now());
 		self.update_title();
@@ -268,7 +268,7 @@ mod tests {
 		assert!(!picks_again(&a, &off), "nothing to pick from");
 	}
 	// Switching the wallpaper off and on again drops the rotation pick, and a
-	// request that does not re-read the folder then answers with nothing at all:
+	// request that doesn't re-read the folder then comes back with nothing at all:
 	// the folder suppresses the built-in, and there is no pick to fall back on.
 	// Test ID: dc7k2
 	#[test]

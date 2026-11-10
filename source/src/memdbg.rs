@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 // Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
 
-//! `SILK_MEMDBG=1` prints what a window holds, on the graphics card and in its
+//! `SILK_MEMDBG=1` prints what a window uses, on the graphics card and in its
 //! own heap, to stderr whenever it changes. The card figures are the
-//! allocator's own (Vulkan and DX12; the GL path keeps no report). The heap
+//! allocator's own (Vulkan and DX12; the GL path has no report). The heap
 //! figures are counted from the structures that grow with use, so they are a
-//! floor: malloc's own overhead and everything else in the process are not in
+//! floor: malloc's own overhead and everything else in the process aren't in
 //! them. See the reducing resources design doc for what they were used for.
 
 use std::collections::BTreeMap;

@@ -1,15 +1,15 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 // Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
 
-//! What a tab says, and how it is shortened to fit.
+//! What a tab says, and how it's shortened to fit.
 //!
 //! What a tab says comes from a template the user can edit (`window.tab_text`,
-//! see `template`). The shipped one reads `<shell> [<task>] <path>`: the shell's
-//! friendly name, the command it is running (or `[last: cmd]` for the one it
-//! just finished), and where it is. A shell that has never run anything drops
+//! see `template`). The default one reads `<shell> [<task>] <path>`: the shell's
+//! friendly name, the command it's running (or `[last: cmd]` for the one it
+//! finished last), and where it is. A shell that has never run anything drops
 //! the brackets and reads `<shell> - <path>` instead.
 //!
-//! When that does not fit, the parts give way in a fixed order, each rung
+//! When that doesn't fit, the parts give way in a fixed order, each rung
 //! strictly narrower than the one above it: a program's own title goes first,
 //! then the shell's name shortens, then the task's name is truncated, then the
 //! path abbreviates, then the task goes altogether, then the path does, and the
@@ -21,32 +21,32 @@
 //!
 //! The path is shortened the way `PyCmd`'s prompt does it: every directory above
 //! the current one drops to its first character, and only if that is still too
-//! wide does an ellipsis eat the middle. Two things survive every step, because
-//! they are what make the text read as a location rather than as a command: the
-//! anchor it starts from (the drive on Windows, `/` or `~` elsewhere) and the
-//! separator it ends with.
+//! wide does an ellipsis eat the middle. A pair of things survive every step,
+//! because they're what make the text read as a location rather than as a
+//! command: the anchor it starts from (the drive on Windows, `/` or `~`
+//! elsewhere) and the separator it ends with.
 //!
-//! Everything here is pure, and the path style is PASSED IN rather than read off
-//! `cfg!` - which is the only reason the Windows forms and the posix ones are
-//! both covered by tests from whichever box happens to be running them.
+//! Everything here is pure, and the path style is passed in rather than read off
+//! `cfg!`, so the Windows forms and the posix ones are both covered by tests on
+//! whichever box runs them.
 //!
-//! The window title is decided here too (`window_suffix`), because it is built
+//! The window title is worked out here too (`window_suffix`), because it is built
 //! from the same parts and falls back to the tab's own label.
 
 use crate::template::{self, Template};
 
-// Three dots rather than U+2026: a tab is drawn in the desktop interface font,
-// and not every one of those carries the single-glyph ellipsis.
+// A run of 3 dots rather than U+2026: a tab is drawn in the desktop interface font,
+// and not every one of those has the single-glyph ellipsis.
 const ELLIPSIS: &str = "...";
 
-/// Which spelling of a path we are shortening.
+/// Which spelling of a path we're shortening.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Style {
 	/// Backslashes, anchored on a drive (`C:\`) or a UNC share. No `~`: neither
 	/// cmd nor PowerShell writes one, so a tab showing one would be inventing a
-	/// spelling the shell itself does not use.
+	/// spelling the shell itself doesn't use.
 	Windows,
-	/// Forward slashes, anchored on `/` - or on `~` when the path is inside the
+	/// Forward slashes, anchored on `/`, or on `~` when the path is inside the
 	/// home directory, which is how every shell there prints it.
 	Posix,
 }
@@ -87,8 +87,8 @@ pub enum Task<'a> {
 	Last(&'a str),
 }
 
-// Hand-picked short forms for the shell names we ship (the titles in shells.rs
-// KNOWN, and the Windows extras beside it). A name the user has renamed is not
+// Hand-picked short forms for the built-in shell names (the titles in shells.rs
+// KNOWN, and the Windows extras beside it). A name the user has renamed isn't
 // on this list and takes the derived forms instead, which is the point of
 // having both: "Cmd" is what a person writes for the Command Prompt, and
 // nothing mechanical gets there from "Windows Cmd".
@@ -113,7 +113,7 @@ const SHORT_SHELLS: &[(&str, &str, &str)] = &[
 ];
 
 /// The shell's name, longest form first: as it reads, then shortened, then cut
-/// to the least that still names it. A shipped name has its forms written out
+/// to the least that still names it. A built-in name has its forms written out
 /// (`SHORT_SHELLS`); anything else is derived from the words in the name.
 pub fn shell_forms(name: &str) -> Vec<String> {
 	let name = name.trim();
@@ -136,8 +136,8 @@ pub fn shell_forms(name: &str) -> Vec<String> {
 
 // The part of a name worth keeping. A WSL entry is named for its distribution
 // ("WSL2; Ubuntu"), and a variant is named for what it varies from ("Zsh (no
-// rc)") - the star is all that is left of that qualifier, so two tabs reading
-// "Zsh" and "Zsh*" at least say that one of them is not the ordinary one.
+// rc)"). The star is all that's left of that qualifier, so 2 tabs reading
+// "Zsh" and "Zsh*" at least show that one of them isn't the ordinary one.
 fn core_name(name: &str) -> (&str, bool) {
 	let head = name.split_once('(').map_or(name, |(head, _)| head).trim();
 	let varied = head.len() != name.len();
@@ -162,8 +162,8 @@ fn derived_tiny(name: &str) -> String {
 	initials(core, 2)
 }
 
-// One letter per word, plus whatever digits the name ends in - a version number
-// is most of what tells two shells of the same family apart.
+// One letter per word, plus whatever digits the name ends in, since a version
+// number is most of what tells 2 shells of the same family apart.
 fn initials(core: &str, words: usize) -> String {
 	let digits: Vec<char> = core
 		.chars()
@@ -184,9 +184,9 @@ fn initials(core: &str, words: usize) -> String {
 	}
 }
 
-/// A program's name, longest first: as it is, then cut from its tail. WHICH
+/// A program's name, longest first: as it is, then cut from its tail. Which
 /// command it is matters more than the end of its name, so the head is what
-/// stays. The template puts any `last:` or brackets round it.
+/// stays. The template puts any `last:` or brackets around it.
 fn task_name_forms(program: &str) -> Vec<String> {
 	let program = program.trim();
 	if program.is_empty() {
@@ -194,8 +194,8 @@ fn task_name_forms(program: &str) -> Vec<String> {
 	}
 	let mut forms = vec![program.to_string()];
 	let mut keep = program.chars().count();
-	// Halve until what is kept says nothing. An ellipsis costs three columns, so
-	// the first cuts of a short name are no shorter than the name itself -
+	// Halve until what is kept says nothing. An ellipsis costs 3 columns, so
+	// the first cuts of a short name are no shorter than the name itself.
 	// push_shorter drops those, and a name too short to cut yields no rung.
 	while keep > 3 {
 		keep /= 2;
@@ -208,7 +208,7 @@ fn task_name_forms(program: &str) -> Vec<String> {
 /// What the terminal's own rights mean for its title.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Rights {
-	/// The word the window title starts with, while the terminal holds them.
+	/// The word the window title starts with, while the terminal has them.
 	pub say: Option<&'static str>,
 	/// Whether a console here writes that same word into the first title it
 	/// sends. Windows does; nothing on unix decorates a title.
@@ -216,7 +216,7 @@ pub struct Rights {
 }
 
 impl Rights {
-	/// The word a console has already written into a title, so it is not said
+	/// The word a console has already written into a title, so it isn't said
 	/// twice. Kept derived rather than stored: a word to take off that nothing
 	/// would put back could only destroy somebody's own text.
 	fn console_marker(self) -> Option<&'static str> {
@@ -229,10 +229,10 @@ impl Rights {
 /// The desktop draws a window title in places that treat it as text and nothing
 /// else: a task bar, a window list, an alt-tab switcher. The engine hands the
 /// string over as the program spelled it, control characters included, so they
-/// come off here - at the one place a program's title arrives - rather than at
-/// each of the several places it is later shown.
+/// come off here, at the one place a program's title comes in, rather than at
+/// each of the several places it's later shown.
 ///
-/// Only the characters that are not text: the C0 controls, delete, and the C1
+/// Only the characters that aren't text: the C0 controls, delete, and the C1
 /// range that a stray high byte decodes into. A right-to-left override survives,
 /// which does let a title read back to front; that is the same reordering any
 /// file name can ask for, and refusing it here would also refuse the joiners
@@ -249,14 +249,14 @@ pub fn plain(title: &str) -> String {
 /// What a title set by the running program is worth showing, if anything.
 ///
 /// A Windows console names a new window after the program it starts, so a shell
-/// that sets no title of its own arrives carrying its own image path - measured
-/// for cmd and for pwsh on two machines. That says less than the tab's own
-/// label, so it is passed over.
+/// that sets no title of its own arrives with its own image path. That was
+/// measured for cmd and for pwsh on 2 machines. It says less than the tab's own
+/// label, so it's passed over.
 fn program_says<'a>(title: &'a str, marker: Option<&str>) -> Option<&'a str> {
 	let mut title = title.trim_start();
 	// While elevated, a Windows console writes its own rights in front of the
-	// first title it sends, which is the one naming the program it started -
-	// measured over a pseudoconsole on two machines. Both halves say nothing, so
+	// first title it sends, which is the one naming the program it started. That
+	// was measured over a pseudoconsole on 2 machines. Both halves say nothing, so
 	// the rights come off here and the name is dropped below. Only the exact word
 	// about to be put back is taken off, so a title that merely reads like one
 	// survives. A console in another language is caught by `foreign_marker_off`.
@@ -271,12 +271,12 @@ fn program_says<'a>(title: &'a str, marker: Option<&str>) -> Option<&'a str> {
 	}
 	// A console that names the program and then the command it is running: the
 	// command is the half that says something. The name has to be a full path,
-	// which is what a console writes there - a bare one would eat the file name
+	// which is what a console writes there, and a bare one would eat the file name
 	// in vim's "build.bat - VIM".
 	if let Some((head, rest)) = title.split_once(" - ") {
 		let head = head.trim();
 		if is_absolute(head) && is_program_name(head) {
-			// The title was trimmed, so what follows the separator cannot be blank.
+			// The title was trimmed, so what follows the separator can't be blank.
 			return Some(rest.trim());
 		}
 	}
@@ -285,13 +285,13 @@ fn program_says<'a>(title: &'a str, marker: Option<&str>) -> Option<&'a str> {
 
 // Nothing but the name of a program, or a path to one. Only a Windows console
 // writes such a title, but the test is the same everywhere: an executable
-// extension is the only handle there is, and a posix path does not carry one.
+// extension is the only handle there is, and a posix path doesn't have one.
 fn is_program_name(title: &str) -> bool {
 	if program_ext(title).is_none() {
 		return false;
 	}
 	// A file name with a space in it could be anything, and so could a sentence
-	// ending in one. Only a path may carry a space, and only above its last part.
+	// ending in one. Only a path may have a space, and only above its last part.
 	let last = &title[title.rfind(['\\', '/']).map_or(0, |at| at + 1)..];
 	!last.contains(char::is_whitespace)
 		&& (is_absolute(title) || !title.contains(char::is_whitespace))
@@ -299,7 +299,7 @@ fn is_program_name(title: &str) -> bool {
 
 // Where the extension's dot is, if the name ends in one a program runs from.
 // `.com` is left out. Far more titles end in a hostname or a directory than in
-// one of the three DOS-era programs that still use that extension.
+// one of the 3 DOS-era programs that still use that extension.
 fn program_ext(name: &str) -> Option<usize> {
 	let dot = name.rfind('.')?;
 	["exe", "bat", "cmd"]
@@ -316,7 +316,7 @@ fn program_stem(path: &str) -> &str {
 }
 
 // An elevated console in another language writes another word in front of the
-// program it started, so the word cannot be matched. What follows it can: the
+// program it started, so the word can't be matched. What follows it can: the
 // path of the program this pane was started with. Only the file name counts,
 // since a console spells the folders its own way (`C:\WINDOWS\system32`).
 fn foreign_marker_off<'a>(title: &'a str, launched: &str) -> &'a str {
@@ -346,7 +346,7 @@ fn is_absolute(path: &str) -> bool {
 
 /// What a program's own title is worth showing, if anything: a console's own
 /// decoration taken off, and a title that only names the program dropped. The
-/// window title and the tab strip both read it here, so they cannot end up
+/// window title and the tab strip both read it here, so they can't end up
 /// disagreeing about what a program said.
 ///
 /// `launched` is the program the pane was started with, which is how a console
@@ -368,11 +368,11 @@ pub fn program_title<'a>(
 /// tab wins; blanking that one on purpose lets the running program's own title
 /// through, and with neither the tab's own label stands in.
 ///
-/// A typed title is shown as typed - the tab shows it that way too - while a
+/// A typed title is shown as typed, as the tab shows it too, while a
 /// program's is trimmed, since nobody chose its spacing, and has any marker a
 /// console wrote into it taken off. `launched` is the program the pane was
 /// started with, which is how that marker is known in any language. `tab` is
-/// only asked for when it is needed, since working it out is not free.
+/// only worked out when it's needed, since that isn't free.
 pub fn window_suffix(
 	rights: Rights,
 	typed: Option<&str>,
@@ -384,7 +384,7 @@ pub fn window_suffix(
 	let program = program.and_then(|title| program_title(rights, title, launched));
 	// With the tab switched off as a source, both of its answers go: the name
 	// typed on it and the text it works out for itself. A program's own title
-	// still comes through, and a `--title` never reached here.
+	// still comes through, and a `--title` never gets here.
 	if !show_tab {
 		return program.map(str::to_string);
 	}
@@ -451,7 +451,7 @@ const RUNNING: usize = 3;
 const LAST: usize = 4;
 const DIRECTORY: usize = 5;
 
-/// What a tab says unless told otherwise. It reads the same as the four check
+/// What a tab says unless told otherwise. It reads the same as the 4 check
 /// boxes it replaced did with all of them on (`tab_text_for`).
 pub const DEFAULT_TAB_TEXT: &str = "%USER_DEFINED% || %PROGRAM_DEFINED% || { %SHELL% {[{ %PROGRAM% || last: %LAST_PROGRAM% }] || -} %CURRENT_DIRECTORY% }";
 
@@ -460,9 +460,9 @@ pub fn tab_template(text: &str) -> Result<Template, template::Error> {
 	Template::parse(text, &TAB_MACROS)
 }
 
-/// The template tabs use: `text`, or the shipped one where `text` is blank or
+/// The template tabs use: `text`, or the default one where `text` is blank or
 /// can't be read. A tab that says something normal is better than one that
-/// shows the mistake; the Settings row says what is wrong with it.
+/// shows the mistake; the Settings row says what's wrong with it.
 pub fn tab_template_or_default(text: &str) -> Template {
 	// `the_shipped_tab_text_reads` parses it, so this can't fail in a tested build
 	let shipped = || tab_template(DEFAULT_TAB_TEXT).unwrap_or_else(|_| unreachable!());
@@ -473,7 +473,7 @@ pub fn tab_template_or_default(text: &str) -> Template {
 }
 
 /// The check boxes the tab text replaced, as an older config has them. All on
-/// is what shipped.
+/// was the default.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Parts {
 	pub title: bool,
@@ -553,9 +553,9 @@ pub fn label_forms(template: &Template, facts: Facts, style: Style) -> Vec<Strin
 	// Every part of a label is a program's own text: a process can rename itself
 	// and a directory name arrives in an archive or a checkout. None of it has
 	// been through `plain` on the way here, and a label is drawn by the tab
-	// strip and stands in for the window title, so it is held to the same rule a
+	// strip and stands in for the window title, so it's held to the same rule a
 	// title is. Cleaned on the way in rather than on the way out, so the rungs
-	// below are measured against what will actually be drawn. A typed name is
+	// below are measured against what will be drawn. A typed name is
 	// shown as typed.
 	let friendly = plain(facts.shell);
 	let title = facts.title.map(plain).filter(|title| !title.is_empty());
@@ -578,7 +578,7 @@ pub fn label_forms(template: &Template, facts: Facts, style: Style) -> Vec<Strin
 		.unwrap_or_default();
 	let full_name = shells.first().map_or("", String::as_str);
 	// The last form is always the shortest; the middle rung only exists when
-	// there are three of them, and a name with no middle rung keeps its own.
+	// there are 3 of them, and a name with no middle rung keeps its own.
 	let tiny_name = (shells.len() > 1).then(|| shells[shells.len() - 1].as_str());
 	let short_name = if shells.len() >= 3 {
 		shells[1].as_str()
@@ -601,7 +601,7 @@ pub fn label_forms(template: &Template, facts: Facts, style: Style) -> Vec<Strin
 	};
 
 	// The order the parts give way in. Each is only a candidate: push_shorter
-	// keeps the ones that actually buy width, so a part with nothing left to
+	// keeps the ones that buy width, so a part with nothing left to
 	// give (a one-directory path, a short program name) costs no rungs at all.
 	let mut forms = vec![fill(None, full_name, first_task, first_path)];
 	push_shorter(&mut forms, fill(None, short_name, first_task, first_path));
@@ -655,8 +655,8 @@ pub fn path_forms(raw: &str, home: Option<&str>, style: Style) -> Vec<String> {
 	let mut forms = vec![join(&parts)];
 	let last = parts.len() - 1;
 	// The ellipsis eats the middle a directory at a time, and what is left of the
-	// path keeps its real names. It costs four columns where a whole name costs
-	// more, so the first steps are LONGER than what they replace - push_shorter
+	// path keeps its real names. It costs 4 columns where a whole name costs
+	// more, so the first steps are longer than what they replace. push_shorter
 	// drops those, which is what "only if it shortens further" means here.
 	for keep in (0..last).rev() {
 		let mut items = parts[..keep].to_vec();
@@ -664,7 +664,7 @@ pub fn path_forms(raw: &str, home: Option<&str>, style: Style) -> Vec<String> {
 		items.push(parts[last].clone());
 		push_shorter(&mut forms, join(&items));
 	}
-	// Initials for everything ABOVE the current directory, which stays whole.
+	// Initials for everything above the current directory, which stays whole.
 	// Only a shallow path gets here: on a deep one the ellipsis has already
 	// covered more ground than a column of single letters would.
 	let abbreviated: Vec<String> = parts
@@ -732,14 +732,14 @@ fn posix_anchor<'a>(path: &'a str, home: Option<&str>) -> (String, &'a str) {
 	}
 	match path.strip_prefix('/') {
 		Some(rest) => ("/".to_string(), rest),
-		// Not absolute, so there is no anchor to promise - show it as it came.
+		// Not absolute, so there's no anchor to promise. Show it as it came.
 		None => (String::new(), path),
 	}
 }
 
 fn windows_anchor(path: &str) -> (String, &str) {
 	let bytes = path.as_bytes();
-	// A UNC path's share IS its root: \\server\share\... anchors on the share,
+	// A UNC path's share is its root: \\server\share\... anchors on the share,
 	// since neither half alone names a place anything can be opened.
 	if bytes.len() >= 2 && (bytes[0] == b'\\' || bytes[0] == b'/') && bytes[0] == bytes[1] {
 		let rest = &path[2..];
@@ -771,7 +771,7 @@ fn windows_anchor(path: &str) -> (String, &str) {
 }
 
 /// What one tab asks the bar for, in pixels: the width its longest label wants,
-/// and the least it can be given and still say anything - which is the width of
+/// and the least it can be given and still say anything, which is the width of
 /// its shortest label, the one that is nothing but a short shell name.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Demand {
@@ -779,10 +779,10 @@ pub struct Demand {
 	pub floor: f32,
 }
 
-// The two percentages read as a range rather than as two independent numbers:
+// The 2 percentages read as a range rather than as 2 independent numbers:
 // the config clamps them on load, but the Settings dialog hands its edits
-// straight over, and a maximum dragged below the regular width must not make
-// this answer something absurd.
+// straight over, and a maximum dragged below the regular width mustn't make
+// this return something absurd.
 fn bounds(total: f32, regular_pct: f32, max_pct: f32) -> (f32, f32) {
 	let total = total.max(0.0);
 	let regular = total * (regular_pct.min(max_pct) / 100.0);
@@ -790,19 +790,19 @@ fn bounds(total: f32, regular_pct: f32, max_pct: f32) -> (f32, f32) {
 	(regular, max)
 }
 
-/// How wide each tab on the page is. `active` is the SLOT of the tab in front,
+/// How wide each tab on the page is. `active` is the slot of the tab in front,
 /// where it is on this page at all.
 ///
-/// The regular width is a TARGET, not a share: with room to spare every tab
-/// sits at it, and the bar simply ends early rather than stretching a couple of
+/// The regular width is a target, not a share: with room to spare every tab
+/// sits at it, and the bar ends early rather than stretching a couple of
 /// tabs across the window. A tab whose label wants more grows past it, up to
 /// the maximum; a crowded bar pushes every tab back below it, down to its own
 /// floor. Whatever room is left over after all that stays empty.
 ///
-/// The tab in front is the exception, since it is the one being read. It takes
+/// The tab in front is the exception, since it's the one being read. It takes
 /// what the row can spare before any other tab grows past its ordinary width,
-/// and it is not held to the maximum - room it does not take is no use to tabs
-/// that are already at the cap.
+/// and it isn't held to the maximum, since room it doesn't take is no use to
+/// tabs that are already at the cap.
 pub fn widths(
 	total: f32,
 	demands: &[Demand],
@@ -815,7 +815,7 @@ pub fn widths(
 	let mut alloc = floors.clone();
 	let mut spare = total.max(0.0) - floors.iter().sum::<f32>();
 	// Every tab up to the regular width first, and only then the ones whose
-	// labels want more - so a long path never takes room another tab needs to
+	// labels want more, so a long path never takes room another tab needs to
 	// reach its ordinary size.
 	let target: Vec<f32> = floors.iter().map(|f| f.max(regular)).collect();
 	spread(&mut alloc, &target, &mut spare);
@@ -838,7 +838,7 @@ pub fn widths(
 }
 
 // Hand out `spare` toward `upto`, in proportion to what each tab still asks
-// for - so when there is not enough to go round, every tab gets the same
+// for, so when there isn't enough to go around, every tab gets the same
 // fraction of the way there rather than the first few taking it all.
 fn spread(alloc: &mut [f32], upto: &[f32], spare: &mut f32) {
 	if *spare <= 0.0 {
@@ -862,11 +862,11 @@ fn spread(alloc: &mut [f32], upto: &[f32], spare: &mut f32) {
 
 /// How many tabs the bar can show at once, starting at `first`: as many as fit
 /// side by side at their floors. Always at least one, however narrow the
-/// window - a tab bar showing no tab is worse than one showing a clipped tab.
+/// window, since a tab bar showing no tab is worse than one showing a clipped tab.
 ///
-/// The floor is why the strip PAGES. A tab that yielded past the point where
+/// The floor is why the strip pages. A tab that yielded past the point where
 /// its label says anything would make the setting meaningless; honoring it
-/// means some tabs do not fit, and the strip shows a page of them instead.
+/// means some tabs don't fit, and the strip shows a page of them instead.
 pub fn tabs_that_fit(total: f32, floors: &[f32], first: usize) -> usize {
 	let mut used = 0.0;
 	let mut fit = 0;
@@ -880,7 +880,7 @@ pub fn tabs_that_fit(total: f32, floors: &[f32], first: usize) -> usize {
 	fit.max(1)
 }
 
-/// Which tab the strip starts at, given where it WANTS to start: pulled back so
+/// Which tab the strip starts at, given where it wants to start: pulled back so
 /// the last page is full rather than half-empty.
 pub fn clamp_page(want: usize, floors: &[f32], total: f32) -> usize {
 	let mut first = want.min(floors.len().saturating_sub(1));
@@ -892,10 +892,10 @@ pub fn clamp_page(want: usize, floors: &[f32], total: f32) -> usize {
 
 /// The page holding `active`, moving as little as possible from `want`.
 ///
-/// Deliberately NOT applied on every read of the strip. A page that is forced
-/// to hold the active tab at all times is a page the wheel can never leave -
+/// Deliberately not applied on every read of the strip. A page that is forced
+/// to hold the active tab at all times is a page the wheel can never leave,
 /// and leaving it is the one thing the wheel is for. So this runs when the
-/// active tab CHANGES, and browsing is free in between.
+/// active tab changes, and browsing is free in between.
 pub fn page_for(want: usize, active: usize, floors: &[f32], total: f32) -> usize {
 	let mut first = clamp_page(want, floors, total);
 	if active < first {
@@ -916,9 +916,9 @@ pub fn slot_x(widths: &[f32], slot: usize) -> f32 {
 	widths.iter().take(slot).sum()
 }
 
-/// Which slot on the page a pointer at `x` is over - the exact inverse of
+/// Which slot on the page a pointer at `x` is over. It's the exact inverse of
 /// `slot_x`, and the only thing a hit test may use. Drawing and hit-testing
-/// reading two different answers is how a click hits a tab other than the
+/// reading 2 different answers is how a click hits a tab other than the
 /// one under the pointer.
 pub fn slot_at_x(widths: &[f32], x: f32) -> Option<usize> {
 	if x < 0.0 {
@@ -935,10 +935,10 @@ pub fn slot_at_x(widths: &[f32], x: f32) -> Option<usize> {
 }
 
 /// One value on a hover-tip line, quoted only where the eye needs the boundary:
-/// a value carrying a space or a quote character. Which quote is picked follows
-/// the config file's own habit - single ones around a value that already holds
+/// a value with a space or a quote character. Which quote is picked follows
+/// the config file's own habit. Single ones go around a value that already has
 /// double quotes, so a Windows command line reads inside them rather than
-/// fighting them - and a value holding both is escaped instead.
+/// fighting them, and a value with both is escaped instead.
 pub fn tip_value(value: &str) -> String {
 	let has_double = value.contains('"');
 	let has_single = value.contains('\'');
@@ -956,10 +956,10 @@ pub fn tip_value(value: &str) -> String {
 
 /// The tip's lines: every value starts at one column, so the pairs read down the
 /// left the way a table does. This is the whole reason the tip is drawn in the
-/// TERMINAL font rather than the interface one - padding with spaces aligns
-/// nothing in a proportional face. The KEY is padded, never the value, so a long
-/// path runs on to the right and the box grows for it instead of the column
-/// moving.
+/// terminal font rather than the interface one, since padding with spaces
+/// aligns nothing in a proportional face. The key is padded, never the value,
+/// so a long path runs on to the right and the box grows for it instead of the
+/// column moving.
 pub fn tip_lines(rows: &[(&str, String)]) -> Vec<String> {
 	let key_w = rows
 		.iter()
@@ -975,8 +975,8 @@ pub fn tip_lines(rows: &[(&str, String)]) -> Vec<String> {
 }
 
 /// How long a tab has been open, at the coarseness a person reads at a glance.
-/// Two units is the most that stays legible in a tip line, and the smaller of
-/// the two is zero-padded so the width does not jump as it ticks.
+/// At most 2 units stay legible in a tip line, and the smaller of the 2 is
+/// zero-padded so the width doesn't jump as it ticks.
 pub fn elapsed(secs: u64) -> String {
 	const MINUTE: u64 = 60;
 	const HOUR: u64 = 60 * MINUTE;
@@ -1001,7 +1001,7 @@ mod tests {
 		tip_lines, tip_value, widths, window_suffix, window_title, with_note,
 	};
 
-	// The tests below were written against the four check boxes, so they ask in
+	// The tests below were written against the 4 check boxes, so they ask in
 	// those terms and get the template that says the same.
 	pub(super) fn label_forms(
 		friendly: &str,
@@ -1043,8 +1043,8 @@ mod tests {
 		program_says(title, None)
 	}
 
-	// The tip is a table, so a value carries quotes only where its own edges are
-	// in doubt. Quoting everything would put them round every friendly shell name
+	// The tip is a table, so a value gets quotes only where its own edges are
+	// in doubt. Quoting everything would put them around every friendly shell name
 	// and every clock reading in the box.
 	// Test ID: dbjnc
 	#[test]
@@ -1057,9 +1057,9 @@ mod tests {
 			tip_value(r#""C:\Program Files\pwsh.exe" -NoLogo"#),
 			r#"'"C:\Program Files\pwsh.exe" -NoLogo'"#
 		);
-		// both kinds present: escape, rather than pick a quote that cannot close
+		// both kinds present: escape, rather than pick a quote that can't close
 		assert_eq!(tip_value(r#"say "it's""#), r#""say \"it's\"""#);
-		// a lone apostrophe still needs a boundary drawn round it
+		// a lone apostrophe still needs a boundary drawn around it
 		assert_eq!(tip_value("it's"), "\"it's\"");
 	}
 
@@ -1076,7 +1076,7 @@ mod tests {
 		assert_eq!(lines[0], "Shell name:    Bash");
 		assert_eq!(lines[1], "Shell command: /bin/bash");
 		assert_eq!(lines[2], "Open:          1m 26s");
-		// and as the property rather than three strings: one column for them all
+		// and as the property rather than 3 strings: one column for them all
 		let value_col = |line: &str| {
 			let colon = line.find(':').expect("a key");
 			line[colon..]
@@ -1114,12 +1114,12 @@ mod tests {
 		let home = Some("/home/jim");
 		assert_eq!(path_forms("/home/jim", home, Style::Posix), vec!["~/"]);
 		assert_eq!(path_forms("/home/jim/dev", home, Style::Posix)[0], "~/dev/");
-		// A path that merely SHARES the prefix is not inside it.
+		// A path that merely shares the prefix isn't inside it.
 		assert_eq!(
 			path_forms("/home/jimbo/dev", home, Style::Posix)[0],
 			"/home/jimbo/dev/"
 		);
-		// Windows keeps the drive - the shells there never print a tilde.
+		// Windows keeps the drive, since the shells there never print a tilde.
 		assert_eq!(
 			path_forms(r"C:\Users\jim\dev", Some(r"C:\Users\jim"), Style::Windows)[0],
 			r"C:\Users\jim\dev\"
@@ -1154,8 +1154,8 @@ mod tests {
 		assert_eq!(path_forms("/.config/x", None, Style::Posix)[2], "/.c/x/");
 	}
 
-	// An ellipsis only earns its place where it is shorter than what it covers -
-	// four columns against a whole directory name.
+	// An ellipsis only earns its place where it's shorter than what it covers:
+	// 4 columns against a whole directory name.
 	// Test ID: dbje2
 	#[test]
 	fn an_ellipsis_only_appears_where_it_shortens() {
@@ -1170,7 +1170,7 @@ mod tests {
 			"{} is not shorter than {before}",
 			forms[first_ellipsis]
 		);
-		// Two directories cannot be beaten by an ellipsis, so none is offered
+		// With 2 directories an ellipsis can't win, so none is offered
 		// until the anchor-only form at the end.
 		let shallow = path_forms(r"C:\a\project", None, Style::Windows);
 		assert_eq!(shallow, vec![r"C:\a\project\", r"C:\...\"]);
@@ -1209,7 +1209,7 @@ mod tests {
 	// Test ID: dbje5
 	#[test]
 	fn a_path_reported_with_forward_slashes_still_reads_as_windows() {
-		// OSC 7 carries a URL, so a Windows shell reporting through it sends
+		// OSC 7 sends a URL, so a Windows shell reporting through it sends
 		// forward slashes for a path the tab must still draw with backslashes.
 		assert_eq!(
 			path_forms("C:/Users/jim/dev", None, Style::Windows)[0],
@@ -1217,19 +1217,19 @@ mod tests {
 		);
 	}
 
-	// A shipped name is shortened the way a person would write it; "Cmd" is not
+	// A built-in name is shortened the way a person would write it; "Cmd" isn't
 	// something a rule gets to from "Windows Cmd".
 	// Test ID: dbnj6
 	#[test]
 	fn a_known_shell_name_has_hand_picked_short_forms() {
 		assert_eq!(shell_forms("Windows Cmd"), ["Windows Cmd", "Cmd", "C"]);
 		assert_eq!(shell_forms("PowerShell 7"), ["PowerShell 7", "PS 7", "P7"]);
-		// a curated short form that is already the shortest yields two rungs
+		// a curated short form that is already the shortest yields 2 rungs
 		assert_eq!(shell_forms("Nushell"), ["Nushell", "Nu"]);
 	}
 
 	// Rename a shell and the table no longer knows it, so the forms are derived.
-	// A name short enough to keep whole yields one shorter rung, not two.
+	// A name short enough to keep whole yields one shorter rung, not 2.
 	// Test ID: dbnj7
 	#[test]
 	fn a_renamed_shell_falls_back_to_derived_forms() {
@@ -1238,11 +1238,11 @@ mod tests {
 			shell_forms("My Build Shell"),
 			["My Build Shell", "MBS", "MB"]
 		);
-		// the version digits survive, since they are what tell a family apart -
-		// and a name whose two derived forms agree yields only one rung
+		// the version digits survive, since they're what tell a family apart,
+		// and a name whose 2 derived forms agree yields only one rung
 		assert_eq!(shell_forms("Fancy Shell 9"), ["Fancy Shell 9", "FS9"]);
 		// a distribution is named for itself, and a variant keeps a mark saying
-		// it is not the ordinary one
+		// it isn't the ordinary one
 		assert_eq!(shell_forms("WSL2; Ubuntu"), ["WSL2; Ubuntu", "Ubuntu", "U"]);
 		assert_eq!(shell_forms("Zsh (no rc)"), ["Zsh (no rc)", "Zsh*", "Z"]);
 		assert!(shell_forms("").is_empty());
@@ -1261,7 +1261,7 @@ mod tests {
 				"[last: doc...]"
 			]
 		);
-		// a name too short to cut offers nothing to cut: three dots cost more
+		// a name too short to cut offers nothing to cut: 3 dots cost more
 		// than the letters they replace
 		assert_eq!(task_forms(Some(Task::Running("cargo"))), ["[cargo]"]);
 		assert!(task_forms(None).is_empty());
@@ -1296,7 +1296,7 @@ mod tests {
 		);
 	}
 
-	// An idle tab keeps the dash, since there is no bracket to separate the name
+	// An idle tab keeps the dash, since there's no bracket to separate the name
 	// from the path.
 	// Test ID: dbnja
 	#[test]
@@ -1327,7 +1327,7 @@ mod tests {
 		);
 	}
 
-	// Each of the three parts can be switched off on its own, and the rungs are
+	// Each of the 3 parts can be switched off on its own, and the rungs are
 	// built out of what is left rather than shortened out of the full label.
 	// Test ID: dcwj7
 	#[test]
@@ -1367,7 +1367,7 @@ mod tests {
 			}),
 			"PowerShell 7 [cargo]"
 		);
-		// Every part off still names the shell. A tab with no text at all cannot
+		// Every part off still names the shell. A tab with no text at all can't
 		// be told from the one beside it.
 		let none = Parts {
 			title: false,
@@ -1376,8 +1376,8 @@ mod tests {
 			directory: false,
 		};
 		assert_eq!(label(none), "PowerShell 7");
-		// and the ladder is built from what is left, not cut down from the full
-		// label - with the directory off there is no path rung to give up
+		// and the ladder is built from what is left rather than cut down from the
+		// full label. With the directory off there's no path rung to give up
 		let kept = label_forms(
 			"PowerShell 7",
 			None,
@@ -1542,7 +1542,7 @@ mod tests {
 		}
 	}
 
-	// The regular width is a target, not a share: three tabs on a wide bar sit
+	// The regular width is a target, not a share: 3 tabs on a wide bar sit
 	// at it and leave the rest of the bar empty.
 	// Test ID: dbnjc
 	#[test]
@@ -1561,7 +1561,7 @@ mod tests {
 	}
 
 	// A label that wants more gets more, and only after every other tab has its
-	// regular width - a long path may not cost another tab its ordinary size.
+	// regular width. A long path may not cost another tab its ordinary size.
 	// Test ID: dbnjd
 	#[test]
 	fn a_long_label_grows_its_own_tab_and_no_other() {
@@ -1580,7 +1580,7 @@ mod tests {
 		assert_eq!(widths(1000.0, &demands, 10.0, 25.0, None), [250.0, 100.0]);
 	}
 
-	// The tab in front is the one being read, so it spells its label out with
+	// The tab in front is the one being read, so it shows its full label with
 	// whatever the row can spare: past the maximum, and ahead of any other tab
 	// growing beyond its ordinary width.
 	// Test ID: dcwr8
@@ -1605,7 +1605,7 @@ mod tests {
 			widths(1000.0, &demands, 10.0, 25.0, None),
 			[200.0, 250.0, 200.0]
 		);
-		// In front, it takes the bar less the other two at their regular width.
+		// In front, it takes the bar less the other 2 at their regular width.
 		let w = widths(1000.0, &demands, 10.0, 25.0, Some(1));
 		assert_eq!(w, [100.0, 800.0, 100.0]);
 		// and it may still not take what another tab needs to be ordinary
@@ -1618,8 +1618,8 @@ mod tests {
 		);
 	}
 
-	// Being in front buys nothing the label does not ask for, and nothing the
-	// row has not got.
+	// Being in front buys nothing the label doesn't ask for, and nothing the
+	// row hasn't got.
 	// Test ID: dcwr9
 	#[test]
 	fn the_tab_in_front_asks_for_no_more_than_its_label_wants() {
@@ -1654,7 +1654,7 @@ mod tests {
 	}
 
 	// A crowded bar pushes every tab back below the regular width by the same
-	// fraction, down to the floor - and no further, which is why the strip pages.
+	// fraction, down to the floor and no further, which is why the strip pages.
 	// Test ID: dbnje
 	#[test]
 	fn a_crowded_bar_shrinks_every_tab_alike_and_stops_at_the_floor() {
@@ -1682,7 +1682,7 @@ mod tests {
 	#[test]
 	fn switching_tabs_brings_the_new_one_onto_the_page() {
 		let floors = vec![100.0; 12];
-		let total = 400.0; // four tabs to a page
+		let total = 400.0; // 4 tabs to a page
 		for active in 0..12 {
 			for want in 0..12 {
 				let first = page_for(want, active, &floors, total);
@@ -1699,7 +1699,7 @@ mod tests {
 		assert_eq!(page_for(3, 2, &[100.0; 4], 800.0), 0);
 	}
 
-	// ...but browsing must not be yanked back. A strip that always held the
+	// But browsing mustn't be yanked back. A strip that always held the
 	// active tab could never be paged away from it, which is the whole point of
 	// being able to page at all.
 	// Test ID: dbje7
@@ -1708,13 +1708,13 @@ mod tests {
 		let floors = vec![100.0; 12];
 		assert_eq!(clamp_page(5, &floors, 400.0), 5);
 		assert_eq!(clamp_page(0, &floors, 400.0), 0);
-		// It still cannot run off the end, nor show a half-empty last page.
+		// It still can't run off the end, nor show a half-empty last page.
 		assert_eq!(clamp_page(11, &floors, 400.0), 8);
 		assert_eq!(clamp_page(3, &[100.0; 4], 800.0), 0);
 	}
 
-	// Drawing and hit-testing have to be the same answer read two ways, now that
-	// the tabs on a page are no longer one width apiece - otherwise a click
+	// Drawing and hit-testing have to be the same answer read 2 ways, now that
+	// the tabs on a page are no longer one width apiece. Otherwise a click
 	// selects a tab other than the one under the pointer.
 	// Test ID: dbje8
 	#[test]
@@ -1832,7 +1832,7 @@ mod tests {
 			says("C:\\WINDOWS\\system32\\cmd.exe  -  build.bat "),
 			Some("build.bat")
 		);
-		// A command given as a full path is shown as one. It is still what is
+		// A command given as a full path is shown as one. It's still what's
 		// running, which is the thing the title is for.
 		assert_eq!(
 			says("C:\\WINDOWS\\system32\\cmd.exe - C:\\tools\\build.exe"),
@@ -1846,7 +1846,7 @@ mod tests {
 	#[test]
 	fn an_editor_naming_the_file_it_has_open_keeps_the_file() {
 		// vim's default title is "<file> - VIM", and a bare file name on the left
-		// must not be read as the program.
+		// mustn't be read as the program.
 		let kept = |title| assert_eq!(says(title), Some(title));
 		kept("build.bat - VIM");
 		kept("setup.exe - NVIM");
@@ -1856,7 +1856,7 @@ mod tests {
 	// Test ID: dcd5n
 	#[test]
 	fn either_spelling_of_a_program_path_reads_the_same() {
-		// Only a Windows console writes one of these, but the test does not have to
+		// Only a Windows console writes one of these, but the test doesn't have to
 		// know that. A posix path names no extension, so nothing there matches in
 		// the first place.
 		assert_eq!(says("/home/jim/games/setup.exe"), None);
@@ -1939,7 +1939,7 @@ mod tests {
 	}
 
 	// A console in another language writes another word in front of the first
-	// title, and the word alone cannot be told from a real one. The path after it
+	// title, and the word alone can't be told from a real one. The path after it
 	// names the program the pane was started with, and that can be matched.
 	// Test ID: dcnwn
 	#[test]
@@ -2013,7 +2013,7 @@ mod tests {
 				"{launched:?}"
 			);
 		}
-		// A word holding a path of its own is not a console's.
+		// A word with a path of its own isn't a console's.
 		let copied = "copy a/b C:\\Windows\\System32\\cmd.exe";
 		assert_eq!(
 			window_suffix(admin, None, Some(copied), Some("cmd"), true, || "Cmd"
@@ -2030,7 +2030,7 @@ mod tests {
 			window_title(Rights::default(), Some("mine"), "SilkTerm", Some("Bash")),
 			"mine"
 		);
-		// Even against nothing to say, and even when it is empty.
+		// Even against nothing to say, and even when it's empty.
 		assert_eq!(
 			window_title(Rights::default(), Some("mine"), "SilkTerm", None),
 			"mine"
@@ -2068,9 +2068,9 @@ mod tests {
 		}
 	}
 
-	// No console writes the separator with nothing after it, so such a title is
-	// not taken apart. Recorded because the rule above only asks whether the
-	// answer is blank, and this is what it is instead.
+	// No console writes the separator with nothing after it, so such a title
+	// isn't taken apart. Tested because the rule above only checks whether the
+	// result is blank, and this is what it is instead.
 	// Test ID: dcdar
 	#[test]
 	fn a_title_ending_on_the_separator_is_shown_whole() {
@@ -2128,16 +2128,16 @@ mod tests {
 			elevated("ADMINISTRATOR: vim foo.rs"),
 			Some("ADMINISTRATOR: vim foo.rs")
 		);
-		// A console that speaks another language writes another word, which is
-		// not known here. `window_suffix` finds it by the program after it.
+		// A console that speaks another language writes another word, which isn't
+		// known here. `window_suffix` finds it by the program after it.
 		assert_eq!(
 			elevated("Administrador: C:\\Windows\\System32\\cmd.exe"),
 			Some("Administrador: C:\\Windows\\System32\\cmd.exe")
 		);
 	}
 
-	// Nothing on unix writes a marker into a title, so running as root must not
-	// start taking one off - there would be nothing to remove but real text.
+	// Nothing on unix writes a marker into a title, so running as root mustn't
+	// start taking one off, since there would be nothing to remove but real text.
 	// Test ID: dcdav
 	#[test]
 	fn root_alone_does_not_strip_anything() {
@@ -2173,7 +2173,7 @@ mod tests {
 	}
 
 	// A word to take off that nothing would put back could only lose text, so the
-	// two are one answer rather than two fields to keep in step.
+	// 2 are one answer rather than 2 fields to keep in step.
 	// Test ID: dcdax
 	#[test]
 	fn only_a_decorated_console_leaves_a_word_to_take_off() {
@@ -2207,13 +2207,13 @@ mod tests {
 			),
 			"Administrator: SilkTerm"
 		);
-		// A --title is otherwise the whole answer, but it does not get to drop this.
+		// A --title is otherwise the whole answer, but it doesn't get to drop this.
 		assert_eq!(
 			window_title(root, Some("deploy"), "SilkTerm", Some("Bash")),
 			"Root: deploy"
 		);
-		// A title that already starts with the word is not given a second one,
-		// and an empty one is not given a dangling colon either.
+		// A title that already starts with the word isn't given a second one,
+		// and an empty one isn't given a dangling colon either.
 		assert_eq!(
 			window_title(root, Some("Root: deploy"), "SilkTerm", None),
 			"Root: deploy"
@@ -2238,9 +2238,9 @@ mod tests {
 		assert_eq!(with_note(title.clone(), None), title);
 	}
 
-	// A title is drawn by the desktop as text, so a program must not be able to
+	// A title is drawn by the desktop as text, so a program mustn't be able to
 	// put anything else in one. This is the concrete case; the fuzz target below
-	// is what says there is no other spelling of it.
+	// checks that there's no other spelling of it.
 	// Test ID: dcdjg
 	#[test]
 	fn a_title_arrives_as_plain_text() {
@@ -2255,7 +2255,7 @@ mod tests {
 		);
 	}
 
-	// A program's title is not the only untrusted text on a tab. Any program can
+	// A program's title isn't the only untrusted text on a tab. Any program can
 	// rename itself, and a directory name arrives in an archive or a checkout,
 	// so the name and the path reach the label and the window title as they are.
 	// Test ID: dcq4v
@@ -2313,7 +2313,7 @@ mod tests {
 		}
 	}
 
-	// The shipped template says exactly what the four check boxes said with all
+	// The default template says exactly what the 4 check boxes said with all
 	// of them on, and the template an older config's boxes become says what
 	// those boxes said, over every mix of them and every kind of tab.
 	// Test ID: de2zk
@@ -2452,8 +2452,8 @@ mod tests {
 		assert_eq!(forms_of("%LAST_PROGRAM%", facts), ["PowerShell 7"]);
 	}
 
-	// A template that can't be read is not shown as the mistake. The tab says
-	// what the shipped one says, and so does a blank one.
+	// A template that can't be read isn't shown as the mistake. The tab says
+	// what the default one says, and so does a blank one.
 	// Test ID: de2zn
 	#[test]
 	fn a_malformed_or_blank_tab_text_reads_as_the_shipped_one() {
@@ -2472,8 +2472,8 @@ mod tests {
 		);
 	}
 
-	// What a tab said before the template, kept as it was so the shipped
-	// template and the one written for an older config's check boxes can be held
+	// What a tab said before the template, kept as it was so the default
+	// template and the one written for an older config's check boxes can be checked
 	// against it (`the_template_says_what_the_check_boxes_said`).
 	mod old {
 		use super::super::{
@@ -2491,8 +2491,8 @@ mod tests {
 			}
 			let mut forms = vec![format!("[{marker}{program}]")];
 			let mut keep = program.chars().count();
-			// Halve until what is kept says nothing. An ellipsis costs three columns, so
-			// the first cuts of a short name are no shorter than the name itself -
+			// Halve until what is kept says nothing. An ellipsis costs 3 columns, so
+			// the first cuts of a short name are no shorter than the name itself.
 			// push_shorter drops those, and a name too short to cut yields no rung.
 			while keep > 3 {
 				keep /= 2;
@@ -2516,10 +2516,10 @@ mod tests {
 			// been through `plain` on the way here, and a label is drawn by the tab
 			// strip and stands in for the window title, so it is held to the same rule a
 			// title is. Cleaned on the way in rather than on the way out, so the rungs
-			// below are measured against what will actually be drawn.
+			// below are measured against what will be drawn.
 			let friendly = plain(friendly);
 			// A part the user turned off is dropped here rather than at each rung, so
-			// the ladder below is built out of what will actually be drawn.
+			// the ladder below is built out of what will be drawn.
 			let program = parts
 				.title
 				.then_some(program)
@@ -2555,7 +2555,7 @@ mod tests {
 				.unwrap_or_default();
 			let full_name = shells.first().map_or("", String::as_str);
 			// The last form is always the shortest; the middle rung only exists when
-			// there are three of them, and a name with no middle rung keeps its own.
+			// there are 3 of them, and a name with no middle rung keeps its own.
 			let tiny_name = (shells.len() > 1).then(|| shells[shells.len() - 1].clone());
 			let short_name = if shells.len() >= 3 {
 				shells[1].as_str()
@@ -2568,7 +2568,7 @@ mod tests {
 			let last_path = paths.last().map(String::as_str);
 
 			// The order the parts give way in. Each is only a candidate: push_shorter
-			// keeps the ones that actually buy width, so a part with nothing left to
+			// keeps the ones that buy width, so a part with nothing left to
 			// give (a one-directory path, a short program name) costs no rungs at all.
 			let mut forms = vec![join(full_name, first_task, first_path)];
 			push_shorter(&mut forms, join(short_name, first_task, first_path));
@@ -2590,7 +2590,7 @@ mod tests {
 				forms.push(friendly.trim().to_string());
 			}
 			// A title the program asked for goes on top, outranked only by a name typed
-			// on the tab - the order the window title already uses. It sits above the
+			// on the tab, the same order the window title uses. It sits above the
 			// ladder rather than inside it: its length says nothing about how much the
 			// tab can give up, and a tab too narrow for it should still fall through the
 			// forms the tab works out for itself.

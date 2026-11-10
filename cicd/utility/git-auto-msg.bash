@@ -26,7 +26,7 @@ fKept(){ SC="${scissors}" awk '$0 == ENVIRON["SC"] {exit} {print}' | git stripsp
 
 tmpl="$(git config --path commit.template 2>/dev/null || true)"
 existing="$(fKept <"${file}")"
-## An untouched template is not a message; git refuses it as unedited.
+## An untouched template isn't a message; git refuses it as unedited.
 if [[ -n "${existing}" && -n "${tmpl}" && -r "${tmpl}" && "${existing}" == "$(fKept <"${tmpl}")" ]]; then existing=""; fi
 [[ -n "${existing}" ]] && exit 0
 

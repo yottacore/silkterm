@@ -4,7 +4,7 @@
 use crate::config;
 
 /// Fractional scroll overlay. The crate's grid only knows integer line
-/// offsets; everything sub-line lives here.
+/// offsets; everything sub-line is here.
 ///
 /// `target`/`visual` are measured in lines of scrollback from the bottom
 /// (0.0 == following new output). Each frame the grid is snapped to
@@ -31,35 +31,35 @@ use crate::config;
 ///              may never exceed what can decay (halving per
 ///              `scroll_ramp_down_ms`) down to the ease-out handoff within the
 ///              backlog still to render. While output pours in the backlog is
-///              deep and the cap is moot - but it is also what keeps the view
-///              a braking distance behind the live bottom (the reserve), so the
-///              moment output ceases the speed rides this curve down instead of
+///              deep and the cap is moot - but it also leaves the view a
+///              braking distance behind the live bottom (the reserve), so the
+///              moment output ceases the speed follows this curve down instead of
 ///              stopping dead. Traced backwards from Ease-out: it ends exactly
 ///              where the stop begins.
 ///   Ease-out   the stop: the last `STOP_BAND` of a line closes at the speed
 ///              that covers the band in `scroll_ease_out_ms`, never past the
 ///              target. Y ends at 0 by construction.
 ///
-/// The backlog itself is NOT capped in lines (a hard cap forces the view to ride
+/// The backlog itself isn't capped in lines (a hard cap forces the view to ride
 /// the output rate the instant it fills, which is exactly the "jumps immediately
 /// to blazing speed" bug) - the ramp-up growth and ramp-down reserve bound the
 /// lag in time instead of lines. The chase applies only to output while
 /// following the bottom - wheel/scrollback navigation keeps the plain `NAV_TAU_MS`
 /// ease, and a user jump back to the bottom sweeps at full ease speed (`sweep`).
 ///
-/// The ease itself is asymmetric, and the two ends are the "Ease-in"/"Ease-out"
-/// settings: motion builds from rest (a two-stage cascade - `visual` chases a
+/// The ease itself is asymmetric, and its 2 ends are the "Ease-in"/"Ease-out"
+/// settings: motion builds from rest (a 2-stage cascade - `visual` chases a
 /// leading `mid` stage over `scroll_ease_in_ms`, so the first frames are gentle
 /// instead of jumping straight to peak speed), and the stop is sharpened by a
 /// minimum closing speed inside `STOP_BAND` (a bare exponential would crawl the
-/// last few pixels in over a second). The two are presented as one pair, so
-/// BOTH read "higher = crisper" in the dialog (matching every other feel
-/// slider) - which is why ease-out is stored as the tail's DURATION and the
+/// last few pixels in over a second). Both are presented as one pair, so
+/// both read "higher = crisper" in the dialog (matching every other feel
+/// slider) - which is why ease-out is stored as the tail's duration and the
 /// closing speed is derived from it, rather than stored as the speed itself
 /// (that would invert against its own partner).
 pub const MAX_BACKLOG: f32 = 16.0; // reference depth for output_ease_lines' clamp and the turnover guess
 const CHASE_GROW_MIN: f32 = 2.0; // gap (lines) under which a user sweep counts as caught up
-// Where Ease-in hands off to Ramp-up (lines/s). An exponential ramp cannot
+// Where Ease-in hands off to Ramp-up (lines/s). An exponential ramp can't
 // leave zero, so the first KNEE_LPS of speed is a linear lift; past it the
 // doubling takes over. The overflow re-invocation re-arms the knee this far
 // above the speed the cap lift found.
@@ -79,13 +79,13 @@ const STOP_BAND: f32 = 0.4;
 /// visual offset (in lines, signed: + shifts content down) grown by each scroll
 /// step, then eased to 0 with the output chase's own curve so the frame slides
 /// into place. The rows the scroll pushed off the region fill the gap (the strip
-/// in pane.rs), so the offset may never exceed what that strip holds: the caller
+/// in pane.rs), so the offset may never exceed what that strip has: the caller
 /// passes the cover, and `SLIDE_ROWS` is the most either side keeps.
 pub const SLIDE_ROWS: usize = 128;
 
 // The output chase's speed state. One drives the scrollback view and one the
 // alt-screen slide, so an app's region scroll eases with the same curve as
-// plain output and the five feel sliders shape both.
+// plain output and the 5 feel sliders shape both.
 #[derive(Debug, Clone, Copy)]
 struct Chase {
 	speed: f32,     // catch-up speed, lines/s (the segment the curve is in falls out of it)
@@ -118,12 +118,12 @@ impl Chase {
 		}
 	}
 
-	// One frame of the chase, one segment at a time: advance the curve and answer
+	// One frame of the chase, one segment at a time: advance the curve and return
 	// the speed the view may close at, given the `backlog` still to cover. Ease-in
 	// lifts the speed linearly to the knee; Ramp-up doubles it toward the current
 	// cap; the braking curve ("Ramp-down", traced backwards from "Ease-out") caps
 	// it the whole way at what can still be wound down within the remaining
-	// backlog - which both holds the reserve behind a live burst and owns the
+	// backlog - which both sets the reserve behind a live burst and owns the
 	// deceleration once output ceases.
 	fn limit(&mut self, backlog: f32, dt_s: f32, cfg: &config::Settings) -> f32 {
 		if self.speed < self.knee {
@@ -161,7 +161,7 @@ pub struct Scroll {
 	sweep: bool,      // user jumped back to the bottom: full ease speed until caught up
 	wheel_dir: f32,   // sign of the last wheel motion, so the detent sits ahead of it
 	// Output lines below the view that it has never come down to. Arriving
-	// output raises it and the view gives it back as it reaches them, so it is
+	// output raises it and the view gives it back as it gets to them, so it is
 	// a history rather than a state - see `unshown_lines`.
 	unshown: f32,
 }
@@ -271,13 +271,13 @@ impl Scroll {
 		self.max
 	}
 
-	/// Where the view actually sits right now, mid-ease. The scrollbar thumb rides
+	/// Where the view is right now, mid-ease. The scrollbar thumb rides
 	/// this so it tracks the content rather than the pending destination.
 	pub fn visual_lines(&self) -> f32 {
 		self.visual
 	}
 
-	/// Where the view is headed. A thumb being DRAGGED rides this instead: the
+	/// Where the view is headed. A thumb being dragged rides this instead: the
 	/// handle must follow the pointer exactly (direct manipulation), while the
 	/// content eases in behind it.
 	pub fn target_lines(&self) -> f32 {
@@ -322,14 +322,14 @@ impl Scroll {
 			// cascade stage rides along - shifting it keeps its lead over `visual`
 			// intact, which is what preserves the eased speed across a burst
 			self.mid = (self.mid + (self.visual - before)).clamp(0.0, self.visual);
-			// the new lines printed below the view, so it has not reached them.
+			// the new lines printed below the view, so it hasn't gotten to them.
 			// The delta is `visual - before` and not `grown`: the floor and the
-			// history clamp above can both make the two differ.
+			// history clamp above can both make them differ.
 			self.unshown = (self.unshown + (self.visual - before)).min(self.visual);
 		}
 	}
 
-	/// A nudge that reaches back no further than the new lines, floor or not:
+	/// A nudge that goes back no further than the new lines, floor or not:
 	/// output after a clear, which must not ease through the screen it cleared.
 	pub fn nudge_output_within(&mut self, grown: f32, view_rows: f32) {
 		let max = self.max;
@@ -338,11 +338,11 @@ impl Scroll {
 		self.max = max;
 	}
 
-	// The whole line the view comes to rest on. Rounding to NEAREST is the obvious
-	// answer and it is wrong at the end of a gesture: a scroll that stops nine
+	// The whole line the view comes to rest on. Rounding to nearest is the obvious
+	// answer, but it's wrong at the end of a gesture: a scroll that stops nine
 	// tenths of a line past a boundary would go all the way forward and then hop
 	// back, which reads as a glitch even though the distance is under a line. So a
-	// wheel goes to the line AHEAD of where it stopped, in the direction it was
+	// wheel goes to the line ahead of where it stopped, in the direction it was
 	// already going. A thumb drag or a track click has no direction of its own and
 	// still rounds to nearest.
 	fn detent(&self) -> f32 {
@@ -360,14 +360,14 @@ impl Scroll {
 	}
 
 	/// How far above the newest line the eased view still sits, in lines, which
-	/// is where the minimap has to stop drawing: past it is text the pane has not
+	/// is where the minimap has to stop drawing: past it is text the pane hasn't
 	/// shown. Only output raises this, and only the view arriving lowers it, so a
 	/// gesture neither shortens the map nor turns the trim off.
 	///
-	/// It cannot be worked out from `visual`, `following()` or `chasing_output()`
-	/// after the fact. `visual` carries a gesture's remaining travel as well as
-	/// the chase's backlog and the two read the same from outside; `following()`
-	/// is true the moment a gesture AIMS at the bottom, and `chasing_output()`
+	/// It can't be worked out from `visual`, `following()`, or `chasing_output()`
+	/// after the fact. `visual` includes a gesture's remaining travel as well as
+	/// the chase's backlog and both read the same from outside; `following()`
+	/// is true the moment a gesture aims at the bottom, and `chasing_output()`
 	/// goes false for the rest of a flood at the first keystroke. Those were
 	/// F150 and F153, the same site in opposite directions.
 	pub fn unshown_lines(&self) -> f32 {
@@ -378,7 +378,7 @@ impl Scroll {
 	/// past it, and `visual` is heading for `target`, so a target below it will
 	/// drain it and a target above it leaves it frozen. The minimap asks because
 	/// a map held short by a frozen count has nothing more to draw until the view
-	/// moves, and owing a compose anyway recomposed forever (F155).
+	/// moves, and asking for a compose anyway recomposed forever (F155).
 	pub fn unshown_draining(&self) -> bool {
 		self.target < self.unshown
 	}
@@ -400,10 +400,10 @@ impl Scroll {
 			self.chase.limit(backlog, dt_s, &cfg)
 		});
 
-		// Two-stage ease: `mid` chases the target at NAV_TAU_MS and `visual`
+		// A 2-stage ease: `mid` chases the target at NAV_TAU_MS and `visual`
 		// chases `mid` over the ease-in attack, so motion builds from rest
 		// instead of spiking on the first frame. Neither stage can pass its input,
-		// so the cascade cannot overshoot.
+		// so the cascade can't overshoot.
 		let smoothing = 1.0 - (-dt_s * 1000.0 / NAV_TAU_MS).exp();
 		self.mid += (self.target - self.mid) * smoothing;
 		let attack_tau = cfg.scroll_ease_in_ms.max(1.0);
@@ -411,12 +411,12 @@ impl Scroll {
 		let before = self.visual;
 		self.visual += (self.mid - self.visual) * attack;
 		if let Some(speed) = limit {
-			// While a burst is in flight the chase IS the motion, not a cap on the
-			// navigation ease. Its segments already end where the stop band begins,
+			// While a burst is in flight the chase is the motion rather than a cap on
+			// the navigation ease. Its segments already end where the stop band begins,
 			// so nothing is left for the cascade to finish. Capping instead handed
 			// any advance short enough that NAV_TAU_MS was the slower of the two -
 			// a returning prompt, a line or two - to a fixed 230ms decay that no
-			// setting reaches: it crawled to a near-stop and then visibly unstuck
+			// setting changes: it crawled to a near-stop and then visibly unstuck
 			// when the stop band took over.
 			self.visual = (before - speed * dt_s).max(self.target);
 			self.mid = self.mid.min(self.visual);
@@ -519,11 +519,11 @@ mod tests {
 	use super::*;
 	use std::sync::MutexGuard;
 
-	// The settings store initializes from the LIVE user config, not the shipped
-	// defaults - a box whose config carries tuned scroll speeds would otherwise
+	// The settings store initializes from the live user config, not the built-in
+	// defaults - a box whose config has tuned scroll speeds would otherwise
 	// steer every assertion here (it did: a fast tau made the whole module fail).
 	// Each test pins the defaults first; the guard serializes the module so a
-	// test that pins something else cannot race the rest. It is the store's
+	// test that pins something else can't race the rest. It is the store's
 	// shared lock, because tests elsewhere put a rated profile live too.
 	fn pin() -> MutexGuard<'static, ()> {
 		let guard = config::test_store_lock();
@@ -596,7 +596,7 @@ mod tests {
 	}
 
 	// F153. Every keystroke calls `jump_bottom`, and a wheel notch at the bottom
-	// is the same shape. Neither shows the user anything, so neither may cancel
+	// does the same. Neither shows the user anything, so neither may cancel
 	// a flood's trim - the fix for F150 read `chasing_output()`, which goes false
 	// for the rest of the flood at the first one.
 	// Test ID: dcwcy
@@ -639,7 +639,7 @@ mod tests {
 
 	// The count is what the map trims by, so it has to be the ease's own backlog
 	// under a plain flood, and it has to drain to nothing once output stops. The
-	// second half walks a mixed script and holds the invariants over all of it.
+	// second half walks a mixed script and checks the invariants over all of it.
 	// Test ID: dcwcz
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
@@ -699,7 +699,7 @@ mod tests {
 			s.advance(0.016);
 			check(&s, &mut last, false, "parked");
 		}
-		// parked above the lines it has not reached, the count is frozen, so a
+		// parked above the lines it hasn't reached, the count is frozen, so a
 		// map held short by it has nothing more to draw until the view moves
 		assert!(s.unshown_lines() > 0.0, "the flood left nothing unshown");
 		assert!(!s.unshown_draining(), "parked, but the count still drains");
@@ -818,7 +818,7 @@ mod tests {
 		assert!(t.frac().abs() < 1e-6);
 	}
 
-	// A gesture that stops just past a line used to be rounded BACK onto it, so
+	// A gesture that stops just past a line used to be rounded back onto it, so
 	// the view went all the way forward and then hopped a line the other way -
 	// under a line of travel, but a visible reversal against the gesture.
 	// Test ID: dbsyc
@@ -844,7 +844,7 @@ mod tests {
 		assert_eq!(
 			to,
 			from + 3,
-			"scrolling back lands on the far line, not back"
+			"scrolling back ends on the far line, not back"
 		);
 		let (from, to) = settle(-2.1);
 		assert_eq!(to, from - 3, "and the same going the other way");
@@ -909,7 +909,7 @@ mod tests {
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_burst_leaves_rest_slowly_with_the_ramp_still_ahead() {
 		let _g = pin();
-		// THE core complaint this model answers: a dump used to hit full speed
+		// The main complaint this model fixes: a dump used to hit full speed
 		// within ~100ms. The first quarter second of even a deep, overflowed
 		// burst must move - but only through Ease-in's lift and the first
 		// moments of the ramp, nowhere near the speed it will reach.
@@ -1010,7 +1010,7 @@ mod tests {
 			);
 			prev = s.app_offset();
 			frames += 1;
-			assert!(frames < 240, "slide never landed ({prev} left after 4s)");
+			assert!(frames < 240, "slide never settled ({prev} left after 4s)");
 		}
 	}
 
@@ -1063,7 +1063,7 @@ mod tests {
 		// After output stops, the visual position must ease straight down to the live
 		// bottom - never rise again. A rise mid-ease is the "page jumps around" /
 		// "scrolls bottom-up" artifact. Assert the position is non-increasing every
-		// frame and reaches the bottom - in BOTH speed profiles (in-view and
+		// frame and reaches the bottom - in both speed profiles (in-view and
 		// overflowed).
 		for rows in [40.0f32, 8.0] {
 			let mut s = Scroll::new();
@@ -1089,9 +1089,9 @@ mod tests {
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_single_screen_burst_eases_gentler_than_an_overflowed_one() {
 		let _g = pin();
-		// Same backlog, two screen heights: the burst that stays wholly on screen
+		// Same backlog, 2 screen heights: the burst that stays wholly on screen
 		// (a short listing) must clear measurably slower than one whose first line
-		// has scrolled off the top - that is the whole two-profile point.
+		// has scrolled off the top - that is the whole 2-profile point.
 		let mut inview = Scroll::new();
 		inview.set_max(1000.0);
 		let mut over = Scroll::new();
@@ -1204,7 +1204,7 @@ mod tests {
 		assert!(!s.animating());
 		assert_eq!(s.app_offset(), 0.0);
 		assert_eq!(s.desired_offset(), 0);
-		// scrolled back: snap holds the position, kills only the motion
+		// scrolled back: snap leaves the position alone, kills only the motion
 		s.wheel(20.0);
 		s.snap();
 		assert!(!s.animating());
@@ -1225,7 +1225,7 @@ mod tests {
 		s.set_max(100.0);
 		s.wheel(30.0);
 		s.advance(0.016);
-		assert_eq!(s.desired_offset(), 30, "wheel must land instantly");
+		assert_eq!(s.desired_offset(), 30, "wheel must take effect instantly");
 		assert!(!s.animating());
 		s.jump_bottom();
 		s.advance(0.016);
@@ -1261,8 +1261,8 @@ mod tests {
 			s.nudge_output(0.2, 40.0);
 			s.advance(0.016);
 		}
-		// 200 lines through the chase's opening segments would take most of a
-		// minute; the configured ease does it in about a second
+		// the chase's opening segments would take most of a minute over 200
+		// lines; the configured ease does it in about a second
 		let left = s.desired_offset() as f32 + s.frac();
 		assert!(left < 30.0, "jump home crawled: {left} lines left after 2s");
 	}
@@ -1326,10 +1326,10 @@ mod tests {
 		);
 	}
 
-	// The four feel knobs each have to MOVE something: this whole settings line
-	// exists because two speed sliders shipped as no-ops, and a knob that reads
-	// as inert is worse than no knob. Each test drives the two extremes of one
-	// setting and asserts they diverge.
+	// The 4 feel knobs each have to move something. This whole settings line
+	// exists because 2 speed sliders were released as no-ops, and a knob that
+	// reads as inert is worse than no knob. Each test drives the 2 extremes of
+	// one setting and asserts they diverge.
 	fn with(mut cfg: config::Settings) {
 		// the feel is read off the live settings, where a profile would mask it
 		cfg.performance_profile = crate::profile::Profile::Custom;
@@ -1427,7 +1427,7 @@ mod tests {
 	fn ramp_down_sets_how_gradually_speed_winds_down() {
 		let _g = pin();
 		// Ramp-down is the braking curve, traced backwards from the ease-out
-		// handoff: a gentler (longer) setting holds the view a longer braking
+		// handoff: a gentler (longer) setting leaves the view a longer braking
 		// distance behind the live bottom and takes correspondingly longer to
 		// wind the same backlog down once output has ceased. Frames from
 		// "output stopped" to rest is the measurement.
@@ -1465,8 +1465,8 @@ mod tests {
 	fn a_stopped_burst_decelerates_instead_of_stopping_dead() {
 		let _g = pin();
 		// The reserve: while output pours in at a steady rate, the braking cap
-		// keeps the view a wind-down's distance behind the bottom - so the
-		// moment output ceases, the speed rides the ramp-down curve to the
+		// leaves the view a wind-down's distance behind the bottom - so the
+		// moment output ceases, the speed follows the ramp-down curve to the
 		// stop instead of falling off a cliff. Reach the steady state
 		// first, then stop feeding and watch the descent.
 		let mut s = Scroll::new();
@@ -1583,8 +1583,8 @@ mod tests {
 		assert!(!s.animating() && s.frac().abs() < 1e-6);
 	}
 
-	// A prompt coming back after a command is a two-line advance, and it used to
-	// be the one motion no setting could reach: the chase only CAPPED the
+	// A prompt coming back after a command is a 2-line advance, and it used to
+	// be the one motion no setting could change: the chase only capped the
 	// navigation ease, so any advance the fixed 230ms cascade was slower than
 	// got the cascade instead - a crawl to a near-stop, then a visible restart
 	// when the stop band took over. Both halves are asserted here.
@@ -1634,14 +1634,14 @@ mod tests {
 		with(config::Settings::default()); // other modules read this same store
 		assert!(
 			slack.len() > brisk.len() * 2,
-			"the feel settings must govern a two-line advance: {} frames brisk vs {} slack",
+			"the feel settings must govern a 2-line advance: {} frames brisk vs {} slack",
 			brisk.len(),
 			slack.len()
 		);
 	}
 
 	// Same rule at the other end: a shallow history caps the ease floor, so the
-	// view never renders a line the grid cannot show.
+	// view never renders a line the grid can't show.
 	// Test ID: dbtpg
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]

@@ -83,7 +83,7 @@ fi
 fX(){ DISPLAY="${display}" XAUTHORITY="${auth}" "${@}"; }
 
 ## The profile lines are something only the old file had, so finding them in
-## the new one shows it was carried over and not just the template.
+## the new one shows it was copied over rather than taken from the template.
 fLaunch(){  ## fLaunch <case>
 	local -r dir="${work}/${1}"
 	mkdir -p "${dir}/home"

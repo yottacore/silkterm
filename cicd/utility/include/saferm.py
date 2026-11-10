@@ -32,10 +32,10 @@ from pathlib import Path
 _IN_TMP = re.compile(r"/(.+/)?tmp/[^/]+(/[^/]+)*")
 
 ##	Read once, as saferm.bash does at source time. Resolved, since macOS's temp
-##	folder sits behind the /var link. A test may set these.
+##	folder is behind the /var link. A test may set these.
 host = os.path.realpath(os.environ.get("HOST_TEMP") or os.environ.get("TMPDIR") or "/tmp")
 own = f"{host.rstrip('/')}/{os.environ.get('EXE_NAME') or 'silkterm'}"
-##	Without HOST_TEMP the root is /tmp, and the short socket folders sit right in it.
+##	Without HOST_TEMP the root is /tmp, and the short socket folders are right in it.
 host_set = bool(os.environ.get("HOST_TEMP"))
 
 
@@ -78,7 +78,7 @@ def _do(parent: str, path: "str | os.PathLike[str]") -> bool:
 	try:
 		_walk(p, os.lstat(p).st_dev)
 	except OSError as e:
-		print(f"safe-rm: could not remove {p}: {e}", file=sys.stderr)
+		print(f"safe-rm: couldn't remove {p}: {e}", file=sys.stderr)
 		return False
 	return True
 

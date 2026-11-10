@@ -18,7 +18,7 @@
 fReleaseNotes_AssetName(){ local name="${1}"; printf '%s' "${name//[^A-Za-z0-9._-]/.}"; }
 
 ## fReleaseNotes_RepoSlug <remote url>
-## owner/repo from a remote such as https://github.com/o/r.git, git@github.com:o/r
+## owner/repo from a remote such as https://github.com/o/r.git, git@github.com:o/r,
 ## or an ssh alias like host_alias:o/r.git.
 fReleaseNotes_RepoSlug(){
 	local url="${1%/}"; url="${url%.git}"
@@ -26,7 +26,7 @@ fReleaseNotes_RepoSlug(){
 	url="${url%[/:]*}"
 	local -r owner="${url##*[/:]}"
 	if [[ -z "${owner}" || -z "${repo}" || "${owner}" == "${url}" ]]; then
-		echo "cannot read owner/repo from remote '${1}'" >&2; return 1
+		echo "can't read owner/repo from remote '${1}'" >&2; return 1
 	fi
 	printf '%s/%s' "${owner}" "${repo}"
 }

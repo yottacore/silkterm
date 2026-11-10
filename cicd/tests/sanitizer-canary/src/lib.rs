@@ -19,7 +19,7 @@ mod tests {
 	#[test]
 	fn races_on_purpose() {
 		static mut SHARED: u64 = 0;
-		// SAFETY: it isn't. Two unsynchronized writes are the race TSan must report.
+		// SAFETY: it isn't. The race TSan must report is 2 unsynchronized writes.
 		let writer = std::thread::spawn(|| unsafe { (&raw mut SHARED).write_volatile(1) });
 		// SAFETY: as above.
 		unsafe { (&raw mut SHARED).write_volatile(2) };

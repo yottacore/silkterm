@@ -8,7 +8,7 @@
 # is derived from it (e.g. "silkterm").
 #
 # Replaces the display name (SilkTerm) and the id (silkterm) in every tracked
-# text file that mentions either, and renames any file or directory carrying the
+# text file that mentions either, and renames any file or directory with the
 # id - the resource template a Windows build reads by name, the packaging files,
 # the wallpaper directory. Binaries are left alone, and so is Cargo.lock, which
 # `cargo build` regenerates. Review `git diff` and `git status` afterwards.
@@ -61,7 +61,7 @@ for f in "${files[@]}"; do
 	sed -i "s/${oldDisplay}/${newDisplay}/g; s/${oldId}/${newId}/g" "${f}"
 done
 
-# Paths carrying the id, deepest component first so a rename never invalidates
+# Paths with the id, deepest component first so a rename never invalidates
 # one still to come. source/assets/silkterm.rc.in is the one a build reads by
 # name: miss it and every Windows build of the renamed tree fails in build.rs.
 mapfile -t paths < <(

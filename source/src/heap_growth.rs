@@ -3,7 +3,7 @@
 
 //! Heap growth over rounds of the program's main actions, in-process, with dhat
 //! as the allocator. Each action runs N rounds to fill its caches, then N more,
-//! and the heap it holds at round 2N may not be more than a margin over round
+//! and the heap it uses at round 2N may not be more than a margin over round
 //! N. Something that keeps growing past its warm-up, such as a cache in a
 //! static or a list nobody trims, fails here. The sanitizers see nothing
 //! there, since the memory is still reachable.
@@ -36,7 +36,7 @@ impl EventListener for Quiet {
 
 struct Action {
 	name: &'static str,
-	// A backlog item that already has this growth, so it is reported and not
+	// A backlog item that already has this growth, so it's reported and not
 	// failed. The item's fix takes it out.
 	known: Option<&'static str>,
 	// A leak planted on purpose. The test fails unless it is caught.
@@ -88,7 +88,7 @@ fn grid_dims(cols: usize, lines: usize) -> crate::term::TermDimensions {
 	}
 }
 
-// A new tab's engine: opened, fed, resized and closed.
+// A new tab's engine: opened, fed, resized, and closed.
 fn engine_round(round: usize) {
 	let cfg = TermConfig {
 		scrolling_history: 2000,
@@ -102,7 +102,7 @@ fn engine_round(round: usize) {
 }
 
 // Output arriving in a tab whose scrollback is full, one frame per read: the
-// engine, the output ease, the scroll record and the row-print detector.
+// engine, the output ease, the scroll record, and the row-print detector.
 fn output_action() -> Box<dyn FnMut(usize)> {
 	let mut frame = crate::pane::replay::frames(100, 30, 500);
 	for round in 0..20 {
@@ -199,7 +199,7 @@ fn actions() -> Vec<Action> {
 			round: Box::new(move |round| planted.push(vec![round as u8; 1024])),
 		},
 		Action {
-			name: "a tab's engine opened, fed, resized and closed",
+			name: "a tab's engine opened, fed, resized, and closed",
 			known: None,
 			planted: false,
 			round: Box::new(engine_round),

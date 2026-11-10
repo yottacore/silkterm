@@ -17,7 +17,7 @@
 ##		With DISPLAY set, the window must never call the X server.
 ##	- Syntax: run.bash [--bin PATH]   (default: the debug build, then release)
 ##	- Exit: 0 passed, 1 a check failed, 3 nothing ran (no binary, sway,
-##	  wtype, foot, python3 or software Vulkan).
+##	  wtype, foot, python3, or software Vulkan).
 ##	- Test ID: ddzwc
 ##	- History: At bottom of file.
 
@@ -229,7 +229,7 @@ fPass(){  ## fPass <folder> <name> [DISPLAY]
 		"${bin}" --shell "/bin/dash ${work}/scene.sh ${dir}" >/dev/null 2>"${dir}/app.err" &
 	appPid=$!
 	if ! fWaitFile "${dir}/up" 200; then echo "  FAIL ${name}: the window never started its shell"; failures=$((failures + 1)); return; fi
-	## Let the keyboard reach the window first. A store made before then is held, like the one below.
+	## Let the keyboard get to the window first. A store made before then is held, like the one below.
 	sleep 1.5
 	: >"${dir}/go"
 	fCheck "${name}: OSC 52 sets the clipboard" fHasClip clipboard osc-clipboard
@@ -260,7 +260,7 @@ fPass(){  ## fPass <folder> <name> [DISPLAY]
 	fCheck "${name}: a double-click puts the word in the primary" fQrun
 
 	## A second window takes the keyboard and leaves this one on screen. An
-	## empty workspace would not do: a window out of view reads no output.
+	## empty workspace wouldn't do: a window out of view reads no output.
 	"${wl[@]}" HOME="${work}/home" XDG_CONFIG_HOME="${cfgHome}" foot sleep 600 >/dev/null 2>&1 &
 	footPid=$!
 	fCheck "${name}: another window takes the keyboard" fFocusLeft

@@ -5,7 +5,7 @@
 ##		mypy.ini, then a check that blocks are indented with tabs, which no ruff
 ##		rule can ask for. One line per finding. cicd.bash gates on it.
 ##	Syntax: py-lint.py [path ...]   (default: every tracked *.py outside forks/)
-##	Exit: 0 clean, 1 findings, 2 ruff is not installed. With no mypy the types
+##	Exit: 0 clean, 1 findings, 2 ruff isn't installed. With no mypy the types
 ##		go unchecked, and a note on stderr says so.
 ##	History: At bottom of script.
 
@@ -64,8 +64,8 @@ def space_indents(path: Path) -> list[int]:
 	return lines
 
 
-## mypy names a script by its file name, and refuses two files with one name in
-## a run. The five test drivers are all run.py, so each takes a run of its own.
+## mypy names a script by its file name, and refuses 2 files with one name in
+## a run. The 5 test drivers are all run.py, so each takes a run of its own.
 def mypy_groups(paths: list[Path]) -> list[list[Path]]:
 	groups: list[list[Path]] = []
 	seen: dict[str, int] = {}
@@ -95,7 +95,7 @@ def mypy_findings(mypy: str, paths: list[Path]) -> list[str]:
 		if checked.returncode not in (0, 1):
 			out.append(checked.stderr.strip() or checked.stdout.strip() or f"mypy exited {checked.returncode}")
 			continue
-		## A module two groups both import is reported by each.
+		## A module 2 groups both import is reported by each.
 		errors = [line for line in checked.stdout.splitlines() if ": error:" in line]
 		if checked.returncode and not errors:
 			errors = [checked.stdout.strip() or f"mypy exited {checked.returncode}"]

@@ -190,7 +190,7 @@ def main() -> int:
         if swap is None:
             out("SKIP", "no trace frames (GL warmup / timing?)")
             return 2
-        # the trace only prints a normal-screen frame that carries a fraction
+        # the trace only prints a normal-screen frame that has a fraction
         if not any(f["alt"] == 0 and f["frac"] > a.eps for f in frames[:swap]):
             note = read_note(a.note)
             if note:

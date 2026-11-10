@@ -386,7 +386,7 @@ fn a_choice_matches_without_case_and_keeps_the_spec_s_word() {
 	assert!(m.spec.valid(s, &text("bogus")).is_err());
 }
 
-// A file that names a temporary preset was not written by a save, and loads
+// A file that names a temporary preset wasn't written by a save, and loads
 // as if it named nothing.
 // Test ID: ddqvn
 #[test]
@@ -468,7 +468,7 @@ fn slider_scales_round_trip_and_snap_to_detents() {
 	for id in ["ease_in", "ramp_down", "blur", "idle_min", "line_height"] {
 		let s = m.spec.at(id);
 		if s.kind == Kind::Int {
-			// a whole number won't land back on every position, but every value
+			// a whole number won't map back onto every position, but every value
 			// has to come back as itself
 			for v in (s.min as i64)..=(s.max as i64).min(2000) {
 				let back = s.from_t(s.to_t(v as f64));

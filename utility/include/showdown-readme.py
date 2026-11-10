@@ -8,8 +8,8 @@
 """Write one terminal's size and memory cells into the shootout table in comparison.md.
 
 The speed columns are owned by utility/termbench.py, which refreshes only its own and
-leaves everything else exactly as written. This owns the other two, keyed the same way -
-by terminal name - so the two writers never touch the same cell.
+leaves everything else exactly as written. This writes the other 2, keyed the same way
+by terminal name, so the 2 writers never touch the same cell.
 
 Only ever updates a row that already exists. Adding a row is a judgment call about where
 it belongs in the ordering, and the speed tool makes that call.
@@ -34,8 +34,8 @@ def norm(cell: str) -> str:
 
 
 def update(doc: Path, terminal: str, file_deps: float, mem: float) -> tuple[str | None, str | None]:
-	#	Spelled out, because the default is the locale codec: on Windows that is cp1252,
-	#	which cannot read the table's own characters and fails the run before it starts.
+	#	Spelled out, because the default is the locale codec: on Windows that's cp1252,
+	#	which can't read the table's own characters and fails the run before it starts.
 	text = doc.read_text(encoding="utf-8")
 	if BEGIN not in text or END not in text:
 		return None, "table markers not found"
@@ -53,13 +53,13 @@ def update(doc: Path, terminal: str, file_deps: float, mem: float) -> tuple[str 
 	mem_col: int | None = None
 	for i, cell in enumerate(header):
 		key = norm(cell)
-		# Headers carry footnote markers and a '(MiB)' tail, so match on the stem.
+		# Headers have footnote markers and a '(MiB)' tail, so match on the stem.
 		if key.startswith("filedeps"):
 			deps_col = i
 		elif key.startswith("mem"):
 			mem_col = i
 	if deps_col is None or mem_col is None:
-		return None, f"could not find both columns in: {header}"
+		return None, f"couldn't find both columns in: {header}"
 
 	target = norm(terminal)
 	for idx in rows[2:]:

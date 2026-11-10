@@ -69,7 +69,7 @@ else
 	fCheck "there is at least one" test -s "${work}/want-both.txt"
 
 	## Pins added to the file reach the pipelines they are marked for and no
-	## other, so neither can have gone back to a list of its own. The shipped
+	## other, so neither can have gone back to a list of its own. The released
 	## list has no windows-only pin, which leaves that filter untested above.
 	mkdir -p "${work}/cicd"
 	cp "${root}/cicd/config.bash" "${work}/cicd/"

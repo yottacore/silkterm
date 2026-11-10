@@ -3,8 +3,8 @@
 ##	Purpose:
 ##		The test ID tool, run on a made-up tree: IDs in whole minutes in
 ##		Crockford base 32, the next free minute for tests made together, and a
-##		check that refuses a missing, malformed, old base 62, future or shared ID.
-##		Test result lines as PASS, FAIL or SKIP, ID and name. The scroll
+##		check that refuses a missing, malformed, old base 62, future, or shared ID.
+##		Test result lines as PASS, FAIL, or SKIP, ID and name. The scroll
 ##		harness's scenes and the fuzz targets each with an ID of their own.
 ##		The private repo's test scripts, checked in the same set.
 ##	Syntax: run.py

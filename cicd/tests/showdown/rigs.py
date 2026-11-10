@@ -3,11 +3,11 @@
 ##	- Purpose:
 ##		Every row of the showdown table in comparison.md that was measured on the Linux rigs
 ##		has to be measurable again, by the entry point and by the rig that owns each
-##		of its columns. This holds that list against the table. It also checks what
-##		the GNOME Terminal, WezTerm, Tabby and Hyper entries rely on: finding the
+##		of its columns. This checks that list against the table. It also checks what
+##		the GNOME Terminal, WezTerm, Tabby, and Hyper entries rely on: finding the
 ##		terminal among the processes of the rig's throwaway account, billing a
 ##		bundle once for its own libraries, and taking a version from the command
-##		that starts a terminal when the terminal itself will not give one. XTerm's
+##		that starts a terminal when the terminal itself won't give one. XTerm's
 ##		speed row came from X11, so the speed rig has to run it on an X server of
 ##		its own, and note 9 in comparison.md has to say so.
 ##	- Test ID: dd8e6

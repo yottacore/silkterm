@@ -5,7 +5,7 @@
 ##		of a real one that has them. Everything goes through as sent, file
 ##		descriptors too, except that MIT-SHM QueryVersion answers no shared
 ##		pixmaps and every ShmCreatePixmap fails BadImplementation, as on a
-##		server whose driver cannot make them (NVIDIA's). A piece of
+##		server whose driver can't make them (NVIDIA's). A piece of
 ##		swnoshm/run.bash, not a test of its own.
 ##	- Syntax: _noshm_proxy.py <real display, :N> <display number to answer as>
 ##	- Exit: runs until killed; 2 bad arguments, no python-xlib, or the real
@@ -109,7 +109,7 @@ class Session:
 						with self.lock:
 							(self.versions if req[1] == SHM_QUERY_VERSION else self.pixmaps).add(seq)
 						if req[1] == SHM_CREATE_PIXMAP:
-							## A minor the server does not know gets an error at this
+							## A minor the server doesn't know gets an error at this
 							## sequence, so the numbering stays as the client counts it.
 							req[1] = 0xFF
 					out += req

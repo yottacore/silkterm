@@ -42,7 +42,7 @@ done
 ticks="${ticks:-${rows}}"
 
 for n in "${rows}" "${ticks}" "${fill}"; do
-	[[ "${n}" =~ ^[0-9]+$ ]] || { echo "error: '${n}' is not a number" >&2; exit 1; }
+	[[ "${n}" =~ ^[0-9]+$ ]] || { echo "error: '${n}' isn't a number" >&2; exit 1; }
 done
 
 fit=$((lines - 3))

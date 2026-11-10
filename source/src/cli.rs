@@ -151,7 +151,7 @@ fn parse_bool(s: &str) -> Option<bool> {
 	}
 }
 
-/// Minimal POSIX-ish word split honouring single/double quotes and backslash, so
+/// Minimal POSIX-ish word split honoring single/double quotes and backslash, so
 /// `git log --oneline`, `bash --norc`, and `sh -c "a | b"` all argv-split right.
 /// Outside quotes a backslash only escapes whitespace and quotes, so Windows paths
 /// can be written plainly; inside double quotes the usual POSIX escapes apply.
@@ -280,7 +280,7 @@ fn parse_hex(flag: &str, v: &str) -> anyhow::Result<[u8; 3]> {
 fn parse_f32(flag: &str, v: &str) -> anyhow::Result<f32> {
 	match v.parse::<f32>() {
 		Ok(n) if n.is_finite() => Ok(n),
-		// nan and inf parse fine and then survive every clamp. One that reaches a
+		// nan and inf parse fine and then survive every clamp. One that gets into a
 		// setting is written over the user's own value at the session's first save,
 		// because a NaN compares unequal to the value it replaced.
 		Ok(_) => Err(anyhow::anyhow!("{flag}: not a finite number: {v}")),
@@ -290,7 +290,7 @@ fn parse_f32(flag: &str, v: &str) -> anyhow::Result<f32> {
 
 // A number standing for a setting is held to that setting's own range, the way
 // the config file's is. The command line has no business asking for a value the
-// file could not hold.
+// file couldn't hold.
 fn parse_f32_in(flag: &str, v: &str, (lo, hi): (f32, f32)) -> anyhow::Result<f32> {
 	Ok(parse_f32(flag, v)?.clamp(lo, hi))
 }
@@ -728,7 +728,7 @@ impl Cli {
 		self.info = Some(self.info.map_or(info, |had| had.min(info)));
 	}
 
-	/// Any tab, pane or structure flag was seen. The first one makes the
+	/// Any tab, pane, or structure flag was seen. The first one makes the
 	/// implicit first tab, so there is always one then.
 	pub fn hierarchical(&self) -> bool {
 		!self.tabs.is_empty()
@@ -775,7 +775,7 @@ fn find_pane(tab: &TabSpec, id: &str) -> Option<usize> {
 		.position(|pane| pane.id.as_deref() == Some(id))
 }
 
-/// Program name, version and build, as --version prints it, and nothing else.
+/// Program name, version, and build, as --version prints it, and nothing else.
 /// The build number is last so a script reading the second field still gets the
 /// version.
 pub fn version_line() -> String {
@@ -943,7 +943,7 @@ mod tests {
 		let c = p("--keep-open --new-tab --new-pane --keep-open=no");
 		assert_eq!(c.win.style.keep_open, Some(true));
 		assert_eq!(c.tabs[1].panes[1].style.keep_open, Some(false));
-		// unset anywhere it was not written, so the cascade can see through it
+		// unset anywhere it wasn't written, so the cascade can see through it
 		assert_eq!(c.tabs[1].panes[0].style.keep_open, None);
 	}
 
@@ -963,7 +963,7 @@ mod tests {
 	}
 
 	// Several print-and-exit flags are one answer: the first of help, syntax,
-	// about, donate and version, whatever order they came in.
+	// about, donate, and version, whatever order they came in.
 	// Test ID: ddj84
 	#[test]
 	fn print_and_exit_flags_are_one_choice_and_help_wins() {
@@ -1018,7 +1018,7 @@ mod tests {
 	#[test]
 	fn about_survives_having_no_adapter() {
 		// A box with no usable GPU still has a version and a build worth
-		// reporting; only the three renderer lines go missing.
+		// reporting; only the 3 renderer lines go missing.
 		let text = about(None);
 		assert!(text.contains(env!("CARGO_PKG_VERSION")));
 		assert!(text.contains(env!("CARGO_PKG_REPOSITORY")));
@@ -1029,7 +1029,7 @@ mod tests {
 	}
 
 	// With an adapter the Info block names it, indented under the heading, and
-	// says whether it is a GPU or a software renderer.
+	// says whether it's a GPU or a software renderer.
 	// Test ID: dd5n6
 	#[test]
 	fn about_names_the_renderer_and_whether_it_is_accelerated() {
@@ -1075,7 +1075,7 @@ mod tests {
 	}
 
 	// --version opens with the version line and the copyright line under it,
-	// per the CICD rules. --about has the same two lines under its heading.
+	// per the CICD rules. --about has the same 2 lines under its heading.
 	// Test ID: defn7
 	#[test]
 	fn version_and_about_put_the_copyright_under_the_version_line() {
@@ -1099,7 +1099,7 @@ mod tests {
 	// Test ID: dbsdm
 	#[test]
 	fn the_build_number_is_lowercase_crockford() {
-		// Baked in by build.rs, so this is the one place the shipped value itself
+		// Baked in by build.rs, so this is the one place the built value itself
 		// gets checked rather than the generator that made it.
 		assert!(!config::BUILD_ID.is_empty());
 		for ch in config::BUILD_ID.chars() {
@@ -1317,9 +1317,9 @@ mod tests {
 		);
 	}
 
-	// What a double-click in Explorer runs: the file's own arguments ride along
-	// even when they look like options, and it starts beside the file unless
-	// told otherwise.
+	// What a double-click in Explorer runs: the file's own arguments are passed
+	// along even when they look like options, and it starts beside the file
+	// unless told otherwise.
 	// Test ID: ddamp
 	#[test]
 	fn open_takes_the_rest_of_the_line() {
@@ -1343,10 +1343,10 @@ mod tests {
 		assert!(parse(argv(&["--open"])).is_err());
 	}
 
-	// A directory rides the same cascade as the shell it starts, in both
+	// A directory follows the same cascade as the shell it starts, in both
 	// spellings and both value forms. It is kept exactly as written: `~` and
 	// `%VAR%` mean nothing until spawn time, and expanding at parse would bake
-	// this process's environment into a value the config file can also carry.
+	// this process's environment into a value the config file can also have.
 	// Test ID: dbh65
 	#[test]
 	fn a_directory_cascades_the_way_a_shell_does() {
@@ -1507,7 +1507,7 @@ mod tests {
 	}
 
 	// Every number stands for a setting, so it is held to that setting's range:
-	// the command line may not ask for a value the config file could not hold.
+	// the command line may not ask for a value the config file couldn't hold.
 	// Test ID: dcq6t
 	#[test]
 	fn a_number_is_held_to_its_settings_range() {
@@ -1650,7 +1650,7 @@ mod tests {
 	}
 
 	// A title goes to whatever scope it follows. After a pane marker it is kept
-	// on the pane and reaches neither the tab nor the window.
+	// on the pane and goes to neither the tab nor the window.
 	// Test ID: dd5nc
 	#[test]
 	fn a_title_names_the_window_or_the_tab_it_follows() {

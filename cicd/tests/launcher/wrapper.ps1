@@ -44,7 +44,7 @@ function fCheck { param([string]$What, [bool]$Ok)
 }
 
 ## The wrapper tries the launcher beside itself first, so a copy of it next to a
-## stand-in never reaches a real one.
+## stand-in never touches a real one.
 $dir = Join-Path ([System.IO.Path]::GetTempPath()) "silkterm-wrapper-test-$PID-$(Get-Random)"
 New-Item -ItemType Directory -Path $dir -Force | Out-Null
 Copy-Item -LiteralPath $Wrapper -Destination (Join-Path $dir "runterm.cmd")
@@ -90,7 +90,7 @@ try {
 	fCheck "reaches the launcher under PowerShell 7, arguments intact ($($run.Code))" (fReached $run)
 	$intactHome = fHome $run
 
-	## What a cut PATH looks like from the wrapper: no folder on it holds pwsh.exe.
+	## What a cut PATH looks like from the wrapper: no folder on it has pwsh.exe.
 	Write-Host "PATH without PowerShell 7"
 	$short = @($env:PATH -split ';' | Where-Object { $_ -and -not (Test-Path -LiteralPath (Join-Path $_ "pwsh.exe")) }) -join ';'
 	fCheck "no folder left on it holds pwsh.exe" (-not ($short -split ';' | Where-Object { $_ -and (Test-Path -LiteralPath (Join-Path $_ "pwsh.exe")) }))

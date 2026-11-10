@@ -79,7 +79,7 @@ out="$(python3 "${flameGate}" --check --dir "${fdir}" 2>&1 || true)"
 fCheck "the flame gate does not read a part file" bash -c '[[ "$1" != NEW* ]]' _ "${out}"
 fCheck "and records nothing" test ! -e "${fdir}/.flame-seen"
 
-## Test result lines are not warnings, whatever the test is named (ddf08).
+## Test result lines aren't warnings, whatever the test is named (ddf08).
 ldir="${work}/names"; mkdir -p "${ldir}"
 {
 	echo 'PASS ddeqk ui_spec::tests::a_warning_needs_a_label_of_its_own'
@@ -104,4 +104,4 @@ echo "all passed"
 ##		- 20260917 JC: Created.
 ##		- 20261003: Test names that hold "warning" (ddf08).
 ##		- 20261025: Stubs fContainerEnd, and fails by name on a call left unstubbed.
-##		- 20261028: Test lines as PASS, FAIL or SKIP, ID and name.
+##		- 20261028: Test lines as PASS, FAIL, or SKIP, ID and name.

@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 // Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
 
-//! Closing a pane, tab or window that has a pane SilkTerm started in tmux:
+//! Closing a pane, tab, or window that has a pane SilkTerm started in tmux:
 //! detach, end the sessions, or ask, as `shell.tmux.on_close` says. Only a
 //! close somebody asked for comes through here. A pane whose tmux client
-//! exited, by a detach inside it or its session ending, just closes.
+//! exited, by a detach inside it or its session ending, closes.
 
 use super::{App, CloseScope, State, close_scope, save_live};
 use crate::config;
@@ -188,8 +188,8 @@ impl State {
 }
 
 impl App {
-	/// Put up a question a close is waiting on, once nothing else holds the
-	/// notice's place. Windows has no tmux, so nothing there asks.
+	/// Put up a question a close is waiting on, once no other notice is up.
+	/// Windows has no tmux, so nothing there asks.
 	pub(super) fn show_close_ask(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
 		if self.notice.is_some() {
 			return;

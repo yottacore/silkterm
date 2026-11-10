@@ -14,12 +14,12 @@
 ##		  still has the token the ledger wrote goes.
 ##		- Cargo build dirs: everything built before a toolchain change, since
 ##		  cargo rebuilds all of it anyway; a dir the config no longer builds into;
-##		  and an incremental cache its profile has not used for a while.
+##		  and an incremental cache its profile hasn't used for a while.
 ##		- Only what the pipeline made and can show it made. A dir has to be a real
 ##		  dir of this user's, and a build dir has to be cargo's, checked right
 ##		  before it goes.
 ##		- Zig caches: one emptied whole once it is over the cap, or once another
-##		  Zig version filled it, going by the stamp it carries. Never part of
+##		  Zig version filled it, going by the stamp it has. Never part of
 ##		  one, since its manifests point into the rest.
 ##		- fSweep_Summary prints what went, on one line.
 ##	History: At bottom of file.
@@ -38,7 +38,7 @@ declare -i __sweepBytes=0
 declare -a __sweepKinds=()
 declare -A __sweepCounts=()
 
-##	fSweep_NotOurs <dir> <token>: why <dir> is not the run folder the token
+##	fSweep_NotOurs <dir> <token>: why <dir> isn't the run folder the token
 ##	names, or nothing when it is.
 fSweep_NotOurs(){
 	local -r dir="${1}" token="${2:-}" mark="${1}/${__sweepMark}"
@@ -79,7 +79,7 @@ fSweep_Remove(){
 	kb="$(du -sk -- "${dir}" 2>/dev/null)" || true
 	kb="${kb%%[[:space:]]*}"
 	if [[ -n "${parent}" ]]; then err="$(fSafeRm_Under "$(realpath -e -- "${parent}" 2>/dev/null)" "${dir}" 2>&1)"
-	else err="$(fSafeRm "${dir}" 2>&1)"; fi || { echo "cleanup: could not remove ${dir}${err:+: ${err}}" >&2; return 1; }
+	else err="$(fSafeRm "${dir}" 2>&1)"; fi || { echo "cleanup: couldn't remove ${dir}${err:+: ${err}}" >&2; return 1; }
 	[[ "${kb}" =~ ^[0-9]+$ ]] && __sweepBytes+=$((kb * 1024))
 	fSweep_Count "${what}" 1
 }
@@ -136,7 +136,7 @@ fSweep_MakeDir(){
 		fi
 		sleep 0.01
 	done
-	echo "cleanup: could not make a folder under ${parent_q7w}" >&2
+	echo "cleanup: couldn't make a folder under ${parent_q7w}" >&2
 	return 1
 }
 
@@ -158,11 +158,11 @@ fSweep_RunDir(){
 			return 0
 		fi
 	done
-	echo "cleanup: could not make a run folder under ${parent_k4p}" >&2
+	echo "cleanup: couldn't make a run folder under ${parent_k4p}" >&2
 	return 1
 }
 
-##	fSweep_RunDirNotOurs <dir>: why <dir> is not the run folder this process
+##	fSweep_RunDirNotOurs <dir>: why <dir> isn't the run folder this process
 ##	made, or nothing when it is.
 fSweep_RunDirNotOurs(){
 	local pid=""
@@ -226,7 +226,7 @@ fSweep_Toolchain(){
 }
 
 ##	fSweep_OldBuildDirs <target dir> <build dir...>: a build dir the last run
-##	wrote down that this one does not name, such as a cross target since
+##	wrote down that this one doesn't name, such as a cross target since
 ##	dropped, goes, and so does its parent once that is empty. Then the list is
 ##	written down for the next run. Only dirs under <target dir>.
 fSweep_OldBuildDirs(){
@@ -256,8 +256,8 @@ fSweep_OldBuildDirs(){
 ##	fSweep_Incremental <days> <build dir...>: rustc keeps one incremental cache
 ##	per crate and build setup, and never drops a setup it stopped using. One
 ##	not touched for <days> before the newest in the same profile goes. Measured
-##	from the newest rather than now, so a pipeline left alone for a month does
-##	not throw away the caches it is about to use.
+##	from the newest rather than now, so a pipeline left alone for a month
+##	doesn't throw away the caches it is about to use.
 fSweep_Incremental(){
 	local -ri days="${1}"
 	shift
@@ -286,7 +286,7 @@ fSweep_Incremental(){
 ##	fSweep_ZigCache <dir> <zig version> <cap MB>: a Zig cache goes whole when the
 ##	stamp in it names another Zig, or it is over <cap MB>. One with no stamp yet
 ##	gets this version's. The cap is on apparent size, as for the cache volumes,
-##	since ZFS and btrfs report compressed blocks and the answer has to be the
+##	since ZFS and btrfs report compressed blocks and the result has to be the
 ##	same on any filesystem.
 fSweep_ZigCache(){
 	local -r dir="${1%/}" ver="${2}" stampFile="${1%/}/.cicd-zig-version"

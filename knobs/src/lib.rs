@@ -3,7 +3,7 @@
 
 //! Settings declared in shcl, and what a change to one does to the others.
 //!
-//! Three parts, top to bottom: the spec (parsed once from a compiled-in file),
+//! It has 3 parts, top to bottom: the spec (parsed once from a compiled-in file),
 //! the stored values with the rules for reading and changing them, and the
 //! files they are saved to. Nothing here draws anything. `demo/demo.shcl`
 //! documents the spec format.
@@ -96,7 +96,7 @@ pub enum Store {
 pub enum Rule {
 	/// A stored state value, by setting id.
 	State(String),
-	/// Answered by the program at run time, see [`Env`].
+	/// Worked out by the program at run time, see [`Env`].
 	Named(String),
 }
 
@@ -829,7 +829,7 @@ impl Setting {
 	}
 }
 
-/// What the program answers at run time: a named rule, such as the desktop's
+/// What the program works out at run time: a named rule, such as the desktop's
 /// font or colors picked from the wallpaper, and the presets of a group that
 /// has the program's own. `None` when there is nothing to follow.
 pub trait Env {
@@ -839,7 +839,7 @@ pub trait Env {
 	}
 }
 
-/// No answers, for code that never reaches a named rule.
+/// No answers, for code that never uses a named rule.
 pub struct NoEnv;
 impl Env for NoEnv {
 	fn rule(&self, _: &str) -> Option<Value> {
@@ -887,7 +887,7 @@ pub enum Source {
 	Held,
 }
 
-/// What the files hold, in spec order. `kept` lines have their full path.
+/// What the files contain, in spec order. `kept` lines have their full path.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Lines {
 	pub config: Vec<(String, Value)>,
@@ -901,7 +901,7 @@ pub struct Model {
 	pub values: Values,
 }
 
-// two models of one spec are the same when they store the same
+// models of one spec are the same when they store the same
 impl PartialEq for Model {
 	fn eq(&self, other: &Self) -> bool {
 		self.values == other.values
@@ -1423,7 +1423,7 @@ impl Model {
 		}
 	}
 
-	/// What the files hold. Own values go at their paths, except one under a
+	/// What the files contain. Own values go at their paths, except one under a
 	/// checkbox that is on, which goes under `kept.set_aside`. Changes go under
 	/// `kept.changes`, with the preset they were made on, and stay there while a
 	/// temporary preset hides them. A group member's own value is its Custom

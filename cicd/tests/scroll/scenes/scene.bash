@@ -188,7 +188,7 @@ if [ "${shape}" = pill ]; then
 	n=1003
 	while :; do
 		n=$((n - 1))
-		## one write per step, so a build cannot fall between the scroll and the pill
+		## one write per step, so a build can't fall between the scroll and the pill
 		printf '\033[3;%dr\033[3;1H\033[T\033[r\033[3;1H  line %06d  the quick brown fox jumps\033[K\033[%d;1H  line %06d  the quick\033[7m 1 new message \033[0m\033[K\033[%d;3H' \
 			"${last}" "${n}" "${last}" "$((n + last - 3))" "${rows}"
 		sleep "${step}"

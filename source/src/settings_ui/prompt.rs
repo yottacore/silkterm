@@ -20,7 +20,7 @@ pub(super) enum PromptFocus {
 }
 
 /// What OK will do. The box itself is the same either way; only this says who
-/// asked for it and what to carry out.
+/// asked for it and what to do.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub(super) enum PromptJob {
 	Theme(ThemeBtn),
@@ -58,7 +58,7 @@ impl Prompt {
 }
 
 impl SettingsDialog {
-	/// OK in the prompt box. A name that will not do keeps the box open and says why.
+	/// OK in the prompt box. A name that won't do keeps the box open and says why.
 	pub(super) fn prompt_accept(&mut self) {
 		let Some(prompt) = self.prompt.as_ref() else {
 			return;
@@ -96,7 +96,7 @@ impl SettingsDialog {
 		}
 	}
 
-	// Centered over the panel, sized to what it holds. Two buttons, right-aligned,
+	// Centered over the panel, sized to fit. The 2 buttons are right-aligned,
 	// the same way the dialog's own footer reads.
 	fn prompt_rect(&self) -> Rect {
 		let Some(prompt) = &self.prompt else {
@@ -202,7 +202,7 @@ impl SettingsDialog {
 	}
 
 	/// The name / confirm box, drawn over everything the panel just drew. Its own
-	/// field caret rides the same edit state the rows use, so it blinks and eases
+	/// field caret uses the same edit state the rows use, so it blinks and eases
 	/// the same way.
 	pub(super) fn prompt_overlay(
 		&self,
@@ -216,7 +216,7 @@ impl SettingsDialog {
 		};
 		let mk = |text: String, x: f32, y: f32| TextItem::plain(text, x, y, colors.text);
 		let row_text_y = |y: f32, h: f32| y + (h - self.line_h) / 2.0;
-		// dim the panel behind, so it is plain that it is not taking input
+		// dim the panel behind, so it is plain that it isn't taking input
 		rects.push(RectInstance {
 			pos: [self.rect.x, self.rect.y],
 			size: [self.rect.w, self.rect.h],
@@ -291,7 +291,7 @@ mod tests {
 	use crate::ui_spec::Key;
 
 	// The box is modal by gate, and the gate is a list every input path has to be
-	// on. These four were missed once: the accelerators applied and closed the
+	// on. These 4 were missed once: the accelerators applied and closed the
 	// dialog through the box, and typing edited the row sitting behind it.
 	// Test ID: davex
 	#[test]
@@ -335,7 +335,7 @@ mod tests {
 		}
 	}
 
-	// The prompt is not a row. Clicking its field used to put the prompt's own
+	// The prompt isn't a row. Clicking its field used to put the prompt's own
 	// sentinel index into the focus ring, and the next frame read the row list
 	// with it.
 	// Test ID: dcbcx
@@ -394,7 +394,7 @@ mod tests {
 		);
 	}
 
-	// A name OK cannot take keeps the box open and says why, instead of closing
+	// A name OK can't take keeps the box open and says why, instead of closing
 	// and quietly doing nothing.
 	// Test ID: davcw
 	#[test]

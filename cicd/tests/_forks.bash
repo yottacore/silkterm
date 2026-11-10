@@ -8,11 +8,11 @@
 ##			fForkCount <var> <setup> <measured>
 ##		Both scripts run in a fresh bash, setup first and not counted. var is set to
 ##		the count, and forkCountExact to 1 when it came from a PID namespace of its
-##		own, where every PID is ours. Where one cannot be made, as in a container, it
-##		is 0, and the count is the last PID of the namespace bash is in, best of five.
+##		own, where every PID is ours. Where one can't be made, as in a container, it
+##		is 0, and the count is the last PID of the namespace bash is in, best of 5.
 ##		In a container that is the container's, which the rest of the run adds to; on
 ##		a box it is the box's. Give that case a looser limit. The measured script must
-##		be safe to run five times.
+##		be safe to run 5 times.
 ##	- History: At bottom of file.
 
 ##	Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]

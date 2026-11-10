@@ -254,7 +254,7 @@ class Rec:
 		return sum(e - s for s, e in self.cuts)
 
 	# an epoch as it falls in the finished take, with every cut before it taken
-	# out. One inside a cut lands on the cut's start.
+	# out. One inside a cut maps to the cut's start.
 	def net(self, epoch: float) -> float:
 		gone = 0.0
 		for s, e in self.cuts:
@@ -306,7 +306,7 @@ class Rec:
 			target[1] += dy
 
 	def make_theme(self) -> str:
-		# Recolour the base theme into the demo's slate decoration, into the WM's
+		# Recolor the base theme into the demo's slate decoration, into the WM's
 		# own HOME. Every frame part is a flat <rect fill="..."> so the swap is a
 		# string replace; the button glyphs are separate files and keep their shape.
 		base = Path("/usr/share/themes") / WM_BASE_THEME / "xfwm4"
@@ -879,15 +879,15 @@ def write_tree(rec: Rec, rng: random.Random) -> None:
 	# `ls` wrapper: the listing flags live here rather than in an alias typed on
 	# camera - everyone has their ls aliased, so showing it being set says nothing.
 	# Owner and group are omitted (-gG) and the timestamp is bare: every column a
-	# row carries is width the gif pays for on each scrolled line, and none of them
+	# row has is width the gif pays for on each scrolled line, and none of them
 	# are what the scene is about. A real listing would also print the real
 	# username, so map it to the fake one.
 	bind = home / "bin"
 	bind.mkdir(exist_ok=True)
 	user = getpass.getuser()
 	wrapper = bind / "ls"
-	# The colours come from the wrapper too. Without LS_COLORS in the environment
-	# ls colours directories and nothing else, so a listing's reds and magentas
+	# The colors come from the wrapper too. Without LS_COLORS in the environment
+	# ls colors directories and nothing else, so a listing's reds and magentas
 	# depended on whoever's shell started the recorder - the same run rendered
 	# differently on two boxes. Ask dircolors for the stock database instead.
 	wrapper.write_text('#!/bin/dash\neval "$(dircolors -b)"\nexport LS_COLORS\n'
@@ -931,14 +931,14 @@ printf '  🤔 🍰 🎉 😀   ┌─┬─┐ ╔═╦═╗ ▁▂▃▄▅�
 ''')
 	show.chmod(0o755)
 
-	# build.sh: cargo-flavoured output, paced in movements rather than at random.
+	# build.sh: cargo-flavored output, paced in movements rather than at random.
 	# The scroll speed is not a constant - it leaves rest gently, doubles while the
 	# backlog grows, tops out, then rides a braking curve down to a slow stop.
 	# Output that arrives at one rate only ever shows one point on that curve, so
 	# the earlier version (a line every so often, with a quarter chance of a pause)
 	# never left the gentle end and the whole middle of the curve went unseen. The
 	# pacing below walks the curve end to end, and the long silence at movement 4
-	# is what makes the wind-down visible at all: the view is still travelling when
+	# is what makes the wind-down visible at all: the view is still traveling when
 	# the output stops, and has to brake and stop on its own.
 	crates = [
 		"proc-macro2", "quote", "syn", "unicode-ident", "libc", "bitflags",

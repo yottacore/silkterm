@@ -18,7 +18,7 @@ pub const NAME_MACROS: &[&str] = &["YYYYmmDD", "HHMMSS", "HHMMSSNN"];
 
 pub const DEFAULT_SESSION_NAME: &str = "%YYYYmmDD%-%HHMMSSNN%";
 
-// a tmux that doesn't answer by then is treated as having said no
+// a tmux that doesn't respond by then is treated as having said no
 const ASK_FOR: Duration = Duration::from_millis(800);
 
 /// What closing a tab or pane does to the tmux sessions SilkTerm started in it.
@@ -120,7 +120,7 @@ pub fn session_name(template: &str, date: &str, time: &str, hundredths: u32) -> 
 /// A session name tmux keeps as given. tmux itself swaps `.` and `:` for `_`,
 /// since they separate the parts of a target, and expands `#` as one of its
 /// formats. The name has to be the one tmux ends up with, or ending the session
-/// by name later finds nothing, so all three are swapped here. Control
+/// by name later finds nothing, so all 3 are swapped here. Control
 /// characters are dropped, since tmux would show them escaped.
 pub fn clean_name(name: &str) -> String {
 	name.chars()
@@ -157,7 +157,7 @@ pub fn launch_argv(
 	if let Some(shell) = shell.filter(|shell| !shell.is_empty()) {
 		argv.push("--".to_string());
 		// One word is run by tmux's default-shell as `-c` text, where a path with
-		// a space in it breaks. Two or more are run as they are.
+		// a space in it breaks. With 2 or more, they're run as they are.
 		if shell.len() == 1 {
 			argv.push("/usr/bin/env".to_string());
 		}
@@ -197,7 +197,7 @@ pub fn free_name(base: &str, mut taken: impl FnMut(&str) -> bool) -> String {
 }
 
 // Names handed out by this process. A new pane's tmux makes its session a
-// moment after the pane starts, so two splits in the same hundredth of a
+// moment after the pane starts, so 2 splits in the same hundredth of a
 // second would otherwise both find the name free.
 fn issued(name: &str) -> bool {
 	static ISSUED: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
@@ -224,7 +224,7 @@ fn has_session(tmux: &Path, name: &str) -> bool {
 }
 
 /// Kill `session`, and nothing else. It goes by the name SilkTerm gave it, so
-/// if the user renamed it, or it is gone, nothing is killed. Waited on from a
+/// if the user renamed it, or it's gone, nothing is killed. Waited on from a
 /// thread of its own, so a tmux that hangs can't stop the window.
 pub fn end(session: &Session) {
 	let mut cmd = command(&session.tmux);
@@ -424,7 +424,7 @@ mod tests {
 				"-l"
 			]
 		);
-		// no directory, no variables and tmux's own shell
+		// no directory, no variables, and tmux's own shell
 		assert_eq!(
 			launch_argv(&session(), None, &[], None),
 			["/usr/bin/tmux", "new-session", "-s", "20261017-17332704"]
@@ -489,7 +489,7 @@ mod tests {
 
 	// The test's own setup and cleanup aren't what it tests, so they aren't held
 	// to ASK_FOR. On vmKt6m a first new-session takes about 40 ms in the whole
-	// suite, yet once didn't answer in time (2026110313290006).
+	// suite, yet once didn't respond in time (2026110313290006).
 	#[cfg(unix)]
 	const SETUP_WAIT: Duration = Duration::from_secs(10);
 

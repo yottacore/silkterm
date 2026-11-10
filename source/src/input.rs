@@ -92,7 +92,7 @@ pub fn close_on_release(
 /// How soon, and how near, a click has to follow the last one to count with it.
 pub const MULTI_CLICK: Duration = Duration::from_millis(400);
 
-/// A press's place in a run of clicks on one spot: 1, 2 or 3, and a fourth
+/// A press's place in a run of clicks on one spot: 1, 2, or 3, and a fourth
 /// starts over. One too late, or more than a cell away, starts a new run.
 pub fn click_count(
 	last: Option<(Instant, f32, f32)>,
@@ -155,7 +155,7 @@ pub struct EditKeys {
 	/// types a character there
 	pub alt: bool,
 	pub shift: bool,
-	/// copy, cut, paste and select all, and the dialog's tab switching
+	/// copy, cut, paste, and select all, and the dialog's tab switching
 	pub shortcut: bool,
 	/// the arrows and the erase keys go by words
 	pub word: bool,
@@ -168,7 +168,7 @@ pub struct EditKeys {
 /// A Mac holds Command for the shortcuts, Option to move by words and Command
 /// to go to either end, as its own text fields do. Control types nothing there,
 /// and Option plus a letter types whatever the layout puts there.
-/// Elsewhere Ctrl does the first two.
+/// Elsewhere Ctrl does the first 2.
 pub fn edit_keys(mods: ModifiersState, mac: bool) -> EditKeys {
 	if mac {
 		EditKeys {
@@ -236,7 +236,7 @@ pub enum Hotkey {
 	MoveTab { forward: bool },
 	Copy,
 	Paste,
-	// Command+Q on macOS, for a press the menu bar does not take
+	// Command+Q on macOS, for a press the menu bar doesn't take
 	Quit,
 	SplitRight,
 	SplitDown,
@@ -270,7 +270,7 @@ fn hotkey_on(key: &Key, mods: ModifiersState, menu_bar: bool, mac: bool) -> Opti
 
 // The bound chords come first, so a binding on Alt+letter wins over the menu
 // title. Alt+letter opens a title only where there is an in-window bar, which a
-// Mac does not have.
+// Mac doesn't have.
 fn hotkey_in(
 	keys: &Bindings,
 	key: &Key,
@@ -309,10 +309,10 @@ pub enum CopyFrom {
 }
 
 /// Whether a copy goes through. The window-focus flag can lag the window
-/// manager, so the two a person drives never wait on it: a chord typed at this
-/// window, or a drag in it, is proof enough it is the one in use. The two that
+/// manager, so the 2 a person drives never wait on it: a chord typed at this
+/// window, or a drag in it, is proof enough it is the one in use. The 2 that
 /// fire on their own take only the pane in use - a background pane printing a
-/// hostile file cannot swap what the next paste holds - and output copies only
+/// hostile file can't swap what the next paste gets - and output copies only
 /// while its window has focus, so a command that finished while the user was
 /// elsewhere never copies late.
 pub fn copy_allowed(from: CopyFrom, window_focused: bool, pane_in_use: bool) -> bool {
@@ -323,7 +323,7 @@ pub fn copy_allowed(from: CopyFrom, window_focused: bool, pane_in_use: bool) -> 
 	}
 }
 
-/// Encode a mouse event as a report for the PTY, honouring the app's tracking
+/// Encode a mouse event as a report for the PTY, honoring the app's tracking
 /// mode (SGR 1006 vs the legacy X10 form) and modifier bits. `col`/`row` are
 /// 0-based cells within the viewport; `pressed` is press vs release (wheel is
 /// press-only); `motion` marks a drag/move report. Returns None when no tracking
@@ -390,7 +390,7 @@ pub fn encode(ev: &KeyEvent, mods: ModifiersState, app_cursor: bool) -> Option<V
 }
 
 // Windows lets a program hand a window a character instead of a key press, and
-// it arrives as a key the layout cannot name carrying only the text it stands
+// it arrives as a key the layout can't name, with only the text it stands
 // for. The touch keyboard sends characters its layout has no key for that way,
 // and so do text expanders and some accessibility tools. Nothing else produces
 // an unnamed key with text on it, so the text is what was typed.
@@ -403,7 +403,7 @@ fn typed_key(key: &Key, text: Option<&str>) -> Option<Key> {
 	}
 }
 
-/// Name a key the platform could not, so every reader of the event sees the
+/// Name a key the platform couldn't, so every reader of the event sees the
 /// character rather than nothing. Both window event handlers call this before
 /// they look at a key.
 pub fn name_typed(mut ev: KeyEvent) -> KeyEvent {
@@ -679,13 +679,13 @@ mod tests {
 	fn mouse_report_needs_tracking() {
 		// no tracking mode set -> nothing to report
 		assert!(mouse_report(TermMode::empty(), MouseBtn::Left, true, false, 0, 0, NONE).is_none());
-		// SGR flag alone (no click/drag/motion) is not tracking
+		// SGR flag alone (no click/drag/motion) isn't tracking
 		assert!(
 			mouse_report(TermMode::SGR_MOUSE, MouseBtn::Left, true, false, 0, 0, NONE).is_none()
 		);
 	}
 
-	// winit calls the spacebar a named key, so Ctrl+Space never reached the
+	// winit calls the spacebar a named key, so Ctrl+Space never got to the
 	// control-code path and sent a plain space. Emacs and readline set-mark, and
 	// tmux begin-selection, all want NUL.
 	// Test ID: dcbds
@@ -702,7 +702,7 @@ mod tests {
 	}
 
 	// A character handed to the window instead of typed at it arrives as a key
-	// the layout cannot name. It used to reach nothing at all.
+	// the layout can't name. It used to go nowhere at all.
 	// Test ID: dcdcy
 	#[test]
 	fn an_unnamed_key_is_read_as_its_text() {
@@ -733,7 +733,7 @@ mod tests {
 
 	// Only an unnamed key is filled in from its text. A named key already says
 	// what it is, and its text is a representation of that rather than typing -
-	// Enter carries "\r", and reading it as a character would lose the key.
+	// Enter has "\r", and reading it as a character would lose the key.
 	// Test ID: dcdd0
 	#[test]
 	fn a_key_the_layout_named_is_left_alone() {
@@ -825,7 +825,7 @@ mod tests {
 
 	// Off since a Mac's own chords moved from Ctrl to Command (20261002), so
 	// Ctrl+, no longer opens Settings there.
-	// `command_comma_is_the_only_settings_chord_on_macos` covers it.
+	// `command_comma_is_the_only_settings_chord_on_macos` tests it instead.
 	// // Command+, is Settings on macOS and nowhere else. Ctrl+, stays on every
 	// // platform, and Command with anything more is not the chord.
 	// // Test ID: ddcee
@@ -849,7 +849,7 @@ mod tests {
 
 	// Off since a Mac's own chords moved from Ctrl to Command (20261002): the
 	// Ctrl chords go to the shell there, where this held them unchanged.
-	// `the_command_chords_are_the_only_program_chords_on_macos` covers it.
+	// `the_command_chords_are_the_only_program_chords_on_macos` tests it instead.
 	// // On a Mac each action with an Apple standard shortcut answers to it, and
 	// // nothing else held with Command does. Off a Mac, Super chords stay free. No
 	// // Ctrl chord moves either way.
@@ -971,7 +971,7 @@ mod tests {
 	}
 
 	// Command+, is Settings on a Mac, and Ctrl+, goes to the shell there.
-	// Elsewhere Ctrl+, is Settings and Super+, is not.
+	// Elsewhere Ctrl+, is Settings and Super+, isn't.
 	// Test ID: dde08
 	#[test]
 	fn command_comma_is_the_only_settings_chord_on_macos() {
@@ -1061,7 +1061,7 @@ mod tests {
 			}
 		}
 		assert!(elsewhere > 20, "{elsewhere}");
-		// keys that are not chords keep what they do
+		// keys that aren't chords keep what they do
 		for mac in [false, true] {
 			let named = |key| hotkey_on(&Key::Named(key), NONE, true, mac);
 			assert_eq!(named(NamedKey::F11), Some(Hotkey::Fullscreen));
@@ -1070,7 +1070,7 @@ mod tests {
 	}
 
 	// Command+Shift+[ and ] walk the tabs on a Mac, which reports the press by
-	// the shifted character. The page keys walk and carry tabs with Command,
+	// the shifted character. The page keys walk and move tabs with Command,
 	// as they do with Ctrl elsewhere.
 	// Test ID: dde0a
 	#[test]
@@ -1148,7 +1148,7 @@ mod tests {
 		);
 	}
 
-	// Ctrl decides alone, whatever else is held. Linux and Windows keep
+	// Ctrl alone counts, whatever else is held. Linux and Windows keep
 	// Ctrl+click for links and block selection.
 	// Test ID: dde2x
 	#[test]
@@ -1203,7 +1203,7 @@ mod tests {
 		assert!(pc.alt && pc.types && !pc.word);
 	}
 
-	// Nothing typed with Command held reaches the shell on a Mac. Elsewhere a
+	// Nothing typed with Command held goes to the shell on a Mac. Elsewhere a
 	// Super chord goes on as it always has.
 	// Test ID: dddnf
 	#[test]
@@ -1218,8 +1218,8 @@ mod tests {
 	}
 
 	// Off since panes got hotkeys (20261003, 2026100220292607): Alt+Shift+Plus
-	// and Minus split, Alt+Shift+W closes and Alt+arrows move, as in Windows
-	// Terminal. Its Ctrl and Ctrl+Shift checks still hold and moved to
+	// and Minus split, Alt+Shift+W closes, and Alt+arrows move, as in Windows
+	// Terminal. Its Ctrl and Ctrl+Shift checks still apply and moved to
 	// `alt_shift_chords_split_and_close_panes_and_alt_arrows_move`.
 	// // Pane split, close and focus cycling are menu-only, so every other chord
 	// // goes to the shell.
@@ -1246,7 +1246,7 @@ mod tests {
 	// }
 
 	// The pane chords are Windows Terminal's: Alt+Shift+Plus splits right,
-	// Alt+Shift+Minus splits down, Alt+Shift+W closes the pane and Alt+arrows
+	// Alt+Shift+Minus splits down, Alt+Shift+W closes the pane, and Alt+arrows
 	// move between panes. Alt+letter still opens a menu, and no Ctrl or
 	// Ctrl+Shift chord was taken for panes.
 	// Test ID: ddes9
@@ -1290,7 +1290,7 @@ mod tests {
 		}
 	}
 
-	// Only Alt alone makes a letter a menu title. Shift, Super or Ctrl held
+	// Only Alt alone makes a letter a menu title. Shift, Super, or Ctrl held
 	// with it is some other chord (AltGr arrives as Ctrl+Alt on Windows), so it
 	// goes on to the shell.
 	// Test ID: ddexv
@@ -1341,7 +1341,7 @@ mod tests {
 			Some(Hotkey::SplitDown)
 		);
 		assert_eq!(mac(d(), CTRL), None);
-		// Command holds back the character Option would type, so the press
+		// Command suppresses the character Option would type, so the press
 		// arrives as "w"
 		let w = || Key::Character("w".into());
 		assert_eq!(mac(w(), COMMAND.union(OPTION)), Some(Hotkey::ClosePane));
@@ -1518,7 +1518,7 @@ mod tests {
 		assert!(!copy_allowed(CopyFrom::Program, true, false));
 	}
 
-	// A capture that is not allowed is disarmed, so output that finished while
+	// A capture that isn't allowed is disarmed, so output that finished while
 	// the user was elsewhere never copies on the way back.
 	// Test ID: dd5pd
 	#[test]

@@ -10,7 +10,7 @@
 ##			- After the wake, a picture close to it, not the bare background.
 ##	- Syntax: run.bash [--bin PATH]   (default: the debug build, then release)
 ##	- Exit: 0 passed, 1 a check failed, 3 nothing ran (no binary, display,
-##	  window manager, xdotool, xwd or ImageMagick).
+##	  window manager, xdotool, xwd, or ImageMagick).
 ##	- Test ID: ddj6q
 ##	- History: At bottom of file.
 
@@ -122,7 +122,7 @@ fNear(){
 }
 
 fCheck "a window came up" test -n "${window}"
-## The idle wait is reset by output, focus and the pointer, so the window is
+## The idle wait is reset by output, focus, and the pointer, so the window is
 ## left alone with focus until the picture is up, then minimized.
 for _ in {1..120}; do
 	fShot "${work}/before.png" || true

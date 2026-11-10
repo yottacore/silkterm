@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 
 ##	- Purpose:
-##		Three windows on the private display, two on one settings file and one
+##		There are 3 windows on the private display, 2 on one settings file and one
 ##		on another. A save in the first has to show in the second at once, and
 ##		never in the third.
 ##			- View > Minimap in window A saves. A's minimap comes on, B keeps
-##			  its own, C's does not change, and nobody picks a new wallpaper.
+##			  its own, C's doesn't change, and nobody picks a new wallpaper.
 ##			- A new wallpaper folder written by hand, then Reload config in A.
 ##			  A and B both pick from the new folder; C picks nothing.
 ##			- B killed without warning. The next save in A finds it gone and
@@ -13,7 +13,7 @@
 ##			- A window D opened after a save starts with what was saved.
 ##	- Syntax: run.bash [--bin PATH]   (default: the debug build, then release)
 ##	- Exit: 0 passed, 1 a check failed, 3 nothing ran (no binary, display,
-##	  xdotool, xwd or ImageMagick).
+##	  xdotool, xwd, or ImageMagick).
 ##	- Test ID: ddwnj
 ##	- History: At bottom of file.
 
@@ -93,7 +93,7 @@ if [[ "${status}" == *"no Xvfb"* ]]; then
 fi
 fX(){ DISPLAY="${display}" XAUTHORITY="${auth}" "${@}"; }
 
-## Two folders of pictures that look nothing alike, so a pick can be told by name.
+## A couple of folders of pictures that look nothing alike, so a pick can be told by name.
 fPictures(){  ## fPictures <dir> <prefix> <color...>
 	local -r dir="${1}" prefix="${2}"; shift 2
 	mkdir -p "${dir}"
@@ -217,7 +217,7 @@ sed -i "s|${work}/pics1|${work}/pics2|" "${shared}"
 SILKTERM_SOCKET="${runDir}/silkterm-ctl-${pids[a]}.sock" "${bin}" --reload-settings >/dev/null 2>&1 || true
 sleep 1
 for name in b c; do fSettled "${name}" "${work}/${name}3.png" West || true; done
-## each window picks on its own, and two picks can land on one name
+## each window picks on its own, and 2 picks can end up on one name
 fCheck "the new folder was picked from" test "$(fHistory "${work}/shared" | grep -c '^two' || true)" -ge 1
 fCheck "b shows a picture from it" fDiffers "${work}/b2.png" "${work}/b3.png"
 fCheck "c does not" fSame "${work}/c2.png" "${work}/c3.png"

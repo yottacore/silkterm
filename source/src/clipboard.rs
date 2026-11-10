@@ -2,18 +2,18 @@
 // Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
 
 //! Thin wrapper over copypasta for the regular CLIPBOARD plus, on Linux, the
-//! PRIMARY selection (middle-click paste). The contexts are held for the
+//! PRIMARY selection (middle-click paste). The contexts stay alive for the
 //! app's lifetime: X11 selection ownership lives in the context, so dropping it
-//! would drop the copied text. Everything is best-effort - a missing/foreign
-//! display just yields no clipboard rather than an error.
+//! would drop the copied text. Everything is best-effort, so a missing or
+//! foreign display means no clipboard rather than an error.
 //!
 //! A Wayland window gets the Wayland clipboard on winit's own connection, and
 //! no X11 context at all, so a Wayland session never opens an X connection for
 //! it. Only an X11 window takes the X11 contexts, under Xwayland too.
 //!
 //! Wayland takes a selection only from a client that has the keyboard, so there
-//! a program's store made while the window is unfocused is held until the
-//! window has it back (2026101607585700).
+//! a program's store made while the window is unfocused waits until the window
+//! has it back (2026101607585700).
 
 use copypasta::ClipboardProvider;
 use raw_window_handle::RawDisplayHandle;
@@ -109,7 +109,7 @@ impl Clipboard {
 	pub fn set_primary(&mut self, text: String) {
 		#[cfg(target_os = "linux")]
 		{
-			// a newer copy beats a held one
+			// a newer copy beats a waiting one
 			self.held_primary = None;
 		}
 		#[cfg(target_os = "linux")]
@@ -176,7 +176,7 @@ impl Clipboard {
 		}
 	}
 
-	// X11, macOS and Windows take a selection from a window without focus.
+	// X11, macOS, and Windows take a selection from a window without focus.
 	fn must_hold(&self) -> bool {
 		self.backend == Backend::Wayland && !self.has_keyboard
 	}
@@ -192,8 +192,8 @@ impl Clipboard {
 
 // SILK_KEYDBG: one line per store, with the result the provider reports. On
 // X11 a store can be accepted and still lose to a clipboard manager that takes
-// the selection straight back, so what happened at THIS end is worth having in
-// the trace before blaming the key that asked for it. On Wayland a store is
+// the selection straight back, so the trace shows what happened at this end
+// before the key that asked for it gets the blame. On Wayland a store is
 // always accepted here, and the clipboard's worker drops one made while no
 // SilkTerm window has the keyboard, so a program's waits for focus instead.
 fn trace(which: &str, len: usize, result: Result<(), Box<dyn std::error::Error + Send + Sync>>) {

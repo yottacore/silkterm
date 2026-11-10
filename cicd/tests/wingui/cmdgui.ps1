@@ -34,7 +34,7 @@ function fTitle([IntPtr]$H) {
 $dir = Join-Path $OutDir "cmdgui"
 fClearOut $dir
 [void](New-Item -ItemType Directory -Path $dir -Force)
-##	csc ships with the .NET Framework that every Windows 10 and 11 has.
+##	csc comes with the .NET Framework that every Windows 10 and 11 has.
 $csc = Join-Path $env:WINDIR "Microsoft.NET\Framework64\v4.0.30319\csc.exe"
 if (-not (Test-Path $csc)) { fSkip "no csc.exe to build the stand-in with" }
 $src = Join-Path $dir "nap.cs"

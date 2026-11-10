@@ -44,7 +44,7 @@
 
 ## Summary
 
-SilkTerm moves text a pixel at a time instead of a whole line at a time. That goes for the wheel and the scrollbar, for new output pushing old text up, and for full-screen programs such as less, vim, nano and tmux that scroll part of the screen themselves. It is the reason the project exists. When this was started, no other terminal eased new output, and none animated full-screen programs.
+SilkTerm moves text a pixel at a time instead of a whole line at a time. That goes for the wheel and the scrollbar, for new output as it pushes old text up, and for full-screen programs such as less, vim, nano, and tmux that scroll part of the screen themselves. It's why the project exists. When the project started, there wasn't any other terminal that eased new output or animated full-screen programs.
 
 ## Specification
 
@@ -62,25 +62,25 @@ SilkTerm moves text a pixel at a time instead of a whole line at a time. That go
 	- When output stops, the speed winds down smoothly and the last line settles in place.
 	- At speed the view trails the output on purpose, by about the distance it needs to slow down. It never falls further behind than that.
 
-- Rows a program keeps in place stay still while the text above them moves. Examples are a progress line, apt's status bar, tmux's status line and the input box of a chat-style program.
+- Rows a program keeps in place stay still while the text above them moves. Examples are a progress line, apt's status bar, tmux's status line, and the input box of a chat-style program.
 
 - Full-screen programs that scroll part of the screen get the same smooth motion as plain output. Their title and status rows stay still.
 
-- New lines that only fill empty space at the bottom of the screen pop in. They do not slide down from behind the text above.
+- New lines that only fill empty space at the bottom of the screen pop in. They don't slide down from behind the text above.
 
-- A window, tab or pane that could not be seen does not animate what it missed. It jumps to the current state in one cut when it is shown again.
+- A window, tab, or pane that couldn't be seen doesn't animate what it missed. It jumps to the current state in one cut when it is shown again.
 
 - The wheel scrolls the scrollback on the normal screen. In a full-screen program it sends arrow keys, unless the program asked for mouse events, in which case the program gets the wheel. Shift keeps the wheel for SilkTerm.
 
-- Settings has one switch that turns all scroll animation off, and five sliders that shape output speed. On every slider, higher means faster, harder or crisper.
+- Settings has one switch that turns all scroll animation off, and 5 sliders that shape output speed. On every slider, higher means faster, harder, or crisper.
 
 - A second switch turns off the slide for full-screen programs only.
 
 ## Goals
 
-- Smooth motion for every kind of scroll a person watches: the wheel, the scrollbar, new output and full-screen programs.
+- Every kind of scroll a person watches moves smoothly. That's the wheel, the scrollbar, new output, and full-screen programs.
 
-- Output never piles up out of sight. The oldest complaint about smooth scrolling on terminals, and the reason it was dropped in the late 80s, is that fast output gets backlogged. SilkTerm has to start slow and gentle, then speed up as far as it needs to.
+- Output never piles up out of sight. The oldest complaint about smooth scrolling on terminals is that fast output gets backlogged, and that's why it was dropped in the late 80s. SilkTerm has to start slow and gentle, then speed up as far as it needs to.
 	- Example: `tail -f` on a log that prints one line now and then, and then suddenly a long, fast burst, and everything in between. Scrolling should stay smooth at the slow end and keep up at the fast end.
 
 - Each setting does one thing a person can see, and no setting quietly changes what another one does.
@@ -89,17 +89,17 @@ SilkTerm moves text a pixel at a time instead of a whole line at a time. That go
 
 ### Non-goals
 
-- Changing what is in the terminal. The engine only knows whole lines, and that stays true.
+- SilkTerm doesn't change what's in the terminal. The engine only knows whole lines, and that stays true.
 
-- Guessing about programs that repaint the whole screen for every change. Those fall back to a plain cut where nothing can be measured reliably.
+- SilkTerm doesn't guess about programs that repaint the whole screen for every change. Those fall back to a plain cut where nothing can be measured reliably.
 
-- Animating content that is already old. A catch-up after being hidden is a cut, not a slide.
+- Content that's already old doesn't animate. A catch-up after a pane was hidden is a cut rather than a slide.
 
 ## Design
 
 ### Whole lines in the engine, a fraction in the renderer
 
-The engine (the `alacritty_terminal` crate) owns "where the grid is", in whole lines. The renderer owns a fractional offset laid over it. The crate's `display_offset` is a whole number, so smooth scrolling lives entirely in the renderer.
+The engine is the `alacritty_terminal` crate, and it owns where the grid is, in whole lines. The renderer owns a fractional offset that's drawn on top of that. The crate's `display_offset` is a whole number, so smooth scrolling is done entirely in the renderer.
 
 1. Keep a separate `visual_offset: f32` in the render layer, apart from the crate's integer `display_offset`.
 
@@ -109,45 +109,45 @@ The engine (the `alacritty_terminal` crate) owns "where the grid is", in whole l
 
 1. Draw the grid shifted down by `visual_offset * cell_height` pixels.
 
-1. Draw one extra row at the top and the bottom, so partial rows fill the edges of the view during a fractional offset. The strip is clipped per pane.
+1. Draw one extra row at the top and the bottom, so partial rows fill the edges of the view during a fractional offset. The extra rows are clipped per pane.
 
-The view never sits past the grid. The whole part of the offset is what the grid is scrolled by, and the fraction is drawn. So an offset beyond the scrollback would pin the whole part while the fraction kept wrapping, one whole-cell hop per line. That was the nano wobble: a burst still easing when the alt screen, which has no scrollback, took over. The offset is clamped to the scrollback instead. That stops the ease the moment a screen swaps, and it caps how far a fresh terminal's first output eases.
+The view is never scrolled past the grid. The whole part of the offset is what the grid is scrolled by, and the fraction is drawn. So an offset beyond the scrollback would pin the whole part while the fraction kept wrapping, one hop of a whole cell per line. That caused the nano wobble. A burst was still easing when the alt screen took over, and the alt screen has no scrollback. The offset is clamped to the scrollback instead. That stops the ease the moment a screen swaps, and it caps how far a fresh terminal's first output eases.
 
 ### Where a gesture comes to rest
 
-A gesture rests on a whole line, and on the line it was heading for. A pixel-delta wheel leaves a fractional target, and parking there draws every row shifted by part of a cell. Rounding to the nearest line is the obvious way to settle that, and it is wrong at the end of a gesture. A scroll that stops nine tenths past a boundary goes all the way forward and then hops back. That reads as a glitch even though the travel is under a line. So the stop goes forward, in the direction the wheel was already turning. A scrollbar drag or a track click carries no direction and still rounds to nearest, which is what direct manipulation wants.
+A gesture rests on a whole line, and on the line it was heading for. A pixel-delta wheel leaves a fractional target, and parking there draws every row shifted by part of a cell. Rounding to the nearest line is the obvious way to settle that, but it's wrong at the end of a gesture. A scroll that stops nine tenths past a boundary goes all the way forward and then hops back. That reads as a glitch even though the travel is under a line. So the stop goes forward, in the direction the wheel was already turning. A scrollbar drag or a track click doesn't have a direction, so it still rounds to the nearest line. That's what's expected of direct manipulation.
 
-The ease curve is deliberately lopsided. A single exponential ease starts at peak speed on its first frame and crawls its last pixels in over a second. Both read wrong. Motion instead builds from rest through two stages: the visual position chases a leading stage, which chases the target. The stop is sharpened by a minimum closing speed over the final fraction of a line. Neither stage can overshoot, so the curve cannot bounce.
+The ease curve is deliberately lopsided. A single exponential ease starts at peak speed on its first frame and crawls its last pixels in over a second. Both read wrong. Instead, motion builds from rest through 2 stages. The visual position chases a leading stage, and that stage chases the target. The stop is sharpened by a minimum closing speed over the final fraction of a line. Neither stage can overshoot, so the curve can't bounce.
 
-User navigation is exempt from the output chase below. Wheel and scrollbar keep a plain fixed ease. The Ease-in setting also paces the wheel ease's start, so both kinds of motion leave rest the same way.
+User navigation is exempt from the output chase below. The wheel and the scrollbar use a plain fixed ease. The Ease-in setting also paces the wheel ease's start, so both kinds of motion leave rest the same way.
 
 ### Easing new output
 
-The same mechanism serves output. When new output pushes content up, `visual_offset` is set back by the lines that arrived and eased to zero, instead of snapping. Output scrolling is an animated target like wheel scrolling.
+Output uses the same mechanism. When new output pushes content up, `visual_offset` is set back by the number of lines that arrived and then eased to zero, instead of snapping. Output scrolling is an animated target like wheel scrolling.
 
-- The scrollback depth is sampled once per read from the program, not once per frame. A drop in depth means a clear, so everything left is new. An alt-screen switch or a resize starts the measurement over.
+- The scrollback depth is sampled once per read from the program, rather than once per frame. A drop in depth means a clear, so everything left is new. An alt-screen switch or a resize starts the measurement over.
 
-- A clear shows at once, whatever the scrollback holds, and the same every time. That covers `clear` and `tput clear`, bash's Ctrl+L, which erases the screen but not the scrollback, and a reset. The engine notes each clear with the lines that went up after it. The view snaps to the bottom, and only those lines ease, so output that fits on the screen shows in place and longer output eases like any other. The ease's floor can't reach back past them into the screen that was cleared.
+- A clear shows at once and the same way every time, whatever is in the scrollback. That includes `clear`, `tput clear`, a reset, and bash's Ctrl+L. Ctrl+L erases the screen but not the scrollback. The engine records each clear along with the lines that went up after it. The view snaps to the bottom, and only those lines ease. So output that fits on the screen shows in place, and longer output eases like any other output. The ease's floor can't extend past those lines into the cleared screen.
 
-- Blank lines that go up from a blank screen don't ease either, since nothing anyone saw moved. ble.sh draws a prompt too long for one row at the top of the screen with insert-line and delete-line, and the engine sends the rows a delete at the top row takes into the scrollback. After `clear` that eased the new prompt up from 2 rows down.
+- Blank lines that go up from a blank screen don't ease either, since nothing anyone saw moved. ble.sh draws a prompt that's too long for one row at the top of the screen, with insert-line and delete-line. A delete at the top row takes rows off the screen, and the engine sends them into the scrollback. After `clear`, those blank lines used to ease the new prompt up from 2 rows down.
 
-- There is one depth baseline, sampled both per read and per frame, and whichever comes first counts the growth. Two baselines let the same lines count twice, which showed as a hop down and an ease back.
+- There's one depth baseline. It's sampled both per read and per frame, and whichever sample comes first counts the growth. With 2 baselines, the same lines were counted twice, and that showed as a hop down and an ease back.
 
-- Once the scrollback is full, its depth stops growing. The engine then counts the lines it sends off the top of the screen, and that count carries plain output. See the ledger below.
+- Once the scrollback is full, its depth stops growing. The engine then counts the lines it sends off the top of the screen, and plain output eases by that count. See the ledger below.
 
-- A row counts as scrolled only if its old position changed too. A command that prints the same output twice therefore shows the second copy in place, not sliding up from under the prompt.
+- A row counts as scrolled only if its old position changed too. So a command that prints the same output twice shows the second copy in place, rather than sliding up from under the prompt.
 
-- Sporadic output eases in over at least `scroll.output_ease_lines` lines, one by default. That floor is capped at 16 and by the history there is to ease through.
+- Sporadic output eases in over at least `scroll.output_ease_lines` lines, 1 by default. The floor is capped at 16, and by how much history there is to ease through.
 
 ### Rows that stay still while output eases
 
-Lines a program redraws in place at the bottom stay still while output eases. A progress line, apt's status bar or a live input block under a transcript did not move in the grid. But the ease shifted the whole pane, so they dropped a row with every new line and slid back up. That showed as a sharp horizontal seam at the top edge of those lines.
+Lines a program redraws in place at the bottom stay still while output eases. A progress line, apt's status bar, or a live input block under a transcript didn't move in the grid. But the ease shifted the whole pane, so they dropped a row with every new line and slid back up. That showed as a sharp horizontal seam at the top edge of those lines.
 
-- The rows kept still are the ones below the rows a step actually moved, and one of them must be text that reads the same as before. Without that, the last chunk of plain output and a prompt coming back after a command would stay still too.
+- The rows that are kept still are the ones below the rows a step moved, and one of them has to be text that reads the same as before. Without that check, the last chunk of plain output and a prompt coming back after a command would stay still too.
 
 - Rows below a program's own scroll region are kept still on the engine's record alone, whatever they say.
 
-- The band only grows while one ease runs. Steady output keeps a single ease going, so a band measured once could miss a block caught half drawn. A band that shrank would drop a kept row back into the moving text.
+- The band of still rows only grows while one ease runs. Steady output keeps a single ease going, so a band measured once could miss a block that was only half drawn at the time. A band that shrank would drop a kept row back into the moving text.
 
 - A single progress line whose text changes on the same frame a new line arrives still drops for that step. Matching rows loosely enough to catch it also kept half-written output lines still.
 
@@ -155,29 +155,29 @@ Lines a program redraws in place at the bottom stay still while output eases. A 
 
 ### Windows and tabs that could not be seen
 
-Nothing that could not be seen eases. A minimized or covered window, and a tab that is not the one shown, build no frames while they are out of view. Whatever arrived meanwhile is a gap, not motion. Easing that gap in would say the wrong thing twice: it animates content that is already old, and it reads as output arriving right now. Coming back on screen is one instant cut instead. The flash that produces is the point, since it marks the update as catching up rather than happening. A window that is merely behind others is not frozen and keeps easing.
+Content that couldn't be seen doesn't ease. A minimized or covered window doesn't build any frames while it's out of view, and neither does a tab that isn't the one shown. Whatever arrived meanwhile is a gap rather than motion. Easing that gap in would be wrong in 2 ways. It would animate content that's already old, and it would look like output that's arriving right now. A window or tab that comes back on screen gets one instant cut instead. The cut causes a flash, and that's on purpose, since it shows the update is catching up rather than happening live. A window that's only behind others isn't frozen, so it keeps easing.
 
 ### The output chase
 
-Catch-up speed is modeled as one curve on a time/speed graph, and each setting is a named segment of it. The curve starts and ends at zero. Each segment hands exactly one thing to the next: the point where it ended. In order:
+Catch-up speed is modeled as one curve on a graph of speed over time, and each setting is a named segment of it. The curve starts and ends at zero. Each segment passes only one thing to the next, and that's the point where it ended. In order:
 
-- Ease-in lifts the speed from rest over its duration. It is the only segment that can leave zero.
+- Ease-in lifts the speed from rest over its duration. It's the only segment that can leave zero.
 
-- Ramp-up doubles the speed every one of its periods, toward whichever top applies.
+- Ramp-up doubles the speed once per period, toward whichever top speed applies.
 
-- The top is either the Single-screen speed or unbounded. Single-screen applies while the burst's own first line is still on screen, so a short listing never races. Once a screenful has scrolled past, the ramp climbs exponentially until it keeps up.
+- The top speed is either the Single-screen speed or unbounded. Single-screen applies while the burst's own first line is still on screen, so a short listing never races. Once a screenful has scrolled past, the ramp climbs exponentially until it keeps up.
 
-- When the cap lifts mid-burst, Ease-in runs once more from the speed it found itself at, and then Ramp-up resumes.
+- When the cap lifts mid-burst, Ease-in runs once more from the speed it was at, and then Ramp-up resumes.
 
 - Ramp-down winds the speed down, and Ease-out brings it to rest.
 
-The segments are straight lines and exponentials adjusted by time, rather than one smooth curve per segment. That is the approach audio and video production use. It is cheap to compute, and each setting stays a plain duration.
+The segments are straight lines and exponentials that are adjusted by time, rather than one smooth curve per segment. Audio and video production use the same approach. It's cheap to compute, and each setting stays a plain duration.
 
-Winding down is the same curve traced backwards. Ramp-down is a braking curve computed from where Ease-out comes to rest. At any moment the speed may not exceed what could still be wound down, halving once per Ramp-down period, within the lines left to draw. Applied continuously, that one rule is both the reserve and the slowdown. At speed, the view trails the live output by a braking distance. The moment output stops, the speed rides the curve down and hands off to Ease-out exactly at the stopping band.
+Winding down is the same curve traced backwards. Ramp-down is a braking curve that's computed from where Ease-out comes to rest. At any moment, the speed can't be more than what could still be wound down within the lines left to draw, with the speed halving once per Ramp-down period. That one rule is applied continuously, and it gives both the reserve and the slowdown. At speed, the view trails the live output by a braking distance. The moment output stops, the speed follows the curve down and hands off to Ease-out exactly at the stopping band.
 
-While a burst is in flight, the chase drives the view outright. It ends exactly where the stopping band begins, so it needs nothing handed to it and leaves nothing over. A prompt coming back after a command gets the same curve as a long listing.
+While a burst is still arriving, the chase alone sets the view's position. It ends exactly where the stopping band begins, so it doesn't need anything handed to it and doesn't leave anything over. A prompt that comes back after a command gets the same curve as a long listing.
 
-The backlog is deliberately not capped in lines. The ramps bound the lag in time instead, to about one Ramp-down period at a steady rate. That is what makes the slow start possible.
+The backlog is deliberately not capped in lines. The ramps bound the lag in time instead, to about one Ramp-down period at a steady rate. That's what makes the slow start possible.
 
 #### The curve, as specified
 
@@ -214,7 +214,7 @@ This is the original specification the chase was built to. It still describes wh
 		- Second invocation of "Ramp-up":
 			- Exact same formula, definition, constraints, and unique attribute as first invocation: Starts at exactly whatever X/Y the previous "Ease-in" ended at, and ends at the unbounded Y.
 				- How does it know where "unbounded Y" is? Maybe it guesses a sane value, maybe it can see the rate of incoming data, or maybe it just punts and accelerates exponentially until it's reached.
-				- As built: it accelerates exponentially until it keeps up.
+				- As built, it accelerates exponentially until it keeps up.
 	- "Ramp-down":
 		- Once output ceases yet hasn't all rendered (because SilkTerm will hold a reserve buffer of at least 1 screen when running at top speed), the speed function hands off to "Ramp-down".
 		- This starts at the precisely known X and Y handoff point on our time/speed curve.
@@ -252,7 +252,7 @@ This is the original specification the chase was built to. It still describes wh
 
 ### The five settings
 
-The five settings that shape the chase are listed in the order they are watched, rather than grouped by how they work:
+The 5 settings that shape the chase are listed in the order a person sees them happen, rather than grouped by how they work:
 
 - Ease-in: how sharply the view leaves rest.
 
@@ -264,115 +264,115 @@ The five settings that shape the chase are listed in the order they are watched,
 
 - Ease-out: how crisply it comes to rest.
 
-All five run one way in the dialog: higher is faster, harder or crisper. Each is stored as a time in milliseconds, where more is gentler, and the dialog maps it onto a 1 to 100 scale that falls as the time grows. The ease ends are stored as durations, not speeds, so no slider reads backwards next to its partner. The shipped defaults read 50, 75, 75, 75 and 40.
+All 5 run the same way in the dialog. Higher is faster, harder, or crisper. Each is stored as a time in milliseconds, where more is gentler, and the dialog maps it onto a 1 to 100 scale that falls as the time grows. The ease ends are stored as durations rather than speeds, so there isn't any slider that reads backwards next to its partner. The defaults are 50, 75, 75, 75, and 40.
 
-These five are active lines in the shipped config, so a changed default reaches only a new config, or one where the line is edited or reset.
+These 5 are active lines in the default config, so a changed default only affects a new config, or one where the line is edited or reset.
 
-One "Smooth scrolling" switch (`scroll.smooth`) turns all scroll animation off at once: the wheel ease, the output ease and the full-screen slide. It leaves the five settings alone and grays their rows. Wheel lines and the scrollbar still apply either way. Every effect group in Settings has the same kind of master switch.
+The "Smooth scrolling" switch (`scroll.smooth`) turns all scroll animation off at once. That's the wheel ease, the output ease, and the full-screen slide. It leaves the 5 settings alone and grays their rows. Wheel lines and the scrollbar still apply either way. Every effect group in Settings has the same kind of master switch.
 
 ### Full-screen programs
 
-Scrollback and output easing both have an easy signal: the wheel turns, or the scrollback grows. Full-screen ("alt-screen") programs such as less, vim, nano and tmux are the hard case. They own the screen. Most scroll a region of it with the terminal's own scroll commands, such as a linefeed at the bottom of a DECSTBM region or `CSI n S`, and the terminal throws the outgoing rows away because the alt screen keeps no scrollback. Some repaint whole lines in place instead, and then the grid just changes under us. Two mechanisms cover the two kinds, and the exact one is asked first.
+Scrollback and output easing both have an easy signal, which is that the wheel turns or the scrollback grows. Full-screen ("alt-screen") programs such as less, vim, nano, and tmux are the hard case. They own the screen. Most scroll a region of it with the terminal's own scroll commands, such as a linefeed at the bottom of a DECSTBM region or `CSI n S`, and the terminal throws the outgoing rows away because the alt screen doesn't keep any scrollback. Some repaint whole lines in place instead, and then the grid changes without any warning. There are 2 mechanisms for the 2 kinds, and the exact one is checked first.
 
-`scroll.smooth_apps` turns this slide off on its own. It is on by default.
+`scroll.smooth_apps` turns this slide off on its own. It's on by default.
 
 #### The engine's scroll ledger
 
-The engine fork records every region scroll as it happens: which rows moved, by how many lines, and the rows the scroll pushed out. Each frame the pane reads it. That is the whole answer for anything that scrolls the terminal.
+The engine fork records every region scroll as it happens. It records which rows moved, by how many lines, and the rows the scroll pushed out. The pane reads that record each frame. That's all that's needed for any program that scrolls the terminal.
 
-- The count is exact and uncapped, so a burst that replaces the screen between two frames is still one known number.
+- The count is exact and uncapped, so a burst that replaces the screen between 2 frames is still one known number.
 
-- The region says which rows stay still, and the outgoing rows are real content rather than a guess.
+- The region shows which rows stay still, and the outgoing rows are real content rather than a guess.
 
-- This is what lets tmux ease at all, since it runs on the alt screen where there is nothing else to measure.
+- The ledger is what lets tmux ease at all, since tmux runs on the alt screen, where there's nothing else to measure.
 
-- The engine also counts every line it sends off the top of the screen into the scrollback. That count carries plain output once the scrollback is full. It covers a whole-screen scroll, a scroll of a region that starts at the top row, and a screen clear. A clear's own push is kept apart from what came after it. apt's progress bar pins the last row under a region like that. The count is summed on its own, so a region scroll in the same read does not lose it.
+- The engine also counts every line it sends off the top of the screen into the scrollback. Plain output eases by that count once the scrollback is full. It includes a scroll of the whole screen, a scroll of a region that starts at the top row, and a screen clear. The lines a clear pushes are kept apart from what came after it. apt's progress bar pins the last row under a region that starts at the top row. The count is summed on its own, so a region scroll in the same read doesn't lose it.
 
-- A recorded scroll that moved only blank rows is not eased. Nothing visible moved. A line editor such as ble.sh scrolls the blank rows under the cursor to make room for its prompt, and easing that drags the prompt down from behind the rows above.
+- A recorded scroll that only moved blank rows isn't eased, since nothing visible moved. A line editor such as ble.sh scrolls the blank rows under the cursor to make room for its prompt, and easing that scroll drags the prompt down from behind the rows above.
 
-- A scroll down that only pushes off rows that were blank to the bottom of the screen pops in. That is content making room for itself, such as an input box growing as a paste arrives. Easing it drops the new lines out from behind the rows above, last line first. The kept rows alone cannot tell this case, since less blanks its prompt row in the same write as its scroll back, so the last frame has to agree. `SLIDE_DOWN_INTO_ROOM` in `pane.rs` brings the slide back.
+- A scroll down that only pushes off rows that were blank to the bottom of the screen pops in. That's content making room for itself, such as an input box that grows as a paste arrives. Easing it drops the new lines out from behind the rows above, last line first. The kept rows alone can't identify this case, since less blanks its prompt row in the same write as its scroll back, so the last frame has to agree. `SLIDE_DOWN_INTO_ROOM` in `pane.rs` brings the slide back.
 
-- One direction at a time. A scroll the other way starts the ledger over, and so does a scroll of a region that shares no row with the one in flight.
+- The ledger tracks one direction at a time. A scroll the other way starts the ledger over, and so does a scroll of a region that doesn't share any row with the one in progress.
 
-- A scroll of an overlapping region carries on. The ledger narrows to the rows both scrolls moved and keeps the rows that cross that edge. The pane takes the record each frame, with the region and direction left open while a slide is in flight, and clears it only at rest. nano is why: its edit window is rows 2 to 45, and whenever the line leaving it is blank, ncurses scrolls rows 2 to 46 instead. Starting over on that threw the slide away every other step of an up run.
+- A scroll of an overlapping region continues the ledger. The ledger narrows to the rows both scrolls moved and keeps the rows that cross that edge. The pane reads the record each frame, and leaves the region and direction open while a slide is in progress. It clears the record only at rest. That's because of nano. Its edit window is rows 2 to 45, but whenever the line that leaves it is blank, ncurses scrolls rows 2 to 46 instead. When the ledger started over on that, the slide was thrown away every other step of an upward run.
 
 #### Fingerprints where the engine recorded nothing
 
-A program that repaints its lines with cursor moves, or ConPTY on Windows re-sending a scroll as a repaint, leaves no ledger entry. For those, every frame fingerprints each visible row with a hash of its characters. `scroll_shift_signed` looks for the vertical shift, up to 24 lines either way, that lines up the most rows, and enough of them must really have moved. An in-place status-line redraw lines up by position but did not move, so it cannot start a false slide. The bands it keeps still are measured the same way, as the unchanged rows at each end.
+There isn't a ledger entry for a program that repaints its lines with cursor moves, or for ConPTY on Windows when it re-sends a scroll as a repaint. For those, each visible row is fingerprinted every frame with a hash of its characters. `scroll_shift_signed` looks for the vertical shift, up to 24 lines either way, that lines up the most rows, and enough of those rows have to have moved. A status line that's redrawn in place lines up by position but didn't move, so it can't start a false slide. The still bands are measured the same way, as the unchanged rows at each end.
 
-ConPTY sends region scrolls that way on the normal screen too. So the slide also runs on the normal screen while the view is following the bottom and the scrollback is not growing.
+ConPTY sends region scrolls that way on the normal screen too. So the slide also runs on the normal screen while the view is following the bottom and the scrollback isn't growing.
 
 #### Easing it into place
 
-The grid is already at the new position. To animate, the content is pushed back by the shift and that offset is eased to zero. It runs the same curve and the same five settings as plain output. A program scrolling its region by N lines looks exactly like N lines printed at a prompt, and a unit test keeps the two on one path.
+The grid is already at the new position. To animate it, the content is pushed back by the shift, and that offset is eased to zero. The slide uses the same curve and the same 5 settings as plain output. A program that scrolls its region by N lines looks the same as N lines printed at a prompt, and a unit test checks that both go through one code path.
 
 #### Filling the gap with the rows that left
 
-The gap the slide reveals cannot be redrawn from the model. The rows the ledger kept, or on the fingerprint path the rows captured styled a frame earlier, go into a strip. The strip is drawn welded to the sliding content's edge and rides the same eased offset, so the gap is always filled with real outgoing content, with its own cell backgrounds and scrim. The offset can never open more gap than the strip has. About three screens are kept, so a long burst eases through its tail.
+The gap the slide reveals can't be redrawn from the model. The rows the ledger kept go into a strip. On the fingerprint path, the strip gets the rows that were captured with their styles a frame earlier. The strip is drawn attached to the sliding content's edge and moves by the same eased offset. So the gap is always filled with real outgoing content, with its own cell backgrounds and scrim. The offset can never open more gap than the strip has. About 3 screens of rows are kept, so a long burst eases through its tail.
 
-- One row is pinned by reading, not by the region. A pager like less scrolls the whole screen and rewrites its prompt on the bottom row afterwards. That row reads the same after the scroll as before, so it is kept still even though the region says it moved. A blank row never qualifies. tmux scrolls first and draws the freed row a moment later, and a frame built in between would otherwise pin that row and make its new line pop in while the rest slides.
+- One row is pinned by what it reads rather than by the region. A pager like less scrolls the whole screen and rewrites its prompt on the bottom row afterwards. That row reads the same after the scroll as before, so it's kept still even though the region says it moved. A blank row never qualifies. tmux scrolls first and draws the freed row a moment later, and a frame that was built in between would otherwise pin that row and make its new line pop in while the rest slides.
 
-- The edge the strip fills from can have a row the recorded scroll does not account for. muffer repaints its "1 new message" pill over the last row of its transcript after each scroll. That row slid with the text while its old copy rode in the strip, so the pill showed twice. Such rows are counted from the edge, up to a quarter of the region, and only when the row past them moved as recorded. A frame repainted wholesale keeps nothing still. The strip then takes its rows from the frame before. The kept edge may grow during a slide, since a frame can be built between the scroll and the repaint.
+- The edge the strip fills from can have a row the recorded scroll doesn't account for. muffer repaints its "1 new message" pill over the last row of its transcript after each scroll. That row slid with the text while its old copy moved in the strip, so the pill showed twice. Such rows are counted from the edge, up to a quarter of the region, and only when the row past them moved as recorded. A frame that's repainted wholesale doesn't keep any row still. The strip then takes its rows from the frame before. The kept edge may grow during a slide, since a frame can be built between the scroll and the repaint.
 
 - Rows under the slide that moved the same way, only further, slide with it, so a whole message moves as one.
 
-A sliding frame is built from four parts:
+A sliding frame is built from 4 parts:
 
-- The scrolled-off strip, filling the revealed gap.
+- The strip of scrolled-off rows, which fills the revealed gap.
 
-- The current middle region, sliding over it, clipped between the two bands.
+- The current middle region, which slides over the strip and is clipped between the 2 bands.
 
 - The title and status bands, drawn unshifted.
 
-- The readability scrim, following the whole thing, strip included.
+- The readability scrim, which follows the whole thing, strip included.
 
-A full-screen program's start or end is an instant swap, not a scroll. The slide is canceled on the spot, and the detectors start over.
+A full-screen program's start or end is an instant swap rather than a scroll. The slide is canceled on the spot, and the detectors start over.
 
 #### What makes this hard
 
-- The stock engine has no scroll event and does not expose the program's scroll region. The ledger is our own addition to the fork. Without it, "a scroll happened, by N lines, with these fixed bands" has to be inferred, and the inference must reject false positives. An in-place redraw must not bounce.
+- The stock engine doesn't have a scroll event and doesn't expose the program's scroll region. The ledger is our own addition to the fork. Without it, "a scroll happened, by N lines, with these fixed bands" has to be inferred, and the inference must reject false positives. A redraw in place must never bounce.
 
-- The off-screen content cannot be recovered from the grid. The ledger takes each row on its way out and leaves a spare in its place, which the grid resets as it would have reset the row. So keeping rows costs a full-screen program next to nothing. Only a row that stops moving while staying on screen is still copied, which happens when an overlapping region carries on. The fingerprint path still has to capture it styled a frame ahead.
+- The off-screen content can't be recovered from the grid. The ledger takes each row on its way out and leaves a spare in its place, which the grid resets as it would have reset the row. So keeping rows costs a full-screen program next to nothing. Only a row that stops moving while staying on screen is still copied, which happens when an overlapping region continues. The fingerprint path still has to capture each row with its styles a frame ahead.
 
-- tmux draws lazily. On a burst it scrolls the outer terminal by the grid's whole advance and only then redraws, so the rows that leave are whatever it had drawn before, sometimes blank. Every terminal's scrollback gets the same stale rows. The strip is faithful to what tmux sent, not to what its pane has.
+- tmux draws lazily. On a burst it scrolls the outer terminal by the grid's whole advance and only then redraws, so the rows that leave are whatever it had drawn before, sometimes blank. Every terminal's scrollback gets the same stale rows. The strip matches what tmux sent, rather than what its pane has.
 
-- tmux can only scroll a pane that spans the full width. Side-by-side panes are repainted, so they fall to the fingerprint path and mostly cut.
+- tmux can only scroll a pane that spans the full width. Side-by-side panes are repainted, so they use the fingerprint path and mostly cut.
 
-- The fixed bands mean three regions have to tile with no gap and no overlap.
+- The fixed bands mean 3 regions have to tile without any gap or overlap.
 
-- All of it is sub-line and per frame, on the same fractional renderer and scrim pass, under a redraw loop that cannot trust X11 redraw requests.
+- All of it is sub-line and per frame, on the same fractional renderer and scrim pass, under a redraw loop that can't trust X11 redraw requests.
 
 ### The wheel in full-screen programs
 
-The wheel sends cursor keys only on the alt screen, with alternate-scroll on and no mouse mode. The normal screen always gets the smooth scrollback, in proportion to the notches turned. When a program has turned on mouse tracking, the wheel is reported to it, one event per line and capped. Shift keeps the wheel local.
+The wheel sends cursor keys only on the alt screen, with alternate-scroll on and without any mouse mode. The normal screen always gets the smooth scrollback, in proportion to the notches turned. When a program has turned on mouse tracking, the wheel is reported to it, one event per line and capped. Shift keeps the wheel local.
 
 ### The scrollbar
 
-- A scrollbar floats over each pane's right edge and never changes the grid, so turning it on or off, or changing its width, reflows nothing. It is 16 DIP wide by default, from 4 to 64.
+- A scrollbar floats over each pane's right edge and never changes the grid, so turning it on or off, or changing its width, doesn't reflow anything. It's 16 DIP wide by default, from 4 to 64.
 
 - It fades while the view is idle at the bottom, and comes back on a scroll or when the pointer nears it. It stays up the whole time the view is parked in the scrollback. Always visible is a setting.
 
 - Dragging the handle scrolls, and a click on the track pages that way. A dragged handle follows the pointer exactly while the text eases in behind it.
 
-- Full-screen programs keep no scrollback, so they get no scrollbar.
+- Full-screen programs don't keep any scrollback, so they don't get a scrollbar.
 
 ## Alternative ideas
 
 ### Unconsidered
 
-- Turn smooth scrolling off when a program is seen writing to the screen directly. Raised in "When running `sudo apt update`, the progress bar at the bottom bounces" (Opened 20260628-083740). The ledger fixed the case that raised it.
+- Turn smooth scrolling off when a program is seen writing to the screen directly. It was raised in "When running `sudo apt update`, the progress bar at the bottom bounces" (Opened 20260628-083740). The ledger fixed that case.
 
 ### Rejected
 
 - Snap the output ease during a burst of lines. It stopped apt's status bar bouncing, but a command's output arrives in one burst under a millisecond, so every multi-line output snapped. Any burst threshold above one frame breaks the feature. Backlog: "Smooth scrolling is broken" (Opened 20260628-083740).
 
-- Cap the backlog at 16 lines and drive the speed from how full it is. Any real burst filled the cap in about a tenth of a second, and after that the view rode the raw output rate and the speed settings did nothing visible.
+- Cap the backlog at 16 lines and drive the speed from how full it is. Any real burst filled the cap in about a tenth of a second, and after that the view followed the raw output rate, and the speed settings didn't do anything visible.
 
-- The chase as a speed cap on the plain navigation ease. It only acted while the ease was the faster of the two, so a short advance got the navigation ease instead, which no setting reaches, and then picked back up at the sharpened stop. A returning prompt stalled every time. Backlog: "A prompt coming back after a command slides in oddly" (Opened 20260905-124907).
+- The chase as a speed cap on the plain navigation ease. It only acted while the ease was the faster of the two, so a short advance got the navigation ease instead, which no setting changes, and then picked back up at the sharpened stop. A returning prompt stalled every time. Backlog: "A prompt coming back after a command slides in oddly" (Opened 20260905-124907).
 
-- Relax the speed only during a lull. In practice it never fired, the Ramp-down setting did nothing visible, and stops from speed were cliffs.
+- Relax the speed only during a lull. In practice it never fired, the Ramp-down setting didn't do anything visible, and stops from speed were abrupt.
 
-- Smooth sigmoid-family curves for each segment, and the straight-line options that adjust height or length rather than time. Straight and exponential segments adjusted by time were chosen. See [The curve, as specified](#the-curve-as-specified).
+- Smooth sigmoid-family curves for each segment, and the straight-line options that adjust height or length rather than time. Straight and exponential segments that are adjusted by time were chosen instead. See [The curve, as specified](#the-curve-as-specified).
 
 - A single exponential ease for the wheel. It starts at peak speed and crawls its last pixels.
 
@@ -382,11 +382,11 @@ The wheel sends cursor keys only on the alt screen, with alternate-scroll on and
 
 ### Superseded
 
-- "Initial scroll speed", the slow starting speed that sped up under a burst. It fed four mechanisms at once, so every slider seemed to move every other one. The chase's Ease-in took over leaving rest. Backlog: "Smooth-scroll enhancement" (Opened 20260628-083740).
+- "Initial scroll speed", the slow starting speed that sped up under a burst. It fed 4 mechanisms at once, so every slider seemed to move every other one. The chase's Ease-in replaced it for leaving rest. Backlog: "Smooth-scroll enhancement" (Opened 20260628-083740).
 
 - "In-view output speed" (`scroll.inview_tau_ms`). It is now the chase's Single-screen speed (`scroll.single_screen_tau_ms`). Backlog: "Scroll-on-output enhancement: One additional setting" (Opened 20260629-110720).
 
-- Filling the gap with the whole previous frame. Its fill could trail the ease and moved at every new capture, which read as a pulsing shadow under a title bar. The scrolled-off strip replaced it. Backlog: "The Notorious "Bouncing Shadow in Wobbly Nano" bug" (Opened 20260707-182523).
+- Filling the gap with the whole previous frame. Its fill could trail the ease and moved at every new capture, which looked like a pulsing shadow under a title bar. The scrolled-off strip replaced it. Backlog: "The Notorious "Bouncing Shadow in Wobbly Nano" bug" (Opened 20260707-182523).
 
 - Inferring the advance at a full scrollback by matching row fingerprints, first strictly, then by best coverage. The engine's own count replaced both on the normal screen. Backlog: "Some output, like debug output will bounce badly" and "Severe bug: `flatpak update` output bounces wildly" (Opened 20260723-135701).
 
@@ -394,11 +394,11 @@ The wheel sends cursor keys only on the alt screen, with alternate-scroll on and
 
 - The wheel sending cursor keys whenever either the alt screen or alternate-scroll was on. It recalled shell history at a bare prompt. Backlog: "Native keybindings for `less` don't work" (Opened 20260628-083740).
 
-- "The engine does not expose the scroll region." True of the stock crate, and the reason apt's status bar bounced. The ledger in the fork records it now. Backlog: "When running `sudo apt update`, the progress bar at the bottom bounces" (Opened 20260628-083740).
+- "The engine does not expose the scroll region." That was true of the stock crate, and it was why apt's status bar bounced. The ledger in the fork records it now. Backlog: "When running `sudo apt update`, the progress bar at the bottom bounces" (Opened 20260628-083740).
 
 ## Research findings
 
-- A slow renderer hides per-frame scroll bugs. A software renderer takes several scroll steps per frame where a real GPU takes one. Reproduce by feeding the recorded bytes in a unit test.
+- A slow renderer hides per-frame scroll bugs. A software renderer takes several scroll steps per frame where a real GPU takes one. They can be reproduced by feeding the recorded bytes into a unit test.
 
 - nano's ncurses switches its scroll region between rows 2 to 45 and rows 2 to 46, depending on whether the line leaving is blank.
 
@@ -406,21 +406,21 @@ The wheel sends cursor keys only on the alt screen, with alternate-scroll on and
 
 - less rewrites its prompt row after each scroll, and blanks it in the same write as a scroll back.
 
-- apt keeps its status bar under a scroll region that starts at the top row, so its log lines grow the scrollback.
+- apt puts its status bar under a scroll region that starts at the top row, so its log lines grow the scrollback.
 
-- tmux scrolls the outer terminal first and draws afterwards, and repaints rather than scrolls a pane that is not full width.
+- tmux scrolls the outer terminal first and draws afterwards, and repaints rather than scrolls a pane that isn't full width.
 
 - ConPTY on Windows re-sends a region scroll as a repaint in place.
 
-- Copying each outgoing row took about a third off the engine's parse speed on the alt screen. Swapping in a spare row brought it to about 5%, and a test keeps it under 10%.
+- Copying each outgoing row took about a third off the engine's parse speed on the alt screen. Swapping in a spare row brought it to about 5%, and a test checks that it stays under 10%.
 
-- The scroll harness scenes (less, vim, nano, muffer) slide the same under Wayland as under X11.
+- less, vim, nano, and muffer slide the same under Wayland as under X11.
 
-- At the start of the project, WezTerm, kitty, foot, Alacritty, GNOME Terminal and Konsole all snapped to whole rows.
+- At the start of the project, WezTerm, kitty, foot, Alacritty, GNOME Terminal, and Konsole all snapped to whole rows.
 
 ## Roadmap
 
-- Stacked tmux panes printing at once: only one slides, and the other jumps. The fix is a ledger entry and a slide per region. Backlog: "With two tmux panes stacked and both printing, only one pane slides at a time" (deferred, Opened 20260911-113647).
+- When stacked tmux panes print at once, only one slides, and the other jumps. The fix is a ledger entry and a slide per region. Backlog: "With two tmux panes stacked and both printing, only one pane slides at a time" (deferred, Opened 20260911-113647).
 
 - Side-by-side tmux panes still cut, since tmux repaints them.
 

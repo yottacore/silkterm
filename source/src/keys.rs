@@ -3,7 +3,7 @@
 
 //! The hotkeys: the name each one has in the config file, its default chords on
 //! each platform, and the bindings in force once the config has had its say.
-//! The key handler, the in-window menus and the macOS menu bar all read one
+//! The key handler, the in-window menus, and the macOS menu bar all read one
 //! `Bindings`, so a rebinding shows up in every one of them.
 
 use std::fmt::Write as _;
@@ -25,8 +25,8 @@ pub enum KeyName {
 	Named(NamedKey),
 }
 
-// The words a chord spells its named keys with. The first word for a key is
-// the one a menu shows.
+// The words a chord uses for its named keys. The first word for a key is the
+// one a menu shows.
 #[rustfmt::skip]
 const NAMED_KEYS: &[(&str, NamedKey)] = &[
 	("Left", NamedKey::ArrowLeft),
@@ -175,7 +175,7 @@ impl Chord {
 				"command" | "cmd" | "super" | "win" => chord.command = true,
 				"" => anyhow::bail!("\"{text}\": write the + key as Plus"),
 				_ => {
-					anyhow::bail!("\"{text}\": {part} is not Ctrl, Alt, Shift or Command");
+					anyhow::bail!("\"{text}\": {part} isn't Ctrl, Alt, Shift, or Command");
 				}
 			}
 		}
@@ -186,7 +186,7 @@ impl Chord {
 			.ok_or_else(|| anyhow::anyhow!("\"{text}\": {last} is not a key name"))?;
 		if !(chord.ctrl || chord.alt || chord.command || chord.key.free_alone()) {
 			anyhow::bail!(
-				"\"{text}\" needs Ctrl, Alt or Command held, or the key would stop reaching the shell"
+				"\"{text}\" needs Ctrl, Alt, or Command held, or the key would stop reaching the shell"
 			);
 		}
 		Ok(chord)
@@ -224,7 +224,7 @@ impl Chord {
 
 	// Whether a press is this chord. `loose` lets a chord with no Shift take a
 	// press with Shift held, on a key some layouts need Shift to reach: "+",
-	// "-" or a digit, as on a French layout. Never a letter or another sign,
+	// "-", or a digit, as on a French layout. Never a letter or another sign,
 	// and never "_", which is Ctrl+_ undo in the shell rather than Ctrl+Minus.
 	fn matches(self, key: &Key, mods: ModifiersState, loose: bool) -> bool {
 		if mods.control_key() != self.ctrl
@@ -262,7 +262,7 @@ pub enum Press {
 	/// a modifier on its own, so the key is still to come
 	Held,
 	Chord(Chord),
-	/// a key that cannot be a hotkey, and why
+	/// a key that can't be a hotkey, and why
 	Refused(String),
 }
 
@@ -290,13 +290,13 @@ pub fn press(key: &Key, mods: ModifiersState, mac: bool) -> Press {
 		Key::Character(typed) => {
 			let mut chars = typed.chars();
 			let (Some(ch), None) = (chars.next(), chars.next()) else {
-				return Press::Refused("That key cannot be a hotkey".into());
+				return Press::Refused("That key can't be a hotkey".into());
 			};
 			match ch {
 				'+' | '=' => KeyName::Plus,
 				'-' | '_' => KeyName::Minus,
 				_ if ch.is_whitespace() || ch.is_control() => {
-					return Press::Refused("That key cannot be a hotkey".into());
+					return Press::Refused("That key can't be a hotkey".into());
 				}
 				_ => {
 					let base = shift
@@ -306,7 +306,7 @@ pub fn press(key: &Key, mods: ModifiersState, mac: bool) -> Press {
 				}
 			}
 		}
-		_ => return Press::Refused("That key cannot be a hotkey".into()),
+		_ => return Press::Refused("That key can't be a hotkey".into()),
 	};
 	let chord = Chord {
 		key: name,
@@ -317,9 +317,9 @@ pub fn press(key: &Key, mods: ModifiersState, mac: bool) -> Press {
 	};
 	if !(chord.ctrl || chord.alt || chord.command || name.free_alone()) {
 		let need = if mac {
-			"Control, Option or Command"
+			"Control, Option, or Command"
 		} else {
-			"Ctrl, Alt or Super"
+			"Ctrl, Alt, or Super"
 		};
 		return Press::Refused(format!("{} needs {need} held", chord.spoken(mac)));
 	}
@@ -415,14 +415,14 @@ fn default_text(
 	if mac { row.3 } else { row.2 }
 }
 
-/// The `keys:` block of the shipped template, every line at its default.
+/// The `keys:` block of the stock template, every line at its default.
 pub fn template_lines(mac: bool) -> String {
 	let mut out = String::new();
 	for row in TABLE {
 		if TEMPLATE_GROUPS.contains(&row.1) {
 			out.push('\n');
 		}
-		// writing to a String cannot fail
+		// writing to a String can't fail
 		let _ = writeln!(
 			out,
 			"\t# {}: \"{}\"  ## Default",
@@ -464,8 +464,8 @@ impl Bindings {
 	}
 
 	/// The defaults with the config file's own values put in. A chord set for
-	/// one hotkey is taken off any other that has it by default, and two set
-	/// for the same chord leave it with the first. Also answers what to tell
+	/// one hotkey is taken off any other that has it by default, and 2 set
+	/// for the same chord leave it with the first. Also works out what to tell
 	/// the user about either.
 	pub fn with(mac: bool, set: &[(Hotkey, Vec<Chord>)]) -> (Self, Vec<String>) {
 		let bindings = Self::resolve(mac, set);
@@ -480,7 +480,7 @@ impl Bindings {
 			.map(
 				|row| match set.iter().find(|(hotkey, _)| *hotkey == row.0) {
 					Some((_, chords)) => (row.0, chords.clone(), true),
-					// the table is checked by test, so a failed parse cannot happen
+					// the table is checked by test, so a failed parse can't happen
 					None => (
 						row.0,
 						parse_value(default_text(row, mac)).unwrap_or_default(),
@@ -607,7 +607,7 @@ impl Bindings {
 }
 
 /// What is wrong with the `keys:` values in a config, each with the line it is
-/// on. `value` answers a path's raw text and its line numbers.
+/// on. `value` returns a path's raw text and its line numbers.
 pub fn complaints(
 	mac: bool,
 	value: impl Fn(&str) -> Option<(String, Vec<usize>)>,
@@ -647,7 +647,7 @@ mod tests {
 	}
 
 	// Every default in the table reads back, on both platforms, and no chord is
-	// given to two hotkeys, since only one of them could ever answer to it.
+	// given to 2 hotkeys, since only one of them could ever answer to it.
 	// Test ID: ddes1
 	#[test]
 	fn every_default_chord_reads_and_none_is_shared() {
@@ -707,12 +707,12 @@ mod tests {
 		for (text, says) in [
 			("Ctrl++", "Plus"),
 			("Ctrl+", "Plus"),
-			("Ctlr+T", "is not Ctrl, Alt, Shift or Command"),
+			("Ctlr+T", "isn't Ctrl, Alt, Shift, or Command"),
 			("Ctrl+Shift+Bogus", "is not a key name"),
-			("T", "needs Ctrl, Alt or Command"),
-			("Shift+T", "needs Ctrl, Alt or Command"),
-			("Left", "needs Ctrl, Alt or Command"),
-			("Shift+Enter", "needs Ctrl, Alt or Command"),
+			("T", "needs Ctrl, Alt, or Command"),
+			("Shift+T", "needs Ctrl, Alt, or Command"),
+			("Left", "needs Ctrl, Alt, or Command"),
+			("Shift+Enter", "needs Ctrl, Alt, or Command"),
 		] {
 			let got = Chord::parse(text).expect_err(text).to_string();
 			assert!(got.contains(says), "{text}: {got}");
@@ -722,7 +722,7 @@ mod tests {
 	}
 
 	// Alt+Shift+Plus is Alt+Shift+= on a US layout, which names the key "+";
-	// Alt+Shift+Minus names it "_". Plain Alt+= is not the chord.
+	// Alt+Shift+Minus names it "_". Plain Alt+= isn't the chord.
 	// Test ID: ddes4
 	#[test]
 	fn plus_and_minus_take_what_shift_makes_of_them() {
@@ -748,8 +748,8 @@ mod tests {
 	}
 
 	// A chord set in the file wins over a default that has it, and the default
-	// stops showing it on its menu row. Two set the same way leave it with the
-	// first, and both are reported.
+	// stops showing it on its menu row. If 2 are set the same way, the first
+	// keeps it, and both are reported.
 	// Test ID: ddes5
 	#[test]
 	fn a_chord_set_in_the_file_takes_it_from_a_default() {
@@ -898,8 +898,8 @@ mod tests {
 		}
 		// a key that would stop typing at the shell says what it needs
 		for (mac, needs) in [
-			(false, "Ctrl, Alt or Super"),
-			(true, "Control, Option or Command"),
+			(false, "Ctrl, Alt, or Super"),
+			(true, "Control, Option, or Command"),
 		] {
 			let Press::Refused(why) = press(&typed("T"), ModifiersState::SHIFT, mac) else {
 				panic!("Shift+T taken as a hotkey");
@@ -953,7 +953,7 @@ mod tests {
 		assert!(off.chords(Hotkey::Copy).is_empty());
 		assert_eq!(off.with_own(Hotkey::Copy, None), moved);
 		assert_eq!(moved.with_own(Hotkey::ClosePane, None), base);
-		// two set the same way: the first in the table keeps it, and says so
+		// the same chord set for 2: the first in the table keeps it, and says so
 		let both = base
 			.with_own(Hotkey::SplitDown, Some(vec![chord("Alt+D")]))
 			.with_own(Hotkey::SplitRight, Some(vec![chord("Alt+D")]));

@@ -2,7 +2,7 @@
 // Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
 
 //! The macOS menu bar. Its layout is plain data built from the same entry lists
-//! the in-window menus draw, so it is checked on every platform; only `native`
+//! the in-window menus draw, so it's checked on every platform; only `native`
 //! talks to `AppKit`.
 
 use winit::keyboard::NamedKey;
@@ -11,7 +11,7 @@ use crate::app::{Entry, MenuAction, mac_entries, menu_hotkey, without_rows};
 use crate::config::APP_NAME;
 use crate::keys::{Bindings, Chord, KeyName, us_shifted};
 
-/// App and Window menu rows `AppKit` carries out by itself.
+/// App and Window menu rows `AppKit` handles by itself.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SystemItem {
 	Services,
@@ -23,7 +23,7 @@ pub enum SystemItem {
 	BringAllToFront,
 }
 
-/// The title of the menu `AppKit` keeps the window list in.
+/// The title of the menu `AppKit` puts the window list in.
 pub const WINDOW_MENU: &str = "Window";
 
 #[derive(Debug, Clone, PartialEq)]
@@ -52,8 +52,8 @@ pub struct BarMenu {
 	pub items: Vec<BarItem>,
 }
 
-// These three live in the app menu on a Mac, so they leave the menus they sit
-// in elsewhere.
+// These 3 are in the app menu on a Mac, so they leave the menus they're in
+// elsewhere.
 fn in_app_menu(action: MenuAction) -> bool {
 	matches!(
 		action,
@@ -61,7 +61,7 @@ fn in_app_menu(action: MenuAction) -> bool {
 	)
 }
 
-/// Command plus a key, for the rows `AppKit` carries out itself.
+/// Command plus a key, for the rows `AppKit` handles itself.
 pub fn command(key: char) -> Chord {
 	Chord {
 		key: KeyName::Char(key),
@@ -72,9 +72,9 @@ pub fn command(key: char) -> Chord {
 	}
 }
 
-// The row's chord, the first one its hotkey answers to. Only a chord with
+// The row's chord, the first one its hotkey responds to. Only a chord with
 // Command goes on a row: `AppKit` takes a row's chord before the window sees
-// the press, and one without Command would take keys the shell is owed.
+// the press, and one without Command would take keys meant for the shell.
 fn key_for(keys: &Bindings, action: MenuAction) -> Option<Chord> {
 	menu_hotkey(action)
 		.and_then(|hotkey| keys.shown(hotkey))
@@ -131,7 +131,7 @@ fn app_menu(keys: &Bindings) -> BarMenu {
 // Apple's Window menu, with SilkTerm's own tabs where a Mac app has its window
 // tabs. `AppKit` adds the list of open windows below these, and on newer
 // releases its own tiling rows. Each window is a process of its own, so the
-// list and Bring all to front reach only this one's.
+// list and Bring all to front include only this one's.
 fn window_menu(keys: &Bindings) -> BarMenu {
 	BarMenu {
 		title: WINDOW_MENU.into(),
@@ -285,8 +285,8 @@ mod native {
 	}
 
 	define_class!(
-		// SAFETY: NSObject has no subclassing requirements, and MenuTarget does
-		// not implement Drop.
+		// SAFETY: NSObject has no subclassing requirements, and MenuTarget doesn't
+		// implement Drop.
 		#[unsafe(super(NSObject))]
 		#[thread_kind = MainThreadOnly]
 		#[name = "SilkTermMenuTarget"]
@@ -329,7 +329,7 @@ mod native {
 
 	struct Installed {
 		key: u64,
-		// A menu item does not retain its target, so this keeps it alive.
+		// A menu item doesn't retain its target, so this keeps it alive.
 		target: Retained<MenuTarget>,
 	}
 
@@ -362,7 +362,7 @@ mod native {
 				let top = NSMenuItem::new(mtm);
 				let sub = submenu(mtm, &app, &menu.title, &menu.items, &target, &mut actions);
 				top.setSubmenu(Some(&sub));
-				// AppKit keeps the open windows listed here
+				// AppKit lists the open windows here
 				if menu.title == WINDOW_MENU {
 					app.setWindowsMenu(Some(&sub));
 				}
@@ -394,7 +394,7 @@ mod native {
 				} => {
 					let row = menu_item(mtm, label, Some(sel!(pick:)), *key);
 					let target: &AnyObject = target;
-					// SAFETY: the target answers pick:, and is kept alive in
+					// SAFETY: the target responds to pick:, and is kept alive in
 					// INSTALLED for as long as this menu is up.
 					unsafe { row.setTarget(Some(target)) };
 					row.setTag(actions.len().try_into().unwrap_or(isize::MAX));
@@ -453,7 +453,7 @@ mod native {
 	) -> Retained<NSMenuItem> {
 		let key = key.and_then(key_equivalent);
 		let key_text = NSString::from_str(key.as_ref().map_or("", |(text, _)| text.as_str()));
-		// SAFETY: every selector passed here is one AppKit or MenuTarget answers.
+		// SAFETY: every selector passed here is one AppKit or MenuTarget responds to.
 		let row = unsafe {
 			NSMenuItem::initWithTitle_action_keyEquivalent(
 				NSMenuItem::alloc(mtm),
@@ -509,7 +509,7 @@ mod tests {
 	fn the_mac_menu_bar_has_the_app_menu_first_then_the_window_menus() {
 		let menus = layout(window_menus(), &Bindings::defaults(true));
 		let titles: Vec<&str> = menus.iter().map(|m| m.title.as_str()).collect();
-		// Help held only About, which moved to the app menu
+		// Help had only About, which moved to the app menu
 		assert_eq!(
 			titles,
 			[
@@ -706,8 +706,8 @@ mod tests {
 	}
 
 	// Each row with an Apple standard shortcut shows its Command chord, drawn by
-	// the menu bar beside a plain label. Every chord the key bindings answer to
-	// is on a row, and no row carries a chord they do not.
+	// the menu bar beside a plain label. Every chord the key bindings respond to
+	// is on a row, and no row has a chord they don't.
 	// Test ID: dddnj
 	#[test]
 	fn the_mac_menu_bar_shows_the_command_chords() {
@@ -755,7 +755,7 @@ mod tests {
 				("Show next tab", "Shift+Command+]".to_string()),
 			]
 		);
-		// every hotkey with a row shows the chord it answers to first; the focus
+		// every hotkey with a row shows the chord it responds to first; the focus
 		// moves, the tab carrying and the Menu key have no row
 		let bound = Bindings::defaults(true);
 		for (hotkey, _) in crate::keys::config_paths() {
@@ -779,7 +779,7 @@ mod tests {
 		}
 	}
 
-	// A Mac has no in-window bar, so the system one reaches every row of the
+	// A Mac has no in-window bar, so the system one has every row of the
 	// in-window menus but the toggle that would bring that bar back. The copy
 	// modes, shown at the right of the in-window bar elsewhere, are check rows on
 	// Edit that follow the focused pane.

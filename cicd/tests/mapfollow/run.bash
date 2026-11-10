@@ -15,8 +15,8 @@
 ##			  while it runs, and the shell gets it back.
 ##			- A listed program at the end of a pipeline keeps it, whether the
 ##			  first stage has exited or still runs.
-##			- Inside a real tmux, a program that is not listed loses it and a
-##			  listed one keeps it. Skipped when tmux is not installed.
+##			- Inside a real tmux, a program that isn't listed loses it and a
+##			  listed one keeps it. Skipped when tmux isn't installed.
 ##	- Syntax: run.bash [--bin PATH]   (default: the debug build, then release)
 ##	- Exit: 0 passed, 1 a check failed, 3 nothing ran (no binary, display,
 ##	  dash or xdotool).

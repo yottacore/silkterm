@@ -75,7 +75,7 @@ fWriteBuiltFrom art "${state}"
 fCheck "a commit made while the builds ran is refused" fNot
 fCheck "and it says the source changed" fSays "the source changed"
 
-## An untracked source file builds here and is not in the tag, so the tagged source
+## An untracked source file builds here and isn't in the tag, so the tagged source
 ## may not even compile: a module whose 'mod' line is committed and whose file is
 ## not is the shape that got through.
 fWriteBuiltFrom art
@@ -86,13 +86,13 @@ fCheck "an untracked source file is refused" fNot
 fCheck "and the file is named" fSays "extra.rs"
 rm -f extra.rs
 
-## An ignored one is not source, so it says nothing about the build.
+## An ignored one isn't source, so it says nothing about the build.
 mkdir -p ignored && echo scratch > ignored/thing
 fWriteBuiltFrom art
 fCheck "an ignored file leaves the tree clean" fYes
 
 ## The set has to be whole. --quick and --no-cross leave the native binary alone in
-## there, and a package step that cannot find its tool only warns, so a release went
+## there, and a package step that can't find its tool only warns, so a release went
 ## out with nothing for Windows to install and the checksums verified either way.
 fWriteBuiltFrom art "" app-linux app-windows.exe
 fCheck "an artifact set missing a target is refused" fNot
@@ -103,7 +103,7 @@ fCheck "a set still missing one is refused" fNot
 fCheck "a whole set is accepted" fYes
 
 ## The release notes name the build, read out of the binary's --version by
-## release.bash's own pattern, lifted here so the two cannot drift apart.
+## release.bash's own pattern, lifted here so the two can't drift apart.
 pattern="$(sed -n "s/^[[:space:]]*buildId=.*sed -n '\\(.*\\)' || true)\"$/\\1/p" "${root}/utility/release.bash")"
 built="$(ls -t "${root}/../target/debug/silkterm" "${root}/../target/release/silkterm" 2>/dev/null | head -1 || true)"
 if [[ -z "${pattern}" ]]; then
@@ -117,7 +117,7 @@ else
 fi
 
 ## Remote git and gh go through gitsby where it is on PATH, and plain git and gh
-## where it is not. Stand-ins that print what they were asked.
+## where it isn't. Stand-ins that print what they were asked.
 stubs="${work}/stubs"; plain="${work}/plain"
 mkdir -p "${stubs}" "${plain}"
 for tool in gitsby git gh; do
@@ -133,10 +133,10 @@ got="$(PATH="${plain}:/usr/bin:/bin" bash -c 'source "$1"; fRemoteGit push origi
 fCheck "and plain git and gh when it is not" \
 	test "${got}" = $'git push origin main\ngh release view'
 
-## Signing. The checksums file says the download was not corrupted; the signature
+## Signing. The checksums file says the download wasn't corrupted; the signature
 ## is what says it came from here. Driven with a throwaway key: signed the way
 ## release.bash signs, and checked by each installer's OWN verify function, so a
-## retyped command cannot pass where the installer fails.
+## retyped command can't pass where the installer fails.
 if command -v ssh-keygen >/dev/null 2>&1; then
 	keyDir="${work}/key"
 	mkdir -p "${keyDir}"
@@ -171,7 +171,7 @@ if command -v ssh-keygen >/dev/null 2>&1; then
 		echo "  ok   install.bash refuses a changed one"
 	fi
 
-	## and a signature by a different key is not the release key's
+	## and a signature by a different key isn't the release key's
 	ssh-keygen -q -t ed25519 -N "" -C other -f "${keyDir}/other" </dev/null
 	rm -f "${work}/dl/${tag}/sums.txt.sig"   ## or ssh-keygen stops to ask about overwriting
 	ssh-keygen -Y sign -f "${keyDir}/other" -n "${namespace}" "${work}/dl/${tag}/sums.txt" >/dev/null 2>&1

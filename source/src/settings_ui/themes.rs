@@ -6,7 +6,7 @@ use crate::config;
 use crate::fields;
 use crate::ui_spec::Key;
 
-/// The theme row's four buttons, in the order they are declared.
+/// The theme row's 4 buttons, in the order they are declared.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub(super) enum ThemeBtn {
 	Save,
@@ -44,7 +44,7 @@ impl SettingsDialog {
 		!fields::changed(&self.edited, Key::Theme).is_empty()
 	}
 
-	// The dialog row key holding palette color `i` (same order as PALETTE_KEYS).
+	// The dialog row key for palette color `i` (same order as PALETTE_KEYS).
 	fn palette_key(i: usize) -> Key {
 		match i {
 			0 => Key::ColBg,
@@ -64,7 +64,7 @@ impl SettingsDialog {
 		match which {
 			ThemeBtn::Save => self.theme_dirty(),
 			ThemeBtn::SaveAs => true,
-			// a built-in is not the user's to rename or throw away; saving over its
+			// a built-in isn't the user's to rename or throw away; saving over its
 			// name first makes a copy that is
 			ThemeBtn::Rename | ThemeBtn::Delete => self.user_theme_index().is_some(),
 		}
@@ -85,7 +85,7 @@ impl SettingsDialog {
 	}
 
 	/// Store the colors and the font on screen under `name`, replacing a saved
-	/// theme of that name or adding one. The variant the dialog is NOT showing
+	/// theme of that name or adding one. The variant the dialog isn't showing
 	/// is taken from whatever `name` resolves to today, so a theme is
 	/// always complete. The font is kept whether or not fonts follow themes.
 	pub(super) fn save_theme_as(&mut self, name: &str) {
@@ -141,7 +141,7 @@ impl SettingsDialog {
 	}
 
 	// A config path segment for a new theme: the name reduced to something a path
-	// can hold, then made unique. The slug never changes afterwards, so a rename
+	// can use, then made unique. The slug never changes afterwards, so a rename
 	// rewrites one line rather than moving a subtree.
 	fn free_slug(&self, name: &str) -> String {
 		let base: String = name
@@ -166,13 +166,13 @@ impl SettingsDialog {
 			.unwrap_or(base)
 	}
 
-	/// Why OK cannot accept the typed name, if it cannot.
+	/// Why OK can't accept the typed name, if it can't.
 	pub(super) fn name_problem(&self, which: ThemeBtn, name: &str) -> Option<String> {
 		let name = name.trim();
 		if name.is_empty() {
 			return Some("Enter a name.".into());
 		}
-		// A theme is not in its own way. Rename opens on the theme's current name,
+		// A theme isn't in its own way. Rename opens on the theme's current name,
 		// so OK with nothing changed has to go through, and so does a change of
 		// case alone - which is the only way to make one.
 		let mine = (which == ThemeBtn::Rename)
@@ -192,7 +192,7 @@ impl SettingsDialog {
 		None
 	}
 
-	/// Press a theme button: Save acts at once, the other three ask first.
+	/// Press a theme button: Save acts at once, the other 3 ask first.
 	pub(super) fn theme_action(&mut self, which: ThemeBtn) {
 		if !self.theme_btn_enabled(which) {
 			return;
@@ -280,7 +280,7 @@ mod tests {
 	}
 
 	// Nothing anywhere records "this theme has unsaved changes" - a color that
-	// disagrees with the theme IS the record, and it lives in the config file, so
+	// disagrees with the theme is the record, and it's stored in the config file, so
 	// the answer is the same after a restart.
 	// Test ID: davcp
 	#[test]
@@ -295,7 +295,7 @@ mod tests {
 		d.set_col(Key::ColFg, [1, 2, 3]);
 		assert!(d.theme_dirty());
 		assert!(!d.part_disabled(row, 0), "Save wakes up on an edit");
-		// Save as is always available; the other two need a theme of the user's own
+		// Save as is always available; the other 2 need a theme of the user's own
 		assert!(!d.part_disabled(row, 1));
 		assert!(d.part_disabled(row, 2), "Rename needs a saved theme");
 		assert!(d.part_disabled(row, 3), "Delete needs a saved theme");
@@ -314,7 +314,7 @@ mod tests {
 		assert_eq!(d.edited.theme, "Mine");
 		let saved = crate::theme::find_user(&d.edited.user_themes, "Mine").expect("saved");
 		assert_eq!(saved.dark.fg, [1, 2, 3]);
-		// the mode the dialog was NOT showing still comes out complete
+		// the mode the dialog wasn't showing still comes out complete
 		assert_eq!(
 			saved.light.fg,
 			crate::theme::resolve("Matrix", crate::theme::Mode::Light, true).fg
@@ -384,7 +384,7 @@ mod tests {
 	}
 
 	// Saving grays Save out, so the control the keyboard was on drops out of the
-	// Tab ring. Focus has to carry on to the next button rather than snapping
+	// Tab ring. Focus has to go on to the next button rather than snapping
 	// back to the first control on the tab.
 	// Test ID: davev
 	#[test]
@@ -514,8 +514,8 @@ mod tests {
 		assert!(!d.theme_dirty(), "the new palette is not a change");
 	}
 
-	// Renaming moves the name and the selection together; the slug behind it does
-	// not move, so the config subtree stays where it is.
+	// Renaming moves the name and the selection together; the slug behind it doesn't
+	// move, so the config subtree stays where it is.
 	// Test ID: dcq55
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
@@ -523,7 +523,7 @@ mod tests {
 		let mut d = on_theme("Matrix");
 		d.save_theme_as("Mine");
 		// Rename opens on the theme's own name, so OK with nothing changed used
-		// to answer "that name is taken" and keep the box up.
+		// to say "that name is taken" and keep the box up.
 		assert!(
 			d.name_problem(super::super::ThemeBtn::Rename, "Mine")
 				.is_none()
@@ -560,7 +560,7 @@ mod tests {
 		assert_eq!(d.edited.user_themes[0].slug, slug);
 		assert_eq!(d.get_col(Key::ColFg), [4, 5, 6]);
 
-		// two themes cannot share a name, or one would swallow the other
+		// no pair of themes can share a name, or one would swallow the other
 		d.save_theme_as("Theirs");
 		assert_eq!(d.edited.user_themes.len(), 2);
 		assert!(
@@ -611,7 +611,7 @@ mod tests {
 		assert_eq!(
 			// which variant an edit goes in follows the mode, so name it: a mode
 			// arriving out of somebody else's config file is what this last went
-			// wrong as, and the colors alone do not say that
+			// wrong as, and the colors alone don't say that
 			saved.dark.fg,
 			[0x12, 0x34, 0x56],
 			"mode {:?}",

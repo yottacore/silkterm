@@ -10,7 +10,7 @@ use crate::gfx::Drawn;
 use crate::pane::Rect;
 use std::time::Instant;
 
-/// A remote screen wears the Remote profile for the session. Nothing is written
+/// A remote screen gets the Remote profile for the session. Nothing is written
 /// and nothing is rated: the console keeps the profile it had, and the override
 /// lifts at the next launch unless that one is remote too.
 pub(super) fn remote_override_at_launch() {
@@ -20,7 +20,7 @@ pub(super) fn remote_override_at_launch() {
 	set_live(|live| crate::profile::set_remote(live, true));
 }
 
-// Turned off, a remote screen is not even asked about; the View menu still
+// Turned off, a remote screen isn't even asked about; the View menu still
 // puts Remote on by hand (2026101914251764).
 fn takes_remote(live: &config::Settings, detected: impl FnOnce() -> bool) -> bool {
 	live.performance_detect_remote && detected()
@@ -37,7 +37,7 @@ pub(super) enum RatingStep {
 /// rendering paced it. A benchmark is timing the same frames itself, a pinned
 /// rate paces itself, and a window without focus is one nobody is watching, so
 /// it gets no say in the profile.
-#[allow(clippy::fn_params_excessive_bools)] // four independent gates, all sixteen cases tested
+#[allow(clippy::fn_params_excessive_bools)] // 4 independent gates, all 16 cases tested
 pub(super) fn rating_step(
 	bench: bool,
 	scroll_anim: bool,
@@ -51,9 +51,9 @@ pub(super) fn rating_step(
 	}
 }
 
-/// With the profile on automatic, hardware the config has not seen gets a fresh
+/// With the profile on automatic, hardware the config hasn't seen gets a fresh
 /// pick, written down against that hardware so the next launch on it leaves the
-/// profile where the rating left it. Answers the id a benchmark should write
+/// profile where the rating left it. Returns the id a benchmark should write
 /// when it finishes, or None where there is nothing to time - a software
 /// renderer is decided here and written now, and a remote screen is left alone.
 pub(super) fn rate_hardware(info: &wgpu::AdapterInfo) -> Option<String> {
@@ -97,7 +97,7 @@ pub(super) fn rate_hardware(info: &wgpu::AdapterInfo) -> Option<String> {
 	None
 }
 
-// Whether this launch owes a rating. A machine already rated once is only
+// Whether this launch needs a rating. A machine already rated once is only
 // re-rated when asked for; the first rating has to happen either way, or there
 // is no profile at all.
 fn rating_due(live: &config::Settings, hardware: &str) -> bool {
@@ -114,7 +114,7 @@ fn rating_due(live: &config::Settings, hardware: &str) -> bool {
 }
 
 /// The session's stepped profile for a device drawn `drawn`, or None to leave
-/// it. Software on a machine with a card is not new hardware, so the card keeps
+/// it. Software on a machine with a card isn't new hardware, so the card keeps
 /// its rating and the session steps down to Low, the way a remote screen takes
 /// Remote. A step made here (`ours`) comes off when the card draws again, and
 /// a deeper step the display watch took since stays.
@@ -142,16 +142,16 @@ fn keep_measured(pick: crate::profile::Profile, id: Option<&str>) -> config::Kep
 	config::keep_tested(pick, id)
 }
 
-// Every rating write reports a failure, since a rating that is not kept is a
+// Every rating write reports a failure, since a rating that isn't kept is a
 // test again at the next launch, and a Windows release build shows no stderr
 // (G37) - which is why the banner says it too.
 fn note_rating_not_kept(kept: &config::Kept) {
 	let reason = match kept {
 		config::Kept::Written => return,
 		config::Kept::Busy => "the settings file is open in another program",
-		config::Kept::Unreadable => "the settings file has a line that cannot be read",
+		config::Kept::Unreadable => "the settings file has a line that can't be read",
 		config::Kept::Unplaced => {
-			"the performance section of the settings file could not be updated"
+			"the performance section of the settings file couldn't be updated"
 		}
 		config::Kept::Unwritable(why) => why.as_str(),
 	};
@@ -162,29 +162,29 @@ fn note_rating_not_kept(kept: &config::Kept) {
 }
 
 // What the benchmark's banner says: that a run is on, or, for its last few
-// seconds, why its answer could not be kept.
+// seconds, why its answer couldn't be kept.
 fn bench_banner_lines(kept: Option<&config::Kept>) -> &'static [&'static str] {
 	const AGAIN: &str = "The test runs again at the next launch.";
 	match kept {
 		None | Some(config::Kept::Written) => &["Testing performance", "This takes a few seconds."],
 		Some(config::Kept::Busy) => &[
-			"Could not save the result",
+			"Couldn't save the result",
 			"The settings file is open in another program.",
 			AGAIN,
 		],
 		Some(config::Kept::Unreadable) => &[
-			"Could not save the result",
-			"The settings file has a line that cannot be read.",
+			"Couldn't save the result",
+			"The settings file has a line that can't be read.",
 			AGAIN,
 		],
 		Some(config::Kept::Unplaced) => &[
-			"Could not save the result",
-			"The performance section of the settings file could not be updated.",
+			"Couldn't save the result",
+			"The performance section of the settings file couldn't be updated.",
 			AGAIN,
 		],
 		Some(config::Kept::Unwritable(_)) => &[
-			"Could not save the result",
-			"The settings file cannot be written.",
+			"Couldn't save the result",
+			"The settings file can't be written.",
 			AGAIN,
 		],
 	}
@@ -192,8 +192,8 @@ fn bench_banner_lines(kept: Option<&config::Kept>) -> &'static [&'static str] {
 
 // What the banner says after a run the display stalled.
 const BENCH_STALLED_LINES: &[&str] = &[
-	"Could not test performance",
-	"The display was not drawing at its usual rate.",
+	"Couldn't test performance",
+	"The display wasn't drawing at its usual rate.",
 	"The test runs again at the next launch.",
 ];
 
@@ -278,8 +278,8 @@ impl State {
 			.map(|up| up + BENCH_BANNER_MIN)
 	}
 
-	/// The Remote profile on or off by hand. Live only: nothing about it reaches
-	/// the file, so the next launch decides for itself.
+	/// The Remote profile on or off by hand. Live only: nothing about it is
+	/// written to the file, so the next launch decides for itself.
 	pub(super) fn toggle_remote(&mut self) {
 		let before = config::settings();
 		let mut next = (*before).clone();
@@ -289,7 +289,7 @@ impl State {
 	}
 
 	/// Put a rung's settings live for the length of the benchmark. Nothing is
-	/// written: the run is a measurement and only its answer reaches the file.
+	/// written: the run is a measurement and only its answer goes to the file.
 	pub(super) fn set_live_profile(&mut self, profile: crate::profile::Profile) {
 		let before = config::settings();
 		let next = with_measured_profile(&before, profile);
@@ -326,7 +326,7 @@ impl State {
 		self.apply_new_settings(&orig, new, false);
 	}
 
-	/// The run could not tell the machine from the display (`Step::Stalled`), most
+	/// The run couldn't tell the machine from the display (`Step::Stalled`), most
 	/// likely a monitor asleep. Nothing is written, so the next launch tests again,
 	/// and the session goes back to the profile it had. Saving Standard here once
 	/// left a machine without its wallpaper from then on.
@@ -335,7 +335,7 @@ impl State {
 		self.bench_id = None;
 		self.rating.reset();
 		eprintln!(
-			"{}: performance test gave no answer (the display was not drawing at its usual rate); it runs again at the next launch",
+			"{}: performance test gave no answer (the display wasn't drawing at its usual rate); it runs again at the next launch",
 			config::APP_NAME
 		);
 		self.bench_stalled = true;
@@ -356,7 +356,7 @@ impl State {
 			return;
 		};
 		eprintln!(
-			"{}: the display is not keeping up; performance profile stepped down to {} until {} restarts",
+			"{}: the display isn't keeping up; performance profile stepped down to {} until {} restarts",
 			config::APP_NAME,
 			crate::profile::current(&next).label(),
 			config::APP_NAME
@@ -492,8 +492,8 @@ mod tests {
 		}
 	}
 
-	// Which launches owe a rating. Pulled out of the launch path when every write
-	// in it changed, so the decision itself provably did not.
+	// Which launches need a rating. Pulled out of the launch path when every write
+	// in it changed, so the decision itself provably didn't.
 	// Software on a machine with a card steps the session to Low and writes
 	// nothing; the card drawing again takes off only a step made that way.
 	// Test ID: ddgxe
@@ -635,9 +635,9 @@ mod tests {
 		}
 	}
 
-	// A rating that did not reach the file was a test at every launch. Each file
+	// A rating that wasn't saved to the file meant a test at every launch. Each file
 	// here is one that used to lose it or read it back as nothing: a clean one, one
-	// with a line the parse cannot place, and one with the key twice.
+	// with a line the parse can't place, and one with the key twice.
 	// Test ID: dcf81
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
@@ -750,20 +750,20 @@ mod tests {
 			),
 			(
 				config::Kept::Unreadable,
-				"The settings file has a line that cannot be read.",
+				"The settings file has a line that can't be read.",
 			),
 			(
 				config::Kept::Unplaced,
-				"The performance section of the settings file could not be updated.",
+				"The performance section of the settings file couldn't be updated.",
 			),
 			(
 				config::Kept::Unwritable("could not write x: denied".to_string()),
-				"The settings file cannot be written.",
+				"The settings file can't be written.",
 			),
 		] {
 			assert_eq!(
 				super::bench_banner_lines(Some(&kept)),
-				["Could not save the result", why, AGAIN],
+				["Couldn't save the result", why, AGAIN],
 				"{kept:?}"
 			);
 		}

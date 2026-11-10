@@ -3,13 +3,13 @@
 
 //! Color glyph (`COLRv1`) rasterization.
 //!
-//! swash - the rasterizer cosmic-text drives - only reads COLR **v0**, and every
-//! current color emoji font ships v1 only. Those glyphs come back as an empty
+//! swash, the rasterizer cosmic-text drives, only reads COLR v0, but every
+//! current color emoji font is v1 only. Those glyphs come back as an empty
 //! image, so the fallback path picks a monochrome face instead. skrifa (already
-//! in the tree, under swash) walks the v1 paint graph; this module is the 2D back
-//! end it paints into - transform/clip/layer stacks over zeno's coverage
-//! rasterizer - producing straight-alpha sRGB RGBA, which glyphon uploads to its
-//! color atlas as a custom glyph.
+//! in the tree, under swash) walks the v1 paint graph, and this module is the 2D
+//! back end it paints into. It has transform/clip/layer stacks over zeno's
+//! coverage rasterizer and writes straight-alpha sRGB RGBA, which glyphon uploads
+//! to its color atlas as a custom glyph.
 //!
 //! Rasters are built ahead of `prepare` (see `TextCtx`), because glyphon holds the
 //! `FontSystem` mutably during it and the font bytes come from that same database.
@@ -39,11 +39,11 @@ const MAX_LAYERS: usize = 24;
 const MAX_RASTERS: usize = 4096;
 // Frames a raster is pinned for once warmed. glyphon re-requests a glyph when
 // its atlas entry is evicted and trimmed, which can be a frame or two after we
-// last warmed it, and answering None to something we previously answered Some
-// is a panic inside glyphon - so the sweep only ever drops older stamps.
+// last warmed it, and returning None for something that previously got Some
+// is a panic inside glyphon, so the sweep only ever drops older stamps.
 const RASTER_PIN_FRAMES: u64 = 2;
 
-/// A color glyph resolved for one char: which face holds it, and the design box
+/// A color glyph resolved for one char: which face has it, and the design box
 /// the raster covers (font units) so the caller can fit it to a cell.
 #[derive(Debug, Clone, Copy)]
 pub struct ColorMetrics {
@@ -66,14 +66,14 @@ struct Resolved {
 
 pub struct ColorGlyphs {
 	// Faces with a COLR table, found by one lazy pass over the db (only paid once
-	// a color candidate actually appears on screen).
+	// a color candidate appears on screen).
 	faces: Option<Vec<fontdb::ID>>,
-	// Per-char resolution, including the misses - a char with no color glyph is
-	// looked up on every cell of every frame otherwise. A hit carries its
+	// Per-char resolution, including the misses, since otherwise a char with no
+	// color glyph is looked up on every cell of every frame. A hit has its
 	// glyphon custom-glyph id (u16, handed out per char, never reused).
 	lookup: HashMap<char, Option<Resolved>>,
 	chars: Vec<char>,
-	// Value carries the frame it was last warmed on, so the overflow sweep can
+	// The value has the frame it was last warmed on, so the overflow sweep can
 	// tell a raster this frame still needs from one nothing references.
 	rasters: HashMap<(u16, u16, u16), (u64, Vec<u8>)>,
 	frame: u64,
@@ -90,14 +90,14 @@ impl std::fmt::Debug for ColorGlyphs {
 	}
 }
 
-/// Should this char be PAINTED, or set in the terminal font? An emoji face
-/// covers far more than it ought to be used for - the heavy check mark and the
-/// copyright sign are both in Noto Color Emoji - and painting one loses the
-/// ANSI color it was set in, which is how a green check in a git prompt came
-/// out purple. Unicode answers with `Emoji_Presentation`, and the answer is No
-/// for nearly everything below U+1F000, so the exceptions are listed. Above
-/// that it is Yes for nearly everything, and the handful of No's up there are
-/// pictures rather than text, so they are left to the font.
+/// Should this char be painted, or set in the terminal font? An emoji face
+/// covers far more than it ought to be used for. The heavy check mark and the
+/// copyright sign are both in Noto Color Emoji, and painting one loses the ANSI
+/// color it was set in, which is how a green check in a git prompt came out
+/// purple. Unicode's `Emoji_Presentation` is No for nearly everything below
+/// U+1F000, so the exceptions are listed. Above that it's Yes for nearly
+/// everything, and the handful of No's up there are pictures rather than text,
+/// so they're left to the font.
 pub fn wants_color(ch: char) -> bool {
 	#[rustfmt::skip]
 	const PAINTED: &[(u32, u32)] = &[
@@ -127,7 +127,7 @@ impl ColorGlyphs {
 	}
 
 	/// Does `ch` have a color glyph, and how big is it in design units? None for
-	/// the overwhelming majority of chars, so the miss is cached too.
+	/// almost all chars, so the miss is cached too.
 	pub fn metrics(&mut self, db: &fontdb::Database, ch: char) -> Option<ColorMetrics> {
 		if !wants_color(ch) {
 			return None;
@@ -164,7 +164,7 @@ impl ColorGlyphs {
 				let gid = font.charmap().map(ch)?;
 				let glyph = font.color_glyphs().get(gid)?;
 				// A ClipBox gives the exact painted extent; without one, fall back to
-				// the glyph's advance and the font's vertical extent - a color font
+				// the glyph's advance and the font's vertical extent. A color font
 				// fills that box closely enough for cell fitting.
 				let (x, y, w, h) =
 					match glyph.bounding_box(LocationRef::default(), Size::unscaled()) {
@@ -214,8 +214,8 @@ impl ColorGlyphs {
 		if w == 0 || h == 0 {
 			return;
 		}
-		// A hit still has to re-stamp: an emoji on screen every frame must not
-		// age out from under the atlas just because it was cached long ago.
+		// A hit still has to re-stamp: an emoji on screen every frame mustn't
+		// age out from under the atlas because it was cached long ago.
 		if let Some(entry) = self.rasters.get_mut(&(id, w, h)) {
 			entry.0 = self.frame;
 			return;
@@ -238,8 +238,7 @@ impl ColorGlyphs {
 	// Drop only what has aged out. Clearing wholesale is what made a screenful
 	// of distinct emoji abort: the sweep fell mid-frame, between glyphon
 	// rasterizing a glyph and asking for it again. If everything is still
-	// pinned the cache simply grows - bounded by what fits on screen, which is
-	// a great deal cheaper than a crash.
+	// pinned the cache grows, bounded by what fits on screen.
 	fn sweep(&mut self) {
 		if self.rasters.len() < MAX_RASTERS {
 			return;
@@ -250,11 +249,11 @@ impl ColorGlyphs {
 
 	/// glyphon's rasterize callback: a pure lookup (see `warm`).
 	///
-	/// A miss answers with transparent pixels rather than None. glyphon
-	/// re-rasterizes every entry it holds when its atlas grows, and a glyph that
-	/// stops answering aborts it - the same crash a wholesale clear caused. The
-	/// sweep can still drop a key glyphon is holding, so the answer has to be
-	/// pixels; the glyph simply is not drawn.
+	/// A miss returns transparent pixels rather than None. glyphon re-rasterizes
+	/// every entry it has when its atlas grows, and a glyph that stops coming back
+	/// aborts it, the same crash a wholesale clear caused. The sweep can still drop
+	/// a key glyphon is using, so a miss still returns pixels, and the glyph isn't
+	/// drawn.
 	pub fn raster(&self, req: RasterizeCustomGlyphRequest) -> Option<RasterizedCustomGlyph> {
 		if req.width == 0 || req.height == 0 {
 			return None;
@@ -297,7 +296,7 @@ pub fn text_families(db: &fontdb::Database, ch: char) -> Vec<String> {
 	found.into_iter().map(|(_, name)| name).collect()
 }
 
-// Faces carrying a COLR table. fontdb memory-maps its sources, so this touches
+// Faces with a COLR table. fontdb memory-maps its sources, so this touches
 // little more than each file's table directory.
 fn color_faces(db: &fontdb::Database) -> Vec<fontdb::ID> {
 	db.faces()
@@ -358,7 +357,7 @@ fn paint(data: &[u8], index: u32, res: &Resolved, w: u16, h: u16) -> Option<Vec<
 	Some(painter.finish())
 }
 
-// One 2D target: premultiplied RGBA, four floats per pixel. Premultiplied so
+// One 2D target: premultiplied RGBA, 4 floats per pixel. Premultiplied so
 // layer compositing is a plain lerp; the sRGB values are blended as-is, which is
 // what every other COLRv1 renderer does.
 type Layer = Vec<f32>;
@@ -457,7 +456,7 @@ impl Painter<'_> {
 		color
 	}
 
-	// CPAL lookup. 0xFFFF means "the text foreground color" - the raster is
+	// CPAL lookup. 0xFFFF means "the text foreground color". The raster is
 	// cached independently of the cell color, so it resolves to white (which
 	// leaves such a paint tintable later if that's ever wanted).
 	fn color(&self, index: u16) -> [f32; 4] {
@@ -510,7 +509,7 @@ impl ColorPainter for Painter<'_> {
 	fn push_clip_box(&mut self, clip_box: BoundingBox<f32>) {
 		let m = self.cur();
 		// The box is axis-aligned in paint space but can arrive rotated here, so
-		// walk its corners rather than transforming two of them.
+		// walk its corners rather than transforming 2 of them.
 		let corners = [
 			(clip_box.x_min, clip_box.y_min),
 			(clip_box.x_max, clip_box.y_min),
@@ -588,7 +587,7 @@ impl ColorPainter for Painter<'_> {
 
 	fn pop_layer_with_mode(&mut self, composite_mode: CompositeMode) {
 		if self.overflowed {
-			// One skipped push, one skipped pop - the next pop is a real one.
+			// One skipped push and one skipped pop, so the next pop is a real one.
 			self.overflowed = false;
 			return;
 		}
@@ -668,7 +667,7 @@ impl OutlinePen for PathPen {
 }
 
 // A brush, ready to evaluate at a device pixel. Gradient geometry is given in
-// paint space, so gradient shades carry the inverse matrix and map each pixel
+// paint space, so gradient shades store the inverse matrix and map each pixel
 // back rather than transforming the gradient itself.
 enum Shade {
 	Solid([f32; 4]),
@@ -831,7 +830,7 @@ impl Shade {
 }
 
 // Two-point conical gradient: the largest t whose interpolated circle passes
-// through the point AND has a non-negative radius. None where no such circle
+// through the point and has a non-negative radius. None where no such circle
 // exists (the cone's shadow), which must stay transparent.
 fn conical(c0: (f32, f32), r0: f32, cd: (f32, f32), dr: f32, x: f32, y: f32) -> Option<f32> {
 	let pd = (x - c0.0, y - c0.1);
@@ -853,7 +852,7 @@ fn conical(c0: (f32, f32), r0: f32, cd: (f32, f32), dr: f32, x: f32, y: f32) -> 
 	let root = disc.sqrt();
 	// Prefer the larger t. Which root that is flips with the sign of `a` (the
 	// radius growing faster than the center moves), so order them rather than
-	// assuming - taking the wrong one paints the far side of the cone.
+	// assuming. Taking the wrong one paints the far side of the cone.
 	let (mut hi, mut lo) = ((b + root) / a, (b - root) / a);
 	if hi < lo {
 		core::mem::swap(&mut hi, &mut lo);
@@ -936,7 +935,7 @@ fn pd_factors(mode: CompositeMode, sa: f32, ba: f32) -> Option<(f32, f32)> {
 		M::DestAtop => (1.0 - ba, sa),
 		M::Xor => (1.0 - ba, 1.0 - sa),
 		M::Plus => (1.0, 1.0),
-		// HSL modes need all three channels at once; they're vanishingly rare in
+		// HSL modes need all 3 channels at once; they're very rare in
 		// real fonts, so they use the ordinary over.
 		M::HslHue | M::HslSaturation | M::HslColor | M::HslLuminosity | M::Unknown => {
 			(1.0, 1.0 - sa)
@@ -1038,7 +1037,7 @@ mod tests {
 
 	// A screen of nothing but distinct emoji overflows the cache inside a single
 	// frame. Anything warmed for that frame has to survive: glyphon panics if the
-	// rasterize callback answers None where it previously answered Some, which is
+	// rasterize callback returns None where it previously returned Some, which is
 	// exactly what a wholesale clear caused.
 	// Test ID: daggh
 	#[test]
@@ -1053,8 +1052,8 @@ mod tests {
 		assert_eq!(cg.rasters.len(), want as usize);
 	}
 
-	// The sweep can drop a key glyphon is still holding, and glyphon aborts on a
-	// glyph that stops answering. So a miss answers with pixels nobody can see.
+	// The sweep can drop a key glyphon is still using, and glyphon aborts on a
+	// glyph that stops coming back. So a miss returns pixels nobody can see.
 	// Test ID: dcbdg
 	#[test]
 	fn a_missing_raster_answers_with_transparent_pixels() {
@@ -1072,7 +1071,7 @@ mod tests {
 		assert!(got.data.iter().all(|b| *b == 0), "and nothing shows");
 	}
 
-	// The cache must still shed genuinely dead entries, or a long session at a
+	// The cache must still shed dead entries, or a long session at a
 	// changing font size would grow without limit.
 	// Test ID: daggj
 	#[test]
@@ -1101,7 +1100,7 @@ mod tests {
 		assert_eq!(cg.rasters.get(&(0, 20, 20)).map(|e| e.0), Some(50));
 	}
 
-	// The whole point of the module: a COLRv1-only emoji font must produce actual
+	// The whole point of the module: a COLRv1-only emoji font must produce
 	// color pixels, where swash hands back an empty image. Skipped where the box
 	// has no color font at all.
 	// Test ID: daerd
@@ -1133,7 +1132,7 @@ mod tests {
 			opaque > 200,
 			"only {opaque} solid pixels - glyph came out blank"
 		);
-		// "Color" means the channels actually differ somewhere; a monochrome
+		// "Color" means the channels differ somewhere; a monochrome
 		// outline would pass the coverage check above on its own.
 		let tinted = raster
 			.data
@@ -1147,7 +1146,7 @@ mod tests {
 	}
 
 	// Porter-Duff SrcIn keeps only the part of the source covered by the backdrop,
-	// and Noto Color Emoji leans on it 300+ times per font.
+	// and Noto Color Emoji uses it 300+ times per font.
 	// Test ID: daere
 	#[test]
 	fn src_in_masks_the_source_to_the_backdrop() {
@@ -1161,7 +1160,7 @@ mod tests {
 		);
 	}
 
-	// Extend modes drive what happens past the ends of a color line.
+	// Extend modes set what happens past the ends of a color line.
 	// Test ID: daerf
 	#[test]
 	fn gradient_extend_modes_wrap_clamp_and_mirror() {
@@ -1178,19 +1177,19 @@ mod tests {
 	}
 
 	// A radial gradient's point must sit on a circle with a non-negative radius,
-	// picking the LARGEST such t; points with no such circle stay transparent.
+	// picking the largest such t; points with no such circle stay transparent.
 	// Test ID: daerg
 	#[test]
 	fn conical_picks_the_largest_valid_circle() {
 		// Concentric, r 0 -> 1: the halfway point sits at t = 0.5.
 		let t = conical((0.0, 0.0), 0.0, (0.0, 0.0), 1.0, 0.5, 0.0).expect("inside");
 		assert!((t - 0.5).abs() < 1e-5, "t = {t}");
-		// Two degenerate point-circles on the x axis: nothing off that axis is on
+		// A pair of degenerate point-circles on the x axis: nothing off that axis is on
 		// any interpolated circle.
 		assert!(conical((0.0, 0.0), 0.0, (10.0, 0.0), 0.0, 0.0, 5.0).is_none());
 		// Shrinking radius with a fixed center puts `a` negative, which flips which
 		// root is the larger one. The larger (t = 6) needs radius -5, so the valid
-		// answer is the backward extension at t = -4 (radius 5) - not None.
+		// answer is the backward extension at t = -4 (radius 5), not None.
 		let t = conical((0.0, 0.0), 1.0, (0.0, 0.0), -1.0, 5.0, 0.0).expect("on a circle");
 		assert!((t + 4.0).abs() < 1e-5, "t = {t}");
 	}

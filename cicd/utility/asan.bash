@@ -37,12 +37,12 @@ source "${root}/cicd/tests/_testdir.bash"
 [[ -n "${SANITIZER_TOOLCHAIN}" ]] || fDie "no nightly named in rust-toolchain.toml"
 rustup toolchain list 2>/dev/null | grep -q "^${SANITIZER_TOOLCHAIN}" \
 	|| fDie "${SANITIZER_TOOLCHAIN} isn't installed here; cicd.bash runs this in the container image"
-fTestDir_Make || fDie "could not make the test run folder"
+fTestDir_Make || fDie "couldn't make the test run folder"
 ## A quarter of the CPUs, the hard step's share, under what the run passed in.
 fJobs_LowPriority; fJobs hard
 
 ## Frames have to be named, or a suppression by function name matches nothing and
-## a report reads as bare addresses. Debian ships it versioned only.
+## a report reads as bare addresses. Debian packages it versioned only.
 symbolizer="$(command -v llvm-symbolizer || true)"
 [[ -n "${symbolizer}" ]] || symbolizer="$(compgen -G '/usr/lib/llvm-*/bin/llvm-symbolizer' | sort -V | tail -n 1 || true)"
 ## Set whole, so nothing inherited can turn the leak check off. Rust's own
@@ -69,7 +69,7 @@ rc=0; "${ASAN_CMD[@]}" --manifest-path cicd/tests/sanitizer-canary/Cargo.toml >"
 if ((rc == 0)) || ! grep -q 'ERROR: LeakSanitizer: detected memory leaks' "${canaryOut}" || ! grep -q 'leaks_on_purpose' "${canaryOut}"; then
 	tail -n 80 "${canaryOut}"
 	fEcho_Clean "FAIL de5f0 ASan canary caught"
-	fDie "the canary's leak was not reported by name, so a leak in the suite could pass too (output in ${canaryOut})"
+	fDie "the canary's leak wasn't reported by name, so a leak in the suite could pass too (output in ${canaryOut})"
 fi
 fEcho_Clean "PASS de5f0 ASan canary caught"
 

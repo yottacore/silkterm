@@ -2,7 +2,7 @@
 // Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
 
 //! The search box over the rows, and the list of matches that takes the page's
-//! place while the box holds text. Picking one goes to it.
+//! place while the box has text. Picking one goes to it.
 //!
 //! A match is a tab or a row, found by its label first, then by one of the
 //! row's `aliases:`, then loosely: the letters in order, or a word one or two
@@ -19,10 +19,10 @@ use crate::ui_spec::Spec;
 
 /// How much bigger the matched part of a result is drawn.
 const MARK_SCALE: f32 = 1.15;
-/// A loose match needs this many letters, or two would match half the dialog.
+/// A loose match needs this many letters, or 2 would match half the dialog.
 const LOOSE_MIN: usize = 3;
 /// How long a row picked from the list stays marked, and how long of that it
-/// holds before it fades, in seconds.
+/// stays solid before it fades, in seconds.
 const FLASH_S: f32 = 1.6;
 const FLASH_HOLD_S: f32 = 0.5;
 const FLASH_ALPHA: f32 = 0.38;
@@ -35,7 +35,7 @@ pub(super) enum Tier {
 }
 
 /// What a result goes to. A tab is listed by its own title; a heading that
-/// only repeats it is not listed again.
+/// only repeats it isn't listed again.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum Target {
 	Tab(usize), // node
@@ -160,7 +160,7 @@ fn in_order(hay: &Folded, query: &str) -> Option<((usize, usize), Vec<(usize, us
 	Some((key, marks))
 }
 
-// Edits apart, a swap of two neighbors counting as one.
+// Edits apart, a swap of 2 neighbors counting as one.
 fn typos(a: &[char], b: &[char]) -> usize {
 	let mut rows = vec![vec![0usize; b.len() + 1]; a.len() + 1];
 	for (i, row) in rows.iter_mut().enumerate() {
@@ -380,7 +380,7 @@ fn heading_of(specs: &[Spec], row: usize) -> Option<usize> {
 	(!SettingsDialog::header_is_tab_title(&specs[at])).then_some(at)
 }
 
-// The row a sub-group member sits under, for two rows that would otherwise
+// The row a sub-group member sits under, for 2 rows that would otherwise
 // read the same (the Scrollbar's Width px and the Minimap's).
 fn leader_of(specs: &[Spec], row: usize) -> Option<usize> {
 	let me = &specs[row];
@@ -500,7 +500,7 @@ impl SettingsDialog {
 		(0..self.search.hits.len()).find(|&k| self.hit_rect(k).contains(x, y))
 	}
 
-	/// Ctrl+F: the keyboard goes to the search box, with what it holds selected.
+	/// Ctrl+F: the keyboard goes to the search box, with its text selected.
 	pub fn search_focus(&mut self) {
 		if self.modal() {
 			return;
@@ -512,7 +512,7 @@ impl SettingsDialog {
 		self.open_edit(SEARCH_ROW, true);
 	}
 
-	/// What the box holds changed: list again from the top.
+	/// The box's text changed: list again from the top.
 	pub(super) fn search_set(&mut self, text: &str) {
 		let was = self.searching();
 		self.search.query = text.to_string();
@@ -876,7 +876,7 @@ mod tests {
 		assert_eq!(hits[0].to, Target::Tab(tab("Shell")), "{hits:?}");
 	}
 
-	// Two letters loosely would match half the dialog, so they find only
+	// Loosely, 2 letters would match half the dialog, so they find only
 	// what has them together.
 	// Test ID: de03x
 	#[test]
@@ -935,12 +935,12 @@ mod tests {
 		assert_eq!(marked, ["Them"]);
 		let (line, _) = first("hyperlinks", Target::Row(heading("Hyperlinks")));
 		assert_eq!(line, format!("Window {sep} Hyperlinks"));
-		// two rows that would read the same say which sub-group they lead from
+		// rows that would read the same say which sub-group they lead from
 		let (a, _) = first("width px", Target::Row(row_of(Key::ScrollbarThickness)));
 		let (b, _) = first("width px", Target::Row(row_of(Key::MinimapWidth)));
 		assert_eq!(a, format!("Movement {sep} Scrollbar {sep} Width px"));
 		assert_eq!(b, format!("Movement {sep} Minimap {sep} Width px"));
-		// loose marks land on the letters that matched
+		// loose marks go on the letters that matched
 		let (_, marked) = first("lnhght", Target::Row(row_of(Key::LineHeight)));
 		assert_eq!(marked.concat(), "Lnhght");
 	}
@@ -1002,7 +1002,7 @@ mod tests {
 	}
 
 	// Typing in the box lists matches over the page; Enter goes to the one
-	// picked, on its tab, in view and with the keyboard on it, and empties
+	// picked, on its tab, in view, and with the keyboard on it, and empties
 	// the box. Escape empties it first and cancels only once it's empty.
 	// Test ID: de041
 	#[test]
@@ -1155,7 +1155,7 @@ mod tests {
 	}
 
 	// With nothing typed the box is outside the Tab walk, as the tabs are, so
-	// Tab from nothing still lands on the tab's first control. From the box,
+	// Tab from nothing still goes to the tab's first control. From the box,
 	// Tab goes on to that control and Shift+Tab back to OK.
 	// Test ID: de045
 	#[test]

@@ -2,7 +2,7 @@
 
 # knobs
 
-Settings declared in a shcl file, and the rules for what a change to one does to the others. Nothing here draws a screen. The program draws the controls, and asks knobs what each one shows and what a change does.
+This crate has settings declared in a shcl file, and the rules for what a change to one does to the others. Nothing here draws a screen. The program draws the controls, and asks knobs what each one shows and what a change does.
 
 ## What's in it
 

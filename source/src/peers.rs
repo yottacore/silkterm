@@ -19,7 +19,7 @@ use std::time::{Duration, Instant};
 const LOCK_WAIT: Duration = Duration::from_secs(2);
 
 /// Where the control sockets and meeting folders go: the session's runtime
-/// folder, else the temp folder. A test run keeps its own.
+/// folder, else the temp folder. A test run uses its own.
 pub fn runtime_dir() -> PathBuf {
 	#[cfg(test)]
 	return crate::testdir::run_dir().to_path_buf();
@@ -29,8 +29,8 @@ pub fn runtime_dir() -> PathBuf {
 		.map_or_else(std::env::temp_dir, PathBuf::from)
 }
 
-/// The settings file as a short name. Two spellings of one file get one key,
-/// and the key is short enough to leave room in a socket path.
+/// The settings file as a short name. Different spellings of one file get one
+/// key, and the key is short enough to leave room in a socket path.
 pub fn key_for(path: &Path) -> String {
 	let real = real_path(path);
 	let text = real.to_string_lossy();
@@ -62,8 +62,8 @@ pub fn own_key() -> Option<&'static str> {
 		.as_deref()
 }
 
-/// The meeting folder for `key`, made if need be. None when it cannot be made
-/// or is not ours, and then this window saves and listens alone.
+/// The meeting folder for `key`, made if need be. None when it can't be made
+/// or isn't ours, and then this window saves and listens alone.
 pub fn meeting_dir(key: &str) -> Option<PathBuf> {
 	let dir = runtime_dir().join(format!("silkterm-{key}"));
 	match make_private_dir(&dir) {
@@ -84,7 +84,7 @@ fn make_private_dir(dir: &Path) -> std::io::Result<()> {
 	}
 	// The fallback is a shared /tmp, where someone else can make the folder first.
 	let meta = std::fs::symlink_metadata(dir)?;
-	// SAFETY: no arguments, cannot fail.
+	// SAFETY: no arguments, can't fail.
 	let uid = unsafe { libc::geteuid() };
 	if !meta.is_dir() || meta.uid() != uid || meta.mode() & 0o077 != 0 {
 		return Err(std::io::Error::new(
@@ -105,7 +105,7 @@ fn warn_once(what: &str) {
 	static SAID: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 	if !SAID.swap(true, std::sync::atomic::Ordering::Relaxed) {
 		eprintln!(
-			"{}: other windows on this settings file will not hear of saves: {what}",
+			"{}: other windows on this settings file won't hear of saves: {what}",
 			crate::config::APP_NAME
 		);
 	}
@@ -190,7 +190,7 @@ thread_local! {
 	static HELD: Cell<u32> = const { Cell::new(0) };
 }
 
-/// Held while a settings or state file is read and written back, so two
+/// Held while a settings or state file is read and written back, so 2
 /// windows saving at the same moment each keep the other's change. A take
 /// inside one already held on this thread is free.
 #[must_use]
@@ -220,8 +220,8 @@ pub fn save_lock() -> SaveLock {
 	SaveLock { file }
 }
 
-// Each take opens the file afresh, so two threads of one process shut each
-// other out the same way two processes do.
+// Each take opens the file afresh, so 2 threads of one process shut each
+// other out the same way 2 processes do.
 fn take(path: &Path, wait: Duration) -> Option<File> {
 	let file = OpenOptions::new()
 		.create(true)
@@ -320,7 +320,7 @@ mod tests {
 	}
 
 	// The second taker waits for the first, here a thread standing in for the
-	// other window, and a take inside a held one does not wait on itself.
+	// other window, and a take inside a held one doesn't wait on itself.
 	// Test ID: ddwna
 	#[test]
 	#[cfg_attr(miri, ignore = "Miri gives a made-up user id")]

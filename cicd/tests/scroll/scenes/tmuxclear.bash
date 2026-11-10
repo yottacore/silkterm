@@ -10,7 +10,7 @@
 ## screen filled in place, so nothing but the clear can scroll.
 ## A clear while a big slide is still running slides, by design
 ## (2026101611321631), and a fill drawn in the same frame as a clear reads as a
-## burst. So after each fill, clear and mark the scene waits for the trace to
+## burst. So after each fill, clear, and mark the scene waits for the trace to
 ## show a frame since, at rest. A fixed pause did that only on a quiet box. A
 ## frame advances the ease by at most 0.1 s, so at a frame a second the bursts
 ## were still sliding under the clears. A wait that runs out leaves a note, and

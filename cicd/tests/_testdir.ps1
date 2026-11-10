@@ -34,7 +34,7 @@ $script:TestDirOwned = $null
 $script:TestDirToken = $null
 
 function fTestDir_Make {
-	##	Sets $env:SILKTERM_TEST_DIR. Throws, naming the path, when it cannot.
+	##	Sets $env:SILKTERM_TEST_DIR. Throws, naming the path, when it can't.
 	if ($env:SILKTERM_TEST_DIR) {
 		$null = New-Item -ItemType Directory -Force -Path $env:SILKTERM_TEST_DIR
 		return
@@ -107,7 +107,7 @@ function fTestDir_Remove {
 	)
 	$reason = fTestDir_NotOurs $Dir $Token
 	if ($reason) { Write-Warning "test run folder: left $Dir in place: $reason"; return $false }
-	##	Windows will not remove a folder in use as the current one.
+	##	Windows won't remove a folder in use as the current one.
 	$here = (Get-Location).ProviderPath
 	if ($here -eq $Dir -or $here.StartsWith($Dir + [System.IO.Path]::DirectorySeparatorChar)) { Set-Location -LiteralPath (Split-Path $Dir) }
 	try { fTestDir_Delete ([System.IO.DirectoryInfo]$Dir) }
@@ -116,7 +116,7 @@ function fTestDir_Remove {
 }
 
 function fTestDir_NotOurs([string]$Dir, [string]$Token) {
-	##	Why $Dir is not this run's folder, or nothing when it is.
+	##	Why $Dir isn't this run's folder, or nothing when it is.
 	##	The second form is what older runs made, which their ledgers still name.
 	if ((Split-Path -Leaf $Dir) -notmatch '^(\d{8}-\d{6}_\d{3}|test_silkterm_\d{8}-\d{8})$') { return 'not named like a run folder' }
 	$info = [System.IO.DirectoryInfo]$Dir
@@ -176,7 +176,7 @@ function fTestDir_Sweep {
 }
 
 function fTestDir_OnlyMarks([string]$Dir) {
-	##	$true when $Dir holds nothing but the owner mark and run.pid.
+	##	$true when $Dir has nothing but the owner mark and run.pid.
 	try {
 		$info = [System.IO.DirectoryInfo]$Dir
 		if (-not $info.Exists -or ($info.Attributes -band [System.IO.FileAttributes]::ReparsePoint)) { return $false }
@@ -188,7 +188,7 @@ function fTestDir_OnlyMarks([string]$Dir) {
 }
 
 function fTestDir_End {
-	##	Removes the folder fTestDir_Make made, when $Status is 0 or it holds
+	##	Removes the folder fTestDir_Make made, when $Status is 0 or it has
 	##	nothing but its marks. Never throws, so it never changes how a script
 	##	exits.
 	[CmdletBinding()]

@@ -5,7 +5,7 @@
 ##		VM is often asleep, so with a VM state helper named it has to be woken
 ##		through it and put back after, and a box that isn't there is a skip with a
 ##		SKIP line, not a failure. Run against a stand-in ssh, scp, host lock and
-##		VM state helper on PATH, so nothing reaches a box.
+##		VM state helper on PATH, so nothing touches a box.
 ##	- Test ID: dehx3
 ##	- History: At bottom of file.
 

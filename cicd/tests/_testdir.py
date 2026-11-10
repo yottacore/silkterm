@@ -6,7 +6,7 @@
 ##		0700 one is made and exported, so every test the caller starts shares it.
 ##		A script that made one calls end(<exit status>) right before it exits,
 ##		which removes the folder on 0 or 3 (a skip) and keeps it otherwise, unless
-##		it holds nothing but its owner mark and run.pid. rm(<path>) removes a
+##		it has nothing but its owner mark and run.pid. rm(<path>) removes a
 ##		folder tree inside it, as fTestDir_Rm does.
 ##	- History: At bottom of file.
 
@@ -72,7 +72,7 @@ def _not_ours(folder: Path, token: str) -> str:
 
 
 def only_marks(folder: Path) -> bool:
-	## True when folder holds nothing but the owner mark and run.pid.
+	## True when folder has nothing but the owner mark and run.pid.
 	try:
 		return (
 			folder.is_dir()
@@ -85,7 +85,7 @@ def only_marks(folder: Path) -> bool:
 
 def end(status: int, keep: bool = False) -> None:
 	## Removes the folder make() made, when status is 0 or 3 (a skip), or it
-	## holds nothing else, and the folder still has this run's mark. `keep`
+	## has nothing else, and the folder still has this run's mark. `keep`
 	## leaves a folder with files in it whatever the status, for a test asked
 	## to keep what passed. Never raises, so it never changes how a script
 	## exits.
@@ -131,7 +131,7 @@ def rm(path: "str | os.PathLike[str]") -> bool:
 
 def use() -> Path:
 	## make(), then this process's tempfile calls and every program it starts
-	## write there. tempfile caches its answer, so TMPDIR alone would not move it.
+	## write there. tempfile caches its answer, so TMPDIR alone wouldn't move it.
 	## TEMP and TMP too, as the pipeline sets them.
 	folder = make()
 	for name in ("TMPDIR", "TEMP", "TMP"):

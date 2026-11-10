@@ -77,7 +77,7 @@ pub fn group_front(_root: u32, pgid: u32) -> Option<u32> {
 		.map(|(pid, _)| *pid)
 }
 
-// Another user's process, as under sudo, answers nothing here; the leader's
+// Another user's process, as under sudo, returns nothing here; the leader's
 // short info still names it.
 #[cfg(target_os = "macos")]
 fn bsd_info(pid: u32) -> Option<libc::proc_bsdinfo> {
@@ -121,7 +121,7 @@ fn read_stat(pid: u32) -> Option<Stat> {
 	parse_stat(&std::fs::read_to_string(format!("/proc/{pid}/stat")).ok()?)
 }
 
-// The name is in parens and may hold spaces or parens of its own, so the
+// The name is in parens and may contain spaces or parens of its own, so the
 // numbers are counted from the last `)`.
 #[cfg(target_os = "linux")]
 fn parse_stat(text: &str) -> Option<Stat> {
@@ -138,7 +138,7 @@ fn parse_stat(text: &str) -> Option<Stat> {
 	})
 }
 
-// Each thread keeps its own list of the children it started.
+// Each thread has its own list of the children it started.
 #[cfg(target_os = "linux")]
 fn children(pid: u32) -> Vec<u32> {
 	let Ok(tasks) = std::fs::read_dir(format!("/proc/{pid}/task")) else {
@@ -163,7 +163,7 @@ const ASK_GAP: Duration = Duration::from_millis(500);
 // how often to look whether an ask has come back
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 const ASK_POLL: Duration = Duration::from_millis(15);
-// a server that has stopped answering
+// a server that has stopped responding
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 const ASK_GIVE_UP: Duration = Duration::from_secs(2);
 
@@ -219,7 +219,7 @@ impl Tmux {
 	}
 
 	/// What runs in the pane tmux client `client` shows. None until tmux has
-	/// answered once, or when it cannot be asked.
+	/// answered once, or when it can't be asked.
 	pub fn inner(&mut self, client: u32, now: Instant) -> Option<Inner> {
 		if client != self.client {
 			*self = Self::default();
@@ -336,7 +336,7 @@ impl Query {
 		let exe = exe
 			.filter(|exe| exe.is_file())
 			.unwrap_or_else(|| "tmux".into());
-		// Something else that calls itself tmux is not handed tmux's arguments.
+		// Something else that calls itself tmux isn't handed tmux's arguments.
 		if !exe
 			.file_name()
 			.is_some_and(|name| name.as_bytes().starts_with(b"tmux"))
@@ -351,7 +351,7 @@ impl Query {
 	}
 }
 
-// A process's binary, arguments and starting environment.
+// A process's binary, arguments, and starting environment.
 #[cfg(target_os = "linux")]
 fn launched_as(pid: u32) -> Option<(Option<std::path::PathBuf>, Vec<std::ffi::OsString>, Vec<u8>)> {
 	use std::os::unix::ffi::OsStrExt;
@@ -367,7 +367,7 @@ fn launched_as(pid: u32) -> Option<(Option<std::path::PathBuf>, Vec<std::ffi::Os
 	Some((exe, argv, environ))
 }
 
-// macOS has no /proc. sysctl hands back the same as one block (KERN_PROCARGS2).
+// macOS has no /proc. sysctl returns the same as one block (KERN_PROCARGS2).
 #[cfg(target_os = "macos")]
 fn launched_as(pid: u32) -> Option<(Option<std::path::PathBuf>, Vec<std::ffi::OsString>, Vec<u8>)> {
 	use std::os::unix::ffi::OsStrExt;
@@ -441,7 +441,7 @@ fn procargs(buf: &[u8]) -> Option<(Vec<std::ffi::OsString>, &[u8])> {
 
 // tmux's -L and -S, read the way its getopt reads them. The other options that
 // take a value are skipped with it, and the command starts at the first word
-// that is not an option.
+// that isn't an option.
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 fn socket_args(argv: &[std::ffi::OsString]) -> Vec<std::ffi::OsString> {
 	use std::os::unix::ffi::{OsStrExt, OsStringExt};
@@ -741,7 +741,7 @@ mod mac_tests {
 	use super::*;
 	use std::process::{Command, Stdio};
 
-	// Polls the real ask until it answers `want`, stirring as output would.
+	// Polls the real ask until it returns `want`, stirring as output would.
 	fn wait_for(tmux: &mut Tmux, client: u32, want: &Inner) -> Option<Inner> {
 		let deadline = Instant::now() + Duration::from_secs(10);
 		let mut seen = None;
@@ -761,7 +761,7 @@ mod mac_tests {
 	#[ignore = "needs tmux; run by hand on a Mac"]
 	fn a_live_tmux_says_what_its_client_shows() {
 		let sock = format!("silk{}", std::process::id());
-		// The server lives under its own TMUX_TMPDIR, which this process lacks,
+		// The server runs under its own TMUX_TMPDIR, which this process lacks,
 		// so the ask finds it only through what the client was started with.
 		let dir = format!("/tmp/{sock}");
 		std::fs::create_dir_all(&dir).unwrap();

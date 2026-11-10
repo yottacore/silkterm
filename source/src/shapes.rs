@@ -12,17 +12,17 @@
 //! leading slash or `~/`. Nothing else is a path, which is what keeps prose out.
 
 // How far past a space a path separator may sit and still read as part of the
-// same path. A folder name runs to a few words; prose does not reach a slash
+// same path. A folder name runs to a few words; prose doesn't reach a slash
 // that soon.
 const SPACE_REACH: usize = 40;
 
 // The longest run of characters after a dot that still reads as a file
 // extension. Long enough for the ones people use, short enough that a sentence
-// ending in a dot plus a word does not qualify.
+// ending in a dot plus a word doesn't qualify.
 const EXT_MAX: usize = 8;
 
 /// The shape covering char `hit`, as a char range, or None when the text there
-/// is just text. `text` is one logical line's chars.
+/// is plain text. `text` is one logical line's chars.
 pub fn span_at(text: &[char], hit: usize) -> Option<(usize, usize)> {
 	if hit >= text.len() {
 		return None;
@@ -38,10 +38,10 @@ fn is_sep(c: char) -> bool {
 	c == '\\' || c == '/'
 }
 
-// Characters a path may carry. Whitespace ends a run (crossing one is decided
+// Characters a path may contain. Whitespace ends a run (crossing one is decided
 // separately) and the rest are the ones Windows forbids in a name outright plus
 // the double quote a shell would have wrapped the path in. Past ASCII only
-// letters, digits and combining marks count, from any script. A prompt puts its
+// letters, digits, and combining marks count, from any script. A prompt puts its
 // status marks (the git prompt's check and x) right after a path, and symbols,
 // emoji and box drawing are far more often that than part of a name.
 fn is_path_char(c: char) -> bool {
@@ -137,7 +137,7 @@ fn anchor(text: &[char], at: usize) -> Option<Anchor> {
 fn remote_len(text: &[char], at: usize) -> Option<usize> {
 	let host = at + user_len(text, at).unwrap_or(0);
 	let colon = host_end(text, host)?;
-	// The first segment has to be absent or carry a letter, or `notes.txt:12/34`
+	// The first segment has to be absent or contain a letter, or `notes.txt:12/34`
 	// reads as a remote.
 	let mut i = colon + 1;
 	while text.get(i).is_some_and(|&c| is_path_char(c) && !is_sep(c)) {
@@ -168,8 +168,8 @@ fn user_len(text: &[char], at: usize) -> Option<usize> {
 	(i > at && text.get(i) == Some(&'@')).then_some(i + 1 - at)
 }
 
-// Where a dotted hostname starting at `at` meets its colon. Two labels at least,
-// and an alphabetic last one, so `e.g.:` and a bare `host:` are not hostnames.
+// Where a dotted hostname starting at `at` meets its colon. At least 2 labels,
+// and an alphabetic last one, so `e.g.:` and a bare `host:` aren't hostnames.
 fn host_end(text: &[char], at: usize) -> Option<usize> {
 	let mut i = at;
 	let mut labels = 0;
@@ -325,7 +325,7 @@ mod tests {
 		);
 	}
 
-	// The case word selection cannot do at all: the space ends the word, so a
+	// The case word selection can't do at all: the space ends the word, so a
 	// double-click used to give back "Files\app.exe".
 	// Test ID: dbsy2
 	#[test]
@@ -553,7 +553,7 @@ mod tests {
 				let row: Vec<char> = String::from_utf8_lossy(&case).chars().collect();
 				for hit in 0..row.len() {
 					// The end is exclusive here, where the pair rule beside it in
-					// pane.rs answers inclusive. The caller takes end - 1.
+					// pane.rs returns inclusive. The caller takes end - 1.
 					let Some((a, b)) = span_at(&row, hit) else {
 						continue;
 					};

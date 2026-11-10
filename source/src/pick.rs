@@ -10,7 +10,7 @@
 use crate::pane::Rect;
 
 /// Hue 0..1 (wrapping), saturation and brightness 0..1. This is what the box
-/// holds, not the bytes: a drag down into black or left into gray leaves the
+/// stores, not the bytes: a drag down into black or left into gray leaves the
 /// hue with nothing to be read back from, and deriving it per frame would send
 /// the marker home the moment the color reached an edge.
 #[derive(Clone, Copy, PartialEq, Debug)]
@@ -21,7 +21,7 @@ pub struct Hsv {
 }
 
 /// The fully lit color at this hue, 0..1 per channel, in sRGB space. The square's
-/// shader computes the same thing, so the two agree on what a hue looks like.
+/// shader computes the same thing, so the 2 agree on what a hue looks like.
 pub fn hue_rgb(h: f32) -> [f32; 3] {
 	let k = h.rem_euclid(1.0) * 6.0;
 	[
@@ -38,8 +38,8 @@ pub fn to_rgb(color: Hsv) -> [u8; 3] {
 	[chan(hue[0]), chan(hue[1]), chan(hue[2])]
 }
 
-/// `keep` supplies what the bytes cannot say. A gray has no hue and black has no
-/// saturation either, so typing 0 into Brightness would otherwise reset the two
+/// `keep` supplies what the bytes can't say. A gray has no hue and black has no
+/// saturation either, so typing 0 into Brightness would otherwise reset the 2
 /// sliders the user had just set.
 pub fn from_rgb(c: [u8; 3], keep: Hsv) -> Hsv {
 	let [r, g, b] = c.map(|v| f32::from(v) / 255.0);
@@ -61,7 +61,7 @@ pub fn from_rgb(c: [u8; 3], keep: Hsv) -> Hsv {
 	}
 }
 
-/// The six value boxes down the right side, top to bottom.
+/// The 6 value boxes down the right side, top to bottom.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Field {
 	Red,
@@ -244,9 +244,9 @@ pub struct Geom {
 	pub ok: Rect,
 }
 
-/// Centered over the panel and sized to what it holds, the way the name box is.
-/// The square is what gives on a narrow panel: it is the one piece with no text
-/// in it, so shrinking it costs nothing that can be read.
+/// Centered over the panel and sized to what it contains, the way the name box
+/// is. The square is what gives on a narrow panel: it's the one piece with no
+/// text in it, so shrinking it costs nothing that can be read.
 pub fn geom(panel: Rect, m: &Metrics) -> Geom {
 	let column = m.label_w + m.field_w;
 	let fields_h = 6.0 * m.field_h + 5.0 * m.gap;
@@ -310,7 +310,7 @@ impl Geom {
 	pub fn field(&self, f: Field) -> Rect {
 		self.fields[Field::ALL.iter().position(|&a| a == f).unwrap_or(0)]
 	}
-	/// Where the marker sits in the square, and where a press in it lands.
+	/// Where the marker sits in the square, and where a press in it falls.
 	pub fn marker(&self, color: Hsv) -> (f32, f32) {
 		(
 			self.square.x + color.s.clamp(0.0, 1.0) * self.square.w,
@@ -336,7 +336,7 @@ impl Geom {
 }
 
 /// Black or white, whichever can be seen on `c`. The marker sits on a field that
-/// runs from white to black to full color, so it cannot be one fixed ink.
+/// runs from white to black to full color, so it can't be one fixed ink.
 pub fn ink_on(c: [u8; 3]) -> [u8; 3] {
 	if crate::palette::to_oklab(c).0 > 0.6 {
 		[0, 0, 0]
@@ -376,7 +376,7 @@ mod tests {
 		}
 	}
 
-	// The box holds HSV and the row holds bytes, so every drag and every
+	// The box stores HSV and the row stores bytes, so every drag and every
 	// keystroke crosses this both ways. A color that shifted on the way through
 	// would creep every time the box opened.
 	// Test ID: dcx0a
@@ -431,10 +431,10 @@ mod tests {
 		assert_eq!(to_rgb(hsv(-0.5, 1.0, 1.0)), [0, 255, 255]);
 	}
 
-	// Nothing here runs WGSL, so the square and the strip are checked by holding
-	// the shader's own text against the model the markers are placed with. The
-	// two painting different colors is the failure that has no other symptom:
-	// the marker would sit where the color is not.
+	// Nothing here runs WGSL, so the square and the strip are checked by comparing
+	// the shader's own text with the model the markers are placed with. The 2
+	// painting different colors is the failure that has no other symptom: the
+	// marker would sit where the color isn't.
 	// Test ID: dcx0d
 	#[test]
 	fn the_shader_paints_what_the_model_says() {
@@ -555,7 +555,7 @@ mod tests {
 		// half-typed says nothing yet, rather than jumping the color to black
 		assert!(Field::Hex.apply(start, "#a0b").is_none());
 		assert!(Field::Red.apply(start, "").is_none());
-		// and a box shows what the model holds
+		// and a box shows what the model has
 		assert_eq!(Field::Blue.text(from_rgb([0, 0, 255], start)), "100");
 		assert_eq!(Field::Hex.text(from_rgb([0, 0, 255], start)), "#0000ff");
 		assert_eq!(Field::Saturation.text(hsv(0.5, 0.42, 1.0)), "42");

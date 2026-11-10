@@ -6,17 +6,17 @@
 
 # Shell integration
 
-SilkTerm opens a new tab, split or window in the directory the current pane is in. To do that it has to know where that pane's shell is, and for most shells it asks the operating system. It reads the shell process's own working directory, and nothing needs setting up.
+SilkTerm opens a new tab, split, or window in the directory the current pane is in. To do that it has to know where that pane's shell is, and for most shells it asks the operating system. It reads the shell process's own working directory, and nothing needs setting up.
 
-Some shells never tell the operating system where they are. PowerShell is an example. `Set-Location` moves PowerShell's own idea of where it is and leaves the process itself in the directory it was launched in, so there is nothing to read. The same applies to any session where the shell you're typing at isn't the process SilkTerm started, such as an `ssh` session, a container, or a REPL that keeps its own location.
+Some shells never tell the operating system where they are. PowerShell is an example. `Set-Location` changes PowerShell's own idea of where it is, but leaves the process itself in the directory it was launched in, so there isn't anything to read. The same applies to any session where the shell you're typing at isn't the process SilkTerm started, such as an `ssh` session, a container, or a REPL that keeps its own location.
 
-The fix is the same one every terminal uses: have the shell say where it is, in a short escape sequence. SilkTerm listens for 2 forms of it and takes either.
+Every terminal fixes this the same way, by having the shell report where it is in a short escape sequence. SilkTerm listens for 2 forms of it and takes either.
 
-- **OSC 7**, a `file://` URL. It's what the unix shells emit, and what GNOME Terminal, WezTerm, kitty and others read.
+- **OSC 7**, a `file://` URL. It's what the unix shells emit, and what GNOME Terminal, WezTerm, kitty, and others read.
 
 - **OSC 9;9**, a plain path. It's the ConEmu form that Windows Terminal documents. A PowerShell profile already set up for Windows Terminal works here unchanged.
 
-What the shell reports wins over what the operating system can see. A reported directory that no longer exists on this machine is ignored, and what the operating system says is used instead. That's also what rejects a path reported from the far side of an `ssh`, since an OSC 7 URL naming another machine is never believed.
+What the shell reports wins over what the operating system can see. A reported directory that no longer exists on this machine is ignored, and what the operating system says is used instead. That's also why a path reported from the far side of an `ssh` is rejected, since an OSC 7 URL that names another machine is never trusted.
 
 ## PowerShell: SilkTerm does this for you
 
@@ -26,15 +26,15 @@ What it won't do:
 
 - **Touch a profile that already reports.** Its own marker, or any other OSC 7 or OSC 9;9 already in the file, means somebody has this in hand, and the file is left exactly as it is. A Windows Terminal setup or oh-my-posh both count.
 
-- **Rewrite what is there.** The block is appended, after a copy of the profile is saved beside it as `Microsoft.PowerShell_profile.ps1.silkterm-backup`. Everything above and below the 2 markers stays exactly as you wrote it.
+- **Rewrite what's there.** The block is appended, after a copy of the profile is saved beside it as `Microsoft.PowerShell_profile.ps1.silkterm-backup`. Everything above and below the 2 markers stays exactly as you wrote it.
 
 - **Put it back.** Deleting the block is how you switch it off. Nothing restores it, because a note beside your usual config records which profiles were written to, so an empty one is left alone. A launch with `--config` reads and keeps the same note, since the profiles are the same whichever config it uses.
 
-- **Replace a prompt you chose.** If your prompt is still the one PowerShell comes with, the block swaps in a git-aware one (below). If it's anything else, including oh-my-posh, starship, or a `prompt` function of your own, it's left alone. On PowerShell 6+ the prompt isn't touched at all, and on Windows PowerShell 5.1, which has no other hook, yours is wrapped rather than replaced.
+- **Replace a prompt you chose.** If your prompt is still the one PowerShell comes with, the block swaps in a git-aware one (below). If it's anything else, including oh-my-posh, starship, or a `prompt` function of your own, it's left alone. On PowerShell 6+ the prompt isn't touched at all, and on Windows PowerShell 5.1, which doesn't have any other hook, yours is wrapped rather than replaced.
 
-- **Write a file the shell would refuse to read.** If PowerShell's execution policy blocks script files, the block would only turn every launch into a red execution-policy error, so the profile is left alone and a line says which shell and why. Windows PowerShell 5.1 is commonly in that state; `Get-ExecutionPolicy` shows it, and `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` is the usual fix. That's your call to make rather than SilkTerm's.
+- **Write a file the shell would refuse to read.** If PowerShell's execution policy blocks script files, the block would only turn every launch into a red execution-policy error, so the profile is left alone and a line says which shell and why. Windows PowerShell 5.1 is commonly in that state. `Get-ExecutionPolicy` shows it, and `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` is the usual fix. That's your call to make rather than SilkTerm's.
 
-One thing it *will* do: keep the block itself up to date. It gains things over time, such as the git-aware prompt, and only the text between the 2 markers is ever rewritten. If you want to change what the block does, copy it out below the markers and edit that copy, or your edits will be replaced on a later launch.
+It does keep the block itself up to date. It gains things over time, such as the git-aware prompt, and only the text between the 2 markers is ever rewritten. If you want to change what the block does, copy it out below the markers and edit that copy, or your edits will be replaced on a later launch.
 
 To switch the whole thing off before it ever runs, set `shell.integration: false` in the config, or clear "Update PowerShell profiles" on the Shell tab of Settings.
 
@@ -47,25 +47,25 @@ Once the block is in place, a stock prompt reads:
 >
 ~~~
 
-Left to right: which PowerShell this is, because two of them look alike at a prompt; the time the prompt was drawn; who and where; and the directory, with your home folder shortened to `~`.
+Left to right: which PowerShell this is, because 2 of them look alike at a prompt; the time the prompt was drawn; who and where; and the directory, with your home folder shortened to `~`.
 
-The part in brackets only appears inside a git working tree, and the two marks at the end of it are a check or a cross:
+The part in brackets only appears inside a git working tree, and the 2 marks at the end of it are a check or a cross:
 
 - The first says everything is committed. A modified file or an untracked one turns it red.
 
-- The second says the branch is level with its upstream - nothing to push, nothing to pull. A branch with no upstream at all counts as not level.
+- The second says the branch is level with its upstream, so there's nothing to push or pull. A branch without any upstream counts as not level.
 
-When the branch is ahead or behind, the counts follow the marks, such as `↑2↓1`. The name in front of the branch is the remote the branch tracks, else `origin`, else the first remote there is. A repository with no remote shows the branch alone.
+When the branch is ahead or behind, the counts follow the marks, such as `↑2↓1`. The name in front of the branch is the remote the branch tracks, else `origin`, else the first remote there is. A repository without a remote shows the branch alone.
 
 When the brackets are there the typing moves to a second line, since the first line is long by then. Outside a repository the prompt is one line. Either way it ends in the usual `>`.
 
 The same prompt appears on Windows PowerShell 5.1 (`[PS 5.1] ...`) and on PowerShell 7 wherever it runs, macOS and Linux included. The block puts the console on the UTF-8 code page, so a branch name with a non-ASCII character in it reads correctly.
 
-It costs one `git` call per prompt, a few more the first time a branch is seen, and none at all outside a working tree - the search for a `.git` folder is done in the shell.
+It costs one `git` call per prompt, a few more the first time a branch is seen, and none at all outside a working tree, because the search for a `.git` folder is done in the shell.
 
-`X9PS1_STANDARD=1` in a session puts an ordinary `PS C:\path>` prompt back, the same way it does for the bash prompt below. To take the whole thing back, define your own `prompt` **below** the block; anything of yours is detected on the next launch and left alone from then on.
+`X9PS1_STANDARD=1` in a session puts an ordinary `PS C:\path>` prompt back, the same way it does for the bash prompt below. To take the whole thing back, define your own `prompt` **below** the block. Anything of yours is detected on the next launch and left alone from then on.
 
-The look is a port of [x9ps1-git](https://github.com/jim-collier/x9ps1-git), the bash prompt described further down, so a PowerShell pane and a bash pane read the same. It is one block rather than a script on disk because a script would mean starting a process for every prompt.
+The look is a port of [x9ps1-git](https://github.com/jim-collier/x9ps1-git), the bash prompt described further down, so a PowerShell pane and a bash pane read the same. It's one block rather than a script on disk because a script would mean starting a process for every prompt.
 
 This is the block, if you'd rather paste it in yourself. Use `notepad $PROFILE`, and create the file if it isn't there:
 
@@ -278,25 +278,25 @@ The guard on the first line keeps it out of your way. It reports only in an inte
 
 ## bash
 
-Nothing to set up, since bash moves its own process and SilkTerm can ask the operating system. Add this to `~/.bashrc` only if you want a pane behind `ssh`, `sudo -i`, or a container to report as well:
+There's nothing to set up, since bash changes its own process's directory, and SilkTerm can ask the operating system. Add this to `~/.bashrc` only if you want a pane behind `ssh`, `sudo -i`, or a container to report as well:
 
 ~~~bash
 PROMPT_COMMAND='printf "\033]7;file://%s%s\033\\" "$HOSTNAME" "$PWD"'
 ~~~
 
-Many distributions already do this for you - Debian and Fedora ship `/etc/profile.d/vte.sh`, which emits the same sequence. Check with `echo "$PROMPT_COMMAND"` before adding a second one.
+Many distributions already do this for you. Debian and Fedora include `/etc/profile.d/vte.sh`, which emits the same sequence. Check with `echo "$PROMPT_COMMAND"` before adding a second one.
 
-Paths with characters that need escaping in a URL are supposed to be percent-encoded. SilkTerm reads them either way, so the one-liner above is enough here; encode if you also use a terminal that is stricter about it.
+Paths with characters that need escaping in a URL are supposed to be percent-encoded. SilkTerm reads them either way, so the one-liner above is enough here. Encode if you also use a terminal that is stricter about it.
 
 ### A git-aware bash prompt
 
-This is separate, and it's the only other setup SilkTerm does for a shell. It's off until "Use git-aware Bash prompt" is checked on the Shell tab of Settings, or `shell.bash_prompt: true` is set in the config. Then a bash pane gets a prompt that shows the branch you are on, whether the working tree is clean, and how far ahead or behind its tracking branch it is. It's updated after every command, and stays out of the way in a directory that isn't a git project.
+This is separate, and it's the only other setup SilkTerm does for a shell. It's off until "Use git-aware Bash prompt" is checked on the Shell tab of Settings, or `shell.bash_prompt: true` is set in the config. Then a bash pane gets a prompt that shows the branch you're on, whether the working tree is clean, and how far ahead or behind its tracking branch it is. It's updated after every command, and stays out of the way in a directory that isn't a git project.
 
 It isn't an install:
 
 - Nothing is written into `.bashrc` or any other file of yours. The prompt is handed to the pane as `PROMPT_COMMAND` in its environment.
 
-- The script is sourced into the pane's shell once, which defines a few `fX9ps1Git_` functions and nothing else. Outside a git project a prompt then starts no process, and inside one it runs git twice.
+- The script is sourced into the pane's shell once, which defines a few `fX9ps1Git_` functions and nothing else. Outside a git project a prompt then doesn't start any process, and inside one it runs git twice.
 
 - It sets `PS1` before every prompt, so it replaces a `PS1` set in `.bashrc`. If you set `PROMPT_COMMAND` yourself, directly or through starship, oh-my-posh, or `/etc/profile.d/vte.sh`, yours runs instead and you won't see this one.
 
@@ -308,7 +308,7 @@ Clear the checkbox again, or set `shell.bash_prompt: false`, to switch it off. T
 
 ## zsh
 
-Same as bash, with nothing needed locally. For a remote pane, add this to `~/.zshrc`:
+It's the same as bash, and nothing is needed locally. For a remote pane, add this to `~/.zshrc`:
 
 ~~~zsh
 precmd() { printf "\033]7;file://%s%s\033\\" "$HOST" "$PWD" }
@@ -316,11 +316,11 @@ precmd() { printf "\033]7;file://%s%s\033\\" "$HOST" "$PWD" }
 
 ## fish
 
-Nothing to do, since fish emits OSC 7 on its own.
+There's nothing to do, since fish emits OSC 7 on its own.
 
 ## cmd.exe
 
-Nothing to do. `cd` moves the process itself, so the operating system knows where it is.
+There's nothing to do. `cd` changes the process's own directory, so the operating system knows where it is.
 
 ## Checking it works
 

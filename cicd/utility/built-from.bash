@@ -2,7 +2,7 @@
 
 ##	- Purpose:
 ##		Tie a set of release artifacts to the source they were built from, so a
-##		stale artifact directory cannot be published under a new tag. Sourced by
+##		stale artifact directory can't be published under a new tag. Sourced by
 ##		cicd.bash (which writes the note) and release.bash (which checks it).
 ##	- History: At bottom of file.
 
@@ -18,7 +18,7 @@
 BUILT_FROM_FILE="built-from.txt"
 
 ## Untracked files named in the note before it gives up and counts the rest. A
-## tree with hundreds is not a release candidate; the first few say enough.
+## tree with hundreds isn't a release candidate; the first few say enough.
 BUILT_FROM_UNTRACKED_MAX=10
 
 ## fSourceState
@@ -33,7 +33,7 @@ fSourceState(){
 	local top=""
 	top="$(git rev-parse --show-toplevel)"
 	local -a untracked=()
-	## from the top, since ls-files alone answers for the current directory down
+	## from the top, since ls-files alone lists the current directory down
 	mapfile -t untracked < <(git -C "${top}" ls-files --others --exclude-standard)
 	if ! (git diff --quiet && git diff --cached --quiet); then dirty="yes"; fi
 	if ((${#untracked[@]})); then dirty="yes"; fi
@@ -63,7 +63,7 @@ fStateField(){
 ## the source from before it. Read now when no state is passed, which is what a
 ## caller that builds nothing wants.
 ##
-## Each <expected-name> is a file the configuration says a whole set holds. The
+## Each <expected-name> is a file the configuration says a whole set has. The
 ## checksums only say the artifacts match each other, so without this a --quick
 ## run's native-only set reads exactly like a full one.
 fWriteBuiltFrom(){
@@ -78,8 +78,8 @@ fWriteBuiltFrom(){
 
 	local moved="no"
 	[[ "$(fStateField "${state}" tree)" == "$(fStateField "${now}" tree)" ]] || moved="yes"
-	## Dirty at either end counts. The binaries are only known to hold the
-	## committed source if nothing was uncommitted for the whole run.
+	## Dirty at either end counts. The binaries are only known to be built from
+	## the committed source if nothing was uncommitted for the whole run.
 	local dirty="yes"
 	if [[ "$(fStateField "${state}" dirty)" == "no" && "$(fStateField "${now}" dirty)" == "no" ]]; then
 		dirty="no"
@@ -125,14 +125,14 @@ fCheckBuiltFrom(){
 		untrackedSeen="$(fStateField "${state}" untracked | tr '\n' ' ')"
 		more="$(fStateField "${state}" untracked_more)"
 		if [[ -n "${untrackedSeen}" ]]; then
-			echo "the artifacts were built over files git does not track, which the tag will not carry: ${untrackedSeen}${more:+plus ${more} more; }add or ignore them and re-run the pipeline"
+			echo "the artifacts were built over files git doesn't track, which the tag won't include: ${untrackedSeen}${more:+plus ${more} more; }add or ignore them and re-run the pipeline"
 		else
 			echo "the artifacts were built from a dirty working tree; re-run the pipeline"
 		fi
 		return 1
 	fi
 	if [[ "${moved}" == "yes" ]]; then
-		echo "the source changed while the artifacts were being built, so they do not all hold ${builtCommit:0:12}; re-run the pipeline"
+		echo "the source changed while the artifacts were being built, so they weren't all built from ${builtCommit:0:12}; re-run the pipeline"
 		return 1
 	fi
 	local here=""
@@ -144,8 +144,8 @@ fCheckBuiltFrom(){
 
 	## A set missing a target reads like a whole one: --quick, --no-cross and
 	## friends leave the native binary alone in there, and a package step that
-	## cannot find its tool only warns. Windows then has nothing to install, and
-	## the tag cannot be cut again without a new version.
+	## can't find its tool only warns. Windows then has nothing to install, and
+	## the tag can't be cut again without a new version.
 	local -a missing=()
 	local want=""
 	while IFS= read -r want; do

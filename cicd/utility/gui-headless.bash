@@ -38,7 +38,7 @@
 ##		While that process lives, only it may stop the server, and another run's
 ##		`start` on the same number is refused rather than shared. Once it has
 ##		exited, as after a start by hand, anyone may stop the server or take it
-##		over. A number some other X server holds is refused outright.
+##		over. A number some other X server is using is refused outright.
 ##	History: At bottom of script.
 
 ##	Copyright (c) 2026 Bubbles
@@ -83,7 +83,7 @@ auth="${runDir}/Xauthority-${num}"
 ownerFile="${runDir}/owner-${num}"
 xLock="/tmp/.X${num}-lock"
 
-## A pid alone is not a process: a run killed before `stop` leaves its pid file,
+## A pid alone isn't a process: a run killed before `stop` leaves its pid file,
 ## and the number can come back as anything. The start time from /proc goes with
 ## it, so a record names one process and no other.
 fStartedAt() { local s; s="$(cat "/proc/${1}/stat" 2>/dev/null)" || return 1; s="${s##*) }"; set -- ${s}; echo "${20}"; }
@@ -129,7 +129,7 @@ fStart() {
 		local pid=$!
 		fRecord "${pid}" > "${xvfbPid}"
 		echo "${me}" > "${ownerFile}"
-		## Up means ours is still running, holds the number, and takes connections.
+		## Up means ours is still running, has the number, and takes connections.
 		local ok=""
 		for _ in $(seq 1 50); do
 			kill -0 "${pid}" 2>/dev/null || break
@@ -140,7 +140,7 @@ fStart() {
 		if [[ -z "${ok}" ]]; then
 			kill "${pid}" 2>/dev/null || true
 			rm -f "${xvfbPid}" "${ownerFile}"
-			echo "Xvfb did not come up on ${display}; see ${runDir}/xvfb-${num}.log" >&2
+			echo "Xvfb didn't come up on ${display}; see ${runDir}/xvfb-${num}.log" >&2
 			exit 1
 		fi
 		fresh=1
@@ -241,9 +241,9 @@ esac
 
 ##	Script history:
 ##		- 20260701: Created.
-##		- 20260917: A pid file carries the start time, so a reused pid is not
-##		  ours; start refuses a number another server holds and reports success
+##		- 20260917: A pid file has the start time, so a reused pid isn't
+##		  ours; start refuses a number another server is using and reports success
 ##		  only for its own; a server belongs to the run that started it.
 ##		- 20261005: start --wm waits for the WM to answer, and fails if it
-##		  does not. Background pids are the programs, not a subshell, and
+##		  doesn't. Background pids are the programs, not a subshell, and
 ##		  stop waits for them to exit.

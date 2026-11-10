@@ -43,7 +43,7 @@ $script:SafeRmHost = $(
 	if ($tempRoot) { [System.IO.Path]::TrimEndingDirectorySeparator([System.IO.Path]::GetFullPath($tempRoot)) }
 )
 $script:SafeRmOwn = if ($script:SafeRmHost) { [System.IO.Path]::Combine($script:SafeRmHost, 'silkterm') }
-##	Without HOST_TEMP the root is /tmp or TEMP, which hold far more than project folders.
+##	Without HOST_TEMP the root is /tmp or TEMP, which contain far more than project folders.
 $script:SafeRmHostSet = [bool]$env:HOST_TEMP
 
 function fSafeRm { fSafeRm_Do '' $args }
@@ -94,7 +94,7 @@ function fSafeRm_Do([string]$Parent, [object[]]$Paths) {
 		if ($info.Exists -and ($info.Attributes -band [System.IO.FileAttributes]::ReparsePoint)) { return (fSafeRm_Refuse "goes through a link: $p") }
 	}
 	try { fSafeRm_Walk $item }
-	catch { [Console]::Error.WriteLine("safe-rm: could not remove ${p}: $($_.Exception.Message)"); return $false }
+	catch { [Console]::Error.WriteLine("safe-rm: couldn't remove ${p}: $($_.Exception.Message)"); return $false }
 	return $true
 }
 

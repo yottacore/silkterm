@@ -33,9 +33,9 @@ use alacritty_terminal::event::{OnResize, WindowSize};
 use alacritty_terminal::tty::{ChildEvent, EventedPty, EventedReadWrite};
 use polling::{Event as PollEvent, PollMode, Poller};
 
-// A payload longer than this is not a directory anybody meant to send, and the
+// A payload longer than this isn't a directory anybody meant to send, and the
 // scanner must never grow a buffer to fit whatever an OSC 52 clipboard write
-// happens to carry.
+// happens to contain.
 const MAX_PAYLOAD: usize = 4096;
 
 const ESC: u8 = 0x1b;
@@ -202,7 +202,7 @@ impl<P: OnResize> OnResize for TappedPty<P> {
 }
 
 // Where in an escape sequence the scanner is. A read returns whatever the pipe
-// happened to hold, so a sequence arrives in as many pieces as it likes and the
+// happened to have, so a sequence arrives in as many pieces as it likes and the
 // state has to survive between reads.
 #[derive(Default, Clone, Copy, PartialEq, Eq, Debug)]
 enum State {
@@ -280,7 +280,7 @@ impl Scan {
 					self.finish(reported);
 					State::Ground
 				}
-				// an ESC that is not ST: malformed, so give up on this sequence
+				// an ESC that isn't ST: malformed, so give up on this sequence
 				// rather than guess where it ends
 				ESC => State::Esc,
 				_ => State::Skip,
@@ -333,8 +333,8 @@ pub fn directory(payload: &str, local_host: &str) -> Option<PathBuf> {
 	as_path(rest.trim_matches('"'))
 }
 
-// `file://<host>/<path>`, percent-encoded. A bare path is taken as well: it is
-// not the spelling anyone documents, but it costs one line to accept and a
+// `file://<host>/<path>`, percent-encoded. A bare path is taken as well: it
+// isn't the spelling anyone documents, but it costs one line to accept and a
 // shell that writes one plainly means the same thing.
 fn from_url(url: &str, local_host: &str) -> Option<PathBuf> {
 	let Some(rest) = url.strip_prefix("file://") else {
@@ -346,8 +346,8 @@ fn from_url(url: &str, local_host: &str) -> Option<PathBuf> {
 	// the host runs to the path's leading separator, which the path keeps
 	let split = rest.find('/')?;
 	let (host, path) = rest.split_at(split);
-	// A directory on another machine is not one we can open. Rejecting it
-	// matters most where the two agree by accident: an ssh session whose remote
+	// A directory on another machine isn't one we can open. Rejecting it
+	// matters most where the 2 agree by accident: an ssh session whose remote
 	// path also exists locally would otherwise open a pane in the wrong one.
 	if !(host.is_empty()
 		|| host.eq_ignore_ascii_case("localhost")
@@ -363,10 +363,10 @@ fn from_url(url: &str, local_host: &str) -> Option<PathBuf> {
 fn as_path(text: &str) -> Option<PathBuf> {
 	// An OSC payload is untrusted text, and this is the funnel both spellings pass
 	// through. A control character is turned away here because a reported
-	// directory is shown as well as used: it names the tab and reaches the window
-	// title, where the desktop draws it as text. A directory really called that is
-	// possible on unix and vanishingly rare, and refusing one only means the new
-	// pane starts where the old one did.
+	// directory is shown as well as used: it names the tab and appears in the
+	// window title, where the desktop draws it as text. A directory with that name
+	// is possible on unix and vanishingly rare, and refusing one only means the
+	// new pane starts where the old one did.
 	//
 	// Whether the path is absolute is NOT asked here. A pane on Windows can report
 	// a posix path, and wsl.exe wants exactly that spelling; usable_cwd is the one
@@ -392,7 +392,7 @@ fn as_path(text: &str) -> Option<PathBuf> {
 	Some(PathBuf::from(text))
 }
 
-// Percent-decoding, tolerant: an escape that is not one is left standing rather
+// Percent-decoding, tolerant: an escape that isn't one is left standing rather
 // than throwing away a path over it. Bytes are decoded, not chars, so a
 // multi-byte character split across escapes reassembles.
 fn decode(text: &str) -> String {
@@ -414,7 +414,7 @@ fn decode(text: &str) -> String {
 	String::from_utf8_lossy(&out).into_owned()
 }
 
-// This machine's name, for the OSC 7 host check. Asked once: it cannot change
+// This machine's name, for the OSC 7 host check. Asked once: it can't change
 // under a running process in any way that matters here.
 fn local_host() -> &'static str {
 	static HOST: OnceLock<String> = OnceLock::new();
@@ -439,7 +439,7 @@ fn host_name() -> String {
 	String::from_utf8_lossy(&bytes).into_owned()
 }
 
-// %COMPUTERNAME% rather than GetComputerNameEx: it is always set, and it saves
+// %COMPUTERNAME% rather than GetComputerNameEx: it's always set, and it saves
 // a windows-sys feature for a string nothing critical depends on.
 #[cfg(windows)]
 fn host_name() -> String {
@@ -516,15 +516,15 @@ mod tests {
 			directory("7;file://localhost/srv/log", "box"),
 			Some(native("/srv/log"))
 		);
-		// the name is not case-sensitive, and a bare path is taken as meant
+		// the name isn't case-sensitive, and a bare path is taken as meant
 		assert_eq!(directory("7;file://BOX/srv", "box"), Some(native("/srv")));
 		assert_eq!(directory("7;/srv", "box"), Some(native("/srv")));
 		// a stray percent is left standing rather than sinking the path
 		assert_eq!(directory("7;file:///50%", "box"), Some(native("/50%")));
 	}
 
-	// A directory on another machine is not one we can open, and the case that
-	// makes this matter is the one where the two agree by accident: an ssh
+	// A directory on another machine isn't one we can open, and the case that
+	// makes this matter is the one where the 2 agree by accident: an ssh
 	// session whose remote path exists here too would open the wrong pane.
 	// Test ID: dbhex
 	#[test]
@@ -539,7 +539,7 @@ mod tests {
 	#[test]
 	fn the_conemu_spelling_is_read_too() {
 		assert_eq!(directory("9;9;/srv/log", "box"), Some(native("/srv/log")));
-		// it is usually sent quoted, and it is never encoded
+		// it's usually sent quoted, and it's never encoded
 		assert_eq!(
 			directory("9;9;\"/srv/two words\"", "box"),
 			Some(native("/srv/two words"))
@@ -558,7 +558,7 @@ mod tests {
 			feed(&[b"ok\x1b", b"]7;file://", b"/srv/log\x07"]),
 			Some(native("/srv/log"))
 		);
-		// ST, split between its two bytes
+		// ST, split between its 2 bytes
 		assert_eq!(
 			feed(&[b"\x1b]7;file:///srv/log\x1b", b"\\rest"]),
 			Some(native("/srv/log"))
@@ -611,9 +611,10 @@ mod tests {
 		);
 	}
 
-	// A reported directory names the tab and reaches the window title, so it has
-	// to be text. Percent-decoding is how a control character gets in: the shell
-	// need not have printed one for the payload to decode into one.
+	// A reported directory names the tab and is shown in the window title, so
+	// that way it has to be text. Percent-decoding is how a control character
+	// gets in: the shell need not have printed one for the payload to decode
+	// into one.
 	// Test ID: dcdj6
 	#[test]
 	fn a_reported_directory_with_a_control_character_is_refused() {
@@ -626,7 +627,7 @@ mod tests {
 	}
 
 	// Where a shell says it is decides where the next pane starts, and the shell
-	// is not the only thing that can print an OSC 7. So the payload is untrusted
+	// isn't the only thing that can print an OSC 7. So the payload is untrusted
 	// text that turns into a path, and the parse has to hold up on anything.
 	mod fuzz {
 		use super::super::directory;
@@ -651,8 +652,8 @@ mod tests {
 					};
 					let text = dir.to_string_lossy();
 					assert!(!text.is_empty(), "{payload:?} gave an empty path");
-					// A control character reaches the tab label and the window
-					// title, so it may not come out of here.
+					// A control character would end up in the tab label and the
+					// window title, so it may not come out of here.
 					assert!(
 						!text.chars().any(char::is_control),
 						"{payload:?} gave {text:?}"

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 ##	Purpose:
-##		The house Bash conventions that shellcheck does not hold on its own. Exits 1
+##		The house Bash conventions that shellcheck doesn't check on its own. Exits 1
 ##		and names each line that drifts.
 ##		- Every expansion braced, "${var}" (shellcheck's optional require-variable-braces).
 ##		- [[ ]] rather than [ ] in Bash (require-double-brackets; sh and dash scripts
@@ -12,8 +12,8 @@
 ##		bash-style.bash [FILE...]   ## default: every first-party script in the repo
 ##	Notes:
 ##		Copies of scripts shared with other projects are skipped, since their
-##		canonical versions live elsewhere: gfs-rotate.bash, x9ps1-git.bash,
-##		n8git_backup-and-publish and runterm.
+##		canonical versions are elsewhere: gfs-rotate.bash, x9ps1-git.bash,
+##		n8git_backup-and-publish, and runterm.
 ##	History: At bottom of script.
 
 ##	Copyright (c) 2026 Bubbles
@@ -51,7 +51,7 @@ named="$(awk '
 while IFS= read -r line; do
 	[[ -n "${line}" ]] || continue
 	type -P "${line##* }" >/dev/null 2>&1 && continue
-	echo "${line}: function name is not fCamelCase"
+	echo "${line}: function name isn't fCamelCase"
 	bad=1
 done <<<"${named}"
 

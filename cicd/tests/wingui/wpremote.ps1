@@ -77,7 +77,7 @@ $ok = fShowing $w.h "control"
 fStop $w.p
 if (-not (fCheck "a console launch shows the wallpaper" $ok)) { return }
 
-##	Settings, then a relaunch, a new tab and a new window
+##	Settings, then a relaunch, a new tab, and a new window
 $cfg = fConfig "settings"
 $w = fLaunch $cfg $stale
 if (-not (fCheck "the Settings window came up" ($w.h -ne [IntPtr]::Zero))) { fStop $w.p; return }

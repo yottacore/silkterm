@@ -21,7 +21,7 @@ How to get SilkTerm onto a machine, build it from source, and set up to work on 
 
 ## Packages and installers
 
-The primary install is a native package from the [releases page](https://github.com/yottacore/silkterm/releases): `.deb` / `.rpm` on Linux, or the NSIS setup `.exe` on Windows. Optional either way: fetch the wallpaper pack, as the [Wallpaper pack](#wallpaper-pack) section shows.
+The primary install is a native package from the [releases page](https://github.com/yottacore/silkterm/releases): `.deb` / `.rpm` on Linux, or the NSIS setup `.exe` on Windows. Either way, the wallpaper pack is optional, and it's fetched as shown in [Wallpaper pack](#wallpaper-pack).
 
 On macOS, SilkTerm is a Mac app sold through an app store. A Microsoft Store version is on the way as well. Links go here once the listings are up. The packages on the releases page stay free.
 
@@ -80,7 +80,7 @@ To run everything a change has to pass before it can be pushed, which is format,
 cicd/cicd.bash [--quick]
 ~~~
 
-`--quick` runs only the quick lints and tests, builds for x86_64 only, and skips the slow stages and anything that needs another machine. `--no-remote` skips only the other machines: the Windows scenarios, the ARM64 smoke run, and the private runner. A machine that is off or busy is skipped too, shown as `SKIP` in its step's line and listed again when the run ends. The build and test stages run in a pinned Debian image when docker is installed, so only docker is needed for them. `--no-container` runs them on this machine instead (see [build.md](build.md)). A full run and a `--quick` run include the fast leak checks, and a full run adds the soak test, which takes a few minutes. `--no-leakcheck` leaves them all out. `--leakcheck` adds the slow ones too: the soak test under `--quick`, CodeQL, and the test suite under Miri, which takes hours. A full run takes about an hour, and `--long` adds the steps that take hours, the ThreadSanitizer and Miri runs and CodeQL. The merge gate, every check of a full run, also runs as a pre-push hook on any push to main (`cicd/cicd.bash --merge-gate`). A push of docs alone skips it. Turn the hooks on once per clone:
+`--quick` runs only the quick lints and tests, builds for x86_64 only, and skips the slow stages and anything that needs another machine. `--no-remote` skips only the other machines: the Windows scenarios, the ARM64 smoke run, and the private runner. A machine that is off or busy is skipped too, shown as `SKIP` in its step's line and listed again when the run ends. The build and test stages run in a pinned Debian image when docker is installed, so only docker is needed for them. `--no-container` runs them on this machine instead (see [build.md](build.md)). A full run and a `--quick` run include the fast leak checks, and a full run adds the soak test, which takes a few minutes. `--no-leakcheck` leaves them all out. `--leakcheck` adds the slow ones too: the soak test under `--quick`, CodeQL, and the test suite under Miri, which takes hours. A full run takes about an hour, and `--long` adds the steps that take hours, the ThreadSanitizer and Miri runs, and CodeQL. The merge gate, every check of a full run, also runs as a pre-push hook on any push to main (`cicd/cicd.bash --merge-gate`). A push of docs alone skips it. Turn the hooks on once per clone:
 
 ~~~bash
 git config core.hooksPath utility/git-hooks

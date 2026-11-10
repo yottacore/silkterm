@@ -2,7 +2,7 @@
 // Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
 
 //! BC1 for the wallpaper: half a byte a texel in graphics memory, against 4
-//! plain. Each 4x4 block keeps 2 colors at 5:6:5 and picks one of 4 points on
+//! plain. Each 4x4 block stores 2 colors at 5:6:5 and picks one of 4 points on
 //! the line between them per texel. Opaque pictures only, so the 3 color mode
 //! with its transparent texel is never used. Encoded on the sRGB bytes, since
 //! the texture is sRGB and the sampler decodes after it unpacks a block.
@@ -31,8 +31,8 @@ pub fn blocks_in((w, h): (u32, u32)) -> usize {
 /// One texel's red, green and blue.
 pub type Texel = [i32; 3];
 
-/// Blocks in rows, left to right. The alpha is not read. About 0.1 s of
-/// CPU at 2560x1440, so it is shared out over a few threads.
+/// Blocks in rows, left to right. The alpha isn't read. About 0.1 s of
+/// CPU at 2560x1440, so it's shared out over a few threads.
 pub fn encode(rgba: &image::RgbaImage) -> Vec<u8> {
 	let tables = tables();
 	encode_blocks(rgba, BLOCK_BYTES, &|block, out| {
@@ -58,7 +58,7 @@ pub fn encode_blocks(
 		.map_or(1, std::num::NonZero::get)
 		.min(4);
 	let band = rows.div_ceil(threads) * row_bytes;
-	// a band whose thread would not start is done here after the rest
+	// a band whose thread wouldn't start is done here after the rest
 	let mut missed = Vec::new();
 	std::thread::scope(|scope| {
 		for (n, blocks) in out.chunks_mut(band).enumerate() {
@@ -87,7 +87,7 @@ pub fn encode_blocks(
 	out
 }
 
-// Block rows from `first` on, as many as `out` holds. Texels past the
+// Block rows from `first` on, as many as fit in `out`. Texels past the
 // picture repeat its edge, the way the sampler's clamp reads it.
 fn encode_rows(
 	rgba: &image::RgbaImage,
@@ -153,7 +153,7 @@ fn pack([r, g, b]: [i32; 3]) -> u16 {
 	((r.clamp(0, 31) << 11) | (g.clamp(0, 63) << 5) | b.clamp(0, 31)) as u16
 }
 
-// What a decoder makes of two endpoints. Hardware rounds the thirds a little
+// What a decoder makes of 2 endpoints. Hardware rounds the thirds a little
 // differently from one maker to the next, a level at most.
 fn palette(c0: u16, c1: u16) -> [Texel; 4] {
 	let (p0, p1) = (unpack(c0), unpack(c1));
@@ -172,7 +172,7 @@ fn palette(c0: u16, c1: u16) -> [Texel; 4] {
 	colors
 }
 
-// Each texel's nearest of the four colors, and the squared error in all.
+// Each texel's nearest of the 4 colors, and the squared error in all.
 // With equal endpoints the block is in the 3 color mode, where the last one
 // is transparent, so every texel takes the first.
 fn fit(block: &[Texel; 16], c0: u16, c1: u16) -> (u32, u32) {
@@ -231,7 +231,7 @@ impl Encoded {
 	}
 }
 
-// Per channel, the endpoint pair whose first third lands nearest each byte
+// Per channel, the endpoint pair whose first third falls nearest each byte
 // value, for 5 and 6 bits. A flat block is then within a level of its color,
 // where rounding the color itself to 5 bits is up to 4 off: on a slow
 // gradient that was the difference between smooth and stepped.
@@ -325,8 +325,8 @@ fn along_the_axis(block: &[Texel; 16], mean: [f32; 3]) -> Encoded {
 	Encoded::of(block, [quantize(hi), quantize(lo)])
 }
 
-/// The block's main direction of color change, through its mean, and the two
-/// points where the texels reach furthest along it, the higher first.
+/// The block's main direction of color change, through its mean, and the 2
+/// points where the texels go furthest along it, the higher first.
 pub fn axis_ends(block: &[Texel; 16], mean: [f32; 3]) -> [[f32; 3]; 2] {
 	let mut cov = [0.0f32; 6];
 	for texel in block {
@@ -375,9 +375,9 @@ pub fn axis_ends(block: &[Texel; 16], mean: [f32; 3]) -> [[f32; 3]; 2] {
 }
 
 // The endpoints that best fit the colors the texels picked: each texel is a
-// known blend of the two, so it is least squares in two unknowns a channel.
+// known blend of the 2, so it's least squares in 2 unknowns a channel.
 fn refit(block: &[Texel; 16], from: Encoded) -> Option<Encoded> {
-	// thirds of the first endpoint in each of the four colors
+	// thirds of the first endpoint in each of the 4 colors
 	const SHARE: [f32; 4] = [3.0, 0.0, 2.0, 1.0];
 	if from.c0 == from.c1 {
 		return None;
@@ -440,7 +440,7 @@ mod tests {
 	}
 
 	// A slow sky gradient, where BC1 bands if anywhere: each block a level or
-	// two of change, and it comes back within two.
+	// two of change, and it comes back within 2.
 	// Test ID: ddkq2
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]

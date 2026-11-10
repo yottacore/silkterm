@@ -15,7 +15,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = "Continue"
 . "$PSScriptRoot\_env.ps1"
 
-# The CLI-only flags print through a console this build does not own, so shell
+# The CLI-only flags print through a console this build doesn't own, so shell
 # redirection loses them: AttachConsole joins the parent's console and the output
 # goes there instead of the file. An explicit redirect with no console to join is
 # the only way to read them from a job. See G37.

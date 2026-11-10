@@ -6,12 +6,12 @@
 //! Everything here touches the filesystem or spends real CPU: scanning the
 //! rotation folder, reading the shuffle history, decoding the image, blurring and
 //! contrast-flattening it, reading its XMP tags. Any of those paths can be a
-//! mounted share that answers slowly or not at all, and the blur alone costs
-//! hundreds of milliseconds on a large image - so none of it may sit between
+//! mounted share that responds slowly or not at all, and the blur alone costs
+//! hundreds of milliseconds on a large image, so none of it can run between
 //! launch and the first frame. The window paints with no wallpaper and picks one
 //! up when the result arrives (`UserEvent::WallpaperReady`).
 //!
-//! Only the GPU upload stays on the winit thread; it needs the device, and it is
+//! Only the GPU upload stays on the winit thread; it needs the device, and it's
 //! a plain texture write.
 
 use std::path::{Path, PathBuf};
@@ -26,7 +26,7 @@ use crate::term::UserEvent;
 use crate::wpcache;
 
 // A built-in wallpaper baked into the binary, shown when the user has none
-// configured (wallpaper_fallback_builtin). ~100KB - negligible next to the binary.
+// configured (wallpaper_fallback_builtin). About 100KB, small next to the binary.
 const DEFAULT_BACKGROUND: &[u8] = include_bytes!("../assets/default-background.jpg");
 
 // How many recently-shown images the shuffle holds back at most.
@@ -43,17 +43,17 @@ pub struct Request {
 	pub newest: Arc<AtomicU64>,
 	pub settings: Arc<Settings>,
 	/// also scan the rotation folder and pick from it (startup and each rotation
-	/// step); false just loads whatever `settings.wallpaper` names.
+	/// step); false loads whatever `settings.wallpaper` names.
 	pub scan: bool,
 	/// The image showing now. Order-mode rotation advances from it (by name, so a
 	/// re-scan that moved things around still ends in the right place), and a
-	/// non-scanning request keeps it when the settings name none - otherwise
+	/// non-scanning request keeps it when the settings name none. Otherwise
 	/// re-reading the config while rotating would blank the wallpaper until the
 	/// next tick, since a rotated pick is live-only and never written to the file.
 	pub current: Option<PathBuf>,
 	/// A bare `--wallpaper` or `--wallpaper-file` asked for no picture, and gets
 	/// none. Without this the built-in stood in, or a rotation folder left the
-	/// window bare, so one flag meant two things depending on a folder.
+	/// window bare, so one flag meant 2 things depending on a folder.
 	pub cleared: bool,
 	/// The window's size in pixels, which the image is held at (`Sizing::held`).
 	/// 0x0 when unknown, which keeps it whole.
@@ -78,8 +78,8 @@ impl Request {
 /// retire the one in flight, and once preparing an image took longer than the
 /// interval every request was retired before it arrived: the picture never
 /// changed, and each abandoned thread went on blurring a photo to the end. The
-/// tick is remembered and served when the result arrives - by the result itself
-/// when it was a rotation, or by sending one then when it was not.
+/// tick is remembered and served when the result arrives, by the result itself
+/// when it was a rotation, or by sending one then when it wasn't.
 #[derive(Debug, Default)]
 pub struct Pacing {
 	inflight: Option<u64>,
@@ -104,8 +104,8 @@ impl Pacing {
 		true
 	}
 
-	/// The newest request answered. True means a tick fired while it was working
-	/// and the answer was no rotation, so one is due now.
+	/// The newest request finished. True means a tick fired while it was working
+	/// and it wasn't a rotation, so one is due now.
 	pub fn arrived(&mut self, scanned: bool) -> bool {
 		self.inflight = None;
 		if scanned {
@@ -125,7 +125,7 @@ pub struct Prepared {
 	pub fit: Fit,
 	pub anchor: [f32; 2],
 	/// What this picture is worth to a derived text color (autotheme.rs). Summed
-	/// here because this is where the finished pixels are, and it is six numbers
+	/// here because this is where the finished pixels are, and it's 6 numbers
 	/// rather than a copy of them.
 	pub summary: crate::autotheme::Summary,
 	/// The size asked for. A kept copy a little off it stands in for it, so
@@ -200,7 +200,7 @@ pub struct Blocks {
 }
 
 /// What a scan found. Absent when the request didn't scan, or when the folder
-/// turned out to hold nothing.
+/// turned out to be empty.
 #[derive(Debug, Clone)]
 pub struct Rotation {
 	pub count: usize,
@@ -220,14 +220,14 @@ pub struct Loaded {
 	pub keep: Option<wpcache::Key>,
 }
 
-// The long edge of the stand-in. A 2560x1440 picture keeps 160x90, 56 KiB.
+// The long edge of the stand-in. A 2560x1440 picture gets 160x90, 56 KiB.
 const STANDIN_EDGE: u32 = 160;
 
 impl Prepared {
 	/// What a window shows the moment it takes its device back, until the real
 	/// picture is prepared again: this one shrunk to a few KiB and drawn
 	/// stretched, smoothed by the shader. Everything but the pixels is kept, so
-	/// it lands where the real one will.
+	/// it's placed where the real one will be.
 	pub fn standin(&self) -> Prepared {
 		let ring = u32::from(self.border);
 		let (w, h) = self.rgba.dimensions();
@@ -298,10 +298,10 @@ fn box_shrink(
 
 /// Run one request on its own thread and post the result back to the event loop.
 ///
-/// A thread per request rather than one long-lived worker, deliberately: a
-/// request that hangs on a dead mount blocks its own thread forever, and a shared
-/// worker would leave every later request queued behind it. The stale result is
-/// harmless when it finally arrives - the sequence stamp retires it. A worker
+/// A thread per request rather than one long-lived worker: a request that
+/// hangs on a dead mount blocks its own thread forever, and a shared worker
+/// would leave every later request queued behind it. A stale result is
+/// harmless when it arrives, since the sequence stamp retires it. A worker
 /// that has been superseded while doing real work gives up between stages.
 pub fn spawn(proxy: &EventLoopProxy<UserEvent>, request: Request) {
 	let proxy = proxy.clone();
@@ -313,10 +313,7 @@ pub fn spawn(proxy: &EventLoopProxy<UserEvent>, request: Request) {
 			});
 		});
 	if let Err(e) = spawned {
-		eprintln!(
-			"{}: could not start wallpaper loader: {e}",
-			config::APP_NAME
-		);
+		eprintln!("{}: couldn't start wallpaper loader: {e}", config::APP_NAME);
 	}
 }
 
@@ -357,8 +354,8 @@ fn run(request: &Request) -> Loaded {
 		path.clone_from(&request.current);
 	}
 	// A configured folder that supplies images owns the wallpaper, so the
-	// built-in must not stand in for it. On a scan we know what the folder
-	// actually holds; otherwise fall back to "is one configured at all".
+	// built-in mustn't stand in for it. On a scan we know what's in the
+	// folder; otherwise fall back to "is one configured at all".
 	let folder_active = if request.scan {
 		rotation.is_some()
 	} else {
@@ -399,8 +396,8 @@ fn rotate(settings: &Settings, current: Option<&str>) -> Option<Rotation> {
 	let dir = settings.rotation_folder()?;
 	let images = list_folder_images(dir);
 	if images.is_empty() {
-		// Silent when the folder was auto-detected - the user never asked for
-		// rotation, so an absent or empty dir is not a mistake to report.
+		// Silent when the folder was auto-detected. Rotation wasn't asked for, so
+		// an absent or empty dir isn't a mistake to report.
 		if !settings.wallpaper_folder_auto {
 			eprintln!(
 				"{}: wallpaper_folder {} has no images",
@@ -490,7 +487,7 @@ impl Sizing {
 
 	/// The size held for a window: what the fit draws the picture at, so the GPU
 	/// never keeps pixels it only scales away. Never bigger than `full`, nor than
-	/// `most`. Stretch takes the larger of the two axis scales, the same as
+	/// `most`. Stretch takes the larger of the 2 axis scales, the same as
 	/// zoom, so the picture keeps its proportions and the blur stays round, as it
 	/// was when the whole image was held.
 	pub fn held(self, window: (u32, u32)) -> (u32, u32) {
@@ -551,7 +548,7 @@ pub fn packing(settings: &Settings) -> Packing {
 }
 
 // The sizing for a picture `full` big, read the same way for a kept copy's
-// key as for the decode, so the two agree.
+// key as for the decode, so the 2 agree.
 fn sizing_of(
 	settings: &Settings,
 	tags: &crate::xmp::Tags,
@@ -607,9 +604,9 @@ fn layout(settings: &Settings, tags: &crate::xmp::Tags) -> (Fit, [f32; 2]) {
 	(fit, anchor)
 }
 
-// The blur's sigma in held pixels. The blur asserts on a sigma that is not a
-// normal float, and a panic here takes every shell down with it. 1e-40 is
-// inside the config's range.
+// The blur's sigma in held pixels. The blur asserts on a sigma that isn't a
+// normal float, and a panic here takes every shell down with it. A sigma of
+// 1e-40 is inside the config's range.
 fn held_blur(blur: f32, scale: f32) -> f32 {
 	let blur = blur * scale;
 	if blur.is_normal() { blur } else { 0.0 }
@@ -619,7 +616,7 @@ fn held_blur(blur: f32, scale: f32) -> f32 {
 // header rather than a decode. Everything `prepare_keeping` reads that changes
 // the stored pixels goes in, bar the held size, which names the copy, and the
 // border, which `prepare_keeping` adds once it knows the size. Light or dark
-// mode is not one of them: that is applied when the picture is drawn (G116).
+// mode isn't one of them, since it's applied when the picture is drawn (G116).
 fn kept_key(
 	settings: &Settings,
 	origin: Origin,
@@ -658,7 +655,7 @@ fn kept_key(
 // Whether `prepare` does more than decode and cut. Only then is a kept copy
 // worth reading, and only then is one made. The encode a picture held by the
 // window also gets, 20 to 60 ms as BC1 and 80 to 160 as BC7 at 2560x1440,
-// does not count.
+// doesn't count.
 fn works(settings: &Settings, sizing: Sizing, held: (u32, u32), blur: f32) -> bool {
 	let scale = held.0 as f32 / sizing.full.0.max(1) as f32;
 	held_blur(blur, scale) > 0.0 || settings.wallpaper_contrast_mask || held != sizing.full
@@ -668,7 +665,7 @@ fn works(settings: &Settings, sizing: Sizing, held: (u32, u32), blur: f32) -> bo
 // contrast mask, the image's own layout tags), at the size the window draws it.
 // `folder_active` suppresses the built-in stand-in where no path was given at
 // all, since rotation is about to supply one; a path that fails to open still
-// falls back to it. `stale` is asked before each stage, and answers None once
+// falls back to it. `stale` is called before each stage, and returns None once
 // the request has been superseded. With `kept` set, a copy kept there is used
 // when one is near the size, and otherwise the key to keep this one under
 // comes back with it. A change to the pixels this makes needs `wpcache`'s
@@ -692,7 +689,7 @@ fn prepare_keeping(
 		None if folder_active || !settings.wallpaper_fallback_builtin => return None,
 		None => Origin::Builtin,
 	};
-	// The image's own tags: layout, and the two look values. The embedded
+	// The image's own tags: layout, and the 2 look values. The embedded
 	// default wallpaper has no path, and keeps the configured values.
 	let mut tags = match origin {
 		Origin::File(path) if settings.wallpaper_honor_xmp || settings.wallpaper_honor_xmp_look => {
@@ -778,14 +775,14 @@ fn prepare_keeping(
 	// Only a blurred picture is ever bordered, so the border comes out of the
 	// blur's margin.
 	let border = sizing.bordered(held);
-	// Blur and contrast-flatten, done in LINEAR light (decode sRGB -> process in
+	// Blur and contrast-flatten, done in linear light (decode sRGB -> process in
 	// f32 -> re-encode) so transitions are gamma-correct; an sRGB-space blur
 	// darkens edges. The f32 intermediate also avoids 8-bit banding inside the
 	// blur (final banding is handled by the high-precision offscreen + the blit's
 	// dither).
 	let blur = held_blur(blur, scale);
 	if blur > 0.0 || settings.wallpaper_contrast_mask || held != sizing.full {
-		// The float copy is sixteen bytes a pixel and the blur is the slow part,
+		// The float copy is 16 bytes a pixel and the blur is the slow part,
 		// so this is where a superseded request costs the most to carry on.
 		if stale() {
 			return None;
@@ -903,7 +900,7 @@ fn prepare(
 }
 
 // Write a copy `prepare` made, after its result went out. A box whose cache
-// cannot be written just goes without, so only the debug line says so.
+// can't be written goes without, so only the debug line says so.
 fn keep_copy(
 	dir: &Path,
 	key: &wpcache::Key,
@@ -997,7 +994,7 @@ fn builtin(settings: &Settings) -> Option<image::DynamicImage> {
 }
 
 // A wallpaper is only ever drawn at window size, and the linear intermediate in
-// `prepare` is sixteen bytes a pixel - so an ordinary large photo wanted
+// `prepare` is 16 bytes a pixel, so an ordinary large photo wanted
 // gigabytes, and an image wider than the GPU's texture limit aborted the upload.
 // The cut comes before the RGBA copy and uses no float buffer, so a small file
 // with huge dimensions costs its decode (512 MiB at most, the image crate's own
@@ -1050,7 +1047,7 @@ fn write_history(recent: &[String]) {
 }
 
 // Cheap non-crypto entropy for random rotation, from the wall clock. Not used
-// for anything security-sensitive - just to vary which image comes up next.
+// for anything security-sensitive, only to vary which image comes up next.
 fn time_entropy() -> u64 {
 	std::time::SystemTime::now()
 		.duration_since(std::time::UNIX_EPOCH)
@@ -1124,7 +1121,7 @@ mod tests {
 		}
 	}
 
-	// Nothing sat between the file and a linear f32 buffer at sixteen bytes a
+	// Nothing sat between the file and a linear f32 buffer at 16 bytes a
 	// pixel, so an ordinary large photo wanted gigabytes and an image past the
 	// GPU's texture limit aborted the upload.
 	// Test ID: dcbez
@@ -1133,7 +1130,7 @@ mod tests {
 		use super::{MAX_EDGE, fit_within};
 		// a 60 megapixel camera file, and what it used to cost as f32 rgba
 		let (w, h) = (9504, 6336);
-		// and the blur holds a second copy of it
+		// and the blur needs a second copy of it
 		assert!(
 			u64::from(w) * u64::from(h) * 16 > 900 << 20,
 			"most of a gigabyte, twice"
@@ -1463,7 +1460,7 @@ mod tests {
 			] {
 				let next = shuffle_pick(5, &recent, entropy);
 				assert!(next < 5);
-				// 5 images hold back 2, so the two newest must not come back
+				// with 5 images, 2 are held back, so the 2 newest mustn't come back
 				for held in recent.iter().take(2) {
 					assert_ne!(next, *held, "shuffle repeated a recent image");
 				}
@@ -1474,7 +1471,7 @@ mod tests {
 	// Test ID: damzk
 	#[test]
 	fn shuffle_survives_tiny_folders() {
-		// two images alternate; one (or none) has nowhere else to go
+		// with 2 images they alternate; one (or none) has nowhere else to go
 		for entropy in 0..20u64 {
 			assert_eq!(shuffle_pick(2, &[0], entropy), 1);
 			assert_eq!(shuffle_pick(2, &[1], entropy), 0);
@@ -1486,7 +1483,7 @@ mod tests {
 	// Test ID: damzm
 	#[test]
 	fn shuffle_still_reaches_every_image() {
-		// holding back recent picks must not strand any image permanently
+		// holding back recent picks mustn't strand any image permanently
 		let mut seen = std::collections::HashSet::new();
 		let mut recent: Vec<usize> = Vec::new();
 		for entropy in 0..500u64 {
@@ -1538,7 +1535,7 @@ mod tests {
 		assert!(prepare(&s, Some(&missing), false, WHOLE, &|| false).is_none());
 	}
 
-	// The blur asserts on a sigma that is not a normal float, and a subnormal one
+	// The blur asserts on a sigma that isn't a normal float, and a subnormal one
 	// passed both the config's range and the tag reader, so the worker panicked
 	// and took the terminal with it.
 	// Test ID: dcr4f
@@ -1628,7 +1625,7 @@ mod tests {
 		let _ = std::fs::remove_dir_all(&dir);
 		std::fs::create_dir_all(&dir).unwrap();
 		let path = dir.join("huge.png");
-		// 64 MiB decoded. Before the fix this peaked near 900 MiB.
+		// The decode is 64 MiB. Before the fix this peaked near 900 MiB.
 		image::GrayImage::new(8000, 8000).save(&path).unwrap();
 		let out = std::process::Command::new(std::env::current_exe().unwrap())
 			.args([
@@ -1683,7 +1680,7 @@ mod tests {
 
 	// A request retired by a newer one used to blur and mask a photo to the end,
 	// a gigabyte or so each for a 4K image, and a rotation faster than the
-	// preparation kept several going at once. The worker asks between stages
+	// preparation kept several going at once. The worker checks between stages
 	// now, and every stage boundary is a place it gives up.
 	// Test ID: dcrby
 	#[test]
@@ -1736,8 +1733,8 @@ mod tests {
 		assert!(run(&request).image.is_none());
 	}
 
-	// The pacing rule, driven by a clock: images that take six seconds to
-	// prepare on a two-second interval. Each tick used to send a request that
+	// The pacing rule, driven by a clock: images that take 6 seconds to
+	// prepare on a 2-second interval. Each tick used to send a request that
 	// retired the one before it, so the picture never changed, and the retired
 	// workers piled up. One preparation at a time now, and the picture changes
 	// no later than one preparation after a tick.
@@ -1793,15 +1790,16 @@ mod tests {
 			);
 		}
 		assert_eq!(most_at_once, 1);
-		// one preparation, a rest of one interval, the next: every eight seconds,
+		// one preparation, a rest of one interval, the next: every 8 seconds,
 		// and the settings change costs one preparation more before rotation
 		// picks up again
 		assert_eq!(changes, vec![6, 14, 33, 41, 49, 57, 65, 73]);
 	}
 
-	// An empty rotation folder reports no rotation, and the built-in fills in -
-	// the folder's emptiness used to be tested during config resolve, so the
-	// suppression has to key on what the scan found, not on the folder existing.
+	// An empty rotation folder reports no rotation, and the built-in fills in.
+	// The folder's emptiness used to be tested during config resolve, so the
+	// suppression has to key on what the scan found rather than the folder
+	// existing.
 	// Test ID: dasfn
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
@@ -1819,7 +1817,7 @@ mod tests {
 	}
 
 	// The image's own tags win over the configured default, and are read from the
-	// file the pixels actually came from (which for rotation is the picked image,
+	// file the pixels came from (which for rotation is the picked image,
 	// not whatever `wallpaper` happened to name).
 	// Test ID: dasfp
 	#[test]
@@ -1888,7 +1886,7 @@ mod tests {
 			let (w, h) = small.rgba.dimensions();
 			assert_eq!(w.max(h), super::STANDIN_EDGE, "{w}x{h}");
 			assert!(small.rgba.len() <= 64 << 10, "{} bytes", small.rgba.len());
-			// everything but the pixels, so it is drawn where the real one will be
+			// everything but the pixels, so it's drawn where the real one will be
 			assert_eq!(small.sizing, image.sizing);
 			assert_eq!(small.summary, image.summary);
 			assert_eq!(small.fit, image.fit);
@@ -1901,7 +1899,7 @@ mod tests {
 
 	// The sampler filters an sRGB texture in linear light, so the stand-in is
 	// averaged the same way. In sRGB values half black and half white would be
-	// 128; the eye, and the real picture drawn small, say 188.
+	// 128; for the eye, and for the real picture drawn small, it's 188.
 	// Test ID: ddj6m
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
@@ -2041,7 +2039,7 @@ mod tests {
 		};
 		let out = prepare(&s, Some(&path), false, WHOLE, &|| false).expect("prepared");
 		let _ = std::fs::remove_file(&path);
-		// the two pixels either side of the edge straddle half the light
+		// the 2 pixels either side of the edge straddle half the light
 		let pair = f32::from(out.rgba.get_pixel(7, 0)[0]) + f32::from(out.rgba.get_pixel(8, 0)[0]);
 		let mid = pair / 2.0;
 		assert!((mid - 188.0).abs() < 12.0, "edge at {mid}");
@@ -2086,7 +2084,7 @@ mod tests {
 	}
 
 	// A kept copy stands for the original only while nothing that changes its
-	// pixels has moved. What only changes how it is drawn stays out of the key.
+	// pixels has moved. What only changes how it's drawn stays out of the key.
 	// Test ID: ddkhg
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
@@ -2300,8 +2298,8 @@ mod tests {
 			crate::bc1::decode(&blocks.bytes, first.held).as_ref()
 		);
 
-		// 2% more pixels: the copy stands in, and says what was asked for, so
-		// the window does not ask again
+		// 2% more pixels: the copy stands in, and records what was asked for, so
+		// the window doesn't ask again
 		let (near, _) = ask((646, 364), Some(&dir));
 		assert_eq!(copies(), 1);
 		assert_eq!(near.rgba.dimensions(), first.rgba.dimensions());

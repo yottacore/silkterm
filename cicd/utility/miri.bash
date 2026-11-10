@@ -7,7 +7,7 @@
 ##		  --leakcheck or --long. Very slow: hours, even with the tests Miri takes
 ##		  over 60 s on ignored there.
 ##		- Miri's sysroot is built first, into the step's own dir under target/.
-##		- The sanitizer canary goes next, each of its two tests alone, since a UB
+##		- The sanitizer canary goes next, each of its 2 tests alone, since a UB
 ##		  report stops the whole test binary. Miri has to report the race as a
 ##		  data race and the forgotten Vec as leaked memory, or the suite run would
 ##		  prove nothing.
@@ -44,7 +44,7 @@ rustup toolchain list 2>/dev/null | grep -q "^${SANITIZER_TOOLCHAIN}" \
 	|| fDie "${SANITIZER_TOOLCHAIN} isn't installed here; cicd.bash runs this in the container image"
 cargo "+${SANITIZER_TOOLCHAIN}" miri --version >/dev/null 2>&1 \
 	|| fDie "${SANITIZER_TOOLCHAIN} has no miri component here; cicd.bash runs this in the container image"
-fTestDir_Make || fDie "could not make the test run folder"
+fTestDir_Make || fDie "couldn't make the test run folder"
 fJobs_LowPriority; fJobs hard
 
 ## fMiri_Reports <output file>: each report, under the test binary it came from,
@@ -63,7 +63,7 @@ fMiri_Reports(){
 setupOut="${SILKTERM_TEST_DIR}/miri_setup.txt"
 fEcho_Clean "Miri sysroot ..."
 env "${MIRI_ENV[@]}" cargo "+${SANITIZER_TOOLCHAIN}" miri setup >"${setupOut}" 2>&1 \
-	|| { tail -n 80 "${setupOut}"; fDie "could not build Miri's sysroot (output in ${setupOut})"; }
+	|| { tail -n 80 "${setupOut}"; fDie "couldn't build Miri's sysroot (output in ${setupOut})"; }
 
 ## fMiri_Canary <id> <test> <what Miri has to say> <race|leak>: one canary test alone.
 ## It has to fail, with Miri's report and the test's name in its output.

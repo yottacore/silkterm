@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# What one window holds on the graphics card and in memory, on the real GPU
+# What one window uses on the graphics card and in memory, on the real GPU
 # without touching the desktop. Starts its own headless sway on the NVIDIA
 # render node and opens one window in it, either as an X11 client through
 # sway's Xwayland (the GL path every X11 desktop takes) or as a native Wayland
@@ -180,7 +180,7 @@ fStartSway(){
 		[[ -S "${swayRun}/wayland-1" && -n "${xDisplay}" ]] && break
 		sleep 0.1
 	done
-	[[ -S "${swayRun}/wayland-1" && -n "${xDisplay}" ]] || { echo "sway did not come up; see ${work}/sway.log" >&2; return 1; }
+	[[ -S "${swayRun}/wayland-1" && -n "${xDisplay}" ]] || { echo "sway didn't come up; see ${work}/sway.log" >&2; return 1; }
 }
 
 fSample(){
@@ -207,7 +207,7 @@ fSettingsOnce(){
 	sleep 6
 	fSample "${work}" "settings open"
 	dialog="$(DISPLAY="${xDisplay}" xdotool search --all --pid "${appPid}" --onlyvisible --name '^Settings$' | head -1)"
-	[[ -n "${dialog}" ]] || { echo "Settings did not open" >&2; return 1; }
+	[[ -n "${dialog}" ]] || { echo "Settings didn't open" >&2; return 1; }
 	DISPLAY="${xDisplay}" xdotool windowactivate --sync "${dialog}" 2>/dev/null
 	sleep 0.3
 	DISPLAY="${xDisplay}" xdotool key Escape
@@ -218,7 +218,7 @@ fSettingsOnce(){
 fStop(){
 	[[ -n "${appPid}" ]] && { kill "${appPid}" 2>/dev/null; wait "${appPid}" 2>/dev/null; }
 	[[ -n "${swayPid}" ]] && { kill "${swayPid}" 2>/dev/null; wait "${swayPid}" 2>/dev/null; }
-	# made by this run (mktemp above) and holding only sway's sockets
+	# made by this run (mktemp above) and containing only sway's sockets
 	[[ -n "${swayRun}" && -d "${swayRun}" ]] && fSafeRm_Under "${swayBase}" "${swayRun}"
 	return 0
 }

@@ -4,7 +4,7 @@
 ##		Pieces of cicd-win.ps1 that need no Windows box, run here: it keeps only
 ##		the newest run logs, which it once never pruned, and it maps the build
 ##		box's paths out of release builds and fails on one left behind. The map
-##		is a TOML file, so a folder name holding a quote or a backslash has to
+##		is a TOML file, so a folder name with a quote or a backslash has to
 ##		come through escaped. The stash it takes before a pull says whether it
 ##		stashed anything, and nothing else. It takes cicd.bash's runs, and hands
 ##		each to the Linux half. A rule it writes to a pipe is UTF-8, not code page
@@ -46,7 +46,7 @@ PY
 }
 fCheck "the path map reads back as the paths it was given" fMapReads
 
-## -NoRemote reaches the Linux half, which is the one that goes to the other boxes.
+## -NoRemote is passed to the Linux half, which is the one that goes to the other boxes.
 ps1="${meDir}/../../cicd-win.ps1"
 fCheck "-NoRemote is a parameter" bash -c 'pwsh -NoProfile -NonInteractive -Command "(Get-Command -Name \"$1\").Parameters.ContainsKey(\"NoRemote\")" | grep -qx True' _ "${ps1}"
 fCheck "and goes to the Linux half as --no-remote" grep -qE '^[[:space:]]*if \(\$NoRemote\)[[:space:]]+\{ \$cicdArgs\.Add\("--no-remote"\) \}'$'\r''?$' "${ps1}"

@@ -14,10 +14,10 @@
 	states its plan, asks before touching anything, and does nothing when the
 	installed binary is already current.
 
-	Reusable: everything project-specific lives in the settings block below.
+	Reusable: everything project-specific is in the settings block below.
 
 	Runs on Windows PowerShell 5.1 and on PowerShell 7+ (pwsh) on any platform
-	it supports - Windows, Linux and macOS. The OS, the CPU architecture and the
+	it supports: Windows, Linux, and macOS. The OS, the CPU architecture, and the
 	asset name are all detected.
 .PARAMETER Release
 	stable (default): newest full release. dev: newest release, pre-releases
@@ -61,7 +61,7 @@ $appComment       = 'Smooth-scrolling GPU terminal with split panes'
 
 ##	Release asset names. {exe} {version} {os} {arch} {ext} are substituted; {ext}
 ##	is ".exe" on Windows and empty elsewhere. {os} is windows/linux/macos, {arch}
-##	is x86_64/arm64 - match whatever the release actually publishes.
+##	is x86_64/arm64 - match whatever the release publishes.
 $assetPattern     = '{exe}-{version}-{os}-{arch}{ext}'
 $sumsPattern      = '{exe}-{version}-sha256sums.txt'
 
@@ -81,13 +81,13 @@ $rawBase = "https://raw.githubusercontent.com/$ownerRepo/main"
 
 ##	`exit` is only safe when this really IS its own process. The advertised
 ##	one-liner runs the downloaded text inside the USER'S shell, where an `exit`
-##	closes their window instead of ending the install - so failures travel as an
-##	exception and only a genuine script file turns that into an exit code.
+##	closes their window instead of ending the install. So a failure is thrown as
+##	an exception, and only a real script file turns that into an exit code.
 ##	Asked by type: a script block's ScriptInfo has no Path at all, and reading
 ##	one fails when the caller's shell has StrictMode on.
 $runningAsScriptFile = $MyInvocation.MyCommand -is [System.Management.Automation.ExternalScriptInfo]
 
-##	5.0 and older lack Get-FileHash, so there is no verifying a download there.
+##	5.0 and older lack Get-FileHash, so a download can't be verified there.
 if ($PSVersionTable.PSVersion.Major -lt 5) {
 	Write-Host "Error: this installer needs PowerShell 5.1 or newer (you have $($PSVersionTable.PSVersion))." -ForegroundColor Red
 	Write-Host '  Install PowerShell 7: https://aka.ms/powershell'
@@ -101,7 +101,7 @@ if ($PSVersionTable.PSVersion.Major -lt 5) {
 ##	outlive the install and quietly alter their session. The entry point at the
 ##	bottom sets all of it inside a script block, which scopes it to the run and
 ##	needs no restoring - assigning a preference from a child scope only makes a
-##	local copy of it anyway, so "save it and put it back" does not work here.
+##	local copy of it anyway, so "save it and put it back" doesn't work here.
 
 
 ##	Output helpers
@@ -113,7 +113,7 @@ function fFail {
 	Write-Host "Error: $Message" -ForegroundColor Red
 	foreach ($hint in $Hints) { Write-Host "  $hint" }
 	Write-Host ''
-	##	Carries no message worth printing - fFail has already said everything.
+	##	No message worth printing, since fFail has already said everything.
 	throw (New-Object System.OperationCanceledException 'installer-abort')
 }
 
@@ -122,7 +122,7 @@ function fHelp {
 	Write-Host "$appName installer $installerVersion"
 	Write-Host ''
 	Write-Host "Downloads the newest $appName release from GitHub, checks its sha256, and"
-	Write-Host 'installs it. It prints what it is about to do and asks first, and it does'
+	Write-Host 'installs it. It prints what it''s about to do and asks first, and it does'
 	Write-Host 'nothing at all when the installed copy is already current.'
 	Write-Host ''
 	Write-Host 'Usage:'
@@ -137,13 +137,13 @@ function fHelp {
 	Write-Host '  -Version              print this installer''s version and exit'
 	Write-Host '  -Help                 this text'
 	Write-Host ''
-	Write-Host 'The operating system, the CPU architecture and the matching release asset are'
-	Write-Host 'all detected - there is nothing to pass for them.'
+	Write-Host 'The operating system, the CPU architecture, and the matching release asset are'
+	Write-Host 'all detected, so there''s nothing to pass for them.'
 	Write-Host ''
 }
 
 ##	The message buried in an exception chain is the one worth showing; the outer
-##	one is usually just "Exception calling ...".
+##	one is usually "Exception calling ...".
 function fInnerMessage {
 	param([System.Management.Automation.ErrorRecord]$ErrorRecord)
 	$ex = $ErrorRecord.Exception
@@ -152,7 +152,7 @@ function fInnerMessage {
 }
 
 ##	Turn a filesystem failure into something actionable. Access-denied and
-##	file-in-use are the two that actually happen, and they need opposite advice.
+##	file-in-use are the 2 that happen in practice, and they need opposite advice.
 function fFileError {
 	param([System.Management.Automation.ErrorRecord]$ErrorRecord, [string]$What, [string]$Path)
 	$ex = $ErrorRecord.Exception
@@ -162,7 +162,7 @@ function fFileError {
 		$hints = @("Windows/your OS refused write access to: $Path")
 		if ($onWindows) {
 			if ($Target -eq 'system') { $hints += 'Re-run from an elevated PowerShell (right-click -> Run as administrator).' }
-			else { $hints += 'Check that the folder is not read-only, and that antivirus is not blocking it.' }
+			else { $hints += 'Check that the folder isn''t read-only, and that antivirus isn''t blocking it.' }
 			$hints += 'Or use -Target user to install under your own profile instead.'
 		} else {
 			if ($Target -eq 'system') { $hints += 'Re-run under sudo, or use -Target user to install under $HOME instead.' }
@@ -183,7 +183,7 @@ function fFileError {
 ##	Environment
 
 ##	5.1 is Windows-only and defines no $IsWindows/$IsLinux/$IsMacOS at all, so
-##	those cannot simply be read - under StrictMode that is a hard error.
+##	those can't be read directly. Under StrictMode that's a hard error.
 if ($PSVersionTable.PSVersion.Major -ge 6) {
 	$onWindows = $IsWindows
 	$onMac     = $IsMacOS
@@ -208,7 +208,7 @@ if (-not $onWindows -or $PSVersionTable.PSVersion.Major -lt 6) {
 $webArgs = @{}
 if ($PSVersionTable.PSVersion.Major -lt 6) { $webArgs['UseBasicParsing'] = $true }
 
-##	Only the API is rate-limited per IP; release downloads are not, so they
+##	Only the API is rate-limited per IP; release downloads aren't, so they
 ##	stay anonymous.
 function fApi {
 	param([string]$Url)
@@ -219,15 +219,15 @@ function fApi {
 
 ##	The release signing key, as one allowed_signers line. Empty until a key is
 ##	generated (see cicd/config.bash), and then the checksums file is only trusted
-##	when it carries a good signature by this key - which is what turns the check
-##	below from "the download was not corrupted" into "this came from the author".
+##	when it has a good signature by this key. That turns the check below
+##	from "the download wasn't corrupted" into "this came from the author".
 $releaseSignPubkey    = ''
 $releaseSignIdentity  = 'releases@silkterm'
 $releaseSignNamespace = 'silkterm-release'
 
-##	Verify the checksums file against the pinned key. Everything else is covered
-##	by the checksums, so this one signature covers the whole release. ssh-keygen
-##	ships with Windows 10 1803 and later.
+##	Verify the checksums file against the pinned key. The checksums vouch for
+##	everything else, so this one signature is enough for the whole release.
+##	ssh-keygen comes with Windows 10 1803 and later.
 function fVerifySignature {
 	param(
 		[Parameter(Mandatory)][string]$Dir,
@@ -236,7 +236,7 @@ function fVerifySignature {
 	)
 
 	if (-not $releaseSignPubkey) {
-		Write-Host 'Note: this release is not signed; the download is checked against its checksums only.'
+		Write-Host 'Note: this release isn''t signed; the download is checked against its checksums only.'
 		return
 	}
 	$sshKeygen = Get-Command ssh-keygen -ErrorAction SilentlyContinue
@@ -248,7 +248,7 @@ function fVerifySignature {
 	$sigPath = Join-Path $Dir "$Sums.sig"
 	try { Invoke-WebRequest -Uri "$dlBase/$Tag/$Sums.sig" -OutFile $sigPath @webArgs }
 	catch {
-		fFail "release $Tag carries no signature ($Sums.sig)" @(
+		fFail "release $Tag doesn't have a signature ($Sums.sig)" @(
 			'This installer only accepts signed releases.',
 			"Release page: https://github.com/$ownerRepo/releases/tag/$Tag"
 		)
@@ -289,16 +289,16 @@ function fVerifySignature {
 		$proc.WaitForExit()
 	}
 	if ($proc.ExitCode -ne 0) {
-		fFail 'the release signature does not verify - NOT installing' @(
-			'The checksums file was not signed by the release key.',
-			'Do not use this download; report it.'
+		fFail 'the release signature doesn''t verify - NOT installing' @(
+			'The checksums file wasn''t signed by the release key.',
+			'Don''t use this download; report it.'
 		)
 	}
 	Write-Host 'Signature OK.'
 }
 
 ##	fFieldCmp <a> <b> - -1, 0 or 1 for one dotted field. Numbers compare as
-##	numbers and sort below words. Two words with the same letters and a trailing
+##	numbers and sort below words. Words with the same letters and a trailing
 ##	number compare by that number, so beta10 is above beta3.
 function fFieldCmp {
 	param([string]$A, [string]$B)
@@ -358,8 +358,8 @@ function fPickTag {
 }
 
 ##	Exec= is read twice: the desktop-entry string rules first, then the Exec
-##	quoting rules on top. So a backslash in the path ends up as four, a quote,
-##	backtick or '$' as two-plus-itself, and a literal '%' has to be doubled or it
+##	quoting rules on top. So a backslash in the path ends up as 4, a quote,
+##	backtick, or '$' as 2 plus itself, and a literal '%' has to be doubled or it
 ##	reads as a field code. The caller quotes the whole value, which a space needs.
 function fDesktopExec {
 	param([string]$Path)
@@ -368,12 +368,12 @@ function fDesktopExec {
 	return ($s -replace '%', '%%')
 }
 
-##	fPathNote <dir> <file> - how to run it when <dir> is not on PATH (Linux, macOS).
+##	fPathNote <dir> <file> - how to run it when <dir> isn't on PATH (Linux, macOS).
 function fPathNote {
 	param([string]$Dir, [string]$File)
 	if (":$($env:PATH):" -like "*:$Dir`:*") { return }
 	Write-Host ''
-	Write-Host "Note: $Dir is not on your PATH, so '$exeName' won't be found by name yet."
+	Write-Host "Note: $Dir isn't on your PATH, so '$exeName' won't be found by name yet."
 	Write-Host "  Add it with:  echo 'export PATH=`"$Dir`:`$PATH`"' >> ~/.profile"
 	Write-Host "  Until then, run it in full:  $File"
 }
@@ -383,10 +383,10 @@ function fPathNote {
 
 ##	fSafeRm_Under <parent> <path> - removes the folder <path>, somewhere under
 ##	<parent>, and nothing else. The repo's cicd/utility/include/saferm.ps1 with
-##	the same rules, carried here since this file runs alone, by `irm | iex` too,
+##	the same rules, copied here since this file runs alone, by `irm | iex` too,
 ##	and on 5.1. Links are looked for only below the parent, since the temp
-##	folder the system hands out can sit behind one, as macOS's /var does. It
-##	skips the HOST_TEMP checks, since a user's box has no HOST_TEMP.
+##	folder the system hands out can be behind one, as macOS's /var is. It
+##	skips the HOST_TEMP checks, since a user's box doesn't have a HOST_TEMP.
 ##	$true when removed; otherwise one line on stderr, and $false.
 function fSafeRm_Under {
 	$rooted = if ($onWindows) { '^[A-Za-z]:[\\/]' } else { '^/' }
@@ -442,9 +442,9 @@ function fMain {
 	Write-Host ''
 
 	##	A local copy, because the stable -> dev fallback below rewrites it. Note
-	##	nothing in here uses a $script:-qualified variable: that scope does not
-	##	exist when this text is run as a script BLOCK, which is one of the three
-	##	ways the one-liner reaches a user.
+	##	nothing in here uses a $script:-qualified variable: that scope doesn't
+	##	exist when this text is run as a script BLOCK, which is one of the 3
+	##	ways the one-liner can be run.
 	$release = $Release
 
 	##	Detect the platform. Windows reports the CPU through the environment,
@@ -461,14 +461,14 @@ function fMain {
 		$osToken = 'linux'
 		$rawArch = (& uname -m)
 	}
-	##	Every `break` is load-bearing: a PowerShell switch runs EVERY matching
+	##	Every `break` is needed: a PowerShell switch runs EVERY matching
 	##	branch, so without them "arm64" matches the arm64 arm and then the
 	##	32-bit-ARM arm, and the last one wins.
 	switch -Regex ("$rawArch".ToLower()) {
 		'^(amd64|x64|x86_64)$'  { $archToken = 'x86_64'; break }
 		'^(arm64|aarch64)$'     { $archToken = 'arm64'; break }
-		'^(x86|i[3-6]86)$'      { $osProblem = '32-bit x86 is not supported'; break }
-		'^arm'                  { $osProblem = '32-bit ARM is not supported'; break }
+		'^(x86|i[3-6]86)$'      { $osProblem = '32-bit x86 isn''t supported'; break }
+		'^arm'                  { $osProblem = '32-bit ARM isn''t supported'; break }
 		default                 { $osProblem = "unrecognized CPU architecture: $rawArch" }
 	}
 	if ($osProblem) {
@@ -480,7 +480,7 @@ function fMain {
 
 	##	Resolve the release tag: the highest version in the release list, drafts
 	##	skipped. Stable wants a full release, and takes the newest pre-release
-	##	only when the list holds none, which is what makes a project with only
+	##	only when the list doesn't have any, which is what makes a project with only
 	##	betas installable. A failed call is an error, never "no release".
 	Write-Host "Looking up the newest $release release of $appName ..."
 	try {
@@ -495,7 +495,7 @@ function fMain {
 				'Wait an hour, or set $env:GITHUB_TOKEN to a personal access token and re-run.'
 			)
 		}
-		fFail "could not read the release list from github.com/$ownerRepo" @(
+		fFail "couldn't read the release list from github.com/$ownerRepo" @(
 			'Check your network or proxy, and that the repository still exists.',
 			"Detail: $apiError"
 		)
@@ -520,8 +520,8 @@ function fMain {
 		-replace '\{os\}', $osToken -replace '\{arch\}', $archToken -replace '\{ext\}', $exeExt
 	$sums = $sumsPattern -replace '\{exe\}', $exeName -replace '\{version\}', $version
 
-	##	Pull the checksums first: it is small, it says which platforms this
-	##	release actually carries, and its hash lets an already-current install
+	##	Pull the checksums first: it's small, it lists the platforms this
+	##	release has, and its hash lets an already-current install
 	##	finish without downloading the binary at all.
 	##	A predictable name under a shared temp directory is somebody else's to
 	##	create first, and '-Force' would then adopt it - or the symlink they put
@@ -529,7 +529,7 @@ function fMain {
 	$tmpDir = Join-Path ([System.IO.Path]::GetTempPath()) `
 		("$exeName-install-" + [System.IO.Path]::GetRandomFileName())
 	try { New-Item -ItemType Directory -Path $tmpDir -ErrorAction Stop | Out-Null }
-	catch { fFail "could not create a temporary directory ($tmpDir)" @($_.Exception.Message) }
+	catch { fFail "couldn't create a temporary directory ($tmpDir)" @($_.Exception.Message) }
 	try {
 		$sumsPath = Join-Path $tmpDir $sums
 		try { Invoke-WebRequest -Uri "$dlBase/$tag/$sums" -OutFile $sumsPath @webArgs }
@@ -554,7 +554,7 @@ function fMain {
 		if (-not $wantSha) {
 			fFail "release $tag has no build for $osToken-$archToken" (@(
 				"Expected asset: $asset",
-				'What it does carry:'
+				'What it does have:'
 			) + ($published | ForEach-Object { "  $_" }) + @(
 				"Building from source: https://github.com/$ownerRepo#build-it-yourself"
 			))
@@ -603,9 +603,9 @@ function fMain {
 		##	Already current? Then only the pieces that went missing are left to
 		##	do, and with none missing, say so and stop - no prompt, no download.
 		##	A piece that exists is left as it is, since it may have been edited.
-		##	A file that cannot be READ (locked by a running copy) must not throw
+		##	A file that can't be READ (locked by a running copy) mustn't throw
 		##	here: fall through unresolved and let the copy fail with a message
-		##	that actually says what to do about it.
+		##	that says what to do about it.
 		$installedSha = ''
 		if (Test-Path -LiteralPath $destFile) {
 			try { $installedSha = (Get-FileHash -Algorithm SHA256 -LiteralPath $destFile).Hash.ToLower() }
@@ -644,8 +644,8 @@ function fMain {
 		if (-not $Yes) {
 			##	Read-Host hands back an empty COLLECTION at end-of-input, and
 			##	`@() -notmatch ...` is itself an empty collection - which is
-			##	falsy, so an `if (... -notmatch ...)` abort branch silently does
-			##	not run and the thing installs unasked. Cast to a string, then
+			##	falsy, so an `if (... -notmatch ...)` abort branch silently doesn't
+			##	run and the thing installs unasked. Cast to a string, then
 			##	test for an explicit yes, so anything unexpected declines.
 			##	[Environment]::UserInteractive is no help here: it stays True
 			##	with stdin redirected from nowhere.
@@ -657,7 +657,7 @@ function fMain {
 			try { $answer = "$(Read-Host 'Proceed? [y/N]')".Trim().ToLowerInvariant() } catch { $cannotAsk = $true }
 			if ($answer -ne 'y' -and $answer -ne 'yes') {
 				if ($cannotAsk -or ($answer -eq '' -and [Console]::IsInputRedirected)) {
-					fFail 'there is no terminal here to ask for confirmation' @(
+					fFail 'there''s no terminal here to ask for confirmation' @(
 						'Re-run with -Yes to install without being asked.'
 					)
 				}
@@ -690,8 +690,8 @@ function fMain {
 			}
 			Write-Host 'Checksum OK.'
 
-			##	Install. Land beside the target and rename into place, as
-			##	install.bash does, so a running copy does not stop an upgrade.
+			##	Install. Stage beside the target and rename into place, as
+			##	install.bash does, so a running copy doesn't stop an upgrade.
 			##	Linux refuses to write over a running program ("text file busy")
 			##	but lets a rename replace it. Windows refuses both, but lets the
 			##	running file itself be renamed out of the way; the old copy is
@@ -699,10 +699,10 @@ function fMain {
 			Write-Host ''
 			Write-Host 'Installing ...'
 			try { New-Item -ItemType Directory -Force -Path $destDir | Out-Null }
-			catch { fFileError -ErrorRecord $_ -What "could not create $destDir" -Path $destDir }
+			catch { fFileError -ErrorRecord $_ -What "couldn't create $destDir" -Path $destDir }
 			$staged = Join-Path $destDir (".$exeName-new-" + [System.IO.Path]::GetRandomFileName())
 			try { Copy-Item -LiteralPath $assetPath -Destination $staged }
-			catch { fFileError -ErrorRecord $_ -What "could not write to $destDir" -Path $staged }
+			catch { fFileError -ErrorRecord $_ -What "couldn't write to $destDir" -Path $staged }
 			try {
 				if ($onWindows) {
 					Get-ChildItem -LiteralPath $destDir -Filter "$exeName.exe.old-*" -Force -ErrorAction SilentlyContinue |
@@ -721,7 +721,7 @@ function fMain {
 				}
 			} catch {
 				Remove-Item -LiteralPath $staged -Force -ErrorAction SilentlyContinue
-				fFileError -ErrorRecord $_ -What "could not replace $destFile" -Path $destFile
+				fFileError -ErrorRecord $_ -What "couldn't replace $destFile" -Path $destFile
 			}
 		}
 
@@ -736,7 +736,7 @@ function fMain {
 				$lnk.Description = $appComment
 				$lnk.Save()
 			} catch {
-				Write-Host "Note: could not create the Start Menu shortcut ($(fInnerMessage $_)) - $appName itself installed fine."
+				Write-Host "Note: couldn't create the Start Menu shortcut ($(fInnerMessage $_)) - $appName itself installed fine."
 			}
 		}
 
@@ -752,7 +752,7 @@ function fMain {
 					"Keywords=$desktopKeywords", 'StartupNotify=true'
 				) | Set-Content -LiteralPath $appFile
 			} catch {
-				Write-Host "Note: could not write the desktop launcher to $appDir - $appName itself installed fine."
+				Write-Host "Note: couldn't write the desktop launcher to $appDir - $appName itself installed fine."
 			}
 		}
 
@@ -783,12 +783,12 @@ function fPathKey {
 		$sub = 'Environment'
 	}
 	$key = $root.OpenSubKey($sub, $Writable)
-	if (-not $key) { throw "cannot open HKEY\$sub" }
+	if (-not $key) { throw "can't open HKEY\$sub" }
 	return $key
 }
 
 ##	True when the persistent PATH of that scope already names the folder. A
-##	PATH that cannot be read counts as missing, so the install tries and says.
+##	PATH that can't be read counts as missing, so the install tries and says.
 function fOnWindowsPath {
 	param([string]$Dir, [string]$Scope)
 	try {
@@ -802,8 +802,8 @@ function fOnWindowsPath {
 
 ##	Append to the persistent PATH via the registry rather than via
 ##	[Environment]::SetEnvironmentVariable, which rewrites a REG_EXPAND_SZ PATH as
-##	a plain REG_SZ - that silently kills every %VAR% already in it. Reading and
-##	writing the raw value keeps whatever kind it already was.
+##	a plain REG_SZ and breaks every %VAR% already in it. Reading and writing
+##	the raw value leaves its kind as it was.
 function fAddToWindowsPath {
 	param([string]$Dir, [string]$Scope)
 	try {
@@ -826,15 +826,14 @@ function fAddToWindowsPath {
 		} finally { $key.Close() }
 		fAnnounceEnvironment
 	} catch {
-		Write-Host "Note: could not update the $Scope PATH ($(fInnerMessage $_)) - $appName itself installed fine."
+		Write-Host "Note: couldn't update the $Scope PATH ($(fInnerMessage $_)) - $appName itself installed fine."
 		Write-Host "  Run it in full:  $(Join-Path $Dir "$exeName.exe")"
 	}
 }
 
-##	A registry write alone reaches nothing until the next sign-in. Explorer, which
-##	starts everything from the Start menu, reloads its environment only when told,
-##	and that is the message SetEnvironmentVariable and setx both send after their
-##	own write.
+##	A registry write alone changes nothing until the next sign-in. Explorer starts
+##	everything from the Start menu, and it reloads its environment only when told.
+##	SetEnvironmentVariable and setx both send that message after their own write.
 function fAnnounceEnvironment {
 	try {
 		if (-not ('SilkInstall.Env' -as [type])) {
@@ -853,10 +852,10 @@ public static extern IntPtr SendMessageTimeout(IntPtr hWnd, uint Msg, UIntPtr wP
 
 
 ##	Script entry point. The `& { }` is what keeps StrictMode off the caller's
-##	shell - it applies to this block and everything it calls, and lapses here.
-##	A hashtable rather than the block's return value: it is a reference, so the
+##	shell. It applies to this block and everything it calls, and lapses here.
+##	A hashtable rather than the block's return value: it's a reference, so the
 ##	child scope can set it directly, and a stray line of pipeline output from
-##	anything in here cannot turn the answer into an array.
+##	anything in here can't turn the answer into an array.
 $state = @{ failed = $false }
 & {
 	Set-StrictMode -Version Latest

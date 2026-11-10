@@ -68,7 +68,7 @@ $work = Join-Path ([System.IO.Path]::GetTempPath()) ('silk-desktop-' + [System.I
 $null = New-Item -ItemType Directory -Path $work
 try {
 	##	A launchable path with the characters GLib does handle. '%' is left out:
-	##	GLib refuses an entry carrying the '%%' the spec asks for, so the case
+	##	GLib refuses an entry with the '%%' the spec asks for, so the case
 	##	list above is as far as that one can be checked.
 	$dir = Join-Path $work 'home dir/a$b "q"/.local/bin'
 	$null = New-Item -ItemType Directory -Path $dir -Force
