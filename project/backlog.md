@@ -275,6 +275,17 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- Stalled until a cosmic-text release takes fontdb 0.24 or later, and winit's sctk-adwaita drops ab_glyph.
 	- Held for a cosmic-text release on fontdb 0.24 or later, and an sctk-adwaita without ab_glyph.
 
+- The "Minutes otherwise" release of resources still isn't working
+	- ID: 2026111009560100
+	- Type: Bug
+	- Status: Queued
+	- Severity: Critical
+	- Opened: 20261110-095601
+	- Opened by: JC
+	- Notes:
+		- Pre-next-cut.
+		- It used to, many builds ago, but hasn't now for over a week.
+
 - Import a v1.0.0-beta1 `config.toml`
 	- ID: 2026110920480399
 	- Type: Feature
