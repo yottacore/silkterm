@@ -34,23 +34,6 @@ Going forward, new issues in the new template at the bottom of this file will go
 
 ## Issues
 
-- Settings: Side-tabs: the lower the tab, the lower the text is within the tab
-	- ID: 2026110609500003
-	- Type: Bug
-	- Status: Waiting for answers
-		- 20261109: The screenshot came in. It waits on the follow-up in questions.md, which asks whether to center the titles on their caps.
-	- Opened: 20261106-095000
-	- Opened by: JC
-	- Assigned to: CC
-	- Notes:
-		- Pre-next-cut.
-	- Reproduced: No, 20261106. On Xvfb at scales 1, 1.25, 1.5, 1.75, and 2, and under headless sway on the RTX 3060 Ti at 1, 1.25, and 2, every tab's title sits the same distance above its box's bottom edge, sub-tabs included. A dev debug build and the 11-01 release build read the same.
-	- Progress log:
-		- 20261106: The title's height comes from its own tab's box, the same box that is drawn, so nothing in the layout can add up down the list. Both renderers in the frame get the same surface size.
-		- 20261109: Measured the screenshot from Silk down to Keys. Every box is 29 px tall, and every baseline sits 8 px above the box's bottom edge, so nothing moves down the list. What changes is the letters. A title with a tall letter (Silk, Themes, Background, Window, Shell) starts 8 px below the box top. One without (Appearance, Text, Cursor, Movement, Program, Keys) starts 11 px down, so it looks low. The titles are centered from the top of a tall letter to the baseline, the same as the main window's menu and tab titles.
-	- Test case: `a_tab_title_sits_as_low_in_its_box_on_every_tab` (deyxd) runs on both sides, at 4 scales, in tall and short windows. It fails when a title is moved a quarter pixel per tab. It passes on the current build.
-	- Branch: rnd1106
-
 - The window doesn't paint while the GPU is busy or short on memory, and stays blank after the load ends
 	- ID: 2026100312470535
 	- Type: Bug
@@ -2627,6 +2610,28 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Test case: None for the figures, which are a measurement. `SILK_MEMDBG` is covered by `each_debug_switch_reads_its_own_variable` (ddf59). Its minimap count is pinned by `the_memory_count_covers_every_stored_row` (ddgtx), seen to fail with the stored rows left out.
 	- Acceptance signoff: Self-closed: the numbers are in the design doc and nothing is left to judge.
 	- Closed: 20261004-194634
+
+- Settings: Side-tabs: the lower the tab, the lower the text is within the tab
+	- ID: 2026110609500003
+	- Type: Bug
+	- Status: Done
+	- Severity: Low
+	- Opened: 20261106-095000
+	- Opened by: JC
+	- Assigned to: CC
+	- Notes:
+		- Pre-next-cut.
+	- Reproduced: No, 20261106. On Xvfb at scales 1, 1.25, 1.5, 1.75, and 2, and under headless sway on the RTX 3060 Ti at 1, 1.25, and 2, every tab's title sits the same distance above its box's bottom edge, sub-tabs included. A dev debug build and the 11-01 release build read the same.
+	- Progress log:
+		- 20261106: The title's height comes from its own tab's box, the same box that is drawn, so nothing in the layout can add up down the list. Both renderers in the frame get the same surface size.
+		- 20261109: Measured the screenshot from Silk down to Keys. Every box is 29 px tall, and every baseline sits 8 px above the box's bottom edge, so nothing moves down the list. What changes is the letters. A title with a tall letter (Silk, Themes, Background, Window, Shell) starts 8 px below the box top. One without (Appearance, Text, Cursor, Movement, Program, Keys) starts 11 px down, so it looks low. The titles are centered from the top of a tall letter to the baseline, the same as the main window's menu and tab titles.
+		- 20261110: Titles now center on their capitals, with the baseline on a whole pixel. In a 29 px box that leaves 9 px over the capitals and 10 under the baseline on every tab, where it was 8 or 11 over before, by letter. A font with a deep descent makes the tabs taller, so g and y stay 2 px clear of the edge.
+	- Actual cause [Bug]: Titles were centered by line box, then dropped half the descent, which centers ascender-top to baseline. A title without a tall letter read low.
+	- Actual fix [Bug]: Tab titles are placed by their capitals, baseline = band top + (band height + cap height) / 2, snapped to a whole pixel. The band grows when the font leaves less than its descent plus 2 px under the baseline.
+	- Test case: `a_tab_title_sits_as_low_in_its_box_on_every_tab` (deyxd) runs on both sides, at 4 scales, in tall and short windows. It fails when a title is moved a quarter pixel per tab. It passes on the current build. `chrome_caps_center_in_bar_on_a_whole_pixel` (df452) and `band_floor_clears_descenders` (df453) fail when the snap or the descent room is taken out.
+	- Branch: rnd1106, tabcap
+	- Acceptance signoff: Self-closed: the new placement was checked in a captured dialog against the 11-09 build, and its tests fail without it.
+	- Closed: 20261110-064500
 
 - knobs' spec checks let a relation loop, case-only twins, a NaN range, and a text chooser through
 	- ID: 2026110919171131

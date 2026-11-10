@@ -1009,6 +1009,7 @@ pub struct TextItem {
 	pub italic: bool, // unused since an automatic value lost its italic (2026100913394950)
 	pub scale: f32,   // 1.0 normal; >1 for the prominent dialog title
 	pub marks: Option<Marks>,
+	pub band: Option<Rect>, // when set, center the capitals in this band instead
 }
 
 /// Parts of a line drawn bold, a step larger and in another color: what a
@@ -1033,6 +1034,7 @@ impl TextItem {
 			italic: false,
 			scale: 1.0,
 			marks: None,
+			band: None,
 		}
 	}
 }
@@ -1687,6 +1689,7 @@ impl SettingsDialog {
 			item.x = self.to_px(item.x);
 			item.y = self.to_px(item.y);
 			item.clip = item.clip.map(|r| self.rect_px(r));
+			item.band = item.band.map(|r| self.rect_px(r));
 		}
 	}
 
@@ -1787,7 +1790,10 @@ impl SettingsDialog {
 		Self::tab_h_for(self.line_h)
 	}
 	fn tab_h_for(line_h: f32) -> f32 {
-		lay().tab_height.max(line_h + lay().tab_pad_v)
+		lay()
+			.tab_height
+			.max(line_h + lay().tab_pad_v)
+			.max(crate::text::ui_band_floor(line_h))
 	}
 	fn gutter_h_for(line_h: f32, rows: usize) -> f32 {
 		(Self::tab_h_for(line_h) + lay().tab_top) * rows as f32
@@ -5825,6 +5831,7 @@ impl SettingsDialog {
 					colors.dim
 				},
 				clip: Some(strip),
+				band: Some(r),
 				..mk(
 					node.title.into(),
 					r.x + lay().tab_pad / 2.0,
@@ -6206,6 +6213,7 @@ impl SettingsDialog {
 				italic: false,
 				scale: 1.0,
 				marks: None,
+				band: None,
 			});
 		}
 		(rects, texts)

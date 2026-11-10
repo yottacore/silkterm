@@ -229,7 +229,7 @@ fn pin_ui_family(fs: &FontSystem) {
 // Chrome ascent/descent scaled to `ui_px`, read the SAME way cosmic-text does
 // (`ui_px * ascent/units_per_em`), so `ui_text_top` predicts the real baseline.
 // A proportional fallback if the pinned face can't be read.
-fn ui_vmetrics(fs: &mut FontSystem, ui_px: f32) -> (f32, f32) {
+fn ui_vmetrics(fs: &mut FontSystem, ui_px: f32) -> (f32, f32, f32) {
 	use std::sync::atomic::Ordering;
 	let want_weight = fontdb::Weight(UI_WEIGHT.load(Ordering::Relaxed));
 	let id = {
@@ -240,13 +240,39 @@ fn ui_vmetrics(fs: &mut FontSystem, ui_px: f32) -> (f32, f32) {
 		};
 		fs.db().query(&query)
 	};
-	let fallback = (ui_px * 0.8, ui_px * 0.2);
+	let fallback = (ui_px * 0.8, ui_px * 0.2, ui_px * 0.7);
 	let Some(font) = id.and_then(|id| fs.get_font(id, want_weight)) else {
 		return fallback;
 	};
 	let metrics = font.as_swash().metrics(&[]);
 	let scale = ui_px / f32::from(metrics.units_per_em).max(1.0);
-	(metrics.ascent * scale, metrics.descent * scale)
+	// an old OS/2 table has no cap height
+	let cap = if metrics.cap_height > 0.0 {
+		metrics.cap_height * scale
+	} else {
+		fallback.2
+	};
+	(metrics.ascent * scale, metrics.descent * scale, cap)
+}
+
+// Room a descender needs under a band's text, past the font's own descent.
+const DESCENT_CLEAR: f32 = 2.0;
+
+// (cap + 2 * descent) / UI line height for the pinned chrome font, as f32
+// bits. Set when a TextCtx reads the font. Bands sized from the line height
+// read it through `ui_band_floor`.
+static UI_INK_PER_LINE: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+
+/// Shortest band, at UI line height `line_h`, that cap-centered chrome text
+/// fits with its descenders clear of the edge. A font with a deep descent
+/// grows the band rather than letting g and y touch the next one.
+pub fn ui_band_floor(line_h: f32) -> f32 {
+	let per_line = f32::from_bits(UI_INK_PER_LINE.load(std::sync::atomic::Ordering::Relaxed));
+	band_floor(line_h, per_line)
+}
+
+fn band_floor(line_h: f32, ink_per_line: f32) -> f32 {
+	line_h * ink_per_line + 2.0 * DESCENT_CLEAR
 }
 
 // Baseline y within a single-line UI buffer of height `ui_line_h`: cosmic-text
@@ -263,6 +289,21 @@ fn ui_baseline_in_buf(ui_line_h: f32, vmetrics: (f32, f32)) -> f32 {
 // ascender-top..baseline; centering THAT (not cap..baseline) is what actually
 // looks balanced - cap-centering leaves the empty descent reading as space
 // below. The rare descender then just dips into the natural descent room.
+// Buffer `top` that centers chrome text's capitals in a bar, with the baseline
+// on a whole pixel. Sentence-case labels, like the settings tabs, take this:
+// line-box centering moves with each font's ascent and descent split, and a
+// half-pixel baseline blurs some rows and not others.
+fn ui_cap_center_top(
+	ui_line_h: f32,
+	vmetrics: (f32, f32),
+	cap: f32,
+	bar_top: f32,
+	bar_h: f32,
+) -> f32 {
+	let baseline = (bar_top + f32::midpoint(bar_h, cap)).round();
+	baseline - ui_baseline_in_buf(ui_line_h, vmetrics)
+}
+
 fn ui_visible_center_top(ui_line_h: f32, vmetrics: (f32, f32), bar_top: f32, bar_h: f32) -> f32 {
 	let (ascent, _) = vmetrics;
 	bar_top + bar_h / 2.0 - ui_baseline_in_buf(ui_line_h, vmetrics) + ascent / 2.0
@@ -448,6 +489,7 @@ pub struct TextCtx {
 	// lays the line out in, so a bar can center chrome text on its real visible
 	// box (see `ui_text_top`).
 	ui_vmetrics: (f32, f32),
+	ui_cap: f32,
 	// primary monospace face + a coverage cache, so the pane can tell which
 	// glyphs fall back to another font (those drift from the cell grid and get
 	// rendered per-cell instead - see Pane::build). The cached value is how many
@@ -647,7 +689,12 @@ impl TextCtx {
 		let ui_px = (ui_px * scale).round().max(8.0);
 		let ui_line_h = (ui_px * 1.35).round(); // roomy UI leading; descenders must clear buttons
 		let ui_metrics = Metrics::new(ui_px, ui_line_h);
-		let ui_vmetrics = ui_vmetrics(&mut font_system, ui_px);
+		let (ascent, descent, ui_cap) = ui_vmetrics(&mut font_system, ui_px);
+		let ui_vmetrics = (ascent, descent);
+		UI_INK_PER_LINE.store(
+			((ui_cap + 2.0 * descent) / ui_line_h).to_bits(),
+			std::sync::atomic::Ordering::Relaxed,
+		);
 
 		let mono_face = {
 			let fam = mono_family();
@@ -671,6 +718,7 @@ impl TextCtx {
 			ui_line_h,
 			ui_metrics,
 			ui_vmetrics,
+			ui_cap,
 			mono_face,
 			cover_cache: HashMap::new(),
 			color_glyphs: ColorGlyphs::new(),
@@ -863,6 +911,18 @@ impl TextCtx {
 	/// high with empty descent space below.
 	pub fn ui_text_top(&self, bar_top: f32, bar_h: f32) -> f32 {
 		ui_visible_center_top(self.ui_line_h, self.ui_vmetrics, bar_top, bar_h)
+	}
+
+	/// `top` for a chrome buffer whose capitals center in the bar, baseline
+	/// snapped to a whole pixel. For the settings tab titles.
+	pub fn ui_cap_top(&self, bar_top: f32, bar_h: f32) -> f32 {
+		ui_cap_center_top(
+			self.ui_line_h,
+			self.ui_vmetrics,
+			self.ui_cap,
+			bar_top,
+			bar_h,
+		)
 	}
 
 	/// As `ui_text_top`, but centering the whole ink box - for tab titles.
@@ -1499,6 +1559,51 @@ mod tests {
 			assert!(
 				(above - below).abs() < 0.01,
 				"above {above} != below {below}"
+			);
+		}
+	}
+
+	// A cap-centered label has as much room over its capitals as under its
+	// baseline, give or take the half pixel the snap moves it, and the baseline
+	// lands on a whole pixel even when the bar doesn't.
+	// Test ID: df452
+	#[test]
+	fn chrome_caps_center_in_bar_on_a_whole_pixel() {
+		for &(vmetrics, cap) in &[
+			((13.6f32, 3.4f32), 9.8f32),
+			((16.2, 4.9), 11.3),
+			((11.0, 2.6), 8.0),
+		] {
+			let ui_line_h = 23.0;
+			for &(bar_top, bar_h) in &[(0.0f32, 29.0f32), (29.0, 29.0), (10.5, 40.0), (7.25, 27.5)]
+			{
+				let top = ui_cap_center_top(ui_line_h, vmetrics, cap, bar_top, bar_h);
+				let baseline = top + ui_baseline_in_buf(ui_line_h, vmetrics);
+				assert!(
+					(baseline - baseline.round()).abs() < 0.001,
+					"baseline {baseline} is between pixels"
+				);
+				let above = baseline - cap - bar_top;
+				let below = bar_top + bar_h - baseline;
+				assert!(
+					(above - below).abs() <= 1.0 + 0.001,
+					"above {above} below {below}"
+				);
+			}
+		}
+	}
+
+	// A band at its floor leaves the descenders DESCENT_CLEAR above the edge
+	// once the capitals are centered, however deep the font's descent.
+	// Test ID: df453
+	#[test]
+	fn band_floor_clears_descenders() {
+		let line_h = 23.0;
+		for &(cap, descent) in &[(9.8f32, 3.4f32), (10.0, 7.5), (8.0, 1.0)] {
+			let h = band_floor(line_h, (cap + 2.0 * descent) / line_h);
+			assert!(
+				(h - cap) / 2.0 >= descent + DESCENT_CLEAR - 0.001,
+				"cap {cap} descent {descent} band {h}"
 			);
 		}
 	}
