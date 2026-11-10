@@ -1802,9 +1802,13 @@ fn scene(
 					line_h * tall,
 				);
 				// the offset is the glyphs', so it scales with them either way
+				let y = match item.band {
+					Some(band) => text.ui_cap_top(band.y, band.h),
+					None => item.y + ink_dy * item.scale,
+				};
 				Placed {
 					x: item.x,
-					y: item.y + ink_dy * item.scale,
+					y,
 					scale: item.scale,
 					color: item.color,
 					clip: item.clip,
