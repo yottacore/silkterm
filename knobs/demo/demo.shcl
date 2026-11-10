@@ -13,7 +13,8 @@
 ##	             file, or none for a value nobody edits by hand
 ##	type         bool, int, float, text, color or choice. Optional, the
 ##	             control implies it; whole: true makes a number an int
-##	path         where it lives in the file
+##	path         where it lives in the file. Case doesn't count, so no 2
+##	             paths may differ only in case
 ##	store        config, the default, or state for what the program works
 ##	             out by itself
 ##	default      the value with nothing stored
@@ -33,9 +34,11 @@
 ##	             "state:<id>" for a stored state value. A value set by hand
 ##	             is kept for when the checkbox goes off again.
 ##	group        a preset group this belongs to, see groups below.
+##	Working out a value reads its auto checkbox, the state value in its rule
+##	and its group's chooser, so none of those may lead back to it.
 ##
 ## groups: a dropdown that picks a set of values, such as a profile or a theme.
-##	chooser      the dropdown setting that picks
+##	chooser      the dropdown setting that picks, of type choice
 ##	noun         what one is called, for tips
 ##	custom       the label for the person's own set, if there is one
 ##	presets      one block each: label, temporary: true for one that lasts

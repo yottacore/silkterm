@@ -34,23 +34,6 @@ Going forward, new issues in the new template at the bottom of this file will go
 
 ## Issues
 
-- knobs' spec checks let a relation loop, case-only twins, a NaN range, and a text chooser through
-	- ID: 2026110919171131
-	- Type: Bug
-	- Status: Queued
-	- Priority: Low
-	- Opened: 20261109-191711
-	- Opened by:
-	- Related IDs: tukzmon:2026110709074419
-	- Steps to reproduce: Load a spec with any of the 4 cases below.
-	- Incorrect behavior: Each parses clean. A loop through a setting's auto switch, its rule's state value, or its group's chooser overflows the stack at the first read. Paths that differ only in case pass, and shcl folds them onto one key, so a round trip loses a value. Dropdown options that differ only in case pass, and the second can't be picked. A NaN range end or detent passes, and then every number is in range. A group chooser of type text takes any text as a pick.
-	- Expected behavior: Each is refused when the spec loads. Spec::valid also refuses a NaN value, since its range check lets one past.
-	- Possible cause: check_links compares paths with case and never looks for NaN, read loops, or the chooser's type.
-	- Estimated effort: Low
-	- Progress log:
-		- tukzmon fixed it in commit 5fcb1e7 (tests df399 to df39c). Its copy now has Presets and Indent enums, so the patch needs those parts adapted here.
-	- Origin: Found in tukzmon's copy of knobs by its 2026-11-07 code review. The same checks are missing here, in check_links in knobs/src/lib.rs.
-
 - Settings: Side-tabs: the lower the tab, the lower the text is within the tab
 	- ID: 2026110609500003
 	- Type: Bug
@@ -2654,6 +2637,30 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Test case: None for the figures, which are a measurement. `SILK_MEMDBG` is covered by `each_debug_switch_reads_its_own_variable` (ddf59). Its minimap count is pinned by `the_memory_count_covers_every_stored_row` (ddgtx), seen to fail with the stored rows left out.
 	- Acceptance signoff: Self-closed: the numbers are in the design doc and nothing is left to judge.
 	- Closed: 20261004-194634
+
+- knobs' spec checks let a relation loop, case-only twins, a NaN range, and a text chooser through
+	- ID: 2026110919171131
+	- Type: Bug
+	- Status: Done
+	- Severity: Low
+	- Opened: 20261109-191711
+	- Opened by:
+	- Related IDs: tukzmon:2026110709074419
+	- Steps to reproduce: Load a spec with any of the 4 cases below.
+	- Incorrect behavior: Each parses clean. A loop through a setting's auto switch, its rule's state value, or its group's chooser overflows the stack at the first read. Paths that differ only in case pass, and shcl folds them onto one key, so a round trip loses a value. Dropdown options that differ only in case pass, and the second can't be picked. A NaN range end or detent passes, and then every number is in range. A group chooser of type text takes any text as a pick.
+	- Expected behavior: Each is refused when the spec loads. Spec::valid also refuses a NaN value, since its range check lets one past.
+	- Possible cause: check_links compares paths with case and never looks for NaN, read loops, or the chooser's type.
+	- Estimated effort: Low
+	- Actual effort: Low
+	- Progress log:
+		- tukzmon fixed it in commit 5fcb1e7 (tests df399 to df39c). Its copy now has Presets and Indent enums, so the patch needs those parts adapted here.
+		- 20261109: Ported. The Presets and Indent enums weren't needed here, since the chooser check keys on from_program as the rest of check_links does.
+	- Actual fix [Bug]: check_links folds case on paths, refuses NaN range ends and detents, refuses option twins, refuses a chooser that isn't a choice, and walks the reads Model::value makes for a loop. Spec::valid refuses a NaN value.
+	- Branch: rnd1109
+	- Test case: df3k1 to df3k4 in knobs/src/tests.rs. Each fails on the old code. The settings spec and its dialog tests still pass.
+	- Acceptance signoff: Self-closed: the spec checks have tests that fail without them, and the real settings spec still loads.
+	- Closed: 20261109-205600
+	- Origin: Found in tukzmon's copy of knobs by its 2026-11-07 code review. The same checks are missing here, in check_links in knobs/src/lib.rs.
 
 - The allocations per frame test once saw the minimap compose during a drag select
 	- ID: 2026110718055000
