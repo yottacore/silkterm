@@ -4295,8 +4295,9 @@ impl ApplicationHandler<UserEvent> for App {
 		state.note_presence(&event);
 		// Anything a person does to the window is a sign of life (see
 		// `release_deadline`); the hidden-to-shown edge is one too, in its arm.
-		if idle::sign_of_life(&event, state.watch.pointer == window_size::Pointer::Over) {
-			state.note_active("input or focus");
+		let pointer_over = state.watch.pointer == window_size::Pointer::Over;
+		if let Some(why) = idle::sign_of_life(&event, pointer_over, state.focused) {
+			state.note_active(why);
 		}
 		match event {
 			WindowEvent::CloseRequested => {
@@ -4395,7 +4396,7 @@ impl ApplicationHandler<UserEvent> for App {
 				if !occluded {
 					// nothing was drawn while hidden, so catch up in one frame
 					state.dirty = true;
-					state.note_active("shown");
+					state.note_shown();
 					if state.gl {
 						state.vram_next = Instant::now();
 						vramdbg("unoccluded -> immediate probe");

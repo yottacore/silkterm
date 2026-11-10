@@ -284,7 +284,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Opened: 20261110-095601
 	- Opened by: JC
 	- Assigned to: CC
-	- Related IDs: 2026110609500001, 2026103010083401
+	- Related IDs: 2026110609500001, 2026103010083401, 2026111010491300
 	- Notes:
 		- Pre-next-cut.
 		- It used to, many builds ago, but hasn't now for over a week.
@@ -333,7 +333,8 @@ Going forward, new issues in the new template at the bottom of this file will go
 - Resources are restored when coming back to the XFCE4 desktop that holds a SilkTerm, with no focus and no pointer over it
 	- ID: 2026111010491300
 	- Type: Bug
-	- Status: Queued
+	- Status: Waiting for answers
+		- 20261110: Which way a released window gets its picture back. See questions.md.
 	- Opened: 20261110-104913
 	- Opened by: JC
 	- Notes:
@@ -345,6 +346,19 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- The mouse never moves over SilkTerm, and it is behind other windows and does not have focus.
 	- Incorrect behavior: Resources are restored.
 	- Expected behavior: It needs to stay in resource-saving mode, until it gets the focus. Not even moving the mouse over it should wake it up, unless that gives it the focus (as some WMs do).
+	- Answers:
+		- 20261110: Work it next, ahead of the beta1 import.
+		- 20261110: If the window can be seen, and has updated content, that new content should be visible. If it's in motion, it should wake back up.
+		- 20261110: Unless it's completely hidden (e.g. minimized, completely obscured, on a tab that isn't visible, the screen is blank or locked, or on a desktop that isn't visible).
+	- Reproduced: Yes, 20261110, on Xvfb with xfwm4, compositing on and off. Switching away and back woke a released, unfocused, partly covered window 3 ways at once: it was told it lost focus, which it never had, it was shown again, and the desktop asked for a repaint.
+	- Actual cause: Each of the 3 counted as a sign of life.
+	- Progress log:
+		- 20261110: Focus counts only as a change now, and being shown again counts only for a window that would go blank without its device. With those 2 gone, the window stayed released through the switch but came back black: X11 doesn't keep a window's pixels while it's on another desktop. So the desktop's repaint request still takes the device back, and that's the one wake left on a switch.
+		- 20261110: Output in a tab in the back is no longer owed at the reveal, per the answer above. der5b's old assertion is commented out with the reason.
+	- Decisions:
+		- 20261110: The repaint request stays a wake until the window can show its last frame without a device. See the question in questions.md.
+	- Branch: deskwake
+	- Test case: `focus_is_a_sign_of_life_only_as_a_change` (df4dh), `hidden_output_is_owed_only_from_the_tab_in_front` (df4dj). Each fails on the old rule.
 
 - Wayland: must use the Wayland clipboard, and minimize other X11 features
 	- ID: 2026101509024607
