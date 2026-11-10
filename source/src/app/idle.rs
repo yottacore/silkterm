@@ -153,8 +153,7 @@ struct Idle {
 // unfocused one may be on a second monitor being read.
 fn release_deadline(cfg: &config::Settings, idle: &Idle) -> Option<Instant> {
 	let rule = idle_rule(cfg);
-	let kept_on_screen = !idle.hidden && (idle.focused || !idle.keeps_picture);
-	if !rule.on || !idle.revealed || idle.bench_busy || kept_on_screen {
+	if kept_by(&rule, idle).is_some() {
 		return None;
 	}
 	let wait = if idle.hidden {
@@ -163,6 +162,23 @@ fn release_deadline(cfg: &config::Settings, idle: &Idle) -> Option<Instant> {
 		rule.otherwise
 	};
 	Some(idle.since + wait)
+}
+
+// What keeps the device, in words for SILK_IDLEDBG, or None when nothing does.
+fn kept_by(rule: &IdleRule, idle: &Idle) -> Option<&'static str> {
+	if !rule.on {
+		Some("switched off")
+	} else if !idle.revealed {
+		Some("not shown yet")
+	} else if idle.bench_busy {
+		Some("a rating is owed or running")
+	} else if !idle.hidden && idle.focused {
+		Some("focused on screen")
+	} else if !idle.hidden && !idle.keeps_picture {
+		Some("on screen, and would go blank")
+	} else {
+		None
+	}
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -202,6 +218,50 @@ fn idle_secs() -> Option<Duration> {
 			.filter(|secs| secs.is_finite() && *secs >= 0.0)
 			.map(Duration::from_secs_f32)
 	})
+}
+
+/// `SILK_IDLEDBG`: what restarts the wait and what holds the device, so a log
+/// from a real desktop shows why a window never let go. A sign of life comes
+/// often, so each kind is said at most once per `TRACE_QUIET`, with a count of
+/// the ones not said. A hold is said when it changes.
+#[derive(Debug, Default)]
+pub(super) struct IdleTrace {
+	said: Vec<(&'static str, Instant, u32)>,
+	hold: Option<Option<&'static str>>,
+}
+
+const TRACE_QUIET: Duration = Duration::from_secs(30);
+
+impl IdleTrace {
+	fn restart(&mut self, why: &'static str) {
+		// only while the wait runs: with focus, every key would be one
+		if !env_flag(EnvFlag::IdleDbg) || self.hold != Some(None) {
+			return;
+		}
+		let now = Instant::now();
+		match self.said.iter_mut().find(|(w, ..)| *w == why) {
+			Some((_, at, quiet)) if now.duration_since(*at) < TRACE_QUIET => *quiet += 1,
+			Some((_, at, quiet)) => {
+				idledbg(&format!("wait restarted: {why} (+{quiet} not said)"));
+				(*at, *quiet) = (now, 0);
+			}
+			None => {
+				idledbg(&format!("wait restarted: {why}"));
+				self.said.push((why, now, 0));
+			}
+		}
+	}
+
+	fn hold(&mut self, hold: Option<&'static str>, wait: (&str, Duration)) {
+		if self.hold == Some(hold) {
+			return;
+		}
+		self.hold = Some(hold);
+		match hold {
+			Some(why) => idledbg(&format!("kept: {why}")),
+			None => idledbg(&format!("waiting {}s ({})", wait.1.as_secs(), wait.0)),
+		}
+	}
 }
 
 /// `SILK_IDLEDBG=1`: the idle release's comings and goings on stderr, stamped
@@ -403,6 +463,8 @@ impl State {
 	pub(super) fn note_active(&mut self, why: &'static str) {
 		if self.idle.active(self.gpu.is_none()) {
 			idledbg(&format!("wake: {why}"));
+		} else {
+			self.idle_trace.restart(why);
 		}
 	}
 
@@ -411,27 +473,52 @@ impl State {
 	/// flag is the one the last pass settled on.
 	pub(super) fn note_output(&mut self, pane: crate::term::PaneId) {
 		let in_front = self.tabs.cur().panes.contains_key(&pane);
+		let shown = !self.was_hidden && in_front;
 		if self
 			.idle
 			.output(self.gpu.is_none(), self.was_hidden, in_front)
 		{
 			idledbg("wake: output");
+		} else if shown {
+			self.idle_trace.restart("output");
+		}
+	}
+
+	/// `SILK_IDLEDBG`: say what holds a window with its device, each time that
+	/// changes. `dialog_up` is the hold the loop owns.
+	pub(super) fn trace_hold(&mut self, cfg: &config::Settings, dialog_up: bool) {
+		if self.gpu.is_none() {
+			return;
+		}
+		let idle = self.idle_view();
+		let rule = idle_rule(cfg);
+		let hold = if dialog_up {
+			Some("a dialog is up")
+		} else {
+			kept_by(&rule, &idle)
+		};
+		let wait = if idle.hidden {
+			("hidden", rule.hidden)
+		} else {
+			("otherwise", rule.otherwise)
+		};
+		self.idle_trace.hold(hold, wait);
+	}
+
+	fn idle_view(&self) -> Idle {
+		Idle {
+			focused: self.focused,
+			hidden: self.was_hidden,
+			revealed: self.revealed,
+			bench_busy: self.bench.is_some() || self.bench_at.is_some(),
+			since: self.idle.since,
+			keeps_picture: self.keeps_picture,
 		}
 	}
 
 	/// Reads the hidden answer the pass's `freeze_sync` settled on.
 	pub(super) fn release_deadline(&self, cfg: &config::Settings) -> Option<Instant> {
-		release_deadline(
-			cfg,
-			&Idle {
-				focused: self.focused,
-				hidden: self.was_hidden,
-				revealed: self.revealed,
-				bench_busy: self.bench.is_some() || self.bench_at.is_some(),
-				since: self.idle.since,
-				keeps_picture: self.keeps_picture,
-			},
-		)
+		release_deadline(cfg, &self.idle_view())
 	}
 
 	/// Let the device and everything on it go. The window stays, the shells run
@@ -755,6 +842,62 @@ mod tests {
 			release_deadline(&cfg, &unshown).is_none(),
 			"not on screen yet"
 		);
+	}
+
+	// The idle trace names the one thing that keeps the device, in the order
+	// the release checks them, and nothing once the wait runs. The names are
+	// what a log from a real desktop is read by, so a new veto needs one.
+	// Test ID: df4cn
+	#[test]
+	fn each_hold_on_the_device_names_itself() {
+		use super::kept_by;
+		let rule = IdleRule {
+			on: true,
+			hidden: Duration::from_mins(1),
+			otherwise: Duration::from_mins(5),
+		};
+		let free = Idle {
+			focused: false,
+			hidden: false,
+			revealed: true,
+			bench_busy: false,
+			since: Instant::now(),
+			keeps_picture: true,
+		};
+		assert_eq!(kept_by(&rule, &free), None);
+		let off = IdleRule { on: false, ..rule };
+		assert_eq!(kept_by(&off, &free), Some("switched off"));
+		let unshown = Idle {
+			revealed: false,
+			..free
+		};
+		assert_eq!(kept_by(&rule, &unshown), Some("not shown yet"));
+		let rating = Idle {
+			bench_busy: true,
+			..free
+		};
+		assert_eq!(kept_by(&rule, &rating), Some("a rating is owed or running"));
+		let focused = Idle {
+			focused: true,
+			..free
+		};
+		assert_eq!(kept_by(&rule, &focused), Some("focused on screen"));
+		let blanks = Idle {
+			keeps_picture: false,
+			..free
+		};
+		assert_eq!(
+			kept_by(&rule, &blanks),
+			Some("on screen, and would go blank")
+		);
+		// out of sight, neither focus nor the picture holds it
+		let hidden = Idle {
+			hidden: true,
+			focused: true,
+			keeps_picture: false,
+			..free
+		};
+		assert_eq!(kept_by(&rule, &hidden), None);
 	}
 
 	// A Windows window drawn through a composition visual has no redirection

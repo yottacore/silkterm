@@ -278,14 +278,28 @@ Going forward, new issues in the new template at the bottom of this file will go
 - The "Minutes otherwise" release of resources still isn't working
 	- ID: 2026111009560100
 	- Type: Bug
-	- Status: Queued
+	- Status: Waiting for answers
+		- 20261110: A run on b23's own desktop with `SILK_IDLEDBG=1` names what holds it. See the question in questions.md.
 	- Severity: Critical
 	- Opened: 20261110-095601
 	- Opened by: JC
+	- Assigned to: CC
+	- Related IDs: 2026110609500001, 2026103010083401
 	- Notes:
 		- Pre-next-cut.
 		- It used to, many builds ago, but hasn't now for over a week.
 	- Target OS: Linux, seen on X11.
+	- Reproduced: No. Each try let go on time with the 20261110-101009 dogfood build and with dev:
+		- Xvfb with xfwm4, compositing on and off, a fresh config, an xterm focused: let go at the wait.
+		- The same with "Minutes otherwise" at 1 in the file and no idle override: let go at 65 s.
+		- Another window moved over SilkTerm and away again after it let go: it stayed let go.
+		- 2 idle muffer sessions wrote nothing to their terminals in 25 s, so an idle one in the front tab doesn't hold it.
+	- Progress log:
+		- 20261110: `SILK_IDLEDBG=1` now says what holds the device each time that changes ("kept: focused on screen", "kept: a dialog is up", "waiting 60s (otherwise)"), and what restarts the wait while it runs, each kind at most once per 30 s with a count of the rest. Before, it only said when the device went and came back, so a window that never let go said nothing.
+	- Decisions:
+		- 20261110: Not closed a third time on a guess. The two earlier fixes each closed a real cause, but neither was seen on this desktop, so the next step is a log from it.
+	- Branch: idledbg
+	- Test case: `each_hold_on_the_device_names_itself` (df4cn).
 
 - Import a v1.0.0-beta1 `config.toml`
 	- ID: 2026110920480399
