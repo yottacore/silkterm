@@ -29,6 +29,7 @@ struct Line {
 	color: [u8; 3],
 	bold: bool,
 	scale: f32,
+	band: Option<Rect>, // a button's caption centers its capitals in the button
 }
 
 // A clickable region in the About box. `button` links draw a filled box behind
@@ -1726,7 +1727,7 @@ fn scene(
 				let buf = shaped.buffer(text, &line.text, &attrs, w as f32, line_h);
 				texts.push(Placed {
 					x: line.x,
-					y: line.y,
+					y: line.band.map_or(line.y, |b| text.ui_cap_top(b.y, b.h)),
 					scale: line.scale,
 					color: line.color,
 					clip: None,
@@ -2455,7 +2456,7 @@ fn layout_about(
 	let (btn_pad_x, btn_pad_y) = (text.dip(ABOUT_BTN_PAD_X), text.dip(ABOUT_BTN_PAD_Y));
 	let label_w = text.measure_ui_text(btn_label, &attrs);
 	let btn_w = label_w + btn_pad_x * 2.0;
-	let btn_h = line_h + btn_pad_y * 2.0;
+	let btn_h = (line_h + btn_pad_y * 2.0).max(crate::text::ui_band_floor(line_h));
 	content_w = content_w.max(btn_w);
 	// the button's hover flyover shows the full donate URL; size the window so it
 	// isn't clipped
@@ -2490,6 +2491,7 @@ fn layout_about(
 			color,
 			bold,
 			scale,
+			band: None,
 		});
 		y += line_h * scale;
 	}
@@ -2516,6 +2518,12 @@ fn layout_about(
 		color: menu_fg,
 		bold: true,
 		scale: 1.0,
+		band: Some(Rect {
+			x: btn_x,
+			y,
+			w: btn_w,
+			h: btn_h,
+		}),
 	});
 	y += btn_h;
 
@@ -2731,7 +2739,7 @@ fn layout_ask(text: &mut TextCtx, ask: &Ask) -> (Vec<Line>, Vec<AboutLink>, (f32
 	let remember_w = box_sz + box_gap + text.measure_ui_text(remember_label, &attrs);
 
 	let (btn_pad_x, btn_pad_y) = (text.dip(ABOUT_BTN_PAD_X), text.dip(ABOUT_BTN_PAD_Y));
-	let btn_h = line_h + btn_pad_y * 2.0;
+	let btn_h = (line_h + btn_pad_y * 2.0).max(crate::text::ui_band_floor(line_h));
 	let btn_gap = text.dip(ASK_BTN_GAP);
 	let buttons: Vec<(&str, AskPart, f32, f32)> = [
 		("Cancel", AskPart::Cancel),
@@ -2763,6 +2771,7 @@ fn layout_ask(text: &mut TextCtx, ask: &Ask) -> (Vec<Line>, Vec<AboutLink>, (f32
 			color,
 			bold: false,
 			scale: 1.0,
+			band: None,
 		});
 		y += line_h;
 	}
@@ -2787,6 +2796,7 @@ fn layout_ask(text: &mut TextCtx, ask: &Ask) -> (Vec<Line>, Vec<AboutLink>, (f32
 		color: fg,
 		bold: false,
 		scale: 1.0,
+		band: None,
 	});
 	y += line_h;
 	y += text.dip(config::MENU_SEP_H) * 2.0;
@@ -2806,6 +2816,7 @@ fn layout_ask(text: &mut TextCtx, ask: &Ask) -> (Vec<Line>, Vec<AboutLink>, (f32
 			color: fg,
 			bold: false,
 			scale: 1.0,
+			band: Some(Rect { x, y, w, h: btn_h }),
 		});
 		x += w + btn_gap;
 	}
@@ -2833,7 +2844,7 @@ fn layout_notice(text: &mut TextCtx, paras: &[String]) -> (Vec<Line>, Vec<AboutL
 	let (btn_pad_x, btn_pad_y) = (text.dip(ABOUT_BTN_PAD_X), text.dip(ABOUT_BTN_PAD_Y));
 	let label_w = text.measure_ui_text(label, &attrs);
 	let btn_w = (label_w + btn_pad_x * 2.0).max(text.dip(NOTICE_BTN_MIN_W));
-	let btn_h = line_h + btn_pad_y * 2.0;
+	let btn_h = (line_h + btn_pad_y * 2.0).max(crate::text::ui_band_floor(line_h));
 	let mut content_w = btn_w;
 	for (row, _, _) in &rows {
 		content_w = content_w.max(text.measure_ui_text(row, &attrs));
@@ -2850,6 +2861,7 @@ fn layout_notice(text: &mut TextCtx, paras: &[String]) -> (Vec<Line>, Vec<AboutL
 			color,
 			bold: false,
 			scale: 1.0,
+			band: None,
 		});
 		y += line_h;
 	}
@@ -2875,6 +2887,12 @@ fn layout_notice(text: &mut TextCtx, paras: &[String]) -> (Vec<Line>, Vec<AboutL
 		color: fg,
 		bold: false,
 		scale: 1.0,
+		band: Some(Rect {
+			x: btn_x,
+			y,
+			w: btn_w,
+			h: btn_h,
+		}),
 	});
 	y += btn_h;
 	(lines, links, (content_w + pad * 2.0, y + pad))
@@ -3589,6 +3607,44 @@ mod tests {
 
 	fn adapter() -> wgpu::AdapterInfo {
 		crate::gfx::test_adapter("X", wgpu::DeviceType::Cpu)
+	}
+
+	// A button's caption centers its capitals in the button, as a Settings tab
+	// title does, and the button is tall enough for that with the descenders
+	// clear. Every box with buttons: About, a notice and the tmux question.
+	// Test ID: df4cw
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn each_button_caption_centers_its_capitals_in_the_button() {
+		let mut sources = vec![AboutSource::About(Box::new(adapter()))];
+		#[cfg(not(target_os = "windows"))]
+		sources.extend([
+			AboutSource::Notice(vec!["Something to say.".into()]),
+			AboutSource::Ask(super::Ask {
+				paras: vec!["A question.".into()],
+				remember: false,
+				focus: super::AskPart::Detach,
+			}),
+		]);
+		for scale in [1.0, 1.5] {
+			let mut text = TextCtx::new_cpu(scale);
+			let floor = crate::text::ui_band_floor(text.ui_line_h);
+			for source in &sources {
+				let (lines, links, _) = layout_source(&mut text, source);
+				let buttons: Vec<_> = links.iter().filter(|l| l.button).collect();
+				assert!(!buttons.is_empty());
+				for b in buttons {
+					assert!(
+						b.rect.h + 0.01 >= floor,
+						"a button shorter than its text needs"
+					);
+					let captions = lines.iter().filter(|l| l.band == Some(b.rect)).count();
+					assert_eq!(captions, 1, "one caption centered in each button");
+				}
+				let banded = lines.iter().filter(|l| l.band.is_some()).count();
+				assert_eq!(banded, links.iter().filter(|l| l.button).count());
+			}
+		}
 	}
 
 	// The Support button opens the donation page and shows its address as a

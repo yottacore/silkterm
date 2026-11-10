@@ -1009,7 +1009,7 @@ pub struct TextItem {
 	pub italic: bool, // unused since an automatic value lost its italic (2026100913394950)
 	pub scale: f32,   // 1.0 normal; >1 for the prominent dialog title
 	pub marks: Option<Marks>,
-	pub band: Option<Rect>, // when set, center the capitals in this band instead
+	pub band: Option<Rect>, // when set, center the capitals in this band instead (tabs, buttons)
 }
 
 /// Parts of a line drawn bold, a step larger and in another color: what a
@@ -1167,7 +1167,7 @@ impl SettingsDialog {
 					+ lay().shell_head_gap
 					+ shells as f32 * line
 					+ lay().shell_add_gap
-					+ lay().button_height.max(line_h + lay().row_pad)
+					+ Self::btn_h_for(line_h)
 			}
 			_ => line,
 		}
@@ -1199,7 +1199,15 @@ impl SettingsDialog {
 		lay().field_height.max(line_h + 2.0 * lay().field_pad_v)
 	}
 	fn btn_h(&self) -> f32 {
-		lay().button_height.max(self.line_h + lay().row_pad)
+		Self::btn_h_for(self.line_h)
+	}
+	// A button's caption centers on its capitals like a tab title, so the
+	// button grows the same way when the font's descent needs more room.
+	fn btn_h_for(line_h: f32) -> f32 {
+		lay()
+			.button_height
+			.max(line_h + lay().row_pad)
+			.max(crate::text::ui_band_floor(line_h))
 	}
 
 	// A heading that only repeats its own tab's title says nothing the tab strip
@@ -2016,7 +2024,7 @@ impl SettingsDialog {
 	}
 	// The footer under the rows: its line, the clear space and the buttons.
 	fn footer_h_for(line_h: f32) -> f32 {
-		1.0 + lay().buttons_gap + lay().button_height.max(line_h + lay().row_pad) + lay().pad
+		1.0 + lay().buttons_gap + Self::btn_h_for(line_h) + lay().pad
 	}
 	// The bands over and under the rows that hold still while the rows scroll:
 	// the search box's and the footer's, each with its line along the rows.
@@ -6028,6 +6036,7 @@ impl SettingsDialog {
 						out.push(TextItem {
 							color,
 							clip: Some(vp),
+							band: Some(r),
 							..mk((*caption).into(), lx, row_text_y(r.y, r.h))
 						});
 					}
@@ -6113,6 +6122,7 @@ impl SettingsDialog {
 					let lx = add.x + (add.w - measure(caption)).max(0.0) / 2.0;
 					out.push(TextItem {
 						clip: Some(vp),
+						band: Some(add),
 						..mk(caption.to_string(), lx, row_text_y(add.y, add.h))
 					});
 				}
@@ -6122,7 +6132,10 @@ impl SettingsDialog {
 		for (_, r, label) in self.buttons() {
 			// center the caption within the button
 			let lx = r.x + (r.w - measure(label)).max(0.0) / 2.0;
-			out.push(mk(label.into(), lx, row_text_y(r.y, r.h)));
+			out.push(TextItem {
+				band: Some(r),
+				..mk(label.into(), lx, row_text_y(r.y, r.h))
+			});
 		}
 		out
 	}
@@ -9057,6 +9070,51 @@ mod tests {
 			!d.mouse_move_dip(x, track.y + 1.0, &mut m),
 			"a drag that left the value alone changed something"
 		);
+	}
+
+	// Every button's caption centers its capitals in the button, the way the
+	// tab titles do, and a button is tall enough for that: the footer's three,
+	// the buttons in a row and the shell list's Add, on every tab.
+	// Test ID: df4cx
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn every_button_caption_centers_in_its_button() {
+		for scale in [1.0, 1.5] {
+			let mut d = mk_dialog_at(4000.0, scale);
+			let line_h = 18.0 * scale;
+			assert!(d.btn_h() + 0.01 >= crate::text::ui_band_floor(d.line_h));
+			let measure = |t: &str| chars7(t) * scale;
+			let mut row_buttons = 0;
+			for tab in 0..tab_titles().len() {
+				d.tab = tab;
+				let texts = d.texts(line_h, measure);
+				let mut boxes: Vec<(super::Rect, &str)> = d
+					.buttons()
+					.iter()
+					.map(|(_, r, label)| (*r, *label))
+					.collect();
+				for (i, spec) in SettingsDialog::visible(d.specs, tab) {
+					match &spec.kind {
+						Kind::Buttons(captions) => {
+							for (part, caption) in captions.iter().enumerate() {
+								boxes.push((d.row_btn_rect(i, part as u16), caption));
+								row_buttons += 1;
+							}
+						}
+						Kind::ShellList => boxes.push((d.shell_add_box(i), "Add")),
+						_ => {}
+					}
+				}
+				for (r, caption) in boxes {
+					let want = Some(d.rect_px(r));
+					assert!(
+						texts.iter().any(|t| t.text == caption && t.band == want),
+						"tab {tab}: \"{caption}\" isn't centered in its button"
+					);
+				}
+			}
+			assert!(row_buttons > 0, "no row had buttons");
+		}
 	}
 
 	// What dialog.rs asks of the dialog for one frame.
