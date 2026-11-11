@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 // Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
 
-//! Control socket: each running instance listens on a per-process endpoint
-//! and exports its name to child shells via `SILKTERM_SOCKET`, so `silkterm
-//! --wallpaper`/`--reload-settings` run from a shell inside a window reaches
-//! exactly that window's process. Protocol: one text line per connection
-//! (`reload`, `wallpaper` + optional tab + path, or `saved` + tab + key from
-//! another window on the same settings file), reply `ok` / `err <msg>`.
-//! A Unix socket on Unix, a named pipe on Windows.
+//! Control socket. Each running instance listens on its own endpoint and
+//! exports the name to child shells as `SILKTERM_SOCKET`, so `silkterm
+//! --wallpaper` or `--reload-settings` run from a shell in a window goes to
+//! that window's process. A connection sends one line: `reload`, `wallpaper`
+//! with an optional tab and path, or `saved`, a tab, and the key of another
+//! window on the same settings file. The reply is `ok` or `err <msg>`. It's a
+//! Unix socket on Unix and a named pipe on Windows.
 
 use std::io::{BufRead, BufReader, Write};
 use std::path::PathBuf;
@@ -87,8 +87,8 @@ fn respond(
 }
 
 /// Bind the socket, export `SILKTERM_SOCKET`, and serve commands on a background
-/// thread. Call before any PTY spawns so shells inherit the variable. Failure is
-/// non-fatal (the app then isn't remotely controllable).
+/// thread. Call before any PTY spawns so shells inherit the variable. When it
+/// fails the window runs without remote control.
 #[cfg(unix)]
 pub fn serve(proxy: EventLoopProxy<UserEvent>) -> Option<CtlServer> {
 	let path = endpoint(std::process::id());
@@ -101,8 +101,8 @@ pub fn serve(proxy: EventLoopProxy<UserEvent>) -> Option<CtlServer> {
 		}
 	};
 	remove_on_any_exit(&path);
-	// SAFETY: no PTY or render thread exists yet (set_var is unsafe under
-	// edition 2024 because of concurrent readers).
+	// SAFETY: no PTY or render thread exists yet. set_var is unsafe under
+	// edition 2024 because of concurrent readers.
 	unsafe { std::env::set_var(ENV_SOCK, &path) };
 	std::thread::spawn(move || {
 		for stream in listener.incoming() {
@@ -134,8 +134,8 @@ pub fn serve(proxy: EventLoopProxy<UserEvent>) -> Option<CtlServer> {
 		);
 		return None;
 	};
-	// SAFETY: no PTY or render thread exists yet (set_var is unsafe under
-	// edition 2024 because of concurrent readers).
+	// SAFETY: no PTY or render thread exists yet. set_var is unsafe under
+	// edition 2024 because of concurrent readers.
 	unsafe { std::env::set_var(ENV_SOCK, &name) };
 	std::thread::spawn(move || serve_pipe(&wide, first, |served| answer(served, &proxy)));
 	Some(CtlServer {
@@ -306,10 +306,10 @@ pub fn serve(_proxy: EventLoopProxy<UserEvent>) -> Option<CtlServer> {
 	None
 }
 
-// One command line -> the event the app applies. Tab separates verb from value
-// so paths with spaces survive. A save is heard only from a window on this
-// process's own settings file; a recycled pid can put another one behind a
-// marker until that marker is cleared.
+// One command line -> the event the app applies. A tab separates verb from
+// value so paths with spaces survive. A save is heard only from a window on
+// this process's own settings file, since a recycled pid can put another one
+// behind a marker until that marker is cleared.
 fn parse(line: &str, own_key: Option<&str>) -> anyhow::Result<UserEvent> {
 	let (verb, value) = match line.split_once('\t') {
 		Some((verb, rest)) => (verb, Some(rest)),
@@ -461,9 +461,9 @@ mod tests {
 	// What a save sends gets to a listening window, a socket nobody listens on any
 	// more reads as gone, and a command from a shell gets its reply. Driven in a
 	// child copy of this test binary (`poke_child` below) started inside the
-	// folder, which binds and pokes by bare name: a full path under the run folder
-	// can pass the limit on a Unix socket path, 103 bytes on a Mac and 107 on
-	// Linux.
+	// folder, which binds and pokes by bare name. A full path under the run
+	// folder can pass the limit on a Unix socket path, which is 103 bytes on a
+	// Mac and 107 on Linux.
 	// Test ID: ddwnc
 	#[cfg(unix)]
 	#[test]

@@ -1,19 +1,20 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 // Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
 
-//! Performance profiles: one setting that decides how much the look is allowed
-//! to cost, and the rating that picks it on a machine that can't keep up.
+//! Performance profiles: one setting for how much the look may cost, and the
+//! rating that picks it on a machine that can't keep up.
 //!
-//! A profile is a preset group in `settings_ui.shcl` (`groups: profile`), and the
-//! model in `Settings` decides which one is in force and what each row shows.
-//! Custom is the person's own values. See the automatic settings design doc.
+//! A profile is a preset group in `settings_ui.shcl` (`groups: profile`), and
+//! the model in `Settings` works out which one is in force and what each row
+//! shows. Custom is the person's own values. See the automatic settings design
+//! doc.
 //!
 //! The rating watches how a scroll ease is paced. A display that keeps its
-//! refresh rate paces one frame per refresh; one that can't stretches every
-//! frame, and a run of stretched frames steps the profile down, no further than
-//! Low and only for the session. It never steps back up within one: a lighter
-//! profile renders less, so a fast-looking run under it says nothing about the
-//! heavier one.
+//! refresh rate paces one frame per refresh, and one that can't stretches every
+//! frame. A run of stretched frames steps the profile down, no further than Low
+//! and only for the session. It never steps back up in the same session, since
+//! a lighter profile renders less and a fast run under it says nothing about
+//! the heavier one.
 
 use crate::config::Settings;
 use std::time::Instant;
@@ -138,8 +139,8 @@ pub fn fingerprint(info: &wgpu::AdapterInfo) -> String {
 }
 
 // The names a driver gives itself when there is no card behind it. wgpu reports
-// most of these as DeviceType::Cpu already; the ones that don't are the remote
-// and virtual display drivers, which is exactly where the pick was going wrong.
+// most of these as DeviceType::Cpu already. The ones it doesn't are the remote
+// and virtual display drivers, which is where the pick went wrong.
 const SOFTWARE_ADAPTERS: &[&str] = &[
 	"llvmpipe",
 	"softpipe",
@@ -159,11 +160,10 @@ pub fn software_adapter(info: &wgpu::AdapterInfo) -> bool {
 	SOFTWARE_ADAPTERS.iter().any(|s| name.contains(s))
 }
 
-/// Is the screen this window draws to somewhere else? Every frame is then encoded
-/// and sent over a network, so what the graphics card can do says nothing about
-/// what the person sees, and timing it would only ever flatter the machine. A
-/// remote session takes the Remote profile for as long as it lasts and writes
-/// nothing down, so the console keeps the rating it had.
+/// Is the screen this window draws to somewhere else? Every frame is then
+/// encoded and sent over a network, so timing the graphics card says nothing
+/// about what the person sees. A remote session takes the Remote profile while
+/// it lasts and saves nothing, so the console keeps the rating it had.
 pub fn remote_session() -> bool {
 	#[cfg(windows)]
 	{
@@ -254,9 +254,9 @@ fn machine_parts() -> String {
 	format!("{}|{}", cpu_name(), memory_gib())
 }
 
-// What a written rating means. Hashed into the id, so a change here re-rates
-// every machine once. 2: a step-down is no longer written, and a profile
-// written by one before couldn't be told apart from a measured answer.
+// What a written rating means. It's hashed into the id, so a change here
+// re-rates every machine once. Version 2 stopped writing a step-down, since a
+// profile an older step-down wrote couldn't be told apart from a measured one.
 const RATING_VERSION: u32 = 2;
 
 /// Everything the pick depends on, as one short id: the processor, the graphics
@@ -355,19 +355,17 @@ const BENCH_FRAMES: usize = 40; // frames measured per rung...
 const BENCH_RUNG_MS: f32 = 800.0; // ...or this long, whichever comes first
 const BENCH_MIN_FRAMES: usize = 5; // never judge a rung on fewer than this
 /// How far past the budget a frame has to run before the profile can't be what
-/// is pacing it. The profiles change the per-pixel work by around half, so a
-/// period several times over says something else is holding the display, and no
-/// step down would rescue it. One constant for both users on purpose: the bench
-/// stops timing the ladder there (the case that would take longest to measure,
-/// for a foregone answer), and the watch refuses to count such a frame at all -
-/// a monitor asleep under the NVIDIA driver paces a GL client at 1 fps.
+/// is pacing it. The profiles change the per-pixel work by about half, so a
+/// period several times over means something else is holding the display, and
+/// no step down would help. The bench stops timing the ladder there, and the
+/// watch doesn't count such a frame at all. A monitor asleep under the NVIDIA
+/// driver paces a GL client at 1 fps.
 ///
-/// The bench used to return Standard there and save it, which left a machine
-/// rated with its monitor asleep on Standard from then on. Not saving on a stall
-/// would test a slow machine at every launch. So a stall is settled by
-/// timing Standard, which has no effects to pay for: a slow machine draws that
-/// well enough and gets Standard, and a display that still stalls is what is
-/// pacing the frames, so nothing is learned and nothing is saved.
+/// The bench used to save Standard on a stall, which left a machine rated with
+/// its monitor asleep on Standard for good. Now a stall is settled by timing
+/// Standard, which has no effects to pay for. A slow machine draws that well
+/// enough and gets Standard, and a display that still stalls is what's pacing
+/// the frames, so nothing is saved.
 pub const STALL_FACTOR: f32 = 4.0;
 
 /// What the caller does with the frame it just measured.
@@ -563,8 +561,8 @@ impl Rating {
 		self.last = None;
 	}
 
-	/// Start over, with nothing measured - the profile changed, so what was
-	/// measured was measured under another workload.
+	/// Start over with nothing measured, since the profile changed and the old
+	/// frames were drawn under another workload.
 	pub fn reset(&mut self) {
 		self.periods.clear();
 		self.last = None;
@@ -747,9 +745,8 @@ mod tests {
 			vec![Profile::Max, Profile::High, Profile::Low],
 			"each rung has to go live before it is judged"
 		);
-		// far over: nothing on the ladder can help, so the rest isn't timed -
-		// which is the case that would otherwise take longest. This used to stop
-		// at Max and answer Standard whatever Standard drew at:
+		// far over: nothing on the ladder can help, so the rest isn't timed.
+		// This used to stop at Max and return Standard whatever Standard drew at:
 		//   let (pick, rungs) = run_bench(budget * 6.0, budget);
 		//   assert_eq!(rungs, vec![Profile::Max]);
 		// Standard is timed now, to see whether the machine or the display is slow.
@@ -861,8 +858,8 @@ mod tests {
 		assert!(!s.cursor_blink);
 		assert!(s.wallpaper_enabled, "Low keeps the wallpaper");
 		assert!(!s.text_scrim, "Low drops the halo");
-		// was: assert_eq!(s.text_outline, 2.0, ...) - no built-in profile draws an
-		// outline over a pixel wide any more, so Low leans on the shipped one
+		// was: assert_eq!(s.text_outline, 2.0, ...). No built-in profile draws an
+		// outline over a pixel wide any more, so Low relies on the default one.
 		assert_eq!(s.text_outline, 1.0, "and leans on the outline");
 		for name in ["max", "high", "low", "standard"] {
 			assert!(

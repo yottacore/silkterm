@@ -3,26 +3,24 @@
 
 //! Flyover help: the parts every tip in the program shares.
 //!
-//! There are four places a tip comes up - a Settings row, a link in the About
-//! box, a tab in the strip, and a menu item - drawn by two different renderers
-//! in two different fonts. What they have in common isn't the drawing: it is
-//! how long the pointer has to rest before a tip appears, how the text is
-//! broken to fit, and where the box goes relative to what it describes. Those
-//! three live here, and each caller draws the result its own way.
+//! A tip comes up in 4 places: a Settings row, a link in the About box, a tab
+//! in the strip, and a menu item. They're drawn by 2 renderers in 2 fonts. What
+//! they share is how long the pointer rests before a tip appears, how the text
+//! is wrapped, and where the box goes. Those are here, and each caller draws
+//! the result its own way. See design.md, "One tip system".
 
 use std::time::{Duration, Instant};
 
 use crate::config;
 use crate::pane::Rect;
 
-/// How long the pointer rests on something before its tip comes up. One value
-/// for every tip in the program - a menu that answered faster than the tab strip
-/// would read as a different kind of thing.
+/// How long the pointer rests on something before its tip comes up. It's one
+/// value for every tip, since a menu tip that came up faster than a tab's would
+/// seem like a different kind of thing.
 pub const DELAY: Duration = Duration::from_millis(600);
 
-// The box itself, DIP (see `config::dip`). One set for every tip the 2 dialogs
-// draw: a box that sat closer to its control in one window than in the other
-// would read as a different kind of thing, the same argument as the delay.
+// The box itself, in DIP (see `config::dip`). The same set for every tip the 2
+// dialogs draw, for the same reason as the delay.
 pub const PAD_X: f32 = 8.0;
 pub const PAD_Y: f32 = 4.0;
 pub const DROP: f32 = 8.0; // offset below the control it describes
@@ -31,10 +29,9 @@ pub const BORDER: f32 = 1.0;
 const WRAP_MARGIN: f32 = 8.0; // window width kept clear of a wrapped tip
 const MIN_WRAP: f32 = 40.0; // a wrap budget never narrower than this
 
-/// Greedy word wrap, measured in whatever font the caller draws in. A single
-/// word wider than the budget still gets its own line rather than being split -
-/// breaking mid-word would be worse than a tip that overhangs by one long word.
-/// A line break in the text starts a new line, and an empty one is a blank line.
+/// Greedy word wrap, measured in whatever font the caller draws in. A word
+/// wider than the budget gets a line of its own rather than being split. A
+/// line break in the text starts a new line, and an empty one is a blank line.
 pub fn wrap(text: &str, max_w: f32, mut measure: impl FnMut(&str) -> f32) -> Vec<String> {
 	let mut lines: Vec<String> = Vec::new();
 	// a line break in the text is kept, so a tip can have a blank line
@@ -68,9 +65,8 @@ pub fn wrap(text: &str, max_w: f32, mut measure: impl FnMut(&str) -> f32) -> Vec
 }
 
 /// Where a tip box goes: centered under what it describes, or above it when
-/// there is no room below, and never off an edge. Clamping into the bottom edge
-/// instead of flipping would sit a footer button's own tip on the buttons it is
-/// describing, which is the case that made the flip necessary.
+/// there is no room below, and never off an edge. Clamping to the bottom edge
+/// instead would put a footer button's tip over the buttons.
 pub fn place(anchor: Rect, size: (f32, f32), win: (f32, f32), gap: f32, edge: f32) -> (f32, f32) {
 	let (box_w, box_h) = size;
 	let (win_w, win_h) = win;
@@ -95,10 +91,9 @@ pub struct Placed {
 	pub text_y: f32,
 }
 
-/// Lay a tip out. `text_w` is the widest line and `line_h` the line height, both
-/// already measured in the font the caller draws in, so both arrive physical.
-/// Every number the box brings itself is a DIP converted once here, which is what
-/// makes a tip at twice the scale the 1x tip doubled.
+/// Lay a tip out. `text_w` is the widest line and `line_h` the line height,
+/// both measured in the caller's font and so already physical. The box's own
+/// numbers are DIPs converted once here, so a tip at 2x is the 1x tip doubled.
 pub fn lay_out(
 	anchor: Rect,
 	lines: usize,
@@ -147,9 +142,8 @@ pub fn wrap_budget(win_w: f32, scale: f32) -> f32 {
 
 /// Where a tip goes when it must not cover what it describes: clear of the
 /// anchor's right edge, flipped to its left when there is no room there, and top
-/// aligned with it. A menu tip needs this - a box centered under the row would
-/// sit on the rows below it, which are exactly what the reader is choosing
-/// between.
+/// aligned with it. A menu tip needs this, since a box centered under the row
+/// would cover the rows below it, which are what the reader is choosing between.
 pub fn beside(anchor: Rect, size: (f32, f32), win: (f32, f32), gap: f32, edge: f32) -> (f32, f32) {
 	let (box_w, box_h) = size;
 	let (win_w, win_h) = win;
@@ -187,8 +181,9 @@ impl Focus {
 		}
 	}
 
-	/// The pointer moved to somewhere new. A move while away counts for
-	/// nothing, since the focus coming back is what has to be followed by one.
+	/// The pointer moved to somewhere new. A move while the window is in the
+	/// background doesn't count, since it's a move after the focus comes back
+	/// that turns tips on again.
 	#[must_use]
 	pub fn moved(self) -> Self {
 		match self {
@@ -202,16 +197,16 @@ impl Focus {
 	}
 }
 
-/// What the pointer is resting on, and since when. `T` names the thing in
-/// whatever terms the caller thinks in - a tab index, a menu row - so the timing
-/// rule is written once and the identity stays the caller's business.
+/// What the pointer is resting on, and since when. `T` names the thing in the
+/// caller's own terms, such as a tab index or a menu row, so the timing rule is
+/// written once.
 #[derive(Debug)]
 pub struct Dwell<T> {
 	over: Option<(T, Instant)>,
 }
 
-// By hand rather than derived: the derive would want `T: Default` too, and what
-// a caller points at - a rect, a tab index - has no default worth naming.
+// By hand, since the derive would want `T: Default` too, and a rect or a tab
+// index has no useful default.
 impl<T> Default for Dwell<T> {
 	fn default() -> Self {
 		Self { over: None }
@@ -282,8 +277,8 @@ mod tests {
 		s.chars().count() as f32 * 6.0
 	}
 
-	// A tip has to fit whatever it hangs off, whatever the font does to the text
-	// - one clamped to a window edge simply runs off it.
+	// A tip has to fit whatever it hangs off, whatever the font does to the
+	// text. One clamped to a window edge runs off it.
 	// Test ID: dbzej
 	#[test]
 	fn a_tip_wraps_on_words_and_never_splits_one() {
@@ -418,7 +413,7 @@ mod tests {
 	}
 
 	// A tip left up too long goes away, and moving about on the same target
-	// doesn't bring it back - only leaving and coming back does.
+	// doesn't bring it back. Only leaving and coming back does.
 	// Test ID: dczr3
 	#[test]
 	fn a_tip_goes_down_after_its_limit_until_the_pointer_comes_back() {
@@ -478,7 +473,7 @@ mod tests {
 	}
 
 	// The clock runs on while the pointer stays put, and restarts when it moves
-	// to something else - otherwise dragging across a strip would flash a tip
+	// to something else. Otherwise dragging across a strip would flash a tip
 	// over every tab on the way.
 	// Test ID: dbzep
 	#[test]
