@@ -8297,7 +8297,7 @@ const DEFAULT_CONFIG_TEMPLATE: &str = r##"# SilkTerm configuration file.
 #
 ## Delete this file to reset everything. A line starting with '# ' is a
 ## setting at its default. Remove the '# ' to change it. Paths can use ~,
-## $NAME and %NAME%.
+## $NAME, and %NAME%.
 
 ## ••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
 ## Performance
@@ -8307,18 +8307,19 @@ performance:
 
 	# automatic: true  ## Default
 
-	## Visual effects level, picked by hand. Used while automatic is off.
-	## "max", "high", "low", "standard" (no effects), or "custom" (use the
-	## values in this file). A value changed in Settings under any but custom
-	## is kept at the end of this file, as a change to that profile.
+	## The visual effects level to use when automatic is off. It's one of
+	## "max", "high", "low", "standard", or "custom". Standard has no effects,
+	## and custom uses the values in this file. A value changed in Settings under
+	## any other profile is saved at the end of this file, as a change to that
+	## profile.
 	# profile: "max"  ## Default
 
 	# check_hardware: true  ## Default
 	# check_next_run: false  ## Default
 
 	## Use the Remote profile when SilkTerm starts on a remote screen, such as
-	## over Remote Desktop, VNC or X forwarding. Off leaves it to the View
-	## menu, under Temporary remote display mode.
+	## over Remote Desktop, VNC, or X forwarding. With this off, it can still be
+	## switched on by hand with Temporary remote display mode on the View menu.
 	# detect_remote: true  ## Default
 
 ## ••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
@@ -8330,13 +8331,13 @@ theme: SilkTerm
 theme_mode: dark
 
 ## The custom theme's colors. A color changed in Settings under any other
-## theme is kept at the end of this file, as a change to that theme. The two
-## scrollbar colors are not part of any theme.
+## theme is saved at the end of this file, as a change to that theme. The 2
+## scrollbar colors aren't part of any theme.
 colors:
-	## Take the text and cursor colors from the wallpaper instead: the text is
-	## placed as far as it can get from the picture's brightest areas, in a hue
-	## complementary to the picture's own. Changing either color in Settings
-	## turns this off, and nothing about the derived colors is saved.
+	## Pick the text and cursor colors from the wallpaper instead. The text color
+	## is chosen to be as different as possible from the picture's brightest
+	## areas, in a hue opposite the picture's own. Changing either color in
+	## Settings turns this off. The picked colors aren't saved.
 	# from_wallpaper: true  ## Default
 	# background: "#000000"
 	# foreground: "#88eecc"  ## Default
@@ -8365,38 +8366,39 @@ transparency:
 wallpaper:
 
 	# enabled: true  ## Default
-	## A single image, instead of the folder below. Empty uses the folder.
+	## A single image to use instead of the folder below. Leave it empty to use
+	## the folder.
 	# image: ""  ## Default
 	# fallback_builtin: true  ## Default
 
-	## Use a folder of images instead of the single image above. Interval 0
-	## picks one at launch and keeps it.
+	## Use a folder of images instead of the single image above. With interval_s
+	## at 0, one image is picked at launch and doesn't change until the next one.
 	rotate:
 		# enabled: true  ## Default
-		## The default is the usual place on this system. A wallpapers or
-		## backgrounds folder there is found too.
+		## The default is the wallpaper folder in SilkTerm's config folder. A folder
+		## named wallpapers or backgrounds there is used too.
 		# folder: "{WPDIR}"  ## Default
 		# interval_s: 0.0  ## Default
 		# random: true  ## Default
 
 	## How much of the picture shows through the background color. Light mode
-	## mixes it differently to reach the same visible result, so the number means
-	## the same thing in either mode - at 10% a picture is plainly there over a
-	## dark background and all but gone over a light one.
+	## mixes it differently, so the same number looks about the same in either
+	## mode. Without that, a picture at 10% would be easy to see over a dark
+	## background but almost gone over a light one.
 	# opacity: 0.10  ## Default
 
-	## Hold every picture to the visibility above, whatever its own brightness,
-	## so a bright photo doesn't glare where a dark one is barely there. A
-	## picture further from the background color than usual is drawn at less than
-	## the number says, and one closer at more. 0 turns it off. At 100%
-	## visibility the picture is always drawn as it is.
+	## Make every picture about as visible as the opacity above says, however
+	## bright it is, so a bright photo doesn't glare and a dark one doesn't
+	## vanish. A picture that's further from the background color than usual is
+	## drawn fainter, and one that's closer is drawn stronger. 0 turns this off.
+	## At 100% opacity the picture is always drawn as it is.
 	# even_visibility: 1.0  ## Default
 
 	## "stretch" fills the window even if that distorts the image. "zoom" keeps
 	## the proportions and crops the edges.
 	# default_fit: "stretch"  ## Default
 
-	## If an image has its own fit, opacity or blur tags, use those instead.
+	## If an image has its own fit, opacity, or blur tags, use those instead.
 	# honor_xmp: true  ## Default
 	# blur: 10.0  ## Default
 	# honor_xmp_look: true  ## Default
@@ -8407,11 +8409,11 @@ wallpaper:
 		# strength: 0.5  ## Default
 		# auto: 0.5  ## Default
 
-	## How the picture is kept in graphics memory. "bc1" is the smallest, but
-	## faint steps can show in smooth gradients. "bc7" takes twice that and
-	## keeps them smooth. "auto" uses bc7 on the High, Max silk and Custom
-	## profiles and bc1 on the others. A picture with a heavy blur is stored
-	## smaller instead, and never compressed.
+	## How the picture is stored in graphics memory. "bc1" is the smallest, but
+	## smooth gradients can show faint banding. "bc7" is twice the size and
+	## doesn't band. "auto" uses bc7 on the High, Max silk, and Custom profiles,
+	## and bc1 on the others. A heavily blurred picture is stored at a smaller
+	## size instead, without compression.
 	# compression: "auto"  ## Default
 
 ## ••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
@@ -8420,9 +8422,9 @@ wallpaper:
 
 font:
 
-	## Follow the desktop's own monospace font, for the face and the size
-	## each. Off uses family and size below. Where the desktop names none, it
-	## is this list and 17 either way.
+	## Use the desktop's own monospace font, with a separate switch for the face
+	## and the size. When a switch is off, family or size below is used. If the
+	## desktop doesn't name a monospace font, this list and 17 are used anyway.
 	# use_system_family: true  ## Default
 	# use_system_size: true  ## Default
 	# family: "Monaspace Argon, Fira Code, JetBrains Mono, Cascadia Mono, Consolas, Ubuntu Mono, SF Mono, Menlo, Courier New"
@@ -8430,10 +8432,11 @@ font:
 
 	line_height_scale: 1.22
 
-	## A theme saved in Settings keeps the family, size and line height too.
-	## While this is on, picking a theme leaves the font as it is. Off, picking
-	## a saved theme sets its font as if typed in, so it wins over the system
-	## font. The built-in themes have no font, and change nothing here.
+	## A theme saved in Settings also saves the family, size, and line height.
+	## While this is on, picking a theme leaves the font alone. When it's off,
+	## picking a saved theme sets its font as if it were typed in, so it wins
+	## over the system font. The built-in themes don't have a font, so they
+	## don't change anything here.
 	# ignore_themes: true  ## Default
 
 ## ••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
@@ -8446,9 +8449,8 @@ text:
 	## readable over a wallpaper.
 	scrim:
 		# enabled: true  ## Default
-		## Light mode quiets the patch by about a doubling and a half: a pale
-		## patch on a darkened background shows more than a dark one does on a
-		## lightened background.
+		## Light mode uses a weaker patch, since a pale patch on a darkened
+		## background shows more than a dark one does on a lightened background.
 		# strength: 20  ## Default
 		# radius: 8.0  ## Default
 		# softness: 0.5  ## Default
@@ -8465,19 +8467,18 @@ text:
 
 	# outline: 1.0  ## Default
 
-	## How much of the correction text darker than its background gets.
-	## Partly covered pixels are blended in linear light, which costs dark text
-	## on a light background most of the ink at the edge of every stroke, so a
-	## light theme reads thin and pale. At 1.0 a letter has as much ink as
-	## the same letter in a dark theme; 0 turns the correction off. Above 1.0
-	## it keeps going, for a display or a font where even that reads light -
-	## expect small letters to start closing up.
-	## Light themes only - light-on-dark text is left alone.
+	## This makes dark text on a light background heavier. Edge pixels are
+	## blended in linear light, which thins the edges of dark strokes on a light
+	## background, so a light theme looks thin and pale without it. At 1.0 a
+	## letter looks as heavy as the same letter in a dark theme, and 0 turns
+	## this off. Values above 1.0 go further, for a display or font where 1.0
+	## still looks light, but small letters start to fill in.
+	## Only light themes use this. Light text on a dark background isn't changed.
 	## Range: 0 to 2
 	# dark_on_light: 1.0  ## Default
 
-	## Brighten or darken text that is too close to its background color to
-	## read. Light themes hold text a tenth further off. 0 is off.
+	## Brighten or darken text that's too close to its background color to
+	## read. Light themes use a 10% higher minimum. 0 turns this off.
 	# min_contrast: 0.45  ## Default
 
 	# color_emoji: true  ## Default
@@ -8489,19 +8490,20 @@ text:
 
 cursor:
 
-	## Percent of the cell: 100/100 block, 100/25 bar, 15/100 underline.
+	## Height and width, as a percent of the cell. 100 and 100 is a block, 100
+	## and 25 is a bar, and 15 and 100 is an underline.
 	size:
 		# height: 100  ## Default
 		# width: 100  ## Default
 
-	## false stops the cursor's animation.
+	## Set this to false to stop the cursor's animation.
 	# blink: true  ## Default
 
 	## Seconds for one whole blink, from peak to peak.
 	# blink_rate_s: 1.0  ## Default
 
-	## "phase" (fade), "pulse_vertical", "pulse_horizontal", "pulse_both".
-	## All of them stop after some time with no typing.
+	## "phase" is a fade. The others are "pulse_vertical", "pulse_horizontal",
+	## and "pulse_both". They all stop after a while with no typing.
 	# animation: "pulse_vertical"  ## Default
 
 	# animation_resume_s: 1  ## Default
@@ -8527,8 +8529,8 @@ scroll:
 	scrollback: 10000
 	# smooth: true  ## Default
 
-	## Timing for scrolling in new output, from the start of a burst to the
-	## end. Milliseconds.
+	## Timings in milliseconds for scrolling in new output, from the start of a
+	## burst of output to the end.
 	ease_in_ms: 82.0
 	ramp_up_ms: 96.0
 	single_screen_tau_ms: 32.0
@@ -8548,7 +8550,7 @@ scroll:
 		# thickness: 16.0  ## Default
 		# auto_hide: true  ## Default
 
-	## The minimap takes space away from the text. The scrollbar does not.
+	## The minimap takes space away from the text. The scrollbar doesn't.
 	minimap:
 		# enabled: true  ## Default
 		# width: 100.0  ## Default
@@ -8562,70 +8564,73 @@ window:
 
 	margin: 8.0
 
-	## Open at the size the window was last given, and at its font zoom. Off
-	## uses columns and rows below.
+	## Open at the window's last size and font zoom. When off, columns and rows
+	## below are used.
 	# remember_size: true  ## Default
 	# columns: 160
 	# rows: 48
 
-	## While remember_size is on, also keep a size and font zoom for each
-	## monitor. A window opens at its monitor's, and takes those of the one it
-	## is moved to once it stops there. The sizes are kept with what else
-	## SilkTerm works out on this machine, not in this file.
+	## While remember_size is on, also remember a size and font zoom for each
+	## monitor. A window opens at its monitor's size, and changes to another
+	## monitor's size once it's moved there and stops. The sizes are saved in
+	## SilkTerm's state file for this machine, not in this file.
 	# remember_per_monitor: true  ## Default
 
 	# remember_maximized: false  ## Default
 
-	## A font zoom resizes the window to keep its columns and rows, up to the
-	## edge of the screen. Off keeps the window's size and changes the grid.
-	## A maximized or fullscreen window keeps its size either way.
+	## Changing the font zoom resizes the window to keep its columns and rows,
+	## until the window fills the screen. When off, the window stays the same
+	## size and the grid changes. A maximized or fullscreen window doesn't
+	## change size either way.
 	# resize_on_zoom: false  ## Default
 
 	# hide_single_tab: false  ## Default
 
-	## Show the menu bar in a new window. The View menu and the right-click
-	## menu change it for the window they are in, and for windows opened after.
-	## Not on macOS, which has its own menu bar.
+	## Show the menu bar in new windows. The View menu and the right-click menu
+	## turn it on or off for that window, and for windows opened after it. macOS
+	## doesn't use this, since it has its own menu bar.
 	# menu_bar: true  ## Default
 
-	## Open a new tab just right of the one in front. Off puts it at the end.
+	## Open a new tab right after the current one. When off, it goes at the end.
 	# new_tab_next_to_current: true  ## Default
 
-	## What a tab says, and whether the window title falls back to it. The
-	## text is a template, where a macro in percent signs is replaced by its
-	## value: USER_DEFINED is a name typed on the tab, PROGRAM_DEFINED the
-	## title the running program asks for, SHELL the shell's name, PROGRAM what
-	## it is running, LAST_PROGRAM what it ran last, and CURRENT_DIRECTORY
-	## where it is. "a || b" shows a, or b when a comes out empty. { } groups
-	## without printing, and [ ] prints its brackets. A group whose macros all
-	## come out empty is left out with its text, and so is text between two
-	## parts unless both of them show. On a narrow tab the parts shorten in a
-	## set order, and a tab with nothing to say names its shell. The tab's
-	## flyover always names the lot, whatever this says.
+	## What each tab says. The text is a template, where a macro between percent
+	## signs is replaced by its value. USER_DEFINED is a name typed on the tab,
+	## PROGRAM_DEFINED is the title the running program sets, SHELL is the
+	## shell's name, PROGRAM is the program the shell is running, LAST_PROGRAM
+	## is the one it ran last, and CURRENT_DIRECTORY is the shell's current
+	## directory. "a || b" shows a, or b if a is empty. { } groups parts without
+	## showing the braces, and [ ] groups them and shows the brackets. A group is
+	## left out, text and all, when all of its macros are empty. Text between 2
+	## parts is left out too, unless both parts show. On a narrow tab the parts
+	## are shortened in a fixed order, and a tab with nothing to show uses its
+	## shell's name. The tab's flyover always lists all of them, whatever this
+	## says. title_shows_tab puts the active tab's text in the title bar when
+	## the running program hasn't set a title.
 	# tab_text: "%USER_DEFINED% || %PROGRAM_DEFINED% || { %SHELL% {[{ %PROGRAM% || last: %LAST_PROGRAM% }] || -} %CURRENT_DIRECTORY% }"  ## Default
 	# title_shows_tab: true  ## Default
 
-	## Let the graphics card's memory go after the window has sat unused, and
-	## take it back the moment the window is used again. The waits are in
-	## minutes: the first for a window that is minimized or covered, the
-	## second for one that is only unfocused with nothing printing. On Windows
-	## with transparency on, a window still on screen is never let go, since
-	## it would turn black.
+	## Free graphics memory after the window hasn't been used for a while, and
+	## get it back as soon as the window is used again. The 2 waits are in
+	## minutes. The first is for a minimized or covered window, and the second
+	## is for a window that's unfocused with no output. On Windows with
+	## transparency on, a visible window never frees its memory, since it would
+	## turn black.
 	# idle_release: true  ## Default
 	# idle_release_hidden_min: 1  ## Default
 	# idle_release_min: 240  ## Default
 
-	## Draw on the processor rather than the graphics card. Slower, but uses
-	## none of the card's memory. Where the card can't give a window what it
-	## needs, the window falls back to this on its own. Not on macOS.
+	## Draw with the processor instead of the graphics card. It's slower but
+	## doesn't use any graphics memory. If the card can't give a window what it
+	## needs, that window switches to this by itself. macOS doesn't use this.
 	# software_rendering: false  ## Default
 
 	## Tab width as a percent of the window width.
 	# tab_regular_width_pct: 10.0  ## Default
 	# tab_max_width_pct: 100.0  ## Default
 
-	## Seconds a tab's flyover stays up before it goes away. It comes back
-	## once the pointer has left the tab and come back. 0 keeps it up.
+	## How many seconds a tab's flyover stays up. It shows again after the
+	## pointer leaves the tab and comes back. 0 leaves it up.
 	# tab_tip_max_s: 30  ## Default
 
 ## ••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
@@ -8634,10 +8639,12 @@ window:
 
 hyperlinks:
 
-	## Recognized: http, https, ftp, ftps, sftp, ssh, file and mailto links.
+	## These links are recognized: http, https, ftp, ftps, sftp, ssh, file, and
+	## mailto.
 	# enabled: true  ## Default
 
-	## Empty uses the desktop's own opener. Example: "firefox --new-tab"
+	## Leave it empty to use the desktop's own opener. Example:
+	## "firefox --new-tab"
 	# open_command: ""  ## Default
 
 ## ••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
@@ -8648,13 +8655,13 @@ keys:
 
 	## Each hotkey is one or more key combinations, separated by spaces. A
 	## combination is the keys held, then the key pressed, joined by "+",
-	## such as "Ctrl+Shift+T". The keys held are Ctrl, Alt, Shift and
-	## Command. On a Mac, Alt is Option; elsewhere, Command is the Windows
-	## or Super key. These keys are written as words: Plus, Minus, Space,
-	## Tab, Enter, Escape, Backspace, Insert, Delete, Home, End, PageUp,
+	## such as "Ctrl+Shift+T". The keys held are Ctrl, Alt, Shift, and
+	## Command. On a Mac, Alt is Option. Everywhere else, Command is the
+	## Windows or Super key. These keys are written as words: Plus, Minus,
+	## Space, Tab, Enter, Escape, Backspace, Insert, Delete, Home, End, PageUp,
 	## PageDown, Left, Right, Up, Down, Menu, and F1 to F12. "none" turns a
-	## hotkey off. A combination set here is taken from any hotkey that has
-	## it by default.
+	## hotkey off. A combination set here is removed from any other hotkey that
+	## has it by default.
 {KEYS}
 ## ••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
 ## Shell
@@ -8665,39 +8672,41 @@ keys:
 
 shell:
 
-	## Applied at every launch. Same syntax as the real command line, which
-	## overrides these. Example: "--new-pane --right --size 35%"
+	## Options applied at every launch, written the same way as on the command
+	## line. Options given on the real command line override these. Example:
+	## "--new-pane --right --size 35%"
 	# command_line: ""  ## Default
 
-	## Used when launched from a menu or shortcut, not from a shell. A new tab
-	## or split starts in the same directory as the pane it came from.
+	## The directory used when SilkTerm is started from a menu or shortcut
+	## rather than from a shell. A new tab or split starts in the same directory
+	## as the pane it was opened from.
 	# startup_directory: "{HOME}"  ## Default
 
-	## Adds a few lines to each PowerShell profile, so a new tab or split can
+	## Add a few lines to each PowerShell profile, so a new tab or split can
 	## start in the pane's current directory.
 	# integration: true  ## Default
 
-	## Give bash panes the x9ps1-git prompt, which shows git status. It
-	## replaces a prompt set in .bashrc.
+	## Use the x9ps1-git prompt in bash panes. It shows the git branch and
+	## status, and replaces any prompt set in .bashrc.
 	# bash_prompt: false  ## Default
 
-	## The TERM a new pane gets. Empty is xterm-256color, which every host
-	## knows, here and over ssh. alacritty describes a few more extras, such
-	## as curly underlines, but a host without that terminfo entry can't run
-	## full-screen programs under it.
+	## The TERM value for a new pane. Empty means xterm-256color, which every
+	## host supports, locally and over ssh. alacritty adds a few extras, such as
+	## curly underlines, but a host without that terminfo entry can't run
+	## full-screen programs with it.
 	# term: ""  ## Default
 
 	# copy_on_select: true  ## Default
 
-	## Start each new tab, split and plain launch in a new tmux session of its
-	## own, so what runs in it survives the window closing and can be attached
-	## to again from anywhere. A layout the command line asks for stays plain.
-	## The Tabs menu's "New tab in tmux" does it for one tab with this off. The
-	## name is a template, where YYYYmmDD is the date and HHMMSS or HHMMSSNN
-	## the time, the second one to a hundredth of a second, each in percent
-	## signs. on_close is what closing such a pane does to its session:
-	## detach leaves it running, end ends it, and prompt asks each time.
-	## Needs tmux, so not on Windows.
+	## Start each new tab, split, and plain launch in its own new tmux session,
+	## so what runs in it survives the window closing and can be reattached from
+	## anywhere. A layout set on the command line doesn't use tmux. With this
+	## off, "New tab in tmux" on the Tabs menu still does it for one tab.
+	## session_name is a template where %YYYYmmDD% is the date, %HHMMSS% is the
+	## time, and %HHMMSSNN% is the time to a hundredth of a second. on_close is
+	## what closing such a pane does to its session. detach leaves it running,
+	## end kills it, and prompt asks each time.
+	## This needs tmux, so it doesn't work on Windows.
 	tmux:
 		# always_new_session: false  ## Default
 		# session_name: "%YYYYmmDD%-%HHMMSSNN%"  ## Default
