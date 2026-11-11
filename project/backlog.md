@@ -34,6 +34,34 @@ Going forward, new issues in the new template at the bottom of this file will go
 
 ## Issues
 
+- Output under tmux: the scrolled-off strip is shaped again every frame, text shaping takes 80%, and the display steps down to High
+	- ID: 2026111017285320
+	- Type: Enhancement
+	- Status: Queued
+	- Priority: Low
+	- Opened: 20261110-172853
+	- Opened by: CC
+	- Related IDs: 2026110920480499
+	- Target OS: All
+	- Notes:
+		- Seen with the profiler's workload in tmux on the card, at Max. It's the same at 0b16ae9, so it isn't a regression.
+		- Most of the cost is harfrust building a shape plan on each call, under the strip's `set_rich_text`.
+
+- The profiler reads the live settings and rating, so its numbers follow personal settings
+	- ID: 2026111017285305
+	- Type: Task
+	- Status: Queued
+	- Priority: Low
+	- Opened: 20261110-172853
+	- Opened by: CC
+	- Related IDs: 2026110920480499
+	- Target OS: Linux
+	- Requirements:
+		- Run the profiled app on a settings tree of its own in the test run folder, with a fixed profile, so one flamegraph compares with the last.
+		- The workload runs plain, never in tmux.
+	- Notes:
+		- On 11-09 the live file had `tmux.always_new_session` on. Since c2e52357 that puts a plain launch in tmux, and the shaping share went from about 40% to 80%. The rating, the minimap and the wallpaper feed in the same way.
+
 - The window doesn't paint while the GPU is busy or short on memory, and stays blank after the load ends
 	- ID: 2026100312470535
 	- Type: Bug
@@ -349,16 +377,27 @@ Going forward, new issues in the new template at the bottom of this file will go
 - Profiler: text shaping read 80.4% at 327d97e, against about 50% on the card in late October
 	- ID: 2026110920480499
 	- Type: Task
-	- Status: Queued
+	- Status: Done
 	- Priority: Low
 	- Opened: 20261109-204804
 	- Opened by: CC
+	- Related IDs: 2026111017285305, 2026111017285320
 	- Target OS: Linux
 	- Requirements:
 		- Run the profile on the card at 327d97e and at 0b16ae9 or fab6815, back to back, so both see the same clock.
 		- If the old build still reads about 50%, find what made shaping cost more. If both read about 80%, find what made the rest cost less, and note it as no action.
 	- Notes:
 		- The top cost is still the shape plan being built again on each call, inside harfrust.
+	- Progress log:
+		- 20261110: Control first. 0b16ae9 on the card with no settings file read 50 to 52%, as on 10-26. 327d97e read 46 to 50% beside it. Both builds alternated on one headless sway, 3 rounds each, each run on its own settings tree.
+		- 20261110: With a copy of the live settings and the rating that skips the startup test, both read 39 to 44%, the same as the pipeline from 10-28 to 11-06.
+		- 20261110: With `tmux.always_new_session` on, 327d97e read 81 to 82% and stepped down to High, the same message and flamegraph as the 11-09 runs. 0b16ae9 read 40 to 45%, since it doesn't start a plain launch in tmux. With the workload started in tmux by hand, both read 79 to 83%.
+		- 20261110: So the jump is a profile setup difference. The pipeline's profiler reads the live settings. The tmux setting is off in them now, but the 11-09 flamegraphs have the same frames as the tmux runs here and none of a plain one's scrollback growth, so it was on then. c2e52357 (11-07) made it cover a plain launch, so the workload ran in tmux. In tmux the scrolled-off strip is shaped again every frame, and the drawing share drops.
+	- Decisions:
+		- No code change here. The profiler's own settings tree is filed as 2026111017285305, and the cost in tmux as 2026111017285320.
+	- Test case: None, since nothing changed. The rig that runs builds back to back is `profile-ab.bash` in the private tools folder.
+	- Verified: 20261110, the runs above on the card, b23, at load 2 to 8.
+	- Closed: 20261110-172908
 
 - A window that never gets focus thinks it has it, and never lets its device go
 	- ID: 2026111011350600
