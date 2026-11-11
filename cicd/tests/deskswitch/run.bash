@@ -9,6 +9,9 @@
 ##			- It is still let go after the switch.
 ##			- It took the device back only to repaint, then let it go again.
 ##			- It shows the same picture as before the switch, not a black one.
+##		Then the pointer comes in over the part of it that shows, moves about,
+##		and leaves, with no click or key. xfwm4 doesn't focus or raise on hover.
+##			- It is still let go, and still unfocused.
 ##			- Focusing it brings it back.
 ##	- Syntax: run.bash [--bin PATH]   (default: the debug build, then release)
 ##	- Exit: 0 passed, 1 a check failed, 3 nothing ran (no binary, display,
@@ -108,6 +111,7 @@ fWaitReleased(){ local _; for _ in $(seq 1 "${1}"); do fReleased && return 0; sl
 fShot(){ fX import -window root "${work}/${1}.png" 2>/dev/null; }
 
 unfocused=0; releasedFirst=0; stillReleased=0; sameShot=0; repainted=0; backOnFocus=0
+movedOver=0; staysOnMove=0; unfocusedOnMove=0
 if [[ -n "${win}" ]]; then
 	fX xdotool windowmove "${win}" 40 40 2>/dev/null || true
 	## another window, focused, over part of it, and the pointer away from both.
@@ -141,6 +145,17 @@ if [[ -n "${win}" ]]; then
 		echo "${differ}" >"${work}/differ"
 		[[ "${differ%%.*}" =~ ^[0-9]+$ ]] && ((${differ%%.*} < 2000)) && sameShot=1
 		grep -q 'redraw request, for one frame' "${work}/said" && (($(grep -c 'device released' "${work}/said") >= 2)) && repainted=1
+		## xlogo covers from 360,210 in the window, so these are all on show
+		movedOver=1
+		for at in "80 80" "200 150" "320 100" "120 300" "60 200"; do
+			# shellcheck disable=SC2086 # two numbers, split on purpose
+			fX xdotool mousemove --window "${win}" ${at} 2>/dev/null || movedOver=0
+			sleep 0.3
+		done
+		fX xdotool mousemove 1000 700 2>/dev/null || true
+		staysOnMove=1
+		for _ in {1..6}; do fReleased || { staysOnMove=0; break; }; sleep 0.5; done
+		[[ "$(fX xdotool getactivewindow 2>/dev/null || true)" != "${win}" ]] && unfocusedOnMove=1
 		fX xdotool windowactivate "${win}" 2>/dev/null || true
 		for _ in {1..10}; do fReleased || { backOnFocus=1; break; }; sleep 0.5; done
 	fi
@@ -153,6 +168,9 @@ fCheck "an unfocused, partly covered window lets its device go" test "${released
 fCheck "it is still let go after a switch to the other desktop and back" test "${stillReleased}" = 1
 fCheck "it took the device back only to repaint, then let it go again" test "${repainted}" = 1
 fCheck "it shows the same picture as before the switch ($(cat "${work}/differ" 2>/dev/null || echo '?') pixels differ)" test "${sameShot}" = 1
+fCheck "the pointer moved over it, and away" test "${movedOver}" = 1
+fCheck "the pointer moving over it leaves it let go" test "${staysOnMove}" = 1
+fCheck "and leaves it unfocused" test "${unfocusedOnMove}" = 1
 fCheck "focusing it brings it back" test "${backOnFocus}" = 1
 
 if ((failures)); then
@@ -164,3 +182,4 @@ echo "all passed"
 
 ##	History:
 ##		- 20261110 JC: Created.
+##		- 20261110 JC: The pointer moving over it, after the switch.

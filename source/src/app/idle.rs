@@ -70,6 +70,21 @@ impl IdleClock {
 		self.owe(released)
 	}
 
+	// The pointer moving over the window, with nothing pressed. It starts the
+	// wait over while the device is held, since someone may be reading along.
+	// It doesn't take a released device back, nor make a repaint's one frame
+	// a whole wake: on a desktop that doesn't focus on hover, a pointer that
+	// crosses a window behind others is on its way somewhere else, and the
+	// last frame is still up. A click, a wheel, a key, or focus wakes it.
+	// True when the wait started over.
+	fn pointer(&mut self, released: bool) -> bool {
+		if released || self.repaint {
+			return false;
+		}
+		self.since = Instant::now();
+		true
+	}
+
 	// The desktop wants pixels, with nobody known to be there: X11 drops a
 	// window's pixels while it is on another desktop. The device is owed for
 	// one frame and the wait isn't started over. Owed already, as for output
@@ -235,12 +250,13 @@ fn idle_secs() -> Option<Duration> {
 }
 
 /// `SILK_IDLEDBG`: what restarts the wait and what holds the device, so a log
-/// from a real desktop shows why a window never let go. A sign of life comes
-/// often, so each kind is said at most once per `TRACE_QUIET`, with a count of
-/// the ones not said. A hold is said when it changes.
+/// from a real desktop shows why a window never let go, and what a released
+/// window heard without waking. A sign of life comes often, so each kind is
+/// said at most once per `TRACE_QUIET`, with a count of the ones not said. A
+/// hold is said when it changes.
 #[derive(Debug, Default)]
 pub(super) struct IdleTrace {
-	said: Vec<(&'static str, Instant, u32)>,
+	said: Vec<(&'static str, &'static str, Instant, u32)>,
 	hold: Option<Option<&'static str>>,
 }
 
@@ -249,19 +265,34 @@ const TRACE_QUIET: Duration = Duration::from_secs(30);
 impl IdleTrace {
 	fn restart(&mut self, why: &'static str) {
 		// only while the wait runs: with focus, every key would be one
-		if !env_flag(EnvFlag::IdleDbg) || self.hold != Some(None) {
+		if self.hold == Some(None) {
+			self.say("wait restarted", why);
+		}
+	}
+
+	// heard by a released window, and left released
+	fn not_a_wake(&mut self, why: &'static str) {
+		self.say("not a wake", why);
+	}
+
+	fn say(&mut self, what: &'static str, why: &'static str) {
+		if !env_flag(EnvFlag::IdleDbg) {
 			return;
 		}
 		let now = Instant::now();
-		match self.said.iter_mut().find(|(w, ..)| *w == why) {
-			Some((_, at, quiet)) if now.duration_since(*at) < TRACE_QUIET => *quiet += 1,
-			Some((_, at, quiet)) => {
-				idledbg(&format!("wait restarted: {why} (+{quiet} not said)"));
+		match self
+			.said
+			.iter_mut()
+			.find(|(t, w, ..)| (*t, *w) == (what, why))
+		{
+			Some((.., at, quiet)) if now.duration_since(*at) < TRACE_QUIET => *quiet += 1,
+			Some((.., at, quiet)) => {
+				idledbg(&format!("{what}: {why} (+{quiet} not said)"));
 				(*at, *quiet) = (now, 0);
 			}
 			None => {
-				idledbg(&format!("wait restarted: {why}"));
-				self.said.push((why, now, 0));
+				idledbg(&format!("{what}: {why}"));
+				self.said.push((what, why, now, 0));
 			}
 		}
 	}
@@ -388,6 +419,9 @@ pub(super) fn restore_sign(event: &WindowEvent) -> bool {
 /// move to where it already was. That kept the wait from ever running out
 /// there, and took a released device back for nobody.
 ///
+/// The pointer moving over the window is `POINTER`, which only starts the wait
+/// over and never takes a released device back (`State::note_pointer`).
+///
 /// Focus counts only as a change. On X11, coming back to the desktop that
 /// has an unfocused window tells it it lost focus, which it never had.
 /// `focused` is the window's focus before this event. The answer names the
@@ -399,7 +433,7 @@ pub(super) fn sign_of_life(
 ) -> Option<&'static str> {
 	match event {
 		WindowEvent::CursorMoved { .. } | WindowEvent::CursorEntered { .. } => {
-			pointer_over.then_some("pointer")
+			pointer_over.then_some(POINTER)
 		}
 		WindowEvent::Focused(now) => (*now != focused).then_some("focus"),
 		WindowEvent::KeyboardInput { .. }
@@ -410,6 +444,9 @@ pub(super) fn sign_of_life(
 		_ => None,
 	}
 }
+
+/// What `sign_of_life` calls the pointer moving over the window.
+pub(super) const POINTER: &str = "pointer";
 
 /// The window's minimized state as last asked, so a pass asks at most once per
 /// `MINIMIZED_RECHECK` rather than every time.
@@ -487,6 +524,15 @@ impl State {
 			idledbg(&format!("wake: {why}"));
 		} else {
 			self.idle_trace.restart(why);
+		}
+	}
+
+	/// The pointer moving over the window (`IdleClock::pointer`).
+	pub(super) fn note_pointer(&mut self) {
+		if self.idle.pointer(self.gpu.is_none()) {
+			self.idle_trace.restart(POINTER);
+		} else if self.gpu.is_none() {
+			self.idle_trace.not_a_wake(POINTER);
 		}
 	}
 
@@ -802,6 +848,35 @@ mod tests {
 			!kept.wake_owed && !kept.repaint,
 			"a window that has its device"
 		);
+	}
+
+	// The pointer moving over a released window, partly behind others and
+	// never focused, took its device back for nobody (2026111009560100). It
+	// starts the wait over only while the device is held, and not during a
+	// repaint's one frame, which would make that a whole wake.
+	// Test ID: df4qc
+	#[test]
+	fn the_pointer_alone_never_takes_the_device_back() {
+		let long_ago = Instant::now()
+			.checked_sub(Duration::from_secs(1))
+			.expect("a second of uptime");
+		let mut released = IdleClock::new();
+		released.since = long_ago;
+		assert!(!released.pointer(true));
+		assert!(!released.wake_owed, "a released window woke on the pointer");
+		assert_eq!(released.since, long_ago);
+		let mut held = IdleClock::new();
+		held.since = long_ago;
+		assert!(held.pointer(false));
+		assert!(held.since > long_ago, "the wait didn't start over");
+		assert!(!held.wake_owed);
+		let mut drawing = IdleClock::new();
+		drawing.since = long_ago;
+		assert!(drawing.repaint(true));
+		drawing.wake_owed = false; // the frame's device is back
+		assert!(!drawing.pointer(false));
+		assert!(drawing.repaint, "the pointer made a repaint a whole wake");
+		assert_eq!(drawing.since, long_ago);
 	}
 
 	// SILK_IDLE_SECS is read once per process. The idle rule is asked twice on

@@ -4295,9 +4295,12 @@ impl ApplicationHandler<UserEvent> for App {
 		state.note_presence(&event);
 		// Anything a person does to the window is a sign of life (see
 		// `release_deadline`); the hidden-to-shown edge is one too, in its arm.
+		// The pointer alone only starts the wait over.
 		let pointer_over = state.watch.pointer == window_size::Pointer::Over;
-		if let Some(why) = idle::sign_of_life(&event, pointer_over, state.focused) {
-			state.note_active(why);
+		match idle::sign_of_life(&event, pointer_over, state.focused) {
+			Some(idle::POINTER) => state.note_pointer(),
+			Some(why) => state.note_active(why),
+			None => {}
 		}
 		match event {
 			WindowEvent::CloseRequested => {

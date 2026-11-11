@@ -280,7 +280,8 @@ Going forward, new issues in the new template at the bottom of this file will go
 - The "Minutes otherwise" release of resources still isn't working
 	- ID: 2026111009560100
 	- Type: Bug
-	- Status: Reopened
+	- Status: Done
+		- 20261110: A look on b23's own desktop is still owed: with the window released, unfocused and partly behind others, move the pointer over it and see it stay in resource conservation mode. It can reopen the item.
 		- 20261110: A run on b23's own desktop with `SILK_IDLEDBG=1` would show what stops the release. See the question in questions.md.
 		- 20261110: It's likely the desktop switch in 2026111010491300, which is fixed now. A look on the next dogfood build may be enough to close it.
 		- 20261110-142723: It almost works. Moving the mouse over in released window still wakes it up though, even though it remains unfocused and partially behind other windows.
@@ -294,17 +295,28 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- Pre-next-cut.
 		- It used to, many builds ago, but hasn't now for over a week.
 	- Target OS: Linux, seen on X11.
+	- Test environment: b23, Xvfb with xfwm4, and Xvfb with no window manager.
 	- Reproduced: No. Each try let go on time with the 20261110-101009 dogfood build and with dev:
 		- Xvfb with xfwm4, compositing on and off, a fresh config, an xterm focused: let go at the wait.
 		- The same with "Minutes otherwise" at 1 in the file and no idle override: let go at 65 s.
 		- Another window moved over SilkTerm and away again after it let go: it stayed let go.
 		- 2 idle muffer sessions wrote nothing to their terminals in 25 s, so an idle one in the front tab doesn't stop the release.
+		- 20261110: Yes, after the answer. Under xfwm4, a released window partly behind another and never focused took its device back when the pointer moved over it, with no click or key. The log said "wake: pointer".
 	- Progress log:
 		- 20261110: `SILK_IDLEDBG=1` now logs why the device is kept each time that changes ("kept: focused on screen", "kept: a dialog is up", "waiting 60s (otherwise)"), and what restarts the wait while it runs, each kind at most once per 30 s with a count of the rest. Before, it logged only when the device went and came back, so a window that never let go didn't log anything.
+		- 20261110: The pointer moving over a released window no longer takes the device back. It still starts the wait over while the window has its device. During a repaint's one frame it's ignored, so the frame doesn't become a whole wake. A released window logs it as "not a wake: pointer".
+		- 20261110: Verified: deskswitch, with a new step that moves the pointer over the part of the released window that shows and away again, fails on the build before the fix (woken by the pointer) and passes after it. deqy2 fails the same way before and passes after. df4qc fails with the old rule put back. The quick gate passes in all 5 areas.
+		- 20261110: deqy2's "moving the pointer over it brings it back" now checks the reverse, "moving the pointer over it leaves it let go", per the answer. A new check has a click bring it back.
 	- Decisions:
 		- 20261110: It isn't closed a third time on a guess. The 2 earlier fixes each closed a real cause, but neither was seen on this desktop, so the next step is a log from it.
-	- Branch: idledbg
-	- Test case: `each_hold_on_the_device_names_itself` (df4cn).
+		- 20261110: The pointer still starts the wait over while the window has its device, since someone may be reading along with the pointer on it. The answer asked only that it not wake a released window. No pointer-only change needs a frame while released: hover underlines and tab tips show once it's back, and a program that tracks the mouse answers with output, which wakes it as before.
+	- Actual cause: The pointer moving over the window counted as a sign of life, so it took a released device back. On a desktop that doesn't focus or raise on hover, that's a pointer crossing on its way to another window.
+	- Actual fix: The pointer alone only starts the wait over while the device is held. A click, the wheel, a key, focus, or output in the front tab still wakes it.
+	- Swept: every `CursorEntered` and `CursorMoved` in `source`. The idle clock's one path is `sign_of_life`, the same on X11, Wayland, Windows and macOS. The dialogs are never let go. The look after a move and the hover code don't touch the device.
+	- Branch: idledbg, rnd1111
+	- Test case: `each_hold_on_the_device_names_itself` (df4cn), `the_pointer_alone_never_takes_the_device_back` (df4qc). Also `cicd/tests/deskswitch/run.bash` (df4e3) and `cicd/tests/idleother/run.bash` (deqy2), both changed, in the full run.
+	- Acceptance signoff: Self-closed: reproduced under xfwm4 by the motion the answer named, deskswitch and deqy2 fail before the fix and pass after, and df4qc pins the rule. The look on b23 can still reopen it.
+	- Closed: 20261110-162209
 
 - Import a v1.0.0-beta1 `config.toml`
 	- ID: 2026110920480399
