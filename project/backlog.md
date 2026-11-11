@@ -37,7 +37,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 - Output under tmux: the scrolled-off strip is shaped again every frame, text shaping takes 80%, and the display steps down to High
 	- ID: 2026111017285320
 	- Type: Enhancement
-	- Status: Queued
+	- Status: Done
 	- Priority: Low
 	- Opened: 20261110-172853
 	- Opened by: CC
@@ -46,6 +46,17 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Notes:
 		- Seen with the profiler's workload in tmux on the card, at Max. It's the same at 0b16ae9, so it isn't a regression.
 		- Most of the cost is harfrust building a shape plan on each call, under the strip's `set_rich_text`.
+	- Progress log:
+		- 20261110: Measured, it wasn't the shape plan. The strip shaped every row in its window again each frame, through `set_rich_text`. And under a flood the slide runs up to 128 rows, so the window held more than twice the rows the region can show.
+		- 20261110: Each strip row now has its own buffer line, which keeps its shaping while the slide moves over it, so a row is shaped once. The window leaves out the rows the slide has moved past the region's edge.
+		- 20261110: The profiler's text shaping share now also counts a line shaped outside `shape_until_scroll`, which is how the strip shapes now. Old flamegraphs read within 0.7 points of before.
+	- Decisions:
+		- The display still steps down from Max on this workload in tmux. What's left of the frame is the per-cell fallback for new random characters, about 47 to 60%, and a plain run costs the same per frame. The step-down is left as is.
+		- The shaping share stays near 80% in tmux, since the time saved goes to more frames. The strip's own share and the cost per frame are what moved.
+	- Test case: `off_strip_lines_move_with_their_rows` (df4t5), `the_strip_shapes_only_the_rows_new_to_its_window` (df4t6), `off_strip_window_stays_inside_the_region` (df4te).
+		- Swept: the one other `set_rich_text` is in dialog.rs, which isn't per frame. The main buffer already sets its lines one at a time.
+	- Verified: 20261110, on the card, b23, at load 2 to 5, with the profiler's workload at Max, the old and new builds alternated 3 rounds each. In tmux, the strip went from 23 to 27% of samples to 12%, the frames in 8 s from 94 to 103 to 121 to 129, and the build per frame from 71 to 78 ms to 56 to 59 ms. The plain control read the same for both builds, 40 to 46% shaping and 54 to 60 ms a frame. The quick gate passes, and so do the tmux, tmuxclear and nano scroll scenes.
+	- Closed: 20261110-180547
 
 - The profiler reads the live settings and rating, so its numbers follow personal settings
 	- ID: 2026111017285305

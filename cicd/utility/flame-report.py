@@ -115,7 +115,8 @@ def fAnalyze(total: int, frames: list[Frame], top: int) -> None:
 			background += s                          # PTY reader / other spawned threads (epoll wait)
 		elif any("State::render" in a for a in anc):
 			render += s
-			if any("shape_until_scroll" in a for a in anc):
+			##	the strip lays its lines out one at a time, outside shape_until_scroll
+			if any("shape_until_scroll" in a or "BufferLine::shape" in a for a in anc):
 				shaping += s                         # subset of render
 		else:
 			other += s
