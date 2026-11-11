@@ -112,12 +112,12 @@ impl MenuAction {
 	}
 }
 
-/// One row of a menu: an action item (optionally a checkmark toggle) or a group
-/// separator. Separators render as a faint horizontal line, never hover/click.
-/// `accel` is the byte offset of the item's accelerator letter in the label
-/// (underlined; typing it picks the item); None = no accelerator - accelerators
-/// must be unique per menu, so low-priority items (and ones that already have a
-/// hotkey) go without.
+/// One row of a menu: an action item, maybe a checkmark toggle, or a group
+/// separator. Separators draw as a faint line and never take hover or clicks.
+/// `accel` is the byte offset of the item's accelerator letter in the label, which
+/// is underlined, and typing it picks the item. None means no accelerator.
+/// Accelerators must be unique per menu, so low-priority items and ones that
+/// already have a hotkey go without.
 #[derive(Debug, Clone)]
 pub(crate) enum Entry {
 	Item {
@@ -149,10 +149,9 @@ pub(super) fn entry_label(entry: &Entry) -> Option<&str> {
 
 /// The first accelerator letter 2 rows of one menu both claim, if any.
 ///
-/// Typing a letter picks the first row with it, so a duplicate doesn't read
-/// as a duplicate - it silently makes the later row unreachable from the
-/// keyboard, which is why this is asserted where a menu is built rather than
-/// left to be noticed.
+/// Typing a letter picks the first row with it, so a duplicate quietly makes the
+/// later row unreachable from the keyboard. That's why this is asserted where a
+/// menu is built.
 pub(super) fn accel_clash(entries: &[Entry]) -> Option<char> {
 	let mut seen: Vec<char> = Vec::new();
 	for entry in entries {
@@ -246,11 +245,11 @@ fn entry_check_accel(ch: char, on: bool, label: &str, action: MenuAction) -> Ent
 	}
 }
 
-// A "... with shell" row, or nothing at all while there is no shell to put
-// under it - an empty flyout is worse than no row. The stored list supplies the
-// titles and the order; only the active entries are offered, and the action
-// has the index into the whole list so a disabled entry between 2 active
-// ones can't shift what a click runs.
+// A "... with shell" row, or no row at all while there's no shell to put under
+// it, since an empty flyout is worse. The stored list supplies the titles and the
+// order, and only the active entries are offered. The action has the index into
+// the whole list, so a disabled entry between 2 active ones can't shift what a
+// click runs.
 fn shell_submenu(
 	shells: &[ShellEntry],
 	accel: Option<char>,
@@ -287,8 +286,8 @@ struct ViewState {
 	next_wallpaper: bool,
 }
 
-// The View menu, apart from the window it is asking about - so the labels, the
-// order and the accelerators can be held to the style guide by test.
+// The View menu, apart from the window it's for, so a test can hold the labels,
+// the order, and the accelerators to the style guide.
 fn view_menu_items(on: ViewState) -> Vec<Entry> {
 	let mut items = vec![
 		entry_item_accel('I', "Increase font size", MenuAction::FontBigger),
@@ -630,7 +629,7 @@ struct CtxState {
 
 fn context_menu_items(on: CtxState, shells: &[ShellEntry]) -> Vec<Entry> {
 	let mut entries = Vec::new();
-	// A link under the click gets its 2 items at the top, and only then -
+	// A link under the click gets its 2 items at the top, and only then, since
 	// they'd be dead weight on every other right-click.
 	if on.link {
 		entries.extend([
@@ -639,10 +638,10 @@ fn context_menu_items(on: CtxState, shells: &[ShellEntry]) -> Vec<Entry> {
 			Entry::Sep,
 		]);
 	}
-	// no accelerator on the shell rows: this menu already spends every letter
-	// their labels offer - 'S' on "Paste selection", 'H' on "Split
-	// horizontal", 'N' on "New tab" - and a duplicate would make the older
-	// item unreachable, since the first match wins
+	// no accelerator on the shell rows, since this menu already uses every letter
+	// their labels offer, such as 'S' on "Paste selection", 'H' on "Split
+	// horizontal", and 'N' on "New tab". The first match wins, so a duplicate would
+	// make the older item unreachable
 	entries.extend([
 		entry_item_accel('C', "Copy", MenuAction::Copy),
 		entry_item_accel('P', "Paste", MenuAction::Paste),
@@ -763,8 +762,8 @@ impl ContextMenu {
 				.map(|entry| self.entry_h(entry))
 				.sum::<f32>()
 	}
-	// Anywhere on the popup, separators and padding included - a click that falls
-	// on the menu belongs to the menu, whatever chrome it happens to cover.
+	// Anywhere on the popup, separators and padding included. A click on the menu
+	// belongs to the menu, whatever chrome it covers.
 	fn hit(&self, mx: f32, my: f32) -> bool {
 		mx >= self.x && mx < self.x + self.w && my >= self.y && my < self.y + self.height()
 	}
@@ -801,10 +800,10 @@ impl ContextMenu {
 }
 
 impl State {
-	/// The menu row a tip would describe: the innermost open popup that the
-	/// pointer is on (a parent keeps its highlight on the row its
-	/// submenu hangs off, so the deepest hovered one is the right answer), and
-	/// only when that row has something to say, in a window with the focus.
+	/// The menu row a tip would describe: the row under the pointer in the innermost
+	/// open popup, and only when that row has a tip, in a window with the focus. A
+	/// parent keeps its highlight on the row its submenu hangs off, so the deepest
+	/// hovered popup is the right one.
 	pub(super) fn menu_tip_target(&self) -> Option<(usize, usize)> {
 		if !self.tip_focus.tips() {
 			return None;
@@ -897,11 +896,10 @@ impl State {
 		self.menu = Some(self.build_popup(target, entries, mx, my));
 	}
 
-	// Lay one popup out at (mx, my), clamped on-screen. Width is the widest
-	// (proportional) label plus the checkmark gutter, the padding, and - only
-	// where a row opens a submenu - the column its arrow sits in. Shared by the
-	// menu bar, the right-click menu and the submenus, so all of them size and
-	// clamp alike.
+	// Lay one popup out at (mx, my), clamped on-screen. Width is the widest label
+	// plus the checkmark gutter, the padding, and the arrow column where a row opens
+	// a submenu. The menu bar, the right-click menu, and the submenus all use this,
+	// so they size and clamp alike.
 	fn build_popup(
 		&mut self,
 		target: PaneId,
@@ -953,14 +951,13 @@ impl State {
 		ContextMenu { x, y, ..menu }
 	}
 
-	// Open the submenu on row `row` of the open popup, or close whatever was
-	// standing open if that row doesn't have one.
+	// Open the submenu on row `row` of the open popup, or close whatever was open if
+	// that row doesn't have one.
 	//
-	// It goes to the right of the parent, never overlapping it, with its first
-	// row lined up on the parent row - which is what lets the pointer rule stay
-	// as simple as it is: moving right off the row leaves the parent entirely,
-	// so nothing else can claim the hover on the way in. It flips to the left
-	// only when there is no room on the right.
+	// It goes to the right of the parent without overlapping it, with its first row
+	// lined up on the parent row. So moving right off the row leaves the parent
+	// entirely, and nothing else can claim the hover on the way in. It flips to the
+	// left only when there's no room on the right.
 	fn open_submenu(&mut self, row: usize) {
 		let Some(menu) = self.menu.as_ref() else {
 			return;
@@ -996,9 +993,9 @@ impl State {
 		let Some(menu) = self.menu.as_mut() else {
 			return false;
 		};
-		// A submenu takes the pointer first - it overlaps no parent row, so being
-		// inside it is unambiguous, and the parent keeps its highlight on the row
-		// the submenu belongs to.
+		// A submenu takes the pointer first. It overlaps no parent row, so being inside
+		// it is clear, and the parent keeps its highlight on the row the submenu belongs
+		// to.
 		if let Some(sub) = menu.sub.as_mut() {
 			if sub.hit(x, y) {
 				let hovered = sub.item_at(x, y);
@@ -1187,8 +1184,8 @@ impl State {
 		self.bar_open = Some(idx);
 	}
 
-	// Request the About window. App opens it (window creation needs the event
-	// loop); the old in-surface overlay path is no longer used.
+	// Request the About window. App opens it, since window creation needs the event
+	// loop.
 	fn open_about(&mut self) {
 		self.pending_about = true;
 		self.menu = None;
@@ -1206,8 +1203,8 @@ impl State {
 		}
 		let area = self.area();
 		match action {
-			// the URL was captured when the menu opened - the output under it may
-			// have scrolled away since
+			// the URL was captured when the menu opened, since the output under it may have
+			// scrolled away
 			MenuAction::OpenLink => {
 				if let Some(url) = self.menu_link.clone() {
 					open_link(&url);
@@ -1368,9 +1365,9 @@ mod tests {
 		}
 	}
 
-	// A letter picks the first row with it, so a menu that spends one twice
-	// doesn't read as ambiguous - it quietly makes the later row unreachable.
-	// Every menu is checked for this where it is built.
+	// A letter picks the first row with it, so a menu that uses one twice quietly
+	// makes the later row unreachable. Every menu is checked for this where it's
+	// built.
 	// Test ID: dbeqq
 	#[test]
 	fn one_menu_never_spends_an_accelerator_twice() {
@@ -1387,10 +1384,9 @@ mod tests {
 		assert_eq!(accel_clash(&clashing), Some('w'));
 	}
 
-	// A submenu row is an ordinary row to the pointer and to the keyboard - only
-	// what activating it does is different. Treating it as a separator instead
-	// (which is what the old 2-arm matches did) leaves it unhoverable and
-	// unreachable, i.e. an item nothing can ever pick.
+	// A submenu row is an ordinary row to the pointer and to the keyboard, and only
+	// activating it is different. The old 2-arm matches treated it as a separator,
+	// which left it unhoverable and unreachable.
 	// Test ID: dbeq9
 	#[test]
 	fn a_submenu_row_hit_tests_and_steps_like_an_item() {
@@ -1418,10 +1414,10 @@ mod tests {
 		assert_eq!(menu.step(Some(3), -1), Some(1));
 	}
 
-	// The submenu is placed clear of its parent's right edge on purpose: that is
-	// the whole of what keeps the pointer rule simple, since "inside the submenu"
-	// and "on a parent row" can then never both be true. A submenu that overlaps
-	// would close itself the moment the pointer entered it.
+	// The submenu is placed clear of its parent's right edge, which keeps the pointer
+	// rule simple, since "inside the submenu" and "on a parent row" can never both be
+	// true. A submenu that overlapped would close itself the moment the pointer
+	// entered it.
 	// Test ID: dbeqa
 	#[test]
 	fn a_submenu_stands_clear_of_the_rows_it_came_from() {
@@ -1440,7 +1436,7 @@ mod tests {
 
 	// A click inside an open submenu is a click on the menu, so the chrome that
 	// stands aside for a popup (the menu bar, the tab bar) has to stand aside for
-	// it too - otherwise a submenu overlapping either band loses its clicks to it.
+	// it too. Otherwise a submenu overlapping either band loses its clicks to it.
 	// Test ID: dbeqb
 	#[test]
 	fn a_click_in_the_submenu_still_counts_as_a_click_on_the_menu() {
@@ -1457,8 +1453,8 @@ mod tests {
 	// A dropdown resolves its own padding and separator height from DIP once, at
 	// the moment it is built, so the draw and the 2 hit tests read one set of
 	// numbers. Whatever the display does to them, `item_at` and `row_top` have to
-	// keep agreeing - a menu whose rows are drawn one place and clicked another
-	// is the failure this guards.
+	// keep agreeing, so a menu's rows are never drawn in one place and clicked in
+	// another.
 	// Test ID: dbeng
 	#[test]
 	fn a_dropdown_scales_whole_and_its_rows_still_hit_test() {
@@ -1491,8 +1487,8 @@ mod tests {
 				sub: None,
 			}
 		};
-		// the padding and the separator row scale, which is what makes the whole
-		// popup scale - height() and row_top() are built out of them
+		// the padding and the separator row scale, which makes the whole popup scale,
+		// since height() and row_top() are built from them
 		assert_eq!(
 			menu_metrics(1.0),
 			(config::MENU_ITEM_PAD_Y, config::MENU_SEP_H)
@@ -1520,8 +1516,8 @@ mod tests {
 
 	// The style guide asks every View toggle to name the thing and be checked
 	// while that thing is on, so a reader can take the whole column one way. A
-	// "Hide ..." caption checked when the thing is gone reads backwards next to
-	// its neighbors, which is what this stops coming back.
+	// "Hide ..." caption checked when the thing is gone reads backwards next to its
+	// neighbors.
 	// Test ID: dc3q1
 	#[test]
 	fn every_view_toggle_is_checked_while_its_subject_is_on() {
