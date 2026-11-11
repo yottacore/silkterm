@@ -1,29 +1,23 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 // Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
 
-//! The directory a shell SAYS it is in, and the tap that hears it.
+//! The directory a shell reports it's in, and the tap that reads it.
 //!
-//! A new tab, split or window starts where the pane it came from is, which
-//! means asking a shell where that is. The OS can answer for a shell that
-//! moves itself (`/proc/<pid>/cwd`, `proc_pidinfo` on macOS, or the PEB on
-//! Windows - see `term.rs`), and can't answer at all for one that keeps its
-//! own idea of where it is: PowerShell's `Set-Location` never tells the OS.
-//! Every terminal has that hole and every terminal fills it the same way - the
-//! shell announces the directory in an escape sequence and the terminal
-//! listens.
+//! A new tab, split, or window starts where its source pane is. The OS knows
+//! that for a shell that changes its own cwd (see `term.rs`), but not for one
+//! that keeps its own idea of it, such as PowerShell with `Set-Location`. Every
+//! terminal fills that gap the same way: the shell sends the directory in an
+//! escape sequence.
 //!
-//! Both spellings in use are read. OSC 7 (`ESC ] 7 ; file://host/path`) is
-//! what the unix shells emit, hostname and percent-encoding included. OSC 9;9
-//! (`ESC ] 9 ; 9 ; C:\path`) is the `ConEmu` spelling that Windows Terminal
-//! documents, so a PowerShell profile already set up for that terminal works
-//! here unchanged - which is the whole reason for reading two.
+//! Both sequences in use are read. OSC 7 (`ESC ] 7 ; file://host/path`) is what
+//! the unix shells send. OSC 9;9 (`ESC ] 9 ; 9 ; C:\path`) is the `ConEmu` form
+//! that Windows Terminal documents, so a PowerShell profile set up for that
+//! terminal works here unchanged.
 //!
-//! The listening is done by wrapping the PTY rather than by forking the VT
-//! parser: `vte` handles neither sequence (OSC 7 goes to its `unhandled`
-//! arm), but `EventedPty` is a public trait and `EventLoop` is generic over
-//! it, so `TappedPty` sits in front of the real one and scans what it reads.
-//! Nothing else about the stream changes - the bytes go on to the parser
-//! exactly as they arrived.
+//! `vte` handles neither sequence, so `TappedPty` wraps the PTY and scans what
+//! it reads, rather than forking the parser. `EventLoop` is generic over the
+//! public `EventedPty` trait, which allows that. The bytes go on to the parser
+//! unchanged.
 
 use std::io::{self, Read};
 use std::path::PathBuf;
@@ -42,13 +36,13 @@ const ESC: u8 = 0x1b;
 const BEL: u8 = 0x07;
 
 /// What the shell last said about where it is. Written by the PTY reader thread
-/// and read by the window thread, so it is behind a lock - one taken only when a
-/// prompt reports and when a new tab/pane/window opens, never per byte and never
-/// per frame.
+/// and read by the window thread, so it's behind a lock. The lock is taken only
+/// when a prompt reports and when a new tab, pane, or window opens, never per
+/// byte or per frame.
 ///
 /// On unix it also keeps who said it: the terminal's foreground process group
 /// when the report arrived. A zsh started from dash reports, then exits, and dash
-/// reports nothing - so the answer has to go with the program that gave it.
+/// reports nothing, so the report has to go with the program that sent it.
 #[derive(Debug, Clone, Default)]
 pub struct Reported {
 	slot: Arc<Mutex<Option<(PathBuf, Option<u32>)>>>,
@@ -140,7 +134,7 @@ impl<P> TappedPty<P> {
 	}
 }
 
-// The tapped PTY IS its own reader: `reader()` hands back a borrow, and the
+// The tapped PTY is its own reader: `reader()` hands back a borrow, and the
 // wrapper can't hold one of the inner reader without borrowing itself. The
 // event loop takes the reader and the writer in separate statements, so this
 // costs nothing.
@@ -227,9 +221,8 @@ impl Scan {
 	fn feed(&mut self, bytes: &[u8], reported: &Reported) {
 		let mut rest = bytes;
 		while !rest.is_empty() {
-			// Ordinary output is the overwhelming majority of any stream, so
-			// Ground skips to the next ESC in one pass rather than walking the
-			// match arm per byte.
+			// Most of any stream is ordinary output, so Ground skips to the next
+			// ESC in one pass rather than walking the match arm per byte.
 			if self.state == State::Ground {
 				match rest.iter().position(|&byte| byte == ESC) {
 					Some(at) => {
@@ -327,15 +320,14 @@ pub fn directory(payload: &str, local_host: &str) -> Option<PathBuf> {
 	if let Some(rest) = payload.strip_prefix("7;") {
 		return from_url(rest, local_host);
 	}
-	// ConEmu's: a plain path, occasionally quoted, never encoded and with no
-	// host to check - it is only ever emitted by a shell on this machine.
+	// ConEmu's: a plain path, sometimes quoted, never encoded, and with no host
+	// to check, since only a shell on this machine sends it.
 	let rest = payload.strip_prefix("9;9;")?;
 	as_path(rest.trim_matches('"'))
 }
 
-// `file://<host>/<path>`, percent-encoded. A bare path is taken as well: it
-// isn't the spelling anyone documents, but it costs one line to accept and a
-// shell that writes one plainly means the same thing.
+// `file://<host>/<path>`, percent-encoded. A bare path is taken too. Nobody
+// documents it, but a shell that writes one means the same thing.
 fn from_url(url: &str, local_host: &str) -> Option<PathBuf> {
 	let Some(rest) = url.strip_prefix("file://") else {
 		return url
@@ -361,16 +353,14 @@ fn from_url(url: &str, local_host: &str) -> Option<PathBuf> {
 // A URL path to a native one. On Windows that means dropping the separator that
 // precedes a drive letter (`/C:/x`) and turning the rest around.
 fn as_path(text: &str) -> Option<PathBuf> {
-	// An OSC payload is untrusted text, and this is the funnel both spellings pass
-	// through. A control character is turned away here because a reported
-	// directory is shown as well as used: it names the tab and appears in the
-	// window title, where the desktop draws it as text. A directory with that name
-	// is possible on unix and vanishingly rare, and refusing one only means the
-	// new pane starts where the old one did.
+	// An OSC payload is untrusted text, and both forms pass through here. A
+	// control character is refused because a reported directory names the tab and
+	// shows in the window title. Refusing such a name only means the new pane
+	// starts where the old one did.
 	//
-	// Whether the path is absolute is NOT asked here. A pane on Windows can report
-	// a posix path, and wsl.exe wants exactly that spelling; usable_cwd is the one
-	// gate on what becomes a working directory.
+	// Whether the path is absolute isn't checked here. A pane on Windows can report
+	// a posix path, which wsl.exe wants. usable_cwd is the one check on what
+	// becomes a working directory.
 	if text.is_empty() || text.chars().any(char::is_control) {
 		return None;
 	}
@@ -423,8 +413,8 @@ fn local_host() -> &'static str {
 
 #[cfg(unix)]
 fn host_name() -> String {
-	// c_char is signed on x86_64 and UNSIGNED on aarch64, so it has to be named
-	// rather than spelled i8 - a bare i8 fails to compile for the ARM targets.
+	// c_char is signed on x86_64 and unsigned on aarch64, so a bare i8 fails to
+	// compile for the ARM targets.
 	let mut buf = [0 as libc::c_char; 256];
 	// SAFETY: the buffer outlives the call and its length is passed with it.
 	let ok = unsafe { libc::gethostname(buf.as_mut_ptr(), buf.len() - 1) } == 0;
@@ -533,8 +523,8 @@ mod tests {
 		assert_eq!(directory("7;file://elsewhere/srv/log", ""), None);
 	}
 
-	// The ConEmu spelling, which is what Windows Terminal documents for
-	// PowerShell - so a profile already set up for that terminal works here.
+	// The ConEmu form, which Windows Terminal documents for PowerShell, so a
+	// profile already set up for that terminal works here.
 	// Test ID: dbhey
 	#[test]
 	fn the_conemu_spelling_is_read_too() {
@@ -547,8 +537,8 @@ mod tests {
 		assert_eq!(directory("9;9;", "box"), None);
 	}
 
-	// A read returns whatever the pipe held, so a report arrives in as many
-	// pieces as it likes - including one split mid-escape and mid-terminator.
+	// A read returns whatever the pipe held, so a report can arrive in any number
+	// of pieces, including one split mid-escape and mid-terminator.
 	// Test ID: dbhez
 	#[test]
 	fn a_report_split_across_reads_still_arrives() {
@@ -570,15 +560,15 @@ mod tests {
 		);
 	}
 
-	// Every other OSC goes past constantly - titles on every prompt, clipboard
-	// writes with whole selections - and none of it may be collected, or a
+	// Every other OSC goes past all the time, such as a title on every prompt or
+	// a clipboard write with a whole selection. None of it may be collected, or a
 	// paste-sized payload would be buffered for nothing.
 	// Test ID: dbhf0
 	#[test]
 	fn nothing_but_the_two_sequences_is_collected() {
 		let reported = Reported::default();
 		let mut scan = Scan::default();
-		// Left UNTERMINATED on purpose, and looked at while it is still open:
+		// Left unterminated on purpose, and looked at while it's still open:
 		// once a sequence ends its payload is taken either way, so a check
 		// after the fact would pass however much had been buffered.
 		scan.feed(b"\x1b]52;c;", &reported);
@@ -611,10 +601,9 @@ mod tests {
 		);
 	}
 
-	// A reported directory names the tab and is shown in the window title, so
-	// that way it has to be text. Percent-decoding is how a control character
-	// gets in: the shell need not have printed one for the payload to decode
-	// into one.
+	// A reported directory names the tab and shows in the window title, so it has
+	// to be plain text. Percent-decoding can put a control character in even when
+	// the shell didn't print one.
 	// Test ID: dcdj6
 	#[test]
 	fn a_reported_directory_with_a_control_character_is_refused() {

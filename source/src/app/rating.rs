@@ -20,8 +20,8 @@ pub(super) fn remote_override_at_launch() {
 	set_live(|live| crate::profile::set_remote(live, true));
 }
 
-// Turned off, a remote screen isn't even asked about; the View menu still
-// puts Remote on by hand (2026101914251764).
+// With detection off, nothing asks whether the screen is remote. The View menu
+// can still turn Remote on by hand (2026101914251764).
 fn takes_remote(live: &config::Settings, detected: impl FnOnce() -> bool) -> bool {
 	live.performance_detect_remote && detected()
 }
@@ -54,8 +54,8 @@ pub(super) fn rating_step(
 /// With the profile on automatic, hardware the config hasn't seen gets a fresh
 /// pick, written down against that hardware so the next launch on it leaves the
 /// profile where the rating left it. Returns the id a benchmark should write
-/// when it finishes, or None where there is nothing to time - a software
-/// renderer is decided here and written now, and a remote screen is left alone.
+/// when it finishes, or None where there's nothing to time. A software renderer
+/// is rated here and written now, and a remote screen is left alone.
 pub(super) fn rate_hardware(info: &wgpu::AdapterInfo) -> Option<String> {
 	let live = config::settings();
 	if !live.performance_automatic || crate::profile::remote(&live) {
@@ -142,9 +142,9 @@ fn keep_measured(pick: crate::profile::Profile, id: Option<&str>) -> config::Kep
 	config::keep_tested(pick, id)
 }
 
-// Every rating write reports a failure, since a rating that isn't kept is a
-// test again at the next launch, and a Windows release build shows no stderr
-// (G37) - which is why the banner says it too.
+// Every rating write reports a failure, since a rating that isn't kept means
+// another test at the next launch. A Windows release build shows no stderr
+// (G37), so the banner says it too.
 fn note_rating_not_kept(kept: &config::Kept) {
 	let reason = match kept {
 		config::Kept::Written => return,
@@ -226,9 +226,8 @@ fn watch_step_down(live: &config::Settings) -> Option<config::Settings> {
 
 impl State {
 	/// The benchmark's banner: one box in the middle of the window, over a dimmed
-	/// screen. It is what makes the run modal - the window behind it keeps drawing
-	/// (that is the thing being timed, and it is worth seeing) but takes no input
-	/// while it is up.
+	/// screen. It makes the run modal. The window behind keeps drawing, since that's
+	/// what is timed, but takes no input while the banner is up.
 	pub(super) fn bench_layout(&mut self) -> Option<(Rect, Vec<(f32, f32, String)>)> {
 		self.bench_banner.as_ref()?;
 		let lines = if self.bench_stalled {
@@ -547,8 +546,8 @@ mod tests {
 		}
 	}
 
-	// Detection is right but unwanted: turned off, a remote screen keeps the
-	// stored profile, and nothing asks the system whether it is remote.
+	// With detection off, a remote screen keeps the stored profile, and nothing
+	// asks the system whether it's remote.
 	// Test ID: de9n8
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
