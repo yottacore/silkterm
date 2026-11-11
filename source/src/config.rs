@@ -3158,6 +3158,7 @@ fn load() -> Settings {
 	// a launch rewrites the file in steps, and a save in another window must
 	// not happen between them
 	let _lock = crate::peers::save_lock();
+	import_beta1_config(&path);
 	if !path.exists() && may_write(&path) {
 		if let Some(dir) = path.parent() {
 			let _ = std::fs::create_dir_all(dir);
@@ -7955,6 +7956,272 @@ fn adopt_legacy_config() {
 			native.display()
 		);
 	}
+}
+
+// SilkTerm v1.0.0-beta1, never released, kept its settings in TOML: beside
+// where the settings file is now, `config.toml` for `config.shcl`, or in
+// ~/.config where that isn't the native place.
+fn beta1_config_paths(native: &std::path::Path) -> Vec<PathBuf> {
+	let mut paths = vec![native.with_extension("toml")];
+	if let Some(legacy) = legacy_config_path() {
+		paths.push(legacy.with_extension("toml"));
+	}
+	paths
+}
+
+// A launch that finds no settings file but a beta1 one reads its values into
+// the template, once. The old file is renamed where it is, the way a converted
+// one is kept, so nothing reads it again. Called before the default template
+// would be written.
+fn import_beta1_config(native: &std::path::Path) {
+	if native.exists() || !may_write(native) {
+		return;
+	}
+	let Some((old, body)) = beta1_config_paths(native)
+		.into_iter()
+		.find_map(|old| std::fs::read(&old).ok().map(|body| (old, body)))
+	else {
+		return;
+	};
+	if let Some(dir) = native.parent() {
+		let _ = std::fs::create_dir_all(dir);
+	}
+	let text = imported_beta1_config(&String::from_utf8_lossy(&body));
+	if let Err(e) = write_config_atomic(native, &text) {
+		eprintln!("{APP_NAME}: couldn't import {}: {e:#}", old.display());
+		return;
+	}
+	match keep_beta1_config(&old) {
+		Some(kept) => eprintln!(
+			"{APP_NAME}: read the settings in {} into {}; the old file is kept at {}",
+			old.display(),
+			native.display(),
+			kept.display()
+		),
+		None => eprintln!(
+			"{APP_NAME}: read the settings in {} into {}, but couldn't rename the old file",
+			old.display(),
+			native.display()
+		),
+	}
+}
+
+// `config.toml` -> `config_backup_20261110-170000_beta1.toml`, with `_2` and
+// on for a second one in the same second.
+fn keep_beta1_config(old: &std::path::Path) -> Option<PathBuf> {
+	let stem = old.file_stem()?.to_string_lossy().into_owned();
+	let (stamp, _) = local_stamp();
+	let kept = (1..=BACKUPS_MAX)
+		.map(|attempt| {
+			let again = if attempt > 1 {
+				format!("_{attempt}")
+			} else {
+				String::new()
+			};
+			old.with_file_name(format!("{stem}_backup_{stamp}_beta1{again}.toml"))
+		})
+		.find(|name| name.symlink_metadata().is_err())?;
+	std::fs::rename(old, &kept).ok().map(|()| kept)
+}
+
+// The template with every beta1 setting this build still has. Its flat names
+// are the ones a pre-nesting SHCL file used, so the values go through the same
+// conversion. A name that has since moved again is followed first, since a
+// beta1 file predates every such move.
+fn imported_beta1_config(toml: &str) -> String {
+	let mut flat = shcl::Document::new();
+	for (path, value) in beta1_values(toml) {
+		let path = CONFIG_RENAMES
+			.iter()
+			.find(|(old, _)| *old == path)
+			.map_or(path.as_str(), |(_, new)| new);
+		let _ = match value {
+			TomlValue::Bool(on) => flat.set_bool(path, on),
+			TomlValue::Int(n) => flat.set_int(path, n),
+			TomlValue::Float(n) => flat.set_float(path, n),
+			TomlValue::Text(text) => flat.set_string(path, &text),
+		};
+	}
+	let shell = flat.get_string("default_shell").ok();
+	let flat = flat.to_string();
+	let (new, _) = rebuilt_config_text(&flat, &[]);
+	let new = with_own_look(&flat, new);
+	// The conversion drops `shell.default`, which a launch otherwise moves to
+	// the top of the shell list.
+	let Some(shell) = shell else {
+		return new;
+	};
+	let mut doc = parse_kept(&new);
+	let _ = doc.set_string("shell.default", &shell);
+	adopted_shell_doc(&doc).map_or(new, |doc| saved_text(&doc))
+}
+
+// A value in a beta1 `config.toml`, of the kinds its settings took.
+#[derive(Debug, Clone, PartialEq)]
+enum TomlValue {
+	Bool(bool),
+	Int(i64),
+	Float(f64),
+	Text(String),
+}
+
+// Each setting in a beta1 `config.toml`, by its dotted SHCL path, in file
+// order. beta1 wrote flat `key = value` lines and a `[colors]` table, so only
+// that much TOML is read. A line in any other shape is skipped, which leaves
+// its setting at the default, as beta1's own reader did with a line it
+// couldn't read. A setting given twice keeps the first.
+fn beta1_values(text: &str) -> Vec<(String, TomlValue)> {
+	let mut table: Option<Vec<String>> = Some(Vec::new());
+	let mut out: Vec<(String, TomlValue)> = Vec::new();
+	for line in text.lines() {
+		let line = line.trim();
+		if line.is_empty() || line.starts_with('#') {
+			continue;
+		}
+		// an array of tables, `[[name]]`, reads as no table, so its lines are skipped
+		if let Some(rest) = line.strip_prefix('[') {
+			table = toml_key(rest).and_then(|(key, rest)| {
+				let rest = rest.strip_prefix(']')?;
+				toml_line_end(rest).then_some(key)
+			});
+			continue;
+		}
+		let Some(prefix) = &table else {
+			continue;
+		};
+		let Some((key, rest)) = toml_key(line) else {
+			continue;
+		};
+		let Some((value, rest)) = rest
+			.strip_prefix('=')
+			.and_then(|rest| toml_value(rest.trim_start()))
+		else {
+			continue;
+		};
+		if !toml_line_end(rest) {
+			continue;
+		}
+		let path = prefix
+			.iter()
+			.chain(&key)
+			.map(|segment| shcl::quote_segment(segment))
+			.collect::<Vec<_>>()
+			.join(".");
+		if !out.iter().any(|(seen, _)| *seen == path) {
+			out.push((path, value));
+		}
+	}
+	out
+}
+
+fn toml_line_end(rest: &str) -> bool {
+	let rest = rest.trim_start();
+	rest.is_empty() || rest.starts_with('#')
+}
+
+// A dotted key, each part bare or quoted, and the text after it.
+fn toml_key(text: &str) -> Option<(Vec<String>, &str)> {
+	let mut segments = Vec::new();
+	let mut rest = text.trim_start();
+	loop {
+		let (segment, after) = if rest.starts_with(['"', '\'']) {
+			toml_string(rest)?
+		} else {
+			let end = rest
+				.find(|c: char| !(c.is_ascii_alphanumeric() || c == '_' || c == '-'))
+				.unwrap_or(rest.len());
+			if end == 0 {
+				return None;
+			}
+			(rest[..end].to_string(), &rest[end..])
+		};
+		segments.push(segment);
+		rest = after.trim_start();
+		match rest.strip_prefix('.') {
+			Some(after) => rest = after.trim_start(),
+			None => return Some((segments, rest)),
+		}
+	}
+}
+
+// A one-line string, basic or literal, and the text after it. No setting took
+// a multi-line one.
+fn toml_string(text: &str) -> Option<(String, &str)> {
+	if text.starts_with("\"\"\"") || text.starts_with("'''") {
+		return None;
+	}
+	if let Some(body) = text.strip_prefix('\'') {
+		let end = body.find('\'')?;
+		return Some((body[..end].to_string(), &body[end + 1..]));
+	}
+	let body = text.strip_prefix('"')?;
+	let mut out = String::new();
+	let mut chars = body.char_indices();
+	while let Some((at, c)) = chars.next() {
+		match c {
+			'"' => return Some((out, &body[at + 1..])),
+			'\\' => {
+				let (_, escape) = chars.next()?;
+				out.push(match escape {
+					'"' => '"',
+					'\\' => '\\',
+					'n' => '\n',
+					't' => '\t',
+					'r' => '\r',
+					'b' => '\u{8}',
+					'f' => '\u{c}',
+					'e' => '\u{1b}',
+					'u' | 'U' => {
+						let len = if escape == 'u' { 4 } else { 8 };
+						let hex: String = chars.by_ref().take(len).map(|(_, c)| c).collect();
+						if hex.len() != len || !hex.bytes().all(|c| c.is_ascii_hexdigit()) {
+							return None;
+						}
+						char::from_u32(u32::from_str_radix(&hex, 16).ok()?)?
+					}
+					_ => return None,
+				});
+			}
+			_ => out.push(c),
+		}
+	}
+	None
+}
+
+// A value and the text after it. Arrays, inline tables and dates are skipped.
+fn toml_value(text: &str) -> Option<(TomlValue, &str)> {
+	if text.starts_with(['"', '\'']) {
+		return toml_string(text).map(|(value, rest)| (TomlValue::Text(value), rest));
+	}
+	let end = text
+		.find(|c: char| c.is_whitespace() || c == '#')
+		.unwrap_or(text.len());
+	let (word, rest) = text.split_at(end);
+	let value = match word {
+		"true" => TomlValue::Bool(true),
+		"false" => TomlValue::Bool(false),
+		_ => toml_number(word)?,
+	};
+	Some((value, rest))
+}
+
+// beta1 also read a float with no digit before the point, such as `.25`.
+fn toml_number(word: &str) -> Option<TomlValue> {
+	let digits = word.replace('_', "");
+	if let Ok(n) = digits.parse::<i64>() {
+		return Some(TomlValue::Int(n));
+	}
+	if !digits
+		.bytes()
+		.all(|c| c.is_ascii_digit() || b"+-.eE".contains(&c))
+	{
+		return None;
+	}
+	digits
+		.parse::<f64>()
+		.ok()
+		.filter(|n| n.is_finite())
+		.map(TomlValue::Float)
 }
 
 // The template, with `{HOME}` filled in from the same constant
@@ -19317,6 +19584,164 @@ mod tests {
 		assert_eq!(s.scrollback, 10000);
 		assert!((s.alt_scroll_lines - 3.0).abs() < 1e-4);
 		assert!((s.output_ease_lines - 1.0).abs() < 1e-4);
+		let _ = load();
+		assert_eq!(std::fs::read_to_string(&path).unwrap(), now, "settled");
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
+	const BETA1_SAVED: &str = include_str!("testdata/beta1_saved.toml");
+	const BETA1_FIRST_LAUNCH: &str = include_str!("testdata/beta1_first_launch.toml");
+
+	// The TOML that beta1 wrote reads as its settings, and a line in any other
+	// shape is skipped.
+	// Test ID: df4rw
+	#[test]
+	fn a_beta1_toml_line_reads_as_its_setting() {
+		use TomlValue::{Bool, Float, Int, Text};
+		let text = concat!(
+			"# comment\n",
+			"use_system_font = false\n",
+			"font_size = 15.5  ## trailing\n",
+			"opacity = .9\n",
+			"scrollback = 10_000\n",
+			"wallpaper = \"C:\\\\pics\\\\a \\\"b\\\" \\u00e9.png\"\n",
+			"word_separators = ',|\"'\n",
+			"rows = [1, 2]\n",
+			"columns = 80 junk\n",
+			"margin = 1979-05-27\n",
+			"font_size = 9.0\n",
+			"[colors]\n",
+			"focus = \"#ff8800\"  # warmer\n",
+			"[themes.\"My Theme\"]\n",
+			"background = '#202020'\n",
+			"[[shells]]\n",
+			"command = \"zsh\"\n",
+		);
+		assert_eq!(
+			beta1_values(text),
+			vec![
+				("use_system_font".to_string(), Bool(false)),
+				("font_size".to_string(), Float(15.5)),
+				("opacity".to_string(), Float(0.9)),
+				("scrollback".to_string(), Int(10000)),
+				(
+					"wallpaper".to_string(),
+					Text("C:\\pics\\a \"b\" \u{e9}.png".to_string())
+				),
+				("word_separators".to_string(), Text(",|\"".to_string())),
+				("colors.focus".to_string(), Text("#ff8800".to_string())),
+				(
+					format!("themes.{}.background", shcl::quote_segment("My Theme")),
+					Text("#202020".to_string())
+				),
+			]
+		);
+	}
+
+	// A launch with no settings file but a beta1 `config.toml` beside it reads
+	// its values, once. The old file is renamed, a setting this build doesn't
+	// have is skipped, and a bad value keeps the default.
+	// Test ID: df4rx
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_beta1_config_is_imported_once() {
+		let _guard = test_config_lock();
+		let _store = test_store_lock();
+		let _ = take_conversion_loss();
+		let dir = format_test_dir("beta1_saved");
+		let path = dir.join("config.shcl");
+		let toml = dir.join("config.toml");
+		std::fs::write(&toml, BETA1_SAVED).unwrap();
+		set_config_override(path.clone());
+
+		let s = load();
+		assert!(!toml.exists(), "renamed");
+		let names = dir_names(&dir);
+		let kept: Vec<&String> = names
+			.iter()
+			.filter(|name| name.starts_with("config_backup_") && name.ends_with("_beta1.toml"))
+			.collect();
+		assert_eq!(kept.len(), 1, "{names:?}");
+		assert_eq!(
+			std::fs::read_to_string(dir.join(kept[0])).unwrap(),
+			BETA1_SAVED
+		);
+		let now = std::fs::read_to_string(&path).unwrap();
+		assert_eq!(
+			shcl::format_version(&now),
+			Some(shcl::FORMAT_MAJOR),
+			"{now}"
+		);
+		let doc = shcl::Document::parse(&now);
+		let text = |at: &str| doc.get_string(at).unwrap_or_default();
+		assert_eq!(doc.get_bool("font.use_system_family"), Ok(false), "{now}");
+		assert_eq!(text("font.family"), "JetBrains Mono, Fira Code");
+		assert_eq!(doc.get_float("font.size"), Ok(15.5));
+		assert_eq!(doc.get_int("window.columns"), Ok(132));
+		assert_eq!(doc.get_float("transparency.opacity"), Ok(0.9));
+		assert_eq!(
+			text("wallpaper.image"),
+			"C:\\Users\\me\\Pictures\\sea \"blue\".png"
+		);
+		assert_eq!(text("cursor.animation"), "phase");
+		assert_eq!(doc.get_float("cursor.blink_rate_s"), Ok(0.8));
+		assert_eq!(text("theme_mode"), "light");
+		assert_eq!(text("colors.background"), "#101010");
+		// beta1's one attention color is `highlight` now
+		assert_eq!(text("colors.highlight"), "#ff8800");
+		assert!(!now.contains("cursor_animation_input"), "{now}");
+		// the grid shows the remembered size, so the file's own is read
+		let (raw, said) = read_config_text(&now, &path);
+		assert_eq!(raw.columns, Some(132));
+		assert_eq!(raw.rows, None, "a bad value keeps the default");
+		assert!(
+			said.iter().any(|line| line.contains("window.rows")),
+			"{said:?}"
+		);
+		assert_eq!(s.scrollback, Settings::default().scrollback);
+		assert_eq!(
+			s.shells
+				.iter()
+				.find(|e| e.active)
+				.map(|e| e.command.as_str()),
+			Some("bash --norc"),
+			"{:?}",
+			s.shells
+		);
+
+		// a later launch has nothing to read, even with a config.toml back
+		std::fs::write(&toml, "columns = 99\n").unwrap();
+		let again = load();
+		assert!((again.font_size - 15.5).abs() < 1e-4);
+		assert!(toml.exists());
+		assert_eq!(std::fs::read_to_string(&path).unwrap(), now, "settled");
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
+	// The template beta1 wrote on a first launch imports with nothing set by
+	// hand that it didn't set, so the profile stays automatic and the file
+	// says nothing at launch.
+	// Test ID: df4ry
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_beta1_first_launch_config_stays_automatic() {
+		let _guard = test_config_lock();
+		let _store = test_store_lock();
+		let dir = format_test_dir("beta1_first");
+		let path = dir.join("config.shcl");
+		std::fs::write(dir.join("config.toml"), BETA1_FIRST_LAUNCH).unwrap();
+		set_config_override(path.clone());
+
+		let s = load();
+		let now = std::fs::read_to_string(&path).unwrap();
+		assert!(config_complaints(&now).is_empty(), "{now}");
+		assert_eq!(
+			crate::fields::get(&s, Key::PerfAuto),
+			Some(Value::Bool(true))
+		);
+		let (raw, _) = read_config_text(&now, &path);
+		assert_eq!((raw.columns, raw.rows), (Some(160), Some(48)));
+		assert_eq!(s.scrollback, 10000);
 		let _ = load();
 		assert_eq!(std::fs::read_to_string(&path).unwrap(), now, "settled");
 		let _ = std::fs::remove_dir_all(&dir);

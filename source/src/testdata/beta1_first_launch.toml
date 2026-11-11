@@ -1,0 +1,232 @@
+## SilkTerm configuration. Delete this file to regenerate defaults.
+## Convention: '## ' starts an explanatory comment; a single '# ' before a
+## `key = value` is a commented-out (disabled) setting you can uncomment.
+## This file is yours to edit: your values, comments, and layout are left alone.
+## On launch SilkTerm only adds options new to this version (and renames/removes
+## ones that changed) - and even that is skipped if the file looks open elsewhere.
+
+##=============================================================================
+## Font
+##=============================================================================
+
+## Use the OS default monospace font FAMILY: put it at the head of the
+## font_family stack below. Turn off to start at font_family instead. Ignored
+## where the OS has no monospace setting to read (Windows has none).
+use_system_font = true
+
+## Use the OS default monospace font SIZE, overriding font_size below. Turn off
+## to size the font yourself. Ignored where the OS reports no size.
+# use_system_font_size = true
+
+## Font family: a comma-separated fallback stack, first installed one wins. The
+## same list is consulted on every platform; use_system_font above only decides
+## whether the OS font is tried ahead of it. Anything not installed is skipped,
+## and a built-in stack backs the whole list up.
+font_family = "Monaspace Argon, Fira Code, JetBrains Mono, Cascadia Mono, Consolas, Ubuntu Mono, SF Mono, Menlo, Courier New"
+
+## Font size in logical pixels. Used when use_system_font_size = false.
+# font_size = 17.0
+
+## Line height as a multiple of the font's natural height (1.0 = tight).
+line_height_scale = 1.22
+
+##=============================================================================
+## Window
+##=============================================================================
+
+## Pixels between the text and the pane edge.
+margin = 8.0
+
+## Initial window size, in character cells (used when remember_size = false).
+columns = 160
+rows = 48
+
+## Launch at the last window size instead of columns/rows (default on). The
+## remembered size is updated automatically whenever you resize the window (kept
+## separate from columns/rows so unchecking reverts to your defined size).
+# remember_size = true
+# remembered_columns = 160
+# remembered_rows = 48
+
+## Hide the tab bar while only one tab is open (also in the View menu).
+# hide_single_tab = false
+
+##=============================================================================
+## Background and transparency
+##=============================================================================
+
+## Transparency: when on, the terminal background (only - never the text, window
+## frame, or menus) becomes see-through, using `opacity` below as its alpha. The
+## code picks the method (per-pixel via a GL surface on X11; native elsewhere).
+# transparent_background = true
+
+## Background opacity, 0.0 (fully transparent) to 1.0 (opaque). Only takes effect
+## when `transparent_background` is on.
+opacity = 0.95
+
+## Ask the compositor to blur the desktop showing through the translucent
+## background ("frosted glass"); text stays crisp. Only honored by KWin and
+## picom-with-blur; on Compiz/GNOME it does nothing (enable blur in the
+## compositor instead). The compositor, not SilkTerm, controls the blur radius.
+# transparent_background_blur = true
+
+## Wallpaper image. Leave commented to auto-detect wallpapers/wallpaper.{png,jpg,jpeg}
+## (or the legacy backgrounds/background.{png,jpg,jpeg}) under this directory. Value
+## may be an absolute path or a filename relative here.
+# wallpaper = "wallpaper.png"
+
+## Show a built-in wallpaper when none is configured (no wallpaper found
+## above and no wallpaper_folder below). Set false for a plain terminal.
+# wallpaper_default = true
+
+## Rotate the wallpaper through a folder of images (overrides wallpaper
+## while set). Path is absolute or relative to this directory. Rotate randomly
+## instead of filename order, and every N seconds (0 = pick one at startup only).
+# wallpaper_folder = "wallpapers"
+# wallpaper_rotate_random = false
+# wallpaper_rotate_interval_s = 0.0
+
+## Image visibility relative to the background color (independent of `opacity`
+## above): 0.0 = all background color, 1.0 = all image.
+# wallpaper_opacity = 0.10
+
+## How the image fits: "stretch" (fill, ignore aspect) or "zoom" (cover, keep aspect).
+# wallpaper_fit = "stretch"
+
+## Gaussian blur applied to the wallpaper (sigma in pixels; 0 = none).
+# wallpaper_blur = 10.0
+
+## Contrast mask: flatten the wallpaper's contrast so it stops competing
+## with text. `size` is the flatten scale (1.0 = half the longest pixel
+## dimension, so the whole image collapses toward one tone; small = only fine
+## detail flattens). `strength` is how far each pixel is pulled toward that local
+## mean. `auto` blends the two manual knobs with values derived from the image's
+## own busyness (1.0 = full auto override, 0.0 = manual only, 0.5 = average).
+# wallpaper_contrast_mask = true
+# wallpaper_contrast_mask_size = 0.5
+# wallpaper_contrast_mask_strength = 0.5
+# wallpaper_contrast_mask_auto = 0.5
+
+##=============================================================================
+## Text scrim
+##=============================================================================
+
+## Text readability scrim: a blurry background-colored halo behind each glyph, so
+## text stays legible over a light/busy background or near-transparent terminal.
+## On by default; uncomment and set text_scrim = false to disable.
+# text_scrim = true
+# text_scrim_radius = 5.0     ## scrim halo radius in pixels
+# text_scrim_softness = 0.5   ## 0 = hard/solid scrim, 1 = soft/faint
+# text_outline = 2.0          ## antialiased outline around glyphs, in pixels (0 = none)
+# text_scrim_function = "sdf" ## halo shape: "sdf" (round, full corners), "dt", "dilate" (square), or "gaussian" (legacy, corners recede)
+# text_scrim_ramp = "gaussian" ## halo falloff curve: "exp", "gaussian", "log", "s", or "linear"
+# text_scrim_regular_weight = true  ## blur bold text at regular weight so its halo matches non-bold text
+# color_emoji = true          ## paint colour emoji (COLRv1); false renders them as monochrome outlines
+# embolden_inverse = true     ## render reverse-video (dark-on-light) text bold so it reads as strongly as normal
+# cursor_scrim = false        ## the cursor joins the scrim halo (default off)
+# cursor_outline = true       ## the cursor joins the text outline (default on)
+
+##=============================================================================
+## Cursor
+##=============================================================================
+
+## Cursor size, as a percent of the cell: height grows from the bottom, width from
+## the left. Together they make any shape: a thin bar (height 100 / width 25), an
+## underline (15 / 100), or a block (100 / 100). Used when the app doesn't set its
+## own; alt-screen apps (vim, less) still control theirs.
+# cursor_size_height = 100
+# cursor_size_width = 25
+
+## Cursor animation: "none" (steady), "phase" (smooth fade), or a pulse that
+## grows/shrinks each cycle - "pulse_vertical", "pulse_horizontal", "pulse_both".
+## The cursor always slides smoothly as you type.
+# cursor_animation = "pulse_vertical"
+
+## What the animation does while you're typing. "continuous" (default) keeps
+## animating right through typing. "pause" glides the cursor to full size and
+## holds it while there's input, then resumes the animation once input has been
+## idle briefly - so it doesn't restart on every keystroke.
+# cursor_animation_input = "continuous"
+
+## Cursor animation cycle length, in milliseconds (blink rate).
+# cursor_blink_rate_ms = 500
+
+##=============================================================================
+## Selection
+##=============================================================================
+
+## Delimiters that bound a double-click word selection. The default keeps
+## : / . - _ ~ as part of a word, so paths (incl. C:\ drive paths), URLs and
+## namespaced identifiers stay selected whole. Leave commented for the default;
+## set to your own string of separator characters to override (add ':' back to
+## split on it).
+# word_separators = ",|\"' ()[]{}<>"
+
+## Pairs whose contents a double-click selects when the click is inside a matched
+## pair (highest precedence first). Leave commented for the default.
+# selection_pairs = "`` \"\" '' {} () [] <>"
+
+##=============================================================================
+## Shell
+##=============================================================================
+
+## Default shell/command for new windows, tabs, and panes when nothing else is
+## given (CLI --shell and per-pane inheritance take precedence). argv-split, so
+## "bash --norc" works. Leave blank/commented to use the system default shell.
+# default_shell = "bash --norc"
+
+## Default command line applied when SilkTerm is launched with no arguments - the
+## same window/tab/pane options the CLI accepts (see --help). Any actual
+## command-line arguments override this entirely. Leave blank/commented for none.
+# command_line = "--new-pane --right --size 35%"
+
+## Start every pane with "Copy on select" enabled (selected text goes to the
+## clipboard). The menu-bar checkbox still toggles it live per pane.
+# copy_on_select = false
+
+##=============================================================================
+## Scrolling
+##=============================================================================
+
+## Lines of scrollback history kept per pane.
+scrollback = 10000
+
+## Smooth-scroll feel. This is the *initial* (slow, smooth) easing for sporadic
+## output, shown in Settings as "Initial scroll speed"; lower tau = snappier. Under
+## a fast output burst the scroll automatically ramps faster to keep up, then eases
+## back to this speed once output stops.
+scroll_tau_ms = 230.0      ## ms; ~ "Initial scroll speed" 25 on the 1..100 dialog scale
+wheel_lines = 3.0          ## lines per wheel notch (smooth scrollback)
+alt_scroll_lines = 3.0     ## lines per wheel notch in full-screen apps (less, nano)
+output_ease_lines = 1.0    ## how far new output slides in before easing to rest
+
+## Ease the whole-line jumps of apps that repaint a scrolling region instead of
+## growing scrollback: full-screen apps that own the screen (less, vim, nano, htop,
+## tmux, ...) and, on Windows, ConPTY-driven TUIs whose output scrolls above a fixed
+## input line. Their scrolling slides instead of snapping; the revealed strip fills
+## with the background during the ~quarter-second slide.
+## Only clean line-scrolls are eased (big page-jumps still snap).
+# smooth_scroll_apps = true
+
+##=============================================================================
+## Theme and colours
+##=============================================================================
+
+## Colour theme. Pick a built-in (SilkTerm, Matrix, Retro Amber) or one you add in
+## a [themes.*] table. theme_mode is "dark", "light", or "system" (follow the OS).
+theme = "SilkTerm"
+theme_mode = "dark"
+
+## Per-colour overrides on top of the theme (uncomment any to tweak one colour).
+## The menu_*/dialog_* keys recolour the chrome (menu bar + dropdowns, and the
+## pop-out Settings/About dialogs); by default every theme shares the same neutral
+## chrome. Menu hover/border shades derive from menu_background automatically.
+[colors]
+# background        = "#000000"
+# foreground        = "#d2d2da"
+# cursor            = "#7a9ad0"
+# focus             = "#5580c8"
+# menu_background   = "#36363b"
+# menu_foreground   = "#f0f0f2"
+# dialog_background = "#20202a"
+# dialog_foreground = "#e2e2ea"

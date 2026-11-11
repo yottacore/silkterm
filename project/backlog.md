@@ -321,7 +321,8 @@ Going forward, new issues in the new template at the bottom of this file will go
 - Import a v1.0.0-beta1 `config.toml`
 	- ID: 2026110920480399
 	- Type: Feature
-	- Status: Queued
+	- Status: Waiting on automated testing
+	- Needs external testing: a launch on macOS (b26) with only `~/.config/silkterm/config.toml`, `HOME` pointed at a temp folder. The unit tests cover the file beside the settings file, not that branch.
 	- Priority: Avg
 	- Opened: 20261109-204804
 	- Opened by: JC
@@ -332,6 +333,18 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- It happens once. The old file is kept, renamed, the same way a too-old config is.
 		- A key the current build doesn't know is skipped, and a bad value falls back to the default.
 	- Origin: The answer to the Check on 2026110610154305 in questions.md, "Yes we must be able to import toml too."
+	- Progress log:
+		- 20261110: beta1's layout is the template at 367c777e^, the last commit before shcl: flat `key = value` lines and a `[colors]` table, in `$XDG_CONFIG_HOME` or `~/.config`, else `%APPDATA%`. Its two fixtures are that template and a save with edits, in `source/src/testdata/beta1_*.toml`.
+		- 20261110: A launch with no settings file reads `config.toml` beside it, or `~/.config/silkterm/config.toml` where that isn't the native place. Its values go through the same conversion as a pre-nesting SHCL file, and the old file is renamed `config_backup_<time>_beta1.toml`.
+	- Decisions:
+		- 20261110: A small hand reader, not a toml crate. toml is in the tree only as a build-time dependency of a proc macro, so the crate would add to the binary. The reader takes one-line strings, numbers, booleans, and tables, which is all beta1 wrote. Anything else is skipped, as beta1's own reader skipped a line it couldn't read.
+		- 20261110: The old file is renamed rather than copied, so no later launch reads it, even after the new file is deleted. Its name keeps `.toml`, with `_beta1` where a converted SHCL file has `_format-v<n>`.
+		- 20261110: `colors.focus` is read as `colors.highlight`, as for every file from before that rename. `default_shell` goes to the top of the shell list, as a beta2 file's does.
+		- 20261110: A setting with no place now, such as `cursor_animation_input`, is left out without a message. The beta1 template had several of them active, such as `scroll_tau_ms`, so a count would name settings nobody set. They stay in the renamed file.
+	- Branch: rnd1111
+	- Test case: df4rw (reader), df4rx (a saved file, once), df4ry (the first-launch template stays automatic). df4rx and df4ry fail with the import call taken out of `load`.
+	- Verified: The backlog quick run passes in all 5 areas, with 1462 unit tests.
+	- Swept: The import runs in `load` before the template is written, after `adopt_legacy_config`. The only other write of a missing file is a save in `persist`, which writes back a file deleted while the program was running, from the settings the launch already read, so it's left as it is.
 
 - Profiler: text shaping read 80.4% at 327d97e, against about 50% on the card in late October
 	- ID: 2026110920480499
