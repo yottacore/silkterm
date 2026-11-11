@@ -321,7 +321,10 @@ fCheck "with no log tee or plan" fNot grep -q 'Fail-fast' <<<"${out}"
 ## Commented out 20261109: the memory cap's flags sit before the name. Checked below.
 # fCheck "the gate's container is named for the step" grep -qE '^run --rm --init --shm-size 1g --cpus [0-9]+ --cpu-shares 256 --name silkterm-'"${runRe}"'-gate ' "${work}/gate.log"
 fCheck "the gate's container is named for the step, with the CPU and memory caps" grep -qE '^run --rm --init --shm-size 1g --cpus [0-9]+ --cpu-shares 256 --memory '"${memWant}"'g --memory-swap '"${memWant}"'g --oom-score-adj 1000 --name silkterm-'"${runRe}"'-gate ' "${work}/gate.log"
-fCheck "and the gate ends with the same cleanup" grep -q '^builder prune -f --filter until=168h' "${work}/gate.log"
+## Commented out 20261111: the build cache is left to the daemon's GC. Checked below.
+# fCheck "and the gate ends with the same cleanup" grep -q '^builder prune -f --filter until=168h' "${work}/gate.log"
+fCheck "and the gate ends with the same cleanup" bash -c 'grep -qx "image ls -q --filter dangling=true --filter label=dev.project=silkterm" "$1" && grep -q "^system df" <(tail -1 "$1")' _ "${work}/gate.log"
+fCheck "which leaves the build cache alone" fNot grep -qE '^(builder|buildx|system) prune' "${work}/gate.log"
 ## CICD_MEM_CAP over the default, none for no cap, and a bad one stopping the run
 ## before docker is asked anything. CodeQL inside the engine run gets 48g.
 memRun=(--container -y --no-sync --no-dogfood --no-publish --no-private --quick --no-fuzz)
@@ -386,8 +389,9 @@ fCheck "with none of the run's containers left, says nothing of them" fNot grep 
 
 ## At the start a stopped container of ours goes. At the end, failed or not, the
 ## run's containers go by its label, then untagged images of ours, then older tags
-## once the run passed, keeping the one before, then the volume rule, then build
-## cache over a week old, and a line comparing docker's sizes.
+## once the run passed, keeping the one before, then the volume rule, and a line
+## comparing docker's sizes. The build cache is every project's, left to the
+## daemon's GC.
 oldTags="2026-10-03T07:00|silkterm-cicd:000000000003 2026-10-01T07:00|silkterm-cicd:000000000001 2026-10-02T07:00|silkterm-cicd:000000000002"
 FAKE_TAGS="${oldTags}" FAKE_UNTAGGED="sha256:feedface" FAKE_STOPPED="c0ffee" FAKE_RUN_IDS="beef1 beef2" FAKE_PRUNED="1.2GB" \
 	FAKE_IMAGE_MISSING=1 fRun tidy.log --container -y --no-sync --no-dogfood --no-publish --no-private --quick
@@ -399,15 +403,20 @@ fCheck "an untagged image the pipeline labeled goes" bash -c 'grep -qx "image ls
 fCheck "the older tags are only the pipeline's" grep -qE '^image ls silkterm-cicd --filter label=dev\.project=silkterm --format' "${work}/tidy.log"
 fCheck "the newest one before this run's stays" fNot grep -qx 'image rm silkterm-cicd:000000000003' "${work}/tidy.log"
 fCheck "and older ones go" bash -c 'grep -qx "image rm silkterm-cicd:000000000002" "$1" && grep -qx "image rm silkterm-cicd:000000000001" "$1"' _ "${work}/tidy.log"
-fCheck "the build cache over a week old is pruned" grep -qx 'builder prune -f --filter until=168h' "${work}/tidy.log"
-fCheck "after the run's containers went" bash -c 'awk "/^rm beef1/ {r = NR} /^builder prune/ {p = NR} END {exit !(r && p && r < p)}" "$1"' _ "${work}/tidy.log"
-fCheck "saying so in the one cleanup line" grep -qE '^cleanup: removed .*1 untagged images, 2 older container images, docker build cache over a week old, ' <<<"${out}"
+## Commented out 20261111: the build cache is left to the daemon's GC. Checked below.
+# fCheck "the build cache over a week old is pruned" grep -qx 'builder prune -f --filter until=168h' "${work}/tidy.log"
+# fCheck "after the run's containers went" bash -c 'awk "/^rm beef1/ {r = NR} /^builder prune/ {p = NR} END {exit !(r && p && r < p)}" "$1"' _ "${work}/tidy.log"
+# fCheck "saying so in the one cleanup line" grep -qE '^cleanup: removed .*1 untagged images, 2 older container images, docker build cache over a week old, ' <<<"${out}"
+fCheck "the build cache is never pruned" fNot grep -qE '^(builder|buildx|system) prune' "${work}/tidy.log"
+fCheck "saying what went in the one cleanup line" grep -qE "^cleanup: removed .*1 untagged images, 2 older container images, the run's temp folder; " <<<"${out}"
+fCheck "with no word of the build cache" fNot grep -qi 'build cache' <<<"${out}"
 fCheck "with about what docker's sizes before and after say it freed" grep -qE "^cleanup: removed .*, the run's temp folder; about 5\.2 GB freed$" <<<"${out}"
 fCheck "and that line is the only one about it" fNot grep -qE '^(docker: |docker build cache|cleanup: stopped)' <<<"${out}"
 fCheck "nothing is removed by force, nor the whole system pruned" fNot grep -qE '^((rm|rmi|image rm|container rm|volume rm) .*(^| )(-f|--force)( |$)|system prune)' "${work}/tidy.log"
 FAKE_TAGS="${oldTags}" FAKE_RUN_RC=7 fRun tagfail.log --container -y --no-sync --no-dogfood --no-publish --no-private --quick
 fCheck "a run that failed removes no tag" fNot grep -q '^image rm silkterm-cicd:' "${work}/tagfail.log"
-fCheck "but still prunes and removes its containers" bash -c 'grep -q "^builder prune" "$1" && grep -qE "^ps -aq --filter label=dev\.run=" "$1"' _ "${work}/tagfail.log"
+## Changed 20261111: no build cache prune.
+fCheck "but still removes its containers" grep -qE "^ps -aq --filter label=dev\.run=" "${work}/tagfail.log"
 
 ## The cache volumes: only the pipeline's, one over the cap goes whole, and so does
 ## the Zig one another Zig filled. docker keeps one still in use.
@@ -471,7 +480,8 @@ runsBefore="$(fRunDirs)"
 intPid=$!
 for _ in $(seq 1 100); do grep -q '^run --rm' "${work}/int.log" 2>/dev/null && break; sleep 0.1; done
 sleep 0.5; kill -INT -- "-${intPid}" 2>/dev/null || true; wait "${intPid}" 2>/dev/null || true
-fCheck "on Ctrl+C the run's containers still go" bash -c 'grep -qx "stop -t 10 beef9" "$1" && grep -q "^builder prune" "$1"' _ "${work}/int.log"
+## Changed 20261111: the end is docker's sizes, not the build cache prune.
+fCheck "on Ctrl+C the run's containers still go" bash -c 'grep -qx "stop -t 10 beef9" "$1" && grep -q "^system df" <(tail -1 "$1")' _ "${work}/int.log"
 fCheck "and so does the run's folder" test "$(fRunDirs)" == "${runsBefore}"
 ## The same in a full run, whose output goes through the log tee, which Ctrl+C
 ## takes down too, so the end must not write before it is done.
@@ -485,7 +495,7 @@ intPid=$!
 for _ in $(seq 1 200); do grep -q '^run --rm' "${work}/intfull.log" 2>/dev/null && break; sleep 0.1; done
 sleep 0.5; kill -INT -- "-${intPid}" 2>/dev/null || true; wait "${intPid}" 2>/dev/null || true
 fCheck "and in a full run, through the log tee, all of the end runs" \
-	bash -c 'grep -qx "stop -t 10 beef8" "$1" && grep -qx "volume rm silkterm-cicd-cache" "$1" && grep -q "^builder prune" "$1" && grep -q "^system df" <(tail -1 "$1")' _ "${work}/intfull.log"
+	bash -c 'grep -qx "stop -t 10 beef8" "$1" && grep -qx "volume rm silkterm-cicd-cache" "$1" && grep -q "^system df" <(tail -1 "$1")' _ "${work}/intfull.log"
 fCheck "the run's folder with it" test "$(fRunDirs)" == "${runsBefore}"
 
 rc=0; out="$(cd "${repo}" && SILK_CICD_IN_CONTAINER=1 FAKE_LOG="${work}/nested.log" bash cicd/cicd.bash --container -y 2>&1)" || rc=$?
