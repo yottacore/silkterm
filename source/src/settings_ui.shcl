@@ -225,7 +225,7 @@ rows:
 		aliases: ["benchmark", "hardware test"]
 		kind: toggle
 		setting: performance.automatic
-		help: "Test how fast this machine draws, and pick the profile it can run smoothly. If the display still falls behind, the profile drops a step until SilkTerm restarts, but never below Low."
+		help: "Test how fast this computer draws, and pick the profile it can run smoothly. If drawing still falls behind, SilkTerm drops to the next profile down until it restarts, but never below Low."
 
 	PerfProfile:
 		label: Profile
@@ -234,7 +234,7 @@ rows:
 		setting: performance.profile
 		auto: PerfAuto
 		rule: machine_profile
-		help: "Which effects to use, from Max silk with all of them to Standard terminal with none. Picking one turns off Choose automatically. Remote (temporary) doesn't, and only lasts until SilkTerm restarts."
+		help: "Which effects to use, from Max silk with all of them to Standard terminal with none. Picking one turns off Choose automatically. Picking Remote (temporary) doesn't, and that profile only lasts until SilkTerm restarts."
 
 	## The label stays short because the widest one on any tab sets the panel's
 	## width, and the flyover has what it leaves out.
@@ -243,7 +243,7 @@ rows:
 		kind: toggle
 		setting: performance.check_hardware
 		gate: PerfAuto
-		help: "Test the machine again when its processor, graphics card, or memory changes. The test takes a few seconds. Only used with Choose automatically on."
+		help: "Test the machine again when its processor, graphics card, or memory changes. The test takes a few seconds. This is only used when Choose automatically is on."
 
 	PerfCheckNext:
 		label: Re-test next run
@@ -251,7 +251,7 @@ rows:
 		beside: true
 		setting: performance.check_next_run
 		gate: PerfAuto
-		help: "Test the machine again at the next launch, even if nothing changed. Turns itself off after the test."
+		help: "Test the machine again at the next launch, even if nothing changed. This turns itself off once the test is done."
 
 	## Not under Choose automatically: Remote comes on at launch either way.
 	PerfDetectRemote:
@@ -259,7 +259,7 @@ rows:
 		aliases: ["automatic remote mode", "remote desktop", "rdp", "vnc", "x forwarding"]
 		kind: toggle
 		setting: performance.detect_remote
-		help: "Switch to the Remote (temporary) profile when SilkTerm starts on a remote screen, such as over Remote Desktop, VNC, or X forwarding. Turned off, Temporary remote display mode on the View menu still switches it by hand."
+		help: "Switch to the Remote (temporary) profile when SilkTerm starts on a remote screen, such as over Remote Desktop, VNC, or X forwarding. With this off, Temporary remote display mode on the View menu still switches to it by hand."
 
 	TextReadability:
 		kind: heading
@@ -284,7 +284,7 @@ rows:
 		setting: text.scrim.strength
 		gate: TextScrim
 		group: profile
-		help: "How solid the scrim is. High values fill in the gaps between letters. Light mode uses less of it, since it stands out more there."
+		help: "How solid the scrim is. High values fill in the gaps between letters. Light mode uses less, since a scrim shows up more on a light background."
 
 	ScrimRadius:
 		label: Scrim radius px
@@ -315,7 +315,7 @@ rows:
 		setting: text.scrim.function
 		gate: TextScrim
 		group: profile
-		help: "How the scrim's outline is worked out from the letters."
+		help: "How the scrim's outline is traced around the letters."
 
 	ScrimRamp:
 		label: ""
@@ -345,7 +345,7 @@ rows:
 		whole: true
 		setting: text.outline
 		group: profile
-		help: "A sharp outline around each letter. Works alone or with the scrim."
+		help: "A sharp outline around each letter. It works alone or with the scrim."
 
 	Scrolling:
 		kind: heading
@@ -430,7 +430,7 @@ rows:
 		aliases: ["colors", "color scheme", "palette"]
 		kind: dropdown
 		setting: theme
-		help: "The color scheme the terminal and this dialog follow."
+		help: "The color scheme for the terminal and this dialog."
 
 	ThemeMode:
 		label: Mode
@@ -446,13 +446,13 @@ rows:
 		kind: toggle
 		indent: 1
 		setting: font.ignore_themes
-		help: "Off, picking a saved theme also sets its font family, size and line height. The built-in themes have no font."
+		help: "When this is off, picking a saved theme also sets the font family, size, and line height saved with it. The built-in themes don't have a font."
 
 	ThemeActions:
 		label: ""
 		kind: buttons
 		options: ["Save", "Save as…", "Rename…", "Delete"]
-		help: "Save keeps the colors below and the font under this theme's name. Only a saved theme can be renamed or deleted."
+		help: "Save stores the colors below and the font settings under this theme's name. Only a saved theme can be renamed or deleted."
 
 	Colors:
 		kind: heading
@@ -550,7 +550,7 @@ rows:
 		aliases: "thumb"
 		kind: color
 		setting: colors.scrollbar_thumb
-		help: "Also colors the minimap marker. Themes don't change this color or Track."
+		help: "This color is also used for the minimap marker. Themes don't change it or the Track color."
 
 	ColScrollbarTrough:
 		label: Track
@@ -633,7 +633,7 @@ rows:
 		kind: toggle
 		setting: wallpaper.honor_xmp_look
 		gate: BgEnabled
-		help: "Let an image's own Opacity and Blur tags win over the 2 sliders above, so they only apply to images without them. The bundled wallpapers all have tags."
+		help: "Let an image's own Opacity and Blur tags win over the 2 sliders above. The sliders then only apply to images without those tags. The bundled wallpapers all have tags."
 
 	BgContrastMask:
 		label: Contrast mask
@@ -650,7 +650,7 @@ rows:
 		whole: true
 		setting: wallpaper.contrast_mask.size
 		gate: BgContrastMask
-		help: "How big an area around each spot is looked at to decide how much to dim it."
+		help: "The size of the area checked around each spot, to work out how much to dim it."
 
 	BgContrastStrength:
 		label: Strength %
@@ -668,7 +668,7 @@ rows:
 		whole: true
 		setting: wallpaper.contrast_mask.auto
 		gate: BgContrastMask
-		help: "How much the mask goes by the image itself instead of the 2 sliders above. 100 is all from the image."
+		help: "How much the mask is based on the image itself, rather than on the 2 sliders above. At 100 it's based only on the image."
 
 	## Last on the tab, since it is the one that depends on the desktop.
 	Transparency:
@@ -695,7 +695,7 @@ rows:
 		kind: toggle
 		setting: transparency.blur_behind
 		gate: Transparency
-		help: "Blur what's behind the window, on desktops that can."
+		help: "Blur what's behind the window, on desktops that support it."
 
 	## ---------------------------------------------------------------------- Text
 
@@ -715,7 +715,7 @@ rows:
 		options: ["Face", "Size"]
 		parts: [SystemFont, SystemFontSize]
 		setting: [font.use_system_family, font.use_system_size]
-		help: "Follow the desktop's own monospace font, for the face and the size independently."
+		help: "Use the desktop's own monospace font. Face and Size can each be turned on separately."
 
 	FontFamily:
 		label: Family
@@ -744,7 +744,7 @@ rows:
 		range: [0.8, 2]
 		typed_max: 4
 		setting: font.line_height_scale
-		help: "Space between lines, as a multiple of the font's own."
+		help: "The height of each line, as a multiple of the font's normal line height."
 
 	## -------------------------------------------------------------------- Cursor
 
@@ -841,7 +841,7 @@ rows:
 		typed_max: 100
 		whole: true
 		setting: scroll.wheel_lines
-		help: "Lines traveled per notch of the mouse wheel."
+		help: "How many lines to scroll per notch of the mouse wheel."
 
 	Scrollbar:
 		label: Scrollbar
@@ -863,7 +863,7 @@ rows:
 		kind: toggle
 		setting: scroll.scrollbar.auto_hide
 		gate: Scrollbar
-		help: "Fade the scrollbar out while the view sits still at the bottom."
+		help: "Fade out the scrollbar while the view is at the bottom and not scrolling."
 
 	Minimap:
 		label: Minimap
@@ -901,7 +901,7 @@ rows:
 		kind: toggle
 		setting: window.remember_per_monitor
 		gate: RememberSize
-		help: "Remember a separate size for each monitor. A window moved to another monitor takes that monitor's size."
+		help: "Remember a separate size for each monitor. A window moved to another monitor changes to that monitor's size."
 		warning: "When screens sleep and wake, this can fight the window manager, and the window may come back at an unexpected size or place."
 
 	Columns:
@@ -937,7 +937,7 @@ rows:
 		aliases: ["font size", "text zoom", "window size"]
 		kind: toggle
 		setting: window.resize_on_zoom
-		help: "Changing the font size from the keyboard or the View menu resizes the window to keep the same columns and rows. It stops at the edge of the screen, where the grid gets smaller as usual. A maximized or fullscreen window keeps its size."
+		help: "Changing the font size from the keyboard or the View menu resizes the window to keep the same columns and rows. Once the window fills the screen it stops growing, and the grid gets smaller as usual. A maximized or fullscreen window keeps its size."
 
 	TabRegularWidth:
 		label: Tab width regular %
@@ -985,7 +985,7 @@ rows:
 		aliases: ["macros", "tab name"]
 		kind: text
 		setting: window.tab_text
-		help: "What each tab says. A macro between percent signs is replaced by its value:◉NEWLINE◉%USER_DEFINED%: a name typed on the tab◉NEWLINE◉%PROGRAM_DEFINED%: the title the running program sets◉NEWLINE◉%SHELL%: the shell's name◉NEWLINE◉%PROGRAM%: the program the shell is running◉NEWLINE◉%LAST_PROGRAM%: the program it ran last◉NEWLINE◉%CURRENT_DIRECTORY%: the shell's current directory◉NEWLINE◉◉NEWLINE◉a || b shows a, or b when a comes out empty. { } groups without printing, and [ ] prints its brackets. A group whose macros all come out empty is left out with its text, and so is text between 2 parts unless both of them show. On a narrow tab the parts get shorter in a set order."
+		help: "What each tab says. A macro between percent signs is replaced by its value:◉NEWLINE◉%USER_DEFINED%: a name typed on the tab◉NEWLINE◉%PROGRAM_DEFINED%: the title the running program sets◉NEWLINE◉%SHELL%: the shell's name◉NEWLINE◉%PROGRAM%: the program the shell is running◉NEWLINE◉%LAST_PROGRAM%: the program it ran last◉NEWLINE◉%CURRENT_DIRECTORY%: the shell's current directory◉NEWLINE◉◉NEWLINE◉a || b shows a, or b if a is empty. { } groups parts without showing the braces, and [ ] groups them and shows the brackets. A group is left out, text and all, when all of its macros are empty. Text between 2 parts is left out too, unless both parts show. On a narrow tab the parts are shortened in a fixed order."
 
 	WindowTitle:
 		kind: heading
@@ -1038,7 +1038,7 @@ rows:
 		aliases: ["multiplexer", "detach", "persistent sessions"]
 		kind: toggle
 		setting: shell.tmux.always_new_session
-		help: "Start each new tab, split, and plain launch in a new tmux session. New tab in tmux on the Tabs menu does it for one tab with this off.◉NEWLINE◉◉NEWLINE◉Pros:◉NEWLINE◉- If your desktop crashes, your CLI sessions survive.◉NEWLINE◉- You can connect to existing CLI sessions remotely.◉NEWLINE◉- You can reconnect from any other installed terminal."
+		help: "Start each new tab, split, and plain launch in a new tmux session. With this off, New tab in tmux on the Tabs menu still does it for one tab.◉NEWLINE◉◉NEWLINE◉Pros:◉NEWLINE◉- If your desktop crashes, your CLI sessions survive.◉NEWLINE◉- You can connect to existing CLI sessions remotely.◉NEWLINE◉- You can reconnect from any other installed terminal."
 		warning: "◉NEWLINE◉◉NEWLINE◉Cons:◉NEWLINE◉- Can't launch GUI programs without extra parameters.◉NEWLINE◉- The SilkTerm Minimap is not available.◉NEWLINE◉- SilkTerm can't adjust itself based on programs inside tmux, so you may see occasional weirdness with smooth-scrolling."
 
 	TmuxSessionName:
@@ -1047,7 +1047,7 @@ rows:
 		kind: text
 		indent: 1
 		setting: shell.tmux.session_name
-		help: "What a new tmux session is called. A macro between percent signs is replaced by its value:◉NEWLINE◉%YYYYmmDD%: the date◉NEWLINE◉%HHMMSS%: the time◉NEWLINE◉%HHMMSSNN%: the time, to a hundredth of a second◉NEWLINE◉◉NEWLINE◉A name tmux already has gets a number on the end. Dots, colons, and # become underscores, since tmux won't keep them."
+		help: "What a new tmux session is called. A macro between percent signs is replaced by its value:◉NEWLINE◉%YYYYmmDD%: the date◉NEWLINE◉%HHMMSS%: the time◉NEWLINE◉%HHMMSSNN%: the time, to a hundredth of a second◉NEWLINE◉◉NEWLINE◉If tmux already has a session by that name, a number is added to the end. Dots, colons, and # are changed to underscores, since tmux doesn't accept them in a name."
 
 	TmuxOnClose:
 		label: When closed
@@ -1056,7 +1056,7 @@ rows:
 		options: ["Detach", "End", "Prompt"]
 		indent: 1
 		setting: shell.tmux.on_close
-		help: "What closing a tab or pane does to a tmux session SilkTerm started in it. Detach leaves it running, so it can be attached to again. End closes it and everything running in it."
+		help: "What closing a tab or pane does to a tmux session SilkTerm started in it. Detach leaves it running, so it can be reattached later. End kills the session and everything running in it."
 
 	## What a window costs the machine. Last on the tab, since it is the part
 	## that depends on the graphics driver.
@@ -1071,7 +1071,7 @@ rows:
 		aliases: ["memory", "sleep", "power saving"]
 		kind: toggle
 		setting: window.idle_release
-		help: "Free graphics memory while the window isn't being used, and get it back when it is. Programs in it keep running. Helps most with a lot of windows open, or a card low on memory."
+		help: "Free graphics memory while the window isn't being used, and get it back when it is. Programs in it keep running. It helps most with a lot of windows open, or on a graphics card that's low on memory."
 		warning: "Turn it off only if the graphics driver has trouble with it."
 
 	IdleHiddenMin:
@@ -1137,7 +1137,7 @@ rows:
 		aliases: ["working directory", "cwd", "start folder"]
 		kind: text
 		setting: shell.startup_directory
-		help: "Where a new shell starts when nothing else says. Accepts ~ and environment variables. --directory, an inherited directory, and the launch directory all come first."
+		help: "The directory a new shell starts in when nothing else sets one. It accepts ~ and environment variables. --directory, an inherited directory, and the launch directory all take priority over this."
 
 	## The 2 things SilkTerm sets up in a shell it starts. PowerShell is the
 	## one shell that can't be asked where it is - it keeps its location to
@@ -1160,7 +1160,7 @@ rows:
 		aliases: ["ps1", "git prompt"]
 		kind: toggle
 		setting: shell.bash_prompt
-		help: "Use the x9ps1-git prompt in new bash panes. It shows the git branch and status, and replaces the .bashrc prompt without changing any file."
+		help: "Use the x9ps1-git prompt in new bash panes. It shows the git branch and status. It replaces the .bashrc prompt without changing any files."
 
 	## What Explorer opens a file type with, per user. Register writes it and
 	## saves what was there; the revert arrow puts that back. Both act at once,
@@ -1178,7 +1178,7 @@ rows:
 		kind: buttons
 		options: "Register"
 		windows: true
-		help: "Open .bat and .cmd files from Explorer in SilkTerm. The pane stays open after the script ends, with its exit code. Register again if SilkTerm is moved."
+		help: "Open .bat and .cmd files from Explorer in SilkTerm. The pane stays open after the script ends, and shows its exit code. Register again if SilkTerm is moved."
 		revert_help: "Put back whatever opened .bat and .cmd files before SilkTerm was registered."
 
 	OpenPowerShell:
@@ -1204,7 +1204,7 @@ rows:
 		options: "Register"
 		windows: true
 		help: "Add Open in SilkTerm to the right-click menu for folders, drives, and folder backgrounds. On Windows 11 it's under Show more options."
-		revert_help: "Take Open in SilkTerm off the folder menu."
+		revert_help: "Remove Open in SilkTerm from the folder menu."
 
 
 	## ---------------------------------------------------------------------- Keys
