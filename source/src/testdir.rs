@@ -7,9 +7,9 @@
 //! `SILKTERM_TEST_DIR` hands its own folder down instead, so a whole pipeline
 //! run shares one. The scripts under cicd/tests follow the same contract in
 //! _testdir.bash, .py and .ps1. A folder this process made is removed when the
-//! run passes, and kept when a test panicked, for the pipeline's stale sweep
-//! to take once its process is gone, unless it contains nothing but its marks.
-//! One named by `SILKTERM_TEST_DIR` is never removed.
+//! run passes. When a test panicked it's kept for the pipeline's stale sweep,
+//! unless there's nothing in it but its marks. One named by
+//! `SILKTERM_TEST_DIR` is never removed.
 
 use std::cell::Cell;
 use std::io::{self, ErrorKind, Write};
@@ -63,7 +63,7 @@ pub fn run_dir() -> &'static Path {
 			token,
 		});
 		// A failing test stops before its own cleanup, so its files are the
-		// record of what it wrote. Any panic keeps the folder, bar one a test
+		// record of what it wrote. Any panic keeps the folder, except one a test
 		// caught on purpose through catch_expected_panic.
 		let previous = std::panic::take_hook();
 		std::panic::set_hook(Box::new(move |info| {

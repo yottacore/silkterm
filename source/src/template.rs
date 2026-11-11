@@ -12,9 +12,9 @@
 //! - Text between 2 parts shows only when both sides show a value. A choice
 //!   that is only text counts as text here, which is what lets a separator
 //!   stand in for a part that is missing.
-//! - Tabs, line breaks, and other control characters are ignored, spaces at either
-//!   end of the template, a group or a choice are too, and a run of spaces
-//!   shows as one.
+//! - Tabs, line breaks, and other control characters are ignored. So are spaces
+//!   at either end of the template, a group, or a choice. A run of spaces shows
+//!   as one.
 //! - A backslash makes the character after it plain text: `\%`, `\{`, `\|`.
 //!
 //! Nothing here knows what the names mean or how long the text may be. The tab

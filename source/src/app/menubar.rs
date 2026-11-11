@@ -13,8 +13,8 @@ use crate::term::PaneId;
 use crate::text::TextCtx;
 
 /// macOS has no in-window menu bar, since the system menu bar has the same
-/// menus and a second bar would break the Mac's own menu contract. `--hide-menu`
-/// is accepted there and does nothing. Elsewhere it outranks the saved setting.
+/// menus. `--hide-menu` is accepted there and does nothing. Elsewhere it
+/// outranks the saved setting.
 pub(super) fn menu_bar_at_launch(hide_menu: Option<bool>, saved: bool, mac: bool) -> bool {
 	!mac && hide_menu.map_or(saved, |hide| !hide)
 }
@@ -68,9 +68,8 @@ struct CopyMetrics {
 /// titles come first, then the right-aligned copy-mode labels, and at a narrow
 /// width some of those aren't there at all.
 ///
-/// Everything on this bar sits on ONE baseline. The copy labels used to center
-/// their full ink box, which reads better on its own but left them half a
-/// descent above the titles beside them.
+/// Everything on the bar shares one baseline. The copy labels used to center
+/// their whole ink box, which left them half a descent above the titles.
 pub(super) fn menubar_text_slot(
 	text: &TextCtx,
 	menu_h: f32,
@@ -170,13 +169,11 @@ impl State {
 			.position(|&(x, w)| mx >= x && mx < x + w)
 	}
 
-	/// The "Copy on [ ] select [ ] output" pair on the right of the menu bar. The
-	/// user has to be able to see when the focused pane is auto-copying, so the
-	/// cluster sheds parts rather than shrinking: the lead-in goes first, then the
-	/// 2 words, and only when even the boxes can't clear the menu titles does
-	/// the whole thing go (None). Overlapping text says less about the copy state
-	/// than a clean absence does. It comes back on its own as the window widens.
-	/// `label_x/label_w` index-match `COPYBOX_LABELS`.
+	/// The "Copy on [ ] select [ ] output" pair on the right of the menu bar. It
+	/// has to show when the focused pane is auto-copying, so it drops parts
+	/// rather than overlap the titles. The lead-in goes first, then the 2 words,
+	/// and it's None only when even the boxes don't fit. `label_x` and `label_w`
+	/// index-match `COPYBOX_LABELS`.
 	pub(super) fn copybox_layout(&mut self) -> Option<CopyBoxes> {
 		let titles_right =
 			self.menubar_layout().last().map_or(0.0, |&(x, w)| x + w) + self.text.dip(MENU_BAR_PAD);
@@ -210,11 +207,10 @@ impl State {
 		None
 	}
 
-	/// Flip one of a pane's 2 auto-copy triggers. The 2 are independent and can
-	/// both be on; nothing else is touched (other panes/tabs/windows keep theirs -
-	/// only the focused pane of the active tab actually copies, gated at copy time).
-	/// A toggle from a context menu on an unfocused pane focuses it so the menu-bar
-	/// checkboxes reflect the pane just changed.
+	/// Flip one of a pane's 2 auto-copy triggers, which can both be on. Other
+	/// panes keep theirs, and only the focused pane of the active tab copies. A
+	/// toggle from the context menu of an unfocused pane focuses it, so the menu
+	/// bar's checkboxes show the pane that changed.
 	pub(super) fn toggle_copy(&mut self, target: PaneId, kind: CopyKind) {
 		let Some(p) = self.tabs.find_pane_mut(target) else {
 			return;
@@ -279,9 +275,9 @@ mod tests {
 		let _ = std::fs::remove_dir_all(&dir);
 	}
 
-	// A narrow window used to draw "Copy on:" straight over "Panes" and "Help" -
-	// both there, neither readable. The cluster sheds parts instead, and the
-	// checkboxes are the last thing to go because they show the state.
+	// A narrow window used to draw "Copy on:" over "Panes" and "Help", so none
+	// of it could be read. The cluster drops parts instead, and the checkboxes
+	// go last because they show the state.
 	// Test ID: dbsya
 	#[test]
 	fn the_copy_cluster_sheds_parts_before_it_reaches_the_menu_titles() {

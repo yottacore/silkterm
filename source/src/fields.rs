@@ -887,9 +887,9 @@ pub fn rename_preset(settings: &mut Settings, chooser: Key, old: &str, new: &str
 	fill(settings, None);
 }
 
-/// Settings fields set directly, the way a test builds them, made into what is
-/// stored, as a file with those lines would load. Only a field that shows a
-/// value other than the one stored is taken.
+/// Turns fields a test set directly into stored values, the way a file with
+/// those lines would load. Only a field whose value differs from the stored one
+/// is taken.
 #[cfg(test)]
 pub fn adopt(mut settings: Settings) -> Settings {
 	let shown: Vec<(Key, Value)> = FIELDS.iter().map(|f| (f.key, (f.get)(&settings))).collect();

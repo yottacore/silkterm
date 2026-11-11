@@ -2,11 +2,11 @@
 // Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
 
 //! `SILK_MEMDBG=1` prints what a window uses, on the graphics card and in its
-//! own heap, to stderr whenever it changes. The card figures are the
-//! allocator's own (Vulkan and DX12; the GL path has no report). The heap
-//! figures are counted from the structures that grow with use, so they are a
-//! floor: malloc's own overhead and everything else in the process aren't in
-//! them. See the reducing resources design doc for what they were used for.
+//! own heap, to stderr whenever it changes. The card figures come from the
+//! allocator, which reports on Vulkan and DX12 only. The heap figures are
+//! counted from the structures that grow with use, so malloc's own overhead
+//! and the rest of the process aren't in them. The reduce resources design doc
+//! in `project/design_docs/` has what they were used for.
 
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
