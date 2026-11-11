@@ -35,7 +35,7 @@ $null = New-Item -ItemType Directory -Path $base
 $ledger = Join-Path $work 'ledger'
 $link = if (fTestDir_OnWindows) { 'Junction' } else { 'SymbolicLink' }
 
-##	The old name, as the ledgers on the boxes still hold, and the new one.
+##	The old name, as the ledgers on the boxes still have it, and the new one.
 function fDir([int]$N) { Join-Path $base $(if ($N -le 3) { 'test_silkterm_2026101{0}-00000000' -f $N } else { '20261001-00000{0}_001' -f $N }) }
 foreach ($n in 1..6) {
 	$null = New-Item -ItemType Directory -Path (fDir $n)

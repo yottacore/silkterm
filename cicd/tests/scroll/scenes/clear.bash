@@ -5,10 +5,10 @@
 ## up. Bash's Ctrl+L sends home and erase-display with no scrollback clear, so the
 ## old screen goes up into history whole, and that is the form that used to ease.
 ## A burst first shows that output still eases. The trace prints nothing for a
-## frame at rest, so the part under test sits between two trips to the alt screen.
+## frame at rest, so the part under test sits between 2 trips to the alt screen.
 ## Both scroll down, the first a line at a time and the second 9 lines at once,
 ## which tells the start from the end.
-## `clear` under ble.sh with a two-row prompt is in the run too.
+## `clear` under ble.sh with a 2-row prompt is in the run too.
 ## POSIX sh (dash).
 
 ##	History: At bottom of file.

@@ -96,7 +96,7 @@ done
 if [[ -z "${sock}" ]]; then echo "  skip: sway did not start"; exit 3; fi
 wl=(env -u DISPLAY -u TMUX -u TMUX_PANE -u SILKTERM_SOCKET XDG_RUNTIME_DIR="${runDir}" WAYLAND_DISPLAY=wayland-1 SWAYSOCK="${sock}")
 
-## The seat has no devices, so a keyboard held for the whole run.
+## The seat has no devices, so wtype adds a keyboard for the whole run.
 "${wl[@]}" wtype -s 600000 &
 kbdPid=$!
 

@@ -131,7 +131,7 @@ def rm(path: "str | os.PathLike[str]") -> bool:
 
 def use() -> Path:
 	## make(), then this process's tempfile calls and every program it starts
-	## write there. tempfile caches its answer, so TMPDIR alone wouldn't move it.
+	## write there. tempfile caches its result, so TMPDIR alone wouldn't move it.
 	## TEMP and TMP too, as the pipeline sets them.
 	folder = make()
 	for name in ("TMPDIR", "TEMP", "TMP"):

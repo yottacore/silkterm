@@ -3,15 +3,15 @@
 
 ##	- Purpose:
 ##		CARGO_TARGET_DIR may be set, and may be absolute. A stage that assumes
-##		'target' builds and then looks for its binary where it was never put -
-##		the Windows installer step did exactly that, warned, and went on, so a
-##		release could go out with no installers in it.
+##		`target` builds and then looks for its binary where it was never put.
+##		The Windows installer step did that, warned, and went on, so a release
+##		could go out without any installers in it.
 ##		fBuildPackages() is lifted out of cicd.bash and run against the real
-##		template and makensis, once with each shape of target directory.
+##		template and makensis, once with each kind of target directory.
 ##		The release collection and the Linux packages run too, on stand-in
-##		binaries and a stand-in cargo, for the names and checksums download
-##		links depend on. And the cross-build flags that keep the Windows
-##		builds reproducible.
+##		binaries and a stand-in cargo, for the names and checksums that download
+##		links depend on. The cross-build flags that keep the Windows builds
+##		reproducible are checked too.
 ##	- Test ID: dcrrh
 ##	- History: At bottom of file.
 
@@ -51,8 +51,8 @@ else
 	fEcho_Clean(){ echo "    ${*}"; }
 	eval "$(sed -n '/^fBuildPackages(){/,/^}/p' "${realRoot}/cicd/cicd.bash")"
 
-	## $1 is the binary path as stage 5 recorded it - relative to the repository
-	## with no CARGO_TARGET_DIR, absolute with one.
+	## $1 is the binary path as stage 5 recorded it. It's relative to the
+	## repository without CARGO_TARGET_DIR, and absolute with it.
 	fRunStep() {
 		local bin="${1}" out="${2}"
 		local abs="${bin}"
@@ -92,7 +92,7 @@ fi
 
 ## The release collection and the Linux packages, lifted out of cicd.bash with
 ## fReleaseExpects and fWriteSums. The binaries are stand-ins, and so are cargo
-## and the two package tools, so what is checked is the names, the calls, and
+## and the 2 package tools, so what is checked is the names, the calls, and
 ## the checksums.
 pkgWork="$(mktemp -d)"
 trap 'rc=$?; fTestDir_Rm "${work:-}" || true; fTestDir_Rm "${pkgWork}" || true; fTestDir_End "${rc}"' EXIT
@@ -168,7 +168,7 @@ STUB
 ) || failures=$((failures + $?))
 
 ## The Windows linkers write the link time into the PE header unless told not to,
-## and then the same commit built twice has two checksums.
+## and then the same commit built twice has 2 checksums.
 fLinkFlag(){ python3 - "${realRoot}/.cargo/config.toml" "${1}" "${2}" <<'PY'
 import sys, tomllib
 cfg = tomllib.load(open(sys.argv[1], "rb"))

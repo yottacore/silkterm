@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 
 ##	- Purpose:
-##		A monitor going dark and coming back, as two monitors do waking from
-##		power save. Runs the real program on headless sway with two outputs,
+##		A monitor going dark and coming back, as 2 monitors do waking from
+##		power save. Runs the real program on headless sway with 2 outputs,
 ##		a landscape one and a portrait one, through its Xwayland. The window
 ##		sits on the portrait output at the size kept for it. The portrait
 ##		output is turned off, so sway moves the window onto the landscape one,
@@ -136,7 +136,7 @@ def walk(node, output):
 		walk(child, output)
 walk(json.load(sys.stdin), None)' "${appPid}"
 }
-## Waits up to <tenths> for the window to be somewhere else than <where>.
+## Waits up to <tenths> for the window to be somewhere other than <where>.
 fLeaves(){  ## fLeaves <where> <tenths>
 	local i
 	for ((i = 0; i < ${2}; i++)); do [[ "$(fWhere)" != "${1}" ]] && return 0; sleep 0.1; done

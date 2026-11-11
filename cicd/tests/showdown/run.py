@@ -129,7 +129,7 @@ def xterm_row() -> str:
 	return " | ".join(xterm_cells())
 
 ## Every line of the table has a leading pipe and no trailing one, the columns
-## line up, and each column's alignment is spelled out.
+## line up, and each column's alignment is set.
 def table_is_tidy() -> bool:
 	text = readme.read_text(encoding="utf-8")
 	block = text.split(tb.README_BEGIN, 1)[1].split(tb.README_END, 1)[0]
@@ -170,7 +170,7 @@ again = tb.readme_table(block, [])
 check("an unchanged table is rewritten byte for byte",
 	again == tb.README_BEGIN + block + tb.README_END)
 
-## update-showdown.py: a quick or --any-size run passes nothing on to be written.
+## update-showdown.py: a quick or --any-size run doesn't pass anything on to be written.
 us = load("update_showdown", UTILITY / "update-showdown.py")
 calls: list[list[str]] = []
 def fake_run_plain(cmd: list[str]) -> bool:
@@ -258,7 +258,7 @@ check("and takes a relative one from the repository",
 ## Both rigs start SilkTerm on settings of their own, never the measuring account's.
 ## The terminal here is a stand-in that does what SilkTerm does at launch: it rewrites
 ## the settings file it loads and adds a PowerShell profile beside it. The speed rig
-## also gets a compositor that only makes its two sockets.
+## also gets a compositor that only makes its 2 sockets.
 account = scratch / "account"
 sentinel = account / ".config/silkterm/config.shcl"
 sentinel.parent.mkdir(parents=True)

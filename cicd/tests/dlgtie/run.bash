@@ -4,7 +4,7 @@
 ##		Opens Settings in the real program under xfwm4 on the private display,
 ##		and checks it stays tied to the terminal window:
 ##			- Transient for it, a dialog, and modal.
-##			- Off the taskbar and the pager, as the window manager holds the
+##			- Off the taskbar and the pager, as the window manager records the
 ##			  state, so the two windows make one entry in each.
 ##			- Above the terminal after a click on the terminal, a raise of it,
 ##			  and another program's window coming in front and going back.
@@ -136,7 +136,7 @@ fCheck "transient for the terminal window" fTransient
 fCheck "a dialog" grep -qF '_NET_WM_WINDOW_TYPE_DIALOG' <<<"$(fProp "${dlg}" _NET_WM_WINDOW_TYPE)"
 fCheck "modal" grep -qF '_NET_WM_STATE_MODAL' <<<"$(fProp "${dlg}" _NET_WM_STATE)"
 
-## Entries the two windows make, as the window manager lists and holds them.
+## Entries the two windows make, as the window manager lists them and sets their state.
 fEntries(){
 	local -r skip="${1}"
 	local w n=0

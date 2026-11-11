@@ -3,8 +3,8 @@
 
 <#
 .SYNOPSIS
-	Three windows, two on one settings file and one on another. A save in the
-	first has to show in the second at once, and never in the third.
+	There are 3 windows, 2 on one settings file and one on another. A save in
+	the first has to show in the second at once, and never in the third.
 .DESCRIPTION
 	The same checks as cicd/tests/livecfg on Linux, over named pipes:
 	- View > Minimap in window A saves. A's minimap comes on, B keeps its
@@ -104,7 +104,7 @@ function fMarkers([int]$Id) {
 }
 
 ##	A picture is prepared on a worker after the first frame, and the text's
-##	halo follows it, so a window is only read once two shots a second apart
+##	halo follows it, so a window is only read once 2 shots a second apart
 ##	agree.
 function fSettled([IntPtr]$H, [string]$Name) {
 	$prev = fShot $h "$name-prev"

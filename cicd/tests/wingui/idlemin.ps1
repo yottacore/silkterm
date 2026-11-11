@@ -4,11 +4,11 @@
 <#
 .SYNOPSIS
 	"Minutes when hidden" on a minimized window on a real Windows desktop, at
-	its shipped 1 minute.
+	its default of 1 minute.
 .DESCRIPTION
 	Each arm, Transparency on and then off: a minimized window keeps its device
 	for half a minute, lets it go within a minute and a quarter, and shows what
-	it did once restored. Not in the pipeline: about three minutes, close to the
+	it did once restored. Not in the pipeline: about 3 minutes, close to the
 	harness limit.
 .NOTES
 	History: At bottom of file.

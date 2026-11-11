@@ -5,12 +5,12 @@
 #  shellcheck disable=2034  ## 'appears unused.' The lifted fStepMem reads them.
 
 ##	- Purpose:
-##		The memory cap every step runs under (utility/include/memcap.bash): a third
-##		of RAM from 4g to 32g, a step's own default when it has one, CICD_MEM_CAP
-##		over both, none for no cap, and anything else stopping the run before it
-##		starts a thing. A container gets the cap with no swap and goes first to
-##		the OOM killer, and the pipeline runs again in a systemd user scope with
-##		the same, once.
+##		The memory cap every step runs under (utility/include/memcap.bash). It's a
+##		third of RAM from 4g to 32g, or a step's own default when it has one, and
+##		CICD_MEM_CAP overrides both. "none" means no cap, and any other bad value
+##		stops the run before it starts anything. A container gets the cap with no
+##		swap and goes first to the OOM killer, and the pipeline runs itself again
+##		once, in a systemd user scope with the same cap.
 ##	- Test ID: df2ss
 ##	- History: At bottom of file.
 

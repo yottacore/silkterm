@@ -2,12 +2,12 @@
 
 ##	- Purpose:
 ##		Launches the real program on the private display with cursor blink off,
-##		and runs quiet programs from a scene shell. Each prints nothing while it
-##		runs, so nothing else asks for a frame. The window title follows the
+##		and runs quiet programs from a scene shell. They don't print anything
+##		while they run, so nothing else asks for a frame. The window title follows the
 ##		tab, and it has to name each one while it runs.
 ##			- Each starts right after a frame was drawn, some at once and some a
 ##			  little later. The tab kept what it saw then for a short while, and
-##			  with no later frame it never said the program's name.
+##			  without a later frame it never showed the program's name.
 ##	- Syntax: run.bash [--bin PATH]   (default: the debug build, then release)
 ##	- Exit: 0 passed, 1 a check failed, 3 nothing ran (no binary, display,
 ##	  dash, xdotool, or xprop).

@@ -35,7 +35,7 @@ fNote "foreground: $(fForeground)"
 
 ##	Have the shell write a file rather than watching for the picture to change. A
 ##	line of text moves a few tenths of a percent of the pixels, which is the same
-##	order as a blinking cursor - so a pixel diff can't tell typing from noise.
+##	order as a blinking cursor. So a pixel diff can't tell typing from noise.
 $proof = Join-Path $OutDir "typed.txt"
 Remove-Item $proof -ErrorAction SilentlyContinue
 $before = fShot $h "smoke-before"

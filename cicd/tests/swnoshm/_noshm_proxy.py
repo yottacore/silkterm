@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 
 ##	- Purpose:
-##		An X server with no MIT-SHM shared pixmaps, made by standing in front
-##		of a real one that has them. Everything goes through as sent, file
-##		descriptors too, except that MIT-SHM QueryVersion answers no shared
-##		pixmaps and every ShmCreatePixmap fails BadImplementation, as on a
+##		An X server with no MIT-SHM shared pixmaps. It's a proxy in front of a
+##		real one that has them. Everything goes through as sent, file
+##		descriptors too, except that MIT-SHM QueryVersion replies with no shared
+##		pixmaps, and every ShmCreatePixmap fails with BadImplementation, as on a
 ##		server whose driver can't make them (NVIDIA's). A piece of
 ##		swnoshm/run.bash, not a test of its own.
-##	- Syntax: _noshm_proxy.py <real display, :N> <display number to answer as>
+##	- Syntax: _noshm_proxy.py <real display, :N> <display number to listen as>
 ##	- Exit: runs until killed; 2 bad arguments, no python-xlib, or the real
 ##	  server has no MIT-SHM.
 
@@ -63,7 +63,7 @@ class Session:
 		self.server = server
 		self.shm = shm_opcode
 		self.lock = threading.Lock()
-		## low 16 bits of the sequence numbers to answer differently
+		## low 16 bits of the sequence numbers to reply to differently
 		self.versions: set[int] = set()
 		self.pixmaps: set[int] = set()
 

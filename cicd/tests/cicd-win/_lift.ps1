@@ -266,7 +266,7 @@ fCheck 'and then says the cleanup line, on a failure too' ($text -match '(?m)^\s
 fCheck 'which fDie''s exit reaches' ($text -match '(?m)^function fDie .*; exit 1 \}\r?$' -and $text -notmatch 'fTestDir_End 1')
 fCheck 'with 2 days for a stale one' ($text -match '(?m)^\$StaleDays = 2\r?$')
 
-##	The stash before a pull answers with a bare bool, so git's own lines must
+##	The stash before a pull returns a bare bool, so git's own lines must
 ##	not end up in it. A clean tree stashes nothing; a dirty one is stashed with
 ##	its untracked files.
 function fEcho_Clean { }
@@ -477,7 +477,7 @@ fCheck 'and lists both with none off' (($ran -join ',') -eq 'fListRustTests,fScr
 fCheck 'the pipeline''s stage 3 is fTestStep' ($text -match '(?m)^\s*\$null = fStepOpen ''Tests''\s*\r?\n\s*fSetJobs\s*\r?\n\s*fTestStep\s*\r?\n\s*fStepClose')
 fCheck 'and -NoRelease builds nothing for release' ($text -match '(?m)^\s*if \(-not \$NoRelease\) \{\s*\r?\n\s*\$script:RemapConfig = fRemapConfig\s*\r?\n\s*\$built = ')
 
-##	The path map, from folders whose names hold a backslash and a quote. The
+##	The path map, from folders whose names have a backslash and a quote. The
 ##	TOML reader on the other end decides whether they were escaped right.
 $Root = "$Work/sil\k`"term"
 New-Item -ItemType Directory -Path $Root -Force | Out-Null

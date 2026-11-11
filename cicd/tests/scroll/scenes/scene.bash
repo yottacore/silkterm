@@ -1,16 +1,16 @@
 #!/bin/dash
 
-## Deterministic full-redraw scroll scene for the SILK_SCROLLDBG harness. Models the
-## paint shape of a real full-screen app so the alt-screen slide can be measured
-## without key injection - it self-scrolls on a timer. Shape ($1):
+## A scroll scene for the SILK_SCROLLDBG harness. It redraws the screen the way a real
+## full-screen program does, so the alt-screen slide can be measured without key
+## injection, and scrolls itself on a timer. Shape ($1):
 ##   less   - content from the top, one static bottom status line (no top band)
-##   vim    - content from the top, two static bottom rows (status + command line)
-##   nano   - one static title bar on top, two static help rows at the bottom
-##   muffer - two static header rows on top, one static footer row
+##   vim    - content from the top, 2 static bottom rows (status + command line)
+##   nano   - one static title bar on top, 2 static help rows at the bottom
+##   muffer - 2 static header rows on top, one static footer row
 ##   tmux   - a scroll region above one status row, scrolled with real linefeeds
 ##   pill   - a region scrolled back with CSI T, a pill repainted over its last row
 ##   chrome - a transcript on the normal screen with a live block redrawn under it,
-##            one new transcript line per step (muffer's shape)
+##            one new transcript line per step (like muffer)
 ##   aptbar - apt's progress bar: a region over all but the last row on the normal
 ##            screen, the bar redrawn on that row, with the scrollback already full
 ##   paste  - an input box on a half-empty normal screen growing a line a step and
@@ -18,14 +18,14 @@
 ##            input box taking a paste)
 ##   pasteil - the same box grown with insert-line and shrunk with delete-line, so
 ##            the engine records each step as a region scroll
-##   prompt - a shell under ble.sh: a short command's output, then the two-row
+##   prompt - a shell under ble.sh: a short command's output, then the 2-row
 ##            prompt drawn with insert- and delete-line under the cursor, and now
 ##            and then the prompt redrawn in place the same way, on a half-empty
 ##            screen and then a full one
-## The repaint shapes use explicit cursor positioning (CUP) and never a newline, so
-## nothing scrolls the real grid - only the drawn content shifts, exactly the way
-## curses/nano repaint. The tmux shape is the other kind: it sets DECSTBM and lets
-## the terminal scroll, the way tmux (and less) drive it.
+## The repaint shapes place the cursor with CUP and never write a newline, so the
+## real grid never scrolls and only the drawn text moves, the same way curses and
+## nano repaint. The tmux shape is the other kind. It sets DECSTBM and lets the
+## terminal scroll, the way tmux and less do.
 ## POSIX sh (dash): no backticks (dash would run them and leak the temp path).
 
 ##	History: At bottom of file.
@@ -81,8 +81,8 @@ if [ "${shape}" = paste ] || [ "${shape}" = pasteil ]; then
 	rows=${sz% *}
 	case "${rows}" in ''|*[!0-9]*) rows=30 ;; esac
 	[ "${rows}" -ge 16 ] || rows=30
-	## transcript 1-3, border 4, input 5.., border, two footer rows, and at
-	## least two blank rows left under it
+	## transcript 1-3, border 4, input 5.., border, 2 footer rows, and at
+	## least 2 blank rows left under it
 	hmax=$((rows - 9))
 	h=0
 	grow=1

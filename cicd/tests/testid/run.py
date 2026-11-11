@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 
 ##	Purpose:
-##		The test ID tool, run on a made-up tree: IDs in whole minutes in
-##		Crockford base 32, the next free minute for tests made together, and a
-##		check that refuses a missing, malformed, old base 62, future, or shared ID.
-##		Test result lines as PASS, FAIL, or SKIP, ID and name. The scroll
-##		harness's scenes and the fuzz targets each with an ID of their own.
-##		The private repo's test scripts, checked in the same set.
+##		Runs the test ID tool on a made-up tree. IDs are whole minutes in
+##		Crockford base 32, tests made together get the next free minute, and the
+##		check refuses a missing, malformed, old base 62, future, or shared ID.
+##		Result lines read PASS, FAIL, or SKIP, then the ID and name. The scroll
+##		harness's scenes and the fuzz targets each get an ID of their own, and
+##		the private repo's test scripts are checked in the same set.
 ##	Syntax: run.py
 ##	Exit: 0 all passed, 1 a check failed.
 ##	Test ID: dejjp

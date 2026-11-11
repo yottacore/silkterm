@@ -8,9 +8,9 @@
 	Check where cicd-win.ps1 looks for each release binary.
 .DESCRIPTION
 	cicd-win.ps1 looks for each release binary under the target directory. It
-	used to spell that '$Root\target', which is wrong wherever CARGO_TARGET_DIR
-	is set, and stops the Windows pipeline outright. fTargetDir is lifted out of
-	the file rather than retyped.
+	used to build that path as '$Root\target', which is wrong wherever
+	CARGO_TARGET_DIR is set and stopped the Windows pipeline. fTargetDir is
+	lifted out of the file rather than retyped.
 .PARAMETER Pipeline
 	Path to cicd-win.ps1. Default: the one in this repo.
 .NOTES

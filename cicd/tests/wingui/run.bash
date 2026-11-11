@@ -5,25 +5,25 @@
 
 ##	- Purpose:
 ##		Run a graphical scenario against a real Windows desktop and bring back the
-##		verdict and the screenshots. Nothing here can be done from an ssh session
-##		on its own: that opens in session 0, which has no desktop, so the scenario
-##		is handed to an interactive scheduled task in the console session instead.
+##		verdict and the screenshots. None of it can run from an ssh session alone,
+##		because ssh opens in session 0, which has no desktop. So the scenario is
+##		handed to an interactive scheduled task in the console session instead.
 ##	- Syntax:
 ##		run.bash [--host <name>] [--keep] [<scenario> ...]
 ##		With no scenario it runs 'smoke'. Shots come back under cicd/artifacts/wingui.
 ##		Each scenario runs once, on the first box in the host config that is up and
 ##		free. One whose header has a '##	Box: gpu' line runs only on a box tagged
-##		gpu there, since the other box's card is integrated. A scenario no box took
-##		is a SKIP line at the end, added to the file SILK_CICD_SKIPS names as well,
-##		which is how cicd.bash lists them again when the run is over.
+##		gpu there, since the other box's card is integrated. A scenario that no box
+##		took gets a SKIP line at the end. The line also goes in the file that
+##		SILK_CICD_SKIPS names, so cicd.bash can list it again when the run is over.
 ##		The binary is cross-built here from the tree under test and sent along, so
 ##		the result is for this commit and not whatever was last built on the box.
 ##		WINGUI_EXE names a binary to send instead. WINGUI_EXTRA lists more files,
 ##		space separated, that go into the run's folder under their own names.
-##		The run's folder on the box and the scripts it sends go once it is over,
-##		unless --keep. Each box's are written down in WINGUI_RUNS until then
-##		(cicd/artifacts/wingui/runs.txt), so the next run there takes away what a
-##		run killed part way left.
+##		The run's folder on the box and the scripts it sends are removed once the
+##		run is over, unless --keep is given. Until then each box's runs are listed
+##		in WINGUI_RUNS (cicd/artifacts/wingui/runs.txt), so the next run on that
+##		box removes what a killed run left.
 ##	- Exit: 0 pass or skipped, 1 a scenario failed.
 ##	- History: At bottom of file.
 
@@ -60,7 +60,7 @@ fMine(){
 	done
 }
 ##	fSkipsLeft: a SKIP line for each scenario no box took.
-##	A box that answered but couldn't run anything left its reason in WINGUI_RAN.
+##	A box that was up but couldn't run anything left its reason in WINGUI_RAN.
 fSkipsLeft(){
 	local scenario why
 	why="$(sed -n 's/^#why //p' "${WINGUI_RAN}" | paste -sd ';' - | sed 's/;/; /g')"
@@ -94,8 +94,8 @@ if [[ -z "${WINGUI_RAN:-}" ]]; then WINGUI_RAN="$(mktemp)"; ownRan=1; fi
 # shellcheck source=cicd/tests/_testdir.bash
 source "${meDir}/../_testdir.bash"; fTestDir_Use
 
-##	The harness sends itself rather than coming from the remote clone, which is
-##	pinned to origin/dev - otherwise every edit here would need a push before it
+##	The harness sends itself rather than running from the remote clone, which is
+##	pinned to origin/dev. Otherwise every edit here would need a push before it
 ##	could be run once.
 bundle="$(mktemp --suffix=.tgz)"
 ##	Every script sent goes in the box's jobs folder under its own name, so each
@@ -236,8 +236,8 @@ Remove-Item $tgz -Force
 ##	Sent along by run.bash. The clone's own build is from whenever it was last made.
 $exe = Join-Path $dir "silkterm.exe"
 
-##	Whoever holds the console is who the scenario has to run as - not whoever ssh
-##	logged in as, which may have been pushed off it.
+##	The scenario has to run as whoever is on the console, rather than whoever ssh
+##	logged in as, since that user may have been pushed off it.
 Add-Type -Namespace Con -Name W -MemberDefinition @"
 [DllImport("kernel32.dll")] public static extern uint WTSGetActiveConsoleSessionId();
 "@
@@ -258,7 +258,7 @@ $me   = "$env:COMPUTERNAME\$who"
 $arg  = "-NoProfile -STA -ExecutionPolicy Bypass -File `"$work\_run.ps1`" -Scenario $scenario -Exe `"$exe`" -OutDir `"$out`" -RunDir `"$dir`""
 $act  = New-ScheduledTaskAction -Execute $pwsh -Argument $arg
 $pri  = New-ScheduledTaskPrincipal -UserId $me -LogonType Interactive
-##	Always clear the last answer first. A result file left by the scenario before
+##	Always clear the last result first. A result file left by the scenario before
 ##	this one is indistinguishable from this one finishing instantly, and the poll
 ##	below would take it, print it, and unregister the task mid-run.
 $res  = Join-Path $out "result.txt"
@@ -284,7 +284,7 @@ if ($said -ne $scenario) { "VERDICT fail the answer is from '$said', not '$scena
 Get-Content $res | Where-Object { $_ -notlike "SCENARIO *" }
 Get-ChildItem (Join-Path $out "shots") -Filter *.png -ErrorAction SilentlyContinue |
 	ForEach-Object { "  shot $($_.Name) $($_.Length)" }
-##	Read the VERDICT line by name. It used to be the first line and is not any
+##	Read the VERDICT line by name. It used to be the first line but isn't any
 ##	more, and taking line one instead quietly stopped every failure propagating.
 $line = (Get-Content $res | Where-Object { $_ -like "VERDICT *" } | Select-Object -First 1)
 if (-not $line) { "VERDICT fail no verdict line in the result"; exit 1 }
@@ -350,8 +350,8 @@ fBox(){
 			"${winRemote}" --host "${box}" --optional pull "${runDir}\\out\\shots" "${shotDir}" >/dev/null 2>&1 || true
 		fi
 	fi
-	##	Take the run's folder and scripts away, pass or fail, so a shared box does
-	##	not pile them up. Only the folder the stage made and marked.
+	##	Remove the run's folder and scripts, pass or fail, so they don't pile up on
+	##	a shared box. Only the folder the stage made and marked.
 	fSweepOwn "${box}"
 	return "${boxFailed}"
 }

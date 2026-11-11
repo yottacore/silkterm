@@ -359,7 +359,7 @@ print(",".join(line.strip() for line in sys.stdin if line.strip() and not near(*
 fCheck "never told a grid well off the ones it took" fNoMoment
 
 ## Moved to HEADLESS-3 at the same scale, so not told, then the pointer over
-## it and straight to fullscreen: it looks while fullscreen. It saves nothing,
+## it and straight to fullscreen: it looks while fullscreen. It doesn't save,
 ## and takes HEADLESS-3's size once back.
 fKeyMove
 fStep "moved to the 100% output once more" HEADLESS-1 "20 110"

@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 
 ##	- Purpose:
-##		win-remote.bash connects to the Windows boxes over ssh. A box can answer on
-##		one of several addresses, and one that is off is the normal case, so the
-##		runner has to try each address, step over a box that is down, and fail
-##		only when nothing answers and the caller didn't say that was fine. Run
-##		against a stand-in ssh and scp on PATH and a host list of its own.
+##		win-remote.bash connects to the Windows boxes over ssh. A box can be on
+##		one of several addresses, and a box that's off is the normal case, so the
+##		runner has to try each address, skip a box that's down, and fail only
+##		when no box replies and the caller didn't say that was fine. The test
+##		runs against a stand-in ssh and scp on PATH and a host list of its own.
 ##	- Test ID: dd5nr
 ##	- History: At bottom of file.
 
@@ -25,8 +25,8 @@ fCheck(){ local -r what="${1}"; shift; if "${@}"; then echo "  ok   ${what}"; el
 work="$(mktemp -d "${TMPDIR:-/tmp}/silk-winremote.XXXXXX")"
 trap 'rc=$?; fTestDir_Rm "${work}" || true; fTestDir_End "${rc}"' EXIT
 
-## An ssh that answers for every address not listed in STUB_DOWN, and notes each
-## command it was given; an scp that does the same for its target. Neither ever
+## An ssh that connects to every address not listed in STUB_DOWN, and notes each
+## command it was given. The scp does the same for its target. Neither one
 ## touches the network.
 stubs="${work}/stubs"
 mkdir -p "${stubs}"
@@ -93,8 +93,8 @@ fCheck "without touching the other box" fNotCalled "192.0.2.20"
 fRemote "192.0.2.10 192.0.2.20" hosts
 fCheck "hosts lists each box as up or down" test "${rc}" -eq 0 -a -n "$(grep -E '^boxa +up +192\.0\.2\.11$' <<<"${out}")" -a -n "$(grep -E '^boxb +down +192\.0\.2\.20$' <<<"${out}")"
 
-## A host lock that another session holds boxa through. wrap waits on a busy box
-## and gives up with the lock's own exit 3; a free one runs the command with it held.
+## A host lock, with boxa held by another session. wrap waits on a busy box and
+## gives up with the lock's own exit 3, and on a free one runs the command with it held.
 cat >"${stubs}/lock" <<'STUB'
 #!/usr/bin/env bash
 cmd="${1}"; shift
@@ -144,8 +144,8 @@ printf 'boxa 192.0.2.10\nboxb 192.0.2.20 gpu  # the card\n' >"${conf}"
 fRemote "" hosts
 fCheck "hosts prints a box's tags after its address" test -n "$(grep -E '^boxb +up +192\.0\.2\.20 gpu$' <<<"${out}")" -a -n "$(grep -E '^boxa +up +192\.0\.2\.10$' <<<"${out}")"
 
-## The VM state helper holds through the same lock and wakes a VM first. One that
-## never wakes exits before the command, which is a skip like a busy box.
+## The VM state helper takes the same lock and wakes a VM first. A VM that never
+## wakes exits before the command, which is a skip like a busy box.
 cat >"${stubs}/vmstate" <<'STUB'
 #!/usr/bin/env bash
 [[ "${1}" == wrap ]] || exit 2; shift

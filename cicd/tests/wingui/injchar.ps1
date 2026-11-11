@@ -3,11 +3,11 @@
 
 <#
 .SYNOPSIS
-	A character can reach a window handed over whole instead of typed, and that
-	is how the touch keyboard sends what its layout has no key for.
+	A character can be handed to a window whole instead of typed, and that's
+	how the touch keyboard sends what its layout has no key for.
 .DESCRIPTION
-	Text expanders and some accessibility tools do the same. It used to reach
-	nothing at all here.
+	Text expanders and some accessibility tools do the same. Those characters
+	used to get lost here.
 .NOTES
 	History: At bottom of file.
 #>
@@ -38,11 +38,11 @@ $said = if (Test-Path $proof) { Get-Content $proof -Raw } else { "" }
 [void](fShot $h "inj-after")
 [void](fCheck "an injected character reaches the shell" ($said -match "silkrig-packet"))
 
-##	The case the touch keyboard is for: a character the layout has no key
-##	for, so nothing but an injection could have produced it. The check is loose and
-##	the note has what was written: a shell that redirects in the console
-##	code page mangles the accent on its way to the file, which says nothing about
-##	what the terminal received.
+##	The case the touch keyboard is for is a character the layout has no key for,
+##	so nothing but an injection could have produced it. The check is loose, and
+##	the note has what was written, since a shell that redirects in the console
+##	code page mangles the accent in the file. That says nothing about what the
+##	terminal received.
 $accent = Join-Path $OutDir "injected-accent.txt"
 Remove-Item $accent -ErrorAction SilentlyContinue
 fSendChars ([string]::Concat("echo caf", [char]0x00E9, "-", [char]0x4E2D, " > ", $accent))

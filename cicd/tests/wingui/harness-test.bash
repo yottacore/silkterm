@@ -3,7 +3,7 @@
 #  shellcheck disable=2016  ## 'Expressions don't expand in single quotes.' The PowerShell being matched needs literal '$'.
 
 ##	- Purpose:
-##		There are 4 things the Windows scenario harness got wrong, checked without a box.
+##		Checks, without a box, 4 things the Windows scenario harness got wrong.
 ##		It ran whatever binary the box last built, so a result could be for an
 ##		older commit. Its cleanup stopped every process named silkterm, on
 ##		boxes other people use. It kept its files outside the temp folder. And it
@@ -148,7 +148,7 @@ fCheck "not another box's" fNot grep -qF '20251231000000-2' "${old:-/dev/null}"
 fCheck "then it is off the list, and the other box's run is not" test "$(cat "${work}/killed/runs.txt")" = $'other\t20251231000000-2\t\t'
 fCheck "and the run went on" test "${rc}" -eq 0
 
-## A box that never answers the sweep keeps the run on the list for next time.
+## A box that never replies to the sweep keeps the run on the list for next time.
 mkdir "${work}/silent"
 rc=0
 out="$(WINGUI_RUNS="${work}/silent/runs.txt" STUB_SILENT=1 STUB_LOG="${work}/silent/calls" STUB_DIR="${work}/silent" WINRIG_HELD=1 \
@@ -194,7 +194,7 @@ fCheck "and says it skipped" grep -qFx "wingui: no box up, skipped" <<< "${out}"
 fCheck "without sending or running anything" bash -c '! grep -qE "^(push|run) " "$1"' _ "${work}/calls-down"
 
 ## The cleanup. There are 2 processes named silkterm: one a run started, with a child of
-## its own, and one somebody else's. Only the first two may stop.
+## its own, and one somebody else's. Only the run's process and its child may be stopped.
 if command -v pwsh >/dev/null 2>&1; then
 	mkdir -p "${work}/ours" "${work}/theirs"
 	cp /bin/sh "${work}/ours/silkterm"

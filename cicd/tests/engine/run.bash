@@ -164,8 +164,8 @@ fCheck "the dhat test hands on to CodeQL, with the report folder" \
 	bash -c 'sed -n "/^fRunLeakcheck(){/,/^}/p" "$1" | grep -q "^[[:space:]]*fRunCodeql \"\${outDir}\"$"' _ "${engine}"
 fCheck "the config names a Rust suite, and the suppressions file is there" \
 	bash -c 'source "$1" && [[ "${CODEQL_SUITE}" == codeql/rust-queries:* && -f "$2/../${CODEQL_SUPPRESSIONS}" ]]' _ "${cicd}/config.bash" "${cicd}"
-## syn and the like reach the crate list only through proc macros, which run at
-## build time, and brought about 200 results with them (2026102211462005).
+## syn and the like are on the crate list only through proc macros, which run
+## at build time, and they brought about 200 results with them (2026102211462005).
 fCheck "the release crates leave out a proc macro's own dependencies" \
 	grep -qF 'cargo tree --offline --locked -e normal,no-proc-macro ' "${cicd}/utility/codeql.bash"
 ## The SARIF filter, lifted from codeql.bash, on two results with the same rule
@@ -792,8 +792,8 @@ fCheck "and each option leaves out its own part" test "$(fStage noRustTests=1 no
 fCheck "--no-clippy all 3 clippy runs" test "$(fStage noClippy=1)" = "fmt,debug,cargo test,script-lints,index,advisories,advisory-tests,deny,release,packages"
 fCheck "--no-deny the advisory scan, its tests and the rest of cargo-deny" test "$(fStage noDeny=1)" = "fmt,debug,cargo test,clippy,clippy-windows,clippy-macos,script-lints,release,packages"
 
-## The test scripts, while the docs checks, which run through the same
-## helper, keep to --no-docs.
+## --no-script-tests leaves out the test scripts. The docs checks run through
+## the same helper, but only --no-docs leaves them out.
 offRoot="${work}/offroot"; mkdir -p "${offRoot}/t" "${offRoot}/cicd/tests/toc"
 printf '#!/usr/bin/env bash\necho ran >>"%s/ran"\n' "${offRoot}" >"${offRoot}/t/x.bash"
 cp "${offRoot}/t/x.bash" "${offRoot}/cicd/tests/toc/run.py"; chmod +x "${offRoot}/t/x.bash" "${offRoot}/cicd/tests/toc/run.py"

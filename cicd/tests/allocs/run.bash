@@ -25,31 +25,17 @@ meDir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 root="$(cd "${meDir}/../../.." && pwd)"
 headless="${root}/cicd/utility/gui-headless.bash"
 
-## Mean allocations per frame. At rest that is the frame itself plus the
-## events and loop passes before it, a timer wake or two. In the drag the
-## frame is held to its limit on its own, and what came before it is held per
-## pointer move instead: a slow box folds more moves into each frame, so a
-## per-frame count there rises with the load, not the code. The count is the
-## whole window thread's, so the graphics driver's share is in it: about 130
-## of them on llvmpipe, the software GL. Measured 20261006: at rest 189 before
-## the frame lists were kept, 167 after; drag 382 and 340. Between frames in
-## a drag, about 2.5 per move (20261010). A driver update can move the floor,
-## so read the figures with --report before moving a limit.
-## The drag frame still had 2 shares that grow with load (20261024). The
-## minimap recomposes once its gap is up, so on every third frame or so on an
-## idle box and every frame on a busy one, about 20 each. And each row the
-## selection newly covers costs about 17, and a slow frame folds more of them.
-## So the drag first jumps down to cover the rows, and only then is counted,
-## moving along one row: a busy box can then add no more than the compose.
-## Measured: 331 to 345, idle or with 8 cores loaded. Later that day a moved
-## selection or link hover stopped composing the map, and the drag read 327
-## idle and 315 to 317 loaded, against 321 with the map off.
-## At load 50 or so the shells' output was still easing in, at 1 or 2 frames
-## a second, 20 s after launch, and the shell scan, started 3 s after the
-## window shows, was folded in later still: about 87000 allocations in one go
-## (20261024). So the count at rest starts once the scan is in and the last few
-## frames were drawn for the cursor alone, and runs until it has enough
-## frames, not for a fixed time.
+## Mean allocations per frame, for the whole window thread, so the graphics
+## driver's share is in it, about 130 on llvmpipe. A driver update can move
+## the floor, so read the figures with --report before moving a limit.
+## In the drag, what comes between frames is limited per pointer move rather
+## than per frame, because a slow box folds more moves into each frame.
+## Each row the selection newly covers costs about 17, so the drag jumps down
+## to cover the rows first and is only counted while it moves along one row.
+## Under heavy load the shell scan can be folded in 20 s or more after launch,
+## about 87000 allocations in one go. So the count at rest waits for the scan
+## and a few frames drawn for the cursor alone, and runs until it has enough
+## frames rather than for a fixed time.
 idleLimit="${ALLOCS_IDLE_LIMIT:-178}"
 dragLimit="${ALLOCS_DRAG_LIMIT:-360}"
 moveLimit="${ALLOCS_MOVE_LIMIT:-6}"
@@ -231,7 +217,7 @@ echo "all passed"
 
 ##	History:
 ##		- 20261006 JC: Created.
-##		- 20261010 JC: The drag holds its frame and its pointer moves apart.
+##		- 20261010 JC: The drag frame and its pointer moves get limits of their own.
 ##		- 20261024 JC: The counted drag moves along one row.
 ##		- 20261024 JC: The count at rest waits for frames drawn for the cursor alone.
 ##		- 20261105 JC: Neither the rest nor the drag may compose the minimap.

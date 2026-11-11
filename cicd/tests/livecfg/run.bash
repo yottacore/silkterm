@@ -5,9 +5,9 @@
 ##		on another. A save in the first has to show in the second at once, and
 ##		never in the third.
 ##			- View > Minimap in window A saves. A's minimap comes on, B keeps
-##			  its own, C's doesn't change, and nobody picks a new wallpaper.
+##			  its own, C's doesn't change, and none of them picks a new wallpaper.
 ##			- A new wallpaper folder written by hand, then Reload config in A.
-##			  A and B both pick from the new folder; C picks nothing.
+##			  A and B both pick from the new folder, and C doesn't pick at all.
 ##			- B killed without warning. The next save in A finds it gone and
 ##			  takes its marker away.
 ##			- A window D opened after a save starts with what was saved.
@@ -143,7 +143,7 @@ fSame(){  ## fSame <a.png> <b.png>
 }
 fDiffers(){ ! fSame "${@}"; }
 ## A picture is prepared on a worker after the first frame, and the text's
-## halo follows it, so a window is only read once two shots a second apart
+## halo follows it, so a window is only read once 2 shots a second apart
 ## agree.
 fSettled(){  ## fSettled <name> <out> [West]
 	local -r tmp="${2%.png}.prev.png"

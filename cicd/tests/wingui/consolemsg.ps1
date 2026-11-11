@@ -3,7 +3,7 @@
 
 <#
 .SYNOPSIS
-	A release build owns no console, so what a control command has to say goes
+	A release build doesn't own a console, so what a control command has to say goes
 	to the console it was typed at, or nowhere.
 .DESCRIPTION
 	It went nowhere for a while.

@@ -29,7 +29,7 @@ IGNORE = "TOC ignore:true"
 
 ## Lowercase, keep letters, digits, spaces, hyphens, and underscores, spaces to
 ## hyphens. The extension keeps underscores, which the written-down rule doesn't
-## mention - see #api-alacritty_terminal in design.md.
+## mention. See #api-alacritty_terminal in design.md.
 def anchor(text: str) -> str:
 	kept = [c for c in text.lower() if c.isalnum() or c in " -_"]
 	return "".join(kept).replace(" ", "-")

@@ -128,7 +128,7 @@ fAlone(){  ## fAlone <label> <command ...>
 fEachScript fAlone
 
 ##	D: the helpers agree. fHelper <lang> prints the run folder, then what the
-##	language's own temp call answers once the helper has run. The Bash child
+##	language's own temp call returns once the helper has run. The Bash child
 ##	removes its folder when it exits, so it also prints the base's entry count,
 ##	the folder's mode, and whether it is a real folder, while it still runs.
 fHelper(){
@@ -201,7 +201,7 @@ for rel in "${scripts[@]}" ../cicd.bash ../cicd-win.ps1; do
 done
 fCheck "and every one that makes a run folder ends it${unended:+ (not:${unended})}" test -z "${unended}"
 ##	A socket bound under a run folder in a long temp dir is past the 107-byte
-##	limit, so sway never comes up and the control socket never answers. A script
+##	limit, so sway never comes up and the control socket never replies. A script
 ##	that starts sway or talks to that socket moves its runtime dir to a short
 ##	folder when the path is long.
 unshortened=""
