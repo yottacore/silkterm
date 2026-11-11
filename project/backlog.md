@@ -193,7 +193,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- ID: 2026101906582193
 	- Type: Task
 	- Status: Stalled
-		- It's held for a first pull request from someone else.
+		- Held for a first pull request from someone else.
 	- Priority: Avg
 	- Opened: 20261019-065821
 	- Opened by: JC
@@ -211,7 +211,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- ID: 2026092812581720
 	- Type: Enhancement
 	- Status: Stalled
-		- It's held for the next release's demo re-record.
+		- Held for the next release's demo re-record.
 	- Needs external testing: the next demo re-record at release shows the cursor at 50% width in the cursor segment
 	- Priority: Avg
 	- Opened: 20260928-125817
@@ -249,7 +249,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- It's stalled until a shcl beta has a fix.
 		- 20261007: It's still there, run against shcl dev d7903b73 rather than inferred. The step above with `set_string("performance.profile", "low")` writes `profile: low` as a new line above the commented one, and keeps the commented line, so 5 lines in become 6 out. Nothing in shcl's changelog or log since b10c2009 is for it. There isn't a 3.0 beta yet, and crates.io still has 2.0.0.
 		- 20261110: Still there on shcl 3.0.0-beta1 and shcl dev 4901ecac. The new line goes at the end of the block now. shcl has it as 2026102910482345, deferred to v4, and a note with this repro was added there.
-	- It's held for a shcl beta that fills in a commented default in place.
+	- Held for a shcl beta that fills in a commented default in place.
 
 - shcl: `migrate_unstamped` can't say a migration didn't finish
 	- ID: 2026100315553545
@@ -271,7 +271,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- 20261007: It's still there, run against shcl dev d7903b73 rather than inferred. The step above still returns `current: false`, `ambiguous: 0`, `lost: 0`, and the stamped `migrate` still shows it only by leaving the Format line off. `Migration` doesn't have a new field. shcl's CLI `migrate` now refuses such a file with exit 7, by the same Format line check. There isn't a 3.0 beta yet, and crates.io still has 2.0.0.
 		- shcl dev now has `upgrade()` and `upgrade_file()` for the swap. They convert a whole file with a timestamped backup, close the open raw block, and stamp it. The CLI backup is now `config_backup_<time>_format-v2.shcl` rather than `config_old_v2.shcl`.
 		- 20261110: Still there on shcl 3.0.0-beta1 and shcl dev 4901ecac. Filed in shcl's backlog as 2026111014552300.
-	- It's held for a shcl beta whose `Migration` says when it couldn't finish.
+	- Held for a shcl beta whose `Migration` says when it couldn't finish.
 
 - ttf-parser is unmaintained, and the advisory scan ignores that until the crates that pull it in move off it
 	- ID: 2026101715240000
@@ -287,20 +287,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Progress log:
 		- 20261019: It's still stuck upstream. `cargo update --dry-run` doesn't move any of fontdb, cosmic-text, ab_glyph, sctk-adwaita, glyphon, or winit, and ttf-parser 0.25.1 still comes in both ways. On crates.io, fontdb 0.24.0 drops it, but the newest cosmic-text, 0.19.0, still asks for fontdb 0.23. sctk-adwaita 0.12.0 still pulls in ab_glyph. Even glyphon 0.12, a breaking bump, still brings cosmic-text 0.19.
 		- It's stalled until a cosmic-text release takes fontdb 0.24 or later, and winit's sctk-adwaita drops ab_glyph.
-	- It's held for a cosmic-text release on fontdb 0.24 or later, and an sctk-adwaita without ab_glyph.
-
-- A unit test run on macOS or Windows could import and rename the box's own `~/.config/silkterm/config.toml`
-	- ID: 2026111018340691
-	- Type: Bug
-	- Status: Queued
-	- Severity: Low
-	- Opened: 20261110-183406
-	- Opened by: CC
-	- Related IDs: 2026110920480399
-	- Target OS: macOS, Windows
-	- Reproduced: No. From reading config.rs; Linux takes no ~/.config fallback, so it can't show here.
-	- Possible cause: Under cfg(test), `may_write` checks only the native path. `beta1_config_paths` adds `legacy_config_path()`, built from the real HOME, so a test whose own folder has no settings file would read a real beta1 file there and rename it. `adopt_legacy_config` may share the shape.
-	- Test case: A test with HOME at a temp folder holding the file, and a load on an empty override folder, asserting the file is still there.
+	- Held for a cosmic-text release on fontdb 0.24 or later, and an sctk-adwaita without ab_glyph.
 
 - The "Minutes otherwise" release of resources still isn't working
 	- ID: 2026111009560100
@@ -7286,6 +7273,28 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Branch: testlines
 	- Test case: There isn't a test, since it's output only. The gate and a quick run showed all 942 Rust tests with an ID, and a made-up name showed the dashes and the warning.
 	- Closed: 20260928-111812
+
+- A unit test run on macOS or Windows could import and rename the box's own `~/.config/silkterm/config.toml`
+	- ID: 2026111018340691
+	- Type: Bug
+	- Status: Done
+	- Severity: Low
+	- Opened: 20261110-183406
+	- Opened by: CC
+	- Related IDs: 2026110920480399
+	- Target OS: macOS, Windows
+	- Reproduced: No. From reading config.rs; Linux takes no ~/.config fallback, so it can't show here.
+		- 20261110: Not reachable with today's tests. Every test that points the settings at a file of its own does it through `set_config_override`, which also sets the release build's override, and with that set there is no `~/.config` path at all. So only that side effect kept it safe.
+	- Possible cause: Under cfg(test), `may_write` checks only the native path. `beta1_config_paths` adds `legacy_config_path()`, built from the real HOME, so a test whose own folder has no settings file would read a real beta1 file there and rename it. `adopt_legacy_config` may share the shape.
+	- Actual cause: The test build's write check guarded only the file being written, not the old file being moved away, and didn't count `~/.config/silkterm` as the box's own folder off Linux. `adopt_legacy_config` had the same shape.
+	- Actual fix: In a test build, a pre-layout or beta1 file in the box's own folder is never moved or renamed, and `~/.config/silkterm` counts as the box's folder on every platform. A release build is unchanged.
+	- Decisions:
+		- 20261110: The test uses the stand-in for the box's folder that ddgbt uses, rather than HOME at a temp folder. HOME is process-global, and the tests that read the box's own settings run beside it. It calls the 2 moves directly with that folder's files, since a whole load takes no `~/.config` path on Linux.
+	- Branch: rnd1111b
+	- Test case: `a_test_run_never_moves_an_old_config_from_the_boxs_folder` (df4we). It fails with the 3 guards taken out (the old shcl file moved) and passes with them.
+	- Verified: The backlog quick run passes in all 5 areas, with 1466 unit tests.
+	- Swept: Every rename or removal of a file the program didn't just write in config.rs: `adopt_legacy_config`, `import_beta1_config`, and `keep_beta1_config`, which renames only what the import read. The other renames and removals in config.rs are of the settings file itself, its backups, or temp files a save made beside it, all in the folder the write check already covers.
+	- Closed: 20261110-190049
 
 - `top` and `htop` no longer smoothly animate disappearing and appearing lines
 	- ID: 2026110912460474

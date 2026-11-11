@@ -7694,6 +7694,8 @@ pub(crate) fn may_write(path: &std::path::Path) -> bool {
 		.flatten()
 		.filter_map(|file| file.parent().map(std::path::Path::to_path_buf))
 		.collect();
+	// where a pre-layout or beta1 file is moved from, off Linux
+	dirs.extend(home_dir().map(|home| home.join(".config").join(APP_DIR)));
 	dirs.extend(data_dir_for(
 		host_layout(),
 		env_path("XDG_CONFIG_HOME").is_some(),
@@ -7921,7 +7923,13 @@ fn adopt_legacy_config() {
 	let (Some(native), Some(legacy)) = (config_path(), legacy_config_path()) else {
 		return;
 	};
-	if !legacy.exists() || !may_write(&native) {
+	adopt_config_from(&native, &legacy);
+}
+
+// The move takes the old file away, so a test run may not make it from the
+// box's own folder either.
+fn adopt_config_from(native: &std::path::Path, legacy: &std::path::Path) {
+	if !legacy.exists() || !may_write(native) || !may_write(legacy) {
 		return;
 	}
 	if native.exists() {
@@ -7941,8 +7949,8 @@ fn adopt_legacy_config() {
 	// rename first: same volume is the ordinary case and it is atomic. A cross
 	// volume move fails EXDEV, so fall back to copy-then-remove, and keep the
 	// original if the remove fails rather than risk having neither.
-	let moved = std::fs::rename(&legacy, &native).is_ok()
-		|| (std::fs::copy(&legacy, &native).is_ok() && std::fs::remove_file(&legacy).is_ok());
+	let moved = std::fs::rename(legacy, native).is_ok()
+		|| (std::fs::copy(legacy, native).is_ok() && std::fs::remove_file(legacy).is_ok());
 	if moved {
 		eprintln!(
 			"{APP_NAME}: moved your config from {} to {}",
@@ -7974,11 +7982,18 @@ fn beta1_config_paths(native: &std::path::Path) -> Vec<PathBuf> {
 // one is kept, so nothing reads it again. Called before the default template
 // would be written.
 fn import_beta1_config(native: &std::path::Path) {
+	import_beta1_config_from(native, beta1_config_paths(native));
+}
+
+// The old file is renamed after the read, so a test run skips one in the box's
+// own folder.
+fn import_beta1_config_from(native: &std::path::Path, olds: Vec<PathBuf>) {
 	if native.exists() || !may_write(native) {
 		return;
 	}
-	let Some((old, body)) = beta1_config_paths(native)
+	let Some((old, body)) = olds
 		.into_iter()
+		.filter(|old| may_write(old))
 		.find_map(|old| std::fs::read(&old).ok().map(|body| (old, body)))
 	else {
 		return;
@@ -19745,6 +19760,58 @@ mod tests {
 		let _ = load();
 		assert_eq!(std::fs::read_to_string(&path).unwrap(), now, "settled");
 		let _ = std::fs::remove_dir_all(&dir);
+	}
+
+	// A test run moves no pre-layout or beta1 file out of the box's own
+	// folder, which off Linux is ~/.config/silkterm, though its settings go
+	// to a folder of the test's own. A folder of its own stands in for the
+	// box's here.
+	// Test ID: df4we
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_test_run_never_moves_an_old_config_from_the_boxs_folder() {
+		struct PutBack;
+		impl Drop for PutBack {
+			fn drop(&mut self) {
+				*crate::locks::lock(test_native_config()) = None;
+			}
+		}
+		let _guard = test_config_lock();
+		let _store = test_store_lock();
+		let home = format_test_dir("boxlegacy");
+		let own = home.join(APP_DIR);
+		std::fs::create_dir_all(&own).unwrap();
+		let legacy = own.join("config.shcl");
+		let toml = own.join("config.toml");
+		std::fs::write(&legacy, "font:\n\tsize: 12\n").unwrap();
+		std::fs::write(&toml, BETA1_SAVED).unwrap();
+		let new_dir = format_test_dir("boxlegacy_new");
+		let path = new_dir.join("config.shcl");
+		set_config_override(path.clone());
+		let put_back = PutBack;
+		*crate::locks::lock(test_native_config()) = Some(legacy.clone());
+
+		adopt_config_from(&path, &legacy);
+		import_beta1_config_from(&path, vec![path.with_extension("toml"), toml.clone()]);
+		assert_eq!(dir_names(&own), ["config.shcl", "config.toml"]);
+		assert_eq!(std::fs::read_to_string(&toml).unwrap(), BETA1_SAVED);
+		assert!(dir_names(&new_dir).is_empty(), "{:?}", dir_names(&new_dir));
+		// asked only, never written
+		if let Some(home) = home_dir() {
+			let real = home.join(".config").join(APP_DIR);
+			assert!(!may_write(&real.join("config.shcl")));
+			assert!(!may_write(&real.join("config.toml")));
+		}
+
+		// the same files outside the box's folder move
+		drop(put_back);
+		import_beta1_config_from(&path, vec![toml.clone()]);
+		assert!(path.exists() && !toml.exists());
+		std::fs::remove_file(&path).unwrap();
+		adopt_config_from(&path, &legacy);
+		assert!(path.exists() && !legacy.exists());
+		let _ = std::fs::remove_dir_all(&home);
+		let _ = std::fs::remove_dir_all(&new_dir);
 	}
 
 	// Only a file from before the profiles, with a look of its own, comes up on
