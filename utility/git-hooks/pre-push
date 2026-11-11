@@ -4,7 +4,7 @@
 # --merge-gate, every check of the default run, against the commit being
 # pushed, in a throwaway worktree. A push that changes only docs and art, the
 # paths in no-gate-paths, skips it and the version guard.
-# dev and feature branches are not gated. A branch is tested before it merges
+# dev and feature branches aren't gated. A branch is tested before it merges
 # into dev, and running the whole pass again on the merge only cost time.
 # Bypass for an emergency: git push --no-verify, or SKIP_GATE=1 git push.
 #
@@ -70,9 +70,9 @@ fDocsOnly() {
 docsOnly=0
 if [ "${gated}" = "1" ] && fDocsOnly; then docsOnly=1; fi
 
-# Release guard: a push to main must strictly INCREASE the version. main is where
-# releases are cut, so shipping the same-or-lower version is a mistake - block it
-# here (before the slower gate) so a forgotten Cargo.toml bump can't reach main.
+# Release guard: a push to main must raise the version, since releases are cut from
+# main. It runs before the slower gate, so a forgotten Cargo.toml bump is blocked
+# early.
 if [ -n "${mainLocal}" ] && [ "${docsOnly}" = "0" ]; then
 	manifest=source/Cargo.toml
 	fReadVer() { git show "${1}:${manifest}" 2>/dev/null | sed -n 's/^version *= *"\(.*\)".*/\1/p' | head -1; }
@@ -109,7 +109,7 @@ if [ -n "${mainLocal}" ] && [ "${docsOnly}" = "0" ]; then
 	}
 	newv=$(fReadVer "${mainLocal}")
 	[ -n "${newv}" ] || { echo "pre-push: cannot read version from ${manifest} on the pushed commit" >&2; exit 1; }
-	# zero remote sha = main does not exist yet (first push), nothing to compare
+	# zero remote sha = main doesn't exist yet (first push), nothing to compare
 	case "${mainRemote}" in
 		*[!0]*)
 			oldv=$(fReadVer "${mainRemote}")
@@ -143,11 +143,11 @@ if [ "${docsOnly}" = "1" ]; then
 fi
 
 echo "pre-push: gating push to main (cicd.bash --merge-gate; --no-verify skips)" >&2
-# Gate the commit being pushed, not whatever the working tree holds. Those are
-# routinely different here, and a fix still sitting unstaged used to carry the
-# push - the gate passed on the tree and main got the version without it. A
-# detached worktree is the cheap way to get the real thing. Cargo's output goes
-# to the usual place, so only this crate is rebuilt, not its dependencies.
+# Gate the commit being pushed, not whatever the working tree has. The two are
+# often different here, and a fix that was still unstaged once let the gate pass
+# on the tree while main got the version without it. A detached worktree is the
+# cheap way to test the commit. Cargo's output goes to the usual place, so only
+# this crate is rebuilt, not its dependencies.
 gatedir="$(mktemp -d "${TMPDIR:-/tmp}/silk-gate.XXXXXX")"
 tree="${gatedir}/tree"
 fCleanup() {

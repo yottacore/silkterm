@@ -4,12 +4,12 @@
 #  shellcheck disable=2086  ## 'Double quote to prevent word splitting.' OK for integer flags.
 
 ##	Purpose:
-##		Surface warnings from the newest cicd run log. cicd tees each run to
-##		cicd/artifacts/lint/run_<ts>.log (gitignored); this greps out the warning /
-##		advisory lines so they can be addressed. Two modes: plain (print warnings
-##		from the newest log) and --check (print only when that log is newer than the
-##		one last recorded in a local marker, then record it - meant for a per-session
-##		startup look that is a no-op until a new cicd run has happened).
+##		Show warnings from the newest cicd run log. cicd tees each run to
+##		cicd/artifacts/lint/run_<ts>.log (gitignored), and this greps the warning
+##		and advisory lines out of it. There are 2 modes: plain (print warnings from
+##		the newest log) and --check (print only when that log is newer than the one
+##		last recorded in a local marker, then record it). --check is meant for a
+##		look at session startup, which does nothing until a new cicd run happens.
 ##	Syntax:
 ##		lint-report.bash [--check] [--force] [--no-mark] [--dir DIR] [--file LOG]
 ##		  --check     gate on the .lint-seen marker; print SEEN and stop if not newer

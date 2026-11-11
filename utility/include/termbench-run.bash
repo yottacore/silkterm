@@ -21,7 +21,7 @@
 ##		termbench-run.bash --term KEY [options]
 ##		   --term KEY      terminal to measure (--list for the known keys)
 ##		   --reps N        runs per scene (default 6; --reps is the only safe way to
-##		                   shorten a run - see the note below)
+##		                   shorten a run, per the note below)
 ##		   --grid CxR      grid every terminal is fitted to (default 160x42)
 ##		   --label TEXT    row name for the table (default: autodetected)
 ##		   --scene NAME    one width class only (ascii|latin|cjk|emoji|mixed)

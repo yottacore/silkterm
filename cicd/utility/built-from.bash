@@ -9,11 +9,11 @@
 ##	Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
 ##	SPDX-License-Identifier: GPL-2.0-or-later
 
-##	The TREE, not the commit. A release is cut from main after 'dev -> main
-##	--no-ff', so HEAD is a different commit from the one the pipeline built -
-##	but the merge keeps the tree, and the tree is what the binaries came from.
-##	The two branches have diverged in ancestry before now without diverging in
-##	content, which is exactly the case a commit comparison gets wrong.
+##	Compares the tree rather than the commit. A release is cut from main after
+##	'dev -> main --no-ff', so HEAD is a different commit from the one the
+##	pipeline built, but the merge keeps the tree, and the binaries came from the
+##	tree. The 2 branches have diverged in ancestry before without diverging in
+##	content, and a commit comparison gets that case wrong.
 
 BUILT_FROM_FILE="built-from.txt"
 
@@ -25,9 +25,9 @@ BUILT_FROM_UNTRACKED_MAX=10
 ## The working tree as it stands, in the note's own lines.
 ##
 ## Untracked files that aren't ignored count as dirty. They build here and the
-## tag doesn't include them, so the tagged source may not even compile - a module
-## whose 'mod' line is committed and whose file isn't is the shape that got
-## through. They are named, since "something is untracked" is no use on its own.
+## tag doesn't include them, so the tagged source may not even compile. A module
+## whose 'mod' line was committed and whose file wasn't got through that way.
+## They're named, since "something is untracked" is no use on its own.
 fSourceState(){
 	local dirty="no"
 	local top=""
@@ -56,12 +56,12 @@ fStateField(){
 
 ## fWriteBuiltFrom <artifact-dir> [state] [expected-name...]
 ##
-## <state> is what fSourceState answered BEFORE the first build. The note has to
-## name the source the binaries hold, not whatever the tree says by the time the
-## note is written: another session committing in the same tree during a build
-## left the note naming the new commit with a clean flag, and the binaries holding
-## the source from before it. Read now when no state is passed, which is what a
-## caller that builds nothing wants.
+## <state> is what fSourceState printed before the first build. The note has to
+## name the source the binaries were built from rather than the tree at the time
+## the note is written. Another session committing in the same tree during a
+## build left the note naming the new commit with a clean flag, while the
+## binaries were built from the source before it. Read now when no state is
+## passed, for a caller that builds nothing.
 ##
 ## Each <expected-name> is a file the configuration says a whole set has. The
 ## checksums only say the artifacts match each other, so without this a --quick
@@ -160,8 +160,8 @@ fCheckBuiltFrom(){
 }
 
 ##	History:
-##		- 20260908 JC: Created - the release could publish a stale build under a
+##		- 20260908 JC: Created. The release could publish a stale build under a
 ##		  new tag with everything reporting green.
 ##		- 20260917 JC: The note names the source the builds read rather than the
-##		  tree at write time, untracked files count as dirty, and it carries the
-##		  artifact names a whole set holds.
+##		  tree at write time, untracked files count as dirty, and it lists the
+##		  artifact names a whole set has.

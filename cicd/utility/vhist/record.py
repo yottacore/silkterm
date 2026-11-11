@@ -5,8 +5,8 @@
 ##		scrolled through a numbered file, for the virtual history probe in
 ##		source/src/pane/vhist_probe.rs. Each read from the pty is kept as its own
 ##		chunk, so a replay can put a frame between any two of them.
-##		Never point this at a coding-agent TUI: the keys it types would go to
-##		that program as input.
+##		Never point this at a program that acts on what's typed into it, since
+##		the keys it types would go to that program as commands.
 ##	Syntax:
 ##		record.py APP OUT [--cols N] [--rows N] [--lines N]
 ##		APP is less, vim, nano, or htop. OUT gets the chunks, each a 4-byte

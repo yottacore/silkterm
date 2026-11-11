@@ -34,7 +34,7 @@ def norm(cell: str) -> str:
 
 
 def update(doc: Path, terminal: str, file_deps: float, mem: float) -> tuple[str | None, str | None]:
-	#	Spelled out, because the default is the locale codec: on Windows that's cp1252,
+	#	Named explicitly, because the default is the locale codec. On Windows that's cp1252,
 	#	which can't read the table's own characters and fails the run before it starts.
 	text = doc.read_text(encoding="utf-8")
 	if BEGIN not in text or END not in text:
