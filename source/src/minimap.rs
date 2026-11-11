@@ -245,8 +245,8 @@ pub fn text_rect(full: Rect, cfg: &config::Settings, scale: f32, wanted: bool) -
 }
 
 // How tall one buffer line draws. Capped, so a buffer shorter than the column
-// doesn't reach the bottom of it. The cap is scaled but deliberately not
-// rounded to whole pixels: a line has to be able to sit at a fraction of one,
+// doesn't reach the bottom of it. The cap is scaled but not rounded to whole
+// pixels, since a line has to be able to sit at a fraction of one,
 // or its ink band falls inside a single pixel row and a page of text goes
 // back to reading as a slab.
 fn line_px(track_h: f32, total: usize, scale: f32) -> f32 {
@@ -1817,8 +1817,6 @@ mod tests {
 		}
 	}
 
-	// A full-screen program draws on its own screen, which has no scroll buffer,
-	// so the column steps aside, unless the program is one that was named.
 	// A page of identical lines has to compose to an evenly lit column. The
 	// gap drawn between lines beats against the pixel grid, and at these
 	// pitches the beat is slow enough to read as broad bands running down the
@@ -1917,6 +1915,8 @@ mod tests {
 		);
 	}
 
+	// A full-screen program draws on its own screen, which has no scroll buffer,
+	// so the column steps aside, unless the program is one that was named.
 	// Test ID: dc4qg
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]

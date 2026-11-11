@@ -14,9 +14,9 @@ use std::time::{Duration, Instant};
 use winit::window::Window;
 
 impl State {
-	/// Track the live window size as columns/rows so "remember last size" can
-	/// restore it next launch. Kept separate from the user's defined columns/rows
-	/// (unchecking the option reverts to those). The inverse of the launch sizing.
+	/// Note the window's size in columns and rows, so Remember last size can open
+	/// at it next launch. It's kept apart from the columns and rows set in
+	/// Settings, which come back when the option is off.
 	pub(super) fn save_window_size(&mut self, w: u32, h: u32) {
 		// skip the creation/programmatic resizes that fire before the first frame,
 		// so they don't clobber the remembered size with the launch size
@@ -53,9 +53,8 @@ impl State {
 	/// The grid the window shows at this size, waiting to be saved.
 	pub(super) fn note_grid(&mut self, w: u32, h: u32) {
 		let (cols, rows) = self.grid_at(w, h);
-		// debounce: an interactive drag fires many Resized events; writing
-		// config.shcl on each would be dozens of file writes/sec. Persist in
-		// flush_window_size once the size has held (or on exit).
+		// a drag sends many Resized events, so flush_window_size writes the size
+		// once it has held, or at exit, rather than dozens of times a second
 		self.pending_size = Some((cols, rows));
 		self.pending_size_at = Instant::now();
 	}
@@ -123,8 +122,8 @@ impl State {
 				s.monitor_sizes.clone(),
 			)
 		};
-		// If the file's open elsewhere the write is skipped (retried on the next
-		// resize or at exit); the live size still updates in memory either way.
+		// If the file's open elsewhere the write is skipped and tried again on the
+		// next resize or at exit. The live size updates in memory either way.
 		if grid.is_some() || zoom.is_some() {
 			mondbg("save", self.watch.key.as_deref(), grid, zoom);
 		}
@@ -683,9 +682,9 @@ impl State {
 	pub(super) fn request_grid(&mut self, cols: usize, rows: usize) {
 		let (w, h) = self.grid_px(cols, rows);
 		let want = winit::dpi::PhysicalSize::new(w, h);
-		// A size the window can honor straight away answers here and sends no
-		// `Resized`, so this is the only chance to move everything the window
-		// event moves - the scrim included, which was left at the old size.
+		// A size the window can take at once is applied here with no `Resized`
+		// sent, so this is the only chance to move everything the window event
+		// moves, the scrim included, which was left at the old size.
 		if (w, h) != self.surface_px {
 			self.watch.asked = Some(Asked {
 				px: (w, h),
@@ -1507,7 +1506,7 @@ fn resize_counts(in_grace: bool, noted: Noted) -> bool {
 }
 
 // Is this resize the size to launch at next time? Only once a frame has been
-// drawn - before that it is the launch size arriving back - and never a
+// drawn, since before that it's the launch size coming back, and never a
 // fullscreen or maximized one, which isn't a window to come back to.
 fn remember_resize(size_tracked: bool, fullscreen: bool, maximized: bool) -> bool {
 	size_tracked && !fullscreen && !maximized

@@ -39,8 +39,8 @@ fn pane_split_dir(
 	explicit.or(split_source)
 }
 
-/// Build the initial tabs/panes from the parsed command line. Without
-/// hierarchical flags, one tab with one pane (running any window-level --shell).
+/// The first tabs and panes, from the parsed command line. With no tab or pane
+/// flags it's one tab with one pane, which runs the window's --shell if given.
 pub(super) fn build_layout(
 	cli: &crate::cli::Cli,
 	text: &mut TextCtx,
@@ -48,14 +48,14 @@ pub(super) fn build_layout(
 	area: Rect,
 ) -> Vec<PaneManager> {
 	use crate::cli::Size;
-	// A bad --shell / default_shell (typo'd binary, PTY failure) should read
-	// like the CLI parse errors, not a Rust panic + backtrace.
-	// The lowest-precedence directory: None whenever a shell launched us, so the
-	// directory it was in survives (see config::startup_dir).
+	// None when a shell started the program, so the pane keeps the shell's
+	// directory. `config::startup_dir` has the rules.
 	let start = config::startup_dir();
 	// `--directory` is resolved once per place it was written, not once per pane,
 	// so a path that isn't there is reported once however many panes inherit it.
 	let win_dir = cli.win.style.directory.as_deref().and_then(config::cli_dir);
+	// a shell that won't start exits like a command-line parse error, rather
+	// than with a panic and a backtrace
 	let spawn =
 		|text: &mut TextCtx, shell: Option<Vec<String>>, dir: Option<PathBuf>, in_tmux: bool| {
 			let dir = dir.or_else(|| start.clone());
