@@ -1044,6 +1044,40 @@ mod tests {
 		);
 	}
 
+	// A window starts unfocused, since one that never gets the focus may never
+	// be told so. Opened behind another window, it kept its device for good
+	// (2026111011350600). Its first focus is a sign of life, and being told at
+	// the map that it has none is not.
+	// Test ID: df4r2
+	#[test]
+	fn a_window_never_focused_counts_as_unfocused() {
+		use super::{kept_by, sign_of_life};
+		use crate::app::FOCUSED_AT_START;
+		use winit::event::WindowEvent;
+		let rule = IdleRule {
+			on: true,
+			hidden: Duration::from_mins(1),
+			otherwise: Duration::from_mins(5),
+		};
+		let never_told = Idle {
+			focused: FOCUSED_AT_START,
+			hidden: false,
+			revealed: true,
+			bench_busy: false,
+			since: Instant::now(),
+			keeps_picture: true,
+		};
+		assert_eq!(kept_by(&rule, &never_told), None);
+		assert_eq!(
+			sign_of_life(&WindowEvent::Focused(true), false, FOCUSED_AT_START),
+			Some("focus")
+		);
+		assert_eq!(
+			sign_of_life(&WindowEvent::Focused(false), false, FOCUSED_AT_START),
+			None
+		);
+	}
+
 	// The idle trace names the one thing that keeps the device, in the order
 	// the release checks them, and nothing once the wait runs. The names are
 	// what a log from a real desktop is read by, so a new veto needs one.

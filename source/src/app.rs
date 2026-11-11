@@ -444,6 +444,11 @@ const MENU_ACCEL_DROP: f32 = 3.0; // accelerator underline's rise off the item's
 // modifiers on the way out - so a grab that still passes the key through hands
 // us an arrow with nothing held, which would encode as a bare arrow.
 const IGNORE_KEYS_WHILE_UNFOCUSED: bool = true;
+// Focus is known only from winit's events, and a window that never gets the
+// focus may never hear one. X11 says so at the map, but Wayland and Windows
+// stay quiet, as for a window opened behind another one. So a window starts
+// unfocused, and its first `Focused(true)` says otherwise (2026111011350600).
+const FOCUSED_AT_START: bool = false;
 
 // Winit replays every key already held down whenever focus changes, flagged
 // `is_synthetic`, so an app can track what is physically pressed. That is
@@ -4024,7 +4029,7 @@ impl ApplicationHandler<UserEvent> for App {
 			tab_hover: crate::tip::Dwell::default(),
 			menu_tip: crate::tip::Dwell::default(),
 			menu_tip_up: None,
-			tip_focus: crate::tip::Focus::default(),
+			tip_focus: crate::tip::Focus::default().changed(FOCUSED_AT_START),
 			tab_first: 0,
 			tab_layout: TabLayout::default(),
 			tab_labels: TabLabels::default(),
@@ -4040,7 +4045,7 @@ impl ApplicationHandler<UserEvent> for App {
 			win_opacity,
 			win_title,
 			last_win_title: String::new(),
-			focused: true,
+			focused: FOCUSED_AT_START,
 			pending_about: false,
 			pending_settings: None,
 			chrome: None,

@@ -350,7 +350,8 @@ Going forward, new issues in the new template at the bottom of this file will go
 - A window that never gets focus thinks it has it, and never lets its device go
 	- ID: 2026111011350600
 	- Type: Bug
-	- Status: Queued
+	- Status: Can't reproduce
+		- 20261110: The fix for the stated cause is in, but that cause can't keep an X11 window focused for good, so it stays open. A failing run's log with `SILK_KEYDBG=1` as well would show which focus events came.
 	- Severity: Avg
 	- Opened: 20261110-113506
 	- Opened by: CC
@@ -363,7 +364,17 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Incorrect behavior: `SILK_IDLEDBG=1` says "kept: focused on screen" for good, while the other window is the active one.
 	- Expected behavior: A window that was never focused counts as unfocused.
 	- Reproduced: Yes, 20261110, 2 of 9 runs of deskswitch with the cores loaded, before its setup focused SilkTerm first.
+		- 20261110: Not again in 13 tries on Xvfb with xfwm4: xlogo mapped 0 to 1 s after the launch, xfwm4 held still while both windows asked to map, and 6 runs of deskswitch in its old setup order, 3 of them with 8 more cores busy. Each time the map told SilkTerm it wasn't focused.
 	- Possible cause: The window starts with its focus flag set, and only a focus event clears it. A window that never had focus doesn't get a focus-out.
+	- Progress log:
+		- 20261110: A window now starts unfocused, and its first focus is a sign of life. On X11 that changes nothing anyone sees, since winit says at the map whether the window has focus. By winit's code, Wayland and Windows say nothing to a window that never gets the focus, such as one opened behind another, so there it kept its device for good.
+		- 20261110: Verified: df4r2 fails with the old start and passes with the new one. deskswitch and deqy2 pass, and so does the quick gate in all 5 areas.
+	- Decisions:
+		- 20261110: The tip rule starts away too, so a window never focused shows no tips, as X11 already had it after the map.
+		- 20261110: X11 focus is the X server's, not the window manager's active window. A window manager that marks another window active and leaves the X focus on SilkTerm would look like this, but that wasn't seen either.
+	- Swept: the start of `focused` and `tip_focus` in `State`, the clipboard's start, which reads focus only on Wayland and starts unfocused there, and the dialogs' tip rule, for windows opened to be used and never let go.
+	- Branch: rnd1111
+	- Test case: `a_window_never_focused_counts_as_unfocused` (df4r2). Also `cicd/tests/deskswitch/run.bash` (df4e3) and `cicd/tests/idleother/run.bash` (deqy2), unchanged.
 
 - A notice can wrap one more line at 2x than at 1x
 	- ID: 2026111014301817
