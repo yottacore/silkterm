@@ -640,6 +640,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Branch: promptslide
 	- Commit: 874af97
 	- Test case: dc821 gained erased-ink cases. New replay tests over ble.sh's bytes: ddynt (prompt after output, half-empty and full screens), ddynv (in-place redraw at each height), ddypr (every split of the prompt and the redraw across 2 reads), ddyps (redraw right after a relayout), ddynw (a repeated listing), ddynx (a table redraw snaps while a prompt still eases), ddyny (the nano bounce). Scroll harness scene `prompt`. Each fails with the part it guards broken.
+	- Closed: 20261015-121132
 
 - Software rendering crashes on b23 with an X11 BadDrawable error
 	- ID: 2026100614510979
@@ -685,6 +686,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Verified: The window test both ways, the Linux unit tests, and clippy for Linux, Windows, and macOS.
 	- Notes:
 		- Before RC1.
+	- Closed: 20261015-121132
 
 - A software rendering launch crashes now and then inside the Vulkan loader
 	- ID: 2026100720280486
@@ -3047,7 +3049,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Branch: rnd1022, rnd1102
 	- Test case: `the_configured_term_reaches_the_program` (de9kn, term.rs) fails with the setting dropped from the pane's environment and passes with it. `shell_term_reads_one_word_and_defaults_empty` (de9kp, config.rs) tests the read and the template line.
 		- Swept: `pane_options` has the one spawn caller and one Windows test. No other place sets TERM for a pane. `front.rs`'s TERM is a test's tmux client. 20261102: only usage.md and the fork design doc named the old default.
-	- Closed:
+	- Closed: 20261102-221522
 
 - The advisory scan misses a crate yanked since cargo's index cache was filled, and clipboard-win 5.4.1 is yanked
 	- ID: 2026102518563500
@@ -3325,6 +3327,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Branch: tmuxclear
 	- Commit: 1e01433
 	- Test case: `a_clear_inside_tmux_shows_at_once` (de18w) and `output_inside_tmux_still_slides` (de18x) in `pane/replay.rs`, on bytes tmux 3.6b sent. Scroll scene `tmuxclear` (`cicd/tests/scroll/run.bash`). Each was red before the fix and green after.
+	- Closed: 20261017-144436
 
 - The build inputs test fails since a cli.rs test reads usage.md
 	- ID: 2026101513385003
@@ -5969,6 +5972,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Test case: `cicd/tests/showdown/run.py` (dcrz2) checks that each writer points at comparison.md and that the README doesn't have a copy of the table. Each check failed with its writer pointed back at README.md. `cicd/tests/showdown/rigs.py` (dd8e6) reads the table and note 9 from comparison.md. `usage_md_names_every_option_in_help` (ddzx3) and `usage_md_examples_parse` (ddzx4) in cli.rs. Both failed with an option and an alias taken out of usage.md and a bad example.
 	- Verified: docs, tables, toc, showdown, and rigs tests pass, the cli unit tests pass, clippy is clean, and the test-ID check passes. When both writers were run on a copy of comparison.md, they left it byte-identical.
 	- Swept: termbench.py, showdown-readme.py, update-showdown.py, and both rigs' headers now name comparison.md, and so do mdtable.py, showdown-readme.md, the tables test, a cicd.bash comment, design.md, and the speed design doc. release.bash, the pre-push hook, and the hooks test are unchanged on purpose, since they read the badge, which stays in the README. wallpaper-gallery.bash reads "102 wallpapers" from the README, which is still there. The release notes keep "See the README". demo-video.py and script.txt name the README gif only. The gallery page links install.md. ancillary-notes.fods records and the speed doc's quoted backlog title stay as written for their dates. Nothing links to the README's showdown anchor, which is still there.
+	- Closed: 20261016-111432
 
 - Copy on select should be a persistent setting that new starts take up, but changes not shared between running sessions
 	- ID: 2026101313381123
@@ -6334,6 +6338,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Progress log:
 		- 20261010: It's done on `tabside`. It adds `tabs_side: top|left` and `A/B` paths to `settings_ui.shcl`, with the design doc and style guide updated. SilkTerm stays on top with flat tabs. Both looks were checked on a build with its tabs nested.
 	- Test case: ddrjm (a tab under another is a path), ddrjg (sub-tabs across the top), ddrjh (the tab walk), ddrjj (down the side), ddrjk (tabs take no focus).
+	- Closed: 20261010-080349
 
 - Settings, Cursor: a "Blink" switch as a subsection heading over the blink rate
 	- ID: 2026100907341817
@@ -6391,6 +6396,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Branch: tabpack
 	- Commit: 98a60d6
 	- Test case: `a_line_of_toggles_packs_each_label_against_its_box` (ddmkg), which failed with packing turned off and passes with it. `a_sub_group_indents_labels_and_nothing_else` (davbb) is commented out, since a packed line's first box leaves the control column. It's replaced by `a_sub_group_indents_labels_and_nothing_else_off_a_packed_line` (ddmkf).
+	- Closed: 20261008-123215
 
 - The wallpaper Visibility and Blur flyovers don't say that an image's own tags win over them
 	- ID: 2026100718350000
@@ -6413,7 +6419,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Branch: tiptweaks
 	- Commit: 07b5e59
 	- Test case: `the_wallpaper_look_sliders_say_a_tag_wins` (ddn08). It failed on the old text and passes on the new.
-	- Closed:
+	- Closed: 20261008-123215
 
 - Tab text: "Program title" -> "Program-defined"
 	- ID: 2026100717261689
@@ -6712,6 +6718,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Branch: tabline
 	- Commit: 00058c2
 	- Test case: `a_shared_line_puts_its_parts_side_by_side` (ddkfs), `one_revert_puts_back_all_four_tab_text_toggles` (ddkft), `each_tab_text_toggle_flips_only_its_own_setting` (ddkfv), `each_tab_text_toggle_has_its_own_tip_over_box_and_label` (ddkfw), `the_tab_text_line_fits_the_panel` (ddkfx). Each failed with the change broken. `a_paired_row_shares_the_line_above_it` (dcd3a) is commented out, since it took every row with one beside it for a line's first. `a_heading_that_repeats_its_tab_takes_no_room` now counts a shared line once.
+	- Closed: 20261006-191435
 
 - Settings: a Keys tab to see and change hotkeys
 	- ID: 2026100307252506
@@ -7107,6 +7114,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- 20261003: Unit tests pass. The menu toggle still needs a look in a real window.
 	- Branch: copysel
 	- Test case: da9gy (on by default), ddeph (an old config's default line goes to on), dejj7 (the menu's choice lasts to the next launch).
+	- Closed: 20261003-134051
 
 - Transparency setting: a warning that it depends on the desktop, and a place at the end of its tab
 	- ID: 2026100220292617
@@ -7136,7 +7144,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Note: `space_toggles_focused_boolean` now presses Space on Wallpaper, since that's the tab's first row after the move.
 	- Branch: seethrutip
 	- Test case: `transparency_is_the_last_group_on_the_background_tab`, `the_transparency_row_warns_that_it_needs_the_compositor`, `a_triangle_keeps_its_direction_at_any_scale`, and `a_warning_needs_a_label_of_its_own`. Each failed on the old code and passes now.
-	- Closed:
+	- Closed: 20261003-134051
 
 - Test files go under one dated folder in the system temp dir
 	- ID: 2026093013113320
@@ -7333,6 +7341,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Possible cause: A shift must account for two thirds of the rows that changed. top rewrites up to 5 header rows every tick, and on a busy box many process rows change their numbers too. A small move, or a busy tick, is then cut. That rule dates from 08-01 and keeps a list program that rewrites rows above a footer it pushes down from sliding, so loosening it for top would bring that back. The same was found about load in 2026101310563310.
 	- Branch: rnd1109
 	- Test case: None, since no code changed.
+	- Closed: 20261110-152153
 
 - A notice can wrap one more line at 2x than at 1x
 	- ID: 2026111014301817
@@ -8218,6 +8227,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Swept: everything that rebuilds the text and then resizes. The scale change and a kept font zoom were the 2 that did. A font zoom from the keyboard keeps the window's size by design, so its new grid is the real one. The Settings dialog's own scale change keeps its size in DIP.
 	- Branch: scalegrid
 	- Commit: 22f315d
+	- Closed: 20261017-144436
 
 - The script header test fails on dev: `utility/fake-flatpak-update.bash` has no History block
 	- ID: 2026101612595000
@@ -9350,7 +9360,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Branch: curwake
 	- Test case: `a_wake_set_while_drawing_is_kept` (dd9nh). It was seen to fail with only the minimap's wake read after the frame. The window wakes don't have a test, since they're in the event loop.
 	- Swept: every wake `about_to_wait` waits on. Per pane, the cursor and the minimap. Per window, the capture, dialog, dialog raise, idle release, restored title, second heal, wallpaper rotation, shell scan, tab tip, rating start and banner, reveal, and VRAM probe wakes. The ones not listed in the fix were already read after the frame, or the frame doesn't set them.
-	- Closed:
+	- Closed: 20260930-153118
 
 - The launcher test would use the real dogfood pool if run on Windows
 	- ID: 2026092621021535
@@ -10127,7 +10137,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Branch: xtermspeed
 	- Test case: dd8e6 (`cicd/tests/showdown/rigs.py`). It was seen to fail on the old rig.
 	- Verified: 20260929, the rig's own xterm run read 28.32, 49.22 and 23.9 against 28.3, 48.5 and 23.9 published, and didn't write anything. The details are in `utility/include/showdown-readme.md`.
-	- Closed:
+	- Closed: 20260930-153118
 
 - The only tests pinning 3 fixes are in the patched crates, which the pipeline never runs
 	- ID: 2026092621021534
@@ -10252,7 +10262,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- 20260930: Canceled for good, and not to be revisited. That includes the COM handoff and any console host of our own. Being the default terminal takes a server that adopts a live console session, and it needs Windows Terminal installed. File associations handle the cases that matter for a small part of the work.
 	- Branch: wthandoff
 	- Commit:
-	- Test case:
+	- Test case: None, since it was canceled.
 	- Acceptance signoff:
 	- Superseded by ID: 2026093009280571
 	- Closed: 20260930-092805
@@ -10281,6 +10291,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- 20261104: Answered A in questions.md, so the alert stays and this closes as moot. Nothing changed in the code.
 	- Branch: rnd1103
 	- Decided against: bundling SwiftShader in the Mac app (option B). A Mac without Metal is a VM or a hackintosh, since every Mac that runs a supported macOS has Metal. The no-Metal alert from 2026102209035801 stays.
+	- Test case: None, since no code changed.
 	- Closed: 20261104-010500
 
 - top quits smooth scrolling at some point
@@ -10328,6 +10339,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- Before the next cut.
 		- 20261022: It's the same request as 2026101909222600, opened the same morning and built that day as `sweep`. It waits on its full run there.
 	- Superseded by ID: 2026101909222600
+	- Test case: None, since it's the same request as 2026101909222600.
 	- Closed: 20261022-111900
 
 - Settings that depend on a master boolean switch follow the automatic settings design
@@ -10446,6 +10458,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- 20261009: Q: The default mode is Dark rather than System. Should Automatic become the default, which changes what a new install shows, or stay a choice in the list?
 			- A: No.
 		- 20261009: Dark stays the default. An automatic value is the default by the design, so System stays a plain entry in the list and there's nothing left to do on this item.
+	- Test case: None, since nothing changed.
 	- Closed: 20261009-133949
 
 - Renames judge a commented line by where a whole-file save would put it, though most saves keep lines now
@@ -12627,6 +12640,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Decision: 20260928, the Rust badge says 1.96, the pinned toolchain everything is built and tested on. `rust-version` says 1.96 too, since the code doesn't build on 1.94.
 	- Test: PowerShell 5.1 by dd2n3 `cicd/tests/install/windows.ps1`. There's no test for bash or Rust, which now claim only the versions the pipeline runs.
 	- Opened: 20260914-124200
+	- Closed: 20260928-163409
 
 - ✅ Say when a color typed into the settings file is read as empty because it wasn't quoted.
 	- `background: #112233` reads as nothing, since `#` starts a comment, and the theme's color is used without a message.
