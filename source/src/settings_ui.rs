@@ -507,7 +507,9 @@ const fn hidden_wait_tip(sees_hidden: bool) -> Option<&'static str> {
 	if sees_hidden {
 		None
 	} else {
-		Some("Wayland never says when a window is hidden, so Minutes otherwise is used.")
+		Some(
+			"Wayland doesn't tell a window when it's hidden, so Minutes otherwise is used instead.",
+		)
 	}
 }
 
