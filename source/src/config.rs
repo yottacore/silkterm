@@ -4482,23 +4482,23 @@ fn unheld_font_in(live: &Settings, zoom: i32) -> FontPick {
 /// Resolve the background image: an explicit path (absolute, or a filename
 /// relative to the config dir), else auto-detect backgrounds/background.{png,jpg,jpeg}
 /// under the config dir. The value is text a person edits by hand, so it goes
-/// through the same expander the startup directory does - `~` and the 3
-/// forms of an environment variable.
+/// through the same expander the startup directory does, for `~` and the 3 forms
+/// of an environment variable.
 pub fn resolve_wallpaper(explicit: Option<String>) -> Option<PathBuf> {
 	let dir = config_dir()?;
 	if let Some(given) = explicit.filter(|value| !value.trim().is_empty()) {
 		let path = PathBuf::from(expand_vars(given.trim()));
-		// Handed back unchecked: the loader opens it on its own thread and says so
-		// if it can't, which stops a wallpaper the user explicitly named from
-		// costing a stat here - it may be the very mount that responds slowly.
+		// Handed back unchecked. The loader opens it on its own thread and says so if it
+		// can't, so a wallpaper the user named doesn't cost a stat here, on what may be
+		// the slow mount.
 		return Some(if path.is_absolute() {
 			path
 		} else {
 			dir.join(path)
 		});
 	}
-	// Current convention first (wallpaper/wallpaper.*), then the older names
-	// so existing setups keep working - across every directory a pack may be in,
+	// Current convention first (wallpaper/wallpaper.*), then the older names so
+	// existing setups keep working. That's across every directory a pack may be in,
 	// which on Windows means Local before the config dir it used to share.
 	wallpaper_search_dirs()
 		.into_iter()
@@ -4520,9 +4520,9 @@ pub fn resolve_wallpaper(explicit: Option<String>) -> Option<PathBuf> {
 }
 
 /// The wallpaper-rotation folder: a relative value resolves against the config
-/// dir (like the single wallpaper). Not checked for existence here - the scan
-/// runs off the startup thread and reports an unreadable folder itself, so a typo
-/// still leaves rotation off.
+/// dir, like the single wallpaper. It isn't checked for existence here, since the
+/// scan runs off the startup thread and reports an unreadable folder itself, so a
+/// typo still leaves rotation off.
 pub fn resolve_wallpaper_folder(explicit: Option<String>) -> Option<PathBuf> {
 	let given = explicit.filter(|value| {
 		let value = value.trim();
@@ -4551,8 +4551,8 @@ thread_local! {
 	static RESTORE_PAUSES: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
 }
 
-// Move a config aside to the first free `.bak` name - so doing it twice never
-// overwrites the copy from the first time. Returns where it went.
+// Move a config aside to the first free `.bak` name, so doing it twice never
+// overwrites the first copy. Returns where it went.
 fn backup_aside(path: &std::path::Path) -> Option<PathBuf> {
 	if !may_write(path) {
 		return None;
@@ -4652,11 +4652,11 @@ pub fn wallpaper_history_path() -> Option<PathBuf> {
 	Some(data_dir()?.join(name))
 }
 
-/// Image files we're willing to load as a wallpaper. One list, so the folder
-/// auto-detect below and the rotation scan can't disagree about what counts.
-/// Must track the `image` crate's enabled features (png + jpeg) - it is built
-/// with default-features off to keep the binary small, so listing anything else
-/// here picks a file that then fails to decode.
+/// Image files that load as a wallpaper. One list, so the folder auto-detect below
+/// and the rotation scan can't disagree. It must track the `image` crate's enabled
+/// features (png and jpeg), since the crate is built with default-features off to
+/// keep the binary small, and anything else listed here would pick a file that
+/// then fails to decode.
 pub fn is_image_file(path: &std::path::Path) -> bool {
 	path.extension()
 		.and_then(|ext| ext.to_str())
@@ -4681,9 +4681,9 @@ pub fn rotation_folder_for(raw: &str, pinned_wallpaper: bool) -> (Option<PathBuf
 
 // The rotation folder to use when none is configured: the conventional
 // wallpaper/ dir (or the legacy names) under the config dir. Only its
-// existence is tested - reading it to see whether it has an image is the
-// scan's job, off the startup thread, and an empty one still means no rotation
-// and no diagnostic, since the user never asked for one.
+// existence is tested. Reading it for an image is the scan's job, off the startup
+// thread, and an empty one still means no rotation and no diagnostic, since the
+// user never asked for one.
 fn default_wallpaper_folder() -> Option<PathBuf> {
 	wallpaper_search_dirs()
 		.into_iter()
@@ -4696,8 +4696,8 @@ fn default_wallpaper_folder() -> Option<PathBuf> {
 }
 
 // Every setting line of `text` as (full path, verbatim line), commented ones
-// included - the walker resolves nesting, so a `# height: 100` 2 levels down
-// comes back as "cursor.size.height".
+// included. The walker resolves nesting, so a `# height: 100` 2 levels down comes
+// back as "cursor.size.height".
 fn setting_lines(text: &str) -> Vec<(String, String)> {
 	let lines: Vec<&str> = text.lines().collect();
 	walk_settings(text)
@@ -4759,12 +4759,11 @@ fn line_setting_key(line: &str) -> Option<&str> {
 	trimmed[end..].trim_start().starts_with(':').then_some(key)
 }
 
-// Paths that were renamed across versions (old -> new). A rename rewrites the
-// key on its line, preserving the comment/active state; if the new path is
-// already present the old one is dropped. Renames must stay within the
-// same parent block - the machinery rewrites the line in place, it doesn't
-// move lines between blocks. (The whole pre-nesting flat namespace is handled
-// separately by `convert_legacy_config`, not here.)
+// Paths that were renamed across versions (old -> new). A rename rewrites the key
+// on its line, keeping its comment or active state, and if the new path is
+// already there the old one is dropped. Renames must stay within the same parent
+// block, since the line is rewritten in place and never moved between blocks.
+// `convert_legacy_config` handles the whole pre-nesting flat namespace.
 const CONFIG_RENAMES: &[(&str, &str)] = &[
 	("scroll.inview_tau_ms", "scroll.single_screen_tau_ms"),
 	// The one attention color became 2. The old key's value is the calmer of
@@ -4828,20 +4827,16 @@ fn animation_is_none(word: &str) -> bool {
 		.eq_ignore_ascii_case("none")
 }
 
-// Paths that no longer exist and should be removed from an existing config.
-// scroll.tau_ms ("Initial scroll speed") has no successor: the speed curve now
-// leaves rest through Ease-in and the one knob that fed 4 mechanisms is
-// gone. scroll.ease_in was a unitless fraction; its replacement is a duration
-// (scroll.ease_in_ms), so the old value can't be moved by a rename.
-// text.dark_on_light_gamma is the same: it named a coverage exponent, and its
-// replacement (text.dark_on_light) is how much of a correction to apply, so
-// the old number means nothing under the new one.
-// `shell.default` is here because the list itself now names the default (its
-// top active entry). Adoption runs before this drops the line - see
-// `adopt_default_shell` - so the value is moved into the list, not discarded.
-// window.idle_release_minimized_min was a wait of its own for a minimized
-// window for about a day. A minimized window takes the hidden wait again, and
-// a value set for the one would be a surprise in the other, so it goes.
+// Paths that no longer exist and are removed from an existing config.
+// scroll.tau_ms has no successor, since the speed curve leaves rest through
+// Ease-in now. scroll.ease_in was a fraction and its replacement is a duration,
+// so a rename can't move the value. text.dark_on_light_gamma is the same, since
+// its replacement is a different quantity.
+// `shell.default` is here because the list itself names the default now.
+// `adopt_default_shell` runs before this drops the line, so the value moves into
+// the list.
+// window.idle_release_minimized_min lasted about a day. A minimized window takes
+// the hidden wait again, and a value set for one would be a surprise in the other.
 const CONFIG_REMOVED: &[&str] = &[
 	"scroll.tau_ms",
 	"scroll.ease_in",
@@ -4867,9 +4862,9 @@ const CONFIG_REMOVED: &[&str] = &[
 // existing config has the template's commented lines verbatim, so after a
 // default changes those lines quietly describe the old behavior. A commented
 // line matching the outgoing default is refreshed to the current template line.
-// An active line is never touched: that value is the user's own choice, and it
-// keeps working exactly as they set it. NOTE: the stored value is the raw
-// post-colon text, trailing `## Default` marker included.
+// An active line is never touched, since that value is the user's own choice. The
+// stored value is the raw text after the colon, trailing `## Default` marker
+// included.
 const SUPERSEDED_DEFAULTS: &[(&str, &str)] = &[
 	// the falloff's "gaussian" is spelled "half_normal" now (both still parse),
 	// and the default curve moved on again to the exponential
@@ -4885,13 +4880,13 @@ const SUPERSEDED_DEFAULTS: &[(&str, &str)] = &[
 	("text.scrim.radius", "5.0  ## Default"),
 	// the outline defaulted to 2 pixels before the halo did more of the work
 	("text.outline", "2.0  ## Default"),
-	// these 2 never tracked the theme they document - they had a gray and a
-	// steel blue from before themes existed, so every config in the wild has them
+	// these 2 never matched the theme they document. They had a gray and a steel
+	// blue from before themes existed, so every config in the wild has them
 	("colors.foreground", "\"#d2d2da\"  ## Default"),
 	("colors.cursor", "\"#7a9ad0\"  ## Default"),
 	// the cursor briefly defaulted to the cool third of the same triad, then to the
-	// warm one - both at the text's own brightness, which is why neither could be
-	// read through
+	// warm one, both at the text's own brightness, so neither could be read
+	// through
 	("colors.cursor", "\"#cc88ee\"  ## Default"),
 	("colors.cursor", "\"#eecc88\"  ## Default"),
 	// the first readable one was a shade under the contrast floor on the plate
@@ -4973,8 +4968,8 @@ const SUPERSEDED_DEFAULTS: &[(&str, &str)] = &[
 
 // The whole pre-nesting flat namespace, old key -> new nested path. Primary
 // (most recent flat) names first; still-older aliases after, so when a config
-// somehow has both spellings the newer one wins. `colors.*` map to
-// themselves - the path didn't change, but active overrides still copy over.
+// somehow has both spellings the newer one wins. `colors.*` map to themselves,
+// since the path didn't change, but active overrides still copy over.
 #[rustfmt::skip]
 const LEGACY_KEYS: &[(&str, &str)] = &[
 	("use_system_font", "font.use_system_family"),
@@ -5063,9 +5058,9 @@ const LEGACY_KEYS: &[(&str, &str)] = &[
 	("background_contrast_mask_auto", "wallpaper.contrast_mask.auto"),
 ];
 
-// A copied value keeps its exact text but not an old trailing comment -
-// the new template's comments describe the setting already. `#` inside a
-// quoted value (every color) survives.
+// A copied value keeps its exact text but not an old trailing comment, since the
+// new template's comments describe the setting already. `#` inside a quoted value
+// (every color) survives.
 fn strip_trailing_comment(value: &str) -> &str {
 	comment_at(value).map_or(value, |at| value[..at].trim_end())
 }
@@ -5210,14 +5205,13 @@ fn repair_wallpaper_heading(path: &std::path::Path) {
 	}
 }
 
-// One-time conversion of a pre-nesting config: the flat `wallpaper_*`-style
-// namespace became nested blocks, and rewriting that in place would shred the
-// old file's comments and grouping. Instead the old file is copied to a `.bak`
-// and a fresh template is written over it, with every active old value copied
-// over to its new path - settings survive, and the file's documentation is
-// current instead of half-old. Unknown `themes.*` subtrees (user data for a
-// future feature) are copied verbatim in dotted form. The rewrite keeps a
-// linked file linked and a private one private.
+// One-time conversion of a pre-nesting config. The flat `wallpaper_*`-style
+// namespace became nested blocks, and rewriting that in place would shred the old
+// file's comments and grouping. So the old file is copied to a `.bak` and a fresh
+// template is written over it, with every active old value copied to its new
+// path, so settings survive and the file's comments are current. Unknown
+// `themes.*` subtrees are copied as is in dotted form. The rewrite keeps a linked
+// file linked and a private one private.
 fn convert_legacy_config(path: &std::path::Path) {
 	convert_legacy_config_with(path, write_config_atomic);
 }
@@ -5274,10 +5268,9 @@ fn converted_config_text(text: &str) -> Option<String> {
 	// old flat name such as `margin` looked like a whole old file.
 	let unread = unreadable_lines(&shcl::Document::parse(text));
 	let read = |index: usize| !unread.contains(&(index + 1));
-	// Only an active flat key marks a file as legacy: any real old config has
-	// several (the template had them), while a comment that merely
-	// contains an old name - e.g. one a relayouted save left at column 0 - must
-	// never nuke a current-format file.
+	// Only an active flat key marks a file as legacy, since any real old config has
+	// several. A comment that only contains an old name, such as one a save left at
+	// column 0, must never wipe a current-format file.
 	let legacy = walked.iter().any(|w| {
 		matches!(w, WalkLine::Setting { index, path: p, header: false, active: true }
 			if read(*index) && !p.contains('.') && LEGACY_KEYS.iter().any(|(old, _)| old == p))
@@ -5313,9 +5306,9 @@ fn rebuilt_config_text(text: &str, garbled: &[usize]) -> (String, usize) {
 	let unread = unreadable_lines(&parsed);
 	let read = |index: usize| !unread.contains(&(index + 1)) && !garbled.contains(&index);
 
-	// active values: current-format paths copy as themselves (a mixed file
-	// loses nothing), old spellings map through the table, best (lowest table
-	// index) spelling winning per new path
+	// active values: current-format paths copy as themselves, so a mixed file loses
+	// nothing, and old spellings map through the table, with the lowest table index
+	// winning per new path.
 	// Settings only, never a block heading: a flat `wallpaper:` had the image,
 	// and matched as a current path it was written onto the `wallpaper:` heading.
 	let known_new: std::collections::HashSet<String> = walk_settings(default_config())
@@ -5393,8 +5386,8 @@ fn rebuilt_config_text(text: &str, garbled: &[usize]) -> (String, usize) {
 		};
 		let value = value.as_str();
 		if let Some((rank, new)) = target {
-			// a mapped path that has since been retired stays retired - the
-			// old value is still in the .bak, but never resurrects here
+			// a mapped path that has since been retired stays retired. The old value is
+			// still in the .bak
 			if !CONFIG_REMOVED.contains(&new.as_str()) {
 				match carry.entry(new) {
 					std::collections::hash_map::Entry::Vacant(slot) => {
@@ -5420,7 +5413,7 @@ fn rebuilt_config_text(text: &str, garbled: &[usize]) -> (String, usize) {
 	let mut out: Vec<String> = default_config().lines().map(str::to_string).collect();
 	for (new_path, (_, value)) in &carry {
 		if !activate_line(&mut out, new_path, value) {
-			// no template line (shouldn't happen) - keep it as a dotted line
+			// no template line, which shouldn't happen, so keep it as a dotted line
 			extras.push(format!("{new_path}: {value}"));
 		}
 	}
@@ -5464,11 +5457,11 @@ fn migrate_config(path: &std::path::Path) {
 	}
 }
 
-// Best-effort check that some other process has the config file open right now
-// (e.g. the user is editing it). Linux only, via /proc/<pid>/fd; elsewhere we
-// assume it's free. It only catches editors that hold the descriptor open, so a
-// false "not busy" is possible - fine, because the writes we gate on it only add
-// program-driven options and never touch the user's own values or comments.
+// Best-effort check that another process has the config file open right now,
+// such as an editor. Linux only, through /proc/<pid>/fd, and elsewhere it reads
+// as free. It only catches editors that hold the descriptor open, so a false "not
+// busy" is possible. That's acceptable, since the writes gated on it only add
+// program-driven options and never touch the user's values or comments.
 #[cfg(target_os = "linux")]
 fn config_open_elsewhere(path: &std::path::Path) -> bool {
 	let Ok(target) = path.canonicalize() else {
@@ -5532,9 +5525,9 @@ fn refresh_font_stack(line: &str) -> Option<String> {
 		.then(|| format!("{head}: \"{DEFAULT_FONT_STACK}\""))
 }
 
-// Everything after a settings line's first colon, trimmed - a trailing `##`
-// comment included, deliberately, so the exact-match test below refuses any line
-// the user has written a note on.
+// Everything after a settings line's first colon, trimmed, with a trailing `##`
+// comment included on purpose, so the exact-match test below refuses any line the
+// user wrote a note on.
 fn line_setting_value(line: &str) -> Option<&str> {
 	let key = line_setting_key(line);
 	let after_key = key.map_or(line, |key| {
@@ -5545,14 +5538,14 @@ fn line_setting_value(line: &str) -> Option<&str> {
 }
 
 // Bring a commented line still echoing a superseded default up to the template's
-// current line for that path. Only a bare, exactly-matching value migrates, so an
-// edited value - or one trailing a note - stays as the user wrote it.
+// current line for that path. Only a bare, exactly matching value migrates, so an
+// edited value, or one followed by a note, stays as the user wrote it.
 fn refresh_superseded_default(line: &str, path: &str) -> Option<String> {
 	if !line.trim_start().starts_with('#') {
 		return None; // active: the user's own value, leave it alone
 	}
-	// a path can have several superseded values (a default retuned more than
-	// once), so every entry for it is a candidate - not just the first
+	// a path can have several superseded values, from a default retuned more
+	// than once, so every entry for it is a candidate
 	let value = line_setting_value(line)?;
 	if !SUPERSEDED_DEFAULTS
 		.iter()
@@ -5696,8 +5689,8 @@ fn migrated_text(text: &str, keep_default_shell: bool) -> Option<String> {
 			}
 			None => (*line).to_string(),
 		};
-		// the refreshes below key on where the line ends up, not where it came
-		// from - a just-renamed line belongs to its new path now
+		// the refreshes below key on where the line ends up rather than where it
+		// came from, since a renamed line belongs to its new path now
 		let mut path: &str = renamed.map_or(path.as_str(), |(_, new, _)| new);
 		// an active "none" becomes the switch that says it now, unless the file
 		// already sets that switch itself
@@ -5829,14 +5822,14 @@ fn loaded_text(text: &str) -> std::borrow::Cow<'_, str> {
 }
 
 // What the next launch parses: the text its rewrites leave, in the launch's own
-// order. The rating check compares through this, because a step can read how a
-// line is written as well as what it says. That was true of 2: the font list
+// order. The rating check compares through this, since a step can read how a
+// line is written as well as what it says. There were 2 that did: the font list
 // refresh looked at the quote character, which the conversion before it copies,
 // and the renames took a commented heading for a parent. A save changes both, so
 // a rating write moved another setting a launch later. Neither reads layout now,
-// and this is what catches the next step that does. Backfill is left out on
-// purpose: it only adds lines the program owns, and it runs whether or not a
-// rating was written. A step added to `load` belongs here too.
+// and this catches the next step that does. Backfill is left out on purpose,
+// since it only adds lines the program owns, and it runs whether or not a rating
+// was written. A step added to `load` belongs here too.
 type LaunchStep = fn(&str) -> Option<String>;
 
 const LAUNCH_STEPS: [LaunchStep; 5] = [
@@ -5889,13 +5882,13 @@ fn saved_paths(text: &str) -> Option<std::collections::HashSet<String>> {
 }
 
 // One-time: `shell.default` used to name the default shell on its own. The list
-// names it now - its first active entry - so the 2 could disagree, and the
-// stored value is the user's own statement of which one they meant. Move the
-// entry it names to the top (creating one if the list has nothing running that
-// program) and drop the key; `CONFIG_REMOVED` clears any commented remnant.
+// names it now, as its first active entry, so the 2 could disagree, and the
+// stored value is the user's own statement of which one they meant. The entry it
+// names moves to the top, created if the list has nothing running that program,
+// and the key is dropped. `CONFIG_REMOVED` clears any commented leftover.
 //
-// It runs before that removal, and only while the key is actively set: a config
-// that never had one, or has already been through this, isn't touched at all.
+// It runs before that removal, and only while the key is actively set, so a
+// config that never had one, or has been through this already, isn't touched.
 fn adopt_default_shell(path: &std::path::Path) {
 	let Ok(doc) = read_doc(path) else { return };
 	let Some(adopted) = adopted_shell_doc(&doc) else {
@@ -5935,10 +5928,10 @@ fn adopted_shell_text(text: &str) -> Option<String> {
 // anything else is added as a new entry, since a command the list doesn't have
 // is still a shell the user chose to launch.
 //
-// "Already running that shell" is an identity question, not a string one: the
-// retired `shell.default` was routinely a bare name where the scan had already
-// stored the full path to the same file, and a string compare therefore promoted
-// a duplicate of the user's default shell to the top of their list.
+// "Already running that shell" compares files rather than strings. The retired
+// `shell.default` was often a bare name where the scan had stored the full path
+// to the same file, and a string compare put a duplicate of the user's default
+// shell at the top of their list.
 fn adopt_default_into(
 	stored: &[crate::shells::ShellEntry],
 	wanted: &str,
@@ -6032,12 +6025,12 @@ enum LineEdit {
 
 // Rewrite the named settings' own lines, leaving everything above them alone.
 //
-// A line edit rather than a document one on purpose: removing the node takes its
-// leading comments with it, so reverting a scrim setting used to destroy 7
-// lines of documentation, and a note written above a value went the same way.
-// `line_for` is given the key, the file's own indentation, the current line and
-// every other commented line for that key, and returns what becomes of it.
-// Returns None when nothing needs writing.
+// It's a line edit rather than a document one, since removing the node takes its
+// leading comments with it. Reverting a scrim setting used to destroy 7 lines of
+// comments, and a note written above a value went the same way. `line_for` gets
+// the key, the file's indentation, the current line, and every other commented
+// line for that key, and returns what becomes of it. Returns None when nothing
+// needs writing.
 //
 // A setting's own line is its active one. A save adds a set value as a new
 // line, sometimes above the commented default it replaces, and taking the
@@ -6142,25 +6135,23 @@ fn reverted_text(text: &str, keys: &[&str]) -> Option<String> {
 }
 
 // The file with each named setting commented out. This is what a cleared box
-// means - "not set" - which isn't the same as the template's default, and the
+// means, "not set", which isn't the same as the template's default, since the
 // template has some of these with a value.
 fn disabled_text(text: &str, keys: &[&str]) -> Option<String> {
 	edit_setting_lines(text, keys, |_, indent, line, _| commented(indent, line))
 }
 
-// Insert any settings the template defines that `path` lacks,
-// using the template's own (commented or active) line so follow-system keys stay
-// absent and behavior is unchanged. Existing values, comments, and formatting are
-// preserved (nothing already in the file is rewritten). Every setting is one
-// self-contained line - nested keys are written in dotted form - so there is no
+// Insert any settings the template defines that `path` lacks, using the
+// template's own line, commented or active, so follow-system keys stay absent and
+// behavior is unchanged. Nothing already in the file is rewritten. Every setting
+// is one self-contained line, with nested keys in dotted form, so there's no
 // table header to insert under.
 //
 // A template group is one comment block plus the settings it introduces, and the
 // block belongs to the group's first setting. A group the file has never seen is
-// appended whole, comments and all - but a group the file already has part of
-// already has those comments, and re-appending them would duplicate the whole
-// paragraph at the end of the file. Stragglers from a part-present group are put
-// back beside the siblings that explain them instead.
+// appended whole, comments and all. A group the file already has part of already
+// has those comments, so stragglers from it are put back beside the siblings that
+// explain them instead.
 fn backfill_config(path: &std::path::Path) {
 	let Ok(text) = std::fs::read_to_string(path) else {
 		return;
@@ -6271,8 +6262,8 @@ fn backfilled_text(text: &str) -> Result<Option<String>, Buried> {
 				continue;
 			}
 			// part-present group: the comments are already in the file next to the
-			// siblings, so re-appending them would duplicate the paragraph - put
-			// each straggler back beside its siblings, line only, template order
+			// siblings, so each straggler goes back beside them, line only, in template
+			// order
 			for (p, block) in group {
 				let at = paths_at(&lines);
 				if has(&at, p) {
@@ -6665,9 +6656,9 @@ fn migrated_parse(text: &str, steps: &[LaunchStep]) -> Option<shcl::Document> {
 // had, every setting it doesn't write loads as it did, and each key reads as
 // exactly what was asked. Lost lines are counted on the bytes (`before` and
 // `out`). Settings are compared as a launch parses them (`loaded` and the
-// migrated `out`), because the launch's renames and refreshes read how a line
-// is written - the quotes around a font stack, the indent of a commented
-// header - and a save changes both.
+// migrated `out`), because the launch's renames and refreshes read how a line is
+// written, such as the quotes around a font stack or the indent of a commented
+// header, and a save changes both.
 fn reads_as_asked(
 	before: &shcl::Document,
 	loaded: &shcl::Document,
@@ -6865,8 +6856,8 @@ const SHCL_BANNER_OLD: &str = "\
 const SHCL_BANNER_MARK: &str = "This config file format is SHCL.";
 
 // Put the footer back on a config that predates it, and move it under anything
-// backfill appended below it. A footer that has been edited is left alone -
-// re-imposing our own wording over someone's would be the rude half of this.
+// backfill appended below it. A footer that has been edited is left alone, so
+// nobody's own wording is replaced.
 fn with_shcl_banner(text: &str) -> Option<String> {
 	let mut lines: Vec<&str> = text.lines().collect();
 	for spelling in [
@@ -7521,7 +7512,7 @@ fn anchor_for(
 static CONFIG_OVERRIDE: OnceLock<PathBuf> = OnceLock::new();
 // Serializes the tests that install a config-path override. The override is
 // process-global, so 2 of them running at once would each read the other's
-// file - and they're in different modules, so the guard has to be here.
+// file, and they're in different modules, so the guard has to be here.
 // The refusal `write_doc` leaves for the window is process-global too, so a
 // test whose save can be refused takes this as well.
 #[cfg(test)]
@@ -7547,15 +7538,12 @@ pub fn set_config_override(path: PathBuf) {
 	let _ = CONFIG_OVERRIDE.set(path);
 }
 
-// `--config` is decided once, before any setting is read, which is exactly what
-// a OnceLock says - but a test installs several throwaway configs in one
-// process, and the second `set` there is silently ignored. That failed quietly
-// and in the worst possible way: every later test wrote its own file and read
-// the first one's, so one test's leftovers steered another's assertions
-// (measured: the theme round-trip read theme_mode "light" out of the generic
-// row test's config and stored its edit in the wrong variant of the palette).
-// So a test build gets a settable door beside the OnceLock. It is still
-// process-global, hence `test_config_lock` around any test that uses it.
+// `--config` is decided once, before any setting is read, which is what a
+// OnceLock is for. But a test installs several configs in one process, and the
+// second `set` there is quietly ignored, so every later test wrote its own file
+// and read the first one's. So a test build gets a settable override beside the
+// OnceLock. It's still process-global, hence `test_config_lock` around any test
+// that uses it.
 #[cfg(test)]
 fn test_override() -> &'static std::sync::Mutex<Option<PathBuf>> {
 	static OVERRIDE: OnceLock<std::sync::Mutex<Option<PathBuf>>> = OnceLock::new();
@@ -7570,14 +7558,14 @@ fn test_native_config() -> &'static std::sync::Mutex<Option<PathBuf>> {
 	&NATIVE
 }
 
-// The directory name under whichever base a platform hands us. One name, so
-// the config dir, the data dir and the legacy probe can't drift apart.
+// The directory name under whichever base a platform gives. One name, so the
+// config dir, the data dir, and the legacy probe can't drift apart.
 const APP_DIR: &str = "silkterm";
 
-// Which platform's conventions to lay the paths out by. Named rather than read
-// off `cfg!` at each site so the whole scheme can be tested for every platform
-// from any one of them - the boxes here are Linux and Windows, and a macOS path
-// nobody present can run is exactly the kind that rots unnoticed.
+// Which platform's conventions to lay the paths out by. It's named rather than
+// read off `cfg!` at each site, so tests cover the scheme for every platform from
+// any one of them. A macOS path that can't be run here is the kind that rots
+// unnoticed.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum Layout {
 	Windows,
@@ -7595,8 +7583,8 @@ fn host_layout() -> Layout {
 	}
 }
 
-// An environment variable as a path, treating empty as unset - an exported but
-// empty HOME isn't a home directory.
+// An environment variable as a path, treating empty as unset, since an exported
+// but empty HOME isn't a home directory.
 fn env_path(name: &str) -> Option<PathBuf> {
 	std::env::var_os(name)
 		.filter(|value| !value.is_empty())
@@ -7609,11 +7597,11 @@ pub fn home_dir() -> Option<PathBuf> {
 
 // Where settings go, by platform convention.
 //
-// An explicit XDG_CONFIG_HOME is honored on every platform - somebody who sets
-// it means it - and only then does the platform get its say: Roaming on Windows
-// (settings are meant to follow the user between machines), Application Support
-// on macOS, ~/.config elsewhere. Each falls back to ~/.config if the native base
-// is missing from the environment, which is better than having no config at all.
+// An explicit XDG_CONFIG_HOME is honored on every platform, since somebody who
+// sets it means it. Otherwise it's Roaming on Windows, so settings follow the
+// user between machines, Application Support on macOS, and ~/.config elsewhere.
+// Each falls back to ~/.config if the native base is missing from the
+// environment, which beats having no config at all.
 fn config_base_for(
 	layout: Layout,
 	xdg: Option<&std::path::Path>,
@@ -7724,15 +7712,14 @@ pub(crate) fn may_write(_: &std::path::Path) -> bool {
 	true
 }
 
-/// Where bulk, machine-local data goes. On Windows that is Local rather than
-/// Roaming: a wallpaper pack is 60 MiB and has no business following the user
-/// onto every machine they sign into. Everywhere else it is the config dir, which
-/// is what those platforms' conventions already mean.
+/// Where bulk, machine-local data goes. On Windows that's Local rather than
+/// Roaming, since a 60 MiB wallpaper pack shouldn't follow the user onto every
+/// machine they sign into. Everywhere else it's the config dir.
 ///
-/// In 2 cases everything stays together on purpose instead: a `--config` override
-/// (so an alternate config still gets its own wallpaper and history rather than
-/// sharing the default ones - that isolation is the point of the flag), and an
-/// explicit `XDG_CONFIG_HOME` (somebody who asks for one tree means one tree).
+/// Everything stays together in 2 cases: a `--config` override, so an alternate
+/// config gets its own wallpaper and history, which is the point of the flag, and
+/// an explicit `XDG_CONFIG_HOME`, since somebody who asks for one tree means one
+/// tree.
 pub fn data_dir() -> Option<PathBuf> {
 	data_dir_for(
 		host_layout(),
@@ -7866,9 +7853,9 @@ fn cache_dir_for(
 }
 
 // Every directory a wallpaper folder may be in, best first. More than one entry
-// only where the data dir split off from the config dir - a pack already beside
-// the config still has to be found, because nobody should have to move 60 MiB to
-// keep what already worked.
+// only where the data dir split off from the config dir, since a pack already
+// beside the config still has to be found, and nobody should have to move 60 MiB
+// to keep what already worked.
 fn wallpaper_search_dirs() -> Vec<PathBuf> {
 	let mut dirs = Vec::new();
 	if let Some(dir) = data_dir() {
@@ -7900,9 +7887,9 @@ fn legacy_config_path() -> Option<PathBuf> {
 }
 
 // Bring a pre-layout config across, once, and only when the native location
-// has nothing. If both exist the native one is the live file and the old one
-// is left exactly where it is - guessing which of 2 real configs somebody
-// wants isn't a call this can make, so it says what it found and moves on.
+// has nothing. If both exist the native one is the live file and the old one is
+// left where it is. This can't guess which of 2 real configs somebody wants, so
+// it says what it found and moves on.
 // Called before the default template would be written, or a fresh template
 // would win the race against the file being adopted.
 fn adopt_legacy_config() {
