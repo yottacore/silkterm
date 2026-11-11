@@ -566,7 +566,7 @@ fHostDescribe(){
 ## profile that reaches here uses fat LTO, and rustc has repeatedly died part way
 ## through one inside LLVM - a different pass and a different signal each time
 ## (SIGILL, SIGSEGV, SIGBUS) - then compiled the identical source clean on the next
-## try. It has crashed twice in a row, so one retry is not enough. Stage 2 has
+## try. It has crashed twice in a row, so one retry isn't enough. Stage 2 has
 ## already compiled everything bar the feature-gated profiler hooks, so a genuine
 ## error surfaces in seconds here and the extra tries cost nothing on that path.
 fRetryBuild(){
@@ -1858,7 +1858,7 @@ fMarkRelease
 ## and chewed on by the mutator. A run that writes one through changes what
 ## later runs replay, and nothing else would say so - a seed just quietly stops
 ## being the case it was saved as. Hashed before and after, so a fixture edited
-## by hand before the run is not mistaken for one the run made.
+## by hand before the run isn't mistaken for one the run made.
 fCorpusHashes(){ find "${root}/cicd/tests/fuzz-corpus" -type f -exec sha256sum {} + 2>/dev/null | sort; }
 
 ## A headless sway drawing on the card's render node, with its own Xwayland, so an

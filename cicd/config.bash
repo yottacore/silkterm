@@ -211,7 +211,7 @@ LAUNCHER_HARNESS=(cicd/tests/launcher/run.ps1)
 
 ## Also run the harness a second time under a headless Wayland compositor (cage), to
 ## prove the Wayland backend renders + scrolls the same as X11. Self-skips (non-fatal)
-## where cage is not installed. 0/unset to disable.
+## where cage isn't installed. 0/unset to disable.
 SCROLL_HARNESS_WAYLAND=1
 
 ## Stages 4 + 5: how many times a fat-LTO build may be attempted before the pipeline
@@ -321,7 +321,7 @@ CLEANUP_CACHE_CAP_MB=2048
 ## GFS_KEEP_* env vars (GFS_KEEP_FREQUENT, GFS_KEEP_DAILY, ...) if needed.
 
 ## Stage 7: dogfood. Every build this run made is installed under a fixed name in
-## the synced app dir for the platform it TARGETS, so a box that cannot build for
+## the synced app dir for the platform it TARGETS, so a box that can't build for
 ## itself still gets a current binary over Dropbox. Nothing here keeps a pool of
 ## dated copies any more - the 'runterm' launcher on each box does that, in its own
 ## rotated versions folder.
@@ -371,9 +371,9 @@ GIT_PUBLISH=(cicd/utility/n8git_backup-and-publish)
 ## dir skips it whole, without rar going in, so one line per dir is enough.
 ##
 ## forks/ holds working clones of the patched dependencies. Each has its own
-## remote, so the archive would otherwise carry 50 MB of a copy of something
+## remote, so the archive would otherwise include 50 MB of a copy of something
 ## already kept elsewhere, and more as each one gets built. What that costs is
-## work committed in a clone and not pushed, which is not in the backup either -
+## work committed in a clone and not pushed, which isn't in the backup either -
 ## already true of this repo, whose .git is excluded the same way.
 ##
 ## target/mmap-bench is the minimap rig's scratch: a 32 MiB flood file it makes

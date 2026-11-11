@@ -6,7 +6,7 @@
 #
 # Needs the headless display up (gui-headless.bash start, CICD_HEADLESS_DISPLAY=:98)
 # and an OPTIMIZED binary - a debug build measures the debug build.
-# Everything it writes goes under target/, which is not tracked: the flood file
+# Everything it writes goes under target/, which isn't tracked: the flood file
 # alone is 32 MiB.
 
 ##	History: At bottom of file.

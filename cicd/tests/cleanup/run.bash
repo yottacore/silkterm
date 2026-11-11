@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-#  shellcheck disable=2034  ## 'variable appears unused.' The lifted code reads them, and shellcheck cannot see into an eval.
+#  shellcheck disable=2034  ## 'variable appears unused.' The lifted code reads them, and shellcheck can't see into an eval.
 
 ##	- Purpose:
 ##		What a run removes of what earlier runs left, and what it never touches.

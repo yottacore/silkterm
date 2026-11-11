@@ -1141,7 +1141,7 @@ fn windows_fixed_shells(root: &Path) -> Vec<Found> {
 					"{} -ExecutionPolicy RemoteSigned",
 					launch(&quoted(&ps51), "powershell")
 				),
-				"runs profile scripts; per-session, nothing is written",
+				"can run profile scripts, without changing the system's execution policy",
 			)
 			.in_group(Group::WinPs5Relaxed, 0),
 		);

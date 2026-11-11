@@ -52,7 +52,7 @@ layout:
 	header_pad: 14             ## heading grows to the UI line height plus this
 	header_gap: 24             ## extra space above a heading that follows a section
 	subgroup_gap: 8            ## extra space above a row that leads a sub-group
-	indent: 16                 ## label offset per sub-group level (controls do not move)
+	indent: 16                 ## label offset per sub-group level (controls don't move)
 	label_width: 168           ## floor for the label column
 	label_gap: 14              ## clear space after the longest label
 	revert_width: 22           ## floor; the revert-to-default column grows to its arrow

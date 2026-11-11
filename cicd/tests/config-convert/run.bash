@@ -140,7 +140,7 @@ fConverts(){  ## fConverts <case> <how> <lost>
 			if [[ "${lost}" == 0 ]]; then
 				fCheck "${name}: nothing reported lost" fNotSaid 'set a list in brackets|could not be carried' "${dir}/said1.txt"
 			else
-				fCheck "${name}: ${lost} lost setting(s) reported, naming the copy" fSaid ": ${lost} line(s) set a list in brackets, which the new format cannot hold; they are kept as written but set nothing. The old file is at ${dir}/${copy}." "${dir}/said1.txt"
+				fCheck "${name}: ${lost} lost setting(s) reported, naming the copy" fSaid ": ${lost} line(s) set a list in brackets, which the new format can't store; they're kept as written but don't set anything. The old file is at ${dir}/${copy}." "${dir}/said1.txt"
 			fi
 			;;
 		new)
@@ -149,7 +149,7 @@ fConverts(){  ## fConverts <case> <how> <lost>
 			if [[ "${lost}" == 0 ]]; then
 				fCheck "${name}: nothing reported lost" fNotSaid 'set a list in brackets|could not be carried' "${dir}/said1.txt"
 			else
-				fCheck "${name}: ${lost} lost setting(s) reported, naming the copy" fSaid ": could not be converted in place, so a new file was written; ${lost} setting(s) could not be copied to it. The old file is at ${dir}/${copy}." "${dir}/said1.txt"
+				fCheck "${name}: ${lost} lost setting(s) reported, naming the copy" fSaid ": couldn't be converted in place, so a new file was written; ${lost} setting(s) couldn't be copied to it. The old file is at ${dir}/${copy}." "${dir}/said1.txt"
 			fi
 			;;
 	esac
@@ -311,12 +311,12 @@ if fDisplay; then
 	## : >"${dir}/said.txt"
 	## fNotice notsaved 'Settings not saved'
 	## fCheck "notsaved: the file is left byte for byte" cmp -s "${dir}/original" "${dir}/config.shcl"
-	## fCheck "notsaved: and no save was tried" fLacks 'could not save config' "${dir}/said.txt"
+	## fCheck "notsaved: and no save was tried" fLacks "couldn't save config" "${dir}/said.txt"
 	mkdir -p "${work}/dropped"
 	printf '## caf\xe9\nfont:\n\tsize: 15\n\n##    Format   3\n' >"${work}/dropped/config.shcl"
 	fNotice dropped 'Settings file rewritten'
 	fCheck "dropped: the file is UTF-8 now" fUtf8 "${work}/dropped/config.shcl"
-	fCheck "dropped: and no save was refused" fLacks 'could not save config' "${work}/dropped/said.txt"
+	fCheck "dropped: and no save was refused" fLacks "couldn't save config" "${work}/dropped/said.txt"
 	if ((startedDisplay)); then "${headless}" stop >/dev/null 2>&1 || true; startedDisplay=0; fi
 fi
 

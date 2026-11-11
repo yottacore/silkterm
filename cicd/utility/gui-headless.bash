@@ -56,7 +56,7 @@ num="${display#:}"
 ## as "headless display failed to start".
 runDir="/tmp/cicd-gui-headless-${USER:-$(id -un)}"
 ## The name is predictable, so somebody else can get there first. Refuse anything
-## we do not own, and anything that is a link to somewhere else - the pid files
+## we don't own, and anything that is a link to somewhere else - the pid files
 ## under here are read and acted on, and the auth cookie is a key to the display.
 mkdir -p "${runDir}"
 if [[ -L "${runDir}" || ! -d "${runDir}" || ! -O "${runDir}" ]]; then

@@ -67,7 +67,7 @@ pub(super) fn ask_text(closing: Closing, names: &[String]) -> (String, Vec<Strin
 		vec![
 			first,
 			format!(
-				"Detach leaves {it} running, so you can attach to {it} again later. End closes {it}, and everything running in {it}."
+				"Detach leaves {it} running, so you can attach to {it} again later. End kills {it}, and everything running in {it}."
 			),
 		],
 	)

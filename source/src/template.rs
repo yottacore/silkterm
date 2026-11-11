@@ -84,7 +84,10 @@ impl fmt::Display for Error {
 				)
 			}
 			Self::TooDeep { at } => {
-				write!(f, "Groups go more than {MAX_DEPTH} deep at character {at}.")
+				write!(
+					f,
+					"Groups are nested more than {MAX_DEPTH} deep at character {at}."
+				)
 			}
 		}
 	}

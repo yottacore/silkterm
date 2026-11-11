@@ -1,6 +1,6 @@
 ## SilkTerm with every optional effect off, for the "plain" row of the shootout table.
 ## Only the overrides are listed - the loader backfills every other key from its own
-## defaults, so this file cannot go stale as new settings are added.
+## defaults, so this file can't go stale as new settings are added.
 
 performance.automatic: false
 performance.profile: custom

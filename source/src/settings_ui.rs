@@ -3737,7 +3737,7 @@ impl SettingsDialog {
 		self.assoc_refresh();
 		let say = match done {
 			Err(why) => Some((
-				"Windows didn't take the change".to_string(),
+				"Windows didn't accept the change".to_string(),
 				format!("{why:#}"),
 			)),
 			Ok(()) if on => {
@@ -12780,7 +12780,7 @@ mod tests {
 	// one, nor Background the only tab that draws one. Replaced by
 	// `two_rows_warn_and_each_mark_answers_for_its_own` (ddkgv), which checks
 	// the same things for both marks.
-	// // The Transparency row carries a warning mark after its label, with its own
+	// // The Transparency row has a warning mark after its label, with its own
 	// // flyover, and it is the only row that does.
 	// // Test ID: ddeqh
 	// #[test]
@@ -12847,7 +12847,7 @@ mod tests {
 	// shows text of its own. Replaced by
 	// `two_rows_warn_and_each_mark_shows_the_rows_tip` (ddp7w), which checks
 	// the same things with the row's tip over the mark.
-	// // Two rows carry a warning mark: Transparency on the Background tab, and
+	// // Two rows have a warning mark: Transparency on the Background tab, and
 	// // "Free resources when idle" on the Window tab. Each draws one triangle after
 	// // its label, clear of its checkbox, and answers with its own flyover, while
 	// // the label keeps the row's usual one. No other tab draws a mark.

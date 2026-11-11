@@ -2577,7 +2577,7 @@ pub fn refusal_notice(refusal: &config::Refusal) -> (String, Vec<String>) {
 			format!("{} can't save its settings file.", config::APP_NAME),
 			refusal.path.display().to_string(),
 			format!("{which} can't be read, and saving now would delete {it}."),
-			"Until that's fixed, changes such as the window size, new shells, and anything set in Settings are used but not kept.".to_string(),
+			"Until that's fixed, changes such as the window size, new shells, and anything set in Settings are used but not saved.".to_string(),
 		],
 	)
 }
@@ -2616,7 +2616,7 @@ pub fn conversion_notice(loss: &config::ConversionLoss) -> (String, Vec<String>)
 fn backup_para(loss: &config::ConversionLoss) -> Option<String> {
 	let name = loss.backup.as_ref().and_then(|b| b.file_name())?;
 	Some(format!(
-		"The file as it was before is kept in the same folder, as {}.",
+		"The old file was saved in the same folder, as {}.",
 		name.to_string_lossy()
 	))
 }
@@ -3191,7 +3191,7 @@ mod tests {
 		);
 		assert_eq!(
 			paras[3],
-			"The file as it was before is kept in the same folder, as config_backup_20261003-142233_format-v2.shcl."
+			"The old file was saved in the same folder, as config_backup_20261003-142233_format-v2.shcl."
 		);
 		let (_, one) = said(1, None);
 		assert_eq!(
@@ -3253,7 +3253,7 @@ mod tests {
 			paras[2],
 			"Line 12 can't be read, and saving now would delete it."
 		);
-		assert!(paras[3].contains("not kept"));
+		assert!(paras[3].contains("not saved"));
 		assert_eq!(
 			said(&[3, 40], 2).1[2],
 			"Lines 3 and 40 can't be read, and saving now would delete them."
@@ -3276,7 +3276,7 @@ mod tests {
 	// lines (2026100315581313), so no save is refused for them and `Refusal` no
 	// longer says why. `a_notice_for_dropped_lines_names_them_and_the_copy` covers
 	// the notice now.
-	// // Lines that are not UTF-8 look fine in some editors, so the notice says
+	// // Lines that aren't UTF-8 look fine in some editors, so the notice says
 	// // what is wrong with them.
 	// // Test ID: ddf77
 	// #[test]
@@ -3329,7 +3329,7 @@ mod tests {
 				),
 				"/home/me/.config/silkterm/config.shcl".to_string(),
 				"Line 3 was left out.".to_string(),
-				"The file as it was before is kept in the same folder, as config_backup_20261003-142233_format-v3.shcl.".to_string(),
+				"The old file was saved in the same folder, as config_backup_20261003-142233_format-v3.shcl.".to_string(),
 			]
 		);
 		let (_, paras) = said(&[3, 40], 2, config::Rewrite::Template);

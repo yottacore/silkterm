@@ -354,7 +354,7 @@ const BENCH_WARMUP: usize = 3; // frames discarded while a rung's settings settl
 const BENCH_FRAMES: usize = 40; // frames measured per rung...
 const BENCH_RUNG_MS: f32 = 800.0; // ...or this long, whichever comes first
 const BENCH_MIN_FRAMES: usize = 5; // never judge a rung on fewer than this
-/// How far past the budget a frame has to run before the profile cannot be what
+/// How far past the budget a frame has to run before the profile can't be what
 /// is pacing it. The profiles change the per-pixel work by around half, so a
 /// period several times over says something else is holding the display, and no
 /// step down would rescue it. One constant for both users on purpose: the bench
@@ -747,7 +747,7 @@ mod tests {
 			vec![Profile::Max, Profile::High, Profile::Low],
 			"each rung has to go live before it is judged"
 		);
-		// far over: nothing on the ladder can help, so the rest is not timed -
+		// far over: nothing on the ladder can help, so the rest isn't timed -
 		// which is the case that would otherwise take longest. This used to stop
 		// at Max and answer Standard whatever Standard drew at:
 		//   let (pick, rungs) = run_bench(budget * 6.0, budget);

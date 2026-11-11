@@ -1485,7 +1485,7 @@ impl Model {
 		if config.exists("kept") {
 			let _ = config.set_comment(
 				"kept",
-				"Kept by the program, so values can come back later.",
+				"Saved by the program, so these values can be used again later.",
 			);
 		}
 		(config.to_canonical(), state.to_canonical())

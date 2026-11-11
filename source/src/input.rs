@@ -827,7 +827,7 @@ mod tests {
 	// Ctrl+, no longer opens Settings there.
 	// `command_comma_is_the_only_settings_chord_on_macos` tests it instead.
 	// // Command+, is Settings on macOS and nowhere else. Ctrl+, stays on every
-	// // platform, and Command with anything more is not the chord.
+	// // platform, and Command with anything more isn't the chord.
 	// // Test ID: ddcee
 	// #[test]
 	// fn command_comma_opens_settings_on_macos_only() {

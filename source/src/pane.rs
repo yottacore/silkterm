@@ -9017,7 +9017,7 @@ mod tests {
 	}
 
 	// Each row's buffer line moves with it through every push and trim, and a
-	// row that came in since is not built yet.
+	// row that came in since isn't built yet.
 	// Test ID: df4t5
 	#[test]
 	fn off_strip_lines_move_with_their_rows() {

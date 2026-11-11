@@ -102,7 +102,7 @@ FOLEY_LAG  = 0.03                             # foley sits this far after the ke
                                               # picture reads tighter than sound-to-keypress)
 
 # The faux window fills the frame below the narration band: a black border shows
-# around it, and BAND px of bare root above it carry the captions. FRAME_* are the
+# around it, and BAND px of bare root above it are for the captions. FRAME_* are the
 # decoration extents (left,right,titlebar,bottom in px) - the client is sized so
 # the outer frame sits BORDER px inside the left/right/bottom edges and BAND px
 # below the top.
@@ -135,7 +135,7 @@ DECO_TEXT     = "#eef3fb"                   # title text
 # of travel. Measured on the shipped gif, a scroll reads -11 -11 -22, -10 -10 -19,
 # -8 -8 -8 -7 -14, +5 +5 +5 +5 +10: an exact doubling on a strict period, at every
 # speed and in both directions. Speed-independence is what rules the app's own
-# scrolling out - a scroll defect does not double itself identically at 3px/frame
+# scrolling out - a scroll defect doesn't double itself identically at 3px/frame
 # and at 11px/frame. That regular hitch is what reads as the picture jumping, and
 # no amount of scroll tuning could ever have removed it.
 #
@@ -241,7 +241,7 @@ class Rec:
 	def env(self) -> dict[str, str]:
 		e = dict(os.environ)
 		e.update(DISPLAY=self.display, XAUTHORITY=self.auth, LIBGL_ALWAYS_SOFTWARE="1")
-		# Setting DISPLAY is not enough to move a winit app onto our private Xvfb:
+		# Setting DISPLAY isn't enough to move a winit app onto our private Xvfb:
 		# it prefers Wayland whenever WAYLAND_DISPLAY is set, so on any Wayland
 		# session (WSLg included) the window opens on the real desktop instead and
 		# nothing here can find it. Everything we launch belongs on the X display.
@@ -767,7 +767,7 @@ def write_config(home: Path, profile: Profile) -> None:
 	#
 	# What is pinned here and what is deliberately absent:
 	#  - grid, font and margin stay pinned even where they equal a default, so a
-	#    later default change cannot reflow a scene that was timed against them.
+	#    later default change can't reflow a scene that was timed against them.
 	#  - the scrim and the scroll feel are NOT pinned, so the demo always shows
 	#    what ships. Pinning them is how the old gif ended up advertising a halo
 	#    and an outline no build had used for weeks.
@@ -911,7 +911,7 @@ def write_tree(rec: Rec, rng: random.Random) -> None:
 	# The bar sweeps the whole hue circle the short way round - dark purple, up
 	# through the bright middle, down to dark red - so it reads as a rainbow rather
 	# than the single-axis ramp it used to be. Computed here, not in dash: integer
-	# shell arithmetic cannot do a hue sweep, and the stops never vary anyway.
+	# shell arithmetic can't do a hue sweep, and the stops never vary anyway.
 	stops: list[str] = []
 	for i in range(36):
 		frac = i / 35
@@ -932,7 +932,7 @@ printf '  🤔 🍰 🎉 😀   ┌─┬─┐ ╔═╦═╗ ▁▂▃▄▅�
 	show.chmod(0o755)
 
 	# build.sh: cargo-flavored output, paced in movements rather than at random.
-	# The scroll speed is not a constant - it leaves rest gently, doubles while the
+	# The scroll speed isn't a constant - it leaves rest gently, doubles while the
 	# backlog grows, tops out, then rides a braking curve down to a slow stop.
 	# Output that arrives at one rate only ever shows one point on that curve, so
 	# the earlier version (a line every so often, with a quarter chance of a pause)
@@ -1033,7 +1033,7 @@ def set_cfg(rec: Rec, keys: dict[str, object]) -> bool:
 	# quoted so a value can never read as a comment or a bare word like none.
 	#
 	# Keys are dotted config paths, and each line's path is RESOLVED from an
-	# indent stack of block headers rather than matched literally. That is not
+	# indent stack of block headers rather than matched literally. That isn't
 	# defensive programming - the app rewrites this file into nested blocks the
 	# first time it saves, so a literal `^cursor\.size\.width: ` matched the file
 	# write_config wrote and then matched nothing at all for the rest of the run.
@@ -1108,7 +1108,7 @@ def seg_wheel(rec: Rec, typist: Typist, mouse: Mouse) -> None:
 	# scrollback under the wheel - the same easing as the output scroll, driven
 	# by hand. xdotool sends two wheel events per click here (winit fires on the
 	# legacy button press AND release), so a few clicks cover a lot of lines. One
-	# direction only: coming back down says nothing going up has not already said,
+	# direction only: coming back down says nothing going up hasn't already said,
 	# and a full-width listing in motion is the costliest thing in the gif. The
 	# screen is then just cleared, with no remark - the scene is over at the top.
 	with Banner(rec, "Scroll back just as smoothly. Minimap at the right."):
@@ -1136,7 +1136,7 @@ def seg_panes(rec: Rec, typist: Typist, mouse: Mouse) -> None:
 		# panes each sliding up a row a beat after they appeared, staggered, on an
 		# otherwise empty screen: nothing else to look at, so it read as glitching.
 		# At half width the prompt has room and no pane reprints. Splitting both
-		# ways also shows the tree does both, which one direction twice does not.
+		# ways also shows the tree does both, which one direction twice doesn't.
 		for accel in ("v", "h"):
 			typist.key("alt+p", sound=key_sound("p"))
 			time.sleep(0.55)
@@ -1446,7 +1446,7 @@ GIF_COLORS = 160        # one global palette; the wallpaper finale wants the hea
 # gifsicle's lossy LZW threshold. OFF on purpose: it only bought ~10%, and what it
 # spends that on is ghost bars of the previous screen left in flat black areas -
 # which in a terminal demo reads as the terminal itself misdrawing. Raise it only
-# if a future scene list pushes the gif past what the README can carry.
+# if a future scene list pushes the gif past what the README can take.
 GIF_LOSSY  = 0
 
 def gif_pass(rec: Rec, work: Path, out_gif: Path, trim: float, dur: float, colors: int = GIF_COLORS, tail: bool = False) -> Path:
@@ -1494,7 +1494,7 @@ def encode_gif(rec: Rec, work: Path, out_gif: Path, video_end_e: float) -> Path:
 ##•••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
 ##	Output placement + rotation (video and gif in their own dirs)
 
-# The README carries the whole demo (it ends on the wallpaper + the black tail,
+# The README shows the whole demo (it ends on the wallpaper + the black tail,
 # which a cut-down highlight could never show), and 12 MiB is the stated ceiling
 # for it. Scrolling is what sets the size - measured per second of finished gif
 # at 50fps: a dense full-width scroll runs ~1.6 MiB/s, the build scene ~0.4, a

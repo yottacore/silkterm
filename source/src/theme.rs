@@ -88,7 +88,7 @@ impl Palette {
 	}
 }
 
-/// A theme the user saved. It carries both variants in full rather than a base plus
+/// A theme the user saved. It has both variants in full rather than a base plus
 /// the differences: saving, renaming and deleting are then all the same operation
 /// on one config subtree, and a saved theme is self-contained enough to hand to
 /// someone else. `slug` is its config path segment and never changes, so a rename
@@ -151,7 +151,7 @@ const SILK_DARK: Palette = Palette {
 	// Hues sit where their names say, warmed toward the pair above; saturation is
 	// the pastel end. Each color's BRIGHTNESS was carried over from the palette
 	// this replaced, hue by hue, so contrast and legibility are unchanged - only
-	// the family moved. The grays carry a faint warm cast for the same reason.
+	// the family moved. The grays have a faint warm cast for the same reason.
 	ansi: [
 		[0x1d, 0x1b, 0x18], [0xd0, 0x72, 0x64], [0x6c, 0xd0, 0x79], [0xd7, 0xc5, 0x7c],
 		[0x7c, 0xa8, 0xe5], [0xbf, 0x7b, 0xd5], [0x53, 0xb9, 0xb5], [0xb7, 0xb1, 0xa5],
@@ -270,7 +270,7 @@ const AMBER_LIGHT: Palette = Palette {
 	],
 };
 
-// Pastel: soft light pastels on a dark gray that carries a faint tint of the
+// Pastel: soft light pastels on a dark gray with a faint tint of the
 // foreground's complement, so the ground reads as cool against the warm cream
 // text instead of as flat charcoal. The light variant turns it round - the same
 // hues deepened, on cream paper. The cursors follow the same rule as SilkTerm's.

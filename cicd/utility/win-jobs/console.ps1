@@ -38,7 +38,7 @@ function fSessions {
 $want = fSessions | Where-Object { $_.User -eq $User } | Select-Object -First 1
 if (-not $want) { "no session for ${User} - log in once (RDP is enough) and run this again"; exit 1 }
 
-##	tscon wants SeTcbPrivilege, which an ssh session does not always carry, so it
+##	tscon wants SeTcbPrivilege, which an ssh session doesn't always have, so it
 ##	goes through a one-shot SYSTEM task. The task must point at a FILE: schtasks
 ##	given nested quotes runs the command inline instead of registering it.
 $script = Join-Path $dir "tscon.ps1"

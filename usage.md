@@ -65,11 +65,11 @@ What each tab says comes from a template. Edit it under Tab text on the Window t
 
 The rest of it:
 
-- `a || b` shows `a`, or `b` when `a` comes out empty.
+- `a || b` shows `a`, or `b` if `a` is empty.
 
-- `{ }` groups without printing, and `[ ]` prints its brackets.
+- `{ }` groups parts without showing the braces, and `[ ]` groups them and shows the brackets.
 
-- A group whose macros all come out empty is left out, with its text.
+- A group is left out, text and all, when all of its macros are empty.
 
 - Text between 2 parts shows only when both sides show something, so a separator doesn't hang off the end when the part after it is missing. A choice without a macro in it, such as the `-` in `{[%PROGRAM%] || -}`, counts as text here. To keep text with one macro, put the 2 in a group: `{(%SHELL%)}`.
 
@@ -115,11 +115,11 @@ Closing a tab, a pane, or the window does what "When closed" says to each sessio
 
 - Detach leaves the session running, to attach to later.
 
-- End closes the session, and everything running in it.
+- End kills the session, and everything running in it.
 
 - Prompt, the default, asks each time. The question has a "Don't ask me next time" box, which saves the answer given as the new setting.
 
-End only ever closes the session SilkTerm started for that pane, found by the name it was given. If the session was renamed, or something else was switched to inside the pane, that one is left alone. A pane whose tmux exits on its own, through a detach inside it or the session ending, closes without asking.
+End only ever kills the session SilkTerm started for that pane, found by the name it was given. If the session was renamed, or something else was switched to inside the pane, that one is left alone. A pane whose tmux exits on its own, through a detach inside it or the session ending, closes without asking.
 
 In the config:
 

@@ -65,7 +65,7 @@ fn is_combining_mark(c: char) -> bool {
 			| '\u{fe20}'..='\u{fe2f}')
 }
 
-// A shape cannot start mid-word: "xC:\a" is not a drive path and "and/or" is not
+// A shape can't start mid-word: "xC:\a" isn't a drive path and "and/or" isn't
 // an absolute one. Listed the other way round on purpose - what may sit in front
 // of a path is a short closed set, and everything else is part of a name.
 fn boundary_before(text: &[char], start: usize) -> bool {
@@ -115,7 +115,7 @@ fn anchor(text: &[char], at: usize) -> Option<Anchor> {
 	if c == '~' && text.get(at + 1).is_some_and(|&c| is_sep(c)) {
 		return path(2);
 	}
-	// /usr/... - a lone slash is not a path, so the next char has to carry one
+	// /usr/... - a lone slash isn't a path, so the next char has to include one
 	if c == '/'
 		&& text
 			.get(at + 1)
@@ -133,7 +133,7 @@ fn anchor(text: &[char], at: usize) -> Option<Anchor> {
 }
 
 // How much of an scp target starting at `at` is prefix - through the colon that
-// separates the host from the path. None when this is not one.
+// separates the host from the path. None when this isn't one.
 fn remote_len(text: &[char], at: usize) -> Option<usize> {
 	let host = at + user_len(text, at).unwrap_or(0);
 	let colon = host_end(text, host)?;
@@ -147,7 +147,7 @@ fn remote_len(text: &[char], at: usize) -> Option<usize> {
 	if !segment.is_empty() && !segment.iter().any(|c| c.is_alphabetic()) {
 		return None;
 	}
-	// a separator with something after it - a host and a bare name is not a target
+	// a separator with something after it - a host and a bare name isn't a target
 	if !text.get(i).is_some_and(|&c| is_sep(c))
 		|| !text.get(i + 1).is_some_and(|&c| is_path_char(c))
 	{
@@ -239,7 +239,7 @@ fn separator_within_reach(text: &[char], from: usize) -> bool {
 		.any(|&c| is_sep(c))
 }
 
-// Where the name ends if this run already carries a file extension, as an offset
+// Where the name ends if this run already has a file extension, as an offset
 // into the run. Only the last segment counts, and what FOLLOWS the extension
 // decides: another dot means a second part (`a.tar.gz`), a separator means it was
 // a directory all along, and anything else means the name ended and the `:120:5`
