@@ -396,7 +396,7 @@ fn rotate(settings: &Settings, current: Option<&str>) -> Option<Rotation> {
 		// an absent or empty dir isn't a mistake to report.
 		if !settings.wallpaper_folder_auto {
 			eprintln!(
-				"{}: wallpaper_folder {} has no images",
+				"{}: wallpaper.rotate.folder {} has no images",
 				config::APP_NAME,
 				dir.display()
 			);
