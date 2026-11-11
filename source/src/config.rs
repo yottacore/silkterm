@@ -10,9 +10,9 @@ use std::sync::{Arc, OnceLock, RwLock};
 /// name lives in Cargo.toml.
 pub const APP_NAME: &str = "SilkTerm";
 
-/// Where Help -> Support SilkTerm sends the browser. Points at DONATE.md (the
-/// canonical list of sponsor options and addresses) rather than
-/// a single link baked into the binary. HEAD resolves to the repo default branch.
+/// Where Help -> Support SilkTerm sends the browser: DONATE.md, the list of
+/// sponsor options and addresses, rather than one link built into the binary.
+/// HEAD resolves to the repo's default branch.
 pub const DONATE_URL: &str = "https://github.com/yottacore/silkterm/blob/HEAD/DONATE.md";
 
 // The addresses worth handing straight to someone who has already decided.
@@ -20,8 +20,8 @@ pub const DONATE_URL: &str = "https://github.com/yottacore/silkterm/blob/HEAD/DO
 pub const SPONSOR_URL: &str = "https://github.com/sponsors/jim-collier";
 pub const KOFI_URL: &str = "https://ko-fi.com/jimcollier";
 
-/// Which exact build this is. The version can't say - every dogfood build of a
-/// release has the same one - so build.rs bakes in whole minutes since 2000 in
+/// Which exact build this is. The version can't say, since every dogfood build of
+/// a release has the same one, so build.rs bakes in whole minutes since 2000 in
 /// Crockford base 32 (source/src/buildnum.rs). It's 5 characters, sorts in build
 /// order, and decodes back to the minute it was built.
 pub const BUILD_ID: &str = env!("SILK_BUILD");
@@ -78,7 +78,7 @@ pub fn title_prefix() -> String {
 /// A terminal running with administrator or root rights says so in its window
 /// title. Windows already writes this "Administrator: " on the title bar of its
 /// own consoles, so that word is kept there, and a console sending a title while
-/// elevated writes it in front of that too - which is the half to take back off.
+/// elevated writes it in front of that too, which is the half to take back off.
 /// SilkTerm never changes its own credentials, so both are read once.
 pub fn rights() -> crate::tabtitle::Rights {
 	crate::tabtitle::Rights {
@@ -133,7 +133,7 @@ fn privilege_word() -> Option<&'static str> {
 	None
 }
 
-/// Which of the cross builds this binary is - otherwise indistinguishable at a
+/// Which of the cross builds this binary is, since they look the same at a
 /// glance. Shared by the About dialog and `--about` so the 2 can't drift.
 pub fn build_target() -> String {
 	let profile = if cfg!(debug_assertions) {
@@ -166,10 +166,10 @@ pub fn uptime() -> std::time::Duration {
 
 /// The display scale factor to lay out at, given what the window reports.
 /// `SILK_SCALE` overrides it, which is the only way to see a high-DPI layout on a
-/// 1x display: chrome written in raw pixels is invisible at 1x and only thins out
-/// as the factor rises, so the defect it guards against can't be seen
-/// without one. Read once (`var_os` takes the env lock and scans environ), same
-/// pattern as `SILK_MAX_FPS`. Off X11 there is no winit knob for this at all.
+/// 1x display. Chrome written in raw pixels looks fine at 1x and only thins out as
+/// the factor rises, so the defect can't be seen without it. Read once, like
+/// `SILK_MAX_FPS`, since `var_os` takes the env lock and scans environ. Off X11
+/// winit has no setting for this at all.
 pub fn display_scale(reported: f64) -> f32 {
 	use std::sync::OnceLock;
 	static OVERRIDE: OnceLock<Option<f32>> = OnceLock::new();
@@ -184,13 +184,13 @@ pub fn display_scale(reported: f64) -> f32 {
 
 /// Chrome measurements are written in DIP (a CSS pixel, 1/96 inch) and converted
 /// to physical pixels where they are used. The main window's chrome shares a
-/// coordinate space with the terminal grid, so there is no single boundary to
-/// divide at the way `settings_ui.rs` has - each measurement scales at its own use
-/// site, through here or `TextCtx::dip`.
+/// coordinate space with the terminal grid, so there's no single boundary to
+/// divide at the way `settings_ui.rs` has, and each measurement scales where it's
+/// used, through here or `TextCtx::dip`.
 ///
-/// Rounded to whole pixels so a rule, a ring or a hairline gap stays crisp, and a
-/// measurement the author asked to be visible never rounds away to nothing (a 1
-/// DIP gap under a scale factor below 1 would otherwise vanish).
+/// Rounded to whole pixels so a rule, a ring, or a hairline gap stays crisp, and a
+/// measurement meant to be visible never rounds away to nothing, as a 1 DIP gap
+/// under a scale factor below 1 would.
 pub fn dip(v: f32, scale: f32) -> f32 {
 	let px = v * scale;
 	if v > 0.0 {
@@ -204,7 +204,7 @@ pub fn dip(v: f32, scale: f32) -> f32 {
 pub const PANE_GAP_PX: f32 = 1.0;
 pub const DIVIDER_GRAB_PX: f32 = 5.0; // mouse tolerance for grabbing a pane divider
 pub const FOCUS_RING_PX: f32 = 2.0;
-pub const SETTLE_EPS: f32 = 0.002; // a settle threshold, not a measurement - never scaled
+pub const SETTLE_EPS: f32 = 0.002; // a settle threshold rather than a measurement, so never scaled
 /// Ceiling on `text.dark_on_light`. 1.0 is the whole correction, an sRGB blend
 /// plus `DARK_ON_LIGHT_CONTRAST`; the headroom above it is for taste, and past
 /// this the counters of small letters fill in.
@@ -237,10 +237,10 @@ pub const SELECTION_BG: [u8; 3] = [0x33, 0x44, 0x66];
 /// drag-and-drop pane reorder: drop-target tint
 pub const DROP_TARGET: [u8; 3] = [0x55, 0x80, 0xc8];
 
-// Scrollbar. Neutral mid-gray in every theme rather than a palette color: desktop
-// scrollbars read as chrome, not as part of the terminal's own color scheme. There
-// is no portable way to ask the OS for its actual value (GTK only names a theme),
-// so this is the shade those themes converge on. colors.scrollbar_* overrides.
+// Scrollbar. A neutral mid-gray in every theme rather than a palette color, since
+// desktop scrollbars read as chrome. There's no portable way to ask the OS for
+// its value (GTK only names a theme), so this is the shade those themes converge
+// on. colors.scrollbar_* overrides it.
 pub const SCROLLBAR_THUMB_DEF: [u8; 3] = [0x8a, 0x8a, 0x92];
 pub const SCROLLBAR_TROUGH_DEF: [u8; 3] = [0x2e, 0x2e, 0x36];
 
@@ -258,13 +258,13 @@ pub const TAB_INACTIVE: [u8; 3] = [0x36, 0x36, 0x3b];
 // The size when the desktop names none and nothing is set (`fields.rs`).
 const FALLBACK_FONT_SIZE: f32 = 17.0;
 
-/// Cross-platform monospace fallback stack (first installed wins): the
-/// `font_family` default, and the resolver's last resort on every platform when
-/// neither the configured family nor the OS monospace resolves. Windows always
-/// goes through it (no OS monospace setting exists there), so every entry must
-/// have a real bold face - the bare `Family::Monospace` db query this replaces
-/// could pick a family without one, silently ejecting bold runs to an
-/// arbitrary (often proportional) fallback.
+/// Cross-platform monospace fallback stack, where the first installed wins. It's
+/// the `font_family` default, and the resolver's last resort when neither the
+/// configured family nor the OS monospace resolves. Windows always goes through
+/// it, since it has no OS monospace setting, so every entry must have a real bold
+/// face. The bare `Family::Monospace` query this replaced could pick a family
+/// without one, and bold runs then fell back to some other font, often a
+/// proportional one.
 pub const DEFAULT_FONT_STACK: &str = "Monaspace Argon, Fira Code, JetBrains Mono, Cascadia Mono, Consolas, Ubuntu Mono, SF Mono, Menlo, Courier New";
 
 /// The family list while it follows the desktop: the desktop's font, then the
@@ -292,10 +292,10 @@ const SUPERSEDED_FONT_STACKS: &[&str] = &[
 /// right-click context menu
 pub const MENU_LINK: [u8; 3] = [0x6c, 0x9c, 0xff]; // clickable URL
 
-/// Menu bar / dropdown colors: bg + text come from the active theme (overridable
-/// via `colors.menu_background/menu_foreground`); hover, border, and the group
-/// separator are derived shades of the bg, so a custom menu color stays coherent
-/// in either a dark or a light direction.
+/// Menu bar and dropdown colors. The bg and text come from the active theme, and
+/// `colors.menu_background` and `menu_foreground` override them. Hover, border,
+/// and the group separator are shades of the bg, so a custom menu color stays
+/// coherent whether it's dark or light.
 pub fn menu_fg() -> [u8; 3] {
 	settings().menu_fg
 }
@@ -309,14 +309,13 @@ pub(crate) fn menu_sep_of(menu_bg: [u8; 3]) -> [u8; 3] {
 	shade(menu_bg, 20)
 }
 // Flyover help in the main window: the tab strip's tip and a menu row's. Both
-// hang off chrome that is painted in the menu color - the default menu bg is the
-// inactive tab's own bytes - so a tip filled with it reads as the thing it is
-// explaining. It lifts by the same step the strip puts between an inactive and
-// an active tab, and warms, since every tab color leans faintly blue. The
-// dialogs' tips already stand off their panel this way, with dialog_btn().
-// Each derivation is a pure function of the menu color it comes from, so a test
-// can ask what a given menu color yields without the live user config deciding
-// the answer (see the config lock the settings tests take).
+// hang off chrome painted in the menu color, since the default menu bg is the
+// inactive tab's own bytes, so a tip filled with it reads as the thing it
+// explains. It lifts by the same step the strip puts between an inactive and an
+// active tab, and warms, since every tab color leans faintly blue. The dialogs'
+// tips stand off their panel the same way, with dialog_btn(). Each derivation is
+// a pure function of the menu color, so a test can check one without the live
+// user config getting in the way.
 const TIP_LIFT: i16 = 34;
 const TIP_WARMTH: i16 = 8;
 const TIP_TEXT_WARMTH: i16 = 5;
@@ -656,11 +655,11 @@ pub fn keep_tested(profile: crate::profile::Profile, hardware: Option<&str>) -> 
 
 // The old config kept the machine's state with the settings. A file that still
 // does, with no state file yet, has those lines moved there before the launch
-// migration drops them. A theme's colors set in the same file move to the
-// theme's "*" changes, which is what they were: colors over a theme. A state
-// line, even the old template's commented one, marks a file from before 10-09,
-// and so does no Format line (`unstamped`, read before the launch stamps it),
-// since shcl 3.0 came first. That is how a file written by hand looks.
+// migration drops them. A theme's colors set in the same file move to the theme's
+// "*" changes, since that's what they were. A file from before 10-09 is known by
+// a state line, even the old template's commented one, or by having no Format
+// line (`unstamped`, read before the launch stamps it), since shcl 3.0 came
+// first. A file written by hand looks like that too.
 fn move_state_out(path: &std::path::Path, unstamped: bool) {
 	let Some(text) = read_settings_text(path) else {
 		return;
@@ -825,10 +824,10 @@ pub struct Settings {
 	pub font_ignores_themes: bool, // a theme pick leaves the 3 above alone
 	pub scrollback: usize,
 	pub scroll_smooth: bool, // master switch: false = every scroll (wheel, output, app slide) happens instantly
-	/// The 5 knobs below are the named segments of the output-scroll speed
-	/// curve, in the order one burst traverses them: leave rest, accelerate,
-	/// top out, wind down, stop. Each hands its end point to the next and has
-	/// no other influence on it (the model is in scroll.rs).
+	/// The next 5 are the named segments of the output-scroll speed curve, in the
+	/// order one burst goes through them: leave rest, accelerate, top out, wind down,
+	/// stop. Each hands its end point to the next and has no other effect on it (the
+	/// model is in scroll.rs).
 	pub scroll_ease_in_ms: f32, // how long the lift from rest to the ramp handoff takes
 	pub scroll_ramp_up_ms: f32, // catch-up speed doubles this often while output stays ahead
 	pub scroll_single_screen_tau_ms: f32, // burst speed ceiling while the burst is still wholly on screen
@@ -1026,11 +1025,10 @@ impl Settings {
 		min_contrast_for(self.fg, self.bg, self.text_min_contrast)
 	}
 
-	/// The rotation folder, or None when either master switch is off. Both callers
-	/// (arming rotation, and the built-in fallback's "nothing is configured" test)
-	/// go through this so they can't disagree - and it is derived rather than
-	/// folded into `wallpaper_folder` at load, because the Settings dialog edits a
-	/// Settings struct directly and never re-runs `resolve`.
+	/// The rotation folder, or None when either master switch is off. Arming rotation
+	/// and the built-in fallback both go through this so they can't disagree. It's
+	/// derived rather than folded into `wallpaper_folder` at load, since the Settings
+	/// dialog edits a Settings struct directly and never runs `resolve` again.
 	pub fn rotation_folder(&self) -> Option<&PathBuf> {
 		(self.wallpaper_enabled && self.wallpaper_rotate_enabled)
 			.then_some(self.wallpaper_folder.as_ref())
@@ -1156,8 +1154,8 @@ impl Settings {
 			remembered_font_zoom: 0,
 			monitor_sizes: Vec::new(),
 			// alacritty's default delimiters minus ':', so a Windows drive path
-			// (C:\...) stays whole on a double-click - and namespaced idents
-			// (std::vec) and URLs (http://) with it. /.-_~ are already word chars.
+			// (C:\...) stays whole on a double-click, and namespaced idents (std::vec) and
+			// URLs (http://) with it. /.-_~ are already word chars.
 			word_separators: alacritty_terminal::term::SEMANTIC_ESCAPE_CHARS
 				.chars()
 				.filter(|&c| c != ':')
@@ -1324,13 +1322,13 @@ pub fn settings() -> Arc<Settings> {
 /// backticks, double quotes, single quotes, then {} () [] <>.
 pub const DEFAULT_SELECTION_PAIRS: &str = "`` \"\" '' {} () [] <>";
 
-/// argv for the default shell - the first active entry in the stored list, which
-/// is what "the one at the top" means. None hands the choice to the system: an
-/// empty list, or one whose every entry is switched off.
+/// argv for the default shell: the first active entry in the stored list, which is
+/// what "the one at the top" means. None hands the choice to the system, for an
+/// empty list or one with every entry switched off.
 ///
-/// The order is the user's (the Settings dialog's Shells tab moves entries; a
-/// scan only ever appends), and an initial population is led by the shell the
-/// user logs in with - see `shells::detect`.
+/// The order is the user's, since the Shells tab moves entries and a scan only
+/// appends. A first population is led by the shell the user logs in with
+/// (`shells::detect`).
 pub fn default_shell_argv() -> Option<Vec<String>> {
 	let shell = settings()
 		.shells
@@ -1340,17 +1338,16 @@ pub fn default_shell_argv() -> Option<Vec<String>> {
 	command_argv(&shell)
 }
 
-/// Where the first pane of a freshly launched window starts, or None to leave it
-/// where SilkTerm itself was started. Of the 4 things that can decide a shell's
-/// directory, this is the last: `--directory` on the command line (`cli_dir`, the
-/// caller's first choice), a new tab, pane or window inheriting from the pane it
-/// came from (handled by the caller, which passes an inherited path instead of
-/// asking here), an inherited directory that somebody picked on purpose, and only
-/// what is left over reads the setting.
+/// Where the first pane of a newly launched window starts, or None to leave it
+/// where SilkTerm was started. Of the 4 things that can decide a shell's directory,
+/// this comes last: `--directory` on the command line (`cli_dir`), a new tab, pane,
+/// or window inheriting from its pane (the caller passes that path instead of
+/// asking here), and an inherited directory somebody picked on purpose. Only what's
+/// left reads the setting.
 ///
-/// So the setting is what a launch from the desktop, a menu or a shortcut gets -
-/// which is the case where the inherited directory is an accident of whoever
-/// started us rather than anything the user chose.
+/// So the setting is what a launch from the desktop, a menu, or a shortcut gets,
+/// where the inherited directory is an accident of the launcher rather than a
+/// choice.
 pub fn startup_dir() -> Option<std::path::PathBuf> {
 	if inherited_dir_is_a_choice() {
 		return None;
@@ -1358,13 +1355,11 @@ pub fn startup_dir() -> Option<std::path::PathBuf> {
 	resolve_dir(&settings().startup_directory, "shell.startup_directory")
 }
 
-// Is the directory we were started in a choice or an accident? A shell that
-// launched us was sitting somewhere on purpose, and so is a file manager's
-// "Open in terminal", which hands us the folder being looked at without giving
-// us a terminal. What is left - a desktop icon, a Start-menu entry, a shortcut -
-// starts in the home directory, at a filesystem root, beside the executable, or
-// in the Windows system folder, and none of those say anything about where the
-// user wants to be.
+// Is the directory SilkTerm was started in a choice or an accident? A shell that
+// launched it was sitting somewhere on purpose, and so is a file manager's "Open
+// in terminal". A desktop icon, a Start-menu entry, or a shortcut starts in the
+// home directory, a filesystem root, beside the executable, or in the Windows
+// system folder, and none of those say where the user wants to be.
 fn inherited_dir_is_a_choice() -> bool {
 	if DIR_HANDED_DOWN.load(Ordering::Relaxed) || launched_from_shell() {
 		return true;
@@ -1417,11 +1412,11 @@ fn dir_is_a_choice(
 		.any(|dir| real(dir) == cwd)
 }
 
-/// A window opened from another one's pane is started in that pane's directory,
-/// which can be home or a root as easily as anywhere. Nothing in the directory
-/// itself says so, and a launcher leaves us in the same places, so the parent
-/// says it out loud. Read and dropped once at the top of main, so no shell of
-/// ours passes it on to a SilkTerm it starts.
+/// A window opened from another one's pane starts in that pane's directory, which
+/// can be home or a root as easily as anywhere. Nothing in the directory says so,
+/// and a launcher leaves SilkTerm in the same places, so the parent says it in this
+/// variable. Main reads and drops it first, so no shell started here passes it on
+/// to another SilkTerm.
 pub const ENV_DIR_HANDED_DOWN: &str = "SILKTERM_DIR_HANDED_DOWN";
 static DIR_HANDED_DOWN: AtomicBool = AtomicBool::new(false);
 
@@ -1440,10 +1435,9 @@ pub fn config_override() -> Option<PathBuf> {
 	CONFIG_OVERRIDE.get().cloned()
 }
 
-/// Where a shell named on the command line starts (`--directory`). Sits above
-/// every one of `startup_dir`'s 3 cases: asking for a directory on the command
-/// line is the most deliberate statement of the lot, so it beats an inherited
-/// one, the shell we were launched from, and the setting alike.
+/// Where a shell named on the command line starts (`--directory`). It beats all 3
+/// of `startup_dir`'s cases, since asking on the command line is the most
+/// deliberate choice of all.
 pub fn cli_dir(raw: &str) -> Option<std::path::PathBuf> {
 	resolve_dir(raw, "--directory")
 }
@@ -1462,21 +1456,20 @@ fn resolve_dir(raw: &str, label: &str) -> Option<std::path::PathBuf> {
 	if dir.is_dir() {
 		return Some(dir);
 	}
-	// Worth one line: a directory that has been renamed or unmounted would
-	// otherwise look like the setting being ignored.
+	// A directory that was renamed or unmounted would otherwise look like the
+	// setting being ignored.
 	eprintln!("{APP_NAME}: {label}: no such directory: {wanted}");
 	None
 }
 
-/// Substitute environment variables written in any of the 3 forms a
-/// person is likely to use - `$NAME` and `${NAME}` from bash, `%NAME%`
-/// from cmd, `$env:NAME` and `${env:NAME}` from PowerShell - plus a leading `~`.
-/// All of them on every platform on purpose: this is text SilkTerm reads, not
-/// something a shell ever sees, so which shell the person likes shouldn't
-/// decide whether their config works. An unset name expands to nothing, the way
-/// a shell does it.
+/// Substitute environment variables in any of the 3 forms a person is likely to
+/// use: `$NAME` and `${NAME}` from bash, `%NAME%` from cmd, and `$env:NAME` and
+/// `${env:NAME}` from PowerShell, plus a leading `~`. All of them work on every
+/// platform, since this is text SilkTerm reads and no shell sees, so a person's
+/// favorite shell shouldn't decide whether their config works. An unset name
+/// expands to nothing, as in a shell.
 ///
-/// What a shell does see never comes through here - `command_argv` expands the
+/// What a shell does see never comes through here. `command_argv` expands the
 /// program name and leaves the arguments alone.
 pub fn expand_vars(text: &str) -> String {
 	let text = match text.strip_prefix('~') {
@@ -1504,7 +1497,7 @@ pub fn expand_vars(text: &str) -> String {
 			}
 		} else if let Some(percent) = tail.strip_prefix('%') {
 			match percent.split_once('%') {
-				// `%%` is an empty name, not a variable - leave it alone.
+				// `%%` is an empty name rather than a variable, so it's left alone.
 				Some((name, after)) if !name.is_empty() => (name, after),
 				_ => {
 					out.push_str(&tail[..1]);
@@ -1548,7 +1541,7 @@ fn strip_env_prefix(name: &str) -> &str {
 // a different spelling on the other platform. Native Windows sets no HOME and
 // unix sets no USERPROFILE, so a config written on either box would otherwise
 // go quiet on the other. Only names with a real one-to-one counterpart are
-// listed - guessing at the rest would be worse than an empty expansion the
+// listed, since guessing at the rest would be worse than an empty expansion the
 // user can see.
 fn lookup(name: &str) -> Option<String> {
 	const ALIASES: &[&[&str]] = &[
@@ -1568,7 +1561,7 @@ fn lookup(name: &str) -> Option<String> {
 		.iter()
 		.find(|group| group.iter().any(|alt| alt.eq_ignore_ascii_case(name)))?;
 	group.iter().find_map(|alt| read(alt)).or_else(|| {
-		// Home is the one we can still work out with nothing in the environment.
+		// Home is the one that can still be worked out with nothing in the environment.
 		group[0]
 			.eq_ignore_ascii_case("HOME")
 			.then(home_string)
@@ -1601,18 +1594,18 @@ fn home_string() -> String {
 	home_dir().map_or_else(String::new, |dir| dir.to_string_lossy().into_owned())
 }
 
-// Did a shell start us? If so its directory is a deliberate choice and outranks
-// the setting; if not, the directory we inherited is whatever the launcher felt
-// like and says nothing about where the user wants to be.
+// Did a shell start SilkTerm? If so its directory is a deliberate choice and
+// outranks the setting. If not, the inherited directory is whatever the launcher
+// picked.
 //
-// The test is the same on both platforms - "is standard input a terminal" - and
-// it is what separates the 2 cases without asking about parent processes,
-// which costs a process-table walk on Windows and would sit on the path to the
-// first frame. Measured on Windows: launched from a console the std handles are
-// the console's (FILE_TYPE_CHAR), launched through ShellExecute the way Explorer
-// and the Start menu do it they are NULL. A release build is a GUI-subsystem
-// binary and owns no console either way, so GetConsoleWindow can't tell
-// and AttachConsole gets it wrong (it succeeds via the grandparent).
+// The test on both platforms is whether standard input is a terminal. It
+// separates the 2 cases without asking about parent processes, which costs a
+// process-table walk on Windows on the way to the first frame. On Windows a
+// console launch gets the console's std handles (FILE_TYPE_CHAR), and a
+// ShellExecute launch from Explorer or the Start menu gets NULL ones. A release
+// build is a GUI-subsystem binary without a console either way, so
+// GetConsoleWindow can't tell, and AttachConsole gets it wrong, since it succeeds
+// through the grandparent.
 #[cfg(unix)]
 fn launched_from_shell() -> bool {
 	// SAFETY: isatty only inspects the descriptor; 0 is always a valid argument.
@@ -1812,9 +1805,9 @@ pub fn keep_session_on_apply(live: &Settings, opened: &Settings, edited: &mut Se
 	crate::fields::fill(edited, None);
 }
 
-// Read the config as an editable document. The parser is forgiving (a bad line
-// becomes a diagnostic, not a failed load), so unlike the old strict TOML path
-// this can't bail on a file the loader reads fine and silently save nothing.
+// Read the config as an editable document. The parser is forgiving, so a bad line
+// becomes a diagnostic rather than a failed load, and this can't give up on a file
+// the loader reads fine and quietly save nothing.
 fn read_doc(path: &std::path::Path) -> Result<shcl::Document, Unread> {
 	let text = read_settings(path).map_err(|e| match e.kind() {
 		std::io::ErrorKind::NotFound => Unread::Missing,
@@ -1904,9 +1897,9 @@ fn save_refused(doc: &shcl::Document) -> bool {
 // One classified line of a config text, with its full nested path resolved from
 // the indentation context (an `enabled:` 2 levels deep under `wallpaper:` /
 // `rotate:` is "wallpaper.rotate.enabled"). Comment lines that contain a setting
-// (`# enabled: true`) get a path too - the machinery treats them as that
-// setting's disabled default. Lines inside a raw fence are passed through as
-// `Fence`; blank lines as `Blank`; anything else as `Other`.
+// (`# enabled: true`) get a path too, since they're that setting's disabled
+// default. Lines inside a raw fence are passed through as `Fence`, blank lines as
+// `Blank`, and anything else as `Other`.
 enum WalkLine {
 	Setting {
 		index: usize,
@@ -2017,27 +2010,25 @@ fn fence_run(line: &str) -> Option<(char, usize)> {
 
 /// Serialize a document back to disk.
 ///
-/// The canonical text keeps comments, blank-line grouping, indentation and line
-/// order, and never rewrites a scalar - so it is the disk text (shcl 1.2 made
-/// that true; before it a comment run under a block of commented-out defaults
-/// came back at the header's depth). The write goes through a temp file and a
-/// rename, so a crash mid-save can't leave a truncated config, and it is
-/// refused outright when the parse dropped lines the save would delete - the
-/// user's own text is worth more than one changed setting.
-/// Returns whether it wrote. A refusal has to get to the caller: the dialog closes
-/// on a save, and 3 failures used to present as a clean one - shcl refusing a
-/// lossy round trip, an unreadable file, an unwritable one.
-/// Every write of the settings file goes through here, launch-time rewrites too,
-/// and so does a PowerShell profile write.
-/// It writes beside the file and renames over it: `fs::write` truncates first, so
-/// a crash or a full disk during one leaves nothing where the config was. A linked
-/// settings file is written through its link rather than replaced by a copy, the
-/// file keeps its mode, and the temp file is created exclusively, so a link left
-/// at its name is never written through. On Windows the publish is `ReplaceFile`,
-/// which keeps the file's ACLs. A path that isn't UTF-8 is refused rather than
-/// converted lossily, which could name a different file. A write that moves the
-/// file to a newer SHCL format, or replaces one that isn't UTF-8, keeps the old
-/// one first (`keep_old_format`).
+/// The canonical text keeps comments, blank-line grouping, indentation, and line
+/// order, and never rewrites a scalar, so it's the disk text (since shcl 1.2). A
+/// write is refused when the parse dropped lines the save would delete, since the
+/// user's own text is worth more than one changed setting. Every write of the
+/// settings file goes through here, launch-time rewrites and PowerShell profile
+/// writes too.
+///
+/// Returns whether it wrote. The dialog closes on a save, and 3 failures used to
+/// look like a clean one: shcl refusing a lossy round trip, an unreadable file,
+/// and an unwritable one.
+///
+/// It writes beside the file and renames over it, since `fs::write` truncates
+/// first and a crash or a full disk would leave nothing. A linked settings file is
+/// written through its link, the file keeps its mode, and the temp file is created
+/// exclusively, so a link left at its name is never written through. On Windows
+/// the publish is `ReplaceFile`, which keeps the file's ACLs. A path that isn't
+/// UTF-8 is refused rather than converted lossily, which could name a different
+/// file. A write that moves the file to a newer SHCL format, or replaces one that
+/// isn't UTF-8, keeps the old one first (`keep_old_format`).
 pub(crate) fn write_config_atomic(path: &std::path::Path, text: &str) -> anyhow::Result<()> {
 	write_config_keeping(path, text).map(|_| ())
 }
@@ -2152,9 +2143,9 @@ fn backup_name(stem: &str, stamp: &str, n: u32, attempt: u32) -> String {
 // includes every conversion, and a save that converts a file a launch left
 // alone. A current file with lines that aren't UTF-8 is written again without
 // them (`upgrade`), and is kept the same way, so no write ever loses its bytes.
-// Every older version is kept: a backup already there is never replaced. The
-// write is refused when the copy can't be made. Returns where the copy is,
-// and the format the file had.
+// Every older version is kept, and a backup already there is never replaced. The
+// write is refused when the copy can't be made. Returns where the copy is and the
+// format the file had.
 fn keep_old_format(path: &std::path::Path, text: &str) -> anyhow::Result<Option<(PathBuf, u32)>> {
 	let (stamp, _) = local_stamp();
 	keep_old_format_at(path, text, &stamp)
@@ -2708,8 +2699,8 @@ fn write_doc(path: &std::path::Path, doc: &shcl::Document) -> bool {
 	true
 }
 
-// A setter returns whether the write applied, and every path here is one of
-// ours, so a refusal is a bug worth hearing about rather than a silent no-op.
+// A setter returns whether the write applied, and every path here is the
+// program's own, so a refusal is a bug worth hearing about rather than a no-op.
 trait Put {
 	fn put_string(&mut self, path: &str, v: &str);
 	fn put_bool(&mut self, path: &str, v: bool);
@@ -2753,13 +2744,13 @@ fn same_f32(a: f32, b: f32) -> bool {
 }
 
 /// Write the values that differ from `orig` back into the config in place. The
-/// user's comments and blank-line grouping survive (see `to_text`); untouched
-/// settings keep whatever they were (commented / following the system). Returns
-/// false (writing nothing) if something in the file changed and it looks open
-/// in another program, so the caller can hold off - e.g. the Settings dialog
-/// stays open instead of clobbering an in-flight edit. The state file is the
-/// program's own, so it is written either way, and a save that changes nothing
-/// in the config, such as a window size, leaves the config alone.
+/// user's comments and blank-line grouping survive (see `to_text`), and untouched
+/// settings stay as they were, commented out or following the system. Returns
+/// false, writing nothing, if something in the file changed and it looks open in
+/// another program, so the caller can hold off and the Settings dialog stays open
+/// instead of clobbering an edit in progress. The state file is the program's own,
+/// so it's written either way, and a save that changes nothing in the config, such
+/// as a window size, leaves the config alone.
 #[must_use]
 pub fn persist(orig: &Settings, edited: &Settings) -> bool {
 	let Some(path) = config_path() else {
@@ -2963,8 +2954,8 @@ pub fn srgb_f32(c: [u8; 3]) -> [f32; 4] {
 	[to_linear(c[0]), to_linear(c[1]), to_linear(c[2]), 1.0]
 }
 
-/// LUT: this runs per background cell per rebuilt frame (thousands of powf
-/// calls otherwise - see pane.rs build).
+/// LUT, since this runs per background cell per rebuilt frame, which would be
+/// thousands of powf calls (see pane.rs build).
 pub fn to_linear(b: u8) -> f32 {
 	static LUT: std::sync::OnceLock<[f32; 256]> = std::sync::OnceLock::new();
 	LUT.get_or_init(|| std::array::from_fn(|i| linear_of(i as u8)))[b as usize]
@@ -2984,8 +2975,8 @@ pub fn to_linear_f32(c: f32) -> f32 {
 	}
 }
 
-/// Inverse of `to_linear_f32`. The one Rust-side copy - the WGSL lin2srgb in
-/// gfx.rs/scrim.rs is necessarily separate.
+/// Inverse of `to_linear_f32`. The one Rust-side copy, since the WGSL lin2srgb in
+/// gfx.rs and scrim.rs has to be separate.
 pub fn from_linear(c: f32) -> f32 {
 	let c = c.clamp(0.0, 1.0);
 	if c <= 0.003_130_8 {
@@ -3167,20 +3158,19 @@ fn load() -> Settings {
 			);
 		}
 	}
-	// A pre-nesting config converts wholesale first (backed up to .bak, active
-	// values copied over). Then migrate an existing config in place
-	// (rename/remove changed keys) and backfill any keys it's missing, so an
-	// updated config stays current without clobbering the user's existing
-	// values. These are the only launch-time writes, and each runs only when
-	// the program's own option set changed. The in-place writes defer (with an
-	// FYI) if the file looks open in another program. A heading an earlier
-	// conversion left with the wallpaper image is put right before that, or
-	// the file reads as pre-nesting and converts again. Ahead of all of it, a
-	// file shcl 2.x wrote is respelled for 3.0, since every step parses it, and
-	// the 2.x file is kept beside it as `config_backup_<time>_format-v2.shcl`.
-	// A current file with lines that aren't UTF-8 is written again without
-	// them here too, kept the same way, so the launch that finds it says so once
-	// and every later save works as usual.
+	// A pre-nesting config converts wholesale first, backed up to .bak with active
+	// values copied over. Then an existing config is migrated in place, with changed
+	// keys renamed or removed, and missing keys backfilled, so it stays current
+	// without clobbering the user's values. These are the only launch-time writes,
+	// and each runs only when the program's own option set changed. The in-place
+	// writes defer, with an FYI, if the file looks open in another program.
+	//
+	// Before that, a heading an earlier conversion left with the wallpaper image is
+	// put right, or the file reads as pre-nesting and converts again. Ahead of
+	// everything, a file shcl 2.x wrote is respelled for 3.0, and the 2.x file is kept
+	// as `config_backup_<time>_format-v2.shcl`. A current file with lines that aren't
+	// UTF-8 is written again without them, kept the same way, so the launch that
+	// finds it says so once and every later save works as usual.
 	let unstamped = std::fs::read(&path)
 		.is_ok_and(|body| shcl::format_version(&String::from_utf8_lossy(&body)).is_none());
 	convert_shcl2_config(&path);
@@ -3276,7 +3266,7 @@ fn restated_launch_messages(path: &std::path::Path, text: &str) -> Vec<String> {
 // were silent, and the first of them permanently stops the program saving.
 //
 // Subtrees the user fills in themselves (their shells, their themes) aren't
-// checked for unknown keys - only the program's own settings.
+// checked for unknown keys, only the program's own settings.
 fn config_complaints(text: &str) -> Vec<String> {
 	let doc = shcl::Document::parse(text);
 	let mut out = Vec::new();
@@ -3429,7 +3419,7 @@ fn line_list(lines: &[usize]) -> String {
 
 impl Reader<'_> {
 	// Complain once about a value that is present but the wrong type. Anything
-	// else (absent, empty) is silent - a commented-out setting is the norm here.
+	// else, absent or empty, is silent, since a commented-out setting is the norm here.
 	// A list is said as a line that can't be read (`misplaced_lists`).
 	fn note<T>(&self, key: &str, got: Result<T, shcl::Status>) -> Option<T> {
 		if self.doc.kind(key) == shcl::ValueKind::Array {
@@ -3447,9 +3437,9 @@ impl Reader<'_> {
 			}
 			Err(shcl::Status::Multiple) => {
 				// Set more than once. shcl refuses to pick a winner, so the
-				// default is what takes effect - which used to happen
-				// in silence, and reads as the setting being ignored outright.
-				// Cite every line: the point is that there is more than one.
+				// default takes effect. That used to happen quietly, and it
+				// read as the setting being ignored. Cite every line, since the
+				// point is that there's more than one.
 				self.said.borrow_mut().push(format!(
 					"{APP_NAME}: {}{}: `{key}` is set more than once, so its default is used",
 					self.path.display(),
@@ -3494,11 +3484,11 @@ impl Reader<'_> {
 	}
 }
 
-// Parse the config and pull out every key we know. The parser is forgiving by
-// design - a malformed line becomes a diagnostic and is skipped rather than
-// sinking the whole document - so this needs no retry loop of its own, and no
-// leading-zero rewriting (`.25` is a valid float here). Also returns what the
-// read has to say about the file, for the caller to print.
+// Parse the config and pull out every known key. The parser is forgiving, so a
+// malformed line becomes a diagnostic and is skipped rather than sinking the whole
+// document, and this needs no retry loop or leading-zero rewriting (`.25` is a
+// valid float here). Also returns what the read says about the file, for the
+// caller to print.
 fn read_raw(text: &str, path: &std::path::Path) -> (RawConfig, Vec<String>) {
 	let doc = shcl::Document::parse(text);
 	let said: Vec<String> = doc
@@ -3730,8 +3720,8 @@ fn read_theme_font(doc: &shcl::Document, slug: &str) -> crate::theme::ThemeFont 
 
 // Bring the file's `themes.*` subtrees in line with the dialog's list. A theme
 // that changed at all is dropped and rewritten whole rather than edited field by
-// field: saving, renaming and deleting are then one operation with one shape, and
-// a stale color can't survive under a name that no longer sets it.
+// field: saving, renaming, and deleting are then one operation, and a stale color
+// can't survive under a name that no longer sets it.
 fn write_user_themes(
 	doc: &mut shcl::Document,
 	orig: &[crate::theme::UserTheme],
@@ -3822,10 +3812,10 @@ fn write_monitor_sizes(doc: &mut shcl::Document, orig: &[MonitorSize], now: &[Mo
 	}
 }
 
-// Stored shells, in file order - which is the menu's order. An entry with no
-// command is skipped: a title alone names nothing to run. Everything else falls
-// back rather than dropping the entry, so a hand-written or half-written block
-// still yields a usable shell.
+// Stored shells, in file order, which is the menu's order. An entry without a
+// command is skipped, since a title alone names nothing to run. Everything else
+// falls back rather than dropping the entry, so a hand-written or half-written
+// block still gives a usable shell.
 fn read_shells(doc: &shcl::Document) -> Vec<crate::shells::ShellEntry> {
 	let mut out = Vec::new();
 	for slug in doc.children("shells") {
@@ -3845,8 +3835,8 @@ fn read_shells(doc: &shcl::Document) -> Vec<crate::shells::ShellEntry> {
 				.get_bool(&format!("shells.{slug}.active"))
 				.unwrap_or(true),
 			comment: text("comment").unwrap_or_default(),
-			// A date written any other way isn't a date we can
-			// show, so it reads as "never seen" rather than failing the entry.
+			// A date written any other way can't be shown, so it
+			// reads as "never seen" rather than failing the entry.
 			last_seen: doc
 				.get_datetime(&format!("shells.{slug}.last_seen"))
 				.ok()
@@ -3858,12 +3848,11 @@ fn read_shells(doc: &shcl::Document) -> Vec<crate::shells::ShellEntry> {
 	out
 }
 
-// Bring the file's `shells.*` subtrees in line with the list in memory. Same
-// approach as the themes above - an entry that changed at all is dropped and
-// rewritten whole, so a field that no longer has a value can't survive under a
-// key that stopped setting it - and, as there, an entry that didn't change is
-// left alone, which stops a scan that found nothing new from rewriting
-// the file at all.
+// Bring the file's `shells.*` subtrees in line with the list in memory. As with
+// the themes above, an entry that changed at all is dropped and rewritten whole,
+// so a field without a value can't survive under a key that stopped setting it.
+// An entry that didn't change is left alone, so a scan that found nothing new
+// doesn't rewrite the file at all.
 fn write_shells(
 	doc: &mut shcl::Document,
 	orig: &[crate::shells::ShellEntry],
@@ -3871,10 +3860,10 @@ fn write_shells(
 ) {
 	let disk = read_shells(doc);
 	let want = shells_to_save(&disk, orig, now);
-	// File order is the list's order - it decides the menu and, at the top, the
-	// default shell - and a reorder changes no entry, so the per-entry path below
-	// would write nothing at all and lose it. A moved entry therefore rewrites
-	// the whole subtree in the new order, which is the only way to say it.
+	// File order is the list's order, which decides the menu and, at the top, the
+	// default shell. A reorder changes no entry, so the per-entry path below would
+	// write nothing and lose it. So a moved entry rewrites the whole subtree in the
+	// new order.
 	let order = |list: &[crate::shells::ShellEntry]| -> Vec<String> {
 		list.iter().map(|e| e.slug.clone()).collect()
 	};
@@ -3951,7 +3940,7 @@ fn shells_to_save(
 
 // One entry's fields, set where they already are. Dropping the subtree first
 // would be simpler, but it takes the entry's comments with it and puts it back
-// at the end of the block - and the scan stamps `last_seen` daily, so the first
+// at the end of the block. The scan stamps `last_seen` daily, so the first
 // launch of each day rewrote every entry it saw. The file's order names the
 // default shell, so a relocated entry can change which shell a new tab gets.
 // The 2 optional fields are removed rather than left behind when they empty.
@@ -3980,16 +3969,16 @@ fn parse_iso_date(text: &str) -> Option<shcl::ShclDateTime> {
 	when.date.is_some().then_some(when)
 }
 
-/// Every numeric setting's range, and the 2 readers that enforce it. A floor on
-/// its own was the 20260707 `output_ease_lines` defect; fixing that one in place
-/// left the rest of the table with the same hole. A window in the low thousands
-/// of columns asks for a texture past the GPU's limit and aborts at launch, and
-/// an unbounded scrollback grows until the process is killed.
+/// Every numeric setting's range, and the 2 readers that enforce it. A floor alone
+/// was the 20260707 `output_ease_lines` defect, and fixing that one in place left
+/// the rest of the table with the same hole. A window in the low thousands of
+/// columns asks for a texture past the GPU's limit and aborts at launch, and an
+/// unbounded scrollback grows until the process is killed.
 ///
-/// Ceilings are generous - well past anything anyone would set on purpose, and
-/// well short of what breaks. Both readers fall back to the default rather than
-/// to an edge when the value isn't a number at all: shcl reads `1e400` as
-/// infinity and reports it good, and infinity survives a clamp.
+/// Ceilings are well past anything anyone would set on purpose, and well short of
+/// what breaks. Both readers fall back to the default rather than an edge when the
+/// value isn't a number at all, since shcl reads `1e400` as infinity and reports it
+/// good, and infinity survives a clamp.
 #[rustfmt::skip]
 pub(crate) mod limits {
 	pub const FONT_SIZE:          (f32, f32) = (4.0, 400.0);
@@ -4094,9 +4083,9 @@ fn resolve(raw: RawConfig) -> Settings {
 			d.alt_scroll_lines,
 			limits::WHEEL_LINES,
 		),
-		// Must clamp: scroll's backlog clamp uses this as its lower bound, and
-		// f32::clamp panics (aborts, in release) when min > max - an over-range
-		// value here killed the terminal on the first scrolling output.
+		// Must clamp, since scroll's backlog clamp uses this as its lower bound, and
+		// f32::clamp panics, aborting in release, when min > max. An over-range value
+		// here killed the terminal on the first scrolling output.
 		output_ease_lines: raw
 			.output_ease_lines
 			.unwrap_or(d.output_ease_lines)
@@ -4398,16 +4387,16 @@ pub fn parse_hex(s: &str) -> Option<[u8; 3]> {
 }
 
 // Font zoom (Ctrl+-/+/= hotkeys), in logical px added to the effective size.
-// Kept with the window size while the size is automatic (remembered_window).
-// Process-wide is per-window since each window is its own process. Per-pane
-// scoping is deferred - it needs per-pane text metrics the single-TextCtx
-// architecture doesn't have.
+// It's kept with the window size while the size is automatic
+// (remembered_window). Process-wide is per-window, since each window is its own
+// process. Per-pane zoom is deferred, since it needs per-pane text metrics and
+// there's one TextCtx.
 static FONT_ZOOM_PX: AtomicI32 = AtomicI32::new(0);
 pub fn font_zoom_px() -> i32 {
 	FONT_ZOOM_PX.load(Ordering::Relaxed)
 }
-/// Step the zoom, clamped so the effective size stays renderable - stepping
-/// past the floor must not bank offset the other direction has to pay back.
+/// Step the zoom, clamped so the effective size stays renderable. Stepping past
+/// the floor mustn't bank an offset the other direction has to pay back.
 pub fn nudge_font_zoom(dir: i32) {
 	let base = base_font_size(&settings());
 	FONT_ZOOM_PX.store(zoom_within(font_zoom_px() + dir, base), Ordering::Relaxed);
