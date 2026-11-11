@@ -13,7 +13,7 @@
 //! font / short screen) the rows region scrolls (wheel + draggable thumb) and
 //! the window height is capped instead of clipping the buttons.
 //!
-//! Units: every measurement below is a DIP - a CSS pixel, i.e. 1/96 inch - and
+//! Units: every measurement below is a DIP, a CSS pixel of 1/96 inch, and
 //! the whole layout is solved in that space. The window's scale factor is
 //! applied only at the boundary: pointer positions, measured text widths, the
 //! UI line height and the height cap divide down on the way in; the window
@@ -178,8 +178,8 @@ fn dlg() -> Dlg {
 	};
 	let settings = config::settings();
 	// The 2 attention colors are themable and mean different things (see
-	// theme.rs). `highlight` paints everything that calls attention at once -
-	// slider handles, the scrollbar, revert arrows, the default button - and the
+	// theme.rs). `highlight` paints everything that calls attention at once, such
+	// as slider handles, the scrollbar, revert arrows, and the default button. The
 	// button fill is a dimmed version of it, mixed toward the panel so a pressed
 	// button reads as pressed rather than as the focused one. `focus` paints only
 	// the ring around whatever the keyboard is on.
@@ -223,23 +223,21 @@ pub fn dialog_focus() -> [u8; 3] {
 	dlg().focus_out
 }
 
-// The Scrolling tab's time constants are all shown as a friendly 1..100 but
-// stored as milliseconds. Logarithmic: a time constant is felt by ratio, and a
-// linear map wastes most of the travel on values that look identical (the old
-// 300ms floor was why the slow end read as a no-op - barely below the 230ms
-// default). Each range spans 2 decades around the value its segment was
-// first tuned to, so a default anywhere in it still leaves room to
-// move either way.
+// The Scrolling tab's time constants are all shown as 1..100 but stored as
+// milliseconds. Logarithmic, since a time constant is felt by ratio, and a
+// linear map wastes most of the travel on values that look the same. Each
+// range spans 2 decades around the value its segment was first tuned to, so a
+// default anywhere in it still leaves room to move either way.
 fn log_pos(v: f32, min: f32, max: f32) -> f32 {
 	(v.clamp(min, max) / min).ln() / (max / min).ln()
 }
 fn log_val(pos: f32, min: f32, max: f32) -> f32 {
 	min * (max / min).powf(pos.clamp(0.0, 1.0))
 }
-// Every feel slider falls: a HIGHER number means a SMALLER stored value,
+// Every feel slider falls: a higher number means a smaller stored value,
 // because each is stored as a time (per-line tau, doubling/halving period,
-// ease duration) and a shorter time is a faster/harder/crisper feel. One
-// direction across the whole tab - higher = faster.
+// ease duration) and a shorter time feels faster. One direction across the
+// whole tab, where higher is faster.
 fn falling_slider(v: f32, min: f32, max: f32) -> f32 {
 	(100.0 - log_pos(v, min, max) * 99.0).round()
 }
@@ -249,10 +247,10 @@ fn falling_value(slider: f32, min: f32, max: f32) -> f32 {
 // 1 = one line/s, 100 = a hundred lines/s.
 const TAU_MIN: f32 = 10.0;
 const TAU_MAX: f32 = 1000.0;
-// A fraction the config stores as 0..1 reads as a whole percent in the dialog:
-// nobody thinks in 0.35. Only the display moves - the file keeps the decimal,
-// so the 2 are the same transform in opposite directions and every default
-// comparison happens on the same side of it.
+// A fraction the config stores as 0..1 reads as a whole percent in the dialog,
+// since nobody thinks in 0.35. Only the display changes, and the file keeps the
+// decimal, so the 2 are the same transform in opposite directions and every
+// default comparison happens on the same side of it.
 fn to_percent(fraction: f32) -> f32 {
 	fraction * 100.0
 }
@@ -706,7 +704,7 @@ enum Focus {
 
 /// Where the user was looking when the dialog closed, so reopening it shortly
 /// after opens on the same tab and scroll position instead of the top of the
-/// first tab. Only the view - edits are discarded on close as before.
+/// first tab. Only the view is kept, and edits are still discarded on close.
 #[derive(Debug, Clone, Copy)]
 pub struct View {
 	tab: usize,
@@ -730,7 +728,7 @@ struct EditState {
 	// smoothed caret x in text-space px; None until first measured (then snaps)
 	caret_vis: Option<f32>,
 	blink_t: f32, // seconds since the last caret/text activity (drives the blink)
-	// (cur, sel, buf.len()) at the last animate pass - a change resets the blink
+	// (cur, sel, buf.len()) at the last animate pass; a change resets the blink
 	last_sig: (usize, Option<usize>, usize),
 	// "File or folder" only: which of the 2 the field was opened on. Fixed for
 	// the life of the field, or emptying the box on the way to typing an image
@@ -953,10 +951,10 @@ fn assoc_slot(assoc: Assoc) -> usize {
 }
 
 // The prompt's text field, the shells grid's own fields, the color picker's
-// 6 value boxes and the search box are the dialog's one open edit, so every
-// bit of field behavior - selection, word ops, the clipboard, the caret ease,
-// the right-click menu - works in all of them without a second copy. None
-// belongs to a spec row, so each borrows an index no row can have: every
+// 6 value boxes and the search box are the dialog's one open edit, so all of
+// the field behavior, such as selection, word ops, the clipboard, the caret
+// ease, and the right-click menu, works in all of them without a second copy.
+// None belongs to a spec row, so each borrows an index no row can have: every
 // `specs[edit.row]` comparison in this module never matches one, and the
 // 4 places that index specs by it each have their own guard.
 const PSEUDO_ROW: usize = usize::MAX / 2;
@@ -1130,7 +1128,7 @@ pub struct SettingsDialog {
 	line: bool,  // the arrows go to either end, Backspace to the start
 	types: bool, // a character key types
 	// UI-font-driven geometry: rows/title/buttons grow with the desktop font so
-	// a large or wide (e.g. bold serif) interface font never truncates. The
+	// a large or wide interface font, such as a bold serif, never truncates. The
 	// consts above are the floor (the classic look at small sizes).
 	line_h: f32,
 	label_w: f32,
@@ -1178,7 +1176,7 @@ impl SettingsDialog {
 		Self::row_h_for(kind, self.line_h, self.edited.shells.len())
 	}
 	// The height of an ordinary row. Every boxed control centers in this, not in
-	// the `row_height` floor - at a large UI font the 2 are far apart, and
+	// the `row_height` floor. At a large UI font the 2 are far apart, and
 	// centering in the floor leaves the controls riding high in their rows.
 	fn line_row_h(&self) -> f32 {
 		lay().row_height.max(self.line_h + lay().row_pad)
@@ -1192,8 +1190,8 @@ impl SettingsDialog {
 			self.row_h(&self.specs[i].kind)
 		}
 	}
-	// An editable field is taller than a checkbox: the text needs clear space
-	// above and below it, not just left and right.
+	// An editable field is taller than a checkbox, since its text needs clear
+	// space above and below.
 	fn field_h(&self) -> f32 {
 		Self::field_h_for(self.line_h)
 	}
@@ -1215,7 +1213,7 @@ impl SettingsDialog {
 	// A heading that only repeats its own tab's title says nothing the tab strip
 	// hasn't already said, so it takes no space and draws nothing. It stays in
 	// the declarations because a heading is also what assigns the rows under it
-	// to a tab - deleting it there would orphan them.
+	// to a tab, and deleting it there would orphan them.
 	fn header_is_tab_title(spec: &Spec) -> bool {
 		matches!(spec.kind, Kind::Header(label) if tab_titles().get(spec.tab) == Some(&label))
 	}
@@ -1630,8 +1628,8 @@ impl SettingsDialog {
 	/// the desktop's own scale moved under it. Everything below the boundary is
 	/// DIP and stays as it is, so only the factor and the chrome measured in
 	/// physical pixels at the old one are refreshed. Values, edits, focus and
-	/// scroll are deliberately untouched - a rebuild would lose every unapplied
-	/// edit the moment the window crossed a monitor edge.
+	/// scroll are left alone, since a rebuild would lose every unapplied edit the
+	/// moment the window crossed a monitor edge.
 	pub fn rescale(&mut self, line_h: f32, chrome: Chrome, max_w: f32, max_h: f32, scale: f32) {
 		let scale = sane_scale(scale);
 		let (line_h, max_w, max_h) = (line_h / scale, max_w / scale, max_h / scale);
@@ -1790,9 +1788,9 @@ impl SettingsDialog {
 	// the strip and the buttons; only it scrolls (chrome stays put).
 	//
 	// The tabs stand on a gutter strip that runs the panel's full width, and the
-	// line closing that strip is what they stand on - so a tab is shorter than a
-	// footer button (it is chrome, not a control) and the strip's height is
-	// the drop from the panel edge plus that tab. A tab under another
+	// line closing that strip is what they stand on. So a tab is shorter than a
+	// footer button, since it's chrome rather than a control, and the strip's
+	// height is the drop from the panel edge plus that tab. A tab under another
 	// adds a row to the strip while its parent is current. Down the left side
 	// the same gutter is a list instead, every tab in it, each as wide as the
 	// list, with sub-tabs stepped in under their parent.
@@ -2173,7 +2171,7 @@ impl SettingsDialog {
 	}
 
 	/// The size the content wants, and the smallest the window may be, both in
-	/// physical pixels - the window's own limits and the resize snap read them.
+	/// physical pixels, for the window's own limits and the resize snap.
 	pub fn natural_size(&self) -> (f32, f32) {
 		(self.to_px(self.natural.0), self.to_px(self.natural.1))
 	}
@@ -2182,7 +2180,7 @@ impl SettingsDialog {
 		(self.to_px(w), self.to_px(h))
 	}
 	/// The window was resized. Everything is laid out from `rect`, so this is all
-	/// of it - except that a smaller window can leave either scroll offset past
+	/// of it, except that a smaller window can leave either scroll offset past
 	/// its new limit, and a popup placed against the old edges is stale.
 	pub fn set_size(&mut self, w_px: f32, h_px: f32) {
 		self.rect.w = self.to_dip(w_px).max(1.0);
@@ -2509,16 +2507,16 @@ impl SettingsDialog {
 			_ => {}
 		}
 	}
-	// Scroll the rows region so a focused control row is fully visible (buttons
-	// are fixed chrome - always visible).
+	// Scroll the rows region so a focused control row is fully visible. The
+	// buttons are fixed chrome and always visible.
 	fn scroll_focus_into_view(&mut self) {
 		let Some(Focus::Row(i, part)) = self.focus else {
 			return;
 		};
 		let vp = self.viewport();
 		// The shells grid is one row and many lines, and a long one is taller
-		// than the viewport - so it is the focused control that has to come into
-		// view there, not the row, which may not fit at all.
+		// than the viewport, so it's the focused control that has to come into
+		// view there rather than the row, which may not fit at all.
 		let (top, bottom) = if matches!(self.specs[i].kind, Kind::ShellList) {
 			let r = self.shell_stop_rect(i, part);
 			(r.y - 4.0, r.y + r.h + 4.0)
@@ -2761,7 +2759,7 @@ impl SettingsDialog {
 		}
 	}
 	/// Space: type into an active edit, activate a focused button, else activate the
-	/// focused control - flip a toggle or open a text/color field for editing.
+	/// focused control, which flips a toggle or opens a text or color field.
 	pub fn key_space(&mut self) -> Action {
 		if self.pick.is_some() {
 			self.pick_activate();
@@ -2859,9 +2857,8 @@ impl SettingsDialog {
 		self.edit = Some(edit);
 	}
 
-	/// Panel size (used to size a dedicated dialog window when the panel is laid
-	/// out at the origin - `new(0.0, 0.0, ...)`).
-	/// Window size in physical pixels.
+	/// Panel size, used to size a dedicated dialog window when the panel is laid
+	/// out at the origin with `new(0.0, 0.0, ...)`. Physical pixels.
 	pub fn size(&self) -> (f32, f32) {
 		(self.to_px(self.rect.w), self.to_px(self.rect.h))
 	}
@@ -3320,7 +3317,7 @@ impl SettingsDialog {
 		}
 	}
 	// Flyover text for a control the environment disables rather than another
-	// setting - explains why it is inert. The hidden wait, where the desktop
+	// setting, saying why it's inert, such as the hidden wait where the desktop
 	// never says a window is hidden.
 	fn disabled_tip(&self, key: Key) -> Option<&'static str> {
 		match key {
@@ -3499,11 +3496,10 @@ impl SettingsDialog {
 			{
 				return Some((Cow::Borrowed(self.specs[i].revert_help), arrow));
 			}
-			// hover target: the row's label + control span. The shells grid is
-			// the exception - its "row" is the whole grid, and a tip that popped
-			// up over every line of it would be in the way of the work; it hangs
-			// off the column titles instead, which is where the question is.
-			// a row of buttons hangs its tip under its buttons, not a checkbox
+			// hover target: the row's label + control span. The shells grid is the
+			// exception, since its "row" is the whole grid and a tip over every line
+			// of it would get in the way, so it hangs off the column titles instead.
+			// A row of buttons hangs its tip under its buttons, not a checkbox.
 			let ctl = match self.specs[i].kind {
 				Kind::Buttons(captions) => {
 					let first = self.row_btn_rect(i, 0);
@@ -3617,7 +3613,7 @@ impl SettingsDialog {
 		(self.centered_in_row(i, self.line_h), self.line_h)
 	}
 	// Does the keyboard ring sit exactly on a control's own outline? For a boxed
-	// control it does, and then the box must not draw its border as well - a
+	// control it does, and then the box must not draw its border as well, since a
 	// field ringed twice reads as 2 outlines for one control. A color row is
 	// the near miss: its ring spans the chip and the hex field, so it stays a
 	// couple of pixels out and only the hex field's own border stands down.
@@ -3645,7 +3641,7 @@ impl SettingsDialog {
 		self.row_keys(i).iter().all(|&k| self.is_default(k))
 	}
 	// A row of push-buttons has no value, and the shells grid is a list rather
-	// than a setting - neither has a default to go back to. A row drawn beside
+	// than a setting, so neither has a default to go back to. A row drawn beside
 	// another has none of its own either: the one revert arrow at the end of the
 	// line stands for both halves. The file-type rows are the exception: their
 	// arrow puts back what Register replaced.
@@ -3673,7 +3669,7 @@ impl SettingsDialog {
 		}
 		keys
 	}
-	// Revert a whole row - every key the row's own arrow resets.
+	// Revert a whole row: every key the row's own arrow resets.
 	fn row_revert(&mut self, i: usize) {
 		if let Some(assoc) = assoc_of(self.specs[i].key) {
 			self.assoc_set(assoc, false);
@@ -3778,14 +3774,6 @@ impl SettingsDialog {
 		}
 	}
 
-	// What a row displays. `edited` is the user's own values; while a profile
-	// is chosen the governed rows show the profile's instead, and only the
-	// display - Apply still writes `edited`, so Custom finds everything intact.
-	// A profile sets the governed fields from its own values alone and leaves
-	// every other field as it was, so a governed row reads the profile's values
-	// and any other row reads `edited`, with nothing copied. That's true only
-	// while no row's value is read from both kinds of field;
-	// `a_shown_value_is_the_profile_laid_over_the_settings` checks every key.
 	// A change made here. The row's field is set first, the way each accessor
 	// below sets it, then knobs takes the value from it, does what the change
 	// does to the rest, and every field is filled again.
@@ -4212,16 +4200,16 @@ impl SettingsDialog {
 			self.prompt_mouse_down(x, y, measure);
 			return Action::None;
 		}
-		// an open field context menu captures the click: an enabled item fires its
-		// command (clipboard glue in dialog.rs), anywhere else just dismisses
+		// An open field context menu takes the click. An enabled item runs its
+		// command (the clipboard side is in dialog.rs), and a click elsewhere closes it.
 		if self.emenu.is_some() {
 			let hit = (0..EDIT_MENU.len()).find(|&k| self.em_item_rect(k).contains(x, y));
 			let cmd = hit.filter(|&k| self.em_enabled(k)).map(|k| EDIT_MENU[k].1);
 			self.emenu = None;
 			return cmd.map_or(Action::None, Action::Edit);
 		}
-		// an open dropdown captures the click: on an option -> pick it, anywhere
-		// else -> just close (a click-away dismiss, consumed either way)
+		// An open dropdown takes the click. A click on an option picks it, and one
+		// elsewhere closes it. Either way the click is used up.
 		if let Some(oi) = self.open.take() {
 			let n = self.dd_options(oi).len();
 			for choice in 0..n {
@@ -4233,7 +4221,7 @@ impl SettingsDialog {
 			return Action::None;
 		}
 		// footer buttons arm on press (drawn pressed) and fire on release, so a
-		// press-drag-off cancels - and the user gets click feedback
+		// press-drag-off cancels, and the press shows
 		for (btn_idx, (_, r, _)) in self.buttons().into_iter().enumerate() {
 			if r.contains(x, y) {
 				self.pressed = Some(btn_idx);
@@ -4316,7 +4304,7 @@ impl SettingsDialog {
 				return Action::None;
 			}
 			// A grayed control takes no click. This used to sit inside each arm, and
-			// the color, text, and radio arms were the 3 that never got it - so
+			// the color, text, and radio arms were the 3 that never got it, so
 			// a control the dialog draws as inert still changed its setting. The
 			// 3 whose parts gray separately keep their own per-part check. A
 			// pair row's key is only its first part, so gating the whole row on
@@ -4474,8 +4462,8 @@ impl SettingsDialog {
 	// Click into an editable field: caret at the click; Shift extends the
 	// selection; double-click selects the word, triple selects all; a plain
 	// click starts a drag-selection.
-	// `row` is the edit's own index - a spec row, or one of the pseudo rows the
-	// grid's fields use - and `focus` is the spec row and part the ring goes on.
+	// `row` is the edit's own index, either a spec row or one of the pseudo rows
+	// the grid's fields use, and `focus` is the spec row and part the ring goes on.
 	// For every field but the grid's they are the same row; for those 2 they
 	// can't be, since no spec row draws them.
 	fn field_click(
@@ -5185,7 +5173,7 @@ impl SettingsDialog {
 			return;
 		}
 		if i == PROMPT_ROW {
-			// nothing to apply yet - but the name just changed, so whatever OK
+			// nothing to apply yet, but the name just changed, so whatever OK
 			// last objected to may no longer be true
 			if let Some(prompt) = self.prompt.as_mut() {
 				prompt.warn = None;
@@ -5207,8 +5195,8 @@ impl SettingsDialog {
 				// The command is required, and this is where that is enforced:
 				// a blank buffer isn't written, so committing an emptied
 				// field leaves the stored command standing and the box shows it
-				// again. (An entry that never got one is dropped on the way out
-				// of the dialog - see `app::apply_settings_values`.)
+				// again. An entry that never got one is dropped on the way out
+				// of the dialog (see `app::apply_settings_values`).
 				if !buf.trim().is_empty() {
 					entry.command = buf.trim().to_string();
 				}
@@ -5244,8 +5232,8 @@ impl SettingsDialog {
 	/// Esc cancels the dialog. A menu, a popup, or the prompt box eats it first.
 	///
 	/// An open field doesn't. Closing the field was all it used to do, and since
-	/// a typed value applies as it is typed there was nothing to take back - so
-	/// the press bought a lost caret and a second Esc. Now that walking onto a
+	/// a typed value applies as it is typed there was nothing to take back, so
+	/// the press only cost the caret and a second Esc. Now that walking onto a
 	/// field opens it, that would have been every field on the way past.
 	pub fn key_escape(&mut self) -> Action {
 		if self.emenu.take().is_some() || self.open.take().is_some() {
@@ -5313,7 +5301,7 @@ impl SettingsDialog {
 		} else if let Some(Focus::Button(b)) = self.focus {
 			self.buttons()[b].0 // a focused footer button
 		} else if let Some(Focus::Row(i, part)) = self.focus {
-			// a focused push-button is what Enter presses, not the dialog's OK -
+			// a focused push-button is what Enter presses, not the dialog's OK,
 			// and every stop in the shells grid is one of those or a field
 			match self.specs[i].kind {
 				Kind::Buttons(_) => {
@@ -5430,8 +5418,8 @@ impl SettingsDialog {
 		fixed.push(quad(foot.x, foot.y, foot.w, 1.0, colors.panel_border));
 		// The tab strip: a recessed gutter closed off by a rule, with the tabs
 		// standing on that rule. The current one is a lighter gray rather than an
-		// accent - it says "you are here", which isn't the same job as the
-		// highlight color's "look at this".
+		// accent, since it says "you are here" rather than the highlight color's
+		// "look at this".
 		let gut = self.gutter_rect();
 		fixed.push(quad(gut.x, gut.y, gut.w, gut.h, colors.gutter));
 		match tabs_side() {
@@ -5826,7 +5814,7 @@ impl SettingsDialog {
 		let mut out = Vec::new();
 		let mk = |text: String, x: f32, y: f32| TextItem::plain(text, x, y, colors.text);
 		let row_text_y = |y: f32, h: f32| y + (h - line_h) / 2.0;
-		// tab titles - the current one reads at full strength, the rest step back
+		// tab titles: the current one reads at full strength, the rest step back
 		let strip = self.tab_strip();
 		let path = self.active_path();
 		for (tab, node) in tab_nodes().iter().enumerate() {
@@ -6296,22 +6284,19 @@ impl Chrome {
 }
 
 /// Widest field label, button caption, slider number, per-tab title and text
-/// column widths at the current UI font, so the dialog sizes to the real text (a
-/// wide serif or a big desktop size never truncates).
+/// column widths at the current UI font, so the dialog sizes to the real text and
+/// a wide serif or a big desktop size never truncates.
 ///
-/// This measures against the text context, so it works in physical pixels - which
-/// is why every layout constant it reads converts through `config::dip` at its use
-/// site, the way the main window's chrome does. Adding a raw DIP number to a
-/// physical measurement here is a live bug: `SettingsDialog::new` divides the whole
-/// sum by the scale factor, so the constant arrives shrunk by that factor. That is
-/// what put a tab's title `tab_pad/2` from its left edge inside a box only
-/// `tab_pad/scale` wider than the title - flush right at 2x, overflowing past it
-/// above that.
+/// This measures against the text context in physical pixels, so every layout
+/// constant it reads converts through `config::dip` where it's used, as the main
+/// window's chrome does. A raw DIP number added to a physical measurement here is
+/// a bug, since `SettingsDialog::new` divides the whole sum by the scale factor.
+/// That's what put a tab's title flush right in its box at 2x, and past it above.
 pub fn chrome_widths(text: &mut crate::text::TextCtx, scale: f32) -> Chrome {
 	let attrs = crate::text::ui_attrs();
 	let dip = |v: f32| config::dip(v, scale);
 	// an indented label starts further right, so the column has to clear the
-	// deepest one plus its own indent - not merely the longest string - and a
+	// deepest one plus its own indent, not only the longest string, and a
 	// warning mark after one
 	let line_h = text.ui_line_h;
 	let specs = &ui().specs;
@@ -6584,8 +6569,8 @@ mod tests {
 
 	// A scale change is a boundary change and nothing else. The layout is solved
 	// in DIP, so the same window comes out the same apparent size on a monitor at
-	// another scale - and the values and unapplied edits have to still be there,
-	// which is the whole reason the dialog isn't rebuilt for one.
+	// another scale. The values and unapplied edits have to still be there, which
+	// is why the dialog isn't rebuilt for one.
 	// Test ID: dcvf7
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
@@ -6677,7 +6662,7 @@ mod tests {
 	}
 
 	// A tab's title is drawn `tab_pad / 2` inside its own box, and the box is only
-	// as wide as the title plus `tab_pad` - so the pad on both sides of that sum has
+	// as wide as the title plus `tab_pad`, so the pad on both sides of that sum has
 	// to be the same pad. Mixing a physical measurement with a raw DIP constant
 	// halves the box's share of it at 2x (flush right) and takes two thirds of it
 	// at 3x (the title runs past the box).
@@ -7743,7 +7728,7 @@ mod tests {
 	}
 
 	// A pair shares one revert arrow, so a profile showing the first half must not
-	// silence the arrow for the second - which isn't governed and can still be
+	// silence the arrow for the second, which isn't governed and can still be
 	// off its default with no other way back.
 	// Test ID: dcwqt
 	#[test]
@@ -7779,9 +7764,9 @@ mod tests {
 	}
 
 	// The tab strip is chrome. It moves only far enough to keep the current tab
-	// in view, and never with the rows' sideways scroll - a tab panned off the
-	// window edge couldn't be clicked, which is how you leave a tab that won't
-	// fit. Both sides, over SilkTerm's own tabs.
+	// in view, and never with the rows' sideways scroll, since a tab panned off
+	// the window edge couldn't be clicked, and that's how you leave a tab that
+	// won't fit. Both sides, over SilkTerm's own tabs.
 	// Test ID: dcd48
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
@@ -7957,7 +7942,7 @@ mod tests {
 	}
 
 	// A sub-group's leader is set off from whatever sat above it, the way a
-	// heading is - but its own members aren't, or the run wouldn't read as one.
+	// heading is, but its own members aren't, or the run wouldn't read as one.
 	// Test ID: davbc
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
@@ -8050,7 +8035,7 @@ mod tests {
 	// A row whose setting the writer never writes is a dead end: the change
 	// applies for the session and is gone at relaunch, with nothing anywhere to
 	// say so. Both scrollbar colors did exactly that from the day the bar
-	// was added, so the check is generic - every row, saved and read back.
+	// was added, so the check is generic: every row, saved and read back.
 	// Test ID: davbd
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
@@ -8359,7 +8344,7 @@ mod tests {
 
 	// A control the dialog draws as inert must not act on a click. The check used
 	// to sit inside each arm of the press handler, and the color, text, and radio
-	// arms never got it - so a grayed field still changed its setting, and the
+	// arms never got it, so a grayed field still changed its setting, and the
 	// font Family field switched off "use the system font" as a side effect.
 	// Rows that only count while a switch above them is on stay live with every
 	// switch off (2026100907341818). What still grays is a switch over the rows
@@ -9418,7 +9403,7 @@ mod tests {
 	}
 
 	// A heading that only repeats its tab's title is gone from the layout
-	// entirely - not merely hidden, or it would leave a gap where it used to be.
+	// entirely rather than hidden, or it would leave a gap where it used to be.
 	// Test ID: dava1
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
@@ -9463,7 +9448,7 @@ mod tests {
 					SettingsDialog::row_advance(d.specs, i, tab, d.line_h, shells)
 				})
 				.sum();
-			// the surplus over the rows is the declared gaps and nothing else -
+			// the surplus over the rows is the declared gaps and nothing else,
 			// stated exactly rather than bounded by a heading's height, so
 			// retuning header_gap can't quietly turn this into a near miss
 			let mut gaps = 0.0;
@@ -9654,7 +9639,7 @@ mod tests {
 		assert_eq!(tab_titles()[grid.tab], "Shell");
 		// The tab is the grid, its headings, the startup directory the grid's own
 		// default shell starts in, the 2 switches for what SilkTerm sets up in a
-		// shell it starts, and on Windows the script types it opens - nothing else
+		// shell it starts, and on Windows the script types it opens. Nothing else
 		// belongs beside them.
 		for spec in ui.specs.iter().filter(|s| s.tab == grid.tab) {
 			assert!(
@@ -9681,7 +9666,7 @@ mod tests {
 		assert!(dir > at, "the startup directory sits below the shells");
 	}
 
-	// Asked for on the Cursor tab, and asked for LAST - so both halves are
+	// Asked for on the Cursor tab, and asked for last, so both halves are
 	// pinned, or a row appended later quietly takes its place.
 	// Test ID: dbfrt
 	#[test]
@@ -10942,7 +10927,7 @@ mod tests {
 		d.char_input('.');
 		d.char_input('x');
 		assert_eq!(d.edit.as_ref().unwrap().buf, "1.2");
-		// a fraction shown as a whole percent takes no dot at all - it is an
+		// a fraction shown as a whole percent takes no dot at all, since it's an
 		// integer field, and 0.5 typed into one would read as half a percent
 		d.commit_edit();
 		let j = d.specs.iter().position(|s| s.key == Key::Opacity).unwrap();
@@ -11044,7 +11029,7 @@ mod tests {
 		(d, i)
 	}
 
-	// The same, with a value comfortably wider than the field it sits in - at the
+	// The same, with a value comfortably wider than the field it sits in, at the
 	// 1px-per-char measure these tests use. Derived from the field rather than
 	// hardcoded, or a wider panel (a new tab, a longer label) quietly makes the
 	// scrolling case untestable instead of failing.
@@ -11197,7 +11182,7 @@ mod tests {
 			.position(|s| matches!(s.kind, Kind::Color))
 			.unwrap();
 		d.tab = d.specs[i].tab;
-		// part 1 is the hex box; part 0 is the chip - was Row(i, 0)
+		// part 1 is the hex box; part 0 is the chip
 		d.focus = Some(Focus::Row(i, 1));
 		d.key_space();
 		d.select_all();
@@ -11811,11 +11796,7 @@ mod tests {
 		);
 	}
 
-	// A click into a field selects the whole value on release, so the next
-	// keystroke replaces it. The awkward case is a value wider than its box: the
-	// view scrolls under the caret, and the frames between press and release used
-	// to drag the selection away with it.
-	// press, hold for a few frames, release - with the pointer put there first,
+	// press, hold for a few frames, release, with the pointer put there first,
 	// the way the window delivers it
 	fn click(d: &mut SettingsDialog, x: f32, y: f32, m: &mut impl FnMut(&str) -> f32) {
 		d.last_click = None;
@@ -11827,6 +11808,10 @@ mod tests {
 		d.mouse_up(x, y);
 	}
 
+	// A click into a field selects the whole value on release, so the next
+	// keystroke replaces it. The awkward case is a value wider than its box: the
+	// view scrolls under the caret, and the frames between press and release used
+	// to drag the selection away with it.
 	// Test ID: dcrpr
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
@@ -11840,7 +11825,7 @@ mod tests {
 		click(&mut d, f.x + f.w / 2.0, f.y + f.h / 2.0, &mut m);
 		assert_eq!(d.selected_text().as_deref(), Some("old.png"));
 
-		// long value, clicked near the right edge - where the view has to scroll
+		// long value, clicked near the right edge, where the view has to scroll
 		let (mut d, i, _) = mk_long_text_edit('y');
 		let want = d.edit.as_ref().unwrap().buf.clone();
 		d.edit = None;
@@ -12942,11 +12927,6 @@ mod tests {
 	// 	}
 	// }
 
-	// A warning mark is on 2 rows: Transparency on the Background tab, and
-	// "Free resources when idle" on the Window tab. Each draws one triangle after
-	// its label, clear of its checkbox. The mark's text ends the row's one tip,
-	// which shows over the label, the mark, and the checkbox. No other tab draws
-	// a mark.
 	// How many rows on `tab` draw a warning mark.
 	fn warned_on(d: &SettingsDialog, tab: usize) -> usize {
 		d.specs
@@ -12955,6 +12935,11 @@ mod tests {
 			.count()
 	}
 
+	// A warning mark is on 4 rows: Transparency on the Background tab, Per
+	// monitor on the Window tab, and the tmux switch and "Free resources when
+	// idle" on the Program tab. Each draws one triangle after its label, clear
+	// of its checkbox. The mark's text ends the row's one tip, which shows over
+	// the label, the mark, and the checkbox. No other tab draws a mark.
 	// Test ID: ddp7w
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]

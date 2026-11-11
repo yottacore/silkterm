@@ -2,10 +2,10 @@
 // Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
 
 //! Panes that run in a tmux session of their own: finding tmux, naming the
-//! session, the command line that starts it, and ending it again. A new tab,
-//! a split and a plain launch each start one while
-//! `shell.tmux.always_new_session` is on, and so does a tab opened with "New
-//! tab in tmux". See design.md, "Panes in tmux".
+//! session, the command line that starts it, and ending it again. A new tab, a
+//! split, and a plain launch each start one while `shell.tmux.always_new_session`
+//! is on, and so does a tab opened with "New tab in tmux". See design.md, "Panes
+//! in tmux".
 
 use crate::config::Choice;
 use std::path::{Path, PathBuf};
@@ -488,7 +488,7 @@ mod tests {
 	}
 
 	// The test's own setup and cleanup aren't what it tests, so they aren't held
-	// to ASK_FOR. On vmKt6m a first new-session takes about 40 ms in the whole
+	// to ASK_FOR. On a Mac VM a first new-session takes about 40 ms in the whole
 	// suite, yet once didn't respond in time (2026110313290006).
 	#[cfg(unix)]
 	const SETUP_WAIT: Duration = Duration::from_secs(10);

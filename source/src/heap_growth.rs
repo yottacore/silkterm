@@ -36,8 +36,8 @@ impl EventListener for Quiet {
 
 struct Action {
 	name: &'static str,
-	// A backlog item that already has this growth, so it's reported and not
-	// failed. The item's fix takes it out.
+	// A backlog item that already has this growth, so it's reported rather than
+	// failed. The item's fix removes it.
 	known: Option<&'static str>,
 	// A leak planted on purpose. The test fails unless it is caught.
 	planted: bool,
@@ -141,7 +141,7 @@ fn minimap_action() -> Box<dyn FnMut(usize)> {
 		let before = term.grid().history_size();
 		parser.advance(&mut term, session_bytes(round).as_bytes());
 		let mut advanced = term.grid().history_size().saturating_sub(before).max(60);
-		// a minute a step, so the throttle never decides a compose
+		// a minute a step, so the throttle never delays a compose
 		for _ in 0..200 {
 			step += 1;
 			map.update(

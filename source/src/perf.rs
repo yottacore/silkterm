@@ -3,20 +3,16 @@
 
 //! Where a burst of output goes (`SILK_PERF=1`).
 //!
-//! Throughput on Windows reads as one number - "it takes N seconds to swallow a
-//! large `cat`" - and that number is the sum of three parties: the console host
+//! On Windows the time to take in a large `cat` is the sum of the console host
 //! delivering bytes, the engine parsing them, and this program reacting to each
-//! batch. Only the last is ours to change, and it is invisible from outside the
-//! process: a wall-clock stopwatch can't say whether the time went into the
-//! grid or into waking the event loop forty thousand times.
+//! batch. Only the last is ours to change, and a wall-clock timer can't tell
+//! whether the time went into the grid or into waking the event loop 40,000
+//! times.
 //!
-//! The counters are plain atomics behind one cached flag, so an ordinary run
-//! pays a relaxed load per site and nothing else. The report goes to stderr when
-//! the loop exits.
-//!
-//! `SILK_LATENCY=1` answers the other question - how long a typed character
-//! takes to appear - and is separate because it is a stopwatch per keystroke
-//! rather than a running total.
+//! The counters are atomics behind one cached flag, so a normal run pays a
+//! relaxed load per site. The report goes to stderr when the loop exits.
+//! `SILK_LATENCY=1` is separate, since it times each keystroke rather than
+//! keeping a running total.
 
 use std::sync::atomic::{AtomicU64, Ordering::Relaxed};
 use std::sync::{Mutex, OnceLock};
@@ -85,10 +81,9 @@ pub fn timed<T>(counter: &AtomicU64, body: impl FnOnce() -> T) -> T {
 	out
 }
 
-// CPU seconds this thread (the window/render thread) and the whole process have
-// burned. The split is the point: a frame that BLOCKS on the display costs wall
-// time and no CPU, so a wall-clock render figure on its own can't say whether
-// the main thread is working or waiting.
+// CPU seconds used by this thread, the window and render thread, and by the
+// whole process. A frame that blocks on the display costs wall time but no CPU,
+// so a wall-clock render figure alone can't tell working from waiting.
 #[cfg(windows)]
 #[allow(clippy::unnecessary_wraps)] // the other platforms return None
 fn cpu_seconds() -> Option<(f64, f64)> {
@@ -188,16 +183,14 @@ pub fn report() {
 	}
 }
 
-/// Keypress to pixel (`SILK_LATENCY=1`), timed over 3 legs rather than as
-/// one number: getting the key to the pty, the shell echoing it back, and us
-/// putting that on screen. Only the last leg is ours, and a single total can't
-/// say which of the 3 is the slow one.
+/// Keypress to pixel (`SILK_LATENCY=1`), timed over 3 legs: the key to the pty,
+/// the shell's echo, and drawing it. Only the last leg is ours, and one total
+/// can't say which leg is slow.
 ///
-/// It can't do 2 things. Nothing after `present` returns is visible from in
-/// here, so the compositor and the display are missing and a figure is a floor,
-/// not the whole wait. And it can't tell a shell's echo from output nobody
-/// typed for, so it belongs at a settled prompt; anything still unanswered after
-/// `LATENCY_WINDOW` is dropped rather than reported as a very slow keystroke.
+/// Nothing after `present` returns is visible from here, so the compositor and
+/// the display are left out and a figure is a floor. It also can't tell an echo
+/// from output nobody typed for, so it's meant for a settled prompt. A key with
+/// no echo after `LATENCY_WINDOW` is dropped rather than reported as slow.
 pub fn latency_on() -> bool {
 	static ON: OnceLock<bool> = OnceLock::new();
 	*ON.get_or_init(|| std::env::var_os("SILK_LATENCY").is_some())
@@ -257,9 +250,9 @@ pub fn echoed(pane: u64) {
 	pending.out.get_or_insert_with(Instant::now);
 }
 
-/// A frame just went out, so the echo is on screen. Says its own line as it goes -
-/// the point is to watch this while typing, and printing after the frame costs
-/// the frame nothing.
+/// A frame just went out, so the echo is on screen. Prints its line right away,
+/// so it can be watched while typing. Printing after the frame costs that frame
+/// nothing.
 pub fn painted() {
 	if !latency_on() {
 		return;
@@ -273,8 +266,8 @@ pub fn painted() {
 		return;
 	}
 	// Typing marks the window dirty, so frames go out between the key and the
-	// echo. Those aren't the frame being waited for - leave the stopwatch
-	// running rather than taking one of them as the answer.
+	// echo. Those aren't the frame being waited for, so the stopwatch keeps
+	// running.
 	let Some(out) = pending.out else {
 		return;
 	};

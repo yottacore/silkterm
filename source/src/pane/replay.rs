@@ -56,8 +56,8 @@ struct Replay {
 	frames: usize,
 }
 
-/// Frames over fed bytes with the slides they saw let go, for a run that wants
-/// only the frames (`heap_growth.rs`).
+/// Frames over fed bytes, with the slides they saw thrown away, for a run that
+/// wants only the frames (`heap_growth.rs`).
 pub(crate) fn frames(cols: usize, lines: usize, scrollback: usize) -> impl FnMut(&str) {
 	let mut replay = Replay::new(cols, lines, scrollback);
 	move |bytes| {
@@ -298,7 +298,7 @@ fn prompt_after(cols: usize) -> String {
 
 // ble.sh's redraw of a prompt already on screen, after a resize or a program
 // that drew its own screen: up to its first row, erase down, then the same
-// insert- and delete-line dance.
+// insert- and delete-line steps.
 const REDRAW: &str = "\x1b[1A\r\r\x1b[J\r\n\x1b[1A\x1b[2L\x1b[2K\x1b[2K\x1b[2M\x1b[2L\x1b[2K";
 
 fn redraw() -> String {

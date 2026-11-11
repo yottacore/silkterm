@@ -330,10 +330,9 @@ mod tests {
 		}
 	}
 
-	// A wallpaper is somebody else's file, and a rotation folder is a folder of
-	// them. The chunk walk below reads lengths out of the file and uses them to
-	// size a read, so a corrupt or hostile image mustn't be able to take the
-	// wallpaper worker down with it, which in a release build takes the process.
+	// The chunk walk reads lengths out of the file and sizes reads by them, so a
+	// corrupt or hostile image mustn't be able to crash the wallpaper worker. In a
+	// release build that would take the process down too.
 	mod fuzz {
 		use super::super::{Tags, read};
 		use crate::fuzz;
