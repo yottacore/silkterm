@@ -5632,7 +5632,7 @@ impl ApplicationHandler<UserEvent> for App {
 			}
 			if let Some(what) = lost {
 				eprintln!(
-					"{}: GPU texture contents lost (VT switch or resume?) - rebuilding",
+					"{}: GPU texture contents lost, probably to a console switch or resume, so rebuilding",
 					config::APP_NAME
 				);
 				vramdbg(&format!("probe: LOST ({what}) -> recover_gpu"));
