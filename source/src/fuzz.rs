@@ -4,12 +4,11 @@
 //! A small deterministic fuzzer, shared by the targets that live beside the code
 //! they hammer (search for `mod fuzz` inside a module's tests).
 //!
-//! Not coverage-guided, and that is a choice rather than a limitation: every
-//! untrusted surface here is grammar-shaped - escape sequences, config lines,
-//! URLs - and a generator that knows the grammar reaches deep states in a few
-//! hundred cases where bit flips need millions. Bit flips still run, over the
-//! generated cases and over the saved corpus, because they find the edges a
-//! well-formed generator never emits.
+//! It isn't coverage-guided, on purpose. Every untrusted input here has a grammar,
+//! such as escape sequences, config lines, and URLs, and a generator that knows the
+//! grammar reaches deep states in a few hundred cases where bit flips need
+//! millions. Bit flips still run over the generated cases and the saved corpus,
+//! since they find edges a well-formed generator never emits.
 //!
 //! Every case is a pure function of one u64 seed, so a failure needs nothing
 //! saved to reproduce: `SILK_FUZZ_SEED`=<n> cargo test <name> runs that case alone.
@@ -57,18 +56,15 @@ impl Rng {
 	}
 }
 
-// The seeds every target runs whatever the clock says. A count taken from the
-// budget alone moves with how busy the box is, and config-rating, which checks
-// a whole launch per case, sat right on the old floor of 10 and went red on a
-// loaded box while covering exactly as much as it does on an idle one. A fixed
-// minimum is the same coverage either way, and a target that gets slow shows up
-// as a slow test rather than a flaky one.
+// The seeds every target runs whatever the clock says. A count from the budget
+// alone moves with load, and config-rating once went red on a busy box at the old
+// floor of 10. A fixed minimum keeps coverage the same, so a target that gets slow
+// shows up as a slow test rather than a flaky one.
 const MIN_CASES: u64 = 10;
 
-// How long one target gets. A plain `cargo test` wants to stay quick, so the
-// default is a fraction of a second; the pipeline sets SILK_FUZZ_SECS for a real
-// soak. Seeds run in order from 0, so a longer budget only ever adds cases -
-// what a short run covered, a long one covers too.
+// How long one target gets. A plain `cargo test` gets a fraction of a second, and
+// the pipeline sets SILK_FUZZ_SECS for a real soak. Seeds run in order from 0, so
+// a longer budget only adds cases.
 fn budget() -> Duration {
 	match std::env::var("SILK_FUZZ_SECS")
 		.ok()
@@ -85,9 +81,9 @@ fn one_seed() -> Option<u64> {
 		.and_then(|v| v.parse().ok())
 }
 
-/// Run `case` over seeds: `MIN_CASES` of them at least, then on while the budget
-/// holds out. A panic is caught so the report names the seed that caused it,
-/// which is the whole reproduction recipe.
+/// Run `case` over seeds, at least `MIN_CASES`, then on while the budget lasts. A
+/// panic is caught so the report names the seed, which is all it takes to
+/// reproduce it.
 pub fn soak(name: &str, mut case: impl FnMut(u64)) {
 	if let Some(seed) = one_seed() {
 		case(seed);
@@ -104,9 +100,8 @@ pub fn soak(name: &str, mut case: impl FnMut(u64)) {
 		);
 		seed += 1;
 	}
-	// Visible with --nocapture, which is how the pipeline runs the soak: a target
-	// that has quietly become too slow to cover anything shows up as a small
-	// number rather than as a pass.
+	// The pipeline runs the soak with --nocapture, so a target that got too slow to
+	// cover anything shows up as a small count rather than a pass.
 	println!("fuzz {name}: {seed} cases");
 }
 
@@ -141,8 +136,8 @@ const NASTY: [u8; 16] = [
 	0x90, 0x9b, 0x9c, 0xc0, 0xed, 0xf5, 0xfe, 0xff,
 ];
 
-/// Chew on one case. Deliberately crude - the point is to reach shapes the
-/// generators can't produce, not to be a good mutator.
+/// Chew on one case. It's crude on purpose, to reach inputs the generators can't
+/// produce.
 pub fn mutate(rng: &mut Rng, parent: &[u8]) -> Vec<u8> {
 	let mut out = parent.to_vec();
 	for _ in 0..=rng.below(6) {
@@ -203,11 +198,10 @@ pub fn text(rng: &mut Rng) -> String {
 	out
 }
 
-/// A stream of the kind a program on the other end of a pty sends: printable
-/// runs with escape sequences threaded through them. Weighted toward the
-/// sequences that do something rather than the ones a parser discards, and
-/// deliberately willing to emit malformed ones - an unterminated OSC, a CSI with
-/// forty parameters, a truncated UTF-8 character.
+/// A stream like the one a program on the other end of a pty sends: printable runs
+/// with escape sequences through them. It favors sequences that do something over
+/// ones a parser discards, and emits malformed ones too, such as an unterminated
+/// OSC, a CSI with 40 parameters, or a truncated UTF-8 character.
 pub fn vt_stream(rng: &mut Rng) -> Vec<u8> {
 	let mut out = Vec::new();
 	for _ in 0..=rng.below(40) {
@@ -239,8 +233,8 @@ const BAD_UTF8: [&[u8]; 6] = [
 	&[0xf5, 0x80, 0x80, 0x80], &[0x80],
 ];
 
-// The finals that move the cursor, edit lines, change modes or ask a question -
-// the ones with state behind them.
+// The finals with state behind them: cursor moves, line edits, mode changes, and
+// queries.
 #[rustfmt::skip]
 const CSI_FINALS: [u8; 24] = [
 	b'@', b'A', b'B', b'C', b'D', b'G', b'H', b'J', b'K', b'L', b'M', b'P',
@@ -356,9 +350,9 @@ mod tests {
 		assert!(corpus("no-such-target").is_empty());
 	}
 
-	// The path to the corpus is built from the manifest directory, so a tree laid
-	// out differently - or a platform that spells the separator the other way -
-	// would find nothing and every target would still pass.
+	// The corpus path is built from the manifest directory. A different tree layout,
+	// or a platform with the other path separator, would find nothing, and every
+	// target would still pass.
 	// Test ID: dcdjn
 	#[test]
 	fn the_corpus_is_where_the_targets_look_for_it() {

@@ -190,12 +190,9 @@ impl Clipboard {
 	}
 }
 
-// SILK_KEYDBG: one line per store, with the result the provider reports. On
-// X11 a store can be accepted and still lose to a clipboard manager that takes
-// the selection straight back, so the trace shows what happened at this end
-// before the key that asked for it gets the blame. On Wayland a store is
-// always accepted here, and the clipboard's worker drops one made while no
-// SilkTerm window has the keyboard, so a program's waits for focus instead.
+// SILK_KEYDBG: one line per store, with the provider's result. On X11 a clipboard
+// manager can take an accepted store straight back, so this shows what happened at
+// this end before the key gets the blame.
 fn trace(which: &str, len: usize, result: Result<(), Box<dyn std::error::Error + Send + Sync>>) {
 	if !crate::app::env_flag(crate::app::EnvFlag::KeyDbg) {
 		return;

@@ -9,10 +9,9 @@
 
 use crate::pane::Rect;
 
-/// Hue 0..1 (wrapping), saturation and brightness 0..1. This is what the box
-/// stores, not the bytes: a drag down into black or left into gray leaves the
-/// hue with nothing to be read back from, and deriving it per frame would send
-/// the marker home the moment the color reached an edge.
+/// Hue 0..1, wrapping, and saturation and brightness 0..1. The box stores this
+/// instead of bytes, since a drag into black or gray leaves no hue to read back,
+/// and the marker would jump home the moment the color reached an edge.
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub struct Hsv {
 	pub h: f32,
@@ -111,8 +110,8 @@ impl Field {
 			}
 		}
 	}
-	/// A typed buffer read back into the model. None where it says nothing yet -
-	/// a half-typed hex, or an empty box.
+	/// A typed buffer read back into the model. None for a half-typed hex or an empty
+	/// box.
 	pub fn apply(self, color: Hsv, buf: &str) -> Option<Hsv> {
 		match self {
 			Field::Hex => crate::config::parse_hex(buf).map(|rgb| from_rgb(rgb, color)),
@@ -431,10 +430,9 @@ mod tests {
 		assert_eq!(to_rgb(hsv(-0.5, 1.0, 1.0)), [0, 255, 255]);
 	}
 
-	// Nothing here runs WGSL, so the square and the strip are checked by comparing
-	// the shader's own text with the model the markers are placed with. The 2
-	// painting different colors is the failure that has no other symptom: the
-	// marker would sit where the color isn't.
+	// Nothing here runs WGSL, so the shader's text is checked against the model the
+	// markers use. If the 2 painted different colors, the marker would sit where the
+	// color isn't, and nothing else would show it.
 	// Test ID: dcx0d
 	#[test]
 	fn the_shader_paints_what_the_model_says() {

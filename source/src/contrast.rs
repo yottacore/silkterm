@@ -1,20 +1,18 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 // Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
 
-//! Background-image "contrast mask": flatten the image's contrast toward a local
-//! mean so it stops competing with terminal text. Applied uniformly across the
-//! whole image at load, in linear light (baked into the texture, like the blur).
+//! The wallpaper's contrast mask. It flattens the image's contrast toward a local
+//! mean, so the picture stops competing with terminal text. It's applied to the
+//! whole image at load, in linear light, and baked into the texture like the blur.
 //!
-//! Three knobs (all 0..1):
-//! - `size`: the flatten scale - the localMean blur radius. 1.0 = half the
-//!   longest pixel dimension (localMean ~ the global average, so the whole image
-//!   collapses toward one tone); small = a tight neighborhood, so only fine busy
-//!   detail flattens. 0 = off.
-//! - `strength`: how far each pixel is pulled toward that local mean. 0 = none,
-//!   1 = fully flat.
-//! - `auto`: blend the two manual knobs with values derived from the image's own
-//!   busyness (a busy image gets flattened more). 1.0 = full auto override, 0.0 =
-//!   manual only, 0.5 = average of the two.
+//! The settings, all 0..1:
+//! - `size`: the blur radius of the local mean. 1.0 is half the longest side,
+//!   where the whole image collapses toward one tone. A small size flattens only
+//!   fine detail. 0 is off.
+//! - `strength`: how far each pixel is pulled toward the local mean. 0 is none,
+//!   1 is flat.
+//! - `auto`: blends the 2 manual settings with values picked from how busy the
+//!   image is. 1.0 is all auto, 0.0 is manual only, and 0.5 is halfway.
 
 use crate::config::LUMA;
 use image::{ImageBuffer, Rgba};
@@ -22,10 +20,8 @@ use std::array::from_fn;
 
 type Linear = ImageBuffer<Rgba<f32>, Vec<f32>>;
 
-// Rec.709 luma weights (the buffer is linear-light).
-
-// Busyness -> auto knob endpoints (feel-tunable). A smooth image needs little;
-// a busy one wants fine detail knocked down: smaller scale, more strength.
+// Busyness -> auto endpoints, tuned by eye. A smooth image needs little, and a
+// busy one needs fine detail knocked down with a smaller scale and more strength.
 const AUTO_SIZE_SMOOTH: f32 = 0.6;
 const AUTO_SIZE_BUSY: f32 = 0.2;
 const AUTO_STRENGTH_SMOOTH: f32 = 0.2;
