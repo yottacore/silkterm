@@ -34,6 +34,19 @@ Going forward, new issues in the new template at the bottom of this file will go
 
 ## Issues
 
+- A unit test run on macOS or Windows could import and rename the box's own `~/.config/silkterm/config.toml`
+	- ID: 2026111018340691
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261110-183406
+	- Opened by: CC
+	- Related IDs: 2026110920480399
+	- Target OS: macOS, Windows
+	- Reproduced: No. From reading config.rs; Linux takes no ~/.config fallback, so it can't show here.
+	- Possible cause: Under cfg(test), `may_write` checks only the native path. `beta1_config_paths` adds `legacy_config_path()`, built from the real HOME, so a test whose own folder has no settings file would read a real beta1 file there and rename it. `adopt_legacy_config` may share the shape.
+	- Test case: A test with HOME at a temp folder holding the file, and a load on an empty override folder, asserting the file is still there.
+
 - Output under tmux: the scrolled-off strip is shaped again every frame, text shaping takes 80%, and the display steps down to High
 	- ID: 2026111017285320
 	- Type: Enhancement
@@ -61,8 +74,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 - The profiler reads the live settings and rating, so its numbers follow personal settings
 	- ID: 2026111017285305
 	- Type: Task
-	- Status: Waiting on automated testing
-	- Needs local test suite run?: stage 4's profiler on the card. It should read about 40% text shaping at Max, with no step down and no startup test.
+	- Status: Done
 	- Priority: Low
 	- Opened: 20261110-172853
 	- Opened by: CC
@@ -83,6 +95,8 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Test case: `cicd/tests/profsettings/run.bash` (df4v4), in the full run. It runs the script's own profiler step with a stand-in app. 8 of its 9 checks fail on the old step, and all pass on the new one.
 		- Swept: `fRunProfiler` is the only place that sets `SILK_PROFILE_OUT`. The scroll harness already has its own config.
 	- Verified: 20261110, df4v4 both ways, a debug build on a private Xvfb with the tree, and the backlog quick run in all 5 areas.
+		- 20261110: Stage 4's profiler alone on the card, at ddde753a, through sway's Xwayland: text shaping 39.5% of 1485 samples, against 80.4% on 11-09 and 40.9% on 11-06. The log has no rating line, so no startup test ran, and no step down.
+	- Closed: 20261110-183341
 
 - The window doesn't paint while the GPU is busy or short on memory, and stays blank after the load ends
 	- ID: 2026100312470535
@@ -371,8 +385,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 - Import a v1.0.0-beta1 `config.toml`
 	- ID: 2026110920480399
 	- Type: Feature
-	- Status: Waiting on automated testing
-	- Needs external testing: a launch on macOS (b26) with only `~/.config/silkterm/config.toml`, `HOME` pointed at a temp folder. The unit tests cover the file beside the settings file, not that branch.
+	- Status: Done
 	- Priority: Avg
 	- Opened: 20261109-204804
 	- Opened by: JC
@@ -394,7 +407,9 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Branch: rnd1111
 	- Test case: df4rw (reader), df4rx (a saved file, once), df4ry (the first-launch template stays automatic). df4rx and df4ry fail with the import call taken out of `load`.
 	- Verified: The backlog quick run passes in all 5 areas, with 1462 unit tests.
+		- 20261110: A debug build of ddde753a on macOS (b26), launched twice with `HOME` at a folder holding only `~/.config/silkterm/config.toml` (the saved fixture). The first launch wrote `~/Library/Application Support/silkterm/config.shcl` with the file's font, size and columns, renamed the old file to `config_backup_<time>_beta1.toml` with its bytes, and said so. The second, with a new `config.toml` there, imported nothing and left it in place.
 	- Swept: The import runs in `load` before the template is written, after `adopt_legacy_config`. The only other write of a missing file is a save in `persist`, which writes back a file deleted while the program was running, from the settings the launch already read, so it's left as it is.
+	- Closed: 20261110-183341
 
 - Profiler: text shaping read 80.4% at 327d97e, against about 50% on the card in late October
 	- ID: 2026110920480499
