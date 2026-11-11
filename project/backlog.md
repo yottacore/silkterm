@@ -289,28 +289,6 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- It's stalled until a cosmic-text release takes fontdb 0.24 or later, and winit's sctk-adwaita drops ab_glyph.
 	- Held for a cosmic-text release on fontdb 0.24 or later, and an sctk-adwaita without ab_glyph.
 
-- A unit test run on macOS or Windows could import and rename the box's own `~/.config/silkterm/config.toml`
-	- ID: 2026111018340691
-	- Type: Bug
-	- Status: Done
-	- Severity: Low
-	- Opened: 20261110-183406
-	- Opened by: CC
-	- Related IDs: 2026110920480399
-	- Target OS: macOS, Windows
-	- Reproduced: No. From reading config.rs; Linux takes no ~/.config fallback, so it can't show here.
-		- 20261110: Not reachable with today's tests. Every test that points the settings at a file of its own does it through `set_config_override`, which also sets the release build's override, and with that set there is no `~/.config` path at all. So only that side effect kept it safe.
-	- Possible cause: Under cfg(test), `may_write` checks only the native path. `beta1_config_paths` adds `legacy_config_path()`, built from the real HOME, so a test whose own folder has no settings file would read a real beta1 file there and rename it. `adopt_legacy_config` may share the shape.
-	- Actual cause: The test build's write check guarded only the file being written, not the old file being moved away, and didn't count `~/.config/silkterm` as the box's own folder off Linux. `adopt_legacy_config` had the same shape.
-	- Actual fix: In a test build, a pre-layout or beta1 file in the box's own folder is never moved or renamed, and `~/.config/silkterm` counts as the box's folder on every platform. A release build is unchanged.
-	- Decisions:
-		- 20261110: The test uses the stand-in for the box's folder that ddgbt uses, rather than HOME at a temp folder. HOME is process-global, and the tests that read the box's own settings run beside it. It calls the 2 moves directly with that folder's files, since a whole load takes no `~/.config` path on Linux.
-	- Branch: rnd1111b
-	- Test case: `a_test_run_never_moves_an_old_config_from_the_boxs_folder` (df4we). It fails with the 3 guards taken out (the old shcl file moved) and passes with them.
-	- Verified: The backlog quick run passes in all 5 areas, with 1466 unit tests.
-	- Swept: Every rename or removal of a file the program didn't just write in config.rs: `adopt_legacy_config`, `import_beta1_config`, and `keep_beta1_config`, which renames only what the import read. The other renames and removals in config.rs are of the settings file itself, its backups, or temp files a save made beside it, all in the folder the write check already covers.
-	- Closed: 20261110-190049
-
 - The "Minutes otherwise" release of resources still isn't working
 	- ID: 2026111009560100
 	- Type: Bug
@@ -7295,6 +7273,28 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Branch: testlines
 	- Test case: There isn't a test, since it's output only. The gate and a quick run showed all 942 Rust tests with an ID, and a made-up name showed the dashes and the warning.
 	- Closed: 20260928-111812
+
+- A unit test run on macOS or Windows could import and rename the box's own `~/.config/silkterm/config.toml`
+	- ID: 2026111018340691
+	- Type: Bug
+	- Status: Done
+	- Severity: Low
+	- Opened: 20261110-183406
+	- Opened by: CC
+	- Related IDs: 2026110920480399
+	- Target OS: macOS, Windows
+	- Reproduced: No. From reading config.rs; Linux takes no ~/.config fallback, so it can't show here.
+		- 20261110: Not reachable with today's tests. Every test that points the settings at a file of its own does it through `set_config_override`, which also sets the release build's override, and with that set there is no `~/.config` path at all. So only that side effect kept it safe.
+	- Possible cause: Under cfg(test), `may_write` checks only the native path. `beta1_config_paths` adds `legacy_config_path()`, built from the real HOME, so a test whose own folder has no settings file would read a real beta1 file there and rename it. `adopt_legacy_config` may share the shape.
+	- Actual cause: The test build's write check guarded only the file being written, not the old file being moved away, and didn't count `~/.config/silkterm` as the box's own folder off Linux. `adopt_legacy_config` had the same shape.
+	- Actual fix: In a test build, a pre-layout or beta1 file in the box's own folder is never moved or renamed, and `~/.config/silkterm` counts as the box's folder on every platform. A release build is unchanged.
+	- Decisions:
+		- 20261110: The test uses the stand-in for the box's folder that ddgbt uses, rather than HOME at a temp folder. HOME is process-global, and the tests that read the box's own settings run beside it. It calls the 2 moves directly with that folder's files, since a whole load takes no `~/.config` path on Linux.
+	- Branch: rnd1111b
+	- Test case: `a_test_run_never_moves_an_old_config_from_the_boxs_folder` (df4we). It fails with the 3 guards taken out (the old shcl file moved) and passes with them.
+	- Verified: The backlog quick run passes in all 5 areas, with 1466 unit tests.
+	- Swept: Every rename or removal of a file the program didn't just write in config.rs: `adopt_legacy_config`, `import_beta1_config`, and `keep_beta1_config`, which renames only what the import read. The other renames and removals in config.rs are of the settings file itself, its backups, or temp files a save made beside it, all in the folder the write check already covers.
+	- Closed: 20261110-190049
 
 - `top` and `htop` no longer smoothly animate disappearing and appearing lines
 	- ID: 2026110912460474
