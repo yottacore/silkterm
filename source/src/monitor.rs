@@ -106,7 +106,7 @@ impl MonitorId {
 
 	/// The same monitor, read again? An EDID gives the size twice, to the mm
 	/// and in whole cm, and the X server returns either one. Which one can
-	/// change across a power save: b23's portrait monitor has read as both
+	/// change across a power save: one portrait monitor has read as both
 	/// 401x641 and 400x640 mm.
 	pub fn same_as(&self, other: &Self) -> bool {
 		let near = |a: u32, b: u32| a.abs_diff(b) < MM_SLACK;
@@ -519,7 +519,7 @@ impl X11Screen {
 
 // The monitors laid out that are lit. One whose cable finds nothing on the
 // other end is dark, though the server can go on laying it out for hours:
-// b23's HDMI monitor sleeps that way. GTK, and so xfwm4, drop such a monitor
+// an HDMI monitor can sleep that way. GTK, and so xfwm4, drop such a monitor
 // and move its windows off it. When it was counted as lit, that move was read
 // as the user's, the window took the other monitor's size, and xfwm4 never
 // put it back (2026110609500002). When the server calls every one
@@ -944,7 +944,7 @@ pub fn snapped(_window: &Window) -> bool {
 mod tests {
 	use super::*;
 
-	// b23's HDMI monitor asleep: still laid out, its cable reads disconnected.
+	// An HDMI monitor asleep: still laid out, its cable reads disconnected.
 	// Test ID: deyvh
 	#[cfg(target_os = "linux")]
 	#[test]
@@ -1090,7 +1090,7 @@ mod tests {
 	#[test]
 	fn a_window_astride_two_outputs_is_named_for_the_one_it_is_drawn_for() {
 		let placed = |at, px, scale| Placed { at, px, scale };
-		// winit's numbers for monwl's layout: the place is times the scale
+		// winit's numbers for a mixed-scale layout: the place is times the scale
 		let h1 = placed((0, 0), (1920, 1080), 1.0);
 		let h2 = placed((3840, 0), (2560, 1600), 2.0);
 		let h3 = placed((0, 1080), (1280, 1024), 1.0);
@@ -1146,7 +1146,7 @@ mod tests {
 			bounds: (at.0, at.1, (px.0 / scale).round(), (px.1 / scale).round()),
 			px,
 		};
-		// monwl's layout
+		// the same mixed-scale layout
 		let h1 = laid((0.0, 0.0), (1920.0, 1080.0), 1.0);
 		let h2 = laid((1920.0, 0.0), (2560.0, 1600.0), 2.0);
 		let h4 = laid((3200.0, 0.0), (1680.0, 1050.0), 1.0);
@@ -1252,7 +1252,7 @@ mod tests {
 		] {
 			assert!(MonitorId::from_key(odd).is_none(), "{odd}");
 		}
-		// b23's portrait monitor, before and after a power save
+		// a portrait monitor, before and after a power save
 		let portrait = "1600x2560_100pct_401x641mm";
 		assert!(same_monitor(portrait, "1600x2560_100pct_400x640mm"));
 		assert!(!same_monitor(portrait, "1600x2560_100pct_411x641mm"));
@@ -1270,7 +1270,7 @@ mod tests {
 	// Test ID: ddq72
 	#[test]
 	fn a_shown_window_on_no_monitor_is_on_none() {
-		// b23 with the portrait monitor at the top left gone dark
+		// the portrait monitor at the top left gone dark, the landscape one left
 		let landscape = [(1600, 554, 3440, 1440)];
 		let window = (100, 100, 1300, 900);
 		assert_eq!(monitor_under(window, None, &landscape), None);

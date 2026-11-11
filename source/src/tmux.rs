@@ -488,7 +488,7 @@ mod tests {
 	}
 
 	// The test's own setup and cleanup aren't what it tests, so they aren't held
-	// to ASK_FOR. On vmKt6m a first new-session takes about 40 ms in the whole
+	// to ASK_FOR. On a Mac VM a first new-session takes about 40 ms in the whole
 	// suite, yet once didn't respond in time (2026110313290006).
 	#[cfg(unix)]
 	const SETUP_WAIT: Duration = Duration::from_secs(10);
