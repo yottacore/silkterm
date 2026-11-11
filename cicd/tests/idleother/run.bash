@@ -14,7 +14,8 @@
 ##		window is told the pointer entered each time, which is nobody there.
 ##			- So it still lets go after the minute.
 ##			- A grab after that leaves it let go.
-##			- Moving the pointer over it brings it back.
+##			- Moving the pointer over it leaves it let go too.
+##			- A click brings it back.
 ##		The wait is the setting's own, read from the file, so no idle override
 ##		is set: SILK_IDLE_SECS would stand in for both waits and hide a setting
 ##		that never gets into the release.
@@ -174,12 +175,18 @@ done
 fQuietTitle(){ DISPLAY="${display}" XAUTHORITY="${auth}" xprop -id "${win[quiet]}" _NET_WM_NAME 2>/dev/null || true; }
 fStaysReleased(){ local _; for _ in {1..6}; do [[ "$(fQuietTitle)" == *"(resource conservation mode)"* ]] || return 1; sleep 0.5; done; }
 fComesBack(){ local _; for _ in {1..10}; do [[ "$(fQuietTitle)" == *"(resource conservation mode)"* ]] || return 0; sleep 0.5; done; return 1; }
-grabbedAfter=0; staysAfterGrab=1; backOnMove=0
+grabbedAfter=0; staysAfterGrab=1; staysOnMove=1; backOnClick=0
 if [[ -n "${releasedAt[quiet]}" ]]; then
 	fGrab && grabbedAfter=1
 	fStaysReleased || staysAfterGrab=0
-	DISPLAY="${display}" XAUTHORITY="${auth}" xdotool mousemove --window "${win[quiet]}" 150 150 2>/dev/null || true
-	fComesBack && backOnMove=1
+	for at in "150 150" "250 200" "400 120"; do
+		# shellcheck disable=SC2086 # two numbers, split on purpose
+		DISPLAY="${display}" XAUTHORITY="${auth}" xdotool mousemove --window "${win[quiet]}" ${at} 2>/dev/null || true
+		sleep 0.3
+	done
+	fStaysReleased || staysOnMove=0
+	DISPLAY="${display}" XAUTHORITY="${auth}" xdotool click 1 2>/dev/null || true
+	fComesBack && backOnClick=1
 fi
 fStopOurs "${appPid}"; appPid=""
 fStopOurs "${backPid}"; backPid=""
@@ -190,7 +197,8 @@ fCheck "an unfocused window on screen lets its device go after Minutes otherwise
 fCheck "and not well before the minute (${releasedAt[quiet]:-never} s)" fNotEarly quiet
 fCheck "the pointer over it was grabbed and let go during the wait (${grabs} times)" test "${grabs}" -ge 4
 fCheck "a pointer grab after the release leaves it let go" test "${grabbedAfter}" = 1 -a "${staysAfterGrab}" = 1
-fCheck "moving the pointer over it brings it back" test "${backOnMove}" = 1
+fCheck "moving the pointer over it leaves it let go" test "${staysOnMove}" = 1
+fCheck "a click brings it back" test "${backOnClick}" = 1
 fCheck "the window with a printing tab in the back came up" test -n "${win[back]}"
 ## xdotool matches any one condition unless told --all, and two windows read
 ## as one then
@@ -214,3 +222,5 @@ echo "all passed"
 ##		  tab in the back.
 ##		- 20261106 JC: The pointer over the quiet window, grabbed and let go by
 ##		  another program during the wait and after the release.
+##		- 20261110 JC: A move over the released window leaves it let go, and a
+##		  click brings it back.

@@ -2682,7 +2682,7 @@ fn wrap_paras(
 	let fg = crate::settings_ui::dialog_text();
 	let dim = crate::settings_ui::dialog_dim();
 	let attrs = ui_attrs();
-	let wrap = text.dip(NOTICE_WRAP);
+	let wrap = text.ui_text_dip(NOTICE_WRAP);
 	let para_gap = text.dip(NOTICE_PARA_GAP);
 	let mut rows: Vec<(String, [u8; 3], f32)> = Vec::new();
 	for (i, para) in paras.iter().enumerate() {
@@ -3760,6 +3760,30 @@ mod tests {
 				let ratio = at2 / at1;
 				assert!((1.85..2.15).contains(&ratio), "{at1} -> {at2}");
 			}
+		}
+	}
+
+	// A notice breaks its lines at the same words at any scale. The sentence is
+	// one that wrapped a line further at 2x, and the runs of x before it move
+	// where its row ends, so some row sits close to the wrap width.
+	// Test ID: df4rf
+	#[test]
+	#[cfg(not(target_os = "windows"))]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_notice_wraps_at_the_same_words_at_any_scale() {
+		let sentence = "Until that is fixed, changes such as the window size, new shells, and anything set in Settings are used now but not kept.";
+		let paras: Vec<String> = (0..24)
+			.map(|n| format!("{} {sentence}", "x".repeat(n + 1)))
+			.collect();
+		let rows = |text: &mut TextCtx| -> Vec<String> {
+			super::wrap_paras(text, &paras, None)
+				.into_iter()
+				.map(|(row, _, _)| row)
+				.collect()
+		};
+		let at_1x = rows(&mut TextCtx::new_cpu(1.0));
+		for scale in [1.25, 1.5, 2.0, 3.0] {
+			assert_eq!(rows(&mut TextCtx::new_cpu(scale)), at_1x, "at {scale}x");
 		}
 	}
 

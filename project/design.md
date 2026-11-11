@@ -184,7 +184,7 @@ A double-click takes something it can name first, such as a path, URL or git rem
 
 ### Measurements and display scaling
 
-Every measurement in the interface is written once in DIP, 1/96 of an inch, and turned into real pixels only when it is drawn. A pop-out dialog converts once, at its window's edge. The main window's chrome converts at each measurement, since it shares its space with the terminal grid. `SILK_SCALE` overrides the scale factor for testing. The full rules are in the [Settings dialog](design_docs/20260930-145721_settings-dialog.md) design doc.
+Every measurement in the interface is written once in DIP, 1/96 of an inch, and turned into real pixels only when it is drawn. A pop-out dialog converts once, at its window's edge. The main window's chrome converts at each measurement, since it shares its space with the terminal grid. A width that text is fitted to, such as where a notice or a menu tip wraps, follows the interface font as drawn rather than the scale factor. The font size is rounded to a whole pixel at each scale, so a line then breaks at the same words at any scale. `SILK_SCALE` overrides the scale factor for testing. The full rules are in the [Settings dialog](design_docs/20260930-145721_settings-dialog.md) design doc.
 
 ### The Settings dialog
 

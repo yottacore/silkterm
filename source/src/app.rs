@@ -444,6 +444,11 @@ const MENU_ACCEL_DROP: f32 = 3.0; // accelerator underline's rise off the item's
 // modifiers on the way out - so a grab that still passes the key through hands
 // us an arrow with nothing held, which would encode as a bare arrow.
 const IGNORE_KEYS_WHILE_UNFOCUSED: bool = true;
+// Focus is known only from winit's events, and a window that never gets the
+// focus may never hear one. X11 says so at the map, but Wayland and Windows
+// stay quiet, as for a window opened behind another one. So a window starts
+// unfocused, and its first `Focused(true)` says otherwise (2026111011350600).
+const FOCUSED_AT_START: bool = false;
 
 // Winit replays every key already held down whenever focus changes, flagged
 // `is_synthetic`, so an app can track what is physically pressed. That is
@@ -4024,7 +4029,7 @@ impl ApplicationHandler<UserEvent> for App {
 			tab_hover: crate::tip::Dwell::default(),
 			menu_tip: crate::tip::Dwell::default(),
 			menu_tip_up: None,
-			tip_focus: crate::tip::Focus::default(),
+			tip_focus: crate::tip::Focus::default().changed(FOCUSED_AT_START),
 			tab_first: 0,
 			tab_layout: TabLayout::default(),
 			tab_labels: TabLabels::default(),
@@ -4040,7 +4045,7 @@ impl ApplicationHandler<UserEvent> for App {
 			win_opacity,
 			win_title,
 			last_win_title: String::new(),
-			focused: true,
+			focused: FOCUSED_AT_START,
 			pending_about: false,
 			pending_settings: None,
 			chrome: None,
@@ -4295,9 +4300,12 @@ impl ApplicationHandler<UserEvent> for App {
 		state.note_presence(&event);
 		// Anything a person does to the window is a sign of life (see
 		// `release_deadline`); the hidden-to-shown edge is one too, in its arm.
+		// The pointer alone only starts the wait over.
 		let pointer_over = state.watch.pointer == window_size::Pointer::Over;
-		if let Some(why) = idle::sign_of_life(&event, pointer_over, state.focused) {
-			state.note_active(why);
+		match idle::sign_of_life(&event, pointer_over, state.focused) {
+			Some(idle::POINTER) => state.note_pointer(),
+			Some(why) => state.note_active(why),
+			None => {}
 		}
 		match event {
 			WindowEvent::CloseRequested => {

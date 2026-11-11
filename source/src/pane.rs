@@ -17,7 +17,7 @@ use alacritty_terminal::term::color::Colors;
 use alacritty_terminal::vte::ansi::CursorShape;
 use glyphon::cosmic_text::{LineEnding, Scroll as TextScroll};
 use glyphon::{
-	Attrs, AttrsList, Buffer, BufferLine, Color as GColor, CustomGlyph, Shaping, Style, TextArea,
+	AttrsList, Buffer, BufferLine, Color as GColor, CustomGlyph, Shaping, Style, TextArea,
 	TextBounds, Weight,
 };
 use winit::event_loop::EventLoopProxy;
@@ -332,9 +332,16 @@ fn span_quads(
 // (only region rows are ever captured). `dir`: +1 = strip above the content
 // (content moved up), -1 = below. `region` is the screen rows (top, one past
 // the bottom) the rows came from; a step from another region starts over.
-// `shaped` is the run of rows currently in strip_buf (see shape_strip).
+// `buf` has one line per row, in the same order, so a row keeps its shaping
+// while the slide moves the window over it. Under a flood every frame pushes
+// rows and moves the window, and shaping the whole window again each time cost
+// a quarter of the frame inside tmux. `built` says which lines have the row's
+// text yet; the rest are blank until the window reaches them. `shaped` is the
+// window the buffer is scrolled to (see `shape`).
 struct OffStrip {
 	rows: std::collections::VecDeque<Vec<StripCell>>,
+	built: std::collections::VecDeque<bool>,
+	buf: Buffer,
 	dir: i8,
 	region: (usize, usize),
 	shaped: std::ops::Range<usize>,
@@ -344,9 +351,11 @@ impl OffStrip {
 	// the most a slide can lag, so older rows are invisible
 	const CAP: usize = crate::scroll::SLIDE_ROWS;
 
-	fn new() -> Self {
+	fn new(buf: Buffer) -> Self {
 		Self {
 			rows: std::collections::VecDeque::new(),
+			built: std::collections::VecDeque::new(),
+			buf,
 			dir: 0,
 			region: (0, 0),
 			shaped: 0..0,
@@ -359,8 +368,20 @@ impl OffStrip {
 
 	fn clear(&mut self) {
 		self.rows.clear();
+		self.built.clear();
+		self.buf.lines.clear();
 		self.dir = 0;
 		self.shaped = 0..0;
+	}
+
+	// a stand-in until the row is built; never drawn, so it needs no font
+	fn blank_line() -> BufferLine {
+		BufferLine::new(
+			"",
+			LineEnding::default(),
+			AttrsList::new(&glyphon::Attrs::new()),
+			Shaping::Advanced,
+		)
 	}
 
 	// Append the rows a step pushed off `region` (`chunk` in visual order). A
@@ -376,34 +397,90 @@ impl OffStrip {
 			self.dir = dir;
 		}
 		self.region = region;
+		let added = chunk.len();
 		if dir > 0 {
 			// content moved up: rows left off the top of the region, the newest
 			// chunk nearest the content = at the strip's bottom
 			self.rows.extend(chunk);
-			while self.rows.len() > Self::CAP {
-				self.rows.pop_front();
-			}
+			self.built.extend(std::iter::repeat_n(false, added));
+			self.buf
+				.lines
+				.extend(std::iter::repeat_with(Self::blank_line).take(added));
+			let excess = self.rows.len().saturating_sub(Self::CAP);
+			self.rows.drain(..excess);
+			self.built.drain(..excess);
+			self.buf.lines.drain(..excess);
 		} else {
 			// content moved down: rows left off the bottom, the newest chunk at
 			// the strip's top (nearest the content), keeping its internal order
 			for row in chunk.into_iter().rev() {
 				self.rows.push_front(row);
+				self.built.push_front(false);
 			}
-			while self.rows.len() > Self::CAP {
-				self.rows.pop_back();
-			}
+			self.buf
+				.lines
+				.splice(0..0, std::iter::repeat_with(Self::blank_line).take(added));
+			self.rows.truncate(Self::CAP);
+			self.built.truncate(Self::CAP);
+			self.buf.lines.truncate(Self::CAP);
 		}
 	}
 
 	// The rows a slide of `app_off` lines can show: those nearest the content,
 	// one more than the offset covers so the part-row at the far edge is drawn.
+	// An offset past the region's height has slid the rows nearest the content
+	// out of the region, so those are left out, less one row for the content's
+	// part-row. A flood lets the offset run to the cap, more than twice a
+	// screenful, and shaping those rows was most of the strip's cost.
 	fn visible(&self, app_off: f32) -> std::ops::Range<usize> {
-		let want = (app_off.abs().ceil() as usize + 1).min(self.rows.len());
+		let len = self.rows.len();
+		let off = app_off.abs().min(len as f32);
+		let far = (off.ceil() as usize + 1).min(len);
+		let height = self.region.1.saturating_sub(self.region.0) as f32;
+		let near = ((off - height).max(0.0).floor() as usize)
+			.saturating_sub(1)
+			.min(far);
 		if app_off > 0.0 {
-			self.rows.len() - want..self.rows.len()
+			len - far..len - near
 		} else {
-			0..want
+			near..far
 		}
+	}
+
+	// Scroll the buffer to `window` and shape it. A row gets its text the first
+	// time a window takes it in and keeps its shaping after that, so a frame
+	// shapes only the rows new to it. Returns how many that was.
+	// The height stays at the cap, since any change to it lays out every shaped
+	// line again. Lines past the window are left to the clip. Each line is laid
+	// out here rather than through shape_until_scroll, which would pull the
+	// scroll back to fill the height from lines that may not be built.
+	fn shape(
+		&mut self,
+		ctx: &mut TextCtx,
+		fg: [u8; 3],
+		width: f32,
+		window: std::ops::Range<usize>,
+	) -> usize {
+		self.shaped = window.clone();
+		if window.is_empty() {
+			return 0;
+		}
+		ctx.resize_buffer(
+			&mut self.buf,
+			width.max(1.0),
+			(Self::CAP as f32 + 1.0) * ctx.cell_h,
+		);
+		self.buf.set_scroll(TextScroll::new(window.start, 0.0, 0.0));
+		let mut fresh = 0;
+		for j in window {
+			if !self.built[j] {
+				self.buf.lines[j] = strip_line(ctx, fg, &self.rows[j]);
+				self.built[j] = true;
+				fresh += 1;
+			}
+			self.buf.line_layout(&mut ctx.font_system, j);
+		}
+		fresh
 	}
 }
 
@@ -977,6 +1054,50 @@ fn debold_attrs(src: &AttrsList, weight: Weight) -> AttrsList {
 	out
 }
 
+// One strip row as a buffer line, styled the way build()'s main loop styles a
+// screen row: runs merged by (color, bold, italic). A character the primary
+// mono face lacks is a space placeholder of its width.
+fn strip_line(ctx: &mut TextCtx, fg: [u8; 3], row: &[StripCell]) -> BufferLine {
+	fn add_run(attrs: &mut AttrsList, range: std::ops::Range<usize>, style: ([u8; 3], bool, bool)) {
+		if range.is_empty() {
+			return;
+		}
+		let mut span = mono_attrs();
+		span.color_opt = Some(GColor::rgb(style.0[0], style.0[1], style.0[2]));
+		if style.1 {
+			span.weight = crate::text::mono_bold_weight();
+		}
+		if style.2 {
+			span.style = Style::Italic;
+		}
+		attrs.add_span(range, &span);
+	}
+	let mut attrs = AttrsList::new(&mono_attrs());
+	let mut text = String::with_capacity(row.len());
+	let mut run_start = 0;
+	let mut run_style = (fg, false, false);
+	for cell in row {
+		if cell.wide == 0 {
+			continue; // wide-char spacer
+		}
+		if !cell.c.is_ascii() && !ctx.covered_at(cell.c, cell.wide) {
+			for _ in 0..cell.wide {
+				text.push(' ');
+			}
+			continue;
+		}
+		let style = (cell.fg, cell.bold, cell.italic);
+		if style != run_style {
+			add_run(&mut attrs, run_start..text.len(), run_style);
+			run_start = text.len();
+			run_style = style;
+		}
+		text.push(render_char(cell.c));
+	}
+	add_run(&mut attrs, run_start..text.len(), run_style);
+	BufferLine::new(text, LineEnding::default(), attrs, Shaping::Advanced)
+}
+
 // Assign one built row per buffer line. `set_text` compares against what the line
 // already has and only drops its cached shaping when something differs, so an
 // unchanged row costs a string compare instead of a re-shape. Mirrors what
@@ -1381,7 +1502,7 @@ pub struct PaneDraw {
 	pub cursor: Option<RectInstance>,
 	/// App-scroll slide (None = common case: whole pane at `top`). While a
 	/// full-screen app's scroll eases, the current frame draws shifted at `top`
-	/// and the scrolled-off strip (`pane.strip_buf`) fills the revealed gap.
+	/// and the scrolled-off strip (`pane.strip.buf`) fills the revealed gap.
 	pub slide: Option<Slide>,
 }
 
@@ -1445,11 +1566,10 @@ pub struct Pane {
 	pub scroll: Scroll,
 	pub buffer: Buffer,
 	// Scrolled-off strip (see OffStrip): styled rows the app's scroll pushed out
-	// of its region, shaped into `strip_buf` and drawn welded to the content edge
-	// so the slide's reveal gap is always exactly filled. `strip_dirty` re-shapes
-	// the buffer on the next build (rows changed, or a font rebuild).
+	// of its region, shaped into its own buffer and drawn welded to the content
+	// edge so the slide's reveal gap is always exactly filled. `strip_dirty`
+	// re-scrolls the buffer on the next build (rows changed, or a font rebuild).
 	strip: OffStrip,
-	strip_buf: Buffer,
 	strip_dirty: bool,
 	// Previous frame's styled cells (captured only in alt-screen smooth-scroll
 	// mode): the rows a step pushes off the region are gone from the grid by the
@@ -2693,14 +2813,15 @@ impl Pane {
 		self.buffer.shape_until_scroll(&mut ctx.font_system, false);
 		self.rows_scratch = rows_out; // keep the row Strings for the next frame
 
-		// Re-shape the scrolled-off strip when the rows on screen changed: new rows
-		// pushed, or the ease moved the window (see OffStrip::visible). A screenful
-		// at most, like the main buffer.
+		// Move the scrolled-off strip to the rows on screen when they changed: new
+		// rows pushed, or the ease moved the window (see OffStrip::visible). Only
+		// rows new to the window are shaped.
 		if let Some(sl) = &slide {
 			if !sl.strip_rows.is_empty() && (self.strip_dirty || self.strip.shaped != sl.strip_rows)
 			{
 				self.strip_dirty = false;
-				self.shape_strip(ctx, &settings, sl.strip_rows.clone());
+				self.strip
+					.shape(ctx, settings.fg, self.rect.w, sl.strip_rows.clone());
 			}
 		}
 		// Strip cells with their own background (inverse video, colored bg) keep it
@@ -3449,83 +3570,10 @@ impl Pane {
 		if slide.strip_rows.is_empty() || self.strip.shaped.is_empty() {
 			return None;
 		}
-		let mut area = self.buf_area(&self.strip_buf, slide.strip_text_top, margin);
+		let mut area = self.buf_area(&self.strip.buf, slide.strip_text_top, margin);
 		area.bounds.top = area.bounds.top.max(slide.top_split_y as i32);
 		area.bounds.bottom = area.bounds.bottom.min(slide.split_y as i32);
 		Some(area)
-	}
-
-	// Re-shape the scrolled-off strip buffer from the captured rows in `window`.
-	// Same span rules as build()'s main loop: runs merged by (color, bold, italic),
-	// newlines embedded into non-empty runs, never empty/standalone spans (they
-	// make set_rich_text loop forever). Glyphs the primary mono face lacks stay
-	// space placeholders - the strip is transient reveal content, not worth a
-	// per-cell fallback pool.
-	fn shape_strip(
-		&mut self,
-		ctx: &mut TextCtx,
-		settings: &config::Settings,
-		window: std::ops::Range<usize>,
-	) {
-		fn flush(spans: &mut Vec<(String, Attrs)>, run: &mut String, style: ([u8; 3], bool, bool)) {
-			if run.is_empty() {
-				return;
-			}
-			let mut attrs = mono_attrs();
-			attrs.color_opt = Some(GColor::rgb(style.0[0], style.0[1], style.0[2]));
-			if style.1 {
-				attrs.weight = crate::text::mono_bold_weight();
-			}
-			if style.2 {
-				attrs.style = Style::Italic;
-			}
-			spans.push((std::mem::take(run), attrs));
-		}
-		self.strip.shaped = window.clone();
-		if window.is_empty() {
-			return;
-		}
-		let mut spans: Vec<(String, Attrs)> = Vec::with_capacity(window.len() + 1);
-		let mut run = String::new();
-		let mut run_style = (settings.fg, false, false);
-		for (j, row) in self.strip.rows.range(window.clone()).enumerate() {
-			if j != 0 {
-				run.push('\n');
-			}
-			for cell in row {
-				if cell.wide == 0 {
-					continue; // wide-char spacer
-				}
-				if !cell.c.is_ascii() && !ctx.covered_at(cell.c, cell.wide) {
-					for _ in 0..cell.wide {
-						run.push(' ');
-					}
-					continue;
-				}
-				let style = (cell.fg, cell.bold, cell.italic);
-				if style != run_style {
-					flush(&mut spans, &mut run, run_style);
-					run_style = style;
-				}
-				run.push(render_char(cell.c));
-			}
-		}
-		flush(&mut spans, &mut run, run_style);
-		ctx.resize_buffer(
-			&mut self.strip_buf,
-			self.rect.w.max(1.0),
-			(window.len() as f32 + 1.0) * ctx.cell_h,
-		);
-		let span_refs = spans.iter().map(|(s, a)| (s.as_str(), a.clone()));
-		self.strip_buf.set_rich_text(
-			&mut ctx.font_system,
-			span_refs,
-			&mono_attrs(),
-			Shaping::Advanced,
-			None,
-		);
-		self.strip_buf
-			.shape_until_scroll(&mut ctx.font_system, false);
 	}
 
 	/// Per-cell fallback glyphs, already positioned (see `Pane::build`). Drawn in
@@ -4069,8 +4117,8 @@ impl PaneManager {
 	pub fn rebuild_buffers(&mut self, ctx: &mut TextCtx) {
 		for pane in self.panes.values_mut() {
 			pane.buffer = ctx.new_buffer(pane.rect.w.max(1.0), pane.rect.h.max(1.0));
-			pane.strip_buf = ctx.new_buffer(pane.rect.w.max(1.0), ctx.cell_h);
-			pane.strip.clear(); // metrics changed; a mid-slide strip would misalign
+			// metrics changed; a mid-slide strip would misalign
+			pane.strip = OffStrip::new(ctx.new_buffer(pane.rect.w.max(1.0), ctx.cell_h));
 			pane.strip_dirty = false;
 			pane.glyph_cache.clear(); // cached glyphs are tied to the old font/metrics
 			// this frame's keys point into the cache just emptied, and `build` only
@@ -4345,15 +4393,13 @@ fn spawn_pane(
 		tmux.is_some(),
 	)?;
 	let buffer = ctx.new_buffer(cw, text_buffer_h(ch, ctx.cell_h));
-	let strip_buf = ctx.new_buffer(cw, ctx.cell_h);
 	let empty_buf = ctx.new_plain_buffer(); // never given text - see emoji_area
 	Ok(Pane {
 		id,
 		term,
 		scroll: Scroll::new(),
 		buffer,
-		strip: OffStrip::new(),
-		strip_buf,
+		strip: OffStrip::new(ctx.new_buffer(cw, ctx.cell_h)),
 		strip_dirty: false,
 		last_cells: Vec::new(),
 		cells_scratch: Vec::new(),
@@ -7647,7 +7693,7 @@ mod tests {
 			feed(&mut term, &format!("\x1b[{};1Hrow {i}", i + 1));
 		}
 		let settings = config::Settings::default();
-		let mut strip = OffStrip::new();
+		let mut strip = test_strip();
 		let mut scroll = crate::scroll::Scroll::new();
 		let mut offsets = Vec::new();
 		let ends = [46, 45, 45, 46, 45, 45, 46, 46, 45];
@@ -8931,6 +8977,184 @@ mod tests {
 		s.rows.iter().map(|r| r[0].c).collect()
 	}
 
+	fn test_strip() -> OffStrip {
+		OffStrip::new(glyphon::Buffer::new_empty(glyphon::Metrics::new(
+			16.0, 20.0,
+		)))
+	}
+
+	fn text_row(text: &str) -> Vec<StripCell> {
+		text.chars()
+			.map(|c| StripCell {
+				c,
+				..strip_row(c)[0]
+			})
+			.collect()
+	}
+
+	// A slide past the region's height has moved the rows nearest the content
+	// out of the region, so the window is only the rows the region can show.
+	// Test ID: df4te
+	#[test]
+	fn off_strip_window_stays_inside_the_region() {
+		let rows = |s: &mut OffStrip, dir: i8| {
+			s.push_step(dir, (2, 32), (0..100).map(|_| strip_row('r')).collect());
+		};
+		let mut up = test_strip();
+		rows(&mut up, 1);
+		// within a screenful nothing changes
+		assert_eq!(up.visible(20.0), 79..100);
+		assert_eq!(up.visible(30.0), 69..100);
+		// row k from the content spans offsets k-1..k, and the region shows
+		// off-30..off: rows 51 to 81 at 80.5, one more on each side
+		assert_eq!(up.visible(80.5), 18..51);
+		assert!(up.visible(80.5).len() <= 30 + 3);
+		let mut down = test_strip();
+		rows(&mut down, -1);
+		assert_eq!(down.visible(-80.5), 49..82);
+		// an offset can't run past the rows there are
+		assert_eq!(down.visible(-500.0), 69..100);
+	}
+
+	// Each row's buffer line moves with it through every push and trim, and a
+	// row that came in since is not built yet.
+	// Test ID: df4t5
+	#[test]
+	fn off_strip_lines_move_with_their_rows() {
+		fn build_all(s: &mut OffStrip) {
+			for j in 0..s.len() {
+				let tag = s.rows[j][0].c.to_string();
+				s.buf.lines[j] = glyphon::BufferLine::new(
+					tag,
+					glyphon::cosmic_text::LineEnding::default(),
+					AttrsList::new(&glyphon::Attrs::new()),
+					glyphon::Shaping::Advanced,
+				);
+				s.built[j] = true;
+			}
+		}
+		fn check(s: &OffStrip, new_rows: &str) {
+			assert_eq!(s.built.len(), s.len());
+			assert_eq!(s.buf.lines.len(), s.len());
+			for j in 0..s.len() {
+				let tag = s.rows[j][0].c;
+				if new_rows.contains(tag) {
+					assert!(!s.built[j], "{tag} came in unbuilt");
+				} else {
+					assert!(s.built[j], "{tag} kept its line");
+					assert_eq!(s.buf.lines[j].text(), tag.to_string());
+				}
+			}
+		}
+		let mut s = test_strip();
+		s.push_step(1, (0, 10), vec![strip_row('a'), strip_row('b')]);
+		build_all(&mut s);
+		s.push_step(1, (0, 10), vec![strip_row('c')]);
+		check(&s, "c");
+		let mut d = test_strip();
+		d.push_step(-1, (0, 10), vec![strip_row('y'), strip_row('z')]);
+		build_all(&mut d);
+		d.push_step(-1, (0, 10), vec![strip_row('w'), strip_row('x')]);
+		assert_eq!(strip_tags(&d), "wxyz");
+		check(&d, "wx");
+		// at the cap, the rows trimmed take their lines with them, both ways
+		let tag = |i: usize| char::from_u32(0x100 + i as u32).unwrap();
+		let mut up = test_strip();
+		for i in 0..OffStrip::CAP {
+			up.push_step(1, (0, 10), vec![strip_row(tag(i))]);
+		}
+		build_all(&mut up);
+		let more: Vec<_> = (OffStrip::CAP..OffStrip::CAP + 3)
+			.map(|i| strip_row(tag(i)))
+			.collect();
+		up.push_step(1, (0, 10), more);
+		assert_eq!(up.len(), OffStrip::CAP);
+		assert_eq!(up.rows[0][0].c, tag(3));
+		let fresh: String = (OffStrip::CAP..OffStrip::CAP + 3).map(tag).collect();
+		check(&up, &fresh);
+		let mut down = test_strip();
+		for i in 0..OffStrip::CAP {
+			down.push_step(-1, (0, 10), vec![strip_row(tag(i))]);
+		}
+		build_all(&mut down);
+		let more: Vec<_> = (OffStrip::CAP..OffStrip::CAP + 3)
+			.map(|i| strip_row(tag(i)))
+			.collect();
+		down.push_step(-1, (0, 10), more);
+		assert_eq!(down.len(), OffStrip::CAP);
+		assert_eq!(down.rows[OffStrip::CAP - 1][0].c, tag(3));
+		check(&down, &fresh);
+		// a clear empties the lines too
+		down.clear();
+		assert!(down.built.is_empty() && down.buf.lines.is_empty());
+	}
+
+	// A flood inside tmux pushes rows and moves the window every frame. Only the
+	// rows new to the window are shaped, the rest keep their shaping, and the
+	// buffer draws the window's rows in order from its first line.
+	// Test ID: df4t6
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn the_strip_shapes_only_the_rows_new_to_its_window() {
+		let mut ctx = crate::text::TextCtx::new_cpu(1.0);
+		if !matches!(mono_attrs().family, glyphon::Family::Name(_)) {
+			eprintln!("no concrete mono family on this box; skipping");
+			return;
+		}
+		let fg = [200; 3];
+		let width = 400.0;
+		let drawn = |s: &OffStrip, window: &std::ops::Range<usize>| -> Vec<String> {
+			s.buf
+				.layout_runs()
+				.take(window.len())
+				.map(|run| run.text.to_string())
+				.collect()
+		};
+		let want = |s: &OffStrip, window: &std::ops::Range<usize>| -> Vec<String> {
+			s.rows
+				.range(window.clone())
+				.map(|row| row.iter().map(|cell| cell.c).collect())
+				.collect()
+		};
+		let mut s = OffStrip::new(ctx.new_buffer(width, ctx.cell_h));
+		s.push_step(
+			1,
+			(0, 30),
+			(0..40).map(|i| text_row(&format!("row {i}"))).collect(),
+		);
+		let window = s.visible(20.0);
+		assert_eq!(s.shape(&mut ctx, fg, width, window.clone()), 21);
+		assert_eq!(drawn(&s, &window), want(&s, &window));
+		for step in 40..45 {
+			s.push_step(1, (0, 30), vec![text_row(&format!("row {step}"))]);
+			let window = s.visible(20.0);
+			let kept = window.start..window.end - 1;
+			assert!(
+				kept.clone().all(|j| s.buf.lines[j].shape_opt().is_some()),
+				"the rows still in the window kept their shaping"
+			);
+			assert_eq!(s.shape(&mut ctx, fg, width, window.clone()), 1);
+			assert_eq!(drawn(&s, &window), want(&s, &window));
+		}
+		// the ease catching up narrows the window and shapes nothing
+		let window = s.visible(3.5);
+		assert_eq!(s.shape(&mut ctx, fg, width, window.clone()), 0);
+		assert_eq!(drawn(&s, &window), want(&s, &window));
+		// content moving down puts the window at the strip's top
+		let mut d = OffStrip::new(ctx.new_buffer(width, ctx.cell_h));
+		d.push_step(
+			-1,
+			(0, 30),
+			(0..10).map(|i| text_row(&format!("down {i}"))).collect(),
+		);
+		let window = d.visible(-4.0);
+		assert_eq!(d.shape(&mut ctx, fg, width, window.clone()), 5);
+		d.push_step(-1, (0, 30), vec![text_row("down new")]);
+		let window = d.visible(-4.0);
+		assert_eq!(d.shape(&mut ctx, fg, width, window.clone()), 1);
+		assert_eq!(drawn(&d, &window), want(&d, &window));
+	}
+
 	// Test ID: d9kmk
 	#[test]
 	fn vanished_range_picks_the_rows_a_step_pushed_off() {
@@ -8971,7 +9195,7 @@ mod tests {
 	fn off_strip_accumulates_in_visual_order() {
 		// up-scroll: each step's rows leave off the region's top, newest nearest the
 		// content = at the strip's bottom
-		let mut s = OffStrip::new();
+		let mut s = test_strip();
 		s.push_step(1, (0, 10), vec![strip_row('a'), strip_row('b')]);
 		s.push_step(1, (0, 10), vec![strip_row('c')]);
 		assert_eq!(strip_tags(&s), "abc");
@@ -8981,7 +9205,7 @@ mod tests {
 		assert_eq!(s.visible(50.0), 0..3);
 		// down-scroll: rows leave off the bottom, newest at the strip's top,
 		// each chunk keeping its internal order
-		let mut d = OffStrip::new();
+		let mut d = test_strip();
 		d.push_step(-1, (0, 10), vec![strip_row('y'), strip_row('z')]);
 		d.push_step(-1, (0, 10), vec![strip_row('w'), strip_row('x')]);
 		assert_eq!(strip_tags(&d), "wxyz");
@@ -8991,7 +9215,7 @@ mod tests {
 	// Test ID: d9kmn
 	#[test]
 	fn off_strip_direction_flip_discards_and_cap_trims_oldest() {
-		let mut s = OffStrip::new();
+		let mut s = test_strip();
 		s.push_step(1, (0, 10), vec![strip_row('a'), strip_row('b')]);
 		// flipping direction discards the old strip (it belongs on the other side)
 		s.push_step(-1, (0, 10), vec![strip_row('c')]);
@@ -9009,7 +9233,7 @@ mod tests {
 		s.push_step(-1, (9, 12), vec![strip_row('e')]);
 		assert_eq!(strip_tags(&s), "e");
 		// the cap trims the rows farthest from the content (oldest)
-		let mut long = OffStrip::new();
+		let mut long = test_strip();
 		for i in 0..(OffStrip::CAP + 3) {
 			long.push_step(
 				1,

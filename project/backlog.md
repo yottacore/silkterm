@@ -160,22 +160,34 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Branch: rnd1106
 	- Stand-in: none (20261106). Xwayland under headless sway can't report an output as disconnected while it stays laid out, which is b23's usual sleep. deqx1 tests the output being taken out of the layout.
 
-- `top` and `htop` no longer smoothly animate disappearing and appearing lines
-	- ID: 2026110912460474
+- A window that never gets focus thinks it has it, and never lets its device go
+	- ID: 2026111011350600
 	- Type: Bug
-	- Status: Done
-		- 20261109: Lines that go away still slide on today's dev. It's waiting for a yes or no on the notes below.
-	- Severity: Low
-	- Opened: 20261109-124604
-	- Opened by: JC
-	- Related IDs: 2026101310563310
-	- Incorrect behavior: `top` and `htop` used to smoothly animate disappearing and appearing lines. Now they don't. And even when the smooth animation worked in those programs, it would quit working after a while.
-	- Notes:
-		- It's not a high priority to get back, more of a nice-to-have.
-	- Reproduced: No, 20261109, on b23 in a headless window. top showed 20 idle processes, one killed every 4 s, so the rows under it moved up. Today's dev slid 3 times and the 11-01 release 4 times. Neither slid for the first 4 kills, where only 2 to 8 rows moved.
-	- Possible cause: A shift must account for two thirds of the rows that changed. top rewrites up to 5 header rows every tick, and on a busy box many process rows change their numbers too. A small move, or a busy tick, is then cut. That rule dates from 08-01 and keeps a list program that rewrites rows above a footer it pushes down from sliding, so loosening it for top would bring that back. The same was found about load in 2026101310563310.
-	- Branch: rnd1109
-	- Test case: None, since no code changed.
+	- Status: Can't reproduce
+		- 20261110: The fix for the stated cause is in, but that cause can't keep an X11 window focused for good, so it stays open. A failing run's log with `SILK_KEYDBG=1` as well would show which focus events came.
+	- Severity: Avg
+	- Opened: 20261110-113506
+	- Opened by: CC
+	- Related IDs: 2026111010491300
+	- Target OS: Linux, seen on X11 under xfwm4.
+	- Test environment: b23, Xvfb with xfwm4, 16 cores busy.
+	- Steps to reproduce:
+		- Start SilkTerm, and map another window before the window manager gives SilkTerm focus, so it never does.
+		- Leave both alone past "Minutes otherwise".
+	- Incorrect behavior: `SILK_IDLEDBG=1` says "kept: focused on screen" for good, while the other window is the active one.
+	- Expected behavior: A window that was never focused counts as unfocused.
+	- Reproduced: Yes, 20261110, 2 of 9 runs of deskswitch with the cores loaded, before its setup focused SilkTerm first.
+		- 20261110: Not again in 13 tries on Xvfb with xfwm4: xlogo mapped 0 to 1 s after the launch, xfwm4 held still while both windows asked to map, and 6 runs of deskswitch in its old setup order, 3 of them with 8 more cores busy. Each time the map told SilkTerm it wasn't focused.
+	- Possible cause: The window starts with its focus flag set, and only a focus event clears it. A window that never had focus doesn't get a focus-out.
+	- Progress log:
+		- 20261110: A window now starts unfocused, and its first focus is a sign of life. On X11 that changes nothing anyone sees, since winit says at the map whether the window has focus. By winit's code, Wayland and Windows say nothing to a window that never gets the focus, such as one opened behind another, so there it kept its device for good.
+		- 20261110: Verified: df4r2 fails with the old start and passes with the new one. deskswitch and deqy2 pass, and so does the quick gate in all 5 areas.
+	- Decisions:
+		- 20261110: The tip rule starts away too, so a window never focused shows no tips, as X11 already had it after the map.
+		- 20261110: X11 focus is the X server's, not the window manager's active window. A window manager that marks another window active and leaves the X focus on SilkTerm would look like this, but that wasn't seen either.
+	- Swept: the start of `focused` and `tip_focus` in `State`, the clipboard's start, which reads focus only on Wayland and starts unfocused there, and the dialogs' tip rule, for windows opened to be used and never let go.
+	- Branch: rnd1111
+	- Test case: `a_window_never_focused_counts_as_unfocused` (df4r2). Also `cicd/tests/deskswitch/run.bash` (df4e3) and `cicd/tests/idleother/run.bash` (deqy2), unchanged.
 
 - Add a contributor license agreement, like nano-git-db's
 	- ID: 2026101906582193
@@ -277,13 +289,28 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- It's stalled until a cosmic-text release takes fontdb 0.24 or later, and winit's sctk-adwaita drops ab_glyph.
 	- It's held for a cosmic-text release on fontdb 0.24 or later, and an sctk-adwaita without ab_glyph.
 
+- A unit test run on macOS or Windows could import and rename the box's own `~/.config/silkterm/config.toml`
+	- ID: 2026111018340691
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261110-183406
+	- Opened by: CC
+	- Related IDs: 2026110920480399
+	- Target OS: macOS, Windows
+	- Reproduced: No. From reading config.rs; Linux takes no ~/.config fallback, so it can't show here.
+	- Possible cause: Under cfg(test), `may_write` checks only the native path. `beta1_config_paths` adds `legacy_config_path()`, built from the real HOME, so a test whose own folder has no settings file would read a real beta1 file there and rename it. `adopt_legacy_config` may share the shape.
+	- Test case: A test with HOME at a temp folder holding the file, and a load on an empty override folder, asserting the file is still there.
+
 - The "Minutes otherwise" release of resources still isn't working
 	- ID: 2026111009560100
 	- Type: Bug
-	- Status: Reopened
+	- Status: Done
+		- 20261110: A look on b23's own desktop is still owed: with the window released, unfocused and partly behind others, move the pointer over it and see it stay in resource conservation mode. It can reopen the item.
 		- 20261110: A run on b23's own desktop with `SILK_IDLEDBG=1` would show what stops the release. See the question in questions.md.
 		- 20261110: It's likely the desktop switch in 2026111010491300, which is fixed now. A look on the next dogfood build may be enough to close it.
 		- 20261110-142723: It almost works. Moving the mouse over in released window still wakes it up though, even though it remains unfocused and partially behind other windows.
+		- 20261110: Answer: Minutes when hidden is 1, otherwise 2. Since the 11-10 build of about 13:30 it lets go after a return from another desktop with the focus elsewhere. A mouse move over the released window still wakes it, while it stays behind other windows.
 	- Severity: Critical
 	- Opened: 20261110-095601
 	- Opened by: JC
@@ -293,118 +320,28 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- Pre-next-cut.
 		- It used to, many builds ago, but hasn't now for over a week.
 	- Target OS: Linux, seen on X11.
+	- Test environment: b23, Xvfb with xfwm4, and Xvfb with no window manager.
 	- Reproduced: No. Each try let go on time with the 20261110-101009 dogfood build and with dev:
 		- Xvfb with xfwm4, compositing on and off, a fresh config, an xterm focused: let go at the wait.
 		- The same with "Minutes otherwise" at 1 in the file and no idle override: let go at 65 s.
 		- Another window moved over SilkTerm and away again after it let go: it stayed let go.
 		- 2 idle muffer sessions wrote nothing to their terminals in 25 s, so an idle one in the front tab doesn't stop the release.
+		- 20261110: Yes, after the answer. Under xfwm4, a released window partly behind another and never focused took its device back when the pointer moved over it, with no click or key. The log said "wake: pointer".
 	- Progress log:
 		- 20261110: `SILK_IDLEDBG=1` now logs why the device is kept each time that changes ("kept: focused on screen", "kept: a dialog is up", "waiting 60s (otherwise)"), and what restarts the wait while it runs, each kind at most once per 30 s with a count of the rest. Before, it logged only when the device went and came back, so a window that never let go didn't log anything.
+		- 20261110: The pointer moving over a released window no longer takes the device back. It still starts the wait over while the window has its device. During a repaint's one frame it's ignored, so the frame doesn't become a whole wake. A released window logs it as "not a wake: pointer".
+		- 20261110: Verified: deskswitch, with a new step that moves the pointer over the part of the released window that shows and away again, fails on the build before the fix (woken by the pointer) and passes after it. deqy2 fails the same way before and passes after. df4qc fails with the old rule put back. The quick gate passes in all 5 areas.
+		- 20261110: deqy2's "moving the pointer over it brings it back" now checks the reverse, "moving the pointer over it leaves it let go", per the answer. A new check has a click bring it back.
 	- Decisions:
 		- 20261110: It isn't closed a third time on a guess. The 2 earlier fixes each closed a real cause, but neither was seen on this desktop, so the next step is a log from it.
-	- Branch: idledbg
-	- Test case: `each_hold_on_the_device_names_itself` (df4cn).
-
-- Import a v1.0.0-beta1 `config.toml`
-	- ID: 2026110920480399
-	- Type: Feature
-	- Status: Queued
-	- Priority: Avg
-	- Opened: 20261109-204804
-	- Opened by: JC
-	- Related IDs: 2026110610154305
-	- Target OS: All
-	- Requirements:
-		- When there's no `config.shcl` but there is a beta1 `config.toml`, its values are read into the new shcl config.
-		- It happens once. The old file is kept, renamed, the same way a too-old config is.
-		- A key the current build doesn't know is skipped, and a bad value falls back to the default.
-	- Origin: The answer to the Check on 2026110610154305 in questions.md, "Yes we must be able to import toml too."
-
-- Profiler: text shaping read 80.4% at 327d97e, against about 50% on the card in late October
-	- ID: 2026110920480499
-	- Type: Task
-	- Status: Queued
-	- Priority: Low
-	- Opened: 20261109-204804
-	- Opened by: CC
-	- Target OS: Linux
-	- Requirements:
-		- Run the profile on the card at 327d97e and at 0b16ae9 or fab6815, back to back, so both see the same clock.
-		- If the old build still reads about 50%, find what made shaping cost more. If both read about 80%, find what made the rest cost less, and note it as no action.
-	- Notes:
-		- The top cost is still the shape plan being built again on each call, inside harfrust.
-
-- A window that never gets focus thinks it has it, and never lets its device go
-	- ID: 2026111011350600
-	- Type: Bug
-	- Status: Queued
-	- Severity: Avg
-	- Opened: 20261110-113506
-	- Opened by: CC
-	- Related IDs: 2026111010491300
-	- Target OS: Linux, seen on X11 under xfwm4.
-	- Test environment: b23, Xvfb with xfwm4, 16 cores busy.
-	- Steps to reproduce:
-		- Start SilkTerm, and map another window before the window manager gives SilkTerm focus, so it never does.
-		- Leave both alone past "Minutes otherwise".
-	- Incorrect behavior: `SILK_IDLEDBG=1` says "kept: focused on screen" for good, while the other window is the active one.
-	- Expected behavior: A window that was never focused counts as unfocused.
-	- Reproduced: Yes, 20261110, 2 of 9 runs of deskswitch with the cores loaded, before its setup focused SilkTerm first.
-	- Possible cause: The window starts with its focus flag set, and only a focus event clears it. A window that never had focus doesn't get a focus-out.
-
-- A notice can wrap one more line at 2x than at 1x
-	- ID: 2026111014301817
-	- Type: Bug
-	- Status: Queued
-	- Severity: Low
-	- Opened: 20261110-143018
-	- Opened by: CC
-	- Target OS: All
-	- Test environment: b23, CPU text layout in the unit tests.
-	- Steps to reproduce:
-		- In `refusal_notice` in `dialog.rs`, make the second paragraph "Until that is fixed, changes such as the window size, new shells, and anything set in Settings are used now but not kept."
-		- Run `about_and_the_notice_lay_out_again_at_twice_the_size` (dd5nh).
-	- Incorrect behavior: The notice is 234 high at 1x and 521 at 2x, a ratio of 2.23, so a line that fits at 1x wraps at 2x.
-	- Expected behavior: A notice wraps the same at any scale, so its size scales with it.
-	- Reproduced: Yes, 20261110. The same sentence without the comma before "and", or with "used but not kept", lays out at about 2x.
-	- Possible cause: Text widths at 2x aren't exactly double the 1x widths, and the wrap width is, so a line close to the edge at 1x doesn't fit at 2x.
-	- Notes:
-		- The notice text was changed to "used but not kept" so dd5nh passes. The test passes or fails on where the words fall, rather than on the layout rule.
-
-- Resources are restored when coming back to the XFCE4 desktop that holds a SilkTerm, with no focus and no pointer over it
-	- ID: 2026111010491300
-	- Type: Bug
-	- Status: Done
-	- Opened: 20261110-104913
-	- Opened by: JC
-	- Notes:
-		- Pre-next-cut.
-	- Target OS: Linux, XFCE4.
-	- Version and build: df4bm
-	- Steps to reproduce:
-		- Use XFCE4's multiple desktop feature, and come back to the desktop that holds a SilkTerm.
-		- The mouse never moves over SilkTerm, and it is behind other windows and does not have focus.
-	- Incorrect behavior: Resources are restored.
-	- Expected behavior: It needs to stay in resource-saving mode, until it gets the focus. Not even moving the mouse over it should wake it up, unless that gives it the focus (as some WMs do).
-	- Answers:
-		- 20261110: Work it next, ahead of the beta1 import.
-		- 20261110: If the window can be seen, and has updated content, that new content should be visible. If it's in motion, it should wake back up.
-		- 20261110: Unless it's completely hidden (e.g. minimized, completely obscured, on a tab that isn't visible, the screen is blank or locked, or on a desktop that isn't visible).
-		- 20261110: How it gets its picture back after the switch: A, repaint and let go.
-	- Reproduced: Yes, 20261110, on Xvfb with xfwm4, compositing on and off. Switching away and back woke a released, unfocused, partly covered window 3 ways at once: it was told it lost focus, which it never had, it was shown again, and the desktop asked for a repaint.
-	- Actual cause: Each of the 3 counted as a sign of life.
-	- Progress log:
-		- 20261110: Focus counts only as a change now, and being shown again counts only for a window that would go blank without its device. With those 2 gone, the window stayed released through the switch but came back black. X11 doesn't keep a window's pixels while it's on another desktop. So the desktop's repaint request still takes the device back, and that's the one wake left on a switch.
-		- 20261110: Output in a background tab no longer has to show at the reveal, per the answer above. der5b's old assertion is commented out with the reason.
-		- 20261110: Done as answered. The desktop's repaint takes the device back for one frame, without starting the wait over, and it goes again once the frame with the wallpaper is up. On the switch it was back in saving mode about 60 ms later, with the same picture as before to the pixel, wallpaper or not, compositing on and off. A sign of life in that time, or output that came in while it was hidden, makes it a whole wake.
-		- 20261110: Verified: deskswitch fails on the 20261110-101009 build (woken by the switch), and its picture check fails with the repaint taken out (230496 pixels differ, a black window). It passed 4 of 4 after the fix.
-	- Actual fix: Focus counts only as a change, being shown again counts only for a window that goes blank without its device, and the desktop's repaint takes the device back for one frame only.
-	- Decisions:
-		- 20261110: A copy of the last frame put back with X11's plain 2D drawing was turned down for repaint and let go, by the answer above.
-	- Branch: deskwake, repaint
-	- Test case: `focus_is_a_sign_of_life_only_as_a_change` (df4dh), `hidden_output_is_owed_only_from_the_tab_in_front` (df4dj), `a_repaint_takes_the_device_back_for_one_frame` (df4e2). Also `cicd/tests/deskswitch/run.bash` (df4e3), in the full run.
-	- Acceptance signoff: Self-closed: reproduced under xfwm4 with compositing on and off, deskswitch fails before the fix and passes after, and the picture after the switch matches the one before.
-	- Closed: 20261110-112700
+		- 20261110: The pointer still starts the wait over while the window has its device, since someone may be reading along with the pointer on it. The answer asked only that it not wake a released window. No pointer-only change needs a frame while released: hover underlines and tab tips show once it's back, and a program that tracks the mouse answers with output, which wakes it as before.
+	- Actual cause: The pointer moving over the window counted as a sign of life, so it took a released device back. On a desktop that doesn't focus or raise on hover, that's a pointer crossing on its way to another window.
+	- Actual fix: The pointer alone only starts the wait over while the device is held. A click, the wheel, a key, focus, or output in the front tab still wakes it.
+	- Swept: every `CursorEntered` and `CursorMoved` in `source`. The idle clock's one path is `sign_of_life`, the same on X11, Wayland, Windows and macOS. The dialogs are never let go. The look after a move and the hover code don't touch the device.
+	- Branch: idledbg, rnd1111
+	- Test case: `each_hold_on_the_device_names_itself` (df4cn), `the_pointer_alone_never_takes_the_device_back` (df4qc). Also `cicd/tests/deskswitch/run.bash` (df4e3) and `cicd/tests/idleother/run.bash` (deqy2), both changed, in the full run.
+	- Acceptance signoff: Self-closed: reproduced under xfwm4 by the motion the answer named, deskswitch and deqy2 fail before the fix and pass after, and df4qc pins the rule. The look on b23 can still reopen it.
+	- Closed: 20261110-162209
 
 - Wayland: must use the Wayland clipboard, and minimize other X11 features
 	- ID: 2026101509024607
@@ -2713,141 +2650,40 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Acceptance signoff: Self-closed: the numbers are in the design doc and nothing is left to judge.
 	- Closed: 20261004-194634
 
-- Button text could get the same vertical-centering rules as Settings tabs
-	- ID: 2026111010152330
-	- Type: Enhancement
+- Resources are restored when coming back to the XFCE4 desktop that holds a SilkTerm, with no focus and no pointer over it
+	- ID: 2026111010491300
+	- Type: Bug
 	- Status: Done
-	- Priority: Low
-	- Opened: 20261110-101523
+	- Opened: 20261110-104913
 	- Opened by: JC
-	- Assigned to: CC
-	- Related IDs: 2026110609500003
 	- Notes:
 		- Pre-next-cut.
-	- Actual fix: Every dialog button's caption centers on its capitals, by the side tabs' rule: the Settings footer, the buttons in a row, the shell list's Add, About's Support, the notice's OK, and the tmux question's buttons. A button grows when the font's descent needs more room, the same way a tab does.
+	- Target OS: Linux, XFCE4.
+	- Version and build: df4bm
+	- Steps to reproduce:
+		- Use XFCE4's multiple desktop feature, and come back to the desktop that holds a SilkTerm.
+		- The mouse never moves over SilkTerm, and it is behind other windows and does not have focus.
+	- Incorrect behavior: Resources are restored.
+	- Expected behavior: It needs to stay in resource-saving mode, until it gets the focus. Not even moving the mouse over it should wake it up, unless that gives it the focus (as some WMs do).
+	- Answers:
+		- 20261110: Work it next, ahead of the beta1 import.
+		- 20261110: If the window can be seen, and has updated content, that new content should be visible. If it's in motion, it should wake back up.
+		- 20261110: Unless it's completely hidden (e.g. minimized, completely obscured, on a tab that isn't visible, the screen is blank or locked, or on a desktop that isn't visible).
+		- 20261110: How it gets its picture back after the switch: A, repaint and let go.
+	- Reproduced: Yes, 20261110, on Xvfb with xfwm4, compositing on and off. Switching away and back woke a released, unfocused, partly covered window 3 ways at once: it was told it lost focus, which it never had, it was shown again, and the desktop asked for a repaint.
+	- Actual cause: Each of the 3 counted as a sign of life.
 	- Progress log:
-		- 20261110: Checked in the Settings dialog at scale 1. In the OK button the capitals had 14 rows above and 11 below. Now they have 12 above and 13 below, with the baseline snapped to a whole pixel.
+		- 20261110: Focus counts only as a change now, and being shown again counts only for a window that would go blank without its device. With those 2 gone, the window stayed released through the switch but came back black. X11 doesn't keep a window's pixels while it's on another desktop. So the desktop's repaint request still takes the device back, and that's the one wake left on a switch.
+		- 20261110: Output in a background tab no longer has to show at the reveal, per the answer above. der5b's old assertion is commented out with the reason.
+		- 20261110: Done as answered. The desktop's repaint takes the device back for one frame, without starting the wait over, and it goes again once the frame with the wallpaper is up. On the switch it was back in saving mode about 60 ms later, with the same picture as before to the pixel, wallpaper or not, compositing on and off. A sign of life in that time, or output that came in while it was hidden, makes it a whole wake.
+		- 20261110: Verified: deskswitch fails on the 20261110-101009 build (woken by the switch), and its picture check fails with the repaint taken out (230496 pixels differ, a black window). It passed 4 of 4 after the fix.
+	- Actual fix: Focus counts only as a change, being shown again counts only for a window that goes blank without its device, and the desktop's repaint takes the device back for one frame only.
 	- Decisions:
-		- 20261110: The main tab bar and the menu bar keep their own rules, per the 11-10 call on 2026110609500003. Their buttons show paths and menu titles rather than sentence-case captions.
-	- Branch: btncap
-	- Test case: `every_button_caption_centers_in_its_button` (df4cx) walks every Settings tab at 2 scales. `each_button_caption_centers_its_capitals_in_the_button` (df4cw) tests About, the notice, and the tmux question. Each fails with the band taken off one button.
-	- Acceptance signoff: Self-closed: measured in the dialog, and its tests fail without it.
-	- Closed: 20261110-104200
-
-- Settings: Side-tabs: the lower the tab, the lower the text is within the tab
-	- ID: 2026110609500003
-	- Type: Bug
-	- Status: Done
-	- Severity: Low
-	- Opened: 20261106-095000
-	- Opened by: JC
-	- Assigned to: CC
-	- Notes:
-		- Pre-next-cut.
-	- Reproduced: No, 20261106. On Xvfb at scales 1, 1.25, 1.5, 1.75, and 2, and under headless sway on the RTX 3060 Ti at 1, 1.25, and 2, every tab's title sits the same distance above its box's bottom edge, sub-tabs included. A dev debug build and the 11-01 release build read the same.
-	- Progress log:
-		- 20261106: The title's height comes from its own tab's box, the same box that is drawn, so nothing in the layout can add up down the list. Both renderers in the frame get the same surface size.
-		- 20261109: Measured the tabs from Silk down to Keys. Every box is 29 px tall, and every baseline sits 8 px above the box's bottom edge, so nothing moves down the list. The letters are what differ. A title with a tall letter (Silk, Themes, Background, Window, Shell) starts 8 px below the box top. A title without one (Appearance, Text, Cursor, Movement, Program, Keys) starts 11 px down, so it looks low. The titles are centered from the top of a tall letter to the baseline, the same as the main window's menu and tab titles.
-		- 20261110: Titles now center on their capitals, with the baseline on a whole pixel. In a 29 px box that leaves 9 px over the capitals and 10 under the baseline on every tab, where it was 8 or 11 over before, by letter. A font with a deep descent makes the tabs taller, so g and y stay 2 px clear of the edge.
-	- Actual cause [Bug]: Titles were centered by line box, then dropped half the descent, which centers ascender-top to baseline. A title without a tall letter read low.
-	- Actual fix [Bug]: Tab titles are placed by their capitals, baseline = band top + (band height + cap height) / 2, snapped to a whole pixel. The band grows when the font leaves less than its descent plus 2 px under the baseline.
-	- Test case: `a_tab_title_sits_as_low_in_its_box_on_every_tab` (deyxd) runs on both sides, at 4 scales, in tall and short windows. It fails when a title is moved a quarter pixel per tab. It passes on the current build. `chrome_caps_center_in_bar_on_a_whole_pixel` (df452) and `band_floor_clears_descenders` (df453) fail when the snap or the descent room is taken out.
-	- Branch: rnd1106, tabcap
-	- Acceptance signoff: Self-closed: the new placement was checked in the dialog against the 11-09 build, and its tests fail without it.
-	- Closed: 20261110-064500
-
-- knobs' spec checks let a relation loop, case-only twins, a NaN range, and a text chooser through
-	- ID: 2026110919171131
-	- Type: Bug
-	- Status: Done
-	- Severity: Low
-	- Opened: 20261109-191711
-	- Opened by:
-	- Related IDs: tukzmon:2026110709074419
-	- Steps to reproduce: Load a spec with any of the 4 cases below.
-	- Incorrect behavior: Each parses clean. A loop through a setting's auto switch, its rule's state value, or its group's chooser overflows the stack at the first read. Paths that differ only in case pass, and shcl folds them onto one key, so a round trip loses a value. Dropdown options that differ only in case pass, and the second can't be picked. A NaN range end or detent passes, and then every number is in range. A group chooser of type text takes any text as a pick.
-	- Expected behavior: Each is refused when the spec loads. Spec::valid also refuses a NaN value, since its range check lets one past.
-	- Possible cause: check_links compares paths with case and never looks for NaN, read loops, or the chooser's type.
-	- Estimated effort: Low
-	- Actual effort: Low
-	- Progress log:
-		- tukzmon fixed it in commit 5fcb1e7 (tests df399 to df39c). Its copy now has Presets and Indent enums, so the patch needs those parts adapted here.
-		- 20261109: Ported. The Presets and Indent enums weren't needed here, since the chooser check keys on from_program as the rest of check_links does.
-	- Actual fix [Bug]: check_links folds case on paths, refuses NaN range ends and detents, refuses option twins, refuses a chooser that isn't a choice, and walks the reads Model::value makes for a loop. Spec::valid refuses a NaN value.
-	- Branch: rnd1109
-	- Test case: df3k1 to df3k4 in knobs/src/tests.rs. Each fails on the old code. The settings spec and its dialog tests still pass.
-	- Acceptance signoff: Self-closed: the spec checks have tests that fail without them, and the real settings spec still loads.
-	- Closed: 20261109-205600
-	- Origin: Found in tukzmon's copy of knobs by its 2026-11-07 code review. The same checks are missing here, in check_links in knobs/src/lib.rs.
-
-- The nano scroll scene on Wayland once saw st=2 while sliding
-	- ID: 2026110814224000
-	- Type: Bug
-	- Status: Done
-	- Severity: Low
-	- Opened: 20261108-142240
-	- Opened by: CC
-	- Assigned to: CC
-	- Target OS: Linux
-	- Test environment: b23, a container run of the regression tests alone at 4eb15ae, load about 10.
-	- Incorrect behavior: `cicd/tests/scroll/run.bash` (d9j4v) failed with "scroll scene nano (Wayland), expected st=1 while sliding but saw st=2". The X11 nano scene and the other 13 Wayland scenes passed in the same run.
-	- Expected behavior: Every sliding frame of the nano scene reads st=1, under the title bar.
-	- Reproduced: No, 20261108. On the host, 5 runs of `--wayland --only nano` passed, at load 8 to 10. Every kept full run log since 20261031 has it passing on both engines. Yes, 20261109, every time, on Wayland with the debug build, by holding the scene for 0.5 s after the first region row of its first scroll step.
-	- Actual cause [Bug]: The scene wrote its frame one row at a time. A frame drawn between those writes on the first step of a slide had the first region row already moved and the rest not. On the next frame that row read the same as before, so it was held as part of the top band, and the bands stay frozen for the whole slide.
-	- Actual fix [Bug]: The full-redraw shapes (less, vim, nano, muffer) write each frame at once, as curses does and as the pill shape already did.
-	- Progress log:
-		- 20261109: The same hold mid-slide passed, since the bands are only measured on a slide's first step. A real app that redraws row by row over a slow link could have one row held for a slide the same way. It hasn't been seen.
-	- Branch: rnd1109
-	- Test case: d9j4v itself. With the hold put in, it failed before the fix and passed after. less, vim, nano, and muffer pass on X11 and Wayland without it.
-	- Acceptance signoff: Self-closed: the cause was made to happen on purpose, and the fix stops it.
-	- Closed: 20261109-210500
-
-- The allocations per frame test once saw the minimap compose during a drag select
-	- ID: 2026110718055000
-	- Type: Bug
-	- Status: Done
-	- Severity: Low
-	- Opened: 20261107-180550
-	- Opened by: CC
-	- Assigned to: CC
-	- Related IDs: 2026102407065861
-	- Target OS: All
-	- Test environment: b23, the pipeline's container run of 20261107 07:44
-	- Incorrect behavior: `cicd/tests/allocs/run.bash` (ddkre) failed with "drag: the map composed 1 times, none wanted". The drag read 82 frames and 4.9 pointer moves per frame, so the box was busy. Every other check passed. The pipeline's cleanup deleted the run's folder.
-	- Expected behavior: A drag select composes the map 0 times.
-	- Reproduced: No, 20261107. None of 11 runs composed: 3 at load 12, 4 with 8 cores busy at nice 19, 2 with 16 busy at normal priority, and 2 more on the new build.
-		- 20261108: Seen again in the container full run at 20f4836, with the new notes: one "map composed" with nothing before it, and its frame's line past the end of the drag. Reproduced every time with the count read half a second after the mouse button comes up.
-	- Possible cause: Anything that marks the whole window between drag frames lets a due compose through. The timed ones are a refused or unpresented frame's retry, a parked cursor's wake, a deferred compose's wake, and a tab's program check. The refused frame fits a busy box best, since its retry redraws a selection frame as a full one. It wasn't confirmed.
-	- Actual cause: It was a test fault. The drag's count was read right after the mouse button came up. Letting go redraws the whole window, which composes both panes' maps, and now and then that frame was drawn before the count was read. The drag itself composed nothing.
-	- Actual fix: ddkre reads the drag's count before it lets go of the button.
-	- Progress log:
-		- 20261107: With `SILK_ALLOCS=1`, each of those paths, plus a scrollbar hover change, a title change, a bell, and a child gone, now prints a note. When either compose check fails, ddkre lists the notes in that span, with what each composing frame was drawn for, up to 20 lines. It was seen working with the drag put back on the whole-window flag: 54 composes, each pair in a frame for rebuild+cursor.
-		- 20261108: Letting go composed the map twice, in a rebuild+cursor frame, in 3 of 3 runs with the count read 2 s after.
-	- Test case: ddkre itself.
-	- Verified: 20261108. With the old order and half a second between letting go and the count, ddkre failed with 2 composes. With the count first it passed 2 of 2.
-	- Branch: mapflake, mapup
-	- Commit: 428e035
-	- Acceptance signoff: Self-closed: the cause was reproduced on demand, and the reordered test can't count the release's frame.
-	- Closed: 20261108-123115
-
-- Window test fixtures write a monitor's key bare, which shcl 3.0 flags as E014
-	- ID: 2026110619310863
-	- Type: Bug
-	- Status: Done
-	- Severity: Low
-	- Opened: 20261106-193108
-	- Opened by: CC
-	- Assigned to: CC
-	- Related IDs: 2026110516054976
-	- Target OS: Linux
-	- Incorrect behavior: dpirand, monwl, monwake, herdback, and startsize seed `config.shcl` with names such as `1920x1200_150pct:` bare. shcl 3.0.0-beta1 reads them, but reports E014, error level, "field name needs quotes". So these tests start the program on a config with an error in it, which a user's file never has, since SilkTerm writes those names quoted.
-	- Expected behavior: The fixtures write the key the way SilkTerm does, in quotes, unless a test means to check a bare one.
-	- Reproduced: 20261106, shcl beta1's `diagnostics()` on such a file. Whether SilkTerm shows the error in the window there isn't checked.
-	- Actual fix: dpirand, monwl, monwake, herdback, and startsize write the key in quotes. The script lint step greps every test fixture for a bare one and fails on it.
-	- Branch: rnd1107b
-	- Test case: The lint step's check, seen to catch a planted bare key. startsize passed with the quoted key.
-	- Acceptance signoff: Self-closed: the quick run passes with the check in, and the check fails on a bare key.
-	- Closed: 20261107-0920
+		- 20261110: A copy of the last frame put back with X11's plain 2D drawing was turned down for repaint and let go, by the answer above.
+	- Branch: deskwake, repaint
+	- Test case: `focus_is_a_sign_of_life_only_as_a_change` (df4dh), `hidden_output_is_owed_only_from_the_tab_in_front` (df4dj), `a_repaint_takes_the_device_back_for_one_frame` (df4e2). Also `cicd/tests/deskswitch/run.bash` (df4e3), in the full run.
+	- Acceptance signoff: Self-closed: reproduced under xfwm4 with compositing on and off, deskswitch fails before the fix and passes after, and the picture after the switch matches the one before.
+	- Closed: 20261110-112700
 
 - Regression: "Conserve resources", "Minutes otherwise" isn't working
 	- ID: 2026103010083401
@@ -4401,6 +4237,35 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- The Windows run this item came from named only these 4. That full suite wasn't run again.
 	- Acceptance signoff: Self-closed: test fixes only, and all 4 failed before the fix and pass after on Windows.
 	- Closed: 20260930-125357
+
+- Import a v1.0.0-beta1 `config.toml`
+	- ID: 2026110920480399
+	- Type: Feature
+	- Status: Done
+	- Priority: Avg
+	- Opened: 20261109-204804
+	- Opened by: JC
+	- Related IDs: 2026110610154305
+	- Target OS: All
+	- Requirements:
+		- When there's no `config.shcl` but there is a beta1 `config.toml`, its values are read into the new shcl config.
+		- It happens once. The old file is kept, renamed, the same way a too-old config is.
+		- A key the current build doesn't know is skipped, and a bad value falls back to the default.
+	- Origin: The answer to the Check on 2026110610154305 in questions.md, "Yes we must be able to import toml too."
+	- Progress log:
+		- 20261110: beta1's layout is the template at 367c777e^, the last commit before shcl: flat `key = value` lines and a `[colors]` table, in `$XDG_CONFIG_HOME` or `~/.config`, else `%APPDATA%`. Its two fixtures are that template and a save with edits, in `source/src/testdata/beta1_*.toml`.
+		- 20261110: A launch with no settings file reads `config.toml` beside it, or `~/.config/silkterm/config.toml` where that isn't the native place. Its values go through the same conversion as a pre-nesting SHCL file, and the old file is renamed `config_backup_<time>_beta1.toml`.
+	- Decisions:
+		- 20261110: A small hand reader, not a toml crate. toml is in the tree only as a build-time dependency of a proc macro, so the crate would add to the binary. The reader takes one-line strings, numbers, booleans, and tables, which is all beta1 wrote. Anything else is skipped, as beta1's own reader skipped a line it couldn't read.
+		- 20261110: The old file is renamed rather than copied, so no later launch reads it, even after the new file is deleted. Its name keeps `.toml`, with `_beta1` where a converted SHCL file has `_format-v<n>`.
+		- 20261110: `colors.focus` is read as `colors.highlight`, as for every file from before that rename. `default_shell` goes to the top of the shell list, as a beta2 file's does.
+		- 20261110: A setting with no place now, such as `cursor_animation_input`, is left out without a message. The beta1 template had several of them active, such as `scroll_tau_ms`, so a count would name settings nobody set. They stay in the renamed file.
+	- Branch: rnd1111
+	- Test case: df4rw (reader), df4rx (a saved file, once), df4ry (the first-launch template stays automatic). df4rx and df4ry fail with the import call taken out of `load`.
+	- Verified: The backlog quick run passes in all 5 areas, with 1462 unit tests.
+		- 20261110: A debug build of ddde753a on macOS (b26), launched twice with `HOME` at a folder holding only `~/.config/silkterm/config.toml` (the saved fixture). The first launch wrote `~/Library/Application Support/silkterm/config.shcl` with the file's font, size and columns, renamed the old file to `config_backup_<time>_beta1.toml` with its bytes, and said so. The second, with a new `config.toml` there, imported nothing and left it in place.
+	- Swept: The import runs in `load` before the template is written, after `adopt_legacy_config`. The only other write of a missing file is a save in `persist`, which writes back a file deleted while the program was running, from the settings the launch already read, so it's left as it is.
+	- Closed: 20261110-183341
 
 - The unscrollable search and buttons areas should be lighter than the scrollable content
 	- ID: 2026103010083403
@@ -7421,6 +7286,167 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Test case: There isn't a test, since it's output only. The gate and a quick run showed all 942 Rust tests with an ID, and a made-up name showed the dashes and the warning.
 	- Closed: 20260928-111812
 
+- `top` and `htop` no longer smoothly animate disappearing and appearing lines
+	- ID: 2026110912460474
+	- Type: Bug
+	- Status: Done
+		- 20261109: Lines that go away still slide on today's dev. It's waiting for a yes or no on the notes below.
+	- Severity: Low
+	- Opened: 20261109-124604
+	- Opened by: JC
+	- Related IDs: 2026101310563310
+	- Incorrect behavior: `top` and `htop` used to smoothly animate disappearing and appearing lines. Now they don't. And even when the smooth animation worked in those programs, it would quit working after a while.
+	- Notes:
+		- It's not a high priority to get back, more of a nice-to-have.
+	- Reproduced: No, 20261109, on b23 in a headless window. top showed 20 idle processes, one killed every 4 s, so the rows under it moved up. Today's dev slid 3 times and the 11-01 release 4 times. Neither slid for the first 4 kills, where only 2 to 8 rows moved.
+	- Possible cause: A shift must account for two thirds of the rows that changed. top rewrites up to 5 header rows every tick, and on a busy box many process rows change their numbers too. A small move, or a busy tick, is then cut. That rule dates from 08-01 and keeps a list program that rewrites rows above a footer it pushes down from sliding, so loosening it for top would bring that back. The same was found about load in 2026101310563310.
+	- Branch: rnd1109
+	- Test case: None, since no code changed.
+
+- A notice can wrap one more line at 2x than at 1x
+	- ID: 2026111014301817
+	- Type: Bug
+	- Status: Done
+	- Severity: Low
+	- Opened: 20261110-143018
+	- Opened by: CC
+	- Target OS: All
+	- Test environment: b23, CPU text layout in the unit tests.
+	- Steps to reproduce:
+		- In `refusal_notice` in `dialog.rs`, make the second paragraph "Until that is fixed, changes such as the window size, new shells, and anything set in Settings are used now but not kept."
+		- Run `about_and_the_notice_lay_out_again_at_twice_the_size` (dd5nh).
+	- Incorrect behavior: The notice is 234 high at 1x and 521 at 2x, a ratio of 2.23, so a line that fits at 1x wraps at 2x.
+	- Expected behavior: A notice wraps the same at any scale, so its size scales with it.
+	- Reproduced: Yes, 20261110. The same sentence without the comma before "and", or with "used but not kept", lays out at about 2x.
+	- Possible cause: Text widths at 2x aren't exactly double the 1x widths, and the wrap width is, so a line close to the edge at 1x doesn't fit at 2x.
+	- Notes:
+		- The notice text was changed to "used but not kept" so dd5nh passes. The test passes or fails on where the words fall, rather than on the layout rule.
+	- Actual cause: The UI font size is rounded to a whole pixel at each scale, 17 at 1x and 35 at 2x here, so text at 2x measured 2.06 times its 1x width. The wrap width was the scale factor times 440, exactly double.
+	- Actual fix: A notice, the tmux question, and a menu tip wrap at a width that follows the UI font as drawn, from the new `TextCtx::ui_text_dip`. At 1x it's the width as written, so nothing changes there. design.md's "Measurements and display scaling" says so.
+	- Decisions:
+		- 20261110: The notice keeps "used but not kept". The wording pass chose it, and the layout no longer depends on it.
+		- 20261110: The wrap width follows the font, rather than the font being made exactly double. A rounded font size keeps text sharp, and only the wrap decision needed to match.
+	- Swept: every word wrap against a fixed width: `wrap_paras` (notice and tmux question) and the menu tip in `app/menus.rs`. The Settings and About tips wrap to the window's width, which isn't a fixed width, and were left alone.
+	- Verified: 20261110. With the issue's sentence in `refusal_notice`, dd5nh failed (234 -> 521) before the fix and passed after. df4rf and df4rg failed with the old wrap width and pass now. The quick run passes, all 5 areas.
+	- Branch: rnd1111
+	- Test case: `a_notice_wraps_at_the_same_words_at_any_scale` (df4rf) and `text_fitted_to_a_ui_width_wraps_the_same_at_any_scale` (df4rg), at 1.25, 1.5, 2 and 3 against 1x. dd5nh, unchanged.
+	- Closed: 20261110-165318
+
+- Settings: Side-tabs: the lower the tab, the lower the text is within the tab
+	- ID: 2026110609500003
+	- Type: Bug
+	- Status: Done
+	- Severity: Low
+	- Opened: 20261106-095000
+	- Opened by: JC
+	- Assigned to: CC
+	- Notes:
+		- Pre-next-cut.
+	- Reproduced: No, 20261106. On Xvfb at scales 1, 1.25, 1.5, 1.75, and 2, and under headless sway on the RTX 3060 Ti at 1, 1.25, and 2, every tab's title sits the same distance above its box's bottom edge, sub-tabs included. A dev debug build and the 11-01 release build read the same.
+	- Progress log:
+		- 20261106: The title's height comes from its own tab's box, the same box that is drawn, so nothing in the layout can add up down the list. Both renderers in the frame get the same surface size.
+		- 20261109: Measured the tabs from Silk down to Keys. Every box is 29 px tall, and every baseline sits 8 px above the box's bottom edge, so nothing moves down the list. The letters are what differ. A title with a tall letter (Silk, Themes, Background, Window, Shell) starts 8 px below the box top. A title without one (Appearance, Text, Cursor, Movement, Program, Keys) starts 11 px down, so it looks low. The titles are centered from the top of a tall letter to the baseline, the same as the main window's menu and tab titles.
+		- 20261110: Titles now center on their capitals, with the baseline on a whole pixel. In a 29 px box that leaves 9 px over the capitals and 10 under the baseline on every tab, where it was 8 or 11 over before, by letter. A font with a deep descent makes the tabs taller, so g and y stay 2 px clear of the edge.
+	- Actual cause [Bug]: Titles were centered by line box, then dropped half the descent, which centers ascender-top to baseline. A title without a tall letter read low.
+	- Actual fix [Bug]: Tab titles are placed by their capitals, baseline = band top + (band height + cap height) / 2, snapped to a whole pixel. The band grows when the font leaves less than its descent plus 2 px under the baseline.
+	- Test case: `a_tab_title_sits_as_low_in_its_box_on_every_tab` (deyxd) runs on both sides, at 4 scales, in tall and short windows. It fails when a title is moved a quarter pixel per tab. It passes on the current build. `chrome_caps_center_in_bar_on_a_whole_pixel` (df452) and `band_floor_clears_descenders` (df453) fail when the snap or the descent room is taken out.
+	- Branch: rnd1106, tabcap
+	- Acceptance signoff: Self-closed: the new placement was checked in the dialog against the 11-09 build, and its tests fail without it.
+	- Closed: 20261110-064500
+
+- knobs' spec checks let a relation loop, case-only twins, a NaN range, and a text chooser through
+	- ID: 2026110919171131
+	- Type: Bug
+	- Status: Done
+	- Severity: Low
+	- Opened: 20261109-191711
+	- Opened by:
+	- Related IDs: tukzmon:2026110709074419
+	- Steps to reproduce: Load a spec with any of the 4 cases below.
+	- Incorrect behavior: Each parses clean. A loop through a setting's auto switch, its rule's state value, or its group's chooser overflows the stack at the first read. Paths that differ only in case pass, and shcl folds them onto one key, so a round trip loses a value. Dropdown options that differ only in case pass, and the second can't be picked. A NaN range end or detent passes, and then every number is in range. A group chooser of type text takes any text as a pick.
+	- Expected behavior: Each is refused when the spec loads. Spec::valid also refuses a NaN value, since its range check lets one past.
+	- Possible cause: check_links compares paths with case and never looks for NaN, read loops, or the chooser's type.
+	- Estimated effort: Low
+	- Actual effort: Low
+	- Progress log:
+		- tukzmon fixed it in commit 5fcb1e7 (tests df399 to df39c). Its copy now has Presets and Indent enums, so the patch needs those parts adapted here.
+		- 20261109: Ported. The Presets and Indent enums weren't needed here, since the chooser check keys on from_program as the rest of check_links does.
+	- Actual fix [Bug]: check_links folds case on paths, refuses NaN range ends and detents, refuses option twins, refuses a chooser that isn't a choice, and walks the reads Model::value makes for a loop. Spec::valid refuses a NaN value.
+	- Branch: rnd1109
+	- Test case: df3k1 to df3k4 in knobs/src/tests.rs. Each fails on the old code. The settings spec and its dialog tests still pass.
+	- Acceptance signoff: Self-closed: the spec checks have tests that fail without them, and the real settings spec still loads.
+	- Closed: 20261109-205600
+	- Origin: Found in tukzmon's copy of knobs by its 2026-11-07 code review. The same checks are missing here, in check_links in knobs/src/lib.rs.
+
+- The nano scroll scene on Wayland once saw st=2 while sliding
+	- ID: 2026110814224000
+	- Type: Bug
+	- Status: Done
+	- Severity: Low
+	- Opened: 20261108-142240
+	- Opened by: CC
+	- Assigned to: CC
+	- Target OS: Linux
+	- Test environment: b23, a container run of the regression tests alone at 4eb15ae, load about 10.
+	- Incorrect behavior: `cicd/tests/scroll/run.bash` (d9j4v) failed with "scroll scene nano (Wayland), expected st=1 while sliding but saw st=2". The X11 nano scene and the other 13 Wayland scenes passed in the same run.
+	- Expected behavior: Every sliding frame of the nano scene reads st=1, under the title bar.
+	- Reproduced: No, 20261108. On the host, 5 runs of `--wayland --only nano` passed, at load 8 to 10. Every kept full run log since 20261031 has it passing on both engines. Yes, 20261109, every time, on Wayland with the debug build, by holding the scene for 0.5 s after the first region row of its first scroll step.
+	- Actual cause [Bug]: The scene wrote its frame one row at a time. A frame drawn between those writes on the first step of a slide had the first region row already moved and the rest not. On the next frame that row read the same as before, so it was held as part of the top band, and the bands stay frozen for the whole slide.
+	- Actual fix [Bug]: The full-redraw shapes (less, vim, nano, muffer) write each frame at once, as curses does and as the pill shape already did.
+	- Progress log:
+		- 20261109: The same hold mid-slide passed, since the bands are only measured on a slide's first step. A real app that redraws row by row over a slow link could have one row held for a slide the same way. It hasn't been seen.
+	- Branch: rnd1109
+	- Test case: d9j4v itself. With the hold put in, it failed before the fix and passed after. less, vim, nano, and muffer pass on X11 and Wayland without it.
+	- Acceptance signoff: Self-closed: the cause was made to happen on purpose, and the fix stops it.
+	- Closed: 20261109-210500
+
+- The allocations per frame test once saw the minimap compose during a drag select
+	- ID: 2026110718055000
+	- Type: Bug
+	- Status: Done
+	- Severity: Low
+	- Opened: 20261107-180550
+	- Opened by: CC
+	- Assigned to: CC
+	- Related IDs: 2026102407065861
+	- Target OS: All
+	- Test environment: b23, the pipeline's container run of 20261107 07:44
+	- Incorrect behavior: `cicd/tests/allocs/run.bash` (ddkre) failed with "drag: the map composed 1 times, none wanted". The drag read 82 frames and 4.9 pointer moves per frame, so the box was busy. Every other check passed. The pipeline's cleanup deleted the run's folder.
+	- Expected behavior: A drag select composes the map 0 times.
+	- Reproduced: No, 20261107. None of 11 runs composed: 3 at load 12, 4 with 8 cores busy at nice 19, 2 with 16 busy at normal priority, and 2 more on the new build.
+		- 20261108: Seen again in the container full run at 20f4836, with the new notes: one "map composed" with nothing before it, and its frame's line past the end of the drag. Reproduced every time with the count read half a second after the mouse button comes up.
+	- Possible cause: Anything that marks the whole window between drag frames lets a due compose through. The timed ones are a refused or unpresented frame's retry, a parked cursor's wake, a deferred compose's wake, and a tab's program check. The refused frame fits a busy box best, since its retry redraws a selection frame as a full one. It wasn't confirmed.
+	- Actual cause: It was a test fault. The drag's count was read right after the mouse button came up. Letting go redraws the whole window, which composes both panes' maps, and now and then that frame was drawn before the count was read. The drag itself composed nothing.
+	- Actual fix: ddkre reads the drag's count before it lets go of the button.
+	- Progress log:
+		- 20261107: With `SILK_ALLOCS=1`, each of those paths, plus a scrollbar hover change, a title change, a bell, and a child gone, now prints a note. When either compose check fails, ddkre lists the notes in that span, with what each composing frame was drawn for, up to 20 lines. It was seen working with the drag put back on the whole-window flag: 54 composes, each pair in a frame for rebuild+cursor.
+		- 20261108: Letting go composed the map twice, in a rebuild+cursor frame, in 3 of 3 runs with the count read 2 s after.
+	- Test case: ddkre itself.
+	- Verified: 20261108. With the old order and half a second between letting go and the count, ddkre failed with 2 composes. With the count first it passed 2 of 2.
+	- Branch: mapflake, mapup
+	- Commit: 428e035
+	- Acceptance signoff: Self-closed: the cause was reproduced on demand, and the reordered test can't count the release's frame.
+	- Closed: 20261108-123115
+
+- Window test fixtures write a monitor's key bare, which shcl 3.0 flags as E014
+	- ID: 2026110619310863
+	- Type: Bug
+	- Status: Done
+	- Severity: Low
+	- Opened: 20261106-193108
+	- Opened by: CC
+	- Assigned to: CC
+	- Related IDs: 2026110516054976
+	- Target OS: Linux
+	- Incorrect behavior: dpirand, monwl, monwake, herdback, and startsize seed `config.shcl` with names such as `1920x1200_150pct:` bare. shcl 3.0.0-beta1 reads them, but reports E014, error level, "field name needs quotes". So these tests start the program on a config with an error in it, which a user's file never has, since SilkTerm writes those names quoted.
+	- Expected behavior: The fixtures write the key the way SilkTerm does, in quotes, unless a test means to check a bare one.
+	- Reproduced: 20261106, shcl beta1's `diagnostics()` on such a file. Whether SilkTerm shows the error in the window there isn't checked.
+	- Actual fix: dpirand, monwl, monwake, herdback, and startsize write the key in quotes. The script lint step greps every test fixture for a bare one and fails on it.
+	- Branch: rnd1107b
+	- Test case: The lint step's check, seen to catch a planted bare key. startsize passed with the quoted key.
+	- Acceptance signoff: Self-closed: the quick run passes with the check in, and the check fails on a bare key.
+	- Closed: 20261107-0920
+
 - Settings on Wayland: the height cap doesn't see the screen, so at 1.5 the window is taller than it
 	- ID: 2026110617385295
 	- Type: Bug
@@ -9447,6 +9473,103 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Commit: c9b40aa
 	- Acceptance signoff: Self-closed: the fix does what the item asks and no more, and its test passes.
 	- Closed: 20261014-152600
+
+- Output under tmux: the scrolled-off strip is shaped again every frame, text shaping takes 80%, and the display steps down to High
+	- ID: 2026111017285320
+	- Type: Enhancement
+	- Status: Done
+	- Priority: Low
+	- Opened: 20261110-172853
+	- Opened by: CC
+	- Related IDs: 2026110920480499
+	- Target OS: All
+	- Notes:
+		- Seen with the profiler's workload in tmux on the card, at Max. It's the same at 0b16ae9, so it isn't a regression.
+		- Most of the cost is harfrust building a shape plan on each call, under the strip's `set_rich_text`.
+	- Progress log:
+		- 20261110: Measured, it wasn't the shape plan. The strip shaped every row in its window again each frame, through `set_rich_text`. And under a flood the slide runs up to 128 rows, so the window held more than twice the rows the region can show.
+		- 20261110: Each strip row now has its own buffer line, which keeps its shaping while the slide moves over it, so a row is shaped once. The window leaves out the rows the slide has moved past the region's edge.
+		- 20261110: The profiler's text shaping share now also counts a line shaped outside `shape_until_scroll`, which is how the strip shapes now. Old flamegraphs read within 0.7 points of before.
+	- Decisions:
+		- The display still steps down from Max on this workload in tmux. What's left of the frame is the per-cell fallback for new random characters, about 47 to 60%, and a plain run costs the same per frame. The step-down is left as is.
+		- The shaping share stays near 80% in tmux, since the time saved goes to more frames. The strip's own share and the cost per frame are what moved.
+	- Test case: `off_strip_lines_move_with_their_rows` (df4t5), `the_strip_shapes_only_the_rows_new_to_its_window` (df4t6), `off_strip_window_stays_inside_the_region` (df4te).
+		- Swept: the one other `set_rich_text` is in dialog.rs, which isn't per frame. The main buffer already sets its lines one at a time.
+	- Verified: 20261110, on the card, b23, at load 2 to 5, with the profiler's workload at Max, the old and new builds alternated 3 rounds each. In tmux, the strip went from 23 to 27% of samples to 12%, the frames in 8 s from 94 to 103 to 121 to 129, and the build per frame from 71 to 78 ms to 56 to 59 ms. The plain control read the same for both builds, 40 to 46% shaping and 54 to 60 ms a frame. The quick gate passes, and so do the tmux, tmuxclear and nano scroll scenes.
+	- Closed: 20261110-180547
+
+- The profiler reads the live settings and rating, so its numbers follow personal settings
+	- ID: 2026111017285305
+	- Type: Task
+	- Status: Done
+	- Priority: Low
+	- Opened: 20261110-172853
+	- Opened by: CC
+	- Related IDs: 2026110920480499
+	- Target OS: Linux
+	- Requirements:
+		- Run the profiled app on a settings tree of its own in the test run folder, with a fixed profile, so one flamegraph compares with the last.
+		- The workload runs plain, never in tmux.
+	- Notes:
+		- On 11-09 the live file had `tmux.always_new_session` on. Since c2e52357 that puts a plain launch in tmux, and the shaping share went from about 40% to 80%. The rating, the minimap and the wallpaper feed in the same way.
+	- Progress log:
+		- 20261110: The profiler's app now runs on its own config, data, state and cache folders in the test run folder. Its settings file turns Choose automatically off at Max and tmux off, and the rest stays at the build's defaults. The app runs with `TMUX` unset too.
+		- 20261110: A launch on that tree keeps the 3 values, writes no rating, and doesn't convert the file, since it has the Format line.
+	- Decisions:
+		- 20261110: Choose automatically off at Max, rather than a rating in the state file. A rating only holds for the card's own hardware id, which the script can't work out, and with automatic off there is also no step down part way through a run. Max is what the pipeline read from 10-28 to 11-06.
+		- 20261110: The XDG folders, as the A/B rig does, rather than `--config`, so its numbers compare with the rig's.
+		- 20261110: The minimap and the wallpaper stay at the build's defaults, so a change to one of those defaults still shows in the graph.
+	- Test case: `cicd/tests/profsettings/run.bash` (df4v4), in the full run. It runs the script's own profiler step with a stand-in app. 8 of its 9 checks fail on the old step, and all pass on the new one.
+		- Swept: `fRunProfiler` is the only place that sets `SILK_PROFILE_OUT`. The scroll harness already has its own config.
+	- Verified: 20261110, df4v4 both ways, a debug build on a private Xvfb with the tree, and the backlog quick run in all 5 areas.
+		- 20261110: Stage 4's profiler alone on the card, at ddde753a, through sway's Xwayland: text shaping 39.5% of 1485 samples, against 80.4% on 11-09 and 40.9% on 11-06. The log has no rating line, so no startup test ran, and no step down.
+	- Closed: 20261110-183341
+
+- Profiler: text shaping read 80.4% at 327d97e, against about 50% on the card in late October
+	- ID: 2026110920480499
+	- Type: Task
+	- Status: Done
+	- Priority: Low
+	- Opened: 20261109-204804
+	- Opened by: CC
+	- Related IDs: 2026111017285305, 2026111017285320
+	- Target OS: Linux
+	- Requirements:
+		- Run the profile on the card at 327d97e and at 0b16ae9 or fab6815, back to back, so both see the same clock.
+		- If the old build still reads about 50%, find what made shaping cost more. If both read about 80%, find what made the rest cost less, and note it as no action.
+	- Notes:
+		- The top cost is still the shape plan being built again on each call, inside harfrust.
+	- Progress log:
+		- 20261110: Control first. 0b16ae9 on the card with no settings file read 50 to 52%, as on 10-26. 327d97e read 46 to 50% beside it. Both builds alternated on one headless sway, 3 rounds each, each run on its own settings tree.
+		- 20261110: With a copy of the live settings and the rating that skips the startup test, both read 39 to 44%, the same as the pipeline from 10-28 to 11-06.
+		- 20261110: With `tmux.always_new_session` on, 327d97e read 81 to 82% and stepped down to High, the same message and flamegraph as the 11-09 runs. 0b16ae9 read 40 to 45%, since it doesn't start a plain launch in tmux. With the workload started in tmux by hand, both read 79 to 83%.
+		- 20261110: So the jump is a profile setup difference. The pipeline's profiler reads the live settings. The tmux setting is off in them now, but the 11-09 flamegraphs have the same frames as the tmux runs here and none of a plain one's scrollback growth, so it was on then. c2e52357 (11-07) made it cover a plain launch, so the workload ran in tmux. In tmux the scrolled-off strip is shaped again every frame, and the drawing share drops.
+	- Decisions:
+		- No code change here. The profiler's own settings tree is filed as 2026111017285305, and the cost in tmux as 2026111017285320.
+	- Test case: None, since nothing changed. The rig that runs builds back to back is `profile-ab.bash` in the private tools folder.
+	- Verified: 20261110, the runs above on the card, b23, at load 2 to 8.
+	- Closed: 20261110-172908
+
+- Button text could get the same vertical-centering rules as Settings tabs
+	- ID: 2026111010152330
+	- Type: Enhancement
+	- Status: Done
+	- Priority: Low
+	- Opened: 20261110-101523
+	- Opened by: JC
+	- Assigned to: CC
+	- Related IDs: 2026110609500003
+	- Notes:
+		- Pre-next-cut.
+	- Actual fix: Every dialog button's caption centers on its capitals, by the side tabs' rule: the Settings footer, the buttons in a row, the shell list's Add, About's Support, the notice's OK, and the tmux question's buttons. A button grows when the font's descent needs more room, the same way a tab does.
+	- Progress log:
+		- 20261110: Checked in the Settings dialog at scale 1. In the OK button the capitals had 14 rows above and 11 below. Now they have 12 above and 13 below, with the baseline snapped to a whole pixel.
+	- Decisions:
+		- 20261110: The main tab bar and the menu bar keep their own rules, per the 11-10 call on 2026110609500003. Their buttons show paths and menu titles rather than sentence-case captions.
+	- Branch: btncap
+	- Test case: `every_button_caption_centers_in_its_button` (df4cx) walks every Settings tab at 2 scales. `each_button_caption_centers_its_capitals_in_the_button` (df4cw) tests About, the notice, and the tmux question. Each fails with the band taken off one button.
+	- Acceptance signoff: Self-closed: measured in the dialog, and its tests fail without it.
+	- Closed: 20261110-104200
 
 - A drag select recomposes the minimap about 11 times a second, though the map shows no selection
 	- ID: 2026102407065861

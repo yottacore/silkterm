@@ -490,6 +490,9 @@ pub struct TextCtx {
 	// box (see `ui_text_top`).
 	ui_vmetrics: (f32, f32),
 	ui_cap: f32,
+	// The UI font size this context would have at scale 1, whole px. The
+	// size is rounded at each scale, so it can't be had back from `scale`.
+	ui_px_at_1x: f32,
 	// primary monospace face + a coverage cache, so the pane can tell which
 	// glyphs fall back to another font (those drift from the cell grid and get
 	// rendered per-cell instead - see Pane::build). The cached value is how many
@@ -686,6 +689,7 @@ impl TextCtx {
 			.map(crate::sysfont::px_from_pt)
 			.filter(|px| *px >= 4.0)
 			.unwrap_or_else(config::effective_font_size);
+		let ui_px_at_1x = ui_px.round().max(8.0);
 		let ui_px = (ui_px * scale).round().max(8.0);
 		let ui_line_h = (ui_px * 1.35).round(); // roomy UI leading; descenders must clear buttons
 		let ui_metrics = Metrics::new(ui_px, ui_line_h);
@@ -719,6 +723,7 @@ impl TextCtx {
 			ui_metrics,
 			ui_vmetrics,
 			ui_cap,
+			ui_px_at_1x,
 			mono_face,
 			cover_cache: HashMap::new(),
 			color_glyphs: ColorGlyphs::new(),
@@ -749,6 +754,15 @@ impl TextCtx {
 	/// at a boundary, because it shares a coordinate space with the terminal grid.
 	pub fn dip(&self, v: f32) -> f32 {
 		config::dip(v, self.scale)
+	}
+
+	/// A width text is fitted to, written in DIP, such as how far a paragraph
+	/// runs before it wraps, in physical px. It follows the UI font rather than
+	/// the scale factor. The font size is rounded to a whole pixel at each scale,
+	/// so text at 2x can run a few percent wider than twice its 1x width, and a
+	/// line that just fits at 1x would wrap at 2x (2026111014301817).
+	pub fn ui_text_dip(&self, v: f32) -> f32 {
+		v * self.ui_metrics.font_size / self.ui_px_at_1x
 	}
 
 	/// Can `ch` ride the shared row buffer, given the grid puts it in `cells`
@@ -1291,6 +1305,31 @@ fn nearest_px(cell: f32) -> u16 {
 #[cfg(test)]
 mod tests {
 	use super::*;
+
+	// Text fitted to a `ui_text_dip` width breaks at the same words at any
+	// scale, as a menu tip's does. Each length of x moves where a row ends.
+	// Test ID: df4rg
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn text_fitted_to_a_ui_width_wraps_the_same_at_any_scale() {
+		let said = "Opens a new pane beside this one, running the same shell in the same folder, and moves the focus to it.";
+		let attrs = ui_attrs();
+		let lines = |ctx: &mut TextCtx| -> Vec<Vec<String>> {
+			let budget = ctx.ui_text_dip(320.0);
+			(0..24)
+				.map(|n| {
+					let text = format!("{} {said}", "x".repeat(n + 1));
+					crate::tip::wrap(&text, budget, |line| ctx.measure_ui_text(line, &attrs))
+				})
+				.collect()
+		};
+		let mut one = TextCtx::new_cpu(1.0);
+		assert_eq!(one.ui_text_dip(320.0), 320.0, "1x is the width as written");
+		let at_1x = lines(&mut one);
+		for scale in [1.25, 1.5, 2.0, 3.0] {
+			assert_eq!(lines(&mut TextCtx::new_cpu(scale)), at_1x, "at {scale}x");
+		}
+	}
 
 	// The shell's cell is the nearest pixel, not the pixel below: 13.64 cut
 	// down to 13 told a picture drawn by the cell to be 5% small.

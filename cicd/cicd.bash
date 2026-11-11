@@ -1214,6 +1214,9 @@ fScriptTests(){
 	## --container: the image tag, the recipe's pins, what goes in with the run, and
 	## what the run here picks up after it.
 	fRunTest cicd/tests/container/run.bash "container run" "container run test failed"
+	## The profiler's own settings tree, since the live file's tmux setting once
+	## doubled its text shaping share.
+	fRunTest cicd/tests/profsettings/run.bash "profiler settings tree"
 	## What a run removes of what earlier runs left, and what it never touches.
 	fRunTest cicd/tests/cleanup/run.bash "stale run cleanup"
 	## A failed test's output, which once went nowhere and left only its name.
@@ -1943,6 +1946,21 @@ fRunProfiler(){
 	fRetryBuild profiler cargo build --profile "${PROFILE_PROFILE}" --features "${PROFILE_FEATURE}"
 	mkdir -p "${profileDir}"
 
+	## The app runs on a settings tree of its own in the run folder, so one graph
+	## compares with the last whoever runs it. The live file's tmux, minimap and
+	## wallpaper settings and its rating each change what is drawn. Choose
+	## automatically is off at Max, so there is no startup test and no step down
+	## part way, and the workload never runs in tmux. The Format line keeps the
+	## launch from converting the file and saying so.
+	local settingsDir=""
+	if ! settingsDir="$(mktemp -d "${SILKTERM_TEST_DIR:-${TMPDIR:-/tmp}}/profiler-settings.XXXXXX")" \
+		|| ! mkdir -p "${settingsDir}/config/silkterm" "${settingsDir}/data" "${settingsDir}/state" "${settingsDir}/cache" \
+		|| ! printf '%s\n' 'performance:' $'\tautomatic: false' $'\tprofile: max' '' 'shell:' $'\ttmux:' $'\t\talways_new_session: false' '' '##    Format   3' \
+			>"${settingsDir}/config/silkterm/config.shcl"; then
+		((PROFILE_STRICT)) && fDie "profiler: couldn't make its settings folder"
+		fEcho "WARNING: profiler skipped: couldn't make its settings folder"; return 0
+	fi
+
 	local headless="${here}/utility/gui-headless.bash" hdisp="" why="" swayDir=""
 	if [[ -n "${SILKTERM_TEST_DIR:-}" ]] && swayDir="$(mktemp -d "${SILKTERM_TEST_DIR}/profiler.XXXXXX")"; then
 		if fCardDisplay_Start "${swayDir}"; then hdisp="${cardDisplay}"; else why="${cardWhy}"; fi
@@ -1976,7 +1994,9 @@ fRunProfiler(){
 	## -u WAYLAND_DISPLAY: winit prefers Wayland wherever it sees one, so on a
 	## Wayland session (WSLg included) DISPLAY alone leaves the window on the
 	## real desktop and the profiler samples nothing.
-	env -u WAYLAND_DISPLAY -u XDG_SESSION_TYPE \
+	env -u WAYLAND_DISPLAY -u XDG_SESSION_TYPE -u TMUX -u TMUX_PANE \
+	XDG_CONFIG_HOME="${settingsDir}/config" XDG_DATA_HOME="${settingsDir}/data" \
+	XDG_STATE_HOME="${settingsDir}/state" XDG_CACHE_HOME="${settingsDir}/cache" \
 	SILK_PROFILE_OUT="${part}" SILK_PROFILE_SECS="${PROFILE_SECS}" DISPLAY="${hdisp}" \
 		"${PROFILE_BIN}" --shell "python3 ${absScript} ${PROFILE_WORKLOAD_ARGS}" || prc=$?
 	if [[ -n "${cardSway}" ]]; then fCardDisplay_Stop; else "${headless}" stop >/dev/null 2>&1 || true; fi
@@ -2508,6 +2528,8 @@ fEcho_Clean
 
 
 ##	History:
+##		- 2026-11-10: The profiler's app runs on a settings tree of its own in the run
+##		              folder, at Max with Choose automatically off, and outside tmux.
 ##		- 2026-11-09: A memory cap with no swap, CICD_MEM_CAP: this side in a systemd
 ##		              scope, and each container with --memory and --oom-score-adj.
 ##		- 2026-11-06: The backlog quick run removes stale run folders too.
