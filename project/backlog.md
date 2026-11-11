@@ -177,15 +177,15 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Incorrect behavior: `SILK_IDLEDBG=1` says "kept: focused on screen" for good, while the other window is the active one.
 	- Expected behavior: A window that was never focused counts as unfocused.
 	- Reproduced: Yes, 20261110, 2 of 9 runs of deskswitch with the cores loaded, before its setup focused SilkTerm first.
-		- 20261110: Not again in 13 tries on Xvfb with xfwm4: xlogo mapped 0 to 1 s after the launch, xfwm4 held still while both windows asked to map, and 6 runs of deskswitch in its old setup order, 3 of them with 8 more cores busy. Each time the map told SilkTerm it wasn't focused.
+		- 20261110: It didn't happen again in 13 tries on Xvfb with xfwm4. The tries had xlogo map 0 to 1 s after the launch, xfwm4 paused while both windows asked to map, and 6 runs of deskswitch in its old setup order, with 8 more cores busy in 3 of them. Each time the map told SilkTerm it wasn't focused.
 	- Possible cause: The window starts with its focus flag set, and only a focus event clears it. A window that never had focus doesn't get a focus-out.
 	- Progress log:
-		- 20261110: A window now starts unfocused, and its first focus is a sign of life. On X11 that changes nothing anyone sees, since winit says at the map whether the window has focus. By winit's code, Wayland and Windows say nothing to a window that never gets the focus, such as one opened behind another, so there it kept its device for good.
+		- 20261110: A window now starts unfocused, and its first focus is a sign of life. On X11 that doesn't change anything anyone sees, since winit says at the map whether the window has focus. Going by winit's code, Wayland and Windows don't send anything to a window that never gets the focus, such as one opened behind another, so there it kept its device for good.
 		- 20261110: Verified: df4r2 fails with the old start and passes with the new one. deskswitch and deqy2 pass, and so does the quick gate in all 5 areas.
 	- Decisions:
-		- 20261110: The tip rule starts away too, so a window never focused shows no tips, as X11 already had it after the map.
-		- 20261110: X11 focus is the X server's, not the window manager's active window. A window manager that marks another window active and leaves the X focus on SilkTerm would look like this, but that wasn't seen either.
-	- Swept: the start of `focused` and `tip_focus` in `State`, the clipboard's start, which reads focus only on Wayland and starts unfocused there, and the dialogs' tip rule, for windows opened to be used and never let go.
+		- 20261110: The tip rule starts unfocused too, so a window that was never focused doesn't show any tips. X11 already did that after the map.
+		- 20261110: On X11 the focus is the X server's input focus rather than the window manager's active window. A window manager that marks another window active and leaves the X focus on SilkTerm would look like this, but that wasn't seen either.
+	- Swept: the starting values of `focused` and `tip_focus` in `State`, the clipboard's start, which reads focus only on Wayland and starts unfocused there, and the dialogs' tip rule. Dialogs are opened to be used and are never let go.
 	- Branch: rnd1111
 	- Test case: `a_window_never_focused_counts_as_unfocused` (df4r2). Also `cicd/tests/deskswitch/run.bash` (df4e3) and `cicd/tests/idleother/run.bash` (deqy2), unchanged.
 
@@ -293,10 +293,10 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- ID: 2026111009560100
 	- Type: Bug
 	- Status: Done
-		- 20261110: A look on b23's own desktop is still owed: with the window released, unfocused and partly behind others, move the pointer over it and see it stay in resource conservation mode. It can reopen the item.
+		- 20261110: It still needed a look on b23's own desktop, with the window released, unfocused, and partly behind others. Moving the pointer over it had to leave it in resource conservation mode, or the item would reopen.
 		- 20261110: A run on b23's own desktop with `SILK_IDLEDBG=1` would show what stops the release. See the question in questions.md.
 		- 20261110: It's likely the desktop switch in 2026111010491300, which is fixed now. A look on the next dogfood build may be enough to close it.
-		- 20261110-142723: It almost works. Moving the mouse over in released window still wakes it up though, even though it remains unfocused and partially behind other windows.
+		- 20261110-142723: It almost works. Moving the mouse over a released window still wakes it up though, even though it remains unfocused and partially behind other windows.
 		- 20261110: Answer: Minutes when hidden is 1, otherwise 2. Since the 11-10 build of about 13:30 it lets go after a return from another desktop with the focus elsewhere. A mouse move over the released window still wakes it, while it stays behind other windows.
 		- 20261111: JC: fixed on b23's desktop. A mouse move over the released window no longer wakes it, when the window manager doesn't raise it.
 	- Severity: Critical
@@ -314,7 +314,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- The same with "Minutes otherwise" at 1 in the file and no idle override: let go at 65 s.
 		- Another window moved over SilkTerm and away again after it let go: it stayed let go.
 		- 2 idle muffer sessions wrote nothing to their terminals in 25 s, so an idle one in the front tab doesn't stop the release.
-		- 20261110: Yes, after the answer. Under xfwm4, a released window partly behind another and never focused took its device back when the pointer moved over it, with no click or key. The log said "wake: pointer".
+		- 20261110: It was reproduced once the answer came in. Under xfwm4, a released window partly behind another and never focused took its device back when the pointer moved over it, with no click or key. The log said "wake: pointer".
 	- Progress log:
 		- 20261110: `SILK_IDLEDBG=1` now logs why the device is kept each time that changes ("kept: focused on screen", "kept: a dialog is up", "waiting 60s (otherwise)"), and what restarts the wait while it runs, each kind at most once per 30 s with a count of the rest. Before, it logged only when the device went and came back, so a window that never let go didn't log anything.
 		- 20261110: The pointer moving over a released window no longer takes the device back. It still starts the wait over while the window has its device. During a repaint's one frame it's ignored, so the frame doesn't become a whole wake. A released window logs it as "not a wake: pointer".
@@ -322,7 +322,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- 20261110: deqy2's "moving the pointer over it brings it back" now checks the reverse, "moving the pointer over it leaves it let go", per the answer. A new check has a click bring it back.
 	- Decisions:
 		- 20261110: It isn't closed a third time on a guess. The 2 earlier fixes each closed a real cause, but neither was seen on this desktop, so the next step is a log from it.
-		- 20261110: The pointer still starts the wait over while the window has its device, since someone may be reading along with the pointer on it. The answer asked only that it not wake a released window. No pointer-only change needs a frame while released: hover underlines and tab tips show once it's back, and a program that tracks the mouse answers with output, which wakes it as before.
+		- 20261110: The pointer still starts the wait over while the window has its device, since someone may be reading along with the pointer on it. The answer was only about not waking a released window. No pointer-only change needs a frame while released: hover underlines and tab tips show once it's back, and a program that tracks the mouse responds with output, which wakes it as before.
 	- Actual cause: The pointer moving over the window counted as a sign of life, so it took a released device back. On a desktop that doesn't focus or raise on hover, that's a pointer crossing on its way to another window.
 	- Actual fix: The pointer alone only starts the wait over while the device is held. A click, the wheel, a key, focus, or output in the front tab still wakes it.
 	- Swept: every `CursorEntered` and `CursorMoved` in `source`. The idle clock's one path is `sign_of_life`, the same on X11, Wayland, Windows and macOS. The dialogs are never let go. The look after a move and the hover code don't touch the device.
@@ -534,9 +534,9 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Parent ID: 2026102416233805
 	- Target OS: Linux
 	- Incorrect behavior: Every container run ended with `docker builder prune -f --filter until=168h`, which trims build cache from every project on the box.
-	- Expected behavior: The pipeline never prunes the build cache. The daemon's own GC trims it. This is part of the CICD reset, a sweeping override, and supersedes the 10-25 call on 2026102416233805 to prune a week of cache at the end of a run.
+	- Expected behavior: The pipeline never prunes the build cache. The daemon's own GC trims it. This is part of the CICD reset, which overrides earlier calls, so it supersedes the 10-25 call on 2026102416233805 to prune a week of cache at the end of a run.
 	- Progress log:
-		- 20261111: Found in a review against the current CICD process rules, which changed after the reset items were closed.
+		- 20261111: It was found in a review against the current CICD process rules, which changed after the reset items were closed.
 	- Actual fix: The prune and its entry in the cleanup line are gone. The rest of the container cleanup is the same.
 	- Branch: bcache
 	- Test case: `cicd/tests/container/run.bash` (ddrp2), its build cache checks. The 4 new checks fail against the old `cicd.bash`.
@@ -4261,18 +4261,18 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- A key the current build doesn't know is skipped, and a bad value falls back to the default.
 	- Origin: The answer to the Check on 2026110610154305 in questions.md, "Yes we must be able to import toml too."
 	- Progress log:
-		- 20261110: beta1's layout is the template at 367c777e^, the last commit before shcl: flat `key = value` lines and a `[colors]` table, in `$XDG_CONFIG_HOME` or `~/.config`, else `%APPDATA%`. Its two fixtures are that template and a save with edits, in `source/src/testdata/beta1_*.toml`.
+		- 20261110: The beta1 layout is the template at 367c777e^, which is the last commit before shcl. It has flat `key = value` lines and a `[colors]` table, and it's read from `$XDG_CONFIG_HOME` or `~/.config`, else `%APPDATA%`. The 2 test fixtures are that template and a save with edits, in `source/src/testdata/beta1_*.toml`.
 		- 20261110: A launch with no settings file reads `config.toml` beside it, or `~/.config/silkterm/config.toml` where that isn't the native place. Its values go through the same conversion as a pre-nesting SHCL file, and the old file is renamed `config_backup_<time>_beta1.toml`.
 	- Decisions:
-		- 20261110: A small hand reader, not a toml crate. toml is in the tree only as a build-time dependency of a proc macro, so the crate would add to the binary. The reader takes one-line strings, numbers, booleans, and tables, which is all beta1 wrote. Anything else is skipped, as beta1's own reader skipped a line it couldn't read.
+		- 20261110: A small reader written by hand is used rather than a toml crate. The toml crate is in the tree only as a build-time dependency of a proc macro, so using it would add to the binary. The reader takes one-line strings, numbers, booleans, and tables, which is all beta1 wrote. Anything else is skipped, as beta1's own reader skipped a line it couldn't read.
 		- 20261110: The old file is renamed rather than copied, so no later launch reads it, even after the new file is deleted. Its name keeps `.toml`, with `_beta1` where a converted SHCL file has `_format-v<n>`.
 		- 20261110: `colors.focus` is read as `colors.highlight`, as for every file from before that rename. `default_shell` goes to the top of the shell list, as a beta2 file's does.
 		- 20261110: A setting with no place now, such as `cursor_animation_input`, is left out without a message. The beta1 template had several of them active, such as `scroll_tau_ms`, so a count would name settings nobody set. They stay in the renamed file.
-		- 20261110: Kept, with the hand reader, by JC's call. No released build wrote config.toml, but the import stays, and no toml crate goes in.
+		- 20261110: JC chose to keep the import and its reader written by hand, even though a released build never wrote config.toml. A toml crate still isn't added.
 	- Branch: rnd1111
 	- Test case: df4rw (reader), df4rx (a saved file, once), df4ry (the first-launch template stays automatic). df4rx and df4ry fail with the import call taken out of `load`.
 	- Verified: The backlog quick run passes in all 5 areas, with 1462 unit tests.
-		- 20261110: A debug build of ddde753a on macOS (b26), launched twice with `HOME` at a folder holding only `~/.config/silkterm/config.toml` (the saved fixture). The first launch wrote `~/Library/Application Support/silkterm/config.shcl` with the file's font, size and columns, renamed the old file to `config_backup_<time>_beta1.toml` with its bytes, and said so. The second, with a new `config.toml` there, imported nothing and left it in place.
+		- 20261110: A debug build of ddde753a was launched twice on macOS (b26), with `HOME` set to a folder that had only `~/.config/silkterm/config.toml`, which was the saved fixture. The first launch wrote `~/Library/Application Support/silkterm/config.shcl` with the file's font, size and columns, renamed the old file to `config_backup_<time>_beta1.toml` with its bytes, and said so. The second, with a new `config.toml` there, imported nothing and left it in place.
 	- Swept: The import runs in `load` before the template is written, after `adopt_legacy_config`. The only other write of a missing file is a save in `persist`, which writes back a file deleted while the program was running, from the settings the launch already read, so it's left as it is.
 	- Closed: 20261110-183341
 
@@ -7304,13 +7304,13 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Opened by: CC
 	- Related IDs: 2026110920480399
 	- Target OS: macOS, Windows
-	- Reproduced: No. From reading config.rs; Linux takes no ~/.config fallback, so it can't show here.
-		- 20261110: Not reachable with today's tests. Every test that points the settings at a file of its own does it through `set_config_override`, which also sets the release build's override, and with that set there is no `~/.config` path at all. So only that side effect kept it safe.
-	- Possible cause: Under cfg(test), `may_write` checks only the native path. `beta1_config_paths` adds `legacy_config_path()`, built from the real HOME, so a test whose own folder has no settings file would read a real beta1 file there and rename it. `adopt_legacy_config` may share the shape.
-	- Actual cause: The test build's write check guarded only the file being written, not the old file being moved away, and didn't count `~/.config/silkterm` as the box's own folder off Linux. `adopt_legacy_config` had the same shape.
+	- Reproduced: No. It was found by reading config.rs. Linux doesn't take the `~/.config` fallback, so it can't show here.
+		- 20261110: Today's tests can't reach it. Every test that points the settings at a file of its own does it through `set_config_override`, which also sets the release build's override, and with that set there is no `~/.config` path at all. So only that side effect kept it safe.
+	- Possible cause: Under cfg(test), `may_write` checks only the native path. `beta1_config_paths` adds `legacy_config_path()`, built from the real HOME, so a test whose own folder has no settings file would read a real beta1 file there and rename it. `adopt_legacy_config` may have the same gap.
+	- Actual cause: The test build's write check guarded only the file being written, not the old file being moved away, and didn't count `~/.config/silkterm` as the box's own folder off Linux. `adopt_legacy_config` had the same gap.
 	- Actual fix: In a test build, a pre-layout or beta1 file in the box's own folder is never moved or renamed, and `~/.config/silkterm` counts as the box's folder on every platform. A release build is unchanged.
 	- Decisions:
-		- 20261110: The test uses the stand-in for the box's folder that ddgbt uses, rather than HOME at a temp folder. HOME is process-global, and the tests that read the box's own settings run beside it. It calls the 2 moves directly with that folder's files, since a whole load takes no `~/.config` path on Linux.
+		- 20261110: The test uses the stand-in for the box's folder that ddgbt uses, rather than HOME at a temp folder. HOME is process-global, and the tests that read the box's own settings run beside it. It calls the 2 moves directly with that folder's files, since a whole load doesn't take a `~/.config` path on Linux.
 	- Branch: rnd1111b
 	- Test case: `a_test_run_never_moves_an_old_config_from_the_boxs_folder` (df4we). It fails with the 3 guards taken out (the old shcl file moved) and passes with them.
 	- Verified: The backlog quick run passes in all 5 areas, with 1466 unit tests.
@@ -7355,10 +7355,10 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Actual cause: The UI font size is rounded to a whole pixel at each scale, 17 at 1x and 35 at 2x here, so text at 2x measured 2.06 times its 1x width. The wrap width was the scale factor times 440, exactly double.
 	- Actual fix: A notice, the tmux question, and a menu tip wrap at a width that follows the UI font as drawn, from the new `TextCtx::ui_text_dip`. At 1x it's the width as written, so nothing changes there. design.md's "Measurements and display scaling" says so.
 	- Decisions:
-		- 20261110: The notice keeps "used but not kept". The wording pass chose it, and the layout no longer depends on it.
+		- 20261110: The notice keeps "used but not kept". It was picked in the wording pass, and the layout no longer depends on it.
 		- 20261110: The wrap width follows the font, rather than the font being made exactly double. A rounded font size keeps text sharp, and only the wrap decision needed to match.
 	- Swept: every word wrap against a fixed width: `wrap_paras` (notice and tmux question) and the menu tip in `app/menus.rs`. The Settings and About tips wrap to the window's width, which isn't a fixed width, and were left alone.
-	- Verified: 20261110. With the issue's sentence in `refusal_notice`, dd5nh failed (234 -> 521) before the fix and passed after. df4rf and df4rg failed with the old wrap width and pass now. The quick run passes, all 5 areas.
+	- Verified: 20261110. With the issue's sentence in `refusal_notice`, dd5nh failed (234 -> 521) before the fix and passed after. df4rf and df4rg failed with the old wrap width and pass now. The quick run passes in all 5 areas.
 	- Branch: rnd1111
 	- Test case: `a_notice_wraps_at_the_same_words_at_any_scale` (df4rf) and `text_fitted_to_a_ui_width_wraps_the_same_at_any_scale` (df4rg), at 1.25, 1.5, 2 and 3 against 1x. dd5nh, unchanged.
 	- Closed: 20261110-165318
@@ -9515,10 +9515,10 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Related IDs: 2026110920480499
 	- Target OS: All
 	- Notes:
-		- Seen with the profiler's workload in tmux on the card, at Max. It's the same at 0b16ae9, so it isn't a regression.
+		- It was seen with the profiler's workload in tmux on the card, at Max. It's the same at 0b16ae9, so it isn't a regression.
 		- Most of the cost is harfrust building a shape plan on each call, under the strip's `set_rich_text`.
 	- Progress log:
-		- 20261110: Measured, it wasn't the shape plan. The strip shaped every row in its window again each frame, through `set_rich_text`. And under a flood the slide runs up to 128 rows, so the window held more than twice the rows the region can show.
+		- 20261110: A measurement showed the cost wasn't the shape plan. The strip shaped every row in its window again each frame, through `set_rich_text`. And under a flood the slide runs up to 128 rows, so the window had more than twice the rows the region can show.
 		- 20261110: Each strip row now has its own buffer line, which keeps its shaping while the slide moves over it, so a row is shaped once. The window leaves out the rows the slide has moved past the region's edge.
 		- 20261110: The profiler's text shaping share now also counts a line shaped outside `shape_until_scroll`, which is how the strip shapes now. Old flamegraphs read within 0.7 points of before.
 	- Decisions:
@@ -9526,7 +9526,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- The shaping share stays near 80% in tmux, since the time saved goes to more frames. The strip's own share and the cost per frame are what moved.
 	- Test case: `off_strip_lines_move_with_their_rows` (df4t5), `the_strip_shapes_only_the_rows_new_to_its_window` (df4t6), `off_strip_window_stays_inside_the_region` (df4te).
 		- Swept: the one other `set_rich_text` is in dialog.rs, which isn't per frame. The main buffer already sets its lines one at a time.
-	- Verified: 20261110, on the card, b23, at load 2 to 5, with the profiler's workload at Max, the old and new builds alternated 3 rounds each. In tmux, the strip went from 23 to 27% of samples to 12%, the frames in 8 s from 94 to 103 to 121 to 129, and the build per frame from 71 to 78 ms to 56 to 59 ms. The plain control read the same for both builds, 40 to 46% shaping and 54 to 60 ms a frame. The quick gate passes, and so do the tmux, tmuxclear and nano scroll scenes.
+	- Verified: 20261110. The old and new builds alternated 3 rounds each on the card, b23, at load 2 to 5, with the profiler's workload at Max. In tmux the strip's share of samples went from 23-27% to 12%, the frames in 8 s went from 94-103 to 121-129, and the build time per frame went from 71-78 ms to 56-59 ms. The plain control read the same for both builds, 40 to 46% shaping and 54 to 60 ms a frame. The quick gate passes, and so do the tmux, tmuxclear and nano scroll scenes.
 	- Closed: 20261110-180547
 
 - The profiler reads the live settings and rating, so its numbers follow personal settings
@@ -9542,18 +9542,18 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- Run the profiled app on a settings tree of its own in the test run folder, with a fixed profile, so one flamegraph compares with the last.
 		- The workload runs plain, never in tmux.
 	- Notes:
-		- On 11-09 the live file had `tmux.always_new_session` on. Since c2e52357 that puts a plain launch in tmux, and the shaping share went from about 40% to 80%. The rating, the minimap and the wallpaper feed in the same way.
+		- On 11-09 the live file had `tmux.always_new_session` on. Since c2e52357 that puts a plain launch in tmux, and the shaping share went from about 40% to 80%. The rating, the minimap, and the wallpaper change the numbers the same way.
 	- Progress log:
 		- 20261110: The profiler's app now runs on its own config, data, state and cache folders in the test run folder. Its settings file turns Choose automatically off at Max and tmux off, and the rest stays at the build's defaults. The app runs with `TMUX` unset too.
-		- 20261110: A launch on that tree keeps the 3 values, writes no rating, and doesn't convert the file, since it has the Format line.
+		- 20261110: A launch on that tree keeps the 3 values, doesn't write a rating, and doesn't convert the file, since it has the Format line.
 	- Decisions:
-		- 20261110: Choose automatically off at Max, rather than a rating in the state file. A rating only holds for the card's own hardware id, which the script can't work out, and with automatic off there is also no step down part way through a run. Max is what the pipeline read from 10-28 to 11-06.
-		- 20261110: The XDG folders, as the A/B rig does, rather than `--config`, so its numbers compare with the rig's.
+		- 20261110: Choose automatically is turned off at Max, rather than a rating being put in the state file. A rating only applies to the card's own hardware id, which the script can't work out, and with automatic off there is also no step down part way through a run. Max is what the pipeline read from 10-28 to 11-06.
+		- 20261110: The app gets its own XDG folders, as the A/B rig does, rather than `--config`, so its numbers compare with the rig's.
 		- 20261110: The minimap and the wallpaper stay at the build's defaults, so a change to one of those defaults still shows in the graph.
-	- Test case: `cicd/tests/profsettings/run.bash` (df4v4), in the full run. It runs the script's own profiler step with a stand-in app. 8 of its 9 checks fail on the old step, and all pass on the new one.
+	- Test case: `cicd/tests/profsettings/run.bash` (df4v4), in the full run. It runs the script's own profiler step with a stand-in app. Of its 9 checks, 8 fail on the old step, and all pass on the new one.
 		- Swept: `fRunProfiler` is the only place that sets `SILK_PROFILE_OUT`. The scroll harness already has its own config.
-	- Verified: 20261110, df4v4 both ways, a debug build on a private Xvfb with the tree, and the backlog quick run in all 5 areas.
-		- 20261110: Stage 4's profiler alone on the card, at ddde753a, through sway's Xwayland: text shaping 39.5% of 1485 samples, against 80.4% on 11-09 and 40.9% on 11-06. The log has no rating line, so no startup test ran, and no step down.
+	- Verified: 20261110. df4v4 was run both ways, a debug build was run on a private Xvfb with the tree, and the backlog quick run passed in all 5 areas.
+		- 20261110: Stage 4's profiler ran alone on the card at ddde753a, through sway's Xwayland. Text shaping was 39.5% of 1485 samples, against 80.4% on 11-09 and 40.9% on 11-06. The log doesn't have a rating line, so no startup test ran, and there wasn't a step down.
 	- Closed: 20261110-183341
 
 - Profiler: text shaping read 80.4% at 327d97e, against about 50% on the card in late October
@@ -9571,12 +9571,12 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Notes:
 		- The top cost is still the shape plan being built again on each call, inside harfrust.
 	- Progress log:
-		- 20261110: Control first. 0b16ae9 on the card with no settings file read 50 to 52%, as on 10-26. 327d97e read 46 to 50% beside it. Both builds alternated on one headless sway, 3 rounds each, each run on its own settings tree.
+		- 20261110: The control ran first. 0b16ae9 on the card with no settings file read 50 to 52%, as on 10-26. 327d97e read 46 to 50% beside it. Both builds alternated on one headless sway, 3 rounds each, each run on its own settings tree.
 		- 20261110: With a copy of the live settings and the rating that skips the startup test, both read 39 to 44%, the same as the pipeline from 10-28 to 11-06.
 		- 20261110: With `tmux.always_new_session` on, 327d97e read 81 to 82% and stepped down to High, the same message and flamegraph as the 11-09 runs. 0b16ae9 read 40 to 45%, since it doesn't start a plain launch in tmux. With the workload started in tmux by hand, both read 79 to 83%.
 		- 20261110: So the jump is a profile setup difference. The pipeline's profiler reads the live settings. The tmux setting is off in them now, but the 11-09 flamegraphs have the same frames as the tmux runs here and none of a plain one's scrollback growth, so it was on then. c2e52357 (11-07) made it cover a plain launch, so the workload ran in tmux. In tmux the scrolled-off strip is shaped again every frame, and the drawing share drops.
 	- Decisions:
-		- No code change here. The profiler's own settings tree is filed as 2026111017285305, and the cost in tmux as 2026111017285320.
+		- There's no code change here. The profiler's own settings tree is filed as 2026111017285305, and the cost in tmux as 2026111017285320.
 	- Test case: None, since nothing changed. The rig that runs builds back to back is `profile-ab.bash` in the private tools folder.
 	- Verified: 20261110, the runs above on the card, b23, at load 2 to 8.
 	- Closed: 20261110-172908
