@@ -85,7 +85,7 @@ SilkTerm moves text a pixel at a time instead of a whole line at a time. That go
 
 - Each setting does one thing a person can see, and no setting quietly changes what another one does.
 
-- Nothing that stays still on screen should bounce, jump or leave a seam.
+- Nothing that stays still on screen should bounce, jump, or leave a seam.
 
 ### Non-goals
 
