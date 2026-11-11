@@ -4260,6 +4260,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- 20261110: The old file is renamed rather than copied, so no later launch reads it, even after the new file is deleted. Its name keeps `.toml`, with `_beta1` where a converted SHCL file has `_format-v<n>`.
 		- 20261110: `colors.focus` is read as `colors.highlight`, as for every file from before that rename. `default_shell` goes to the top of the shell list, as a beta2 file's does.
 		- 20261110: A setting with no place now, such as `cursor_animation_input`, is left out without a message. The beta1 template had several of them active, such as `scroll_tau_ms`, so a count would name settings nobody set. They stay in the renamed file.
+		- 20261110: Kept, with the hand reader, by JC's call. No released build wrote config.toml, but the import stays, and no toml crate goes in.
 	- Branch: rnd1111
 	- Test case: df4rw (reader), df4rx (a saved file, once), df4ry (the first-launch template stays automatic). df4rx and df4ry fail with the import call taken out of `load`.
 	- Verified: The backlog quick run passes in all 5 areas, with 1462 unit tests.
