@@ -170,7 +170,7 @@ pub fn home(window: &Window, layout: &[(i64, i64, i64, i64)]) -> Option<(i64, i6
 	monitor_under(win, None, layout).map(|index| layout[index])
 }
 
-/// Where in the layout each output a Wayland window is on sits, first entered
+/// The layout position of each output a Wayland window is on, first entered
 /// first. None off Wayland, or where winit's state can't be read.
 pub fn outputs_under(window: &Window) -> Option<Vec<(i64, i64, i64, i64)>> {
 	#[cfg(target_os = "linux")]
@@ -189,8 +189,8 @@ pub fn outputs_under(window: &Window) -> Option<Vec<(i64, i64, i64, i64)>> {
 	}
 }
 
-/// Where in the layout the Wayland output `MonitorId::of_window` names sits.
-/// None off Wayland, or where it can't name one.
+/// The layout position of the Wayland output that `MonitorId::of_window`
+/// names. None off Wayland, or where it can't name one.
 pub fn output_drawn_for(window: &Window) -> Option<(i64, i64, i64, i64)> {
 	#[cfg(target_os = "linux")]
 	{
@@ -262,12 +262,12 @@ impl Laid {
 	}
 }
 
-// Of the outputs a Wayland window is on, first entered first, the one it is
-// drawn for: the first when it is at the window's scale, as on the other
-// path, else the only one at that scale, else the only one of those most of a
-// window this size could be on while it touches the rest. Between 2 at
-// 100% with a 200% output first, that's the one it's on, which the other path
-// couldn't say.
+// Of the outputs a Wayland window is on, first entered first, the one it's
+// drawn for. That's the first when it's at the window's scale, as on the other
+// path. Otherwise it's the only one at that scale, or else the only one of
+// those that could have most of a window this size while it touches the rest.
+// With 2 at 100% and a 200% output first, this finds the one it's on, which
+// the other path couldn't.
 #[cfg_attr(not(any(target_os = "linux", test)), allow(dead_code))]
 fn laid_drawn_for(on: &[Laid], scale: f64, size: (f64, f64)) -> Option<usize> {
 	if on.first()?.at_scale(scale) {
@@ -520,10 +520,11 @@ impl X11Screen {
 // The monitors laid out that are lit. One whose cable finds nothing on the
 // other end is dark, though the server can go on laying it out for hours:
 // b23's HDMI monitor sleeps that way. GTK, and so xfwm4, drop such a monitor
-// and herd its windows off it. Counted as lit, the herd read as the user's
-// move, the window took the other monitor's size, and xfwm4 never put it
-// back (2026110609500002). When the server calls every one disconnected,
-// none is taken as dark, as GTK falls back to the whole screen then.
+// and move its windows off it. When it was counted as lit, that move was read
+// as the user's, the window took the other monitor's size, and xfwm4 never
+// put it back (2026110609500002). When the server calls every one
+// disconnected, none is taken as dark, since GTK falls back to the whole
+// screen then.
 #[cfg(target_os = "linux")]
 fn lit_crtcs<T>(laid: Vec<(T, Vec<Connection>)>) -> Vec<T> {
 	let lit = |ends: &[Connection]| ends.iter().any(|&end| end != Connection::DISCONNECTED);
@@ -588,13 +589,12 @@ fn x11_monitor_under(window: &Window, at_pointer: bool) -> Option<Option<PxMm>> 
 }
 
 // The outputs a Wayland window is on and where each is in the layout, read
-// from winit's own toolkit state on its own connection. winit gives only
-// the first output and each one's scale rounded up to a whole number, so 125%,
-// 150% and 200% all read 2 (2026101411554909). The toolkit stores the rest, as
-// user data on winit's surface and outputs, which is where winit's own
-// `current_monitor` reads the first from. None when the window isn't a
-// Wayland one or that state can't be read, as when winit moves to another
-// toolkit release; then the rounded numbers are all there is.
+// from winit's own toolkit state on its own connection. winit gives only the
+// first output, and each one's scale rounded up, so 125%, 150%, and 200% all
+// read 2 (2026101411554909). The toolkit stores the rest as user data on
+// winit's surface and outputs. None when the window isn't a Wayland one or
+// that state can't be read, as when winit moves to another toolkit release.
+// Then the rounded numbers are all there is.
 #[cfg(target_os = "linux")]
 mod wayland {
 	use super::Laid;
