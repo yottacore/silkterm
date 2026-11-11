@@ -207,7 +207,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- 20261019: Added `CLA.md`, a section in contributing.md, and `.github/workflows/cla.yml`, the same as nano-git-db's. Both files need JC's review. The check still needs a first pull request from someone else to prove it.
 		- 20261023: Neither a full run nor Mac CI runs `cla.yml`, which runs only on pull requests.
 
-- Demo: the cursor goes to 50% width when the cursor size and animation change
+- Demo: the cursor should go to 50% width when the cursor size and animation change
 	- ID: 2026092812581720
 	- Type: Enhancement
 	- Status: Stalled
