@@ -41,10 +41,12 @@
 	History: At bottom of file.
 #>
 
+##	-Release and -Target are checked in fMain rather than by ValidateSet, whose
+##	error is a red wall of PowerShell text that doesn't read like the others.
 [CmdletBinding()]
 param(
-	[ValidateSet('stable', 'dev')] [string]$Release = 'stable',
-	[ValidateSet('user', 'system')] [string]$Target = 'user',
+	[string]$Release = 'stable',
+	[string]$Target = 'user',
 	[switch]$Yes,
 	[switch]$Help,
 	[switch]$Version
@@ -53,7 +55,7 @@ param(
 
 ##	===================  Per-project settings - edit only these  ==================
 
-$installerVersion = '1.3.0'
+$installerVersion = '1.3.1'
 $ownerRepo        = 'yottacore/silkterm'
 $appName          = 'SilkTerm'
 $exeName          = 'silkterm'
@@ -107,9 +109,11 @@ if ($PSVersionTable.PSVersion.Major -lt 5) {
 ##	Output helpers
 
 ##	fFail <message> [hint ...] - one error line, then any hints, then abort.
+##	A blank line first, unless nothing but the opening one has been printed.
+##	$outputStarted is fMain's, seen here by dynamic scope.
 function fFail {
 	param([string]$Message, [string[]]$Hints = @())
-	Write-Host ''
+	if ($outputStarted) { Write-Host '' }
 	Write-Host "Error: $Message" -ForegroundColor Red
 	foreach ($hint in $Hints) { Write-Host "  $hint" }
 	Write-Host ''
@@ -440,6 +444,11 @@ function fSafeRm_Under {
 function fMain {
 
 	Write-Host ''
+	$outputStarted = $false
+
+	##	Case-insensitive, as ValidateSet was.
+	if ($Release -notin @('stable', 'dev')) { fFail "-Release must be stable or dev (got '$Release')" }
+	if ($Target -notin @('user', 'system')) { fFail "-Target must be user or system (got '$Target')" }
 
 	##	A local copy, because the stable -> dev fallback below rewrites it. Note
 	##	nothing in here uses a $script:-qualified variable: that scope doesn't
@@ -483,6 +492,7 @@ function fMain {
 	##	only when the list doesn't have any, which is what makes a project with only
 	##	betas installable. A failed call is an error, never "no release".
 	Write-Host "Looking up the newest $release release of $appName ..."
+	$outputStarted = $true
 	try {
 		##	5.1 passes the array on as one object, so collect it before wrapping.
 		$rels = fApi "$apiBase/releases?per_page=100"
@@ -758,11 +768,10 @@ function fMain {
 
 		##	PATH
 		if ($needPath) { fAddToWindowsPath $destDir $pathScope }
-		if (-not $onWindows) { fPathNote $destDir $destFile }
 
-		Write-Host ''
 		if ($needBinary) { Write-Host "Installed $appName $tag to $destFile" }
 		else { Write-Host "Put back what was missing for $appName $tag" }
+		if (-not $onWindows) { fPathNote $destDir $destFile }
 		Write-Host ''
 	} finally {
 		$null = fSafeRm_Under ([System.IO.Path]::GetTempPath()) $tmpDir
@@ -904,4 +913,7 @@ if ($state.failed -and $runningAsScriptFile) { exit 1 }
 ##		  mv is called by path.
 ##		- 20261031 JC: The download folder goes through a guard of its own, with
 ##		  the rules of the repo's saferm.ps1.
+##		- 20261111 JC: A bad -Release or -Target gets a plain error line, not
+##		  ValidateSet's; one blank line before any error; the PATH note comes
+##		  after the result, as in install.bash.
 
