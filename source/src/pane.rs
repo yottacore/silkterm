@@ -4317,9 +4317,9 @@ fn grid_point(
 
 // The height a pane's text buffer is given: the content plus 2 rows of slack.
 // `build` lays out lines+1 rows (the overscan row above the viewport, then the
-// screen), so the last one sits right at the content height, and when that is
-// an exact multiple of the cell height the text layout drops it - the bottom
-// line goes invisible. The pane's text bounds still clip the drawing.
+// screen), so the last one sits right at the content height, and when that's
+// an exact multiple of the cell height the text layout drops it, so the bottom
+// line vanished. The pane's text bounds still clip the drawing.
 fn text_buffer_h(content_h: f32, cell_h: f32) -> f32 {
 	content_h + 2.0 * cell_h
 }
@@ -4342,8 +4342,8 @@ fn spawn_pane(
 	cwd: Option<std::path::PathBuf>,
 	in_tmux: bool,
 ) -> anyhow::Result<Pane> {
-	// A pane with no command of its own runs the default shell - resolved here
-	// and then remembered, rather than left as "whatever the default is". The
+	// A pane with no command of its own runs the default shell, resolved here
+	// and then remembered rather than left as "whatever the default is". The
 	// list can change under a running pane: the background scan fills it a few
 	// seconds after launch, and the Shells tab reorders it. Leaving it unresolved
 	// made the tab name whichever shell was first at the moment somebody looked,
@@ -4469,16 +4469,15 @@ fn spawn_pane(
 	})
 }
 
-// Where the captured output starts, as a capture-time absolute line index.
-// `cmd_start` was recorded at arm time in "history + row" coordinates, but that
-// origin moves once the scrollback is at cap: each pushed line evicts the
-// oldest, shifting every absolute index down, so the stale index falls past the
-// start and the copy silently drops the first lines of the output. Re-find the
-// arm-time prompt row by its content hash instead, scanning back from the end
-// (the nearest match is the arm-time prompt unless the output itself repeats
-// that exact row); the output starts on the next line. Fall back to `cmd_start`
-// when there's no anchor or no match (blank prompt row, the row was evicted, or
-// the shell redrew it on Enter).
+// Where the captured output starts, as an absolute line index at capture time.
+// `cmd_start` was recorded at arm time as "history + row", and that origin
+// moves once the scrollback is full, since each pushed line evicts the oldest.
+// The stale index then falls past the start and the copy drops the output's
+// first lines. So the arm-time prompt row is found again by its content hash,
+// scanning back from the end, and the output starts on the next line. The
+// nearest match is the prompt unless the output repeats that exact row. Falls
+// back to `cmd_start` with no anchor or no match: a blank prompt row, an
+// evicted row, or a shell that redrew it on Enter.
 fn capture_start<T: alacritty_terminal::event::EventListener>(
 	term: &Term<T>,
 	cmd_start: usize,
@@ -4503,10 +4502,10 @@ fn capture_start<T: alacritty_terminal::event::EventListener>(
 // Drop a multi-line prompt's extra rows off the capture end. `end_abs` already
 // excludes the resumed prompt's input line (the cursor row); strip the rows
 // above it whose skeleton matches the learned prompt block (see prompt_block
-// on Pane), so e.g. a 2-line prompt's decoration line isn't copied as output
-// even when its content (cwd, clock) changed since the arm. Fail-safe: a row
-// whose structure doesn't match (nothing learned yet, a different row)
-// stops the strip and stays in the copy - the prior behavior.
+// on Pane), so a 2-line prompt's decoration line isn't copied as output even
+// when its content (cwd, clock) changed since the arm. A row whose structure
+// doesn't match, with nothing learned yet or a different row, stops the strip
+// and stays in the copy.
 fn prompt_strip<T: alacritty_terminal::event::EventListener>(
 	term: &Term<T>,
 	start_abs: usize,
@@ -4575,16 +4574,15 @@ fn capture_grid_text<T: alacritty_terminal::event::EventListener>(
 // What a paste puts on the wire.
 //
 // Unbracketed, the application can't tell a paste from typing, so a line break
-// has to arrive the way the Enter key delivers one - a lone CR. Sending the LF
-// as well leaves a shell sitting on a continuation line after every row, and a
-// Windows clipboard is CRLF by nature, so that is the ordinary case there and
-// not an edge one.
+// has to arrive the way the Enter key sends one, as a lone CR. Sending the LF
+// too leaves a shell on a continuation line after every row, and a Windows
+// clipboard is CRLF, so that's the usual case there.
 //
-// Bracketed, the text goes over as the application asked for it - line breaks
-// included - except for ESC: one in the payload closes the bracket
-// early (the application is watching for `ESC[201~`), and everything after it
-// is then read as keystrokes rather than as data, which is how a paste runs a
-// command nobody typed. Dropping ESC is what makes the bracket a real boundary.
+// Bracketed, the text goes over as the application asked for it, line breaks
+// included, except for ESC. One in the payload closes the bracket early, since
+// the application watches for `ESC[201~`, and everything after it is read as
+// keystrokes rather than data, which is how a paste runs a command nobody
+// typed. Dropping ESC makes the bracket a real boundary.
 fn paste_payload(text: &str, bracket: bool) -> String {
 	if bracket {
 		text.replace('\x1b', "")
@@ -4700,8 +4698,8 @@ fn bracket_reach(grid: &Grid<Cell>, point: Point) -> Option<(Point, Point)> {
 
 // Inside span (start..=end columns) of the highest-precedence matched pair that
 // encloses `col` on `row`. `pairs` is (open, close) in precedence order; the
-// first enclosing non-empty pair wins (so e.g. inside `()` selects the `()`
-// contents even if a lower-precedence `[]` is nested within). None -> no pair.
+// first enclosing non-empty pair wins, so inside `()` selects the `()` contents
+// even with a lower-precedence `[]` nested in it. None -> no pair.
 fn pair_inside(row: &[char], col: usize, pairs: &[(char, char)]) -> Option<(usize, usize)> {
 	for &(open, close) in pairs {
 		let found = if open == close {
@@ -4940,9 +4938,9 @@ fn equalize(node: &mut Node, dir: Dir) {
 	}
 }
 
-// After splitting to create leaf `id` along `dir`, even-distribute the whole
-// same-direction run it joined - unless a divider in that run was hand-dragged
-// (then the run keeps its sizes and the new 50/50 split stands).
+// After splitting to create leaf `id` along `dir`, even out the whole
+// same-direction run it joined, unless a divider in that run was dragged by
+// hand. Then the run keeps its sizes and the new 50/50 split stands.
 fn equalize_dir_run(root: &mut Node, id: PaneId, dir: Dir) {
 	let Some(path) = path_to(root, id) else {
 		return;
@@ -5419,42 +5417,36 @@ fn repainted_edge(cur: &[u64], last: &[u64], region: &std::ops::Range<usize>, st
 }
 
 // Whether this frame may read the row diff as a scroll (`scroll_shift_signed`).
-// Only where the engine recorded none - a recorded scroll is exact and handled
-// first - and then the alt screen always, the normal screen only on a repaint
-// frame: following, no scrollback growth (the ConPTY case, where a TUI's
-// region-scroll above a fixed input line arrives as an in-place repaint).
+// Only where the engine recorded none, since a recorded scroll is exact and
+// handled first. Then always on the alt screen, and on the normal screen only
+// on a repaint frame: following, with no scrollback growth. That's the ConPTY
+// case, where a TUI's region scroll above a fixed input line arrives as an
+// in-place repaint.
 fn fingerprint_frame(alt: bool, follow: bool, grew: usize, scrolled: i32) -> bool {
 	scrolled == 0 && (alt || (follow && grew == 0))
 }
 
-// Detect a clean vertical translate between 2 frames for the app-scroll
-// slide, in either direction, up to `max` lines.
-// +k = scrolled forward (content moved up k rows), -k = scrolled back (down k).
-// Real full-screen apps keep static chrome bands - a status/input line at the
-// bottom (less, vim) and often a title bar at the top (nano, muffer) - so the
-// scrolling region is a middle block, not a top prefix. We therefore count, for
-// each candidate k, how many rows translate cleanly anywhere (cur[i]==last[i+k]),
-// and pick the k with the most. A shift counts only if a solid block translates
-// (>= `need`) and enough of those rows moved (>= MOVED_MIN) - where a row
-// only counts as moved when the content appeared at its new position and left its
-// old one. Both halves matter: a static or blank field matches positionally but
-// hasn't scrolled (easing that produces the apt/blank-jitter bounce), and a row
-// whose source still has the old content is a copy, not a move - a repeated
-// command's output on a half-empty screen re-prints the previous listing lower
-// down, which reads as a perfect downward translate (the blank field supplies the
-// positional matches, the repeat supplies the changed targets) and slid brand-new
-// output down out from under the prompt. A shift must also explain the frame: at
-// least two thirds of the changed rows beyond the k it reveals must be rows the
-// translation moved. An option-list TUI that swaps in a taller/shorter block for
-// the highlighted entry only pushes the short footer under it - the rewritten
-// block and marker rows above sit unexplained, so that relayout (which passes
-// both moved tests: the footer moves and vacates) is rejected,
-// while a real scroll accounts for nearly everything that changed (a couple of
-// live status/spinner rows fit inside the third). Otherwise 0 (in-place redraw,
-// content change, or a jump bigger than `max`) and the caller hard-cuts. 64-bit
-// row fingerprints make a coincidental non-translation match vanishingly
-// unlikely, so no contiguity check is needed. It never guesses a full turnover -
-// easing a non-scroll looks wrong.
+// Detect a clean vertical shift between 2 frames for the app-scroll slide, in
+// either direction, up to `max` lines. +k is scrolled forward (content moved up
+// k rows) and -k scrolled back. Full-screen apps keep static bands, a status or
+// input line at the bottom (less, vim) and often a title bar at the top (nano,
+// muffer), so the scrolling region is a middle block. For each k this counts
+// the rows that shift cleanly anywhere (cur[i] == last[i+k]) and picks the k
+// with the most. A shift counts only if a solid block shifts (>= `need`) and
+// enough of those rows moved (>= MOVED_MIN), where a row moved only if the
+// content showed up at its new place and left its old one. A static or blank
+// field matches by position without scrolling, and easing it made apt and
+// blank areas jitter. A row whose source still has the old content is a copy,
+// and a repeated command's output on a half-empty screen looked like a perfect
+// downward shift and slid new output down from under the prompt. A shift also
+// has to explain the frame: at least two thirds of the changed rows beyond the
+// k it reveals have to be rows it moved. An option list that swaps in a taller
+// or shorter block for the highlighted entry only pushes the footer under it,
+// so that relayout is rejected, while a real scroll explains nearly everything
+// that changed. Otherwise 0, for an in-place redraw, a content change, or a
+// jump bigger than `max`, and the caller cuts straight to it. 64-bit row
+// fingerprints make a chance match too unlikely to need a contiguity check. It
+// never guesses a full turnover, since easing what isn't a scroll looks wrong.
 const MOVED_MIN: usize = 3; // a real scroll must move at least this many rows
 fn scroll_shift_signed(cur: &[u64], last: &[u64], max: usize) -> i32 {
 	let n = cur.len();
@@ -5503,10 +5495,10 @@ fn scroll_shift_signed(cur: &[u64], last: &[u64], max: usize) -> i32 {
 }
 
 // Count the static (unchanged) rows at the top and bottom edges between 2
-// frames: a fixed title bar (nano/muffer) above and a status/help band below the
-// scrolling region. Returns (top, bottom); zeroed if they would meet or cover
-// the whole screen (no distinct scroll region). Measured only on a gesture's first
-// step - see build() - so mid-scroll fluctuation can't jitter the band boundary.
+// frames: a fixed title bar (nano, muffer) above and a status or help band below
+// the scrolling region. Returns (top, bottom), zeroed if they would meet or
+// cover the whole screen with no scroll region between. Measured only on a
+// gesture's first step (see build()), so the band edge can't jitter mid-scroll.
 fn static_bands(cur: &[u64], last: &[u64]) -> (usize, usize) {
 	let n = cur.len();
 	if last.len() != n {
@@ -5574,8 +5566,8 @@ fn translate_span(cur: &[u64], last: &[u64], shift: i32) -> Option<(usize, usize
 // change", which misses fixed-position chrome that changes while it sits still:
 // muffer paints a "N new messages"/"Jump to bottom" pill at the bottom edge of its
 // transcript, composited over the last region row, so that row differs every step,
-// the unchanged-suffix walk stops below it, and the pill rode the ease - the same
-// ghost the title bar used to produce. So also pin whatever the shift's own extent
+// the unchanged-suffix walk stops below it, and the pill rode the ease, the same
+// ghost the title bar used to make. So also pin whatever the shift's own extent
 // leaves out. Combined by max, which is what makes this safe: a band can only grow,
 // so no row that slid before starts sliding differently, and since the span always
 // contains every moved row a band can never swallow one that scrolled.
@@ -5709,11 +5701,6 @@ mod tests {
 		fn send_event(&self, _e: Event) {}
 	}
 
-	// A full-screen app has no scrollback of its own, so a bar there could only
-	// report a fiction. Same answer when there is nothing to scroll.
-	// Copy-on-output used to hold a core for the life of any command that printed
-	// nothing: the settle deadline stayed in the past, so the loop woke on it
-	// every pass and asked the shell again each time.
 	// `glyphs` has this frame's keys into `glyph_cache`, and a font-size change
 	// while the reader holds the term lease empties the cache with the keys still
 	// in hand. Indexing there aborts the process; the draw skips instead.
@@ -5731,6 +5718,9 @@ mod tests {
 		assert!(body.contains("glyph_cache.get(&"), "the draw asks instead");
 	}
 
+	// Copy-on-output used to hold a core for the life of any command that printed
+	// nothing: the settle deadline stayed in the past, so the loop woke on it
+	// every pass and asked the shell again each time.
 	// Test ID: dcbd8
 	#[test]
 	fn a_command_that_prints_nothing_does_not_spin_the_loop() {
@@ -5746,6 +5736,8 @@ mod tests {
 		assert_eq!(next_capture_poll(now, settle, long_ago), now + settle);
 	}
 
+	// A full-screen app has no scrollback of its own, so a bar there would have
+	// nothing to show. Same answer when there's nothing to scroll.
 	// Test ID: daqnc
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
@@ -5879,10 +5871,9 @@ mod tests {
 	}
 
 	// A TUI hides the cursor to repaint (CSI ?25l) and parks it wherever the paint
-	// ended - commonly the far bottom-right cell. Ignore DECTCEM and that parked
-	// position gets a cursor drawn on it, alternating with the real one at repaint
-	// rate, which is faster than any blink. Visibility is a mode; the shape says
-	// nothing about it, so asking the shape alone can never answer this.
+	// ended, often the far bottom-right cell. Ignoring DECTCEM draws a cursor at
+	// that spot, alternating with the real one at repaint rate, which is faster
+	// than any blink. Visibility is a mode, and the shape says nothing about it.
 	// Test ID: dbfjh
 	#[test]
 	fn a_hidden_cursor_is_not_drawn_where_the_app_parked_it() {
@@ -5908,8 +5899,8 @@ mod tests {
 			"back when the app shows it again"
 		);
 
-		// a shape the app set (DECSCUSR) survives while shown and is still suppressed
-		// while hidden - they're independent, which is the whole point
+		// a shape the app set (DECSCUSR) survives while shown and is still hidden
+		// while the cursor is, since the 2 are independent
 		feed(&mut term, "[5 q");
 		assert_eq!(shape(&term), CursorShape::Beam, "DECSCUSR beam");
 		feed(&mut term, "[?25l");
@@ -6155,8 +6146,8 @@ mod tests {
 
 	// The strip of background between 2 panes is one DIP, so it keeps its
 	// weight as the display's DPI rises instead of thinning to a hairline that
-	// disappears - and the tolerance for grabbing it has to widen with it, or the
-	// divider becomes progressively harder to catch on a high-DPI screen.
+	// disappears, and the grab tolerance has to widen with it, or the divider
+	// gets harder to catch on a high-DPI screen.
 	// Test ID: dbenj
 	#[test]
 	fn the_pane_gap_and_its_grab_zone_scale_with_the_display() {
@@ -6253,8 +6244,8 @@ mod tests {
 		let period = 1.0;
 		let timeout = 0.35;
 		let mut st = PauseState::default();
-		// input mid-shrink: the cycle keeps running forward at normal speed - the
-		// very next frame is a plain +dt, not a jump to full
+		// input mid-shrink: the cycle keeps running forward at normal speed, so the
+		// next frame is a plain +dt rather than a jump to full
 		let mut t = st.advance(
 			0.7, 0.01, 0.01, period, 0.5, timeout, 0.0, true, 0.0, 0.0, false,
 		);
@@ -6351,8 +6342,8 @@ mod tests {
 			}
 		}
 		assert!(st.parked && ((t / period).fract() - 0.5).abs() < 1e-6);
-		// stays parked indefinitely - a big wall-clock gap (the sleeping loop
-		// catching up) satisfies the hold but the input idle past the stop pins it
+		// stays parked for good: a big wall-clock gap from the sleeping loop
+		// catching up satisfies the hold, but input idle past the stop pins it
 		t = st.advance(
 			t,
 			0.01,
@@ -6367,8 +6358,8 @@ mod tests {
 			false,
 		);
 		assert!(st.active && ((t / period).fract() - 0.5).abs() < 1e-6);
-		// activity (keystroke or refocus poke) resets idle_t: still parked for
-		// the resume delay, then the cycle resumes from full - never mid-cycle
+		// activity (a keystroke or refocus poke) resets idle_t: still parked for
+		// the resume delay, then the cycle resumes from full, never mid-cycle
 		t = st.advance(
 			t, 0.01, 0.01, period, 0.5, resume, stop, false, 0.0, 0.0, false,
 		);
@@ -6402,7 +6393,7 @@ mod tests {
 		let mut input_idle = 0.0f32;
 		let mut cursor_idle = 0.0f32;
 		let mut t = 0.7;
-		// for 20 seconds at 100 fps, with the program nudging the cursor every 2s -
+		// for 20 seconds at 100 fps, with the program nudging the cursor every 2s,
 		// well inside the 5s stop, so the cursor's own idle never gets there
 		for step in 0..2000 {
 			let moved = step % 200 == 0;
@@ -6450,8 +6441,8 @@ mod tests {
 			}
 		}
 		assert!(st.parked && ((t / period).fract() - 0.5).abs() < 1e-6);
-		// held indefinitely while blocked: output moving the cursor (moved) and
-		// long holds satisfy nothing - only becoming active again can end it
+		// held for good while blocked: output moving the cursor (moved) and long
+		// holds satisfy nothing, and only becoming active again can end it
 		for _ in 0..300 {
 			t = st.advance(
 				t, 0.01, 0.01, period, 0.5, resume, stop, true, 5.0, 5.0, true,
@@ -6459,8 +6450,8 @@ mod tests {
 		}
 		assert!(st.active && st.parked && ((t / period).fract() - 0.5).abs() < 1e-6);
 		// unblocked with only idle_t reset: waits out the resume delay, then the
-		// cycle resumes from full - size continuous throughout. (In the app a
-		// refocus also calls resume(), which skips this wait - see below.)
+		// cycle resumes from full, with the size continuous throughout. In the app
+		// a refocus also calls resume(), which skips this wait (see below).
 		let mut idle = 0.0;
 		let mut resumed = None;
 		for _ in 0..200 {
@@ -6477,8 +6468,8 @@ mod tests {
 		assert!((t - (0.5 * period + 0.01)).abs() < 1e-6);
 	}
 
-	// A refocus ends the park at once - it must not sit out the resume delay the
-	// way input does - and still resumes from the cursor's full size.
+	// A refocus ends the park at once rather than sitting out the resume delay
+	// the way input does, and still resumes from the cursor's full size.
 	// Test ID: dan5b
 	#[test]
 	fn pause_state_resume_skips_the_delay() {
@@ -6588,7 +6579,7 @@ mod tests {
 		assert!(!move_is_input(None, now), "nothing typed yet");
 		assert!(move_is_input(Some(ago(30)), now));
 		// a command's output starts within a frame or two of Enter but keeps
-		// coming long after it - that later stretch is the program, not the user
+		// coming long after it, and that later stretch is the program's
 		assert!(!move_is_input(Some(ago(800)), now));
 	}
 
@@ -6639,9 +6630,9 @@ mod tests {
 	// Test ID: d9kcd
 	#[test]
 	fn capture_finds_output_start_at_full_scrollback() {
-		// 3 rows, scrollback cap 4 - the command's output fills the buffer to cap
-		// and evicts old lines, the long-lived-shell case. The arm-time absolute
-		// index goes stale with each eviction; the content anchor must not.
+		// 3 rows, scrollback cap 4: the command's output fills the buffer to the
+		// cap and evicts old lines, as in a long-lived shell. The arm-time absolute
+		// index goes stale with each eviction, and the content anchor mustn't.
 		let mut term = term_fed(20, 3, 4, "h1\r\nh2\r\nh3\r\nh4\r\nuser$ cmd");
 		// arm at the prompt (before Enter gets to the terminal)
 		let grid = term.grid();
@@ -6680,7 +6671,7 @@ mod tests {
 		let end = grid.history_size() + grid.cursor.point.line.0.max(0) as usize;
 		let stripped = prompt_strip(&term, cmd_start, end, &block);
 		assert_eq!(capture_grid_text(&term, cmd_start, stripped), "A\nB\n");
-		// nothing learned yet, or a non-matching row: strip nothing (fail-safe)
+		// nothing learned yet, or a row that doesn't match: strip nothing
 		assert_eq!(prompt_strip(&term, cmd_start, end, &[]), end);
 		assert_eq!(prompt_strip(&term, cmd_start, end, &[123]), end);
 	}
@@ -6689,8 +6680,8 @@ mod tests {
 	#[test]
 	fn capture_strips_dynamic_prompt_rows() {
 		// the decoration row's content changes per command (cwd, clock) but its
-		// structure doesn't; the skeleton match must still strip it - an exact
-		// compare left every dynamic prompt's rows in the copy (the reported bug)
+		// structure doesn't. The skeleton match still has to strip it, since an
+		// exact compare left every dynamic prompt's rows in the copy.
 		let mut term = term_fed(30, 8, 100, "[~/proj git:main 10:01]\r\nuser$ cmd");
 		let grid = term.grid();
 		let cmd_start = grid.history_size() + grid.cursor.point.line.0.max(0) as usize + 1;
@@ -6714,9 +6705,9 @@ mod tests {
 	// Test ID: dbeem
 	#[test]
 	fn a_plain_row_is_too_thin_to_learn_as_a_prompt() {
-		// the skeleton can't tell one one-word row from another - by design, so a
-		// prompt's cwd and clock can change - which is exactly why such a row must
-		// never be learned as prompt: the strip would then eat a real output line.
+		// the skeleton can't tell one one-word row from another, so a prompt's cwd
+		// and clock can change. That's why such a row is never learned as prompt,
+		// or the strip would eat a real output line.
 		let word = fnv_row_skel("alpha    ".chars());
 		let year = fnv_row_skel("2026     ".chars());
 		assert_eq!(word.0, year.0, "unrelated one-word rows hash alike");
@@ -6752,7 +6743,7 @@ mod tests {
 	#[test]
 	fn a_bracketed_paste_cannot_be_closed_from_inside() {
 		// The application is watching for ESC[201~, so an ESC in the payload
-		// ends the bracket early and everything after it is read as keystrokes -
+		// ends the bracket early and everything after it is read as keystrokes,
 		// which is how a paste runs a command nobody typed. The ESC has to go.
 		let attack = "safe\x1b[201~rm -rf ~\r";
 		let out = paste_payload(attack, true);
@@ -6762,7 +6753,7 @@ mod tests {
 		);
 		assert_eq!(out, "safe[201~rm -rf ~\r");
 		// Bracketed, the application asked for the text itself, so line breaks pass
-		// through untouched - only ESC is taken out.
+		// through untouched, and only ESC is taken out.
 		assert_eq!(paste_payload("one\r\ntwo", true), "one\r\ntwo");
 	}
 
@@ -6789,7 +6780,7 @@ mod tests {
 	#[test]
 	fn capture_below_scrollback_cap_matches_either_way() {
 		// plenty of scrollback: no eviction, so the stale-index and anchor paths
-		// agree - the anchor must not regress the common case
+		// agree, and the anchor mustn't break the common case
 		let mut term = term_fed(20, 3, 100, "user$ cmd");
 		let grid = term.grid();
 		let cmd_start = grid.history_size() + grid.cursor.point.line.0.max(0) as usize + 1;
@@ -6912,8 +6903,8 @@ mod tests {
 	// Test ID: d9cnk
 	#[test]
 	fn manual_divider_stops_equalization() {
-		// the outer divider was hand-dragged (manual): a later split must not
-		// re-equalize - the 0.7 ratio is preserved
+		// the outer divider was dragged by hand (manual), so a later split doesn't
+		// even it out again and the 0.7 ratio stays
 		let mut root = split(
 			Dir::Vertical,
 			0.7,
@@ -7126,8 +7117,8 @@ mod tests {
 		assert_eq!(scroll_shift_signed(&[60, 70, 80, 90, 99], &last, 8), 0);
 		// a jump bigger than max isn't eased
 		assert_eq!(scroll_shift_signed(&fwd, &last, 1), 0);
-		// real-app shape: the middle scrolls but a static status/input band at the
-		// bottom stays put - the middle block still translates, so it's detected
+		// a real app: the middle scrolls but a static status or input band at the
+		// bottom stays put, and the middle block still shifts, so it's detected
 		let last_s = [10u64, 20, 30, 40, 900, 901];
 		let cur_s = [20u64, 30, 40, 50, 900, 901];
 		assert_eq!(scroll_shift_signed(&cur_s, &last_s, 8), 1);
@@ -7145,9 +7136,9 @@ mod tests {
 		// backward (middle slid down 1) with the same static bands
 		let back = [700u64, 701, 5, 10, 20, 30, 900, 901];
 		assert_eq!(scroll_shift_signed(&back, &last, 8), -1);
-		// a large static/blank field matches positionally but hasn't moved - must not
-		// be read as a scroll (this is the apt/blank-jitter guard). Here rows 1..6 are
-		// all identical (a blank band); only row 0 changed, in place. No real scroll.
+		// a large static or blank field matches by position but hasn't moved, so it
+		// mustn't read as a scroll, which made apt and blank areas jitter. Here rows
+		// 1..6 are all the same blank band, and only row 0 changed, in place.
 		let bl_last = [1u64, 5, 5, 5, 5, 5, 5, 9];
 		let bl_cur = [2u64, 5, 5, 5, 5, 5, 5, 9];
 		assert_eq!(scroll_shift_signed(&bl_cur, &bl_last, 8), 0);
@@ -7158,11 +7149,11 @@ mod tests {
 	fn repeated_output_on_a_half_empty_screen_is_not_a_scroll() {
 		// A cleared screen, then the same short command run twice: the second
 		// listing re-prints the first one's rows lower down while the originals
-		// stay put. That's a copy, not a translate - the blank field below
-		// supplies enough positional matches to clear `need`, and the repeated
-		// rows fall on formerly-blank targets, so the old moved test passed and
-		// the brand-new output slid down out from under the prompt. The vacated
-		// half of the moved test rejects it: the sources never left.
+		// stay put. That's a copy rather than a shift. The blank field below gives
+		// enough matches by position to clear `need`, and the repeated rows fall on
+		// rows that were blank, so the old moved test passed and the new output
+		// slid down from under the prompt. The vacated half of the moved test
+		// rejects it, since the sources never left.
 		const B: u64 = 77; // blank row fingerprint (identical for every blank row)
 		let listing = [101u64, 102, 103, 104, 105, 106];
 		let (p1, p2, p2c) = (200u64, 201, 202); // prompts; p2c = p2 + typed command
@@ -7180,12 +7171,12 @@ mod tests {
 		assert_eq!(scroll_shift_signed(&cur, &last, APP_SCROLL_MAX), 0);
 	}
 
-	// An option list (a question/select TUI): moving the highlight swaps in a
-	// description block of a different height, so the short footer below it (hint
-	// line, rule, key help) translates a row - and vacates its sources,
-	// so the vacated-move test passes - while the rewritten description and the
-	// 2 marker rows sit above it unexplained. Blank rows supply the positional
-	// matches. A real scroll explains nearly all of a frame's change; this
+	// An option list, as in a question or select TUI: moving the highlight swaps
+	// in a description block of another height, so the short footer below it
+	// (hint line, rule, key help) shifts a row and vacates its sources, which
+	// passes the vacated-move test. The rewritten description and the 2 marker
+	// rows above it are left unexplained, and blank rows give the matches by
+	// position. A real scroll explains nearly all of a frame's change, and this
 	// explains about half, so the explanation gate rejects it in both detectors.
 	fn list_relayout_frames() -> (Vec<u64>, Vec<u64>) {
 		const B: u64 = 9; // blank rows all share one fingerprint
@@ -7204,7 +7195,7 @@ mod tests {
 	fn list_relayout_description_height_change_is_not_a_scroll() {
 		let (small, big) = list_relayout_frames();
 		// grow: the footer slid down one row; shrink: back up one. Neither is a
-		// scroll - the pane must hard-cut, not glide the list around.
+		// scroll, so the pane cuts straight to it rather than gliding the list.
 		assert_eq!(scroll_shift_signed(&big, &small, APP_SCROLL_MAX), 0);
 		assert_eq!(scroll_shift_signed(&small, &big, APP_SCROLL_MAX), 0);
 	}
@@ -7234,8 +7225,8 @@ mod tests {
 		assert_eq!(pushed_since(76, 75), 1);
 		assert_eq!(pushed_since(75, 75), 0);
 		// `clear` truncates, then the same listing refills to the same depth. The
-		// per-frame difference reads 0 here, which is the whole bug; sampled per
-		// read cycle the pre-clear depth is still 76, and the drop says all 75
+		// per-frame difference reads 0 here, which was the bug. Sampled per read
+		// cycle the depth before the clear is still 76, and the drop says all 75
 		// lines now in the buffer arrived after the clear.
 		assert_eq!(pushed_since(75, 76), 75);
 		// a bare `clear` with no output that follows must not arm anything
@@ -7333,8 +7324,8 @@ mod tests {
 	// Test ID: dascm
 	#[test]
 	fn pinning_the_overlay_keeps_it_out_of_the_strip() {
-		// the rows a step retires must come from the region, never from the pinned
-		// overlay - a strip row with the pill would redraw it inside the reveal
+		// the rows a step retires come from the region, never from the pinned
+		// overlay, since a strip row with the pill would draw it again in the gap
 		let (cur, last) = muffer_pill_frames(700, 701);
 		let (st, sb) = slide_bands(&cur, &last, -1);
 		let range = vanished_range(-1, st, sb, 30);
@@ -7353,10 +7344,10 @@ mod tests {
 	// Test ID: dascn
 	#[test]
 	fn a_band_never_swallows_a_row_that_scrolled() {
-		// the safety property: an overlay stranded mid-region (muffer also floats a
-		// dim scroll-hint arrow inside the viewport) must not hand every row past it
-		// to the band - the span is anchored on the moved rows, so it can only be
-		// widened outward, never pulled in across one.
+		// an overlay left mid-region, such as the dim scroll-hint arrow muffer also
+		// floats in the viewport, mustn't hand every row past it to the band. The
+		// span is anchored on the moved rows, so it can only widen outward, never
+		// pull in across one.
 		let (mut cur, mut last) = muffer_pill_frames(700, 701);
 		last[12] = 555; // a live one-row overlay floating mid-transcript
 		cur[12] = 556;
@@ -7498,13 +7489,12 @@ mod tests {
 		assert_eq!(repainted_edge(&last, &last, &(0..25), 25), 0);
 	}
 
-	// App-scroll scenario matrix
-	// Per-app regression coverage for the alt-screen slide: each real full-screen
-	// app repaints in a characteristic shape, and the (shift, static-band) pair the
-	// detector extracts decides whether the pane slides smoothly or hard-cuts. These
-	// model the shapes so a change to the detector/bands (or the SLIDE_TOP_BAND_APPS
-	// toggle) is caught without a live GL run. The committed headless harness
-	// (cicd/tests/scroll) exercises the same shapes end-to-end via SILK_SCROLLDBG.
+	// App-scroll cases, per app, for the alt-screen slide. Each full-screen app
+	// repaints in its own way, and the (shift, static band) pair the detector
+	// finds sets whether the pane slides or cuts straight to the new frame. These
+	// model each app's frames, so a change to the detector, the bands, or
+	// SLIDE_TOP_BAND_APPS shows up here. cicd/tests/scroll runs the same cases
+	// end to end through SILK_SCROLLDBG.
 
 	// Build a (last, cur) frame pair modeling a full-screen app whose middle scroll
 	// region moved up by `shift` rows (forward = content scrolls up, newer rows in at
@@ -7604,7 +7594,7 @@ mod tests {
 		// hard-cut as a page turnover. less-shaped so it slides.
 		let (last, cur) = app_frames(40, 0, 1, 6);
 		assert_eq!(scroll_shift_signed(&cur, &last, APP_SCROLL_MAX), 6);
-		// but a jump past the window isn't eased (hard-cut) - it isn't a clean scroll
+		// but a jump past the window isn't eased, since it isn't a clean scroll
 		let (last2, cur2) = app_frames(40, 0, 1, (APP_SCROLL_MAX + 5) as i32);
 		assert_eq!(scroll_shift_signed(&cur2, &last2, APP_SCROLL_MAX), 0);
 	}
