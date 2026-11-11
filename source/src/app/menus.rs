@@ -848,7 +848,7 @@ impl State {
 		let attrs = crate::text::ui_attrs();
 		let pad = self.text.dip(MENU_TIP_PAD);
 		let line_h = self.text.ui_line_h;
-		let budget = self.text.dip(MENU_TIP_MAX_W);
+		let budget = self.text.ui_text_dip(MENU_TIP_MAX_W);
 		let lines = crate::tip::wrap(help, budget, |line| self.text.measure_ui_text(line, &attrs));
 		let text_w = lines.iter().fold(0.0f32, |widest, line| {
 			widest.max(self.text.measure_ui_text(line, &attrs))

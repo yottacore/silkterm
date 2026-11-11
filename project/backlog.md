@@ -379,7 +379,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 - A notice can wrap one more line at 2x than at 1x
 	- ID: 2026111014301817
 	- Type: Bug
-	- Status: Queued
+	- Status: Done
 	- Severity: Low
 	- Opened: 20261110-143018
 	- Opened by: CC
@@ -394,6 +394,16 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Possible cause: Text widths at 2x aren't exactly double the 1x widths, and the wrap width is, so a line close to the edge at 1x doesn't fit at 2x.
 	- Notes:
 		- The notice text was changed to "used but not kept" so dd5nh passes. The test passes or fails on where the words fall, rather than on the layout rule.
+	- Actual cause: The UI font size is rounded to a whole pixel at each scale, 17 at 1x and 35 at 2x here, so text at 2x measured 2.06 times its 1x width. The wrap width was the scale factor times 440, exactly double.
+	- Actual fix: A notice, the tmux question, and a menu tip wrap at a width that follows the UI font as drawn, from the new `TextCtx::ui_text_dip`. At 1x it's the width as written, so nothing changes there. design.md's "Measurements and display scaling" says so.
+	- Decisions:
+		- 20261110: The notice keeps "used but not kept". The wording pass chose it, and the layout no longer depends on it.
+		- 20261110: The wrap width follows the font, rather than the font being made exactly double. A rounded font size keeps text sharp, and only the wrap decision needed to match.
+	- Swept: every word wrap against a fixed width: `wrap_paras` (notice and tmux question) and the menu tip in `app/menus.rs`. The Settings and About tips wrap to the window's width, which isn't a fixed width, and were left alone.
+	- Verified: 20261110. With the issue's sentence in `refusal_notice`, dd5nh failed (234 -> 521) before the fix and passed after. df4rf and df4rg failed with the old wrap width and pass now. The quick run passes, all 5 areas.
+	- Branch: rnd1111
+	- Test case: `a_notice_wraps_at_the_same_words_at_any_scale` (df4rf) and `text_fitted_to_a_ui_width_wraps_the_same_at_any_scale` (df4rg), at 1.25, 1.5, 2 and 3 against 1x. dd5nh, unchanged.
+	- Closed: 20261110-165318
 
 - Resources are restored when coming back to the XFCE4 desktop that holds a SilkTerm, with no focus and no pointer over it
 	- ID: 2026111010491300
