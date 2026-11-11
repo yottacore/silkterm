@@ -217,13 +217,13 @@ What a window already gives back while unused is described in the [Releasing res
 
 ### The wallpaper at window size
 
-- Today the image is cut to 4096 on its long side, blurred on the CPU at that size, and uploaded whole. The GPU scales it to the window every frame.
+- Before this, the image was cut to 4096 on its long side, blurred on the CPU at that size, and uploaded whole. The GPU scaled it to the window every frame.
 
 - Prepare it at the size it's drawn at instead, by its fit. Scale, never crop, so the anchor and fit still work during a resize.
 
 - After a resize, keep drawing the current texture, scaled. Once resizing has been still for a short wait, the worker prepares the image at the new size and swaps it in without a fade.
 
-- The blur is in image pixels today. The new size changes that, so the blur is scaled with the image to keep today's look at the same window size.
+- The blur was in image pixels. The new size changes that, so the blur is scaled with the image to keep the old look at the same window size.
 
 - A blurred image needs less than the window's size. Detail finer than the blur is gone anyway, so the image can be held smaller by a factor tied to the blur, and the GPU scales it up.
 	- At the default blur, that might cut it by 4 or more without any encoder.
@@ -423,7 +423,7 @@ What a window already gives back while unused is described in the [Releasing res
 
 ### Software rendering
 
-- SilkTerm uses a software adapter only when no graphics card is found at launch. A card that is found but can't make a device, as when its memory is full, ends the launch, and an idle rebuild retries the same card.
+- Before this, SilkTerm used a software adapter only when no graphics card was found at launch. A card that was found but couldn't make a device, as when its memory was full, ended the launch, and an idle rebuild retried the same card.
 
 - "Always use software rendering" is off by default. It asks wgpu for the fallback adapter, which is lavapipe or llvmpipe on Linux and WARP on Windows.
 	- The performance profile follows it. Automatic already starts a software adapter at Low.
@@ -478,7 +478,7 @@ What a window already gives back while unused is described in the [Releasing res
 
 - 8-bit blur layers, tried 2026-10-04. They would save 2 more bytes a pixel, which is 7 MiB at 2560x1440. Against the control on GL, the distance functions changed 3 to 10% of pixels by 1 or 2 levels. The Gaussian function changed 11% by up to 6, seen as steps in the halo's fade.
 
-- Half-size blur layers, tried 2026-10-04. They would save 3 more bytes a pixel, which is 10.5 MiB at 2560x1440, and three quarters of the blur's work. A half-size pixel counts as glyph when any of the 4 under it does, so the halo comes out heavier. At the default settings about a fifth of the pixels changed, mostly by 1 to 5 levels, and small counters in glyphs like @, # and $ filled solid, by up to 51. A soft halo changed by at most 3.
+- Half-size blur layers, tried 2026-10-04. They would save 3 more bytes a pixel, which is 10.5 MiB at 2560x1440, and three quarters of the blur's work. A half-size pixel counts as glyph when any of the 4 under it does, so the halo comes out heavier. At the default settings about a fifth of the pixels changed, mostly by 1 to 5 levels, and small counters in glyphs like @, #, and $ filled solid, by up to 51. A soft halo changed by at most 3.
 	- Under the plan above, the lower profiles get half size when the loss shows. The only lower profile with a halo is High, which keeps the same share of the radius so it looks like the same halo, so it stays full size until that's settled.
 
 - One channel for the text coverage. glyphon writes each glyph's own color, so it would take a change to our glyphon branch to write white. It would save 3 more bytes a pixel. It hasn't been tried.
