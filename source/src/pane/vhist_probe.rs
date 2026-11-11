@@ -201,7 +201,7 @@ impl Probe {
 			}
 			return;
 		}
-		// the last frame never settled before this scroll; it is all there is of it
+		// the last frame never settled before this scroll, so it's placed as it is
 		if let Some(unsettled) = self.pending.take() {
 			self.place(&unsettled, 0, self.region.clone(), &[]);
 		}
@@ -276,7 +276,7 @@ impl Probe {
 		if at >= self.rows.len() {
 			self.rows.resize(at + 1, String::new());
 		}
-		// a blank row on screen says nothing: it may be one not drawn yet
+		// a blank row on screen may be one not drawn yet, so it doesn't overwrite
 		let old = &mut self.rows[at];
 		if old != row && !row.is_empty() {
 			if !old.is_empty() {

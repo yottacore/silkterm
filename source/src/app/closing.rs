@@ -3,8 +3,8 @@
 
 //! Closing a pane, tab, or window that has a pane SilkTerm started in tmux:
 //! detach, end the sessions, or ask, as `shell.tmux.on_close` says. Only a
-//! close somebody asked for comes through here. A pane whose tmux client
-//! exited, by a detach inside it or its session ending, closes.
+//! close somebody asked for comes through here. A pane whose tmux client exits,
+//! by a detach inside it or by its session ending, closes without asking.
 
 use super::{App, CloseScope, State, close_scope, save_live};
 use crate::config;
@@ -28,7 +28,7 @@ pub(super) enum Plan {
 	Ask,
 }
 
-/// The setting decides only where there are sessions SilkTerm started.
+/// The setting matters only where SilkTerm started sessions.
 pub(super) fn close_plan(on_close: OnClose, has_sessions: bool) -> Plan {
 	match (has_sessions, on_close) {
 		(false, _) | (true, OnClose::Detach) => Plan::Close,
@@ -200,14 +200,14 @@ impl App {
 		let Some(closing) = state.close_ask.take() else {
 			return;
 		};
-		// a template that starts with the time puts them in the order made
+		// with a name template that starts with the time, this lists them oldest first
 		let mut names: Vec<String> = state
 			.sessions_closing(closing)
 			.into_iter()
 			.map(|s| s.name)
 			.collect();
 		names.sort();
-		// the panes it was about went while it waited
+		// the panes closed while the question waited
 		if names.is_empty() {
 			state.answer_close(closing, false, false);
 			return;

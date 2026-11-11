@@ -81,17 +81,11 @@ use crate::term::UserEvent;
 #[cfg(feature = "profiling")]
 use anyhow::Context;
 use winit::event_loop::{ControlFlow, EventLoop};
-// Make stdout/stderr reach the terminal we were launched from.
-//
-// A Windows release build is GUI-subsystem (see the attribute at the top of this
-// file), so the loader gives it no console and a plain println! from a CLI-only
-// flag goes NOWHERE - measured: run from a real console, the output simply never
-// appears, while the same command through a pipe works, which is what makes this
-// so easy to miss. Joining the parent's console fixes it.
-//
-// Called only on the paths that print and exit. NOT on the normal launch path: a
-// terminal window that owns a console would die with the shell that started it.
-// Everywhere else this is a no-op (already have one, or nothing to join).
+// Joins the parent's console so stdout and stderr reach the terminal that
+// launched us. A Windows release build is GUI-subsystem and has no console, so
+// println! from a CLI-only flag is lost when run from a console, even though a
+// pipe works. Called only on paths that print and exit, since a window that owns
+// a console would die with the shell that started it. A no-op elsewhere.
 fn open_console() {
 	#[cfg(windows)]
 	// SAFETY: a plain Win32 call taking a constant; failure is reported by the
@@ -108,8 +102,8 @@ fn cli_only(cli: &cli::Cli) -> bool {
 fn control(cli: &cli::Cli) -> bool {
 	cli.reload || cli.wallpaper.is_some()
 }
-// Every path that prints and exits needs the console, the control commands
-// included - on Windows their errors went nowhere.
+// Every path that prints and exits needs the console, including the control
+// commands, whose errors on Windows went nowhere.
 fn prints_and_exits(cli: &cli::Cli) -> bool {
 	cli_only(cli) || control(cli)
 }
@@ -135,10 +129,9 @@ fn main() -> anyhow::Result<()> {
 	if prints_and_exits(&cli) {
 		open_console();
 	}
-	// CLI-only flags: print and exit, before anything reads a config or opens a
-	// window. All but --version and --about are padded with a blank line either
-	// side so the block stands clear of the prompts above and below it; those 2
-	// stay flush.
+	// CLI-only flags print and exit before anything reads a config or opens a
+	// window. All but --version and --about get a blank line above and below, to
+	// set them apart from the prompts around them.
 	if let Some(info) = cli.info {
 		match info {
 			cli::Info::Help => print!(
@@ -152,9 +145,9 @@ fn main() -> anyhow::Result<()> {
 		}
 		return Ok(());
 	}
-	// Control commands: talk to the already-running window this shell lives in
-	// (via SILKTERM_SOCKET), then exit - nothing here launches a window. Reload
-	// first so --reload-settings --wallpaper x ends with x applied.
+	// Control commands talk to the running window this shell is in, through
+	// SILKTERM_SOCKET, then exit without launching one. Reload goes first so
+	// --reload-settings --wallpaper x ends with x applied.
 	if control(&cli) {
 		let mut cmds: Vec<String> = Vec::new();
 		if cli.reload {
@@ -184,9 +177,9 @@ fn main() -> anyhow::Result<()> {
 	if let Some(path) = &cli.config {
 		config::set_config_override(path.clone());
 	}
-	// Start over from the shipped defaults: move the current config aside before
-	// anything reads it, so the load below writes a fresh one. Runs after --config
-	// so the two combine (reset THAT file).
+	// Moves the current config aside before anything reads it, so the load below
+	// writes a fresh one from the defaults. After --config, so that's the file that
+	// gets reset.
 	if cli.reset_config {
 		match config::reset_config() {
 			Some(backup) => println!(
@@ -197,9 +190,9 @@ fn main() -> anyhow::Result<()> {
 			None => println!("{}: no config to reset", config::APP_NAME),
 		}
 	}
-	// Launched with no layout arguments? Fall back to a config-defined command
-	// line (real CLI arguments override it entirely). A bare --config still takes
-	// the fallback - it picks WHICH config, so that config's command_line applies.
+	// With no layout arguments, fall back to the config's command_line. Real CLI
+	// arguments override it. A bare --config still takes the fallback, since it
+	// only picks which config's command_line applies.
 	if cli::only_config_args(std::env::args().skip(1)) {
 		let command_line = config::settings().command_line.clone();
 		if !command_line.trim().is_empty() {
@@ -219,9 +212,9 @@ fn main() -> anyhow::Result<()> {
 	let proxy = event_loop.create_proxy();
 	// control socket up before any PTY spawns, so shells inherit SILKTERM_SOCKET
 	let _ctl = ctl::serve(proxy.clone());
-	// Read what the machine is on a worker: the profile needs it, nothing before
-	// the first frame does, and a /proc read has no business on that path. After
-	// the environment writes above.
+	// Read what the machine is on a worker thread. The profile needs it but nothing
+	// before the first frame does, so the /proc read stays off that path. After the
+	// environment writes above.
 	profile::probe_machine();
 	let mut app = App::new(proxy, cli);
 	// cicd profiler stage: SILK_PROFILE_OUT set -> sample this run and write a

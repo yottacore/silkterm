@@ -1,15 +1,14 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 // Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
 
-// The build number: whole minutes since 2000 began, written in Crockford base 32.
-// Five characters until 2063, it sorts in the order the builds were made, and it
-// decodes back to the minute one was built - which is what a copy's file date
-// could never be trusted for, since every producer stamps that differently.
+// The build number: whole minutes since 2000 began, in Crockford base 32. It
+// stays 5 characters until 2063, sorts in build order, and decodes back to the
+// minute it was built. A copy's file date can't be trusted for that, since every
+// tool stamps it differently.
 //
-// build.rs include!s this file, so the number baked into the binary and the tests
-// below are the same code. That's why nothing here has a `use` line and why the
-// module is only compiled into the crate under cfg(test): at run time the answer
-// is already a string in the environment (config::BUILD_ID).
+// build.rs include!s this file, so the binary's number and the tests below use
+// the same code. That's why there's no `use` line here, and why the module is in
+// the crate only under cfg(test). At run time the number is config::BUILD_ID.
 
 // Crockford's alphabet, lowercase. No i, l, o, or u, so nothing in a build number
 // copied out of a bug report can be read back as a digit or as another letter.
@@ -458,13 +457,12 @@ mod tests {
 		gpl
 	}
 
-	// The rest of the tree: build.rs, the Rust outside src/, and every script
-	// git tracks. A copyright line in the Jim Collier or the Bubbles form (or
-	// a .ps1's ASCII one), the license within a few lines under it, nothing but
-	// comments above it, and
-	// History at the bottom of the file, not in the header. A .rs file takes
-	// its crate's license, and only an MIT one may be in the Bubbles form.
-	// Tracked files only, so a scratch file in a working tree is never judged.
+	// The rest of the tree: build.rs, the Rust outside src/, and every script git
+	// tracks. Each needs a copyright line in the Jim Collier or the Bubbles form, or
+	// a .ps1's ASCII one, the license a few lines under it, only comments above it,
+	// and History at the bottom of the file rather than in the header. A .rs file
+	// takes its crate's license, and only an MIT one may be in the Bubbles form.
+	// Untracked files are skipped, so a scratch file in a working tree isn't judged.
 	// Test ID: ddghe
 	#[test]
 	#[cfg_attr(miri, ignore = "Miri can't start a process")]

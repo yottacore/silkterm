@@ -6,10 +6,9 @@ use alacritty_terminal::vte::ansi::{Color, NamedColor};
 
 use crate::config::Settings;
 
-/// The 16 ANSI colors come from the active theme (`config::settings().ansi`),
-/// resolved in config from the theme name + mode. See theme.rs. Callers pass
-/// their per-frame Settings snapshot: this runs ~2x per cell per rebuilt frame,
-/// and `settings()` is an `RwLock` read + Arc clone - too hot to take per color.
+/// The 16 ANSI colors come from the active theme, see theme.rs. Callers pass
+/// their per-frame Settings snapshot, since this runs about twice per cell per
+/// rebuilt frame and `settings()` takes a lock and an Arc clone.
 pub fn resolve(c: Color, colors: &Colors, settings: &Settings) -> [u8; 3] {
 	match c {
 		Color::Spec(rgb) => [rgb.r, rgb.g, rgb.b],
@@ -73,18 +72,13 @@ fn named(n: NamedColor, colors: &Colors, settings: &Settings) -> [u8; 3] {
 	}
 }
 
-/// Minimum-contrast lift. A program that writes near-black text (ANSI black, a
-/// dark 256-cube entry) on a dark background, or a pale color on a light one, is
-/// unreadable through no fault of the theme. `readable` measures the gap in Oklab
-/// lightness and, when it is too small, moves the text away from its background -
-/// L only, so the hue and the saturation survive and colors stay told apart.
-///
-/// Oklab rather than the WCAG ratio: that ratio's +0.05 term swamps the dark end,
-/// so two near-blacks score well while being invisible, which is exactly the case
-/// this is for.
+/// Minimum-contrast lift. Text too close in lightness to its background, such as
+/// ANSI black on a dark theme, is moved away from it in Oklab lightness only, so
+/// hue and saturation stay put. Oklab rather than the WCAG ratio, because that
+/// ratio's +0.05 term scores 2 near-blacks as readable.
 pub fn readable(fg: [u8; 3], bg: [u8; 3], min_gap: f32) -> [u8; 3] {
-	// Equal colors are deliberate concealment (the HIDDEN attribute, or a program
-	// hiding text on purpose). Never second-guess that.
+	// Equal colors mean the text is hidden on purpose, by the HIDDEN attribute or
+	// by the program.
 	if min_gap <= 0.0 || fg == bg {
 		return fg;
 	}
@@ -93,10 +87,9 @@ pub fn readable(fg: [u8; 3], bg: [u8; 3], min_gap: f32) -> [u8; 3] {
 	if (l - bg_l).abs() >= min_gap {
 		return fg;
 	}
-	// Away from the background, on the side the text is already on - but a pale
-	// color on a merely light background has no room going lighter, so take the
-	// other side when the near one runs off the end. A tie goes by which end the
-	// background sits at.
+	// Move on the side the text is already on, unless that runs off the end, as a
+	// pale color on a light background does. A tie goes by which half the
+	// background is in.
 	let near = if l == bg_l { bg_l < 0.5 } else { l > bg_l };
 	let (up, down) = (bg_l + min_gap, bg_l - min_gap);
 	let target = if near {
@@ -134,8 +127,8 @@ pub(crate) fn from_oklab(lightness: f32, a: f32, b: f32) -> [u8; 3] {
 	let l = (lightness + 0.396_337_78 * a + 0.215_803_76 * b).powi(3);
 	let m = (lightness - 0.105_561_346 * a - 0.063_854_17 * b).powi(3);
 	let s = (lightness - 0.089_484_18 * a - 1.291_485_5 * b).powi(3);
-	// Out-of-gamut ends here whenever a saturated color is pushed toward an end;
-	// from_linear_u8 clamps, which costs a little saturation and no hue.
+	// A saturated color pushed toward an end can go out of gamut. from_linear_u8
+	// clamps it, which costs a little saturation and no hue.
 	[
 		crate::config::from_linear_u8(4.076_741_7 * l - 3.307_711_6 * m + 0.230_969_94 * s),
 		crate::config::from_linear_u8(-1.268_438 * l + 2.609_757_4 * m - 0.341_319_38 * s),
@@ -143,9 +136,8 @@ pub(crate) fn from_oklab(lightness: f32, a: f32, b: f32) -> [u8; 3] {
 	]
 }
 
-/// The distinct (fg, bg) pairs on one screen are few - a handful even in a busy
-/// TUI - and `readable` is six cube roots. Memo it for the length of a build; a
-/// screen with more pairs than the cap just recomputes past that point.
+/// A screen has only a few distinct (fg, bg) pairs, and `readable` takes 6 cube
+/// roots, so results are cached for one build. Pairs past the cap are recomputed.
 #[derive(Debug, Default)]
 pub struct Readable {
 	seen: Vec<([u8; 3], [u8; 3], [u8; 3])>,
@@ -155,7 +147,7 @@ pub struct Readable {
 const READABLE_MEMO_CAP: usize = 64;
 
 impl Readable {
-	/// The same answer `readable` gives, kept per color pair.
+	/// Same result as `readable`, cached per color pair.
 	pub fn get(&mut self, fg: [u8; 3], bg: [u8; 3], min_gap: f32) -> [u8; 3] {
 		if min_gap <= 0.0 {
 			return fg;
@@ -259,7 +251,7 @@ mod tests {
 		assert!(to_oklab(out).0 > l, "a dark background lifts");
 	}
 
-	// Hue survives the move - a lifted red must not come back some other color.
+	// A lifted red stays red.
 	// Test ID: dbzcq
 	#[test]
 	fn the_hue_survives_a_lift() {
@@ -268,8 +260,8 @@ mod tests {
 		assert!(out[0] > out[1] && out[0] > out[2], "{out:?}");
 	}
 
-	// A pale color on a light-but-not-white background: lighter runs out of room
-	// well before the gap is met, so it has to go the other way instead.
+	// On a light gray background, going lighter runs out of room before the gap is
+	// met, so the text goes darker.
 	// Test ID: dbzcr
 	#[test]
 	fn a_direction_with_no_room_flips_to_the_other_one() {
@@ -286,7 +278,7 @@ mod tests {
 
 	// Test ID: dbzcs
 	#[test]
-	fn the_memo_answers_the_same_as_the_plain_call() {
+	fn memo_matches_plain_call() {
 		let mut memo = Readable::default();
 		let pairs = [
 			([0, 0, 0x80], [0, 0, 0]),
