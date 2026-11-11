@@ -4,12 +4,12 @@
 
 ##	Purpose:
 ##		- Run the SilkTerm dogfood launcher, 'n8runterm.ps1', passing every argument
-##		  through. Serves Linux, BSD and macOS; Windows has 'runterm.cmd'.
+##		  through. For Linux, BSD, and macOS; Windows has 'runterm.cmd'.
 ##		- All the logic lives in the .ps1 so there is one implementation to keep
 ##		  right. This finds it and execs pwsh in place, so the launcher runs in the
 ##		  window it was called from and nothing extra appears in the process list.
 ##		- Falls back to an installed terminal only when pwsh is missing, since
-##		  without it the launcher cannot run at all.
+##		  without it the launcher can't run at all.
 ##	History: At bottom of script.
 
 ##	Copyright (c) 2026 Bubbles
@@ -23,7 +23,7 @@
 
 ## Where the launcher might be, best first: beside this script (the repo copy),
 ## then the local mirror of the synced tree, then the synced tree itself. On a Mac
-## ~/synced is a Finder alias, which a shell cannot follow, so Dropbox is named too.
+## ~/synced is a Finder alias, which a shell can't follow, so Dropbox is named too.
 declare -r selfDir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 declare -ar launcherCandidates=(
 	"${selfDir}/n8runterm.ps1"

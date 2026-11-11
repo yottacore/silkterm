@@ -102,6 +102,6 @@ echo "all passed"
 
 ##	History:
 ##		- 20260917 JC: Created.
-##		- 20261003: Test names that hold "warning" (ddf08).
+##		- 20261003: Test names that contain "warning" (ddf08).
 ##		- 20261025: Stubs fContainerEnd, and fails by name on a call left unstubbed.
 ##		- 20261028: Test lines as PASS, FAIL, or SKIP, ID and name.

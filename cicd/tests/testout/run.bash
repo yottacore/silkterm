@@ -3,12 +3,12 @@
 #  shellcheck disable=2016  ## 'Expressions don't expand in single quotes.' Those are the scratch scripts' own lines.
 
 ##	- Purpose:
-##		A failed test script's output goes in the run log, then its FAIL line, and
-##		the failure line names the file that keeps it, when it outlives the run. A passing or skipped test
-##		stays quiet but for its PASS or SKIP line, which says why it skipped. In the
-##		image a skip for a missing tool fails instead. Lifts
-##		fRunTest and its helpers out of cicd.bash as they stand and feeds them
-##		scratch scripts that pass, fail, and skip.
+##		A failed test script's output goes in the run log, then its FAIL line.
+##		The FAIL line names the file with the output when that file outlives the
+##		run. A passing or skipped test prints only its PASS or SKIP line, and a
+##		SKIP line says why. In the image a skip for a missing tool fails instead.
+##		The test lifts fRunTest and its helpers out of cicd.bash as they stand,
+##		and feeds them scratch scripts that pass, fail, and skip.
 ##	- Test ID: ddp9p
 ##	- History: At bottom of file.
 

@@ -1,45 +1,27 @@
 #!/usr/bin/env python3
 
 ##	Purpose:
-##		Record the SilkTerm demo video and README gif: drives a real SilkTerm on a
-##		private Xvfb (never :0) inside a decorated window, types at a realistic pace
-##		(variable wpm, occasional fixed typos), lays down keyboard/mouse foley
-##		synced to the actual input timestamps, overlays per-segment narration, and
-##		encodes the deliverables. Two recordings from one script, each maxing out
-##		its format:
+##		Record the SilkTerm demo video and README gif. It drives a real SilkTerm on
+##		a private Xvfb (never :0) in a decorated window, types at a human pace with
+##		the odd typo, mixes in key and mouse sounds synced to the real input times,
+##		adds a caption per scene, and encodes both outputs from one script:
 ##		  video: 1920x1080@60 h265, font 1.5x the defined size, with audio
 ##		  gif:   960x540@50 native, defined font size, optimized palette, silent
-##		The app is rendered ON THE GPU via VirtualGL (vglrun -d egl); on plain
-##		llvmpipe the Xvfb caps it near 10fps and the scroll judders, which no
-##		capture rate or frame-averaging can fix (the frames aren't there to blend).
-##		On the GPU it paints as fast as vblank lets it, so the run PINS the app's
-##		frame rate to the capture rate (SILK_MAX_FPS, see PROFILES) rather than
-##		guessing at it. The window size is passed at LAUNCH (--pixel-width/height), never
-##		resized after: the VGL EGL present latches the surface size at creation
-##		(the app's xcb event connection bypasses VGL's Xlib interposer), so a
-##		post-launch xdotool resize leaves a stale-offset blit (clipped video /
-##		band-at-top gif). The outro comment goes gray via a prompt flag (no
-##		ble.sh - it drops the odd first keystroke and breaks commands).
-##		Narration lives in a black band above the window (BAND px of bare root,
-##		the window is placed below it) - plain yellow text, no box, so nothing
-##		ever covers the terminal. The band is static, which costs a gif almost
-##		nothing (the encoder only stores what changes between frames). The window
-##		decoration is generated at record time (a square-cornered dark theme
-##		recolored slate blue-gray) so it reads as chrome against both the black
-##		band and the terminal's own colors.
-##		Settings changes shown mid-run (the cursor ones) go through the app's
-##		control socket, so they arrive live with nothing typed on camera.
-##		Both profiles start opaque on a plain black background (no image); the
-##		closing scenes turn the built-in wallpaper on through the control socket.
-##		Screens are cleared between scenes except where the next command is meant
-##		to push the previous output up - a cleared screen means the typing that
-##		follows changes few pixels, which is most of what keeps the gif small.
-##		Gif size is set almost entirely by the scrolling scenes: measured per 5s
-##		window, scrolling ran 20-40x the byte cost of everything else, so their
-##		LENGTH and the WIDTH of the rows in motion are the only real levers (palette
-##		size, dither and lossy were all measured and are not worth their artifacts).
-##		Hence: short listings with narrow columns, a brief build, one direction of
-##		wheel, and no full-screen-app scene at all.
+##		The app renders on the GPU through VirtualGL (vglrun -d egl). On plain
+##		llvmpipe the Xvfb caps it near 10fps and the scroll judders, and no capture
+##		trick can blend frames that were never drawn. The run pins the app's frame
+##		rate to the capture rate (SILK_MAX_FPS, see PROFILES).
+##		The window size is passed at launch and never changed after, since the VGL
+##		EGL present latches the surface size at creation (see launch_app).
+##		Captions go in a black band above the window, so nothing covers the
+##		terminal. Settings changes mid-run go through the app's control socket, so
+##		nothing is typed on camera for them.
+##		Gif size is set almost entirely by the scrolling scenes, which measured
+##		20-40x the byte cost of everything else per 5s. Their length and the width
+##		of the rows in motion are the only real levers. Palette size, dither and
+##		lossy were measured too and aren't worth their artifacts. So the listings
+##		are short and narrow, the build is brief, the wheel goes one way, and
+##		there's no full-screen app scene.
 ##	Syntax:
 ##		demo-video.py [--profile video,gif] [--segments a,b,...] [--seed N]
 ##		              [--keep-work] [--no-rotate] [--no-asset] [--display :98]
@@ -47,10 +29,10 @@
 ##		Env: SILK_BIN overrides the binary (default release/silkterm under
 ##		CARGO_TARGET_DIR, or REPO/target).
 ##	Notes:
-##		AV sync needs no calibration: before the app launches, the bare root is
-##		flashed white (xsetroot) at a recorded wall-clock time; the bright frame
-##		is found in the capture afterwards, anchoring every event epoch to video
-##		time exactly. Sound assets + licenses live in ./sounds/ (see LICENSES.txt).
+##		AV sync needs no calibration. Before the app launches the bare root is
+##		flashed white at a logged wall-clock time, and finding that frame in the
+##		capture maps every event time to video time. Sound files and their
+##		licenses are in ./sounds/ (see LICENSES.txt).
 ##	History: at bottom.
 
 ##	Copyright (c) 2026 Bubbles
@@ -97,9 +79,8 @@ LEAD_S     = 0.8                              # quiet lead-in kept before the fi
 TAIL_HOLD_S  = 4.5                            # freeze the final frame this long at the end...
 TAIL_BLACK_S = 2.0                            # ...then a fully black screen this long
 TAIL_EXTRA   = TAIL_HOLD_S + TAIL_BLACK_S     # total appended tail (added at encode, not captured)
-FOLEY_LAG  = 0.03                             # foley sits this far after the key event (the app
-                                              # paints the glyph a frame or two later; sound-to-
-                                              # picture reads tighter than sound-to-keypress)
+FOLEY_LAG  = 0.03                             # foley plays this far after the key event, since
+                                              # the app paints the glyph a frame or two later
 
 # The faux window fills the frame below the narration band: a black border shows
 # around it, and BAND px of bare root above it are for the captions. FRAME_* are the
@@ -109,42 +90,34 @@ FOLEY_LAG  = 0.03                             # foley sits this far after the ke
 BORDER   = 8
 FRAME_L, FRAME_R, FRAME_T, FRAME_B = 2, 2, 32, 2
 
-# The decoration is built at record time from a square-cornered dark theme (its
-# parts are flat one-color SVGs, so a color swap is the whole job) and dropped
-# in the WM's own throwaway HOME - nothing is installed system-wide, and the
-# WM's session gets every XDG folder inside that HOME too (see wm_env). Slate
-# blue-gray: it has to read as chrome next to mint terminal text and warm yellow
-# captions, while separating the window from the black border and black band.
-WM_BASE_THEME = "Material-Black-Pistachio"  # SQUARE corners (opaque top-left)
+# The decoration is built at record time from a square-cornered dark theme. Its
+# parts are flat one-color SVGs, so swapping colors is enough. It goes in the
+# WM's throwaway HOME, so nothing is installed system-wide (see wm_env). Slate
+# blue-gray stands out as chrome next to mint terminal text and yellow captions,
+# and still separates the window from the black border and band.
+WM_BASE_THEME = "Material-Black-Pistachio"  # square corners (opaque top-left)
 WM_THEME      = "SilkDemo"
 DECO_BG       = "#5c6a8a"                   # active titlebar + frame
 DECO_BG_OFF   = "#3c4557"                   # inactive
 DECO_GLYPH    = "#e8eefa"                   # button glyphs
 DECO_TEXT     = "#eef3fb"                   # title text
 
-# cap_fps == out_fps == what the app paints, and all three are now WELDED: the
-# run exports SILK_MAX_FPS=cap_fps (see app_env), which pins the app's
-# animation loop to that rate and takes vblank out of the picture.
+# cap_fps, out_fps and the app's paint rate are all the same: the run exports
+# SILK_MAX_FPS=cap_fps (see app_env), which pins the app's animation loop to
+# that rate instead of vblank.
 #
-# The welding is the whole point, and the shipped gif is what proved it matters.
-# x11grab samples the X screen on a fixed clock and gets whatever frame is
-# current, so the step between two samples is always a whole number of the app's
-# frames. Unless the app's rate divides the capture rate evenly, that number is
-# not constant: it was painting 60 (vblank on a 60Hz host) into a 50fps capture,
-# so one frame in six was dropped and every fifth stored frame carried two frames
-# of travel. Measured on the shipped gif, a scroll reads -11 -11 -22, -10 -10 -19,
-# -8 -8 -8 -7 -14, +5 +5 +5 +5 +10: an exact doubling on a strict period, at every
-# speed and in both directions. Speed-independence is what rules the app's own
-# scrolling out - a scroll defect doesn't double itself identically at 3px/frame
-# and at 11px/frame. That regular hitch is what reads as the picture jumping, and
-# no amount of scroll tuning could ever have removed it.
-#
-# Pinning also removes a hidden dependency nobody would have looked for: without
-# it the source rate is the RECORDING HOST'S refresh rate, so the same script on
-# a 144Hz box beats against both profiles.
+# x11grab samples the screen on a fixed clock, so the step between 2 samples is
+# a whole number of app frames. Unless the app's rate divides the capture rate
+# evenly, that number changes. The old gif had the app painting 60 into a 50fps
+# capture, so one frame in 6 was dropped and every fifth stored frame moved
+# twice as far, at every scroll speed and in both directions. A scroll bug in
+# the app wouldn't double the same way at every speed, so the capture was the
+# cause, and no scroll tuning could have fixed it. Without the pin the source
+# rate would also be the recording host's refresh rate, so a 144Hz box would
+# beat against both profiles.
 #
 # A gif stores each frame's delay in whole centiseconds, so its rate must be
-# 100/n: 50 is 2cs. The video has no such constraint.
+# 100/n: 50 is 2cs. The video has no such limit.
 class Profile(TypedDict):
 	size: tuple[int, int]
 	cap_fps: int
@@ -245,7 +218,8 @@ class Rec:
 		# it prefers Wayland whenever WAYLAND_DISPLAY is set, so on any Wayland
 		# session (WSLg included) the window opens on the real desktop instead and
 		# nothing here can find it. Everything we launch belongs on the X display.
-		# Out of the desktop's session too, or it restarts a stopped WM onto ours.
+		# It has to leave the desktop's session too, or the session restarts a
+		# stopped WM onto ours.
 		for k in ("WAYLAND_DISPLAY", "XDG_SESSION_TYPE", "SESSION_MANAGER"):
 			e.pop(k, None)
 		return e
@@ -445,9 +419,9 @@ class Rec:
 		e.pop("LIBGL_ALWAYS_SOFTWARE", None)      # the app runs on the GPU (see gpu_prefix)
 		# the pop-out dialogs (Settings/About) are static wgpu/Vulkan windows; pin
 		# them to lavapipe so they don't chase a GPU Vulkan surface Xvfb can't present
-		# gray prompt, rose user, sand host. The trailing bit grays whatever is TYPED
-		# after the prompt WHEN a flag file exists - that's how the outro comment goes
-		# gray ("as if ble.sh") without ble.sh, which drops the odd first keystroke.
+		# gray prompt, rose user, sand host. The trailing bit grays whatever is typed
+		# after the prompt while a flag file exists. That's how the outro comment goes
+		# gray without ble.sh, which drops the odd first keystroke.
 		gray_flag = ("\\[$(test -f \"$HOME/.silk-gray\" && "
 			"printf '\\033[38;5;245m')\\]")
 		# pin the app's animation rate to the rate we grab at, so every capture
@@ -469,14 +443,14 @@ class Rec:
 		cmd = [self.bin, "--config", str(self.home / ".config/silkterm/config.shcl"),
 			"--shell", shell_cmd]
 		cmd = gpu_prefix(e) + cmd
-		# a decorated (non-fullscreen) window: xfwm4 draws the full frame + the
-		# titlebar with buttons, which is the "fake decoration" the shot wants.
-		# The window fills the view below the narration band - a BORDER-px black
-		# frame around it, BAND px of black above. The client is sized so the outer
-		# decoration fits what is left. That size goes in at LAUNCH (--pixel-width/
-		# height) and the window is never resized after - the VGL EGL present
-		# latches the surface size at creation, so a post-launch resize breaks the
-		# blit (moving is fine, which is how place_window nudges it into place).
+		# a decorated window, with xfwm4 drawing the frame and titlebar. It fills
+		# the view below the narration band, with a BORDER px black frame around it,
+		# and the client is sized so the outer decoration fits what's left. The
+		# size goes in at launch and the window is never resized after. The VGL EGL
+		# present latches the surface size at creation, because the app's xcb
+		# connection bypasses VGL's Xlib interposer, so a later resize leaves a
+		# clipped, offset picture. Moving is fine, which is how place_window nudges
+		# it into place.
 		width, height = self.size
 		cw = width - 2 * BORDER - FRAME_L - FRAME_R
 		ch = height - 2 * BORDER - self.band - FRAME_T - FRAME_B
@@ -510,7 +484,7 @@ class Rec:
 				self.app.kill()
 			self.app = None
 
-	# --- event log -------------------------------------------------------------
+	# event log
 	def ev(self, kind: str) -> None:
 		self.events.append((time.time(), kind))
 
@@ -537,9 +511,9 @@ NEIGH = {
 	"o": "ip", "p": "o", "q": "wa", "r": "et", "s": "ad", "t": "ry", "u": "yi",
 	"v": "cb", "w": "qe", "x": "zc", "y": "tu", "z": "x",
 }
-# char -> XT scancode: the key bank has one unique slice per physical key, so
-# every key thocks with its own sample; a shifted symbol thocks with its base
-# key, same as a real board
+# char -> XT scancode. The key bank has one slice per physical key, so each key
+# plays its own sample, and a shifted symbol plays its base key's, as on a real
+# board.
 _SHIFTED = dict(zip('!@#$%^&*()_+{}:"<>?~|', "1234567890-=[];',./`\\"))
 _SCAN = {c: 2 + i for i, c in enumerate("1234567890-=")}
 _SCAN |= {c: 16 + i for i, c in enumerate("qwertyuiop[]")}
@@ -757,21 +731,21 @@ def write_dconf(home: Path, profile: Profile) -> None:
 
 def write_config(home: Path, profile: Profile) -> None:
 	# mirrors the real defined config. Both profiles start opaque on plain black,
-	# which needs wallpaper.fallback_builtin OFF - it defaults on, and while it is on there
-	# is no "no wallpaper" state to start from (an unset image IS what shows the
-	# built-in one). Image opacity stays at the 0.10 default.
+	# which needs wallpaper.fallback_builtin off. It defaults on, and while it's
+	# on an unset image shows the built-in one, so there's no "no wallpaper" state.
+	# Image opacity stays at the 0.10 default.
 	#
-	# rotate.enabled stays OFF too: rotation adopts a wallpaper folder on its
-	# own, and a folder suppresses the built-in image, so the reveal could show
+	# rotate.enabled stays off too. Rotation picks up a wallpaper folder on its
+	# own, and a folder hides the built-in image, so the reveal could show
 	# something else or nothing at all.
 	#
-	# What is pinned here and what is deliberately absent:
+	# What's pinned here and what's left out on purpose:
 	#  - grid, font and margin stay pinned even where they equal a default, so a
 	#    later default change can't reflow a scene that was timed against them.
-	#  - the scrim and the scroll feel are NOT pinned, so the demo always shows
-	#    what ships. Pinning them is how the old gif ended up advertising a halo
+	#  - the scrim and the scroll feel aren't pinned, so the demo always shows the
+	#    current defaults. Pinning them is how the old gif ended up showing a halo
 	#    and an outline no build had used for weeks.
-	#  - cursor.size.width IS pinned, and to the shipped block on purpose: it is
+	#  - cursor.size.width is pinned to the default block on purpose, since it's
 	#    the before half of seg_cursor, which narrows it to half width on camera.
 	cfgdir = home / ".config" / "silkterm"
 	cfgdir.mkdir(parents=True, exist_ok=True)
@@ -876,12 +850,11 @@ def write_tree(rec: Rec, rng: random.Random) -> None:
 		f.touch()
 		os.truncate(f, size)
 
-	# `ls` wrapper: the listing flags live here rather than in an alias typed on
-	# camera - everyone has their ls aliased, so showing it being set says nothing.
-	# Owner and group are omitted (-gG) and the timestamp is bare: every column a
-	# row has is width the gif pays for on each scrolled line, and none of them
-	# are what the scene is about. A real listing would also print the real
-	# username, so map it to the fake one.
+	# `ls` wrapper. The listing flags go here rather than in an alias typed on
+	# camera, since everyone has ls aliased and showing it set says nothing.
+	# Owner and group are left out (-gG) and the timestamp is bare, because every
+	# column adds width the gif pays for on each scrolled line. A real listing
+	# would also print the real username, so map it to the fake one.
 	bind = home / "bin"
 	bind.mkdir(exist_ok=True)
 	user = getpass.getuser()
@@ -931,15 +904,13 @@ printf '  🤔 🍰 🎉 😀   ┌─┬─┐ ╔═╦═╗ ▁▂▃▄▅�
 ''')
 	show.chmod(0o755)
 
-	# build.sh: cargo-flavored output, paced in movements rather than at random.
-	# The scroll speed isn't a constant - it leaves rest gently, doubles while the
-	# backlog grows, tops out, then rides a braking curve down to a slow stop.
-	# Output that arrives at one rate only ever shows one point on that curve, so
-	# the earlier version (a line every so often, with a quarter chance of a pause)
-	# never left the gentle end and the whole middle of the curve went unseen. The
-	# pacing below walks the curve end to end, and the long silence at movement 4
-	# is what makes the wind-down visible at all: the view is still traveling when
-	# the output stops, and has to brake and stop on its own.
+	# build.sh: cargo-like output, paced in movements rather than at random. The
+	# scroll speed eases off from rest, doubles while the backlog grows, tops out,
+	# then brakes down to a slow stop. Output at one steady rate only ever shows
+	# one point on that curve, so the old version never left the gentle end. The
+	# pacing below walks the whole curve, and the long silence at movement 4 is
+	# what makes the wind-down visible: the view is still moving when the output
+	# stops, and has to brake and stop on its own.
 	crates = [
 		"proc-macro2", "quote", "syn", "unicode-ident", "libc", "bitflags",
 		"smallvec", "log", "cfg-if", "once_cell", "memchr", "either",
@@ -973,8 +944,8 @@ printf '  🤔 🍰 🎉 😀   ┌─┬─┐ ╔═╦═╗ ▁▂▃▄▅�
 	#     speed past its single-screen cap and makes the view trail the live bottom
 	for c in feed:
 		comp(c)
-	# 4 - silence, and this is the point of the whole scene: nothing more arrives,
-	#     so the view has to brake down the ramp and stop by itself, in view
+	# 4 - silence: nothing more arrives, so the view has to brake down the ramp
+	#     and stop by itself, in view
 	lines.append("sleep 1.3")
 	# 5 - coda: a couple of slow lines, which start gently again from rest
 	lines += [
@@ -1028,20 +999,19 @@ def ctl(rec: Rec, line: str) -> bool:
 		return False
 
 def set_cfg(rec: Rec, keys: dict[str, object]) -> bool:
-	# a settings change, applied the way a settings change applies: rewrite the
-	# keys and reload. Live, and nothing has to be typed on camera. Strings are
-	# quoted so a value can never read as a comment or a bare word like none.
+	# applies a settings change the normal way, by rewriting the keys and
+	# reloading, so nothing is typed on camera. Strings are quoted so a value can
+	# never read as a comment or a bare word like none.
 	#
-	# Keys are dotted config paths, and each line's path is RESOLVED from an
-	# indent stack of block headers rather than matched literally. That isn't
-	# defensive programming - the app rewrites this file into nested blocks the
-	# first time it saves, so a literal `^cursor\.size\.width: ` matched the file
-	# write_config wrote and then matched nothing at all for the rest of the run.
-	# It failed silently, which cost a whole render to notice: the cursor never
-	# changed shape and the panes scene never stilled its cursors.
+	# Keys are dotted config paths, and each line's path is worked out from an
+	# indent stack of block headers rather than matched literally. The app
+	# rewrites this file into nested blocks the first time it saves, so a literal
+	# `^cursor\.size\.width: ` matched the file write_config wrote and then matched
+	# nothing for the rest of the run. That failed silently, and the cursor and
+	# panes scenes never changed anything.
 	#
-	# Hence the miss check below - a key that resolves to no line is a scene that
-	# will quietly not happen, so it stops the run instead.
+	# So a key that resolves to no line stops the run, rather than leaving a
+	# scene that quietly doesn't happen.
 	cfg = rec.home / ".config/silkterm/config.shcl"
 	lines = cfg.read_text().split("\n")
 	stack: list[tuple[int, str]] = []
@@ -1087,8 +1057,8 @@ def wipe(rec: Rec, typist: Typist, settle: float = 0.8) -> None:
 	time.sleep(settle)
 
 def seg_ls(rec: Rec, typist: Typist, mouse: Mouse) -> None:
-	# opens straight on the listing: the ls flags are baked into the wrapper rather
-	# than aliased on camera, because watching someone set an alias sells nothing
+	# opens straight on the listing. The ls flags are in the wrapper rather than
+	# aliased on camera, because watching someone set an alias shows nothing.
 	with Banner(rec, "Silky-smooth output scrolling"):
 		typist.cmd("ls ~/", settle=3.0)
 		time.sleep(0.7)
@@ -1097,20 +1067,19 @@ def seg_ls(rec: Rec, typist: Typist, mouse: Mouse) -> None:
 def seg_build(rec: Rec, typist: Typist, mouse: Mouse) -> None:
 	with Banner(rec, "Watch it adapt to any output speed"):
 		typist.cmd("cd projects/pulsar", settle=0.6, typos=0.0)
-		# the script runs ~6.5s now (five paced movements, see write_tree) and the
-		# settle has to outlast it, or the scene cuts away mid wind-down - which is
-		# the half worth watching
+		# the script runs about 6.5s (5 paced movements, see write_tree), and the
+		# settle has to outlast it or the scene cuts away during the wind-down
 		typist.cmd("./build.sh", settle=7.0)
 		time.sleep(0.7)
 	# no wipe: the wheel scene scrolls back up through all of this
 
 def seg_wheel(rec: Rec, typist: Typist, mouse: Mouse) -> None:
-	# scrollback under the wheel - the same easing as the output scroll, driven
-	# by hand. xdotool sends two wheel events per click here (winit fires on the
-	# legacy button press AND release), so a few clicks cover a lot of lines. One
-	# direction only: coming back down says nothing going up hasn't already said,
-	# and a full-width listing in motion is the costliest thing in the gif. The
-	# screen is then just cleared, with no remark - the scene is over at the top.
+	# scrollback under the wheel, with the same easing as the output scroll.
+	# xdotool sends 2 wheel events per click here (winit fires on the legacy
+	# button press and release), so a few clicks scroll a lot of lines. One
+	# direction only, since scrolling back down shows nothing new, and a
+	# full-width listing in motion is the costliest thing in the gif. The scene
+	# ends at the top and the screen is cleared without a caption.
 	with Banner(rec, "Scroll back just as smoothly. Minimap at the right."):
 		mouse.move(rec.size[0] // 2, rec.band + (rec.size[1] - rec.band) // 2, dur=0.5)
 		mouse.wheel(True, 3, hz=3.2)
@@ -1119,24 +1088,22 @@ def seg_wheel(rec: Rec, typist: Typist, mouse: Mouse) -> None:
 	wipe(rec, typist)
 
 def seg_panes(rec: Rec, typist: Typist, mouse: Mouse) -> None:
-	# still the cursor first, silently: three panes each pulsing their own cursor
+	# stop the cursor blink first, silently: 3 panes each pulsing their own cursor
 	# pull the eye off the split, and every pulse is motion the gif pays for.
-	# Two splits straight off the menu bar (Alt+P opens Panes, then the item's own
-	# accelerator letter - V for vertical), all keyboard, no menu coordinates to
-	# guess at. Splitting twice is what shows the auto-sizing. Closing them again
-	# shows nothing new and took seconds, so that happens in a cut.
+	# Both splits come off the menu bar by keyboard (Alt+P opens Panes, then the
+	# item's accelerator letter, V for vertical), with no menu coordinates to
+	# guess. Splitting twice shows the auto-sizing. Closing them shows nothing new
+	# and took seconds, so that happens in a cut.
 	set_cfg(rec, {"cursor.blink": False})
 	with Banner(rec, "Split panes, sized for you"):
 		rec.xdo("windowactivate", rec.win)
 		time.sleep(0.3)
-		# vertical then HORIZONTAL, not vertical twice. Two vertical splits leave
-		# three columns, and at a third of the width the prompt very nearly fills
-		# its pane - readline then redisplays it on a fresh line, which is a line
-		# of new output, which the panes ease in like any other. The result was two
-		# panes each sliding up a row a beat after they appeared, staggered, on an
-		# otherwise empty screen: nothing else to look at, so it read as glitching.
-		# At half width the prompt has room and no pane reprints. Splitting both
-		# ways also shows the tree does both, which one direction twice doesn't.
+		# vertical then horizontal. With 2 vertical splits the prompt nearly fills
+		# a pane a third of the width wide, so readline redraws it on a fresh line,
+		# and the panes ease that line in like any other output. Each pane slid up
+		# a row a beat after it appeared, on an otherwise empty screen, which looked
+		# like a glitch. At half width the prompt fits and no pane reprints.
+		# Splitting both ways also shows the tree does both.
 		for accel in ("v", "h"):
 			typist.key("alt+p", sound=key_sound("p"))
 			time.sleep(0.55)
@@ -1153,13 +1120,13 @@ def seg_panes(rec: Rec, typist: Typist, mouse: Mouse) -> None:
 		wipe(rec, typist, settle=1.8)
 
 def seg_cursor(rec: Rec, typist: Typist, mouse: Mouse) -> None:
-	# the cursor is a setting, so switch it the way a setting switches - live,
-	# through the control socket, with nothing typed on camera. An empty screen:
-	# the cursor is the only thing moving on it.
+	# the cursor is a setting, so it's switched like one, live through the
+	# control socket with nothing typed on camera. The screen is empty, so the
+	# cursor is the only thing moving.
 	#
-	# The scene opens on the pulsing block, already back on in the panes scene's
-	# cut. Then shape and animation change together, block and pulse to a
-	# half-width block that fades. The new animation waits out
+	# The scene opens on the pulsing block, turned back on in the panes scene's
+	# cut. Then shape and animation change together, from a pulsing block to a
+	# fading half-width block. The new animation waits out
 	# cursor.animation_resume_s before it starts, so the second hold is the
 	# longer one.
 	with Banner(rec, "Cursor shape and animation, your pick"):
@@ -1183,7 +1150,7 @@ def seg_wallpaper(rec: Rec, typist: Typist, mouse: Mouse) -> None:
 	# ends on - wallpaper, color, then the sign-off
 
 def seg_showcase(rec: Rec, typist: Typist, mouse: Mouse) -> None:
-	# drop the flag the prompt watches for BEFORE this command runs, so the prompt
+	# drop the flag the prompt watches for before this command runs, so the prompt
 	# it returns to is already the gray one and the outro can type straight into
 	# it - no bare Return just to draw a fresh prompt.
 	(rec.home / ".silk-gray").touch()
@@ -1193,8 +1160,8 @@ def seg_showcase(rec: Rec, typist: Typist, mouse: Mouse) -> None:
 
 def seg_outro(rec: Rec, typist: Typist, mouse: Mouse) -> None:
 	# the prompt grays whatever is typed after it while the flag file exists, so
-	# the comment goes gray from the '#' on, as if ble.sh were installed - but with
-	# plain reliable bash typing.
+	# the comment goes gray from the '#' on, as if ble.sh were installed, but with
+	# plain bash typing.
 	with Banner(rec, "github.com/yottacore/silkterm"):
 		rec.xdo("windowactivate", rec.win)
 		time.sleep(0.5)
@@ -1231,10 +1198,9 @@ SOUND_FILES = {
 KEYPACK = SOUNDS / "keys-oreo"     # mechvibes "EG Oreo": one recording, one slice per key
 GAIN = {"key": 0.85, "mouse:CLICK": 0.5, "mouse:CLICK_Q": 0.36, "mouse:WHEEL": 0.5}
 
-# the bank is quiet and slice loudness wanders ~6 dB; even each slice out to a
-# consistent body presence (space/enter a touch prouder) but keep every key's
-# own transient and timbre - that natural variety is the whole point of a
-# per-key bank
+# the bank is quiet and slice loudness varies by about 6 dB. Even out each
+# slice's body level, with space and enter a little louder, but keep each key's
+# own attack and timbre, since that variety is why the bank is per key
 KEY_BODY = {57: 0.085, 28: 0.085, 14: 0.07}
 
 def shape_slice(s: np.ndarray, code: int) -> np.ndarray:
@@ -1378,8 +1344,8 @@ def vf_chain(rec: Rec, work: Path, trim: float, dur: float, tail: bool = False) 
 	p = rec.p
 	def to_vt(epoch: float) -> float:
 		return rec.flash_vt + (epoch - rec.flash_e)
-	# the GPU source is genuinely smooth, so just pin CFR at the delivery rate -
-	# no frame-averaging needed (and none to fake, the frames are real)
+	# the GPU source is smooth, so pin CFR at the delivery rate with no frame
+	# averaging
 	filters = [f"fps={rec.out_fps}"]
 	if rec.cuts:
 		gone = "+".join(f"between(t,{to_vt(s) - trim:.3f},{to_vt(e) - trim:.3f})"
@@ -1388,7 +1354,7 @@ def vf_chain(rec: Rec, work: Path, trim: float, dur: float, tail: bool = False) 
 		filters.append(f"select='not({gone})',setpts=N/({rec.out_fps}*TB),"
 			f"fps={rec.out_fps}")
 	# resolve each banner's [s,e]; then clamp every end to the next banner's start
-	# minus a gap, so only ONE banner is ever on screen (consecutive banners were
+	# minus a gap, so only one banner is ever on screen (consecutive banners were
 	# crossfading into an overlapping smear)
 	spans: list[tuple[float, float, str]] = []
 	for s_e, e_e, text in rec.banners:
@@ -1407,7 +1373,7 @@ def vf_chain(rec: Rec, work: Path, trim: float, dur: float, tail: bool = False) 
 			continue
 		tf = esc_drawtext(work, i, text)
 		y = wobble_y(base_y, s, e, amp)
-		# quick alpha pop (~0.15s) - the bounce carries the motion
+		# quick alpha pop (~0.15s), and the bounce does the moving
 		fade = f"clip((t-{s:.3f})/0.15,0,1)*clip(({e:.3f}-t)/0.15,0,1)"
 		filters.append(
 			f"drawtext=fontfile={BANNER_TTF}:textfile={tf}:fontsize={p['banner_fs']}:"
@@ -1443,17 +1409,17 @@ def encode_video(rec: Rec, work: Path, out_mp4: Path, video_end_e: float) -> Pat
 	return out_mp4
 
 GIF_COLORS = 160        # one global palette; the wallpaper finale wants the headroom
-# gifsicle's lossy LZW threshold. OFF on purpose: it only bought ~10%, and what it
-# spends that on is ghost bars of the previous screen left in flat black areas -
-# which in a terminal demo reads as the terminal itself misdrawing. Raise it only
-# if a future scene list pushes the gif past what the README can take.
+# gifsicle's lossy LZW threshold. Off on purpose: it only saved about 10%, and it
+# left ghost bars of the previous screen in flat black areas, which in a terminal
+# demo looks like the terminal misdrawing. Raise it only if a future scene list
+# pushes the gif past what the README can take.
 GIF_LOSSY  = 0
 
 def gif_pass(rec: Rec, work: Path, out_gif: Path, trim: float, dur: float, colors: int = GIF_COLORS, tail: bool = False) -> Path:
 	vf = vf_chain(rec, work, trim, dur, tail=tail)
 	pal = work / "pal.png"
 	cut = ["-ss", f"{trim:.3f}", "-t", f"{dur + (TAIL_EXTRA if tail else 0.0):.3f}"]
-	# ONE global palette (stats_mode=full) applied uniformly: stats_mode=diff +
+	# One global palette (stats_mode=full) applied uniformly: stats_mode=diff +
 	# diff_mode=rectangle mis-handled the big inter-frame jumps of fast scrolling
 	# and left white/ghosted blocks. Ordered bayer stays temporally stable (error
 	# diffusion shimmers and bloats a gif).
@@ -1499,9 +1465,9 @@ def encode_gif(rec: Rec, work: Path, out_gif: Path, video_end_e: float) -> Path:
 # for it. Scrolling is what sets the size - measured per second of finished gif
 # at 50fps: a dense full-width scroll runs ~1.6 MiB/s, the build scene ~0.4, a
 # near-static scene ~0.03. So if a render comes out over, the levers in order are the
-# LENGTH of the wheel scene, the width of the rows in motion, and only then
-# GIF_LOSSY. Dropping to 25fps halves it outright and is the last resort - the
-# smoothness is the thing being demonstrated.
+# length of the wheel scene, the width of the rows in motion, and only then
+# GIF_LOSSY. Dropping to 25fps halves it, but that's the last resort, since the
+# smoothness is what the demo shows.
 GIF_ASSET_MAX_MB = 12
 
 def rotate(out_dir: Path, prefix: str, ext: str, no_rotate: bool) -> None:
@@ -1636,7 +1602,7 @@ if __name__ == "__main__":
 ##		  nothing - the config is nested by the time any scene changes a setting,
 ##		  so every live change had been a silent no-op. Wallpaper rotation off, or
 ##		  it adopts the reveal image at launch. Scrim values unpinned so the demo
-##		  shows what ships. Cursor starts as the block and narrows to a bar.
+##		  shows the defaults. Cursor starts as the block and narrows to a bar.
 ##		- 20260729: a blank line closes the showcase output, so the sign-off block
 ##		  sits clear of the unicode row.
 ##		- 20260726: gif cut under 10 MiB - the `less` scene dropped, the wheel one

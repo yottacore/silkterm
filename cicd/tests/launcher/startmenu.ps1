@@ -73,7 +73,7 @@ function fUseHome { param([string]$Root)
 }
 
 ## One launch, as a shortcut's wrapper would make it but with nothing opened.
-## Answers what it asked for: { Cim; Walks; ProcessLists }.
+## Returns what it asked for: { Cim; Walks; ProcessLists }.
 function fLaunch { param([string]$Root)
 	fUseHome $Root
 	$tally = Join-Path $Root "tally.txt"

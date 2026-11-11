@@ -4,7 +4,7 @@
 ##		The advisory scan sees a yank made after a box's cargo index cache was
 ##		filled. cargo-deny reads that cache as it is, so config.bash's
 ##		INDEX_REFRESH_CMD runs first. In a copy of the cache, one locked crate's
-##		entry is made stale (marked yanked, with a dead etag): the scan alone must
+##		entry is made stale (marked yanked, with a dead etag). The scan alone must
 ##		fail on it, and after the refresh it must pass. A refresh with no network
 ##		must fail. Exit 3 when cargo-deny isn't installed or the index can't be
 ##		reached.

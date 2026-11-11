@@ -173,9 +173,9 @@ fGone(){
 	return 1
 }
 
-## Xwayland shows the window no button held on a title bar, so a look after a
-## move waits for a sign the person is back at it. Only the first look goes
-## ahead without one, and a move that came after it waited for good
+## Under Xwayland the window can't see a button held on a title bar, so a look
+## after a move waits for a sign the person is back at it. Only the first look
+## goes ahead without one, and a move after it waited for good
 ## (2026110116413708). A key is that sign, and leaves no pointer over a window.
 ## With no window manager to focus the window the key never arrived, so it
 ## takes focus first.

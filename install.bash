@@ -81,7 +81,7 @@ Options:
                          system:           /usr/local (uses sudo)
   --yes, -y              skip the confirmation prompt
   --version              print this installer's version and exit
-  --help, -h             this text
+  --help, -h             show this text
 
 The operating system, the CPU architecture, and the matching release asset are
 all detected, so there's nothing to pass for them.
@@ -106,19 +106,15 @@ function fGet() {
 	fi
 }
 
-##	fApi <url> <outfile> - an API call, with the optional token. Only the API
-##	is rate-limited per IP; release downloads aren't, so they stay anonymous.
-##	The body is kept whatever the status, since GitHub says why in it, and
-##	anything else worth showing goes to <outfile>.err. Fails on any non-2xx.
-##	Https on the first request and on every redirect after it. Without this a
-##	redirect can walk the download down to plain http, which is where the
-##	checksum stops meaning anything.
+##	Https on the first request and on every redirect after it. Otherwise a
+##	redirect can drop the download to plain http, where the checksum stops
+##	meaning anything.
 httpsOnly_curl=(--proto '=https' --proto-redir '=https')
 httpsOnly_wget=(--https-only)
 
 ##	The token goes in a file rather than on the command line, where 'ps' shows it
-##	to every account on the box. Written 0600 inside a directory only we can read,
-##	and removed by the EXIT trap. Set up once, from fMain, before the first API
+##	to every account on the box. The file is written 0600 in a private directory,
+##	and the EXIT trap removes it. fMain calls this once, before the first API
 ##	call.
 authDir=""
 authFile=""
@@ -127,8 +123,8 @@ function fAuthInit() {
 	authDir="$(mktemp -d 2>/dev/null)" || return 1
 	chmod 700 "${authDir}" 2>/dev/null
 	authFile="${authDir}/auth"
-	##	curl and wget read their own config formats, and only curl's takes
-	##	quotes - wget's rc takes everything after the '=' verbatim.
+	##	Only curl's config format takes quotes. wget's rc takes everything
+	##	after the '=' as is.
 	if [[ "${dlTool}" = "curl" ]]; then
 		( umask 077; printf 'header = "Authorization: Bearer %s"\n' "${apiToken}" >"${authFile}" )
 	else
@@ -136,6 +132,10 @@ function fAuthInit() {
 	fi
 }
 
+##	fApi <url> <outfile> - an API call, with the optional token. Only the API
+##	is rate-limited per IP, so release downloads stay anonymous. The body is
+##	kept whatever the status, since GitHub says why in it, and any other error
+##	text goes to <outfile>.err. Fails on any non-2xx.
 function fApi() {
 	local url="${1}" out="${2}" code="" rc=0
 	if [[ "${dlTool}" = "curl" ]]; then
@@ -158,7 +158,7 @@ function fApi() {
 	fi
 }
 
-##	Same, but shows progress - the release binary is the only big download.
+##	fGet with a progress bar, since the release binary is the only big download.
 function fGetShown() {
 	local url="${1}" out="${2}"
 	if [[ "${dlTool}" = "curl" ]]; then
@@ -194,7 +194,7 @@ function fVerifySignature() {
 	printf '%s %s\n' "${releaseSignIdentity}" "${releaseSignPubkey}" > "${dir}/allowed_signers"
 	ssh-keygen -Y verify -f "${dir}/allowed_signers" -I "${releaseSignIdentity}" \
 		-n "${releaseSignNamespace}" -s "${dir}/${sums}.sig" < "${dir}/${sums}" >/dev/null 2>&1 \
-		|| fFail "the release signature doesn't verify - NOT installing" \
+		|| fFail "the release signature doesn't verify, so nothing was installed" \
 			"The checksums file wasn't signed by the release key." \
 			"Don't use this download; report it."
 	echo "Signature OK."
@@ -321,9 +321,9 @@ function fPathNote() {
 	echo "  Until then, run it in full:  ${2}"
 }
 
-##	Scratch space. Global on purpose: the EXIT trap fires after fMain has
-##	returned, so a local would be out of scope by then (and `set -u` turns that
-##	into a failed exit status on an otherwise perfect install).
+##	Global on purpose, because the EXIT trap fires after fMain has returned. A
+##	local would be out of scope by then, and `set -u` would turn that into a
+##	failed exit status on a good install.
 tmpDir=""
 function fCleanup() {
 	[[ -z "${tmpDir}" ]]  || rm -rf "${tmpDir}"
@@ -331,9 +331,9 @@ function fCleanup() {
 }
 
 ##	0 = yes, 1 = no, 2 = couldn't ask at all.
-##	The terminal comes FIRST because the `curl ... | bash` form leaves the script
-##	itself sitting on stdin - reading the answer from there would eat the script.
-##	Falling back to stdin is what keeps a piped `echo y | ...` working.
+##	The terminal is read first because the `curl ... | bash` form leaves the
+##	script itself on stdin, and reading the answer from there would eat it. The
+##	stdin fallback keeps a piped `echo y | ...` working.
 function fConfirm() {
 	local answer=""
 	printf "%s [y/N]: " "${1}"
@@ -350,8 +350,8 @@ function fMain() {
 
 	echo
 
-	##	Detect the platform first so --help can describe it, but defer any
-	##	"unsupported" failure until after --help/--version have had their say.
+	##	Detect the platform first so --help can describe it, but hold back any
+	##	"unsupported" failure until --help and --version have run.
 	local osName osToken="" archToken="" exeExt="" osProblem=""
 	osName="$(uname -s 2>/dev/null || echo unknown)"
 	case "$(fLower "${osName}")" in
@@ -392,12 +392,12 @@ function fMain() {
 		"Building from source: https://github.com/${ownerRepo}#build-it-yourself"
 	if [[ "${osToken}" = "windows" ]]; then
 		fFail "this is the Windows shell environment (${osName})" \
-			"Use the PowerShell installer instead - it also sets up the Start Menu entry and PATH:" \
+			"Use the PowerShell installer instead, which also sets up the Start Menu entry and PATH:" \
 			"  irm ${rawBase}/install.ps1 | iex"
 	fi
 
-	##	Tools. curl/wget only need to exist for one of them; a hash tool is
-	##	non-negotiable, since an unverified binary must never be installed.
+	##	Either curl or wget will do. A hash tool is required, since an unverified
+	##	binary is never installed.
 	local dlTool="" shaTool=""
 	if command -v curl >/dev/null 2>&1; then dlTool="curl"
 	elif command -v wget >/dev/null 2>&1; then dlTool="wget"
@@ -440,7 +440,7 @@ function fMain() {
 	if [[ -z "${tag}" ]] && [[ "${release}" = "stable" ]]; then
 		tag="$(fReleaseRows <"${listFile}" | fPickTag dev)"
 		if [[ -n "${tag}" ]]; then
-			echo "No full release published yet; using the newest pre-release instead."
+			echo "There's no full release yet, so this installs the newest pre-release."
 			release="dev"
 		fi
 	fi
@@ -497,8 +497,8 @@ function fMain() {
 	[[ "${osToken}" = "linux" ]] && [[ "${menuEntry}" = "1" ]] || appDir=""
 	destFile="${destDir}/${exeName}"
 
-	##	Already current? Then only a missing launcher is left to do, and with
-	##	nothing missing, say so and stop - no prompt, no download. An existing
+	##	Already current? Then only a missing launcher is left to do. With nothing
+	##	missing, it says so and stops without a prompt or a download. An existing
 	##	launcher is left as it is, since it may have been edited by hand.
 	local needBinary=1 needLauncher=0
 	if [[ -f "${destFile}" ]] && [[ "$(fSha256 "${destFile}")" = "${wantSha}" ]]; then needBinary=0; fi
@@ -547,7 +547,7 @@ function fMain() {
 				"Re-run with --yes to install without being asked."
 		fi
 		if [[ "${answered}" != "0" ]]; then
-			echo "Aborted - nothing was touched."; echo; exit 0
+			echo "Canceled. Nothing was changed."; echo; exit 0
 		fi
 		echo
 	fi
@@ -561,16 +561,16 @@ function fMain() {
 				"URL: ${dlBase}/${tag}/${asset}"
 		local haveSha; haveSha="$(fSha256 "${tmpDir}/${asset}")"
 		if [[ "${haveSha}" != "${wantSha}" ]]; then
-			fFail "checksum mismatch - NOT installing" \
+			fFail "checksum mismatch, so nothing was installed" \
 				"expected ${wantSha}" \
 				"got      ${haveSha}" \
 				"The download was corrupted or tampered with. Try again; if it repeats, report it."
 		fi
 		echo "Checksum OK."
 
-		##	Install. Stage beside the target and rename into place: a rename is atomic,
-		##	and it replaces a binary that is currently RUNNING (a straight copy over
-		##	one fails with ETXTBSY).
+		##	Install. Stage beside the target and rename into place, since a rename is
+		##	atomic and can replace a running binary. A straight copy over one fails
+		##	with ETXTBSY.
 		echo
 		echo "Installing ..."
 		local staged="${destDir}/.${exeName}.new.$$"
@@ -602,14 +602,14 @@ function fMain() {
 			&& ${sudoCmd} cp "${tmpDir}/${exeName}.desktop" "${appDir}/${exeName}.desktop" 2>/dev/null; then
 			${sudoCmd} chmod 0644 "${appDir}/${exeName}.desktop"
 		else
-			echo "Note: couldn't write the desktop launcher to ${appDir} (the program itself installed fine)."
+			echo "Note: couldn't write the desktop launcher to ${appDir}, but the program installed fine."
 		fi
 	fi
 
 	if [[ "${needBinary}" = "1" ]]; then
 		echo "Installed ${appName} ${tag} to ${destFile}"
 	else
-		echo "Put back what was missing for ${appName} ${tag}"
+		echo "Restored what was missing for ${appName} ${tag}"
 	fi
 	fPathNote "${destDir}" "${destFile}"
 	echo

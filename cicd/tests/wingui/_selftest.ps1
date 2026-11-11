@@ -5,7 +5,7 @@
 .SYNOPSIS
 	Proves the harness can still report a failure.
 .DESCRIPTION
-	Run it by hand after changing anything in _run.ps1 or run.bash - it must
+	Run it by hand after changing anything in _run.ps1 or run.bash. It must
 	come back 'fail' with exit 1. Delete the check below and it must come back
 	'fail' for a second reason, that the scenario asserted nothing. Never listed
 	in WINGUI_HARNESS.

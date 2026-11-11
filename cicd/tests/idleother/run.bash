@@ -11,7 +11,7 @@
 ##		tab in the back, with a quiet tab in front, and has to let go the same.
 ##		The pointer rests over the quiet window, and another program grabs it
 ##		and lets it go every few seconds, as a menu or a window drag does. The
-##		window is told the pointer entered each time, which is nobody there.
+##		window is told the pointer entered each time, though nobody is there.
 ##			- So it still lets go after the minute.
 ##			- A grab after that leaves it let go.
 ##			- Moving the pointer over it leaves it let go too.

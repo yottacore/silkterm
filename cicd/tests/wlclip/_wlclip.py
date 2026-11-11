@@ -4,7 +4,7 @@
 ##		Reads or sets a Wayland selection from outside any window, through
 ##		the wlr data control protocol, which sway has. The same job as
 ##		wl-paste and wl-copy, for a box without them. A piece of
-##		wlclip/run.bash, not a test of its own. Speaks the Wayland wire
+##		wlclip/run.bash, not a test of its own. It speaks the Wayland wire
 ##		format itself, so it needs nothing past python3.
 ##	- Syntax:
 ##		_wlclip.py get clipboard|primary

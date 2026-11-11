@@ -3,7 +3,7 @@
 #  shellcheck disable=2034  ## 'variable appears unused.' Both are set for the caller, one through a nameref.
 
 ##	- Purpose:
-##		Counts the processes a piece of bash starts, for tests that hold a loop to
+##		Counts the processes a piece of bash starts, for tests that limit a loop to
 ##		no fork per item. Sourced; it defines fForkCount and runs nothing.
 ##			fForkCount <var> <setup> <measured>
 ##		Both scripts run in a fresh bash, setup first and not counted. var is set to

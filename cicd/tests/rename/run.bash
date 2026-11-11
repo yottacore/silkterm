@@ -3,9 +3,9 @@
 
 ##	- Purpose:
 ##		utility/rename.bash renames the project. It used to rewrite only
-##		Cargo.toml, the Rust sources, and the Markdown docs, and to rename no file
-##		at all - so the resource template build.rs reads by name kept the old
-##		name, and every Windows build of the renamed tree failed in its build
+##		Cargo.toml, the Rust sources, and the Markdown docs, and didn't rename any
+##		files. The resource template that build.rs reads by name kept the old
+##		name, so every Windows build of the renamed tree failed in its build
 ##		script. The pipeline, the packaging, and the installers kept it too.
 ##		This clones the repository, renames the clone, and checks that nothing a
 ##		build reads by name went missing and that the old name is gone.
@@ -36,7 +36,7 @@ git -C "${root}" clone --quiet --shared . "${clone}"
 ( cd "${clone}" && utility/rename.bash Weavterm >/dev/null )
 
 ##	Every input build.rs reads by name: the files it watches, the ones it opens
-##	under the crate directory, and the build-number input list. Anything spelled
+##	under the crate directory, and the build-number input list. Anything written
 ##	with a {placeholder}, and anything under OUT_DIR, is an output.
 missing=0
 while IFS= read -r p; do

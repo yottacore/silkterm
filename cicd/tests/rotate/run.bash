@@ -2,7 +2,7 @@
 
 ##	- Purpose:
 ##		gfs_rotate prunes the run logs and flamegraphs. A wrong role or count
-##		would quietly delete old ones, so this fills a scratch folder with two
+##		would quietly delete old ones, so this fills a scratch folder with 2
 ##		years of dated files, rotates it at a fixed time, and checks what is left:
 ##		the first file, the newest few, and the last file of each recent hour,
 ##		day, week, and month, about 30 in all, and nothing else touched.
@@ -52,7 +52,7 @@ neighbours="$(cd "${dir}" && sha256sum flame_20250101-000000.svg run_20250101-00
 
 ## Dates are read and written without date, so date itself is the reference:
 ## times a clock change skips or repeats, impossible dates, zones with odd
-## offsets, and the two epochs printf reads as "now".
+## offsets, and the 2 epochs printf reads as "now".
 fSameAsDate(){
 	local z s e want got bad=0
 	local -a cases=(20260308-023000 20261101-013000 20261101-010000 20261101-020000 20261025-013000 20260329-013000

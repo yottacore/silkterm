@@ -155,7 +155,7 @@ fCheck "and the shell runs inside it" fWaitFor shells.log shell 1
 win="$(fWindow || true)"
 fCheck "the window came up" test -n "${win}"
 if [[ -n "${win}" ]]; then
-	## past the shell scan, folded in 3 s after the window shows
+	## wait past the shell scan, which runs 3 s after the window shows
 	sleep 6
 	fX xdotool windowactivate --sync "${win}" 2>/dev/null || fX xdotool windowfocus --sync "${win}" 2>/dev/null || true
 	fX xdotool key --clearmodifiers ctrl+shift+t 2>/dev/null || true

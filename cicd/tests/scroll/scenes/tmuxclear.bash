@@ -5,7 +5,7 @@
 ## the alt screen and scrolls away the pane's rows under the prompt's line with a
 ## region and CSI S, since the status line keeps it from erasing to the bottom.
 ## A burst inside the pane scrolls the pane away whole too, then draws it, so the
-## bursts first show that output still slides. The clears sit between a region
+## bursts first show that output still slides. The clears come between a region
 ## scroll of 3 and one of 5, which the trace shows as sh. Each clear goes over a
 ## screen filled in place, so nothing but the clear can scroll.
 ## A clear while a big slide is still running slides, by design
@@ -89,7 +89,7 @@ fWipe(){
 	printf '\033[1;%dr\033[1;1H\033[2;%dr\033[%dS\033[1;1H\033[K' "${pane}" "${pane}" "$((pane - 1))"
 }
 
-## ble.sh's two-row prompt, drawn at the top with insert- and delete-line
+## ble.sh's 2-row prompt, drawn at the top with insert- and delete-line
 fBle(){
 	printf '\033[1;1H\033[2M\033[1;1H\033[2L\033[1;1H\033[0;36m12:00:00\033(B\033[m user@host:~/repo [ main ]\r\n-> $ '
 }

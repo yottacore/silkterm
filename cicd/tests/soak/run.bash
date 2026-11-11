@@ -151,7 +151,7 @@ main="$(fWindows | head -n 1)"
 silkPid="$(fX xdotool getwindowpid "${main}" 2>/dev/null || true)"
 echo "  ok   a window came up"
 fType "${main}" "soak first"; firstPid="$(fTyped "soak first" || echo 0)"
-## Past the shell scan, which is folded in once 3 s after the window shows.
+## Wait past the shell scan, which runs once 3 s after the window shows.
 sleep 6
 
 ## Each pane's shell is a new process, and gone once its pane is closed, so a

@@ -11,46 +11,45 @@
 ##		  the Windows build can be looked at (rendering, fonts, chrome, dialogs, DPI,
 ##		  transparency) without a Windows machine.
 ##		- No docker. The Windows build links only system DLLs, so unlike the sister
-##		  nemo-anywhere launcher there is no GTK runtime to stage out of a container -
-##		  only fonts and a private wineprefix, both handled here.
+##		  nemo-anywhere launcher there's no GTK runtime to copy out of a container.
+##		  Only fonts and a private wineprefix are staged.
 ##		- Everything goes in cicd/artifacts/win-run/ (gitignored): the wineprefix, a
 ##		  copy of the exe, its own config.shcl, and the run log. The real ~/.wine and
 ##		  ~/.config/silkterm are never touched, so a Windows-side config rewrite can't
 ##		  disturb the Linux build's settings.
 ##		- The exe is re-copied every run, so a fresh cross-build is picked up
 ##		  automatically. --restage rebuilds the wineprefix itself (after a wine upgrade).
-##		- Each run replaces the last: a previous instance of THIS staged copy is killed
-##		  first, matched on its exact staged path - so a silkterm started from anywhere
-##		  else (notably the Linux dogfood build) is left alone. wineserver is shared with
-##		  any other wine app and is never touched.
+##		- Each run replaces the last. A previous instance of this staged copy is killed
+##		  first, matched on its exact staged path, so a silkterm started from anywhere
+##		  else is left alone. wineserver is shared with any other wine app and is never
+##		  touched.
 ##	What works, and what doesn't (measured against wine 10.0):
 ##		- Works: the window, the GPU path (wgpu picks up the real card through
 ##		  winevulkan), fonts, menu/tab chrome, dialogs, wallpaper, scrim.
-##		- Doesn't work: the shell. Wine's ConPTY is half implemented -
-##		  CreatePseudoConsole succeeds and the initial size is honored (conhost starts
-##		  headless at the right grid), but a child spawned with
-##		  PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE doesn't attach to it, so no
-##		  child output ever gets to the grid. Expect a live, correctly drawn, empty
+##		- Doesn't work: the shell. Wine's ConPTY is half implemented.
+##		  CreatePseudoConsole succeeds and conhost starts headless at the right grid
+##		  size, but a child spawned with PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE doesn't
+##		  attach to it, so no child output ever gets to the grid. Expect a live, correctly drawn, empty
 ##		  terminal. Good for looking at the Windows build, not for driving it.
 ##		- Because of that, the default shell is a keep-alive rather than a real one:
 ##		  cmd.exe finds no usable console, exits immediately, and takes the window with
-##		  it (the terminal quits when its last pane's command ends). A child that
+##		  it, since the terminal quits when its last pane's command ends. A child that
 ##		  stays running keeps the window open so there's something to look at. Pass
 ##		  --shell cmd.exe to get the real thing back once wine passes the I/O through.
 ##		- ResizePseudoConsole is a stub returning E_NOTIMPL, and the terminal backend
-##		  asserts the result is S_OK - so the app used to die on its first resize. The
+##		  asserts the result is S_OK, so the app used to die on its first resize. The
 ##		  small conpty.dll built here (fBuildConptyShim) forwards create/close to
 ##		  kernel32 and returns S_OK for a resize, which keeps it alive. It needs
 ##		  mingw; without mingw the app still starts but dies on the first resize.
-##		- Microsoft's own conpty.dll + OpenConsole.exe (the ConPTY nuget) were tried and
-##		  fail earlier still - CreatePseudoConsole returns 0xd000000d - so there is no
-##		  better implementation to drop in, and dropping one in would be worse: the
-##		  backend prefers any loadable conpty.dll over kernel32 and doesn't fall back
-##		  when it fails.
+##		- Microsoft's own conpty.dll and OpenConsole.exe, from the ConPTY nuget, fail
+##		  earlier still, with CreatePseudoConsole returning 0xd000000d. Dropping them
+##		  in would be worse, since the backend prefers any loadable conpty.dll over
+##		  kernel32 and doesn't fall back when it fails.
 ##		- A newer wine doesn't help either. Measured on 11.14: the pty pipe still gets
-##		  0 bytes. Only ResizePseudoConsole changes - it fakes success from 11.2 on,
-##		  which makes the shim redundant. To try another wine put it first on PATH
-##		  (wine/wineboot are called unqualified) and pass --restage for its own prefix.
+##		  0 bytes. Only ResizePseudoConsole changes. It fakes success from 11.2 on,
+##		  which makes the shim redundant. To try another wine, put it first on PATH,
+##		  since wine and wineboot are called unqualified, and pass --restage for its
+##		  own prefix.
 ##		- Only the x86_64 build runs; wine on x86_64 can't execute the ARM64 exe.
 ##		- Wine's menu builder is turned off for every wine call here. Left on, it
 ##		  registers file types and menu entries on the desktop that point into the
@@ -197,12 +196,11 @@ fLinkFonts(){
 	done
 }
 
-## conpty.dll shim - see the Purpose block. The backend loads any conpty.dll next
-## to the exe in preference to kernel32, which is the hook used here: create and
-## close go straight back to kernel32 (both work under wine), and resize returns
-## S_OK instead of wine's E_NOTIMPL, which the backend would assert on.
-## Consequence: a resize is silently not forwarded to the child, which costs
-## nothing here because the child never attaches to the pseudoconsole anyway.
+## conpty.dll shim, per the Purpose block. The backend loads a conpty.dll next to
+## the exe in preference to kernel32. Create and close go straight back to kernel32,
+## which both work under wine, and resize returns S_OK instead of wine's E_NOTIMPL,
+## which the backend would assert on. A resize isn't forwarded to the child, which
+## doesn't matter since the child never attaches to the pseudoconsole.
 fBuildConptyShim(){
 	local -r shimSrc="${stageDir}/app/conpty-shim.c"
 	local -r shimDll="${stageDir}/app/conpty.dll"
@@ -271,19 +269,18 @@ fBuildConptyShim(){
 #••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
 # Launch
 
-## Replace the previous run of THIS staged copy. Matched on the staged path, which
-## no other build shares, so a terminal started from anywhere else - notably the
-## Linux dogfood builds - can never match. Wine reports the app under its Windows
-## path (Z:\...\app\silkterm.exe) while the launcher stub keeps the unix one, so
-## every separator becomes a regex '.' and the one pattern catches both spellings.
-## pkill returns 1 when nothing matched, which is fine. wineserver is shared with
-## any other wine app and is left alone on purpose.
+## Replace the previous run of this staged copy. The match is on the staged path,
+## which no other build shares. Wine reports the app under its Windows path
+## (Z:\...\app\silkterm.exe) while the launcher stub keeps the unix one, so every
+## separator becomes a regex '.' to match both. pkill returns 1 when nothing
+## matched, which is fine. wineserver is shared with any other wine app, so it's
+## left alone.
 fStagedExePattern(){ printf '%s' "${stagedExe}" | sed 's/[][\\.^$*+?(){}|]/\\&/g; s#/#.#g'; }
 
 ## The keep-alive child outlives the app: it never attached to the pseudoconsole, so
 ## nothing tears it down when its parent goes, and one would leak per run. Matched on
-## the whole command line, anchored - so it can only ever match the exact keep-alive
-## started here, never some other ping the user is running.
+## the whole command line, anchored, so it can't match some other ping that's
+## running.
 fKillOrphanedKeepAlive(){
 	local -r exact="^$(printf '%s' "${keepAliveShell}" | sed 's/[][\\.^$*+?(){}|]/\\&/g')$"
 	pkill -f "${exact}" 2>/dev/null || true
@@ -315,7 +312,7 @@ fLaunch(){
 	export DISPLAY="${optDisplay}"
 
 	## The shell string is split by the terminal's own POSIX-style parser, where an
-	## unquoted backslash escapes the next character - so a plain C:\windows\... path
+	## unquoted backslash escapes the next character, so a plain C:\windows\... path
 	## would arrive with its separators eaten. Bare names resolve on the Windows PATH.
 	local -a launchArgs=(
 		"--config" "$(fToWin "${configFile}")"
@@ -331,8 +328,8 @@ fLaunch(){
 		return 0
 	fi
 
-	## Detach: new session, no controlling tty, own fds - so this script returns at
-	## once and the app outlives it. The log path goes in an env var to keep quotes off
+	## Detach with a new session, no controlling tty, and its own fds, so this script
+	## returns at once and the app outlives it. The log path goes in an env var to keep quotes off
 	## argv, matching the sister launcher.
 	fEcho "Log: ${logFile}"
 	WINE_LOG="${logFile}" setsid /bin/sh -c \

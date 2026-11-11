@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 
 ##	- Purpose:
-##		The publish script commits and pushes, so nothing the caller's environment
-##		holds may be executed inside it. It used to eval one of its own variables.
+##		The publish script commits and pushes, so nothing from the caller's
+##		environment may run inside it. It used to eval one of its own variables.
 ##	- Test ID: dcbdv
 ##	- History: At bottom of file.
 

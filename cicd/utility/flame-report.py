@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 
-##	Purpose: Summarize the newest SilkTerm profiler flamegraph - self-time hot
-##		spots, inclusive call buckets, and the caller chain of the top leaves -
-##		by parsing the pprof/inferno SVG (its fg:w attribute = raw sample counts).
-##		Runs two ways: plain (print the report, meant to run every cicd run) and
+##	Purpose: Summarize the newest SilkTerm profiler flamegraph: self-time hot
+##		spots, inclusive call buckets, and the caller chain of the top leaves. It
+##		parses the pprof/inferno SVG, whose fg:w attribute is the raw sample count.
+##		It runs 2 ways: plain (print the report, meant for every cicd run) and
 ##		--check (print only when the newest flamegraph is newer than the one last
-##		recorded in a local marker, then record it - meant for session startup so
-##		a look is a no-op until there is something new to read).
+##		recorded in a local marker, then record it). --check is meant for session
+##		startup, so a look does nothing until there's something new to read.
 ##	History: At bottom of script.
 
 ##	Copyright (c) 2026 Bubbles
@@ -35,14 +35,14 @@ Frame = tuple[str, float, float, float]   # name, x, y, w in raw samples
 
 
 def fSkip(msg: str) -> NoReturn:
-	##	2 = environmental skip (no dir / unparseable) - non-fatal, matches the
-	##	cicd profiler stage which treats such things as a warning, not a failure.
+	##	2 = skip for the environment (no dir, or unparseable). It isn't fatal, to
+	##	match the cicd profiler stage, which treats these as a warning.
 	sys.stderr.write(f"flame-report: {msg}\n")
 	sys.exit(2)
 
 
 def fNewest(pdir: str) -> tuple[str, str] | None:
-	##	Sort on the timestamp, NOT the role suffix: GFS rotation retags the role
+	##	Sort on the timestamp, not the role suffix: GFS rotation retags the role
 	##	(frequent -> latest -> hour/day/...) as time passes, but the timestamp in
 	##	the name is stable.
 	best: tuple[str, str] | None = None

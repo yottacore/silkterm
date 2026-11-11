@@ -513,7 +513,8 @@ fCheck "and the run here calls them after the container" bash -c 'sed -n "/^if (
 fCheck "the content scrub too" bash -c 'sed -n "/^if ((container)); then$/,/^fi$/p" "$1" | grep -q "^[[:space:]]fContentScrub$"' _ "${engine}"
 fCheck "the run inside writes no second log" grep -q 'LINT_LOG_DIR:-}" && -z "${SILK_CICD_IN_CONTAINER:-}"' "${engine}"
 
-## The ASan run: in the image from a run on this box, as is inside the container.
+## The ASan run goes in the image when started on this box, and runs the script
+## as is when already inside the container.
 # shellcheck source=cicd/utility/include/jobs.bash
 source "${root}/cicd/utility/include/jobs.bash"
 eval "$(fLift '^fRunAsan(){' '^}')"

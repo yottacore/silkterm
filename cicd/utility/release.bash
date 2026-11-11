@@ -2,7 +2,7 @@
 
 ##	- Purpose: Cut a release locally from main. No hosted CI: the tag, the
 ##	  artifacts, and the optional GitHub Release upload all happen on this box.
-##	- Flow (run AFTER merging dev into main --no-ff):
+##	- Flow (run after merging dev into main --no-ff):
 ##	   1. verify: on main, clean tree, version bumped, README badge matches
 ##	   2. run the full pipeline if the release artifacts are missing/stale
 ##	   3. tag the merge: v<version>, where <version> comes from source/Cargo.toml

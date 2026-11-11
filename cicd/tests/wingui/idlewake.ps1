@@ -8,10 +8,10 @@
 	Each arm, Transparency on and then off: the window is let go while minimized
 	and restored without focus, then left in view unfocused past the idle time,
 	then let go minimized again and restored with focus. What it shows after
-	each is held against what it showed before. A restore can catch the window
+	each is compared with what it showed before. A restore can catch the window
 	with no size yet, which a busy GPU makes likelier. idlewake-load.txt in the
 	run's folder starts gpu-stress.exe (run.bash WINGUI_EXTRA) with its
-	arguments for each arm. Not in the pipeline: about three minutes, and the
+	arguments for each arm. Not in the pipeline: about 3 minutes, and the
 	load is sent by hand.
 .NOTES
 	History: At bottom of file.

@@ -114,13 +114,13 @@ unfocused=0; releasedFirst=0; stillReleased=0; sameShot=0; repainted=0; backOnFo
 movedOver=0; staysOnMove=0; unfocusedOnMove=0
 if [[ -n "${win}" ]]; then
 	fX xdotool windowmove "${win}" 40 40 2>/dev/null || true
-	## another window, focused, over part of it, and the pointer away from both.
+	## Another window, focused, over part of it, and the pointer away from both.
 	## xlogo sets no _NET_WM_PID, so it is found by its class.
 	DISPLAY="${display}" XAUTHORITY="${auth}" xlogo -geometry 300x200+400+250 >/dev/null 2>&1 &
 	logoPid=$!
 	fX xdotool mousemove 1000 700 2>/dev/null || true
-	## until SilkTerm isn't the active window, since a map that is slow under
-	## load left it focused, and it never let go
+	## Wait until SilkTerm isn't the active window. A slow map under load left it
+	## focused, and it never let go.
 	logo=""; active=""; unfocused=0
 	for _ in {1..20}; do
 		sleep 0.5

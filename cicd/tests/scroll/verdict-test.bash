@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 
 ##	- Purpose:
-##		The scroll harness once printed OK and exited zero after running no scenes
-##		at all, and stayed that way through a release. This checks its exit code against
+##		The scroll harness once printed OK and exited 0 without running any
+##		scenes, and stayed that way through a release. This checks its exit code against
 ##		what happened, and the trace checks against what they are there to
 ##		catch. Nothing here needs a display.
 ##	- Test ID: dcbdt

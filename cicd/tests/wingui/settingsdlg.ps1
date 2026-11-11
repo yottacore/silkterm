@@ -4,7 +4,7 @@
 <#
 .SYNOPSIS
 	The Settings dialog is a second window with its own GPU context, and winit's
-	parenting on Windows makes it a child rather than an owned window - so
+	parenting on Windows makes it a child rather than an owned window. So
 	nothing about it follows from the main window working.
 .NOTES
 	History: At bottom of file.

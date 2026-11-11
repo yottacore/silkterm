@@ -6,7 +6,7 @@
 ##		ci-mac.bash names every test that failed, even when a test's own output
 ##		splits "test <name> ..." from its FAILED, and runs only those again.
 ##		Lifts fFailedNames and fWhyFailed out of ci-mac.bash as they stand and
-##		feeds them logs in the shapes cargo test writes, with cargo stood in for.
+##		feeds them logs laid out as cargo test writes them, with a stand-in cargo.
 ##	- Test ID: desrb
 ##	- History: At bottom of file.
 

@@ -1,7 +1,7 @@
 #!/bin/dash
 #  shellcheck disable=2086  ## $BENCH_ARGS is a multi-argument string and has to split.
-#                              $LABEL must NOT: it can contain a space, and splitting it
-#                              silently killed every run of the first campaign.
+#                              $LABEL mustn't, since it can contain a space, and splitting
+#                              it silently killed every run of the first campaign.
 # Runs inside the terminal under test.
 #
 # While it waits for the go file it reports its own grid, which is what lets one

@@ -70,8 +70,8 @@ function fGrab([string]$Name) {
 }
 
 ##	cls and then a screenful of numbered lines, so a painted window changes a
-##	lot and a blank one not at all. The shell writes a file as well, which says
-##	the keys got through whatever the picture shows.
+##	lot and a blank one not at all. The shell also writes a file, so the keys can
+##	be seen to get through whatever the picture shows.
 $script:typed = 0
 function fType([string]$Label) {
 	$script:typed++
@@ -151,7 +151,7 @@ fPress "ctrl+win+left"
 Start-Sleep -Seconds 3
 fStep "back, window cloaked: $(fCloaked $h)"
 [void](fGrab "vd-back")
-##	The extra desktop goes again: over to it and close it, which ends up back here.
+##	Close the extra desktop again. Switching to it and closing it ends up back here.
 fPress "ctrl+win+right"
 Start-Sleep -Seconds 1
 fPress "ctrl+win+f4"

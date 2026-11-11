@@ -122,15 +122,14 @@ def measure(pids: list[int], exe_paths: list[str], be: Collector, verbose: bool 
 		hit = by_name.get(be.base_name(name))
 		return hit if hit else be.find_library(name)
 
-	# Injected rather than depended on. Windows machines routinely have libraries pushed
-	# into every process - font hooks, security shims - and those belong to the machine,
-	# not to the terminal: billing them makes a row that no other machine reproduces. The
-	# test is self-calibrating rather than a name list: a library none of the tree's own
-	# binaries import, which is nonetheless mapped into this tool's process as well, is
-	# being injected into everything. Anything the tree imports stays, whoever else maps it.
-	# Windows only for now, on purpose: every published row was measured on Linux, and
-	# the rule there could only move one. Extending it needs a published row reproduced
-	# first, which is the gate every change to this accounting goes through.
+	# Injected rather than depended on. Windows machines often have libraries such as font
+	# hooks and security shims pushed into every process, and billing the terminal for
+	# them gives a row no other machine reproduces. A library that none of the tree's own
+	# binaries import, but that's also mapped into this tool's process, is being injected
+	# into everything. Anything the tree imports stays, whoever else maps it.
+	# This is Windows only, since every published row was measured on Linux and the rule
+	# could only move one there. Any change to this accounting needs a published row
+	# reproduced first.
 	injected: set[str] = set()
 	if be.name == "windows":
 		own_closure = closure([p for p in exe_paths if Path(p).exists()], be.needed, resolve)
@@ -230,8 +229,8 @@ def measure(pids: list[int], exe_paths: list[str], be: Collector, verbose: bool 
 # The trailing lookahead has to admit '_', because the vendor back ends are named
 # libEGL_nvidia / libGLX_mesa / libdrm_intel and are loaded at runtime rather than linked.
 # A plain word boundary misses all of them, they then look like libraries nobody in the
-# graphics stack needs, and seeding the app closure with one drags libLLVM in behind it -
-# which is how the terminal ended up billed for 200 MiB of mesa.
+# graphics stack needs, and seeding the app closure with one drags libLLVM in behind it.
+# That's how the terminal once got billed for 200 MiB of mesa.
 LINUX_GFX_RE = re.compile(
 	r"""^(?:
 		  libGL | libGLX | libGLdispatch | libGLESv\d | libEGL | libglapi
@@ -462,9 +461,8 @@ class WindowsBackend:
 			            ("VirtualAttributes", ct.c_size_t)]
 
 		class PROCESSENTRY32W(ct.Structure):
-			#	Fixed widths, not c_long: it is 4 bytes here and 8 on most of the world, and
-			#	a struct whose layout the caller has to get exactly right is no place for a
-			#	type whose size moves.
+			#	Fixed widths rather than c_long, which is 4 bytes here and 8 on most other
+			#	platforms.
 			_fields_ = [("dwSize", wt.DWORD),
 			            ("cntUsage", wt.DWORD),
 			            ("th32ProcessID", wt.DWORD),
@@ -950,10 +948,10 @@ def find_terminal(be: Backend) -> tuple[list[int], str]:
 	owner = be.console_owner() if hasattr(be, "console_owner") else 0
 	program = owner
 	if owner and stem_of(be.exe_of(owner)) not in CONSOLE_HOSTS:
-		#	Windows 11 returns the console PROGRAM for this query, not the host, so the
-		#	host has to be found beside it: a child where the system attached one, a parent
-		#	where it was launched explicitly. Only adjacent - walking further up leaves the
-		#	session entirely and ends up on whatever started it.
+		#	Windows 11 returns the console program for this query, not the host, so the
+		#	host has to be found beside it. It's a child where the system attached one, or
+		#	a parent where it was launched explicitly. Only adjacent processes count, since
+		#	walking further up leaves the session and ends up on whatever started it.
 		for near in [be.parent_of(owner)] + be.children_of(owner):
 			if near > 1 and stem_of(be.exe_of(near)) in CONSOLE_HOSTS:
 				owner = near
@@ -1008,7 +1006,7 @@ def find_terminal(be: Backend) -> tuple[list[int], str]:
 
 	mine = set(tree_of(be, os.getpid()))
 	#	The wrapper runs this script, so the interpreter above is part of the measuring
-	#	tool too and has to go the same way its child does - billing a terminal for it adds
+	#	tool too and is dropped the same way its child is. Billing a terminal for it adds
 	#	about 19 MiB that no rig-measured row has. Only interpreters are dropped, so the
 	#	walk stops at the shell, which the terminal is entitled to.
 	runner = be.parent_of(os.getpid())
@@ -1243,8 +1241,8 @@ def main() -> int:
 
 	res = measure(pids, exes, be, verbose=args.verbose, payload=args.payload)
 
-	# A self-contained bundle has no meaningful "executable" - what you install is the
-	# whole extracted payload, plus the system libraries it still borrows.
+	# A self-contained bundle has no single executable. What gets installed is the whole
+	# extracted payload, plus the system libraries it still uses.
 	if args.payload:
 		total = 0
 		for root, _, files in os.walk(args.payload):

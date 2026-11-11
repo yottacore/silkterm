@@ -7,8 +7,8 @@
 ##
 ##		There are 2 ways in:
 ##
-##		THIS TERMINAL, any OS. Measures whatever terminal you're sitting in - speed,
-##		then size and memory - and writes its row. Needs nothing but Python 3 and a
+##		THIS TERMINAL, any OS. Measures the speed, then the size and memory, of the
+##		terminal you're sitting in, and writes its row. Needs nothing but Python 3 and a
 ##		tty, so it's the only way to measure the terminals that exist solely on
 ##		Windows or macOS. This is what you get if you name no terminal. Size the window
 ##		to 100x30 first, or the size half will refuse; pass --label with the table's
@@ -28,8 +28,8 @@
 ##		Nothing is published unless it's comparable. Re-measure a terminal already in
 ##		the table before adding a new one: the rig reproduced SilkTerm's speed within
 ##		0.6% and its memory within 1.3%, and a figure taken any other way doesn't
-##		belong beside the existing rows. Figures from a second machine are a separate
-##		question again - see include/showdown-readme.md on calibrating one.
+##		belong beside the existing rows. Figures from a second machine need that machine
+##		calibrated first, as include/showdown-readme.md describes.
 ##
 ##	Usage:
 ##		utility/update-showdown.py                      measure this terminal

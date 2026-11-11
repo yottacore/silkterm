@@ -8,42 +8,40 @@
 	Windows-native CI/CD pipeline for SilkTerm.
 .DESCRIPTION
 	A PowerShell port of the Linux cicd.bash, doing as much of the same work as
-	Windows allows - including the parts cicd.bash farms out to helper scripts
-	(the git backup/publish). Does NOT touch cicd.bash (that stays the
-	Linux/cross pipeline).
+	Windows allows, the git backup and publish included. cicd.bash stays the
+	Linux and cross pipeline.
 
 	Stages (fail-fast; any error aborts before the next stage):
 	 0. remote sync    (fetch; fast-forward if safely behind; abort if diverged)
 	 1. format         (cargo fmt)
 	 2. debug build    (cargo build)
-	 3. tests + lints  (cargo test; clippy + cargo-deny are ADVISORY here, but
-	                    the advisory scan gates)
-	 4. release builds  x86_64 msvc AND gnu (always both), + ARM64 when its
-	                    toolchain is present (auto-detected, else warn-skip)
+	 3. tests + lints  (cargo test; clippy and cargo-deny only warn here, but
+	                    the advisory scan fails the run)
+	 4. release builds  x86_64 msvc and gnu, always both, plus ARM64 when its
+	                    toolchain is there (else a warning and a skip)
 	 5. packages       (NSIS installer .exe per built arch, if makensis found)
-	 6. linux half     (-Wsl: hand the Linux-only work to WSL2 - see below)
+	 6. linux half     (-Wsl: hand the Linux-only work to WSL2, below)
 	 7. dogfood        (copy the best x86_64 build to <dogfood>\silkterm.exe)
 	 8. publish        (stash -> pull -> add -> commit -> push, current branch)
 
-	What Windows can't do (dropped vs cicd.bash): the profiler (pprof's
-	SIGPROF sampler is Unix-only - the profiling feature can't even compile
-	for a Windows target), the headless scroll harness / demo
-	(need Xvfb), .deb/.rpm packages (Linux), and the rar version-archive step
-	of publish (skipped by request). clippy is advisory, not gating: the
-	Unix-gated ctl code emits dead_code warnings here, so -D warnings can't
-	pass.
+	What Windows can't do, compared to cicd.bash: the profiler, since pprof's
+	SIGPROF sampler is Unix-only and the profiling feature doesn't compile for
+	a Windows target; the scroll harness and the demo, which need Xvfb; the
+	Linux packages; and the rar version archive step of publish, skipped by
+	request. clippy only warns, since the Unix-gated ctl code has dead_code
+	warnings here, so -D warnings can't pass.
 
 	-Wsl gets all of that back on a box that has WSL2, by running the Linux
-	pipeline (cicd.bash --no-windows) there against THIS working tree. The
-	two halves split cleanly: Windows builds what only Windows can, msvc
-	above all, and WSL builds what only Linux can. Neither repeats the
-	other's targets. Off by default - it roughly doubles a run.
+	pipeline (cicd.bash --no-windows) there against this working tree. Windows
+	builds what only Windows can, msvc above all, and WSL builds what only
+	Linux can, so neither repeats the other's targets. It's off by default,
+	since it about doubles a run.
 
-	Dogfood pick: prefer the msvc build IF it's self-contained (statically
-	linked, no VCRUNTIME140/MSVCP140 dependency); else the gnu build; else
-	whichever single build exists. The fixed silkterm.exe goes to the SYNCED
-	app dir; the runterm launcher keeps its own rotated pool locally
-	(the two stay separate dirs on purpose).
+	Dogfood pick: the msvc build if it's self-contained (statically linked,
+	with no VCRUNTIME140 or MSVCP140 dependency), else the gnu build, else
+	whichever single build there is. The fixed silkterm.exe goes to the synced
+	app dir, and the runterm launcher keeps its own rotated copies locally, in
+	a separate dir.
 .PARAMETER Yes
 	Run unattended (no confirm / message prompt).
 .PARAMETER Quiet
@@ -135,8 +133,8 @@
 	Print the steps and test IDs the other options would run, and run nothing.
 	Under -Wsl the Linux half prints its own (cicd.bash --list).
 .PARAMETER Wsl
-	Also run the Linux half in WSL2 (.deb/.rpm, profiler, scroll harness -
-	everything Windows can't do).
+	Also run the Linux half in WSL2, for everything Windows can't do: the .deb
+	and .rpm packages, the profiler, and the scroll harness.
 .PARAMETER WslDistro
 	Which distribution to use (default: the first WSL2 one).
 .PARAMETER Message
@@ -201,9 +199,9 @@ if ($PSVersionTable.PSVersion.Major -lt 6) {
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
-## We drive native tools (git, cargo) by hand and read $LASTEXITCODE - several
-## probes (git diff --quiet, clippy) return non-zero ON PURPOSE. Keep a non-zero
-## native exit from throwing so those reads work regardless of the caller's shell.
+## Native tools such as git and cargo are run by hand and $LASTEXITCODE is read,
+## and some probes (git diff --quiet, clippy) exit non-zero on purpose. A non-zero
+## native exit mustn't throw, so those reads work whatever the caller's shell is.
 $PSNativeCommandUseErrorActionPreference = $false
 ## Low priority for the whole run, set here so every child inherits it.
 try { (Get-Process -Id $PID).PriorityClass = 'BelowNormal' } catch { Write-Warning "couldn't lower the priority: $_" }
@@ -266,7 +264,8 @@ $Targets = @(
 )
 
 ## Collected release binaries + checksums go here (its own dir so the Linux
-## pipeline's cicd/artifacts/release wipe can't nuke Windows artifacts, or v.v.).
+## pipeline's cicd/artifacts/release wipe can't remove Windows artifacts, or the
+## other way round).
 $ReleaseArtifactDir = Join-Path $Root "cicd\artifacts\release-win"
 
 ## NSIS installer template (shared with the Linux pipeline).
@@ -275,10 +274,10 @@ $NsisTemplate = Join-Path $Root "cicd\packaging\windows\installer.nsi.in"
 ## Full-run transcript (gitignored, alongside the Linux lint logs' sibling).
 $LogDir = Join-Path $Root "cicd\artifacts\lint-win"
 
-## Dogfood: the fixed-name copy, into the SYNCED app dir so it rides Dropbox and
-## any box can grab it. Deliberately a SEPARATE dir from the launcher's local
-## versions folder - runterm copies from here into that, and the two never share a
-## folder. Same layout the Linux pipeline's DOGFOOD_DESTS uses.
+## Dogfood: the fixed-name copy goes into the synced app dir, so Dropbox copies it
+## to every box. It's a separate dir from the launcher's local versions folder on
+## purpose, since runterm copies from here into that. Same layout as the Linux
+## pipeline's DOGFOOD_DESTS.
 ## First one that exists wins, the same list the launcher reads. 'synced' can read
 ## as empty on Windows, so the real Dropbox spelling follows it.
 $DogfoodDirs     = @(
@@ -689,7 +688,7 @@ function fCheckToolPins {
 				if ($mk) { $found = $true; $out = & $mk @rest 2>$null; $verLine = $out | Select-Object -First 1 }
 			} else {
 				if (Get-Command $exe -ErrorAction SilentlyContinue) {
-					## Collect the whole output FIRST, then take the first line. Piping a
+					## Collect the whole output first, then take the first line. Piping a
 					## native command straight into `Select-Object -First 1` races: the
 					## early upstream-stop can kill the tool mid-print (exit 101) and drop
 					## its version line, which read as a false "not found".
@@ -924,11 +923,11 @@ function fStashIfDirty {
 	return ($after -gt $before)
 }
 
-## Stage 0: make sure the local branch can be safely refreshed from its upstream
-## BEFORE spending the build - what stage 7 pushes should be what got built and
-## tested here, not an untested post-build merge. Behind-only is safe (fast-
-## forward, stash-wrapped for a dirty tree); diverged aborts now rather than at
-## publish. Offline just warns - a local build shouldn't need the net.
+## Stage 0: check that the local branch can be refreshed from its upstream before
+## the build, so what stage 8 pushes is what was built and tested here, rather
+## than an untested merge. Behind only is safe, as a fast-forward with a stash
+## around it for a dirty tree. Diverged aborts now rather than at publish.
+## Offline only warns, since a local build shouldn't need the net.
 function fRemoteSync {
 	& git rev-parse --abbrev-ref '@{u}' 2>$null | Out-Null
 	if ($LASTEXITCODE -ne 0) {
@@ -958,7 +957,7 @@ function fRemoteSync {
 	fEcho "OK: fast-forwarded $behind commit(s) from upstream"
 }
 
-## Publish: a native port of n8git_backup-and-publish MINUS the rar archive step.
+## Publish: a native port of n8git_backup-and-publish without the rar archive step.
 ## stash (if dirty) -> pull --no-ff (if upstream) -> pop -> add -> commit -> push.
 ## $Msg empty means "let git open its editor" (git uses core.editor / EDITOR).
 function fPublish {
@@ -1105,7 +1104,7 @@ function fLeftOut {
 ## the headless scroll harness. --no-windows on that side is what stops the two
 ## halves rebuilding each other's targets.
 ##
-## It builds THIS working tree over /mnt rather than a second checkout, so there
+## It builds this working tree over /mnt rather than a second checkout, so there
 ## is nothing to keep in sync. Reading the source over 9p was measured and costs
 ## nothing. CARGO_TARGET_DIR is the part that matters: left alone, the Linux build
 ## would go in the same target\ the Windows build just used, and the two would
@@ -1202,7 +1201,7 @@ function fWslLinuxHalf {
 	## found" - exit 127, no useful message, and from a file nobody was looking at.
 	## .gitattributes asks for LF on all of them, but git never re-normalizes files
 	## that were already in the tree when the rule arrived, so a long-lived clone
-	## can have them for years without noticing. Say so rather than let it happen.
+	## can have them for years without anybody noticing, so the check says so here.
 	$crlf = @(& git ls-files --eol | Where-Object { $_ -match "w/crlf" -and $_ -match "eol=lf" } |
 		ForEach-Object { ($_ -split "`t")[-1] })
 	if ($crlf) {
@@ -1360,8 +1359,8 @@ function fMain {
 		return
 	}
 
-	## Capture the commit message up front so the run finishes unattended. This is
-	## the natural place to bail on the common (publish) path - Ctrl+C aborts.
+	## Ask for the commit message up front so the run finishes unattended. Ctrl+C
+	## here stops the run.
 	if (-not $Unattended -and -not $NoPublish -and -not $publishMsg) {
 		$m = Read-Host "Publish commit message (blank = editor; Ctrl+C aborts)"
 		## Read-Host bypasses the blank counter; reset it so the next section's
@@ -1425,8 +1424,8 @@ function fMain {
 	fStepClose
 
 	## Release builds (x86_64 msvc + gnu always; ARM64 when ready).
-	## (No profiler stage here: pprof's SIGPROF sampler is Unix-only - the
-	## profiling feature can't even compile for a Windows target.)
+	## No profiler stage here, since pprof's SIGPROF sampler is Unix-only and the
+	## profiling feature doesn't compile for a Windows target.
 	## -NoRelease: none of them, and the steps that read them are off too.
 	$built = @(); $ver = ''
 	if (-not $NoRelease) {

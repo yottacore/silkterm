@@ -5,7 +5,7 @@
 ##		The git hooks act on a commit or a push, where a mistake is awkward to undo.
 ##		Drives them in a scratch repository: the pre-commit formatter must touch only
 ##		what is staged, and the pre-push gate must verify the commit being pushed
-##		rather than whatever the working tree happens to hold.
+##		rather than whatever the working tree happens to have.
 ##	- Test ID: dcrj6
 ##	- History: At bottom of file.
 
@@ -110,9 +110,9 @@ fCheck "and is formatted" \
 	bash -c 'git -C "$1" show HEAD:main.rs | grep -Fxq "fn main() {"' _ "${repo}"
 
 ## The pre-push gate, with a stub in place of the pipeline: a real gate is a full
-## build, and what is being tested is WHICH source it reads, not what it does.
+## build, and this checks which source it reads rather than what it does.
 ## The stub passes when the tree it runs in says "good" and fails when it says
-## "bad", so the answer names the source the hook handed it.
+## "bad", so its result names the source the hook handed it.
 push="${work}/push"
 origin="${push}/origin.git"
 clone="${push}/clone"

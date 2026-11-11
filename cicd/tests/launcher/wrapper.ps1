@@ -55,7 +55,7 @@ Set-Content -LiteralPath (Join-Path $dir "n8runterm.ps1") -Value @(
 $said = Join-Path $dir "said.txt"
 
 ## Runs the wrapper as a shortcut would, with PATH set to $PathValue and any other
-## variables in $Env, and answers { Code; Output; Said }.
+## variables in $Env, and returns { Code; Output; Said }.
 function fRunWrapper { param([string]$PathValue, [hashtable]$Env = @{})
 	Remove-Item -LiteralPath $said -ErrorAction SilentlyContinue
 	$psi = New-Object System.Diagnostics.ProcessStartInfo
