@@ -72,7 +72,7 @@ printf '[{"tag_name":"v9.9.9","draft":false,"prerelease":false}]\n' > "${relDir}
 
 ## A curl that returns it. Takes the URL, -o and -w, ignores the rest, and notes
 ## each --config so the token check can see the file was still passed that way.
-## STUB_API_CODE is the status the API answers with.
+## STUB_API_CODE is the status the API returns.
 stubDir="${work}/stub"
 mkdir -p "${stubDir}"
 cat > "${stubDir}/curl" <<'STUB'
@@ -226,7 +226,7 @@ fCases() {
 	h="${work}/${kind}-pre-only"
 	STUB_DIR="${caseDir}" fInstall "${h}" || true
 	fCheck "${kind}: with no full release, stable takes the newest pre-release" fInstalled "${h}" 9.9.9-beta10
-	fCheck "${kind}: and says it did" fSaid "${h}" "No full release published yet"
+	fCheck "${kind}: and says it did" fSaid "${h}" "There's no full release yet"
 
 	## An API failure is an error, never "no full release".
 	caseDir="${work}/${kind}-rel-500"
@@ -235,7 +235,7 @@ fCases() {
 	h="${work}/${kind}-api-500"
 	rc=0; STUB_DIR="${caseDir}" STUB_API_CODE=500 fInstall "${h}" || rc=$?
 	fCheck "${kind}: a failed API call stops the install" test "${rc}" -ne 0
-	fCheck "${kind}: and is not read as no full release" fNotSaid "${h}" "No full release"
+	fCheck "${kind}: and is not read as no full release" fNotSaid "${h}" "no full release yet"
 	fCheck "${kind}: and names the status" fSaidRe "${h}" "Detail:.*500"
 	fCheck "${kind}: with one blank line before the error, after the lookup line" fSpaced "${h}"
 
@@ -263,7 +263,7 @@ fCases() {
 	h="${work}/${kind}-badsum"
 	rc=0; STUB_DIR="${caseDir}" fInstall "${h}" || rc=$?
 	fCheck "${kind}: a checksum mismatch stops the install" test "${rc}" -ne 0
-	fCheck "${kind}: and says so" fSaid "${h}" "checksum mismatch - NOT installing"
+	fCheck "${kind}: and says so" fSaid "${h}" "checksum mismatch, so nothing was installed"
 	fCheck "${kind}: and installs nothing" test ! -e "${h}/.local/bin/silkterm"
 
 	## A re-run with the program current puts back a launcher that went missing,
@@ -276,7 +276,7 @@ fCases() {
 	rc=0; fInstall "${h}" || rc=$?
 	fCheck "${kind}: a re-run puts back a missing launcher" test -e "${h}/.local/share/applications/silkterm.desktop"
 	fCheck "${kind}: without installing the program again" test "$(stat -c %Y "${h}/.local/bin/silkterm")" = "$(date -d '2001-01-01' +%s)"
-	fCheck "${kind}: and says so" fSaid "${h}" "Put back what was missing"
+	fCheck "${kind}: and says so" fSaid "${h}" "Restored what was missing"
 	rc=0; fInstall "${h}" || rc=$?
 	fCheck "${kind}: with nothing missing, a re-run does nothing" fSaid "${h}" "Already up to date"
 
@@ -322,8 +322,8 @@ for opt in --release --target; do
 	fCheck "bash: and names the option" fSaid "${h}" "${opt} needs a value"
 done
 
-## install.ps1 without -Yes, where it can't ask. It used to say "Aborted" and
-## succeed. Read-Host throws under -NonInteractive, and with a terminal on stdin
+## install.ps1 without -Yes, where it can't ask. It used to say it was canceled
+## and succeed. Read-Host throws under -NonInteractive, and with a terminal on stdin
 ## nothing else gives it away, so that case runs under a pty.
 if command -v pwsh >/dev/null 2>&1; then
 	fAsked(){
@@ -341,7 +341,7 @@ if command -v pwsh >/dev/null 2>&1; then
 			script -qec "pwsh -NoProfile -NonInteractive -File '${meDir}/stubrun.ps1' -Installer '${root}/install.ps1'" /dev/null \
 			</dev/null >"${h}/out.log" 2>&1 || true
 		fCheck "ps1: no -Yes under -NonInteractive on a terminal asks for -Yes and installs nothing" fAsked "${h}"
-		fCheck "ps1: and does not claim to have aborted" fNotSaid "${h}" "Aborted"
+		fCheck "ps1: and does not claim to have aborted" fNotSaid "${h}" "Canceled"
 	else
 		echo "  skip install.ps1 on a terminal (no script)"
 	fi
