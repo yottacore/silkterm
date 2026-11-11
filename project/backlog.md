@@ -61,7 +61,8 @@ Going forward, new issues in the new template at the bottom of this file will go
 - The profiler reads the live settings and rating, so its numbers follow personal settings
 	- ID: 2026111017285305
 	- Type: Task
-	- Status: Queued
+	- Status: Waiting on automated testing
+	- Needs local test suite run?: stage 4's profiler on the card. It should read about 40% text shaping at Max, with no step down and no startup test.
 	- Priority: Low
 	- Opened: 20261110-172853
 	- Opened by: CC
@@ -72,6 +73,16 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- The workload runs plain, never in tmux.
 	- Notes:
 		- On 11-09 the live file had `tmux.always_new_session` on. Since c2e52357 that puts a plain launch in tmux, and the shaping share went from about 40% to 80%. The rating, the minimap and the wallpaper feed in the same way.
+	- Progress log:
+		- 20261110: The profiler's app now runs on its own config, data, state and cache folders in the test run folder. Its settings file turns Choose automatically off at Max and tmux off, and the rest stays at the build's defaults. The app runs with `TMUX` unset too.
+		- 20261110: A launch on that tree keeps the 3 values, writes no rating, and doesn't convert the file, since it has the Format line.
+	- Decisions:
+		- 20261110: Choose automatically off at Max, rather than a rating in the state file. A rating only holds for the card's own hardware id, which the script can't work out, and with automatic off there is also no step down part way through a run. Max is what the pipeline read from 10-28 to 11-06.
+		- 20261110: The XDG folders, as the A/B rig does, rather than `--config`, so its numbers compare with the rig's.
+		- 20261110: The minimap and the wallpaper stay at the build's defaults, so a change to one of those defaults still shows in the graph.
+	- Test case: `cicd/tests/profsettings/run.bash` (df4v4), in the full run. It runs the script's own profiler step with a stand-in app. 8 of its 9 checks fail on the old step, and all pass on the new one.
+		- Swept: `fRunProfiler` is the only place that sets `SILK_PROFILE_OUT`. The scroll harness already has its own config.
+	- Verified: 20261110, df4v4 both ways, a debug build on a private Xvfb with the tree, and the backlog quick run in all 5 areas.
 
 - The window doesn't paint while the GPU is busy or short on memory, and stays blank after the load ends
 	- ID: 2026100312470535
