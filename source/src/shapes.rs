@@ -1,15 +1,14 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 // Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
 
-//! What a double-click takes when the text under the pointer is a shape we can
-//! name: a URL, a Windows or posix path, an scp target. Word selection cuts those
-//! in the wrong places - a space in a folder name ends the path early, a `:12`
-//! line number gets dragged in, a bracket in a wiki URL splits it - so a shape
-//! that is recognized here is taken whole and outranks both the pair rule and the
-//! word rule.
+//! What a double-click takes when the text under the pointer is a URL, a Windows
+//! or posix path, or an scp target. Word selection cuts those in the wrong places,
+//! such as at a space in a folder name, at a `:12` line number, or at a bracket in
+//! a wiki URL. So a match here is taken whole, and outranks both the pair rule and
+//! the word rule.
 //!
-//! Everything a shape can start with is anchored: a drive letter, a UNC prefix, a
-//! leading slash or `~/`. Nothing else is a path, which is what keeps prose out.
+//! Every path start is anchored: a drive letter, a UNC prefix, a leading slash, or
+//! `~/`. That's what keeps prose out.
 
 // How far past a space a path separator may sit and still read as part of the
 // same path. A folder name runs to a few words; prose doesn't reach a slash
@@ -38,12 +37,11 @@ fn is_sep(c: char) -> bool {
 	c == '\\' || c == '/'
 }
 
-// Characters a path may contain. Whitespace ends a run (crossing one is decided
-// separately) and the rest are the ones Windows forbids in a name outright plus
-// the double quote a shell would have wrapped the path in. Past ASCII only
-// letters, digits, and combining marks count, from any script. A prompt puts its
-// status marks (the git prompt's check and x) right after a path, and symbols,
-// emoji and box drawing are far more often that than part of a name.
+// Characters a path may contain. Whitespace ends a run, and crossing one is
+// decided separately. The rest left out are the ones Windows forbids in a name,
+// plus the double quote a shell wraps a path in. Past ASCII, only letters, digits,
+// and combining marks count. A prompt puts status marks, such as the git prompt's
+// check and x, right after a path, so symbols, emoji, and box drawing stay out.
 fn is_path_char(c: char) -> bool {
 	if c.is_ascii() {
 		return !c.is_ascii_whitespace()
@@ -53,9 +51,9 @@ fn is_path_char(c: char) -> bool {
 	c.is_alphanumeric() || is_combining_mark(c)
 }
 
-// The combining blocks. A grid cell never holds one of these on its own - the
-// engine hangs them on the cell before - so this is for text from anywhere else.
-// Most marks in other scripts are alphabetic already.
+// The combining blocks. The engine attaches these to the cell before, so a grid
+// cell never holds one alone, and this is for text from anywhere else. Most marks
+// in other scripts are alphabetic already.
 fn is_combining_mark(c: char) -> bool {
 	matches!(c,
 		'\u{0300}'..='\u{036f}'
@@ -65,9 +63,9 @@ fn is_combining_mark(c: char) -> bool {
 			| '\u{fe20}'..='\u{fe2f}')
 }
 
-// A shape can't start mid-word: "xC:\a" isn't a drive path and "and/or" isn't
-// an absolute one. Listed the other way round on purpose - what may sit in front
-// of a path is a short closed set, and everything else is part of a name.
+// A path can't start mid-word: "xC:\a" isn't a drive path and "and/or" isn't an
+// absolute one. The list is of what may sit in front of a path, since that's a
+// short closed set, and everything else is part of a name.
 fn boundary_before(text: &[char], start: usize) -> bool {
 	match start.checked_sub(1).and_then(|i| text.get(i)) {
 		Some(&c) => {
@@ -124,16 +122,16 @@ fn anchor(text: &[char], at: usize) -> Option<Anchor> {
 		return path(1);
 	}
 	// git@github.com:owner/repo.git, and the userless spelling a git prompt shows.
-	// The `.git` does NOT end it: a prompt writes the branch after it as
-	// `repo.git:dev`, and that whole field is the thing being clicked on.
+	// The `.git` doesn't end it, since a prompt writes the branch after it as
+	// `repo.git:dev`, and that whole field is what gets clicked.
 	remote_len(text, at).map(|prefix| Anchor {
 		prefix,
 		ext_ends: false,
 	})
 }
 
-// How much of an scp target starting at `at` is prefix - through the colon that
-// separates the host from the path. None when this isn't one.
+// How much of an scp target starting at `at` is prefix, through the colon after
+// the host. None when it isn't one.
 fn remote_len(text: &[char], at: usize) -> Option<usize> {
 	let host = at + user_len(text, at).unwrap_or(0);
 	let colon = host_end(text, host)?;
@@ -240,8 +238,8 @@ fn separator_within_reach(text: &[char], from: usize) -> bool {
 }
 
 // Where the name ends if this run already has a file extension, as an offset
-// into the run. Only the last segment counts, and what FOLLOWS the extension
-// decides: another dot means a second part (`a.tar.gz`), a separator means it was
+// into the run. Only the last segment counts, and what comes after the extension
+// decides. Another dot means a second part (`a.tar.gz`), a separator means it was
 // a directory all along, and anything else means the name ended and the `:120:5`
 // after it is somebody's line number.
 fn ends_at_extension(run: &[char]) -> Option<usize> {
@@ -340,7 +338,7 @@ mod tests {
 		);
 	}
 
-	// Prose after a path is prose, not more path - there is no separator in it.
+	// Prose after a path isn't part of it, since there's no separator in it.
 	// Test ID: dbsy3
 	#[test]
 	fn a_space_with_no_separator_after_it_ends_the_path() {
