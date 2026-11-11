@@ -48,12 +48,12 @@ cat >"${work}/app.bash" <<-'APP'
 chmod +x "${work}/app.bash"
 touch "${work}/workload.py"
 
-eval "$(fLift '^fRunProfiler(){' '^}')"
+eval "$(fLift '^fRunProfiler(){' '^}' | sed 's/\bgfs_rotate /fRotateStub /')"
 fEcho(){ echo "    ${*}"; }
 fEcho_Clean(){ echo "    ${*}"; }
 fDie(){ echo "    DIE ${*}"; return 1; }
 fRetryBuild(){ :; }
-gfs_rotate(){ :; }
+fRotateStub(){ :; }
 fCardDisplay_Start(){ cardDisplay=":fake"; cardSway="fake"; }
 fCardDisplay_Stop(){ cardDisplay=""; cardSway=""; }
 
