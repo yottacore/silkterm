@@ -1,58 +1,51 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 // Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
 
-//! What gets set up in the shells this terminal starts: a directory-reporting
-//! block in PowerShell profiles, and a git-aware prompt for both PowerShell and
-//! bash.
+//! What gets set up in the shells this terminal starts: a block in PowerShell
+//! profiles that reports the directory, and a git-aware prompt for both
+//! PowerShell and bash.
 //!
 //! The PowerShell half:
 //!
-//! Every other shell moves its own process when it moves, so the operating
-//! system can be asked where it is and nothing needs setting up (see `cwd.rs`).
-//! PowerShell keeps its location to itself, so it has to say where it is - and
-//! asking every user to paste a block into a file to make new tabs open in the
-//! right place is a poor trade when the block can be put there for them.
+//! Every other shell changes its own process's directory, so the system can be
+//! asked where it is (see `cwd.rs`). PowerShell keeps its location to itself,
+//! so it has to report it, and the block is put in the profile rather than
+//! asking every user to paste it in. The limits are in design.md, "The shell
+//! list and how it is filled":
 //!
-//! What that licenses is narrow, and the limits are the design:
+//! - Only a profile that doesn't report anything is touched. Our marker, or any
+//!   other OSC 7 or OSC 9;9 in the file, such as a Windows Terminal setup, means
+//!   it's handled already.
+//! - The file is only appended to, once, after a copy is kept beside it. The
+//!   marker makes a second launch a no-op. The block itself is kept current in
+//!   place, since it gains things over time. That edit is safe only because the
+//!   region is between our own 2 markers. A stored shell entry has no such
+//!   markers, which is why that list is only ever added to.
+//! - Deleting the block switches it off. A note beside the account's own
+//!   config, whatever `--config` names, lists the profiles written to, so one
+//!   that had the block and doesn't any more is left alone. Without the note
+//!   the next launch put the block back, since the marker went with it.
+//!   `shell.integration` switches the whole thing off.
+//! - A profile that doesn't decode as UTF-8 is left alone. 5.1 writes UTF-16 by
+//!   default, and appending to a file that can't be read replaces it.
+//! - A shell whose execution policy would refuse the profile is left alone.
+//!   Windows PowerShell 5.1 is at Restricted by default on desktop Windows, and
+//!   a profile written for it turned every launch into a red error. Changing
+//!   somebody's execution policy isn't ours to do.
+//! - It runs on the shell-scan thread, well after the window is up, because
+//!   asking PowerShell where its profile is means starting one.
 //!
-//! - Only a profile that reports NOTHING is touched. Our own marker, or any
-//!   other OSC 7 / OSC 9;9 already in the file (a Windows Terminal setup, say),
-//!   means somebody has this in hand and the file is left alone.
-//! - Only ever APPENDED to, after a copy is kept beside it, and only once - the
-//!   marker is what makes a second launch a no-op. The one exception is the
-//!   block ITSELF, which is kept current in place: it gains things over time
-//!   (the version prompt did), and an install that only ever appends would
-//!   leave everyone who already had it on the first version forever. That edit
-//!   is only safe because the region is delimited by our own two markers and
-//!   was written by us - which is exactly the signal a stored shell entry
-//!   lacks, and why THAT list may only ever be added to.
-//! - Deleting the block is how it is switched off. A note beside the account's
-//!   own config, whatever `--config` names, records which profiles were written
-//!   to, so a profile that carried the block and no longer does is left alone -
-//!   without it the next launch simply put the block back, since the marker went
-//!   with it. `shell.integration` switches the whole thing off before it starts.
-//! - A profile that doesn't decode as UTF-8 is left alone: 5.1 writes UTF-16 by
-//!   default, and appending to a file we can't read replaces it.
-//! - A shell that would refuse to load the profile is left alone. Measured on
-//!   this box: Windows PowerShell 5.1 sits at a policy that blocks script
-//!   files, so a profile written for it turned every launch into a red
-//!   execution-policy error. Writing a file a shell can't read is worse than
-//!   doing nothing, and changing somebody's execution policy isn't ours to do.
-//! - It runs on the shell-scan thread, well after the window is up, because it
-//!   asks PowerShell itself where its profile is - which means starting one.
+//! The block also has the prompt in it, rather than calling a script beside
+//! the config the way the bash half does. A prompt is drawn after every
+//! command, and starting a process that often on Windows isn't free.
 //!
-//! The block also includes the prompt, rather than pointing at a script written
-//! beside the config the way the bash half does. A prompt is drawn after every
-//! command, and on Windows starting a process that often isn't free.
-//!
-//! The bash half is a much smaller thing, and deliberately so. It is off by
-//! default. When on, bash picks up `PROMPT_COMMAND` from its environment, and
-//! that sets PS1 before every prompt, so it replaces a PS1 from the rc files -
-//! which Debian's own files set, so yielding to one would mean never showing.
-//! An rc file that sets a `PROMPT_COMMAND` of its own still wins. Nothing is
-//! written into anyone's rc file, and switching it off is a setting rather
-//! than an uninstall. The script is sourced once per shell, so outside a git
-//! working tree a prompt starts no process.
+//! The bash half is smaller. It's off by default. When on, bash takes
+//! `PROMPT_COMMAND` from its environment, which sets PS1 before every prompt,
+//! so it replaces a PS1 from the rc files. Debian's own files set one, so
+//! yielding to it would mean never showing. An rc file that sets its own
+//! `PROMPT_COMMAND` still wins. Nothing is written into anyone's rc file, and
+//! switching it off is a setting. The script is sourced once per shell, so
+//! outside a git working tree a prompt starts no process.
 
 use std::path::{Path, PathBuf};
 
@@ -61,16 +54,16 @@ use anyhow::Context as _;
 use crate::config;
 use crate::shells::Found;
 
-/// The block, and the marker that says it is already there. Compiled in so the
-/// binary is the one source of it - `shell-integration.md` documents the same
-/// text for anyone adding it by hand, and a test holds the two together.
+/// The block, and the marker that says it's already there. Compiled in so the
+/// binary is the one source of it. `shell-integration.md` has the same text for
+/// anyone adding it by hand, and a test checks that the 2 match.
 ///
-/// It is written out as plain UTF-8 with no byte-order mark, and Windows
-/// PowerShell 5.1 reads such a file as ANSI - so the block itself has to stay
-/// ASCII, and the glyphs its prompt draws are spelled as code points.
+/// It's written as plain UTF-8 with no byte-order mark, which Windows
+/// PowerShell 5.1 reads as ANSI, so the block has to stay ASCII and the glyphs
+/// its prompt draws are written as code points.
 pub const SNIPPET: &str = include_str!("shell_integration.ps1");
-// Named rather than spelled at each use: this module compares and rewrites
-// line endings constantly, and an escape is easy to get subtly wrong.
+// Named, since this module compares and rewrites line endings a lot, and an
+// escape is easy to get wrong.
 const LF: &str = "\n";
 const CRLF: &str = "\r\n";
 const NL: char = '\n';
@@ -78,8 +71,8 @@ const NL: char = '\n';
 pub const MARKER: &str = "# >>> SilkTerm shell integration >>>";
 pub const END_MARKER: &str = "# <<< SilkTerm shell integration <<<";
 
-/// A file that already has either sequence is reporting - by our block or by
-/// somebody else's setup - and isn't ours to edit.
+/// A file that already has either sequence reports by itself, through our block
+/// or somebody else's setup, and isn't ours to edit.
 pub fn already_reports(profile: &str) -> bool {
 	profile.contains(MARKER) || profile.contains("]9;9;") || profile.contains("]7;file:")
 }
@@ -133,9 +126,9 @@ pub fn powershells(found: &[Found]) -> Vec<String> {
 	out
 }
 
-// Is this program a PowerShell? Matched on the base name the way the shell
-// table is (lowercased, `.exe` dropped), so a full path answers the same as a
-// bare name - and `pwsh-preview` and the like answer yes as well.
+// Whether this program is a PowerShell. Matched on the base name the way the
+// shell table is, lowercased with `.exe` dropped, so a full path gives the same
+// result as a bare name, and `pwsh-preview` counts too.
 fn is_powershell(program: &str) -> bool {
 	let base = program_base(program);
 	base == "powershell" || base == "pwsh" || base.starts_with("pwsh-")
@@ -158,8 +151,7 @@ fn program_base(program: &str) -> String {
 }
 
 /// Put the block in every PowerShell profile that reports nothing. Called on the
-/// shell-scan thread; every failure is a diagnostic, never a stop - a profile we
-/// can't read or write is somebody else's business.
+/// shell-scan thread. A failure prints a line and goes on to the next profile.
 pub fn install(found: &[Found]) {
 	if !config::settings().shell_integration {
 		return;
@@ -176,7 +168,7 @@ pub fn install(found: &[Found]) {
 				&policy
 			};
 			eprintln!(
-				"{}: {program} won't run profile scripts ({answer}), so its profile was left alone - see shell-integration.md",
+				"{}: {program} won't run profile scripts ({answer}), so its profile was left alone. See shell-integration.md",
 				config::APP_NAME
 			);
 			continue;
@@ -190,12 +182,10 @@ pub fn install(found: &[Found]) {
 	}
 }
 
-// Ask a PowerShell where its own profile is. There is no way to work this out
-// from outside - the Documents folder it sits under can be redirected, and per
-// host and per version it differs - so the shell is asked, which means starting
-// one. On Windows that starts a console with it, hence CREATE_NO_WINDOW: a
-// console flashing over the terminal a few seconds after launch would be a
-// mystery to anyone who saw it.
+// Ask a PowerShell where its own profile is. It can't be worked out from
+// outside, since the Documents folder can be redirected and the file differs
+// per host and version. On Windows starting one opens a console, hence
+// CREATE_NO_WINDOW, so nothing flashes over the terminal after launch.
 fn ask_shell(program: &str) -> Option<(PathBuf, String)> {
 	query_shell(program, PROFILE_QUERY)
 }
@@ -217,12 +207,11 @@ fn query_shell(program: &str, query: &str) -> Option<(PathBuf, String)> {
 		const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 		command.creation_flags(CREATE_NO_WINDOW);
 	}
-	// The exit status is deliberately not consulted. On a locked-down box the
-	// policy question ANSWERS ITSELF by failing: Get-ExecutionPolicy lives in a
-	// module whose manifest is a script file, so Restricted stops it loading and
-	// the shell exits non-zero - while the profile path still comes back on
-	// stdout. Reading only the status would turn that into silence, which is
-	// how this first went wrong.
+	// The exit status isn't read. On a locked-down box the policy query fails:
+	// Get-ExecutionPolicy is in a module whose manifest is a script file, so
+	// Restricted stops it loading and the shell exits non-zero, while the
+	// profile path still comes back on stdout. Reading only the status turned
+	// that into silence.
 	let output = command.output().ok()?;
 	parse_answer(&String::from_utf8_lossy(&output.stdout))
 }
@@ -248,13 +237,11 @@ fn parse_answer(answer: &str) -> Option<(PathBuf, String)> {
 	Some((PathBuf::from(path), policy))
 }
 
-// Would this shell actually load a profile it found? A block written into a
-// profile the shell then refuses to run is worse than none at all: measured
-// here, Windows PowerShell 5.1 sits at Restricted, and a profile written for it
-// turned every launch into a red execution-policy error. An answer we don't
-// recognize - including no answer at all - is treated as "no": the cost of
-// being wrong that way is a feature that doesn't switch itself on, against an
-// error on somebody's every prompt.
+// Whether this shell would load a profile it found. Windows PowerShell 5.1 is
+// at Restricted by default, and a profile written for it turned every launch
+// into a red execution-policy error. An answer that isn't recognized, or no
+// answer, counts as no, since then the worst case is a feature that stays off
+// rather than an error at every prompt.
 fn policy_runs_scripts(policy: &str) -> bool {
 	matches!(
 		policy.trim().to_ascii_lowercase().as_str(),
@@ -262,12 +249,10 @@ fn policy_runs_scripts(policy: &str) -> bool {
 	)
 }
 
-/// The profile with our block brought up to date, or None when there is nothing
-/// to do - no block of ours in the file, or the one there is already current.
-/// Only the text BETWEEN the two markers is touched; whatever the user wrote
-/// above or below it is carried through untouched. An opening marker with no
-/// closing one isn't a block we finished writing, so it isn't a region we may
-/// replace either.
+/// The profile with our block brought up to date, or None when there's no block
+/// of ours or it's already current. Only the text between the 2 markers
+/// changes. An opening marker with no closing one isn't a block we finished
+/// writing, so it isn't replaced either.
 pub fn refreshed_block(profile: &str, newline: &str) -> Option<String> {
 	let start = profile.find(MARKER)?;
 	let end_marker = profile[start..].find(END_MARKER)? + start;
@@ -299,10 +284,10 @@ fn read_profile(profile: &Path) -> anyhow::Result<Option<String>> {
 	}
 }
 
-// Keep what is there under a name that says where it came from, and never over a
-// backup already made - that one is the copy worth keeping. Only a plain file
-// counts as that copy. A link at the name, dangling or not, isn't followed: a
-// profile often holds tokens, and the copy gets the profile's own mode.
+// Keep what's there under a name that says where it came from, and never over a
+// backup already made, since that one has the original. Only a plain file
+// counts as that copy. A link at the name, dangling or not, isn't followed,
+// since a profile often has tokens in it, and the copy gets the profile's mode.
 fn backup_once(profile: &Path, existing: &str) -> bool {
 	use std::io::Write;
 	if existing.trim().is_empty() {
@@ -311,7 +296,7 @@ fn backup_once(profile: &Path, existing: &str) -> bool {
 	let backup = profile.with_extension("ps1.silkterm-backup");
 	let refuse = |why: String| {
 		eprintln!(
-			"{}: couldn't back up {}: {why} - left it alone",
+			"{}: couldn't back up {}, so it was left alone: {why}",
 			config::APP_NAME,
 			profile.display()
 		);
@@ -454,7 +439,7 @@ fn install_into_with(profile: &Path, record: Option<&Path>) {
 		Ok(()) => {
 			note_installed(record, profile);
 			eprintln!(
-				"{}: added shell integration to {} - new tabs and panes will open in the shell's current directory (see shell-integration.md)",
+				"{}: added shell integration to {}. New tabs and panes will open in the shell's current directory. See shell-integration.md",
 				config::APP_NAME,
 				profile.display()
 			);
@@ -464,18 +449,18 @@ fn install_into_with(profile: &Path, record: Option<&Path>) {
 }
 
 // The prompt script itself, compiled in so the binary is the one source of it.
-// x9ps1-git is a separate MIT project of the same author; this is a copy of its
-// `bin/x9ps1-git`, and the version it has is in its own header. One change: its
-// host color table is cut to a commented example, so no machine names are
-// included.
+// x9ps1-git is a separate MIT project by the same author, and this is a copy of
+// its `bin/x9ps1-git`, with the version in its own header. The one change is
+// that its host color table is cut to a commented example, so no machine names
+// are included.
 const BASH_PROMPT: &str = include_str!("x9ps1-git.bash");
 
-// What the script is called once it is on disk. No extension, because it is
-// also perfectly usable by hand from a PATH directory.
+// What the script is called once it's on disk. No extension, since it also
+// works by hand from a PATH directory.
 const BASH_PROMPT_FILE: &str = "x9ps1-git";
 
-// Is this program bash? Same base-name matching as `is_powershell`, so Git Bash
-// and a full path both answer yes, while `sh` (which may well be dash) doesn't.
+// Whether this program is bash. Same base-name matching as `is_powershell`, so
+// Git Bash and a full path both count, while `sh`, which may be dash, doesn't.
 fn is_bash(program: &str) -> bool {
 	program_base(program) == "bash"
 }
@@ -487,9 +472,9 @@ fn is_bash(program: &str) -> bool {
 // git working tree. Running it as `"$BASH" script` cost a new bash every
 // prompt. A bash started inside the pane inherits PROMPT_COMMAND but not the
 // functions, hence the check rather than a one-time source. Sourcing needs no
-// execute bit and nothing on PATH. The path is spelled with forward slashes and
-// single-quoted, which every bash takes - including a Windows one, where a
-// backslash inside quotes would otherwise arrive as an escape.
+// execute bit and nothing on PATH. The path is written with forward slashes and
+// single-quoted, which every bash takes, a Windows one included, where a
+// backslash inside quotes would be read as an escape.
 fn prompt_command(path: &Path) -> String {
 	let quoted = path
 		.display()
@@ -581,8 +566,8 @@ mod tests {
 		);
 	}
 
-	// sh may well be dash, and a shell named by a full path is the ordinary case
-	// on Windows - so both have to answer the way a bare `bash` does.
+	// sh may be dash, and a shell named by a full path is the usual case on
+	// Windows, so both have to give the result a bare `bash` does.
 	// Test ID: dbzdw
 	#[test]
 	fn only_bash_is_offered_the_bash_prompt() {
@@ -1426,9 +1411,9 @@ Write-Host \"COLOR=$global:__SilkTermHostColor\"",
 		Found::new(title, command.to_string(), "")
 	}
 
-	// A profile that already reports isn't ours to edit, whoever set it up -
-	// and this is also what makes a second launch a no-op rather than a second
-	// copy of the block.
+	// A profile that already reports isn't ours to edit, whoever set it up.
+	// This also makes a second launch a no-op rather than a second copy of the
+	// block.
 	// Test ID: dbj7v
 	#[test]
 	fn a_profile_that_already_reports_is_left_alone() {
@@ -1447,8 +1432,8 @@ Write-Host \"COLOR=$global:__SilkTermHostColor\"",
 		assert!(!already_reports(""));
 	}
 
-	// What is there is followed, never rewritten - so a prompt the profile sets
-	// up further down is the one this block wraps.
+	// What's there is followed, never rewritten, so a prompt the profile sets up
+	// further down is the one this block wraps.
 	// Test ID: dbj7w
 	#[test]
 	fn the_block_goes_at_the_end_and_keeps_what_was_there() {
@@ -1590,9 +1575,9 @@ Write-Host \"COLOR=$global:__SilkTermHostColor\"",
 		let _ = std::fs::remove_dir_all(&dir);
 	}
 
-	// A block in a profile the shell won't run is worse than no block: it's
-	// an execution-policy error on every launch, which is what a first cut of
-	// this did to Windows PowerShell 5.1 on the box it was written on.
+	// A block in a profile the shell won't run is worse than no block, since
+	// it's an execution-policy error at every launch. A first cut of this did
+	// that to Windows PowerShell 5.1.
 	// Test ID: dbj7y
 	#[test]
 	fn a_shell_that_will_not_run_scripts_keeps_its_profile() {
@@ -1619,7 +1604,7 @@ Write-Host \"COLOR=$global:__SilkTermHostColor\"",
 		assert!(!is_powershell("cmd.exe"));
 		assert!(!is_powershell("powershell-ise.exe"), "a different program");
 
-		// one entry per PROGRAM: the no-startup-file twin is the same shell with
+		// one entry per program: the no-startup-file twin is the same shell with
 		// the same profile, and a scan lists both
 		let scan = [
 			found("Bash", "/bin/bash"),

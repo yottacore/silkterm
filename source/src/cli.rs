@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 // Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
 
-//! Command-line parsing -> a window/tab/pane layout plan. See
-//! project/design.md "Command-line options". Startup-only (not a hot path).
+//! Command-line parsing into a plan for the window's tabs and panes. See
+//! design.md, "Command-line options".
 //!
-//! Model: window-level options come first, then a hierarchy of tabs and panes
-//! built with the create/select verbs (`--new-tab`/`--tab=`, `--new-pane`/`--pane=`).
-//! Style options (shell, colors, font, ...) attach to the current scope and
-//! cascade window -> tab -> pane (resolved at apply time).
+//! Window options come first, then tabs and panes made or picked with
+//! `--new-tab`, `--tab=`, `--new-pane`, and `--pane=`. Style options such as the
+//! shell, colors, and font go to the current scope, and cascade window -> tab ->
+//! pane when they're applied.
 
 use std::path::PathBuf;
 
@@ -29,8 +29,8 @@ pub enum Size {
 	Percent(f32),
 }
 
-/// Cascading look/behavior options; each level fills what it sets, the rest
-/// inherit. `wallpaper_img: Some(None)` means "explicitly no image".
+/// Options for look and behavior that cascade. Each level fills what it sets
+/// and inherits the rest. `wallpaper_img: Some(None)` means "explicitly no image".
 #[derive(Debug, Default, Clone)]
 pub struct Style {
 	pub shell: Option<Vec<String>>, // argv (already shell-word-split)
@@ -48,7 +48,7 @@ pub struct Style {
 	pub software_rendering: Option<bool>,
 }
 
-/// Options that apply to the whole window (only valid before any tab/pane marker).
+/// Options for the whole window, which have to come before any tab or pane flag.
 #[derive(Debug, Default, Clone)]
 pub struct WindowOpts {
 	pub columns: Option<usize>,
@@ -130,15 +130,15 @@ pub struct Cli {
 	pub info: Option<Info>,
 	pub config: Option<PathBuf>,
 	pub reset_config: bool,
-	/// control commands for an already-running window (talk, then exit):
-	/// `Some(None)` clears the wallpaper, `Some(Some(p))` sets it.
+	/// a command for the running window, sent before exiting. `Some(None)`
+	/// clears the wallpaper, and `Some(Some(p))` sets it.
 	pub wallpaper: Option<Option<String>>,
 	pub reload: bool,
 	pub win: WindowOpts,
 	pub tabs: Vec<TabSpec>, // empty -> no hierarchical options given (use defaults)
 }
 
-// An id refers to the implicit first tab/pane.
+// Whether an id names the implicit first tab or pane.
 fn is_first_id(id: &str) -> bool {
 	matches!(id, "0" | "main")
 }
@@ -151,10 +151,11 @@ fn parse_bool(s: &str) -> Option<bool> {
 	}
 }
 
-/// Minimal POSIX-ish word split honoring single/double quotes and backslash, so
-/// `git log --oneline`, `bash --norc`, and `sh -c "a | b"` all argv-split right.
-/// Outside quotes a backslash only escapes whitespace and quotes, so Windows paths
-/// can be written plainly; inside double quotes the usual POSIX escapes apply.
+/// A small POSIX-like word split that honors single and double quotes and
+/// backslash, so `git log --oneline`, `bash --norc`, and `sh -c "a | b"` split
+/// right. Outside quotes a backslash escapes only whitespace and quotes, so
+/// Windows paths can be written plainly. Inside double quotes the usual POSIX
+/// escapes apply.
 pub fn shell_split(s: &str) -> anyhow::Result<Vec<String>> {
 	let mut out = Vec::new();
 	let mut word = String::new();
@@ -197,8 +198,8 @@ pub fn shell_split(s: &str) -> anyhow::Result<Vec<String>> {
 				}
 			}
 			// Only whitespace and quotes are worth escaping outside quotes. A backslash
-			// before anything else stays put, so a Windows path survives unquoted -
-			// consuming it turned `C:\windows\system32\cmd.exe` into
+			// before anything else stays put, so a Windows path survives unquoted.
+			// Dropping it turned `C:\windows\system32\cmd.exe` into
 			// `C:windowssystem32cmd.exe`, and `\\host\share` into `\host\share`.
 			'\\' => {
 				in_word = true;
@@ -238,7 +239,7 @@ impl Args {
 		}
 		token
 	}
-	// value for a flag whose `=value` (if any) is `inline`; else the next token.
+	// the flag's value: `inline` if there was an `=value`, else the next token
 	fn value(&mut self, flag: &str, inline: Option<String>) -> anyhow::Result<String> {
 		if let Some(v) = inline {
 			return Ok(v);
@@ -246,9 +247,9 @@ impl Args {
 		self.next_token()
 			.ok_or_else(|| anyhow::anyhow!("{flag} needs a value"))
 	}
-	// value-optional flag: inline `=value`, else the next token only when it isn't
-	// another option - so a bare flag reads as "no value" instead of eating the
-	// following `--option` as its value.
+	// a flag whose value is optional: inline `=value`, else the next token only
+	// when it isn't another option, so a bare flag reads as no value rather than
+	// taking the next `--option`
 	fn optional_value(&mut self, inline: Option<String>) -> Option<String> {
 		if inline.is_some() {
 			return inline.filter(|s| !s.is_empty());
@@ -289,8 +290,8 @@ fn parse_f32(flag: &str, v: &str) -> anyhow::Result<f32> {
 }
 
 // A number standing for a setting is held to that setting's own range, the way
-// the config file's is. The command line has no business asking for a value the
-// file couldn't hold.
+// the config file's is. The command line can't ask for a value the file
+// couldn't hold.
 fn parse_f32_in(flag: &str, v: &str, (lo, hi): (f32, f32)) -> anyhow::Result<f32> {
 	Ok(parse_f32(flag, v)?.clamp(lo, hi))
 }
@@ -331,7 +332,7 @@ pub fn parse<I: IntoIterator<Item = String>>(args: I) -> anyhow::Result<Cli> {
 		pos: 0,
 	};
 	let mut cli = Cli::default();
-	// current scope: which tab / pane subsequent options attach to. None -> window.
+	// current scope: the tab that later options go to. None is the window.
 	let mut cur_tab: Option<usize> = None;
 	let mut cur_pane: usize = 0;
 
@@ -353,8 +354,8 @@ pub fn parse<I: IntoIterator<Item = String>>(args: I) -> anyhow::Result<Cli> {
 		};
 
 		// CLI-only flags: main.rs prints and exits on these, so no window and no
-		// layout is ever built. Taken in ANY position on purpose - asking for the
-		// help should never be answered with a complaint about where it was put.
+		// layout is built. They're taken in any position, so asking for help never
+		// gets a complaint about where the flag was put.
 		let info = match name {
 			"help" => Some(Info::Help),
 			"syntax" => Some(Info::Syntax),
@@ -368,10 +369,10 @@ pub fn parse<I: IntoIterator<Item = String>>(args: I) -> anyhow::Result<Cli> {
 			continue;
 		}
 
-		// markers (enter/select a scope)
+		// flags that make or pick a scope
 		match name {
 			"new-tab" => {
-				// optional handle comes only from `=value` (never eats the next flag)
+				// an optional handle comes only from `=value`, never the next flag
 				ensure_first_tab(&mut cli); // implicit first tab always exists
 				let id = inline.filter(|s| !s.is_empty());
 				let mut tab = TabSpec::new(id);
@@ -393,7 +394,7 @@ pub fn parse<I: IntoIterator<Item = String>>(args: I) -> anyhow::Result<Cli> {
 			"new-pane" => {
 				ensure_first_tab(&mut cli);
 				let tab_idx = cur_tab.unwrap_or(0);
-				// optional handle comes only from `=value` (never eats the next flag)
+				// an optional handle comes only from `=value`, never the next flag
 				let id = inline.filter(|s| !s.is_empty());
 				cli.tabs[tab_idx].panes.push(PaneSpec::new(id, false));
 				cur_pane = cli.tabs[tab_idx].panes.len() - 1;
@@ -413,8 +414,8 @@ pub fn parse<I: IntoIterator<Item = String>>(args: I) -> anyhow::Result<Cli> {
 			_ => {}
 		}
 
-		// control commands (act on the running window this shell is inside,
-		// then exit - see ctl.rs; main.rs short-circuits before any layout)
+		// control commands act on the window this shell runs in, then exit. See
+		// ctl.rs. main.rs handles them before any layout is built.
 		match name {
 			"wallpaper" => {
 				// value = new image path; bare flag = clear (mirrors --wallpaper-file)
@@ -428,7 +429,7 @@ pub fn parse<I: IntoIterator<Item = String>>(args: I) -> anyhow::Result<Cli> {
 			_ => {}
 		}
 
-		// window-level options (illegal once a tab/pane marker was seen)
+		// window options, refused once a tab or pane flag was seen
 		let window_only = matches!(
 			name,
 			"columns"
@@ -538,7 +539,7 @@ pub fn parse<I: IntoIterator<Item = String>>(args: I) -> anyhow::Result<Cli> {
 			continue;
 		}
 
-		// cascading style options (route to the current scope)
+		// cascading style options go to the current scope
 		let style = match cur_tab {
 			None => &mut cli.win.style,
 			Some(tab_idx) => {
@@ -590,7 +591,7 @@ pub fn parse<I: IntoIterator<Item = String>>(args: I) -> anyhow::Result<Cli> {
 			// --background-image* are kept as aliases for the --wallpaper* names.
 			"wallpaper-file" | "background-image" => {
 				// value present -> that path; no value -> explicitly none. A bare
-				// flag followed by another option must not eat that option as a path.
+				// flag followed by another option doesn't take that option as a path.
 				style.wallpaper_img = Some(tokens.optional_value(inline));
 			}
 			"wallpaper-stretch" | "background-image-stretch" => {
@@ -627,9 +628,9 @@ fn set_dir(pane: &mut PaneSpec, dir: Dir4, on: bool, flag: &str) -> anyhow::Resu
 	Ok(())
 }
 
-/// Fold window-level CLI style options into `settings` (pure). Window-scoped only:
-/// per-pane visual style is deferred (it needs a per-pane renderer the single
-/// shared `TextCtx` doesn't have). `--shell` is handled separately (`build_layout`).
+/// Fold the window's style options into `settings`. Only the window's are used,
+/// since a style per pane would need a renderer per pane, and there's one shared
+/// `TextCtx`. `build_layout` handles `--shell`.
 pub fn fold_window_style(settings: &mut config::Settings, style: &Style) {
 	use crate::ui_spec::Key;
 	use knobs::Value;
@@ -665,8 +666,9 @@ pub fn fold_window_style(settings: &mut config::Settings, style: &Style) {
 }
 
 impl WindowOpts {
-	/// Apply this window's CLI style to the live settings at startup (no-op if none
-	/// set). Call after the theme/OS palette settles so colors aren't clobbered.
+	/// Apply this window's command-line style to the live settings at startup.
+	/// Call it after the theme and system palette are settled, or they'd
+	/// overwrite the colors.
 	pub fn apply_style(&self) {
 		let style = &self.style;
 		let any = style.font_name.is_some()
@@ -708,9 +710,9 @@ impl WindowOpts {
 	}
 }
 
-/// True when the arguments amount to "no layout given": empty, or only --config
-/// (which picks WHICH config file, not a layout) - the config's own `command_line`
-/// should still apply in that case.
+/// True when the arguments give no layout: none at all, or only --config, which
+/// picks the file rather than a layout. The file's own `command_line` still
+/// applies then.
 pub fn only_config_args<I: IntoIterator<Item = String>>(args: I) -> bool {
 	let mut it = args.into_iter();
 	while let Some(arg) = it.next() {
@@ -797,16 +799,16 @@ pub fn version_text() -> String {
 }
 
 /// A CLI-only flag's output with a blank line above and below, so the block sits
-/// clear of the shell prompts either side of it. Print with `print!` - the
-/// trailing blank line is part of the string. --version is deliberately NOT run
-/// through this: it exists to be captured by a script.
+/// clear of the shell prompts either side of it. Print it with `print!`, since
+/// the trailing blank line is part of the string. --version isn't padded, since
+/// scripts capture it.
 pub fn padded(body: &str) -> String {
 	format!("\n{}\n\n", body.trim_end_matches('\n'))
 }
 
 /// What --about prints: enough to identify a build in a bug report. `info` is
-/// None when no GPU adapter could be probed - the version and build still are
-/// worth having, so that reads as three missing lines rather than a failure.
+/// None when no GPU adapter could be probed. The version and build are still
+/// useful, so that leaves out 3 lines rather than failing.
 pub fn about(info: Option<&wgpu::AdapterInfo>) -> String {
 	let mut lines = vec![
 		format!("About {}", config::APP_NAME),
@@ -834,8 +836,8 @@ pub fn about(info: Option<&wgpu::AdapterInfo>) -> String {
 	lines.join("\n")
 }
 
-/// What --donate prints. The short version of DONATE.md - someone who reached
-/// for this from a shell wants the address, not the essay.
+/// What --donate prints, a short form of DONATE.md, since someone asking from a
+/// shell wants the address.
 pub fn donate() -> String {
 	format!(
 		"\
@@ -858,7 +860,7 @@ other terminal nerds it exists.",
 	)
 }
 
-/// One-line-per-option usage text (shared by --help and --syntax).
+/// Usage text with one line per option, for --help and --syntax.
 pub fn usage() -> &'static str {
 	"\
 Usage: silkterm [WINDOW OPTIONS] [--new-tab|--tab=ID [TAB OPTIONS]] [--new-pane|--pane=ID [PANE OPTIONS]] ...
@@ -950,8 +952,8 @@ mod tests {
 	// Test ID: db7ea
 	#[test]
 	fn cli_only_flags_are_taken_anywhere() {
-		// They print and exit, so where they sit can't matter - and answering
-		// "--new-tab --help" with a placement complaint would be absurd.
+		// They print and exit, so where they are doesn't matter, and
+		// "--new-tab --help" doesn't get a complaint about placement.
 		assert_eq!(p("--help").info, Some(Info::Help));
 		assert_eq!(p("-h").info, Some(Info::Help));
 		assert_eq!(p("--new-tab --new-pane --help").info, Some(Info::Help));
@@ -1007,8 +1009,8 @@ mod tests {
 	// Test ID: db7ec
 	#[test]
 	fn padding_puts_one_blank_line_either_side() {
-		// A body's own trailing newlines must not stack up into extra blanks -
-		// usage() ends with one, the built texts don't.
+		// A body's own trailing newlines don't stack up into extra blanks.
+		// usage() ends with one and the built texts don't.
 		assert_eq!(padded("a\nb"), "\na\nb\n\n");
 		assert_eq!(padded("a\nb\n"), "\na\nb\n\n");
 		assert_eq!(padded("a\nb\n\n\n"), "\na\nb\n\n");
@@ -1051,8 +1053,8 @@ mod tests {
 	// Test ID: dbsdk
 	#[test]
 	fn version_names_the_build_as_well_as_the_release() {
-		// A release version can't tell two builds apart, which is the whole reason
-		// the build number exists - so --version has to show both.
+		// A release version can't tell 2 builds apart, which is why the build
+		// number exists, so --version shows both.
 		let line = version_line();
 		assert!(line.starts_with(config::APP_NAME));
 		assert!(line.contains(env!("CARGO_PKG_VERSION")));
@@ -1354,9 +1356,9 @@ mod tests {
 		assert_eq!(c.win.style.directory.as_deref(), Some("/w"));
 		assert_eq!(c.tabs[1].style.directory.as_deref(), Some("/t"));
 		assert_eq!(c.tabs[1].panes[1].style.directory.as_deref(), Some("~/p"));
-		// nothing said = nothing set, so the config's own setting still decides
+		// nothing said = nothing set, so the config's own setting still applies
 		assert_eq!(p("--shell=fish").win.style.directory, None);
-		// and it needs a value - a bare flag must not swallow the next option
+		// and it needs a value, so a bare flag doesn't take the next option
 		assert!(parse(["--directory".to_string()]).is_err());
 	}
 
@@ -1492,8 +1494,8 @@ mod tests {
 	}
 
 	// nan parsed fine and went into the live settings. The session's first save
-	// then compared it against the value it stood for, found the two unequal - a
-	// NaN is unequal to itself - and wrote NaN over the user's own value.
+	// then found it unequal to the value it stood for, since NaN is unequal even
+	// to itself, and wrote NaN over the user's own value.
 	// Test ID: dcq6s
 	#[test]
 	fn a_non_finite_number_is_refused() {
