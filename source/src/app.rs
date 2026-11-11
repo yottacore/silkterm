@@ -64,25 +64,24 @@ mod tabs;
 mod vt;
 mod window_size;
 
-// Delayed re-assertions of "terminal stays under the dialog" after the dialog is
-// focused, to win the race against the WM's own activation restacking (Compiz).
-// The window must outlast the WM's raise/focus animation (Compiz fade/zoom can
-// keep re-stacking for a few hundred ms), so it spans ~1.2s - a too-short window
-// let the animation re-bury the terminal after the last retry (About showed this;
-// Settings happened to settle in time). Each retry is one cheap X message.
+// How many times the terminal is put back under the dialog after the dialog is
+// focused, since the window manager's own raise can come later. Compiz's fade
+// or zoom can keep restacking for a few hundred ms, so the retries span ~1.2s.
+// A shorter span let the animation bury the terminal again after the last
+// retry. Each retry is one cheap X message.
 const RAISE_REASSERTS: u8 = 24;
 const RAISE_REASSERT_IVL: Duration = Duration::from_millis(50);
 
-// Reopening Settings this soon after closing it resumes the tab and scroll it
-// was left on - long enough to cover "closed it, went to look at the result,
-// came back", short enough that a later visit still starts from the top.
+// Reopening Settings this soon after closing it goes back to the tab and scroll
+// it was left on. That covers closing it to look at the result and coming back,
+// and a later visit still starts from the top.
 const SETTINGS_RESUME: Duration = Duration::from_mins(1);
 
 pub struct App {
 	proxy: EventLoopProxy<UserEvent>,
 	state: Option<State>,
 	cli: crate::cli::Cli,
-	// pop-out dialog window (About/Settings), if open. Its own surface + text
+	// the About or Settings window, if open. It has its own surface and text
 	// context, so it can be larger than the main window.
 	dialog: Option<crate::dialog::DialogWin>,
 	dialog_dirty: bool,
@@ -102,15 +101,15 @@ pub struct App {
 	// where the Settings dialog was when it last closed, and when that was
 	settings_view: Option<(Instant, crate::settings_ui::View)>,
 	// and the size it was dragged to, which outlives the view above and lasts
-	// the whole session. Deliberately never written to the config.
+	// the whole session. It's never written to the config.
 	settings_size: Option<(f32, f32)>,
-	// after the dialog is focused, re-assert "keep the terminal under me" a few
-	// times: the WM's own activation (raising the dialog) can come just after our
-	// first restack and re-bury the terminal, so a couple of delayed retries
-	// settle it (see handle_dialog_event / about_to_wait).
+	// after the dialog is focused, the terminal is put back under it a few more
+	// times, since the window manager's own raise of the dialog can come after
+	// the first restack and bury the terminal again (see handle_dialog_event and
+	// about_to_wait)
 	raise_reassert: u8,
 	raise_next: Instant,
-	// VT watcher spawned (once per process; GL path only)
+	// the console watcher is running, once per process and only on the GL path
 	vt_watch: bool,
 	// GPU context the pop-out dialogs draw on, warmed on a worker thread once the
 	// terminal is on screen (see gfx::DialogGpu for why they can't share the
@@ -218,17 +217,15 @@ impl App {
 	}
 }
 
-// The background shell scan came back (shells.rs). It reports what it found;
-// the fold into the stored list happens here, on the winit thread, against the
-// list as it stands right now - so a scan can't bring a snapshot that went
-// stale while it ran. Nothing on screen changes (menus are built when they
-// open), so this only has to put the list in the live settings and in the file.
-// A scan that found nothing new compares equal and writes nothing at all; if the
-// config looks open in another program the write is skipped and the list still
-// applies for this session.
+// The background shell scan came back (shells.rs). Its findings are merged into
+// the stored list here, on the winit thread, against the list as it is now, so
+// a scan can't bring back a list that went stale while it ran. Nothing on
+// screen changes, since menus are built when they open. A scan that found
+// nothing new writes nothing. If the config looks open in another program the
+// write is skipped and the list still applies for this session.
 //
-// A Settings dialog open at that moment is folded into as well, on both of its
-// copies - see `Dialog::fold_shells`.
+// An open Settings dialog gets the merge too, on both of its copies. See
+// `Dialog::fold_shells`.
 fn fold_shells(found: &[crate::shells::Found]) {
 	save_live(|live| {
 		let shells = crate::shells::merge(&live.shells, found);
@@ -304,12 +301,12 @@ fn close_scope(present: bool, panes_in_tab: usize, tabs: usize) -> CloseScope {
 	}
 }
 
-// Shaped chrome text, kept frame to frame: menu-bar titles + the copybox label,
-// the tab close-"x", and per-tab title buffers. Re-shaping these every rendered
-// frame was constant background work during any animation (even the idle cursor
-// pulse). Rebuilt when the menu color changes; a tab entry re-shapes only when
-// its title or the tab width changes; the whole cache is dropped on a
-// text-context rebuild (buffers are tied to the FontSystem they were made with).
+// Shaped chrome text, kept frame to frame: the menu bar titles and copybox
+// label, the tab close mark, and each tab's title. Shaping these every frame was
+// constant work during any animation, even the idle cursor pulse. The cache is
+// rebuilt when the menu color changes, and a tab entry is shaped again only when
+// its title or width changes. The whole cache is dropped when the text context
+// is rebuilt, since buffers belong to the FontSystem that made them.
 struct ChromeCache {
 	menu_fg: [u8; 3],
 	menubar: Vec<Buffer>, // MENU_BAR titles + trailing "Copy output" label
@@ -344,9 +341,9 @@ impl FrameBufs {
 	}
 }
 
-// Menu/tab bars auto-size to the menu (proportional) font: height = the text line
-// height (cell_h) + this vertical padding, so a larger font isn't clipped (#124).
-// Chrome measurements are DIP and convert at their use site - see config::dip.
+// The menu and tab bars size to the menu font: the text's line height (cell_h)
+// plus this padding, so a larger font isn't clipped (#124). Chrome measurements
+// are DIP and are converted where they're used. See config::dip.
 const MENU_BAR_VPAD: f32 = 6.0;
 const TAB_BAR_VPAD: f32 = 6.0; // text is metric-centered in the bar; descenders clear via that
 const BELL_TAU_S: f32 = 0.18; // visual-bell flash fade time-constant (~0.8s to settle)
@@ -354,13 +351,13 @@ const BELL_TAU_S: f32 = 0.18; // visual-bell flash fade time-constant (~0.8s to 
 // finished halo's alpha. The scrim design doc and the dialog's comment both quote the
 // number, and a test checks them against it.
 const SCRIM_PCT_PER_DOUBLING: f32 = 20.0;
-// Freeze knob (one line rolls it back): a minimized window builds no frames -
-// PTY reading never stops - and catches up in one hard-cut frame on restore.
-// For WMs that never report Occluded for an iconified window.
+// A minimized window builds no frames, though it keeps reading the PTY, and
+// catches up in one frame on restore. It's for window managers that never
+// report Occluded for a minimized window. False turns it off.
 const FREEZE_MINIMIZED: bool = true;
-// Warm knob (one line rolls it back): build the dialogs' GPU context on a worker
-// thread once the terminal is up, instead of on the click that opens one. Off
-// means every dialog open pays for its own instance + adapter + device again.
+// Build the dialogs' GPU context on a worker thread once the terminal is up,
+// rather than on the click that opens one. With it off every dialog open pays
+// for its own instance, adapter, and device again.
 const WARM_DIALOG_GPU: bool = true;
 const SIZE_SAVE_DEBOUNCE: Duration = Duration::from_millis(500); // remember-size settle time before hitting disk
 // A window moved to another monitor takes that monitor's size once it has sat
@@ -392,8 +389,8 @@ const LATE_ANSWER_WAIT: Duration = Duration::from_secs(15);
 const SHELL_SCAN_DELAY: Duration = Duration::from_secs(3);
 // The scan waits for the wallpaper to be on screen (see `wp_shown`), and a
 // wallpaper on a share that never responds would otherwise put it off for the
-// life of the window - leaving the Tabs menu with no shells in it. This is the
-// backstop, measured from the reveal.
+// life of the window, which leaves the Tabs menu with no shells in it. This is
+// the backstop, measured from the reveal.
 const SHELL_SCAN_MAX_WAIT: Duration = Duration::from_secs(20);
 // The performance benchmark waits for the wallpaper too: it is one of the
 // things being timed, and starting before it is on screen would rate a lighter
@@ -438,11 +435,11 @@ const COPYBOX_LEAD_GAP: f32 = 10.0; // "Copy on:" lead-in to the first checkbox
 const COPYBOX_TICK_INSET: f32 = 3.0; // checked fill's inset inside its box
 const MENUBAR_TEXT_W: f32 = 240.0; // shaping width for a menu-bar title buffer
 const MENU_ACCEL_DROP: f32 = 3.0; // accelerator underline's rise off the item's line box
-// Input knob (one line rolls it back): a key that arrives while the window is
-// unfocused is never typed. A WM hotkey grab (Ctrl+Alt+Arrow for desktop
-// switching) brackets the chord with a focus-out/in pair, and winit zeroes the
-// modifiers on the way out - so a grab that still passes the key through hands
-// us an arrow with nothing held, which would encode as a bare arrow.
+// A key that arrives while the window is unfocused is never typed. A window
+// manager hotkey grab, such as Ctrl+Alt+Arrow for desktop switching, wraps the
+// chord in a focus-out and focus-in, and winit zeroes the modifiers on the way
+// out. So a grab that still passes the key through sends an arrow with nothing
+// held, which would go to the shell as a bare arrow.
 const IGNORE_KEYS_WHILE_UNFOCUSED: bool = true;
 // Focus is known only from winit's events, and a window that never gets the
 // focus may never hear one. X11 says so at the map, but Wayland and Windows
@@ -451,9 +448,10 @@ const IGNORE_KEYS_WHILE_UNFOCUSED: bool = true;
 const FOCUSED_AT_START: bool = false;
 
 // Winit replays every key already held down whenever focus changes, flagged
-// `is_synthetic`, so an app can track what is physically pressed. That is
-// state, not typing - and on X11 the replay arrives before winit re-queries the
-// modifiers, so a held Ctrl+Alt+Arrow comes back through it as a bare arrow.
+// `is_synthetic`, so an app can track what is physically pressed. That's state
+// rather than typing, and on X11 the replay comes before winit reads the
+// modifiers again, so a held Ctrl+Alt+Arrow comes back through it as a bare
+// arrow.
 fn key_is_typed(state: ElementState, is_synthetic: bool) -> bool {
 	state == ElementState::Pressed && !is_synthetic
 }
@@ -515,12 +513,12 @@ pub(crate) fn env_flag(flag: EnvFlag) -> bool {
 // path keeps swap interval 1 and a scroll ease keeps rendering on Poll.
 //
 // It exists for the demo recorder, which samples the X screen at a fixed rate.
-// Whatever paces the app has to divide that rate evenly or frames fall off the
-// sampling grid on a strict period - a source of 60 into a capture of 50 drops
-// one frame in 6, so every fifth stored frame has 2 frames of travel,
-// and a regular hitch like that is what reads as the picture jumping.
-// Pinning the source to the capture rate takes the host's refresh rate out of
-// the answer entirely. Also useful for measuring a fixed frame budget.
+// Whatever paces the app has to divide that rate evenly, or frames fall off the
+// sampling grid on a strict period. A source of 60 into a capture of 50 drops
+// one frame in 6, so every fifth stored frame has 2 frames of travel, which
+// looks like the picture jumping. Pinning the source to the capture rate takes
+// the host's refresh rate out of it. It's also useful for measuring a fixed
+// frame budget.
 fn max_fps() -> Option<f64> {
 	use std::sync::OnceLock;
 	static FPS: OnceLock<Option<f64>> = OnceLock::new();
@@ -556,9 +554,9 @@ fn reveal_due(drawn_at_size: bool, past_deadline: bool, occluded: bool) -> bool 
 	occluded || past_deadline || drawn_at_size
 }
 
-// Next frame on a fixed schedule, not `now + interval` - the latter adds each
+// Next frame on a fixed schedule rather than `now + interval`, which adds each
 // frame's own render time to the period and runs slow. Falling behind resyncs
-// rather than trying to catch up in a burst.
+// rather than catching up in a burst.
 fn pace_frame(next: &mut Option<Instant>, ivl: Duration) -> ControlFlow {
 	let now = Instant::now();
 	let mut at = next.unwrap_or(now) + ivl;
@@ -664,9 +662,9 @@ struct State {
 	select_edge_held: f32,              // seconds that drag has been past a pane edge
 	last_click: Option<(Instant, f32, f32)>, // for multi-click detection
 	click_count: u32,                   // consecutive clicks in the same spot (2=double, 3=triple)
-	// (active tab, focused pane, window focused) at the last frame - a change
-	// while focused pokes the focused pane's cursor, so a long-idle-parked
-	// animation resumes on any window/tab/pane refocus
+	// (active tab, focused pane, window focused) at the last frame. A change
+	// while focused pokes the focused pane's cursor, so a cursor animation
+	// parked after a long idle starts again on any refocus.
 	cursor_focus_sig: Option<(usize, PaneId, bool)>,
 	// the pane whose program was last told it has the keyboard
 	focus_holder: Option<PaneId>,
@@ -676,8 +674,8 @@ struct State {
 	map_dragging: Option<PaneId>, // pane whose minimap marker is being dragged
 	// A Ctrl+press hit a hyperlink: the release over the same link opens it,
 	// a release anywhere else drops it (drag off to cancel, like the tab close
-	// button). The URL is captured at press time - output can scroll it away in
-	// between - and `menu_link` is the same for the right-click menu's 2 items.
+	// button). The URL is taken at press time, since output can scroll it away
+	// in between, and `menu_link` is the same for the right-click menu's 2 items.
 	link_arm: Option<(PaneId, String)>,
 	menu_link: Option<String>,
 	cursor_icon: CursorIcon,
@@ -689,8 +687,8 @@ struct State {
 	frame_budget: crate::profile::FrameBudget,
 	// The startup benchmark: a run in flight, and when one is due. While a run
 	// is in flight the window renders flat out. bench_banner is when the banner
-	// went up, which is earlier than either - it's up for the wait as well as the
-	// run, and the window takes no input for as long as it is up (bench_layout).
+	// went up, which is earlier than either, since it's up for the wait as well
+	// as the run. The window takes no input while it's up (bench_layout).
 	bench: Option<crate::profile::Bench>,
 	bench_at: Option<Instant>,
 	bench_cap: Option<Instant>,
@@ -710,14 +708,14 @@ struct State {
 	marks_moved: bool,
 	bell_flash: f32,    // visual-bell brightness, set to 1.0 on BEL, decays to 0
 	size_tracked: bool, // false until the first frame, so startup/programmatic resizes don't overwrite remembered_size
-	// The window is born hidden and revealed once a real frame is on screen at its
-	// final (grid-derived) size, so it never flashes the default size / blank client
-	// before painting. reveal_want is the physical size to wait for when the startup
-	// resize was async (None = reveal on the first frame); reveal_deadline is a hard
-	// fallback so an async or WM-adjusted resize can't strand the window hidden.
+	// The window starts hidden and is shown once a real frame is on screen at its
+	// final size, the one from the grid, so it never flashes the default size or a
+	// blank client. reveal_want is the physical size to wait for when the startup
+	// resize was async, and None shows it on the first frame. reveal_deadline is
+	// the fallback, so a resize the window manager changed can't leave it hidden.
 	revealed: bool,
 	// When the background shell scan is due: set when the window is revealed,
-	// cleared when the scan is away. None the rest of the time - it runs once.
+	// cleared when the scan is away. None the rest of the time, since it runs once.
 	shell_scan_at: Option<Instant>,
 	reveal_want: Option<winit::dpi::PhysicalSize<u32>>,
 	reveal_deadline: Instant,
@@ -764,9 +762,9 @@ struct State {
 	chrome: Option<ChromeCache>, // shaped menu/tab text, reused across frames
 	chrome_rev: u64, // bumped whenever a chrome buffer is (re)shaped
 	// Signature of everything feeding the prepared text set, from the last frame
-	// that prepared. A pure cursor frame matches it, and then both
-	// glyphon prepares (the bulk of per-frame CPU) and the atlas trim are skipped
-	// - the retained vertex buffers are still correct. None = must prepare.
+	// that prepared. A frame where only the cursor changed matches it, and then
+	// the glyphon prepares, most of the CPU in a frame, and the atlas trim are
+	// skipped, since the kept vertex buffers are still right. None means prepare.
 	text_sig: Option<u64>,
 	// same idea for the context-menu overlay (skip re-shaping an open menu)
 	overlay_sig: Option<u64>,
@@ -785,16 +783,16 @@ struct State {
 	// The window still shows its last frame once its device is gone (see
 	// `release_deadline`). A Windows window with no redirection bitmap doesn't.
 	keeps_picture: bool,
-	// last cycle's hidden answer; its false edge is the unfreeze - one dirty
-	// catch-up frame, hard-cut. Written only by freeze_sync, which both render
-	// entry points go through.
+	// whether the window was hidden last cycle. When it goes false the window
+	// unfreezes with one catch-up frame. Written only by freeze_sync, which both
+	// render entry points go through.
 	was_hidden: bool,
 	minimized: MinimizedProbe,
 	// Deadline of the next animation frame while SILK_MAX_FPS pins the rate; None
 	// otherwise, which is every ordinary run. See `max_fps`.
 	next_frame: Option<Instant>,
-	// Rotation state as of the last scan; the folder itself, the shuffle history
-	// and the picking are all in the worker (wallpaper.rs), so nothing here reads
+	// Rotation state as of the last scan. The folder, the shuffle history, and
+	// the picking are all in the worker (wallpaper.rs), so nothing here reads
 	// the filesystem.
 	wp_count: usize, // images the last scan found (<2 = nothing to rotate to)
 	wp_current: Option<PathBuf>, // image showing now, so order mode advances from it
@@ -824,7 +822,7 @@ struct State {
 	// is what the shell scan waits for: the scan is filesystem and registry work
 	// and the wallpaper is hundreds of ms of decode and blur off-thread, so letting
 	// them overlap puts a stall between the window appearing and the wallpaper
-	// arriving in it - the one moment anyone is looking.
+	// showing in it, which is the one moment anyone is looking.
 	wp_shown: bool,
 	// The hard deadline for that wait (see SHELL_SCAN_MAX_WAIT).
 	shell_scan_cap: Option<Instant>,
@@ -875,8 +873,8 @@ impl State {
 		}
 	}
 
-	// The tab bar shows for >1 tab always; for a single tab unless the user
-	// opts out (hide_single_tab, View menu / config).
+	// The tab bar always shows for more than one tab, and for a single tab
+	// unless hide_single_tab is on.
 	fn tab_bar_visible(&self) -> bool {
 		!self.bare && (self.tabs.len() > 1 || !config::settings().hide_single_tab)
 	}
@@ -933,19 +931,19 @@ impl State {
 
 	// Point every pane at the pointer (only the one under it gets a position), so
 	// the next build can look for a hyperlink there. Marking dirty on a pending
-	// probe is what makes the underline appear at all - the frame that scans is
-	// also the frame that draws the result - and it costs at most one frame per
+	// probe is what makes the underline show at all, since the frame that scans
+	// is also the frame that draws the result. It costs at most one frame per
 	// cell crossed, never one per pixel.
 	fn update_link_hover(&mut self, at: Option<(f32, f32)>) {
 		if !config::settings().hyperlinks {
 			return;
 		}
-		// An app watching the pointer owns it: no underline flickering through a
-		// TUI that uses the mouse itself. This has to key on the app's mode, not on
-		// whether this particular event was reported - the report is throttled to
-		// cell changes, so a pointer that settles inside one cell would slip
-		// through and underline anyway. Shift is the local-action bypass, the same
-		// one that already lets a selection through a tracking app.
+		// An app watching the pointer owns it, so no underline flickers through a
+		// TUI that uses the mouse. This keys on the app's mode rather than on
+		// whether this event was reported, since reports are throttled to cell
+		// changes and a pointer that settles inside one cell would slip through.
+		// Shift is the bypass for local actions, the same one that lets a
+		// selection through a tracking app.
 		let shift = self.mods.shift_key();
 		let over = at
 			.and_then(|(x, y)| self.tabs.cur().pane_at(x, y))
@@ -965,9 +963,9 @@ impl State {
 		self.marks_moved |= probing;
 	}
 
-	// Whether the pointer is over an underlined link - the pane's own hover state,
-	// so this is only the pointer shape's question. Anything that acts on a link
-	// re-scans through link_at_pointer instead of trusting a frame-old answer.
+	// Whether the pointer is over an underlined link, from the pane's own hover
+	// state, so it only decides the pointer shape. Anything that acts on a link
+	// scans again through link_at_pointer rather than trusting a frame-old result.
 	fn hovering_link(&self) -> bool {
 		let (x, y) = self.mouse;
 		self.tabs
@@ -1017,8 +1015,8 @@ impl State {
 
 	// Refresh every pane's scrollbar-hover flag from the pointer. Only the pane the
 	// pointer is over can be hovered, so this also clears the one it just
-	// left. Marks dirty only on a change - the fade is what needs the frames, and
-	// this runs on every mouse move.
+	// left. Marks dirty only on a change, since the fade is what needs the frames
+	// and this runs on every mouse move.
 	fn update_bar_hover(&mut self, x: f32, y: f32) {
 		let cfg = config::settings();
 		if !cfg.scrollbar {
@@ -1040,10 +1038,10 @@ impl State {
 		}
 	}
 
-	// Mouse reporting: forward a button press/release to the pane under the cursor
-	// when the app has mouse tracking on (see `input::press_is_reported` for what
-	// stays local). Returns true when the event was reported (and shouldn't be
-	// handled locally). Records the held button for drag + release.
+	// Mouse reporting: forward a button press or release to the pane under the
+	// pointer when the app has mouse tracking on (see `input::press_is_reported`
+	// for what stays local). Returns true when the event was reported and isn't
+	// handled here. Records the held button for drag and release.
 	fn report_mouse_button(&mut self, button: MouseButton, state: ElementState) -> bool {
 		let Some(btn) = input::mouse_btn_of(button) else {
 			return false;
@@ -1073,7 +1071,7 @@ impl State {
 			self.mouse_cell = Some((col, row));
 			true
 		} else {
-			// only our business if we owned the matching press
+			// only reported if the matching press was
 			if self.mouse_btn.take().is_none() {
 				return false;
 			}
@@ -1094,9 +1092,10 @@ impl State {
 		}
 	}
 
-	// Mouse reporting: forward cursor motion when the app requests it - MOUSE_MOTION
-	// (any move) or MOUSE_DRAG (only while a button is held). De-duped per cell so a
-	// pixel jiggle inside one cell doesn't flood the PTY. Returns true when reported.
+	// Mouse reporting: forward pointer motion when the app asks for it, with
+	// MOUSE_MOTION for any move or MOUSE_DRAG only while a button is held. Sent
+	// once per cell, so a pixel jiggle inside one cell doesn't flood the PTY.
+	// Returns true when reported.
 	fn report_mouse_motion(&mut self) -> bool {
 		if self.mods.shift_key() {
 			return false;
@@ -1134,13 +1133,12 @@ impl State {
 	}
 
 	// Copy-output: when the focused pane's foreground command finishes, copy its
-	// output text to the desktop clipboard. A pending capture only survives while
-	// its pane stays the active copy target (window focused, tab active, pane
-	// focused, trigger on) - anything else disarms it, so output that finished
-	// while the user was elsewhere never copies late on refocus; only a command
-	// launched after returning does. Runs every event-loop pass, and every way
-	// eligibility can break is itself an event, so the disarm always comes before
-	// a refocus could re-poll.
+	// output to the desktop clipboard. A pending capture survives only while its
+	// pane is still the copy target, with the window focused, the tab active, the
+	// pane focused, and the trigger on. Anything else disarms it, so output that
+	// finished while the user was elsewhere never copies late on refocus. Runs
+	// every event-loop pass, and every way that can break is itself an event, so
+	// the disarm always comes before a refocus could poll again.
 	fn poll_output_copy(&mut self) {
 		let cur_focused = self.tabs.cur().focused;
 		for pm in &mut self.tabs.list {
@@ -1195,8 +1193,8 @@ impl State {
 
 	// A drag-selection held past the top or bottom of its pane crawls the view
 	// that way and keeps extending, so a selection can run past what is on screen.
-	// Returns true while it is scrolling, which keeps frames coming - the pointer
-	// is stationary, so nothing else would ask for one.
+	// Returns true while it's scrolling, which keeps frames coming, since the
+	// pointer is still and nothing else would ask for one.
 	fn autoscroll_selection(&mut self, dt: f32) -> bool {
 		let Some(id) = self.selecting else {
 			self.select_edge_held = 0.0;
@@ -1224,8 +1222,8 @@ impl State {
 		// The pointer sits still while the content moves under it, so the far end
 		// of the selection has to be re-read against the rows now on screen.
 		pane.drag_selection_to(x, y, &self.text);
-		// Pinned at either end there is nothing left to reveal, so don't ask for
-		// another frame - held past the bottom, that would be a spin.
+		// Pinned at either end there's nothing left to show, so no frame is asked
+		// for, which held past the bottom would spin.
 		moved
 	}
 
@@ -1237,8 +1235,8 @@ impl State {
 		}
 	}
 
-	// The active tab's title, in full - the window title has the whole title bar
-	// and the OS elides it itself.
+	// The active tab's title, in full, since the window title has the whole title
+	// bar and the system shortens it itself.
 	fn active_tab_title(&mut self) -> String {
 		let active = self.tabs.active;
 		self.refresh_tab_labels(Some(active));
@@ -1249,8 +1247,8 @@ impl State {
 			.unwrap_or_else(|| config::APP_NAME.to_string())
 	}
 
-	// What the window title says after the app name - see tabtitle::window_suffix
-	// for the order the 3 sources come in.
+	// What the window title says after the app name. See tabtitle::window_suffix
+	// for the order of the 3 sources.
 	fn title_suffix(&mut self) -> Option<String> {
 		let typed = self.tabs.cur().title_override.clone();
 		let program = self.pane_title();
@@ -1277,10 +1275,10 @@ impl State {
 		(!title.trim().is_empty()).then(|| title.clone())
 	}
 
-	// The window title (taskbar / alt-tab): a CLI --title override verbatim, else
-	// the app name (with the dogfood build when this is one) and whatever the
-	// active tab has to say. Called on tab/focus change and each rendered frame;
-	// set_title only fires when the string changed (avoids WM flicker).
+	// The window title in the taskbar and alt-tab: a --title from the command line
+	// as given, else the app name, with the dogfood build when this is one, and
+	// what the active tab has to say. Called on a tab or focus change and on each
+	// frame drawn. set_title runs only when the string changed, to avoid flicker.
 	fn update_title(&mut self) {
 		let custom = self.win_title.clone();
 		// A --title is the whole answer, so nothing else is worked out.
@@ -1308,8 +1306,8 @@ impl State {
 			.unwrap_or_else(|| config::settings().opacity)
 	}
 
-	// relayout every tab (not only the active one) - needed when the tab bar
-	// appears/disappears (1<->2 tabs) and the pane area changes.
+	// lay out every tab again, not only the active one, for when the tab bar
+	// shows or hides between 1 and 2 tabs and the pane area changes
 	fn relayout_all(&mut self) {
 		self.relayout_all_in(self.surface_px);
 	}
@@ -1323,10 +1321,10 @@ impl State {
 		}
 	}
 
-	// New window = a fresh process (each window is its own process), started in
-	// the focused pane's current directory so it picks up where you are. The
-	// child sets up its own ctl socket/env at startup; a reaper thread waits on
-	// it so a closed window can't linger as a zombie.
+	// A new window is a new process, started in the focused pane's current
+	// directory. The child sets up its own control socket and environment at
+	// startup, and a reaper thread waits on it so a closed window can't linger as
+	// a zombie.
 	fn new_window(&mut self) {
 		let cwd = self
 			.tabs
@@ -1354,8 +1352,8 @@ impl State {
 	}
 
 	// A pane whose shell has gone: close only that pane, then its tab, then the
-	// window. Mirrors the Close-Pane menu cascade. The pane can be in any tab -
-	// a background tab's shell exits the same way.
+	// window. Mirrors the Close pane menu cascade. The pane can be in any tab,
+	// since a background tab's shell exits the same way.
 	fn close_dead_pane(&mut self, id: PaneId) {
 		let area = self.area();
 		let Some(tab_idx) = self
@@ -1483,24 +1481,23 @@ impl State {
 		self.bar_open = None;
 	}
 
-	// Live-apply edited settings (from the dialog), persist, and rebuild whatever
-	// the change touched (text metrics, background image, opacity, window size).
-	// Returns false if the config file looked open elsewhere so the write was
-	// skipped - the caller (dialog OK) then keeps the dialog open instead of
-	// closing over an unsaved change. The values still apply live regardless.
+	// Apply edited settings from the dialog, save them, and rebuild what the
+	// change touched, such as text metrics, the wallpaper, opacity, or window
+	// size. Returns false when the config file looked open elsewhere and the
+	// write was skipped, and then the dialog's OK keeps it open rather than
+	// closing over an unsaved change. The values apply live either way.
 	fn apply_settings_values(&mut self, orig: &config::Settings, edited: config::Settings) -> bool {
-		// The Shells tab edits the list now, so this is the one path allowed to
-		// write it - and it is the dialog's copy that wins. The baseline is the
-		// live list rather than the dialog's own `orig`: a scan that arrived while
-		// the dialog was open has already been folded into both of its copies
-		// (Dialog::fold_shells), so the 2 agree, and taking the live one is what
-		// keeps them in step if they ever don't. They don't when another window
-		// changed the list after this one loaded; the dialog's list is then
-		// written whole, and it already has that change.
+		// The Shells tab edits the list, so this is the one path allowed to write
+		// it, and the dialog's copy wins. The baseline is the live list rather
+		// than the dialog's own `orig`. A scan that arrived while the dialog was
+		// open has been merged into both of its copies (Dialog::fold_shells), so
+		// the 2 agree, and taking the live one keeps them in step if they don't.
+		// They don't when another window changed the list after this one loaded,
+		// and then the dialog's list is written whole, which has that change.
 		//
-		// An entry with no command names nothing to run, so it is dropped here
-		// rather than written - that is the whole of the grid's "Command is
-		// required" rule at the point the list leaves the dialog.
+		// An entry with no command names nothing to run, so it's dropped here
+		// rather than written. That's the grid's "Command is required" rule where
+		// the list leaves the dialog.
 		let live = config::settings();
 		let mut orig = orig.clone();
 		let mut edited = edited;
@@ -1515,7 +1512,7 @@ impl State {
 			self.watch.font_pinned = false;
 		}
 		// The dialog opened on the file, so the file gets only what was edited,
-		// while this window takes everything that differs from what it runs -
+		// while this window takes everything that differs from what it runs,
 		// including what another window saved since this one loaded.
 		let wrote = config::persist(&orig, &edited);
 		self.apply_new_settings(&live, edited, false);
