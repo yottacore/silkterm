@@ -788,8 +788,8 @@ fContainerVolumes(){
 }
 ## fContainerEnd <status>: at the end of a run, failed or stopped too. The run's
 ## containers go by its label, unless --keep-temp. Then untagged images of ours,
-## older tags once this run has passed, the cache volume rule, and build cache
-## over a week old, every project's, so the next build stays warm. All of it is
+## older tags once this run has passed, and the cache volume rule. The build cache
+## is every project's, so it's left to the daemon's own GC. All of it is
 ## done before a word is printed, since Ctrl+C takes the log tee down too, and a
 ## write to it then ends the run on the spot. What went, and what docker's sizes
 ## say it freed, go to the run's one cleanup line.
@@ -802,14 +802,13 @@ fContainerEnd(){
 		case "${line}" in
 			count\|*) what="${line#count|}"; n="${what##*|}"; what="${what%|*}"; [[ ! "${n}" =~ ^[0-9]+$ ]] || fSweep_Count "${what}" "${n}" ;;
 			freed\|*) n="${line#freed|}"; [[ ! "${n}" =~ ^[0-9]+$ ]] || __sweepBytes+=${n} ;;
-			pruned\|*) fSweep_Note "docker build cache over a week old" ;;
 			?*) printf '%s\n' "${line}" ;;
 		esac
 	done <<<"${said}"
 }
 fContainerEnd_Work(){
 	local -ri rc="${1:-0}"
-	local id pruned="" before after
+	local id before after
 	local -i gone=0
 	local -a ids=() names=()
 	before="$("${docker}" system df --format '{{.Type}}|{{.Size}}' 2>/dev/null | fDockerBytes || true)"
@@ -829,9 +828,6 @@ fContainerEnd_Work(){
 	((! gone)) || echo "count|untagged images|${gone}"
 	if ((rc == 0)) && [[ -n "${containerImage}" ]]; then fContainerTags "${containerImage}"; fi
 	if ((! keepTemp)) && [[ -n "${containerImage}" ]]; then fContainerVolumes; fi
-	## Older docker says "Total reclaimed space:", newer "Total:".
-	pruned="$("${docker}" builder prune -f --filter until=168h 2>/dev/null | sed -n 's/^Total[^:]*:[[:space:]]*//p' || true)"
-	[[ -z "${pruned}" || "${pruned}" =~ ^0(\.0+)?[kMGT]?B$ ]] || echo "pruned|${pruned}"
 	after="$("${docker}" system df --format '{{.Type}}|{{.Size}}' 2>/dev/null | fDockerBytes || true)"
 	if [[ "${before}" =~ ^[0-9]+$ && "${after}" =~ ^[0-9]+$ ]] && ((before > after)); then echo "freed|$((before - after))"; fi
 }

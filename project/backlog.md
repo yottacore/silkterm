@@ -524,6 +524,25 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Branch: rnd1102
 	- Closed: 20261102-182500
 
+- CICD reset: the container cleanup prunes docker's build cache, which every project shares
+	- ID: 2026111114300000
+	- Type: Bug
+	- Status: Done
+	- Severity: High
+	- Opened: 20261111-143000
+	- Opened by: CC
+	- Parent ID: 2026102416233805
+	- Target OS: Linux
+	- Incorrect behavior: Every container run ended with `docker builder prune -f --filter until=168h`, which trims build cache from every project on the box.
+	- Expected behavior: The pipeline never prunes the build cache. The daemon's own GC trims it. This is part of the CICD reset, a sweeping override, and supersedes the 10-25 call on 2026102416233805 to prune a week of cache at the end of a run.
+	- Progress log:
+		- 20261111: Found in a review against the current CICD process rules, which changed after the reset items were closed.
+	- Actual fix: The prune and its entry in the cleanup line are gone. The rest of the container cleanup is the same.
+	- Branch: bcache
+	- Test case: `cicd/tests/container/run.bash` (ddrp2), its build cache checks. The 4 new checks fail against the old `cicd.bash`.
+	- Acceptance signoff: Self-closed: a written rule, and its test fails against the old code.
+	- Closed: 20261111-143500
+
 - CICD reset: the bash guard doesn't refuse HOST_TEMP itself or a project's whole folder under it
 	- ID: 2026103115170424
 	- Type: Bug
