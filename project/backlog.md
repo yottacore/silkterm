@@ -298,6 +298,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- 20261110: It's likely the desktop switch in 2026111010491300, which is fixed now. A look on the next dogfood build may be enough to close it.
 		- 20261110-142723: It almost works. Moving the mouse over in released window still wakes it up though, even though it remains unfocused and partially behind other windows.
 		- 20261110: Answer: Minutes when hidden is 1, otherwise 2. Since the 11-10 build of about 13:30 it lets go after a return from another desktop with the focus elsewhere. A mouse move over the released window still wakes it, while it stays behind other windows.
+		- 20261111: JC: fixed on b23's desktop. A mouse move over the released window no longer wakes it, when the window manager doesn't raise it.
 	- Severity: Critical
 	- Opened: 20261110-095601
 	- Opened by: JC
@@ -327,7 +328,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Swept: every `CursorEntered` and `CursorMoved` in `source`. The idle clock's one path is `sign_of_life`, the same on X11, Wayland, Windows and macOS. The dialogs are never let go. The look after a move and the hover code don't touch the device.
 	- Branch: idledbg, rnd1111
 	- Test case: `each_hold_on_the_device_names_itself` (df4cn), `the_pointer_alone_never_takes_the_device_back` (df4qc). Also `cicd/tests/deskswitch/run.bash` (df4e3) and `cicd/tests/idleother/run.bash` (deqy2), both changed, in the full run.
-	- Acceptance signoff: Self-closed: reproduced under xfwm4 by the motion the answer named, deskswitch and deqy2 fail before the fix and pass after, and df4qc pins the rule. The look on b23 can still reopen it.
+	- Acceptance signoff: Self-closed: reproduced under xfwm4 by the motion the answer named, deskswitch and deqy2 fail before the fix and pass after, and df4qc pins the rule. JC confirmed it on b23's desktop on 20261111.
 	- Closed: 20261110-162209
 
 - Wayland: must use the Wayland clipboard, and minimize other X11 features
@@ -2664,12 +2665,13 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- 20261110: Output in a background tab no longer has to show at the reveal, per the answer above. der5b's old assertion is commented out with the reason.
 		- 20261110: Done as answered. The desktop's repaint takes the device back for one frame, without starting the wait over, and it goes again once the frame with the wallpaper is up. On the switch it was back in saving mode about 60 ms later, with the same picture as before to the pixel, wallpaper or not, compositing on and off. A sign of life in that time, or output that came in while it was hidden, makes it a whole wake.
 		- 20261110: Verified: deskswitch fails on the 20261110-101009 build (woken by the switch), and its picture check fails with the repaint taken out (230496 pixels differ, a black window). It passed 4 of 4 after the fix.
+		- 20261111: JC: fixed on b23's desktop. Coming back to the desktop, it wakes, repaints, and goes back to sleep, as designed.
 	- Actual fix: Focus counts only as a change, being shown again counts only for a window that goes blank without its device, and the desktop's repaint takes the device back for one frame only.
 	- Decisions:
 		- 20261110: A copy of the last frame put back with X11's plain 2D drawing was turned down for repaint and let go, by the answer above.
 	- Branch: deskwake, repaint
 	- Test case: `focus_is_a_sign_of_life_only_as_a_change` (df4dh), `hidden_output_is_owed_only_from_the_tab_in_front` (df4dj), `a_repaint_takes_the_device_back_for_one_frame` (df4e2). Also `cicd/tests/deskswitch/run.bash` (df4e3), in the full run.
-	- Acceptance signoff: Self-closed: reproduced under xfwm4 with compositing on and off, deskswitch fails before the fix and passes after, and the picture after the switch matches the one before.
+	- Acceptance signoff: Self-closed: reproduced under xfwm4 with compositing on and off, deskswitch fails before the fix and passes after, and the picture after the switch matches the one before. JC confirmed it on b23's desktop on 20261111.
 	- Closed: 20261110-112700
 
 - Regression: "Conserve resources", "Minutes otherwise" isn't working
