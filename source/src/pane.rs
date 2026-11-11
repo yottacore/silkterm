@@ -38,7 +38,7 @@ fn alloc_pane_id() -> PaneId {
 	PANE_ID_SEQ.fetch_add(1, Ordering::Relaxed)
 }
 
-// SILK_SCROLLDBG: per-frame app-scroll trace (dev-only, gated by the env var).
+// SILK_SCROLLDBG: a per-frame trace of the app-scroll slide.
 static DBG_FRAME: AtomicU64 = AtomicU64::new(0);
 fn scroll_dbg() -> bool {
 	use std::sync::OnceLock;
@@ -48,9 +48,9 @@ fn scroll_dbg() -> bool {
 
 // Cursor animation tunables (internal).
 const CURSOR_MOVE_TAU_MS: f32 = 55.0; // horizontal slide responsiveness (lower = snappier)
-// Catch-up: the slide's time-constant shrinks the farther the cursor trails its
-// real column, so a fast burst/paste doesn't leave it lagging across the line
-// (per-cell factor); and it never trails more than CURSOR_MAX_LAG cells.
+// Catch-up: the slide's time constant shrinks by a factor per cell the cursor
+// trails its real column, so a fast burst or paste doesn't leave it lagging
+// across the line. It never trails more than CURSOR_MAX_LAG cells.
 const CURSOR_CATCHUP: f32 = 0.45; // tau divisor per cell of lag
 const CURSOR_MAX_LAG: f32 = 8.0; // hard cap on how far behind the slide may sit (cells)
 pub(crate) const CURSOR_ALPHA: f32 = 0.55; // solid block-cursor alpha; theme.rs tests cursor colors against it
@@ -65,27 +65,27 @@ pub(crate) const CURSOR_ALPHA_LIGHT: f32 = 0.8;
 const CURSOR_ANIM_CONTINUOUS: bool = false;
 // A cursor move this soon after the user sent input is that input's echo; a
 // later move is the program's own output. Only echoed input gets the full
-// resume delay - see resume_delay.
+// resume delay. See resume_delay.
 const TYPED_ECHO_S: f32 = 0.2;
 // Resume delay for a pause that output caused: enough stillness that a
 // gap between 2 writes can't unpark it, short enough to read as "the moment
 // the prompt came back". The configured delay is for typing, not for output.
 const OUTPUT_RESUME_S: f32 = 0.05;
-// Freeze knob (one line rolls it back): only the focused pane of the focused
-// window animates its cursor; every other pane parks at full size (same
-// glide-to-full / resume-from-full machinery, so the size stays continuous).
+// Only the focused pane of the focused window animates its cursor, and every
+// other pane parks at full size. It's the same glide to full and resume from
+// full, so the size stays continuous.
 const FREEZE_UNFOCUSED_BLINK: bool = true;
 const BELL_BRIGHTEN: f32 = 0.6; // max lerp of text toward white at the bell flash peak
 
 // Alt-screen app-scroll tunables.
 const APP_SCROLL_MAX: usize = 24; // max per-step shift the fingerprint slide detector will believe
-// Whether the smooth slide engages for full-screen apps that keep a static top
-// band (title bar: nano, muffer). Was off while the reveal strip was filled from
-// a single retained frame: the strip could under-fill by the ease lag and its
-// re-capture repositioned it every step - the band/scrim bounce. The scrolled-off
-// strip (OffStrip below) fills the gap exactly and never repositions, so the
-// slide is on for top-band apps again. Apps that fill from the top with only a
-// bottom status line (less, vim) have no top band and slide regardless.
+// Whether the smooth slide is used for full-screen apps that keep a static top
+// band, such as the title bar in nano or muffer. It was off while the strip was
+// filled from one kept frame, since the strip could fall short by the ease lag
+// and moved every step, which bounced the band and the scrim. The scrolled-off
+// strip (OffStrip below) fills the gap exactly and never moves, so it's on
+// again. Apps that fill from the top with only a bottom status line, such as
+// less or vim, have no top band and slide either way.
 const SLIDE_TOP_BAND_APPS: bool = true;
 // Whether a slide down into rows that were blank to the bottom of the screen
 // eases. That is content making room for itself, not a scroll: a paste growing
@@ -101,9 +101,9 @@ const WIPE_MAX_SLIDE: f32 = 3.0;
 
 const PROMPT_ABOVE_MAX: usize = 4; // rows above the prompt considered for multi-line-prompt learning
 // Skeleton segments a row must have before it can be learned as a prompt row.
-// The skeleton collapses every run of alphanumerics to one 'a' - that is what
-// lets a prompt's clock and cwd change without breaking the match - so every
-// one-word row hashes alike. A pair of commands that each printed a single
+// The skeleton collapses every run of letters and digits to one 'a', which lets
+// a prompt's clock and cwd change without breaking the match, so every one-word
+// row hashes alike. A pair of commands that each printed a single
 // word therefore taught the learner that the row above the input line was
 // prompt, and the strip then ate the real last line of every copy after that
 // (measured in PowerShell: 2 of 5 commands copied nothing at all).
@@ -128,8 +128,9 @@ pub enum CopyKind {
 }
 
 // One styled cell captured for the scrolled-off strip. Colors are resolved at
-// capture time (the palette/theme can change later; the strip shows what was on
-// screen). `wide` is the cell count: 0 = wide-char spacer (skip), 1, or 2.
+// capture time, since the palette or theme can change later and the strip shows
+// what was on screen. `wide` is the cell count: 0 = wide-char spacer (skip), 1,
+// or 2.
 #[derive(Clone, Copy, PartialEq, Debug)]
 struct StripCell {
 	c: char,
@@ -205,8 +206,8 @@ fn cell_rules(
 }
 
 /// Thickness of an underline, and how far its top sits below the cell's top.
-/// The mono baseline isn't published, so it goes off the cell box instead -
-/// close enough for a thin rule, and it scales with the font.
+/// The mono baseline isn't published, so it goes off the cell box instead,
+/// which is close enough for a thin rule and scales with the font.
 fn underline_metrics(cell_h: f32) -> (f32, f32) {
 	let thick = (cell_h * 0.06).round().max(1.0);
 	let gap = (cell_h * 0.10).round();
@@ -324,20 +325,19 @@ fn span_quads(
 	}
 }
 
-// Scrolled-off strip: the rows a scroll pushed out of an app's region, retained
-// styled and in visual order (top to bottom) so the slide can draw them in the
-// gap it reveals. The strip is welded to the content edge and grows by exactly
-// each step's shift while app_off grows by the same amount, so the gap is always
-// exactly filled - no under-fill, no re-capture jump, and no furniture bleed
-// (only region rows are ever captured). `dir`: +1 = strip above the content
-// (content moved up), -1 = below. `region` is the screen rows (top, one past
-// the bottom) the rows came from; a step from another region starts over.
-// `buf` has one line per row, in the same order, so a row keeps its shaping
-// while the slide moves the window over it. Under a flood every frame pushes
-// rows and moves the window, and shaping the whole window again each time cost
-// a quarter of the frame inside tmux. `built` says which lines have the row's
-// text yet; the rest are blank until the window reaches them. `shaped` is the
-// window the buffer is scrolled to (see `shape`).
+// Scrolled-off strip: the rows a scroll pushed out of an app's region, kept
+// styled and top to bottom so the slide can draw them in the gap it opens. The
+// strip is fixed to the content edge and grows by each step's shift while
+// app_off grows by the same, so the gap is always filled exactly, and only
+// region rows are ever captured. `dir` is +1 for a strip above the content
+// (content moved up) and -1 for below. `region` is the screen rows (top, one
+// past the bottom) the rows came from, and a step from another region starts
+// over. `buf` has one line per row in the same order, so a row keeps its
+// shaping while the slide moves the window over it. Under a flood, shaping the
+// whole window again every frame cost a quarter of the frame inside tmux.
+// `built` says which lines have their row's text yet, and the rest are blank
+// until the window takes them in. `shaped` is the window the buffer is
+// scrolled to (see `shape`).
 struct OffStrip {
 	rows: std::collections::VecDeque<Vec<StripCell>>,
 	built: std::collections::VecDeque<bool>,
@@ -579,9 +579,9 @@ fn weld_region_clip(
 }
 
 // Fingerprint every visible row (FNV-1a over the chars) and, when `styled` is
-// given, snapshot the styled cells too - the scrolled-off strip's source data.
-// Colors resolve the same way build()'s cell loop does (minus the transient
-// bell flash and selection, which don't belong in a retained row). Recycles the
+// given, snapshot the styled cells too, as the source for the scrolled-off
+// strip. Colors resolve the way build()'s cell loop does, less the bell flash
+// and selection, which don't belong in a kept row. Recycles the
 // caller's row allocations and its contrast memo. One entry per column; a
 // wide-char spacer stays as a wide=0 placeholder so indexes keep matching columns.
 fn snapshot_rows(
@@ -705,10 +705,10 @@ fn strip_rows(
 }
 
 // Whether to draw a cursor at all, and as what. DECTCEM (CSI ?25 l/h) is in
-// the terminal mode - `cursor_style()` reports the shape an app asked for and
-// says nothing about whether the app wants one drawn - so both have to be asked,
-// the way the engine's own renderable content does. Miss this and a TUI that
-// hides the cursor to repaint still gets one painted wherever the paint left it.
+// the terminal mode, and `cursor_style()` reports the shape an app asked for
+// but nothing about whether it wants one drawn. So both are read, the way the
+// engine's own renderable content does. Without it a TUI that hides the cursor
+// to repaint still gets one painted wherever the paint left it.
 fn shown_cursor_shape(mode: TermMode, shape: CursorShape) -> CursorShape {
 	if mode.contains(TermMode::SHOW_CURSOR) {
 		shape
@@ -718,9 +718,9 @@ fn shown_cursor_shape(mode: TermMode, shape: CursorShape) -> CursorShape {
 }
 
 // The rendered cursor geometry as (width, height) fractions of the cell. An
-// app-set Beam/Underline (DECSCUSR) maps to a thin bar / underline; a plain Block
-// uses the configured cursor_size_* - except on the alt screen, where the app
-// (vim, less, ...) owns a full block.
+// app-set Beam or Underline (DECSCUSR) maps to a thin bar or underline. A plain
+// Block uses the configured cursor_size_*, except on the alt screen, where the
+// app (vim, less) gets a full block.
 fn cursor_geometry(shape: CursorShape, alt_screen: bool) -> (f32, f32) {
 	match shape {
 		CursorShape::Beam => (0.15, 1.0),      // thin vertical bar
@@ -896,11 +896,11 @@ fn fnv_row(chars: impl Iterator<Item = char>) -> u64 {
 	hash
 }
 
-// Skeleton fingerprint for prompt learning/stripping: runs of alphanumerics
-// collapse to one marker and runs of spaces to one space, so a prompt row whose
-// content changes per command (cwd, git branch, clock, right-aligned segments)
-// still hashes the same while its punctuation/box-drawing structure must match
-// exactly. An exact-content compare here misses every dynamic multi-line
+// Skeleton fingerprint for learning and stripping prompts: runs of letters and
+// digits collapse to one marker and runs of spaces to one space, so a prompt
+// row whose content changes per command (cwd, git branch, clock, right-aligned
+// segments) still hashes the same, while its punctuation and box drawing have
+// to match exactly. An exact compare here misses every dynamic multi-line
 // prompt, which then gets copied as output.
 fn fnv_row_skel(chars: impl Iterator<Item = char>) -> (u64, usize) {
 	let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
@@ -918,13 +918,13 @@ fn fnv_row_skel(chars: impl Iterator<Item = char>) -> (u64, usize) {
 	(hash, segments)
 }
 
-// The char to feed the shaper for a grid cell. A cell may have a literal control
-// char - alacritty leaves the '\t' in the first tab cell and fills to the tab
-// stop with spaces - and cosmic-text shapes a raw tab as a full 8-col stop,
-// shifting the rest of the row off the col*cell_w grid so the visible text no
-// longer lines up with the selectable cells (misaligned double-click on tabbed
-// output like `zpool status`). The cell already has the padding, so render
-// any control char as a plain 1-cell space.
+// The char to give the shaper for a grid cell. A cell may hold a literal
+// control char, since alacritty leaves the '\t' in the first tab cell and fills
+// to the tab stop with spaces. cosmic-text shapes a raw tab as a full 8-column
+// stop, which shifts the rest of the row off the col*cell_w grid, so the text
+// no longer lines up with the cells, and double-click missed on tabbed output
+// like `zpool status`. The cell already has the padding, so any control char
+// is drawn as a plain 1-cell space.
 fn render_char(c: char) -> char {
 	if c.is_control() { ' ' } else { c }
 }
@@ -1021,7 +1021,7 @@ fn link_at(
 	let point_of = |i: usize| Point::new(Line(first_line + (i / cols) as i32), Column(i % cols));
 	let start_pt = point_of(start);
 	let cell = &grid[start_pt.line][start_pt.column];
-	// Underline in the link's own color, so a colored URL keeps its identity -
+	// Underline in the link's own color, so a colored URL keeps its color,
 	// including the minimum-contrast lift, or the rule would sit off the text.
 	let (fg, bg) = if cell.flags.contains(Flags::INVERSE) {
 		(cell.bg, cell.fg)
@@ -1041,7 +1041,7 @@ fn link_at(
 	})
 }
 
-// Same spans at a single weight - what the scrim's de-bolded buffer wants. Derived
+// The same spans at a single weight, for the scrim's de-bolded buffer. Derived
 // on demand rather than built alongside the real list, so a screen with no bold on
 // it pays nothing.
 fn debold_attrs(src: &AttrsList, weight: Weight) -> AttrsList {
@@ -1124,10 +1124,10 @@ fn set_buffer_rows<'a>(
 }
 
 // One step of the cursor's horizontal slide toward `target` (visual columns).
-// Exponential easing whose time-constant shrinks with the gap, so the cursor
-// speeds up the farther it trails its real column (a burst/paste catches up
-// instead of dragging across the line) while a single-cell move keeps the gentle
-// slide - plus a hard cap so it never sits more than CURSOR_MAX_LAG cells behind.
+// Exponential easing whose time constant shrinks with the gap, so the cursor
+// speeds up the farther it trails its real column and a burst or paste catches
+// up, while a one-cell move keeps the gentle slide. A hard cap keeps it from
+// sitting more than CURSOR_MAX_LAG cells behind.
 fn cursor_slide_step(cursor_x: f32, target: f32, dt: f32) -> f32 {
 	let gap = (target - cursor_x).abs();
 	let tau = CURSOR_MOVE_TAU_MS / (1.0 + gap * CURSOR_CATCHUP);
@@ -1160,8 +1160,8 @@ fn glide_to_full(blink_t: f32, dt: f32, period: f32, full_phase: f32) -> (f32, b
 
 // One animation cycle: (period seconds, the phase where the cursor is at its
 // largest). That full-size phase is the only point a pause ever parks at and
-// the only point a resume ever starts from - "phase" fades from full at 0, the
-// pulses peak mid-cycle. Both the pause and the refocus resume read it here so
+// the only point a resume ever starts from, since "phase" fades from full at 0
+// and the pulses peak mid-cycle. Both the pause and the refocus resume read it here so
 // they can't drift apart. The rate is the whole cycle, peak to peak.
 fn cursor_cycle(anim: CursorAnimation, blink_rate_s: f32) -> (f32, f32) {
 	let period = blink_rate_s.max(0.05);
@@ -1183,8 +1183,8 @@ fn move_is_input(typed_at: Option<std::time::Instant>, now: std::time::Instant) 
 
 // How long a pause stays at full size before the cycle resumes. Typing gets the
 // configured delay, so the cursor stays still between keystrokes. Output gets
-// almost none: a command scrolling the screen isn't the user doing something,
-// so once it stops - the prompt is back - the cursor comes straight back to life.
+// almost none, since a command scrolling the screen isn't the user doing
+// anything. Once it stops and the prompt is back, the cursor starts again at once.
 fn resume_delay(by_input: bool, configured_s: f32) -> f32 {
 	if by_input {
 		configured_s
@@ -1208,12 +1208,12 @@ fn cursor_wake_after(
 		.then(|| (resume_s - idle_t).max(resume_s - hold_t).max(0.0) + 0.02)
 }
 
-// Cursor animation pause. On input (or long idle) the cycle keeps running at
-// its normal speed until it next reaches the full-size phase, parks there,
-// then resumes the cycle from that same point - so the size is continuous at
-// every step: no snap to full on a keystroke, and no snap to small on resume
-// even when the glide outlasts the idle window (slow blink rates). While
-// parked no frames flow (the CPU win), so the timers take a wall-clock dt.
+// Cursor animation pause. On input or a long idle the cycle runs at its normal
+// speed until it next reaches the full-size phase, parks there, then starts
+// again from that same point. So the size is continuous at every step, with no
+// snap to full on a keystroke and no snap to small on resume, even when the
+// glide outlasts the idle window at slow blink rates. While parked no frames
+// are drawn, which saves the CPU, so the timers take a wall-clock dt.
 #[derive(Default)]
 struct PauseState {
 	active: bool, // an episode is in progress (gliding or holding)
@@ -1239,8 +1239,9 @@ impl PauseState {
 	) -> f32 {
 		// past the long-idle threshold the animation stops outright: park (via
 		// the same glide, so it stops at full) and stay parked until activity.
-		// A blocked pane (not the focused pane of the focused window) parks the
-		// same way and stays parked until it is active again - nothing times it out.
+		// A blocked pane, one that isn't the focused pane of the focused window,
+		// parks the same way and stays parked until it's active again, with no
+		// timeout.
 		// The threshold is measured from the last input, not from the cursor's
 		// own stillness: a clock in a prompt or a TUI redrawing on its own timer
 		// moves the cursor every few seconds, and reading that as the user being
@@ -1273,8 +1274,8 @@ impl PauseState {
 	}
 
 	// End the episode now instead of waiting out the resume delay. Only for a
-	// refocus, where the caller also parks blink_t at the full-size phase - so
-	// this still resumes from full, like every other resume.
+	// refocus, where the caller also parks blink_t at the full-size phase, so
+	// this still resumes from full like every other resume.
 	fn resume(&mut self) {
 		self.active = false;
 		self.parked = false;
@@ -1285,7 +1286,7 @@ impl PauseState {
 // Expand `line` up and down across soft-wrapped rows, clamped to [top, bot].
 // `wrapped(l)` is true when grid row l's last cell has WRAPLINE (the logical
 // line continues into row l+1). Returns the (first, last) grid row of the whole
-// logical line - used for triple-click line selection.
+// logical line, for triple-click line selection.
 fn logical_line_bounds(line: i32, top: i32, bot: i32, wrapped: impl Fn(i32) -> bool) -> (i32, i32) {
 	let line = line.clamp(top, bot);
 	let mut start = line;
@@ -1376,9 +1377,9 @@ const BAR_VISIBLE_EPS: f32 = 0.02;
 // Shortest thumb, as a multiple of the bar's thickness. A huge scrollback would
 // otherwise grind the thumb down to a sliver nobody can grab.
 const BAR_MIN_THUMB: f32 = 1.6;
-// How far outside the bar the pointer still counts as "near" it, so the bar
-// fades in slightly before you get there rather than under the cursor. DIP, like
-// the configured thickness it widens.
+// How far outside the bar the pointer still counts as near it, so the bar fades
+// in a little before the pointer gets there rather than under it. DIP, like the
+// configured thickness it widens.
 const BAR_HOVER_SLOP: f32 = 6.0;
 
 /// Where a press hit the scrollbar.
@@ -1398,10 +1399,10 @@ pub struct Bar {
 	pub thumb: Rect,
 }
 
-// Is a scrollbar meaningful for a pane in this state? A full-screen app owns its
-// screen and keeps no scrollback of its own, so there is nothing a bar could
-// report - and one pinned full-height would only be a lie. Nothing to scroll,
-// same answer. Free fn so the rule is testable without a live PTY.
+// Whether a scrollbar means anything for a pane in this state. A full-screen app
+// owns its screen and keeps no scrollback, so a bar would have nothing to show,
+// and one pinned full height would be wrong. Nothing to scroll gives the same
+// answer. A free fn so the rule can be tested without a live PTY.
 fn bar_applies_to(cfg: &config::Settings, alt: bool, max_lines: f32) -> bool {
 	cfg.scrollbar && !alt && max_lines > 0.0
 }
@@ -1422,7 +1423,7 @@ fn bar_track(full: Rect, rect: Rect, thickness: f32, margin: f32) -> Rect {
 //
 // `pos` runs 0 at the bottom (following new output) to 1 at the oldest line, so
 // it matches the scroll model's "lines back from the bottom" rather than the
-// screen's y axis - the caller flips it.
+// screen's y axis, and the caller flips it.
 fn bar_thumb_span(track_h: f32, thickness: f32, rows: f32, max: f32, pos_lines: f32) -> (f32, f32) {
 	// the viewport's share of everything there is to look at
 	let visible = (rows / (rows + max)).clamp(0.0, 1.0);
@@ -1455,8 +1456,8 @@ fn handle_pos(dragged: bool, dropped: bool, target: f32, visual: f32) -> f32 {
 }
 
 // The hold after a drop is over once the text has caught up, or at once if
-// anything else has moved the target since (a wheel, a jump, fresh output) -
-// from there on the handle belongs to the content again.
+// anything else has moved the target since (a wheel, a jump, new output). From
+// there on the handle follows the content again.
 fn drop_hold_over(animating: bool, dropped_at: f32, target: f32) -> bool {
 	!animating || (target - dropped_at).abs() > config::SETTLE_EPS
 }
@@ -1490,10 +1491,10 @@ enum Node {
 pub struct PaneDraw {
 	pub top: f32,
 	pub bg: Vec<RectInstance>,
-	/// Underline quads for the hovered hyperlink. Kept out of `bg` deliberately:
-	/// those double as the scrim's "this cell paints its own background" mask, and
-	/// an underline isn't a cell background - filing it there would punch the
-	/// readability halo out of every line with a link.
+	/// Underline quads for the hovered hyperlink. They're kept out of `bg`, since
+	/// those double as the scrim's mask for cells that paint their own background,
+	/// and filing an underline there would punch the halo out of every line with
+	/// a link.
 	pub links: Vec<RectInstance>,
 	/// Underlines and strike-throughs the text asks for. Out of `bg` for the
 	/// same reason as `links`, and drawn with them; unlike them, built with the
@@ -1506,21 +1507,19 @@ pub struct PaneDraw {
 	pub slide: Option<Slide>,
 }
 
-/// One frame of an easing app-scroll slide. The current frame renders at
-/// `PaneDraw.top`, clipped to `[region_clip_t, region_clip_b]`; the scrolled-off
-/// strip renders at `strip_top` clipped to the scroll region `[top_split_y,
-/// split_y]` (it has only region rows, so nothing can bleed into the bands);
-/// and the fixed bands - a bottom status/input line (`has_band`, below `split_y`)
-/// and a top title bar (`has_top_band`, above `top_split_y`) - redraw unshifted
-/// at `band_top`. `top_split_y` is `f32::MIN` when there's no top band (open clip).
+/// One frame of an easing app-scroll slide. The current frame draws at
+/// `PaneDraw.top`, clipped to `[region_clip_t, region_clip_b]`. The scrolled-off
+/// strip draws at `strip_top`, clipped to the scroll region `[top_split_y,
+/// split_y]`, and has only region rows, so nothing bleeds into the bands. The
+/// fixed bands, a bottom status or input line (`has_band`, below `split_y`) and
+/// a top title bar (`has_top_band`, above `top_split_y`), draw unshifted at
+/// `band_top`. `top_split_y` is `f32::MIN` when there's no top band.
 ///
-/// The region clip is welded to the shifted content's extent, not only the band
-/// boundaries: the current-frame draw is the whole buffer translated by voff, so
-/// band rows ride into the region during a slide - the title's glyphs (and their
-/// scrim) sit voff below the real title, the status rows sit voff above theirs -
-/// rendering as ghost copies that bounce with the ease. Clipping at the
-/// content edge cuts them off; the strip owns the gap on the other side of the
-/// weld.
+/// The region clip follows the shifted content's edge as well as the band
+/// edges. The current frame is the whole buffer moved by voff, so band rows
+/// slid into the region and showed as ghost copies that bounced with the ease.
+/// Clipping at the content edge cuts them off, and the strip fills the gap on
+/// the other side. See the smooth scrolling design doc, "Full-screen programs".
 #[derive(Debug, Clone)]
 pub struct Slide {
 	pub strip_top: f32,
@@ -1537,11 +1536,11 @@ pub struct Slide {
 	pub has_top_band: bool,
 }
 
-// A shaped fallback glyph, cached per (char, bold, italic). Color isn't baked
-// (the TextArea's default_color tints it), so one shaped buffer is used for every
-// cell/color drawing that glyph - the shaping (harfbuzz fallback matching) is
-// the expensive part and only pays once per distinct glyph instead of per cell
-// per frame. `ink_w`/`ink_off` are the rasterized ink box for cell-fit scaling.
+// A shaped fallback glyph, cached per (char, bold, italic). Color isn't baked in,
+// since the TextArea's default_color tints it, so one shaped buffer is used for
+// every cell that draws that glyph. Shaping, with harfbuzz fallback matching, is
+// the costly part and is paid once per glyph rather than per cell per frame.
+// `ink_w` and `ink_off` are the rasterized ink box for fitting it to the cell.
 struct FallbackGlyph {
 	buf: Buffer,
 	ink_w: f32,
@@ -1551,7 +1550,7 @@ struct FallbackGlyph {
 }
 
 /// The hyperlink under the pointer: the URL, and the grid span it occupies so the
-/// underline can be drawn (inclusive, absolute grid lines - negative in history).
+/// underline can be drawn (inclusive, absolute grid lines, negative in history).
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct LinkHit {
 	pub url: String,
@@ -1566,19 +1565,19 @@ pub struct Pane {
 	pub scroll: Scroll,
 	pub buffer: Buffer,
 	// Scrolled-off strip (see OffStrip): styled rows the app's scroll pushed out
-	// of its region, shaped into its own buffer and drawn welded to the content
-	// edge so the slide's reveal gap is always exactly filled. `strip_dirty`
-	// re-scrolls the buffer on the next build (rows changed, or a font rebuild).
+	// of its region, shaped into its own buffer and drawn against the content
+	// edge so the slide's gap is always filled exactly. `strip_dirty` scrolls the
+	// buffer again on the next build, after a row change or a font rebuild.
 	strip: OffStrip,
 	strip_dirty: bool,
 	// Previous frame's styled cells (captured only in alt-screen smooth-scroll
 	// mode): the rows a step pushes off the region are gone from the grid by the
-	// time the step is detected, so they must be captured a frame ahead.
+	// time the step is detected, so they have to be captured a frame ahead.
 	// `cells_scratch` recycles the row allocations frame to frame.
 	last_cells: Vec<Vec<StripCell>>,
 	cells_scratch: Vec<Vec<StripCell>>,
 	// Recycles the per-row Strings the build's attr-run assembler fills each
-	// rebuilt frame (set_text copies out of them, so fresh ones were pure churn).
+	// rebuilt frame, since set_text copies out of them and new ones were waste.
 	rows_scratch: Vec<(String, AttrsList)>,
 
 	// `rect` is the text area; `full` is everything the layout gave this pane,
@@ -1589,8 +1588,8 @@ pub struct Pane {
 	pub read_only: bool, // accept no PTY input/paste; selection + copy still work
 
 	// --keep-open: hold this pane after its shell exits instead of closing it.
-	// `held` is that pane once the shell has gone - it shows the exit line and
-	// waits for a key.
+	// `held` is that pane once the shell has gone, showing the exit line and
+	// waiting for a key.
 	pub keep_open: bool,
 	pub held: bool,
 	// launch argv (None = default shell); a split inherits this so a new pane
@@ -1604,7 +1603,7 @@ pub struct Pane {
 	// Frames in a row that reused last_draw because the terminal was busy.
 	lock_misses: u32,
 	// Lines pushed into scrollback since the last build. Sampled per PTY wakeup
-	// and again by each build, both against the one baseline - see
+	// and again by each build, both against the one baseline. See
 	// `note_history` and the growth step in build().
 	depth: DepthSampler,
 	// On-screen row fingerprints from the last build, used to detect an app's
@@ -1616,33 +1615,34 @@ pub struct Pane {
 	// Rows of static bottom band (status/input line) that must not slide during the
 	// current alt-screen app-scroll ease. Captured when a scroll is detected.
 	slide_static: usize,
-	// Rows of static top band (title bar - nano, muffer) that must not slide, the
-	// mirror of slide_static. The scrolling region is between the bands.
+	// Rows of static top band, a title bar as in nano or muffer, that mustn't
+	// slide, the mirror of slide_static. The scrolling region is between the bands.
 	slide_static_top: usize,
 	// Rows at the bottom a program redrew in place while the output ease chases
 	// new lines above them, drawn still (`output_band`). 0 = none.
 	out_band: usize,
-	// Last detected step's shift (signed lines). Only feeds the SILK_SCROLLDBG
-	// trace now - the strip is positioned by app_off alone - but the harness
-	// regex reads the field, so it stays.
+	// Last detected step's shift in signed lines. It only feeds the SILK_SCROLLDBG
+	// trace now, since the strip is placed by app_off alone, but the harness regex
+	// reads the field, so it stays.
 	slide_sh: f32,
-	// Previous frame's alt-screen state. An enter/exit is an instant screen swap,
-	// not a scroll - detected here to hard-cut it instead of animating the swap.
+	// Previous frame's alt-screen state. An enter or exit is an instant screen
+	// swap rather than a scroll, so it's detected here to cut straight to it.
 	last_alt: bool,
 	// Set by hard_cut() when this pane comes back from a freeze (hidden tab,
-	// minimized window): the next build treats the gap like an alt-screen swap -
-	// rebaseline the scroll detectors, suppress the nudge, jump instantly.
+	// minimized window). The next build treats the gap like an alt-screen swap:
+	// it rebaselines the scroll detectors, skips the nudge, and jumps at once.
 	pending_cut: bool,
-	// Fallback glyphs (not in the primary mono font) pulled out of `buffer` and
-	// drawn one-per-cell so their font advance can't shift the row. `glyph_cache`
-	// stores each distinct glyph shaped once (keyed by char + bold + italic);
-	// `glyphs` is this frame's placements - (key, x, y, color, scale) - `scale`
-	// shrinks an over-wide fallback glyph to fit its cell box. The cache persists
-	// across frames (dropped on a font/size rebuild, see rebuild_buffers).
+	// Fallback glyphs, ones not in the primary mono font, pulled out of `buffer`
+	// and drawn one per cell so their font advance can't shift the row.
+	// `glyph_cache` has each distinct glyph shaped once, keyed by char, bold, and
+	// italic. `glyphs` is this frame's placements as (key, x, y, color, scale),
+	// where `scale` shrinks an over-wide fallback glyph to fit its cell. The
+	// cache lasts across frames and is dropped on a font or size rebuild (see
+	// rebuild_buffers).
 	glyph_cache: HashMap<(char, bool, bool), FallbackGlyph>,
 	glyphs: Vec<((char, bool, bool), f32, f32, GColor, f32)>,
 	// Color (COLRv1) glyphs this frame, placed in absolute screen px and drawn
-	// through glyphon's color atlas - see coloremoji.rs. They ride a TextArea
+	// through glyphon's color atlas. See coloremoji.rs. They ride a TextArea
 	// that has no text of its own, hence `empty_buf`.
 	emoji: Vec<CustomGlyph>,
 	empty_buf: Buffer,
@@ -1654,7 +1654,7 @@ pub struct Pane {
 	// Per-build memo for the minimum-contrast lift (see palette::Readable).
 	readable: palette::Readable,
 	// Cursor animation: `cursor_x` (visual column) eases toward the target column
-	// so the cursor slides as you type; `blink_t` drives a smooth fade-blink while
+	// so the cursor slides with typing; `blink_t` drives a smooth fade-blink while
 	// it sits idle. Snaps on a row change so it doesn't slide diagonally on a newline.
 	cursor_x: f32,
 	cursor_col: f32,
@@ -1670,14 +1670,15 @@ pub struct Pane {
 	// nudging the cursor isn't the user being here.
 	cursor_active_at: std::time::Instant,
 	// when the user last sent input here (keys, paste), and whether the cursor's
-	// last move was that input's echo rather than program output - the 2 get
-	// different resume delays
+	// last move was that input's echo rather than program output, since the 2
+	// get different resume delays
 	typed_at: Option<std::time::Instant>,
 	cursor_by_input: bool,
 	cursor_pause: PauseState,
 	pub cursor_animating: bool,
-	/// parked cursor: when the loop must wake to resume the cycle (no frames flow
-	/// while parked). None while animating, or when parked with no timed resume.
+	/// parked cursor: when the loop has to wake to resume the cycle, since no
+	/// frames are drawn while parked. None while animating, or when parked with
+	/// no timed resume.
 	pub cursor_wake: Option<std::time::Instant>,
 	// Scrollbar fade: `bar_alpha` eases toward 0 or 1, `bar_hold` keeps it up for
 	// a moment after the last user scroll. `bar_drag` is the grab offset from the
@@ -1688,31 +1689,32 @@ pub struct Pane {
 	pub bar_drag: Option<f32>,
 	pub bar_animating: bool,
 	// Minimap column: the rasterized buffer and the image composed from it, plus
-	// where a drag of the viewport marker started - the pointer y and the scroll
-	// position the view sat at then.
+	// where a drag of the viewport marker started, as the pointer y and the
+	// scroll position then.
 	map: Minimap,
 	pub map_drag: Option<(f32, f32)>,
 	// Where the target sat when a handle drag ended, while the text is still
 	// easing up to it. None once both agree. See `handle_lines`.
 	handle_drop_at: Option<f32>,
 	// Hyperlink hover: the pointer in window px (None = not over this pane), the
-	// link it hit, and a request to re-scan. The scan needs the grid, so it
-	// runs in build() where the term lock is already held - on the frame the
-	// pointer changed cell, and on any frame that re-shaped text (output moves the
-	// span out from under a pointer that never moved).
+	// link it hit, and a request to scan again. The scan needs the grid, so it
+	// runs in build() where the term lock is already held. That's on the frame
+	// the pointer changed cell, and on any frame that shaped text, since output
+	// moves the span out from under a pointer that never moved.
 	hover_px: Option<(f32, f32)>,
 	link_probe: bool,
 	pub link_hover: Option<LinkHit>,
-	// false until the first full build (and reset on a buffer rebuild). When the
-	// frame is a pure cursor animation (no content/scroll/bell change), build skips
-	// the expensive text re-shape and reuses the cached buffer/bg/glyphs.
+	// false until the first full build, and reset on a buffer rebuild. When the
+	// frame only animates the cursor, with no content, scroll, or bell change,
+	// build skips the costly text shaping and reuses the cached buffer,
+	// backgrounds, and glyphs.
 	text_built: bool,
 	/// Bumped on every full re-shape, so the renderer can tell "this pane's text
 	/// is byte-for-byte the frame before" without inspecting the buffers. Drives
 	/// the prepare/scrim skip in app.rs.
 	pub shape_rev: u64,
-	/// `TermMode` snapshot from the last build, so per-keystroke/wheel input paths
-	/// read it lock-free (at worst one frame stale) instead of taking the term
+	/// `TermMode` snapshot from the last build, so the keystroke and wheel paths
+	/// read it without a lock, at worst a frame stale, rather than taking the term
 	/// lock the PTY reader may hold across a whole read cycle.
 	pub mode: TermMode,
 	/// Is the minimap column showing? A program drawing its own screen can take
@@ -1724,22 +1726,22 @@ pub struct Pane {
 	/// The screen modes `sync_minimap` last saw, so a change asks again what runs.
 	pub map_modes: TermMode,
 	/// This pane's PTY produced output since the last successful build. Set by
-	/// the Wakeup(id) event, cleared in `build()` once the term lock is acquired
-	/// (a busy-term frame keeps it, so the rebuild retries next frame). Scopes
-	/// re-shaping to panes that changed: one busy pane no longer forces its
+	/// the Wakeup(id) event, and cleared in `build()` once the term lock is taken.
+	/// A frame with a busy term keeps it, so the rebuild tries again next frame.
+	/// It limits shaping to panes that changed, so one busy pane doesn't force its
 	/// idle siblings through `set_rich_text` every frame.
 	pub content_dirty: bool,
 
-	// Auto-copy triggers, independent and session-only (never persisted). A new
-	// pane inherits both from the pane it split off (see `split_at`); a new tab or
-	// window starts with both off. Only the focused pane of the active tab in the
-	// focused window copies - the flags stay set otherwise (see the copy
-	// gating in app.rs), so leaving them on across background tabs/windows is fine.
-	// `copy_output` drives the command-output capture (see `arm_capture` / `poll_capture`):
-	// on Enter at the shell prompt we arm and record `cmd_start` (the line after the
-	// prompt); when the terminal settles back at the prompt, the lines since are
-	// copied. `last_output` is refreshed on every Wakeup so the settle timer measures
-	// true idle. This catches both instant (ls) and long commands.
+	// Auto-copy triggers, separate and session-only. A new pane takes both from
+	// the pane it split off (see `split_at`), and a new tab or window starts with
+	// both off. Only the focused pane of the active tab in the focused window
+	// copies, and the flags stay set otherwise (see the copy gating in app.rs).
+	// `copy_output` drives the command output capture (see `arm_capture` and
+	// `poll_capture`). Enter at the shell prompt arms it and records `cmd_start`,
+	// the line after the prompt, and when the terminal settles back at the prompt
+	// the lines since are copied. `last_output` is refreshed on every Wakeup so
+	// the settle timer measures real idle, for instant commands such as ls and
+	// long ones alike.
 	pub copy_select: bool,
 	pub copy_output: bool,
 	capture_armed: bool,
@@ -1817,8 +1819,8 @@ impl Pane {
 		map_rebuild: bool, // the minimap may show the change (a moved selection or hover doesn't)
 		active: bool,      // the focused pane of the focused window (cursor animates only there)
 	) {
-		// Result goes in self.last_draw (read via draw()) - returning it by value
-		// cloned the whole bg-quad Vec per pane per frame.
+		// The result goes in self.last_draw, read through draw(), since returning
+		// it by value cloned the whole bg quad Vec per pane per frame.
 		let cell_w = ctx.cell_w;
 		let cell_h = ctx.cell_h;
 		let margin = ctx.margin;
@@ -1826,31 +1828,30 @@ impl Pane {
 		let lines = self.term.lines;
 		let settings = config::settings(); // snapshot once, not per cell
 
-		// Don't block the render thread while the PTY reader is mid-burst: it holds
+		// Don't block the render thread while the PTY reader is mid-burst. It holds
 		// the terminal across a whole read cycle, so reuse the last built frame and
-		// come back next frame. But an unfair try can lose that race forever (the
-		// reader re-acquires the instant it lets go), so after LOCK_WAIT_AFTER misses
-		// take the fair lock instead: it queues on the lease, which puts us in at the
-		// end of the current read cycle and makes the reader's next cycle wait behind
-		// us. That caps the stale-frame run - without it a heavy `cat` freezes the
-		// pane for seconds - at the cost of blocking for one cycle (measured under
-		// 5ms). See the speed design doc.
+		// come back next frame. An unfair try can lose that race forever, since the
+		// reader takes the lock again the moment it lets go, so after
+		// LOCK_WAIT_AFTER misses take the fair lock instead. That queues on the
+		// lease, so this frame goes in at the end of the current read cycle and the
+		// reader's next cycle waits behind it. It caps the run of stale frames,
+		// which a heavy `cat` stretched to seconds, at the cost of blocking for one
+		// cycle, measured under 5ms. See the speed design doc.
 		let Some(mut guard) = lock_for_frame(&self.term.term, &mut self.lock_misses) else {
 			return;
 		};
 		self.mode = *guard.mode();
 		self.content_dirty = false;
 
-		// Alt-screen enter/exit is an instant full-screen swap, not a scroll. Flag the
-		// transition so the scroll probes below hard-cut it: on enter the app-scroll
-		// probe would match blank rows between the old and new screens (nano "jiggles"/
-		// scrolls in on launch); on exit the history_size jump (the alt grid has no
-		// scrollback) would fire an output-ease that scrolls the restored screen back
-		// in. `gesture_active` (an alt-scroll slide already easing) freezes the band
-		// sizes across a continuous scroll - see the app-scroll block. The output
-		// ease itself needs no cutting here: the alt grid has no scrollback, so the
-		// set_max(0) below stops it (see Scroll::set_max for the wobble that came
-		// from letting it run on).
+		// Alt-screen enter and exit are an instant full-screen swap rather than a
+		// scroll, so the scroll probes below cut straight to it. On enter the
+		// app-scroll probe would match blank rows between the old and new screens,
+		// and nano jiggled in on launch. On exit the history_size jump, since the
+		// alt grid has no scrollback, would fire an output ease that scrolled the
+		// restored screen back in. `gesture_active`, an alt-scroll slide already
+		// easing, freezes the band sizes across a continuous scroll. The output
+		// ease needs no cut here, since set_max(0) below stops it (see
+		// Scroll::set_max for the wobble that came from letting it run on).
 		let alt = self.mode.contains(TermMode::ALT_SCREEN);
 		// a freeze catch-up (pending_cut) works the same as the screen swap:
 		// the grid moved arbitrarily far while nothing was built, so every
@@ -1862,21 +1863,19 @@ impl Pane {
 		let cols = self.term.cols;
 		let history = guard.grid().history_size();
 
-		// Output easing: nudge the smooth offset when the viewport advanced while
-		// following the bottom. Pre-cap, scrollback growth is the line-advance
-		// count (and an in-place status line that uses no newline doesn't grow it,
-		// so it doesn't bounce). Once the scrollback buffer fills, history_size
-		// flatlines - old lines drop off the top as fast as new ones arrive - so
-		// growth reads 0 even though the screen still scrolls; the engine's own
-		// count (`scrolled`, below) tracks the advance from there.
+		// Output easing: nudge the smooth offset when the view moved while
+		// following the bottom. Until the scrollback is full, its growth is the
+		// count of lines advanced, and an in-place status line with no newline
+		// doesn't grow it, so it doesn't bounce. Once the scrollback fills,
+		// history_size stays flat as old lines drop off the top, so growth reads 0
+		// while the screen still scrolls, and the engine's own count (`scrolled`,
+		// below) takes over.
 		// The depth is sampled per PTY wakeup (`note_history`) and again here,
-		// both against the one baseline. A build that gets to the grid before
-		// that cycle's wakeup is handled banks the growth itself, and the wakeup
-		// then finds nothing left. Measuring it here against a baseline of its
-		// own counted a line twice whenever the build won that race, and under a
-		// steady in-place progress line (rar's percent) the second count showed
-		// as the view hopping down a line and easing back up. A screen swap's
-		// depth swing is banked the same way and thrown out by `!cut` below.
+		// against one baseline, so whichever gets to the grid first banks the
+		// growth. A baseline of its own here counted a line twice whenever the
+		// build won that race, and a steady progress line such as rar's percent
+		// showed as the view hopping down a line and easing back up. A screen
+		// swap's depth swing is banked the same way and dropped by `!cut` below.
 		let grew = self.depth.take(history);
 		let cleared = self.depth.take_cleared();
 		self.scroll.set_max(history as f32);
@@ -1897,10 +1896,9 @@ impl Pane {
 			)
 		};
 		if cut {
-			// hard-cut the screen swap (or freeze catch-up): drop any in-flight
-			// slide and rebaseline the row fingerprints (and the styled snapshot
-			// the strip captures from) to the new screen, so the app-scroll probe
-			// can't diff across the gap.
+			// cut straight to the screen swap or freeze catch-up: drop any in-flight
+			// slide and rebaseline the row fingerprints and the styled snapshot to
+			// the new screen, so the app-scroll probe can't diff across the gap.
 			self.scroll.cancel_app_scroll();
 			self.strip.clear();
 			self.last_rows = if settings.smooth_apps() {
@@ -1998,25 +1996,19 @@ impl Pane {
 			}
 		}
 
-		// App-scroll easing: a full-screen app owns its screen and scrolls a region
-		// of it in place, with no scrollback behind it to ease through. The engine's
-		// record says exactly what moved (`ledger_step`): the region is the band
-		// split, the rows that left it are the strip that fills the revealed gap,
-		// and the slide offset grows by the count so the frame eases into place
-		// instead of snapping. Where the engine recorded nothing - an app that
-		// repaints its lines rather than scrolling them, or ConPTY re-emitting a
-		// normal-screen TUI's region-scroll as an in-place repaint - a clean
-		// vertical translate between this repaint and the last is inferred from
-		// the row fingerprints instead (`scroll_shift_signed`, up to APP_SCROLL_MAX
-		// rows; in-place redraws and big page-jumps don't match, so they hard-cut).
-		// Skipped on pure cursor-animation frames (the fast path below): a shift can
-		// only appear when the grid content changed, and that always forces a full
-		// build - so the styled snapshot isn't paid per blink frame. The snapshot
-		// refreshes on every content frame, grew>0 frames included: those animate
-		// via the output ease, and a stale snapshot would make the next repaint
-		// frame diff across that eased scroll and slide it again - a spurious extra
-		// down-then-up on every output line (the shell redraws its prompt right
-		// after the scroll).
+		// App-scroll easing: a full-screen app scrolls a region of its screen in
+		// place, with no scrollback behind it. The engine's record says what moved
+		// (`ledger_step`). The region sets the bands, the rows that left it fill
+		// the gap as the strip, and the slide offset grows by the count so the
+		// frame eases into place. Where the engine recorded nothing, such as an app
+		// that repaints its lines or ConPTY sending a TUI's region scroll as a
+		// repaint, a clean vertical shift is inferred from the row fingerprints
+		// (`scroll_shift_signed`, up to APP_SCROLL_MAX rows). Skipped on frames
+		// that only animate the cursor, since a shift needs changed content and
+		// that forces a full build. The snapshot is refreshed on every content
+		// frame, grew > 0 included, or the next repaint diffed across the eased
+		// scroll and slid it again, once per output line. See the smooth scrolling
+		// design doc, "Full-screen programs".
 		let mut shift_dbg = 0i32;
 		let step = ledger_step(alt, follow, advanced, whole_screen, scrolled);
 		let chunk = step.map(|_| {
@@ -2090,14 +2082,14 @@ impl Pane {
 			if let (true, Some(step)) = (apps, step) {
 				shift_dbg = step;
 				// The bands are the region's edges, except that a row at the edge away
-				// from the strip which reads the same as last frame is held still: a
-				// pager's prompt, redrawn after every scroll with no region of its own
-				// (less). Visually lossless either way - the same text ends up in the
-				// same place - and frozen for the gesture, like the inferred bands, so
-				// a row that matches by chance can't un-pin mid-ease. A blank row is
-				// never it: a build can fall between an app's scroll and its draw of
-				// the freed row (tmux flushes exactly that way), and pinning the row
-				// then makes its new line pop in while the rest slides.
+				// from the strip that reads the same as last frame is held still, such
+				// as the prompt less redraws after every scroll with no region of its
+				// own. The same text ends up in the same place either way, and it's
+				// frozen for the gesture like the inferred bands, so a row that matches
+				// by chance can't come loose mid-ease. A blank row never counts, since a
+				// build can fall between an app's scroll and its draw of the freed row,
+				// as tmux flushes, and holding the row then makes its new line pop in
+				// while the rest slides.
 				if !gesture_active || self.strip.region != (region.start, region.end) {
 					let blank = fnv_row(std::iter::repeat_n(' ', cols));
 					let same = |i: usize| {
@@ -2171,22 +2163,22 @@ impl Pane {
 					0
 				};
 				if shift != 0 {
-					// Freeze the band sizes on the gesture's first step (a clean
-					// settled-vs-scrolled diff); re-measuring per step fluctuates by a row
-					// whenever a blank/matching line abuts a band. Held while the slide eases.
+					// Freeze the band sizes on the gesture's first step, from a clean
+					// diff. Measuring per step moves by a row whenever a blank or
+					// matching line is next to a band. Held while the slide eases.
 					if !gesture_active {
 						let (st, sb) = slide_bands(&rows, &self.last_rows, shift);
 						self.slide_static = sb;
 						self.slide_static_top = st;
 					}
 					if SLIDE_TOP_BAND_APPS || self.slide_static_top == 0 {
-						// Accumulate the visual offset so the current content stays continuous
-						// across overlapping steps: screen row = grid_row + app_off, the grid
-						// already advanced by shift, so app_off must grow by shift to hold a
-						// line fixed for that instant. The strip grows by the same rows the
-						// step pushed off the region (from the frame-old snapshot; a stale or
-						// resized snapshot skips the fill for this one step), so the gap
-						// the accumulated offset opens is always exactly filled.
+						// Add to the visual offset so the current content stays continuous
+						// across overlapping steps. screen row = grid_row + app_off, and the
+						// grid already moved by shift, so app_off grows by shift to hold a
+						// line still for that instant. The strip grows by the rows the step
+						// pushed off the region, from last frame's snapshot, so the gap the
+						// offset opens is always filled. A stale or resized snapshot skips
+						// the fill for that one step.
 						self.slide_sh = shift as f32;
 						if self.last_cells.len() == lines
 							&& self.last_cells.first().is_none_or(|r| r.len() == cols)
@@ -2197,8 +2189,8 @@ impl Pane {
 								self.slide_static,
 								lines,
 							);
-							// move the rows out, don't clone: last_cells is replaced wholesale
-							// below, and snapshot_rows recycles emptied slots next capture
+							// move the rows out rather than clone them, since last_cells is
+							// replaced whole below and snapshot_rows recycles emptied slots
 							let chunk: Vec<Vec<StripCell>> = self.last_cells[range]
 								.iter_mut()
 								.map(std::mem::take)
@@ -2253,12 +2245,12 @@ impl Pane {
 		} else {
 			0
 		};
-		// Dev trace for the alt-screen slide (SILK_SCROLLDBG). Off = one cached bool
-		// check per frame. The per-frame (sh, app_off, slide_sh, st, sb) sequence is
-		// the deterministic proof that the slide eases smoothly (app_off monotonic, no
-		// bounce). `rgn` and `strip` are there because both of them show what a truncated
-		// slide looks like: a region that differs from the strip's throws the strip
-		// away, and the offset is then capped to what one step can fill.
+		// Dev trace for the alt-screen slide (SILK_SCROLLDBG). Off, it's one cached
+		// bool per frame. The per-frame (sh, app_off, slide_sh, st, sb) sequence
+		// shows whether the slide eases smoothly, with app_off monotonic and no
+		// bounce. `rgn` and `strip` show what a cut-short slide looks like: a region
+		// that differs from the strip's throws the strip away, and the offset is
+		// then capped to what one step can fill.
 		if scroll_dbg()
 			&& ((settings.smooth_apps() && (alt || app_off != 0.0 || shift_dbg != 0))
 				|| (!alt && frac > 0.0))
@@ -2307,8 +2299,8 @@ impl Pane {
 		};
 		let display_offset = desired as i32;
 		let hist = history as i32;
-		// fractional scroll shifts content down by frac of a cell; we render an
-		// extra row above (screen row -1) so the revealed strip is filled.
+		// fractional scroll shifts content down by frac of a cell, so an extra row
+		// is drawn above (screen row -1) to fill the gap.
 		let y_of = |screen_row: i32| {
 			self.rect.y + margin + (screen_row as f32 + voff_of(screen_row)) * cell_h
 		};
@@ -2316,12 +2308,12 @@ impl Pane {
 		// the bands (which are redrawn unshifted at band_top); grid elements use y_of.
 		let top = self.rect.y + margin + (-1.0 + voff) * cell_h;
 		// Slide geometry (only while app_off is easing). The current frame draws at
-		// `top` (scroll region, clipped to [top_split_y, split_y]); the scrolled-off
-		// strip fills the gap the shift opens - above the content when sliding down
-		// (app_off > 0), below it when sliding up. The strip is welded to the content
-		// edge and rides the same eased offset, so it never moves relative to the
-		// content: its last row ends exactly at the region's first row (up-scroll),
-		// or its first row starts one past the region's last (down-scroll).
+		// `top` (scroll region, clipped to [top_split_y, split_y]). The scrolled-off
+		// strip fills the gap the shift opens, above the content when sliding down
+		// (app_off > 0) and below it when sliding up. The strip is fixed to the
+		// content edge and moves with the same eased offset, so its last row ends
+		// exactly at the region's first row on an up-scroll, and its first row
+		// starts one past the region's last on a down-scroll.
 		let slide = if app_off == 0.0 && ob == 0 {
 			None
 		} else if app_off == 0.0 {
@@ -2381,9 +2373,9 @@ impl Pane {
 			})
 		};
 		// Hyperlink under the pointer. The scan wants the grid, which is locked
-		// right here - so it runs on the frame the pointer changed cell, and on
-		// every frame that re-shapes text (output slides the span out from under a
-		// pointer that never moved). A missed lock leaves the probe pending.
+		// right here, so it runs on the frame the pointer changed cell and on every
+		// frame that shapes text, since output slides the span out from under a
+		// pointer that never moved. A missed lock leaves the probe pending.
 		if self.link_probe || force_rebuild || !self.text_built {
 			self.link_probe = false;
 			let hit = if settings.hyperlinks {
@@ -2466,15 +2458,16 @@ impl Pane {
 			cursor_geometry(cursor_shape, guard.mode().contains(TermMode::ALT_SCREEN));
 		let following = desired == 0;
 
-		// Fast path: a pure cursor-animation frame (blink/slide, no content/scroll/
-		// bell change). Reuse the cached buffer + glyphs + bg from the last full
-		// build and recompute only the cursor - skips set_rich_text + shaping, the
-		// expensive part, so a blinking cursor doesn't re-shape text every frame.
+		// Fast path: a frame that only animates the cursor, with no content,
+		// scroll, or bell change. Reuse the cached buffer, glyphs, and backgrounds
+		// from the last full build and work out only the cursor. That skips
+		// set_rich_text and shaping, so a blinking cursor doesn't shape text every
+		// frame.
 		//
-		// `delta` has to be nil for that to hold: the caller decides `force_rebuild`
+		// `delta` has to be 0 for that to hold. The caller sets `force_rebuild`
 		// from `scroll.animating()`, which is already false on the frame an ease
-		// ends, and if that last step crossed a line the grid has just moved under
-		// a buffer nobody re-shaped - text drawn a row off its own backgrounds.
+		// ends, and if that last step crossed a line the grid moved under a buffer
+		// that wasn't shaped again, so text drew a row off its own backgrounds.
 		if !force_rebuild && self.text_built && delta == 0 {
 			drop(guard);
 			let cursor = self.cursor_quad(
@@ -2493,8 +2486,8 @@ impl Pane {
 				settings.cursor,
 				active,
 			);
-			// the fast path is a pure cursor frame - never taken while a slide eases
-			// (that forces a rebuild), so there is never a slide here
+			// the fast path only animates the cursor and is never taken while a
+			// slide eases, since that forces a rebuild, so there's never a slide here
 			self.last_draw.top = top;
 			self.last_draw.cursor = cursor;
 			self.last_draw.links = link_rects;
