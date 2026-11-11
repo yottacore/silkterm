@@ -24,9 +24,9 @@ BUILT_FROM_UNTRACKED_MAX=10
 ## fSourceState
 ## The working tree as it stands, in the note's own lines.
 ##
-## Untracked files that are not ignored count as dirty. They build here and the
-## tag does not carry them, so the tagged source may not even compile - a module
-## whose 'mod' line is committed and whose file is not is the shape that got
+## Untracked files that aren't ignored count as dirty. They build here and the
+## tag doesn't include them, so the tagged source may not even compile - a module
+## whose 'mod' line is committed and whose file isn't is the shape that got
 ## through. They are named, since "something is untracked" is no use on its own.
 fSourceState(){
 	local dirty="no"

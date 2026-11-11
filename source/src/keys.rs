@@ -158,7 +158,7 @@ impl Chord {
 	pub fn parse(text: &str) -> anyhow::Result<Chord> {
 		let parts: Vec<&str> = text.split('+').collect();
 		let Some((last, held)) = parts.split_last() else {
-			anyhow::bail!("\"{text}\" names no key");
+			anyhow::bail!("\"{text}\" isn't a key");
 		};
 		let mut chord = Chord {
 			key: KeyName::Plus,
@@ -186,7 +186,7 @@ impl Chord {
 			.ok_or_else(|| anyhow::anyhow!("\"{text}\": {last} is not a key name"))?;
 		if !(chord.ctrl || chord.alt || chord.command || chord.key.free_alone()) {
 			anyhow::bail!(
-				"\"{text}\" needs Ctrl, Alt, or Command held, or the key would stop reaching the shell"
+				"\"{text}\" needs Ctrl, Alt, or Command held, or the shell would stop getting that key"
 			);
 		}
 		Ok(chord)
@@ -535,9 +535,9 @@ impl Bindings {
 				let spoken = taken.chord.spoken(self.mac);
 				let (by, from) = (path(taken.by), path(taken.from));
 				if taken.both_set {
-					format!("`{by}` and `{from}` both use {spoken} - only `{by}` answers to it")
+					format!("`{by}` and `{from}` both use {spoken} - only `{by}` responds to it")
 				} else {
-					format!("{spoken} is set for `{by}`, so `{from}` no longer answers to it")
+					format!("{spoken} is set for `{by}`, so `{from}` no longer responds to it")
 				}
 			})
 			.collect()
@@ -624,7 +624,7 @@ pub fn complaints(
 		}
 		match parse_value(&text) {
 			Ok(chords) => set.push((hotkey, chords)),
-			Err(why) => out.push(format!("`{path}`{} is not used - {why:#}", cite(&lines))),
+			Err(why) => out.push(format!("`{path}`{} isn't used - {why:#}", cite(&lines))),
 		}
 	}
 	out.extend(Bindings::with(mac, &set).1);
@@ -765,7 +765,7 @@ mod tests {
 		assert_eq!(
 			notes,
 			[
-				"Ctrl+Shift+W is set for `keys.close_pane`, so `keys.close_tab` no longer answers to it"
+				"Ctrl+Shift+W is set for `keys.close_pane`, so `keys.close_tab` no longer responds to it"
 			]
 		);
 		let (b, notes) = Bindings::with(
@@ -820,7 +820,7 @@ mod tests {
 		let said = complaints(false, file, cite);
 		assert_eq!(said.len(), 1, "{said:?}");
 		assert!(
-			said[0].starts_with("`keys.split_right` line 7 is not used"),
+			said[0].starts_with("`keys.split_right` line 7 isn't used"),
 			"{said:?}"
 		);
 		assert!(said[0].contains("Plsu is not a key name"), "{said:?}");

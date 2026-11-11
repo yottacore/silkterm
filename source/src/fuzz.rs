@@ -142,7 +142,7 @@ const NASTY: [u8; 16] = [
 ];
 
 /// Chew on one case. Deliberately crude - the point is to reach shapes the
-/// generators cannot produce, not to be a good mutator.
+/// generators can't produce, not to be a good mutator.
 pub fn mutate(rng: &mut Rng, parent: &[u8]) -> Vec<u8> {
 	let mut out = parent.to_vec();
 	for _ in 0..=rng.below(6) {

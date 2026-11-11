@@ -19,7 +19,7 @@
 //! is pure and runs wherever the live settings are, so a theme change re-colors
 //! the text with no second decode.
 //!
-//! What this cannot do: guarantee the floor. Measured over the shipped pack of
+//! What this can't do: guarantee the floor. Measured over the shipped pack of
 //! 104 images, a single foreground clears a 0.45 gap on all of them at the
 //! shipped 10% visibility, on about two thirds at 35%, and on a fifth at 100%.
 //! Past that no color exists - the field's own bright end is inside the floor of
@@ -126,7 +126,7 @@ pub fn summarize(img: &image::RgbaImage, opacity: f32) -> Summary {
 	let mut lumas: Vec<f32> = Vec::with_capacity(GRID_W * GRID_H);
 	let mut channels: [Vec<f32>; 3] = std::array::from_fn(|_| Vec::with_capacity(GRID_W * GRID_H));
 	let (mut a_sum, mut a_n) = (0.0f64, 0u32);
-	// Chroma-weighted hue histogram, one bin a degree. A mean color cannot be
+	// Chroma-weighted hue histogram, one bin a degree. A mean color can't be
 	// used here: opposite hues cancel, and 17 of the shipped pack average to a
 	// near-gray whose hue is noise - one of them reads 174 degrees away from the
 	// hue that is actually all over it.
@@ -229,7 +229,7 @@ fn ab(hue: f32, chroma: f32) -> (f32, f32) {
 
 // A color at this lightness and hue, with the chroma pulled in until it fits.
 //
-// Oklab will happily name a lightness that sRGB cannot reach at a given chroma,
+// Oklab will happily name a lightness that sRGB can't reach at a given chroma,
 // and `from_oklab` clamps the channels - which costs the lightness that was
 // asked for, silently. That is fine for `palette::readable`, which is nudging
 // text that already exists, and not fine here: the lightness IS the legibility,
@@ -268,8 +268,8 @@ fn hue_chroma(c: [u8; 3]) -> (f32, f32) {
 
 // What the background behind a glyph really is, as a linear luma - the wallpaper
 // pass's own blend, with the image's luma standing in for its color. Light mode
-// mixes differently from dark, so `mix` carries which one (visibility.rs). Where
-// the image does not cover its pixel the background shows through first, so the
+// mixes differently from dark, so `mix` says which one (visibility.rs). Where
+// the image doesn't cover its pixel the background shows through first, so the
 // picture is filled with it before the two are mixed.
 fn field_luma(sum: &Summary, image_luma: f32, bg: [u8; 3], mix: crate::visibility::Mix) -> f32 {
 	let bg = config::luma(bg);
@@ -281,7 +281,7 @@ fn field_luma(sum: &Summary, image_luma: f32, bg: [u8; 3], mix: crate::visibilit
 // `behind_luma`.
 //
 // It has to be searched rather than solved. The plate is blended in linear light,
-// the floor is measured in Oklab lightness, and a tinted color's luma is not its
+// the floor is measured in Oklab lightness, and a tinted color's luma isn't its
 // lightness - which is the step that quietly cost the cursor a twentieth of the
 // floor before. Plate lightness rises with the cursor's, so sixteen rounds of
 // bisection place it inside a byte, and this runs once a picture rather than per
@@ -365,7 +365,7 @@ pub fn derive(sum: &Summary, settings: &Settings) -> Derived {
 	// The cursor is a plate with the glyph's own color on top, so
 	// it is a second background the text has to clear the same floor on. Put the
 	// plate exactly the floor away from the text - the furthest it can sit from
-	// the field while still carrying a glyph - and find the cursor that draws it.
+	// the field while it still has a glyph - and find the cursor that draws it.
 	// Solved against the field's bright end, so a darker cell only widens the gap.
 	let plate = if light_text {
 		target - floor

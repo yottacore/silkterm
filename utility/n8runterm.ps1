@@ -1099,7 +1099,7 @@ if ($script:GuiFeedback -and $script:RunWarnings.Count) {
 ##		- 2026-09-07: One cross-platform implementation, replacing the Windows-only
 ##		  script and the separate bash launcher. Reads only the synced app dir, so
 ##		  the network source and its bounded waits are gone. Copies GFS-rotate in a
-##		  versions folder behind a '<program>' symlink, which also carries the icon
+##		  versions folder behind a '<program>' symlink, which also has the icon
 ##		  a .desktop entry points at.
 ##		- 2026-09-01: Elevate by default; '--no-admin' opts out. A filtered token
 ##		  has no SeCreateSymbolicLinkPrivilege, so an unelevated shell can't make a

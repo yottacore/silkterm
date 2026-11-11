@@ -6,7 +6,7 @@
 //! A new tab, split or window starts where the pane it came from is, which
 //! means asking a shell where that is. The OS can answer for a shell that
 //! moves itself (`/proc/<pid>/cwd`, `proc_pidinfo` on macOS, or the PEB on
-//! Windows - see `term.rs`), and cannot answer at all for one that keeps its
+//! Windows - see `term.rs`), and can't answer at all for one that keeps its
 //! own idea of where it is: PowerShell's `Set-Location` never tells the OS.
 //! Every terminal has that hole and every terminal fills it the same way - the
 //! shell announces the directory in an escape sequence and the terminal
@@ -141,7 +141,7 @@ impl<P> TappedPty<P> {
 }
 
 // The tapped PTY IS its own reader: `reader()` hands back a borrow, and the
-// wrapper cannot hold one of the inner reader without borrowing itself. The
+// wrapper can't hold one of the inner reader without borrowing itself. The
 // event loop takes the reader and the writer in separate statements, so this
 // costs nothing.
 impl<P: EventedReadWrite> Read for TappedPty<P> {
@@ -571,7 +571,7 @@ mod tests {
 	}
 
 	// Every other OSC goes past constantly - titles on every prompt, clipboard
-	// writes carrying whole selections - and none of it may be collected, or a
+	// writes with whole selections - and none of it may be collected, or a
 	// paste-sized payload would be buffered for nothing.
 	// Test ID: dbhf0
 	#[test]

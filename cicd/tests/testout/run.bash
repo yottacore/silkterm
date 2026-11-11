@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-#  shellcheck disable=2034  ## 'variable appears unused.' The lifted fRunTest reads listing, and shellcheck cannot see into an eval.
+#  shellcheck disable=2034  ## 'variable appears unused.' The lifted fRunTest reads listing, and shellcheck can't see into an eval.
 #  shellcheck disable=2016  ## 'Expressions don't expand in single quotes.' Those are the scratch scripts' own lines.
 
 ##	- Purpose:

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-#  shellcheck disable=2034  ## 'variable appears unused.' The lifted fWhyFailed reads logDir, and shellcheck cannot see into an eval.
+#  shellcheck disable=2034  ## 'variable appears unused.' The lifted fWhyFailed reads logDir, and shellcheck can't see into an eval.
 #  shellcheck disable=2329  ## 'Never invoked.' The cargo stand-in is called by the lifted fWhyFailed.
 
 ##	- Purpose:

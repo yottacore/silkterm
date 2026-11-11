@@ -2702,10 +2702,7 @@ fn write_doc(path: &std::path::Path, doc: &shcl::Document) -> bool {
 		write_config_atomic(path, &saved_text(doc))
 	};
 	if let Err(e) = written {
-		eprintln!(
-			"{APP_NAME}: could not save config {}: {e:#}",
-			path.display()
-		);
+		eprintln!("{APP_NAME}: couldn't save config {}: {e:#}", path.display());
 		return false;
 	}
 	true
@@ -2877,7 +2874,7 @@ pub fn persist(orig: &Settings, edited: &Settings) -> bool {
 	wrote
 }
 
-const KEPT_NOTE: &str = "Kept by SilkTerm, so values can come back later. See Settings.";
+const KEPT_NOTE: &str = "Saved by SilkTerm, so these values can be used again later. See Settings.";
 
 // The settings knobs keeps, from the model's lines. A line whose value
 // changed is written, one whose value went is returned to put back the way the
@@ -3302,7 +3299,7 @@ fn config_complaints(text: &str) -> Vec<String> {
 		// still sets nothing. A save it can't keep the lines for is refused, and
 		// the window says so then.
 		out.push(format!(
-			"{} line(s) could not be read{} - they are kept but set nothing",
+			"{} line(s) couldn't be read{} - they're kept in the file but don't set anything",
 			lines.len().max(doc.lost_count()),
 			line_list(&lines)
 		));
@@ -3331,7 +3328,7 @@ fn config_complaints(text: &str) -> Vec<String> {
 	let mut seen: std::collections::HashMap<&str, usize> = std::collections::HashMap::new();
 	let mut active: Vec<(String, usize)> = Vec::new();
 	for w in walk_settings(text) {
-		// a block header carries no value of its own
+		// a block header doesn't have a value of its own
 		if let WalkLine::Setting {
 			index,
 			path,
@@ -6184,7 +6181,7 @@ fn backfill_config(path: &std::path::Path) {
 		Ok(None) => return,
 		Err(setting) => {
 			eprintln!(
-				"{APP_NAME}: {}: adding the missing settings would stop {setting} being read, so none were added",
+				"{APP_NAME}: {}: adding the missing settings would stop {setting} from being read, so they weren't added",
 				path.display()
 			);
 			return;
@@ -7378,12 +7375,12 @@ impl ConversionLoss {
 			.unwrap_or_default();
 		match self.how {
 			Converted::InPlace => format!(
-				"{APP_NAME}: {}: {} line(s) set a list in brackets, which the new format cannot hold; they are kept as written but set nothing.{kept}",
+				"{APP_NAME}: {}: {} line(s) set a list in brackets, which the new format can't store; they're kept as written but don't set anything.{kept}",
 				self.path.display(),
 				self.lost
 			),
 			Converted::Rewritten => format!(
-				"{APP_NAME}: {}: could not be converted in place, so a new file was written; {} setting(s) could not be copied to it.{kept}",
+				"{APP_NAME}: {}: couldn't be converted in place, so a new file was written; {} setting(s) couldn't be copied to it.{kept}",
 				self.path.display(),
 				self.lost
 			),
@@ -7398,7 +7395,7 @@ impl ConversionLoss {
 				if self.lines.len() == 1 { "it" } else { "them" }
 			),
 			Converted::Dropped(Rewrite::Template) => format!(
-				"{APP_NAME}: {}: not UTF-8 text at{}, so a new file was written from the defaults; {} setting(s) could not be copied to it.{kept}",
+				"{APP_NAME}: {}: not UTF-8 text at{}, so a new file was written from the defaults; {} setting(s) couldn't be copied to it.{kept}",
 				self.path.display(),
 				line_list(&self.lines),
 				self.lost
@@ -10485,21 +10482,21 @@ mod tests {
 		assert!(
 			about_keys
 				.iter()
-				.any(|line| line.contains("`keys.split_down` line 3 is not used")
+				.any(|line| line.contains("`keys.split_down` line 3 isn't used")
 					&& line.contains("Bogus is not a key name")),
 			"{said:?}"
 		);
 		assert!(
 			about_keys
 				.iter()
-				.any(|line| line.contains("`keys.font_reset` line 7 is not used")),
+				.any(|line| line.contains("`keys.font_reset` line 7 isn't used")),
 			"{said:?}"
 		);
 		if !cfg!(target_os = "macos") {
 			assert!(
 				about_keys
 					.iter()
-					.any(|line| line.contains("so `keys.close_tab` no longer answers to it")),
+					.any(|line| line.contains("so `keys.close_tab` no longer responds to it")),
 				"{said:?}"
 			);
 			assert_eq!(about_keys.len(), 3, "{said:?}");
@@ -12565,7 +12562,7 @@ mod tests {
 		let lost = config_complaints("font:\n\t\tsize: 13.0\n\tfamily: \"One\"\n");
 		assert!(
 			lost.iter()
-				.any(|m| m.contains("line 3") && m.contains("set nothing")),
+				.any(|m| m.contains("line 3") && m.contains("don't set anything")),
 			"{lost:?}"
 		);
 
@@ -14179,7 +14176,7 @@ mod tests {
 	// Off since a current file that isn't UTF-8 is written again without those
 	// lines (2026100315581313), where it was left alone.
 	// `a_current_file_that_is_not_utf8_drops_only_those_lines` covers `upgrade`.
-	// // A current file that is not UTF-8 is no upgrade, so it is left as it was.
+	// // A current file that isn't UTF-8 is no upgrade, so it is left as it was.
 	// // Test ID: ddf6f
 	// #[test]
 	// fn a_current_file_shcl_cannot_read_is_left_alone() {
@@ -14244,7 +14241,7 @@ mod tests {
 	// without those lines, the old bytes kept beside it (2026100315581313), where
 	// it was left as it was and every save refused.
 	// `a_launch_writes_a_current_file_that_is_not_utf8_again` covers it now.
-	// // A current file that is not UTF-8 used to load as all defaults with no
+	// // A current file that isn't UTF-8 used to load as all defaults with no
 	// // word. It is still left as it was, but every line that decodes is read.
 	// // Test ID: ddf75
 	// #[test]
@@ -14286,7 +14283,7 @@ mod tests {
 	// refusing. `a_save_on_a_current_file_that_is_not_utf8_writes_it_again` covers
 	// the save and the rating write now.
 	// // A save on that file used to say it saved and write nothing. Writing it
-	// // would drop the line that does not decode, so it is refused, and the
+	// // would drop the line that doesn't decode, so it is refused, and the
 	// // window hears of it as for any refused save.
 	// // Test ID: ddf76
 	// #[test]
@@ -15765,7 +15762,7 @@ mod tests {
 	// `an_existing_config_loses_the_minimized_wait` covers the line now.
 	// // The minimized wait came after the other two, so a file written before
 	// // it has the idle paragraph without it. It goes in beside them, first of
-	// // the waits, and the paragraph is not written twice.
+	// // the waits, and the paragraph isn't written twice.
 	// // Test ID: ddgsg
 	// #[test]
 	// fn an_existing_config_learns_the_minimized_wait() {
@@ -17901,7 +17898,7 @@ mod tests {
 		assert!(now > before, "the rating went in above the line");
 		let said = said();
 		for cites in [
-			format!("could not be read line {now} "),
+			format!("couldn't be read line {now} "),
 			format!("line {now}: indentation"),
 			format!("`window.opacity` line {} ", now - 1),
 		] {
@@ -17934,7 +17931,7 @@ mod tests {
 		let said = config_complaints(text);
 		assert!(
 			said.iter()
-				.any(|m| m.contains("line 3") && m.contains("set nothing")),
+				.any(|m| m.contains("line 3") && m.contains("don't set anything")),
 			"{said:?}"
 		);
 		assert!(

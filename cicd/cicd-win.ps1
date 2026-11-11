@@ -1202,7 +1202,7 @@ function fWslLinuxHalf {
 	## found" - exit 127, no useful message, and from a file nobody was looking at.
 	## .gitattributes asks for LF on all of them, but git never re-normalizes files
 	## that were already in the tree when the rule arrived, so a long-lived clone
-	## can carry them for years without noticing. Say so rather than let it happen.
+	## can have them for years without noticing. Say so rather than let it happen.
 	$crlf = @(& git ls-files --eol | Where-Object { $_ -match "w/crlf" -and $_ -match "eol=lf" } |
 		ForEach-Object { ($_ -split "`t")[-1] })
 	if ($crlf) {
@@ -1512,7 +1512,7 @@ try {
 ##		  is left; tool pins come from tool-pins.txt; old run logs are pruned;
 ##		  PowerShell scripts are linted when PSScriptAnalyzer is installed;
 ##		  fetch, pull and push go through gitsby where it is installed; the
-##		  installer carries the program's icon and a version block.
+##		  installer has the program's icon and a version block.
 ##		- 2026-08-24 JC: -Wsl runs the Linux half (cicd.bash --no-windows) in WSL2
 ##		  against this same tree, so one box covers both platforms; stages
 ##		  renumbered to 8.

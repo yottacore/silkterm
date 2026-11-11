@@ -5,7 +5,7 @@
 //!
 //! There are four places a tip comes up - a Settings row, a link in the About
 //! box, a tab in the strip, and a menu item - drawn by two different renderers
-//! in two different fonts. What they have in common is not the drawing: it is
+//! in two different fonts. What they have in common isn't the drawing: it is
 //! how long the pointer has to rest before a tip appears, how the text is
 //! broken to fit, and where the box goes relative to what it describes. Those
 //! three live here, and each caller draws the result its own way.
@@ -418,7 +418,7 @@ mod tests {
 	}
 
 	// A tip left up too long goes away, and moving about on the same target
-	// does not bring it back - only leaving and coming back does.
+	// doesn't bring it back - only leaving and coming back does.
 	// Test ID: dczr3
 	#[test]
 	fn a_tip_goes_down_after_its_limit_until_the_pointer_comes_back() {

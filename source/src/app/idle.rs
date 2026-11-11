@@ -14,13 +14,13 @@ use winit::event::WindowEvent;
 /// When the window last saw a person or a shell: input, focus either way, or
 /// output while it could be seen. The idle release counts from `since` (see
 /// `release_deadline`). `wake_owed` says something wants the window back since
-/// it let its device go, so the device is owed as soon as there is a screen to
+/// it let its device go, so the device is due as soon as there is a screen to
 /// draw on.
 #[derive(Debug)]
 pub(super) struct IdleClock {
 	since: Instant,
 	wake_owed: bool,
-	// owed only to answer the desktop's repaint, and let go again once drawn
+	// due only to answer the desktop's repaint, and let go again once drawn
 	repaint: bool,
 	// a rebuild the GPU refused, tried again on this
 	retry: Retry,
@@ -36,7 +36,7 @@ impl IdleClock {
 		}
 	}
 
-	/// The device back now: it is owed, there is a screen to draw on, and no
+	/// The device back now: it is due, there is a screen to draw on, and no
 	/// refused rebuild is waiting out its backoff.
 	pub(super) fn rebuild_due(&self, hidden: bool, now: Instant) -> bool {
 		self.wake_owed && !hidden && self.retry.at.is_none_or(|at| now >= at)
@@ -44,7 +44,7 @@ impl IdleClock {
 
 	// A busy or full GPU can refuse the device, and only input used to try
 	// again, so a window left alone stayed blank after the load was gone. It
-	// stays owed and is tried again on a backoff instead. True on the first
+	// stays due and is tried again on a backoff instead. True on the first
 	// refusal of a run.
 	fn rebuild_failed(&mut self, now: Instant) -> bool {
 		self.wake_owed = true;
@@ -63,7 +63,7 @@ impl IdleClock {
 		self.retry.at.filter(|_| self.wake_owed && !hidden)
 	}
 
-	// A sign of life. True when it is the one that makes the device owed.
+	// A sign of life. True when it is the one that makes the device due.
 	fn active(&mut self, released: bool) -> bool {
 		self.since = Instant::now();
 		self.repaint = false;
@@ -86,9 +86,9 @@ impl IdleClock {
 	}
 
 	// The desktop wants pixels, with nobody known to be there: X11 drops a
-	// window's pixels while it is on another desktop. The device is owed for
-	// one frame and the wait isn't started over. Owed already, as for output
-	// at the reveal, it stays a whole wake. True when this makes it owed.
+	// window's pixels while it is on another desktop. The device is due for
+	// one frame and the wait isn't started over. Due already, as for output
+	// at the reveal, it stays a whole wake. True when this makes it due.
 	fn repaint(&mut self, released: bool) -> bool {
 		let newly = self.owe(released);
 		self.repaint |= newly;
@@ -103,9 +103,9 @@ impl IdleClock {
 
 	// A shell printing. Output nobody can see doesn't keep a hidden window's
 	// device, or a program that prints forever would hold it for good. Output
-	// in the tab in front is still owed at the reveal, so the window shows
+	// in the tab in front is still due at the reveal, so the window shows
 	// what changed once it can be seen. A tab in the back is out of sight
-	// either way, and nothing it prints changes the picture, so it isn't owed
+	// either way, and nothing it prints changes the picture, so it isn't due
 	// the device: that would take it back and let it go again once per wait
 	// for as long as the tab prints. Switching to the tab is input, which
 	// brings it back.
@@ -170,7 +170,7 @@ struct Idle {
 	focused: bool,
 	hidden: bool,        // minimized, or covered where the desktop says so
 	revealed: bool,      // shown at all yet
-	bench_busy: bool,    // a rating owed or running
+	bench_busy: bool,    // a rating due or running
 	since: Instant,      // the last sign of life
 	keeps_picture: bool, // still shows its last frame once let go
 }
@@ -200,7 +200,7 @@ fn kept_by(rule: &IdleRule, idle: &Idle) -> Option<&'static str> {
 	} else if !idle.revealed {
 		Some("not shown yet")
 	} else if idle.bench_busy {
-		Some("a rating is owed or running")
+		Some("a rating is due or running")
 	} else if !idle.hidden && idle.focused {
 		Some("focused on screen")
 	} else if !idle.hidden && !idle.keeps_picture {
@@ -507,7 +507,7 @@ impl State {
 	/// catch-up frame, hard-cut so the gap closes instantly instead of easing in
 	/// (that ease is the bounce class, and it also reads as output arriving now).
 	/// Every pane is cut, not only the ones flagged dirty: the flag is cleared by
-	/// whichever build got there first, so it answers "is a rebuild owed", not
+	/// whichever build got there first, so it answers "is a rebuild due", not
 	/// "did the grid move while nobody was looking". A pane that did sit
 	/// still is snapping a scroll already at rest.
 	pub(super) fn freeze_catchup(&mut self) {
@@ -518,7 +518,7 @@ impl State {
 	}
 
 	/// A sign of life: the idle clock starts over, and a window that let its
-	/// device go is owed it back.
+	/// device go gets it back.
 	pub(super) fn note_active(&mut self, why: &'static str) {
 		if self.idle.active(self.gpu.is_none()) {
 			idledbg(&format!("wake: {why}"));
@@ -560,8 +560,8 @@ impl State {
 
 	/// Shown again after being out of sight. Nobody is known to be there, so
 	/// the wait isn't started over, and a window that let its device go keeps
-	/// its last frame up until something on screen changes (output it was owed
-	/// while hidden is owed now). A window that goes blank without its device
+	/// its last frame up until something on screen changes (output that came in
+	/// while it was hidden is due now). A window that goes blank without its device
 	/// takes it back. Windows sends no occlusion events, and its repaint on a
 	/// restore can come before the size does, so this is called from the
 	/// catch-up edge as well as on an occlusion event.
@@ -651,7 +651,7 @@ impl State {
 	/// built afresh. The wallpaper is prepared again from the file rather than
 	/// kept, as after a VT switch (`recover_gpu`), and its small stand-in shows
 	/// from the first frame until it arrives. A failure leaves the window
-	/// released and owed, and it is tried again on a backoff while the window
+	/// released and due, and it is tried again on a backoff while the window
 	/// shows.
 	pub(super) fn rebuild_gpu(&mut self) {
 		let Some(rebirth) = self.rebirth.as_ref() else {
@@ -808,7 +808,7 @@ mod tests {
 		assert_eq!(sign_of_life(&WindowEvent::Focused(true), false, true), None);
 	}
 
-	// A released window is owed its device at the reveal only for output it
+	// A released window is due its device at the reveal only for output it
 	// can show: the tab in front. A tab in the back printing while the window
 	// was hidden changes nothing anyone will see.
 	// Test ID: df4dj
@@ -824,7 +824,7 @@ mod tests {
 	// The desktop's repaint takes a released device back for one frame, with
 	// the wait left running, so it can be let go again once drawn. A sign of
 	// life in that time makes it a whole wake, and so does a device already
-	// owed, as for output while the window was hidden.
+	// due, as for output while the window was hidden.
 	// Test ID: df4e2
 	#[test]
 	fn a_repaint_takes_the_device_back_for_one_frame() {
@@ -1047,7 +1047,7 @@ mod tests {
 	// A window starts unfocused, since one that never gets the focus may never
 	// be told so. Opened behind another window, it kept its device for good
 	// (2026111011350600). Its first focus is a sign of life, and being told at
-	// the map that it has none is not.
+	// the map that it has none isn't.
 	// Test ID: df4r2
 	#[test]
 	fn a_window_never_focused_counts_as_unfocused() {
@@ -1110,7 +1110,7 @@ mod tests {
 			bench_busy: true,
 			..free
 		};
-		assert_eq!(kept_by(&rule, &rating), Some("a rating is owed or running"));
+		assert_eq!(kept_by(&rule, &rating), Some("a rating is due or running"));
 		let focused = Idle {
 			focused: true,
 			..free
@@ -1289,7 +1289,7 @@ mod tests {
 
 	// A program printing in a minimized window held its device for good, since
 	// every output started the idle clock over. Output nobody can see leaves the
-	// clock alone, but a released window is still owed its device for the reveal.
+	// clock alone, but a released window is still due its device for the reveal.
 	// Test ID: dcrvv
 	#[test]
 	fn output_into_a_hidden_window_does_not_keep_its_device() {
@@ -1307,11 +1307,11 @@ mod tests {
 		assert!(!clock.wake_owed);
 		assert!(
 			clock.output(true, true, true),
-			"a released window is owed it"
+			"a released window is due it"
 		);
 		assert!(clock.wake_owed);
 		assert_eq!(clock.since, long_ago);
-		assert!(!clock.output(true, true, true), "owed once");
+		assert!(!clock.output(true, true, true), "due once");
 
 		let mut seen = IdleClock {
 			since: long_ago,
@@ -1328,7 +1328,7 @@ mod tests {
 	// A program printing now and then in a tab in the back kept an unfocused
 	// window on screen from ever letting go after "Minutes otherwise". Only
 	// the tab in front counts while the window shows, and a released window
-	// isn't owed its device for a tab nobody sees.
+	// isn't due its device for a tab nobody sees.
 	// Test ID: der5b
 	#[test]
 	fn output_from_a_tab_in_the_back_does_not_keep_the_device() {
@@ -1348,7 +1348,7 @@ mod tests {
 		);
 		assert!(!clock.output(true, false, false));
 		assert!(!clock.wake_owed, "a tab in the back took the device back");
-		// Hidden, it was owed at the reveal whichever tab printed. Since
+		// Hidden, it was due at the reveal whichever tab printed. Since
 		// 2026111010491300 only the tab in front is, since a tab in the back
 		// can't be seen after the reveal either (df4dj pins that).
 		// assert!(clock.output(true, true, false));
@@ -1382,7 +1382,7 @@ mod tests {
 		assert!(clock.rebuild_due(false, wake), "tried again with no input");
 		assert_eq!(clock.rebuild_wake(true), None, "no wakes while hidden");
 
-		// a return to the console releases and rebuilds with nothing owed yet
+		// a return to the console releases and rebuilds with nothing due yet
 		let mut healed = IdleClock::new();
 		healed.rebuild_failed(now);
 		assert!(healed.wake_owed);

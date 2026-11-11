@@ -31,13 +31,13 @@
 //!   to, so a profile that carried the block and no longer does is left alone -
 //!   without it the next launch simply put the block back, since the marker went
 //!   with it. `shell.integration` switches the whole thing off before it starts.
-//! - A profile that does not decode as UTF-8 is left alone: 5.1 writes UTF-16 by
-//!   default, and appending to a file we cannot read replaces it.
+//! - A profile that doesn't decode as UTF-8 is left alone: 5.1 writes UTF-16 by
+//!   default, and appending to a file we can't read replaces it.
 //! - A shell that would refuse to load the profile is left alone. Measured on
 //!   this box: Windows PowerShell 5.1 sits at a policy that blocks script
 //!   files, so a profile written for it turned every launch into a red
-//!   execution-policy error. Writing a file a shell cannot read is worse than
-//!   doing nothing, and changing somebody's execution policy is not ours to do.
+//!   execution-policy error. Writing a file a shell can't read is worse than
+//!   doing nothing, and changing somebody's execution policy isn't ours to do.
 //! - It runs on the shell-scan thread, well after the window is up, because it
 //!   asks PowerShell itself where its profile is - which means starting one.
 //!
@@ -78,8 +78,8 @@ const NL: char = '\n';
 pub const MARKER: &str = "# >>> SilkTerm shell integration >>>";
 pub const END_MARKER: &str = "# <<< SilkTerm shell integration <<<";
 
-/// A file that already carries either sequence is reporting - by our block or by
-/// somebody else's setup - and is not ours to edit.
+/// A file that already has either sequence is reporting - by our block or by
+/// somebody else's setup - and isn't ours to edit.
 pub fn already_reports(profile: &str) -> bool {
 	profile.contains(MARKER) || profile.contains("]9;9;") || profile.contains("]7;file:")
 }
@@ -159,7 +159,7 @@ fn program_base(program: &str) -> String {
 
 /// Put the block in every PowerShell profile that reports nothing. Called on the
 /// shell-scan thread; every failure is a diagnostic, never a stop - a profile we
-/// cannot read or write is somebody else's business.
+/// can't read or write is somebody else's business.
 pub fn install(found: &[Found]) {
 	if !config::settings().shell_integration {
 		return;
@@ -251,9 +251,9 @@ fn parse_answer(answer: &str) -> Option<(PathBuf, String)> {
 // Would this shell actually load a profile it found? A block written into a
 // profile the shell then refuses to run is worse than none at all: measured
 // here, Windows PowerShell 5.1 sits at Restricted, and a profile written for it
-// turned every launch into a red execution-policy error. An answer we do not
+// turned every launch into a red execution-policy error. An answer we don't
 // recognize - including no answer at all - is treated as "no": the cost of
-// being wrong that way is a feature that does not switch itself on, against an
+// being wrong that way is a feature that doesn't switch itself on, against an
 // error on somebody's every prompt.
 fn policy_runs_scripts(policy: &str) -> bool {
 	matches!(
@@ -266,7 +266,7 @@ fn policy_runs_scripts(policy: &str) -> bool {
 /// to do - no block of ours in the file, or the one there is already current.
 /// Only the text BETWEEN the two markers is touched; whatever the user wrote
 /// above or below it is carried through untouched. An opening marker with no
-/// closing one is not a block we finished writing, so it is not a region we may
+/// closing one isn't a block we finished writing, so it isn't a region we may
 /// replace either.
 pub fn refreshed_block(profile: &str, newline: &str) -> Option<String> {
 	let start = profile.find(MARKER)?;
@@ -292,7 +292,7 @@ fn read_profile(profile: &Path) -> anyhow::Result<Option<String>> {
 		Err(e) => Err(e).with_context(|| format!("couldn't read {}", profile.display())),
 		Ok(bytes) => String::from_utf8(bytes).map(Some).map_err(|_| {
 			anyhow::anyhow!(
-				"{} isn't UTF-8 - left it alone, add the block by hand (see shell-integration.md)",
+				"{} isn't UTF-8, so it was left alone. Add the block by hand (see shell-integration.md)",
 				profile.display()
 			)
 		}),
@@ -301,7 +301,7 @@ fn read_profile(profile: &Path) -> anyhow::Result<Option<String>> {
 
 // Keep what is there under a name that says where it came from, and never over a
 // backup already made - that one is the copy worth keeping. Only a plain file
-// counts as that copy. A link at the name, dangling or not, is not followed: a
+// counts as that copy. A link at the name, dangling or not, isn't followed: a
 // profile often holds tokens, and the copy gets the profile's own mode.
 fn backup_once(profile: &Path, existing: &str) -> bool {
 	use std::io::Write;
@@ -454,7 +454,7 @@ fn install_into_with(profile: &Path, record: Option<&Path>) {
 		Ok(()) => {
 			note_installed(record, profile);
 			eprintln!(
-				"{}: added shell integration to {} - new tabs and panes will open where the shell is (see shell-integration.md)",
+				"{}: added shell integration to {} - new tabs and panes will open in the shell's current directory (see shell-integration.md)",
 				config::APP_NAME,
 				profile.display()
 			);
@@ -611,7 +611,7 @@ mod tests {
 
 	// Windows writes the answer in the console's code page, so a path is only
 	// believed as the hex the query asks for. An empty profile gives an empty
-	// first line, and the policy that then comes first is not hex.
+	// first line, and the policy that then comes first isn't hex.
 	// Test ID: dcqa4
 	#[test]
 	fn a_profile_path_is_read_from_its_hex_and_nothing_else() {
@@ -1426,7 +1426,7 @@ Write-Host \"COLOR=$global:__SilkTermHostColor\"",
 		Found::new(title, command.to_string(), "")
 	}
 
-	// A profile that already reports is not ours to edit, whoever set it up -
+	// A profile that already reports isn't ours to edit, whoever set it up -
 	// and this is also what makes a second launch a no-op rather than a second
 	// copy of the block.
 	// Test ID: dbj7v

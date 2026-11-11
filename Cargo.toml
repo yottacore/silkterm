@@ -2,11 +2,11 @@
 # Build/test/run from this root as before; Cargo.lock and target/ stay here.
 [workspace]
 members = ["source", "knobs"]
-# Crates that live here but are not part of the build. `forks/` holds working
+# Crates that live here but aren't part of the build. `forks/` holds working
 # clones of the patched dependencies, and the clipboard reproducer is run by
 # hand. The sanitizer canary leaks on purpose, so it's built only by the
 # sanitizer step. Without this, cargo takes any package under this directory for
-# a member it was not told about and refuses to build it on its own.
+# a member it wasn't told about and refuses to build it on its own.
 exclude = ["forks", "cicd/tests/clipboard-race", "cicd/tests/sanitizer-canary", "cicd/utility/gpu-stress", "knobs/demo"]
 resolver = "3"
 
@@ -29,17 +29,17 @@ resolver = "3"
 # That one went upstream as alacritty/alacritty#9026 and was closed unmerged.
 # The branch is cut from the v0.17.0 tag rather than master purely so the
 # version still reads 0.26.0 - cargo silently ignores a patch whose version does
-# not satisfy the dependency requirement, and master carries a pre-release
-# version that does not.
+# not satisfy the dependency requirement, and master has a pre-release
+# version that doesn't.
 #
 # The cap of nine combining marks per cell is upstream's own fix (ede2ac144d),
 # here until a release has it. The last three are ours. On Linux, a program that
 # closes its terminal and keeps running no longer spins the reader thread at a
 # whole core; the PTY is left out of the poll for a tenth of a second at a time.
-# A title is cut to 2 KiB, so the title stack cannot be made to hold gigabytes.
+# A title is cut to 2 KiB, so the title stack can't be made to hold gigabytes.
 # And on Windows a pane gives back its process, thread and pipe handles when it
 # closes, and a program path with a space is quoted, so a planted program
-# earlier in that path cannot run in its place.
+# earlier in that path can't run in its place.
 [patch.crates-io]
 alacritty_terminal = { git = "https://github.com/jim-collier/alacritty", branch = "scroll-ledger-0.26.0" }
 
@@ -57,8 +57,8 @@ x11-clipboard = { git = "https://github.com/jim-collier/x11-clipboard", branch =
 # light. A half covered pixel then reads at about three quarters brightness
 # either way, which is strong on a dark background and nearly nothing on a light
 # one - so light themes lose the thin parts of every letter and read thin and
-# pale. Our branch carries the text color, its background and a blend amount in
-# the params uniform, and bends coverage so the finished pixel lands where an
+# pale. Our branch adds the text color, its background and a blend amount in
+# the params uniform, and bends coverage so the finished pixel ends up where an
 # sRGB blend of that pair would have put it. That is the weight the font was
 # drawn for and what almost every other program paints; the output stays linear,
 # so the target is still encoded once. A blend of 0 leaves coverage alone. A
@@ -103,7 +103,7 @@ float_cmp = "allow"
 # would scatter tightly-coupled state.
 too_many_lines = "allow"
 
-# Config/Settings-style structs legitimately carry many independent toggles.
+# Config/Settings-style structs legitimately have many independent toggles.
 struct_excessive_bools = "allow"
 
 # `..Default::default()` in struct-update reads better than naming the type.
@@ -122,7 +122,7 @@ many_single_char_names = "allow"
 # present-with-value. Option<Option<T>> models that directly.
 option_option = "allow"
 
-# Errors are values. An unwrap or expect outside the tests says why it cannot
+# Errors are values. An unwrap or expect outside the tests says why it can't
 # fail, in the reason of an allow at that site. Tests are exempt (clippy.toml).
 unwrap_used = "warn"
 expect_used = "warn"

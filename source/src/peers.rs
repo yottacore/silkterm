@@ -105,7 +105,7 @@ fn warn_once(what: &str) {
 	static SAID: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 	if !SAID.swap(true, std::sync::atomic::Ordering::Relaxed) {
 		eprintln!(
-			"{}: other windows on this settings file won't hear of saves: {what}",
+			"{}: other windows using this settings file won't be told about saves: {what}",
 			crate::config::APP_NAME
 		);
 	}

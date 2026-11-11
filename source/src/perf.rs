@@ -7,7 +7,7 @@
 //! large `cat`" - and that number is the sum of three parties: the console host
 //! delivering bytes, the engine parsing them, and this program reacting to each
 //! batch. Only the last is ours to change, and it is invisible from outside the
-//! process: a wall-clock stopwatch cannot say whether the time went into the
+//! process: a wall-clock stopwatch can't say whether the time went into the
 //! grid or into waking the event loop forty thousand times.
 //!
 //! The counters are plain atomics behind one cached flag, so an ordinary run
@@ -87,7 +87,7 @@ pub fn timed<T>(counter: &AtomicU64, body: impl FnOnce() -> T) -> T {
 
 // CPU seconds this thread (the window/render thread) and the whole process have
 // burned. The split is the point: a frame that BLOCKS on the display costs wall
-// time and no CPU, so a wall-clock render figure on its own cannot say whether
+// time and no CPU, so a wall-clock render figure on its own can't say whether
 // the main thread is working or waiting.
 #[cfg(windows)]
 #[allow(clippy::unnecessary_wraps)] // the other platforms return None
@@ -273,7 +273,7 @@ pub fn painted() {
 		return;
 	}
 	// Typing marks the window dirty, so frames go out between the key and the
-	// echo. Those are not the frame being waited for - leave the stopwatch
+	// echo. Those aren't the frame being waited for - leave the stopwatch
 	// running rather than taking one of them as the answer.
 	let Some(out) = pending.out else {
 		return;

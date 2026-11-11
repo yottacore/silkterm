@@ -1052,7 +1052,7 @@ mod tests {
 	#[test]
 	fn version_names_the_build_as_well_as_the_release() {
 		// A release version can't tell two builds apart, which is the whole reason
-		// the build number exists - so --version has to carry both.
+		// the build number exists - so --version has to show both.
 		let line = version_line();
 		assert!(line.starts_with(config::APP_NAME));
 		assert!(line.contains(env!("CARGO_PKG_VERSION")));
@@ -1060,7 +1060,7 @@ mod tests {
 		// One flush line: it exists to be captured by a script.
 		assert!(!line.contains('\n'));
 		// A script reading the second field still gets the version, not the build.
-		// Retired 2026-09-24: the version now carries a leading "v", as release
+		// Retired 2026-09-24: the version now has a leading "v", as release
 		// tags do, so the second field is "v<version>". The assertion below replaces it.
 		// assert_eq!(line.split(' ').nth(1), Some(env!("CARGO_PKG_VERSION")));
 		assert_eq!(

@@ -74,22 +74,22 @@ impl MenuAction {
 				"Paste the text last selected with the mouse, without copying it first."
 			}
 			MenuAction::ToggleCopySelect => {
-				"Copy text to the clipboard as soon as it's selected. Only for this pane."
+				"Copy text to the clipboard as soon as it's selected. This only applies to this pane."
 			}
 			MenuAction::ToggleCopyOutput => {
-				"Copy a command's output when it finishes and the prompt comes back. Only for this pane."
+				"Copy a command's output when it finishes and the prompt comes back. This only applies to this pane."
 			}
 			MenuAction::ToggleReadOnly => {
 				"Ignore typing in this pane, so a long job can't be stopped by accident."
 			}
 			MenuAction::ToggleFrame => {
-				"The title bar and border. Off also hides the minimize, maximize, and close buttons."
+				"Show the title bar and border. Turning it off also hides the minimize, maximize, and close buttons."
 			}
 			MenuAction::ToggleMenuBar => {
-				"The menu bar. With it off, right-click a pane for the same menu."
+				"Show the menu bar. With it off, right-click a pane for the same menu."
 			}
 			MenuAction::ToggleSingleTab => {
-				"The tab strip. Off keeps it hidden until there is a second tab."
+				"Show the tab strip. With it off, the strip stays hidden until there's a second tab."
 			}
 			MenuAction::ToggleMinimap => {
 				"Show a small view of the whole scrollback beside the text. It takes up columns the text would have used."
@@ -98,7 +98,7 @@ impl MenuAction {
 				"Hide the title bar, menu bar, and tab strip at once. Choose it again to bring back what was showing."
 			}
 			MenuAction::ToggleRemote => {
-				"Run as a plain terminal for a remote screen, where the effects are lost anyway. Turns on by itself when a remote session is found, and off at the next launch."
+				"Run as a plain terminal for a remote screen, where the effects are lost anyway. It turns on by itself when a remote session is found, and turns off at the next launch."
 			}
 			MenuAction::NextWallpaper => {
 				"Show the next image from the wallpaper folder now. The rotation timer restarts."

@@ -108,7 +108,7 @@ fn curve(x: f32) -> f32 {
 
 // How bright a picture reads, from its overall level and its bright end. The
 // bright end is half the answer because glare comes from there, not from the
-// average - a photo that is mostly night sky with a sun in it is not a dark
+// average - a photo that is mostly night sky with a sun in it isn't a dark
 // picture to look at.
 fn brightness(mean: f32, hi: f32) -> f32 {
 	0.5 * (curve(mean) + curve(hi))

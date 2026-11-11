@@ -411,7 +411,7 @@ pub struct Minimap {
 	rough_n: usize,
 	// No stand-ins from here up, so the search for them starts here.
 	clean_from: usize,
-	// Edits owed to the store: drop every row, or this many off the top.
+	// Edits the store still needs: drop every row, or this many off the top.
 	owed_clear: bool,
 	owed_front: usize,
 	// History moved or was rebuilt since the last compose, so the next one
@@ -2571,7 +2571,7 @@ mod tests {
 		// the scrollback rebuilt whole, as after a screen swap or a resize
 		update(&mut map, &term, 0, 0, true);
 		assert!(map.job.is_some(), "the whole image was composed here");
-		assert!(map.pending(), "and nothing owed while it is away");
+		assert!(map.pending(), "and nothing due while it is away");
 		assert!(map.wake().is_some(), "or a time to look for it");
 		let rev = map.rev;
 		map.wait();
@@ -3194,10 +3194,10 @@ mod tests {
 
 		let mut map = Minimap::default();
 		drive(&mut map, 0, 0);
-		assert!(!map.pending(), "the first compose left one owed");
+		assert!(!map.pending(), "the first compose left one due");
 		// the other pane's compose frame: a rebuild with nothing of its own
 		drive(&mut map, 0, 40);
-		assert!(!map.pending(), "a build inside the gap owed a compose");
+		assert!(!map.pending(), "a build inside the gap made a compose due");
 		assert!(map.wake().is_none(), "and asked for a frame");
 
 		// the control: output folded inside the gap does need the compose that

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-#  shellcheck disable=2034  ## 'variable appears unused.' The lifted block reads them, and shellcheck cannot see into an eval.
+#  shellcheck disable=2034  ## 'variable appears unused.' The lifted block reads them, and shellcheck can't see into an eval.
 
 ##	- Purpose:
 ##		Stage 0 of cicd.bash brings the tree up to its upstream before anything is
