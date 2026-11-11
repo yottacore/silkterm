@@ -8685,7 +8685,7 @@ mod tests {
 
 	// The default menu background is the inactive tab's own bytes, so a tip
 	// filled with it drew as a tab that grew downward. It has to stand off every
-	// tab color - lighter, and warm where the whole strip leans blue - without
+	// tab color, lighter and warm where the whole strip leans blue, without
 	// turning into a different surface. The lightness floor and ceiling are the
 	// strip's own inactive-to-active step either side, so "slightly lighter"
 	// means what the strip already means by it.
@@ -8732,8 +8732,8 @@ mod tests {
 		assert_ne!(tip_fg_of(fg), fg);
 	}
 
-	// A custom menu color takes the tip with it, which is the whole reason
-	// these are shades rather than 2 more colors on the Themes tab. shade()
+	// A custom menu color takes the tip with it, which is why these are shades
+	// rather than 2 more colors on the Themes tab. shade()
 	// picks its direction from luminance, so a light menu color has to send the
 	// tip the other way rather than off the top end.
 	// Test ID: dcwfn
@@ -8787,7 +8787,7 @@ mod tests {
 
 	// The case that keeps coming up is a file manager's "Open in terminal": no
 	// tty, but a directory that was very much chosen. Only the 3 directories
-	// a launcher leaves us in by default may fall through to the setting.
+	// a launcher leaves SilkTerm in by default may fall through to the setting.
 	// Test ID: dbsxm
 	#[test]
 	fn an_inherited_directory_is_a_choice_unless_a_launcher_picked_it() {
@@ -8807,7 +8807,7 @@ mod tests {
 	}
 
 	// An MSIX package's Start-menu entry has no working directory, so Windows
-	// starts it in System32. That is where the launcher left us, not a folder
+	// starts it in System32. That's where the launcher left it, rather than a folder
 	// anybody picked, so the first shell goes to the setting instead.
 	// Test ID: dd7yq
 	#[test]
@@ -8883,7 +8883,7 @@ mod tests {
 	#[test]
 	fn an_explicit_xdg_config_home_wins_on_every_platform() {
 		// Setting it is a deliberate act, so it outranks the platform default
-		// everywhere - including the 2 platforms that have a native answer.
+		// everywhere, including the 2 platforms that have a native answer.
 		let xdg = PathBuf::from("/elsewhere/cfg");
 		let home = PathBuf::from("/home/u");
 		let roaming = PathBuf::from("C:/Users/u/AppData/Roaming");
@@ -8911,10 +8911,10 @@ mod tests {
 		assert_eq!(config_base_for(Layout::Xdg, None, None, None), None);
 	}
 
-	// The whole point of the DIP pass: a chrome measurement is the same physical
-	// size on any display, so it doubles when the scale factor does. The floor is
-	// the other half - a hairline the author asked to be visible must never round
-	// down to nothing, which is what a 1 DIP rule does on a display below 1x.
+	// The DIP pass: a chrome measurement is the same physical size on any display,
+	// so it doubles when the scale factor does. The floor is the other half, since a
+	// hairline meant to be visible must never round down to nothing, which is what a
+	// 1 DIP rule does on a display below 1x.
 	// Test ID: dbenh
 	#[test]
 	fn a_chrome_measurement_scales_and_a_hairline_survives() {
@@ -8931,7 +8931,7 @@ mod tests {
 				"the pane gap vanished at {scale}x"
 			);
 		}
-		// zero stays zero - the floor is for measurements meant to be seen
+		// zero stays zero, since the floor is for measurements meant to be seen
 		assert_eq!(dip(0.0, 2.0), 0.0);
 	}
 
@@ -8954,7 +8954,7 @@ mod tests {
 
 	// The scan stamps the date daily, so this fires on its own on the first launch
 	// of each day. It used to drop the entry's subtree and put it back at the end
-	// of the block, which loses its comments and moves it - and the first entry in
+	// of the block, which loses its comments and moves it, and the first entry in
 	// the file is the default shell.
 	// Test ID: dcbd5
 	#[test]
@@ -8981,9 +8981,9 @@ mod tests {
 		assert!(out.contains("2026-09-08"), "the stamp went in: {out:?}");
 	}
 
-	// File order is the list's order - it decides what the menu offers first and
-	// therefore which shell is the default - and a reorder changes no entry, so
-	// the per-entry write path would have written nothing at all and lost it.
+	// File order is the list's order, which decides what the menu offers first and
+	// so which shell is the default. A reorder changes no entry, so the per-entry
+	// write path would have written nothing at all and lost it.
 	// Test ID: dbfrp
 	#[test]
 	fn a_reorder_is_written_even_though_no_entry_changed() {
@@ -9407,7 +9407,7 @@ mod tests {
 	// the value is also left exactly as the user typed it.
 	// A profile's values ride on top of the live settings, and a write that
 	// starts from a live copy (the minimap toggle, the remembered size) must
-	// not write them into the file - or Custom would have nothing to put back.
+	// not write them into the file, or Custom would have nothing to put back.
 	// Test ID: dc57n
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
@@ -9581,7 +9581,7 @@ mod tests {
 
 	// A step the display watch took lasts the session. Written down, one stall
 	// became every later launch's profile, with no way back while automatic was
-	// on - that took a desktop to Standard terminal and its wallpaper with it.
+	// on. That took a desktop to Standard terminal and its wallpaper with it.
 	// Test ID: dcf3s
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
@@ -10578,10 +10578,10 @@ mod tests {
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn persist_survives_bare_decimal_float() {
-		// Memoize settings() before installing the override: a test on another
-		// thread initializing settings() after the override would load() - an
-		// in-place migrate/backfill rewrite of our temp file - racing our own
-		// read below (parallel-suite flake: truncated read -> defaults).
+		// Memoize settings() before installing the override. A test on another thread
+		// that first calls settings() after the override would load(), which rewrites
+		// this temp file in place, racing the read below (a truncated read gave
+		// defaults).
 		let _guard = super::test_config_lock();
 		let _ = settings();
 		let dir =
@@ -10652,7 +10652,7 @@ mod tests {
 			.spawn()
 			.unwrap();
 
-		// give the child a moment to exist in /proc, then confirm we see it
+		// give the child a moment to exist in /proc, then confirm it's seen
 		let mut seen = false;
 		for _ in 0..50 {
 			if config_open_elsewhere(&path) {
@@ -12279,8 +12279,8 @@ mod tests {
 	}
 
 	// Reverting used to remove the node, and shcl takes a node's leading comments
-	// with it - so a scrim setting destroyed 7 lines of documentation, and a
-	// note written above a value went the same way.
+	// with it, so a scrim setting destroyed 7 lines of comments, and a note written
+	// above a value went the same way.
 	// Test ID: dcbd6
 	#[test]
 	fn reverting_a_setting_keeps_the_comments_above_it() {
@@ -12564,7 +12564,7 @@ mod tests {
 	}
 
 	// A key written twice can't resolve to one value, so the default takes
-	// effect. That is the right outcome, but it has to be said - the setting is
+	// effect. That's the right outcome, but it has to be said, since the setting is
 	// there in the file, plainly set, and doing nothing.
 	// Test ID: dav1f
 	#[test]
@@ -12606,11 +12606,11 @@ mod tests {
 		);
 	}
 
-	// The template must already be what a save would produce, or the very
-	// first save would reflow the file we just wrote. Nearly every setting here is
-	// a commented default with no active sibling - the form that shcl used to
-	// re-pad to the block header's depth - so this is now the guard on the writer
-	// itself, and a bump that reintroduced the reflow would fail here.
+	// The template must already be what a save would produce, or the very first
+	// save would reflow the file just written. Nearly every setting here is a
+	// commented default with no active sibling, the form shcl used to re-pad to the
+	// block header's depth, so this guards the writer itself, and a bump that
+	// brought back the reflow would fail here.
 	// Test ID: damtq
 	#[test]
 	fn default_config_survives_a_save_unchanged() {
@@ -15403,9 +15403,9 @@ mod tests {
 		assert_eq!(expand_vars("$SILKTERM_NO_SUCH_VAR/x"), "/x");
 	}
 
-	// The default is the home variable spelled the way somebody on this
-	// platform would type it, and the template's commented line has to say the
-	// same thing or the first save rewrites the file we just wrote (G69, G72).
+	// The default is the home variable written the way somebody on this platform
+	// would type it, and the template's commented line has to say the same thing or
+	// the first save rewrites the file just written (G69, G72).
 	// Test ID: dcq0v
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
@@ -15494,7 +15494,7 @@ mod tests {
 
 	// A directory named on the command line is checked before anything spawns, so
 	// a path that isn't there reads as one line naming the flag rather than as a
-	// shell that failed to start - and it expands the same tokens the setting does.
+	// shell that failed to start, and it expands the same tokens the setting does.
 	// Test ID: dbh66
 	#[test]
 	fn a_named_directory_is_expanded_and_checked() {
@@ -15510,11 +15510,11 @@ mod tests {
 		);
 	}
 
-	// The bug this fixes was in everyone's config: `shell.default` was
-	// routinely a bare name where the scan had already stored the full path to
-	// the same file, so a string compare promoted a second copy of the user's
-	// default shell to the top of their own list - where the top is what "default
-	// shell" now means, so the duplicate became the default.
+	// The bug this fixes was in everyone's config: `shell.default` was often a bare
+	// name where the scan had already stored the full path to the same file, so a
+	// string compare put a second copy of the user's default shell at the top of
+	// their own list. The top is what "default shell" means now, so the duplicate
+	// became the default.
 	// Test ID: dbg0r
 	#[test]
 	fn a_default_shell_already_in_the_list_moves_instead_of_doubling() {
@@ -16719,15 +16719,15 @@ mod tests {
 	// The first path-level rename since the config went nested. A rename rewrites
 	// the key on its own line and must keep everything else about it: the value,
 	// the active/commented state, and the indentation that says which block it
-	// belongs to. Renames may not cross blocks - the machinery rewrites lines, it
-	// doesn't move them - so this one stays inside `scroll:`.
+	// belongs to. Renames may not cross blocks, since lines are rewritten and never
+	// moved, so this one stays inside `scroll:`.
 	// Test ID: daqy9
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_renamed_setting_keeps_its_value_and_its_block() {
 		let out = migrate_config_text("scroll:\n\tinview_tau_ms: 45.0\n").expect("should migrate");
 		assert_eq!(out, "scroll:\n\tsingle_screen_tau_ms: 45.0\n");
-		// the value has to survive the trip through the loader, not just the text
+		// the value has to survive the trip through the loader, and not only the text
 		let s = resolve(read_raw(&out, std::path::Path::new("test.shcl")).0);
 		assert!((s.scroll_single_screen_tau_ms - 45.0).abs() < f32::EPSILON);
 		// the dotted spelling reads and rewrites the same way
@@ -16765,11 +16765,11 @@ mod tests {
 		assert_eq!(s.minimap_tui_whitelist, "less vim");
 	}
 
-	// A rename can hand its old name to a new setting - `colors.focus` became
-	// `colors.highlight` and the freed name is now the vivid focus color.
-	// Once both spellings are in the file the old line must be left exactly
-	// where it is: it is no longer stale, it is the new setting's own line, and
-	// dropping or re-renaming it would delete a user's color on every launch.
+	// A rename can hand its old name to a new setting: `colors.focus` became
+	// `colors.highlight`, and the freed name is now the vivid focus color.
+	// Once both spellings are in the file the old line must be left where it is.
+	// It's the new setting's own line now, and dropping or re-renaming it would
+	// delete a user's color on every launch.
 	// Test ID: dav9z
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
@@ -16786,7 +16786,7 @@ mod tests {
 		);
 
 		// after backfill both spellings are present, and every launch after that
-		// is a no-op - the file has reached its resting state
+		// is a no-op, since the file has reached its resting state
 		let both = "colors:\n\thighlight: \"#abcdef\"\n\tfocus: \"#123456\"\n";
 		assert!(migrate_config_text(both).is_none());
 		let s = resolve(read_raw(both, std::path::Path::new("test.shcl")).0);
@@ -16839,8 +16839,8 @@ mod tests {
 
 	// Backfill only ever adds a missing key, so a config written when an older
 	// stack was the default kept that stack forever. Migration refreshes exactly
-	// the old defaults and nothing the user chose themselves - now keyed on
-	// the nested font.family path.
+	// the old defaults and nothing the user chose, now keyed on the nested
+	// font.family path.
 	// Test ID: daf5e
 	#[test]
 	fn migrate_refreshes_a_superseded_default_font_stack() {
@@ -16858,7 +16858,7 @@ mod tests {
 		// the current value is already right, so nothing to do
 		let current = format!("font:\n\tfamily: \"{DEFAULT_FONT_STACK}\"\n");
 		assert!(migrate_config_text(&current).is_none());
-		// a stack the user edited, or one they commented out, is theirs - leave it
+		// a stack the user edited, or one they commented out, is theirs, so leave it
 		let edited = format!("font:\n\tfamily: \"Iosevka, {stale}\"\n");
 		assert!(migrate_config_text(&edited).is_none());
 		assert!(migrate_config_text(&format!("font:\n\t# family: \"{stale}\"\n")).is_none());
@@ -17665,8 +17665,8 @@ mod tests {
 		}
 	}
 
-	// The walker is what gives every line its full nested path - the whole
-	// line-oriented machinery keys on it.
+	// The walker gives every line its full nested path, and all the line-based
+	// code keys on it.
 	// Test ID: daq6a
 	#[test]
 	fn walker_resolves_nested_paths() {
@@ -17694,9 +17694,9 @@ mod tests {
 
 	// A dialog save on a fresh nested config: the new active value goes inside
 	// its block, and everything else in the file is left exactly as it stands.
-	// The whole-file diff is the strong form of that - a save may only ever add
-	// the lines it was asked to add - and the spot checks below say which forms
-	// are being relied on, so a failure names the one that moved.
+	// The whole-file diff is the strong form of that, since a save may only add the
+	// lines it was asked to add, and the spot checks below say which forms are being
+	// relied on, so a failure names the one that moved.
 	// Test ID: daq6b
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
@@ -17859,9 +17859,9 @@ mod tests {
 	}
 
 	// A new key added to a group the file already has part of must go beside
-	// its siblings inside their block, at the right depth, not be appended with
-	// a second copy of the group's comment block - that paragraph is already in
-	// the file, attached to the siblings.
+	// its siblings inside their block, at the right depth, rather than being appended
+	// with a second copy of the group's comment block, which is already in the file,
+	// attached to the siblings.
 	// Test ID: daq3c
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
@@ -18363,7 +18363,7 @@ mod tests {
 						out.push('\n');
 					}
 					3 => {
-						// A block header, then children under it - sometimes under
+						// A block header, then children under it, sometimes under
 						// one that was already written above.
 						let _ = writeln!(out, "{}:", rng.pick(keys));
 						for _ in 0..=rng.below(3) {
