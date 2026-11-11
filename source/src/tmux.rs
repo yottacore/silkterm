@@ -4,7 +4,7 @@
 //! Panes that run in a tmux session of their own: finding tmux, naming the
 //! session, the command line that starts it, and ending it again. A new tab, a
 //! split, and a plain launch each start one while `shell.tmux.always_new_session`
-//! is on, and so does a tab opened with "New tab in tmux". See design.md, "Panes
+//! is on, and so does a tab opened with "New tab in tmux". See usage.md, "Panes
 //! in tmux".
 
 use crate::config::Choice;

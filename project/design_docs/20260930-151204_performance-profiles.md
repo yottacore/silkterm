@@ -96,7 +96,7 @@ A profile is layered on top of the stored settings rather than stored in them. T
 
 So a setting has 2 layers, which are the file's and the profile's. `settings()` returns the profile's.
 
-The cheaper profiles keep the same share of the scrim radius, which is 5 px against the default 8, so they look like the same halo built with fewer taps. Low keeps the wallpaper, which is decoded once and doesn't cost anything per frame.
+High draws the scrim at 5 px against the default 8, with the cheaper Dilate function, and Low turns it off. Low keeps the wallpaper, which is decoded once and doesn't cost anything per frame.
 
 ### Remote (temporary)
 

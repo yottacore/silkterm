@@ -179,7 +179,7 @@ Text can be particularly hard to read, for example when using light text on a no
 
 - **Clickable links**. Hover a URL to underline it, Ctrl+click to open it (Command+click on macOS), or use the right-click menu. Only known-safe schemes are ever treated as links, and an app that has taken over the mouse keeps it.
 
-- **Smart double-click text selection**. Recognizes paths, URL, git remotes, quoted text, bracketed text, etc.
+- **Smart double-click text selection**. Recognizes paths, URLs, git remotes, quoted text, bracketed text, etc.
 
 - **Copy on select, and/or copy on output**. Both optional, both per-pane. Copy-on-output grabs what a command printed without the prompt around it. A program in the pane you're using can set the clipboard too, the way tmux and editors over ssh do.
 
@@ -203,7 +203,7 @@ Text can be particularly hard to read, for example when using light text on a no
 
 - **GPU-accelerated with software fallback**. An idle window can also give its GPU memory back.
 
-- **Releases memory, CPU, and GPU resources when idle**. Without affecting running programs. The timeouts are tunable. The only way you even knew something happened, is the wallpaper reloads in about a quarter second, and "... (resources restored)" appears for a few seconds in the window title.
+- **Releases memory, CPU, and GPU resources when idle**. Without affecting running programs. The timeouts are tunable. The only way you even knew something happened is the wallpaper reloads in about a quarter second, and "... (resources restored)" appears for a few seconds in the window title.
 
 - Loosely based on [Alacritty](https://github.com/alacritty/alacritty), for the basement plumbing - to avoid rewriting the complex but solved problems of terminal emulation. (Alacritty is also a high-performance, open-source terminal written in Rust.)
 

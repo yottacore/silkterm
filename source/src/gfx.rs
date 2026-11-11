@@ -2516,7 +2516,7 @@ fn fs(in: VsOut) -> @location(0) vec4<f32> {
 // Fullscreen-triangle flip-blit: samples the offscreen scene and writes it to
 // the GL default framebuffer with V flipped (fbo 0 has a bottom-left origin).
 // The offscreen already has premultiplied rgba, so this is a straight copy.
-const BLIT_WGSL: &str = r#"
+const BLIT_WGSL: &str = r"
 struct VsOut { @builtin(position) clip: vec4<f32>, @location(0) uv: vec2<f32> };
 @vertex
 fn vs(@builtin(vertex_index) i: u32) -> VsOut {
@@ -2557,7 +2557,7 @@ fn fs(in: VsOut) -> @location(0) vec4<f32> {
     let d = (hash12(p) - hash12(p + vec2<f32>(13.7, 91.3))) / 255.0;
     return vec4<f32>(lin2srgb(c.rgb) + vec3<f32>(d), c.a);
 }
-"#;
+";
 
 #[cfg(test)]
 mod tests {

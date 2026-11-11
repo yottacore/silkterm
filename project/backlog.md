@@ -9587,7 +9587,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- 20261110: So the jump is a profile setup difference. The pipeline's profiler reads the live settings. The tmux setting is off in them now, but the 11-09 flamegraphs have the same frames as the tmux runs here and none of a plain one's scrollback growth, so it was on then. c2e52357 (11-07) made it cover a plain launch, so the workload ran in tmux. In tmux the scrolled-off strip is shaped again every frame, and the drawing share drops.
 	- Decisions:
 		- There's no code change here. The profiler's own settings tree is filed as 2026111017285305, and the cost in tmux as 2026111017285320.
-	- Test case: None, since nothing changed. The rig that runs builds back to back is `profile-ab.bash` in the private tools folder.
+	- Test case: None, since nothing changed. Builds were compared back to back.
 	- Verified: 20261110, the runs above on the card, b23, at load 2 to 8.
 	- Closed: 20261110-172908
 
