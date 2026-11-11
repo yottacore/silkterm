@@ -1190,8 +1190,8 @@ impl SettingsDialog {
 			self.row_h(&self.specs[i].kind)
 		}
 	}
-	// An editable field is taller than a checkbox: the text needs clear space
-	// above and below it, not just left and right.
+	// An editable field is taller than a checkbox, since its text needs clear
+	// space above and below.
 	fn field_h(&self) -> f32 {
 		Self::field_h_for(self.line_h)
 	}
@@ -4200,16 +4200,16 @@ impl SettingsDialog {
 			self.prompt_mouse_down(x, y, measure);
 			return Action::None;
 		}
-		// an open field context menu captures the click: an enabled item fires its
-		// command (clipboard glue in dialog.rs), anywhere else just dismisses
+		// An open field context menu takes the click. An enabled item runs its
+		// command (the clipboard side is in dialog.rs), and a click elsewhere closes it.
 		if self.emenu.is_some() {
 			let hit = (0..EDIT_MENU.len()).find(|&k| self.em_item_rect(k).contains(x, y));
 			let cmd = hit.filter(|&k| self.em_enabled(k)).map(|k| EDIT_MENU[k].1);
 			self.emenu = None;
 			return cmd.map_or(Action::None, Action::Edit);
 		}
-		// an open dropdown captures the click: on an option -> pick it, anywhere
-		// else -> just close (a click-away dismiss, consumed either way)
+		// An open dropdown takes the click. A click on an option picks it, and one
+		// elsewhere closes it. Either way the click is used up.
 		if let Some(oi) = self.open.take() {
 			let n = self.dd_options(oi).len();
 			for choice in 0..n {
