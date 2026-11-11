@@ -1534,9 +1534,9 @@ impl State {
 		base
 	}
 
-	// Re-read config.shcl from disk and live-apply it (the "internal command" for
-	// picking up hand-edits without a file watcher). The file is the source here,
-	// so nothing is persisted back.
+	// Read config.shcl again and apply it live, so hand edits are picked up
+	// without a file watcher. The file is the source here, so nothing is written
+	// back.
 	fn reload_config(&mut self) {
 		let orig = config::settings().as_ref().clone();
 		let edited = settings_after_reload(
@@ -1584,7 +1584,7 @@ impl State {
 		self.saves_told = config::saves();
 	}
 
-	// Font zoom (hotkeys / View menu): step the zoom offset and rebuild the
+	// Font zoom from the hotkeys or the View menu: step the zoom offset and rebuild the
 	// text context at the new effective size. Window-wide, and remembered with
 	// the window's size.
 	fn font_zoom(&mut self, dir: i32) {
@@ -1629,7 +1629,7 @@ impl State {
 		self.note_grid(w, h);
 	}
 
-	// Force the next frame through a full prepare + scrim build. Call whenever
+	// Force the next frame through a full prepare and scrim build. Call whenever
 	// something outside the signature's reach makes the retained GPU state stale
 	// (new atlases, recreated textures, lost VRAM).
 	fn invalidate_prepared(&mut self) {
@@ -1660,9 +1660,9 @@ impl State {
 		}
 	}
 
-	// Swap in `edited` and rebuild whatever changed vs `orig` (text metrics,
-	// background image, window opacity). Shared by the dialog and config reload.
-	// `force_bg` re-reads the image even if the path string didn't change.
+	// Swap in `edited` and rebuild what changed from `orig`, such as text metrics,
+	// the wallpaper, or window opacity. Shared by the dialog and the config
+	// reload. `force_bg` reads the image again even if its path didn't change.
 	fn apply_new_settings(
 		&mut self,
 		orig: &config::Settings,
@@ -1709,13 +1709,13 @@ impl State {
 			self.rating.reset();
 		}
 
-		// Backdrop-blur hint toggled -> set/clear the compositor property live.
+		// the backdrop blur hint changed, so set or clear the compositor property now
 		if blur_changed {
 			set_blur_behind(&self.window, config::settings().transparent_background_blur);
 		}
 
-		// Transparency is per-pixel (terminal background only) - never whole-window.
-		// Nothing to do here; the bg fill picks up the new opacity on the next frame.
+		// Transparency is per pixel, on the terminal background only, so there's
+		// nothing to do for it here. The fill picks up the new opacity next frame.
 		// window dimensions changed in Settings -> resize to the new cell grid
 		if resize {
 			let (columns, rows) =
@@ -1777,13 +1777,12 @@ impl State {
 		}
 	}
 
-	// returns true while any pane is still animating (caller keeps frames coming).
-	// `force_rebuild` = the frame changed content/scroll/bell (not a pure cursor
-	// animation), so panes re-shape text; false lets them reuse the cached frame.
-	// `map_rebuild` = that change may show in the minimap too, which a moved
-	// selection or link hover doesn't.
-	// A frame, on the device the window has. No device means nothing drawn and
-	// no animation to keep frames coming for.
+	// A frame, on the device the window has. Returns true while any pane is still
+	// animating, so the caller keeps frames coming. No device means nothing is
+	// drawn and nothing animates. `force_rebuild` means the frame changed
+	// content, scroll, or bell rather than only the cursor, so panes shape text
+	// again. `map_rebuild` means the change may show in the minimap too, which a
+	// moved selection or link hover doesn't.
 	fn render(&mut self, force_rebuild: bool, map_rebuild: bool) -> bool {
 		let Some(mut gpu) = self.gpu.take() else {
 			return false;
@@ -1794,8 +1793,8 @@ impl State {
 	}
 
 	fn render_with(&mut self, gpu: &mut Gpu, force_rebuild: bool, map_rebuild: bool) -> bool {
-		// once a frame has been drawn, later resizes are user-driven and may update
-		// the remembered window size (startup/programmatic ones happen before this)
+		// once a frame has been drawn, later resizes are the user's and may update
+		// the remembered window size. The startup ones come before this.
 		self.size_tracked = true;
 		let area = self.area();
 		if area.w < 1.0 || area.h < 1.0 {
@@ -1822,8 +1821,8 @@ impl State {
 		}
 
 		// Regaining the window, switching tab, or moving pane focus pokes the
-		// focused pane: its cursor animation resumes immediately, from the top of
-		// the cycle - no resume delay, that one is for input.
+		// focused pane: its cursor animation starts again at once, from the top of
+		// the cycle. The resume delay is only for input.
 		let focus_sig = (self.tabs.active, self.tabs.cur().focused, self.focused);
 		if self.focused && self.cursor_focus_sig != Some(focus_sig) {
 			let id = self.tabs.cur().focused;
@@ -1833,8 +1832,8 @@ impl State {
 		}
 		self.cursor_focus_sig = Some(focus_sig);
 
-		// Visual-bell flash decays toward 0; while >0 the text is brightened (in
-		// build) and we keep rendering so the fade is smooth.
+		// The visual bell flash decays toward 0. While it's above 0 the text is
+		// brightened (in build) and frames keep coming so the fade is smooth.
 		if self.bell_flash > 0.0 {
 			self.bell_flash = (self.bell_flash * (-dt / BELL_TAU_S).exp()).max(0.0);
 			if self.bell_flash < 0.01 {
@@ -1843,8 +1842,8 @@ impl State {
 		}
 		let bell = self.bell_flash;
 
-		// translucent background only when the surface supports it and the user has
-		// Transparency on - and it only ever affects the bg, never text/chrome.
+		// translucent background only when the surface supports it and Transparency
+		// is on, and it only affects the background, never text or chrome
 		let bg_alpha = if gpu.gfx.transparent && cfg.transparent_background {
 			self.opacity()
 		} else {
@@ -1896,10 +1895,10 @@ impl State {
 				animating = true;
 			}
 			let rect = pane.rect;
-			// scope the expensive re-shape to panes that changed: fresh
-			// PTY output (content_dirty), an active scroll ease, or a global
-			// cause (bell flash, chrome/UI change) - idle siblings reuse their
-			// cached frame instead of re-shaping at the busy pane's rate
+			// shape again only the panes that changed: new PTY output
+			// (content_dirty), an active scroll ease, or a global cause such as a
+			// bell flash or a chrome change. Idle siblings reuse their cached frame
+			// rather than shaping at the busy pane's rate.
 			let own = pane.content_dirty || pane.scroll.animating();
 			let force = force_rebuild || own;
 			let map = map_rebuild || own;
@@ -1930,8 +1929,8 @@ impl State {
 		}
 
 		// The builds above are where a hyperlink hover is resolved, so the pointer
-		// shape can only be settled after them - a link found under a pointer that
-		// has stopped moving gets no further pointer event to react to.
+		// shape can only be settled after them, since a link found under a pointer
+		// that has stopped moving gets no further pointer event.
 		self.sync_cursor_icon();
 
 		let under_len = instances.len() as u32;
@@ -1957,9 +1956,9 @@ impl State {
 				instances.extend(minimap_insts(&g, p.map_drag.is_some()));
 			}
 		}
-		// Focus ring only distinguishes panes when there's more than one; with a
-		// single pane it's an unwanted border line around the whole content
-		// (the user wants background all the way to the edge), so skip it.
+		// The focus ring only tells panes apart when there's more than one. With a
+		// single pane it would be a border around the whole content, where the
+		// background should run to the edge, so it's skipped.
 		if self.tabs.cur().panes.len() > 1 {
 			if let Some(p) = self.tabs.cur().panes.get(&self.tabs.cur().focused) {
 				instances.extend(focus_ring(p.full, self.text.scale));
@@ -1985,8 +1984,8 @@ impl State {
 		let ring_end = instances.len() as u32;
 
 		// Column images: one texture per pane, uploaded only when the compose
-		// behind them moved. Direct field access - `tabs.cur()` would borrow the
-		// whole of self and the renderer needs it mutably.
+		// behind them moved. Direct field access, since `tabs.cur()` would borrow
+		// the whole of self and the renderer needs it mutably.
 		gpu.minimap.begin_frame();
 		if cfg.minimap {
 			let mm = &mut gpu.minimap;
@@ -1999,21 +1998,22 @@ impl State {
 			}
 		}
 
-		// cursor quads also feed the scrim's cursor-coverage texture (its own tex,
-		// so cursor_scrim/cursor_outline gate it independently); the cursor still
-		// draws crisp above the composite below. Collect them whenever the scrim is
-		// on - the shader flags decide whether they reach the halo and/or outline.
+		// cursor quads also feed the scrim's cursor coverage texture, which is its
+		// own so cursor_scrim and cursor_outline gate it separately. The cursor
+		// still draws crisp above the composite below. They're collected whenever
+		// the scrim is on, and the shader flags decide whether they reach the halo
+		// or the outline.
 		if scrim_on {
 			scrim_cursors.extend(cursors.iter().map(|(_, q)| *q));
 		}
 
-		// Hyperlink underlines sit with the cursor, after the scrim composite - they
-		// are chrome about the text, not a cell background. Filed with the bg quads
-		// they were painted over by the halo, which is densest right under the
-		// glyphs, so a solid rule came out as a barcode tracing the letterforms.
-		// They stay out of the scrim's coverage map either way (an underline should
-		// cast no halo of its own), and stay under the cursor as before.
-		// The text's own underlines and strike-throughs go the same way.
+		// Hyperlink underlines go with the cursor, after the scrim composite, since
+		// they're chrome about the text rather than a cell background. Filed with
+		// the background quads they were painted over by the halo, which is
+		// densest right under the glyphs, so a solid rule came out as a barcode
+		// tracing the letters. They stay out of the scrim's coverage map either
+		// way, so an underline casts no halo of its own, and stay under the
+		// cursor. The text's own underlines and strike-throughs go the same way.
 		for p in self.tabs.cur().panes.values() {
 			let draw = p.draw();
 			if draw.links.is_empty() && draw.rules.is_empty() {
@@ -2074,8 +2074,8 @@ impl State {
 			}
 			// always-visible copy-mode checkboxes (right side): outlines always,
 			// filled per the focused pane's 2 independent triggers, so the state
-			// is never hidden. Dimmed when this window isn't focused - the flags
-			// stay set, but nothing copies until it regains focus.
+			// is never hidden. Dimmed when this window isn't focused, since the flags
+			// stay set but nothing copies until it has the focus again.
 			let fp = self.tabs.cur().panes.get(&self.tabs.cur().focused);
 			let checked = [
 				fp.is_some_and(|p| p.copy_select),
@@ -2117,7 +2117,7 @@ impl State {
 			None
 		};
 
-		// tab bar (only with >1 tab), drawn just below the menu bar. Its labels are
+		// tab bar, when it shows, drawn just below the menu bar. Its labels are
 		// brought up to date here, before anything this frame reads the strip, and
 		// only probed while it is hidden.
 		let tab_bar_y = self.menubar_h();
@@ -2213,10 +2213,9 @@ impl State {
 						));
 					}
 				}
-				// close-button box: a 1px outline (border rect + inner tab-bg fill).
-				// The active tab's box fill leans faintly toward a pastel red - just
-				// past noticeable, so the current tab reads at a glance without a
-				// clashing accent.
+				// close button box: a 1px outline, as a border rect and an inner fill.
+				// The active tab's box leans faintly toward a pastel red, so the
+				// current tab stands out without a clashing accent.
 				let cb = tab_close_box(x, tab_w, tab_bar_y, tab_h, self.text.scale);
 				instances.push(rect_inst(
 					cb.x - cb_rule,
@@ -2331,7 +2330,7 @@ impl State {
 		};
 
 		// A tip's box, in a layer of its own after the menus, so it sits over
-		// everything - a pane's own text and an open menu's alike. A menu tip
+		// everything, a pane's own text and an open menu alike. A menu tip
 		// flips to the left of a submenu at the right edge, which puts it over
 		// the parent menu. The tab strip's and a menu row's are the same 2
 		// quads; only what they say and where they sit differ.
@@ -2398,8 +2397,8 @@ impl State {
 		} else {
 			(&[], &[])
 		};
-		// keep the shaped chrome text current (see ChromeCache) - a color change
-		// rebuilds it all, otherwise only changed tab titles re-shape
+		// keep the shaped chrome text current (see ChromeCache). A color change
+		// rebuilds it all, and otherwise only changed tab titles are shaped again.
 		if self
 			.chrome
 			.as_ref()
@@ -2474,7 +2473,7 @@ impl State {
 		// Fingerprint every input to the prepared text set. A pure cursor frame
 		// reproduces it exactly, which is the signal that glyphon's retained
 		// buffers are still correct and both prepares can be skipped. Anything
-		// missed here shows up as an extra prepare, never as stale text - so err
+		// missed here shows up as an extra prepare, never as stale text, so lean
 		// toward including a value rather than reasoning that it can't change.
 		let text_sig = {
 			use std::hash::{Hash, Hasher};
@@ -2526,8 +2525,9 @@ impl State {
 
 		// All rect instances and the bg-image shader work in absolute
 		// framebuffer pixels (matching the glyphon viewport), so the resolution
-		// is the whole window - not the content `area`, which is shorter by the
-		// menu/tab bars and would shift cell bg + cursor down relative to text.
+		// is the whole window rather than the content `area`, which is shorter by
+		// the menu and tab bars and would shift cell backgrounds and the cursor
+		// down from the text.
 		let (frame_w, frame_h) = (gpu.gfx.config.width as f32, gpu.gfx.config.height as f32);
 		self.text
 			.update_viewport(&gpu.gfx.queue, gpu.gfx.config.width, gpu.gfx.config.height);
@@ -2554,10 +2554,10 @@ impl State {
 			.upload(&gpu.gfx.device, &gpu.gfx.queue, &instances);
 
 		// Nothing that feeds the text changed, so glyphon's prepared buffers from
-		// the last frame still describe this one exactly. Skipping the whole area
-		// build + both prepares is the point of the signature: shaping and
-		// glyph-cache lookups are over half the per-frame cost, and an idle cursor
-		// pulse repeats them 30x a second for no visual difference.
+		// the last frame still describe this one exactly. Skipping the area build
+		// and both prepares is why the signature exists, since shaping and glyph
+		// cache lookups are over half the cost of a frame, and an idle cursor
+		// pulse repeats them 30x a second for no visible change.
 		if !text_same {
 			#[allow(
 				clippy::unwrap_used,
@@ -2609,7 +2609,7 @@ impl State {
 					else {
 						continue;
 					};
-					// trailing buffers are the copy-mode labels - dim them off-focus
+					// trailing buffers are the copy-mode labels, dimmed when unfocused
 					let color = if i < bar_layout.len() {
 						menu_fg
 					} else {
@@ -2677,11 +2677,11 @@ impl State {
 			}
 
 			if let Err(e) = self.text.prepare(&gpu.gfx.device, &gpu.gfx.queue, areas) {
-				// Atlas full (after a long session of varied glyphs). The normal per-frame
-				// trim is at the end of render, below this early return - so without
-				// trimming here the atlas never recovers and all text goes black for good
-				// (cursor/cell-bg quads use a separate renderer, so they still show). Trim
-				// now to free space; the next frame re-prepares with room and recovers.
+				// Atlas full, after a long session of varied glyphs. The usual trim is
+				// at the end of render, past this early return, so without a trim here
+				// the atlas never recovers and all text goes black for good. Cursor and
+				// cell background quads use a separate renderer, so they still show.
+				// Trimming now frees space, and the next frame prepares again with room.
 				eprintln!(
 					"{}: text prepare failed; trimming atlas to recover: {e:?}",
 					config::APP_NAME
@@ -2696,12 +2696,11 @@ impl State {
 			if scrim_on {
 				let mut scrim_areas: Vec<TextArea> = Vec::new();
 				for p in self.tabs.cur().panes.values() {
-					// scrim follows the current frame's slide, including the scrolled-off
-					// strip filling the reveal gap - without it the strip's text (e.g. the
-					// row just below a static header) loses its readability halo mid-slide
-					// and the halo "pops" when the slide settles, reading as a shadow that
-					// jumps at the band boundary. The strip has only region rows, so it
-					// is always scrim-safe (no furniture to guard out of the scrim).
+					// the scrim follows this frame's slide, including the scrolled-off
+					// strip filling the gap. Without it the strip's text, such as the row
+					// just below a static header, loses its halo mid-slide, and the halo
+					// pops back when the slide settles. The strip has only region rows,
+					// so there's nothing in it to keep out of the scrim.
 					let draw = p.draw();
 					match &draw.slide {
 						Some(slide) => {
@@ -2753,13 +2752,13 @@ impl State {
 		} // !text_same
 		self.text_sig = Some(text_sig);
 
-		// lay out the menu into the overlay renderer: one proportional buffer
-		// per item label (at the gutter), plus a checkmark buffer for checked toggles.
-		// Re-shaping every frame while a menu sits open (the cursor blink keeps
-		// frames coming) is skippable: the overlay text only depends on the menu's
-		// geometry/labels/color. Only skip alongside text_same - the end-of-frame
-		// atlas trim (which runs when !text_same) drops glyphs the retained overlay
-		// vertex buffers still reference, so a trim frame must re-prepare.
+		// lay out the menu in the overlay renderer: one proportional buffer per
+		// item label, at the gutter, plus a checkmark buffer for checked toggles.
+		// Shaping every frame while a menu is open, with the cursor blink keeping
+		// frames coming, can be skipped, since the overlay text depends only on the
+		// menu's geometry, labels, and color. Skip only alongside text_same. The
+		// end-of-frame atlas trim, which runs when !text_same, drops glyphs the
+		// kept overlay vertex buffers still use, so a trim frame has to prepare.
 		if self.menu.is_some()
 			|| tip_layout.is_some()
 			|| menu_tip.is_some()
@@ -2972,12 +2971,12 @@ impl State {
 		// distance paths measure the halo extent in px; keep it a touch wider than
 		// the (sigma-based) gaussian look so switching functions doesn't shrink it.
 		let scrim_ext = crate::scrim::clamp_ext(cfg.text_scrim_radius * 2.0);
-		// The halo is built from the text alone - the cursor is in its own
-		// coverage texture and only joins at the blur (cursor_scrim) or the
-		// composite (cursor_outline). So when the text is unchanged the color map,
-		// the text-coverage pass and the blur can all be reused from last frame;
-		// every scrim texture is stored, not transient. That is most of the idle
-		// GPU cost. The blur still has to re-run if the cursor feeds it.
+		// The halo is built from the text alone. The cursor is in its own coverage
+		// texture and joins only at the blur (cursor_scrim) or the composite
+		// (cursor_outline). So when the text is unchanged the color map, the text
+		// coverage pass, and the blur can all be reused from last frame, since
+		// every scrim texture is kept. That's most of the idle GPU cost. The blur
+		// still has to run again if the cursor feeds it.
 		let scrim_cached = scrim_on && text_same && self.scrim_sig == Some(text_sig);
 		let blur_cached = scrim_cached && !cfg.cursor_scrim;
 		if scrim_on {
@@ -3013,9 +3012,9 @@ impl State {
 				});
 				let _ = self.text.render_scrim(&mut pass);
 			}
-			// cursor coverage in its own texture (kept apart from the text so the
-			// halo and the outline can each include it independently). Skipped -
-			// full-res clear included - when neither flag samples it.
+			// cursor coverage in its own texture, kept apart from the text so the
+			// halo and the outline can each include it. Skipped, full-res clear
+			// included, when neither flag samples it.
 			if cfg.cursor_scrim || cfg.cursor_outline {
 				let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
 					label: Some("scrim cursor"),
@@ -3055,10 +3054,10 @@ impl State {
 			let divider = config::srgb_f32(config::DIVIDER);
 			// transparent base only when the background is see-through
 			// (same gate as bg_alpha): pane-gap dividers then show the desktop.
-			// Otherwise the clear must be opaque - the X11 window is always an
-			// ARGB visual, so any alpha<1 pixel (the 1px divider slits, AA edges
-			// of fractional pane rects) lets the compositor blend the desktop
-			// through as bright speckles along the split lines.
+			// Otherwise the clear has to be opaque, since the X11 window is always
+			// an ARGB visual. Any pixel with alpha under 1, such as the 1px divider
+			// slits or the antialiased edges of fractional pane rects, lets the
+			// compositor show the desktop through as bright specks along the splits.
 			let clear = if gpu.gfx.transparent && cfg.transparent_background {
 				wgpu::Color::TRANSPARENT
 			} else {
@@ -3087,8 +3086,8 @@ impl State {
 			});
 
 			let (sw, sh) = (gpu.gfx.config.width, gpu.gfx.config.height);
-			// pane backgrounds (exactly pane-sized, no clip needed) - skipped where the
-			// wallpaper writes them itself
+			// pane backgrounds, exactly pane-sized so no clip is needed, skipped where
+			// the wallpaper writes them itself
 			if !wp_writes_fill {
 				gpu.rects.draw(&mut pass, 0..under_len);
 			}
@@ -3096,8 +3095,8 @@ impl State {
 			if let Some(img) = &gpu.wallpaper_img {
 				if wp_writes_fill {
 					// The mix replaces the fill rather than blending over it, so it has
-					// to stop at the pane edge - otherwise the divider slits between
-					// panes would take the pane's background color instead of their own.
+					// to stop at the pane edge, or the divider slits between panes
+					// would take the pane's background color instead of their own.
 					for full in &pane_fulls {
 						let (x, y, w, h) = scissor(*full, sw, sh);
 						if w == 0 || h == 0 {
@@ -3137,7 +3136,7 @@ impl State {
 			}
 			// scrim goes under the crisp text, over the cell backgrounds. Clip it to
 			// the content area so the halo only affects terminal text, never the
-			// menu bar / tab titles above it.
+			// menu bar or tab titles above it.
 			if scrim_on {
 				// frame-invariant composite args: upload the uniform once, not per pane
 				gpu.scrim.write_comp_uniform(
@@ -3152,18 +3151,18 @@ impl State {
 					if halo_on { 1.0 } else { 0.0 },
 					halo_match,
 				);
-				// The scrim is a full-frame blur - each glyph's halo spreads ~scrim_ext
-				// px every direction. Composite it per pane, clipped per-side: an edge that
-				// borders another pane (internal divider) clips at the content edge (rect
-				// inset by the margin) so the halo can't reach the inter-pane gutter - the
-				// "garbage around split lines"; an edge at the window border clips at the rect
-				// edge so the outer halo still fills the window margin. The gutter (margin +
-				// gap + margin) is wider than the halo reach, so no pane's halo touches a
-				// neighbor's content region.
+				// The scrim is a full-frame blur, and each glyph's halo spreads about
+				// scrim_ext px every way. It's composited per pane and clipped per side.
+				// An edge next to another pane clips at the content edge, the rect inset
+				// by the margin, so the halo can't reach the gutter between panes, which
+				// drew garbage around split lines. An edge at the window border clips at
+				// the rect edge, so the outer halo still fills the window margin. The
+				// gutter, margin plus gap plus margin, is wider than the halo reaches, so
+				// no pane's halo touches a neighbor's content.
 				let area = self.area();
 				for (rect, _, _) in &group_ranges {
-					// external = sits on the content-area boundary (window edge); otherwise it
-					// borders a gap/another pane -> pull the clip in by the margin.
+					// an edge on the content area's boundary is the window edge. Otherwise
+					// it borders a gap or another pane, so the clip comes in by the margin.
 					let l = if rect.x <= area.x + 0.5 {
 						rect.x
 					} else {
@@ -3224,9 +3223,9 @@ impl State {
 			gpu.rects.draw(&mut pass, ring_start..ring_end);
 		}
 
-		// second pass: context menu / menu-bar dropdown on top (preserves main
-		// pass), then any tip over that. Each layer's text draws before the next
-		// layer's rects, which keeps menu text off a tip's box.
+		// second pass: the context menu or menu bar dropdown on top, keeping the
+		// main pass, then any tip over that. Each layer's text draws before the
+		// next layer's rects, which keeps menu text off a tip's box.
 		if menu_range.is_some() || tip_range.is_some() {
 			let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
 				label: Some("overlay pass"),
@@ -3271,10 +3270,11 @@ impl State {
 		}
 		crate::perf::since(&crate::perf::SUBMIT_NS, submit);
 		crate::perf::painted();
-		// The window was created hidden; reveal it once a real frame is on screen at
-		// the final size (no default-size/blank flash). reveal_want (async resize)
-		// holds off until the surface reaches the grid size; the deadline is a hard
-		// fallback so a WM that grants a different size can't leave it stuck hidden.
+		// The window was created hidden, and it's shown once a real frame is on
+		// screen at the final size, so there's no flash of the default size.
+		// reveal_want, for an async resize, holds off until the surface reaches the
+		// grid size. The deadline is the fallback, so a window manager that grants
+		// another size can't leave it hidden.
 		if !self.revealed {
 			let settled = self.reveal_want.is_none_or(|w| {
 				gpu.gfx.config.width == w.width && gpu.gfx.config.height == w.height
@@ -3284,11 +3284,11 @@ impl State {
 			}
 		}
 		// This frame showed whatever the wallpaper worker returned, so the scan's
-		// clock starts from here rather than from the reveal - a wallpaper that took
-		// 2 seconds to decode used to have the scan running underneath it. Only
-		// ever pushed back, never re-armed: once the scan has gone (shell_scan_at
-		// cleared, which the backstop guarantees) a late wallpaper must not start a
-		// second one.
+		// clock starts from here rather than from the reveal. A wallpaper that took
+		// 2 seconds to decode used to have the scan running under it. It's only
+		// pushed back, never armed again, since once the scan has gone
+		// (shell_scan_at cleared, which the backstop makes sure of) a late
+		// wallpaper mustn't start a second one.
 		if self.revealed && self.wp_answered && !self.wp_shown {
 			self.wp_shown = true;
 			self.shell_scan_at = push_back(
@@ -3302,9 +3302,9 @@ impl State {
 			gpu.gfx.dump_offscreen("/tmp/silk_offscreen.png");
 		}
 		// Trim only on a frame that prepared. The trim clears glyphon's in-use set,
-		// and a later allocation evicts whatever isn't in it - so trimming after a
-		// skipped prepare would let the atlas drop glyphs the retained buffers are
-		// still pointing at.
+		// and a later allocation evicts whatever isn't in it, so trimming after a
+		// skipped prepare would let the atlas drop glyphs the kept buffers still
+		// point at.
 		if !text_same {
 			self.text.trim_atlas();
 		}
@@ -3332,7 +3332,7 @@ fn rect_inst(x: f32, y: f32, w: f32, h: f32, color: [u8; 3]) -> RectInstance {
 }
 
 // The close-"X" mark: a shader-drawn quad (mode 1) whose 2 diagonal bars
-// center exactly in `cb` at any size/DPI. Stroke scales with the box.
+// center exactly in `cb` at any size and DPI. The stroke scales with the box.
 fn close_x_inst(cb: Rect, color: [u8; 3]) -> RectInstance {
 	RectInstance {
 		pos: [cb.x, cb.y],
@@ -3376,7 +3376,7 @@ fn minimap_insts(g: &crate::minimap::Geom, active: bool) -> Option<RectInstance>
 	} else {
 		config::SCROLLBAR_IDLE_A
 	};
-	// a wash, not a lid: it marks where you are without hiding what is under it
+	// a faint wash, so it marks the view without hiding what's under it
 	Some(RectInstance {
 		pos: [handle.x, handle.y],
 		size: [g.preview.w, handle.h],
@@ -3446,10 +3446,10 @@ fn spec_areas(
 		.collect()
 }
 
-// Dim a chrome color toward the bar background when the window isn't focused;
-// used on the copy-mode checkboxes + labels to signal auto-copy is inert until
-// the window regains focus (the pane's flags stay set meanwhile). Focused = no
-// change.
+// Dim a chrome color toward the bar background when the window isn't focused.
+// The copy-mode checkboxes and labels use it to show auto-copy is off until the
+// window has focus again, while the pane's flags stay set. Focused leaves it as
+// is.
 fn copy_dim(color: [u8; 3], focused: bool) -> [u8; 3] {
 	if focused {
 		return color;
@@ -3463,8 +3463,9 @@ fn copy_dim(color: [u8; 3], focused: bool) -> [u8; 3] {
 	]
 }
 
-// X11 session? (Per-pixel transparency needs the glutin GL path only on X11;
-// Wayland's wgpu surface already does premultiplied alpha.)
+// Whether this is an X11 session. Per-pixel transparency needs the glutin GL
+// path only on X11, since Wayland's wgpu surface already does premultiplied
+// alpha.
 fn is_x11(el: &ActiveEventLoop) -> bool {
 	use raw_window_handle::{HasDisplayHandle, RawDisplayHandle};
 	el.owned_display_handle()
@@ -3477,9 +3478,9 @@ fn is_x11(el: &ActiveEventLoop) -> bool {
 		})
 }
 
-// Stable X11 WM_CLASS (+ Wayland app_id) so the window is identifiable to the
-// WM/taskbar and matchable in compositor rules - e.g. Compiz's blur "Blur
-// Windows" = class=SilkTerm. winit's with_name(general, instance) yields
+// A stable X11 WM_CLASS and Wayland app_id, so the window manager and taskbar
+// can tell the window apart and compositor rules can match it, such as Compiz's
+// "Blur Windows" = class=SilkTerm. winit's with_name(general, instance) gives
 // WM_CLASS = "instance", "general", so res_class="SilkTerm", res_name="silkterm".
 #[cfg(target_os = "linux")]
 fn with_app_id(attrs: winit::window::WindowAttributes) -> winit::window::WindowAttributes {
@@ -3493,12 +3494,12 @@ fn with_app_id(attrs: winit::window::WindowAttributes) -> winit::window::WindowA
 	attrs
 }
 
-// Ask a KWin/picom-style compositor to blur the desktop behind the window's
-// translucent regions (frosted glass) via _KDE_NET_WM_BLUR_BEHIND_REGION: a
-// single 0 cardinal = blur the whole window, deleting the property turns it off.
-// X11-only and compositor-dependent - Compiz/GNOME ignore the hint (there the
-// user enables blur in the compositor), and the compositor, not us, owns the
-// blur radius. Opens a throwaway connection; called only at startup / on toggle.
+// Ask a KWin or picom style compositor to blur the desktop behind the window's
+// translucent parts through _KDE_NET_WM_BLUR_BEHIND_REGION. A single 0 cardinal
+// blurs the whole window, and deleting the property turns it off. It's X11 only
+// and up to the compositor. Compiz and GNOME ignore the hint, since blur is
+// turned on in the compositor there, and the compositor sets the blur radius.
+// Opens a throwaway connection, and is called only at startup or on a toggle.
 #[cfg(target_os = "linux")]
 fn set_blur_behind(window: &Window, enable: bool) {
 	use raw_window_handle::{HasWindowHandle, RawWindowHandle};
@@ -3619,8 +3620,9 @@ fn open_url(url: &str) {
 	let _ = cmd.spawn();
 }
 
-// Hand a clicked link to the desktop. A failure is the opener's (no xdg-open, a
-// bad open_command) and is worth saying out loud once, not worth an alert.
+// Hand a clicked link to the desktop. A failure is the opener's, such as no
+// xdg-open or a bad open_command, so it's printed once rather than shown in an
+// alert.
 fn open_link(url: &str) {
 	let cfg = config::settings();
 	// with none set it goes to the desktop's own opener, which takes the URL its
@@ -3717,13 +3719,13 @@ impl ApplicationHandler<UserEvent> for App {
 			}
 			_ => winit::dpi::LogicalSize::new(1000.0, 640.0).into(),
 		};
-		// On Windows, requesting transparency forces a no-redirection-bitmap
-		// (layered) window that some virtual-desktop managers - VirtuaWin - won't
-		// track, so it sits still across workspace switches. Alpha only reaches the
-		// screen there through the composited DX12 path (Gfx::new_composited), so
-		// an always-transparent window buys nothing when Transparency is off. Ask
-		// for it only when it's in use; X11/Wayland always request it so
-		// the live toggle works (no such side effect there).
+		// On Windows, asking for transparency forces a layered window with no
+		// redirection bitmap, which some virtual desktop managers such as
+		// VirtuaWin don't track, so it stays put across workspace switches. Alpha
+		// only shows there through the composited DX12 path (Gfx::new_composited),
+		// so an always-transparent window gains nothing when Transparency is off.
+		// It's asked for only when in use. X11 and Wayland always ask for it so
+		// the live toggle works, with no such side effect there.
 		let want_transparent =
 			!cfg!(windows) || config::settings().transparent_background || win_opacity.is_some();
 		let attrs = Window::default_attributes()
@@ -3749,15 +3751,15 @@ impl ApplicationHandler<UserEvent> for App {
 		// Born hidden, then resized to the grid-derived size and drawn once before
 		// being shown (revealed after the first correct frame in render). Otherwise it
 		// flashes the 1000x640 default with a blank client, then jumps to the real
-		// size and paints - visible on X11/Wayland as well as Windows.
+		// size and paints, on X11 and Wayland as well as Windows.
 		let attrs = attrs.with_visible(false);
 
-		// On X11 the wgpu surface can't do per-pixel alpha, so we always take the
-		// glutin GL path there (transparent-capable backend), regardless of the
-		// current Transparency setting - that way the toggle works live without a
-		// relaunch (the bg alpha is gated per-frame, not the backend). Off-X11 the
-		// normal wgpu path is used (Wayland already supports premultiplied alpha).
-		// If the GL context can't be created, fall back to the native wgpu surface.
+		// On X11 the wgpu surface can't do per-pixel alpha, so the glutin GL path
+		// is always used there, whatever the Transparency setting, and the toggle
+		// works live without a relaunch. The background alpha is gated per frame
+		// rather than by backend. Elsewhere the usual wgpu path is used, since
+		// Wayland already supports premultiplied alpha. If the GL context can't be
+		// created, it falls back to the native wgpu surface.
 		let want_gl = is_x11(event_loop);
 		cli_win.apply_renderer();
 		let want = crate::gfx::wanted();
@@ -3806,16 +3808,16 @@ impl ApplicationHandler<UserEvent> for App {
 		} else {
 			(rate_hardware(&gfx.adapter_info), false)
 		};
-		// Window-level CLI style (--font-name/-size, colors, bg image/fit/opacity)
-		// overrides the loaded settings before text + bg image are built. Applied
-		// after the theme/OS palette settles so it isn't clobbered. Per-pane style
-		// stays deferred (needs a per-pane renderer).
+		// The window's command-line style, such as the font, colors, and wallpaper,
+		// overrides the loaded settings before text and the wallpaper are built.
+		// Applied after the theme and system palette are settled, so they don't
+		// overwrite it. A style per pane would need a renderer per pane.
 		cli_win.apply_style();
 		if cli_win.fullscreen.unwrap_or(false) {
 			window.set_fullscreen(Some(Fullscreen::Borderless(None)));
 		}
-		// Request compositor backdrop blur (KWin/picom) if the setting is on; no-op
-		// off-X11 and on compositors that don't honor the hint.
+		// Ask for compositor backdrop blur (KWin, picom) if the setting is on. It
+		// does nothing off X11 or on a compositor that ignores the hint.
 		set_blur_behind(&window, config::settings().transparent_background_blur);
 
 		// An automatic size opens at the last size and font zoom, this monitor's
@@ -3828,8 +3830,8 @@ impl ApplicationHandler<UserEvent> for App {
 			config::set_font_zoom(kept.font_zoom);
 		}
 
-		// Transparency only ever affects the terminal background (per-pixel), never
-		// the whole window - so there's no compositor whole-window-opacity fallback.
+		// Transparency only affects the terminal background, per pixel, never the
+		// whole window, so there's no fallback to whole-window opacity.
 		let scale = config::display_scale(window.scale_factor());
 		let mut text = TextCtx::new(&gfx.device, &gfx.queue, gfx.format, scale);
 		let rects = RectRenderer::new(&gfx.device, gfx.format);
@@ -3837,14 +3839,14 @@ impl ApplicationHandler<UserEvent> for App {
 		let scrim =
 			crate::scrim::Scrim::new(&gfx.device, gfx.format, gfx.config.width, gfx.config.height);
 
-		// Resize to the configured initial grid now that cell metrics are known.
-		// cell_w/cell_h/margin are physical px; floor() in content_dims gives the
-		// exact column/row count at this size. If the request applies
-		// synchronously winit returns the new size (no Resized event), so adopt
-		// it here; otherwise a Resized event reconfigures the surface.
-		// CLI columns/rows override config; --pixel-width/height override either
-		// dimension directly. Add the menu-bar height (when shown) so the content
-		// still gets the requested row count (the tab bar only appears with >1 tab).
+		// Resize to the configured grid now that cell metrics are known. cell_w,
+		// cell_h, and margin are physical px, and floor() in content_dims gives the
+		// exact column and row count at this size. If the request applies at once,
+		// winit returns the new size with no Resized event, so it's taken here.
+		// Otherwise a Resized event reconfigures the surface. Command-line columns
+		// and rows override the config, and --pixel-width and --pixel-height
+		// override either one. The menu bar and tab strip heights are added where
+		// they show, so the content still gets the row count asked for.
 		let watch = MonitorWatch {
 			key: monitor,
 			check_at: None,
@@ -3884,8 +3886,8 @@ impl ApplicationHandler<UserEvent> for App {
 		} else {
 			1
 		};
-		// The strip shows for more than one tab, and for a single one unless the
-		// user opts out - State::tab_bar_visible's rule.
+		// The strip shows for more than one tab, and for a single one unless
+		// hide_single_tab is on, as in State::tab_bar_visible.
 		let tab_bar_h = if n_tabs > 1 || !settings.hide_single_tab {
 			text.ui_line_h + text.dip(TAB_BAR_VPAD)
 		} else {
@@ -3929,10 +3931,10 @@ impl ApplicationHandler<UserEvent> for App {
 		let want = winit::dpi::PhysicalSize::new(want_w, want_h);
 		let maximize_on_reveal = launch_maximized(&settings, cli_win);
 		let mut scrim = scrim;
-		// If the resize applies synchronously (Windows, macOS), the first frame is already at
-		// the final size - reveal on it. Otherwise (async X11/Wayland) wait for the
-		// surface to reach `want` before revealing, so the window never maps at the
-		// default size first.
+		// If the resize applies at once (Windows, macOS), the first frame is already
+		// at the final size and the window is shown on it. Otherwise, on X11 and
+		// Wayland, it waits for the surface to reach `want`, so the window never
+		// maps at the default size first.
 		let reveal_want = if let Some(applied) = request_size(&window, want) {
 			gfx.resize(applied.width, applied.height);
 			scrim.resize(&gfx.device, applied.width, applied.height);
@@ -4086,9 +4088,9 @@ impl ApplicationHandler<UserEvent> for App {
 			conserve: Conserve::Off,
 			vt_heal: VtHeal::default(),
 		});
-		// A wallpaper given on the command line (--wallpaper-file, incl. an explicit
-		// clear) owns this session: rotation is skipped entirely, whatever the config
-		// says, and the stored rotation settings are left untouched.
+		// A wallpaper given on the command line with --wallpaper-file, including an
+		// explicit clear, holds for this session. Rotation is skipped whatever the
+		// config says, and the stored rotation settings are left alone.
 		let cli_wallpaper = self.cli.win.style.wallpaper_img.is_some();
 		if let Some(state) = self.state.as_mut() {
 			state.init_wallpaper(cli_wallpaper);
@@ -4125,8 +4127,8 @@ impl ApplicationHandler<UserEvent> for App {
 						p.term.wake_handled();
 						p.content_dirty = true;
 						p.note_output(); // copy-output: push the settle deadline out
-						// scrollback depth, sampled per read cycle - the only
-						// granularity that sees a `clear` truncate it
+						// scrollback depth, sampled per read cycle, which is the only
+						// granularity that sees a `clear` cut it
 						p.note_history();
 					}
 				});
@@ -4141,9 +4143,10 @@ impl ApplicationHandler<UserEvent> for App {
 				}
 			}
 			UserEvent::PtyWrite(id, bytes) => {
-				// a reply the terminal has to send the program (cursor position, device
-				// attributes), not something the user sent - so read-only doesn't
-				// withhold it, and this is the one direct write left in this file
+				// a reply the terminal has to send the program, such as the cursor
+				// position or device attributes, rather than something the user sent.
+				// So read-only doesn't hold it back, and this is the one direct write
+				// left in this file.
 				if let Some(p) = state.tabs.find_pane(id) {
 					p.term.write(bytes);
 				}
@@ -4182,7 +4185,7 @@ impl ApplicationHandler<UserEvent> for App {
 				state.hold_dead_pane(id, &status);
 			}
 			UserEvent::Exit(id) => {
-				// A shell exited: close only its pane, not the whole app - unless
+				// A shell exited: close only its pane, not the whole app, unless
 				// --keep-open asked for the pane to stay and say how it ended.
 				if !state.hold_dead_pane(id, "unknown") {
 					state.close_dead_pane(id);
@@ -4235,9 +4238,9 @@ impl ApplicationHandler<UserEvent> for App {
 				state.dirty = true;
 			}
 			UserEvent::VtSwitched => {
-				// Return to our console (the watcher signals only returns).
-				// Rebuild unconditionally: focus may move to another window or
-				// nowhere, and an unfocused window must heal too.
+				// Back on this display's console, since the watcher only sends
+				// returns. Rebuild either way, since focus may go to another window
+				// or nowhere, and an unfocused window has to heal too.
 				vramdbg("vt return -> heal_gpu");
 				state.heal_gpu(self.dialog.is_some() || self.notice.is_some());
 				state.vt_heal.returned(Instant::now());
@@ -4259,7 +4262,7 @@ impl ApplicationHandler<UserEvent> for App {
 			return;
 		}
 		// Simulated modality: while a dialog is open the main window takes no
-		// input; a click on it re-raises/focuses the dialog instead.
+		// input, and a click on it raises and focuses the dialog instead.
 		if let Some(d) = &self.dialog {
 			match &event {
 				WindowEvent::KeyboardInput { .. }
@@ -4334,11 +4337,11 @@ impl ApplicationHandler<UserEvent> for App {
 				state.dirty = true;
 			}
 
-			// DPI/scale changed (monitor move or a live scaling change). Re-scale
-			// cell metrics + chrome for the new factor and keep the grid
-			// (`rescale`); a Resized event follows to reconfigure the surface +
-			// scrim. That resize is the system's, not the user's, and the new
-			// scale may mean another monitor.
+			// The scale changed, from a monitor move or a live scaling change. Cell
+			// metrics and chrome are scaled for the new factor and the grid is kept
+			// (`rescale`). A Resized event follows to reconfigure the surface and
+			// scrim. That resize is the system's, not the user's, and the new scale
+			// may mean another monitor.
 			WindowEvent::ScaleFactorChanged {
 				scale_factor,
 				mut inner_size_writer,
@@ -4383,19 +4386,19 @@ impl ApplicationHandler<UserEvent> for App {
 				// a tab tip up now goes; the menu's follows at the next update_tips
 				let (x, y) = state.mouse;
 				state.note_tab_hover(x, y);
-				// repaint: focus-dependent chrome (copybox dim) and the refocus
-				// poke that resumes a long-idle-parked cursor are both in render
+				// repaint: the chrome that depends on focus, such as the copybox dim,
+				// and the refocus poke that restarts a parked cursor are both in render
 				state.dirty = true;
-				// Regaining focus is the likely first moment back from a VT
-				// switch/suspend - probe the GPU uploads now, not at the slow tick.
+				// Regaining focus is likely the first moment back from a console
+				// switch or suspend, so probe the GPU uploads now, not at the slow tick.
 				if focused && state.gl {
 					state.vram_next = Instant::now();
 					vramdbg("focus regained -> immediate probe");
 				}
 			}
 
-			// Becoming visible again (VT return, compositor remap) - probe now too;
-			// a VT switch doesn't always hand focus straight back.
+			// Visible again after a console return or a compositor remap, so probe
+			// now too, since a console switch doesn't always give the focus back.
 			WindowEvent::Occluded(occluded) => {
 				state.occluded = occluded;
 				if !occluded {
@@ -4409,7 +4412,8 @@ impl ApplicationHandler<UserEvent> for App {
 				}
 			}
 
-			// OS switched dark/light: a "System" theme follows it live.
+			// The system switched between dark and light, and a "System" theme
+			// follows it live.
 			WindowEvent::ThemeChanged(theme) => {
 				let dark = !matches!(theme, winit::window::Theme::Light);
 				if config::reapply_for_os(dark) {
@@ -4432,11 +4436,11 @@ impl ApplicationHandler<UserEvent> for App {
 				}
 				let (x, y) = state.mouse;
 				// The tab bar is chrome and sits above every pane, so its tip is
-				// tracked before anything that could claim the pointer - including a
+				// tracked before anything that could claim the pointer, including a
 				// mouse-tracking app, which never sees the bar at all.
 				state.note_tab_hover(x, y);
-				// A thumb drag in progress owns the pointer - before the mouse-report
-				// path, so a tracking app can't swallow the drag half way down.
+				// A thumb drag in progress owns the pointer. It comes before the mouse
+				// report path, so a tracking app can't take the drag half way down.
 				if let Some(id) = state.bar_dragging {
 					let cfg = config::settings();
 					if let Some(p) = state.tabs.cur_mut().panes.get_mut(&id) {
@@ -4453,12 +4457,12 @@ impl ApplicationHandler<UserEvent> for App {
 					state.dirty = true;
 					return;
 				}
-				// mouse-tracking app wants motion/drag reports; when it does, skip our
-				// local hover/selection handling for this move. The report is
-				// PTY-bound: nothing local changed, so no redraw - marking dirty here
-				// forced a full re-shape of every pane per cell crossed.
+				// a mouse-tracking app wants motion or drag reports, and then the local
+				// hover and selection handling is skipped for this move. The report
+				// goes to the PTY and nothing local changed, so no redraw. Marking
+				// dirty here forced a full shape of every pane per cell crossed.
 				if state.report_mouse_motion() {
-					// the app owns the pointer, so nothing of ours is hovering it
+					// the app owns the pointer, so nothing here is hovered
 					state.update_link_hover(None);
 					return;
 				}
@@ -4550,11 +4554,11 @@ impl ApplicationHandler<UserEvent> for App {
 					}
 				}
 				// A popup tall enough to be clamped to the top of the window covers
-				// the menu bar, and the click belongs to whatever is drawn on top -
-				// otherwise its first item is unreachable. Same reason the tab-bar
+				// the menu bar, and the click belongs to whatever is drawn on top, or
+				// its first item can't be reached. Same reason the tab-bar
 				// branch below stands aside for an open menu.
 				let on_popup = state.menu.as_ref().is_some_and(|m| m.hit_any(x, y));
-				// click on the menu bar: toggle/open the top-level menu's dropdown
+				// click on the menu bar: open or close the top-level menu's dropdown
 				if button == MouseButton::Left
 					&& state.menu_bar
 					&& !on_popup && y < state.menu_bar_h()
@@ -4596,7 +4600,7 @@ impl ApplicationHandler<UserEvent> for App {
 						// press in the close-button column only arms the close (the
 						// button lights up); the close itself fires on release over
 						// the same box, so a slipped press can be dragged off to
-						// cancel - standard button feel. Elsewhere selects the tab.
+						// cancel, as buttons usually work. Elsewhere it selects the tab.
 						let bar_h = state.tab_bar_h();
 						let on_close = state
 							.tab_close_box_at(i, tab_bar_y, bar_h)
@@ -4632,7 +4636,7 @@ impl ApplicationHandler<UserEvent> for App {
 					}
 					return;
 				}
-				// A visible scrollbar takes the click before anything else - including a
+				// A visible scrollbar takes the click before anything else, including a
 				// mouse-tracking app, the same way the right-click menu does. `bar_hit`
 				// returns None whenever the bar is faded out, so an invisible bar never
 				// steals a click that belonged to the text under it.
@@ -4679,9 +4683,9 @@ impl ApplicationHandler<UserEvent> for App {
 						return;
 					}
 				}
-				// mouse-tracking app owns the pointer: report the press, skip local
-				// selection/paste/menu (Shift bypasses to the local action). An open
-				// menu must get the click (operate/dismiss it), not the app underneath.
+				// a mouse-tracking app owns the pointer: report the press and skip the
+				// local selection, paste, and menu, though Shift bypasses to the local
+				// action. An open menu gets the click rather than the app under it.
 				if state.report_mouse_button(button, ElementState::Pressed) {
 					state.dirty = true;
 					return;
@@ -4717,7 +4721,7 @@ impl ApplicationHandler<UserEvent> for App {
 							// Ctrl+click a link, Command+click on a Mac: arm here, open
 							// on the release over the same link, so a slipped press can
 							// be dragged off to cancel. The same key elsewhere still
-							// starts a block selection - only a press on a link is taken.
+							// starts a block selection, since only a press on a link is taken.
 							state.focus_at(x, y);
 							state.link_arm = Some((id, link.url));
 						} else {
@@ -4749,9 +4753,9 @@ impl ApplicationHandler<UserEvent> for App {
 									p.begin_selection(start, Side::Left, SelectionType::Simple);
 									p.update_selection(end, Side::Right);
 								} else if kind == ClickSelect::Word {
-									// a shape we can name (URL, path) wins; else the
-									// contents of a matched pair; else a bracket to
-									// its partner; else the word
+									// a URL or a path wins, else the contents of a
+									// matched pair, else a bracket to its partner,
+									// else the word
 									match p
 										.shape_span(point)
 										.or_else(|| p.pair_span(point, &pairs))
@@ -4808,10 +4812,10 @@ impl ApplicationHandler<UserEvent> for App {
 				}
 			}
 
-			// a mouse-tracking app owns the pointer: report the release we opened.
-			// Only for the same button as the reported press - releasing a different
-			// one must not clear the held state (the app would see an unbalanced
-			// press) nor steal that button's local release handling below.
+			// a mouse-tracking app owns the pointer: report the release that matches
+			// the reported press, and only for that button. Releasing another one
+			// mustn't clear the held state, which would leave the app a press with no
+			// release, or take that button's local release handling below.
 			WindowEvent::MouseInput {
 				state: ElementState::Released,
 				button,
@@ -4934,8 +4938,8 @@ impl ApplicationHandler<UserEvent> for App {
 					.unwrap_or(state.tabs.cur().focused);
 				let cell_h = state.text.cell_h;
 				// A mouse-tracking app (muffer, tmux, vim with mouse on, ...) wants
-				// the wheel as button 64/65 reports, not our scrollback. Report one
-				// notch per line, then stop here.
+				// the wheel as button 64/65 reports rather than scrolling back here.
+				// Report one notch per line, then stop.
 				let shift = state.mods.shift_key();
 				let (up, notches) = match delta {
 					MouseScrollDelta::LineDelta(_, y) => (y > 0.0, (y.abs().round() as u32).max(1)),
@@ -4945,8 +4949,8 @@ impl ApplicationHandler<UserEvent> for App {
 					),
 				};
 				if let Some(p) = state.tabs.cur().panes.get(&id) {
-					// No cell under the pointer means it is over the minimap
-					// column, not the text - fall through and scroll the buffer.
+					// No cell under the pointer means it's over the minimap column
+					// rather than the text, so fall through and scroll the buffer.
 					if let Some((col, row)) = (input::wheel_route(p.mode, shift)
 						== WheelRoute::Report)
 						.then(|| p.screen_cell_at(x, y, &state.text))
@@ -4998,8 +5002,8 @@ impl ApplicationHandler<UserEvent> for App {
 						}
 					} else {
 						p.scroll.wheel(lines);
-						// user-driven scroll, so the bar comes up; output-driven
-						// scrolling deliberately doesn't (it never stops)
+						// user-driven scroll, so the bar comes up. Output-driven
+						// scrolling doesn't, since it never stops.
 						p.poke_scrollbar();
 					}
 				}
@@ -5024,7 +5028,7 @@ impl ApplicationHandler<UserEvent> for App {
 					);
 				}
 				// A replayed press is focus bookkeeping, and a release is the
-				// shell's business, not ours - neither is typing.
+				// shell's business, so neither is typing.
 				if !key_is_typed(key.state, is_synthetic) {
 					return;
 				}
@@ -5042,11 +5046,11 @@ impl ApplicationHandler<UserEvent> for App {
 					}
 					return;
 				}
-				// An open menu (context menu / menu-bar dropdown) captures the
-				// navigation keys - they drive the menu, not the terminal pane.
+				// An open menu, a context menu or a menu bar dropdown, takes the
+				// navigation keys, since they drive the menu rather than the pane.
 				if state.menu.is_some() {
-					// Every one of these drives the innermost open popup - with a
-					// submenu standing open, that is the submenu.
+					// Every one of these drives the innermost open popup, which is
+					// the submenu when one is open.
 					match &key.logical_key {
 						Key::Named(NamedKey::Escape) => {
 							// back out one level at a time, the way a submenu is entered
@@ -5066,9 +5070,9 @@ impl ApplicationHandler<UserEvent> for App {
 							}
 						}
 						// Right enters a submenu and Left leaves one; where there is
-						// no submenu in the way they cycle between menu-bar dropdowns
-						// (a no-op for a right-click context menu, which isn't
-						// bar-anchored)
+						// no submenu in the way they cycle between menu bar dropdowns.
+						// That does nothing for a right-click menu, which isn't
+						// anchored to the bar.
 						Key::Named(NamedKey::ArrowLeft | NamedKey::ArrowRight) => {
 							let left = matches!(key.logical_key, Key::Named(NamedKey::ArrowLeft));
 							let enter = (!left).then(|| state.submenu_row()).flatten();
@@ -5091,8 +5095,8 @@ impl ApplicationHandler<UserEvent> for App {
 								state.menu_activate(row, &self.proxy);
 							}
 						}
-						// accelerator: a letter activates the item with it (the
-						// underlined letter; unique per menu, some items have none)
+						// accelerator: a letter picks the item underlined with it.
+						// It's unique per menu, and some items have none.
 						Key::Character(typed) => {
 							let ch = typed.chars().next().map(|c| c.to_ascii_lowercase());
 							let hit = ch.and_then(|ch| {
@@ -5286,14 +5290,14 @@ impl ApplicationHandler<UserEvent> for App {
 		crate::perf::report();
 	}
 
-	// request_redraw isn't reliable under some compositors, so we drive frames
-	// here: render when something changed or an animation is in flight, and
-	// poll only while animating (otherwise sleep until the next event).
+	// request_redraw isn't reliable under some compositors, so frames are driven
+	// here: render when something changed or an animation is running, and poll
+	// only while animating, else sleep until the next event.
 	fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
 		crate::perf::bump(&crate::perf::PASSES);
 		let _t = crate::perf::Span::new(&crate::perf::PASS_NS);
-		// One place to act on `quit`, so every path that sets it exits - menus,
-		// hotkeys, and the tab-close box all get here on the next pass.
+		// One place to act on `quit`, so every path that sets it exits. Menus,
+		// hotkeys, and the tab close box all get here on the next pass.
 		if self.state.as_ref().is_some_and(|state| state.quit) {
 			event_loop.exit();
 			return;
@@ -5359,8 +5363,8 @@ impl ApplicationHandler<UserEvent> for App {
 			}
 		}
 
-		// Open the About window if requested (window creation needs the event loop,
-		// so State only signals and we act here).
+		// Open the About window if asked for. Window creation needs the event
+		// loop, so State only flags it and it's done here.
 		let open_about = self
 			.state
 			.as_mut()
@@ -5425,9 +5429,9 @@ impl ApplicationHandler<UserEvent> for App {
 				Err(e) => eprintln!("{}: Settings window failed: {e}", config::APP_NAME),
 			}
 		}
-		// a dialog with an animating field edit (view scroll / caret / blink) or a
-		// tip coming due gets its frame when it is due one, not on every pass,
-		// or each pointer move would draw it again (see dlg_wake below)
+		// a dialog with an animating field edit, such as a view scroll, caret, or
+		// blink, or a tip coming due gets its frame when due rather than on every
+		// pass, or each pointer move would draw it again (see dlg_wake below)
 		if self
 			.dialog
 			.as_ref()
@@ -5501,7 +5505,7 @@ impl ApplicationHandler<UserEvent> for App {
 			.as_ref()
 			.and_then(super::dialog::DialogWin::wake_at);
 
-		// re-assert the dialog->terminal stacking a few times after focus (see the
+		// put the terminal back under the dialog a few times after focus (see the
 		// field comment). Cleared when the dialog closes.
 		if self.dialog.is_none() {
 			self.raise_reassert = 0;
@@ -5525,10 +5529,10 @@ impl ApplicationHandler<UserEvent> for App {
 			.any(|p| p.scroll.animating());
 		let cursor_anim = state.tabs.cur().panes.values().any(|p| p.cursor_animating);
 		let content = state.tabs.cur().panes.values().any(|p| p.content_dirty);
-		// Parked-cursor resume: no frames flow while a cursor is parked at full,
-		// so consume any due wake (render one catch-up frame - the pause state
-		// sees the timeouts met and resumes the cycle) and keep the earliest
-		// pending one to fold into the control flow below.
+		// Parked cursor resume: no frames come while a cursor is parked at full,
+		// so take any due wake and render one catch-up frame, where the pause
+		// state sees the timeouts met and starts the cycle again. The earliest
+		// pending one goes into the control flow below.
 		let mut cursor_wake: Option<Instant> = None;
 		let wake_now = Instant::now();
 		for pane in state.tabs.cur_mut().panes.values_mut() {
@@ -5576,10 +5580,10 @@ impl ApplicationHandler<UserEvent> for App {
 			state.conserve = Conserve::Off;
 			state.update_title();
 		}
-		// GL path: the VT watcher (spawn_vt_watch) is the real loss trigger; the
-		// readback probes below stay as field evidence + a fallback for a missed
-		// switch, since a real purge read back "intact" (driver restores readback
-		// contents while sampled copies stay garbage).
+		// GL path: the console watcher (spawn_vt_watch) is what catches a loss.
+		// The readback probes below stay as a record and a fallback for a missed
+		// switch, since a real purge read back intact. The driver restores
+		// readback contents while sampled copies stay garbage.
 		if let Some(gpu) = state.gpu.as_mut().filter(|gpu| gpu.gfx.is_gl()) {
 			if state.vramloss_test && state.revealed {
 				state.vramloss_test = false;
@@ -5589,11 +5593,11 @@ impl ApplicationHandler<UserEvent> for App {
 				}
 				vramdbg("SILK_VRAMLOSS: sentinels + wallpaper clobbered");
 			}
-			// Poll both probes; either detecting loss triggers the one rebuild.
-			// Field logs showed every witness - synthetic sentinels and the
-			// wallpaper's own uploaded block - reading back intact across a real
-			// purge that blacked the window, so readback can't be the primary
-			// detector. Kept for the diagnostic trail and as a fallback.
+			// Poll both probes, and either one finding a loss triggers the one
+			// rebuild. Logs showed every witness, the test sentinels and the
+			// wallpaper's own uploaded block, read back intact across a real purge
+			// that blacked the window, so readback can't be the main check. The
+			// probes are kept for the log and as a fallback.
 			let mut lost = None;
 			match gpu.gfx.vram_check_poll() {
 				Some(VramProbe::Lost { uploaded, rendered }) => {
@@ -5636,9 +5640,9 @@ impl ApplicationHandler<UserEvent> for App {
 			}
 		}
 		let bell_anim = state.bell_flash > 0.0;
-		// Until revealed (born hidden, shown at final size), keep rendering so the
-		// reveal check runs each cycle; the deadline wake below guarantees it can't
-		// stay hidden if no post-resize frame is otherwise triggered.
+		// Until the window is shown, keep rendering so the reveal check runs each
+		// cycle. The deadline wake below makes sure it can't stay hidden if nothing
+		// else asks for a frame after the resize.
 		if !state.revealed {
 			state.dirty = true;
 		}
@@ -5731,9 +5735,9 @@ impl ApplicationHandler<UserEvent> for App {
 			|| cursor_anim
 			|| bell_anim
 		{
-			// UI/chrome changes and the bell force all panes to re-shape; fresh
-			// output and scroll eases are scoped per pane inside render (a pure
-			// cursor-animation frame lets every pane reuse its cached frame).
+			// Chrome changes and the bell make every pane shape again. New output
+			// and scroll eases are scoped per pane inside render, and a frame where
+			// only the cursor animates lets every pane reuse its cached frame.
 			let map = state.dirty || bell_anim;
 			let force = map || state.marks_moved;
 			state.dirty = false;
@@ -5784,17 +5788,16 @@ impl ApplicationHandler<UserEvent> for App {
 				}
 				RatingStep::Pause => state.rating.pause(),
 			}
-			// a pane whose term was locked kept its content_dirty (rebuild was
-			// skipped) - retry shortly instead of waiting for the next event,
-			// or the last wakeup of a burst could leave a stale frame up
+			// a pane whose term was locked kept its content_dirty, since its rebuild
+			// was skipped. Retry shortly rather than waiting for the next event, or
+			// the last wakeup of a burst could leave a stale frame up.
 			let retry = state.tabs.cur().panes.values().any(|p| p.content_dirty);
 			let pace = max_fps().map(|fps| Duration::from_secs_f64(1.0 / fps));
 			if state.bench.is_some() {
 				ControlFlow::Poll
 			} else if animating && (scroll_anim || bell_anim) {
-				// scroll (the flagship smooth feature) and the bell flash render
-				// at full rate; fresh content needs no Poll - each PTY read
-				// batch arrives as its own Wakeup
+				// scroll and the bell flash render at full rate. New content needs
+				// no Poll, since each PTY read batch comes as its own Wakeup.
 				match pace {
 					Some(ivl) => pace_frame(&mut state.next_frame, ivl),
 					None => ControlFlow::Poll,
@@ -5802,10 +5805,10 @@ impl ApplicationHandler<UserEvent> for App {
 			} else if retry {
 				ControlFlow::WaitUntil(Instant::now() + Duration::from_millis(5))
 			} else if animating {
-				// a lone idle cursor blink is capped to ~30fps so it isn't
-				// re-rendering every frame only to pulse - but a pinned rate
-				// applies to the cursor too, or a scene where the cursor is the only
-				// thing moving samples off the grid the rest of the run is on
+				// a lone idle cursor blink is capped to ~30fps so it isn't drawing
+				// every frame only to pulse. A pinned rate applies to the cursor too,
+				// or a scene where the cursor is the only thing moving samples off
+				// the grid the rest of the run is on.
 				match pace {
 					Some(ivl) => pace_frame(&mut state.next_frame, ivl),
 					None => ControlFlow::WaitUntil(Instant::now() + Duration::from_millis(33)),
@@ -5828,8 +5831,8 @@ impl ApplicationHandler<UserEvent> for App {
 		// size is saved, so the size goes to the monitor the window ended on.
 		state.check_monitor();
 		state.check_herd();
-		// Debounced remember-size: persist once the size has held; while one is
-		// pending, make sure the loop wakes up to flush it even when idle.
+		// Remember last size: save once the size has held, and while one is
+		// pending, make sure the loop wakes to write it even when idle.
 		state.flush_window_size(false);
 		// Settings shows the automatic size, which is this one
 		if let Some(dialog) = self.dialog.as_mut() {
@@ -5899,11 +5902,11 @@ impl ApplicationHandler<UserEvent> for App {
 		// wake when the background shell scan comes due, even on an idle window
 		let flow = wake_by(flow, state.shell_scan_at);
 		// wake to raise a tab tip whose pointer has rested, and to keep an open
-		// one current - the pointer sitting still generates no events of its own,
-		// so nothing else would bring the window back
+		// one current. A pointer sitting still sends no events of its own, so
+		// nothing else would bring the window back.
 		let flow = wake_by(flow, state.tip_wake());
 		// wake when the benchmark comes due, and again when its banner may come
-		// down - an idle window generates nothing of its own to bring it back
+		// down, since an idle window sends nothing of its own to bring it back
 		let bench_wake = match (state.bench_at, state.bench_cap) {
 			(Some(_), Some(cap)) if state.bench_blocked() => Some(cap),
 			(at, _) => at,
@@ -6164,10 +6167,10 @@ mod tests {
 		);
 	}
 
-	// converts it at a boundary the way the Settings dialog does - every piece
-	// scales at its own use site, and a piece that misses out is the
-	// defect this pass fixed (chrome thinning out as the display's DPI rises).
-	// So: the same geometry at 2x must come out at twice the size, everywhere.
+	// Chrome geometry is in DIP, and every piece is converted where it's used, as
+	// in the Settings dialog. A piece that missed the conversion thinned out as
+	// the display's DPI rose, so the same geometry at 2x has to come out at twice
+	// the size everywhere.
 	// Test ID: dbenf
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
@@ -6195,10 +6198,10 @@ mod tests {
 		assert_eq!(thick, thin * 2.0);
 	}
 
-	// A WM hotkey grab (Ctrl+Alt+Arrow) brackets its chord with a focus change,
-	// and winit replays every held key as a synthetic press on the way back in -
-	// before it re-reads the modifiers. Taking that replay as typing is what put
-	// a bare arrow into the shell, so only a real press may count.
+	// A window manager hotkey grab (Ctrl+Alt+Arrow) wraps its chord in a focus
+	// change, and winit replays every held key as a synthetic press on the way
+	// back in, before it reads the modifiers again. Taking that replay as typing
+	// put a bare arrow into the shell, so only a real press counts.
 	// Test ID: db6zv
 	#[test]
 	fn a_replayed_key_is_not_typing() {
@@ -6239,8 +6242,8 @@ mod tests {
 
 	// The demo capture samples on a fixed clock, so a pinned rate that drifts is
 	// worse than none: it would wander off the sampling grid instead of sitting
-	// on it. Each frame's deadline therefore has to come from the last deadline,
-	// never from "now" - which is the whole of what this pins.
+	// on it. So each frame's deadline has to come from the last deadline, never
+	// from "now".
 	// Test ID: db6z2
 	#[test]
 	fn a_pinned_frame_rate_does_not_drift() {
