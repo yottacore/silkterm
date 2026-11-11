@@ -36,10 +36,9 @@ impl SettingsDialog {
 			.position(|t| t.name.eq_ignore_ascii_case(name))
 	}
 
-	/// A color changed under the theme picked: the dropdown says `Name *`, and
-	/// the changes are saved apart from it, so the answer survives a restart.
-	/// So does a font that differs from a saved theme's, while fonts follow
-	/// themes.
+	/// A color changed under the theme picked: the dropdown says `Name *`, and the
+	/// changes are saved apart from the theme, so this survives a restart. A font that
+	/// differs from a saved theme's counts too, while fonts follow themes.
 	pub(super) fn theme_dirty(&self) -> bool {
 		!fields::changed(&self.edited, Key::Theme).is_empty()
 	}
@@ -174,7 +173,7 @@ impl SettingsDialog {
 		}
 		// A theme isn't in its own way. Rename opens on the theme's current name,
 		// so OK with nothing changed has to go through, and so does a change of
-		// case alone - which is the only way to make one.
+		// case alone, since that's the only way to make one.
 		let mine = (which == ThemeBtn::Rename)
 			.then(|| self.user_theme_index())
 			.flatten();
@@ -279,9 +278,9 @@ mod tests {
 			.expect("the theme actions row")
 	}
 
-	// Nothing anywhere records "this theme has unsaved changes" - a color that
-	// disagrees with the theme is the record, and it's stored in the config file, so
-	// the answer is the same after a restart.
+	// Nothing records that a theme has unsaved changes. A color that disagrees with
+	// the theme is the record, and it's stored in the config file, so the result is
+	// the same after a restart.
 	// Test ID: davcp
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
@@ -609,9 +608,9 @@ mod tests {
 		let back = config::reload_from_disk();
 		let saved = crate::theme::find_user(&back.user_themes, "Saved One").expect("on disk");
 		assert_eq!(
-			// which variant an edit goes in follows the mode, so name it: a mode
-			// arriving out of somebody else's config file is what this last went
-			// wrong as, and the colors alone don't say that
+			// which variant an edit goes in follows the mode, so name it. This last broke on
+			// a mode that came from somebody else's config file, and the colors alone don't
+			// show that
 			saved.dark.fg,
 			[0x12, 0x34, 0x56],
 			"mode {:?}",

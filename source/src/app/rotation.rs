@@ -11,9 +11,9 @@ use crate::config;
 use std::time::{Duration, Instant};
 
 // A rotation folder with nothing picked from it has to be read, or the request
-// comes back with no picture at all: a configured folder owns the wallpaper and
-// suppresses the built-in stand-in, so there is nothing left to show. A
-// command-line wallpaper is exempt, since it keeps rotation out of the session.
+// comes back with no picture, since a configured folder replaces the built-in
+// stand-in. A command-line wallpaper keeps rotation out of the session, so it's
+// exempt.
 fn needs_folder_read(
 	locked: bool,
 	showing: Option<&std::path::Path>,
@@ -35,17 +35,17 @@ pub(super) fn rotation_live(locked: bool, count: usize, folder: bool) -> bool {
 	!locked && count >= 2 && folder
 }
 
-// Where the rotation timer goes when a tick fires. It has to move off `now`
-// here rather than waiting for the worker's answer: the answer is dropped
-// unless it is still the newest request, and a timer left in the past fires
-// again on the very next pass, so each pass started another decode thread.
+// Where the rotation timer goes when a tick fires. It moves off `now` here rather
+// than waiting for the worker, since the worker's result is dropped unless it's
+// still the newest request. A timer left in the past fired again on every pass,
+// and each pass started another decode thread.
 fn rotation_next(now: Instant, live: bool, interval_s: f32) -> Option<Instant> {
 	(live && interval_s > 0.0).then(|| now + Duration::from_secs_f32(interval_s))
 }
 
 impl State {
-	// Control-socket wallpaper change: live-only and window-scoped, like the
-	// launch-time --background-image - nothing is persisted to config.shcl.
+	// A wallpaper change from the control socket. Like --background-image at launch,
+	// it's live only and for this window, and nothing is written to config.shcl.
 	fn set_wallpaper(&mut self, image: Option<std::path::PathBuf>) {
 		let orig = config::settings().as_ref().clone();
 		let mut edited = orig.clone();
@@ -53,10 +53,9 @@ impl State {
 		self.apply_new_settings(&orig, edited, true);
 	}
 
-	/// Hand the wallpaper to a worker thread and carry on drawing. `scan` also
-	/// (re)reads the rotation folder and picks from it. Nothing here waits: the
-	/// folder, the image, and its tags can all be on a slow share, which is why
-	/// none of it runs on this thread.
+	/// Hand the wallpaper to a worker thread and carry on drawing. `scan` also reads
+	/// the rotation folder again and picks from it. The folder, the image, and its tags
+	/// can all be on a slow share, so none of it runs on this thread.
 	pub(super) fn request_wallpaper(&mut self, scan: bool) {
 		self.post_wallpaper(scan, None);
 	}
@@ -75,9 +74,9 @@ impl State {
 		self.wp_resize_at = None;
 		// a lock that names nothing is a bare flag asking for no picture
 		let cleared = self.wp_locked && settings.wallpaper.is_none();
-		// retires anything already in flight - a result arriving after a newer
-		// request (a rotation tick overtaken by a settings change) is dropped, and
-		// the worker sees the new stamp and stops at its next stage
+		// the new stamp retires anything already in flight. A result that comes in after
+		// a newer request is dropped, and the worker sees the new stamp and stops at its
+		// next stage
 		let seq = self
 			.wp_seq
 			.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
@@ -127,10 +126,10 @@ impl State {
 		}
 	}
 
-	/// Wallpaper rotation: unless a wallpaper came in on the command line (a
-	/// deliberate choice for this session, which leaves rotation out of it
-	/// entirely), scan the folder and pick one. The timer arms when the scan
-	/// comes back - only then do we know whether there is anything to rotate through.
+	/// Wallpaper rotation: scan the folder and pick one, unless a wallpaper came in on
+	/// the command line, which keeps rotation out of this session. The timer starts
+	/// when the scan comes back, since only then is it known whether there's anything
+	/// to rotate through.
 	pub(super) fn init_wallpaper(&mut self, lock: bool) {
 		self.wp_locked = lock;
 		self.request_wallpaper(!lock);
@@ -177,8 +176,8 @@ impl State {
 			self.wp_next = Some(Instant::now());
 		}
 		if loaded.scanned {
-			// a scan is authoritative about rotation: no pick means the folder is
-			// empty (or went away), so the timer goes with it
+			// a scan decides rotation. No pick means the folder is empty or gone, so the
+			// timer goes with it
 			self.wp_count = 0;
 			self.wp_current = None;
 			self.wp_next = None;
@@ -193,9 +192,9 @@ impl State {
 					.then(|| Instant::now() + Duration::from_secs_f32(ivl));
 			}
 		}
-		// The derived text and cursor colors follow the picture (autotheme.rs), so
-		// what this one is worth goes live with it. Session state: none of it
-		// is written to the file, the same as a rotated pick.
+		// The derived text and cursor colors follow the picture (autotheme.rs), so this
+		// picture's summary goes live with it. None of it is written to the file, the
+		// same as a rotated pick.
 		let summary = loaded.image.as_ref().map(|img| img.summary);
 		if config::settings().wallpaper_summary != summary {
 			set_live(|live| {
@@ -233,8 +232,8 @@ impl State {
 	pub(super) fn lock_wallpaper(&mut self, image: Option<std::path::PathBuf>) {
 		self.wp_locked = true;
 		self.wp_next = None;
-		// rotation is done for this session, so drop what it was showing - otherwise
-		// an explicit clear would fall back to it instead of clearing
+		// rotation is done for this session, so drop what it was showing. Otherwise an
+		// explicit clear would fall back to it instead of clearing
 		self.wp_current = None;
 		self.set_wallpaper(image);
 	}

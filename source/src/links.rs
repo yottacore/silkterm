@@ -130,9 +130,9 @@ pub fn find_at(text: &[char], hit: usize) -> Option<(usize, usize, String)> {
 	None
 }
 
-/// Hand `url` to the desktop. `open_command` (config) overrides the platform
-/// default: argv-split, the URL appended as the last argument. Runs detached -
-/// the child is reaped on its own thread so a browser launch can't zombie.
+/// Hand `url` to the desktop. A set `open_command` replaces the platform default,
+/// split into arguments with the URL last. The child is reaped on its own thread,
+/// so a browser launch can't leave a zombie.
 pub fn open(url: &str, open_command: &str) -> io::Result<()> {
 	let mut cmd = if open_command.trim().is_empty() {
 		default_command(url)
@@ -182,13 +182,9 @@ pub fn desktop_opener() -> &'static str {
 }
 
 // The program that hands a URL to the desktop, and the URL as one plain argument.
-//
-// Windows doesn't go through `cmd /C start`, on purpose. cmd's parser sees the
-// whole command line before argument quoting means anything, and it expands
-// percent variables before it processes any escaping. So a URL printed by a
-// remote host could bring a variable in, and an expanded value containing `&`
-// would start a second command. Terminal output is untrusted, and there is no
-// escape that survives that order. explorer takes its arguments the ordinary way.
+// Windows doesn't use `cmd /C start`, since cmd expands percent variables before
+// any escaping, so a URL printed by a remote host could start a second command.
+// explorer takes its arguments the ordinary way.
 fn opener_argv(host: Host, url: &str) -> (&'static str, String) {
 	let program = match host {
 		Host::Windows => "explorer.exe",
@@ -213,11 +209,9 @@ mod tests {
 		s.chars().collect()
 	}
 
-	// Terminal output is untrusted, and the Windows opener used to go through cmd.
-	// Its parser reads the command line before argument quoting means anything,
-	// and expands percent variables before any escaping is processed. No escaping
-	// survives that, so every platform hands the URL to its own opener as one
-	// plain argument.
+	// Terminal output is untrusted, so every platform hands the URL to its own opener
+	// as one plain argument. The Windows opener used to go through cmd, and no
+	// escaping is safe there.
 	// Test ID: dcbe8
 	#[test]
 	fn a_url_reaches_the_opener_exactly_as_it_was_printed() {
@@ -350,10 +344,9 @@ mod tests {
 		}
 	}
 
-	// A printed line is untrusted text, and the only thing standing between it and
-	// a process launch is the scan below. So the scan gets hammered: whatever it
-	// hands back must be a whole allowlisted URL, taken verbatim out of the row,
-	// and made of nothing but the characters allowed in a URL.
+	// A printed line is untrusted text, and the scan below is all that stands
+	// between it and a process launch. Whatever the scan returns must be a whole
+	// allowlisted URL, copied as is from the row, made only of URL characters.
 	mod fuzz {
 		use super::super::{SCHEMES, find_at, is_url_char};
 		use crate::fuzz;

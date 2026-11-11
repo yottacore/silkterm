@@ -2,16 +2,11 @@
 // Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
 
 //! BC7 for the wallpaper: a byte a texel in graphics memory, twice BC1 and a
-//! quarter of plain. Mostly mode 6: each 4x4 block stores 2 colors at 7 bits
-//! plus a shared low bit and picks one of 16 points between them per texel,
-//! where BC1 has 4 points between 5:6:5 ends, so a slow gradient no longer
-//! steps at the block edges. Opaque only, so both alpha ends are 255, the low
-//! bit is 1 and every color end is odd. That leaves 0 out of reach, and a
-//! black sky came back a level up all over, so a block that touches 0 also
-//! tries mode 5: 7 bit ends that reach 0 and 255, an alpha of its own, and 4
-//! points. The other modes split a block in 2 or 3 for sharp edges, which a
-//! wallpaper has few of, at several times the code and the encode time.
-//! Unlike BC1, every decoder agrees to the bit.
+//! quarter of plain. It's mostly mode 6, with 16 points between a block's 2 ends
+//! where BC1 has 4, so a slow gradient doesn't step at the block edges. Opaque
+//! mode 6 ends are always odd and can't reach 0, so a block that touches 0 also
+//! tries mode 5. The other modes are for sharp edges, which a wallpaper has few
+//! of. Unlike BC1, every decoder agrees to the bit.
 
 use crate::bc1::Texel;
 
