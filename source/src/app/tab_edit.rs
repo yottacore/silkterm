@@ -13,9 +13,8 @@ use crate::textedit::{Reach, caret_from_click, reach_left, reach_right, word_at}
 use std::time::Instant;
 use winit::keyboard::{Key, NamedKey};
 
-// What a typed tab title is worth keeping, given what the tab would say on its
-// own. Blank, or the same as the automatic name, means no override at all -
-// both are the way back to a tab that names itself.
+// The title to keep from what was typed. A blank one, or one that matches the
+// automatic name, means no override, so the tab goes back to naming itself.
 fn typed_title(typed: String, auto: &str) -> Option<String> {
 	(!typed.trim().is_empty() && typed != auto).then_some(typed)
 }
@@ -178,7 +177,7 @@ fn tab_edit_key(key: &Key, keys: input::EditKeys, selected: bool) -> Option<TabE
 	let reach = Reach::new(keys.word, keys.line);
 	let types = keys.types && !keys.alt;
 	Some(match key {
-		// Tab commits too - there is nowhere for it to move to.
+		// Tab commits too, since there's nowhere for it to move to.
 		Key::Named(NamedKey::Enter | NamedKey::Tab) => TabEditKey::Commit,
 		Key::Named(NamedKey::Escape) => TabEditKey::Cancel,
 		Key::Named(NamedKey::ContextMenu) => TabEditKey::Menu,
@@ -291,15 +290,15 @@ impl State {
 		self.dirty = true;
 	}
 
-	/// Take what was typed. A title matching what the tab would have said anyway
-	/// is dropped rather than frozen, and so is a blank one - either way the tab
-	/// goes back to naming itself.
+	/// Take what was typed. A title that matches what the tab would have said
+	/// anyway is dropped rather than frozen, and so is a blank one. Either way the
+	/// tab goes back to naming itself.
 	pub(super) fn commit_tab_edit(&mut self) {
 		let Some(edit) = self.tab_edit.take() else {
 			return;
 		};
-		// What this tab would say with no title of its own - cleared first, since
-		// that is what the label is built from.
+		// What this tab would say with no title of its own. The override is cleared
+		// first, since the label is built from it.
 		if let Some(pm) = self.tabs.list.get_mut(edit.tab) {
 			pm.title_override = None;
 		}
