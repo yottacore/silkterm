@@ -8795,7 +8795,7 @@ mod tests {
 		// ble.sh, after a command: 2 linefeeds, then insert- and delete-line on
 		// the blank rows under the cursor to make room for the prompt. The engine
 		// records the last of those as a region scroll of 3; nothing visible
-		// moved, so there is nothing to ease - and easing it slid the prompt drawn
+		// moved, so there is nothing to ease. Easing it slid the prompt drawn
 		// right after down from behind the rows above.
 		let (cols, lines) = (10usize, 8usize);
 		let mut term = term_fed(cols, lines, 1000, "one\r\ntwo\r\n$ cmd\r\nout\r\n");
@@ -8906,13 +8906,12 @@ mod tests {
 	// Test ID: da88k
 	#[test]
 	fn output_frame_refreshes_snapshot_so_repaint_probe_cannot_reslide() {
-		// One shell "enter", as frames: the scroll arrives in a grew=1 frame (animated
-		// by the output ease), the prompt redraw arrives one frame later with grew=0 -
-		// a slide frame. A snapshot left stale across the grew frame makes that
-		// slide frame read the eased scroll as a fresh 1-line repaint shift and
-		// slide it a second time - the "down one line, then up two" output judder.
-		// The gate refreshes the snapshot on the grew frame, so the slide frame
-		// diffs only the in-place prompt redraw: no shift.
+		// One shell "enter", as frames. The scroll arrives in a grew=1 frame, which
+		// the output ease animates, and the prompt redraw comes a frame later with
+		// grew=0, a slide frame. With the snapshot left stale across the grew frame,
+		// the slide frame read the eased scroll as a new 1-line shift and slid it
+		// again, so output went down one line, then up 2. The gate refreshes the
+		// snapshot on the grew frame, so the slide frame sees only the redraw.
 		use std::fmt::Write as _;
 		let (cols, lines) = (20usize, 12usize);
 		let mut prime = String::new();
@@ -9153,14 +9152,14 @@ mod tests {
 	// Test ID: d9mf3
 	#[test]
 	fn region_clip_welds_to_the_content_edge() {
-		// down-slide (voff +2 cells, cell_h 20): bands at y=20 (title) / y=160
-		// (status); content starts at 20+40=60. The gap 20..60 belongs to the
-		// strip - the clip must start at the content edge so the title's
-		// translated copy (drawn at 40..60) is cut off. Bottom stays band-bound.
+		// down-slide (voff +2 cells, cell_h 20): the title band is at y=20 and the
+		// status band at y=160, and content starts at 20+40=60. The gap 20..60 is
+		// the strip's, so the clip starts at the content edge and cuts off the
+		// title's moved copy at 40..60. The bottom stays at the band.
 		assert_eq!(weld_region_clip(20.0, 160.0, 60.0, 200.0), (60.0, 160.0));
 		// up-slide (voff -2): content ends at 160-40=120; the status rows'
-		// translated copies (drawn just above 120) must be cut, gap 120..160 is
-		// the strip's. Top stays band-bound.
+		// moved copies just above 120 are cut, and the gap 120..160 is the
+		// strip's. The top stays at the band.
 		assert_eq!(weld_region_clip(20.0, 160.0, -20.0, 120.0), (20.0, 120.0));
 		// no top band: f32::MIN stays open until the content edge
 		assert_eq!(
@@ -9228,8 +9227,8 @@ mod tests {
 		);
 	}
 
-	// (cell_w, cell_h, margin) for the link tests - round numbers so a pixel
-	// coordinate reads as a cell without arithmetic.
+	// (cell_w, cell_h, margin) for the link tests. Round numbers, so a pixel
+	// coordinate reads as a cell at a glance.
 	const LINK_METRICS: (f32, f32, f32) = (10.0, 20.0, 5.0);
 
 	// Pointer at the center of grid cell (row, col), in window pixels.
@@ -9286,7 +9285,7 @@ mod tests {
 	}
 
 	// A URL that runs past the right edge is one logical line, so the scan has to
-	// span the wrap - otherwise hovering the tail half finds a fragment, or
+	// span the wrap. Otherwise hovering the tail half finds a fragment, or
 	// nothing, depending on where the break fell.
 	// Test ID: datv3
 	#[test]
@@ -9481,7 +9480,7 @@ mod tests {
 	}
 
 	// Reverse video renders thinner than the same weight the right way round, so
-	// nano's title and status bars are drawn bold - unless the setting says not.
+	// nano's title and status bars are drawn bold, unless the setting says not.
 	// Test ID: dd5q1
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
