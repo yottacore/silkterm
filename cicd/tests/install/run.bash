@@ -107,10 +107,21 @@ chmod +x "${stubDir}/curl"
 pwshDir="$(dirname "$(readlink -f "$(command -v pwsh 2>/dev/null || echo /nonexistent)")")"
 fInstall() {
 	local home="${1}" rc=0; shift
-	local -a args=() run=()
+	local -a args=() run=() kv=()
 	read -r -a args <<<"${INSTALL_ARGS:-}"
 	if [[ "${INSTALLER:-bash}" = "ps1" ]]; then
 		run=(pwsh -NoProfile -NonInteractive -File "${meDir}/stubrun.ps1" -Installer "${root}/install.ps1")
+	elif [[ "${INSTALLER:-bash}" = "bash32" ]]; then
+		## The scratch tree is mounted at its own path, so the paths in the
+		## release list and the checks below still hold inside the container.
+		local e
+		for e in "${@}"; do kv+=(-e "${e}"); done
+		run=(docker run --rm -i --network none --memory 512m --memory-swap 512m --oom-score-adj 1000
+			--label silkterm-test=install -u "$(id -u):$(id -g)"
+			-v "${work}:${work}" -v "${root}/install.bash:/install.bash:ro"
+			-e HOME="${home}" -e TMPDIR="${home}/.tmp" -e PATH="${stubDir}:/usr/local/bin:/usr/bin:/bin"
+			-e STUB_DIR="${STUB_DIR:-${relDir}}" -e STUB_API_CODE="${STUB_API_CODE:-200}"
+			-e STUB_LOG="${home}/.tmp/calls.log" "${kv[@]}" "${bash32Image}" bash /install.bash --yes)
 	else
 		run=(bash "${root}/install.bash" --yes)
 	fi
@@ -126,6 +137,12 @@ fInstalled(){ grep -aqFx "#ver ${2}" "${1}/.local/bin/silkterm" 2>/dev/null; }
 fSaid(){ grep -qF -- "${2}" "${1}/out.log"; }
 fNotSaid(){ ! grep -qF -- "${2}" "${1}/out.log"; }
 fSaidRe(){ grep -qE -- "${2}" "${1}/out.log"; }
+## The output starts and ends with a blank line, never has 2 in a row, and has
+## one before an error line.
+fSpaced(){
+	awk 'NR == 1 && $0 != "" { exit 1 } $0 == "" && prev == "" && NR > 1 { exit 1 }
+		/^Error:/ && prev != "" { exit 1 } { prev = $0 } END { if (prev != "") exit 1 }' "${1}/out.log"
+}
 
 ## The token used to be written into a fresh 0700 folder per API call, and the
 ## cleanup found nothing to remove because the function that made it ran in a
@@ -180,7 +197,7 @@ fi
 ## The cases both installers have to get right, run once for each. $1 is bash
 ## or ps1.
 fCases() {
-	local kind="${1}" h caseDir rc pid
+	local kind="${1}" h caseDir rc pid opt
 	local INSTALLER="${kind}"
 	export INSTALLER
 	## Which release: the highest version, not the first listed, with drafts
@@ -220,6 +237,15 @@ fCases() {
 	fCheck "${kind}: a failed API call stops the install" test "${rc}" -ne 0
 	fCheck "${kind}: and is not read as no full release" fNotSaid "${h}" "No full release"
 	fCheck "${kind}: and names the status" fSaidRe "${h}" "Detail:.*500"
+	fCheck "${kind}: with one blank line before the error, after the lookup line" fSpaced "${h}"
+
+	## A bad target value says which ones it takes, in the installer's own words.
+	h="${work}/${kind}-bad-target"
+	if [[ "${kind}" = "ps1" ]]; then opt="-Target x"; else opt="--target x"; fi
+	rc=0; INSTALL_ARGS="${opt}" fInstall "${h}" || rc=$?
+	fCheck "${kind}: a bad target value stops the install" test "${rc}" -ne 0
+	fCheck "${kind}: and names the values it takes" fSaid "${h}" "must be user or system (got 'x')"
+	fCheck "${kind}: with one blank line on each side" fSpaced "${h}"
 
 	caseDir="${work}/${kind}-rel-403"
 	mkdir -p "${caseDir}"
@@ -245,7 +271,8 @@ fCases() {
 	h="${work}/${kind}-rerun"
 	fInstall "${h}" || true
 	rm -f "${h}/.local/share/applications/silkterm.desktop"
-	touch -d '2001-01-01' "${h}/.local/bin/silkterm"
+	## Missing when the first install failed, which the checks below report.
+	touch -d '2001-01-01' "${h}/.local/bin/silkterm" 2>/dev/null || true
 	rc=0; fInstall "${h}" || rc=$?
 	fCheck "${kind}: a re-run puts back a missing launcher" test -e "${h}/.local/share/applications/silkterm.desktop"
 	fCheck "${kind}: without installing the program again" test "$(stat -c %Y "${h}/.local/bin/silkterm")" = "$(date -d '2001-01-01' +%s)"
@@ -270,6 +297,15 @@ fCases() {
 	fCheck "${kind}: leaving nothing staged behind" test -z "$(find "${h}/.local/bin" -name '.silkterm*' 2>/dev/null)"
 }
 fCases bash
+## install.bash targets the bash 3.2 macOS still has, and the host's bash 5
+## takes things 3.2 doesn't, such as namerefs and ${x,,}. Never pulled here,
+## since a test doesn't reach the network.
+bash32Image="bash:3.2"
+if command -v docker >/dev/null 2>&1 && docker image inspect "${bash32Image}" >/dev/null 2>&1; then
+	fCases bash32
+else
+	echo "  skip install.bash under bash 3.2 (no docker, or no ${bash32Image} image)"
+fi
 if command -v pwsh >/dev/null 2>&1; then
 	fCases ps1
 	## Each run's download folder goes through its guard, failed runs' too.
@@ -404,3 +440,5 @@ echo "all passed"
 ##		- 20260926 JC: A release list as one object, an option with no value, and
 ##		               install.ps1 without -Yes where it can't ask.
 ##		- 20261028 JC: A download that fails its checksum installs nothing.
+##		- 20261111 JC: install.bash cases under bash 3.2; blank-line layout and a
+##		               bad target value.

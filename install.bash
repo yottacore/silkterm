@@ -23,7 +23,7 @@
 
 ##	•••••••••••••••••••  Per-project settings - edit only these  ••••••••••••••••••
 
-installerVersion="1.3.0"
+installerVersion="1.3.1"
 ownerRepo="yottacore/silkterm"
 appName="SilkTerm"
 exeName="silkterm"
@@ -52,8 +52,11 @@ rawBase="https://raw.githubusercontent.com/${ownerRepo}/main"
 ##	Output helpers
 
 ##	fFail "message" ["hint" ...] - one error line, then any hints, then exit.
+##	A blank line first, unless nothing but the opening one has been printed.
+outputStarted=0
 function fFail() {
 	local first="${1}"; shift
+	[[ "${outputStarted}" = "0" ]] || echo >&2
 	echo "Error: ${first}" >&2
 	while [[ "$#" -gt 0 ]]; do echo "  ${1}" >&2; shift; done
 	echo >&2
@@ -422,6 +425,7 @@ function fMain() {
 	##	only when the list doesn't have any, which is what makes a project with only
 	##	betas installable. A failed call is an error, never "no release".
 	echo "Looking up the newest ${release} release of ${appName} ..."
+	outputStarted=1
 	local tag="" listFile="${tmpDir}/releases.json"
 	if ! fApi "${apiBase}/releases?per_page=100" "${listFile}"; then
 		if grep -qi 'rate limit' "${listFile}" 2>/dev/null; then
@@ -632,3 +636,4 @@ fi
 ##		  drafts; an API error no longer reads as "no full release";
 ##		  a re-run puts back a missing launcher.
 ##		- 20261006 JC: [[ ]] for every test, and version fields compare as base 10.
+##		- 20261111 JC: One blank line before an error that follows other output.
