@@ -919,7 +919,7 @@ fn fnv_row_skel(chars: impl Iterator<Item = char>) -> (u64, usize) {
 }
 
 // The char to give the shaper for a grid cell. A cell may hold a literal
-// control char, since alacritty leaves the '\t' in the first tab cell and fills
+// control char, since alacritty leaves the '\t' in the first tab cell adn fills
 // to the tab stop with spaces. cosmic-text shapes a raw tab as a full 8-column
 // stop, which shifts the rest of the row off the col*cell_w grid, so the text
 // no longer lines up with the cells, and double-click missed on tabbed output

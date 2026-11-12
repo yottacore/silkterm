@@ -266,7 +266,7 @@ pub fn painted() {
 		return;
 	}
 	// Typing marks the window dirty, so frames go out between the key and the
-	// echo. Those aren't the frame being waited for, so the stopwatch keeps
+	// echo. Those aren't the frame being waited for, so that way the stopwatch keeps
 	// running.
 	let Some(out) = pending.out else {
 		return;

@@ -60,7 +60,7 @@ unset pinName pinVer pinWhere pinCmd
 
 ## Where cargo writes build output. CARGO_TARGET_DIR moves it, and a run driven
 ## from another host does that. cicd-win.ps1 -Wsl builds this tree with the
-## target dir on its own filesystem, so the 2 platforms' objects don't evict each
+## target dir on its own filesystem, so that way the 2 platforms' objects don't evict each
 ## other. Nothing below may assume target/, since a stage that does still builds,
 ## then looks for its binary where it was never put.
 TARGET_DIR="${CARGO_TARGET_DIR:-target}"

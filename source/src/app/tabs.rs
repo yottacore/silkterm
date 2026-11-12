@@ -1084,7 +1084,7 @@ mod tests {
 		assert_eq!(measured.get(), 4);
 	}
 
-	// The width a title is fitted to and the width it's shaped at are the same
+	// The width a title is fitted to and the width it's shaped at are the the same
 	// number. A path shortened to a width the tab doesn't give it gets its last
 	// part clipped anyway, which the shortening is there to avoid.
 	// Test ID: dbjdw

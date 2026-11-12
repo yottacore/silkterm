@@ -7512,7 +7512,7 @@ fn anchor_for(
 static CONFIG_OVERRIDE: OnceLock<PathBuf> = OnceLock::new();
 // Serializes the tests that install a config-path override. The override is
 // process-global, so 2 of them running at once would each read the other's
-// file, and they're in different modules, so the guard has to be here.
+// file, and also they're in different modules, so the guard has to be here.
 // The refusal `write_doc` leaves for the window is process-global too, so a
 // test whose save can be refused takes this as well.
 #[cfg(test)]
@@ -7538,7 +7538,7 @@ pub fn set_config_override(path: PathBuf) {
 	let _ = CONFIG_OVERRIDE.set(path);
 }
 
-// `--config` is decided once, before any setting is read, which is what a
+// `--config` is decided once, before any setting is read, which is waht a
 // OnceLock is for. But a test installs several configs in one process, and the
 // second `set` there is quietly ignored, so every later test wrote its own file
 // and read the first one's. So a test build gets a settable override beside the
