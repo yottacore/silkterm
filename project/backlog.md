@@ -260,6 +260,8 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- It's stalled until a cosmic-text release takes fontdb 0.24 or later, and winit's sctk-adwaita drops ab_glyph.
 	- Held for a cosmic-text release on fontdb 0.24 or later, and an sctk-adwaita without ab_glyph.
 
+- **Stop here to work on releasing rc.1**.
+
 - The "Minutes otherwise" release of resources still isn't working
 	- ID: 2026111009560100
 	- Type: Bug
@@ -10500,7 +10502,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 
 ### Features and enhancements
 
-- **Stop here to work on releasing RC1**.
+- **Stop here to work on releasing rc.1**.
 
 - **Stop here to work on releasing v1.0.0 with Windows and macOS store releases**.
 
