@@ -11,7 +11,7 @@
 ##		  the Windows build can be looked at (rendering, fonts, chrome, dialogs, DPI,
 ##		  transparency) without a Windows machine.
 ##		- No docker. The Windows build links only system DLLs, so unlike the sister
-##		  nemo-anywhere launcher there's no GTK runtime to copy out of a container.
+##		  ${sisterLauncher} launcher there's no GTK runtime to copy out of a container.
 ##		  Only fonts and a private wineprefix are staged.
 ##		- Everything goes in cicd/artifacts/win-run/ (gitignored): the wineprefix, a
 ##		  copy of the exe, its own config.shcl, and the run log. The real ~/.wine and
@@ -75,6 +75,7 @@
 # Configuration
 
 declare -r  appId="silkterm"
+declare -r  sisterLauncher="nemo-anywhere"  ## named in --help
 declare -r  repoRoot="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 declare -r  stageDir="${repoRoot}/cicd/artifacts/win-run"
 declare -r  winePrefix="${stageDir}/prefix"
@@ -146,7 +147,7 @@ fParseArgs(){
 }
 
 fShowHelp(){
-	sed -n '/^##	Purpose:/,/^##	History:/p' "${BASH_SOURCE[0]}" | sed 's/^##\t\?//'
+	sed -n '/^##	Purpose:/,/^##	History:/p' "${BASH_SOURCE[0]}" | sed -e 's/^##\t\?//' -e "s/\${sisterLauncher}/${sisterLauncher}/g"
 }
 
 
