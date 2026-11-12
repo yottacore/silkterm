@@ -1,10 +1,8 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 // Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
 
-//! Best-effort detection of the OS's default monospace/fixed-pitch font (family
-//! and point size). Each platform uses its native mechanism; everything is
-//! optional and falls back gracefully. Detected once and cached, since it's read
-//! a couple of times at startup (config size + font-family resolution).
+//! The OS's default monospace font, family and point size, where one can be
+//! found. It's read once and cached, since startup reads it a couple of times.
 
 use std::sync::OnceLock;
 
@@ -55,18 +53,17 @@ pub struct UiFont {
 	pub italic: bool,
 }
 
-/// Cached desktop *interface* (UI/chrome) font: whatever the user picked for
-/// menus and dialogs - serif or not. This is the first choice for chrome text;
-/// `sans_serif()` below is only the fallback when no desktop setting is readable.
+/// The desktop's interface font, the one picked for menus and dialogs, serif or
+/// not. Chrome text uses it first, and `sans_serif()` only when no desktop setting
+/// is readable.
 pub fn interface() -> &'static UiFont {
 	static U: OnceLock<UiFont> = OnceLock::new();
 	U.get_or_init(platform::interface)
 }
 
-/// Cached OS sans-serif (proportional UI) family, best-effort. Fallback for
-/// chrome when no desktop interface font is readable - the generic
-/// `Family::SansSerif` is unreliable (fontdb defaults it to "Arial" and falls
-/// through to a serif when that's absent).
+/// The OS sans-serif family, for chrome when no desktop interface font is
+/// readable. The generic `Family::SansSerif` isn't reliable, since fontdb defaults
+/// it to "Arial" and falls through to a serif when that's missing.
 pub fn sans_serif() -> Option<&'static str> {
 	static S: OnceLock<Option<String>> = OnceLock::new();
 	S.get_or_init(sans_serif_detect).as_deref()
@@ -74,8 +71,8 @@ pub fn sans_serif() -> Option<&'static str> {
 
 #[cfg(target_os = "linux")]
 fn sans_serif_detect() -> Option<String> {
-	// fontconfig's `sans-serif` alias resolves to a real sans face regardless of
-	// the user's (possibly serif) document font.
+	// fontconfig's `sans-serif` alias resolves to a real sans face, even when the
+	// document font is a serif.
 	let out = std::process::Command::new("fc-match")
 		.args(["--format=%{family}", "sans-serif"])
 		.output()
@@ -122,9 +119,8 @@ mod platform {
 		}
 	}
 
-	/// The desktop interface (UI) font. GNOME/MATE/Cinnamon expose it through
-	/// gsettings; Xfce through xfconf. Either may be a serif - that's the point:
-	/// chrome follows whatever the user picked, not a sans assumption.
+	/// The desktop interface font, from gsettings on GNOME, MATE, and Cinnamon, or
+	/// xfconf on Xfce. It may be a serif, and chrome follows it anyway.
 	pub fn interface() -> super::UiFont {
 		interface_from(
 			&desktop(),
@@ -141,10 +137,10 @@ mod platform {
 		desktop_font(desktop, gnome, xfce).unwrap_or_default()
 	}
 
-	// The desktop's own store answers first. gsettings answers wherever GNOME's
-	// schemas are installed, an Xfce box included, and a key nobody set comes
-	// back as the schema default - so on Xfce it may only fill in for a missing
-	// xfconf answer, or the chrome follows Cantarell 11 whatever was picked.
+	// The desktop's own store is asked first. gsettings works wherever GNOME's
+	// schemas are installed, Xfce included, and returns the schema default for a key
+	// nobody set. So on Xfce it only fills in for a missing xfconf value, or chrome
+	// would follow Cantarell 11 whatever was picked.
 	fn desktop_font(
 		desktop: &str,
 		gnome: impl FnOnce() -> Option<String>,
@@ -204,8 +200,7 @@ mod platform {
 
 	// Parse a Pango font description "Family Style... Size", e.g.
 	// "GentiumAlt Bold 13" -> family "GentiumAlt", size 13, bold. The style
-	// words are captured (bold/italic), not just stripped, so chrome can honor
-	// the desktop's weight/slant.
+	// words set bold and italic, so chrome can follow the desktop's weight and slant.
 	fn parse_pango(desc: &str) -> super::UiFont {
 		let desc = desc.trim().trim_matches(['\'', '"']);
 		let mut tokens: Vec<&str> = desc.split_whitespace().collect();
@@ -374,9 +369,9 @@ mod platform {
 		(!family.is_empty()).then(|| family.to_string())
 	}
 
-	/// macOS has no user-set UI font, and the actual one (San Francisco) hides
-	/// behind a private name fontdb can't query. Report `AppKit`'s system size and
-	/// let the family fall back (curated list has Helvetica Neue).
+	/// macOS has no user-set UI font, and San Francisco hides behind a private name
+	/// fontdb can't query. So this reports `AppKit`'s system size, and the family
+	/// falls back to the curated list, which has Helvetica Neue.
 	pub fn interface() -> super::UiFont {
 		let size = NSFont::systemFontSize() as f32;
 		super::UiFont {
@@ -396,11 +391,10 @@ mod platform {
 		NONCLIENTMETRICSW, SPI_GETNONCLIENTMETRICS, SystemParametersInfoW,
 	};
 
-	/// Windows has no dedicated monospace setting; report the message-box font
-	/// size (the conventional system size). No reliable system *monospace* family,
-	/// so leave family None - the resolver then walks the user's `font_family` stack
-	/// and `config::DEFAULT_FONT_STACK` (never the bare `Family::Monospace` db lottery,
-	/// whose winner can lack a bold face).
+	/// Windows has no monospace setting, so this reports the message-box font size.
+	/// There's no reliable system monospace family either, so the resolver walks the
+	/// user's `font_family` stack and `config::DEFAULT_FONT_STACK`. The bare
+	/// `Family::Monospace` can pick a font without a bold face.
 	pub fn monospace() -> Monospace {
 		Monospace {
 			family: None,
@@ -408,8 +402,8 @@ mod platform {
 		}
 	}
 
-	/// The menu font is what native chrome (menus/dialog labels) uses; family,
-	/// size, weight and slant all honor the user's "Menu" font setting.
+	/// The menu font is what native menus and dialog labels use. Family, size,
+	/// weight, and slant all follow the user's "Menu" font setting.
 	pub fn interface() -> super::UiFont {
 		// SAFETY: `ncm` is an all-integer struct, zeroed with `cbSize` set, that
 		// outlives the call, and a screen DC is released on the path that got it.

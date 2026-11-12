@@ -3,8 +3,8 @@
 
 <#
 .SYNOPSIS
-	The installer's PATH change has to reach a console opened from the Start
-	menu.
+	The installer's PATH change has to show up in a console opened from the
+	Start menu.
 .DESCRIPTION
 	What the shell starts gets the shell's own copy of the environment, and a
 	registry write on its own left that copy as it was until the next sign-in.
@@ -38,7 +38,7 @@ $marker = "SILKPATH_" + (Split-Path $dir -Leaf).Substring(9)
 
 ##	This scenario has no window of its own to put in front. When the last one closes,
 ##	the foreground can fall to an elevated window, such as Performance Monitor
-##	on vm925w, and Windows drops every key sent past it without a word. The
+##	on vm925w, and Windows silently drops every key sent while it's in front. The
 ##	taskbar is the shell's and never elevated.
 Add-Type -Namespace SilkPath -Name W -MemberDefinition '[DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern IntPtr FindWindowW(string c, string t);'
 $tray = [SilkPath.W]::FindWindowW("Shell_TrayWnd", $null)

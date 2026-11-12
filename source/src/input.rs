@@ -69,7 +69,7 @@ pub fn release_is_reported(held: Option<MouseBtn>, button: MouseButton) -> bool 
 	held.is_some() && held == mouse_btn_of(button)
 }
 
-/// A left press in the tab-bar band goes to the tab bar - unless a dropdown is
+/// A left press in the tab-bar band goes to the tab bar, unless a dropdown is
 /// open. One opens flush under the menu bar, so its top item overlaps the band,
 /// and "Tabs|New tab" would select a tab instead of firing.
 pub fn tab_bar_takes_press(menu_open: bool, bar_shown: bool, y: f32, top: f32, h: f32) -> bool {
@@ -308,13 +308,12 @@ pub enum CopyFrom {
 	Output,  // a finished command's output, with copy on output on
 }
 
-/// Whether a copy goes through. The window-focus flag can lag the window
-/// manager, so the 2 a person drives never wait on it: a chord typed at this
-/// window, or a drag in it, is proof enough it is the one in use. The 2 that
-/// fire on their own take only the pane in use - a background pane printing a
-/// hostile file can't swap what the next paste gets - and output copies only
-/// while its window has focus, so a command that finished while the user was
-/// elsewhere never copies late.
+/// Whether a copy goes through. The window-focus flag can lag the window manager,
+/// so the 2 copies a person drives never wait on it, since a chord or a drag in
+/// this window shows it's the one in use. The 2 that fire on their own take only
+/// the pane in use, so a background pane printing a hostile file can't swap what
+/// the next paste gets. Output copies only while its window has focus, so a
+/// command that finished while the user was elsewhere never copies late.
 pub fn copy_allowed(from: CopyFrom, window_focused: bool, pane_in_use: bool) -> bool {
 	match from {
 		CopyFrom::Chord | CopyFrom::Select => true,
@@ -323,11 +322,10 @@ pub fn copy_allowed(from: CopyFrom, window_focused: bool, pane_in_use: bool) -> 
 	}
 }
 
-/// Encode a mouse event as a report for the PTY, honoring the app's tracking
-/// mode (SGR 1006 vs the legacy X10 form) and modifier bits. `col`/`row` are
-/// 0-based cells within the viewport; `pressed` is press vs release (wheel is
-/// press-only); `motion` marks a drag/move report. Returns None when no tracking
-/// mode is set.
+/// Encode a mouse event as a report for the PTY, in the app's tracking mode (SGR
+/// 1006 or the legacy X10 form) with modifier bits. `col` and `row` are 0-based
+/// cells in the viewport, `pressed` is press or release (the wheel only presses),
+/// and `motion` marks a drag or move report. None when no tracking mode is set.
 pub fn mouse_report(
 	mode: TermMode,
 	btn: MouseBtn,
@@ -356,9 +354,9 @@ pub fn mouse_report(
 		return Some(format!("\x1b[<{button_code};{wire_col};{wire_row}{end}").into_bytes());
 	}
 
-	// Legacy X10 form: ESC [ M <Cb+32> <Cx+32> <Cy+32>, one byte each - so a
-	// coordinate past 223 can't be encoded; clamp rather than corrupt. Release
-	// reports button 3 (wheel never releases, so this only hits real buttons).
+	// Legacy X10 form: ESC [ M <Cb+32> <Cx+32> <Cy+32>, one byte each, so a
+	// coordinate past 223 can't be encoded and is clamped. Release reports button 3,
+	// and the wheel never releases, so this only hits real buttons.
 	let button_code = if pressed || btn.is_wheel() {
 		button_code
 	} else {
@@ -475,8 +473,8 @@ fn encode_key(
 	match key {
 		Key::Named(named) => {
 			// Modified navigation/function keys use the xterm `;<m>` forms
-			// (Ctrl+Arrow word-skip, Ctrl+Del, Shift+F<n>, ...). These replace
-			// the ESC prefix for Alt too - apps expect CSI 1;3A, not ESC CSI A.
+			// (Ctrl+Arrow word-skip, Ctrl+Del, Shift+F<n>, ...). These replace the ESC
+			// prefix for Alt too, since apps expect CSI 1;3A rather than ESC CSI A.
 			if mod_param > 1 {
 				if *named == NamedKey::Backspace && ctrl {
 					// xterm/VTE convention; shells bind ^H to a word delete
@@ -500,8 +498,8 @@ fn encode_key(
 				}
 				NamedKey::Escape => vec![0x1b],
 				// winit reports the spacebar as a named key on every platform, so
-				// this is where Ctrl+Space has to become NUL - set-mark in emacs,
-				// readline and tmux all rely on it.
+				// this is where Ctrl+Space becomes NUL, which set-mark in emacs,
+				// readline, and tmux rely on.
 				NamedKey::Space if ctrl => vec![0],
 				NamedKey::Space => vec![b' '],
 				NamedKey::ArrowUp => cursor_seq(b'A', app_cursor),
@@ -732,8 +730,8 @@ mod tests {
 	}
 
 	// Only an unnamed key is filled in from its text. A named key already says
-	// what it is, and its text is a representation of that rather than typing -
-	// Enter has "\r", and reading it as a character would lose the key.
+	// what it is, and its text stands for the key rather than being typed. Enter
+	// has "\r", and reading it as a character would lose the key.
 	// Test ID: dcdd0
 	#[test]
 	fn a_key_the_layout_named_is_left_alone() {

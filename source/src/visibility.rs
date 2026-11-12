@@ -1,34 +1,28 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 // Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
 
-//! How much of the wallpaper, and how much of the text scrim's halo, actually
-//! gets drawn. Both are authored amounts - a person moved a slider - and neither
-//! survives being handed straight to the renderer.
+//! How much of the wallpaper, and how much of the text scrim's halo, gets drawn.
+//! Both are slider amounts, and neither works handed straight to the renderer,
+//! since the number a person picks is perceptual and what the renderer wants isn't.
 //!
-//! There are 2 things in the way, and both are the same kind of problem: the
-//! number a person picks is perceptual, and what the renderer wants isn't.
+//! - The mode. sRGB's curve is steep at the bottom and flat at the top, so a
+//!   linear-light blend at one alpha shows a lot over a near-black background and
+//!   almost nothing over a light one. Dark mode is the reference and keeps the
+//!   linear blend. Light mode mixes the background and the picture in a power
+//!   curve instead, at the amount dark mode's blend would show. Both are closed
+//!   form, with nothing tuned by eye.
+//! - The picture. At one setting a bright photo glares where a dark one barely
+//!   shows, since the slider says how much picture to mix in rather than how far
+//!   to move the background. `even_visibility` holds every picture to the same
+//!   displacement, fading out toward 100%, where the picture is drawn as it is.
 //!
-//! - **The mode.** A linear-light blend is what the program has always drawn,
-//!   and sRGB's curve is steep at the bottom and flat at the top, so the same
-//!   alpha covers a lot of visible ground over a near-black background and
-//!   almost none over a light one. Dark mode is the reference and is never
-//!   touched. Light mode mixes the background and the picture in a power curve
-//!   instead, at the amount dark mode's blend would have delivered. Both halves
-//!   are closed form - nothing is calibrated by eye and nothing is solved.
-//! - **The picture.** At one setting a bright photo glares where a dark one is
-//!   barely there, because the slider says how much of the picture to mix in
-//!   rather than how far to move the background. `even_visibility` holds every
-//!   picture to the same displacement, fading out toward 100% where the picture
-//!   has to be drawn as it is.
+//! The scrim's halo can't read the destination it blends against, so it's matched
+//! against the picture's average instead. Light mode redraws each halo alpha at
+//! whatever moves that field as far as dark mode's halo moves dark mode's.
 //!
-//! The scrim's halo blends against the destination through the pipeline's blend
-//! state and can't read it, so it's matched against the picture's average
-//! instead: light mode redraws each halo alpha at whatever moves that field as
-//! far as dark mode's halo moves dark mode's.
-//!
-//! The measure throughout is a transfer curve taken on Rec.709 luma. Luma
-//! because it's affine under the alpha composite, so one number stands in for a
-//! whole blend; a curve because linear light isn't what the eye reads.
+//! The measure throughout is a transfer curve on Rec.709 luma. Luma is affine
+//! under the alpha composite, so one number stands in for a whole blend, and the
+//! curve is there because the eye doesn't read linear light.
 
 use crate::config::{self, LUMA, Settings};
 
@@ -56,9 +50,9 @@ fn dark(settings: &Settings) -> bool {
 	settings.theme_mode.is_dark(config::os_dark())
 }
 
-// The theme's own dark background - what "as prominent as dark mode" is measured
+// The theme's own dark background, which "as prominent as dark mode" is measured
 // against. An overridden `bg` in light mode is still compared with the theme the
-// user picked, since that is the dark mode they would see.
+// user picked, since that's the dark mode they would see.
 fn paired_dark_luma(settings: &Settings) -> f32 {
 	config::luma(paired_dark_bg(settings))
 }
@@ -90,13 +84,11 @@ fn slope(at: f32) -> f32 {
 }
 
 // How much of the picture's own contrast a linear-light blend at `alpha` puts on
-// screen, over a background of `bg`. This is what the visibility slider has
-// always meant, whether or not anyone said so.
+// screen, over a background of `bg`. This is what the visibility slider means.
 //
-// Over pure black it works out at exactly `alpha^(1/2.4)`, which is why dark
-// mode has never needed any of this: black leaves the blend a pure scale of the
-// encoded picture, and a scale can't touch contrast. A dark theme whose
-// background isn't black delivers less, and this says how much less.
+// Over pure black it works out at exactly `alpha^(1/2.4)`, so dark mode never
+// needed any of this. A dark theme whose background isn't black shows less, and
+// this says how much less.
 fn encoded_scale(alpha: f32, bg: f32) -> f32 {
 	alpha * slope(alpha * WALLPAPER_LUMA + (1.0 - alpha) * bg) / slope(WALLPAPER_LUMA)
 }
@@ -107,9 +99,8 @@ fn curve(x: f32) -> f32 {
 }
 
 // How bright a picture reads, from its overall level and its bright end. The
-// bright end is half the answer because glare comes from there, not from the
-// average - a photo that is mostly night sky with a sun in it isn't a dark
-// picture to look at.
+// bright end counts for half because glare comes from there, so a photo of night
+// sky with a sun in it isn't a dark picture to look at.
 fn brightness(mean: f32, hi: f32) -> f32 {
 	0.5 * (curve(mean) + curve(hi))
 }
@@ -128,11 +119,8 @@ fn standout(picture: (f32, f32), bg: f32) -> f32 {
 // The slider's amount, evened out for how bright this picture is. A picture
 // further from the background than usual is drawn at less than the number says
 // and one closer at more, so the setting means the same thing whatever is
-// rotated in next.
-//
-// The correction fades out as the slider rises and is gone at 100%, because
-// there the picture has to be drawn as it is - that is what 100% means, and it
-// is the one reading a ramp must not disturb.
+// rotated in next. The correction fades out as the slider rises and is gone at
+// 100%, since 100% means the picture as it is.
 fn evened(amount: f32, slider: f32, picture: (f32, f32), bg: f32, strength: f32) -> f32 {
 	let strength = strength.clamp(0.0, 1.0);
 	if strength <= 0.0 {
@@ -207,11 +195,9 @@ fn halo_node(k: usize) -> f32 {
 /// picture. The composite runs it on every halo alpha, the crisp outline
 /// included (`matched_alpha` in scrim.rs).
 ///
-/// One scalar gain used to stand in for this, matched at half the halo over an
-/// average picture, with the outline left at full strength. sRGB's curve is
-/// steep near black and flat near white, so dark mode's halo builds slowly and
-/// light mode's fast, and the gap is widest over the dark parts of a picture,
-/// which light mode shows far more of. A gain couldn't follow either.
+/// A single gain used to stand in for this. sRGB's curve builds dark mode's halo
+/// slowly and light mode's fast, most of all over the dark parts of a picture, and
+/// a gain couldn't follow that.
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub struct HaloMatch {
 	pub curve: [f32; HALO_NODES],
@@ -304,7 +290,7 @@ pub fn halo_match(
 }
 
 /// `halo_match` is several thousand powers, and its inputs change only with the
-/// picture, the theme or a slider, so a window keeps the last answer.
+/// picture, the theme, or a slider, so a window caches the last result.
 #[derive(Default, Debug)]
 pub struct HaloMemo {
 	key: Vec<u32>,
@@ -376,8 +362,8 @@ mod tests {
 	const HI: f32 = 0.45;
 
 	// Dark mode never takes the other blend, whatever the picture. The visibility
-	// ramp does reach it - that is the point of the ramp - so the exact identity
-	// only holds with the ramp off, which is what the second half checks.
+	// ramp does reach it, so the exact identity only holds with the ramp off, which
+	// the second half checks.
 	// Test ID: dcx75
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
@@ -412,9 +398,9 @@ mod tests {
 		}
 	}
 
-	// The whole reason the mix is a pure power curve rather than sRGB's own. Over
-	// a black background the 2 are the same arithmetic, so a dark theme could
-	// take either path and draw the same pixels.
+	// This is why the mix is a pure power curve rather than sRGB's own. Over a black
+	// background the 2 are the same arithmetic, so a dark theme could take either
+	// path and draw the same pixels.
 	// Test ID: dcx6h
 	#[test]
 	fn over_black_the_mix_is_the_blend_it_replaces() {
@@ -570,9 +556,9 @@ mod tests {
 		}
 	}
 
-	// was: matched at half the halo only, through one gain, over one average
-	// picture. It now has to hold at every alpha and over the whole picture, since
-	// the tail and the dark parts are where the old gain left light mode loud.
+	// The halo used to be matched at half strength only, through one gain, over one
+	// average picture. It has to hold at every alpha and over the whole picture,
+	// since the tail and the dark parts are where the old gain left light mode loud.
 	// Test ID: dcx42
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
@@ -725,8 +711,8 @@ mod tests {
 		}
 	}
 
-	// The same rule read from the other side, which is what the backlog asked
-	// for: over a light background it is the DARK picture that stands out.
+	// The same rule read from the other side: over a light background, the dark
+	// picture is the one that stands out.
 	// Test ID: dcx78
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]

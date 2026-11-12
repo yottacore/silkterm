@@ -73,7 +73,7 @@ function fConsoleWait([int] $Age) {
 	if ($Age -lt 600) { 180 } else { 10 }
 }
 
-##	A box that logs a user on by itself gets time to, since ssh can answer
+##	A box that logs a user on by itself gets time to, since ssh can connect
 ##	before that's done. One that doesn't would only wait for nothing.
 function fWaitConsoleUser([int] $Seconds, [int] $Poll = 5) {
 	$who = fConsoleUser
@@ -105,7 +105,7 @@ function fStage {
 	Remove-Item env:SILKTERM_TEST_DIR -ErrorAction SilentlyContinue
 	fTestDir_Make
 	##	Made by this account, written by that one. Inheritance usually gives them
-	##	the folder already; this doesn't depend on it.
+	##	the folder already, but this doesn't depend on it.
 	icacls $env:SILKTERM_TEST_DIR /grant "*${sid}:(OI)(CI)M" /Q | Out-Null
 	if ($LASTEXITCODE) { throw "cannot give $who the run folder $env:SILKTERM_TEST_DIR" }
 	"RUNFOR $who"

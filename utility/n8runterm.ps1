@@ -37,8 +37,8 @@
 	symlink at all. '--no-admin' opts out.
 
 	Reports a failure in a dialog when launched from a shortcut (or with
-	'--gui'), since a click's console flashes shut. '--admin',
-	'--no-admin', and '--gui' are consumed here; everything else is passed on.
+	'--gui'), since a click's console flashes shut. '--admin', '--no-admin',
+	'--gui', and '--install-only' are consumed here; everything else is passed on.
 
 	With no build held and no source reachable, falls back to the first
 	installed terminal from a per-platform list.
@@ -64,15 +64,14 @@ $ExeSuffix     = if ($Platform -eq "windows") { ".exe" } else { "" }
 $ExeName       = "$ProgramName$ExeSuffix"
 $IconName      = "$ProgramName.png"
 
-## Home, spelled the way each platform spells it. $env:HOME is set on Linux and
-## macOS; Windows has USERPROFILE.
+## $env:HOME is set on Linux and macOS; Windows has USERPROFILE.
 $HomeDir = if ($env:HOME) { $env:HOME } else { $env:USERPROFILE }
 
 ## Where a build comes from: the synced app dir cicd installs into. One entry per
 ## platform today, kept as a list so a second location is a one-line change.
-## First one that exists wins. 'synced' is a junction to Dropbox, and on Windows
-## it reads as an EMPTY directory - Dropbox's filter driver doesn't populate
-## through it - so the real spelling has to be listed as well.
+## First one that exists wins. On Windows the 'synced' junction to Dropbox reads
+## as empty, since Dropbox's filter driver doesn't populate through it, so the
+## real path is listed too.
 $SourceDirs = switch ($Platform) {
 	"windows" { @(
 		(Join-Path $HomeDir "synced\0-0\common\exec\app\mswin")
@@ -88,9 +87,8 @@ $SourceDirs = switch ($Platform) {
 	) }
 }
 
-## Where copies live and what the symlink is called. Deliberately NOT under the
-## synced tree - a dogfood build churns every pipeline run and has no business
-## riding a sync.
+## Where copies live and what the symlink is called. Kept out of the synced tree,
+## since a dogfood build changes every pipeline run and doesn't need to sync.
 $InstallRoot = switch ($Platform) {
 	"windows" { Join-Path $env:LOCALAPPDATA "Programs" }
 	"macos"   { Join-Path $HomeDir "Applications" }
@@ -101,17 +99,17 @@ $LatestLink  = Join-Path $InstallRoot $ExeName
 $IconPath    = Join-Path $InstallRoot $IconName
 
 ## Retention: at most $KeepMax copies, at least $KeepMin, and stop at $KeepBytes
-## once past the minimum. $KeepRecent of the most recent are held ahead of the
+## once past the minimum. $KeepRecent of the most recent are kept ahead of the
 ## time-spread picks, so a bad build always has a couple of predecessors beside it.
 $KeepMax    = 10
 $KeepMin    = 5
 $KeepRecent = 2
 $KeepBytes  = 1GB
 
-## How many of each period tier may be taken. Without a cap the daily picks eat the
-## whole budget on a box that builds every day, and the older end of the spread -
-## the point of keeping any of this - never gets a slot. These sum to the budget,
-## so the order they're asked in picks which tiers survive.
+## How many of each period tier may be taken. Without a cap the daily picks use up
+## the whole budget on a box that builds every day, and the older builds never get
+## a slot. These sum to the budget, so the order they're asked in decides which
+## tiers survive.
 $PeriodKeep = @{ day = 3; week = 2; month = 2; year = 1 }
 
 ## Per-run decision log beside the versions folder, so a console that closes can't
@@ -278,10 +276,10 @@ function fCopyIfNewer {
 }
 
 
-## What the source build IS, in the shared tag convention
+## The source build's tag, in the shared convention
 ## '<toolchain: gnu|msvc><built on: l|m|b|w><target: l|m|b|w><arch: i|a>'. cicd
-## writes it beside the binary, because a cross-build says nothing about the box
-## that reads it. Without the sidecar, describe what we can see.
+## writes it in a file beside the binary, since the box reading a cross-build can't
+## tell where it was built. Without that file, describe what we can see.
 function fBuildTag {
 	param([Parameter(Mandatory)][string]$SourceDir)
 
@@ -349,8 +347,8 @@ function fHeldMatching {
 }
 
 
-## Rename a held copy to a new stamp/tag/role. A running image can refuse it, which
-## costs nothing - the name is bookkeeping and the next run tries again.
+## Rename a held copy to a new stamp/tag/role. A running image can refuse it. That's
+## harmless, since the name is only bookkeeping and the next run tries again.
 function fRenameHeld {
 	param(
 		[Parameter(Mandatory)]$Version,
@@ -518,10 +516,6 @@ function fRunningExePaths {
 }
 
 
-## Point the '<program>' symlink at the newest copy, so a plain name on PATH and a
-## .desktop Icon= both follow the current build without being rewritten. Windows
-## needs a privilege for this that a filtered token lacks, which is most of why the
-## launcher elevates; a copy stands in when the link is refused.
 ## Is this file one of ours? A copy the symlink fallback made is byte-identical
 ## to a build in the pool; anything else got here another way.
 function fIsPoolCopy {
@@ -537,6 +531,10 @@ function fIsPoolCopy {
 	return $false
 }
 
+## Point the '<program>' symlink at the newest copy, so a plain name on PATH and a
+## .desktop Icon= both follow the current build without being rewritten. Windows
+## needs a privilege for this that a filtered token lacks, which is most of why the
+## launcher elevates; a copy stands in when the link is refused.
 function fUpdateLatestLink {
 	param([Parameter(Mandatory)][string]$Target)
 
@@ -614,8 +612,8 @@ function fUpdateShortcut {
 
 ## macOS has no menu files. An app in ~/Applications is what Spotlight, Launchpad
 ## and the Dock find. Its program is a script that has the launcher copy and
-## rotate, then runs the build the symlink points at in its own process. So
-## the terminal IS the app: one Dock icon, which can be kept there.
+## rotate, then runs the build the symlink points at in its own process. That
+## makes the terminal the app, with one Dock icon that can be kept there.
 ## Started by the launcher instead, it would be a second program with no bundle,
 ## and the Dock would show the app quitting and a nameless one appearing.
 function fWriteMacApp {
@@ -690,8 +688,8 @@ exec @WRAPPER@ "$@"
 }
 
 
-## A .desktop entry that runs the wrapper rather than the terminal - a shortcut
-## naming a build pins that build forever. Terminal=false, so the wrapper's own
+## A .desktop entry that runs the wrapper rather than the terminal, since a
+## shortcut naming a build pins that build forever. Terminal=false, so the wrapper's own
 ## console never appears; it exits as soon as the terminal is up.
 function fWriteDesktopEntry {
 	param([Parameter(Mandatory)][string]$Wrapper)
@@ -916,8 +914,8 @@ function fEnsureDir {
 ## Informational note to the host and the run log.
 function fNote { param([string]$Msg); fLog $Msg; Write-Host "runterm: $Msg" }
 
-## Non-fatal note. Pass -Gui to also show it in the end-of-run dialog (the
-## shortcut case, where the console flashes shut); reserved for real problems.
+## Non-fatal note. Pass -Gui to also show it in the end-of-run dialog, for a
+## shortcut click whose console flashes shut. Only for real problems.
 function fWarn {
 	param([string]$Msg, [switch]$Gui)
 	fLog "WARN: $Msg"
@@ -961,7 +959,7 @@ function fTrimLog {
 ## Remove any mark-of-the-web this script picked up from the sync layer. An
 ## unsigned script with one is refused under RemoteSigned, which silently kills
 ## a shortcut click. The body never runs, so nothing copies and nothing logs. This
-## only helps the NEXT run; the current one already cleared the policy to be here.
+## helps only the next run, since the current one already got past the policy.
 function fSelfHealMotw {
 	try {
 		$zone = Get-Content -LiteralPath $PSCommandPath -Stream Zone.Identifier -ErrorAction SilentlyContinue
@@ -984,8 +982,8 @@ function fIsElevated {
 }
 
 
-## True when we were double-clicked rather than started from a shell - Explorer is
-## the parent of a shortcut click, a terminal is the parent of a command-line run.
+## True when we were double-clicked rather than started from a shell. Explorer is
+## the parent of a shortcut click, and a terminal is the parent of a command-line run.
 ## Used to auto-enable GUI feedback so a flash-and-close click can still report.
 function fLaunchedFromShortcut {
 	if ($Platform -ne "windows") { return $false }
@@ -1053,8 +1051,8 @@ $script:GuiFeedback = $forceGui -or (fLaunchedFromShortcut)
 ## symlink and the launched terminal all run high-integrity. Minimized, because the
 ## relaunch has no console of its own to reuse. The relaunch passes '--gui'. Its
 ## parent is the UAC broker, not Explorer, so it can't re-detect the shortcut. A
-## declined consent does NOT abort: we fall through and run unelevated so there is
-## still a terminal, with a dialog saying it may be stale.
+## declined consent doesn't abort. The script runs on unelevated so there's still
+## a terminal, with a dialog saying it may be stale.
 if ($Platform -eq "windows" -and $wantAdmin -and -not (fIsElevated)) {
 	$self = (Get-Process -Id $PID).Path
 	$fwd  = fJoinArgs (@("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $PSCommandPath) + $args + "--gui")

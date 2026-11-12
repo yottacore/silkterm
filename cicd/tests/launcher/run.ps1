@@ -91,7 +91,7 @@ function fRunSaying { param([string]$Home_, [string[]]$Extra = @())
 }
 
 ## A launch through a script that counts each whole process list asked for,
-## then hands the call to the real Get-Process. Answers the count.
+## then hands the call to the real Get-Process. Returns the count.
 function fProcessListsRead { param([string]$Home_)
 	fUseHome $Home_
 	$tally = Join-Path $Home_ "tally.txt"

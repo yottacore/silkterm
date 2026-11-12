@@ -106,7 +106,7 @@ impl MonitorId {
 
 	/// The same monitor, read again? An EDID gives the size twice, to the mm
 	/// and in whole cm, and the X server returns either one. Which one can
-	/// change across a power save: b23's portrait monitor has read as both
+	/// change across a power save: one portrait monitor has read as both
 	/// 401x641 and 400x640 mm.
 	pub fn same_as(&self, other: &Self) -> bool {
 		let near = |a: u32, b: u32| a.abs_diff(b) < MM_SLACK;
@@ -170,7 +170,7 @@ pub fn home(window: &Window, layout: &[(i64, i64, i64, i64)]) -> Option<(i64, i6
 	monitor_under(win, None, layout).map(|index| layout[index])
 }
 
-/// Where in the layout each output a Wayland window is on sits, first entered
+/// The layout position of each output a Wayland window is on, first entered
 /// first. None off Wayland, or where winit's state can't be read.
 pub fn outputs_under(window: &Window) -> Option<Vec<(i64, i64, i64, i64)>> {
 	#[cfg(target_os = "linux")]
@@ -189,8 +189,8 @@ pub fn outputs_under(window: &Window) -> Option<Vec<(i64, i64, i64, i64)>> {
 	}
 }
 
-/// Where in the layout the Wayland output `MonitorId::of_window` names sits.
-/// None off Wayland, or where it can't name one.
+/// The layout position of the Wayland output that `MonitorId::of_window`
+/// names. None off Wayland, or where it can't name one.
 pub fn output_drawn_for(window: &Window) -> Option<(i64, i64, i64, i64)> {
 	#[cfg(target_os = "linux")]
 	{
@@ -262,12 +262,12 @@ impl Laid {
 	}
 }
 
-// Of the outputs a Wayland window is on, first entered first, the one it is
-// drawn for: the first when it is at the window's scale, as on the other
-// path, else the only one at that scale, else the only one of those most of a
-// window this size could be on while it touches the rest. Between 2 at
-// 100% with a 200% output first, that's the one it's on, which the other path
-// couldn't say.
+// Of the outputs a Wayland window is on, first entered first, the one it's
+// drawn for. That's the first when it's at the window's scale, as on the other
+// path. Otherwise it's the only one at that scale, or else the only one of
+// those that could have most of a window this size while it touches the rest.
+// With 2 at 100% and a 200% output first, this finds the one it's on, which
+// the other path couldn't.
 #[cfg_attr(not(any(target_os = "linux", test)), allow(dead_code))]
 fn laid_drawn_for(on: &[Laid], scale: f64, size: (f64, f64)) -> Option<usize> {
 	if on.first()?.at_scale(scale) {
@@ -519,11 +519,12 @@ impl X11Screen {
 
 // The monitors laid out that are lit. One whose cable finds nothing on the
 // other end is dark, though the server can go on laying it out for hours:
-// b23's HDMI monitor sleeps that way. GTK, and so xfwm4, drop such a monitor
-// and herd its windows off it. Counted as lit, the herd read as the user's
-// move, the window took the other monitor's size, and xfwm4 never put it
-// back (2026110609500002). When the server calls every one disconnected,
-// none is taken as dark, as GTK falls back to the whole screen then.
+// an HDMI monitor can sleep that way. GTK, and so xfwm4, drop such a monitor
+// and move its windows off it. When it was counted as lit, that move was read
+// as the user's, the window took the other monitor's size, and xfwm4 never
+// put it back (2026110609500002). When the server calls every one
+// disconnected, none is taken as dark, since GTK falls back to the whole
+// screen then.
 #[cfg(target_os = "linux")]
 fn lit_crtcs<T>(laid: Vec<(T, Vec<Connection>)>) -> Vec<T> {
 	let lit = |ends: &[Connection]| ends.iter().any(|&end| end != Connection::DISCONNECTED);
@@ -588,13 +589,12 @@ fn x11_monitor_under(window: &Window, at_pointer: bool) -> Option<Option<PxMm>> 
 }
 
 // The outputs a Wayland window is on and where each is in the layout, read
-// from winit's own toolkit state on its own connection. winit gives only
-// the first output and each one's scale rounded up to a whole number, so 125%,
-// 150% and 200% all read 2 (2026101411554909). The toolkit stores the rest, as
-// user data on winit's surface and outputs, which is where winit's own
-// `current_monitor` reads the first from. None when the window isn't a
-// Wayland one or that state can't be read, as when winit moves to another
-// toolkit release; then the rounded numbers are all there is.
+// from winit's own toolkit state on its own connection. winit gives only the
+// first output, and each one's scale rounded up, so 125%, 150%, and 200% all
+// read 2 (2026101411554909). The toolkit stores the rest as user data on
+// winit's surface and outputs. None when the window isn't a Wayland one or
+// that state can't be read, as when winit moves to another toolkit release.
+// Then the rounded numbers are all there is.
 #[cfg(target_os = "linux")]
 mod wayland {
 	use super::Laid;
@@ -944,7 +944,7 @@ pub fn snapped(_window: &Window) -> bool {
 mod tests {
 	use super::*;
 
-	// b23's HDMI monitor asleep: still laid out, its cable reads disconnected.
+	// An HDMI monitor asleep: still laid out, its cable reads disconnected.
 	// Test ID: deyvh
 	#[cfg(target_os = "linux")]
 	#[test]
@@ -1090,7 +1090,7 @@ mod tests {
 	#[test]
 	fn a_window_astride_two_outputs_is_named_for_the_one_it_is_drawn_for() {
 		let placed = |at, px, scale| Placed { at, px, scale };
-		// winit's numbers for monwl's layout: the place is times the scale
+		// winit's numbers for a mixed-scale layout: the place is times the scale
 		let h1 = placed((0, 0), (1920, 1080), 1.0);
 		let h2 = placed((3840, 0), (2560, 1600), 2.0);
 		let h3 = placed((0, 1080), (1280, 1024), 1.0);
@@ -1146,7 +1146,7 @@ mod tests {
 			bounds: (at.0, at.1, (px.0 / scale).round(), (px.1 / scale).round()),
 			px,
 		};
-		// monwl's layout
+		// the same mixed-scale layout
 		let h1 = laid((0.0, 0.0), (1920.0, 1080.0), 1.0);
 		let h2 = laid((1920.0, 0.0), (2560.0, 1600.0), 2.0);
 		let h4 = laid((3200.0, 0.0), (1680.0, 1050.0), 1.0);
@@ -1252,7 +1252,7 @@ mod tests {
 		] {
 			assert!(MonitorId::from_key(odd).is_none(), "{odd}");
 		}
-		// b23's portrait monitor, before and after a power save
+		// a portrait monitor, before and after a power save
 		let portrait = "1600x2560_100pct_401x641mm";
 		assert!(same_monitor(portrait, "1600x2560_100pct_400x640mm"));
 		assert!(!same_monitor(portrait, "1600x2560_100pct_411x641mm"));
@@ -1270,7 +1270,7 @@ mod tests {
 	// Test ID: ddq72
 	#[test]
 	fn a_shown_window_on_no_monitor_is_on_none() {
-		// b23 with the portrait monitor at the top left gone dark
+		// the portrait monitor at the top left gone dark, the landscape one left
 		let landscape = [(1600, 554, 3440, 1440)];
 		let window = (100, 100, 1300, 900);
 		assert_eq!(monitor_under(window, None, &landscape), None);

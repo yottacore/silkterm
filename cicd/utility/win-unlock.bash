@@ -6,12 +6,12 @@
 ##		Make a Windows box's test session usable again after it locked itself, and
 ##		put it back on the console. A locked session hands back black pictures and
 ##		swallows typing, so the graphical scenarios skip until this is run.
-##	- How it works, and why it is two steps:
-##		Nothing can unlock a session from outside; it has to be authenticated
-##		again. Connecting to it once over RDP IS that logon, so the session comes
-##		back unlocked - but it is then a remote session, which the app treats
-##		differently and which is not the real adapter. Moving it back to the
-##		console is the second step, and that is what the 'console' job does.
+##	- How it works, and why it's 2 steps:
+##		Nothing can unlock a session from outside, since it has to be
+##		authenticated again. Connecting to it once over RDP is that logon, so the
+##		session comes back unlocked. But then it's a remote session, which the app
+##		treats differently and which isn't on the real adapter. Moving it back to
+##		the console is the second step, and the 'console' job does that.
 ##	- Syntax:
 ##		win-unlock.bash [--host <name>] [--as <account>] [--display <:n>]
 ##	- Exit: 0 if the box came back usable or was already, 1 if not.
@@ -51,7 +51,7 @@ if ! DISPLAY="${display}" xdpyinfo >/dev/null 2>&1; then
 	startedX=$!
 	for _ in $(seq 1 40); do DISPLAY="${display}" xdpyinfo >/dev/null 2>&1 && break; sleep 0.1; done
 fi
-##	Kill by pid, never by pattern - a pattern here also matches this script.
+##	Kill by pid, never by pattern, since a pattern here also matches this script.
 fCleanup() { [[ -n "${rdpPid:-}" ]] && kill "${rdpPid}" 2>/dev/null; ((startedX)) && kill "${startedX}" 2>/dev/null; true; }
 trap fCleanup EXIT
 

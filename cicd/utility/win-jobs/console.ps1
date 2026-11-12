@@ -6,10 +6,10 @@
 	Put a user's session on the console, so graphical scenarios run against the
 	real adapter rather than a remote one.
 .DESCRIPTION
-	This does NOT unlock anything. A session that locked itself has to be
-	authenticated again, and the way to do that from elsewhere is to connect to it
-	once over RDP - reconnecting is a logon, and a logon unlocks. Moving it back
-	here afterwards is what drops the remote flag the app reads.
+	This doesn't unlock anything. A session that locked itself has to be
+	authenticated again, and from elsewhere that means connecting to it once over
+	RDP, since a reconnect is a logon and a logon unlocks. Moving it back here
+	afterwards drops the remote flag the app reads.
 .PARAMETER User
 	The account whose session moves. Default: the unprivileged test account.
 .NOTES
@@ -39,7 +39,7 @@ $want = fSessions | Where-Object { $_.User -eq $User } | Select-Object -First 1
 if (-not $want) { "no session for ${User} - log in once (RDP is enough) and run this again"; exit 1 }
 
 ##	tscon wants SeTcbPrivilege, which an ssh session doesn't always have, so it
-##	goes through a one-shot SYSTEM task. The task must point at a FILE: schtasks
+##	goes through a one-shot SYSTEM task. The task must point at a file, since schtasks
 ##	given nested quotes runs the command inline instead of registering it.
 $script = Join-Path $dir "tscon.ps1"
 @("tscon $($want.Id) /dest:console", "Start-Sleep -Seconds 2", "'done' | Set-Content '$dir\tscon.done'") |
@@ -60,9 +60,9 @@ try {
 Start-Sleep -Seconds 3
 "after:"; fSessions | ForEach-Object { "  $($_.User) id=$($_.Id) $($_.State)" }
 
-##	A lock screen process says nothing either way - LockApp stays around, suspended,
-##	both after an unlock and while locked with the display asleep. The session's own
-##	flags are the answer: offset 16 of WTSSessionInfoEx, 0 locked, 1 unlocked.
+##	The lock screen process doesn't tell either way, since LockApp stays around,
+##	suspended, both after an unlock and while locked with the display asleep. The
+##	session's own flags do: offset 16 of WTSSessionInfoEx, 0 locked, 1 unlocked.
 Add-Type -Namespace Con -Name Wts -MemberDefinition @"
 [DllImport("wtsapi32.dll")] public static extern bool WTSQuerySessionInformationW(IntPtr srv, int id, int cls, out IntPtr buf, out int bytes);
 [DllImport("wtsapi32.dll")] public static extern void WTSFreeMemory(IntPtr p);

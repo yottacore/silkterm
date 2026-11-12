@@ -18,8 +18,8 @@ use std::time::{Duration, Instant};
 use winit::event_loop::EventLoopProxy;
 
 /// The tab strip as drawn: which tab it starts at, and per tab shown, how wide
-/// it is and what it says. Tabs are no longer one width apiece, so a position on
-/// the bar is a running total rather than a multiplication (see tabtitle).
+/// it is and what it says. Tabs vary in width, so a position on the bar is a
+/// running total rather than a multiplication (see tabtitle).
 #[derive(Debug, Default)]
 pub(super) struct TabLayout {
 	key: (u32, usize, usize, usize, u32, u64),
@@ -47,8 +47,8 @@ impl TabLayout {
 	}
 }
 
-// What one tab's label is made from. It is kept beside the forms it gave, so a
-// frame can tell whether they still stand by comparing rather than building.
+// What one tab's label is made from. It's kept beside the forms built from it,
+// so a frame can tell whether they're current by comparing rather than building.
 #[derive(Clone, Debug, Default, PartialEq)]
 struct LabelFacts {
 	// the text being typed, while this tab is the one being renamed
@@ -152,14 +152,13 @@ impl TabLabels {
 
 // Everything a tab could say, longest form first (see tabtitle): the tab text
 // template filled in with the name typed on the tab or given by `--title`, the
-// program's own title, and the shell's friendly name - what the Shells list
-// calls it, which is the name the user themselves gave it - plus whatever that
-// shell has to report: the command it is running, the last one it ran, or,
-// having run nothing at all, where it is.
+// program's own title, and the shell's name from the Shells list, plus what
+// that shell reports. That's the command it's running, the last one it ran, or
+// where it is if it hasn't run anything.
 fn label_forms_from(facts: &LabelFacts, settings: &config::Settings) -> Vec<String> {
-	// A rename in progress is what the tab says, so what is typed is what is
-	// seen - and it is one form, never shortened, or the caret would sit off
-	// the end of an abbreviated label.
+	// A rename in progress is what the tab says, so what's typed is what's seen.
+	// It's one form and never shortened, or the caret would sit off the end of a
+	// shortened label.
 	if let Some(text) = &facts.edit {
 		return vec![text.clone()];
 	}
@@ -194,8 +193,7 @@ fn label_forms_from(facts: &LabelFacts, settings: &config::Settings) -> Vec<Stri
 	)
 }
 
-/// Tab strip: each tab owns its own pane split-tree. Detach/dock to other
-/// windows is deferred (needs multi-window support).
+/// Tab strip: each tab has its own pane split tree.
 #[derive(Debug)]
 pub(super) struct Tabs {
 	pub(super) list: Vec<PaneManager>,
@@ -212,8 +210,8 @@ impl Tabs {
 	pub(super) fn len(&self) -> usize {
 		self.list.len()
 	}
-	/// `PaneIds` are globally unique; the pane may live in any tab, not just the
-	/// active one (background-tab shells reply to ESC[6n etc. too)
+	/// `PaneIds` are globally unique, and the pane may be in any tab, since shells
+	/// in background tabs reply to ESC[6n too.
 	pub(super) fn find_pane(&self, id: PaneId) -> Option<&Pane> {
 		self.list.iter().find_map(|pm| pm.panes.get(&id))
 	}
@@ -229,8 +227,8 @@ impl Tabs {
 	pub(super) fn move_active(&mut self, fwd: bool) {
 		self.active = move_tab(&mut self.list, self.active, fwd);
 	}
-	/// Every pane's look at what runs that has come due, in any tab, since a
-	/// tab in the back names its shell's program too. True when an answer changed.
+	/// Runs each pane's check of what's running once it's due, in every tab, since
+	/// a background tab names its shell's program too. True when a result changed.
 	pub(super) fn recheck_tasks(&mut self, now: std::time::Instant) -> bool {
 		let mut moved = false;
 		for pane in self.list.iter_mut().flat_map(|pm| pm.panes.values_mut()) {
@@ -240,7 +238,7 @@ impl Tabs {
 		}
 		moved
 	}
-	/// The next of those looks still ahead of `now`.
+	/// When the next of those checks is due after `now`.
 	pub(super) fn task_wake(&self, now: std::time::Instant) -> Option<std::time::Instant> {
 		self.list
 			.iter()
@@ -262,8 +260,7 @@ fn tab_step(i: usize, n: usize, forward: bool) -> usize {
 
 // The active tab once the one at `index` has gone and `len` are left. The same
 // tab where it can be, else the one that took its place, else the last. A tab
-// opened beside the one it came from goes back to that one (`opener`, where it
-// sits now), since that is where its maker was.
+// opened beside another goes back to that one (`opener`, where it is now).
 fn active_after_close(active: usize, index: usize, len: usize, opener: Option<usize>) -> usize {
 	if active == index
 		&& let Some(back) = opener
@@ -298,8 +295,8 @@ fn move_tab<T>(list: &mut [T], i: usize, forward: bool) -> usize {
 }
 
 /// Top and height of a tab button inside the bar: inset at the top, and the bar's
-/// bottom hairline left showing under it. The draw and the text centering read
-/// the one rule.
+/// bottom hairline left showing under it. The draw and the text centering both
+/// use this.
 pub(super) fn tab_button_v(bar_y: f32, tab_h: f32, scale: f32) -> (f32, f32) {
 	let top = config::dip(TAB_TOP_PAD, scale);
 	let rule = config::dip(CHROME_HAIRLINE, scale);
@@ -345,8 +342,8 @@ pub(super) fn tab_edit_box(
 }
 
 /// How much of a tab its title gets: the button less its own inset on both sides
-/// and the close-button column it must never run under. The draw and the fit read
-/// the one rule, or a title is shortened to a width it isn't then given.
+/// and the close-button column it must never run under. The draw and the fit both
+/// use this, or a title gets shortened to a width it isn't given.
 pub(super) fn tab_title_w(tab_w: f32, scale: f32) -> f32 {
 	let pad = config::dip(TAB_TITLE_PAD, scale);
 	(tab_w - 2.0 * pad - config::dip(TAB_CLOSE_W, scale)).max(config::dip(8.0, scale))
@@ -354,17 +351,15 @@ pub(super) fn tab_title_w(tab_w: f32, scale: f32) -> f32 {
 
 // The command line behind a tab, for naming the shell it runs. Every pane
 // resolves its own at spawn (see `spawn_pane`), so None here means nothing is
-// switched on at all and the engine picked its own default - which we have no
-// way to name, and must not guess at from the list: guessing is what had a pane
-// running PowerShell labeled Command Prompt.
+// switched on and the engine picked its own default. There's no way to name
+// that, and a guess from the list once labeled a PowerShell pane Command Prompt.
 fn tab_command_line(command: Option<&[String]>) -> String {
 	command.map_or_else(String::new, crate::shells::command_line)
 }
 
 /// A tab's hover tip: what it runs, how it was started, where it is, and how
-/// long it has been open - the 3 of those a tab is too narrow to say, plus
-/// the one it never says. The lines are built on a timer rather than per frame:
-/// naming the shell resolves its program on the filesystem, and the clock at the
+/// long it's been open. The lines are built on a timer rather than per frame,
+/// since naming the shell looks up its program on disk, and the clock at the
 /// bottom has to tick anyway.
 #[derive(Debug)]
 pub(super) struct TabTip {
@@ -394,15 +389,14 @@ impl TabTip {
 }
 
 impl State {
-	// Measure the strip afresh: what each tab's label wants, what the least it
-	// can be given is, which tabs that leaves on the page, and the widest label
-	// form that fits the width each one ends up with.
+	// Measure the strip again: what each tab's label wants, the least each can be
+	// given, which tabs that leaves on the page, and the widest form that fits the
+	// width each one ends up with.
 	//
-	// Kept rather than recomputed per call, because measuring every tab's label
-	// on each mouse move or frame would be paid for on each one. Everything goes
-	// through `tab_layout`, which rebuilds only when one of the inputs in
-	// `tab_layout_key` moved; the labels' own revision is one of them, so a
-	// label that changed is measured again (see TabLabels).
+	// Kept rather than recomputed per call, so labels aren't measured on every
+	// mouse move or frame. `tab_layout` rebuilds only when an input in
+	// `tab_layout_key` changed, and the labels' revision is one of them, so a
+	// changed label is measured again (see TabLabels).
 	fn rebuild_tab_layout(&mut self) {
 		// the count may have moved since the last frame read the labels
 		self.refresh_tab_labels(None);
@@ -417,11 +411,11 @@ impl State {
 			.map(|tab| tab.as_ref().map(|tab| tab.demand).unwrap_or_default())
 			.collect();
 		let floors: Vec<f32> = demands.iter().map(|d| d.floor).collect();
-		// Bring the active tab onto the page when it changes - and only then, so
-		// a page the wheel moved to stays put. Driven from the change rather than
-		// from each of the many places that set `tabs.active`, so no path misses
-		// it. `tab_first` is otherwise only a preference, clamped on read, so
-		// opening or closing a tab can't strand it.
+		// Bring the active tab onto the page when it changes, and only then, so a
+		// page the wheel moved to stays put. This runs off the change rather than
+		// from each place that sets `tabs.active`, so no path misses it. Otherwise
+		// `tab_first` is only a preference, clamped on read, so opening or closing
+		// a tab can't strand it.
 		if self.tab_followed != self.tabs.active {
 			self.tab_followed = self.tabs.active;
 			self.tab_first =
@@ -432,7 +426,7 @@ impl State {
 			.min(self.tabs.len().saturating_sub(first));
 		let settings = config::settings();
 		// The tab in front takes what the row can spare, so the strip has to know
-		// which slot it is on this page - and nothing, when it is on another.
+		// which slot it's in on this page, or that it's on another page.
 		let active_slot = self
 			.tabs
 			.active
@@ -446,8 +440,7 @@ impl State {
 			active_slot,
 		);
 		// The widest form that fits the space this tab ended up with, else the
-		// shortest there is - which still names the shell, so it reads as a tab
-		// even clipped.
+		// shortest. That still names the shell, so it reads as a tab even clipped.
 		let labels = widths
 			.iter()
 			.enumerate()
@@ -514,16 +507,16 @@ impl State {
 		&self.tab_layout
 	}
 
-	/// Where tab `i` sits on the bar and how wide it is, or None when it is on
-	/// another page. Drawing and both hit tests read this one answer, or a click
-	/// sits on a different tab than the one under the pointer.
+	/// Where tab `i` is on the bar and how wide it is, or None when it's on
+	/// another page. Drawing and both hit tests use this, so a click never goes to
+	/// a different tab than the one under the pointer.
 	pub(super) fn tab_box(&mut self, i: usize) -> Option<(f32, f32)> {
 		let layout = self.tab_layout();
 		Some((layout.x(i)?, layout.w(i)?))
 	}
 
-	/// Which tab a pointer at `x` is over - the inverse of `tab_box`, and the only
-	/// thing the 2 hit tests may use.
+	/// Which tab a pointer at `x` is over. It's the inverse of `tab_box`, and the
+	/// only thing the 2 hit tests may use.
 	pub(super) fn tab_at(&mut self, x: f32) -> Option<usize> {
 		self.tab_layout().at_x(x)
 	}
@@ -576,8 +569,8 @@ impl State {
 			});
 		}
 		// The focused pane's own title, plus the program the pane was started
-		// with - that is what tells a console's own decoration apart from text
-		// somebody chose.
+		// with, which tells a console's own decoration apart from text somebody
+		// chose.
 		let focused_id = pm.focused;
 		let (said, launched) = pm.panes.get(&focused_id).map_or_else(
 			|| (String::new(), None),
@@ -595,9 +588,9 @@ impl State {
 		})
 	}
 
-	/// Which tab the pointer is over, and since when. Anything the pointer is
-	/// already busy with - a drag, an open menu - owns it instead, so no tip
-	/// appears underneath one. Nor does one in a window without the focus.
+	/// Which tab the pointer is over, and since when. A drag or an open menu
+	/// takes the pointer instead, so no tip appears under one. Nor does one in a
+	/// window without the focus.
 	pub(super) fn note_tab_hover(&mut self, x: f32, y: f32) {
 		let busy = !self.tip_focus.tips()
 			|| self.bar_dragging.is_some()
@@ -650,8 +643,8 @@ impl State {
 		kept.is_none()
 	}
 
-	/// When the loop next has to wake for the tip - to raise one whose pointer has
-	/// rested, or to re-read one that is already up (its clock ticks).
+	/// When the loop next has to wake for the tip: to raise one once the pointer
+	/// has rested, or to re-read one that's up, since its clock ticks.
 	pub(super) fn tab_tip_wake(&self) -> Option<Instant> {
 		match &self.tab_tip {
 			Some(tip) => Some(tip.built + TAB_TIP_REFRESH),
@@ -660,9 +653,9 @@ impl State {
 	}
 
 	// What a tip says, as key/value pairs padded to one column (tabtitle::tip_lines).
-	// The path is shown whole here - the tab is where it gets shortened, and the tip
-	// is the place to look when the short form wasn't enough. A value that has
-	// a space or a quote is quoted, so its edges are never in doubt.
+	// The path is shown whole here. The tab is where it gets shortened, and the tip
+	// is where to look when the short form isn't enough. A value that has a space
+	// or a quote is quoted, so its edges are never in doubt.
 	fn tab_tip_lines(&mut self, index: usize) -> Vec<String> {
 		let Some(pm) = self.tabs.list.get_mut(index) else {
 			return Vec::new();
@@ -702,7 +695,7 @@ impl State {
 		rows.push((
 			"Current path",
 			cwd.map_or_else(
-				// not a value, so it takes no quotes - a directory called
+				// not a value, so it takes no quotes, since a directory called
 				// "(not reported)" isn't what this line means
 				|| "(not reported)".to_string(),
 				|dir| {
@@ -727,13 +720,11 @@ impl State {
 		crate::tabtitle::tip_lines(&rows)
 	}
 
-	/// The tip's box, and where each of its lines sits inside it. Measured in the
-	/// terminal font, which is the one thing in the chrome that is: the lines are a
-	/// key/value table padded with spaces, and spaces align nothing in a
-	/// proportional face. The box fits the longest line rather than guessing; it
-	/// hangs off its own tab rather than off the pointer, so it doesn't jitter as
-	/// the pointer moves about inside one, and it is pushed back inside the window
-	/// rather than being allowed to run off the right edge.
+	/// The tip's box, and where each of its lines goes in it. Measured in the
+	/// terminal font, the only place the chrome uses it, since the lines are a
+	/// key/value table padded with spaces. The box fits the longest line. It hangs
+	/// off its own tab rather than the pointer, so it doesn't jitter, and it's
+	/// pushed back inside the window rather than running off the right edge.
 	pub(super) fn tab_tip_layout(&mut self) -> Option<(Rect, Vec<(f32, f32, String)>)> {
 		let generation = self.text.generation;
 		let text = &mut self.text;
@@ -748,9 +739,9 @@ impl State {
 		let w = text_w + 2.0 * pad;
 		let h = line_h * lines.len() as f32 + 2.0 * pad;
 		let win_w = self.surface_px.0 as f32;
-		// A tab paged off the strip while its tip was up takes the tip with it -
-		// a tip hanging off nothing would sit at the bar's left end, pointing at
-		// whichever tab happened to be there.
+		// A tab paged off the strip while its tip was up takes the tip with it.
+		// Otherwise the tip would sit at the bar's left end, pointing at whatever
+		// tab is there.
 		let x = self.tab_box(tab)?.0.min((win_w - w).max(0.0)).max(0.0);
 		let y = self.menubar_h() + self.tab_bar_h() + self.text.dip(TAB_TIP_GAP);
 		let placed = lines
@@ -767,7 +758,7 @@ impl State {
 
 	/// `shell` is a shell picked by name from the Tabs menu; None inherits from
 	/// the pane that was active, as a plain new tab does. The directory is
-	/// inherited either way - picking a shell says nothing about where to start.
+	/// inherited either way, since picking a shell says nothing about where to start.
 	/// `in_tmux` starts the tab's pane in a tmux session of its own, as "New
 	/// tab in tmux" asks for. With "Always run in new tmux session" on, every
 	/// new tab gets one.
@@ -779,8 +770,8 @@ impl State {
 	) {
 		self.commit_tab_edit();
 		let in_tmux = in_tmux || config::settings().tmux_new_session;
-		// area with the bar shown (we're about to have >1 tab); relayout_all fixes
-		// the exact rects right after, this is the new pane's provisional box
+		// the area with the bar shown, since there's about to be more than one tab.
+		// It's a provisional box, and relayout_all sets the exact rects right after.
 		let bar = self.menubar_h() + self.tab_bar_h();
 		let area = Rect {
 			x: 0.0,
@@ -843,8 +834,8 @@ impl State {
 		self.dirty = true;
 	}
 
-	/// Close the tab at `idx` (not necessarily the active one - a background tab's
-	/// shell can exit). Keeps `active` pointing at the same tab where it can.
+	/// Close the tab at `idx`, which may not be the active one, since a background
+	/// tab's shell can exit. Keeps `active` pointing at the same tab where it can.
 	pub(super) fn close_tab_at(&mut self, idx: usize) {
 		// A rename is keyed by position, so any change to the list ends it.
 		self.cancel_tab_edit();
@@ -1093,12 +1084,9 @@ mod tests {
 		assert_eq!(measured.get(), 4);
 	}
 
-	// Build a popup by hand, the way the geometry tests need it - no window, no
-	// text context, only the numbers `row_top`/`item_at`/`step` are made of.
-	// The width a title is fitted to and the width the buffer is shaped at are
-	// the same number by construction - shorten a path to a width the tab doesn't
-	// then give it and the last component is clipped anyway, which is the whole
-	// thing the shortening exists to avoid.
+	// The width a title is fitted to and the width it's shaped at are the same
+	// number. A path shortened to a width the tab doesn't give it gets its last
+	// part clipped anyway, which the shortening is there to avoid.
 	// Test ID: dbjdw
 	#[test]
 	fn a_title_is_fitted_to_the_width_it_is_given() {
@@ -1123,8 +1111,8 @@ mod tests {
 
 	// A tab may only name the shell it can see. A pane resolves its own command
 	// at spawn, so an unresolved one means nothing was switched on and the engine
-	// chose for itself - and a guess from the list is what had a pane
-	// running PowerShell labeled Command Prompt.
+	// chose for itself. A guess from the list once labeled a PowerShell pane
+	// Command Prompt.
 	// Test ID: dbjdx
 	#[test]
 	fn a_tab_names_only_the_shell_it_can_see() {

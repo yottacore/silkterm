@@ -113,7 +113,7 @@ try {
 	$running.Kill(); $running.WaitForExit(); $running = $null
 	fCheck 'leaving nothing staged behind' (-not (Get-ChildItem -LiteralPath $destDir -Filter '.silkterm-new-*' -Force))
 
-	##	The copy moved aside goes at the next upgrade, once nothing has it open.
+	##	The copy moved aside is removed at the next upgrade, once nothing has it open.
 	fRelease '9.9.10'
 	$null = fInstall
 	fCheck 'the next upgrade removes the old copy' ((fInstalled '9.9.10') -and -not (Get-ChildItem -LiteralPath $destDir -Filter 'silkterm.exe.old-*' -Force))
@@ -126,7 +126,7 @@ try {
 	fCheck 'a re-run puts back the shortcut' (Test-Path -LiteralPath $lnk)
 	fCheck 'and the PATH entry' (fPathHas)
 	fCheck 'without installing the program again' ((Get-Item -LiteralPath $destFile).LastWriteTimeUtc -eq $before)
-	fCheck 'and says so' ($out -match 'Put back what was missing')
+	fCheck 'and says so' ($out -match 'Restored what was missing')
 	$out = fInstall
 	fCheck 'with nothing missing, a re-run does nothing' ($out -match 'Already up to date')
 

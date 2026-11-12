@@ -3,28 +3,25 @@
 
 //! Text and cursor colors taken from the wallpaper (`colors.from_wallpaper`).
 //!
-//! There are 2 halves, decided separately, because harmony and legibility are
-//! unrelated problems and solving them with one number solves neither:
+//! There are 2 halves, worked out separately, since harmony and legibility are
+//! separate problems:
 //!
-//! - **Lightness** comes from how bright the background actually gets. A photo's
-//!   brightness varies per cell, so the average says nothing useful: white text
-//!   readable over a dark sky vanishes into a cloud. The text is placed the
-//!   contrast floor away from the field's BRIGHT END.
-//! - **Hue** comes from the image's dominant hue, rotated to its complement, at
-//!   low chroma. The cursor takes a further third of the circle, the way every
-//!   built-in theme's cursor already sits against its foreground.
+//! - Lightness comes from how bright the background gets. A photo's brightness
+//!   varies per cell, so white text readable over a dark sky vanishes into a
+//!   cloud. The text is placed the contrast floor away from the field's bright end.
+//! - Hue comes from the image's dominant hue, rotated to its complement, at low
+//!   chroma. The cursor takes a further third of the circle, the way every
+//!   built-in theme's cursor sits against its foreground.
 //!
-//! The work splits over 2 threads. `summarize` runs on the wallpaper worker,
-//! where the prepared pixels are, and reduces an image to 6 numbers. `derive`
-//! is pure and runs wherever the live settings are, so a theme change re-colors
-//! the text with no second decode.
+//! `summarize` runs on the wallpaper worker, where the prepared pixels are, and
+//! reduces an image to 6 numbers. `derive` is pure and runs wherever the live
+//! settings are, so a theme change re-colors the text with no second decode.
 //!
-//! What this can't do: guarantee the floor. Measured over the shipped pack of
-//! 104 images, a single foreground clears a 0.45 gap on all of them at the
-//! shipped 10% visibility, on about two thirds at 35%, and on a fifth at 100%.
-//! Past that no color exists - the field's own bright end is inside the floor of
-//! white. The derived color takes the best position available and the text scrim
-//! covers the rest, which is the job it already had.
+//! This can't guarantee the floor. Over the bundled pack of 104 images, one
+//! foreground clears a 0.45 gap on all of them at the default 10% visibility, on
+//! about two thirds at 35%, and on a fifth at 100%. Past that no color exists,
+//! since the field's own bright end is inside the floor of white. The scrim covers
+//! the rest.
 
 use crate::config::{self, LUMA, Settings};
 use crate::palette::{from_oklab, to_oklab, to_oklab_linear};
@@ -37,20 +34,20 @@ use crate::palette::{from_oklab, to_oklab, to_oklab_linear};
 const GRID_W: usize = 150;
 const GRID_H: usize = 40;
 
-// Where the bright and dark ends are read. Not the extremes: one specular
-// highlight would drag the text to white on any image with a sun in it, and the
-// scrim is what covers the last few cells.
+// Where the bright and dark ends are read. They aren't the extremes, since one
+// specular highlight would drag the text to white on any image with a sun in it,
+// and the scrim covers the last few cells.
 const HI_PCT: f32 = 0.95;
 const LO_PCT: f32 = 0.05;
 
-// A tint, not a color. Body text over a photo wants a cast; a saturated
-// foreground is tiring to read and is what makes a complement "vibrate" against
-// its ground. Limits every theme to the same gentle tint, so a monochrome theme's
-// vivid foreground doesn't come back as vivid yellow.
+// A tint rather than a color. A saturated foreground is tiring to read and makes
+// a complement "vibrate" against its ground. Every theme gets the same gentle
+// tint, so a monochrome theme's vivid foreground doesn't come back as vivid
+// yellow.
 const MAX_CHROMA: f32 = 0.06;
 
-// Below this mean chroma an image has no hue worth complementing - six of the
-// shipped pack are here - and the theme's own hue is kept instead.
+// Below this mean chroma an image has no hue worth complementing, and the theme's
+// own hue is kept instead. Of the bundled pack, 6 are under it.
 const MIN_CHROMA: f32 = 0.02;
 
 // How far round the cursor sits from the text. A third of the circle, which is
@@ -60,8 +57,9 @@ const CURSOR_ROTATE: f32 = 120.0;
 /// How many evenly spaced quantiles of each channel a summary keeps.
 pub const SPREAD: usize = 16;
 
-/// What one image is worth to the derivation. A handful of numbers, so the live
-/// settings can store it and re-derive on a theme change without decoding anything.
+/// The numbers the derivation needs from one image. There are few enough that the
+/// live settings can store them and derive again on a theme change without
+/// decoding anything.
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub struct Summary {
 	// Per-cell linear luma at the bright and dark ends, alpha premultiplied.
@@ -126,10 +124,9 @@ pub fn summarize(img: &image::RgbaImage, opacity: f32) -> Summary {
 	let mut lumas: Vec<f32> = Vec::with_capacity(GRID_W * GRID_H);
 	let mut channels: [Vec<f32>; 3] = std::array::from_fn(|_| Vec::with_capacity(GRID_W * GRID_H));
 	let (mut a_sum, mut a_n) = (0.0f64, 0u32);
-	// Chroma-weighted hue histogram, one bin a degree. A mean color can't be
-	// used here: opposite hues cancel, and 17 of the shipped pack average to a
-	// near-gray whose hue is noise - one of them reads 174 degrees away from the
-	// hue that is actually all over it.
+	// Chroma-weighted hue histogram, one bin a degree. A mean color doesn't work,
+	// since opposite hues cancel, and 17 of the bundled pack average to a near-gray
+	// whose hue is noise.
 	let mut hist = [0.0f32; 360];
 	let mut chroma_sum = 0.0f64;
 	for (bin, &n) in sum.iter().zip(count.iter()) {
@@ -228,15 +225,9 @@ fn ab(hue: f32, chroma: f32) -> (f32, f32) {
 }
 
 // A color at this lightness and hue, with the chroma pulled in until it fits.
-//
-// Oklab will happily name a lightness that sRGB can't reach at a given chroma,
-// and `from_oklab` clamps the channels - which costs the lightness that was
-// asked for, silently. That is fine for `palette::readable`, which is nudging
-// text that already exists, and not fine here: the lightness IS the legibility,
-// and a text color 0.02 short of its target takes the cursor plate with it.
-// Reducing chroma at a constant lightness and hue is how CSS Color 4 maps into
-// gamut, and it is the right way round for a tint - the cast is decoration.
-// A gray is always reachable, so the search always has an answer.
+// `from_oklab` clamps channels sRGB can't reach, which quietly costs lightness.
+// Here the lightness is the legibility, so chroma gives way instead, the same way
+// CSS Color 4 maps into gamut. A gray always fits, so the search always ends.
 fn at_lightness(lightness: f32, hue: f32, chroma: f32) -> [u8; 3] {
 	// A byte's worth of lightness at the pale end is about this, so asking for
 	// more precision than this only chases the quantization.
@@ -266,11 +257,11 @@ fn hue_chroma(c: [u8; 3]) -> (f32, f32) {
 	(b.atan2(a).to_degrees().rem_euclid(360.0), a.hypot(b))
 }
 
-// What the background behind a glyph really is, as a linear luma - the wallpaper
-// pass's own blend, with the image's luma standing in for its color. Light mode
-// mixes differently from dark, so `mix` says which one (visibility.rs). Where
-// the image doesn't cover its pixel the background shows through first, so the
-// picture is filled with it before the two are mixed.
+// The background behind a glyph as a linear luma: the wallpaper pass's own blend,
+// with the image's luma standing in for its color. Light mode mixes differently
+// from dark, so `mix` says which one (visibility.rs). Where the image doesn't
+// cover its pixel the background shows through first, so the picture is filled
+// with it before the 2 are mixed.
 fn field_luma(sum: &Summary, image_luma: f32, bg: [u8; 3], mix: crate::visibility::Mix) -> f32 {
 	let bg = config::luma(bg);
 	let filled = image_luma + bg * (1.0 - sum.alpha.clamp(0.0, 1.0));
@@ -280,18 +271,16 @@ fn field_luma(sum: &Summary, image_luma: f32, bg: [u8; 3], mix: crate::visibilit
 // The cursor whose plate comes out at `plate_target` over a field of
 // `behind_luma`.
 //
-// It has to be searched rather than solved. The plate is blended in linear light,
-// the floor is measured in Oklab lightness, and a tinted color's luma isn't its
-// lightness - which is the step that quietly cost the cursor a twentieth of the
-// floor before. Plate lightness rises with the cursor's, so sixteen rounds of
-// bisection place it inside a byte, and this runs once a picture rather than per
-// frame. Where the field is already brighter than the target the search bottoms
-// out at black, which is the best answer available. `alpha` is the plate's, which
-// is stronger over a light theme (`pane::cursor_alpha`).
+// It's searched rather than solved, since the plate blends in linear light, the
+// floor is in Oklab lightness, and a tinted color's luma isn't its lightness.
+// Bisection places it inside a byte in 16 rounds, once a picture rather than per
+// frame. Where the field is already brighter than the target the search ends at
+// black. `alpha` is the plate's, which is stronger over a light theme
+// (`pane::cursor_alpha`).
 //
-// The field is taken as a neutral at its summarized luma. The summary is a luma
-// statistic by design, and `the_neutral_field_model_stays_inside_a_tolerance`
-// bounds what the simplification costs on a strongly tinted picture.
+// The field is taken as a neutral at its summarized luma, and
+// `the_neutral_field_model_stays_inside_a_tolerance` bounds what that costs on a
+// strongly tinted picture.
 fn cursor_for(plate_target: f32, behind_luma: f32, alpha: f32, hue: f32, chroma: f32) -> [u8; 3] {
 	let plate_of = |cursor_l: f32| {
 		let c = at_lightness(cursor_l, hue, chroma);
@@ -341,10 +330,9 @@ pub fn derive(sum: &Summary, settings: &Settings) -> Derived {
 	let (fg_l, fg_c) = (to_oklab(fg).0, hue_chroma(fg).1);
 	let light_text = fg_l >= to_oklab(bg).0;
 
-	// Away from the field's near end, and never dimmer than the theme asked for:
-	// the wallpaper may demand more separation, not less. With the floor off this
-	// leaves the theme's own lightness alone, which is the right reading of a
-	// floor set to zero.
+	// Away from the field's near end, and never dimmer than the theme asked for, so
+	// the wallpaper can only add separation. With the floor off this leaves the
+	// theme's own lightness alone.
 	let target = if light_text {
 		(hi + floor).max(fg_l)
 	} else {
@@ -362,11 +350,11 @@ pub fn derive(sum: &Summary, settings: &Settings) -> Derived {
 	};
 	let out_fg = at_lightness(target, hue, chroma);
 
-	// The cursor is a plate with the glyph's own color on top, so
-	// it is a second background the text has to clear the same floor on. Put the
-	// plate exactly the floor away from the text - the furthest it can sit from
-	// the field while it still has a glyph - and find the cursor that draws it.
-	// Solved against the field's bright end, so a darker cell only widens the gap.
+	// The cursor is a plate with the glyph's own color on top, so the text has to
+	// clear the same floor on it. The plate goes exactly the floor away from the
+	// text, the furthest it can sit from the field and still show the glyph, and this
+	// finds the cursor that draws it. It's solved against the field's bright end, so
+	// a darker cell only widens the gap.
 	let plate = if light_text {
 		target - floor
 	} else {
@@ -438,9 +426,9 @@ mod tests {
 	}
 
 	// The bright end is what the text is placed against, and it has to find a
-	// bright strip that most of the picture disagrees with - a sky over a dark
-	// landscape is the ordinary case. A middle reading would call this image dark
-	// and put the text where the strip swallows it.
+	// bright strip that most of the picture disagrees with, such as a sky over a dark
+	// landscape. A middle reading would call this image dark and put the text where
+	// the strip swallows it.
 	// Test ID: dcwvh
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
@@ -519,10 +507,10 @@ mod tests {
 		assert!(lightness(light.fg) < 0.5, "{:?}", light.fg);
 	}
 
-	// The whole point of the lightness half: a brighter picture pushes the text
-	// further away, and it is measured against the bright end. The theme here has
-	// a mid-gray foreground on purpose - a shipped one sits high enough that the
-	// "never dimmer than the theme" floor would swallow the range being measured.
+	// The lightness half: a brighter picture pushes the text further away, measured
+	// against the bright end. The theme here has a mid-gray foreground on purpose,
+	// since a bundled one sits high enough that the "never dimmer than the theme"
+	// floor would swallow the range being measured.
 	// Test ID: dcwvn
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
@@ -606,9 +594,9 @@ mod tests {
 
 	// Light mode draws the picture at a higher alpha than the slider reads, so the
 	// field the text is placed against is darker than the number alone suggests.
-	// Same colors, same picture, same slider - only the mode moves. A dark
-	// picture turned well up, because below that the field stays bright enough
-	// that the theme's own foreground wins either way.
+	// Only the mode changes here. The picture is dark and turned well up, because
+	// below that the field stays bright enough that the theme's own foreground wins
+	// either way.
 	// Test ID: dcx40
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]

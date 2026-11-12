@@ -137,7 +137,7 @@ fWhyFailed(){
 }
 
 ## What --about reports is the adapter the app would draw with. No Renderer line
-## means none was found, which is an answer and not a failure.
+## means none was found, and that isn't a failure.
 fAdapter(){
 	local said
 	said="$(cargo run --quiet --locked -- --about 2>&1)" || { echo "${said}"; return 1; }

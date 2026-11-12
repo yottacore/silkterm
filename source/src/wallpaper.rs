@@ -3,16 +3,15 @@
 
 //! The wallpaper pipeline, off the winit thread.
 //!
-//! Everything here touches the filesystem or spends real CPU: scanning the
-//! rotation folder, reading the shuffle history, decoding the image, blurring and
-//! contrast-flattening it, reading its XMP tags. Any of those paths can be a
-//! mounted share that responds slowly or not at all, and the blur alone costs
-//! hundreds of milliseconds on a large image, so none of it can run between
-//! launch and the first frame. The window paints with no wallpaper and picks one
-//! up when the result arrives (`UserEvent::WallpaperReady`).
+//! Scanning the rotation folder, reading the shuffle history, decoding,
+//! blurring, contrast-flattening, and reading XMP tags all touch the filesystem or
+//! spend real CPU. Any of those paths can be a slow or dead share, and the blur
+//! alone takes hundreds of milliseconds on a large image, so none of it can run
+//! before the first frame. The window paints with no wallpaper and picks one up
+//! when the result arrives (`UserEvent::WallpaperReady`).
 //!
-//! Only the GPU upload stays on the winit thread; it needs the device, and it's
-//! a plain texture write.
+//! Only the GPU upload stays on the winit thread, since it needs the device, and
+//! it's a plain texture write.
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -45,11 +44,10 @@ pub struct Request {
 	/// also scan the rotation folder and pick from it (startup and each rotation
 	/// step); false loads whatever `settings.wallpaper` names.
 	pub scan: bool,
-	/// The image showing now. Order-mode rotation advances from it (by name, so a
-	/// re-scan that moved things around still ends in the right place), and a
-	/// non-scanning request keeps it when the settings name none. Otherwise
-	/// re-reading the config while rotating would blank the wallpaper until the
-	/// next tick, since a rotated pick is live-only and never written to the file.
+	/// The image showing now. Order-mode rotation moves on from it by name, so a
+	/// re-scan that moved things still ends in the right place. A request without a
+	/// scan keeps it when the settings name none, since a rotated pick is live only,
+	/// and re-reading the config would blank the wallpaper until the next tick.
 	pub current: Option<PathBuf>,
 	/// A bare `--wallpaper` or `--wallpaper-file` asked for no picture, and gets
 	/// none. Without this the built-in stood in, or a rotation folder left the
@@ -72,14 +70,13 @@ impl Request {
 	}
 }
 
-/// Rotation pacing, kept apart from the window so it can be driven by a clock.
+/// Rotation pacing, kept apart from the window so a test can drive it with a clock.
 ///
-/// A tick that finds a request still working sends nothing. Sending would only
-/// retire the one in flight, and once preparing an image took longer than the
-/// interval every request was retired before it arrived: the picture never
-/// changed, and each abandoned thread went on blurring a photo to the end. The
-/// tick is remembered and served when the result arrives, by the result itself
-/// when it was a rotation, or by sending one then when it wasn't.
+/// A tick that finds a request still working sends nothing. Once preparing an
+/// image took longer than the interval, each tick retired the request in flight,
+/// so the picture never changed and every abandoned thread blurred its photo to
+/// the end. The tick is remembered and handled when the result arrives, by the
+/// result itself when it was a rotation, or by sending one then when it wasn't.
 #[derive(Debug, Default)]
 pub struct Pacing {
 	inflight: Option<u64>,
@@ -124,9 +121,9 @@ pub struct Prepared {
 	pub opacity: f32,
 	pub fit: Fit,
 	pub anchor: [f32; 2],
-	/// What this picture is worth to a derived text color (autotheme.rs). Summed
-	/// here because this is where the finished pixels are, and it's 6 numbers
-	/// rather than a copy of them.
+	/// The summary a derived text color needs (autotheme.rs). It's taken here because
+	/// this is where the finished pixels are, and it's 6 numbers rather than a copy of
+	/// them.
 	pub summary: crate::autotheme::Summary,
 	/// The size asked for. A kept copy a little off it stands in for it, so
 	/// `rgba` may be a few pixels bigger or smaller.
@@ -298,11 +295,10 @@ fn box_shrink(
 
 /// Run one request on its own thread and post the result back to the event loop.
 ///
-/// A thread per request rather than one long-lived worker: a request that
-/// hangs on a dead mount blocks its own thread forever, and a shared worker
-/// would leave every later request queued behind it. A stale result is
-/// harmless when it arrives, since the sequence stamp retires it. A worker
-/// that has been superseded while doing real work gives up between stages.
+/// There's a thread per request rather than one long-lived worker, so a request
+/// that hangs on a dead mount blocks only its own thread. A stale result is
+/// dropped when it arrives, since the sequence stamp retires it, and a superseded
+/// worker gives up between stages.
 pub fn spawn(proxy: &EventLoopProxy<UserEvent>, request: Request) {
 	let proxy = proxy.clone();
 	let spawned = std::thread::Builder::new()
@@ -353,9 +349,9 @@ fn run(request: &Request) -> Loaded {
 	} else if path.is_none() && settings.rotation_folder().is_some() {
 		path.clone_from(&request.current);
 	}
-	// A configured folder that supplies images owns the wallpaper, so the
-	// built-in mustn't stand in for it. On a scan we know what's in the
-	// folder; otherwise fall back to "is one configured at all".
+	// A configured folder that supplies images replaces the built-in. A scan knows
+	// what's in the folder, and otherwise this falls back to whether one is
+	// configured at all.
 	let folder_active = if request.scan {
 		rotation.is_some()
 	} else {
@@ -400,7 +396,7 @@ fn rotate(settings: &Settings, current: Option<&str>) -> Option<Rotation> {
 		// an absent or empty dir isn't a mistake to report.
 		if !settings.wallpaper_folder_auto {
 			eprintln!(
-				"{}: wallpaper_folder {} has no images",
+				"{}: wallpaper.rotate.folder {} has no images",
 				config::APP_NAME,
 				dir.display()
 			);
@@ -661,15 +657,14 @@ fn works(settings: &Settings, sizing: Sizing, held: (u32, u32), blur: f32) -> bo
 	held_blur(blur, scale) > 0.0 || settings.wallpaper_contrast_mask || held != sizing.full
 }
 
-// Decode the wallpaper and apply everything that is fixed at load time (blur,
-// contrast mask, the image's own layout tags), at the size the window draws it.
-// `folder_active` suppresses the built-in stand-in where no path was given at
-// all, since rotation is about to supply one; a path that fails to open still
-// falls back to it. `stale` is called before each stage, and returns None once
-// the request has been superseded. With `kept` set, a copy kept there is used
-// when one is near the size, and otherwise the key to keep this one under
-// comes back with it. A change to the pixels this makes needs `wpcache`'s
-// FORMAT bumped, or kept copies go on showing the old look.
+// Decode the wallpaper and apply everything fixed at load time (blur, contrast
+// mask, the image's own layout tags), at the size the window draws it.
+// `folder_active` keeps the built-in out where no path was given, since rotation
+// is about to supply one, but a path that fails to open still falls back to it.
+// `stale` is called before each stage and returns None once the request is
+// superseded. With `kept` set, a kept copy near the size is used, or else the key
+// to keep this one under comes back with it. A change to the pixels this makes
+// needs `wpcache`'s FORMAT bumped, or kept copies go on showing the old look.
 fn prepare_keeping(
 	settings: &Settings,
 	path: Option<&Path>,
@@ -775,11 +770,10 @@ fn prepare_keeping(
 	// Only a blurred picture is ever bordered, so the border comes out of the
 	// blur's margin.
 	let border = sizing.bordered(held);
-	// Blur and contrast-flatten, done in linear light (decode sRGB -> process in
-	// f32 -> re-encode) so transitions are gamma-correct; an sRGB-space blur
-	// darkens edges. The f32 intermediate also avoids 8-bit banding inside the
-	// blur (final banding is handled by the high-precision offscreen + the blit's
-	// dither).
+	// Blur and contrast-flatten in linear light, so transitions are gamma-correct,
+	// since an sRGB-space blur darkens edges. The f32 copy also avoids 8-bit banding
+	// inside the blur. Final banding is handled by the high-precision offscreen and
+	// the blit's dither.
 	let blur = held_blur(blur, scale);
 	if blur > 0.0 || settings.wallpaper_contrast_mask || held != sizing.full {
 		// The float copy is 16 bytes a pixel and the blur is the slow part,
@@ -993,12 +987,11 @@ fn builtin(settings: &Settings) -> Option<image::DynamicImage> {
 		.flatten()
 }
 
-// A wallpaper is only ever drawn at window size, and the linear intermediate in
-// `prepare` is 16 bytes a pixel, so an ordinary large photo wanted
-// gigabytes, and an image wider than the GPU's texture limit aborted the upload.
-// The cut comes before the RGBA copy and uses no float buffer, so a small file
-// with huge dimensions costs its decode (512 MiB at most, the image crate's own
-// limit) and nothing at full size after that. Blurring gets cheaper too.
+// A wallpaper is only drawn at window size, and the linear copy in `prepare` is
+// 16 bytes a pixel, so a large photo wanted gigabytes, and an image wider than the
+// GPU's texture limit aborted the upload. The cut comes before the RGBA copy and
+// uses no float buffer, so a small file with huge dimensions costs only its
+// decode, 512 MiB at most by the image crate's own limit.
 fn cut_to_rgba(img: image::DynamicImage, (w, h): (u32, u32)) -> image::RgbaImage {
 	if (w, h) == (img.width(), img.height()) {
 		return img.into_rgba8();
@@ -1063,10 +1056,9 @@ fn next_wallpaper_index(len: usize, current: usize) -> usize {
 }
 
 // Pick the next image the way a music player shuffles: at random, but never one
-// of the last few shown. Straight uniform draws repeat often enough that people
-// read them as broken, so holding back roughly half the folder (capped) buys the
-// feel of randomness while staying a shuffle rather than a fixed cycle.
-// `recent` is newest-first; entries past the hold-back window are ignored.
+// of the last few shown. Plain uniform draws repeat often enough that people think
+// it's broken, so roughly half the folder is held back, up to a cap. `recent` is
+// newest-first, and entries past the hold-back window are ignored.
 fn shuffle_pick(len: usize, recent: &[usize], entropy: u64) -> usize {
 	if len < 2 {
 		return 0;

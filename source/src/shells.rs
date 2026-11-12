@@ -182,8 +182,8 @@ pub fn spawn(proxy: &EventLoopProxy<UserEvent>) {
 
 /// Fold a scan's findings into the stored list, in place and conservatively.
 ///
-/// The stored order is kept whole (it's the menu's order, and the future Shells
-/// tab lets the user set it); anything new goes at the end. `active` only ever
+/// The stored order is kept whole, since it's the menu's order and the Shell
+/// tab lets the user set it. Anything new goes at the end. `active` only ever
 /// falls: an entry whose program can't be found is switched off rather than
 /// deleted, so a shell that is merely uninstalled keeps its title, its flags and
 /// its place. It isn't switched back on if the program returns, since a scan
@@ -1071,8 +1071,8 @@ fn login_groups(base: &str) -> ((Group, u32), (Group, u32)) {
 
 // The shell the user logs in with. $SHELL is what a person means by "my shell"
 // and every desktop session sets it. Windows has no user shell at all, so the
-// nearest discoverable thing is what it calls the command processor (ComSpec,
-// i.e. cmd.exe); if even that is unset, the table below leads instead.
+// nearest thing is what it calls the command processor (ComSpec, which is
+// cmd.exe). If even that is unset, the table below leads instead.
 #[cfg(unix)]
 fn login_shell() -> Option<String> {
 	let shell = std::env::var("SHELL").ok()?;
@@ -1450,11 +1450,6 @@ mod tests {
 		assert_eq!(which_in("python3", apps.as_os_str(), &runnable), None);
 	}
 
-	// The whole offered order, in one assertion: this is what the Tabs menu looks
-	// like on a fresh install, so a group that moved, or one that quietly stopped
-	// sorting alphabetically, is a visible change and not an implementation
-	// detail. Elvish has a later table position than YSH on purpose: inside an
-	// alphabetical group the title decides and the table position mustn't leak in.
 	// The tab strip asks this once per tab per frame, and each answer used to walk
 	// the stored list resolving every entry through the filesystem. A numeric gate
 	// rather than a stopwatch: repeats cost no searches at all.
@@ -1495,6 +1490,10 @@ mod tests {
 		assert_eq!(friendly("/bin/bash", &renamed), "My bash");
 	}
 
+	// The whole offered order, in one assertion. This is what the Tabs menu looks
+	// like on a fresh install, so a group that moved, or one that stopped sorting
+	// alphabetically, is a visible change. Elvish has a later table position than
+	// YSH on purpose, since inside an alphabetical group the title decides.
 	// Test ID: dbjn8
 	#[test]
 	fn the_offered_order_groups_first_and_sorts_inside_a_group() {

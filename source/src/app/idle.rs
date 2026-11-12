@@ -105,10 +105,9 @@ impl IdleClock {
 	// device, or a program that prints forever would hold it for good. Output
 	// in the tab in front is still due at the reveal, so the window shows
 	// what changed once it can be seen. A tab in the back is out of sight
-	// either way, and nothing it prints changes the picture, so it isn't due
-	// the device: that would take it back and let it go again once per wait
-	// for as long as the tab prints. Switching to the tab is input, which
-	// brings it back.
+	// either way, so its output doesn't make the device due. Otherwise the
+	// device would be taken back and let go once per wait for as long as the
+	// tab prints. Switching to the tab is input, which brings it back.
 	fn output(&mut self, released: bool, hidden: bool, in_front: bool) -> bool {
 		if !in_front {
 			false
@@ -217,9 +216,9 @@ struct IdleRule {
 	otherwise: Duration,
 }
 
-// The setting's answer, unless SILK_IDLE_SECS names one wait in seconds for
-// every case - which is how the release is exercised without leaving a window
-// alone for half an hour.
+// The setting's value, unless SILK_IDLE_SECS names one wait in seconds for
+// every case. That's how the release is tested without leaving a window alone
+// for half an hour.
 fn idle_rule(cfg: &config::Settings) -> IdleRule {
 	if let Some(wait) = idle_secs() {
 		return IdleRule {
@@ -336,18 +335,16 @@ fn trim_heap() {
 fn trim_heap() {}
 
 /// A big buffer comes straight from the OS and goes straight back. glibc's
-/// mmap threshold starts at 128 KB but moves: freeing a mapped buffer raises it
-/// to that buffer's size, after which a wallpaper's decode (several buffers of
-/// megabytes each) is carved out of the thread's own arena and stays resident
-/// there once freed, because `malloc_trim` never shrinks an arena that isn't
-/// the main one. Measured on a 1920x993 wallpaper: about 40 MB kept per decode,
-/// one per rebuild after an idle release, and the first decode's 50 MB kept for
-/// the life of every window. Setting the threshold pins it. 4 MB keeps a
-/// frame's own vectors in the arena on any grid and puts only the image buffers
-/// on the mapping path. Pinning it also stops the trim threshold moving, so
-/// that is set too, high enough that the main heap's top isn't given back and
-/// asked for again around every frame. Called before the first thread exists,
-/// like the environment fixes.
+/// mmap threshold starts at 128 KB but rises to the size of any mapped buffer
+/// that's freed. After that a wallpaper decode, several buffers of megabytes
+/// each, comes from the thread's own arena and stays resident once freed, since
+/// `malloc_trim` never shrinks an arena other than the main one. On a 1920x993
+/// wallpaper that kept about 40 MB per rebuild after an idle release. Setting
+/// the threshold pins it, and at 4 MB a frame's own vectors stay in the arena
+/// while only image buffers are mapped. Pinning it also stops the trim threshold
+/// moving, so that's set too, high enough that the main heap's top isn't given
+/// back and asked for again around every frame. Called before the first thread
+/// exists, like the environment fixes.
 #[cfg(all(target_os = "linux", target_env = "gnu"))]
 pub(crate) fn tune_heap() {
 	// SAFETY: plain allocator parameters, set before any other thread runs.
@@ -412,20 +409,19 @@ pub(super) fn restore_sign(event: &WindowEvent) -> bool {
 }
 
 /// Whether an event is a person at the window, for the idle clock. The pointer
-/// counts once it is over the window by the rule the look after a move uses
-/// (`note_presence`), not on being told it entered: on X11 a pointer grab let
-/// go by any program on the desktop, such as a menu, a window drag, or a screen
-/// locker, tells the window under a pointer at rest that it entered, with one
-/// move to where it already was. That kept the wait from ever running out
-/// there, and took a released device back for nobody.
+/// counts once `note_presence` finds it over the window, not when it's told it
+/// entered. On X11 a pointer grab let go by any program, such as a menu, a
+/// window drag, or a screen locker, tells the window under a resting pointer
+/// that it entered, with one move to where it already was. That kept the wait
+/// from ever running out, and took a released device back for nobody.
 ///
 /// The pointer moving over the window is `POINTER`, which only starts the wait
 /// over and never takes a released device back (`State::note_pointer`).
 ///
-/// Focus counts only as a change. On X11, coming back to the desktop that
-/// has an unfocused window tells it it lost focus, which it never had.
-/// `focused` is the window's focus before this event. The answer names the
-/// sign for `SILK_IDLEDBG`.
+/// Focus counts only as a change. On X11, coming back to the desktop that has
+/// an unfocused window tells it it lost focus, which it never had. `focused` is
+/// the window's focus before this event. The result names the sign for
+/// `SILK_IDLEDBG`.
 pub(super) fn sign_of_life(
 	event: &WindowEvent,
 	pointer_over: bool,
@@ -475,7 +471,7 @@ impl MinimizedProbe {
 
 impl State {
 	// Whether any of this window is on screen. Both render entry points check
-	// it - a frame built while hidden would bank the whole buffered backlog
+	// it, since a frame built while hidden would bank the whole buffered backlog
 	// into the output ease, and the reveal would then play it back as if it
 	// had just arrived.
 	fn window_hidden(&mut self) -> bool {
@@ -487,10 +483,10 @@ impl State {
 		})
 	}
 
-	/// The freeze edge, owned in one place because both render entry points call
-	/// it: on restore the WM's own redraw arrives before `about_to_wait` runs, so
-	/// whichever gets here first has to be the one that catches up - otherwise that
-	/// frame banks the whole backlog into the ease before anything cuts it.
+	/// The freeze edge, kept in one place because both render entry points call
+	/// it. On restore the WM's own redraw comes before `about_to_wait` runs, so
+	/// whichever gets here first has to catch up. Otherwise that frame banks the
+	/// whole backlog into the ease before anything cuts it.
 	pub(super) fn freeze_sync(&mut self) -> bool {
 		let hidden = self.window_hidden();
 		let frame = freeze_frame(self.was_hidden, hidden);
@@ -502,14 +498,14 @@ impl State {
 		frame == Frame::Skip
 	}
 
-	/// A frozen surface coming back on screen: hidden tabs never build, and a
-	/// minimized/occluded window builds nothing - so the reveal is one dirty
-	/// catch-up frame, hard-cut so the gap closes instantly instead of easing in
-	/// (that ease is the bounce class, and it also reads as output arriving now).
-	/// Every pane is cut, not only the ones flagged dirty: the flag is cleared by
-	/// whichever build got there first, so it answers "is a rebuild due", not
-	/// "did the grid move while nobody was looking". A pane that did sit
-	/// still is snapping a scroll already at rest.
+	/// A frozen surface coming back on screen. Hidden tabs never build, and a
+	/// minimized or occluded window builds nothing, so the reveal is one dirty
+	/// catch-up frame, hard-cut so the gap closes at once instead of easing in.
+	/// That ease is the bounce class, and it also reads as output arriving now.
+	/// Every pane is cut rather than only dirty ones, since the dirty flag is
+	/// cleared by whichever build got there first. It says whether a rebuild is
+	/// due, not whether the grid moved while hidden. Cutting a pane that sat still
+	/// snaps a scroll already at rest.
 	pub(super) fn freeze_catchup(&mut self) {
 		for pane in self.tabs.cur_mut().panes.values_mut() {
 			pane.hard_cut();

@@ -96,7 +96,7 @@ A profile is layered on top of the stored settings rather than stored in them. T
 
 So a setting has 2 layers, which are the file's and the profile's. `settings()` returns the profile's.
 
-The cheaper profiles keep the same share of the scrim radius, which is 5 px against the default 8, so they look like the same halo built with fewer taps. Low keeps the wallpaper, which is decoded once and doesn't cost anything per frame.
+High draws the scrim at 5 px against the default 8, with the cheaper Dilate function, and Low turns it off. Low keeps the wallpaper, which is decoded once and doesn't cost anything per frame.
 
 ### Remote (temporary)
 
@@ -142,7 +142,7 @@ Automatic is the default, and the first pick is measured rather than guessed. Go
 
 The hash is built from the processor and its usable core count, the graphics adapter, and installed memory to the nearest GiB. The profile is written down against that hash. The parts that don't need the adapter are read on a background thread at launch, because nothing before the first frame needs them.
 
-- A different hash is a different machine and gets rated again. The same hash leaves the profile where it was left.
+- A different hash is a different machine and gets rated again. With the same hash, the profile stays as it was.
 
 - "Check for hardware change" switches the check off for a machine already rated, and "Re-test next run" forces one more rating anyway.
 
@@ -154,7 +154,7 @@ The hash is built from the processor and its usable core count, the graphics ada
 
 - Either way, the write is refused if any other setting would load differently at the next launch. That's judged on the text the next launch would leave, after every rewrite it makes before it reads the file. Those rewrites are the wallpaper heading repair, the conversion of a file from before the nested layout, the move of `shell.default` into the shell list, and the renames and refreshes. Adding missing settings is left out, because it only adds lines the program owns and runs whether or not a rating was written.
 
-- Those steps don't read quotes or indents now, so there isn't any known case that makes the check refuse. The check stays for the next step that does, and a test gives it one.
+- Those steps don't read quotes or indents now, so there isn't any known case that makes the check refuse. The check stays for any later step that does read them, and a test feeds it a case it refuses.
 
 - A rating is also refused where the next launch wouldn't keep it. That launch writes a file from before the nested layout afresh and doesn't copy any rating over, so the rating goes in one launch later.
 

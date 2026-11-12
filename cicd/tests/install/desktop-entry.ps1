@@ -7,10 +7,11 @@
 .SYNOPSIS
 	Check the freedesktop launcher install.ps1 writes on Linux.
 .DESCRIPTION
-	Exec= is read twice - the desktop-entry string rules, then the Exec quoting
-	rules - so a path holding a space, a quote, a '$' or a '%' needs escaping,
-	not just quotes. The entry block is lifted out of install.ps1 rather than
-	retyped, so a change to the line it writes is a change to what is checked.
+	Exec= is read twice, first with the desktop-entry string rules and then
+	with the Exec quoting rules. So a path with a space, a quote, a '$' or a
+	'%' needs escaping as well as quotes. The entry block is lifted out of
+	install.ps1 rather than retyped, so a change to the line it writes is a
+	change to what is checked.
 .PARAMETER Installer
 	Path to install.ps1. Default: the one in this repo.
 .NOTES

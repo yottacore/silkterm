@@ -4,7 +4,7 @@
 ##		Software rendering on an X server that can't make shared pixmaps, as
 ##		NVIDIA's can't. Mesa's software Vulkan used them anyway there, and
 ##		winit died of the X errors that followed. The server here is headless
-##		sway's Xwayland behind _noshm_proxy.py, which answers as such a server.
+##		sway's Xwayland behind _noshm_proxy.py, which acts as such a server.
 ##			- Launched with software rendering on, the window draws and
 ##			  Settings opens, with no X error.
 ##			- Launched on the card and then switched to software, the window
@@ -105,7 +105,7 @@ if [[ -z "${realDisplay}" ]]; then echo "  skip: sway's Xwayland did not come up
 extensions="$(DISPLAY="${realDisplay}" xdpyinfo -queryExtensions 2>/dev/null || true)"
 if ! grep -q 'DRI3' <<<"${extensions}"; then echo "  skip: Xwayland has no DRI3"; exit 3; fi
 
-## The first number nothing answers on and nothing has a socket for.
+## The first number that nothing listens on and nothing has a socket for.
 display=""
 for n in {160..199}; do
 	if [[ -e "/tmp/.X11-unix/X${n}" ]] || DISPLAY=":${n}" xdpyinfo >/dev/null 2>&1; then continue; fi
@@ -175,7 +175,7 @@ if fSaid swap 'Cpu]'; then
 else
 	sed -i 's/software_rendering: false/software_rendering: true/' "${work}/swap/config.shcl"
 	SILKTERM_SOCKET="${runDir}/swap/silkterm-ctl-${appPid}.sock" "${bin}" --reload-settings >/dev/null 2>&1 || true
-	## The swap waits for the loop's next pass, and a pointer move is one.
+	## The swap waits for the loop's next pass, and a pointer move starts one.
 	sleep 2
 	fX xdotool mousemove --window "${window}" 40 40 2>/dev/null || true
 	sleep 4

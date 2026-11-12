@@ -64,9 +64,9 @@ fCheck "a build from a dirty tree is refused" fNot
 git checkout -q -- file.txt
 
 ## A commit made in this tree while the builds run. The note used to be written
-## from the tree as it stood by then, so it named the new commit with a clean flag
-## while the binaries held the source from before it - and a run long enough to
-## cross-build can hold one of each.
+## from the tree as it was by then, so it named the new commit as clean while the
+## binaries were built from the commit before it. A run long enough to cross-build
+## can have one of each.
 state="$(fSourceState)"
 echo "second session" > other.txt
 git add other.txt
@@ -76,8 +76,8 @@ fCheck "a commit made while the builds ran is refused" fNot
 fCheck "and it says the source changed" fSays "the source changed"
 
 ## An untracked source file builds here and isn't in the tag, so the tagged source
-## may not even compile: a module whose 'mod' line is committed and whose file is
-## not is the shape that got through.
+## may not even compile. A module whose 'mod' line is committed and whose file
+## isn't is the case that got through.
 fWriteBuiltFrom art
 fCheck "a clean tree is still accepted" fYes
 echo "fn extra() {}" > extra.rs
@@ -134,8 +134,8 @@ fCheck "and plain git and gh when it is not" \
 	test "${got}" = $'git push origin main\ngh release view'
 
 ## Signing. The checksums file says the download wasn't corrupted; the signature
-## is what says it came from here. Driven with a throwaway key: signed the way
-## release.bash signs, and checked by each installer's OWN verify function, so a
+## is what says it came from here. It uses a throwaway key, signs the way
+## release.bash signs, and checks with each installer's own verify function, so a
 ## retyped command can't pass where the installer fails.
 if command -v ssh-keygen >/dev/null 2>&1; then
 	keyDir="${work}/key"

@@ -1,59 +1,53 @@
 #!/usr/bin/env python3
 
 ##	Purpose:
-##		Measure how fast a terminal emulator draws text. Runs on any
-##		terminal, any OS, needs nothing but Python 3.8+ and a tty.
+##		Measure how fast a terminal emulator draws text. It runs on any
+##		terminal and any OS, and needs only Python 3.8+ and a tty.
 ##
-##		There are 5 scenes, each a long stream of one UTF-8 width class, because that's
-##		what separates a fast terminal from a slow one: 1-byte ASCII takes the
-##		renderer's fast path, 2-byte stays in the primary font, 3-byte goes
-##		double-width, and 4-byte emoji fall out of the mono font entirely into
-##		fallback and color-glyph paths. A fifth scene mixes all 4 with color
-##		and attribute changes. ASCII is tested 4 times as often as the wide
-##		classes and 2-byte twice, so the overall score leans the way real output
-##		does.
+##		There are 5 scenes. Four of them are each a long stream of one UTF-8
+##		width class, because that's what separates a fast terminal from a slow
+##		one. 1-byte ASCII takes the renderer's fast path, 2-byte stays in the
+##		primary font, 3-byte goes double-width, and 4-byte emoji fall out of the
+##		mono font into fallback and color-glyph paths. The fifth scene mixes all
+##		4 with color and attribute changes. ASCII is tested 4 times as often as
+##		the wide classes and 2-byte twice, so the overall score leans the way
+##		real output does.
 ##
-##		A couple of things make the numbers mean something:
+##		Timing is synchronized. write() returns when the pty accepted the bytes,
+##		not when the terminal drew them, so timing a bare write measures the
+##		kernel buffer. A terminal that reads greedily and renders later would
+##		look infinitely fast. So every run ends with a Primary DA query and the
+##		clock stops on the reply, which a terminal can only send after parsing
+##		everything queued before it. That's only a parser barrier, though.
+##		Terminals that render on another thread can still have frames in flight
+##		when they reply. Reps run back to back with no gap, so deferred work
+##		falls inside the next rep and comes out in the average, but a single rep
+##		can flatter an asynchronous renderer.
 ##
-##		SYNCHRONIZED TIMING. write() returns when the pty accepted the bytes, not
-##		when the terminal drew them, so timing a bare write measures the kernel
-##		buffer and reports nonsense (a terminal that reads greedily and renders
-##		later looks infinitely fast). Every run therefore ends with a Primary DA
-##		query and the clock stops on the reply, which a terminal can only send
-##		after parsing everything queued before it. That's only a parser
-##		barrier, though. Terminals that render on another thread can still have
-##		frames in flight when they reply. Reps run back to back with no gap, so
-##		deferred work falls inside the next rep and comes out in the average, but
-##		a single rep can flatter an asynchronous renderer.
+##		On Windows the console host replies to the barrier, not the terminal.
+##		ConPTY parses the child's output itself and replies with a DEC-level
+##		"ESC[?61;...", so the query never gets to the terminal at all. A Windows
+##		figure is the console host and the terminal together, coupled through
+##		the pipe between them. That also puts a low ceiling on every Windows row.
+##		A consumer that reads the bytes and throws them away measures the same
+##		figure as a real terminal, to within a percent.
 ##
-##		ON WINDOWS THE BARRIER IS ANSWERED BY THE CONSOLE HOST, NOT THE TERMINAL.
-##		ConPTY parses the child's output itself and replies on its own account:
-##		measured, the reply is a DEC-level "ESC[?61;..." and the query never
-##		gets to the terminal at all, so a terminal that would have answered
-##		"ESC[?6c" never sees one. A Windows figure is therefore the whole chain
-##		- console host plus terminal, coupled through the pipe between them -
-##		and not the terminal on its own. It also puts a low ceiling on every
-##		Windows row: a consumer that reads the bytes and throws them away
-##		measures the same figure as a real terminal, to within a percent.
+##		The score uses cells per second as well as MB/s. Megabytes reward ASCII
+##		for being narrow and flatter emoji for being wide. At one point 2-byte
+##		text measured faster than ASCII in MB/s while being slower per character.
 ##
-##		CELLS PER SECOND, as well as MB/s. Megabytes reward ASCII for being narrow
-##		and flatter emoji for being wide: at one point 2-byte text measured
-##		faster than ASCII in MB/s while being slower per character. Cells per
-##		second says which moved more screen, and the score uses it.
+##		What's measured is throughput under flood, meaning how fast a terminal
+##		reads output and keeps up, rather than a glyph rasterization rate. Only
+##		a screenful of cells is ever visible, so most of the stream is parsed,
+##		stored, and scrolled past without being drawn. That matches the question
+##		this exists to answer: "why does it bog down when something dumps a lot
+##		of text".
 ##
-##		WHAT THIS IS: throughput under flood - how fast a terminal reads output
-##		and keeps up, rather than a glyph rasterization rate. Only a screenful of
-##		cells is ever visible, so most of the stream is parsed, stored, and
-##		scrolled past without being drawn, and terminals that render on another
-##		thread overlap what drawing they do with the next read. That matches the
-##		question "why does it bog down when something dumps a lot of text", which
-##		is what this exists to answer.
-##
-##		The payload is deterministic: identical bytes on every machine and every
-##		run, from a fixed seed, so any 2 terminals are always compared on exactly
-##		the same work. It is generated into memory before the clock starts and
-##		written in 1 MB blocks, so the harness is never the thing being measured
-##		- the report proves that with a write-to-null ceiling.
+##		The payload is the same bytes on every machine and every run, from a
+##		fixed seed, so any 2 terminals are compared on the same work. It's built
+##		in memory before the clock starts and written in 1 MB blocks, and the
+##		report shows a write-to-null ceiling to prove the harness isn't what's
+##		being measured.
 ##
 ##		Results append to a data file under the user's data directory and build a
 ##		history table: every terminal that has ever been benchmarked here, by name
@@ -118,13 +112,12 @@ TABLE_LINE_CELLS = 80
 
 MB = 1024 * 1024
 
-# Chunk handed to each write(). Big enough that per-call overhead vanishes,
-# small enough to stay off the terminal's back with one giant blocking write.
+# Bytes per write(). Big enough that per-call overhead doesn't count, and small
+# enough that one giant blocking write doesn't stall the terminal.
 WRITE_CHUNK = 1 << 20
 
-# How long to wait for the device-attributes reply that ends a run. Generous:
-# a terminal that buffers aggressively can still be parsing long after the
-# last write returned.
+# How long to wait for the device-attributes reply that ends a run. A terminal
+# that buffers a lot can still be parsing long after the last write returned.
 SYNC_TIMEOUT = 180.0
 
 # Palette of pre-rendered characters the payload is assembled from. Large
@@ -214,11 +207,10 @@ class Scene:
 		self.megabytes = megabytes
 
 
-# Sized individually, not by one shared scale, so that a single rep of each
-# costs about the same wall time: emoji run roughly 20 times slower per
-# byte than ASCII, so equal payloads would spend the whole run on emoji. The
-# figures come from measuring xfce4-terminal and put a full run near 2
-# minutes there; --scale moves all of them together.
+# Each scene is sized so one rep takes about the same wall time. Emoji run
+# roughly 20 times slower per byte than ASCII, so equal payloads would spend the
+# whole run on emoji. The sizes put a full run near 2 minutes in xfce4-terminal,
+# and --scale moves all of them together.
 SCENES = [
 	Scene("ascii", "1-byte", 4, 100),
 	Scene("latin", "2-byte", 2, 85),
@@ -310,10 +302,10 @@ MIXED_SGR = [
 ]
 
 
-# Share of each line's cells given to each width class. Roughly the shape of
-# real polyglot output, and fixed shares are what guarantee every class
-# appears. An earlier draft ordered segments by hand and the emoji
-# never fitted, so the mixed scene quietly tested no 4-byte characters at all.
+# Share of each line's cells given to each width class, roughly as in real
+# polyglot output. Fixed shares make sure every class appears. Segments were
+# once ordered by hand and the emoji never fit, so the mixed scene didn't test
+# any 4-byte characters.
 MIXED_BUDGET = [
 	("ascii", 0.50), ("latin", 0.15), ("symbol", 0.08),
 	("cjk", 0.19), ("emoji", 0.08),
@@ -779,9 +771,9 @@ def run_scene(console: Console, scene: Scene, blob: bytes, reps: int, quiet: boo
 	times: list[float] = []
 	synced_all = True
 
-	# One short warmup, not counted. The first sight of a glyph costs far more
-	# than the next thousand - an unwarmed emoji scene measured 0.82 MB/s then
-	# 11.40 on the very next rep, which is a cache being filled, not throughput.
+	# One short warmup, not counted. The first draw of a glyph costs far more than
+	# the next thousand. An unwarmed emoji scene measured 0.82 MB/s, then 11.40 on
+	# the next rep.
 	console.emit("\x1b[0m\x1b[H\x1b[2J\x1b[3J")
 	console.write(blob[:max(1, len(blob) // 5)])
 	console.sync()
@@ -999,8 +991,8 @@ def _key(name: str) -> str:
 	return re.sub(r"[^a-z0-9]", "", name.lower())
 
 
-# A run inside SilkTerm as shipped belongs on the row for SilkTerm as shipped;
-# the stripped-down build is a different row and has to name itself with --label.
+# A run inside the full SilkTerm build goes on its row. The stripped-down build
+# is a different row and has to name itself with --label.
 ROW_ALIASES = {"silkterm": "silktermcandy"}
 
 
@@ -1059,7 +1051,7 @@ def readme_table(existing: str, rows: list[dict[str, Any]]) -> str:
 		col[_head_key(cell)] = i
 
 	# Headers get reworded to keep the table inside a readable width, so the
-	# score column is found by its tail rather than one exact spelling.
+	# score column is found by the end of its header rather than the whole text.
 	name_at, ver_at = col.get("terminal"), col.get("ver", col.get("version"))
 	at = next((i for k, i in col.items() if k.endswith("speed score")), None)
 	if name_at is None or ver_at is None or at is None:

@@ -6,7 +6,7 @@
 //! `silkterm-<key>` in the runtime folder. Each process leaves an empty file
 //! there named by its pid, and a save holds the `lock` file there while it
 //! reads and writes. A window on another file has another key and never hears
-//! about it. See design.md, "Settings across windows".
+//! about it. See design.md, "Windows find each other".
 
 use std::cell::Cell;
 use std::fs::{File, OpenOptions, TryLockError};
@@ -151,8 +151,8 @@ pub enum Told {
 	Missed,
 }
 
-/// Tell every other window on this settings file that the file changed. Only
-/// a folder read when no other window is open.
+/// Tell every other window on this settings file that the file changed. With
+/// no other window open it costs a folder read.
 pub fn tell_others() {
 	let Some(key) = own_key() else { return };
 	let Some(dir) = meeting_dir(key) else { return };
@@ -278,8 +278,8 @@ mod tests {
 		assert_eq!(key_for(&file).len(), 16);
 	}
 
-	// A marker nobody answers for goes; one that answers stays; this process's
-	// own is never told.
+	// A marker with nothing listening behind it is removed, and one that answers
+	// stays. This process's own marker is never told.
 	// Test ID: ddwn8
 	#[test]
 	fn a_save_reaches_the_others_and_clears_the_dead() {

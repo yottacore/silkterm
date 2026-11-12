@@ -48,9 +48,9 @@ Add-Type -Namespace Silk -Name Win -MemberDefinition @'
 public struct RECT { public int Left, Top, Right, Bottom; }
 '@
 
-##	MainWindowHandle answers with whatever the process registered first, which for
-##	this app is a 16x16 helper window - so the real one has to be picked out by
-##	size from everything the process owns.
+##	MainWindowHandle returns whatever window the process registered first, which
+##	for this app is a 16x16 helper window. So the real one has to be picked out by
+##	size from every window the process owns.
 Add-Type -TypeDefinition @'
 using System;
 using System.Collections.Generic;
@@ -155,15 +155,16 @@ function fCheck([string]$What, [bool]$Ok) {
 
 function fNote([string]$Text) { $script:checks.Add("  note $text") }
 
-##	Whether anyone could see or type into this desktop. A locked session
-##	still runs windows and still answers PrintWindow, but screen grabs come back
-##	black and injected input goes to the lock screen - so a scenario that needs
+##	Whether anyone could see or type into this desktop. A locked session still
+##	runs windows, and PrintWindow still works there, but screen grabs come back
+##	black and injected input goes to the lock screen. So a scenario that needs
 ##	either must stop rather than quietly measure nothing.
-##	Windows keeps the answer itself, so ask for it first. Reading it off the lock
-##	screen went wrong: once the display sleeps, a locked session has nothing in
-##	front and LockApp sits suspended, which is also how it lingers after an unlock.
-##	The other two tests stay for a build that doesn't report the state. The
-##	desktop name catches the old style of lock, which hands input to Winlogon.
+##	Windows tracks the lock state itself, so ask it first. Reading the state off
+##	the lock screen went wrong. Once the display sleeps, a locked session has
+##	nothing in front and LockApp is suspended, and LockApp also stays that way
+##	after an unlock.
+##	The other 2 tests stay for a build that doesn't report the state. The
+##	desktop name catches the old style of lock, which sends input to Winlogon.
 function fSessionUsable {
 	if ((fLockState) -eq "locked") { return $false }
 	$fg = [Silk.Win]::GetForegroundWindow()
@@ -196,8 +197,8 @@ function fLockState {
 }
 
 ##	A config to start from. Rating the hardware swallows input for several seconds
-##	after launch, so anything that types has to switch it off or wait it out - and
-##	waiting it out makes the scenario slow and its timing a guess. Only the ladder
+##	after launch, so anything that types has to switch it off or wait it out.
+##	Waiting makes the scenario slow and its timing a guess. Only the ladder
 ##	scenario wants the rating.
 function fFreshConfig([string]$Path, [string[]]$Extra = @()) {
 	Remove-Item $path -ErrorAction SilentlyContinue
@@ -233,7 +234,7 @@ function fWaitWindow([System.Diagnostics.Process]$P, [int]$Seconds = 30) {
 	[IntPtr]::Zero
 }
 
-##	A window the process owns that isn't the one already known - the dialog is a
+##	A window the process owns that isn't the one already known. The dialog is a
 ##	second window in the same process, so it can't be found by pid alone.
 function fWaitOther([System.Diagnostics.Process]$P, [IntPtr]$Known, [int]$Seconds = 20) {
 	for ($i = 0; $i -lt ($seconds * 4); $i++) {
@@ -249,7 +250,7 @@ function fWaitOther([System.Diagnostics.Process]$P, [IntPtr]$Known, [int]$Second
 
 ##	Windows only hands the foreground to a process that owns it already or that
 ##	received the last input. On a session just reconnected to the console nobody
-##	owns either, so a bare SetForegroundWindow is refused - press a harmless key
+##	owns either, so a bare SetForegroundWindow is refused. Press a harmless key
 ##	first, and borrow the current owner's input queue.
 function fFocus([IntPtr]$H) {
 	$escaped = [System.Collections.Generic.List[uint32]]::new()
@@ -348,7 +349,7 @@ function fSend([string]$Text) { [SilkKeys]::Text($text); Start-Sleep -Millisecon
 function fSendChars([string]$Text) { [SilkKeys]::TextUnicode($text); Start-Sleep -Milliseconds 400 }
 
 ##	One chord, spelled "ctrl+shift+t" or "alt+f" or "escape". A single character is
-##	looked up through the keyboard layout so a comma is a comma wherever it lives.
+##	looked up through the keyboard layout so a comma is a comma wherever its key is.
 function fPress([string]$Combo) {
 	$parts = $combo.ToLower() -split '\+'
 	$key = $parts[-1]
@@ -368,8 +369,8 @@ function fRect([IntPtr]$H) {
 	@{ x = $r.Left; y = $r.Top; w = $r.Right - $r.Left; h = $r.Bottom - $r.Top }
 }
 
-##	A screen grab is the faithful picture - it is what the compositor put up, and
-##	it is the only one that sees a window drawn without a redirection bitmap (the
+##	A screen grab is the true picture, since it's what the compositor put up, and
+##	it's the only one that sees a window drawn without a redirection bitmap (the
 ##	transparent path). PrintWindow is the fallback for a session nobody can see.
 function fShot([IntPtr]$H, [string]$Name) {
 	$r = fRect $h
@@ -395,7 +396,7 @@ function fShot([IntPtr]$H, [string]$Name) {
 
 ##	Fraction of sampled pixels with any light. A window that came up but never
 ##	drew reads near zero, which is the difference between a real capture and the
-##	black rectangle a locked session hands back.
+##	black rectangle a locked session returns.
 function fInk([System.Drawing.Bitmap]$Bmp, [int]$Step = 4) {
 	if (-not $bmp) { return 0.0 }
 	$lit = 0; $seen = 0
@@ -427,7 +428,7 @@ function fDiff([System.Drawing.Bitmap]$A, [System.Drawing.Bitmap]$B, [int]$Step 
 
 ##	One value out of a written config, and whether the file says it. A
 ##	setting left at its default stays commented in the template, so a
-##	scenario that can't tell those apart reads an empty answer and calls it a bug.
+##	scenario that can't tell those apart reads an empty value and calls it a bug.
 function fSetting([string]$Path, [string]$Dotted) {
 	if (-not (Test-Path $path)) { return @{ value = $null; source = "no file" } }
 	$block, $leaf = $dotted -split '\.', 2

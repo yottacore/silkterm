@@ -133,7 +133,7 @@ done
 fShot "${work}/before.png"
 fX xdotool windowminimize "${window}" || true
 fCheck "let go once minimized" fSaid "device released" 30
-## the file now answers nothing, so the wake's own prepare never finishes
+## nobody writes the pipe, so the wake's own prepare never finishes
 mv "${picture}" "${work}/picture.kept.png"
 mkfifo "${picture}"
 fX xdotool windowactivate "${window}" 2>/dev/null || fX xdotool windowmap "${window}" || true

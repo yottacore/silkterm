@@ -50,15 +50,11 @@ impl App {
 				if let Some(d) = &mut self.dialog {
 					d.set_focus(true);
 				}
-				// keep the terminal directly beneath us when we're activated, so
-				// nothing stays wedged between the 2 (Compiz doesn't do this). Do
-				// it now and arm delayed retries - the WM's own raise/animation of
-				// the dialog can keep re-stacking for a while and re-bury the
-				// terminal. We don't disarm on focus-out: the restack only positions
-				// the terminal relative to us (never raises us), so retrying after
-				// the user switched away can't pop the pair over another window -
-				// and Compiz's animation briefly drops+restores focus, which would
-				// otherwise kill the retries mid-flight.
+				// keep the terminal right under the dialog when it's activated, so nothing gets
+				// between the 2 (Compiz doesn't do this). The WM's own raise and animation can
+				// restack it for a while, so retries are armed too. They aren't disarmed on
+				// focus-out, since the restack never raises the dialog, and Compiz's animation
+				// drops and restores focus for a moment.
 				if let Some(d) = &self.dialog {
 					d.raise_parent();
 				}
@@ -216,12 +212,11 @@ impl App {
 		}
 	}
 
-	/// Windows: an owned popup gets no automatic placement (it appears at the
-	/// screen origin). macOS centers a new window on the screen at its first
-	/// size, and growing it after keeps the bottom edge, so a tall one is pushed
-	/// down from under the menu bar and off the bottom. Both center the dialog
-	/// over the terminal and keep it on the work area. Linux WMs place
-	/// transients themselves.
+	/// Windows gives an owned popup no placement, so it opens at the screen origin.
+	/// macOS centers a new window at its first size and keeps the bottom edge as it
+	/// grows, so a tall one ends up off the bottom. On both, the dialog is centered
+	/// over the terminal and kept on the work area. Linux WMs place transients
+	/// themselves.
 	#[cfg(any(target_os = "windows", target_os = "macos"))]
 	pub(super) fn center_dialog(&self) {
 		let (Some(state), Some(dialog)) = (self.state.as_ref(), self.dialog.as_ref()) else {
@@ -258,9 +253,9 @@ impl App {
 	#[allow(clippy::unused_self)]
 	pub(super) fn center_dialog(&self) {}
 
-	/// Windows: the dialog is created hidden (see `dialog::make`), so after centering it
-	/// draw one frame at the final position and then show it - no origin flash, no jump.
-	/// Elsewhere the dialog is already mapped by `new_about` / `new_settings`.
+	/// Windows: the dialog is created hidden (see `dialog::make`), so after centering,
+	/// one frame is drawn at the final position before it's shown. That way it doesn't
+	/// flash at the origin or jump. Elsewhere `new_about` and `new_settings` map it.
 	#[cfg(target_os = "windows")]
 	pub(super) fn reveal_dialog(&mut self) {
 		if let Some(d) = self.dialog.as_mut() {
@@ -275,7 +270,7 @@ impl App {
 
 	// Drop the dialog window, remembering a Settings view on the way out so a
 	// reopen within SETTINGS_RESUME picks up where it left off. Every close goes
-	// through here - Cancel, OK, Esc, and the window's own close button alike.
+	// through here: Cancel, OK, Esc, and the window's own close button.
 	fn close_dialog(&mut self) {
 		if let Some(view) = self
 			.dialog
@@ -447,9 +442,9 @@ impl App {
 				self.apply_dialog_settings();
 			}
 			DA::ApplyAndClose => {
-				// Only close on OK if the save worked or can't; if the file looked
-				// open elsewhere the change applied live but wasn't written, so we
-				// keep the dialog up to try again (the FYI went to stderr).
+				// Only close on OK if the save worked or never can. If the file looked open
+				// elsewhere, the change applied live but wasn't written, so the dialog stays up
+				// to try again. The FYI went to stderr.
 				if self.apply_dialog_settings() {
 					self.close_dialog();
 				}
@@ -457,12 +452,10 @@ impl App {
 		}
 	}
 
-	// Pull the edited Settings from the dialog window and live-apply them to the
-	// main window (config + persist + rebuild). The dialog has its own surface,
-	// so it's unaffected.
-	// Returns true when the change was written to disk, or when it never can be
-	// until the file is fixed, which a notice says. False means the file looked
-	// open elsewhere: applied live but not saved, and OK leaves the dialog open.
+	// Pull the edited Settings from the dialog window and apply them live to the
+	// main window. Returns true when the change was written, or when it can't be
+	// until the file is fixed, which a notice says. False means the file looked open
+	// elsewhere, so the change is live but not saved, and OK leaves the dialog open.
 	fn apply_dialog_settings(&mut self) -> bool {
 		let mut wrote = true;
 		let mut refused = false;
@@ -480,9 +473,9 @@ impl App {
 					self.notice_owed = Some(refusal);
 				}
 			}
-			// Reverted-to-default keys: after persist wrote the diffs, comment
-			// them back out so the file returns to the template's default line.
-			// Skip when the write was deferred (revert_keys would no-op busy).
+			// Keys reverted to default get commented back out after persist wrote the diffs,
+			// so the file returns to the template's default line. Skipped when the write was
+			// deferred.
 			if wrote {
 				if let Some(reverted) = self
 					.dialog
@@ -492,11 +485,11 @@ impl App {
 					config::revert_keys(&reverted);
 				}
 			}
-			// The applied values are the new baseline, so a later Apply diffs against
-			// the live state (without this, re-selecting the open-time value - e.g.
-			// Bg fit back to Stretch - reads as "no change" and isn't re-applied).
-			// When another window saved while these changes were in hand, the file
-			// now has both, and both the window and the dialog take it from there.
+			// The applied values are the new baseline, so a later Apply diffs against the
+			// live state. Without this, picking the open-time value again, such as Bg fit
+			// back to Stretch, reads as no change. When another window saved while these
+			// changes were open, the file has both, and the window and the dialog both take
+			// it from there.
 			if let Some(d) = self.dialog.as_mut() {
 				let behind = wrote && d.take_behind();
 				d.commit_baseline();

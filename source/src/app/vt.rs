@@ -11,10 +11,10 @@ use winit::event_loop::EventLoopProxy;
 // After a return to this console, how long until the second heal (VtHeal).
 const VT_SETTLE: Duration = Duration::from_secs(3);
 
-/// VT-switch field diagnostics: `touch ~/silk_vramdbg.on` (no relaunch needed)
-/// makes the sentinel probes append their results to `~/silk_vramdbg.txt`, so a
-/// desktop repro can show whether loss detection fired. The marker is re-checked
-/// per call - probes tick every 2s, so the stat costs nothing.
+/// While `~/silk_vramdbg.on` exists, the probes append their results to
+/// `~/silk_vramdbg.txt`, to show whether a console switch was caught. The
+/// marker is checked on every call so it works without a relaunch. Probes run
+/// every 2s, so that's cheap.
 pub(super) fn vramdbg(msg: &str) {
 	use std::io::Write;
 	let Some(home) = std::env::var_os("HOME") else {
@@ -65,16 +65,13 @@ impl VtHeal {
 	}
 }
 
-/// Watch the active virtual console (/sys/class/tty/tty0/active). A VT switch
-/// away and back breaks sampling of long-lived textures in ways the readback
-/// probes can't see (field logs: every witness read back intact across a switch
-/// that blacked the window - the driver restores readback contents while the
-/// sampled copies stay garbage). So detect the switch itself: the value at spawn
-/// is the console this display is on; when the file returns to it after being
-/// elsewhere, send `VtSwitched` so the sampled textures are rebuilt. Only returns
-/// are signaled - a rebuild done while parked on another console could itself be
-/// purged on the way back. `SILK_VTFILE` overrides the watched path so a headless
-/// test can drive the mechanism (Xvfb has no VTs).
+/// Watch the active virtual console (/sys/class/tty/tty0/active), and send
+/// `VtSwitched` on a return to the one this display is on. A switch away and
+/// back spoils sampled textures while readback still comes back intact, so the
+/// probes can't catch it. Only returns are sent, since a rebuild done on
+/// another console could be purged on the way back. `SILK_VTFILE` replaces the
+/// path for tests, as Xvfb has no consoles. More in the releasing resources
+/// design doc.
 #[cfg(target_os = "linux")]
 pub(super) fn spawn_vt_watch(proxy: EventLoopProxy<UserEvent>) -> bool {
 	let path = std::env::var_os("SILK_VTFILE").map_or_else(
@@ -82,7 +79,7 @@ pub(super) fn spawn_vt_watch(proxy: EventLoopProxy<UserEvent>) -> bool {
 		std::path::PathBuf::from,
 	);
 	let read = |p: &std::path::Path| std::fs::read_to_string(p).ok().map(|s| s.trim().to_owned());
-	// unreadable (container, odd kernel) -> no watcher; probes remain as fallback
+	// unreadable in a container or on an odd kernel, so the probes are all there is
 	let Some(home_vt) = read(&path) else {
 		return false;
 	};

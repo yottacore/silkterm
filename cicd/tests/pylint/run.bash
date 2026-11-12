@@ -5,7 +5,7 @@
 ##		a clean script, and leave alone what ruff.toml leaves out. The same for
 ##		its tab check, which lets spaces line up after the tabs and passes the
 ##		one script indented with spaces. Each class of the style guide's Python
-##		rules fails, and so does a type error only mypy sees, while two scripts
+##		rules fails, and so does a type error only mypy sees, while 2 scripts
 ##		with one file name still pass together. Run on scripts written here,
 ##		never tracked, so the pipeline's own lint of the repository never sees
 ##		them.
@@ -50,7 +50,7 @@ printf 'def main() -> None:\n\ttry:\n\t\tprint(1)\n\texcept Exception:\n\t\tpass
 printf 'def main() -> None:\n\ttry:\n\t\tprint(1)\n\texcept Exception:  # noqa: BLE001\n\t\tpass\n' >"${work}/blindok.py"
 ## Clean to ruff, wrong to mypy.
 printf 'def main() -> int:\n\treturn "one"\n' >"${work}/typeerror.py"
-## mypy names a script by its file, so two run.py files in one run would clash.
+## mypy names a script by its file, so 2 run.py files in one run would clash.
 mkdir -p "${work}/one" "${work}/two"
 cp "${work}/clean.py" "${work}/one/run.py"
 cp "${work}/clean.py" "${work}/two/run.py"

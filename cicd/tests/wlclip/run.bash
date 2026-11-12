@@ -111,8 +111,9 @@ fClip(){ "${wl[@]}" python3 -I "${meDir}/_wlclip.py" "${@}"; }
 probe=0; fClip get clipboard >/dev/null 2>"${work}/clip.err" || probe=$?
 if ((probe != 0 && probe != 4)); then echo "  skip: no data control: $(cat "${work}/clip.err")"; exit 3; fi
 
-## The seat has no devices. A keyboard held for the whole run, since a
-## selection belongs to the client with keyboard focus, and a pointer.
+## The seat has no devices, so a virtual keyboard and pointer are added. The
+## keyboard stays for the whole run, since a selection belongs to the client
+## with keyboard focus.
 "${wl[@]}" wtype -s 600000 &
 kbdPid=$!
 mkfifo "${work}/ptr.in"
@@ -220,8 +221,8 @@ fPass(){  ## fPass <folder> <name> [DISPLAY]
 	[[ -n "${display}" ]] && appEnv+=(DISPLAY="${display}")
 	: >"${work}/x.calls"
 	## Mesa's device select layer asks an X server which card is the default
-	## when Wayland can't say. Its own call, not the program's, and there is
-	## one card here.
+	## when Wayland can't say. The call is the layer's own rather than the
+	## program's, and there's only one card here.
 	"${appEnv[@]}" SILK_KEYDBG=1 NODEVICE_SELECT=1 LIBGL_ALWAYS_SOFTWARE=1 VK_ICD_FILENAMES="${lvp}" \
 		VK_LAYER_MESSAGE_ID_FILTER=VUID-vkCmdCopyBufferToImage-pRegions-00173 \
 		HOME="${work}/home" XDG_CONFIG_HOME="${cfgHome}" XDG_DATA_HOME="${work}/home/.local/share" \
@@ -260,7 +261,7 @@ fPass(){  ## fPass <folder> <name> [DISPLAY]
 	fCheck "${name}: a double-click puts the word in the primary" fQrun
 
 	## A second window takes the keyboard and leaves this one on screen. An
-	## empty workspace wouldn't do: a window out of view reads no output.
+	## empty workspace wouldn't work, because a window out of view reads no output.
 	"${wl[@]}" HOME="${work}/home" XDG_CONFIG_HOME="${cfgHome}" foot sleep 600 >/dev/null 2>&1 &
 	footPid=$!
 	fCheck "${name}: another window takes the keyboard" fFocusLeft

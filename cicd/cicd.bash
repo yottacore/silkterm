@@ -24,13 +24,13 @@
 ##	   0. remote sync (fetch; fast-forward if safely behind; abort if diverged)
 ##	   1. format (cargo fmt)
 ##	   2. debug build (this is what the tests + profiler run against)
-##	   3. regression tests + lints + fuzz soak (clippy for Linux, Windows, and macOS
-##	      and the advisory scan gating, the rest of cargo-deny not; the tests again
-##	      under ASan and LSan, in the container image; the leak checks, which
-##	      are the heap-growth test under dhat and the soak test under
-##	      heaptrack, in the image; under --long, the tests again
-##	      under TSan, in the image too; under --leakcheck or --long, the tests
-##	      again under Miri, in the image, for hours; scroll harness)
+##	   3. regression tests, lints, and the fuzz soak. Clippy for Linux, Windows,
+##	      and macOS and the advisory scan fail the run, and the rest of cargo-deny
+##	      only warns. The tests run again under ASan and LSan in the container
+##	      image, then the leak checks there: the heap-growth test under dhat and
+##	      the soak test under heaptrack. --long adds the tests under TSan, and
+##	      --leakcheck or --long adds them under Miri, which takes hours. Then the
+##	      scroll harness.
 ##	   4. profiler (flamegraph SVG; non-gating artifact - see failure policy), on
 ##	      the card through a headless sway, and always on this box
 ##	   5. release build (native + cross targets; optimized, for packaging + dogfood),
@@ -291,10 +291,10 @@ if ((noWindows)) && declare -p CROSS_TARGETS &>/dev/null; then
 fi
 declare -p PACKAGE_ENABLE &>/dev/null || PACKAGE_ENABLE=0   ## tolerate a config predating the packages stage
 
-## Publish commit message: -m wins, then config, then what is typed at the
+## Publish commit message: -m wins, then config, then what's typed at the
 ## prompt below. A blank answer, or --yes, takes the automatic one. The publisher
-## runs quiet and never opens an editor, so the plan and the prompt name the
-## message a blank answer commits. They used to promise an editor.
+## runs quiet and never opens an editor, so the plan and the prompt show the
+## message a blank answer commits.
 autoMsg="${APP_NAME} CI/CD ${stamp}"
 ## fPublishMessage <cli> <config> <answer>
 fPublishMessage(){
@@ -427,9 +427,9 @@ fBuildTag(){
 	esac
 	printf 'gnu%s%s%s' "${here}" "${target}" "${arch}"
 }
-## First writable dir out of a '|'-separated candidate list, or nothing. Reports
-## only - the preflight calls it too, and a plan that is never confirmed must not
-## have left directories behind.
+## First writable dir out of a '|'-separated candidate list, or nothing. It makes
+## no dirs, since the preflight calls it too, and a plan that's never confirmed
+## mustn't leave any behind.
 fDogfoodDest(){
 	local dir
 	local -a dirs=()
@@ -563,12 +563,11 @@ fHostDescribe(){
 	esac
 }
 ## Run a build command, retrying it a few times before calling it a failure. Every
-## profile that reaches here uses fat LTO, and rustc has repeatedly died part way
-## through one inside LLVM - a different pass and a different signal each time
-## (SIGILL, SIGSEGV, SIGBUS) - then compiled the identical source clean on the next
-## try. It has crashed twice in a row, so one retry isn't enough. Stage 2 has
-## already compiled everything bar the feature-gated profiler hooks, so a genuine
-## error surfaces in seconds here and the extra tries cost nothing on that path.
+## profile built here uses fat LTO, and rustc has died part way through one inside
+## LLVM several times, at a different pass with a different signal each time, then
+## built the same source clean on the next try. It has crashed twice in a row, so
+## one retry isn't enough. Stage 2 has already compiled all but the profiler hooks,
+## so a real error shows up in seconds and the extra tries cost little.
 fRetryBuild(){
 	local -r what="${1}"; shift
 	local -i tries="${BUILD_ATTEMPTS:-5}"
@@ -692,7 +691,7 @@ fRunDir_End(){
 }
 ## fStaleRuns: run folders over 2 days old whose run.pid process is gone, which
 ## a killed run or a failed lone test left. Every run outside the container
-## takes them, the backlog quick run too, since it's the one rounds run most.
+## removes them, the backlog quick run too, since rounds run that one most.
 fStaleRuns(){
 	[[ -z "${SILK_CICD_IN_CONTAINER:-}" ]] || return 0
 	fSweep_StaleRuns "${runBase}" "${CLEANUP_STALE_DAYS:-2}" "stale run folders"
@@ -720,17 +719,17 @@ fContainerBuild(){
 	mapfile -t labels < <(fLabels)
 	"${docker}" build -t "${image}" "${labels[@]}" "${args[@]}" --build-arg "JOBS=${CICD_MAX_JOBS}" "${here}/container" || fDie "image build failed"
 }
-## fContainerVolume <name>: made with the labels when it isn't there, since one
-## docker run makes on the fly has none.
+## fContainerVolume <name>: makes the volume with the labels when it isn't there,
+## since one that docker run makes on the fly has no labels.
 fContainerVolume(){
 	local -a labels=()
 	"${docker}" volume inspect "${1}" >/dev/null 2>&1 && return 0
 	mapfile -t labels < <(fLabels)
 	"${docker}" volume create "${labels[@]}" "${1}" >/dev/null || echo "WARNING: couldn't make the volume ${1}" >&2
 }
-## A container of ours that stopped without going, as one does when the docker
-## daemon restarts under --rm. A running one is left, since it can be another
-## run's.
+## Removes our stopped containers. One is left behind that way when the docker
+## daemon restarts under --rm. A running one is left alone, since it can be
+## another run's.
 fContainerStopped(){
 	local id
 	local -i gone=0
@@ -740,9 +739,9 @@ fContainerStopped(){
 	done < <("${docker}" ps -aq --filter "label=${projectLabel}" --filter status=exited --filter status=created --filter status=dead 2>/dev/null || true)
 	fSweep_Count "stopped containers" "${gone}"
 }
-## fContainerTags <image>: of the pipeline's images, the one this run used and the
-## newest before it stay, and older ones go. Plain image rm, so one a container
-## still uses stays, and goes on a later run.
+## fContainerTags <image>: keeps the image this run used and the newest one before
+## it, and removes older ones. A plain image rm leaves one that a container still
+## uses, for a later run to remove.
 fContainerTags(){
 	local -r image="${1}"
 	local line old
@@ -755,9 +754,9 @@ fContainerTags(){
 	done < <("${docker}" image ls "${image%%:*}" --filter "label=${projectLabel}" --format '{{.CreatedAt}}|{{.Repository}}:{{.Tag}}' 2>/dev/null | sort -r || true)
 	((! gone)) || echo "count|older container images|${gone}"
 }
-## fContainerVolumes: a cache volume of ours over the cap goes whole, and so does
-## the Zig one once another Zig version filled it. docker refuses a volume that a
-## container still uses, such as another run's, so that one stays.
+## fContainerVolumes: removes a cache volume of ours that's over the cap, whole,
+## and the Zig one once another Zig version filled it. docker refuses a volume
+## that a container still uses, such as another run's, so that one stays.
 fContainerVolumes(){
 	local name size stamped zigNow why seen=""
 	local -r capBytes=$(( ${CLEANUP_CACHE_CAP_MB:-2048} * 1048576 )) tidy="${EXE_NAME}-${runName}-tidy"
@@ -786,13 +785,13 @@ fContainerVolumes(){
 		else fEcho_Clean "cleanup: left the volume ${name} (${why}), still in use"; fi
 	done <<<"${seen}"
 }
-## fContainerEnd <status>: at the end of a run, failed or stopped too. The run's
-## containers go by its label, unless --keep-temp. Then untagged images of ours,
-## older tags once this run has passed, and the cache volume rule. The build cache
-## is every project's, so it's left to the daemon's own GC. All of it is
-## done before a word is printed, since Ctrl+C takes the log tee down too, and a
-## write to it then ends the run on the spot. What went, and what docker's sizes
-## say it freed, go to the run's one cleanup line.
+## fContainerEnd <status>: runs at the end of a run, failed or stopped too. It
+## removes the run's containers by label, unless --keep-temp, then our untagged
+## images, older tags once this run has passed, and cache volumes over the cap.
+## The build cache is every project's, so the daemon's own GC trims it. Nothing
+## is printed until the work is done, since Ctrl+C takes the log tee down too,
+## and a write to it then ends the run. What was removed, and what it freed, goes
+## on the run's one cleanup line.
 fContainerEnd(){
 	local said="" line what n
 	((dockerUsed)) && [[ -n "${runName}" && -z "${SILK_CICD_IN_CONTAINER:-}" ]] || return 0
@@ -834,21 +833,21 @@ fContainerEnd_Work(){
 ## fStepMem <step>: the step's own default memory cap, when it has one, which
 ## CICD_MEM_CAP still overrides. CodeQL peaked at 32.1 GB in the 2 weeks to
 ## 2026-11-09, over the general cap, so it gets 48g, and so does an engine run
-## that does it inside.
+## that runs CodeQL inside.
 fStepMem(){
 	if [[ "${1}" == codeql ]]; then echo 48g
 	elif [[ "${1}" == engine && -n "${CODEQL_SUITE:-}" ]] && ((${leakcheck:-0} && ${codeql:-0})); then echo 48g; fi
 	return 0
 }
-## fContainerRun <image> <script> <options...>: a pipeline script in the container,
-## the engine or the ASan run, against this tree. Its /tmp is a new folder in the
-## run's folder, so the X sockets inside never meet this box's, and no lock or
-## socket a killed run left is there for the next. It goes with the run's folder,
-## or as soon as the step passes. The container starts as root only long enough to
-## give this uid a passwd entry, since the terminal looks its user up (a bare
-## --user has none), and the X socket folder, then drops to it. The run gets a
-## session bus of its own, which xfwm4 needs, and this box's time zone, so a name
-## stamped inside sorts with the ones made here.
+## fContainerRun <image> <script> <options...>: runs a pipeline script in the
+## container, such as the engine or the ASan run, against this tree. Its /tmp is a
+## new folder in the run's folder, so the X sockets inside never meet this box's,
+## and a killed run leaves no lock or socket for the next. That folder is removed
+## with the run's folder, or as soon as the step passes. The container starts as
+## root only to give this uid a passwd entry, since the terminal looks its user up
+## and a bare --user has none, and to make the X socket folder. Then it drops to
+## the uid. The run gets its own session bus, which xfwm4 needs, and this box's
+## time zone, so a name stamped inside sorts with the ones made here.
 fContainerRun(){
 	local -r image="${1}" script="${2}"; shift 2
 	local gitCommon privTests zone="${TZ:-}" runTmp="" runToken="" why="" step="${script##*/}"
@@ -874,9 +873,9 @@ fContainerRun(){
 	gitCommon="$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null || true)"
 	[[ -z "${gitCommon}" || "${gitCommon}" == "${root}/"* ]] || mounts+=(-v "${gitCommon}:${gitCommon}")
 	## The private repo, read only, so the test ID check inside sees its tests as
-	## it does here, and they run. They read its runner, helpers and build
-	## scripts, so the whole repo goes in. The runner itself isn't run inside,
-	## as stage 6 is this side's.
+	## it does here, and they run. Those tests read its runner, helpers, and build
+	## scripts, so the whole repo is mounted. The runner itself isn't run inside,
+	## since stage 6 runs it out here.
 	[[ -z "${PRIVATE_TESTS}" ]] || privArgs=(-v "${PRIVATE_TESTS%/cicd/*}:${PRIVATE_TESTS%/cicd/*}:ro" -e "SILK_PRIVATE_RUNNER=${PRIVATE_TESTS%/cicd/*}/cicd/run.bash")
 	# shellcheck disable=2154  ## memCapArgs is set by memcap.bash's fMemCap_DockerArgs.
 	"${docker}" run "${rmArg[@]}" --init --shm-size 1g --cpus "${CICD_MAX_JOBS}" --cpu-shares 256 "${memCapArgs[@]}" --name "${EXE_NAME}-${runName}-${step}" "${labels[@]}" "${mounts[@]}" "${privArgs[@]}" -w "${root}" \
@@ -970,8 +969,8 @@ if ((container)); then
 fi
 
 ## One folder for every file the tests write, made before the gate, or once a full
-## run is past its prompt, so every test shares it. Not before the prompt: a run
-## stopped there would make one for nothing.
+## run is past its prompt, so every test shares it. It isn't made before the
+## prompt, since a run stopped there would make one for nothing.
 # shellcheck source=cicd/tests/_testdir.bash
 source "${root}/cicd/tests/_testdir.bash"
 
@@ -1155,7 +1154,7 @@ fScriptTests(){
 	## wtype, python3, or software Vulkan.
 	fRunTest_MaySkip cicd/tests/dlgwl/run.bash "Settings tied to its window on Wayland"
 	## On native Wayland a window takes each output's own size once moved or
-	## dropped there, a sliver left on another output too. Exit 3 is a skip: no
+	## dropped there, even with a sliver left on another output. Exit 3 is a skip: no
 	## binary, sway, python3, or software Vulkan.
 	((quick)) || fRunTest_MaySkip cicd/tests/monwl/run.bash "window size per Wayland output"
 	## On native Wayland the clipboard and the primary are Wayland's, both ways,
@@ -1317,9 +1316,9 @@ fScriptTests(){
 }
 
 ## fRunEnd <status>: the EXIT trap's cleanup. --keep-temp keeps the run's
-## folder, pass or fail, and says where it is. What it says waits until all of
-## it is done, since Ctrl+C takes the log tee down, and a write to it then ends
-## the run before the run's folder goes.
+## folder, pass or fail, and says where it is. Nothing is printed until the
+## cleanup is done, since Ctrl+C takes the log tee down, and a write to it then
+## ends the run before the run's folder is removed.
 fRunEnd(){
 	local said=""
 	((! runEnded)) || return 0
@@ -1385,8 +1384,9 @@ fPlanSteps(){
 	why=""; ((${#GIT_PUBLISH[@]})) || why="$(fStepOff_Why --no-publish)"; fStepIf "Backup + publish" "${why}"
 	fStepNumbers
 }
-## What the run outside handed in, checked, since it ends up in arithmetic.
-## Kept from the tests this run starts, which number steps of their own.
+## The step numbers the run outside handed in, checked, since they end up in
+## arithmetic. export -n keeps them from the tests this run starts, which number
+## steps of their own.
 export -n SILK_CICD_STEP_AT SILK_CICD_STEP_TOTAL
 stepBase=0
 fStepNumbers(){
@@ -1697,9 +1697,8 @@ fi
 if ((${#DOGFOOD_DESTS[@]} && ! noRelease)); then fDogfoodPreflight; fi
 
 if ((! assumeYes)); then
-	## Capture the commit message up front so the run can finish unattended. This
-	## is the natural place to bail on the common (publish) path - Ctrl+C here
-	## aborts; there is no separate "Proceed? [y/N]" (removed to cut friction).
+	## Ask for the commit message up front so the run can finish unattended.
+	## Ctrl+C here stops the run, and there's no separate "Proceed? [y/N]" prompt.
 	if ((${#GIT_PUBLISH[@]})) && [[ -z "${publishMsg}" ]]; then
 		read -r -p "Publish commit message (blank = \"${autoMsg}\"; Ctrl+C aborts): " m
 		fEcho_ResetBlankCounter
@@ -1711,19 +1710,17 @@ fRunDir_Make || fDie "couldn't make the run's folder"
 trap 'rc=$?; fRunEnd "${rc}"' EXIT
 skipLog="${runDir}/skips.txt"; : >"${skipLog}"
 
-## Tee the rest of the run (all stages) to a gitignored log so warnings from any
-## stage can be reviewed after the fact. Rotate the prior (closed) logs first.
-## The awk pass normalizes section spacing on the way through: exactly one blank
-## line before every letterbox rule. The blank-collapse counter can't do this -
-## raw tool output (cargo, git, rar) never touches it, so a section's leading
-## blank gets swallowed or doubled depending on what a tool printed last. Skip
-## the insert on the stream's first line: the preflight already ends with a
-## blank on the tty, which this pipe never sees.
+## Tee the rest of the run to a gitignored log, after rotating the old ones, so
+## warnings from any stage can be read later. The awk pass puts exactly one blank
+## line before every letterbox rule. Raw tool output such as cargo's never goes
+## through the blank-collapse counter, so a section's leading blank came out
+## swallowed or doubled. The stream's first line gets no blank, since the
+## preflight already ended with one on the tty.
 ##
-## The log is written under a .part name and renamed on the way out, once tee has
-## finished, so the startup gate never marks a log as seen while it is still
-## being written. A failed run's log is renamed too. The wait is bounded, since a
-## background process a stage left behind can hold the pipe open.
+## The log is written under a .part name and renamed once tee has finished, on a
+## failed run too, so the startup gate never marks a half-written log as seen.
+## The wait is bounded, since a background process a stage left behind can hold
+## the pipe open.
 ##
 ## Inside the container the run outside already has all of it in its own log.
 fFinishLog(){
@@ -1768,11 +1765,11 @@ if [[ -z "${SILK_CICD_IN_CONTAINER:-}" ]] && ((! noCleanup)); then
 	fi
 fi
 
-## Stage 0: remote sync. Make sure the local branch can be safely refreshed from
-## its upstream BEFORE spending the build: what stage 8 pushes should be what got
-## built and tested here, not an untested post-build merge. Behind-only is safe
-## (fast-forward, stash-wrapped for a dirty tree); diverged aborts now rather
-## than at publish. Offline just warns - a local build shouldn't need the net.
+## Stage 0: remote sync. Check that the local branch can be refreshed from its
+## upstream before the build, so what stage 8 pushes is what was built and tested
+## here, rather than an untested merge. Behind only is safe, as a fast-forward
+## with a stash around it for a dirty tree. Diverged aborts now rather than at
+## publish. Offline only warns, since a local build shouldn't need the net.
 fJobs
 if ! fStepOpen "Remote sync"; then
 	:
@@ -1814,11 +1811,11 @@ else
 fi
 fStepClose
 
-## The source everything from here on reads. Taken before the first build, because
-## the note has to name what the binaries were built from: a commit made in this
-## tree during a build used to leave the note naming the new commit, clean, with the
-## native binary built from the source before it and the cross binaries from the
-## source after. Stage 0 is past, so its fast-forward isn't mistaken for that.
+## The source everything from here on reads, taken before the first build so the
+## note names what the binaries were built from. A commit made in this tree during
+## a build once left the note naming the new commit, with the native binary built
+## from the source before it and the cross binaries from the source after. Stage 0
+## is past, so its fast-forward isn't mistaken for that.
 builtFromState="$(fSourceState)"
 
 ## Pin the build number for the whole run. build.rs would otherwise read the clock
@@ -1850,11 +1847,10 @@ fMarkRelease(){
 }
 fMarkRelease
 
-## The fuzz corpus is read-only data: every file in it is replayed on each run
-## and chewed on by the mutator. A run that writes one through changes what
-## later runs replay, and nothing else would say so - a seed just quietly stops
-## being the case it was saved as. Hashed before and after, so a fixture edited
-## by hand before the run isn't mistaken for one the run made.
+## The fuzz corpus is read-only data. Every file in it is replayed on each run
+## and fed to the mutator, so a run that writes one changes what later runs
+## replay, and nothing else would report it. It's hashed before and after, so a
+## fixture edited by hand before the run isn't mistaken for one the run made.
 fCorpusHashes(){ find "${root}/cicd/tests/fuzz-corpus" -type f -exec sha256sum {} + 2>/dev/null | sort; }
 
 ## A headless sway drawing on the card's render node, with its own Xwayland, so an
@@ -2512,8 +2508,8 @@ if ((! container && ! noCleanup)) && command -v zig >/dev/null 2>&1; then
 	while IFS= read -r -d '' zigDir; do fSweep_ZigCache "${zigDir}" "${zigNow}" "${CLEANUP_CACHE_CAP_MB:-2048}" || true
 	done < <(find "${root}" -xdev \( -name .git -o -name target -o -path "${root}/forks" -o -path "${root}/cicd/artifacts" \) -prune -o -type d \( -name .zig-cache -o -name zig-cache \) -print0 -prune 2>/dev/null)
 fi
-## The skip list is in the run's folder, which the end removes, and still
-## comes last.
+## The skip list is in the run's folder, so it's read before fRunEnd removes
+## that folder, then printed last.
 fEcho_Clean
 skipsSaid="$(fSkipSummary)"
 fRunEnd 0

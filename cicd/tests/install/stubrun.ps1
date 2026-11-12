@@ -7,11 +7,12 @@
 .SYNOPSIS
 	Run install.ps1 for real against a stand-in release.
 .DESCRIPTION
-	Runs it the way the one-liner does: its text as a script block. The two web
-	cmdlets are replaced by functions of the same name, which the block finds
-	first. They serve the folder in STUB_DIR, and the API answers with
-	STUB_API_CODE. STUB_ONE_OBJECT=1 hands the release list over as one object,
-	the way Windows PowerShell 5.1 does, and STUB_NO_YES=1 leaves out -Yes.
+	Runs it the way the one-liner does, with its text as a script block. The 2
+	web cmdlets are replaced by functions of the same name, which the block
+	finds first. They return files from the folder in STUB_DIR, and the API
+	returns the status in STUB_API_CODE. STUB_ONE_OBJECT=1 hands the release
+	list over as one object, the way Windows PowerShell 5.1 does, and
+	STUB_NO_YES=1 leaves out -Yes.
 .PARAMETER Installer
 	Path to install.ps1.
 .PARAMETER Rest

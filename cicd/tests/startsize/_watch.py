@@ -48,8 +48,8 @@ def main() -> int:
 	max_atoms = {disp.intern_atom("_NET_WM_STATE_MAXIMIZED_VERT"), disp.intern_atom("_NET_WM_STATE_MAXIMIZED_HORZ")}
 	full_atom = disp.intern_atom("_NET_WM_STATE_FULLSCREEN")
 	start = time.monotonic()
-	## Polled, not evented: the window is reparented under the window manager's
-	## frame, and "shown" is the frame's map state, not the window's own.
+	## Polled rather than evented, because the window is reparented under the
+	## window manager's frame, and "shown" is the frame's map state.
 	window: Window | None = None
 	last: tuple[int, int, bool, str] | None = None
 	shown_at: float | None = None

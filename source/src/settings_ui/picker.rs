@@ -37,8 +37,8 @@ impl SettingsDialog {
 	}
 
 	/// A chip opened. The box stores the color as HSV from here on, and the row
-	/// behind it follows every change - so the swatch, and the window under the
-	/// dialog, show what is being chosen while it is chosen.
+	/// behind it follows every change, so the swatch and the window under the
+	/// dialog show the color while it's being chosen.
 	pub(super) fn pick_open(&mut self, i: usize) {
 		self.commit_edit();
 		self.open = None;
@@ -87,7 +87,7 @@ impl SettingsDialog {
 	}
 
 	/// The one place the box's color changes. The row follows it, and an open
-	/// value box is refreshed and reselected the way a slider's number field is -
+	/// value box is refreshed and reselected the way a slider's number field is,
 	/// so stepping it with the arrows keeps working and a commit sees the number.
 	pub(super) fn pick_set(&mut self, hsv: pick::Hsv) {
 		let Some(picker) = self.pick.as_mut() else {
@@ -231,7 +231,7 @@ impl SettingsDialog {
 	}
 
 	/// A drag that strays off the square or the strip keeps adjusting, clamped to
-	/// the edge - the same rule a slider drag follows.
+	/// the edge, as a slider drag does.
 	pub(super) fn pick_drag_to(&mut self, x: f32, y: f32) {
 		let Some(picker) = self.pick.as_ref() else {
 			return;

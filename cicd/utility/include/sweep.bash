@@ -4,23 +4,23 @@
 #  shellcheck disable=2154  ## 'referenced but not assigned.' The globals are declared at the top, which shellcheck misses for a sourced file.
 
 ##	Purpose:
-##		- What a pipeline run leaves behind, and taking it away once it is stale.
-##		  Source this. It defines functions and runs nothing.
-##		- Run folders: one a killed run left goes after a few days, once no
-##		  process from its run.pid is left. A run that ends has already removed
-##		  its own.
+##		- Removes what pipeline runs leave behind, once it's stale. Source this.
+##		  It defines functions and runs nothing.
+##		- Run folders: a folder left by a killed run goes after a few days, once
+##		  no process from its run.pid is still running. A run that ends has
+##		  already removed its own.
 ##		- The ledgers older runs wrote, of a test run folder or the container's
 ##		  /tmp, each with the token in its owner mark. Only a folder whose mark
 ##		  still has the token the ledger wrote goes.
 ##		- Cargo build dirs: everything built before a toolchain change, since
 ##		  cargo rebuilds all of it anyway; a dir the config no longer builds into;
 ##		  and an incremental cache its profile hasn't used for a while.
-##		- Only what the pipeline made and can show it made. A dir has to be a real
-##		  dir of this user's, and a build dir has to be cargo's, checked right
-##		  before it goes.
-##		- Zig caches: one emptied whole once it is over the cap, or once another
-##		  Zig version filled it, going by the stamp it has. Never part of
-##		  one, since its manifests point into the rest.
+##		- It removes only what the pipeline made and can show it made. A dir has
+##		  to be a real dir of this user's, and a build dir has to be cargo's,
+##		  checked right before it goes.
+##		- Zig caches: a cache is emptied whole once it's over the cap, or once its
+##		  stamp names another Zig version. Never part of one, since its manifests
+##		  point into the rest.
 ##		- fSweep_Summary prints what went, on one line.
 ##	History: At bottom of file.
 

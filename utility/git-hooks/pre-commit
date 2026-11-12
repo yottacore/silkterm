@@ -1,6 +1,6 @@
 #!/bin/sh
 # Keep staged Rust files rustfmt-clean before every commit (rustfmt.toml governs
-# style; intentional data tables carry #[rustfmt::skip]). Formats what is STAGED
+# style; intentional data tables carry #[rustfmt::skip]). Formats what's staged
 # and writes it back to the index, so a file with only some of its changes staged
 # commits only those. The working tree is reformatted too, but only where it has
 # nothing unstaged to lose.
@@ -21,8 +21,8 @@ files="$(git diff --cached --name-only --diff-filter=ACM -- '*.rs')"
 [ -n "${files}" ] || exit 0
 
 root="$(git rev-parse --show-toplevel)"
-# The staged copy is formatted outside the tree, so name the config explicitly -
-# rustfmt otherwise walks up from the file and would find nothing.
+# The staged copy is formatted outside the tree, so the config is named explicitly.
+# Otherwise rustfmt walks up from the file and finds nothing.
 fmtcfg=""
 if [ -f "${root}/rustfmt.toml" ]; then
 	fmtcfg="${root}/rustfmt.toml"
@@ -40,13 +40,13 @@ for f in ${files}; do
 	blob="$(git rev-parse --verify --quiet ":${f}")" || continue
 	mode="$(git ls-files --stage -- "${f}" | cut -c1-6)"
 	[ -n "${mode}" ] || continue
-	# one name per path, so two files called mod.rs cannot tread on each other
+	# one name per path, so 2 files called mod.rs can't tread on each other
 	tmp="${work}/$(printf '%s' "${f}" | tr '/' '_')"
 	git cat-file blob "${blob}" >"${tmp}"
 	# asked before the index moves, or the reformat itself reads as unstaged work
 	if git diff --quiet -- "${f}"; then whole=1; else whole=0; fi
 	# Through stdin: given a file, rustfmt follows its `mod` lines, which name
-	# files that are not beside the copy, so a crate root could not commit.
+	# files that aren't beside the copy, so a crate root couldn't commit.
 	if [ -n "${fmtcfg}" ]; then
 		rustfmt --edition 2024 --config-path "${fmtcfg}" <"${tmp}" >"${tmp}.fmt"
 	else
@@ -57,8 +57,8 @@ for f in ${files}; do
 	[ "${new}" = "${blob}" ] && continue
 	git update-index --cacheinfo "${mode},${new},${f}"
 	# Nothing unstaged in this file: the working copy is the old staged content,
-	# so replace it and the two stay in step. Otherwise leave it - those edits
-	# are not part of this commit and reformatting around them would drag them in.
+	# so replace it and the 2 stay in step. Otherwise leave it, since those edits
+	# aren't part of this commit and reformatting around them would drag them in.
 	if [ "${whole}" = "1" ]; then
 		cp -- "${tmp}" "${root}/${f}"
 	else

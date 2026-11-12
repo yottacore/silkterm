@@ -1,15 +1,15 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 // Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
 
-//! The Settings dialog's declarations, read from `settings_ui.shcl` (compiled
-//! in). The file owns what the dialog IS - rows, order, sections, tabs, the
-//! config path behind each row, when a row grays out, and the geometry.
-//! The `settings_ui` module owns what it DOES.
+//! The Settings dialog's declarations, read from `settings_ui.shcl`, which is
+//! compiled in. The file declares the rows, their order, sections, tabs, the
+//! config path behind each row, when a row grays out, and the geometry. The
+//! `settings_ui` module has the behavior.
 //!
-//! The document is constant, so it is parsed once and handed out as `'static`.
-//! Anything wrong with it is a build-time mistake rather than a user's, and
-//! `the_declarations_are_complete_and_well_formed` fails on all of it -
-//! including the one class no parser can see, a row that is simply absent.
+//! The document is constant, so it's parsed once and handed out as `'static`.
+//! Anything wrong with it is a build mistake rather than a user's, and
+//! `the_declarations_are_complete_and_well_formed` fails on all of it,
+//! including a row that's missing, which no parser can see.
 
 use std::collections::HashSet;
 use std::sync::{Mutex, OnceLock};
@@ -107,7 +107,7 @@ pub enum Kind {
 	// The shells grid: one line per stored shell (name, command, last seen,
 	// active, and the buttons that move or remove it), plus an Add button. It is
 	// one row here and many on screen, so its height follows the list's length
-	// rather than the row metrics - see `SettingsDialog::row_h_for`.
+	// rather than the row metrics. See `SettingsDialog::row_h_for`.
 	ShellList,
 	// One hotkey's chords, set by pressing the new ones. The hotkey is the one
 	// the row's `setting:` binds under `keys:`.
@@ -124,10 +124,10 @@ pub struct Spec {
 	/// Flyover text for a control whose purpose isn't obvious from its label.
 	/// Empty means the row explains itself and gets no tip.
 	pub help: &'static str,
-	/// Sub-group depth. Only the LABEL moves; the controls stay in their column,
-	/// so a run of indented labels reads as belonging to the row above it. A
-	/// sub-group is therefore not declared anywhere - it is the leader's own
-	/// depth plus everything deeper that follows.
+	/// Sub-group depth. Only the label moves and the controls stay in their
+	/// column, so a run of indented labels reads as belonging to the row above.
+	/// A sub-group isn't declared anywhere. It's the leader's depth plus every
+	/// deeper row after it.
 	pub indent: u8,
 	/// Drawn on the same line as the row above rather than under it. A line of
 	/// N rows splits the control column into N even parts; the first row keeps
@@ -604,7 +604,7 @@ fn parse(text: &str) -> Result<Ui, Vec<String>> {
 		let at = |field: &str| format!("rows.{name}.{field}");
 		let label = doc.get_string(&at("label")).unwrap_or_default();
 		let kind_text = doc.get_string(&at("kind")).unwrap_or_default();
-		// A heading names its section, not a setting; every other row's name IS
+		// A heading names its section, not a setting. Every other row's name is
 		// its setting unless the row says otherwise.
 		let key = if kind_text == "heading" {
 			Key::None
@@ -970,9 +970,8 @@ fn read_groups(doc: &shcl::Document, problems: &mut Vec<String>) -> Vec<GroupSpe
 mod tests {
 	use super::{Key, Kind, SOURCE, Spec, keep_platform, parse, pick_warnings, tab_tree, ui};
 
-	// The one check no parser strictness can make: a setting the code knows but
-	// the document never mentions is a perfectly valid document, and a setting
-	// silently missing from the dialog is exactly the failure worth catching.
+	// A setting the code knows and the document never mentions still leaves a
+	// valid document, so no parser can catch it.
 	// Test ID: dav4k
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
@@ -1200,8 +1199,8 @@ mod tests {
 	}
 
 	// "Carry" read as "has" or "keeps" is a word to avoid in what people read,
-	// and it had crept into 2 tips (2026100812334384). Every string declared
-	// for the dialog, both platforms' marks included.
+	// and it had crept into 2 tips (2026100812334384). This reads every string
+	// declared for the dialog, both platforms' marks included.
 	// Test ID: ddp7x
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]

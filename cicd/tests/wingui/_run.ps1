@@ -5,8 +5,8 @@
 .SYNOPSIS
 	Runs one scenario inside the console session and writes a verdict file.
 .DESCRIPTION
-	Started by an interactive scheduled task, because a process arriving over
-	ssh is in session 0 and has no desktop at all - which is what made every
+	Started by an interactive scheduled task, because a process started over
+	ssh is in session 0 and has no desktop at all. That's what made every
 	earlier attempt at this look like a permissions problem.
 .PARAMETER Scenario
 	The scenario's name: <name>.ps1 beside this file.
@@ -65,7 +65,7 @@ try {
 
 	##	A scenario that asserted nothing must not read as a pass. The scroll harness
 	##	printed OK for a while after it quietly stopped running any scene, and this
-	##	is the same shape of hole.
+	##	is the same kind of hole.
 	$asserted = @($script:checks | Where-Object { $_ -match '^\s+(ok|FAIL) ' }).Count
 	if ($asserted -eq 0) { $reason = "the scenario made no checks"; $verdict = "fail" }
 	else { $verdict = if ($script:failures -eq 0) { "pass" } else { "fail" } }

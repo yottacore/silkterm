@@ -11,10 +11,9 @@
 ## fScrollVerdict <pass> <fail> <miss> <strict>
 ## Echoes one line saying why, and returns 0 for a good run.
 ##
-## Nothing passing is a failure whether or not --strict was asked for. The caller
-## has already answered the environment questions by the time it gets here, so
-## zero measured scenes means the run tested nothing - which once read as OK for
-## a whole release.
+## A run where nothing passed is a failure, with or without --strict. The caller
+## has already checked the environment by the time it gets here, so 0 measured
+## scenes means the run tested nothing. That once read as OK for a whole release.
 fScrollVerdict(){
 	local -ri pass="${1}" fail="${2}" miss="${3}" strict="${4}"
 	if ((fail)); then

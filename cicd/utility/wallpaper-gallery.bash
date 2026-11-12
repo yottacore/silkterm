@@ -3,12 +3,12 @@
 #  shellcheck disable=2155  ## 'Declare and assign separately.' Cumbersome and unnecessary here.
 
 ##	Purpose:
-##		Render the two browsable views of the shipped wallpaper pack.
+##		Render the 2 browsable views of the wallpaper pack.
 ##		  1. The README contact sheet: every image center-cropped to one tile size and
 ##		     tiled into a single JPEG, so the README costs one request, not one per image.
 ##		  2. The Pages gallery under docs/: a thumbnail grid whose tiles open the full
-##		     image in place, with prev/next paging. Full images are NOT copied - the
-##		     page fetches them from the pack in the repository, so nothing is duplicated.
+##		     image in place, with prev/next paging. Full images aren't copied, since
+##		     the page fetches them from the pack in the repository.
 ##		Both are rendered artifacts: they go stale silently when images are added,
 ##		removed or replaced, so re-run this in the same commit that touches the pack.
 ##	Syntax:
@@ -220,8 +220,8 @@ if ((doPage)); then
 
 	##	One JSON record per image: file name, title, slug (which is what a permalink
 	##	names, so it survives the pack being reordered), credit, license, source URL.
-	##	Only " and \ need escaping; the text travels as UTF-8 either way. An image
-	##	with no attribution row is REPORTED - that is how the table goes stale.
+	##	Only " and \ need escaping, since the text is UTF-8 either way. An image
+	##	with no attribution row is reported, because that means the table is stale.
 	awk -F'\t' '
 		function esc(s) { gsub(/\\/,"\\\\",s); gsub(/"/,"\\\"",s); return s }
 		NR==FNR { cr[$1]=$2; lic[$1]=$3; url[$1]=$4; next }

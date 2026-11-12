@@ -88,13 +88,14 @@ KINDS = {"move": 3.0, "drag": 4.0, "resize": 2.0, "zoom": 2.0, "relaunch": 1.5, 
 RESCALED = "a scale change moves the grid a few cells"
 CAPPED = "sway holds a floating window to the size of the whole layout"
 TOLD_NOTHING = "a Wayland window is told nothing of a move"
-## Wayland and Xwayland show a window no button held on the compositor's title
-## bar, so a move with the pointer away could be a drag held still. The look
-## waits for the pointer back over the window, a key, or focus.
+## On Wayland and Xwayland a window can't see a button held on the
+## compositor's title bar, so a move with the pointer away could be a drag held
+## still. The look waits until the pointer is back over the window, a key comes,
+## or the window gets focus.
 WAITS = "a window that can't see the buttons waits for the person after a move"
-## A resize that takes a Wayland window off an output is told to it once a
-## frame at the new size is up, which in software can come after the size is
-## saved, so it may still count the output it was on as the size was set.
+## A Wayland window that a resize takes off an output is only told so once a
+## frame at the new size is up. In software that can come after the size is
+## saved, so the save may still be for the output it was on.
 LEFT_LATE = "a Wayland window is told it left an output once a frame at its new size is up"
 KNOWN: dict[str, str] = {}
 
@@ -337,8 +338,8 @@ def make_plan(seed: int, arm: str | None = None) -> Plan:
 			continue
 		if kind in ("move", "drag", "relaunch"):
 			here = steps[-1].to
-	## Drawn apart, so a seed from before it was added makes the same case,
-	## but for this.
+	## A separate generator, so a seed from before this was added still makes
+	## the same case apart from it.
 	more = random.Random(f"{seed}/remember-size")
 	persist = bool(cli or font) and more.random() < 0.5
 	for step in steps:
@@ -716,15 +717,13 @@ def key_of(arm: str, out: dict[str, Any], scale: float) -> str:
 	return f"{mode['width']}x{mode['height']}_{round(scale * 100)}pct"
 
 
-## The grids a scale change can leave a window at that keeps its size on the
-## desktop, from a cell and scale to another. A font's cell doesn't grow in
-## step with the scale, so the grid goes by how far the cell grew against
-## the scale: at font zoom -2 a cell is 9x18 at 100% and 19x38 at 200%, and
-## 24 rows became 22 (2026101513385002). One more either way for the margins,
-## the chrome and the part of a cell the window had over. The cell the shell
-## is told is a whole pixel, and the real one is within half a pixel of it:
-## at 125% a cell of 13.64 told as 13 made 130 columns look like 136 were
-## still needed (2026101716374843).
+## The grids a scale change can leave a window at when it keeps its size on
+## the desktop. A font's cell doesn't grow in step with the scale, so the grid
+## goes by how far the cell grew against the scale: at font zoom -2 a cell is
+## 9x18 at 100% and 19x38 at 200%, and 24 rows became 22 (2026101513385002).
+## One more either way allows for the margins, the chrome, and a part cell.
+## The shell is told the cell in whole pixels, so the real one can be up to
+## half a pixel off (2026101716374843).
 def drift_band(grid: Grid, was: tuple[tuple[int, int], float], now: tuple[tuple[int, int], float]) -> set[Grid]:
 	(cell_was, scale_was), (cell, scale) = was, now
 	spans = []
@@ -935,10 +934,10 @@ class Case:
 		lw, lh = self.rig.extent()
 		if win_now and (win_now.rect[2] >= lw - 4 or win_now.rect[3] + win_now.deco >= lh - 4):
 			grids |= {(c, r) for c in range(1, max(g[0] for g in grids) + 1) for r in range(1, max(g[1] for g in grids) + 1)}
-		## A window drawing in software can be seconds late with a frame, and
-		## what waits on one comes late with it: the look after a scale change,
-		## and so the take after the drift (2026101614100002). One more step to
-		## a grid it may end at is that, and it has to stay there.
+		## A window drawing in software can be seconds late with a frame, and so
+		## is the look after a scale change that waits on it (2026101614100002).
+		## So the grid may take one more step to a grid it can end at, and then
+		## it has to stay there.
 		if got is not None and later_lines:
 			seen = [f"{got[1]} {got[0]}", *later_lines]
 			rows, cols = (int(v) for v in seen[-1].split())

@@ -457,8 +457,8 @@ impl Painter<'_> {
 	}
 
 	// CPAL lookup. 0xFFFF means "the text foreground color". The raster is
-	// cached independently of the cell color, so it resolves to white (which
-	// leaves such a paint tintable later if that's ever wanted).
+	// cached apart from the cell color, so it resolves to white, which could be
+	// tinted later.
 	fn color(&self, index: u16) -> [f32; 4] {
 		if index == 0xFFFF {
 			return [1.0, 1.0, 1.0, 1.0];
@@ -1100,9 +1100,8 @@ mod tests {
 		assert_eq!(cg.rasters.get(&(0, 20, 20)).map(|e| e.0), Some(50));
 	}
 
-	// The whole point of the module: a COLRv1-only emoji font must produce
-	// color pixels, where swash hands back an empty image. Skipped where the box
-	// has no color font at all.
+	// A COLRv1-only emoji font must produce color pixels, where swash returns an
+	// empty image. Skipped where the box has no color font at all.
 	// Test ID: daerd
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]

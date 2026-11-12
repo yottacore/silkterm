@@ -24,34 +24,36 @@
 ##		win-remote.bash [--host <name>] [--optional] hold <command> [args...]
 ##	Notes:
 ##		Hosts are read from $WINRIG_CONF (default ~/.config/silkterm/winrig.conf),
-##		one per line as '<name> <addr>[,<addr>...] [<tag>...]'. First address that
-##		answers wins. The file lives outside the repo on purpose - machine names are
-##		not project data. Boxes are used in the order listed, so the favored one goes
-##		first. The tag 'gpu' marks a box with a real card, which is the only kind a
-##		scenario that needs one runs on. hosts prints the tags after the address.
-##		A host that is down is skipped with a warning. Exit is 1 only if every
+##		one per line as '<name> <addr>[,<addr>...] [<tag>...]'. The first address
+##		that answers is used. The file is kept outside the repo, since machine names
+##		aren't project data. Boxes are used in the order listed, so the favored one
+##		goes first. The tag 'gpu' marks a box with a real graphics card, and a
+##		scenario that needs one runs only there. hosts prints the tags after the
+##		address.
+##		A host that's down is skipped with a warning. Exit is 1 only if every
 ##		selected host was unreachable, or if a job failed on a host that was up.
 ##		--optional drops the first of those, so nothing reachable is a skip rather
-##		than a failure. Every cicd caller passes it: the boxes are somebody's desk
-##		and a laptop, so one being off is the normal case, not a broken build. A job
-##		that ran and failed still fails, with or without it.
-##		Jobs run against a clone the remote keeps at origin/dev; it is reset, not
-##		merged, so local edits there are discarded. Uncommitted work here does not
-##		reach it - push first. --ref names a different branch, which is how a fix
-##		gets tried on Windows before it is merged; the next plain sync puts the
-##		clone back on dev. It belongs to sync alone - a job runs against whatever
-##		the clone was last synced to, so sync with it first and then run the job.
+##		than a failure. Every cicd caller passes it, since the boxes are someone's
+##		desktop and a laptop, and one being off is normal. A job that ran and
+##		failed still fails, with or without it.
+##		Jobs run against a clone the remote keeps at origin/dev. It's reset rather
+##		than merged, so local edits there are discarded, and uncommitted work here
+##		never gets there, so push first. --ref names a different branch, which is
+##		how a fix gets tried on Windows before it's merged, and the next plain sync
+##		puts the clone back on dev. Only sync takes it. A job runs against whatever
+##		the clone was last synced to, so sync with --ref first and then run the job.
 ##		Passing it to anything else is refused rather than ignored.
-##		--as picks the remote account. The default builds and tests, because the rust
-##		toolchain is a per-user rustup install under it. The unprivileged test account
-##		has no toolchain but a virgin profile, which is what to run a built binary as.
-##		Other sessions on this machine may share the boxes. A line '@lock <command>' in
-##		the host config names a host lock, and then everything but hosts waits for the
-##		selected boxes through it, unless the caller already holds them. A lock that is
-##		missing, can't run, or doesn't know a box is passed over. WINRIG_LOCK_WAIT
-##		caps the wait in seconds. A line '@vmstate <command>' names the VM state
-##		helper, which holds the boxes through the same lock, wakes a VM that is
-##		paused or off, and puts it back the way it was found once the job is done.
+##		--as picks the remote account. The default account builds and tests, since
+##		the Rust toolchain is a per-user rustup install under it. The unprivileged
+##		test account has no toolchain but a clean profile, so run a built binary as
+##		that one.
+##		Other sessions on this machine may share the boxes. A line '@lock <command>'
+##		in the host config names a host lock, and then everything but hosts waits
+##		for the selected boxes through it, unless the caller already holds them. A
+##		lock that's missing, can't run, or doesn't know a box is ignored.
+##		WINRIG_LOCK_WAIT caps the wait in seconds. A line '@vmstate <command>' names
+##		the VM state helper, which takes the boxes through the same lock, wakes a VM
+##		that's paused or off, and puts it back the way it was found after the job.
 ##		hold runs a local command with the boxes held, for a caller that makes several
 ##		calls in a row and can't have another session get in between them.
 ##		With --optional, each box is held and run on in turn, and one that another
@@ -91,7 +93,7 @@ lockCmd=""; vmStateCmd=""
 
 fLoadConf() {
 	##	The config lives outside the repo, so having none is the ordinary state on
-	##	any box but the one it was written on - a cicd caller skips rather than dies.
+	##	any box but the one it was written on, so a cicd caller skips rather than dies.
 	if [[ ! -r "${conf}" ]]; then
 		((optional)) && { fWarn "no host config at ${conf}, skipped"; exit 0; }
 		fFail "no host config at ${conf}
@@ -176,8 +178,8 @@ PS
 	rm -f "${tmp}"
 }
 
-##	Walk the selected hosts, skipping whatever is down. A skipped host is a warning;
-##	only a job that ran and failed, or nothing reachable at all, is an error.
+##	Walk the selected hosts, skipping whatever is down. A skipped host is a warning.
+##	Only a job that ran and failed, or nothing reachable at all, is an error.
 fOverHosts() {
 	local fn="${1}"
 	local -i up=0 bad=0
@@ -272,8 +274,8 @@ fDoRun() { fRunScript "${1}" "${runScript}" "${runArgs[@]}"; }
 fNoRef() { [[ -z "${refGiven}" ]] || fFail "--ref belongs to sync - sync with it first, then run this" 2 ;}
 
 ##	Options are only read before the command, so 'sync --ref <branch>' parsed the
-##	ref as nothing and synced dev - the same trap fNoRef exists for. A command
-##	that takes no arguments says so rather than dropping them.
+##	ref as nothing and synced dev, the same trap as in fNoRef. A command that
+##	takes no arguments says so rather than dropping them.
 fNoArgs() { local what="${1}"; shift; (($# == 0)) || fFail "${what} takes no arguments, and options go before the command (got: ${*})" 2 ;}
 
 ##	WINRIG_ONLY narrows every call made under a one-box hold, as --host would.

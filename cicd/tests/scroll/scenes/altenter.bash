@@ -6,7 +6,7 @@
 ## until the trace shows the burst easing, so the ease is mid-flight. A fixed gap
 ## did that only on a quiet box: on a busy one the first frame came after the swap
 ## and nothing eased at all. A wait that runs out leaves a note, and the analyzer
-## calls the run a skip. The nano-shaped paint that follows is held still, so every
+## calls the run a skip. The nano-style screen drawn after it is held still, so every
 ## alt-screen frame should have a zero fraction.
 ## POSIX sh (dash).
 

@@ -33,10 +33,9 @@ struct Line {
 }
 
 // A clickable region in the About box. `button` links draw a filled box behind
-// their label (the Support button); plain links are colored text. A link
-// with a `tooltip` shows that text as a flyover while the cursor is over it -
-// used so the Support button can reveal the URL it opens without baking it into
-// the label.
+// their label (the Support button); plain links are colored text. A link with a
+// `tooltip` shows it as a flyover while the pointer is over it, so the Support
+// button can show the URL it opens without putting it in the label.
 struct AboutLink {
 	rect: Rect,
 	// None closes the window, which is a notice's OK
@@ -259,12 +258,12 @@ impl DialogWin {
 
 	/// Restack the terminal to sit directly beneath this dialog. Called when the
 	/// dialog gains focus, so a window that got in front of the terminal can't
-	/// stay wedged between them - the transient hints alone don't force this on
+	/// stay wedged between them. The transient hints alone don't force this on
 	/// WMs that don't raise a transient's parent with it (Compiz).
 	pub fn raise_parent(&self) {
-		// SILK_MODALDBG=1 traces the restack + the resulting stack order, so a WM
-		// where this misbehaves (e.g. a Compiz profile that ignores the restack)
-		// can be diagnosed from the terminal without a headless rig.
+		// SILK_MODALDBG=1 traces the restack and the stack order that results, so a
+		// WM where this misbehaves, such as a Compiz profile that ignores the
+		// restack, can be diagnosed from the terminal.
 		let dbg = std::env::var_os("SILK_MODALDBG").is_some();
 		restack_parent_below(&self.window, self.parent.as_ref(), dbg, self.kind());
 	}
@@ -298,17 +297,14 @@ impl DialogWin {
 				h.ceil().max(1.0) as u32,
 			));
 		// Tie the dialog to the terminal window so the WM keeps it above its
-		// parent and groups them. Windows: must be owner semantics, not winit's
-		// generic parent_window - that creates a WS_CHILD window there, which
-		// embeds the dialog inside the terminal's client area (clipped when the
-		// dialog is bigger than the terminal) and never gets its own keyboard
-		// activation (text fields dead). An owned popup floats above the owner,
-		// takes focus normally, and stays off the taskbar. macOS: parent_window
-		// is child-window-of semantics, which is what we want there. X11:
-		// parent_window means literal X reparenting (an embedded child, unmanaged
-		// by the WM), so don't pass it there; WM_TRANSIENT_FOR is set after
-		// creation instead (below). Wayland: winit has no parent at all, so
-		// xdg_toplevel.set_parent goes on the raw toplevel, also below.
+		// parent and groups them. Windows needs an owned popup rather than winit's
+		// parent_window, which makes a WS_CHILD window there: embedded in the
+		// terminal's client area, clipped to it, and never given keyboard focus.
+		// An owned popup floats above the owner, takes focus, and stays off the
+		// taskbar. On macOS parent_window is what's wanted. On X11 it means X
+		// reparenting, an embedded child the WM doesn't manage, so WM_TRANSIENT_FOR
+		// is set after creation instead (below). Wayland has no parent in winit,
+		// so xdg_toplevel.set_parent goes on the raw toplevel, also below.
 		#[cfg(target_os = "windows")]
 		if let Some(RawWindowHandle::Win32(h)) = handle {
 			use winit::platform::windows::WindowAttributesExtWindows;
@@ -319,15 +315,14 @@ impl DialogWin {
 			// SAFETY: the handle comes from the live main window on this same thread.
 			attrs = unsafe { attrs.with_parent_window(handle) };
 		}
-		// X11: create unmapped so WM_TRANSIENT_FOR + the modal/dialog hints are all
-		// set before the WM maps the window and fixes its stacking group. A post-map
-		// property write is read too late by Compiz et al - that's why re-selecting
-		// the dialog raised it alone and left the parent buried. The caller shows the
-		// window after the final resize (see new_about / new_settings).
-		// Windows: an owned popup gets no auto-placement and appears at the screen
-		// origin, so it must be created hidden, centered over the terminal, drawn
-		// once, then revealed by the caller - otherwise it flashes at (0,0) then
-		// jumps to center.
+		// X11: create unmapped so WM_TRANSIENT_FOR and the modal and dialog hints are
+		// set before the WM maps the window and fixes its stacking group. Compiz and
+		// others read a property written after the map too late, which is why
+		// selecting the dialog again raised it alone and left the parent buried. The
+		// caller shows the window after the final resize (see new_about /
+		// new_settings). Windows: an owned popup gets no auto-placement and appears at
+		// the screen origin, so it's created hidden, centered over the terminal, drawn
+		// once, then shown by the caller. Otherwise it flashes at (0,0) and jumps.
 		#[cfg(any(target_os = "linux", target_os = "windows"))]
 		{
 			attrs = attrs.with_visible(false);
@@ -530,9 +525,9 @@ impl DialogWin {
 			Self::make(el, "Settings".into(), 560.0, 800.0, true, parent, warm)?;
 		let scale = config::display_scale(window.scale_factor());
 		let chrome = crate::settings_ui::chrome_widths(&mut text, scale);
-		// Cap the window to the part of the screen it can occupy - the
-		// monitor minus the taskbar, minus the frame the WM puts round it - and to
-		// ~1010 DIP tall. A tab that doesn't fit scrolls instead of pushing the
+		// Cap the window to the part of the screen it can occupy, which is the
+		// monitor minus the taskbar and the frame the WM puts round it, and to
+		// about 1010 DIP tall. A tab that doesn't fit scrolls instead of pushing the
 		// footer buttons off the bottom. SettingsDialog divides these by the scale
 		// factor on the way in, so every figure here is physical.
 		let (max_w, max_h) = Self::settings_caps(
@@ -648,7 +643,7 @@ impl DialogWin {
 	}
 
 	/// The size it is sitting at, in DIP. Kept for the rest of the session so a
-	/// reopen comes back the size it was dragged to - and on a monitor at another
+	/// reopen comes back the size it was dragged to, and on a monitor at another
 	/// scale, the same apparent size rather than the same count of pixels.
 	pub fn settings_size(&self) -> Option<(f32, f32)> {
 		match &self.content {
@@ -1006,8 +1001,8 @@ impl DialogWin {
 	}
 
 	/// DPI/scale changed under an open dialog: dragged to a monitor at another
-	/// scale, or the desktop's scaling changed. Only the boundary follows - the text
-	/// context rasterizes at the new size and the chrome is measured again - while
+	/// scale, or the desktop's scaling changed. Only the boundary follows. The text
+	/// context rasterizes at the new size and the chrome is measured again, while
 	/// every value and unapplied edit stays put.
 	pub fn set_scale(&mut self, scale_factor: f64) {
 		let scale = config::display_scale(scale_factor);
@@ -1071,7 +1066,7 @@ impl DialogWin {
 				min_h.ceil() as u32,
 			)));
 		// Nothing guarantees a Resized. winit keeps the logical size, so an
-		// ordinary window gets one with the new physical size - but a maximized or
+		// ordinary window gets one with the new physical size, but a maximized or
 		// tiled window keeps its physical size and sends nothing, and the layout
 		// would then be drawn at the new scale inside the old window. Hand the
 		// dialog what the window measures, then ask for a size that still fits
@@ -1099,8 +1094,8 @@ impl DialogWin {
 
 	// Magnetic snap: within a few DIP of the size the content wants, the window
 	// settles exactly on it; drag further and it lets go. `snapped` is the guard
-	// against a window manager that declines the request - without it, declining
-	// once would mean asking again on every event.
+	// against a window manager that declines the request. Without it, one decline
+	// would mean asking again on every event.
 	fn snap_to_natural(&mut self, w: f32, h: f32) {
 		let Content::Settings(dialog) = &self.content else {
 			return;
@@ -1144,8 +1139,8 @@ impl DialogWin {
 	// How big the Settings window may be: the part of the screen it can occupy,
 	// less the frame the WM puts round it, and no taller than DLG_MAX_H.
 	// The parent names the monitor. A dialog created hidden has never been placed,
-	// so asking which monitor it is on answers for wherever the origin happens to
-	// be - the primary, not the screen the terminal is on. `placed` is false for
+	// so asking which monitor it is on gives wherever the origin is, which is the
+	// primary rather than the screen the terminal is on. `placed` is false for
 	// that first measurement; see `pick_monitor` for what it changes.
 	fn settings_caps(
 		window: &Window,
@@ -1834,9 +1829,9 @@ fn scene(
 			}
 			// flyover: what a control does, or why it is grayed out. A small box
 			// under it, in a layer of its own drawn after everything else, so no
-			// row, list, or picker text draws over it. It wraps - a sentence long enough
-			// to outrun the panel would otherwise be clamped to the edge and run
-			// off it, and the panel's width isn't ours to grow.
+			// row, list, or picker text draws over it. It wraps, since a sentence long
+			// enough to outrun the panel would be clamped to the edge and run off it,
+			// and the panel can't grow to fit.
 			if let Some((tip, anchor)) = tip {
 				let scale = text.scale;
 				let avail = crate::tip::wrap_budget(w as f32, scale);
@@ -1944,13 +1939,12 @@ fn ring(rects: &mut Vec<RectInstance>, r: Rect, t: f32, color: [u8; 3]) {
 	rects.push(quad(r.x + r.w - t, r.y, t, r.h, color));
 }
 
-// X11: make the dialog a proper transient modal of the terminal via WM hints -
-// WM_TRANSIENT_FOR (winit has no API for it there; its parent_window means
-// literal X reparenting), plus the EWMH dialog type and the MODAL / SKIP_TASKBAR /
-// SKIP_PAGER states. That gives the standard Linux modal behavior (kept off the
-// taskbar, pager, and alt+tab, stacked above and raised with its parent, retains
-// focus) without any input tricks. Same throwaway-connection pattern as
-// app::set_blur_behind. No-op off X11.
+// X11: make the dialog a proper transient modal of the terminal with WM hints.
+// That's WM_TRANSIENT_FOR, which winit has no API for there, plus the EWMH
+// dialog type and the MODAL / SKIP_TASKBAR / SKIP_PAGER states. That gives the
+// usual Linux modal behavior (kept off the taskbar, pager, and alt+tab, stacked
+// above and raised with its parent, keeps focus) without any input tricks. Same
+// throwaway-connection pattern as app::set_blur_behind. No-op off X11.
 #[cfg(target_os = "linux")]
 fn set_transient_for(window: &Window, parent: Option<&RawWindowHandle>) {
 	use winit::raw_window_handle::HasWindowHandle;
@@ -2208,12 +2202,12 @@ mod wl_guest {
 
 // Keep the parent (terminal) window directly below `dialog` in the stack, via an
 // EWMH _NET_RESTACK_WINDOW client message to the root window. xfwm4/GNOME raise a
-// transient's parent with it automatically; Compiz doesn't, so when the dialog
-// is re-activated after another window came forward, the terminal stays buried
-// behind that window - this slots it back just beneath the dialog. The message
-// goes to root (the only stacking path Compiz honors for a managed window: it
-// reparents clients into decoration frames, so a direct XConfigureWindow on the
-// client isn't redirected to the WM and does nothing). Focus is untouched.
+// transient's parent with it automatically, but Compiz doesn't. So when the
+// dialog is activated again after another window came forward, the terminal
+// stays buried behind that window, and this puts it back just beneath the
+// dialog. The message goes to root, the only stacking path Compiz honors for
+// a managed window, since it reparents clients into decoration frames and a
+// direct XConfigureWindow on the client does nothing. Focus is untouched.
 #[cfg(target_os = "linux")]
 fn restack_parent_below(dialog: &Window, parent: Option<&RawWindowHandle>, dbg: bool, kind: &str) {
 	use winit::raw_window_handle::HasWindowHandle;
@@ -2341,7 +2335,7 @@ const ABOUT_BTN_PAD_Y: f32 = 8.0;
 const ABOUT_TIP_ROOM: f32 = 14.0; // headroom kept below the button for its flyover
 const ABOUT_BORDER: f32 = 1.0; // 1px rule around the Support button
 // The flyover box's own measurements are shared with the Settings dialog's, in
-// tip.rs - both windows draw the same box.
+// tip.rs, since both windows draw the same box.
 
 // The size to ask the window for after a change of display scale: the pixels it
 // has now, kept to what still fits the screen. A screen fits fewer DIP at a
@@ -2411,9 +2405,9 @@ fn layout_about(
 	let menu_link = config::MENU_LINK;
 	let accel = crate::gfx::acceleration(info);
 	let repo_url = env!("CARGO_PKG_REPOSITORY").to_string();
-	// Every measurement below is DIP, converted here rather than at a boundary -
-	// the panel is small enough that one conversion per number is clearer than a
-	// second coordinate space (settings_ui.rs is the one that earns that).
+	// Every measurement below is DIP, converted here rather than at a boundary,
+	// since the panel is small enough that one conversion per number is clearer
+	// than a second coordinate space (settings_ui.rs is the one that needs it).
 	let gap = text.dip(config::MENU_SEP_H);
 	let indent = text.dip(ABOUT_INDENT);
 	let tight = text.dip(ABOUT_TIGHT_GAP);
@@ -2902,7 +2896,7 @@ fn layout_notice(text: &mut TextCtx, paras: &[String]) -> (Vec<Line>, Vec<AboutL
 /// taskbar/panels/docks. winit has no API for it, so each platform is asked in
 /// its own way and anything else falls back to the whole monitor. Physical
 /// pixels, screen coordinates. Takes a handle rather than a window because the
-/// window that wants the answer often isn't the one to ask - see `settings_caps`.
+/// window that wants the answer often isn't the one to ask (see `settings_caps`).
 #[cfg(target_os = "windows")]
 pub fn work_area_of(handle: RawWindowHandle) -> Option<(i32, i32, i32, i32)> {
 	use windows_sys::Win32::Graphics::Gdi::{
@@ -2929,7 +2923,7 @@ pub fn work_area_of(handle: RawWindowHandle) -> Option<(i32, i32, i32, i32)> {
 	}
 }
 
-/// X11 publishes it as _`NET_WORKAREA` on the root window - 4 CARDINALs per
+/// X11 publishes it as `_NET_WORKAREA` on the root window, 4 CARDINALs per
 /// virtual desktop, so the current desktop picks the entry. It spans the whole
 /// virtual screen rather than one monitor, which is as much as the protocol
 /// offers, so `usable_screen` treats it as a cap rather than an answer. Wayland
@@ -2989,7 +2983,7 @@ pub fn work_area_of(handle: RawWindowHandle) -> Option<(i32, i32, i32, i32)> {
 	let view: &NSView = unsafe { h.ns_view.cast::<NSView>().as_ref() };
 	let screen = view.window()?.screen()?;
 	// Cocoa's origin is the bottom-left of the first screen, the one with the
-	// menu bar - the same display winit measures from.
+	// menu bar, which is the same display winit measures from.
 	let primary = NSScreen::screens(mtm).firstObject()?;
 	let area = screen.visibleFrame();
 	Some(flip_cocoa_rect(
@@ -3104,7 +3098,7 @@ fn pick_monitor(
 // out from the window so the arithmetic can be tested without one.
 fn caps_from(screen: (f32, f32), decor: (f32, f32), scale: f32) -> (f32, f32) {
 	// The frame can only be measured once there is one, and X11 adds it at map
-	// time - after the first measurement. Hence the DIP allowance to fall back on.
+	// time, after the first measurement. Hence the DIP allowance to fall back on.
 	let decor_h = if decor.1 > 0.0 {
 		decor.1
 	} else {
@@ -3383,9 +3377,9 @@ mod tests {
 		assert_eq!(tip_gate(&mut dwell, None, Instant::now()).0, None);
 	}
 
-	// The defect this was written for: a 1080p screen at 150% with a taskbar
-	// leaves 1008 usable, and the dialog was being sized against the full 1080 -
-	// so its footer buttons sat behind the taskbar with no way to reach OK.
+	// A 1080p screen at 150% with a taskbar leaves 1008 usable, and the dialog
+	// was being sized against the full 1080, so its footer buttons sat behind the
+	// taskbar with no way to reach OK.
 	// Test ID: dcd34
 	#[test]
 	fn the_height_cap_comes_off_the_usable_screen_not_the_monitor() {
@@ -3404,7 +3398,7 @@ mod tests {
 	}
 
 	// Before the window is mapped there is no frame to measure, so the allowance
-	// stands in for one - and it is a DIP figure, so it grows with the scale.
+	// stands in for one. It's a DIP figure, so it grows with the scale.
 	// Test ID: dcd35
 	#[test]
 	fn an_unmapped_window_falls_back_to_the_dip_allowance() {
@@ -3456,7 +3450,7 @@ mod tests {
 		assert_eq!(usable_screen(None, Some((800.0, 600.0))), (800.0, 600.0));
 	}
 
-	// The b26 case: a Retina screen that looks like 1440x900, a 25 point menu
+	// A Mac laptop: a Retina screen that looks like 1440x900, a 25 point menu
 	// bar and a Dock. Sized against the whole display, the dialog plus its title
 	// bar was taller than what lies below the menu bar, so macOS pushed it down
 	// until the buttons were off the bottom. Off the visible frame it fits, and

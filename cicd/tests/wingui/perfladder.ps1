@@ -5,8 +5,8 @@
 .SYNOPSIS
 	The performance ladder rating itself on real hardware.
 .DESCRIPTION
-	It has only ever run on a software adapter, where it answers Standard, so
-	what a discrete or integrated GPU actually rates has never been seen.
+	It has only ever run on a software adapter, where it rates Standard, so
+	what a discrete or integrated GPU rates has never been seen.
 .NOTES
 	History: At bottom of file.
 #>
@@ -32,7 +32,7 @@ $p = fStartSilk -Exe $Exe -SilkArgs @("--config=$cfg", "--columns", "110", "--ro
 $h = fWaitWindow $p 40
 if (-not (fCheck "a window came up" ($h -ne [IntPtr]::Zero))) { fStop $p; return }
 ##	The banner stays up 4 seconds at least, so the shot is taken 2 seconds
-##	after the window came up, however long focus took. A focus that fails burns
+##	after the window came up, however long focus took. A focus that fails takes
 ##	nearly 4 seconds on its own, and a shot after that misses the banner.
 $up = Get-Date
 $got = fFocus $h
@@ -46,8 +46,8 @@ $moved = fDiff $during $after
 fNote "banner frame differs from settled by $moved"
 [void](fCheck "the banner went up and came down again" ($moved -gt 0.01))
 
-##	Nothing is written until the run answers, so the state file appearing with a
-##	rating in it IS the result - there is no separate 'did it finish' to ask.
+##	Nothing is written until the run finishes, so a state file with a rating in
+##	it is the result. There's no separate check for whether it finished.
 $rated = @{ value = $null }
 for ($i = 0; $i -lt 60; $i++) {
 	$rated = fSetting $state "performance.rated_hardware"

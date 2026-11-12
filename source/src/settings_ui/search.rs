@@ -642,8 +642,8 @@ impl SettingsDialog {
 		}
 	}
 
-	/// The picked row's mark fades out over a second or so. The wake the frame
-	/// loop wants while it does.
+	/// The picked row's mark fades out over a second or so. Returns the wake the
+	/// frame loop needs while it fades.
 	pub(super) fn flash_step(&mut self, dt: f32) -> Option<u64> {
 		let (_, t) = self.flash.as_mut()?;
 		*t += dt;

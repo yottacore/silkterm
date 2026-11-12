@@ -26,7 +26,7 @@ work="$(mktemp -d "${SILKTERM_TEST_DIR:?}/armsmoke.XXXXXX")"
 stubs="${work}/stubs"; mkdir -p "${stubs}"
 printf 'not really arm64\n' >"${work}/silkterm"
 
-##	Boxes listed in ${work}/up answer. --version prints STUB_OUT and exits
+##	Boxes listed in ${work}/up are up. --version prints STUB_OUT and exits
 ##	STUB_RC. Every other command is noted, so the clean-up can be seen.
 cat >"${stubs}/ssh" <<'STUB'
 #!/usr/bin/env bash
@@ -53,7 +53,7 @@ case "${1}" in
 esac
 STUB
 ##	A box in STUB_ASLEEP is a guest that is off: wrap wakes it, runs the
-##	command and puts it back. STUB_NOWAKE: it never answers. STUB_BUSY: the
+##	command and puts it back. STUB_NOWAKE: it never comes up. STUB_BUSY: the
 ##	lock's wait runs out.
 cat >"${stubs}/vmstate" <<'STUB'
 #!/usr/bin/env bash

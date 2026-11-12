@@ -1,17 +1,15 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 // Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
 
-//! Color themes: each theme is a (dark, light) pair of `Palette`s. The active
-//! theme name + mode (Dark / Light / System) resolve to one `Palette` - the
-//! terminal bg/fg/cursor, the two attention colors and the 16 ANSI colors -
-//! which `config` folds into `Settings` and `palette.rs` reads. The `colors.*`
-//! keys still override on
-//! top (a per-color tweak).
+//! Color themes: each theme is a (dark, light) pair of `Palette`s. The active theme
+//! name and mode (Dark, Light, or System) resolve to one `Palette`, which `config`
+//! folds into `Settings` and `palette.rs` reads. The `colors.*` keys still
+//! override single colors on top.
 //!
-//! A theme the user saves from the Settings dialog is a `UserTheme`: the same
-//! (dark, light) pair, stored whole in `config.shcl` under `themes.<slug>` and
-//! resolved ahead of the built-ins, so one may take a built-in's name and stand
-//! in for it until it's deleted.
+//! A theme saved from the Settings dialog is a `UserTheme`: the same pair, stored
+//! whole in `config.shcl` under `themes.<slug>`. Saved themes resolve ahead of the
+//! built-ins, so one may take a built-in's name and stand in for it until it's
+//! deleted.
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Palette {
@@ -19,31 +17,31 @@ pub struct Palette {
 	pub fg: [u8; 3],
 	pub cursor: [u8; 3],
 
-	// Two attention colors, deliberately separate. `highlight` marks several
-	// things at once - the live pane's ring, slider handles, revert icons, the
-	// default button - so it stays calm. `focus` marks the ONE element the
-	// keyboard is on, so it is the more vivid of the pair and sits well away
-	// from `highlight` in hue.
+	// There are 2 attention colors, kept apart on purpose. `highlight` marks several
+	// things at once, such as the live pane's ring, slider handles, revert icons, and
+	// the default button, so it stays calm. `focus` marks the one element the
+	// keyboard is on, so it's the more vivid of the 2 and sits well away from
+	// `highlight` in hue.
 	pub highlight: [u8; 3],
 	pub focus: [u8; 3],
 
-	// Chrome: menu bar / dropdowns (menu_*) and pop-out dialogs (dialog_*). Every
-	// built-in theme uses the SAME neutral defaults below (menu identical in both
-	// modes, dialog lighter in Light mode) - a theme MAY override, and the
-	// colors.menu_*/dialog_* keys tweak them per-user.
+	// Chrome: the menu bar and dropdowns (menu_*) and pop-out dialogs (dialog_*).
+	// Every built-in theme uses the neutral defaults below, with the menu the same in
+	// both modes and the dialog lighter in Light mode. A theme may override them, and
+	// the colors.menu_* and dialog_* keys tweak them per user.
 	pub menu_bg: [u8; 3],
 	pub menu_fg: [u8; 3],
 	pub dialog_bg: [u8; 3],
 	pub dialog_fg: [u8; 3],
-	/// Chrome areas that hold no interactive element - the strip the dialog's tabs
-	/// sit on. Recessed against the panel in both modes.
+	/// Chrome areas without any interactive element, such as the strip the dialog's
+	/// tabs sit on. Recessed against the panel in both modes.
 	pub gutter: [u8; 3],
 	pub ansi: [[u8; 3]; 16],
 }
 
-/// The ten palette colors a user can edit, spelled as `colors.*` spells them.
-/// One order, used by the dialog's rows, by a saved theme's config block, and by
-/// the index accessors below - so none of the three can drift from the others.
+/// The 10 palette colors a user can edit, named as the `colors.*` keys name them.
+/// The dialog's rows, a saved theme's config block, and the index accessors below
+/// all use this one order, so they can't drift apart.
 pub const PALETTE_KEYS: [&str; 10] = [
 	"background",
 	"foreground",
@@ -89,10 +87,10 @@ impl Palette {
 }
 
 /// A theme the user saved. It has both variants in full rather than a base plus
-/// the differences: saving, renaming and deleting are then all the same operation
-/// on one config subtree, and a saved theme is self-contained enough to hand to
-/// someone else. `slug` is its config path segment and never changes, so a rename
-/// only rewrites `name` - and `name` is what the `theme` setting stores.
+/// differences, so saving, renaming, and deleting all work on one config subtree,
+/// and a saved theme can be handed to someone else. `slug` is its config path
+/// segment and never changes, so a rename only rewrites `name`, which is what the
+/// `theme` setting stores.
 #[derive(Clone, PartialEq, Debug)]
 pub struct UserTheme {
 	pub slug: String,
@@ -111,8 +109,8 @@ pub struct ThemeFont {
 	pub line_height_scale: Option<f32>,
 }
 
-// Shared chrome defaults (same for every theme). The menu keeps one neutral gray
-// in both modes (unchanged look); the dialog panel is dark-gray / light-gray by mode.
+// Chrome defaults shared by every theme. The menu keeps one neutral gray in both
+// modes, and the dialog panel is dark gray or light gray by mode.
 pub const MENU_BG_DEF: [u8; 3] = [0x36, 0x36, 0x3b];
 pub const MENU_FG_DEF: [u8; 3] = [0xf0, 0xf0, 0xf2];
 const DLG_BG_DARK: [u8; 3] = [0x20, 0x20, 0x2a];
@@ -128,19 +126,16 @@ pub struct Theme {
 	pub light: Palette,
 }
 
-// The project's original palette - now the default theme's dark variant.
+// The project's original palette, now the default theme's dark variant.
 #[rustfmt::skip]
 const SILK_DARK: Palette = Palette {
 	bg: [0x00, 0x00, 0x00],
 	// The block cursor is a plate at pane::CURSOR_ALPHA under the glyph, and the
-	// glyph keeps its own color, so the plate is a second background the text
-	// has to clear the contrast floor on. A cursor at the fg's own brightness
-	// mushes the two together. This is the fg's triadic partner dropped to the
-	// brightness where the text on it clears the floor and it still shows
-	// against the black bg (3.3:1). Every theme's cursor is held to that by a
-	// test. The highlight stays warm: it marks the pane, not the caret, so it
-	// wants its own identity rather than an echo of the cursor. Focus is its
-	// azure complement - the one thing the keyboard is on.
+	// glyph keeps its own color, so the text has to clear the contrast floor on the
+	// plate too. This is the fg's triadic partner, dropped to the brightness where
+	// text on it clears the floor and it still shows against the black bg (3.3:1). A
+	// test holds every theme's cursor to that. The highlight stays warm, since it
+	// marks the pane rather than the caret. Focus is its azure complement.
 	fg: [0x88, 0xee, 0xcc],
 	cursor: [0x8a, 0x3f, 0xa4],
 	highlight: [0xc8, 0xa0, 0x5a],
@@ -148,10 +143,10 @@ const SILK_DARK: Palette = Palette {
 	menu_bg: MENU_BG_DEF, menu_fg: MENU_FG_DEF,
 	dialog_bg: DLG_BG_DARK, dialog_fg: DLG_FG_DARK,
 	gutter: GUTTER_DARK,
-	// Hues sit where their names say, warmed toward the pair above; saturation is
-	// the pastel end. Each color's BRIGHTNESS was carried over from the palette
-	// this replaced, hue by hue, so contrast and legibility are unchanged - only
-	// the family moved. The grays have a faint warm cast for the same reason.
+	// Hues sit where their names say, warmed toward the pair above, at the pastel end
+	// of saturation. Each color's brightness was copied from the palette this
+	// replaced, hue by hue, so contrast is unchanged and only the hues moved. The
+	// grays have a faint warm cast for the same reason.
 	ansi: [
 		[0x1d, 0x1b, 0x18], [0xd0, 0x72, 0x64], [0x6c, 0xd0, 0x79], [0xd7, 0xc5, 0x7c],
 		[0x7c, 0xa8, 0xe5], [0xbf, 0x7b, 0xd5], [0x53, 0xb9, 0xb5], [0xb7, 0xb1, 0xa5],
@@ -160,21 +155,17 @@ const SILK_DARK: Palette = Palette {
 	],
 };
 
-// A light theme's text is as dark as it is to make room for the cursor. The
-// plate has to sit the contrast floor away from the text, so the paler the text
-// the closer the plate crowds the background. At this depth, and at the light
-// plate's stronger alpha, it stands about as far off the paper as a dark
-// theme's plate stands off its background.
+// A light theme's text is this dark to make room for the cursor, since the plate
+// has to sit the contrast floor away from the text. At this depth and the light
+// plate's stronger alpha, it stands about as far off the paper as a dark theme's
+// plate does off its background.
 //
-// Every light theme's ANSI colors sit 0.52 to 0.54 Oklab L under the paper on
-// average, each one just past the light contrast floor so the floor never has
-// to move it. They used to average 0.36 to 0.47 and lean on the floor, then
-// went to 0.57 and read too dark once light text got heavier (2026100607293301),
-// so they were eased about a third of the way back. A dark theme's sit 0.60 to
-// 0.77 over black, but much past that a yellow or a cyan has no color left.
-// Chroma stayed up, so each reads as a color rather than a muddier copy. The
-// 2 monochrome themes move their whole set together, keeping the spread that
-// is all they have to tell colors apart.
+// Every light theme's ANSI colors average 0.52 to 0.54 Oklab L under the paper,
+// each just past the light contrast floor so the floor never moves it. At 0.57
+// they read too dark once light text got heavier (2026100607293301). A dark
+// theme's sit 0.60 to 0.77 over black, since much past that a yellow or a cyan has
+// no color left. The 2 monochrome themes move their whole set together, to keep
+// the spread they rely on to tell colors apart.
 #[rustfmt::skip]
 const SILK_LIGHT: Palette = Palette {
 	bg: [0xf6, 0xf5, 0xf0],
@@ -193,9 +184,9 @@ const SILK_LIGHT: Palette = Palette {
 	],
 };
 
-// Matrix: monochrome green. Dark = bright green on near-black; light = dark green
-// on a light gray. Being monochrome, the cursor is the same hue as the text at
-// the brightness the text stays readable on (see SILK_DARK and SILK_LIGHT).
+// Matrix: monochrome green, bright green on near-black in dark mode and dark green
+// on light gray in light mode. Since it's monochrome, the cursor is the text's hue
+// at the brightness the text stays readable on (see SILK_DARK and SILK_LIGHT).
 #[rustfmt::skip]
 const MATRIX_DARK: Palette = Palette {
 	bg: [0x00, 0x08, 0x02],
@@ -270,10 +261,10 @@ const AMBER_LIGHT: Palette = Palette {
 	],
 };
 
-// Pastel: soft light pastels on a dark gray with a faint tint of the
-// foreground's complement, so the ground reads as cool against the warm cream
-// text instead of as flat charcoal. The light variant turns it round - the same
-// hues deepened, on cream paper. The cursors follow the same rule as SilkTerm's.
+// Pastel: soft pastels on a dark gray with a faint tint of the foreground's
+// complement, so the ground reads as cool against the warm cream text. The light
+// variant turns it around, with the same hues deepened on cream paper. The
+// cursors follow the same rule as SilkTerm's.
 #[rustfmt::skip]
 const PASTEL_DARK: Palette = Palette {
 	bg: [0x1d, 0x20, 0x28],
@@ -390,7 +381,7 @@ pub fn resolve_in(user: &[UserTheme], name: &str, mode: Mode, system_dark: bool)
 	if dark { theme.dark } else { theme.light }
 }
 
-/// Built-ins only - for paths that have no user themes to hand (and the tests).
+/// Built-ins only, for paths that have no user themes at hand, and the tests.
 pub fn resolve(name: &str, mode: Mode, system_dark: bool) -> Palette {
 	resolve_in(&[], name, mode, system_dark)
 }
@@ -439,9 +430,9 @@ mod tests {
 		}
 	}
 
-	// The pair only works if the 2 read as different signals. A theme that let
-	// them converge would draw the focused control and everything merely
-	// highlighted in the same color, which is the whole point of splitting them.
+	// The pair only works if the 2 read as different signals. A theme that let them
+	// converge would draw the focused control in the same color as everything
+	// highlighted.
 	// Test ID: dava3
 	#[test]
 	fn the_two_attention_colors_stay_apart() {
@@ -455,10 +446,10 @@ mod tests {
 		}
 	}
 
-	// Body text has to clear the minimum-contrast floor on its own - if a theme's
-	// own foreground needed lifting, the floor would be repainting the thing it is
-	// measured against. ANSI black is the other end of the same check: it is
-	// invisible on a dark ground by definition, which is the case the floor is for.
+	// Body text has to clear the minimum-contrast floor on its own. If a theme's own
+	// foreground needed lifting, the floor would be repainting the thing it's
+	// measured against. ANSI black is the other end of the check, since it's
+	// invisible on a dark ground, which is the case the floor is for.
 	// Test ID: dbzct
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]

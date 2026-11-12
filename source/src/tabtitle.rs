@@ -3,35 +3,28 @@
 
 //! What a tab says, and how it's shortened to fit.
 //!
-//! What a tab says comes from a template the user can edit (`window.tab_text`,
-//! see `template`). The default one reads `<shell> [<task>] <path>`: the shell's
-//! friendly name, the command it's running (or `[last: cmd]` for the one it
-//! finished last), and where it is. A shell that has never run anything drops
-//! the brackets and reads `<shell> - <path>` instead.
+//! A tab's text comes from a template the user can edit (`window.tab_text`, see
+//! `template`). The default reads `<shell> [<task>] <path>`: the shell's friendly
+//! name, the command it's running (or `[last: cmd]` for the one it finished last),
+//! and where it is. A shell that has never run anything reads `<shell> - <path>`
+//! instead.
 //!
-//! When that doesn't fit, the parts give way in a fixed order, each rung
-//! strictly narrower than the one above it: a program's own title goes first,
-//! then the shell's name shortens, then the task's name is truncated, then the
-//! path abbreviates, then the task goes altogether, then the path does, and the
-//! last rung is the shortest form of the shell's name on its own. A name typed
-//! on the tab never shortens. Each rung is the template filled in with the
-//! parts at that rung's length, so the template decides what is said and the
-//! ladder decides how short it gets. The caller measures the rungs in order and
-//! takes the first that fits (`label_forms`).
+//! When that doesn't fit, the parts give way in a fixed order, each rung narrower
+//! than the one above: a program's own title goes first, then the shell's name
+//! shortens, the task's name is cut, the path abbreviates, the task goes, the path
+//! goes, and the last rung is the shell's shortest name alone. A name typed on the
+//! tab never shortens. The caller measures the rungs in order and takes the first
+//! that fits (`label_forms`).
 //!
-//! The path is shortened the way `PyCmd`'s prompt does it: every directory above
-//! the current one drops to its first character, and only if that is still too
-//! wide does an ellipsis eat the middle. A pair of things survive every step,
-//! because they're what make the text read as a location rather than as a
-//! command: the anchor it starts from (the drive on Windows, `/` or `~`
-//! elsewhere) and the separator it ends with.
+//! The path is shortened from the middle. An ellipsis takes out a directory at a
+//! time, so what's left keeps its real names, and only a shallow path drops the
+//! directories above the current one to their first character. The anchor (the
+//! drive on Windows, `/` or `~` elsewhere) and the trailing separator survive
+//! every step, since they make the text read as a place rather than a command.
 //!
-//! Everything here is pure, and the path style is passed in rather than read off
-//! `cfg!`, so the Windows forms and the posix ones are both covered by tests on
-//! whichever box runs them.
-//!
-//! The window title is worked out here too (`window_suffix`), because it is built
-//! from the same parts and falls back to the tab's own label.
+//! The path style is passed in rather than read off `cfg!`, so tests cover the
+//! Windows and posix forms on any box. The window title is worked out here too
+//! (`window_suffix`), since it's built from the same parts.
 
 use crate::template::{self, Template};
 
@@ -88,10 +81,9 @@ pub enum Task<'a> {
 }
 
 // Hand-picked short forms for the built-in shell names (the titles in shells.rs
-// KNOWN, and the Windows extras beside it). A name the user has renamed isn't
-// on this list and takes the derived forms instead, which is the point of
-// having both: "Cmd" is what a person writes for the Command Prompt, and
-// nothing mechanical gets there from "Windows Cmd".
+// KNOWN, and the Windows extras beside it). A renamed shell isn't on this list
+// and takes the derived forms instead. "Cmd" is what a person writes for the
+// Command Prompt, and no rule gets there from "Windows Cmd".
 #[rustfmt::skip]
 const SHORT_SHELLS: &[(&str, &str, &str)] = &[
 	// full name              shorter      shortest
@@ -217,8 +209,8 @@ pub struct Rights {
 
 impl Rights {
 	/// The word a console has already written into a title, so it isn't said
-	/// twice. Kept derived rather than stored: a word to take off that nothing
-	/// would put back could only destroy somebody's own text.
+	/// twice. It's derived rather than stored, since taking off a word that nothing
+	/// puts back could only destroy somebody's own text.
 	fn console_marker(self) -> Option<&'static str> {
 		self.say.filter(|_| self.decorated)
 	}
@@ -226,17 +218,15 @@ impl Rights {
 
 /// A title a program asked for, as plain text.
 ///
-/// The desktop draws a window title in places that treat it as text and nothing
-/// else: a task bar, a window list, an alt-tab switcher. The engine hands the
-/// string over as the program spelled it, control characters included, so they
-/// come off here, at the one place a program's title comes in, rather than at
-/// each of the several places it's later shown.
+/// The desktop treats a window title as text only, in a task bar, a window list,
+/// or an alt-tab switcher. The engine hands the string over as the program sent
+/// it, control characters included, so they come off here, where a program's
+/// title comes in, rather than at each place it's shown.
 ///
-/// Only the characters that aren't text: the C0 controls, delete, and the C1
-/// range that a stray high byte decodes into. A right-to-left override survives,
-/// which does let a title read back to front; that is the same reordering any
-/// file name can ask for, and refusing it here would also refuse the joiners
-/// that hold an emoji together.
+/// Only the characters that aren't text go: the C0 controls, delete, and the C1
+/// range a stray high byte decodes into. A right-to-left override survives, since
+/// any file name can ask for the same reordering, and refusing it would also
+/// refuse the joiners that hold an emoji together.
 pub fn plain(title: &str) -> String {
 	title
 		.chars()
@@ -249,17 +239,15 @@ pub fn plain(title: &str) -> String {
 /// What a title set by the running program is worth showing, if anything.
 ///
 /// A Windows console names a new window after the program it starts, so a shell
-/// that sets no title of its own arrives with its own image path. That was
-/// measured for cmd and for pwsh on 2 machines. It says less than the tab's own
-/// label, so it's passed over.
+/// that sets no title of its own arrives with its own image path, as cmd and pwsh
+/// both do. That says less than the tab's own label, so it's passed over.
 fn program_says<'a>(title: &'a str, marker: Option<&str>) -> Option<&'a str> {
 	let mut title = title.trim_start();
-	// While elevated, a Windows console writes its own rights in front of the
-	// first title it sends, which is the one naming the program it started. That
-	// was measured over a pseudoconsole on 2 machines. Both halves say nothing, so
-	// the rights come off here and the name is dropped below. Only the exact word
-	// about to be put back is taken off, so a title that merely reads like one
-	// survives. A console in another language is caught by `foreign_marker_off`.
+	// While elevated, a Windows console writes its rights in front of the first
+	// title it sends, which names the program it started. Neither half says anything
+	// useful, so the rights come off here and the name is dropped below. Only the
+	// exact word about to be put back is taken off, so a title that only reads like
+	// one survives. A console in another language is caught by `foreign_marker_off`.
 	if let Some(word) = marker {
 		if let Some(rest) = title.strip_prefix(word).and_then(|r| r.strip_prefix(": ")) {
 			title = rest;
@@ -397,8 +385,8 @@ pub fn window_suffix(
 	Some(program.map_or_else(tab, str::to_string))
 }
 
-/// The whole window title. A `--title` given on the command line is the answer
-/// apart from the rights, since it is a request for exactly that string.
+/// The whole window title. A `--title` given on the command line is used as is,
+/// apart from the rights, since it asks for exactly that string.
 ///
 /// The rights the terminal is running with come first and no flag turns them
 /// off, since the absence of the word has to mean something.
@@ -550,13 +538,12 @@ pub fn label_forms(template: &Template, facts: Facts, style: Style) -> Vec<Strin
 	{
 		return vec![typed.to_string()];
 	}
-	// Every part of a label is a program's own text: a process can rename itself
-	// and a directory name arrives in an archive or a checkout. None of it has
-	// been through `plain` on the way here, and a label is drawn by the tab
-	// strip and stands in for the window title, so it's held to the same rule a
-	// title is. Cleaned on the way in rather than on the way out, so the rungs
-	// below are measured against what will be drawn. A typed name is
-	// shown as typed.
+	// Every part of a label is a program's own text: a process can rename itself,
+	// and a directory name can come from an archive or a checkout. None of it has
+	// been through `plain`, and a label is drawn by the tab strip and stands in for
+	// the window title, so it's held to the same rule. It's cleaned on the way in, so
+	// the rungs below are measured against what will be drawn. A typed name is shown
+	// as typed.
 	let friendly = plain(facts.shell);
 	let title = facts.title.map(plain).filter(|title| !title.is_empty());
 	let (running, task_name) = match facts.task {
@@ -622,10 +609,10 @@ pub fn label_forms(template: &Template, facts: Facts, style: Style) -> Vec<Strin
 		// names nothing it has. The shell's name is the floor either way.
 		forms.push(friendly.trim().to_string());
 	}
-	// A title the program asked for goes on top. It sits above the ladder rather
-	// than inside it: its length says nothing about how much the tab can give
-	// up, and a tab too narrow for it should still fall through the forms the
-	// tab works out for itself.
+	// A title the program asked for goes on top. It sits above the ladder rather than
+	// inside it, since its length says nothing about how much the tab can give up,
+	// and a tab too narrow for it should still fall through the forms the tab works
+	// out for itself.
 	if title.is_some() {
 		let top = fill(title.as_deref(), full_name, first_task, first_path);
 		if !top.is_empty() && forms.first() != Some(&top) {
@@ -635,9 +622,9 @@ pub fn label_forms(template: &Template, facts: Facts, style: Style) -> Vec<Strin
 	forms
 }
 
-/// Every shortening of `raw`, longest first and each strictly shorter than the
-/// one before it. The first is the path in full; the last is the anchor alone,
-/// so there is always something to draw even in a tab too narrow for a name.
+/// Every shortening of `raw`, longest first and each shorter than the one before
+/// it. The first is the path in full, and the last is the anchor and an ellipsis,
+/// so there's always something to draw even in a tab too narrow for a name.
 pub fn path_forms(raw: &str, home: Option<&str>, style: Style) -> Vec<String> {
 	let sep = style.sep();
 	let (anchor, parts) = split(raw, home, style);
@@ -654,10 +641,9 @@ pub fn path_forms(raw: &str, home: Option<&str>, style: Style) -> Vec<String> {
 	}
 	let mut forms = vec![join(&parts)];
 	let last = parts.len() - 1;
-	// The ellipsis eats the middle a directory at a time, and what is left of the
-	// path keeps its real names. It costs 4 columns where a whole name costs
-	// more, so the first steps are longer than what they replace. push_shorter
-	// drops those, which is what "only if it shortens further" means here.
+	// The ellipsis takes out the middle a directory at a time, and what's left of the
+	// path keeps its real names. The ellipsis costs 4 columns, so a step that covers
+	// a short name is longer than what it replaces, and push_shorter drops it.
 	for keep in (0..last).rev() {
 		let mut items = parts[..keep].to_vec();
 		items.push(ELLIPSIS.to_string());
@@ -793,7 +779,7 @@ fn bounds(total: f32, regular_pct: f32, max_pct: f32) -> (f32, f32) {
 /// How wide each tab on the page is. `active` is the slot of the tab in front,
 /// where it is on this page at all.
 ///
-/// The regular width is a target, not a share: with room to spare every tab
+/// The regular width is a target rather than a share: with room to spare every tab
 /// sits at it, and the bar ends early rather than stretching a couple of
 /// tabs across the window. A tab whose label wants more grows past it, up to
 /// the maximum; a crowded bar pushes every tab back below it, down to its own
@@ -892,10 +878,9 @@ pub fn clamp_page(want: usize, floors: &[f32], total: f32) -> usize {
 
 /// The page holding `active`, moving as little as possible from `want`.
 ///
-/// Deliberately not applied on every read of the strip. A page that is forced
-/// to hold the active tab at all times is a page the wheel can never leave,
-/// and leaving it is the one thing the wheel is for. So this runs when the
-/// active tab changes, and browsing is free in between.
+/// This isn't applied on every read of the strip, since a page forced to hold the
+/// active tab could never be left with the wheel. So it runs when the active tab
+/// changes, and browsing is free in between.
 pub fn page_for(want: usize, active: usize, floors: &[f32], total: f32) -> usize {
 	let mut first = clamp_page(want, floors, total);
 	if active < first {
@@ -917,9 +902,8 @@ pub fn slot_x(widths: &[f32], slot: usize) -> f32 {
 }
 
 /// Which slot on the page a pointer at `x` is over. It's the exact inverse of
-/// `slot_x`, and the only thing a hit test may use. Drawing and hit-testing
-/// reading 2 different answers is how a click hits a tab other than the
-/// one under the pointer.
+/// `slot_x`, and the only thing a hit test may use. If drawing and hit-testing
+/// disagreed, a click could hit a tab other than the one under the pointer.
 pub fn slot_at_x(widths: &[f32], x: f32) -> Option<usize> {
 	if x < 0.0 {
 		return None;
@@ -955,11 +939,10 @@ pub fn tip_value(value: &str) -> String {
 }
 
 /// The tip's lines: every value starts at one column, so the pairs read down the
-/// left the way a table does. This is the whole reason the tip is drawn in the
-/// terminal font rather than the interface one, since padding with spaces
-/// aligns nothing in a proportional face. The key is padded, never the value,
-/// so a long path runs on to the right and the box grows for it instead of the
-/// column moving.
+/// left the way a table does. That's why the tip is drawn in the terminal font
+/// rather than the interface one, since padding with spaces aligns nothing in a
+/// proportional face. The key is padded, never the value, so a long path runs on
+/// to the right and the box grows for it instead of the column moving.
 pub fn tip_lines(rows: &[(&str, String)]) -> Vec<String> {
 	let key_w = rows
 		.iter()
@@ -1542,7 +1525,7 @@ mod tests {
 		}
 	}
 
-	// The regular width is a target, not a share: 3 tabs on a wide bar sit
+	// The regular width is a target rather than a share: 3 tabs on a wide bar sit
 	// at it and leave the rest of the bar empty.
 	// Test ID: dbnjc
 	#[test]
@@ -1699,9 +1682,8 @@ mod tests {
 		assert_eq!(page_for(3, 2, &[100.0; 4], 800.0), 0);
 	}
 
-	// But browsing mustn't be yanked back. A strip that always held the
-	// active tab could never be paged away from it, which is the whole point of
-	// being able to page at all.
+	// Browsing mustn't be yanked back, though. A strip that always held the active
+	// tab could never be paged away from it.
 	// Test ID: dbje7
 	#[test]
 	fn the_page_can_be_moved_away_from_the_active_tab() {
@@ -2087,9 +2069,9 @@ mod tests {
 		);
 	}
 
-	// Measured on both Windows machines: an elevated console puts its own rights
-	// in front of every title it sends over a pseudoconsole, so the marker arrives
-	// glued to the path the program-name rule was written to drop.
+	// An elevated Windows console puts its own rights in front of every title it
+	// sends over a pseudoconsole, so the marker arrives glued to the path the
+	// program-name rule was written to drop.
 	// Test ID: dcdas
 	#[test]
 	fn an_elevated_console_marker_is_not_repeated() {

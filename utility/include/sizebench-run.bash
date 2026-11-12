@@ -12,7 +12,7 @@
 ##		Reproduce a published row before trusting a new one. This rig reproduced
 ##		SilkTerm's memory within 1.3% and its excluded-driver figure within 0.4% of the
 ##		numbers already in the table; anything measured a different way isn't comparable
-##		with them. Window size is the trap - the same binary reads 38 MiB heavier at its
+##		with them. Window size is the trap. The same binary reads 38 MiB heavier at its
 ##		default geometry than at the table's 100x30 grid.
 ##	- Syntax:
 ##		sizebench-run.bash --term KEY [options]
@@ -68,7 +68,7 @@ trap fCleanup EXIT
 ##  The terminals
 #•••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
 
-## Each entry: key|binary|how it is told its grid. The keep-alive shell matters - a
+## Each entry: key|binary|how it is told its grid. The keep-alive shell matters, since a
 ## terminal whose child exits takes the window with it before anything can be measured.
 fTermBinary() {
 	local -r key="${1}"
@@ -142,7 +142,7 @@ fLaunch() {
 				>"${_work}/term.log" 2>&1 &
 			;;
 		silkterm)
-			## Shipped settings with the profile pinned. On a fresh folder SilkTerm rates
+			## Default settings with the profile pinned. On a fresh folder SilkTerm rates
 			## this software display, picks Low, and the row is measured with the text
 			## scrim and the cursor animation off.
 			mkdir -p "${XDG_CONFIG_HOME}/silkterm"
@@ -158,7 +158,7 @@ fLaunch() {
 				>"${_work}/term.log" 2>&1 &
 			;;
 		xterm)
-			## X toolkit option, one dash - '--geometry' isn't accepted.
+			## X toolkit option with one dash, since '--geometry' isn't accepted.
 			"${bin}" -geometry "${cols}x${rows}" -e /bin/dash -c 'exec sleep 1000000' \
 				>"${_work}/term.log" 2>&1 &
 			;;

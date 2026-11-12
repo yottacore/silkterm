@@ -18,25 +18,19 @@ use wgpu::hal::api::Gles;
 use winit::event_loop::ActiveEventLoop;
 use winit::window::{Window, WindowAttributes};
 
-/// Color pipeline contract (breaking it reproduces the "everything too dark /
-/// `SELECTION_BG` invisible" bug class): every fragment shader in this app writes
-/// linear light (rect `srgb_f32`, glyphon Accurate, bg-image, scrim), and exactly
-/// one sRGB encode happens per frame, owned by this module. On the native path
-/// the sRGB surface format encodes on write. On the GL path the blit's lin2srgb
-/// does it into the non-sRGB fbo 0, so the offscreen must stay a non-sRGB,
-/// high-precision format (`Rgba16Float`; an sRGB view would decode in the blit's
-/// sample and cancel the encode, an 8-bit linear one bands dark gradients).
-/// New render features mustn't add their own encode. The scrim's color map is
-/// stored encoded, but only as storage: scrim.rs decodes it on read, so what it
-/// draws is still linear.
+/// Color pipeline contract: every fragment shader here writes linear light, and
+/// exactly one sRGB encode happens per frame, in this module. The native path's
+/// sRGB surface encodes on write. On the GL path the blit's lin2srgb encodes into
+/// the non-sRGB fbo 0, so the offscreen must stay a non-sRGB, high-precision format
+/// (`Rgba16Float`). Breaking this brings back the "everything too dark" bugs, so
+/// new render features mustn't add an encode of their own. The scrim's color map
+/// is stored encoded, but scrim.rs decodes it on read.
 ///
 /// That one encode runs on premultiplied values, which is exact at alpha 1 and
-/// wrong anywhere else: sRGB(a * c) is brighter than a * sRGB(c), and the
-/// compositor blends what it gets as if it were the second. A light background
-/// at 80% came out as 91% of itself, so it covered most of what the desktop
-/// behind it should have shown, while black stayed black. The only translucent
-/// thing drawn is the pane fill, so rather than move the encode, the fill is
-/// given the color whose encoded, premultiplied value is right.
+/// wrong anywhere else, since sRGB(a * c) is brighter than a * sRGB(c). A light
+/// background at 80% came out as 91% of itself. The pane fill is the only
+/// translucent thing drawn, so the fill is given the color whose encoded,
+/// premultiplied value is right.
 pub fn see_through(color: [f32; 4]) -> [f32; 4] {
 	let a = color[3];
 	if a >= 1.0 || a <= 0.0 {
@@ -49,12 +43,12 @@ pub fn see_through(color: [f32; 4]) -> [f32; 4] {
 // How a frame reaches the screen. `Native` is the normal wgpu surface
 // (Vulkan/Metal/DX/Wayland), with premultiplied alpha where the platform has it.
 // `Gl` runs wgpu on a glutin-created GL context so X11 can do per-pixel alpha:
-// the wgpu surface there can't bind the window's ARGB visual, but glutin can. We
-// render to the GL default framebuffer (fbo 0) and present via swap_buffers.
+// the wgpu surface there can't bind the window's ARGB visual, but glutin can. The
+// scene renders to the GL default framebuffer (fbo 0) and presents with swap_buffers.
 enum Backend {
 	Native(wgpu::Surface<'static>),
 	// The GL default framebuffer (fbo 0) is Y-flipped vs wgpu's top-left origin,
-	// which flips our quads and clips glyphon's bounds-limited text out entirely.
+	// which flips the quads and clips glyphon's bounds-limited text out entirely.
 	// So the scene renders to `offscreen` (normal orientation, exactly like the
 	// native path), then `blit` flips it into the default framebuffer `fb`.
 	Gl {
@@ -228,28 +222,23 @@ impl std::fmt::Debug for Frame {
 	}
 }
 
-// A VT switch (Ctrl+Alt+F1 and back) or suspend/resume can silently trash the
-// contents of GPU textures on the GL path. The context survives, so per-frame
-// procedural draws (rects, cursor) still work, but everything sampled from a
-// once-uploaded texture, such as the glyph atlases (all text) and the wallpaper,
-// reads garbage, which is the "window goes mostly black" bug. No event reports
-// this, so known-pattern sentinel textures are probed on a slow tick; a
-// mismatched readback means the uploads are gone and the app rebuilds them
-// (State::recover_gpu). Native-surface backends already get Lost/Outdated from
-// the swapchain and aren't affected, so the sentinel exists only on GL.
+// A VT switch or suspend and resume can quietly wipe GPU texture contents on the
+// GL path. The context survives, so per-frame draws still work, but anything
+// sampled from an uploaded texture, such as the glyph atlases and the wallpaper,
+// reads garbage, and the window goes mostly black. No event reports this, so
+// sentinel textures with a known pattern are probed on a slow tick, and a
+// mismatch makes the app rebuild its uploads (State::recover_gpu). Native
+// backends get Lost or Outdated from the swapchain instead.
 //
-// There are 2 witnesses, because the NVIDIA driver restores what it has a sysmem
-// backing for and purges the rest (NV_robustness_video_memory_purge: resources
-// exclusively in video memory "will be lost"; the driver "attempts to hide"
-// the purge for the ones it can restore). A single 64px copy-usage sentinel
-// survived a real VT switch that still wiped the atlas, so:
-// - `up_tex`: CPU-uploaded + TEXTURE_BINDING, sized like a glyph atlas. It
+// There are 2 sentinels, since NVIDIA restores what it has a system-memory copy
+// of and purges the rest (NV_robustness_video_memory_purge). A single small
+// copy-usage sentinel survived a real VT switch that still wiped the atlas.
+// - `up_tex`: uploaded from the CPU and sampled, sized like a glyph atlas. It
 //   catches drivers that purge sampled uploads.
-// - `fbo_tex`: seeded only by a GPU-side copy, never from the CPU, so no
-//   driver can re-materialize its contents from a sysmem copy. It catches the
-//   documented purge of vidmem-exclusive (rendered/FBO-class) resources.
-//   Seeded by copy rather than a render-pass clear, since a clear could be
-//   tracked as metadata and re-applied on restore, which would false-negative.
+// - `fbo_tex`: filled only by a GPU-side copy, so no driver can restore it from
+//   a system-memory copy. It catches the purge of video-memory-only resources.
+//   It's filled by a copy rather than a clear, since a driver could replay a
+//   clear on restore and hide the loss.
 const SENTINEL_PX: u32 = 256; // atlas-sized, so it shares the real textures' VRAM pool
 const SENTINEL_ROW: u32 = SENTINEL_PX * 4; // Rgba8Unorm; multiple of 256 (COPY_BYTES_PER_ROW_ALIGNMENT), so no pad rows
 const SENTINEL_BYTES: usize = (SENTINEL_ROW * SENTINEL_PX) as usize;
@@ -880,10 +869,10 @@ impl Gfx {
 	) -> anyhow::Result<(Self, Arc<Window>)> {
 		#[cfg(target_os = "linux")]
 		quiet_glx_errors();
-		// No transparency requirement in the template: the picker closure must
-		// return a Config (can't say "none fit"), and a panic there would abort
-		// past resumed()'s native-backend fallback (panic=abort in release).
-		// So match broadly, prefer transparent+deepest-alpha, validate after.
+		// No transparency requirement in the template, since the picker closure must
+		// return a Config, and a panic there would abort past resumed()'s native-backend
+		// fallback. So match broadly, prefer transparent and deepest alpha, and check
+		// after.
 		let template = glutin::config::ConfigTemplateBuilder::new();
 		let (window, config) = DisplayBuilder::new()
 			.with_window_attributes(Some(attrs))
@@ -895,8 +884,8 @@ impl Gfx {
 			));
 		}
 		let window = Arc::new(window.ok_or_else(|| anyhow::anyhow!("glutin made no window"))?);
-		// empty flags: no indirect-validation (needs compute the GL 3.3 context
-		// lacks; we never use indirect draws).
+		// empty flags: no indirect validation, which needs compute the GL 3.3 context
+		// lacks, and indirect draws aren't used.
 		let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
 			backends: wgpu::Backends::GL,
 			flags: wgpu::InstanceFlags::empty(),
@@ -955,12 +944,11 @@ impl Gfx {
 			)?
 		};
 		let ctx = ctx.make_current(&surface)?;
-		// Frame pacing on this path is swap_buffers blocking on vblank; the driver
-		// default isn't guaranteed (__GL_SYNC_TO_VBLANK=0, PRIME setups), and without
-		// it every scroll animation becomes an unthrottled busy-render loop.
-		// SILK_MAX_FPS (app.rs) paces the loop itself, and then vblank mustn't also
-		// have a say: a swap that blocks to the next refresh puts every frame back on
-		// the display's grid, which is the grid the pinned rate exists to leave.
+		// Frame pacing on this path is swap_buffers blocking on vblank. The driver default
+		// isn't guaranteed (__GL_SYNC_TO_VBLANK=0, PRIME setups), and without it every
+		// scroll animation becomes a busy render loop. SILK_MAX_FPS (app.rs) paces the
+		// loop itself, and then vblank has to stay out of it, since a swap that blocks to
+		// the next refresh puts every frame back on the display's grid.
 		let interval = if std::env::var_os("SILK_MAX_FPS").is_some() {
 			glutin::surface::SwapInterval::DontWait
 		} else {
@@ -992,12 +980,11 @@ impl Gfx {
 		};
 		let drawn = Drawn::of(&adapter_info, false, false);
 
-		// The GL offscreen is linear-light, so it mustn't be sRGB (an sRGB-declared
-		// offscreen makes the blit's textureSample decode, canceling its lin2srgb).
-		// It must also be high-precision: an 8-bit linear offscreen starves dark
-		// gradients of codes -> pronounced banding (esp. a blurred background image).
-		// Rgba16Float gives a linear intermediate with no banding; the blit then
-		// does the single linear->sRGB encode (+ dither) into the 8-bit fbo 0.
+		// The GL offscreen is linear light, so it mustn't be sRGB, or the blit's
+		// textureSample would decode and cancel its lin2srgb. It also has to be
+		// high-precision, since an 8-bit linear offscreen bands dark gradients, most of
+		// all a blurred wallpaper. The blit then does the single linear-to-sRGB encode,
+		// with dither, into the 8-bit fbo 0.
 		let format = wgpu::TextureFormat::Rgba16Float;
 		let surface_cfg = wgpu::SurfaceConfiguration {
 			usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
@@ -1184,9 +1171,9 @@ impl Gfx {
 		)
 	}
 
-	/// Poll an in-flight probe. Some(Lost{..}) = a witness pattern is gone (the
-	/// sentinels are reseeded before returning so the caller only rebuilds the
-	/// rest). None = still pending / no probe.
+	/// Poll an in-flight probe. Some(Lost{..}) means a witness pattern is gone, and the
+	/// sentinels are reseeded before returning, so the caller only rebuilds the rest.
+	/// None means still pending or no probe.
 	pub fn vram_check_poll(&mut self) -> Option<VramProbe> {
 		let sent = self.sentinel.as_mut()?;
 		let read = sent.read.poll(&self.device, |data| {
@@ -1467,26 +1454,24 @@ fn surface_config(
 		present_mode: wgpu::PresentMode::AutoVsync,
 		alpha_mode,
 		view_formats: vec![],
-		// Windows: one queued frame, not 2. With Fifo + 2-frame DXGI latency
-		// the CPU races ahead then blocks, so the wall-clock dt between frames
-		// alternates short/long and the scroll ease steps unevenly (judder).
-		// One frame paces present to the display -> steady dt -> smooth. The GL
-		// path and other platforms already pace evenly, so leave them.
+		// Windows: one queued frame rather than 2. With Fifo and 2-frame DXGI latency
+		// the CPU races ahead then blocks, so the time between frames alternates short
+		// and long and the scroll eases unevenly. One frame paces present to the display.
+		// The GL path and other platforms already pace evenly.
 		desired_maximum_frame_latency: if cfg!(windows) { 1 } else { 2 },
 	};
 	Some((config, format, transparent))
 }
 
 // The compositing mode to ask for, and whether it lets a translucent background
-// show the desktop. Premultiplied wherever it's offered. If only Opaque is
-// available (no compositor), stay opaque and transparency is silently ignored.
+// show the desktop. Premultiplied wherever it's offered, and opaque with no
+// compositor, where transparency is quietly ignored.
 //
-// Metal never offers PreMultiplied, only Opaque and PostMultiplied, and the
-// first one offered is Opaque, so a Mac window stayed opaque. PostMultiplied
-// there only means the CAMetalLayer isn't marked opaque. Core Animation still
-// reads the layer as premultiplied, which is what the shaders write, so it's
-// the same thing under another name. Elsewhere PostMultiplied would multiply
-// a second time, so it is taken on Metal only.
+// Metal offers only Opaque and PostMultiplied, and Opaque first, so a Mac window
+// stayed opaque. PostMultiplied there only means the CAMetalLayer isn't marked
+// opaque, and Core Animation still reads the layer as premultiplied, which is
+// what the shaders write. Elsewhere PostMultiplied would multiply a second time,
+// so it's taken on Metal only.
 fn pick_alpha_mode(
 	offered: &[wgpu::CompositeAlphaMode],
 	backend: wgpu::Backend,
@@ -1658,16 +1643,13 @@ impl<A: winit::application::ApplicationHandler<T>, T: 'static>
 	}
 }
 
-/// A wgpu instance/adapter/device kept for the life of the process and shared by
-/// every pop-out dialog.
+/// A wgpu instance, adapter, and device kept for the life of the process and
+/// shared by every pop-out dialog.
 ///
-/// Dialogs can't borrow the terminal's context: on X11 that one is a glutin
-/// GL/EGL context, and a second GL instance panics in wgpu-hal's EGL teardown. So
-/// each dialog used to build a whole PRIMARY context of its own, on the click, and
-/// again on every reopen since nothing was retained. Building the instance,
-/// adapter and device is most of the time it takes to open a dialog. Warming it
-/// once on a worker thread moves that off the click, and keeping it moves it off
-/// every later open too.
+/// Dialogs can't borrow the terminal's context, since on X11 it's a glutin GL/EGL
+/// context and a second GL instance panics in wgpu-hal's EGL teardown. Building
+/// the instance, adapter, and device is most of the time it takes to open a
+/// dialog, so this is warmed once on a worker thread and kept for every later open.
 #[derive(Clone, Debug)]
 pub struct DialogGpu {
 	instance: wgpu::Instance,
@@ -1724,12 +1706,11 @@ impl DialogGpu {
 	}
 }
 
-// The warm-up worker and the context it produces. `Failed` is a state of its own
-// rather than an empty `Ready`: a box with no usable adapter fails every time, so
-// without it `start` would spawn another worker on the next event-loop pass and
-// keep paying a full adapter probe (and printing) for the life of the process.
-// Generic over the context only so the state machine can be exercised without a
-// GPU; the one real instantiation is DialogGpu.
+// The warm-up worker and the context it builds. `Failed` is a state of its own
+// rather than an empty `Ready`, since a box with no usable adapter fails every
+// time, and `start` would otherwise spawn another worker on every event-loop pass
+// for the life of the process. It's generic over the context only so a test can
+// drive the state machine without a GPU.
 #[derive(Debug)]
 enum Warm<T> {
 	Idle,
@@ -1742,6 +1723,7 @@ impl<T> Warm<T> {
 	// Join the worker if there is one, and hand back a state either way. Written
 	// as a by-value transition so the caller can't take the state and forget to
 	// put it back. Doing that dropped an already-built context and left every
+	// later dialog on the cold path.
 	fn settled(self) -> Self {
 		match self {
 			// a panicked worker reads as a failure, same as a returned None
@@ -1988,15 +1970,13 @@ impl GlxCodes {
 #[cfg(target_os = "linux")]
 const WSI_DEBUG: &str = "MESA_VK_WSI_DEBUG";
 
-/// Software rendering on an X server that can't make shared pixmaps, NVIDIA's
-/// for one. Mesa's software Vulkan presents through MIT-SHM pixmaps whenever the
-/// server has DRI3, without asking. Each pixmap is refused unseen, the fence
-/// made on it fails `BadDrawable`, and winit panics at its next checked call.
-/// Mesa's `noshm` makes it use `PutImage` instead. Every Vulkan instance reads
-/// the variable, the dialogs' worker too, so it's set once from main
-/// while the process is still single-threaded. Shells started from here
-/// inherit it, which keeps a software Vulkan program run in one off the same
-/// fault.
+/// Software rendering on an X server that can't make shared pixmaps, such as
+/// NVIDIA's. Mesa's software Vulkan presents through MIT-SHM pixmaps whenever the
+/// server has DRI3, the server refuses each one, and winit panics at its next
+/// checked call. Mesa's `noshm` makes it use `PutImage` instead. Every Vulkan
+/// instance reads the variable, so it's set once from main while the process is
+/// still single-threaded. Shells started from here inherit it, which keeps a
+/// software Vulkan program run in one off the same fault.
 #[cfg(target_os = "linux")]
 pub fn keep_software_off_shared_pixmaps(on_x11: bool) {
 	if !on_x11 {
@@ -2536,7 +2516,7 @@ fn fs(in: VsOut) -> @location(0) vec4<f32> {
 // Fullscreen-triangle flip-blit: samples the offscreen scene and writes it to
 // the GL default framebuffer with V flipped (fbo 0 has a bottom-left origin).
 // The offscreen already has premultiplied rgba, so this is a straight copy.
-const BLIT_WGSL: &str = r#"
+const BLIT_WGSL: &str = r"
 struct VsOut { @builtin(position) clip: vec4<f32>, @location(0) uv: vec2<f32> };
 @vertex
 fn vs(@builtin(vertex_index) i: u32) -> VsOut {
@@ -2552,10 +2532,10 @@ fn vs(@builtin(vertex_index) i: u32) -> VsOut {
 }
 @group(0) @binding(0) var t: texture_2d<f32>;
 @group(0) @binding(1) var s: sampler;
-// linear -> sRGB. The GL default framebuffer (fbo 0) isn't sRGB-capable here, so
-// wgpu won't encode on write; without this every pixel comes out ~half-bright (opaque
-// text then reads as "faded/transparent"). Encode manually and write to a non-sRGB
-// target so there's no double conversion. rgb is premultiplied; encode per-channel.
+// linear -> sRGB. fbo 0 isn't sRGB-capable here, so wgpu won't encode on write,
+// and without this every pixel comes out about half as bright. rgb is
+// premultiplied, and it's encoded per channel into a non-sRGB target, so there's
+// no double conversion.
 fn lin2srgb(c: vec3<f32>) -> vec3<f32> {
     let cl = max(c, vec3<f32>(0.0));
     let lo = cl * 12.92;
@@ -2577,7 +2557,7 @@ fn fs(in: VsOut) -> @location(0) vec4<f32> {
     let d = (hash12(p) - hash12(p + vec2<f32>(13.7, 91.3))) / 255.0;
     return vec4<f32>(lin2srgb(c.rgb) + vec3<f32>(d), c.a);
 }
-"#;
+";
 
 #[cfg(test)]
 mod tests {

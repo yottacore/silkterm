@@ -59,10 +59,10 @@ done < "$(dirname "${BASH_SOURCE[0]}")/tool-pins.txt"
 unset pinName pinVer pinWhere pinCmd
 
 ## Where cargo writes build output. CARGO_TARGET_DIR moves it, and a run driven
-## from another host does exactly that (cicd-win.ps1 -Wsl builds this tree with
-## the target dir on its own filesystem, so the two platforms' objects don't
-## evict each other). Nothing below may assume 'target' - a stage that does
-## still builds, then looks for its binary somewhere it was never put.
+## from another host does that. cicd-win.ps1 -Wsl builds this tree with the
+## target dir on its own filesystem, so the 2 platforms' objects don't evict each
+## other. Nothing below may assume target/, since a stage that does still builds,
+## then looks for its binary where it was never put.
 TARGET_DIR="${CARGO_TARGET_DIR:-target}"
 
 ## Stage 2: debug build (fast compile sanity)
@@ -71,25 +71,24 @@ DEBUG_BUILD_CMD=(cargo build)
 ## Stage 3: regression tests
 TEST_CMD=(cargo test)
 
-## Stage 3 (after tests): lints. Gating; house allows live in the workspace
-## Cargo.toml [workspace.lints.clippy]. PROBE decides tool availability -
-## a failed probe skips the step with a warning instead of aborting.
-## rust-toolchain.toml pins one toolchain for every rustup-routed cargo, but a
-## shell where system cargo wins PATH can still populate target/ with the other
-## rustc (E0514: artifacts from a different compiler), so lint pins the rustup
-## PATH and keeps its own target dir as insurance. That dir hangs off
-## CARGO_TARGET_DIR when one is set, so a run driven from elsewhere (a Windows
-## box delegating the Linux half through WSL) keeps its build output where it
-## put the rest of it, rather than in the source tree it was handed.
+## Stage 3 (after tests): lints, which fail the run. The house allows are in the
+## workspace Cargo.toml [workspace.lints.clippy]. A failed probe skips the step
+## with a warning instead of aborting.
+## rust-toolchain.toml pins one toolchain for every cargo that rustup runs, but a
+## shell where system cargo comes first on PATH can still fill target/ from the
+## other rustc (E0514), so the lint step puts the rustup PATH first and keeps its
+## own target dir. That dir is under CARGO_TARGET_DIR when one is set, so a run
+## driven from elsewhere, such as a Windows box running the Linux half through
+## WSL, keeps its build output with the rest of it rather than in the source tree.
 LINT_PROBE=(env "PATH=${HOME}/.cargo/bin:${PATH}" cargo clippy --version)
 LINT_CMD=(env "PATH=${HOME}/.cargo/bin:${PATH}" "CARGO_TARGET_DIR=${TARGET_DIR}/lint" cargo clippy --workspace --all-targets -- -D warnings)
 
-## Stage 3 (after lints): the same lints again for Windows. The cross-builds build
-## the binary only, and the lints above run for this box, so Windows-only code is
-## seen by neither - a cfg-gated item used by an ungated test broke the suite there
-## and two lint findings sat in code this box never compiles. Both took a Windows
-## box to find, and both are answered from here in under a minute. Empty () to
-## disable.
+## Stage 3 (after lints): the same lints again for Windows. The cross builds build
+## the binary only, and the lints above run for this box, so neither one checks
+## Windows-only code. A cfg-gated item used by an ungated test broke the suite
+## there, and 2 lint findings went unseen in code this box never compiles. Both
+## took a Windows box to find, and this step finds them in under a minute. Empty
+## () to disable.
 XLINT_CMD=(env "PATH=${HOME}/.cargo/bin:${PATH}" "CARGO_TARGET_DIR=${TARGET_DIR}/lint" cargo clippy --workspace --all-targets --target x86_64-pc-windows-gnu -- -D warnings)
 ## Stage 3: and for macOS, which nothing here builds. The Mac build is on another
 ## box and only runs on a full run, so macOS-only unsafe code went unlinted unless
@@ -98,14 +97,14 @@ XLINT_CMD=(env "PATH=${HOME}/.cargo/bin:${PATH}" "CARGO_TARGET_DIR=${TARGET_DIR}
 MACLINT_CMD=(env "PATH=${HOME}/.cargo/bin:${PATH}" "CARGO_TARGET_DIR=${TARGET_DIR}/lint" cargo clippy --workspace --all-targets --target x86_64-apple-darwin -- -D warnings)
 
 ## Stage 3 (after tests): the fuzz soak. The targets are ordinary tests, so the
-## run above already exercised them at a fraction of a second each; this gives
-## every one a real budget. Seconds PER TARGET, and they run in parallel, so the
-## wall time is roughly this plus the build. 0 disables; --quick sets it to 0.
+## run above already ran them for a fraction of a second each, and this gives
+## every one a real budget. Seconds per target, and they run in parallel, so the
+## wall time is about this plus the build. 0 disables; --quick sets it to 0.
 FUZZ_SECS=20
 FUZZ_CMD=(cargo test fuzz::)
 
-## Stage 3 (after lints): dependency police (licenses/duplicates/sources,
-## policy in deny.toml). Non-gating for now; tighten once the report is tuned.
+## Stage 3 (after lints): cargo-deny's license, duplicate, and source checks, with
+## the policy in deny.toml. They only warn for now, until the report is tuned.
 DENY_PROBE=(cargo deny --version)
 DENY_CMD=(cargo deny check licenses bans sources)
 ## Known advisories against the locked dependencies a release binary is built
@@ -192,14 +191,14 @@ CODEQL_SUPPRESSIONS="cicd/codeql-suppressions.txt"
 ## under --quick; 0 skips it too. A value of 150 runs about 5 cases.
 DPIRAND_SECS=150
 
-## Stage 3 (last): headless scroll regression harness. Slow (a private Xvfb + GL
-## per scene), so it is skipped under --quick; non-fatal on an environment miss,
-## but a measured scroll regression aborts. Empty () to disable.
+## Stage 3 (last): headless scroll regression harness. It's slow, with a private
+## Xvfb and GL per scene, so --quick skips it. A missing tool only skips it, but a
+## measured scroll regression aborts. Empty () to disable.
 SCROLL_HARNESS=(cicd/tests/scroll/run.bash)
 
 ## Stage 3: graphical scenarios against a real Windows desktop, over ssh. Slow, so
-## it is skipped under --quick. A box that is off, or whose session is locked, is a
-## skip and not a failure - both are somebody's machine rather than build hardware.
+## it is skipped under --quick. A box that's off, or whose session is locked, is a
+## skip, since both boxes are people's own machines rather than build hardware.
 ## Each scenario runs once, on the first box free for it, and one that needs a
 ## real card only on a box tagged gpu (run.bash's header has the rule).
 ## Empty () to disable. Extra scenario names may be listed after run.bash.
@@ -244,7 +243,7 @@ RELEASE_ARTIFACT_DIR="cicd/artifacts/release"   # relative to repo root; gitigno
 VERSION_MANIFEST="source/Cargo.toml"            # the single version source
 
 ## Stage 6: distributable packages, built from the stage-5 release binaries (never
-## rebuilt) when --quick is NOT passed. Linux -> .deb + .rpm (cargo-deb /
+## rebuilt), except under --quick. Linux -> .deb + .rpm (cargo-deb /
 ## cargo-generate-rpm, metadata in source/Cargo.toml). Windows -> a single self-
 ## contained NSIS installer .exe per arch (makensis), which upgrades an existing
 ## install in place. macOS is built on a Mac by the private runner below. BSD is
@@ -321,10 +320,9 @@ CLEANUP_CACHE_CAP_MB=2048
 ## GFS_KEEP_* env vars (GFS_KEEP_FREQUENT, GFS_KEEP_DAILY, ...) if needed.
 
 ## Stage 7: dogfood. Every build this run made is installed under a fixed name in
-## the synced app dir for the platform it TARGETS, so a box that can't build for
-## itself still gets a current binary over Dropbox. Nothing here keeps a pool of
-## dated copies any more - the 'runterm' launcher on each box does that, in its own
-## rotated versions folder.
+## the synced app dir for the platform it targets, so a box that can't build for
+## itself still gets a current binary over Dropbox. The runterm launcher on each
+## box keeps the dated copies, in its own rotated versions folder.
 ## One line per flavor: "<os-arch>|<name at dest>|<dir>[|<dir>...]", where os-arch
 ## names a CROSS_TARGETS row or RELEASE_NATIVE_OSARCH. The first writable dir wins;
 ## none writable fails the run, and a target not built this run is passed over.
@@ -353,7 +351,7 @@ DOGFOOD_ICON="source/assets/logo.png"
 ##
 ## The private key never goes in the repo. To set one up once:
 ##   ssh-keygen -t ed25519 -C releases@silkterm -f ~/.ssh/silkterm-release
-## then put the CONTENTS of ~/.ssh/silkterm-release.pub into releaseSignPubkey
+## then put the text of ~/.ssh/silkterm-release.pub into releaseSignPubkey
 ## in install.bash and install.ps1, and point this at the private half. Empty
 ## means the release goes out unsigned, and release.bash says so.
 RELEASE_SIGN_KEY="${SILKTERM_RELEASE_KEY:-}"
@@ -372,9 +370,9 @@ GIT_PUBLISH=(cicd/utility/n8git_backup-and-publish)
 ##
 ## forks/ holds working clones of the patched dependencies. Each has its own
 ## remote, so the archive would otherwise include 50 MB of a copy of something
-## already kept elsewhere, and more as each one gets built. What that costs is
-## work committed in a clone and not pushed, which isn't in the backup either -
-## already true of this repo, whose .git is excluded the same way.
+## already kept elsewhere, and more as each one gets built. The cost is that work
+## committed in a clone and not pushed isn't in the backup either, which is
+## already true of this repo, since its .git is excluded the same way.
 ##
 ## target/mmap-bench is the minimap rig's scratch: a 32 MiB flood file it makes
 ## on demand, plus one log per run.

@@ -34,7 +34,7 @@ function fCheck { param([string]$What, [bool]$Ok)
 	if ($Ok) { Write-Host "  ok   $What" } else { Write-Host "  FAIL $What"; $script:failures++ }
 }
 
-##	What the guard said on stderr, and what it answered.
+##	What the guard said on stderr, and what it returned.
 function fTry { param([scriptblock]$Call)
 	$saved = [Console]::Error
 	$err = [System.IO.StringWriter]::new()
@@ -200,7 +200,7 @@ $gone = fDir (Join-Path $base "parent${sep}gone")
 fCheck 'a parent behind a link is refused' (fRefused { fSafeRm_Under (Join-Path $behind 'parent') (Join-Path $behind "parent${sep}gone") } 'goes through a link')
 
 ##	install.ps1 runs alone, by irm | iex too, so it has a copy, on 5.1 as
-##	well. The temp folder the system hands it can sit behind a link, as macOS's
+##	well. The temp folder the system gives it can be behind a link, as macOS's
 ##	/var does, so that copy looks for links only below the parent.
 $installer = Join-Path $PSScriptRoot '../../../install.ps1'
 $ast = [System.Management.Automation.Language.Parser]::ParseFile($installer, [ref]$null, [ref]$null)
