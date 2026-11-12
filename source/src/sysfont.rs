@@ -15,6 +15,11 @@ pub struct Monospace {
 /// Cached system monospace description.
 pub fn monospace() -> &'static Monospace {
 	static M: OnceLock<Monospace> = OnceLock::new();
+	// Miri can't start the desktop's settings tools, and every config test reaches
+	// this through the defaults.
+	if cfg!(miri) {
+		return M.get_or_init(Monospace::default);
+	}
 	M.get_or_init(platform::monospace)
 }
 
@@ -58,6 +63,9 @@ pub struct UiFont {
 /// is readable.
 pub fn interface() -> &'static UiFont {
 	static U: OnceLock<UiFont> = OnceLock::new();
+	if cfg!(miri) {
+		return U.get_or_init(UiFont::default);
+	}
 	U.get_or_init(platform::interface)
 }
 
