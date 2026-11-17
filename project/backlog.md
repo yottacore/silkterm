@@ -34,6 +34,20 @@ Going forward, new issues in the new template at the bottom of this file will go
 
 ## Issues
 
+- With Resize window on zoom on, a zoom on the alt screen adds a column
+	- ID: 2026111708050191
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261117-080501
+	- Opened by: CC
+	- Related IDs: 2026111700130407
+	- Target OS: All
+	- Steps to reproduce: Turn on Resize window on zoom. Run a full-screen program such as less in a 700x400 window, then press Ctrl+Plus.
+	- Incorrect behavior: The program is told one column more than it had, 64 then 65. On the normal screen the grid is kept, 55 then 55.
+	- Expected behavior: The program keeps its columns and rows.
+	- Note: Found on Xvfb while working 2026111700130407, on the dev build and the 11-10 dogfood build. The alt screen hides the minimap column, which the zoom's size may still count.
+
 - The window doesn't paint while the GPU is busy or short on memory, and stays blank after the load ends
 	- ID: 2026100312470535
 	- Type: Bug
@@ -198,13 +212,22 @@ Going forward, new issues in the new template at the bottom of this file will go
 - Window auto-resize stopped working
 	- ID: 2026111700130407
 	- Type: Bug
-	- Status: Queued
+	- Status: Waiting for answers
+		- Waits on the question in questions.md about which resize is meant.
 	- Opened: 20261117-001304
 	- Opened by: JC
 	- Target version: rc.1
 	- Incorrect behavior: Window auto-resize stopped working.
 	- Notes:
 		- Possibly only when running Muffer?
+	- Reproduced: No. No doc or setting is called auto-resize, so each kind of automatic resize was tried, on the dev build and on the dogfood build from 11-10 that was running when this was filed.
+	- Progress log:
+		- 20261117: On Xvfb, with and without xfwm4, a program in the pane was told each new grid after every window resize. That held on the normal screen, on the alt screen with mouse tracking on, and with a frame every 50 ms in synchronized-output marks, like muffer. It also held for a window resized after its device was let go.
+		- 20261117: With Resize window on zoom on, each zoom resized the window and kept the rows. The columns were one more after the first zoom on the alt screen, and stayed there.
+		- 20261117: dpirand on X11 passed 5 cases, with drags, moves, zooms, resizes and relaunches across 2 to 4 monitors.
+		- 20261117: Not tried: monitors waking on a real desktop, which the rigs can't stand in for.
+	- Decisions:
+		- 20261117: No test yet. Which behavior to pin waits on the answer.
 
 - Tab labels and the window title are worked out again on every frame
 	- ID: 2026111623500001
