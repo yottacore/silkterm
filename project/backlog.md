@@ -199,8 +199,6 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Notes:
 		- Possibly only when running Muffer?
 
-- **Stop here to work on releasing rc.1**.
-
 - Tab labels and the window title are worked out again on every frame
 	- ID: 2026111623500001
 	- Type: Enhancement
@@ -296,6 +294,8 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- The ink and diff checks call `GetPixel` 35k to 60k times per image, which takes seconds per check.
 		- Read the bitmap's bytes once instead. It needs a Windows box to test.
 		- Detail: `detail_backlog.md`, under this ID.
+
+- **Stop here to work on releasing rc.1**.
 
 - The "Minutes otherwise" release of resources still isn't working
 	- ID: 2026111009560100
