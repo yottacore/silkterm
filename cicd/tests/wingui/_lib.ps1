@@ -394,20 +394,59 @@ function fShot([IntPtr]$H, [string]$Name) {
 	$bmp | Add-Member -NotePropertyName How -NotePropertyValue $how -PassThru
 }
 
+##	GetPixel is one interop call a pixel, and a check samples 35k to 60k of them,
+##	which took seconds. These read the locked bitmap a row at a time instead.
+##	Format32bppArgb is B, G, R, A in memory, whatever the source format, and a
+##	row is stride bytes after the one above it, stride being negative bottom-up.
+Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+public static class SilkPix {
+	public static double Ink(IntPtr scan0, int stride, int w, int h, int step) {
+		if (step < 1) step = 1;
+		var row = new byte[w * 4];
+		long lit = 0, seen = 0;
+		for (int y = 0; y < h; y += step) {
+			Marshal.Copy(IntPtr.Add(scan0, y * stride), row, 0, row.Length);
+			for (int x = 0; x < w; x += step) {
+				int i = x * 4;
+				seen++;
+				if (row[i] + row[i + 1] + row[i + 2] > 40) lit++;
+			}
+		}
+		return seen == 0 ? 0.0 : Math.Round((double)lit / seen, 4);
+	}
+	public static double Diff(IntPtr scanA, int strideA, IntPtr scanB, int strideB, int w, int h, int step) {
+		if (step < 1) step = 1;
+		var ra = new byte[w * 4]; var rb = new byte[w * 4];
+		long moved = 0, seen = 0;
+		for (int y = 0; y < h; y += step) {
+			Marshal.Copy(IntPtr.Add(scanA, y * strideA), ra, 0, ra.Length);
+			Marshal.Copy(IntPtr.Add(scanB, y * strideB), rb, 0, rb.Length);
+			for (int x = 0; x < w; x += step) {
+				int i = x * 4;
+				seen++;
+				if (Math.Abs(ra[i] - rb[i]) + Math.Abs(ra[i + 1] - rb[i + 1]) + Math.Abs(ra[i + 2] - rb[i + 2]) > 24) moved++;
+			}
+		}
+		return seen == 0 ? 0.0 : Math.Round((double)moved / seen, 4);
+	}
+}
+'@
+
+function fLockBits([System.Drawing.Bitmap]$Bmp) {
+	$rect = New-Object System.Drawing.Rectangle 0, 0, $bmp.Width, $bmp.Height
+	$bmp.LockBits($rect, [System.Drawing.Imaging.ImageLockMode]::ReadOnly, [System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
+}
+
 ##	Fraction of sampled pixels with any light. A window that came up but never
 ##	drew reads near zero, which is the difference between a real capture and the
 ##	black rectangle a locked session returns.
 function fInk([System.Drawing.Bitmap]$Bmp, [int]$Step = 4) {
 	if (-not $bmp) { return 0.0 }
-	$lit = 0; $seen = 0
-	for ($y = 0; $y -lt $bmp.Height; $y += $step) {
-		for ($x = 0; $x -lt $bmp.Width; $x += $step) {
-			$seen++
-			$px = $bmp.GetPixel($x, $y)
-			if ($px.R + $px.G + $px.B -gt 40) { $lit++ }
-		}
-	}
-	if ($seen -eq 0) { 0.0 } else { [math]::Round($lit / $seen, 4) }
+	$d = fLockBits $bmp
+	try { [SilkPix]::Ink($d.Scan0, $d.Stride, $bmp.Width, $bmp.Height, $step) }
+	finally { $bmp.UnlockBits($d) }
 }
 
 ##	How much of the picture moved. Ink saturates on a wallpaper, so 'did anything
@@ -415,15 +454,14 @@ function fInk([System.Drawing.Bitmap]$Bmp, [int]$Step = 4) {
 function fDiff([System.Drawing.Bitmap]$A, [System.Drawing.Bitmap]$B, [int]$Step = 3) {
 	if (-not $a -or -not $b) { return 1.0 }
 	if ($a.Width -ne $b.Width -or $a.Height -ne $b.Height) { return 1.0 }
-	$moved = 0; $seen = 0
-	for ($y = 0; $y -lt $a.Height; $y += $step) {
-		for ($x = 0; $x -lt $a.Width; $x += $step) {
-			$seen++
-			$p1 = $a.GetPixel($x, $y); $p2 = $b.GetPixel($x, $y)
-			if ([math]::Abs($p1.R - $p2.R) + [math]::Abs($p1.G - $p2.G) + [math]::Abs($p1.B - $p2.B) -gt 24) { $moved++ }
-		}
-	}
-	if ($seen -eq 0) { 0.0 } else { [math]::Round($moved / $seen, 4) }
+	##	A bitmap can't be locked twice, and nothing moved anyway.
+	if ([object]::ReferenceEquals($a, $b)) { return 0.0 }
+	$da = fLockBits $a
+	try {
+		$db = fLockBits $b
+		try { [SilkPix]::Diff($da.Scan0, $da.Stride, $db.Scan0, $db.Stride, $a.Width, $a.Height, $step) }
+		finally { $b.UnlockBits($db) }
+	} finally { $a.UnlockBits($da) }
 }
 
 ##	One value out of a written config, and whether the file says it. A
@@ -459,3 +497,4 @@ function fStop([System.Diagnostics.Process]$P) {
 ##		- 20260908 JC: Created.
 ##		- 20261006 JC: Help block, typed parameters, checks kept in a list.
 ##		- 20261014 JC: fStartSilk takes a working folder.
+##		- 20261117: fInk and fDiff read the locked bitmap rather than a pixel a call.

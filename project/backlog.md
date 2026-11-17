@@ -537,7 +537,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 - Windows GUI test pixel checks read one pixel per call
 	- ID: 2026111623500008
 	- Type: Task
-	- Status: Queued
+	- Status: Done
 	- Priority: Low
 	- Opened: 20261116-235000
 	- Opened by: CC
@@ -547,6 +547,19 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- The ink and diff checks call `GetPixel` 35k to 60k times per image, which takes seconds per check.
 		- Read the bitmap's bytes once instead. It needs a Windows box to test.
 		- Detail: `detail_backlog.md`, under this ID.
+	- Actual fix: `fInk` and `fDiff` lock the bitmap as 32-bit ARGB and count in a small C# class, a row at a time. The thresholds, sampling and rounding are the same as before.
+	- Decisions:
+		- 20261117: The C# takes the locked memory and its stride rather than a `Bitmap`, so it needs no System.Drawing reference under either PowerShell, and its counting can be tested on Linux.
+		- 20261117: `fDiff` of a bitmap against itself returns 0 without locking, since a bitmap can't be locked twice. A step under 1 counts as 1, where the old loop never ended.
+	- Verified: 20261117 on b29w. The old and new functions gave the same answer in all 270 cases: 15 images in 32-bit, premultiplied, 24-bit, 16-bit, 8-bit indexed, BMP-loaded, cropped and bottom-up forms, sizes from 1x1 to 1280x720, steps 1 to 7, and edge cases. On a 1280x720 image, ink took 266 ms of CPU before and under 2 ms after, and diff 1.3 to 2.2 s before and 2.3 ms after, at 1 to 4% load. The `smoke` and `settingsdlg` scenarios passed with the change, and `idlewake`'s ink and diff readings looked as before.
+		- `idlewake`'s opaque arm failed "typing reached the shell" in that run. That check types and looks for a file, and doesn't read pixels.
+		- The new test dfe8t failed with the old `_lib.ps1`, with the ink line moved to 40, and with the second bitmap's stride ignored. It passes with the fix.
+	- Swept: every caller of `fInk` and `fDiff` under `cicd/tests/wingui` (`_gpuload`, `idlemin`, `idlewake`, `livecfg`, `perfladder`, `settingsdlg`, `smoke`, `softrender`, `wpremote`). `GetPixel` isn't used anywhere else in the repo.
+	- Test case: `cicd/tests/wingui/pixels-test.bash` (dfe8t), which checks the C# counts against one pixel at a time, rows top first and bottom first. The Windows comparison was a one-off rig, `private/claude_simple/tools/pixparity/pixparity.bash`.
+	- Branch: nov17-2026111623500008
+	- Commit: 2b981c4c
+	- Acceptance signoff: Self-closed: old and new gave the same answers on b29w, and the new test fails on the old code.
+	- Closed: 20261117-112921
 
 - **Stop here to work on releasing rc.1**.
 
