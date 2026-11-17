@@ -153,7 +153,7 @@ impl Conserve {
 	pub(super) fn wake(self) -> Option<Instant> {
 		match self {
 			Conserve::Restored(at) => Some(at + RESTORED_SHOWN),
-			_ => None,
+			Conserve::Off | Conserve::Saving | Conserve::Restoring => None,
 		}
 	}
 

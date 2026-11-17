@@ -184,12 +184,12 @@ pub fn shell_split(s: &str) -> anyhow::Result<Vec<String>> {
 					match q {
 						'"' => break,
 						'\\' => {
-							if let Some(&next) = chars.peek() {
-								if next == '"' || next == '\\' || next == '$' || next == '`' {
-									chars.next();
-									word.push(next);
-									continue;
-								}
+							if let Some(&next) = chars.peek()
+								&& matches!(next, '"' | '\\' | '$' | '`')
+							{
+								chars.next();
+								word.push(next);
+								continue;
 							}
 							word.push('\\');
 						}
@@ -264,11 +264,11 @@ impl Args {
 		if let Some(v) = inline {
 			return parse_bool(&v).ok_or_else(|| anyhow::anyhow!("{flag}: not a bool: {v}"));
 		}
-		if let Some(token) = self.items.get(self.pos) {
-			if let Some(b) = parse_bool(token) {
-				self.pos += 1;
-				return Ok(b);
-			}
+		if let Some(token) = self.items.get(self.pos)
+			&& let Some(b) = parse_bool(token)
+		{
+			self.pos += 1;
+			return Ok(b);
 		}
 		Ok(true)
 	}
@@ -619,10 +619,10 @@ fn set_dir(pane: &mut PaneSpec, dir: Dir4, on: bool, flag: &str) -> anyhow::Resu
 	if !on {
 		return Ok(()); // --right=false etc. is a no-op (leaves default/inherit)
 	}
-	if let Some(prev) = pane.dir {
-		if prev != dir {
-			anyhow::bail!("--{flag} conflicts with an earlier direction on this pane");
-		}
+	if let Some(prev) = pane.dir
+		&& prev != dir
+	{
+		anyhow::bail!("--{flag} conflicts with an earlier direction on this pane");
 	}
 	pane.dir = Some(dir);
 	Ok(())

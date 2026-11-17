@@ -87,8 +87,7 @@ def main() -> int:
 	work = tempfile.mkdtemp(prefix='vhist_', dir=tmp_root)
 	path = str(Path(work) / 'numbered.txt')
 	with Path(path).open('w', encoding='ascii') as f:
-		for n in range(1, args.lines + 1):
-			f.write(f'L{n:05d} the quick brown fox jumps over the lazy dog\n')
+		f.writelines(f'L{n:05d} the quick brown fox jumps over the lazy dog\n' for n in range(1, args.lines + 1))
 
 	env = dict(os.environ, TERM='xterm-256color', LANG='C.UTF-8', LESS='', LESSHISTFILE='-',
 		HOME=work, COLUMNS=str(args.cols), LINES=str(args.rows))

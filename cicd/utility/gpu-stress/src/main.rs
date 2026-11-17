@@ -3,9 +3,9 @@
 
 //! Keeps a GPU busy, full, or both, so a window can be watched under load.
 //!
-//!	gpu-stress [--vram-mb N | --vram-pct P] [--chunk-mb N] [--touch]
-//!	           [--busy F] [--slice-ms N] [--secs N] [--stop-file PATH]
-//!	           [--backend all|vulkan|dx12|gl]
+//!     gpu-stress [--vram-mb N | --vram-pct P] [--chunk-mb N] [--touch]
+//!                [--busy F] [--slice-ms N] [--secs N] [--stop-file PATH]
+//!                [--backend all|vulkan|dx12|gl]
 //!
 //! --vram-mb takes that much in chunks until the driver refuses one. --vram-pct
 //! asks wgpu to refuse past that percent of the budget the driver reports, and
@@ -156,8 +156,9 @@ impl Burner {
 
 	// One dispatch, waited out. Returns how long the GPU took.
 	fn slice(&self, device: &wgpu::Device, queue: &wgpu::Queue) -> Duration {
-		let words = [self.iters, 0, 0, 0];
-		let bytes: Vec<u8> = words.iter().flat_map(|w| w.to_le_bytes()).collect();
+		// `Params`: the loop count, then padding
+		let mut bytes = [0u8; 16];
+		bytes[..4].copy_from_slice(&self.iters.to_le_bytes());
 		queue.write_buffer(&self.params, 0, &bytes);
 		let mut encoder =
 			device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });

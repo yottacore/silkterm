@@ -53,12 +53,11 @@ def is_excluded(path: Path, excluded: list[Path]) -> bool:
 ## Only INDENT tokens count: a continuation line or a docstring may line up
 ## with spaces after its tabs.
 def space_indents(path: Path) -> list[int]:
-	lines = []
+	lines: list[int] = []
 	with path.open("rb") as stream:
 		try:
-			for token in tokenize.tokenize(stream.readline):
-				if token.type == tokenize.INDENT and " " in token.string:
-					lines.append(token.start[0])
+			lines.extend(token.start[0] for token in tokenize.tokenize(stream.readline)
+				if token.type == tokenize.INDENT and " " in token.string)
 		except (tokenize.TokenError, SyntaxError):
 			pass  ## ruff reports the syntax error
 	return lines

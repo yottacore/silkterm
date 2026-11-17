@@ -4,7 +4,7 @@
 //! Prepared wallpapers kept on disk, so a launch, a return to a picture in
 //! rotation, a resize, or a wake from the idle release reads a small file
 //! rather than blurring the original again. A picture the GPU gets as BC1 or
-//! BC7 is kept as those blocks, which go back up wiht no decode or encode.
+//! BC7 is kept as those blocks, which go back up with no decode or encode.
 //! One the GPU gets plain is kept as JPEG. Every SilkTerm process on the box
 //! shares the folder: an entry is written to a temp file and renamed into
 //! place, and one that doesn't read back whole is removed and made again.
@@ -393,6 +393,7 @@ fn prune(dir: &Path, limit: u64, now: SystemTime) {
 	};
 	let mut copies = Vec::new();
 	let mut total = 0u64;
+	let suffix = format!(".{EXT}");
 	for entry in entries.flatten() {
 		let Ok(meta) = entry.metadata() else {
 			continue;
@@ -409,7 +410,7 @@ fn prune(dir: &Path, limit: u64, now: SystemTime) {
 			}
 			continue;
 		}
-		if !name.ends_with(&format!(".{EXT}")) {
+		if !name.ends_with(&suffix) {
 			continue;
 		}
 		if !current_format(&entry.path()) {

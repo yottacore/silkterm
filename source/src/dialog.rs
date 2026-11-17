@@ -373,39 +373,21 @@ impl DialogWin {
 			warm,
 		)?;
 		let (lines, links, size) = layout_about(&mut text, adapter);
-		let requested_size =
-			winit::dpi::PhysicalSize::new(size.0.ceil() as u32, size.1.ceil() as u32);
-		if let Some(applied) = crate::app::request_size(&window, requested_size) {
-			gfx.resize(applied.width, applied.height);
-		}
+		fit_window(&window, &mut gfx, size);
 		// mapped last, at the final size, with the transient hints already in place
 		#[cfg(target_os = "linux")]
 		window.set_visible(true);
-		Ok(Self {
-			_modal: modal,
-			window,
-			gfx,
-			text,
-			rects,
-			content: Content::About {
-				lines,
-				links,
-				source: AboutSource::About(Box::new(adapter.clone())),
-			},
-			mouse: (0.0, 0.0),
-			last_frame: std::time::Instant::now(),
-			anim_wake: None,
-			refused: Retry::default(),
-			tip: crate::tip::Dwell::default(),
-			tip_drawn: None,
-			focus: crate::tip::Focus::default(),
-			shaped: ShapedText::default(),
-			parent: parent.map(Parent::handle),
-			parent_monitor: parent.and_then(|p| p.monitor),
-			snapped: false,
-			caps: (f32::MAX, f32::MAX),
-			mods: ModifiersState::empty(),
-		})
+		let content = Content::About {
+			lines,
+			links,
+			source: AboutSource::About(Box::new(adapter.clone())),
+		};
+		Ok(Self::assemble(
+			(modal, window, gfx, text, rects),
+			content,
+			parent,
+			(f32::MAX, f32::MAX),
+		))
 	}
 
 	/// A message and an OK button, standing in for the system's message box on a
@@ -421,38 +403,20 @@ impl DialogWin {
 		let (modal, window, mut gfx, mut text, rects) =
 			Self::make(el, title, 480.0, 200.0, false, parent, warm)?;
 		let (lines, links, size) = layout_notice(&mut text, paras);
-		let requested_size =
-			winit::dpi::PhysicalSize::new(size.0.ceil() as u32, size.1.ceil() as u32);
-		if let Some(applied) = crate::app::request_size(&window, requested_size) {
-			gfx.resize(applied.width, applied.height);
-		}
+		fit_window(&window, &mut gfx, size);
 		#[cfg(target_os = "linux")]
 		window.set_visible(true);
-		Ok(Self {
-			_modal: modal,
-			window,
-			gfx,
-			text,
-			rects,
-			content: Content::About {
-				lines,
-				links,
-				source: AboutSource::Notice(paras.to_vec()),
-			},
-			mouse: (0.0, 0.0),
-			last_frame: std::time::Instant::now(),
-			anim_wake: None,
-			refused: Retry::default(),
-			tip: crate::tip::Dwell::default(),
-			tip_drawn: None,
-			focus: crate::tip::Focus::default(),
-			shaped: ShapedText::default(),
-			parent: parent.map(Parent::handle),
-			parent_monitor: parent.and_then(|p| p.monitor),
-			snapped: false,
-			caps: (f32::MAX, f32::MAX),
-			mods: ModifiersState::empty(),
-		})
+		let content = Content::About {
+			lines,
+			links,
+			source: AboutSource::Notice(paras.to_vec()),
+		};
+		Ok(Self::assemble(
+			(modal, window, gfx, text, rects),
+			content,
+			parent,
+			(f32::MAX, f32::MAX),
+		))
 	}
 
 	/// The question closing a tab, pane, or window with a pane in tmux asks:
@@ -473,38 +437,20 @@ impl DialogWin {
 			focus: AskPart::Detach,
 		};
 		let (lines, links, size) = layout_ask(&mut text, &ask);
-		let requested_size =
-			winit::dpi::PhysicalSize::new(size.0.ceil() as u32, size.1.ceil() as u32);
-		if let Some(applied) = crate::app::request_size(&window, requested_size) {
-			gfx.resize(applied.width, applied.height);
-		}
+		fit_window(&window, &mut gfx, size);
 		#[cfg(target_os = "linux")]
 		window.set_visible(true);
-		Ok(Self {
-			_modal: modal,
-			window,
-			gfx,
-			text,
-			rects,
-			content: Content::About {
-				lines,
-				links,
-				source: AboutSource::Ask(ask),
-			},
-			mouse: (0.0, 0.0),
-			last_frame: std::time::Instant::now(),
-			anim_wake: None,
-			refused: Retry::default(),
-			tip: crate::tip::Dwell::default(),
-			tip_drawn: None,
-			focus: crate::tip::Focus::default(),
-			shaped: ShapedText::default(),
-			parent: parent.map(Parent::handle),
-			parent_monitor: parent.and_then(|p| p.monitor),
-			snapped: false,
-			caps: (f32::MAX, f32::MAX),
-			mods: ModifiersState::empty(),
-		})
+		let content = Content::About {
+			lines,
+			links,
+			source: AboutSource::Ask(ask),
+		};
+		Ok(Self::assemble(
+			(modal, window, gfx, text, rects),
+			content,
+			parent,
+			(f32::MAX, f32::MAX),
+		))
 	}
 
 	/// `resume` is the view a recently closed Settings window was left on (see
@@ -569,13 +515,28 @@ impl DialogWin {
 		// mapped last, at the final size, with the transient hints already in place
 		#[cfg(target_os = "linux")]
 		window.set_visible(true);
-		Ok(Self {
+		Ok(Self::assemble(
+			(modal, window, gfx, text, rects),
+			Content::Settings(dialog),
+			parent,
+			(max_w, max_h),
+		))
+	}
+
+	// What every dialog starts with, past its window and its content.
+	fn assemble(
+		(modal, window, gfx, text, rects): (ModalHint, Arc<Window>, Gfx, TextCtx, RectRenderer),
+		content: Content,
+		parent: Option<Parent>,
+		caps: (f32, f32),
+	) -> Self {
+		Self {
 			_modal: modal,
 			window,
 			gfx,
 			text,
 			rects,
-			content: Content::Settings(dialog),
+			content,
 			mouse: (0.0, 0.0),
 			last_frame: std::time::Instant::now(),
 			anim_wake: None,
@@ -587,9 +548,9 @@ impl DialogWin {
 			parent: parent.map(Parent::handle),
 			parent_monitor: parent.and_then(|p| p.monitor),
 			snapped: false,
-			caps: (max_w, max_h),
+			caps,
 			mods: ModifiersState::empty(),
-		})
+		}
 	}
 
 	/// (orig, edited) for the app to apply, if this is Settings.
@@ -919,31 +880,32 @@ impl DialogWin {
 		clip: Option<&mut crate::clipboard::Clipboard>,
 	) {
 		use winit::keyboard::NamedKey as N;
-		if let Content::Settings(dialog) = &mut self.content {
-			match key {
-				N::Home => dialog.cursor_home(),
-				N::End => dialog.cursor_end(),
-				N::Delete if dialog.shift() => {
-					if let (Some(clip), Some(text)) = (clip, dialog.selected_text()) {
-						clip.set_clipboard(text);
-						dialog.delete_selection();
-					} else {
-						dialog.delete_forward();
-					}
+		let Content::Settings(dialog) = &mut self.content else {
+			return;
+		};
+		match key {
+			N::Home => dialog.cursor_home(),
+			N::End => dialog.cursor_end(),
+			N::Delete if dialog.shift() => {
+				if let (Some(clip), Some(text)) = (clip, dialog.selected_text()) {
+					clip.set_clipboard(text);
+					dialog.delete_selection();
+				} else {
+					dialog.delete_forward();
 				}
-				N::Delete => dialog.delete_forward(),
-				N::Insert if dialog.shift() => {
-					if let Some(text) = clip.and_then(super::clipboard::Clipboard::get_clipboard) {
-						dialog.insert_str(&text);
-					}
-				}
-				N::Insert if dialog.ctrl() => {
-					if let (Some(clip), Some(text)) = (clip, dialog.selected_text()) {
-						clip.set_clipboard(text);
-					}
-				}
-				_ => {}
 			}
+			N::Delete => dialog.delete_forward(),
+			N::Insert if dialog.shift() => {
+				if let Some(text) = clip.and_then(super::clipboard::Clipboard::get_clipboard) {
+					dialog.insert_str(&text);
+				}
+			}
+			N::Insert if dialog.ctrl() => {
+				if let (Some(clip), Some(text)) = (clip, dialog.selected_text()) {
+					clip.set_clipboard(text);
+				}
+			}
+			_ => {}
 		}
 	}
 
@@ -1036,10 +998,7 @@ impl DialogWin {
 			*old_lines = lines;
 			*old_links = links;
 		}
-		let want = winit::dpi::PhysicalSize::new(size.0.ceil() as u32, size.1.ceil() as u32);
-		if let Some(applied) = crate::app::request_size(&self.window, want) {
-			self.gfx.resize(applied.width, applied.height);
-		}
+		fit_window(&self.window, &mut self.gfx, size);
 	}
 
 	fn rescale_settings(&mut self, was: f32, scale: f32) {
@@ -1084,11 +1043,11 @@ impl DialogWin {
 		// the natural size is a different number of pixels now, so let the snap
 		// have another go at whatever size we end up with
 		self.snapped = false;
-		if want != now {
-			// a platform that resizes synchronously answers here and sends no Resized
-			if let Some(applied) = crate::app::request_size(&self.window, want) {
-				self.resize(applied.width, applied.height);
-			}
+		// a platform that resizes synchronously answers here and sends no Resized
+		if want != now
+			&& let Some(applied) = crate::app::request_size(&self.window, want)
+		{
+			self.resize(applied.width, applied.height);
 		}
 	}
 
@@ -1280,18 +1239,18 @@ impl DialogWin {
 				let (rect_split, rows_end) = (scene.rect_split, scene.rows_end);
 				self.rects.draw(&mut pass, 0..rect_split as u32);
 				// scrolled settings rows, clipped to the viewport
-				if rows_end > rect_split {
-					if let Some(vp) = scene.scissor_vp {
-						let x = vp.x.max(0.0).min(w as f32) as u32;
-						let y = vp.y.max(0.0).min(h as f32) as u32;
-						let sw = vp.w.max(0.0).min(w as f32 - x as f32) as u32;
-						let sh = vp.h.max(0.0).min(h as f32 - y as f32) as u32;
-						if sw > 0 && sh > 0 {
-							pass.set_scissor_rect(x, y, sw, sh);
-							self.rects
-								.draw(&mut pass, rect_split as u32..rows_end as u32);
-							pass.set_scissor_rect(0, 0, w, h);
-						}
+				if rows_end > rect_split
+					&& let Some(vp) = scene.scissor_vp
+				{
+					let x = vp.x.max(0.0).min(w as f32) as u32;
+					let y = vp.y.max(0.0).min(h as f32) as u32;
+					let sw = vp.w.max(0.0).min(w as f32 - x as f32) as u32;
+					let sh = vp.h.max(0.0).min(h as f32 - y as f32) as u32;
+					if sw > 0 && sh > 0 {
+						pass.set_scissor_rect(x, y, sw, sh);
+						self.rects
+							.draw(&mut pass, rect_split as u32..rows_end as u32);
+						pass.set_scissor_rect(0, 0, w, h);
 					}
 				}
 			}
@@ -1381,6 +1340,8 @@ struct ShapedText {
 	index: HashMap<ShapeKey, usize>,
 	// last frame's, until this one asks for them
 	spare: HashMap<ShapeKey, glyphon::Buffer>,
+	// scratch for moving `bufs` into `spare`, kept so a frame doesn't allocate it
+	moving: Vec<Option<glyphon::Buffer>>,
 }
 
 #[derive(Clone, PartialEq, Eq, Hash)]
@@ -1402,15 +1363,13 @@ impl ShapedText {
 			self.index.clear();
 			return;
 		}
-		let mut last: Vec<Option<glyphon::Buffer>> = std::mem::take(&mut self.bufs)
-			.into_iter()
-			.map(Some)
-			.collect();
+		self.moving.extend(self.bufs.drain(..).map(Some));
 		for (key, slot) in self.index.drain() {
-			if let Some(buf) = last[slot].take() {
+			if let Some(buf) = self.moving[slot].take() {
 				self.spare.insert(key, buf);
 			}
 		}
+		self.moving.clear();
 	}
 
 	// This frame's buffer for `line` in `attrs`, shaped only when the last frame
@@ -1811,9 +1770,7 @@ fn scene(
 					buf,
 				}
 			};
-			for item in &items {
-				texts.push(place(text, item));
-			}
+			texts.extend(items.iter().map(|item| place(text, item)));
 			let rows_end = rects.len();
 			// open dropdown popup / field context menu: rects appended after the
 			// rows (drawn on top, unscissored, in a second pass); text goes to
@@ -1823,9 +1780,7 @@ fn scene(
 				let start = rects.len() as u32;
 				rects.extend(ov_rects);
 				overlay_range = Some((start, rects.len() as u32));
-				for item in &ov_texts {
-					overlay_texts.push(place(text, item));
-				}
+				overlay_texts.extend(ov_texts.iter().map(|item| place(text, item)));
 			}
 			// flyover: what a control does, or why it is grayed out. A small box
 			// under it, in a layer of its own drawn after everything else, so no
@@ -2336,6 +2291,15 @@ const ABOUT_TIP_ROOM: f32 = 14.0; // headroom kept below the button for its flyo
 const ABOUT_BORDER: f32 = 1.0; // 1px rule around the Support button
 // The flyover box's own measurements are shared with the Settings dialog's, in
 // tip.rs, since both windows draw the same box.
+
+// Ask for a laid-out box's size, and follow it at once where the platform
+// resizes synchronously and sends no Resized.
+fn fit_window(window: &Window, gfx: &mut Gfx, size: (f32, f32)) {
+	let want = winit::dpi::PhysicalSize::new(size.0.ceil() as u32, size.1.ceil() as u32);
+	if let Some(applied) = crate::app::request_size(window, want) {
+		gfx.resize(applied.width, applied.height);
+	}
+}
 
 // The size to ask the window for after a change of display scale: the pixels it
 // has now, kept to what still fits the screen. A screen fits fewer DIP at a

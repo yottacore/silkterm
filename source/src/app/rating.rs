@@ -37,7 +37,10 @@ pub(super) enum RatingStep {
 /// rendering paced it. A benchmark is timing the same frames itself, a pinned
 /// rate paces itself, and a window without focus is one nobody is watching, so
 /// it gets no say in the profile.
-#[allow(clippy::fn_params_excessive_bools)] // 4 independent gates, all 16 cases tested
+#[allow(
+	clippy::fn_params_excessive_bools,
+	reason = "4 independent gates, all 16 cases tested"
+)]
 pub(super) fn rating_step(
 	bench: bool,
 	scroll_anim: bool,
@@ -305,7 +308,7 @@ impl State {
 			config::APP_NAME,
 			pick.label()
 		);
-		let orig = (*config::settings()).clone();
+		let orig = config::settings();
 		let mut new = with_measured_profile(&orig, pick);
 		let id = self.bench_id.take();
 		let kept = keep_measured(pick, id.as_deref());

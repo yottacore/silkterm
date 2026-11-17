@@ -153,10 +153,11 @@ fLines(){
 	fi
 }
 mapfile -t sceneRows < <(sed -n '/^scenes=(/,/^)/{s/^\t"\([^"]*\)"$/\1/p}' "${meDir}/run.bash")
-listWant="" skipWant="" failWant=""
+listWant="" skipWant="" failWant="" listRow=""
 for row in "${sceneRows[@]}"; do
 	read -r -a f <<<"${row}"
-	listWant+="$(printf '  %-5s  scroll scene %s (X11)' "${f[0]}" "${f[1]}")"$'\n'
+	printf -v listRow '  %-5s  scroll scene %s (X11)' "${f[0]}" "${f[1]}"
+	listWant+="${listRow}"$'\n'
 	skipWant+="SKIP ${f[0]} scroll scene ${f[1]} (X11), no SilkTerm binary (build it first, or pass --bin)"$'\n'
 	failWant+="FAIL ${f[0]} scroll scene ${f[1]} (X11), no SilkTerm binary (build it first, or pass --bin)"$'\n'
 done

@@ -397,6 +397,8 @@ function fRotate {
 		}
 		$periodTop[$unit] = $top
 	}
+	$nowKeys = @{}
+	foreach ($unit in $units) { $nowKeys[$unit] = fPeriodKey -When $now -Unit $unit }
 
 	## Selection order, best claim first. Duplicates are dropped as it goes.
 	$order = New-Object System.Collections.Generic.List[object]
@@ -404,7 +406,7 @@ function fRotate {
 	$order.Add($all[-1])
 	$order.AddRange(@($all | Select-Object -Skip 1 -First $KeepRecent))
 	foreach ($unit in $units) {
-		$nowKey = fPeriodKey -When $now -Unit $unit
+		$nowKey = $nowKeys[$unit]
 		$taken  = 0
 		foreach ($version in $all) {
 			if ($taken -ge $PeriodKeep[$unit]) { break }
@@ -465,7 +467,7 @@ function fRotate {
 		$role = "frequent"
 		foreach ($unit in $units) {
 			$key = fPeriodKey -When $version.Stamp -Unit $unit
-			if ($key -eq (fPeriodKey -When $now -Unit $unit)) { continue }
+			if ($key -eq $nowKeys[$unit]) { continue }
 			if ($periodTop[$unit][$key] -eq $version.Name) { $role = fRoleName $unit }
 		}
 		if ($version.Name -eq $oldest) { $role = "oldest" }

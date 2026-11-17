@@ -16,17 +16,17 @@ use winit::event_loop::EventLoopProxy;
 // tab's, the window's, then the default. The first pane of a tab has no split
 // source, and a window with no tabs given has only the last 2.
 fn pane_shell(
-	explicit: Option<&Vec<String>>,
-	split_source: Option<&Vec<String>>,
-	tab: Option<&Vec<String>>,
-	window: Option<&Vec<String>>,
+	explicit: Option<&[String]>,
+	split_source: Option<&[String]>,
+	tab: Option<&[String]>,
+	window: Option<&[String]>,
 	default: impl FnOnce() -> Option<Vec<String>>,
 ) -> Option<Vec<String>> {
 	explicit
 		.or(split_source)
 		.or(tab)
 		.or(window)
-		.cloned()
+		.map(<[String]>::to_vec)
 		.or_else(default)
 }
 
@@ -75,7 +75,7 @@ pub(super) fn build_layout(
 			None,
 			None,
 			None,
-			cli.win.style.shell.as_ref(),
+			cli.win.style.shell.as_deref(),
 			config::default_shell_argv,
 		);
 		// a plain launch starts its pane as a new tab would, in tmux when the
@@ -94,10 +94,10 @@ pub(super) fn build_layout(
 	{
 		// main pane's shell cascades pane -> tab -> window
 		let main_shell = pane_shell(
-			tab.panes[0].style.shell.as_ref(),
+			tab.panes[0].style.shell.as_deref(),
 			None,
-			tab.style.shell.as_ref(),
-			cli.win.style.shell.as_ref(),
+			tab.style.shell.as_deref(),
+			cli.win.style.shell.as_deref(),
 			config::default_shell_argv,
 		);
 		// directories cascade the same way the shells do
@@ -155,10 +155,10 @@ pub(super) fn build_layout(
 			};
 			// new pane's shell: explicit -> the pane it splits -> tab -> window
 			let shell = pane_shell(
-				pane_spec.style.shell.as_ref(),
-				shells.get(&target).and_then(Option::as_ref),
-				tab.style.shell.as_ref(),
-				cli.win.style.shell.as_ref(),
+				pane_spec.style.shell.as_deref(),
+				shells.get(&target).and_then(Option::as_deref),
+				tab.style.shell.as_deref(),
+				cli.win.style.shell.as_deref(),
 				config::default_shell_argv,
 			);
 			// and its directory: explicit -> the pane it splits -> tab -> window

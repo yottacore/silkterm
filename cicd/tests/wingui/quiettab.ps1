@@ -46,11 +46,10 @@ Start-Sleep -Seconds 5
 foreach ($round in 1..2) {
 	fSendChars "ping -n 6 127.0.0.1 > `$null"
 	fPress "enter"
-	$seen = @()
-	for ($i = 0; $i -lt 20; $i++) {
+	$seen = @(for ($i = 0; $i -lt 20; $i++) {
 		Start-Sleep -Milliseconds 200
-		$seen += fTitle $h
-	}
+		fTitle $h
+	})
 	$seen = @($seen | Select-Object -Unique)
 	foreach ($t in $seen) { fNote "round $($round): '$t'" }
 	[void](fCheck "round $($round): the tab names ping while it runs" (@($seen | Where-Object { $_ -match '\[ping\]' }).Count -gt 0))

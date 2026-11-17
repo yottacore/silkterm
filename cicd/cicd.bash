@@ -650,13 +650,14 @@ containerRecipe="${here}/container/Dockerfile"
 ## The build args: the toolchain and its targets, then VER_<pin> for each pin the
 ## recipe takes, so a pin the image doesn't install changes nothing.
 fContainerArgs(){
-	local pin name ver
+	local pin name ver recipe
 	printf 'VER_rust=%s\n' "$(sed -n 's/^channel *= *"\(.*\)".*/\1/p' "${root}/rust-toolchain.toml")"
 	printf 'RUST_TARGETS=%s\n' "$(sed -n '/^targets *= *\[/,/\]/p' "${root}/rust-toolchain.toml" | grep -oE '"[^"]+"' | tr -d '"' | paste -sd' ')"
 	printf 'RUST_NIGHTLY=%s\n' "${SANITIZER_TOOLCHAIN:-}"
+	recipe=$'\n'"$(<"${containerRecipe}")"$'\n'
 	for pin in "${TOOL_PINS[@]}"; do
 		name="${pin%%|*}"; name="${name//-/_}"; ver="${pin#*|}"; ver="${ver%%|*}"
-		if grep -qxF "ARG VER_${name}" "${containerRecipe}"; then printf 'VER_%s=%s\n' "${name}" "${ver}"; fi
+		if [[ "${recipe}" == *$'\n'"ARG VER_${name}"$'\n'* ]]; then printf 'VER_%s=%s\n' "${name}" "${ver}"; fi
 	done
 }
 fContainerImage(){ printf '%s-cicd:%s' "${EXE_NAME}" "$({ cat "${containerRecipe}"; fContainerArgs; } | sha256sum | cut -c1-12)"; }

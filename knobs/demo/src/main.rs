@@ -13,6 +13,7 @@ use eframe::egui;
 use knobs::{Control, Env, Kind, Model, Source, Spec, Value};
 use std::collections::BTreeMap;
 use std::path::PathBuf;
+use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime};
 
 const SPEC: &str = include_str!("../demo.shcl");
@@ -234,19 +235,11 @@ impl Demo {
 	}
 
 	fn rows(&mut self, ui: &mut egui::Ui, tab: usize) {
-		let ids: Vec<String> = self
-			.model
-			.spec
-			.settings
-			.iter()
-			.filter(|s| s.tab == tab && s.control != Control::None)
-			.map(|s| s.id.clone())
-			.collect();
+		// a handle of its own, since a change takes self mutably mid-row
+		let spec = Arc::clone(&self.model.spec);
 		// widest label on any tab, so the controls stay put between tabs
 		let font = egui::TextStyle::Body.resolve(ui.style());
-		let label_w = self
-			.model
-			.spec
+		let label_w = spec
 			.settings
 			.iter()
 			.filter(|s| !matches!(s.control, Control::None | Control::Heading))
@@ -264,17 +257,19 @@ impl Demo {
 			.num_columns(3)
 			.spacing([12.0, 8.0])
 			.show(ui, |ui| {
-				for id in ids {
-					self.row(ui, &id, label_w);
+				for s in spec
+					.settings
+					.iter()
+					.filter(|s| s.tab == tab && s.control != Control::None)
+				{
+					self.row(ui, s, label_w);
 					ui.end_row();
 				}
 			});
 	}
 
-	fn row(&mut self, ui: &mut egui::Ui, id: &str, label_w: f32) {
-		let Some(s) = self.model.spec.get(id).cloned() else {
-			return;
-		};
+	fn row(&mut self, ui: &mut egui::Ui, s: &knobs::Setting, label_w: f32) {
+		let id = s.id.as_str();
 		if s.control == Control::Heading {
 			ui.vertical(|ui| {
 				ui.add_space(4.0);
@@ -304,7 +299,7 @@ impl Demo {
 					}
 					r
 				}
-				Control::Slider => Self::slider(ui, &s, &v, &mut new),
+				Control::Slider => Self::slider(ui, s, &v, &mut new),
 				Control::Number => {
 					let mut x = v.as_f64();
 					let mut d = egui::DragValue::new(&mut x).range(s.min..=s.max).speed(0.1);
@@ -464,16 +459,10 @@ impl Demo {
 		ui.separator();
 		ui.heading("State");
 		ui.label("What the program worked out by itself.");
-		let state: Vec<knobs::Setting> = self
-			.model
-			.spec
-			.settings
-			.iter()
-			.filter(|s| s.control == Control::None)
-			.cloned()
-			.collect();
+		// a handle of its own, since a change takes self mutably
+		let spec = Arc::clone(&self.model.spec);
 		egui::Grid::new("state").num_columns(2).show(ui, |ui| {
-			for s in state {
+			for s in spec.settings.iter().filter(|s| s.control == Control::None) {
 				ui.label(&s.label);
 				let v = self.model.value(&s.id, &self.desk);
 				let mut new = None;
@@ -509,9 +498,9 @@ impl Demo {
 					}
 				}
 				if let Some(nv) = new {
-					let id = s.id.clone();
+					let id = &s.id;
 					self.change(&format!("state {id} = {}", nv.show()), |m, d| {
-						m.set(&id, &nv, d);
+						m.set(id, &nv, d);
 					});
 				}
 				ui.end_row();
@@ -548,7 +537,7 @@ impl Demo {
 	}
 }
 
-fn first_run(spec: impl Into<std::sync::Arc<Spec>>, desk: &Desk) -> Model {
+fn first_run(spec: impl Into<Arc<Spec>>, desk: &Desk) -> Model {
 	let mut m = Model::new(spec);
 	let groups: Vec<String> = m.spec.groups.iter().map(|g| g.id.clone()).collect();
 	for g in groups {

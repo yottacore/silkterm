@@ -107,7 +107,26 @@ impl MenuAction {
 			MenuAction::NewTabShell(_) => "Open a tab running this shell instead of the usual one.",
 			MenuAction::SplitShell(..) => "Split this pane and run this shell in the new half.",
 			MenuAction::CopyLink => "Copy the link's address instead of opening it.",
-			_ => "",
+			MenuAction::OpenLink
+			| MenuAction::Copy
+			| MenuAction::Paste
+			| MenuAction::Edit(_)
+			| MenuAction::NewTab
+			| MenuAction::NewWindow
+			| MenuAction::PrevTab
+			| MenuAction::NextTab
+			| MenuAction::NewTabTmux
+			| MenuAction::CloseTab
+			| MenuAction::SplitVertical
+			| MenuAction::SplitHorizontal
+			| MenuAction::Close
+			| MenuAction::FontBigger
+			| MenuAction::FontSmaller
+			| MenuAction::FontReset
+			| MenuAction::ToggleFullscreen
+			| MenuAction::Settings
+			| MenuAction::About
+			| MenuAction::Quit => "",
 		}
 	}
 }
@@ -727,18 +746,24 @@ impl ContextMenu {
 	fn entry_h(&self, entry: &Entry) -> f32 {
 		match entry {
 			Entry::Sep => self.sep_h,
-			_ => self.item_h,
+			Entry::Item { .. } | Entry::Sub { .. } => self.item_h,
 		}
 	}
 	/// This popup and every submenu standing open off it, outermost first.
 	pub(super) fn chain(&self) -> Vec<&ContextMenu> {
-		let mut out = vec![self];
-		let mut at = self;
-		while let Some(sub) = &at.sub {
-			out.push(sub);
-			at = sub;
-		}
-		out
+		self.popups().collect()
+	}
+	// The same, with nothing allocated, for the per-frame and per-move callers.
+	fn popups(&self) -> impl Iterator<Item = &ContextMenu> {
+		std::iter::successors(Some(self), |at| at.sub.as_deref())
+	}
+	// The tip for row `row`, or None where it has none to give.
+	fn row_help(&self, row: usize) -> Option<&'static str> {
+		let help = match self.entries.get(row)? {
+			Entry::Item { action, .. } => action.help(),
+			Entry::Sub { .. } | Entry::Sep => "",
+		};
+		(!help.is_empty()).then_some(help)
 	}
 	// The popup the keyboard and the pointer are on: the innermost open one.
 	fn inner_mut(&mut self) -> &mut ContextMenu {
@@ -752,7 +777,7 @@ impl ContextMenu {
 	}
 	/// Anywhere on this popup or a submenu of it.
 	pub(super) fn hit_any(&self, mx: f32, my: f32) -> bool {
-		self.chain().iter().any(|popup| popup.hit(mx, my))
+		self.popups().any(|popup| popup.hit(mx, my))
 	}
 	pub(super) fn row_top(&self, i: usize) -> f32 {
 		self.y
@@ -810,16 +835,11 @@ impl State {
 		}
 		let root = self.menu.as_ref()?;
 		let (depth, menu, row) = root
-			.chain()
-			.iter()
+			.popups()
 			.enumerate()
-			.filter_map(|(depth, menu)| menu.hover.map(|row| (depth, *menu, row)))
-			.next_back()?;
-		let help = match menu.entries.get(row)? {
-			Entry::Item { action, .. } => action.help(),
-			_ => "",
-		};
-		(!help.is_empty()).then_some((depth, row))
+			.filter_map(|(depth, menu)| menu.hover.map(|row| (depth, menu, row)))
+			.last()?;
+		menu.row_help(row).map(|_| (depth, row))
 	}
 
 	/// The menu tip's box and its wrapped lines, once the pointer has rested on a
@@ -828,22 +848,15 @@ impl State {
 	pub(super) fn menu_tip_layout(&mut self) -> Option<(Rect, Vec<(f32, f32, String)>)> {
 		let (depth, row) = self.menu_tip.ripe()?;
 		let (anchor, help) = {
-			let menu = *self.menu.as_ref()?.chain().get(depth)?;
-			let help = match menu.entries.get(row)? {
-				Entry::Item { action, .. } => action.help(),
-				_ => "",
-			};
+			let menu = self.menu.as_ref()?.popups().nth(depth)?;
 			let anchor = Rect {
 				x: menu.x,
 				y: menu.row_top(row),
 				w: menu.w,
 				h: menu.item_h,
 			};
-			(anchor, help)
+			(anchor, menu.row_help(row)?)
 		};
-		if help.is_empty() {
-			return None;
-		}
 		let attrs = crate::text::ui_attrs();
 		let pad = self.text.dip(MENU_TIP_PAD);
 		let line_h = self.text.ui_line_h;
@@ -968,6 +981,7 @@ impl State {
 			}
 			return;
 		};
+		// the parent keeps its row's items to open it again; the popup owns its own
 		let items = items.clone();
 		let (px, pw, top, pad_y) = (menu.x, menu.w, menu.row_top(row), menu.pad_y);
 		// measured against a provisional build, since the width is what decides
@@ -996,13 +1010,13 @@ impl State {
 		// A submenu takes the pointer first. It overlaps no parent row, so being inside
 		// it is clear, and the parent keeps its highlight on the row the submenu belongs
 		// to.
-		if let Some(sub) = menu.sub.as_mut() {
-			if sub.hit(x, y) {
-				let hovered = sub.item_at(x, y);
-				let moved = hovered != sub.hover;
-				sub.hover = hovered;
-				return moved;
-			}
+		if let Some(sub) = menu.sub.as_mut()
+			&& sub.hit(x, y)
+		{
+			let hovered = sub.item_at(x, y);
+			let moved = hovered != sub.hover;
+			sub.hover = hovered;
+			return moved;
 		}
 		let hovered = menu.item_at(x, y);
 		if hovered == menu.hover {
@@ -1029,20 +1043,18 @@ impl State {
 			return;
 		};
 		let target = menu.target;
-		let chain = menu.chain();
-		// innermost first: a submenu is drawn over whatever it covers
-		let found = chain
-			.iter()
+		// the innermost hit wins: a submenu is drawn over whatever it covers
+		let found = menu
+			.popups()
 			.enumerate()
-			.rev()
-			.find_map(|(depth, popup)| popup.item_at(x, y).map(|row| (depth, row)));
-		let Some((depth, row)) = found else {
+			.filter_map(|(depth, popup)| popup.item_at(x, y).map(|row| (depth, popup, row)))
+			.last();
+		let Some((depth, popup, row)) = found else {
 			self.menu = None;
 			self.bar_open = None;
 			return;
 		};
-		let entry = chain[depth].entries[row].clone();
-		match entry {
+		match popup.entries[row] {
 			// only the root popup has submenus, so a deeper one can't open
 			Entry::Sub { .. } => {
 				if depth == 0 {
@@ -1066,12 +1078,13 @@ impl State {
 			return;
 		};
 		let target = menu.target;
-		let chain = menu.chain();
-		let depth = chain.len() - 1;
-		let Some(entry) = chain[depth].entries.get(row).cloned() else {
+		let Some((depth, inner)) = menu.popups().enumerate().last() else {
 			return;
 		};
-		match entry {
+		let Some(entry) = inner.entries.get(row) else {
+			return;
+		};
+		match *entry {
 			Entry::Sub { .. } if depth == 0 => {
 				self.open_submenu(row);
 				if let Some(sub) = self.menu.as_mut().and_then(|menu| menu.sub.as_mut()) {
@@ -1083,7 +1096,7 @@ impl State {
 				self.bar_open = None;
 				self.apply_menu(action, target, proxy);
 			}
-			_ => {}
+			Entry::Sub { .. } | Entry::Sep => {}
 		}
 	}
 
@@ -1206,8 +1219,8 @@ impl State {
 			// the URL was captured when the menu opened, since the output under it may have
 			// scrolled away
 			MenuAction::OpenLink => {
-				if let Some(url) = self.menu_link.clone() {
-					open_link(&url);
+				if let Some(url) = &self.menu_link {
+					open_link(url);
 				}
 			}
 			MenuAction::CopyLink => {
@@ -1227,17 +1240,17 @@ impl State {
 				}
 			}
 			MenuAction::Paste => {
-				if let Some(text) = self.clipboard.get_clipboard() {
-					if let Some(p) = self.tabs.cur_mut().panes.get_mut(&target) {
-						p.paste(&text);
-					}
+				if let Some(text) = self.clipboard.get_clipboard()
+					&& let Some(p) = self.tabs.cur_mut().panes.get_mut(&target)
+				{
+					p.paste(&text);
 				}
 			}
 			MenuAction::PasteSelection => {
-				if let Some(text) = self.clipboard.get_primary() {
-					if let Some(p) = self.tabs.cur_mut().panes.get_mut(&target) {
-						p.paste(&text);
-					}
+				if let Some(text) = self.clipboard.get_primary()
+					&& let Some(p) = self.tabs.cur_mut().panes.get_mut(&target)
+				{
+					p.paste(&text);
 				}
 			}
 			// the rename it was for has already ended

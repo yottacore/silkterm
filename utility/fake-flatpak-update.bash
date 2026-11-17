@@ -53,11 +53,11 @@ fi
 
 if ((fill > 0)); then seq 1 "${fill}" | sed 's/^/fill /'; fi
 
-# One row. Marks: done, in progress, waiting.
+# One row, into $row. Marks: done, in progress, waiting.
 fRow() {
 	local i="${1}" t="${2}" mark=" "
 	if ((i < t)); then mark="x"; elif ((i == t)); then mark="|"; fi
-	printf '%2d. [%s] org.silk.App%02d  stable  u' $((i + 1)) "${mark}" "${i}"
+	printf -v row '%2d. [%s] org.silk.App%02d  stable  u' $((i + 1)) "${mark}" "${i}"
 }
 
 printf '\033[?25l'
@@ -65,8 +65,8 @@ trap 'printf "\033[?25h\n"' EXIT
 
 for ((t = 0; t < ticks; t++)); do
 	out=$'\033[1;1H\033[0J'
-	for ((i = 0; i < rows - fit; i++)); do out+="$(fRow "${i}" "${t}")"; done
-	for ((i = rows - fit; i < rows; i++)); do out+=$'\r\n'"$(fRow "${i}" "${t}")"; done
+	for ((i = 0; i < rows - fit; i++)); do fRow "${i}" "${t}"; out+="${row}"; done
+	for ((i = rows - fit; i < rows; i++)); do fRow "${i}" "${t}"; out+=$'\r\n'"${row}"; done
 	out+=$'\r\n\r\n'"Updating $((t + 1))/${rows}"
 	printf '%s' "${out}"
 	sleep "${delay}"

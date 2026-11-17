@@ -761,7 +761,7 @@ fCheck "with no options none of them is set" test "$(fParseOff)" = "00000000000 
 fOffEach(){
 	local -i i; local want
 	for i in "${!offFlags[@]}"; do
-		want="$(printf '%*s' 11 '' | tr ' ' 0)"; want="${want:0:i}1${want:i+1}"
+		printf -v want '%011d' 0; want="${want:0:i}1${want:i+1}"
 		[[ "$(fParseOff "${offFlags[i]}")" == "${want} inner="* ]] || { echo "    ${offFlags[i]}: $(fParseOff "${offFlags[i]}")"; return 1; }
 	done
 }

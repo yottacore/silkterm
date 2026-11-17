@@ -609,10 +609,15 @@ impl State {
 			self.text.margin,
 			self.chrome_h(),
 		);
-		let max_dim = self.gpu.as_ref().map_or(SAFE_MAX_DIM, |gpu| {
+		fit_px(w, h, self.max_window_dim())
+	}
+
+	// The largest window side the device can draw (`fit_px`), or a safe guess
+	// while the device is let go.
+	fn max_window_dim(&self) -> u32 {
+		self.gpu.as_ref().map_or(SAFE_MAX_DIM, |gpu| {
 			gpu.gfx.device.limits().max_texture_dimension_2d
-		});
-		fit_px(w, h, max_dim)
+		})
 	}
 
 	// No monitor's own size is taken: the switches are off, or the command
@@ -787,9 +792,7 @@ impl State {
 				outer.height.saturating_sub(inner.height),
 			)
 		};
-		let max_dim = self.gpu.as_ref().map_or(SAFE_MAX_DIM, |gpu| {
-			gpu.gfx.device.limits().max_texture_dimension_2d
-		});
+		let max_dim = self.max_window_dim();
 		let room = zoom_room(
 			area_here(&self.window),
 			self.window.outer_position().ok().map(|p| (p.x, p.y)),

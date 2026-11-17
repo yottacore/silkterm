@@ -831,7 +831,7 @@ pub fn button_held(window: &Window) -> Option<bool> {
 }
 
 #[cfg(windows)]
-#[allow(clippy::unnecessary_wraps)] // Linux returns None
+#[allow(clippy::unnecessary_wraps, reason = "Linux returns None")]
 pub fn button_held(_window: &Window) -> Option<bool> {
 	use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
 		GetAsyncKeyState, VK_LBUTTON, VK_RBUTTON,
@@ -845,13 +845,13 @@ pub fn button_held(_window: &Window) -> Option<bool> {
 }
 
 #[cfg(target_os = "macos")]
-#[allow(clippy::unnecessary_wraps)] // Linux returns None
+#[allow(clippy::unnecessary_wraps, reason = "Linux returns None")]
 pub fn button_held(_window: &Window) -> Option<bool> {
 	Some(objc2_app_kit::NSEvent::pressedMouseButtons() != 0)
 }
 
 #[cfg(not(any(target_os = "linux", windows, target_os = "macos")))]
-#[allow(clippy::unnecessary_wraps)] // Linux returns None
+#[allow(clippy::unnecessary_wraps, reason = "Linux returns None")]
 pub fn button_held(_window: &Window) -> Option<bool> {
 	Some(false)
 }

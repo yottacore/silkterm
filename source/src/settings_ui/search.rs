@@ -160,28 +160,31 @@ fn in_order(hay: &Folded, query: &str) -> Option<((usize, usize), Vec<(usize, us
 	Some((key, marks))
 }
 
-// Edits apart, a swap of 2 neighbors counting as one.
+// Edits apart, a swap of 2 neighbors counting as one. One flat table, since
+// this runs for every word of every row on each key typed.
 fn typos(a: &[char], b: &[char]) -> usize {
-	let mut rows = vec![vec![0usize; b.len() + 1]; a.len() + 1];
-	for (i, row) in rows.iter_mut().enumerate() {
-		row[0] = i;
+	let w = b.len() + 1;
+	let mut table = vec![0usize; (a.len() + 1) * w];
+	let at = |i: usize, j: usize| i * w + j;
+	for i in 0..=a.len() {
+		table[at(i, 0)] = i;
 	}
-	for (j, cell) in rows[0].iter_mut().enumerate() {
-		*cell = j;
+	for j in 0..=b.len() {
+		table[at(0, j)] = j;
 	}
 	for i in 1..=a.len() {
 		for j in 1..=b.len() {
 			let cost = usize::from(a[i - 1] != b[j - 1]);
-			let mut d = (rows[i - 1][j] + 1)
-				.min(rows[i][j - 1] + 1)
-				.min(rows[i - 1][j - 1] + cost);
+			let mut d = (table[at(i - 1, j)] + 1)
+				.min(table[at(i, j - 1)] + 1)
+				.min(table[at(i - 1, j - 1)] + cost);
 			if i > 1 && j > 1 && a[i - 1] == b[j - 2] && a[i - 2] == b[j - 1] {
-				d = d.min(rows[i - 2][j - 2] + 1);
+				d = d.min(table[at(i - 2, j - 2)] + 1);
 			}
-			rows[i][j] = d;
+			table[at(i, j)] = d;
 		}
 	}
-	rows[a.len()][b.len()]
+	table[at(a.len(), b.len())]
 }
 
 // A word, a word's start or the whole text a typo or two off the query. A short
@@ -194,6 +197,7 @@ fn near(hay: &Folded, query: &str) -> Option<(usize, (usize, usize))> {
 		_ => 2,
 	};
 	let chars: Vec<(usize, char)> = hay.text.char_indices().collect();
+	let letters: Vec<char> = chars.iter().map(|&(_, c)| c).collect();
 	// (first char, end char) runs to try: every word, and the whole text
 	let mut spans: Vec<(usize, usize)> = vec![(0, chars.len())];
 	let mut k = 0;
@@ -221,8 +225,7 @@ fn near(hay: &Folded, query: &str) -> Option<(usize, (usize, usize))> {
 			if end <= start {
 				continue;
 			}
-			let them: Vec<char> = chars[start..end].iter().map(|&(_, c)| c).collect();
-			let d = typos(&want, &them);
+			let d = typos(&want, &letters[start..end]);
 			if d <= allowed && best.is_none_or(|(was, _)| d < was) {
 				let a = chars[start].0;
 				let b = chars[end - 1].0 + chars[end - 1].1.len_utf8();
@@ -384,11 +387,12 @@ fn heading_of(specs: &[Spec], row: usize) -> Option<usize> {
 // read the same (the Scrollbar's Width px and the Minimap's).
 fn leader_of(specs: &[Spec], row: usize) -> Option<usize> {
 	let me = &specs[row];
+	let mine = heading_of(specs, row);
 	let twin = (0..specs.len()).any(|j| {
 		j != row
 			&& specs[j].tab == me.tab
 			&& specs[j].label == me.label
-			&& heading_of(specs, j) == heading_of(specs, row)
+			&& heading_of(specs, j) == mine
 	});
 	if !twin {
 		return None;
@@ -483,7 +487,10 @@ impl SettingsDialog {
 
 	// Result `k`'s line in the list, which scrolls like the rows it stands for.
 	fn hit_rect(&self, k: usize) -> Rect {
-		let vp = self.viewport();
+		self.hit_rect_in(self.viewport(), k)
+	}
+	// The same, in viewport `vp`, for a walk down the list that has it already.
+	fn hit_rect_in(&self, vp: Rect, k: usize) -> Rect {
 		let h = self.line_row_h();
 		Rect {
 			x: vp.x + lay().pad / 2.0,
@@ -494,10 +501,11 @@ impl SettingsDialog {
 	}
 
 	fn hit_at(&self, x: f32, y: f32) -> Option<usize> {
-		if !self.viewport().contains(x, y) {
+		let vp = self.viewport();
+		if !vp.contains(x, y) {
 			return None;
 		}
-		(0..self.search.hits.len()).find(|&k| self.hit_rect(k).contains(x, y))
+		(0..self.search.hits.len()).find(|&k| self.hit_rect_in(vp, k).contains(x, y))
 	}
 
 	/// Ctrl+F: the keyboard goes to the search box, with its text selected.
@@ -647,10 +655,9 @@ impl SettingsDialog {
 	pub(super) fn flash_step(&mut self, dt: f32) -> Option<u64> {
 		let (_, t) = self.flash.as_mut()?;
 		*t += dt;
+		// done, but one more frame, to draw it gone
 		if *t >= FLASH_S {
 			self.flash = None;
-			// one more frame, to draw it gone
-			return Some(16);
 		}
 		Some(16)
 	}
@@ -758,7 +765,7 @@ impl SettingsDialog {
 			return;
 		}
 		for (k, hit) in self.search.hits.iter().enumerate() {
-			let r = self.hit_rect(k);
+			let r = self.hit_rect_in(vp, k);
 			if r.y + r.h < vp.y || r.y > vp.y + vp.h {
 				continue;
 			}

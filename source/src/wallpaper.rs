@@ -390,7 +390,7 @@ fn run(request: &Request) -> Loaded {
 // Scan the rotation folder, pick the next image, and record the pick.
 fn rotate(settings: &Settings, current: Option<&str>) -> Option<Rotation> {
 	let dir = settings.rotation_folder()?;
-	let images = list_folder_images(dir);
+	let mut images = list_folder_images(dir);
 	if images.is_empty() {
 		// Silent when the folder was auto-detected. Rotation wasn't asked for, so
 		// an absent or empty dir isn't a mistake to report.
@@ -414,7 +414,8 @@ fn rotate(settings: &Settings, current: Option<&str>) -> Option<Rotation> {
 	} else {
 		next_wallpaper_index(images.len(), showing.unwrap_or(0))
 	};
-	let current = images[index].clone();
+	let count = images.len();
+	let current = images.swap_remove(index);
 	if let Some(name) = current
 		.file_name()
 		.map(|n| n.to_string_lossy().into_owned())
@@ -424,10 +425,7 @@ fn rotate(settings: &Settings, current: Option<&str>) -> Option<Rotation> {
 		recent.truncate(WP_AVOID_MAX);
 		write_history(&recent);
 	}
-	Some(Rotation {
-		count: images.len(),
-		current,
-	})
+	Some(Rotation { count, current })
 }
 
 fn index_of(images: &[PathBuf], name: &str) -> Option<usize> {
@@ -717,7 +715,7 @@ fn prepare_keeping(
 					stored.1
 				));
 				let (fit, anchor) = layout(settings, &tags);
-				let summary = hold.summary.unwrap_or(crate::autotheme::Summary {
+				let summary = hold.summary.unwrap_or_else(|| crate::autotheme::Summary {
 					opacity: opacity.clamp(0.0, 1.0),
 					..copy.summary
 				});

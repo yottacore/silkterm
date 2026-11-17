@@ -92,20 +92,11 @@ pub struct Summary {
 /// be drawn at.
 pub fn summarize(img: &image::RgbaImage, opacity: f32) -> Summary {
 	let (w, h) = (img.width() as usize, img.height() as usize);
+	if w == 0 || h == 0 {
+		return empty_summary(opacity);
+	}
 	let mut sum = vec![[0.0f32; 4]; GRID_W * GRID_H];
 	let mut count = vec![0u32; GRID_W * GRID_H];
-	if w == 0 || h == 0 {
-		return Summary {
-			luma_hi: 0.0,
-			luma_lo: 0.0,
-			luma_mean: 0.0,
-			spread: [[0.0; 3]; SPREAD],
-			alpha: 1.0,
-			hue: 0.0,
-			chroma: 0.0,
-			opacity,
-		};
-	}
 	// One pass, box-averaging into the grid in linear light. An sRGB-space
 	// average darkens, the same reason the blur works in linear.
 	for (x, y, px) in img.enumerate_pixels() {
@@ -151,27 +142,14 @@ pub fn summarize(img: &image::RgbaImage, opacity: f32) -> Summary {
 		hist[hue as usize % 360] += chroma;
 	}
 	if lumas.is_empty() {
-		return Summary {
-			luma_hi: 0.0,
-			luma_lo: 0.0,
-			luma_mean: 0.0,
-			spread: [[0.0; 3]; SPREAD],
-			alpha: 1.0,
-			hue: 0.0,
-			chroma: 0.0,
-			opacity,
-		};
+		return empty_summary(opacity);
 	}
 	lumas.sort_by(f32::total_cmp);
 	for channel in &mut channels {
 		channel.sort_by(f32::total_cmp);
 	}
 	let cells = a_n.max(1) as f64;
-	let mean = if lumas.is_empty() {
-		0.0
-	} else {
-		(lumas.iter().map(|&x| f64::from(x)).sum::<f64>() / lumas.len() as f64) as f32
-	};
+	let mean = (lumas.iter().map(|&x| f64::from(x)).sum::<f64>() / lumas.len() as f64) as f32;
 	Summary {
 		luma_hi: pct(&lumas, HI_PCT),
 		luma_lo: pct(&lumas, LO_PCT),
@@ -188,6 +166,20 @@ pub fn summarize(img: &image::RgbaImage, opacity: f32) -> Summary {
 		hue: dominant_hue(&hist),
 		chroma: (chroma_sum / cells) as f32,
 		opacity: opacity.clamp(0.0, 1.0),
+	}
+}
+
+// The summary of an image with no pixels to read.
+fn empty_summary(opacity: f32) -> Summary {
+	Summary {
+		luma_hi: 0.0,
+		luma_lo: 0.0,
+		luma_mean: 0.0,
+		spread: [[0.0; 3]; SPREAD],
+		alpha: 1.0,
+		hue: 0.0,
+		chroma: 0.0,
+		opacity,
 	}
 }
 

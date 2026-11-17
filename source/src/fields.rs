@@ -611,17 +611,18 @@ pub fn fill(settings: &mut Settings, monitor: Option<&str>) {
 		let _ = (f.put)(settings, v);
 	}
 	// the wallpaper's colors are worked out from everything else
-	if settings.colors_from_wallpaper && settings.wallpaper_enabled {
-		if let Some(sum) = settings.wallpaper_summary {
-			settings.wallpaper_derived = Some(crate::autotheme::derive(&sum, settings));
-			let pair = {
-				let env = Env::new(settings, monitor);
-				[Key::ColFg, Key::ColCursor].map(|k| settings.model.value(k.name(), &env))
-			};
-			for (k, v) in [Key::ColFg, Key::ColCursor].into_iter().zip(&pair) {
-				if let Some(f) = field(k) {
-					let _ = (f.put)(settings, v);
-				}
+	if settings.colors_from_wallpaper
+		&& settings.wallpaper_enabled
+		&& let Some(sum) = settings.wallpaper_summary
+	{
+		settings.wallpaper_derived = Some(crate::autotheme::derive(&sum, settings));
+		let pair = {
+			let env = Env::new(settings, monitor);
+			[Key::ColFg, Key::ColCursor].map(|k| settings.model.value(k.name(), &env))
+		};
+		for (k, v) in [Key::ColFg, Key::ColCursor].into_iter().zip(&pair) {
+			if let Some(f) = field(k) {
+				let _ = (f.put)(settings, v);
 			}
 		}
 	}
@@ -660,6 +661,7 @@ pub fn set(settings: &mut Settings, key: Key, v: &Value, monitor: Option<&str>) 
 	if field(key).is_none() {
 		return;
 	}
+	// a copy to change, since Env borrows the settings the model sits in
 	let mut model = settings.model.clone();
 	model.set(key.name(), v, &Env::new(settings, monitor));
 	settings.model = model;
@@ -674,6 +676,7 @@ pub fn reset(settings: &mut Settings, key: Key, monitor: Option<&str>) {
 	if field(key).is_none() {
 		return;
 	}
+	// a copy to change, since Env borrows the settings the model sits in
 	let mut model = settings.model.clone();
 	model.reset(key.name(), &Env::new(settings, monitor));
 	settings.model = model;

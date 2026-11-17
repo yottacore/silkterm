@@ -22,7 +22,10 @@ use raw_window_handle::RawDisplayHandle;
 use copypasta::x11_clipboard::{Primary, X11ClipboardContext};
 
 /// The desktop's selections. `clipboard` is CLIPBOARD, beside PRIMARY.
-#[allow(clippy::struct_field_names)]
+#[allow(
+	clippy::struct_field_names,
+	reason = "`clipboard` names the CLIPBOARD selection"
+)]
 pub struct Clipboard {
 	clipboard: Option<Box<dyn ClipboardProvider>>,
 	#[cfg(target_os = "linux")]
@@ -36,7 +39,7 @@ pub struct Clipboard {
 	held_primary: Option<String>,
 }
 
-// Which clipboard the the window's display gave us.
+// Which clipboard the window's display gave us.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Backend {
 	Wayland,

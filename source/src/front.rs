@@ -128,13 +128,18 @@ fn parse_stat(text: &str) -> Option<Stat> {
 	let open = text.find('(')?;
 	let close = text.rfind(')')?;
 	let comm = text.get(open + 1..close)?.to_string();
-	let rest: Vec<&str> = text.get(close + 1..)?.split_whitespace().collect();
+	// fields after the name, 0-based: state 0, pgrp 2, tpgid 5, starttime 19
+	let mut rest = text.get(close + 1..)?.split_whitespace();
+	let gone = matches!(rest.next()?, "Z" | "X" | "x");
+	let pgrp = rest.nth(1)?.parse().ok()?;
+	let tpgid = rest.nth(2)?.parse().ok()?;
+	let start = rest.nth(13)?.parse().ok()?;
 	Some(Stat {
 		comm,
-		gone: matches!(*rest.first()?, "Z" | "X" | "x"),
-		pgrp: rest.get(2)?.parse().ok()?,
-		tpgid: rest.get(5)?.parse().ok()?,
-		start: rest.get(19)?.parse().ok()?,
+		gone,
+		pgrp,
+		tpgid,
+		start,
 	})
 }
 

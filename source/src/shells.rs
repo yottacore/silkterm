@@ -305,7 +305,11 @@ impl Ident {
 			base: base_name(prog),
 			args: args
 				.iter()
-				.filter(|arg| !COSMETIC_FLAGS.contains(&arg.to_ascii_lowercase().as_str()))
+				.filter(|arg| {
+					!COSMETIC_FLAGS
+						.iter()
+						.any(|flag| arg.eq_ignore_ascii_case(flag))
+				})
 				.cloned()
 				.collect(),
 		})
@@ -391,22 +395,29 @@ pub fn friendly(command: &str, stored: &[ShellEntry]) -> String {
 	// a second. The result only changes when the stored list does, so it's cached
 	// against the list's own content.
 	let stamp = list_stamp(stored);
-	let mut memo = crate::locks::lock(&FRIENDLY_MEMO);
-	match memo.as_mut() {
-		Some((seen, map)) if *seen == stamp => {
-			if let Some(hit) = map.get(command) {
-				return hit.clone();
+	{
+		let mut memo = crate::locks::lock(&FRIENDLY_MEMO);
+		match memo.as_mut() {
+			Some((seen, map)) if *seen == stamp => {
+				if let Some(hit) = map.get(command) {
+					return hit.clone();
+				}
 			}
+			_ => *memo = Some((stamp, std::collections::HashMap::new())),
 		}
-		_ => *memo = Some((stamp, std::collections::HashMap::new())),
 	}
+	// not held across the PATH search
 	let answer = friendly_uncached(command, stored);
-	if let Some((_, map)) = memo.as_mut() {
+	let mut memo = crate::locks::lock(&FRIENDLY_MEMO);
+	if let Some((seen, map)) = memo.as_mut()
+		&& *seen == stamp
+	{
 		if map.len() >= FRIENDLY_MEMO_MAX {
 			map.clear();
 		}
 		map.insert(command.to_string(), answer.clone());
 	}
+	drop(memo);
 	answer
 }
 
@@ -432,10 +443,9 @@ fn friendly_uncached(command: &str, stored: &[ShellEntry]) -> String {
 	if let Some(entry) = stored
 		.iter()
 		.find(|entry| same_command(&entry.command, command))
+		&& !entry.title.trim().is_empty()
 	{
-		if !entry.title.trim().is_empty() {
-			return entry.title.clone();
-		}
+		return entry.title.clone();
 	}
 	crate::cli::shell_split(command)
 		.ok()
@@ -482,8 +492,11 @@ fn unique_slug(title: &str, existing: &[ShellEntry]) -> String {
 	while base.contains("__") {
 		base = base.replace("__", "_");
 	}
-	let base = base.trim_matches('_').to_string();
-	let base = if base.is_empty() { "shell" } else { &base }.to_string();
+	let base = match base.trim_matches('_') {
+		"" => "shell",
+		trimmed => trimmed,
+	}
+	.to_string();
 	let taken = |s: &str| existing.iter().any(|e| e.slug == s);
 	if !taken(&base) {
 		return base;
@@ -698,7 +711,11 @@ fn pretty(base: &str) -> String {
 	let mut chars = base.chars();
 	chars.next().map_or_else(
 		|| base.to_string(),
-		|first| first.to_uppercase().collect::<String>() + chars.as_str(),
+		|first| {
+			let mut name: String = first.to_uppercase().collect();
+			name.push_str(chars.as_str());
+			name
+		},
 	)
 }
 

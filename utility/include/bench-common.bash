@@ -71,10 +71,12 @@ fFindTerm(){
 fOwnedPids(){
 	local -r home="${1}" launched="${2:-0}"
 	local pid="" environ=""
+	local -a envVars=()
 	if ((launched > 0)); then fCollectTree "${launched}"; fi
 	for pid in $(pgrep -u "$(id -u)" 2>/dev/null || true); do
-		environ="$(tr '\0' '\n' 2>/dev/null < "/proc/${pid}/environ" || true)"
-		if [[ $'\n'"${environ}"$'\n' == *$'\n'"HOME=${home}"$'\n'* ]]; then printf '%s\n' "${pid}"; fi
+		mapfile -d '' -t envVars 2>/dev/null < "/proc/${pid}/environ" || continue
+		printf -v environ '\n%s' "${envVars[@]}"
+		if [[ "${environ}"$'\n' == *$'\n'"HOME=${home}"$'\n'* ]]; then printf '%s\n' "${pid}"; fi
 	done
 	return 0
 }

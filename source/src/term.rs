@@ -495,10 +495,10 @@ impl TermInstance {
 	pub fn task(&mut self) -> Task {
 		const PROBE_IVL: std::time::Duration = std::time::Duration::from_millis(250);
 		let now = std::time::Instant::now();
-		if let Some((at, task)) = &self.task_cache {
-			if now.duration_since(*at) < PROBE_IVL {
-				return task.clone();
-			}
+		if let Some((at, task)) = &self.task_cache
+			&& now.duration_since(*at) < PROBE_IVL
+		{
+			return task.clone();
 		}
 		let task = match self.running_program() {
 			Some(program) => {
@@ -621,10 +621,10 @@ impl TermInstance {
 		// mount that has stopped responding, each of those stalls the render.
 		const PROBE_IVL: std::time::Duration = std::time::Duration::from_millis(250);
 		let now = std::time::Instant::now();
-		if let Some((at, dir)) = self.cwd_cache.borrow().as_ref() {
-			if now.duration_since(*at) < PROBE_IVL {
-				return dir.clone();
-			}
+		if let Some((at, dir)) = self.cwd_cache.borrow().as_ref()
+			&& now.duration_since(*at) < PROBE_IVL
+		{
+			return dir.clone();
 		}
 		let dir = self
 			.reported_cwd

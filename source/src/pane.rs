@@ -1058,21 +1058,29 @@ fn debold_attrs(src: &AttrsList, weight: Weight) -> AttrsList {
 // screen row: runs merged by (color, bold, italic). A character the primary
 // mono face lacks is a space placeholder of its width.
 fn strip_line(ctx: &mut TextCtx, fg: [u8; 3], row: &[StripCell]) -> BufferLine {
-	fn add_run(attrs: &mut AttrsList, range: std::ops::Range<usize>, style: ([u8; 3], bool, bool)) {
+	fn add_run(
+		attrs: &mut AttrsList,
+		(base, bold_weight): (&glyphon::Attrs<'static>, Weight),
+		range: std::ops::Range<usize>,
+		style: ([u8; 3], bool, bool),
+	) {
 		if range.is_empty() {
 			return;
 		}
-		let mut span = mono_attrs();
+		let mut span = base.clone();
 		span.color_opt = Some(GColor::rgb(style.0[0], style.0[1], style.0[2]));
 		if style.1 {
-			span.weight = crate::text::mono_bold_weight();
+			span.weight = bold_weight;
 		}
 		if style.2 {
 			span.style = Style::Italic;
 		}
 		attrs.add_span(range, &span);
 	}
-	let mut attrs = AttrsList::new(&mono_attrs());
+	// hoisted, as in build: both take a lock, too hot per run
+	let base = mono_attrs();
+	let fonts = (&base, crate::text::mono_bold_weight());
+	let mut attrs = AttrsList::new(&base);
 	let mut text = String::with_capacity(row.len());
 	let mut run_start = 0;
 	let mut run_style = (fg, false, false);
@@ -1088,13 +1096,13 @@ fn strip_line(ctx: &mut TextCtx, fg: [u8; 3], row: &[StripCell]) -> BufferLine {
 		}
 		let style = (cell.fg, cell.bold, cell.italic);
 		if style != run_style {
-			add_run(&mut attrs, run_start..text.len(), run_style);
+			add_run(&mut attrs, fonts, run_start..text.len(), run_style);
 			run_start = text.len();
 			run_style = style;
 		}
 		text.push(render_char(cell.c));
 	}
-	add_run(&mut attrs, run_start..text.len(), run_style);
+	add_run(&mut attrs, fonts, run_start..text.len(), run_style);
 	BufferLine::new(text, LineEnding::default(), attrs, Shaping::Advanced)
 }
 
@@ -2091,7 +2099,6 @@ impl Pane {
 				// as tmux flushes, and holding the row then makes its new line pop in
 				// while the rest slides.
 				if !gesture_active || self.strip.region != (region.start, region.end) {
-					let blank = fnv_row(std::iter::repeat_n(' ', cols));
 					let same = |i: usize| {
 						self.last_rows.len() == lines
 							&& rows[i] == self.last_rows[i]
@@ -2150,7 +2157,6 @@ impl Pane {
 			} else if apps {
 				let shift = if fingerprint_frame(alt, follow, grew, scrolled) {
 					let shift = scroll_shift_signed(&rows, &self.last_rows, APP_SCROLL_MAX);
-					let blank = fnv_row(std::iter::repeat_n(' ', cols));
 					shift_dbg = shift;
 					if SLIDE_DOWN_INTO_ROOM
 						|| !shift_makes_room(&rows, &self.last_rows, shift, blank)
@@ -2213,7 +2219,6 @@ impl Pane {
 				} else {
 					0
 				};
-				let blank = fnv_row(std::iter::repeat_n(' ', cols));
 				let measured = output_band(&rows, &self.last_rows, advanced, hint, blank);
 				self.out_band = adopt_band(self.out_band, measured, was_chasing);
 			}
@@ -2828,7 +2833,9 @@ impl Pane {
 				if rect_bot <= rect_top {
 					continue;
 				}
-				let (mut unders, mut strikes) = (Vec::new(), Vec::new());
+				// the grid's span lists are drawn already, so their capacity is reused
+				unders.clear();
+				strikes.clear();
 				for (c, cell) in row.iter().enumerate() {
 					if cell.wide == 0 {
 						continue;
@@ -3652,6 +3659,7 @@ impl Pane {
 				(segments >= PROMPT_SKEL_MIN).then_some(skel)
 			})
 			.collect();
+		drop(guard);
 		let confirmed = above
 			.iter()
 			.zip(&self.prompt_above)
@@ -5188,11 +5196,13 @@ fn repaint_shift(
 	if inked < MOVED_MIN || checked < MOVED_MIN || moved * 4 >= checked {
 		return None;
 	}
+	// every shift below compares against the same screen rows, so print them once
+	let now: Vec<u64> = (0..n as i32).map(print).collect();
 	let same = |shift: usize| {
 		last.iter()
 			.enumerate()
 			.skip(shift)
-			.filter(|&(i, &was)| was != blank && print((i - shift) as i32) == was)
+			.filter(|&(i, &was)| was != blank && now[i - shift] == was)
 			.count()
 	};
 	let (shift, held) = (0..k.min(APP_SCROLL_MAX + 1).min(n))
