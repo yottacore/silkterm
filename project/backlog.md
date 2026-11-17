@@ -555,7 +555,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- `idlewake`'s opaque arm failed "typing reached the shell" in that run. That check types and looks for a file, and doesn't read pixels.
 		- The new test dfe8t failed with the old `_lib.ps1`, with the ink line moved to 40, and with the second bitmap's stride ignored. It passes with the fix.
 	- Swept: every caller of `fInk` and `fDiff` under `cicd/tests/wingui` (`_gpuload`, `idlemin`, `idlewake`, `livecfg`, `perfladder`, `settingsdlg`, `smoke`, `softrender`, `wpremote`). `GetPixel` isn't used anywhere else in the repo.
-	- Test case: `cicd/tests/wingui/pixels-test.bash` (dfe8t), which checks the C# counts against one pixel at a time, rows top first and bottom first. The Windows comparison was a one-off rig, `private/claude_simple/tools/pixparity/pixparity.bash`.
+	- Test case: `cicd/tests/wingui/pixels-test.bash` (dfe8t), which checks the C# counts against one pixel at a time, rows top first and bottom first. The Windows comparison was a one-off rig, kept outside the repo.
 	- Branch: nov17-2026111623500008
 	- Commit: 2b981c4c
 	- Acceptance signoff: Self-closed: old and new gave the same answers on b29w, and the new test fails on the old code.
