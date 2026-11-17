@@ -2752,7 +2752,14 @@ impl SettingsDialog {
 		if self.disabled(key) {
 			return;
 		}
-		self.set_f32(key, scale.stepped(self.get_f32(key), dir, shift));
+		let now = self.get_f32(key);
+		let next = scale.stepped(now, dir, shift);
+		// same as a dropdown at its end: setting the same number still lifts the
+		// automatic mark and turns the sub-group on. The slack is for a value
+		// read back through a percent or speed conversion.
+		if (next - now).abs() > f32::EPSILON * 8.0 * now.abs().max(1.0) {
+			self.set_f32(key, next);
+		}
 		if self.edit.as_ref().is_some_and(|e| e.row == i) {
 			let buf = self.fmt_val(key, scale.int);
 			if let Some(edit) = &mut self.edit {
@@ -2809,17 +2816,24 @@ impl SettingsDialog {
 		}
 		match self.specs[i].kind {
 			Kind::Slider { .. } => self.step_slider(i, dir, self.shift),
-			// closed dropdown: Left/Right nudge the value without opening (combobox feel)
+			// closed dropdown: Left/Right nudge the value without opening (combobox feel).
+			// Re-setting the same option drops a theme's changes and turns the
+			// sub-group on, so a press at the end does nothing.
 			Kind::Radio(options) => {
 				let sel = self.get_radio(key) as i32;
 				let new_sel = (sel + dir).clamp(0, options.len() as i32 - 1);
-				self.set_radio(key, new_sel as usize);
+				if new_sel != sel {
+					self.set_radio(key, new_sel as usize);
+				}
 			}
 			Kind::Dropdown(_) => {
 				let n = self.dd_len(i) as i32;
 				if n > 0 {
 					let sel = self.get_radio(key) as i32;
-					self.set_radio(key, (sel + dir).clamp(0, n - 1) as usize);
+					let new_sel = (sel + dir).clamp(0, n - 1);
+					if new_sel != sel {
+						self.set_radio(key, new_sel as usize);
+					}
 				}
 			}
 			_ => {}
@@ -10436,6 +10450,84 @@ mod tests {
 		assert!(d.get_radio(Key::BgFit) > before || before == 1);
 		d.key_horizontal(-1);
 		assert_eq!(d.get_radio(Key::BgFit), 0);
+	}
+
+	// An arrow that can't move a slider or a closed dropdown any further used
+	// to set the same value again, which turned the row's switch on (Text
+	// scrim, Wallpaper) and put a theme's colors back. Every such row, both
+	// ends, with its switch off.
+	// Test ID: dfehc
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn an_arrow_at_the_end_changes_nothing() {
+		use super::{Focus, SliderScale};
+		let mut d = mk_dialog(4000.0);
+		let fresh = d.edited.clone();
+		let (mut covered, mut gated) = (0, 0);
+		for i in 0..d.specs.len() {
+			let key = d.specs[i].key;
+			for dir in [-1, 1] {
+				d.edited = fresh.clone();
+				d.edit = None;
+				d.open = None;
+				if d.disabled(key) {
+					continue;
+				}
+				let specs = d.specs;
+				let kind = &specs[i].kind;
+				let at_end = |d: &SettingsDialog| -> Option<f32> {
+					match kind {
+						Kind::Slider { .. } => Some(d.get_f32(key)),
+						Kind::Radio(_) | Kind::Dropdown(_) => Some(d.get_radio(key) as f32),
+						_ => None,
+					}
+				};
+				match kind {
+					Kind::Slider { .. } => {
+						let scale = SliderScale::of(kind).unwrap();
+						d.set_f32(key, if dir < 0 { scale.min } else { scale.max });
+					}
+					Kind::Radio(_) | Kind::Dropdown(_) => {
+						let n = match kind {
+							Kind::Radio(options) => options.len(),
+							_ => d.dd_len(i),
+						};
+						if n < 2 {
+							continue;
+						}
+						d.set_radio(key, if dir < 0 { 0 } else { n - 1 });
+					}
+					_ => continue,
+				}
+				let gate = crate::fields::spec()
+					.get(key.name())
+					.and_then(|s| s.gate.as_deref())
+					.and_then(Key::parse);
+				let end = at_end(&d);
+				if let Some(gate) = gate {
+					d.set_toggle(gate, false);
+					assert!(!d.get_toggle(gate), "{} stayed on", gate.name());
+					// a switch that moves the row off its end has nothing to test
+					if at_end(&d) != end {
+						continue;
+					}
+				}
+				let before = d.edited.clone();
+				d.tab = d.specs[i].tab;
+				d.focus = Some(Focus::Row(i, 0));
+				d.key_horizontal(dir);
+				assert!(
+					d.edited == before,
+					"{} changed on {} at its end",
+					d.specs[i].label,
+					if dir < 0 { "Left" } else { "Right" }
+				);
+				covered += 1;
+				gated += usize::from(gate.is_some());
+			}
+		}
+		assert!(covered >= 40, "only {covered} ends tried");
+		assert!(gated >= 10, "only {gated} ends tried under a switch");
 	}
 
 	// Test ID: da580

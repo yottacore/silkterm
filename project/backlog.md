@@ -363,7 +363,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 - Settings: Left or Right at the end of a closed dropdown drops a theme's color changes
 	- ID: 2026111713374905
 	- Type: Bug
-	- Status: Queued
+	- Status: Closed
 	- Severity: Avg
 	- Opened: 20261117-133749
 	- Opened by: CC
@@ -371,15 +371,27 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Target version: rc.1
 	- Incorrect behavior: Theme SilkTerm with one edited color shows "SilkTerm *". With the Theme box focused, Left at the first option snaps the colors back and drops the changes, and the next OK removes them from the file. Left on Function at "Distance field" turns Text scrim on. Left on Fit at "Stretch" turns Wallpaper on. The box shows no change in any of these.
 	- Expected behavior: A key that can't move the choice does nothing.
-	- Reproduced: No. Traced through the code.
+	- Reproduced: 20261117, by test. dfehc and dfehd fail on the code before the fix.
 	- Possible cause: `key_horizontal` calls `set_radio` with the clamped index even when it equals the current one. `Model::set` drops theme changes and turns on the parent setting on any set.
+	- Actual cause: `key_horizontal` and `step_slider` set the value even when the press can't move it. Any set counts as a change. It drops a theme's changes, turns the row's switch on and lifts the automatic mark.
 	- Origin: e79a250e, 20260805, with 3a052615, 20261009, which made a set drop changes. Not seen by an earlier round. Confirmed by trace.
 	- Sweep: `step_slider` at either end calls `set_f32` with the same value. Up at the top of Font size turns "Use system size" off, and Columns or Rows at the top turn Remember size off. Picking the same option again from an open popup is a recorded behavior and stays.
+	- Swept: the Radio and Dropdown arms of `key_horizontal`, and `step_slider`, which Left, Right, Up and Down all go through. The other `set_radio` and `set_f32` callers are picks by hand and stay as they are: a popup option, a click on a radio, a slider drag, a typed number, and the theme buttons. dfehc walks every slider, radio and dropdown at both ends.
 	- Decisions:
 		- 20261117: Kept for rc.1, since it loses data. rc.1 takes only Critical and High items and anything that crashes or loses data.
+		- 20261117: An open number box is still refreshed on a press at the end, so a typed number past the end gives way to the value, as before.
+		- 20261117: A click on the radio already picked still sets it, like the popup's same pick.
+	- Actual fix: A press at the end of a closed dropdown, a radio row or a slider does nothing. The value is set only when the step moves it.
 	- Notes:
 		- Code review 20261117 item 6.
 		- Detail: `detail_backlog.md`, under this ID.
+	- Branch: nov17-2026111713374905
+	- Commit: b889657c
+	- Test case: dfehc (every slider, radio and dropdown at both ends, with its switch off, changes nothing), dfehd (the theme box at both ends keeps an edited color). dfehc fails at "Function, falloff" with the dropdown check taken out, and at "Opacity %" with the slider check taken out. dfehd fails with the dropdown check taken out. The automatic mark case isn't pinned, since the desktop's size would have to sit at the top.
+	- Verified: 20261117, the quick gate (fmt, clippy, 1503 unit tests, scripts, docs).
+	- Acceptance signoff: Self-closed: the change does what the item asked, and its tests fail before the fix and pass after.
+	- Closed: 20261117-155300
+	- Closed reason: Done
 
 - A setting written twice in the file can't be changed or reverted from Settings, and OK closes as if it saved
 	- ID: 2026111713374906
@@ -535,7 +547,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 - The terminal window's close button quits while Settings is open and drops its unapplied changes
 	- ID: 2026111713374934
 	- Type: Bug
-	- Status: Queued
+	- Status: Closed
 	- Severity: Low
 	- Opened: 20261117-133749
 	- Opened by: CC
@@ -543,15 +555,27 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Target version: rc.1
 	- Incorrect behavior: With Settings open and changed, a click on the terminal's title-bar X quits and the changes are lost. Ctrl+Q, the macOS Quit menu and a click on the terminal are all held back by the dialog instead.
 	- Expected behavior: With a dialog up, closing the main window focuses the dialog, as a click does.
-	- Reproduced: No. Traced through the code.
+	- Reproduced: 20261117, by test. dfehe fails without the close request in the hold.
 	- Possible cause: The dialog's hold on the main window covers keys, wheel, IME, and presses, but not CloseRequested.
+	- Actual cause: As above.
 	- Origin: dca3f532, 20260702, and 80f70698, 20261017. Not seen by an earlier round. Confirmed by trace.
 	- Sweep: The notice has the same gap, but holds no changes.
+	- Swept: the dialog's hold in `window_event` and `notice_holds` both use one rule now, `underneath` in `app/dialogs.rs`. The benchmark banner lets a close through on purpose, and isn't a dialog.
 	- Decisions:
 		- 20261117: Kept for rc.1, since it loses data. rc.1 takes only Critical and High items and anything that crashes or loses data.
+		- 20261117: The notice holds a close too, per the Sweep, so a notice and a dialog follow one rule. That covers About, and Settings' own close while a notice is in front of it, which now brings the notice forward.
+	- Actual fix: A close request on a window under a dialog or notice brings the one on top forward, as a click does.
 	- Notes:
 		- Code review 20261117 item 35.
 		- Detail: `detail_backlog.md`, under this ID.
+		- The hold's routing wasn't tried in a real window. It's the branch a click already takes.
+	- Branch: nov17-2026111713374905
+	- Commit: ed23125f
+	- Test case: dfehe (a close and a press raise, keys and IME are dropped, the rest goes through). It fails with the close request taken out of the rule.
+	- Verified: 20261117, the quick gate (fmt, clippy, 1503 unit tests, scripts, docs).
+	- Acceptance signoff: Self-closed: the change does what the item asked, and its test fails before the fix and passes after.
+	- Closed: 20261117-155300
+	- Closed reason: Done
 
 - A command-line argument that isn't valid Unicode crashes SilkTerm
 	- ID: 2026111713374941

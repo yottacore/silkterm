@@ -356,18 +356,13 @@ impl App {
 		let Some(n) = &self.notice else {
 			return false;
 		};
-		match event {
-			WindowEvent::KeyboardInput { .. }
-			| WindowEvent::MouseWheel { .. }
-			| WindowEvent::Ime(_) => true,
-			WindowEvent::MouseInput {
-				state: ElementState::Pressed,
-				..
-			} => {
+		match underneath(event) {
+			Underneath::Takes => false,
+			Underneath::Drops => true,
+			Underneath::Raises => {
 				n.window.focus_window();
 				true
 			}
-			_ => false,
 		}
 	}
 
@@ -596,9 +591,65 @@ fn alert(headline: &str, detail: &str) {
 	alert.runModal();
 }
 
+/// What a window under Settings or a notice does with an event.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum Underneath {
+	Takes,
+	Drops,
+	/// the one on top comes forward instead
+	Raises,
+}
+
+/// The close button counts as a click: let through, it quit with Settings
+/// open and its changes went with it.
+pub(super) fn underneath(event: &WindowEvent) -> Underneath {
+	match event {
+		WindowEvent::KeyboardInput { .. }
+		| WindowEvent::MouseWheel { .. }
+		| WindowEvent::Ime(_) => Underneath::Drops,
+		WindowEvent::MouseInput {
+			state: ElementState::Pressed,
+			..
+		}
+		| WindowEvent::CloseRequested => Underneath::Raises,
+		_ => Underneath::Takes,
+	}
+}
+
 #[cfg(test)]
 mod tests {
 	use super::notice_due;
+
+	// A dialog holds the window under it: keys go nowhere, and a click or the
+	// title bar's close brings the dialog forward. The close used to quit past
+	// Settings and lose what it had changed.
+	// Test ID: dfehe
+	#[test]
+	fn the_window_under_a_dialog_raises_it_on_a_close() {
+		use super::{Underneath, underneath};
+		use winit::event::{DeviceId, ElementState, Ime, MouseButton, WindowEvent};
+		let device_id = DeviceId::dummy();
+		let press = |state| WindowEvent::MouseInput {
+			device_id,
+			state,
+			button: MouseButton::Left,
+		};
+		assert_eq!(underneath(&WindowEvent::CloseRequested), Underneath::Raises);
+		assert_eq!(
+			underneath(&press(ElementState::Pressed)),
+			Underneath::Raises
+		);
+		assert_eq!(
+			underneath(&press(ElementState::Released)),
+			Underneath::Takes
+		);
+		assert_eq!(
+			underneath(&WindowEvent::Ime(Ime::Enabled)),
+			Underneath::Drops
+		);
+		assert_eq!(underneath(&WindowEvent::Focused(true)), Underneath::Takes);
+		assert_eq!(underneath(&WindowEvent::RedrawRequested), Underneath::Takes);
+	}
 
 	// A Mac with no Metal device ended the launch with a line on stderr only,
 	// which a launch from Finder never shows.

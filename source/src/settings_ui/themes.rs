@@ -466,6 +466,35 @@ mod tests {
 		assert_eq!(d.dd_closed_label(row), "Mine");
 	}
 
+	// Left on the first theme, or Right on Custom at the end, can't move the
+	// box. It used to pick the same theme again, which put its colors back
+	// with nothing on screen to say so, and the next OK wrote that.
+	// Test ID: dfehd
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn an_arrow_at_the_end_of_the_theme_box_keeps_the_changes() {
+		let first = crate::theme::names().next().unwrap();
+		for (name, dir) in [(first, -1), (knobs::CUSTOM, 1)] {
+			let mut d = on_theme(name);
+			let row = d
+				.specs
+				.iter()
+				.position(|s| s.key == Key::Theme)
+				.expect("the theme row");
+			let at = d.get_radio(Key::Theme);
+			let end = if dir < 0 { 0 } else { d.dd_len(row) - 1 };
+			assert_eq!(at, end, "{name} isn't at the end the arrow heads for");
+			d.set_col(Key::ColFg, [1, 2, 3]);
+			let dirty = d.theme_dirty();
+			d.tab = d.specs[row].tab;
+			d.focus = Some(super::super::Focus::Row(row, 0));
+			d.key_horizontal(dir);
+			assert_eq!(d.get_radio(Key::Theme), at, "{name}");
+			assert_eq!(d.get_col(Key::ColFg), [1, 2, 3], "{name} lost its color");
+			assert_eq!(d.theme_dirty(), dirty, "{name}");
+		}
+	}
+
 	// Picking a theme takes on its colors. Keeping the old theme's tweaks would
 	// make the picker look broken on every color that had been edited.
 	// Test ID: davcs

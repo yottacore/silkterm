@@ -4362,20 +4362,15 @@ impl ApplicationHandler<UserEvent> for App {
 			return;
 		}
 		// Simulated modality: while a dialog is open the main window takes no
-		// input, and a click on it raises and focuses the dialog instead.
+		// input, and a click on it or its close button raises the dialog instead.
 		if let Some(d) = &self.dialog {
-			match &event {
-				WindowEvent::KeyboardInput { .. }
-				| WindowEvent::MouseWheel { .. }
-				| WindowEvent::Ime(_) => return,
-				WindowEvent::MouseInput {
-					state: ElementState::Pressed,
-					..
-				} => {
+			match dialogs::underneath(&event) {
+				dialogs::Underneath::Takes => {}
+				dialogs::Underneath::Drops => return,
+				dialogs::Underneath::Raises => {
 					d.window.focus_window();
 					return;
 				}
-				_ => {}
 			}
 		}
 		let Some(state) = self.state.as_mut() else {
