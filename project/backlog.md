@@ -34,26 +34,6 @@ Going forward, new issues in the new template at the bottom of this file will go
 
 ## Issues
 
-- Window auto-resize stopped working
-	- ID: 2026111700130407
-	- Type: Bug
-	- Status: Waiting for answers
-		- Waits on the question in questions.md about which resize is meant.
-	- Opened: 20261117-001304
-	- Opened by: JC
-	- Target version: rc.1
-	- Incorrect behavior: Window auto-resize stopped working.
-	- Notes:
-		- Possibly only when running Muffer?
-	- Reproduced: No. No doc or setting is called auto-resize, so each kind of automatic resize was tried, on the dev build and on the dogfood build from 11-10 that was running when this was filed.
-	- Progress log:
-		- 20261117: On Xvfb, with and without xfwm4, a program in the pane was told each new grid after every window resize. That held on the normal screen, on the alt screen with mouse tracking on, and with a frame every 50 ms in synchronized-output marks, like muffer. It also held for a window resized after its device was let go.
-		- 20261117: With Resize window on zoom on, each zoom resized the window and kept the rows. The columns were one more after the first zoom on the alt screen, and stayed there.
-		- 20261117: dpirand on X11 passed 5 cases, with drags, moves, zooms, resizes and relaunches across 2 to 4 monitors.
-		- 20261117: Not tried: monitors waking on a real desktop, which the rigs can't stand in for.
-	- Decisions:
-		- 20261117: No test yet. Which behavior to pin waits on the answer.
-
 - The window doesn't paint while the GPU is busy or short on memory, and stays blank after the load ends
 	- ID: 2026100312470535
 	- Type: Bug
@@ -214,6 +194,27 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- 20261019: It's still stuck upstream. `cargo update --dry-run` doesn't move any of fontdb, cosmic-text, ab_glyph, sctk-adwaita, glyphon, or winit, and ttf-parser 0.25.1 still comes in both ways. On crates.io, fontdb 0.24.0 drops it, but the newest cosmic-text, 0.19.0, still asks for fontdb 0.23. sctk-adwaita 0.12.0 still pulls in ab_glyph. Even glyphon 0.12, a breaking bump, still brings cosmic-text 0.19.
 		- It's stalled until a cosmic-text release takes fontdb 0.24 or later, and winit's sctk-adwaita drops ab_glyph.
 	- Held for a cosmic-text release on fontdb 0.24 or later, and an sctk-adwaita without ab_glyph.
+
+- Window auto-resize stopped working
+	- ID: 2026111700130407
+	- Type: Bug
+	- Status: Queued
+		- 20261117: The answer narrows it to a window moved to another monitor, which doesn't take the size kept for that monitor.
+	- Opened: 20261117-001304
+	- Opened by: JC
+	- Target version: rc.1
+	- Incorrect behavior: Window auto-resize stopped working.
+	- Notes:
+		- Possibly only when running Muffer?
+	- Reproduced: No. No doc or setting is called auto-resize, so each kind of automatic resize was tried, on the dev build and on the dogfood build from 11-10 that was running when this was filed.
+	- Progress log:
+		- 20261117: On Xvfb, with and without xfwm4, a program in the pane was told each new grid after every window resize. That held on the normal screen, on the alt screen with mouse tracking on, and with a frame every 50 ms in synchronized-output marks, like muffer. It also held for a window resized after its device was let go.
+		- 20261117: With Resize window on zoom on, each zoom resized the window and kept the rows. The columns were one more after the first zoom on the alt screen, and stayed there.
+		- 20261117: dpirand on X11 passed 5 cases, with drags, moves, zooms, resizes and relaunches across 2 to 4 monitors.
+		- 20261117: Not tried: monitors waking on a real desktop, which the rigs can't stand in for.
+	- Decisions:
+		- 20261117: No test yet. Which behavior to pin waits on the answer.
+		- 20261117: Work only the move to another monitor. dpirand passes that on X11, so a `SILK_MONDBG=1` log from the desktop where it failed would show where it goes wrong.
 
 - Tab labels and the window title are worked out again on every frame
 	- ID: 2026111623500001
