@@ -754,7 +754,7 @@ struct State {
 	close_ask: Option<closing::Closing>,
 	win_opacity: Option<f32>, // CLI --background-opacity override (this window only)
 	win_title: Option<String>, // CLI --title override (else "AppName - <tab title>")
-	last_win_title: String,   // last string set on the window (skip redundant set_title)
+	kept_title: crate::tabtitle::KeptTitle, // what was last set on the window
 	focused: bool, // window has keyboard focus (gates copy-output: never copy from a background window)
 	pending_about: bool, // request to open the About window (App acts on it; needs the event loop)
 	pending_settings: Option<Instant>, // request to open the Settings window, and when
@@ -1234,67 +1234,40 @@ impl State {
 		}
 	}
 
-	// The active tab's title, in full, since the window title has the whole title
-	// bar and the system shortens it itself.
-	fn active_tab_title(&mut self) -> String {
-		let active = self.tabs.active;
-		self.refresh_tab_labels(Some(active));
-		self.tab_labels
-			.forms(active)
-			.first()
-			.cloned()
-			.unwrap_or_else(|| config::APP_NAME.to_string())
-	}
-
-	// What the window title says after the app name. See tabtitle::window_suffix
-	// for the order of the 3 sources.
-	fn title_suffix(&mut self) -> Option<String> {
-		let typed = self.tabs.cur().title_override.clone();
-		let program = self.pane_title();
-		let pm = self.tabs.cur();
-		let launched = pm
-			.panes
-			.get(&pm.focused)
-			.and_then(|pane| pane.launched())
-			.map(str::to_string);
-		crate::tabtitle::window_suffix(
-			config::rights(),
-			typed.as_deref(),
-			program.as_deref(),
-			launched.as_deref(),
-			config::settings().title_shows_tab,
-			|| self.active_tab_title(),
-		)
-	}
-
-	// The title the focused pane's program asked for, if it asked for one.
-	fn pane_title(&self) -> Option<String> {
-		let pm = self.tabs.cur();
-		let title = &pm.panes.get(&pm.focused)?.title;
-		(!title.trim().is_empty()).then(|| title.clone())
-	}
-
 	// The window title in the taskbar and alt-tab: a --title from the command line
 	// as given, else the app name, with the dogfood build when this is one, and
 	// what the active tab has to say. Called on a tab or focus change and on each
-	// frame drawn. set_title runs only when the string changed, to avoid flicker.
+	// frame drawn, so it's only built when what it says moved, and set_title
+	// runs only then, to avoid flicker.
 	fn update_title(&mut self) {
+		use crate::tabtitle::Suffix;
+		let note = self.conserve.note(Instant::now());
 		// A --title is the whole answer, so nothing else is worked out.
-		let suffix = if self.win_title.is_some() {
-			None
-		} else {
-			self.title_suffix()
+		let custom = self.win_title.is_some();
+		// The tab's label in full, since the window title has the whole title bar
+		// and the system shortens it itself. It's brought up to date only when
+		// it's the one used, and the strip may be hidden.
+		if !custom && title_from(&self.tabs) == Some(Suffix::Tab) {
+			self.refresh_tab_labels(Some(self.tabs.active));
+		}
+		let suffix = match title_from(&self.tabs).filter(|_| !custom) {
+			None => None,
+			Some(Suffix::Said(said)) => Some(said),
+			Some(Suffix::Tab) => Some(
+				self.tab_labels
+					.forms(self.tabs.active)
+					.first()
+					.map_or(config::APP_NAME, String::as_str),
+			),
 		};
-		let title = crate::tabtitle::window_title(
+		if let Some(title) = self.kept_title.update(
 			config::rights(),
 			self.win_title.as_deref(),
-			&config::title_prefix(),
-			suffix.as_deref(),
-		);
-		let title = crate::tabtitle::with_note(title, self.conserve.note(Instant::now()));
-		if title != self.last_win_title {
+			config::title_prefix(),
+			suffix,
+			note,
+		) {
 			self.window.set_title(&title);
-			self.last_win_title = title;
 		}
 	}
 
@@ -3319,6 +3292,24 @@ impl State {
 	}
 }
 
+// Where the window title's suffix comes from, for the active tab: see
+// tabtitle::suffix_from for the order of the 3 sources. Only borrows.
+fn title_from(tabs: &Tabs) -> Option<crate::tabtitle::Suffix<'_>> {
+	let pm = tabs.cur();
+	let pane = pm.panes.get(&pm.focused);
+	// a program that never asked for a title, or asked for a blank one
+	let program = pane
+		.map(|pane| pane.title.as_str())
+		.filter(|title| !title.trim().is_empty());
+	crate::tabtitle::suffix_from(
+		config::rights(),
+		pm.title_override.as_deref(),
+		program,
+		pane.and_then(Pane::launched),
+		config::settings().title_shows_tab,
+	)
+}
+
 fn rect_inst(x: f32, y: f32, w: f32, h: f32, color: [u8; 3]) -> RectInstance {
 	RectInstance {
 		pos: [x, y],
@@ -3736,7 +3727,7 @@ impl ApplicationHandler<UserEvent> for App {
 			.with_title(crate::tabtitle::window_title(
 				config::rights(),
 				win_title.as_deref(),
-				&config::title_prefix(),
+				config::title_prefix(),
 				None,
 			))
 			.with_window_icon(load_icon())
@@ -4047,7 +4038,7 @@ impl ApplicationHandler<UserEvent> for App {
 			close_ask: None,
 			win_opacity,
 			win_title,
-			last_win_title: String::new(),
+			kept_title: crate::tabtitle::KeptTitle::default(),
 			focused: FOCUSED_AT_START,
 			pending_about: false,
 			pending_settings: None,

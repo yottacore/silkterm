@@ -24,7 +24,7 @@
 //!
 //! The path style is passed in rather than read off `cfg!`, so tests cover the
 //! Windows and posix forms on any box. The window title is worked out here too
-//! (`window_suffix`), since it's built from the same parts.
+//! (`suffix_from`), since it's built from the same parts.
 
 use crate::template::{self, Template};
 
@@ -360,8 +360,43 @@ pub fn program_title<'a>(
 /// A typed title is shown as typed, as the tab shows it too, while a
 /// program's is trimmed, since nobody chose its spacing, and has any marker a
 /// console wrote into it taken off. `launched` is the program the pane was
-/// started with, which is how that marker is known in any language. `tab` is
-/// only worked out when it's needed, since that isn't free.
+/// started with, which is how that marker is known in any language. The tab's
+/// own label is only named as the source, not read, since it isn't free, and
+/// nothing is copied, since this is asked on every frame.
+pub fn suffix_from<'a>(
+	rights: Rights,
+	typed: Option<&'a str>,
+	program: Option<&'a str>,
+	launched: Option<&str>,
+	show_tab: bool,
+) -> Option<Suffix<'a>> {
+	let program = program.and_then(|title| program_title(rights, title, launched));
+	// With the tab switched off as a source, both of its answers go: the name
+	// typed on it and the text it works out for itself. A program's own title
+	// still comes through, and a `--title` never gets here.
+	if !show_tab {
+		return program.map(Suffix::Said);
+	}
+	if let Some(typed) = typed {
+		if !typed.trim().is_empty() {
+			return Some(Suffix::Said(typed));
+		}
+		return program.map(Suffix::Said);
+	}
+	Some(program.map_or(Suffix::Tab, Suffix::Said))
+}
+
+/// Where the window title's suffix comes from: text it was given, or the
+/// tab's own label (see `suffix_from`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Suffix<'a> {
+	Said(&'a str),
+	Tab,
+}
+
+/// `suffix_from` with the tab's label worked out by `tab`, only when it's the
+/// one used.
+#[cfg(test)]
 pub fn window_suffix(
 	rights: Rights,
 	typed: Option<&str>,
@@ -370,20 +405,44 @@ pub fn window_suffix(
 	show_tab: bool,
 	tab: impl FnOnce() -> String,
 ) -> Option<String> {
-	let program = program.and_then(|title| program_title(rights, title, launched));
-	// With the tab switched off as a source, both of its answers go: the name
-	// typed on it and the text it works out for itself. A program's own title
-	// still comes through, and a `--title` never gets here.
-	if !show_tab {
-		return program.map(str::to_string);
-	}
-	if let Some(typed) = typed {
-		if !typed.trim().is_empty() {
-			return Some(typed.to_string());
+	suffix_from(rights, typed, program, launched, show_tab).map(|from| match from {
+		Suffix::Said(said) => said.to_string(),
+		Suffix::Tab => tab(),
+	})
+}
+
+/// The window title as last set, kept by what it was made from, so a frame
+/// that changes none of that builds nothing.
+#[derive(Debug, Default)]
+pub struct KeptTitle {
+	made_from: Option<(Option<String>, Option<&'static str>)>,
+}
+
+impl KeptTitle {
+	/// The title to set, or None when it would read as it does now. The rights,
+	/// a `--title` and the prefix are fixed for a window, so only the suffix and
+	/// the note are compared.
+	pub fn update(
+		&mut self,
+		rights: Rights,
+		custom: Option<&str>,
+		prefix: &str,
+		suffix: Option<&str>,
+		note: Option<&'static str>,
+	) -> Option<String> {
+		if self
+			.made_from
+			.as_ref()
+			.is_some_and(|(said, was)| said.as_deref() == suffix && *was == note)
+		{
+			return None;
 		}
-		return program.map(str::to_string);
+		self.made_from = Some((suffix.map(str::to_string), note));
+		Some(with_note(
+			window_title(rights, custom, prefix, suffix),
+			note,
+		))
 	}
-	Some(program.map_or_else(tab, str::to_string))
 }
 
 /// The whole window title. A `--title` given on the command line is used as is,
@@ -2451,6 +2510,60 @@ mod tests {
 			tab_template_or_default("%shell% %Current_Directory%"),
 			tab_template("%SHELL% %CURRENT_DIRECTORY%").expect("reads")
 		);
+	}
+
+	// A frame drawn with the window title's parts as they were. Its suffix used
+	// to be copied out and the whole title built, only to be found unchanged.
+	// Test ID: dfe45
+	#[test]
+	fn an_unchanged_window_title_builds_nothing() {
+		use super::{KeptTitle, Suffix, suffix_from};
+		fn frame(
+			kept: &mut KeptTitle,
+			typed: Option<&str>,
+			program: Option<&str>,
+			note: Option<&'static str>,
+		) -> Option<String> {
+			let rights = Rights::default();
+			let suffix = match suffix_from(rights, typed, program, None, true) {
+				Some(Suffix::Said(said)) => Some(said),
+				Some(Suffix::Tab) => Some("Work shell - ~/src"),
+				None => None,
+			};
+			kept.update(rights, None, "SilkTerm", suffix, note)
+		}
+		let mut kept = KeptTitle::default();
+		assert_eq!(
+			frame(&mut kept, None, Some("vim notes.md"), None).as_deref(),
+			Some("SilkTerm - vim notes.md")
+		);
+		let before = crate::perf::thread_allocs();
+		for _ in 0..240 {
+			assert_eq!(frame(&mut kept, None, Some("vim notes.md"), None), None);
+		}
+		let spent = crate::perf::thread_allocs() - before;
+		assert_eq!(spent, 0, "allocations over 240 frames, title unchanged");
+		// Each part that moves makes a new title.
+		let moves: [(Option<&str>, Option<&str>, Option<&'static str>, &str); 5] = [
+			(None, Some("htop"), None, "SilkTerm - htop"),
+			(None, None, None, "SilkTerm - Work shell - ~/src"),
+			(Some("Logs"), None, None, "SilkTerm - Logs"),
+			(Some("Logs"), None, Some("idle"), "SilkTerm - Logs (idle)"),
+			(Some("Logs"), None, None, "SilkTerm - Logs"),
+		];
+		for (typed, program, note, want) in moves {
+			assert_eq!(
+				frame(&mut kept, typed, program, note).as_deref(),
+				Some(want)
+			);
+			assert_eq!(frame(&mut kept, typed, program, note), None, "{want}");
+		}
+		// The count above means something only where the counter counts.
+		if cfg!(debug_assertions) {
+			let before = crate::perf::thread_allocs();
+			std::hint::black_box(String::from("x"));
+			assert!(crate::perf::thread_allocs() > before);
+		}
 	}
 
 	// What a tab said before the template, kept as it was so the default

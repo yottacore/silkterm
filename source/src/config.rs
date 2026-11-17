@@ -67,12 +67,13 @@ pub fn dogfood_detail() -> Option<&'static str> {
 }
 
 /// What every window title starts with: the app name, plus the dogfood build when
-/// this is one.
-pub fn title_prefix() -> String {
-	match dogfood_detail() {
+/// this is one. Fixed for the process, so worked out once.
+pub fn title_prefix() -> &'static str {
+	static PREFIX: OnceLock<String> = OnceLock::new();
+	PREFIX.get_or_init(|| match dogfood_detail() {
 		Some(detail) => format!("{APP_NAME} [dogfood {detail}]"),
 		None => APP_NAME.to_string(),
-	}
+	})
 }
 
 /// A terminal running with administrator or root rights says so in its window

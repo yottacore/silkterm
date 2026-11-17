@@ -3918,6 +3918,32 @@ impl Pane {
 	}
 }
 
+/// See `PaneManager::tab_facts`.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct TabFacts<'a> {
+	/// the tab's own title, typed or from `--title`
+	pub title_override: Option<&'a str>,
+	/// the focused pane's own title, and the program it was started with
+	pub said: &'a str,
+	pub launched: Option<&'a str>,
+	/// what the pane was started with, None for the default shell
+	pub command: Option<&'a [String]>,
+	pub task: &'a crate::term::Task,
+	pub cwd: Option<&'a std::path::Path>,
+}
+
+impl TabFacts<'_> {
+	/// A tab without a pane says nothing.
+	pub const NONE: TabFacts<'static> = TabFacts {
+		title_override: None,
+		said: "",
+		launched: None,
+		command: None,
+		task: &crate::term::Task::Idle,
+		cwd: None,
+	};
+}
+
 pub struct PaneManager {
 	pub panes: HashMap<PaneId, Pane>,
 	root: Node,
@@ -4011,22 +4037,27 @@ impl PaneManager {
 		);
 	}
 
-	/// What the tab has to say about itself: the command its focused pane was
-	/// launched with (None = whatever the default shell is), what that shell is
-	/// running, and where it is now. `&mut` because asking what is running costs a
-	/// probe, which the term throttles and caches for itself.
-	pub fn tab_facts(
-		&mut self,
-	) -> (
-		Option<Vec<String>>,
-		crate::term::Task,
-		Option<std::path::PathBuf>,
-	) {
-		let focused_id = self.focused;
-		self.panes.get_mut(&focused_id).map_or_else(
-			|| (None, crate::term::Task::Idle, None),
-			|pane| (pane.command.clone(), pane.term.task(), pane.term.cwd()),
-		)
+	/// What the tab has to say about itself, lent from the tab and its focused
+	/// pane. `&mut` because asking what is running costs a probe, which the term
+	/// throttles and caches for itself.
+	pub fn tab_facts(&mut self) -> TabFacts<'_> {
+		let title_override = self.title_override.as_deref();
+		let Some(pane) = self.panes.get_mut(&self.focused) else {
+			return TabFacts {
+				title_override,
+				..TabFacts::NONE
+			};
+		};
+		let (task, cwd) = pane.term.task_and_cwd();
+		let command = pane.command.as_deref();
+		TabFacts {
+			title_override,
+			said: &pane.title,
+			launched: command.and_then(<[String]>::first).map(String::as_str),
+			command,
+			task,
+			cwd,
+		}
 	}
 
 	/// What a new tab or window made from the focused pane should inherit:
@@ -4151,7 +4182,7 @@ impl PaneManager {
 				pane.term.retask();
 			}
 			let running = match pane.term.task() {
-				crate::term::Task::Running(name) => Some(name),
+				crate::term::Task::Running(name) => Some(name.clone()),
 				crate::term::Task::Last(_) | crate::term::Task::Idle => None,
 			};
 			let now = std::time::Instant::now();

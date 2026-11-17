@@ -271,7 +271,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 - Tab labels and the window title are worked out again on every frame
 	- ID: 2026111623500001
 	- Type: Enhancement
-	- Status: Queued
+	- Status: Started
 	- Priority: Avg
 	- Opened: 20261116-235000
 	- Opened by: CC
@@ -280,6 +280,32 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- Each frame copies every tab's title, command, and folder only to compare them with the last frame's, and builds the window title's parts before finding it unchanged.
 		- Work them out only when a tab's facts or a title input changed.
 		- Detail: `detail_backlog.md`, under this ID.
+	- Progress log:
+		- 20261117: The tab labels and the window title are done. A tab's facts are lent from its pane and compared where they are, and copied only when one moved. The window title is built only when what follows the app name, or the note after it, changed. The app name and dogfood part is worked out once.
+		- 20261117: At rest, in ddkre's window (2 tabs, 3 panes), the window thread went from 166 allocations per frame to 145, the same in a second pair of runs. A drag went from 325 to 328 per frame down to 304 to 306.
+		- 20261117: The tip and rating banner part of the detail is in child 2026111708444862, still Queued.
+	- Decisions:
+		- 20261117: The window title's source is now worked out without reading the tab's label, by `suffix_from`, so the caller can borrow it. The old `window_suffix` stays, test-only, so its tests run unchanged.
+		- 20261117: The tip and banner part went to a child. Their lines pass through 3 layout functions and the whole render, the per-line shaping costs more than the copy, and no window test puts a tip up to measure.
+	- Verified: 20261117. Both new tests fail with the old copy-then-compare and build-then-compare put back, and pass with the fix. The quick run passed, all 5 areas. Clippy for Windows is clean. It wasn't run on Windows, where the task probe's code path is the same as before.
+	- Swept: Every caller of `tab_facts`, `task()`, and `title_prefix`. The tab tip reads the lent facts too. The minimap still copies a running program's name each frame, as before, but no longer a finished one's. The tip and the banner are in the child.
+	- Branch: nov17-2026111623500001
+	- Commit: 172c03df
+	- Test case: `idle_frames_copy_no_tab_facts` (dfe46), no allocations over 240 idle frames. `an_unchanged_window_title_builds_nothing` (dfe45), no allocations over 240 frames with the title unchanged, and a new title for each part that moves. ddkre's figures above.
+
+- The tab tip and the rating banner copy every line on each frame they show
+	- ID: 2026111708444862
+	- Type: Enhancement
+	- Status: Queued
+	- Priority: Low
+	- Opened: 20261117-084448
+	- Opened by: CC
+	- Parent ID: 2026111623500001
+	- Target version: rc.1
+	- Requirements:
+		- While the tab tip or the rating banner is up, each frame copies all its lines out of the kept copy, since the frame keeps them across calls that change the window's state.
+		- Lend the lines to the frame instead.
+		- Detail: `detail_backlog.md`, under 2026111623500001, third bullet.
 
 - Settings: tips, labels, and search results are built again on every frame or pointer move
 	- ID: 2026111623500002
