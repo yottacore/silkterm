@@ -191,6 +191,102 @@ Going forward, new issues in the new template at the bottom of this file will go
 
 - **Stop here to work on releasing rc.1**.
 
+- Tab labels and the window title are worked out again on every frame
+	- ID: 2026111623500001
+	- Type: Enhancement
+	- Status: Queued
+	- Priority: Avg
+	- Opened: 20261116-235000
+	- Opened by: CC
+	- Requirements:
+		- Each frame copies every tab's title, command, and folder only to compare them with the last frame's, and builds the window title's parts before finding it unchanged.
+		- Work them out only when a tab's facts or a title input changed.
+		- Detail: `detail_backlog.md`, under this ID.
+
+- Settings: tips, labels, and search results are built again on every frame or pointer move
+	- ID: 2026111623500002
+	- Type: Enhancement
+	- Status: Queued
+	- Priority: Avg
+	- Opened: 20261116-235000
+	- Opened by: CC
+	- Requirements:
+		- A pointer move over the dialog builds a row's whole tip text only to learn whether there is one.
+		- Each frame copies every label into a new string, and rebuilds each visible search result's heading trail.
+		- Detail: `detail_backlog.md`, under this ID.
+
+- Window moves and resizes on Linux open a new X server connection for each question they ask
+	- ID: 2026111623500003
+	- Type: Enhancement
+	- Status: Queued
+	- Priority: Avg
+	- Opened: 20261116-235000
+	- Opened by: CC
+	- Target OS: Linux
+	- Requirements:
+		- Several monitor and button queries run per resize or move event, and each one connects to the X server again.
+		- Keep one connection per window.
+		- Detail: `detail_backlog.md`, under this ID.
+
+- Tips and the menu bar measure their text again on each frame or hit test
+	- ID: 2026111623500004
+	- Type: Enhancement
+	- Status: Queued
+	- Priority: Low
+	- Opened: 20261116-235000
+	- Opened by: CC
+	- Requirements:
+		- A tip on screen is wrapped and then measured a second time on every frame.
+		- Every click or hover test on the menu bar measures all its titles again.
+		- Detail: `detail_backlog.md`, under this ID.
+
+- A Settings change copies the whole settings model
+	- ID: 2026111623500005
+	- Type: Enhancement
+	- Status: Queued
+	- Priority: Low
+	- Opened: 20261116-235000
+	- Opened by: CC
+	- Requirements:
+		- Each change, including each step of a slider drag, clones the model before setting one value.
+		- Detail: `detail_backlog.md`, under this ID.
+
+- Launch reads and parses config.shcl about 12 times
+	- ID: 2026111623500006
+	- Type: Enhancement
+	- Status: Queued
+	- Priority: Low
+	- Opened: 20261116-235000
+	- Opened by: CC
+	- Requirements:
+		- Each launch step reads the file again, and the last one parses the same text 3 more times.
+		- Read and parse it once.
+		- Detail: `detail_backlog.md`, under this ID.
+
+- Smaller allocations made on every frame in the render and dialog paths
+	- ID: 2026111623500007
+	- Type: Enhancement
+	- Status: Queued
+	- Priority: Low
+	- Opened: 20261116-235000
+	- Opened by: CC
+	- Requirements:
+		- About 10 places make a new list or string each frame where a kept buffer or a borrow would do. None is large alone.
+		- Detail: `detail_backlog.md`, under this ID.
+
+- Windows GUI test pixel checks read one pixel per call
+	- ID: 2026111623500008
+	- Type: Task
+	- Status: Queued
+	- Priority: Low
+	- Opened: 20261116-235000
+	- Opened by: CC
+	- Target OS: Windows
+	- Requirements:
+		- The ink and diff checks call `GetPixel` 35k to 60k times per image, which takes seconds per check.
+		- Read the bitmap's bytes once instead. It needs a Windows box to test.
+		- Detail: `detail_backlog.md`, under this ID.
+
 - The "Minutes otherwise" release of resources still isn't working
 	- ID: 2026111009560100
 	- Type: Bug
