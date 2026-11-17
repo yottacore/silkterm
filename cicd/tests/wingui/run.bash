@@ -106,7 +106,7 @@ runId="$(date +%Y%m%d%H%M%S)-$$"
 scripts="$(mktemp -d)"
 ##	install.ps1 goes along for the scenario that checks its PATH change.
 ##	So does the safe removal guard, which _lib.ps1 loads.
-tar czf "${bundle}" -C "${meDir}" --exclude=run.bash --exclude=harness-test.bash --exclude=_stage.ps1 . -C "${root}" install.ps1 -C "${root}/cicd/utility/include" saferm.ps1
+tar czf "${bundle}" -C "${meDir}" --exclude=run.bash --exclude=harness-test.bash --exclude=pixels-test.bash --exclude=_stage.ps1 . -C "${root}" install.ps1 -C "${root}/cicd/utility/include" saferm.ps1
 fEnd(){
 	local -r rc=$?
 	rm -f "${bundle}"; fTestDir_Rm "${scripts}" || true

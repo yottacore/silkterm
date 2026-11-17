@@ -68,6 +68,59 @@ pub fn wrap(text: &str, max_w: f32, mut measure: impl FnMut(&str) -> f32) -> Vec
 	lines
 }
 
+/// A tip's words wrapped and measured, kept while the tip stays up. A frame
+/// used to wrap them and then measure every line again for the box's width.
+/// Wrapped again only when the words, the budget, or the text context change.
+#[derive(Debug, Default)]
+pub struct Wrapped {
+	said: String,
+	budget: u32,
+	generation: u64,
+	lines: Vec<String>,
+	widest: f32,
+	/// How many times the words were wrapped, so a test can see a frame didn't.
+	#[cfg(test)]
+	pub wraps: usize,
+}
+
+impl Wrapped {
+	/// The lines and the widest of them. `generation` is the text context's
+	/// (`TextCtx::generation`), which a font, size, or scale change moves.
+	pub fn lay(
+		&mut self,
+		said: &str,
+		budget: f32,
+		generation: u64,
+		mut measure: impl FnMut(&str) -> f32,
+	) -> (&[String], f32) {
+		let budget_bits = budget.to_bits();
+		let same = !self.lines.is_empty()
+			&& self.generation == generation
+			&& self.budget == budget_bits
+			&& self.said == said;
+		if !same {
+			self.lines = wrap(said, budget, &mut measure);
+			self.widest = self
+				.lines
+				.iter()
+				.fold(0.0f32, |widest, line| widest.max(measure(line)));
+			said.clone_into(&mut self.said);
+			self.budget = budget_bits;
+			self.generation = generation;
+			#[cfg(test)]
+			{
+				self.wraps += 1;
+			}
+		}
+		(&self.lines, self.widest)
+	}
+
+	/// The lines as last laid out, for a frame that laid them out first.
+	pub fn lines(&self) -> &[String] {
+		&self.lines
+	}
+}
+
 /// Where a tip box goes: centered under what it describes, or above it when
 /// there is no room below, and never off an edge. Clamping to the bottom edge
 /// instead would put a footer button's tip over the buttons.
@@ -141,6 +194,14 @@ pub fn lay_out(
 /// edge, so neither a longer sentence nor a larger interface font runs off it.
 pub fn wrap_budget(win_w: f32, scale: f32) -> f32 {
 	(win_w - config::dip(WRAP_MARGIN, scale) - config::dip(PAD_X, scale) * 2.0)
+		.max(config::dip(MIN_WRAP, scale))
+}
+
+/// How wide a tip placed by `beside` may run: its own cap, or less in a window
+/// too narrow for that, so the box and its padding fit between the edges. The
+/// main window has no minimum width (2026111709545547).
+pub fn beside_budget(cap: f32, win_w: f32, pad: f32, edge: f32, scale: f32) -> f32 {
+	cap.min(win_w - 2.0 * (pad + edge))
 		.max(config::dip(MIN_WRAP, scale))
 }
 
@@ -268,7 +329,7 @@ impl<T: Copy + PartialEq> Dwell<T> {
 
 #[cfg(test)]
 mod tests {
-	use super::{DELAY, Dwell, Focus, beside, lay_out, place, wrap, wrap_budget};
+	use super::{DELAY, Dwell, Focus, beside, beside_budget, lay_out, place, wrap, wrap_budget};
 	use crate::pane::Rect;
 	use std::time::Duration;
 
@@ -416,6 +477,43 @@ mod tests {
 		assert_eq!(left, 74.0);
 	}
 
+	// A menu tip wrapped at its own cap was wider than a narrow window, so its
+	// lines ran off the edge whichever side of the menu it went.
+	// Test ID: dfe6n
+	#[test]
+	fn a_menu_tip_fits_a_window_narrower_than_its_cap() {
+		let said =
+			"Read the config file again, so hand edits made since it was opened take effect.";
+		let (pad, edge, cap) = (6.0, 6.0, 320.0);
+		for win_w in [120.0, 200.0, 300.0, 340.0, 800.0] {
+			let budget = beside_budget(cap, win_w, pad, edge, 1.0);
+			let lines = wrap(said, budget, measure);
+			let widest = lines.iter().map(|line| measure(line)).fold(0.0, f32::max);
+			let size = (widest + 2.0 * pad, 40.0);
+			for row in [
+				rect(0.0, 30.0, 100.0, 24.0),
+				rect(win_w - 100.0, 30.0, 100.0, 24.0),
+			] {
+				let (x, _) = beside(row, size, (win_w, 300.0), pad, edge);
+				assert!(
+					x >= edge && x + size.0 <= win_w - edge,
+					"{win_w} wide: box at {x}, {} wide",
+					size.0
+				);
+			}
+		}
+		assert_eq!(
+			beside_budget(cap, 800.0, pad, edge, 1.0),
+			cap,
+			"a wide window keeps the cap"
+		);
+		assert_eq!(
+			beside_budget(cap, 10.0, pad, edge, 2.0),
+			80.0,
+			"never under the floor"
+		);
+	}
+
 	// A tip left up too long goes away, and moving about on the same target
 	// doesn't bring it back. Only leaving and coming back does.
 	// Test ID: dczr3
@@ -493,5 +591,49 @@ mod tests {
 		// pointing at nothing is how a tip is put away
 		assert!(!dwell.point_at(None));
 		assert_eq!(dwell.wake(), None);
+	}
+
+	// A menu or Settings tip on screen was wrapped and then measured line by
+	// line on every frame. Kept, it's wrapped once while it stays up, and a
+	// change to the words, the width, or the text context wraps it again.
+	// Test ID: dfe5r
+	#[test]
+	fn a_kept_tip_is_wrapped_once_while_it_stays_up() {
+		let said = "Read the config file again, so hand edits take effect.";
+		let mut kept = super::Wrapped::default();
+		let (lines, widest) = kept.lay(said, 120.0, 1, measure);
+		assert_eq!(lines, wrap(said, 120.0, measure).as_slice());
+		assert_eq!(
+			widest,
+			lines.iter().map(|line| measure(line)).fold(0.0, f32::max)
+		);
+		let before = crate::perf::thread_allocs();
+		let mut measured = 0;
+		for _ in 0..240 {
+			let _ = kept.lay(said, 120.0, 1, |line| {
+				measured += 1;
+				measure(line)
+			});
+		}
+		assert_eq!(
+			crate::perf::thread_allocs() - before,
+			0,
+			"allocations over 240 frames"
+		);
+		assert_eq!((kept.wraps, measured), (1, 0), "wrapped or measured again");
+		let before = crate::perf::thread_allocs();
+		let _ = kept.lay("Open a new window.", 120.0, 1, measure);
+		assert_eq!(kept.lines(), ["Open a new window."]);
+		// new words are wrapped again, which also shows the counter counts
+		if cfg!(debug_assertions) {
+			assert!(crate::perf::thread_allocs() > before);
+		}
+		let _ = kept.lay("Open a new window.", 60.0, 1, measure);
+		assert_eq!(kept.lines(), ["Open a new", "window."]);
+		let _ = kept.lay("Open a new window.", 60.0, 2, measure);
+		assert_eq!(
+			kept.wraps, 4,
+			"a change of words, width, or context kept the old lines"
+		);
 	}
 }

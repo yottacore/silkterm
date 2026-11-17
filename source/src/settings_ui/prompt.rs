@@ -9,6 +9,7 @@
 use super::{Dlg, PROMPT_ROW, SettingsDialog, TextItem, ThemeBtn, border, lay, quad};
 use crate::gfx::RectInstance;
 use crate::pane::Rect;
+use std::borrow::Cow;
 
 /// Where the keyboard is inside the box. A confirmation has no field, so `Field`
 /// is unreachable there and the focus walk starts at Cancel.
@@ -214,7 +215,7 @@ impl SettingsDialog {
 		let Some(prompt) = &self.prompt else {
 			return (rects, texts);
 		};
-		let mk = |text: String, x: f32, y: f32| TextItem::plain(text, x, y, colors.text);
+		let mk = |text: Cow<'static, str>, x: f32, y: f32| TextItem::plain(text, x, y, colors.text);
 		let row_text_y = |y: f32, h: f32| y + (h - self.line_h) / 2.0;
 		// dim the panel behind, so it is plain that it isn't taking input
 		rects.push(RectInstance {
@@ -230,7 +231,7 @@ impl SettingsDialog {
 		texts.push(TextItem {
 			clip: Some(box_r),
 			..mk(
-				prompt.title.clone(),
+				prompt.title.clone().into(),
 				box_r.x + lay().pad,
 				box_r.y + lay().pad + (self.line_h + lay().row_pad - self.line_h) / 2.0,
 			)
@@ -247,7 +248,9 @@ impl SettingsDialog {
 			texts.push(TextItem {
 				clip: Some(field),
 				..mk(
-					self.edit.as_ref().map_or(String::new(), |e| e.buf.clone()),
+					self.edit
+						.as_ref()
+						.map_or(Cow::Borrowed(""), |e| e.buf.clone().into()),
 					field.x + lay().field_pad - view,
 					row_text_y(field.y, field.h),
 				)
@@ -258,7 +261,7 @@ impl SettingsDialog {
 			texts.push(TextItem {
 				color: colors.btn_hl,
 				clip: Some(box_r),
-				..mk(warn.clone(), box_r.x + lay().pad, y)
+				..mk(warn.clone().into(), box_r.x + lay().pad, y)
 			});
 		}
 		for (part, caption) in [(PromptFocus::Cancel, "Cancel"), (PromptFocus::Ok, "OK")] {

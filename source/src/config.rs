@@ -67,12 +67,13 @@ pub fn dogfood_detail() -> Option<&'static str> {
 }
 
 /// What every window title starts with: the app name, plus the dogfood build when
-/// this is one.
-pub fn title_prefix() -> String {
-	match dogfood_detail() {
+/// this is one. Fixed for the process, so worked out once.
+pub fn title_prefix() -> &'static str {
+	static PREFIX: OnceLock<String> = OnceLock::new();
+	PREFIX.get_or_init(|| match dogfood_detail() {
 		Some(detail) => format!("{APP_NAME} [dogfood {detail}]"),
 		None => APP_NAME.to_string(),
-	}
+	})
 }
 
 /// A terminal running with administrator or root rights says so in its window
@@ -450,15 +451,35 @@ pub fn remembered_window_at(
 	monitor: Option<&str>,
 	per_monitor: bool,
 ) -> KeptWindow {
-	let last = KeptWindow {
+	remembered_in(
+		last_window(settings),
+		&settings.monitor_sizes,
+		monitor,
+		per_monitor,
+	)
+}
+
+/// The last size the window was given anywhere.
+pub fn last_window(settings: &Settings) -> KeptWindow {
+	KeptWindow {
 		columns: settings.remembered_columns,
 		rows: settings.remembered_rows,
 		font_zoom: settings.remembered_font_zoom,
-	};
+	}
+}
+
+/// The same from the fields it reads, for a caller that borrows the model
+/// beside them mutably.
+pub fn remembered_in(
+	last: KeptWindow,
+	sizes: &[MonitorSize],
+	monitor: Option<&str>,
+	per_monitor: bool,
+) -> KeptWindow {
 	monitor
 		.filter(|_| per_monitor)
-		.and_then(|key| monitor_entry(&settings.monitor_sizes, key))
-		.map(|at| &settings.monitor_sizes[at])
+		.and_then(|key| monitor_entry(sizes, key))
+		.map(|at| &sizes[at])
 		.map_or(last, |m| KeptWindow {
 			columns: m.columns,
 			rows: m.rows,
@@ -660,14 +681,13 @@ pub fn keep_tested(profile: crate::profile::Profile, hardware: Option<&str>) -> 
 // a state line, even the old template's commented one, or by having no Format
 // line (`unstamped`, read before the launch stamps it), since shcl 3.0 came
 // first. A file written by hand looks like that too.
-fn move_state_out(path: &std::path::Path, unstamped: bool) {
-	let Some(text) = read_settings_text(path) else {
+fn move_state_out(file: &mut LaunchFile, unstamped: bool) {
+	let Some(text) = file.body.as_deref().map(settings_text) else {
 		return;
 	};
 	// the launch's migration drops these lines, so they are read before it
 	let respelled = rewritten_by(&text, &[from_shcl2_text]);
 	let raw = shcl::Document::parse(&respelled);
-	let old = shcl::Document::parse(&loaded_text(&text));
 	let ints = [
 		"window.remembered_columns",
 		"window.remembered_rows",
@@ -695,6 +715,8 @@ fn move_state_out(path: &std::path::Path, unstamped: bool) {
 	if !old_file {
 		return;
 	}
+	// what `loaded_text` gives, from the respelling already done
+	let old = shcl::Document::parse(&rewritten_by(&respelled, &[migrate_config_text]));
 	if let Some(state) = state_path().filter(|p| has_state && !p.exists() && may_write(p)) {
 		let mut doc = shcl::Document::new();
 		for p in ints {
@@ -735,12 +757,13 @@ fn move_state_out(path: &std::path::Path, unstamped: bool) {
 			eprintln!("{APP_NAME}: couldn't save {}: {e:#}", state.display());
 		}
 	}
-	move_theme_colors(path, &text, &old);
+	move_theme_colors(file, &text, &old);
 }
 
 // Colors set over a built-in or saved theme become that theme's "*" changes,
 // so nothing on screen changes. Their lines stay, as Custom's colors.
-fn move_theme_colors(path: &std::path::Path, text: &str, old: &shcl::Document) {
+fn move_theme_colors(file: &mut LaunchFile, text: &str, old: &shcl::Document) {
+	let path = file.path;
 	let theme = old
 		.get_string("theme")
 		.unwrap_or_else(|_| "SilkTerm".into());
@@ -776,7 +799,7 @@ fn move_theme_colors(path: &std::path::Path, text: &str, old: &shcl::Document) {
 	if save_refused(&doc) || config_open_elsewhere(path) {
 		return;
 	}
-	if let Err(e) = write_config_atomic(path, &saved_text(&doc)) {
+	if let Err(e) = file.write(saved_text(&doc)) {
 		eprintln!(
 			"{APP_NAME}: couldn't update config {}: {e:#}",
 			path.display()
@@ -786,7 +809,7 @@ fn move_theme_colors(path: &std::path::Path, text: &str, old: &shcl::Document) {
 
 fn window_memory_from(text: &str, path: &std::path::Path, settings: &mut Settings) {
 	let reader = Reader {
-		doc: shcl::Document::parse(text),
+		doc: &shcl::Document::parse(text),
 		path,
 		said: std::cell::RefCell::new(Vec::new()),
 	};
@@ -1814,8 +1837,12 @@ fn read_doc(path: &std::path::Path) -> Result<shcl::Document, Unread> {
 		std::io::ErrorKind::NotFound => Unread::Missing,
 		_ => Unread::Failed(e),
 	})?;
+	Ok(editable_doc(text))
+}
+
+fn editable_doc(text: String) -> shcl::Document {
 	// a launch that found the file busy left it as 2.x wrote it
-	Ok(parse_kept(&from_shcl2_text(&text).unwrap_or(text)))
+	parse_kept(&from_shcl2_text(&text).unwrap_or(text))
 }
 
 // Why a save found no document to edit.
@@ -3169,33 +3196,84 @@ fn load() -> Settings {
 	// as `config_backup_<time>_format-v2.shcl`. A current file with lines that aren't
 	// UTF-8 is written again without them, kept the same way, so the launch that
 	// finds it says so once and every later save works as usual.
-	let unstamped = std::fs::read(&path)
-		.is_ok_and(|body| shcl::format_version(&String::from_utf8_lossy(&body)).is_none());
-	convert_shcl2_config(&path);
-	repair_wallpaper_heading(&path);
-	convert_legacy_config(&path);
-	adopt_default_shell(&path);
-	move_state_out(&path, unstamped);
-	migrate_config(&path);
-	backfill_config(&path);
-	refresh_shcl_banner(&path);
-	let (raw, doc) = match read_settings(&path) {
+	let mut file = LaunchFile::read(&path);
+	launch_steps(&mut file);
+	let (raw, doc) = match file.body {
 		// The writes above defer when the file looks open elsewhere, so parse the
 		// migrated text rather than what is on disk: a renamed key must never be
 		// read under its old spelling, which matters most where a rename hands an
 		// old name to a new setting (colors.focus).
-		Ok(text) => {
+		Some(body) => {
+			let text = settings_text(&body);
+			note_seen(&path, &text);
 			let text = loaded_text(&text);
-			let (raw, said) = read_config_text(&text, &path);
+			let doc = shcl::Document::parse(&text);
+			let (raw, said) = read_config_doc(&doc, &text, &path);
 			for line in &said {
 				eprintln!("{line}");
 			}
 			remember_launch_messages(&path, said);
-			(raw, shcl::Document::parse(&text))
+			(raw, doc)
 		}
-		Err(_) => (RawConfig::default(), shcl::Document::new()),
+		None => (RawConfig::default(), shcl::Document::new()),
 	};
 	settled(resolve(raw), &doc)
+}
+
+fn launch_steps(file: &mut LaunchFile) {
+	let unstamped = file
+		.body
+		.as_deref()
+		.is_some_and(|body| shcl::format_version(&String::from_utf8_lossy(body)).is_none());
+	convert_shcl2_config(file);
+	repair_wallpaper_heading(file);
+	convert_legacy_config(file);
+	adopt_default_shell(file);
+	move_state_out(file, unstamped);
+	migrate_config(file);
+	backfill_config(file);
+	refresh_shcl_banner(file);
+}
+
+// The settings file as the launch's steps leave it, so each step reads what
+// the one before it wrote rather than the disk again.
+struct LaunchFile<'a> {
+	path: &'a std::path::Path,
+	body: Option<Vec<u8>>,
+}
+
+impl<'a> LaunchFile<'a> {
+	fn read(path: &'a std::path::Path) -> Self {
+		Self {
+			path,
+			body: std::fs::read(path).ok(),
+		}
+	}
+
+	// None for a file that isn't UTF-8, as `read_to_string` gives
+	fn text(&self) -> Option<&str> {
+		std::str::from_utf8(self.body.as_deref()?).ok()
+	}
+
+	fn write(&mut self, out: String) -> anyhow::Result<()> {
+		let written = write_config_atomic(self.path, &out);
+		self.wrote(written.is_ok(), out);
+		written
+	}
+
+	// A failed write can leave either file, and the test seam skips writes
+	// outside its folders, so those read the disk again.
+	fn wrote(&mut self, ok: bool, out: String) {
+		if ok && may_write(self.path) {
+			self.body = Some(out.into_bytes());
+		} else {
+			self.reread();
+		}
+	}
+
+	fn reread(&mut self) {
+		self.body = std::fs::read(self.path).ok();
+	}
 }
 
 // Settings read from a file, with the model read from the same document and
@@ -3220,11 +3298,20 @@ fn settled(mut settings: Settings, doc: &shcl::Document) -> Settings {
 
 // The values in a config text, and everything a launch prints about it.
 fn read_config_text(text: &str, path: &std::path::Path) -> (RawConfig, Vec<String>) {
-	let mut said: Vec<String> = config_complaints(text)
+	read_config_doc(&shcl::Document::parse(text), text, path)
+}
+
+// `doc` is `text` parsed
+fn read_config_doc(
+	doc: &shcl::Document,
+	text: &str,
+	path: &std::path::Path,
+) -> (RawConfig, Vec<String>) {
+	let mut said: Vec<String> = complaints_in(doc, text)
 		.into_iter()
 		.map(|line| format!("{APP_NAME}: {}: {line}", path.display()))
 		.collect();
-	let (raw, read) = read_raw(text, path);
+	let (raw, read) = read_raw_doc(doc, path);
 	said.extend(read);
 	(raw, said)
 }
@@ -3265,8 +3352,14 @@ fn restated_launch_messages(path: &std::path::Path, text: &str) -> Vec<String> {
 //
 // Subtrees the user fills in themselves (their shells, their themes) aren't
 // checked for unknown keys, only the program's own settings.
+#[cfg(test)]
 fn config_complaints(text: &str) -> Vec<String> {
-	let doc = shcl::Document::parse(text);
+	complaints_in(&shcl::Document::parse(text), text)
+}
+
+// `doc` is `text` parsed
+fn complaints_in(doc: &shcl::Document, text: &str) -> Vec<String> {
+	let walked = walk_settings(text);
 	let mut out = Vec::new();
 
 	// A hotkey that doesn't read keeps its default, and one set over another's
@@ -3281,7 +3374,7 @@ fn config_complaints(text: &str) -> Vec<String> {
 		line_list,
 	));
 
-	let lines = unreadable_lines(&doc);
+	let lines = unreadable_lines(doc);
 	if !lines.is_empty() || doc.lost_count() > 0 {
 		// shcl writes such a line back as it was, so a save goes through, but it
 		// still sets nothing. A save it can't keep the lines for is refused, and
@@ -3296,17 +3389,17 @@ fn config_complaints(text: &str) -> Vec<String> {
 	// `background: #112233` sets nothing, since `#` starts a comment, and the
 	// theme's color is used instead. The walk takes such a line for a heading.
 	let source: Vec<&str> = text.lines().collect();
-	for w in walk_settings(text) {
+	for w in &walked {
 		if let WalkLine::Setting {
 			index,
 			path,
 			active: true,
 			header: true,
-		} = w && let Some(color) = unquoted_color(source[index])
+		} = w && let Some(color) = unquoted_color(source[*index])
 		{
 			out.push(format!(
 				"`{path}` is empty{} - `#` starts a comment, so write the color in quotes: \"{color}\"",
-				line_list(&[index + 1])
+				line_list(&[*index + 1])
 			));
 		}
 	}
@@ -3315,7 +3408,7 @@ fn config_complaints(text: &str) -> Vec<String> {
 	// in the file, plainly set, and doing nothing.
 	let mut seen: std::collections::HashMap<&str, usize> = std::collections::HashMap::new();
 	let mut active: Vec<(String, usize)> = Vec::new();
-	for w in walk_settings(text) {
+	for w in walked {
 		// a block header doesn't have a value of its own
 		if let WalkLine::Setting {
 			index,
@@ -3382,7 +3475,7 @@ fn config_complaints(text: &str) -> Vec<String> {
 // setting whose value won't coerce. A key that is absent, empty, or unreadable
 // comes back None, so `resolve` falls through to that setting's default.
 struct Reader<'a> {
-	doc: shcl::Document,
+	doc: &'a shcl::Document,
 	path: &'a std::path::Path,
 	said: std::cell::RefCell<Vec<String>>,
 }
@@ -3482,13 +3575,17 @@ impl Reader<'_> {
 	}
 }
 
-// Parse the config and pull out every known key. The parser is forgiving, so a
+#[cfg(test)]
+fn read_raw(text: &str, path: &std::path::Path) -> (RawConfig, Vec<String>) {
+	read_raw_doc(&shcl::Document::parse(text), path)
+}
+
+// Pull out every known key. The parser is forgiving, so a
 // malformed line becomes a diagnostic and is skipped rather than sinking the whole
 // document, and this needs no retry loop or leading-zero rewriting (`.25` is a
 // valid float here). Also returns what the read says about the file, for the
 // caller to print.
-fn read_raw(text: &str, path: &std::path::Path) -> (RawConfig, Vec<String>) {
-	let doc = shcl::Document::parse(text);
+fn read_raw_doc(doc: &shcl::Document, path: &std::path::Path) -> (RawConfig, Vec<String>) {
 	let said: Vec<String> = doc
 		.diagnostics()
 		.iter()
@@ -3634,8 +3731,8 @@ fn read_raw(text: &str, path: &std::path::Path) -> (RawConfig, Vec<String>) {
 			scrollbar_thumb: reader.read_string("colors.scrollbar_thumb"),
 			scrollbar_trough: reader.read_string("colors.scrollbar_trough"),
 		},
-		user_themes: read_user_themes(&reader.doc),
-		shells: read_shells(&reader.doc),
+		user_themes: read_user_themes(reader.doc),
+		shells: read_shells(reader.doc),
 		keys: read_keys(&reader),
 	};
 	(raw, reader.said.into_inner())
@@ -5176,26 +5273,28 @@ fn wallpaper_heading_repaired(text: &str) -> Option<String> {
 
 // In place and with no backup: an install this damaged converted the file at
 // every launch, and has used up most of the backup names doing it.
-fn repair_wallpaper_heading(path: &std::path::Path) {
-	let Ok(text) = std::fs::read_to_string(path) else {
+fn repair_wallpaper_heading(file: &mut LaunchFile) {
+	let path = file.path;
+	let Some(text) = file.text() else {
 		return;
 	};
-	let Some(out) = wallpaper_heading_repaired(&text) else {
+	let Some(out) = wallpaper_heading_repaired(text) else {
 		return;
 	};
+	// the image line is added only when the file named no image already
+	let added = out.lines().count() > text.lines().count();
 	if config_open_elsewhere(path) {
 		note_config_busy(path);
 		return;
 	}
-	if let Err(e) = write_config_atomic(path, &out) {
+	if let Err(e) = file.write(out) {
 		eprintln!(
 			"{APP_NAME}: couldn't repair config {}: {e:#}",
 			path.display()
 		);
 		return;
 	}
-	// the image line is added only when the file named no image already
-	if out.lines().count() > text.lines().count() {
+	if added {
 		eprintln!(
 			"{APP_NAME}: moved the wallpaper image in {} from the `wallpaper:` line to `image:`",
 			path.display()
@@ -5215,21 +5314,23 @@ fn repair_wallpaper_heading(path: &std::path::Path) {
 // path, so settings survive and the file's comments are current. Unknown
 // `themes.*` subtrees are copied as is in dotted form. The rewrite keeps a linked
 // file linked and a private one private.
-fn convert_legacy_config(path: &std::path::Path) {
-	convert_legacy_config_with(path, write_config_atomic);
+fn convert_legacy_config(file: &mut LaunchFile) {
+	convert_legacy_config_with(file, write_config_atomic);
 }
 
 // The writer is a parameter so a test can fail it the ways the real one can.
 fn convert_legacy_config_with(
-	path: &std::path::Path,
+	file: &mut LaunchFile,
 	write: fn(&std::path::Path, &str) -> anyhow::Result<()>,
 ) {
-	let Ok(text) = std::fs::read_to_string(path) else {
+	let path = file.path;
+	let Some(text) = file.text() else {
 		return;
 	};
-	let Some(joined) = converted_config_text(&text) else {
+	let Some(joined) = converted_config_text(text) else {
 		return;
 	};
+	let text = text.to_owned();
 	if config_open_elsewhere(path) {
 		note_config_busy(path);
 		return;
@@ -5237,12 +5338,14 @@ fn convert_legacy_config_with(
 	let Some(backup) = backup_copy(path, text.as_bytes()) else {
 		return;
 	};
-	if let Err(e) = write(path, &joined) {
+	let written = write(path, &joined);
+	file.wrote(written.is_ok(), joined);
+	if let Err(e) = written {
 		// A file that stays unwritable would gain a backup at every launch, so one
 		// that reads back whole needs none. Anything else keeps it: ReplaceFile can
 		// fail after the file it replaces is gone and writing it again fails,
 		// leaving the backup the only copy.
-		if std::fs::read(path).is_ok_and(|now| now == text.as_bytes()) {
+		if file.body.as_deref() == Some(text.as_bytes()) {
 			let _ = std::fs::remove_file(&backup);
 			eprintln!(
 				"{APP_NAME}: couldn't convert config {}: {e:#}",
@@ -5265,20 +5368,29 @@ fn convert_legacy_config_with(
 
 // The conversion as text: None for a file that isn't pre-nesting.
 fn converted_config_text(text: &str) -> Option<String> {
-	let walked = walk_settings(text);
+	// Only an active flat key marks a file as legacy, since any real old config has
+	// several. A comment that only contains an old name, such as one a save left at
+	// column 0, must never wipe a current-format file.
+	let flat: Vec<usize> = walk_settings(text)
+		.iter()
+		.filter_map(|w| match w {
+			WalkLine::Setting {
+				index,
+				path: p,
+				header: false,
+				active: true,
+			} if !p.contains('.') && LEGACY_KEYS.iter().any(|(old, _)| old == p) => Some(*index),
+			_ => None,
+		})
+		.collect();
+	if flat.is_empty() {
+		return None;
+	}
 	// A line shcl can't read sets nothing, whatever it is called. The walk puts
 	// a line that steps back to a depth nothing uses at the top level, where an
 	// old flat name such as `margin` looked like a whole old file.
 	let unread = unreadable_lines(&shcl::Document::parse(text));
-	let read = |index: usize| !unread.contains(&(index + 1));
-	// Only an active flat key marks a file as legacy, since any real old config has
-	// several. A comment that only contains an old name, such as one a save left at
-	// column 0, must never wipe a current-format file.
-	let legacy = walked.iter().any(|w| {
-		matches!(w, WalkLine::Setting { index, path: p, header: false, active: true }
-			if read(*index) && !p.contains('.') && LEGACY_KEYS.iter().any(|(old, _)| old == p))
-	});
-	if !legacy {
+	if flat.iter().all(|index| unread.contains(&(index + 1))) {
 		return None;
 	}
 	Some(rebuilt_config_text(text, &[]).0)
@@ -5442,18 +5554,16 @@ fn rebuilt_config_text(text: &str, garbled: &[usize]) -> (String, usize) {
 // name changed, drop keys that no longer exist. Preserves the user's values,
 // comments, and layout (line-based, like backfill). New keys are added by
 // backfill_config; this only renames/removes, so run it first.
-fn migrate_config(path: &std::path::Path) {
-	let Ok(text) = std::fs::read_to_string(path) else {
-		return;
-	};
-	let Some(out) = migrated_text(&text, true) else {
+fn migrate_config(file: &mut LaunchFile) {
+	let path = file.path;
+	let Some(out) = file.text().and_then(|text| migrated_text(text, true)) else {
 		return;
 	};
 	if config_open_elsewhere(path) {
 		note_config_busy(path);
 		return;
 	}
-	if let Err(e) = write_config_atomic(path, &out) {
+	if let Err(e) = file.write(out) {
 		eprintln!(
 			"{APP_NAME}: couldn't migrate config {}: {e:#}",
 			path.display()
@@ -5893,9 +6003,12 @@ fn saved_paths(text: &str) -> Option<std::collections::HashSet<String>> {
 //
 // It runs before that removal, and only while the key is actively set, so a
 // config that never had one, or has been through this already, isn't touched.
-fn adopt_default_shell(path: &std::path::Path) {
-	let Ok(doc) = read_doc(path) else { return };
-	let Some(adopted) = adopted_shell_doc(&doc) else {
+fn adopt_default_shell(file: &mut LaunchFile) {
+	let path = file.path;
+	let Some(body) = file.body.as_deref() else {
+		return;
+	};
+	let Some(adopted) = adopted_shell_doc(&editable_doc(settings_text(body))) else {
 		return;
 	};
 	if config_open_elsewhere(path) {
@@ -5903,6 +6016,7 @@ fn adopt_default_shell(path: &std::path::Path) {
 		return;
 	}
 	let _ = write_doc(path, &adopted);
+	file.reread();
 }
 
 // None for a file with no active `shell.default`.
@@ -5990,7 +6104,7 @@ pub fn revert_keys(keys: &[&str]) {
 		);
 		return;
 	}
-	backfill_config(&path);
+	backfill_config(&mut LaunchFile::read(&path));
 }
 
 /// Comment the named settings out, so each is as good as absent. Used for a
@@ -6156,11 +6270,12 @@ fn disabled_text(text: &str, keys: &[&str]) -> Option<String> {
 // appended whole, comments and all. A group the file already has part of already
 // has those comments, so stragglers from it are put back beside the siblings that
 // explain them instead.
-fn backfill_config(path: &std::path::Path) {
-	let Ok(text) = std::fs::read_to_string(path) else {
+fn backfill_config(file: &mut LaunchFile) {
+	let path = file.path;
+	let Some(text) = file.text() else {
 		return;
 	};
-	let out = match backfilled_text(&text) {
+	let out = match backfilled_text(text) {
 		Ok(Some(out)) => out,
 		Ok(None) => return,
 		Err(setting) => {
@@ -6175,7 +6290,7 @@ fn backfill_config(path: &std::path::Path) {
 		note_config_busy(path);
 		return;
 	}
-	if let Err(e) = write_config_atomic(path, &out) {
+	if let Err(e) = file.write(out) {
 		eprintln!(
 			"{APP_NAME}: couldn't update config {}: {e:#}",
 			path.display()
@@ -6992,12 +7107,14 @@ fn from_a_beta(text: &str) -> Option<(String, usize)> {
 	// a comma list is E026 and a bare name not led by a letter E014; a line
 	// that doesn't read for any other reason is a beta1 file's own
 	let before = shcl::Document::parse(text);
-	let spellings = before
-		.diagnostics()
-		.iter()
-		.filter(|d| matches!(d.severity, shcl::Severity::Error))
-		.all(|d| matches!(d.code, "E026" | "E014"));
-	if !spellings {
+	let errors = || {
+		before
+			.diagnostics()
+			.iter()
+			.filter(|d| matches!(d.severity, shcl::Severity::Error))
+	};
+	// shcl's `upgrade` leaves a clean file named this format as it is
+	if errors().next().is_none() || !errors().all(|d| matches!(d.code, "E026" | "E014")) {
 		return None;
 	}
 	let up = shcl::upgrade(text, true);
@@ -7278,18 +7395,16 @@ fn read_settings_text(path: &std::path::Path) -> Option<String> {
 	read_settings(path).ok()
 }
 
-fn convert_shcl2_config(path: &std::path::Path) {
-	let Ok(body) = std::fs::read(path) else {
-		return;
-	};
-	let Some(out) = upgraded_text(&body) else {
+fn convert_shcl2_config(file: &mut LaunchFile) {
+	let path = file.path;
+	let Some(out) = file.body.as_deref().and_then(upgraded_text) else {
 		return;
 	};
 	if config_open_elsewhere(path) {
 		note_config_busy(path);
 		return;
 	}
-	if let Err(e) = write_config_atomic(path, &out) {
+	if let Err(e) = file.write(out) {
 		eprintln!(
 			"{APP_NAME}: couldn't update config {}: {e:#}",
 			path.display()
@@ -7395,23 +7510,24 @@ pub fn take_conversion_loss() -> Option<ConversionLoss> {
 	crate::locks::lock(&LOST_IN_CONVERSION).take()
 }
 
-fn refresh_shcl_banner(path: &std::path::Path) {
-	let Ok(text) = std::fs::read_to_string(path) else {
+fn refresh_shcl_banner(file: &mut LaunchFile) {
+	let path = file.path;
+	let Some(text) = file.text() else {
 		return;
 	};
 	// The footer's Format line says a file was converted. One still in 2.x
 	// spellings, because its conversion was put off, waits for the next launch.
-	if from_shcl2_text(&text).is_some() {
+	if from_shcl2_text(text).is_some() {
 		return;
 	}
-	let Some(out) = with_shcl_banner(&text) else {
+	let Some(out) = with_shcl_banner(text) else {
 		return;
 	};
 	if config_open_elsewhere(path) {
 		note_config_busy(path);
 		return;
 	}
-	if let Err(e) = write_config_atomic(path, &out) {
+	if let Err(e) = file.write(out) {
 		eprintln!(
 			"{APP_NAME}: couldn't update config {}: {e:#}",
 			path.display()
@@ -9316,8 +9432,8 @@ mod tests {
 		let default_of = |text: &str| shcl::Document::parse(text).get_string("shell.default").ok();
 
 		std::fs::write(&path, format!("{clean}mm:\n\t\tnn: 1\n\too: 2\n")).unwrap();
-		adopt_default_shell(&path);
-		migrate_config(&path);
+		adopt_default_shell(&mut LaunchFile::read(&path));
+		migrate_config(&mut LaunchFile::read(&path));
 		let beside = std::fs::read_to_string(&path).unwrap();
 		assert_eq!(default_of(&beside), None, "{beside}");
 		assert_eq!(order(&beside), ["zsh", "bash"]);
@@ -9325,8 +9441,8 @@ mod tests {
 
 		// a second shell block sends the save back to the canonical form
 		std::fs::write(&path, format!("{clean}shell:\n\t\tnn: 1\n\too: 2\n")).unwrap();
-		adopt_default_shell(&path);
-		migrate_config(&path);
+		adopt_default_shell(&mut LaunchFile::read(&path));
+		migrate_config(&mut LaunchFile::read(&path));
 		let refused = std::fs::read_to_string(&path).unwrap();
 		assert_eq!(
 			default_of(&refused).as_deref(),
@@ -9336,8 +9452,8 @@ mod tests {
 		assert_eq!(order(&refused), ["bash", "zsh"]);
 
 		std::fs::write(&path, &clean).unwrap();
-		adopt_default_shell(&path);
-		migrate_config(&path);
+		adopt_default_shell(&mut LaunchFile::read(&path));
+		migrate_config(&mut LaunchFile::read(&path));
 		let saved = std::fs::read_to_string(&path).unwrap();
 		assert_eq!(default_of(&saved), None, "{saved}");
 		assert_eq!(order(&saved), ["zsh", "bash"]);
@@ -11799,7 +11915,7 @@ mod tests {
 		let link = dir.join("config.shcl");
 		std::os::unix::fs::symlink(&real, &link).unwrap();
 
-		backfill_config(&link);
+		backfill_config(&mut LaunchFile::read(&link));
 		let meta = std::fs::symlink_metadata(&link).unwrap();
 		assert!(
 			meta.file_type().is_symlink(),
@@ -11836,7 +11952,7 @@ mod tests {
 			std::os::unix::fs::symlink(&victim, dir.join(name)).unwrap();
 		}
 
-		backfill_config(&path);
+		backfill_config(&mut LaunchFile::read(&path));
 		assert_eq!(
 			std::fs::read_to_string(&victim).unwrap(),
 			"untouched\n",
@@ -13386,13 +13502,13 @@ mod tests {
 		let dir = format_test_dir("fmtcopy_kept");
 		let path = dir.join("config.shcl");
 		std::fs::write(&path, SHCL2_FILE).unwrap();
-		convert_shcl2_config(&path);
+		convert_shcl2_config(&mut LaunchFile::read(&path));
 		let first = backups_in(&dir, "config");
 		assert_eq!(first.len(), 1, "{first:?}");
 
 		let other = "font:\n\tfamily: \"C:\\\\Fonts\\\\mine.ttf\"\n";
 		std::fs::write(&path, other).unwrap();
-		convert_shcl2_config(&path);
+		convert_shcl2_config(&mut LaunchFile::read(&path));
 		let both = backups_in(&dir, "config");
 		assert_eq!(both.len(), 2, "{both:?}");
 		assert!(both.contains(&first[0]), "{both:?}");
@@ -13418,7 +13534,7 @@ mod tests {
 		for (name, stem) in [("mine.shcl", "mine"), ("mine.conf", "mine.conf")] {
 			let mine = dir.join(name);
 			std::fs::write(&mine, SHCL2_FILE).unwrap();
-			convert_shcl2_config(&mine);
+			convert_shcl2_config(&mut LaunchFile::read(&mine));
 			let kept = backups_in(&dir, stem);
 			assert_eq!(kept.len(), 1, "{kept:?}");
 			assert!(is_backup_name(&kept[0], stem, 2), "{kept:?}");
@@ -13613,7 +13729,7 @@ mod tests {
 					.map(|_| {
 						scope.spawn(|| {
 							start.wait();
-							convert_shcl2_config(&path);
+							convert_shcl2_config(&mut LaunchFile::read(&path));
 						})
 					})
 					.collect();
@@ -13673,7 +13789,7 @@ mod tests {
 		let dir = format_test_dir("fmtcopy_footer");
 		let path = dir.join("config.shcl");
 		std::fs::write(&path, SHCL2_FILE).unwrap();
-		refresh_shcl_banner(&path);
+		refresh_shcl_banner(&mut LaunchFile::read(&path));
 		assert_eq!(std::fs::read_to_string(&path).unwrap(), SHCL2_FILE);
 		assert_eq!(dir_names(&dir), ["config.shcl"]);
 		let _ = std::fs::remove_dir_all(&dir);
@@ -15699,7 +15815,7 @@ mod tests {
 	// 		\t# idle_release_hidden_min: 30  ## Default\n\
 	// 		\t# idle_release_min: 240  ## Default\n";
 	// 	std::fs::write(&path, before).unwrap();
-	// 	backfill_config(&path);
+	// 	backfill_config(&mut LaunchFile::read(&path));
 	// 	let out = std::fs::read_to_string(&path).unwrap();
 	// 	let _ = std::fs::remove_file(&path);
 	// 	let at = |line: &str| {
@@ -15961,6 +16077,56 @@ mod tests {
 	// themes.* user data survives, and the original file is kept as a .bak.
 	// When both an old alias and its newer flat spelling are present, the newer
 	// one wins.
+	// Test ID: dfe7m
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn the_launch_steps_read_the_settings_file_once() {
+		let dir =
+			crate::testdir::run_dir().join(format!("silkterm_readonce_{}", std::process::id()));
+		let _ = std::fs::create_dir_all(&dir);
+		let path = dir.join("config.shcl");
+		let current = super::with_shcl_banner(default_config())
+			.unwrap_or_else(|| default_config().to_string());
+		std::fs::write(&path, &current).unwrap();
+		let mut file = LaunchFile::read(&path);
+		// a step that read the disk again would convert this
+		let legacy = "font_family: \"Iosevka\"\nscrollback: 5000\n";
+		std::fs::write(&path, legacy).unwrap();
+		super::launch_steps(&mut file);
+		assert_eq!(std::fs::read_to_string(&path).unwrap(), legacy);
+		assert_eq!(file.text(), Some(current.as_str()));
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
+	// Test ID: dfe7n
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn each_launch_step_reads_what_the_one_before_it_wrote() {
+		let dir =
+			crate::testdir::run_dir().join(format!("silkterm_readchain_{}", std::process::id()));
+		let _ = std::fs::create_dir_all(&dir);
+		let path = dir.join("config.shcl");
+		std::fs::write(
+			&path,
+			"font_family: \"Iosevka\"\nscrollback: 5000\nwheel_lines: 4\n",
+		)
+		.unwrap();
+		let mut file = LaunchFile::read(&path);
+		super::launch_steps(&mut file);
+		let out = std::fs::read_to_string(&path).unwrap();
+		assert_eq!(
+			file.text(),
+			Some(out.as_str()),
+			"the launch parses the file it left"
+		);
+		assert!(out.contains("\tscrollback: 5000"), "converted:\n{out}");
+		// a second launch finds nothing left to do
+		let mut again = LaunchFile::read(&path);
+		super::launch_steps(&mut again);
+		assert_eq!(std::fs::read_to_string(&path).unwrap(), out);
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
 	// Test ID: daq68
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
@@ -15986,7 +16152,7 @@ mod tests {
 			colors.focus: \"#abcdef\"\n\
 			theme: Matrix\n";
 		std::fs::write(&path, legacy).unwrap();
-		convert_legacy_config(&path);
+		convert_legacy_config(&mut LaunchFile::read(&path));
 		let out = std::fs::read_to_string(&path).unwrap();
 
 		assert!(out.contains("\tscrollback: 5000"), "value carried:\n{out}");
@@ -16049,7 +16215,7 @@ mod tests {
 		assert_eq!(bak, legacy, "the original file survives untouched as .bak");
 
 		// the converted file is current-format: converting again is a no-op
-		convert_legacy_config(&path);
+		convert_legacy_config(&mut LaunchFile::read(&path));
 		assert_eq!(out, std::fs::read_to_string(&path).unwrap());
 		let _ = std::fs::remove_file(&path);
 		let _ = std::fs::remove_file(dir.join("config.shcl.bak"));
@@ -16098,7 +16264,7 @@ mod tests {
 		let _ = std::fs::create_dir_all(&dir);
 		let path = dir.join("config.shcl");
 		std::fs::write(&path, default_config()).unwrap();
-		convert_legacy_config(&path);
+		convert_legacy_config(&mut LaunchFile::read(&path));
 		assert_eq!(std::fs::read_to_string(&path).unwrap(), default_config());
 		assert!(
 			!dir.join("config.shcl.bak").exists(),
@@ -16145,7 +16311,7 @@ mod tests {
 		let _ = std::fs::create_dir_all(&dir);
 		let path = dir.join("config.shcl");
 		std::fs::write(&path, &text).unwrap();
-		convert_legacy_config(&path);
+		convert_legacy_config(&mut LaunchFile::read(&path));
 		let disk = std::fs::read_to_string(&path).unwrap();
 		assert!(
 			read_shells(&shcl::Document::parse(&disk)) == list,
@@ -16246,7 +16412,7 @@ mod tests {
 			std::fs::create_dir_all(&dir).unwrap();
 			let path = dir.join("config.shcl");
 			std::fs::write(&path, format!("{head}: x\nfont_size: 13\n")).unwrap();
-			convert_legacy_config(&path);
+			convert_legacy_config(&mut LaunchFile::read(&path));
 			let out = std::fs::read_to_string(&path).unwrap();
 			assert!(
 				out.contains("\tsize: 13"),
@@ -16524,7 +16690,7 @@ mod tests {
 		let link = dir.join("config.shcl");
 		std::os::unix::fs::symlink(&real, &link).unwrap();
 
-		repair_wallpaper_heading(&link);
+		repair_wallpaper_heading(&mut LaunchFile::read(&link));
 
 		assert!(
 			std::fs::symlink_metadata(&link)
@@ -16576,7 +16742,7 @@ mod tests {
 		std::fs::write(&victim, "untouched\n").unwrap();
 		std::os::unix::fs::symlink(&victim, dir.join("config.shcl.bak")).unwrap();
 
-		convert_legacy_config(&link);
+		convert_legacy_config(&mut LaunchFile::read(&link));
 
 		assert!(
 			std::fs::symlink_metadata(&link)
@@ -16642,7 +16808,7 @@ mod tests {
 		let link = dir.join("config.shcl");
 		std::os::unix::fs::symlink(&real, &link).unwrap();
 
-		convert_legacy_config(&link);
+		convert_legacy_config(&mut LaunchFile::read(&link));
 
 		let still_link = std::fs::symlink_metadata(&link).is_ok_and(|m| m.file_type().is_symlink());
 		let text = std::fs::read_to_string(&real).unwrap_or_default();
@@ -16684,7 +16850,7 @@ mod tests {
 			let path = dir.join("config.shcl");
 			std::fs::write(&path, flat).unwrap();
 
-			convert_legacy_config_with(&path, write);
+			convert_legacy_config_with(&mut LaunchFile::read(&path), write);
 
 			assert_eq!(
 				std::fs::read_to_string(&path).ok().as_deref(),
@@ -17881,7 +18047,7 @@ mod tests {
 			\t\t# folder: \"wallpaper/\"  ## Default\n\
 			\t\t# random: true  ## Default\n";
 		std::fs::write(&path, drifted).unwrap();
-		backfill_config(&path);
+		backfill_config(&mut LaunchFile::read(&path));
 		let out = std::fs::read_to_string(&path).unwrap();
 
 		let paragraphs = out.matches("Rotate the wallpaper through a folder").count();
@@ -17914,7 +18080,7 @@ mod tests {
 			"missing sections backfilled whole:\n{out}"
 		);
 
-		backfill_config(&path);
+		backfill_config(&mut LaunchFile::read(&path));
 		assert_eq!(
 			out,
 			std::fs::read_to_string(&path).unwrap(),
@@ -17944,9 +18110,9 @@ mod tests {
 			\n\
 			colors.focus: \"#abcdef\"\n";
 		std::fs::write(&path, drifted).unwrap();
-		convert_legacy_config(&path);
-		migrate_config(&path);
-		backfill_config(&path);
+		convert_legacy_config(&mut LaunchFile::read(&path));
+		migrate_config(&mut LaunchFile::read(&path));
+		backfill_config(&mut LaunchFile::read(&path));
 		let out = std::fs::read_to_string(&path).unwrap();
 
 		assert!(
@@ -17973,9 +18139,9 @@ mod tests {
 		);
 
 		// stable: a second pass changes nothing.
-		convert_legacy_config(&path);
-		migrate_config(&path);
-		backfill_config(&path);
+		convert_legacy_config(&mut LaunchFile::read(&path));
+		migrate_config(&mut LaunchFile::read(&path));
+		backfill_config(&mut LaunchFile::read(&path));
 		assert_eq!(
 			out,
 			std::fs::read_to_string(&path).unwrap(),
@@ -18037,7 +18203,7 @@ mod tests {
 	// not change it a second time.
 	mod fuzz {
 		use super::super::{
-			CONFIG_CONVERTS, CONFIG_REMOVED, CONFIG_RENAMES, LEGACY_KEYS, RatingLines,
+			CONFIG_CONVERTS, CONFIG_REMOVED, CONFIG_RENAMES, LEGACY_KEYS, LaunchFile, RatingLines,
 			SUPERSEDED_FONT_STACKS, adopt_default_shell, config_complaints, convert_legacy_config,
 			default_config, disabled_text, line_setting_key, migrate_config_text, next_launch_text,
 			parse_kept, read_raw, resolve, reverted_text, saved_text, setting_groups,
@@ -18186,8 +18352,8 @@ mod tests {
 				std::fs::create_dir_all(&dir).unwrap();
 				let path = dir.join("config.shcl");
 				std::fs::write(&path, text).unwrap();
-				convert_legacy_config(&path);
-				adopt_default_shell(&path);
+				convert_legacy_config(&mut LaunchFile::read(&path));
+				adopt_default_shell(&mut LaunchFile::read(&path));
 				let out = std::fs::read_to_string(&path).unwrap();
 				let _ = std::fs::remove_dir_all(&dir);
 				out

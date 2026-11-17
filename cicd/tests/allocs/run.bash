@@ -2,13 +2,16 @@
 
 ##	- Purpose:
 ##		Counts the heap allocations the window thread makes per frame, with
-##		the program at rest and during a drag select, and fails past a limit.
+##		the program at rest, during a drag select, and with a tip up, and
+##		fails past a limit.
 ##		The window has 2 tabs, a split pane, and the halo on, so the tab
 ##		strip, both panes, and the scrim are all in every frame.
 ##			- At rest: the cursor pulse redraws and nothing else changes.
 ##			- Drag: the pointer held down, taken down a pane's rows, then moved
 ##			  along the last one.
-##		Neither one composes the minimap, since it shows no selection and
+##			- Tips: a tab's tip held up, then a menu row's, each counted over
+##			  the frame at rest.
+##		Neither the rest nor the drag composes the minimap, since it shows no selection and
 ##		nothing printed.
 ##	- Syntax: run.bash [--bin PATH] [--report]   (default: the debug build)
 ##		--report prints the figures and checks no limit.
@@ -39,6 +42,15 @@ headless="${root}/cicd/utility/gui-headless.bash"
 idleLimit="${ALLOCS_IDLE_LIMIT:-178}"
 dragLimit="${ALLOCS_DRAG_LIMIT:-360}"
 moveLimit="${ALLOCS_MOVE_LIMIT:-6}"
+## A frame with a tip up, over the frame at rest. Each pays for a second
+## render pass. Copying the tab tip's lines out for each frame cost 6 more,
+## and wrapping and measuring the menu tip 11 more.
+tabTipLimit="${ALLOCS_TAB_TIP_LIMIT:-43}"
+menuTipLimit="${ALLOCS_MENU_TIP_LIMIT:-28}"
+## Where to hover: a tab's middle, and the File menu's first row, which has a
+## tip. Both are below the menu bar, at 1x.
+tabTipY=40
+menuTipY=45
 restWait="${ALLOCS_REST_WAIT:-60}"
 restRun=5
 idleWant=20
@@ -195,6 +207,38 @@ dragPerMove="$(awk -v b="${dragBetween}" -v m="${moves}" 'BEGIN { printf "%.1f",
 dragMaps="$(fComposes "${from}" "${to}")"; dragFrom="${from}"; dragTo="${to}"
 echo "    drag: ${dragFrames} frames, ${dragFrame} allocations drawing each, ${dragTotal} with what came before, ${dragPerMove} per pointer move between frames, ${dragMaps} map composes"
 
+## A tip held up: a tab's, then a menu row's. Each is counted as frames over
+## the frame at rest, which takes the graphics driver's floor out of it. The
+## tip's own frames cost more than that, since they add a render pass. The
+## note the window prints as a tip comes up shows the hover found one.
+## Prints the frames, the mean frame, and how many notes came.
+fTipFrames(){
+	local -r note="${1}" mark="${2}"
+	local from up n f
+	sleep 2
+	up="$(sed -n "$((mark + 1)),\$p" "${said}" | grep -cxF "[allocs] ${note}" || true)"
+	from="$(fLines)"; sleep 3
+	read -r n f _ _ < <(fMean "${from}" "$(fLines)")
+	echo "${n} ${f} ${up}"
+}
+fX xdotool mousemove --window "${window}" 120 200
+sleep 1
+mark="$(fLines)"
+fX xdotool mousemove --window "${window}" 60 "${tabTipY}"
+read -r tabTipFrames tabTipFrame tabTipUp < <(fTipFrames "tab tip up" "${mark}")
+tabTipOver=$((tabTipFrame - idleFrame))
+echo "    tab tip: ${tabTipFrames} frames, ${tabTipFrame} allocations drawing each, ${tabTipOver} over the frame at rest"
+fX xdotool mousemove --window "${window}" 120 200
+sleep 1
+fX xdotool mousemove --window "${window}" 18 10 click 1
+sleep 0.5
+mark="$(fLines)"
+fX xdotool mousemove --window "${window}" 40 "${menuTipY}"
+read -r menuTipFrames menuTipFrame menuTipUp < <(fTipFrames "menu tip up" "${mark}")
+fX xdotool key Escape
+menuTipOver=$((menuTipFrame - idleFrame))
+echo "    menu tip: ${menuTipFrames} frames, ${menuTipFrame} allocations drawing each, ${menuTipOver} over the frame at rest"
+
 if ((idleFrames > 0 && idleTotal == 0)); then echo "  skip: this build counts no allocations (a release build?)"; exit 3; fi
 if ((!report)); then
 	fCheck "frames counted at rest" test "${idleFrames}" -gt 5
@@ -203,6 +247,12 @@ if ((!report)); then
 	fCheck "drag: ${dragFrame} per frame, limit ${dragLimit}" test "${dragFrame}" -le "${dragLimit}"
 	fCheck "drag: ${dragPerMove} per move between frames, limit ${moveLimit}" \
 		awk -v a="${dragPerMove}" -v l="${moveLimit}" 'BEGIN { exit !(a <= l) }'
+	fCheck "a tab tip came up" test "${tabTipUp}" -ge 1
+	fCheck "frames counted with the tab tip up" test "${tabTipFrames}" -gt 5
+	fCheck "tab tip: ${tabTipOver} per frame over rest, limit ${tabTipLimit}" test "${tabTipOver}" -le "${tabTipLimit}"
+	fCheck "a menu tip came up" test "${menuTipUp}" -ge 1
+	fCheck "frames counted with the menu tip up" test "${menuTipFrames}" -gt 5
+	fCheck "menu tip: ${menuTipOver} per frame over rest, limit ${menuTipLimit}" test "${menuTipOver}" -le "${menuTipLimit}"
 	fCheck "at rest: the map composed ${idleMaps} times, none wanted" test "${idleMaps}" -eq 0
 	fCheck "drag: the map composed ${dragMaps} times, none wanted" test "${dragMaps}" -eq 0
 	if ((idleMaps)); then echo "    at rest, what came before each compose:"; fNotes "${idleFrom}" "${idleTo}"; fi
@@ -223,3 +273,4 @@ echo "all passed"
 ##		- 20261105 JC: Neither the rest nor the drag may compose the minimap.
 ##		- 20261107 JC: A compose nobody wanted prints the notes before it.
 ##		- 20261108 JC: The drag is counted up to the release, not past it.
+##		- 20261117 JC: A tab tip and a menu tip held up, each with a limit.

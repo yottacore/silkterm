@@ -78,7 +78,7 @@ impl State {
 		self.pending_size = None;
 		// Read once the size has held, not in the resize event: the window
 		// manager may set the maximized state after the resize it caused.
-		let fullscreen = crate::monitor::fullscreen(&self.window);
+		let fullscreen = crate::monitor::fullscreen(&self.window, &self.x11);
 		let maximized = self.window.is_maximized();
 		let noted = std::mem::take(&mut self.watch.noted);
 		let keep = what_to_keep(
@@ -169,7 +169,8 @@ impl State {
 			return;
 		}
 		let set_on = crate::monitor::outputs_under(&self.window);
-		let Some(now_on) = crate::monitor::MonitorId::of_window(&self.window).map(|m| m.key())
+		let Some(now_on) =
+			crate::monitor::MonitorId::of_window(&self.window, &self.x11).map(|m| m.key())
 		else {
 			return;
 		};
@@ -207,7 +208,8 @@ impl State {
 		if !only_left(&set_on, &now) {
 			return;
 		}
-		let Some(now_on) = crate::monitor::MonitorId::of_window(&self.window).map(|m| m.key())
+		let Some(now_on) =
+			crate::monitor::MonitorId::of_window(&self.window, &self.x11).map(|m| m.key())
 		else {
 			return;
 		};
@@ -229,7 +231,7 @@ impl State {
 		if !move_counts(
 			now < self.watch.ignore_moves_until,
 			&self.watch.layout,
-			|| crate::monitor::layout(&self.window),
+			|| crate::monitor::layout(&self.window, &self.x11),
 		) {
 			self.note_own_place();
 			return;
@@ -263,7 +265,7 @@ impl State {
 		move_counts(
 			own || now < self.watch.ignore_moves_until,
 			&self.watch.layout,
-			|| crate::monitor::layout(&self.window),
+			|| crate::monitor::layout(&self.window, &self.x11),
 		)
 	}
 
@@ -329,9 +331,9 @@ impl State {
 			(self.watch.heard_at, self.watch.stirred_at),
 			(Some(heard), Some(stirred)) if heard > stirred
 		);
-		let layout = crate::monitor::layout(&self.window);
+		let layout = crate::monitor::layout(&self.window, &self.x11);
 		let drag = drag_state(
-			crate::monitor::button_held(&self.window),
+			crate::monitor::button_held(&self.window, &self.x11),
 			self.watch.opening || layout != self.watch.layout_looked,
 			self.watch.pointer == Pointer::Over,
 			heard,
@@ -350,7 +352,7 @@ impl State {
 			Drag::Over => {}
 		}
 		let moved_at = self.watch.moved_at.take();
-		let now_on = crate::monitor::MonitorId::of_window(&self.window).map(|m| m.key());
+		let now_on = crate::monitor::MonitorId::of_window(&self.window, &self.x11).map(|m| m.key());
 		let on_some = now_on.is_some() || self.window.current_monitor().is_some();
 		if look_again(on_some, self.watch.positionless, moved_at, now) {
 			self.watch.moved_at = moved_at;
@@ -432,7 +434,7 @@ impl State {
 			return;
 		};
 		if self.keeps_size()
-			|| crate::monitor::fullscreen(&self.window)
+			|| crate::monitor::fullscreen(&self.window, &self.x11)
 			|| self.window.is_maximized()
 		{
 			return;
@@ -488,7 +490,7 @@ impl State {
 		if self.watch.check_at.is_some()
 			|| self.watch.put_off
 			|| self.window.is_minimized() == Some(true)
-			|| crate::monitor::button_held(&self.window) == Some(true)
+			|| crate::monitor::button_held(&self.window, &self.x11) == Some(true)
 		{
 			self.watch.herd = Some(Herd {
 				poll_at: now + MONITOR_RECHECK,
@@ -498,14 +500,14 @@ impl State {
 		}
 		let place = self.place_now();
 		if self.keeps_size()
-			|| crate::monitor::fullscreen(&self.window)
+			|| crate::monitor::fullscreen(&self.window, &self.x11)
 			|| self.window.is_maximized()
 			|| place.is_none()
 		{
 			self.watch.herd = None;
 			return;
 		}
-		let layout = crate::monitor::layout(&self.window);
+		let layout = crate::monitor::layout(&self.window, &self.x11);
 		match herd_step(&herd, &layout, place, now) {
 			HerdStep::Home => {
 				self.watch.herd = None;
@@ -548,7 +550,7 @@ impl State {
 			return;
 		}
 		// taken on the way back, at the window's own size
-		if crate::monitor::fullscreen(&self.window) || self.window.is_maximized() {
+		if crate::monitor::fullscreen(&self.window, &self.x11) || self.window.is_maximized() {
 			mondbg("later", self.watch.key.as_deref(), None, None);
 			self.watch.take_owed = true;
 			return;
@@ -587,7 +589,7 @@ impl State {
 			at: now,
 			on: crate::monitor::output_drawn_for(&self.window),
 		});
-		self.watch.layout = crate::monitor::layout(&self.window);
+		self.watch.layout = crate::monitor::layout(&self.window, &self.x11);
 		self.request_grid(cols, rows);
 	}
 
@@ -653,7 +655,7 @@ impl State {
 		};
 		let ratio = scale / self.text.scale;
 		let free = !self.no_area
-			&& !crate::monitor::fullscreen(&self.window)
+			&& !crate::monitor::fullscreen(&self.window, &self.x11)
 			&& !self.window.is_maximized();
 		// not a move means a take just happened, since only a take sets that grace
 		let took = !self.rescale_moves(Instant::now());
@@ -758,7 +760,7 @@ impl State {
 			|| !self.revealed
 			|| self.no_area
 			|| self.window.is_maximized()
-			|| crate::monitor::fullscreen(&self.window)
+			|| crate::monitor::fullscreen(&self.window, &self.x11)
 			|| crate::monitor::snapped(&self.window)
 		{
 			return None;
@@ -928,10 +930,16 @@ fn fits(
 
 // Out to whole cells of the window's own grid, which is what gets saved, so
 // the next launch opens at this size. A part cell short of it gave the shell
-// a column less.
+// a column less. A size already at whole cells stays: `window_px` rounds up
+// to a pixel, so its cells read a bit over and a ceil here added one.
 fn whole_cells(px: u32, most: u32, cell: f32, margin: f32, chrome: f32) -> u32 {
-	let cells = ((px as f32 - 2.0 * margin - chrome) / cell).ceil().max(1.0) as usize;
-	let whole = window_px(1, cells, cell, cell, margin, chrome).1;
+	let at = |cells: usize| window_px(1, cells, cell, cell, margin, chrome).1;
+	let cells = cells_in(px, cell, margin, chrome);
+	let whole = if at(cells) >= px {
+		at(cells)
+	} else {
+		at(cells + 1)
+	};
 	if whole <= most { whole.max(px) } else { px }
 }
 
@@ -995,7 +1003,7 @@ fn coming_px(was: (u32, u32), told: (u32, u32), ratio: f32, free: bool) -> (u32,
 // Whole cells in a window this many pixels across, after the margins either
 // side and the chrome; one at least. The inverse of `window_px`.
 fn cells_in(px: u32, cell: f32, margin: f32, chrome: f32) -> usize {
-	(((px as f32 - 2.0 * margin - chrome) / cell).floor() as i64).max(1) as usize
+	crate::text::cells_across(px as f32 - 2.0 * margin - chrome, cell)
 }
 
 /// The window a grid asks for: the cells, the margins either side, and the chrome
@@ -1658,6 +1666,29 @@ mod tests {
 			}
 		}
 		assert_eq!(cells_in(0, 10.0, 4.0, 30.0), 1, "never no cells");
+	}
+
+	// The same at cell sizes that aren't binary fractions, where a window of
+	// exactly N cells read back as N-1: 15 cells of 9.6 make 144 px, and 144 /
+	// 9.6 came to just under 15 in f32.
+	// Test ID: dfe3q
+	#[test]
+	fn a_grid_reads_back_at_any_cell_size() {
+		for cell in [7.2, 8.4, 9.6, 10.65, 10.8, 13.33, 16.2, 19.2, 25.6] {
+			for (margin, chrome) in [(0.0, 0.0), (4.0, 0.0), (4.0, 30.0), (6.5, 31.5)] {
+				for n in 1..400 {
+					let (w, h) = window_px(n, n, cell, cell, margin, chrome);
+					assert_eq!(
+						(
+							cells_in(w, cell, margin, 0.0),
+							cells_in(h, cell, margin, chrome)
+						),
+						(n, n),
+						"{cell} {margin} {chrome}"
+					);
+				}
+			}
+		}
 	}
 
 	// A resize that leaves a Wayland window wholly on one of the 2 outputs
@@ -2498,6 +2529,35 @@ mod tests {
 		assert_eq!(cells_in(whole, 10.65, 4.0, 0.0), 80);
 		assert_eq!(whole_cells(500, 960, 24.0, 4.0, 30.0), 518);
 		assert_eq!(whole_cells(1818, 1818, 30.0, 4.0, 0.0), 1818, "at the edge");
+	}
+
+	// A zoom on the alt screen, where the minimap is off, gave the program a
+	// column more: the least size for its grid was already whole cells, and
+	// rounding it out again added one, 64 then 65 in a 700x400 window.
+	// Test ID: dfe3c
+	#[test]
+	fn a_size_already_at_whole_cells_keeps_its_grid() {
+		use super::whole_cells;
+		assert_eq!(whole_cells(690, 2000, 10.65, 4.0, 0.0), 690, "64 cells");
+		for cell in [7.0, 9.6, 10.65, 10.8, 12.0, 13.33, 24.0] {
+			for chrome in [0.0, 30.0, 31.5] {
+				for n in 1..200 {
+					let at = |n: usize| window_px(1, n, cell, cell, 4.0, chrome).1;
+					assert_eq!(
+						whole_cells(at(n), u32::MAX, cell, 4.0, chrome),
+						at(n),
+						"{cell} {chrome} {n}"
+					);
+					for px in at(n) + 1..at(n + 1) {
+						assert_eq!(
+							whole_cells(px, u32::MAX, cell, 4.0, chrome),
+							at(n + 1),
+							"{cell} {chrome} {px}"
+						);
+					}
+				}
+			}
+		}
 	}
 
 	// X11's work area spans both monitors; the window gets the part on its own.

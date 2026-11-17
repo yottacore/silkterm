@@ -311,6 +311,12 @@ pub enum Task {
 	Idle,
 }
 
+// a probe's kept answer, or Idle before the first one
+fn seen_task(cache: Option<&(std::time::Instant, Task)>) -> &Task {
+	const IDLE: &Task = &Task::Idle;
+	cache.map_or(IDLE, |(_, task)| task)
+}
+
 pub struct TermInstance {
 	pub term: Arc<FairMutex<Term<EventProxy>>>,
 	// same gate the engine's thread posts through, so the window can re-arm it
@@ -492,13 +498,23 @@ impl TermInstance {
 	/// on unix and a live child process on Windows (see `at_shell_prompt`). Both are
 	/// throttled the same way, since render asks per tab per frame and a probe on
 	/// every idle blink frame added up.
-	pub fn task(&mut self) -> Task {
+	///
+	/// Lent rather than copied, since a frame asks for every tab and almost
+	/// always gets the answer it got last time.
+	pub fn task(&mut self) -> &Task {
+		self.fresh_task();
+		self.task_seen()
+	}
+
+	fn fresh_task(&mut self) {
 		const PROBE_IVL: std::time::Duration = std::time::Duration::from_millis(250);
 		let now = std::time::Instant::now();
-		if let Some((at, task)) = &self.task_cache
-			&& now.duration_since(*at) < PROBE_IVL
+		if self
+			.task_cache
+			.as_ref()
+			.is_some_and(|(at, _)| now.duration_since(*at) < PROBE_IVL)
 		{
-			return task.clone();
+			return;
 		}
 		let task = match self.running_program() {
 			Some(program) => {
@@ -510,8 +526,24 @@ impl TermInstance {
 				None => Task::Idle,
 			},
 		};
-		self.task_cache = Some((now, task.clone()));
-		task
+		self.task_cache = Some((now, task));
+	}
+
+	// the last answer, without looking again
+	fn task_seen(&self) -> &Task {
+		seen_task(self.task_cache.as_ref())
+	}
+
+	/// What runs and where the shell is, both as `task()` and `cwd()` give
+	/// them, but lent, for the tab strip to compare with what it showed.
+	pub fn task_and_cwd(&mut self) -> (&Task, Option<&std::path::Path>) {
+		self.fresh_task();
+		self.fresh_cwd();
+		let cwd = self.cwd_cache.get_mut().as_ref();
+		(
+			seen_task(self.task_cache.as_ref()),
+			cwd.and_then(|(_, dir)| dir.as_deref()),
+		)
 	}
 
 	/// Makes the next `task()` look again rather than use its cache.
@@ -540,7 +572,7 @@ impl TermInstance {
 		{
 			*self.child_probe.borrow_mut() = None;
 		}
-		before != Some(self.task())
+		before.as_ref() != Some(self.task())
 	}
 
 	// The foreground process group is the shell's own while it sits at its prompt,
@@ -615,24 +647,34 @@ impl TermInstance {
 	/// an ssh, is dropped, and the OS answer stands instead. So is a report from a
 	/// program that has since exited, on unix, where that can be told.
 	pub fn cwd(&self) -> Option<std::path::PathBuf> {
+		self.fresh_cwd();
+		self.cwd_cache
+			.borrow()
+			.as_ref()
+			.and_then(|(_, dir)| dir.clone())
+	}
+
+	fn fresh_cwd(&self) {
 		// Throttled the way `task()` beside it is, and for the same reason: the
 		// tab strip asks once per tab per frame, and both halves of the answer
 		// touch the filesystem, a stat plus a /proc read and another stat. On a
 		// mount that has stopped responding, each of those stalls the render.
 		const PROBE_IVL: std::time::Duration = std::time::Duration::from_millis(250);
 		let now = std::time::Instant::now();
-		if let Some((at, dir)) = self.cwd_cache.borrow().as_ref()
-			&& now.duration_since(*at) < PROBE_IVL
+		if self
+			.cwd_cache
+			.borrow()
+			.as_ref()
+			.is_some_and(|(at, _)| now.duration_since(*at) < PROBE_IVL)
 		{
-			return dir.clone();
+			return;
 		}
 		let dir = self
 			.reported_cwd
 			.live()
 			.filter(|dir| dir.is_dir())
 			.or_else(|| self.os_cwd());
-		*self.cwd_cache.borrow_mut() = Some((now, dir.clone()));
-		dir
+		*self.cwd_cache.borrow_mut() = Some((now, dir));
 	}
 
 	// Where the OS says the shell process itself is (see process_cwd).

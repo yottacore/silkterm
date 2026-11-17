@@ -313,6 +313,74 @@ struct ChromeCache {
 	tabs: Vec<(String, f32, Buffer)>,
 }
 
+// Most lines the benchmark banner says, which its kept lefts have room for.
+const BENCH_BANNER_MAX_LINES: usize = 4;
+
+// Where a box of text over everything else goes this frame: a tab tip, a menu
+// tip, or the benchmark banner. Line `i` sits at `top + line_h * i`. Holds no
+// words, so the layout can take `&mut self` and the frame borrows the words
+// after from whoever keeps them (`Overlay`).
+#[derive(Clone, Copy, Debug)]
+struct OverlayAt {
+	rect: Rect,
+	top: f32,
+	line_h: f32,
+	lefts: OverlayLefts,
+}
+
+#[derive(Clone, Copy, Debug)]
+enum OverlayLefts {
+	// a tip: every line starts at one left
+	Even(f32),
+	// the banner: each line centered, so each has its own
+	Each([f32; BENCH_BANNER_MAX_LINES]),
+}
+
+// The words of an overlay, lent rather than copied. A frame used to copy every
+// line out of the kept tip, each frame it was up.
+#[derive(Clone, Copy, Debug)]
+enum OverlayWords<'a> {
+	Kept(&'a [String]),
+	Fixed(&'static [&'static str]),
+}
+
+impl OverlayWords<'_> {
+	fn len(self) -> usize {
+		match self {
+			Self::Kept(lines) => lines.len(),
+			Self::Fixed(lines) => lines.len(),
+		}
+	}
+}
+
+#[derive(Clone, Copy, Debug)]
+struct Overlay<'a> {
+	at: OverlayAt,
+	words: OverlayWords<'a>,
+}
+
+impl<'a> Overlay<'a> {
+	fn rect(&self) -> &Rect {
+		&self.at.rect
+	}
+
+	// Each line as (left, top, words).
+	fn placed(self) -> impl Iterator<Item = (f32, f32, &'a str)> {
+		let at = self.at;
+		(0..self.words.len()).map(move |i| {
+			let line = match self.words {
+				OverlayWords::Kept(lines) => lines[i].as_str(),
+				OverlayWords::Fixed(lines) => lines[i],
+			};
+			let left = match at.lefts {
+				OverlayLefts::Even(left) => left,
+				OverlayLefts::Each(lefts) => lefts.get(i).copied().unwrap_or(at.rect.x),
+			};
+			(left, at.top + at.line_h * i as f32, line)
+		})
+	}
+}
+
 // The lists a frame fills, kept between frames so each frame clears them
 // rather than growing them from empty. `render_with` takes them out for the
 // frame and puts them back emptied; an early return just drops them.
@@ -325,6 +393,8 @@ struct FrameBufs {
 	group_ranges: Vec<(Rect, u32, u32)>,
 	link_ranges: Vec<(Rect, u32, u32)>,
 	cursor_ranges: Vec<(Rect, u32, u32)>,
+	// glyphon's areas, main pass then scrim pass, emptied between uses
+	areas: Vec<TextArea<'static>>,
 }
 
 impl FrameBufs {
@@ -336,6 +406,7 @@ impl FrameBufs {
 		self.group_ranges.clear();
 		self.link_ranges.clear();
 		self.cursor_ranges.clear();
+		self.areas.clear();
 		self
 	}
 }
@@ -643,6 +714,8 @@ impl Gpu {
 
 struct State {
 	window: Arc<Window>,
+	// the X server connection the monitor checks after a move or resize use
+	x11: crate::monitor::X11Link,
 	// None while the window has let its device go after a long idle, with what
 	// is needed to build it again waiting in `rebirth` (see `release_gpu`).
 	// `render` takes it out for the length of a frame, so nothing a frame calls
@@ -732,6 +805,9 @@ struct State {
 	// rather than by an event, so "has it changed" has to be asked against what
 	// was last drawn, not against what the timer said a moment ago.
 	menu_tip_up: Option<(usize, usize)>,
+	// that row's tip wrapped and measured, kept while it's up
+	menu_tip_text: crate::tip::Wrapped,
+	bar_widths: menubar::BarWidths, // the menu bar's titles and labels, measured
 	// no tips of any kind while the window is in the background
 	tip_focus: crate::tip::Focus,
 	// The tab last opened beside the active one, and that tab, each by a pane
@@ -754,7 +830,7 @@ struct State {
 	close_ask: Option<closing::Closing>,
 	win_opacity: Option<f32>, // CLI --background-opacity override (this window only)
 	win_title: Option<String>, // CLI --title override (else "AppName - <tab title>")
-	last_win_title: String,   // last string set on the window (skip redundant set_title)
+	kept_title: crate::tabtitle::KeptTitle, // what was last set on the window
 	focused: bool, // window has keyboard focus (gates copy-output: never copy from a background window)
 	pending_about: bool, // request to open the About window (App acts on it; needs the event loop)
 	pending_settings: Option<Instant>, // request to open the Settings window, and when
@@ -1186,6 +1262,9 @@ impl State {
 		self.menu_tip.point_at(self.menu_tip_target());
 		let up = self.menu_tip.ripe();
 		let menu_changed = up != self.menu_tip_up;
+		if menu_changed && up.is_some() {
+			crate::perf::allocs_note("menu tip up");
+		}
 		self.menu_tip_up = up;
 		self.update_tab_tip() || menu_changed
 	}
@@ -1234,67 +1313,40 @@ impl State {
 		}
 	}
 
-	// The active tab's title, in full, since the window title has the whole title
-	// bar and the system shortens it itself.
-	fn active_tab_title(&mut self) -> String {
-		let active = self.tabs.active;
-		self.refresh_tab_labels(Some(active));
-		self.tab_labels
-			.forms(active)
-			.first()
-			.cloned()
-			.unwrap_or_else(|| config::APP_NAME.to_string())
-	}
-
-	// What the window title says after the app name. See tabtitle::window_suffix
-	// for the order of the 3 sources.
-	fn title_suffix(&mut self) -> Option<String> {
-		let typed = self.tabs.cur().title_override.clone();
-		let program = self.pane_title();
-		let pm = self.tabs.cur();
-		let launched = pm
-			.panes
-			.get(&pm.focused)
-			.and_then(|pane| pane.launched())
-			.map(str::to_string);
-		crate::tabtitle::window_suffix(
-			config::rights(),
-			typed.as_deref(),
-			program.as_deref(),
-			launched.as_deref(),
-			config::settings().title_shows_tab,
-			|| self.active_tab_title(),
-		)
-	}
-
-	// The title the focused pane's program asked for, if it asked for one.
-	fn pane_title(&self) -> Option<String> {
-		let pm = self.tabs.cur();
-		let title = &pm.panes.get(&pm.focused)?.title;
-		(!title.trim().is_empty()).then(|| title.clone())
-	}
-
 	// The window title in the taskbar and alt-tab: a --title from the command line
 	// as given, else the app name, with the dogfood build when this is one, and
 	// what the active tab has to say. Called on a tab or focus change and on each
-	// frame drawn. set_title runs only when the string changed, to avoid flicker.
+	// frame drawn, so it's only built when what it says moved, and set_title
+	// runs only then, to avoid flicker.
 	fn update_title(&mut self) {
+		use crate::tabtitle::Suffix;
+		let note = self.conserve.note(Instant::now());
 		// A --title is the whole answer, so nothing else is worked out.
-		let suffix = if self.win_title.is_some() {
-			None
-		} else {
-			self.title_suffix()
+		let custom = self.win_title.is_some();
+		// The tab's label in full, since the window title has the whole title bar
+		// and the system shortens it itself. It's brought up to date only when
+		// it's the one used, and the strip may be hidden.
+		if !custom && title_from(&self.tabs) == Some(Suffix::Tab) {
+			self.refresh_tab_labels(Some(self.tabs.active));
+		}
+		let suffix = match title_from(&self.tabs).filter(|_| !custom) {
+			None => None,
+			Some(Suffix::Said(said)) => Some(said),
+			Some(Suffix::Tab) => Some(
+				self.tab_labels
+					.forms(self.tabs.active)
+					.first()
+					.map_or(config::APP_NAME, String::as_str),
+			),
 		};
-		let title = crate::tabtitle::window_title(
+		if let Some(title) = self.kept_title.update(
 			config::rights(),
 			self.win_title.as_deref(),
-			&config::title_prefix(),
-			suffix.as_deref(),
-		);
-		let title = crate::tabtitle::with_note(title, self.conserve.note(Instant::now()));
-		if title != self.last_win_title {
+			config::title_prefix(),
+			suffix,
+			note,
+		) {
 			self.window.set_title(&title);
-			self.last_win_title = title;
 		}
 	}
 
@@ -1862,6 +1914,7 @@ impl State {
 			mut group_ranges,
 			mut link_ranges,
 			mut cursor_ranges,
+			areas: mut kept_areas,
 		} = std::mem::take(&mut self.frame_bufs);
 		// the autoscroll runs every frame, so it goes first in the `||`
 		let mut animating = self.autoscroll_selection(dt) || bell > 0.0;
@@ -2334,9 +2387,19 @@ impl State {
 		// flips to the left of a submenu at the right edge, which puts it over
 		// the parent menu. The tab strip's and a menu row's are the same 2
 		// quads; only what they say and where they sit differ.
-		let tip_layout = self.tab_tip_layout();
-		let menu_tip = self.menu_tip_layout();
+		let tip_at = self.tab_tip_layout();
+		let menu_tip_at = self.menu_tip_layout();
 		let bench_banner = self.bench_layout();
+		// The words are borrowed from where they're kept, so nothing past here
+		// may take `&mut self`, only its fields.
+		let tip_layout = tip_at.zip(self.tab_tip.as_ref()).map(|(at, tip)| Overlay {
+			at,
+			words: OverlayWords::Kept(tip.shown()),
+		});
+		let menu_tip = menu_tip_at.map(|at| Overlay {
+			at,
+			words: OverlayWords::Kept(self.menu_tip_text.lines()),
+		});
 		let border = self.text.dip(CHROME_HAIRLINE);
 		let tip_range = (tip_layout.is_some() || menu_tip.is_some() || bench_banner.is_some())
 			.then(|| {
@@ -2359,11 +2422,11 @@ impl State {
 				let boxes = tip_layout
 					.iter()
 					.chain(menu_tip.iter())
-					.map(|(rect, _)| (rect, tip_edge, tip_fill))
+					.map(|tip| (tip.rect(), tip_edge, tip_fill))
 					.chain(
 						bench_banner
 							.iter()
-							.map(|(rect, _)| (rect, menu_border_rgb, menu_bg_rgb)),
+							.map(|banner| (banner.rect(), menu_border_rgb, menu_bg_rgb)),
 					);
 				for (box_rect, edge, fill) in boxes {
 					instances.push(rect_inst(
@@ -2561,7 +2624,7 @@ impl State {
 				reason = "set at the top of the frame when it was None"
 			)]
 			let chrome = self.chrome.as_ref().unwrap();
-			let mut areas: Vec<TextArea> = Vec::new();
+			let mut areas = crate::text::reuse_areas(std::mem::take(&mut kept_areas));
 			for p in self.tabs.cur().panes.values() {
 				// app-scroll slide: fill the revealed gap from the scrolled-off strip,
 				// draw the current scroll region over it, then the static bands unshifted
@@ -2673,7 +2736,11 @@ impl State {
 				x += tab_w;
 			}
 
-			if let Err(e) = self.text.prepare(&gpu.gfx.device, &gpu.gfx.queue, areas) {
+			let prepared = self
+				.text
+				.prepare(&gpu.gfx.device, &gpu.gfx.queue, areas.drain(..));
+			kept_areas = crate::text::reuse_areas(areas);
+			if let Err(e) = prepared {
 				// Atlas full, after a long session of varied glyphs. The usual trim is
 				// at the end of render, past this early return, so without a trim here
 				// the atlas never recovers and all text goes black for good. Cursor and
@@ -2691,7 +2758,7 @@ impl State {
 			// scrim source pass has its own prepared set: pane text only (no chrome),
 			// with de-bolded buffers where a pane built one (text_scrim_regular_weight)
 			if scrim_on {
-				let mut scrim_areas: Vec<TextArea> = Vec::new();
+				let mut scrim_areas = crate::text::reuse_areas(std::mem::take(&mut kept_areas));
 				for p in self.tabs.cur().panes.values() {
 					// the scrim follows this frame's slide, including the scrolled-off
 					// strip filling the gap. Without it the strip's text, such as the row
@@ -2732,10 +2799,11 @@ impl State {
 					scrim_areas.extend(p.glyph_areas(margin));
 					scrim_areas.extend(p.emoji_area(margin));
 				}
-				if let Err(e) =
+				let prepared =
 					self.text
-						.prepare_scrim(&gpu.gfx.device, &gpu.gfx.queue, scrim_areas)
-				{
+						.prepare_scrim(&gpu.gfx.device, &gpu.gfx.queue, scrim_areas.drain(..));
+				kept_areas = crate::text::reuse_areas(scrim_areas);
+				if let Err(e) = prepared {
 					eprintln!(
 						"{}: scrim prepare failed; trimming atlas to recover: {e:?}",
 						config::APP_NAME
@@ -2767,12 +2835,8 @@ impl State {
 				gpu.gfx.config.width.hash(&mut hasher);
 				gpu.gfx.config.height.hash(&mut hasher);
 				self.chrome_rev.hash(&mut hasher); // covers a menu color change
-				for (_, placed) in tip_layout
-					.iter()
-					.chain(menu_tip.iter())
-					.chain(bench_banner.iter())
-				{
-					for (left, top, line) in placed {
+				for overlay in tip_layout.iter().chain(&menu_tip).chain(&bench_banner) {
+					for (left, top, line) in overlay.placed() {
 						left.to_bits().hash(&mut hasher);
 						top.to_bits().hash(&mut hasher);
 						line.hash(&mut hasher);
@@ -2809,12 +2873,12 @@ impl State {
 				let tip_col = Some(GColor::rgb(tip_fg[0], tip_fg[1], tip_fg[2]));
 				// The tip alone shapes in the terminal font: its lines are a table
 				// padded with spaces, which no proportional face can align.
-				if let Some((box_rect, placed)) = &tip_layout {
+				if let Some(tip) = tip_layout {
 					let mut tip_attrs = crate::text::mono_attrs();
 					tip_attrs.color_opt = tip_col;
 					let line_h = self.text.cell_h;
-					for (left, top, line) in placed {
-						let mut buf = self.text.new_buffer(box_rect.w, line_h);
+					for (left, top, line) in tip.placed() {
+						let mut buf = self.text.new_buffer(tip.rect().w, line_h);
 						buf.set_text(
 							&mut self.text.font_system,
 							line,
@@ -2823,7 +2887,7 @@ impl State {
 							None,
 						);
 						buf.shape_until_scroll(&mut self.text.font_system, false);
-						tip_specs.push((*left, *top, buf));
+						tip_specs.push((left, top, buf));
 					}
 				}
 				// a menu row's tip and the benchmark banner shape in the interface
@@ -2831,17 +2895,15 @@ impl State {
 				// tip's text color with its box; the banner stays with the menu.
 				let ui_lines = menu_tip
 					.iter()
-					.map(|(rect, placed)| (rect, placed, tip_col))
-					.chain(
-						bench_banner
-							.iter()
-							.map(|(rect, placed)| (rect, placed, attrs.color_opt)),
-					);
-				for (box_rect, placed, color) in ui_lines {
+					.map(|tip| (tip, tip_col))
+					.chain(bench_banner.iter().map(|banner| (banner, attrs.color_opt)));
+				for (overlay, color) in ui_lines {
 					let mut attrs = attrs.clone();
 					attrs.color_opt = color;
-					for (left, top, line) in placed {
-						let mut buf = self.text.new_ui_buffer(box_rect.w, self.text.ui_line_h);
+					for (left, top, line) in overlay.placed() {
+						let mut buf = self
+							.text
+							.new_ui_buffer(overlay.rect().w, self.text.ui_line_h);
 						buf.set_text(
 							&mut self.text.font_system,
 							line,
@@ -2850,7 +2912,7 @@ impl State {
 							None,
 						);
 						buf.shape_until_scroll(&mut self.text.font_system, false);
-						tip_specs.push((*left, *top, buf));
+						tip_specs.push((left, top, buf));
 					}
 				}
 				for menu in self.menu.iter().flat_map(ContextMenu::chain) {
@@ -3313,10 +3375,29 @@ impl State {
 			group_ranges,
 			link_ranges,
 			cursor_ranges,
+			areas: kept_areas,
 		}
 		.emptied();
 		animating && presented
 	}
+}
+
+// Where the window title's suffix comes from, for the active tab: see
+// tabtitle::suffix_from for the order of the 3 sources. Only borrows.
+fn title_from(tabs: &Tabs) -> Option<crate::tabtitle::Suffix<'_>> {
+	let pm = tabs.cur();
+	let pane = pm.panes.get(&pm.focused);
+	// a program that never asked for a title, or asked for a blank one
+	let program = pane
+		.map(|pane| pane.title.as_str())
+		.filter(|title| !title.trim().is_empty());
+	crate::tabtitle::suffix_from(
+		config::rights(),
+		pm.title_override.as_deref(),
+		program,
+		pane.and_then(Pane::launched),
+		config::settings().title_shows_tab,
+	)
 }
 
 fn rect_inst(x: f32, y: f32, w: f32, h: f32, color: [u8; 3]) -> RectInstance {
@@ -3430,24 +3511,21 @@ fn spec_areas(
 	specs: &[(f32, f32, Buffer)],
 	(right, bottom): (i32, i32),
 	default_color: GColor,
-) -> Vec<TextArea<'_>> {
-	specs
-		.iter()
-		.map(|(left, top, buffer)| TextArea {
-			buffer,
-			left: *left,
-			top: *top,
-			scale: 1.0,
-			bounds: TextBounds {
-				left: 0,
-				top: 0,
-				right,
-				bottom,
-			},
-			default_color,
-			custom_glyphs: &[],
-		})
-		.collect()
+) -> impl Iterator<Item = TextArea<'_>> {
+	specs.iter().map(move |(left, top, buffer)| TextArea {
+		buffer,
+		left: *left,
+		top: *top,
+		scale: 1.0,
+		bounds: TextBounds {
+			left: 0,
+			top: 0,
+			right,
+			bottom,
+		},
+		default_color,
+		custom_glyphs: &[],
+	})
 }
 
 // Dim a chrome color toward the bar background when the window isn't focused.
@@ -3736,7 +3814,7 @@ impl ApplicationHandler<UserEvent> for App {
 			.with_title(crate::tabtitle::window_title(
 				config::rights(),
 				win_title.as_deref(),
-				&config::title_prefix(),
+				config::title_prefix(),
 				None,
 			))
 			.with_window_icon(load_icon())
@@ -3827,7 +3905,8 @@ impl ApplicationHandler<UserEvent> for App {
 		// An automatic size opens at the last size and font zoom, this monitor's
 		// own where they are kept. A size or font size on the command line wins.
 		let settings = config::settings();
-		let monitor = crate::monitor::MonitorId::of_new_window(&window).map(|m| m.key());
+		let x11 = crate::monitor::X11Link::default();
+		let monitor = crate::monitor::MonitorId::of_new_window(&window, &x11).map(|m| m.key());
 		let kept = config::remembered_window(&settings, monitor.as_deref());
 		let font_pinned = cli_win.style.font_size.is_some();
 		if settings.remember_size && !font_pinned {
@@ -3858,7 +3937,7 @@ impl ApplicationHandler<UserEvent> for App {
 			ignore_resize_until: Instant::now(),
 			ignore_moves_until: Instant::now(),
 			layout: Vec::new(),
-			layout_looked: crate::monitor::layout(&window),
+			layout_looked: crate::monitor::layout(&window, &x11),
 			home: None,
 			place: None,
 			herd: None,
@@ -3970,6 +4049,7 @@ impl ApplicationHandler<UserEvent> for App {
 
 		self.state = Some(State {
 			window,
+			x11,
 			gpu: Some(Gpu {
 				gfx,
 				rects,
@@ -4031,6 +4111,8 @@ impl ApplicationHandler<UserEvent> for App {
 			tab_opener: None,
 			tab_hover: crate::tip::Dwell::default(),
 			menu_tip: crate::tip::Dwell::default(),
+			menu_tip_text: crate::tip::Wrapped::default(),
+			bar_widths: menubar::BarWidths::default(),
 			menu_tip_up: None,
 			tip_focus: crate::tip::Focus::default().changed(FOCUSED_AT_START),
 			tab_first: 0,
@@ -4047,7 +4129,7 @@ impl ApplicationHandler<UserEvent> for App {
 			close_ask: None,
 			win_opacity,
 			win_title,
-			last_win_title: String::new(),
+			kept_title: crate::tabtitle::KeptTitle::default(),
 			focused: FOCUSED_AT_START,
 			pending_about: false,
 			pending_settings: None,
@@ -6449,5 +6531,63 @@ mod tests {
 			bare_chrome(false, (true, false), (false, true)).1,
 			(true, true)
 		);
+	}
+
+	// The tab tip and the benchmark banner copied every line out for each
+	// frame they were up. The frame borrows them from where they're kept.
+	// Test ID: dfe5s
+	#[test]
+	fn an_overlay_lends_its_words() {
+		use super::{BENCH_BANNER_MAX_LINES, Overlay, OverlayAt, OverlayLefts, OverlayWords};
+		use crate::pane::Rect;
+		const SAID: &[&str] = &["Testing performance", "This takes a few seconds."];
+		let kept = vec!["Shell name:  sh".to_string(), "Open:        3s".to_string()];
+		let rect = Rect {
+			x: 10.0,
+			y: 20.0,
+			w: 200.0,
+			h: 60.0,
+		};
+		let tip = Overlay {
+			at: OverlayAt {
+				rect,
+				top: 28.0,
+				line_h: 18.0,
+				lefts: OverlayLefts::Even(18.0),
+			},
+			words: OverlayWords::Kept(&kept),
+		};
+		let before = crate::perf::thread_allocs();
+		let mut lines = 0;
+		for (i, (left, top, line)) in tip.placed().enumerate() {
+			assert!(std::ptr::eq(line, kept[i].as_str()), "line {i} was copied");
+			assert_eq!((left, top), (18.0, 28.0 + 18.0 * i as f32));
+			lines += 1;
+		}
+		assert_eq!(lines, kept.len());
+		assert_eq!(
+			crate::perf::thread_allocs() - before,
+			0,
+			"placing the lines allocated"
+		);
+		let mut lefts = [0.0; BENCH_BANNER_MAX_LINES];
+		lefts[..2].copy_from_slice(&[40.0, 31.0]);
+		let banner = Overlay {
+			at: OverlayAt {
+				rect,
+				top: 42.0,
+				line_h: 20.0,
+				lefts: OverlayLefts::Each(lefts),
+			},
+			words: OverlayWords::Fixed(SAID),
+		};
+		let before = crate::perf::thread_allocs();
+		let placed: Vec<_> = banner.placed().collect();
+		// collecting them does allocate, which shows the counter counts
+		if cfg!(debug_assertions) {
+			assert!(crate::perf::thread_allocs() > before);
+		}
+		assert_eq!(placed, [(40.0, 42.0, SAID[0]), (31.0, 62.0, SAID[1])]);
+		assert!(std::ptr::eq(placed[1].2, SAID[1]));
 	}
 }

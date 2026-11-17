@@ -187,7 +187,7 @@ fCheck "the test ID check lists the script tests" test "${#scripts[@]}" -gt 10
 scripts+=(wingui/run.bash)
 skipped=""
 for rel in "${scripts[@]}"; do
-	[[ "${rel}" == wingui/* && "${rel}" != wingui/harness-test.bash && "${rel}" != wingui/run.bash ]] && continue
+	[[ "${rel}" == wingui/* && "${rel}" != wingui/harness-test.bash && "${rel}" != wingui/pixels-test.bash && "${rel}" != wingui/run.bash ]] && continue
 	grep -qE 'mktemp|tempfile|GetTempPath|\$env:TEMP' "${tests}/${rel}" || continue
 	grep -qE 'fTestDir_Use|_testdir\.use\(\)' "${tests}/${rel}" || skipped+=" ${rel}"
 done
@@ -195,7 +195,7 @@ fCheck "every script test that makes scratch uses the run folder${skipped:+ (not
 ##	A guard for what C2 can't run. The pipelines are on the list too.
 unended=""
 for rel in "${scripts[@]}" ../cicd.bash ../cicd-win.ps1; do
-	[[ "${rel}" == wingui/* && "${rel}" != wingui/harness-test.bash && "${rel}" != wingui/run.bash ]] && continue
+	[[ "${rel}" == wingui/* && "${rel}" != wingui/harness-test.bash && "${rel}" != wingui/pixels-test.bash && "${rel}" != wingui/run.bash ]] && continue
 	grep -qE 'fTestDir_(Use|Make)|_testdir\.use\(\)' "${tests}/${rel}" || continue
 	grep -qE 'fTestDir_End|_testdir\.end\(' "${tests}/${rel}" || unended+=" ${rel}"
 done

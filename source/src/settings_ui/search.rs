@@ -56,6 +56,9 @@ pub(super) struct Hit {
 pub(super) struct Search {
 	pub(super) query: String,
 	pub(super) hits: Vec<Hit>,
+	// each hit's line and its marks, worked out once per query rather than
+	// once per frame
+	lines: Vec<(String, Vec<(usize, usize)>)>,
 	pub(super) sel: usize,
 	// where the page was scrolled to before the list took its place
 	kept_scroll: Option<f32>,
@@ -403,10 +406,18 @@ fn leader_of(specs: &[Spec], row: usize) -> Option<usize> {
 		.find(|&i| specs[i].indent < me.indent && !specs[i].label.is_empty())
 }
 
+// Result lines worked out on this thread. Test builds only.
+#[cfg(test)]
+thread_local! {
+	static CRUMBS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
 /// A result's line: its tab and the tabs over it, its heading where that
 /// isn't the tab's title, its own label, then the alias that found it. The
 /// marks come back moved to where they fall in the line.
 pub(super) fn crumb(specs: &[Spec], hit: &Hit) -> (String, Vec<(usize, usize)>) {
+	#[cfg(test)]
+	CRUMBS.with(|n| n.set(n.get() + 1));
 	let nodes = tab_nodes();
 	let sep = format!(" {} ", ui().icons.search_sep);
 	let (path, subject) = match hit.to {
@@ -525,6 +536,12 @@ impl SettingsDialog {
 		let was = self.searching();
 		self.search.query = text.to_string();
 		self.search.hits = rank(self.specs, text);
+		self.search.lines = self
+			.search
+			.hits
+			.iter()
+			.map(|hit| crumb(self.specs, hit))
+			.collect();
 		self.search.sel = 0;
 		match (was, self.searching()) {
 			(false, true) => {
@@ -764,20 +781,24 @@ impl SettingsDialog {
 			});
 			return;
 		}
-		for (k, hit) in self.search.hits.iter().enumerate() {
+		for (k, (line, spans)) in self.search.lines.iter().enumerate() {
 			let r = self.hit_rect_in(vp, k);
 			if r.y + r.h < vp.y || r.y > vp.y + vp.h {
 				continue;
 			}
-			let (line, spans) = crumb(self.specs, hit);
 			out.push(TextItem {
 				clip: Some(clip_rect(r, vp)),
 				marks: Some(Marks {
-					spans,
+					spans: spans.clone(),
 					color: colors.handle,
 					scale: MARK_SCALE,
 				}),
-				..TextItem::plain(line, r.x + lay().pad / 2.0, text_y(r.y, r.h), colors.text)
+				..TextItem::plain(
+					line.clone(),
+					r.x + lay().pad / 2.0,
+					text_y(r.y, r.h),
+					colors.text,
+				)
 			});
 		}
 	}
@@ -1203,5 +1224,39 @@ mod tests {
 				"the box overlaps tab {node}"
 			);
 		}
+	}
+
+	// Each frame worked out every shown result's line again: its tabs, its
+	// heading and leader, and the separator. The query works them out once.
+	// Test ID: dfe4k
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_frame_reuses_the_result_lines() {
+		let mut d = mk_dialog(700.0);
+		let crumbs = || super::CRUMBS.with(std::cell::Cell::get);
+		let before = crumbs();
+		d.search_set("size");
+		let hits = d.search.hits.len();
+		assert!(hits >= 2, "{:?}", d.search.hits);
+		assert_eq!(crumbs() - before, hits, "one line per result per query");
+		let first = d.texts_dip(d.line_h, chars7);
+		let before = crumbs();
+		let again = d.texts_dip(d.line_h, chars7);
+		assert_eq!(crumbs() - before, 0, "a frame worked the lines out again");
+		let lines = |texts: &[super::super::TextItem]| {
+			texts
+				.iter()
+				.filter_map(|t| {
+					t.marks
+						.as_ref()
+						.map(|m| (t.text.to_string(), m.spans.clone()))
+				})
+				.collect::<Vec<_>>()
+		};
+		let want: Vec<_> = d.search.hits.iter().map(|h| crumb(d.specs, h)).collect();
+		let drawn = lines(&first);
+		assert!(!drawn.is_empty());
+		assert_eq!(drawn, lines(&again));
+		assert!(drawn.iter().all(|l| want.contains(l)), "{drawn:?}");
 	}
 }

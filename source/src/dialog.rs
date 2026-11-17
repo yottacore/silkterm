@@ -195,6 +195,8 @@ pub struct DialogWin {
 	// no tips while the window is in the background
 	focus: crate::tip::Focus,
 	shaped: ShapedText,
+	// the last frame's lists, emptied, for the next frame to fill
+	kept: Scene,
 	// the terminal window this dialog belongs to, so we can restack it beneath
 	// us when we're activated (see raise_parent).
 	parent: Option<RawWindowHandle>,
@@ -545,6 +547,7 @@ impl DialogWin {
 			tip_drawn: None,
 			focus: crate::tip::Focus::default(),
 			shaped: ShapedText::default(),
+			kept: Scene::default(),
 			parent: parent.map(Parent::handle),
 			parent_monitor: parent.and_then(|p| p.monitor),
 			snapped: false,
@@ -1136,7 +1139,8 @@ impl DialogWin {
 			None
 		};
 		let (w, h) = (self.gfx.config.width, self.gfx.config.height);
-		let (scene, tip_drawn) = compose(
+		let (scene, tip_drawn) = compose_into(
+			std::mem::take(&mut self.kept),
 			&self.content,
 			&mut self.text,
 			&mut self.shaped,
@@ -1150,6 +1154,7 @@ impl DialogWin {
 		let Ok(frame) = self.gfx.begin_frame() else {
 			// nothing else asks again (see the terminal's own refused frame)
 			self.refused.missed(now, FRAME_RETRY_FIRST, FRAME_RETRY_MAX);
+			self.kept = scene.emptied();
 			return;
 		};
 		let view = self.gfx.frame_view(&frame);
@@ -1292,6 +1297,7 @@ impl DialogWin {
 			self.refused.missed(now, FRAME_RETRY_FIRST, FRAME_RETRY_MAX);
 		}
 		self.text.trim_atlas();
+		self.kept = scene.emptied();
 	}
 }
 
@@ -1307,6 +1313,7 @@ struct Placed {
 }
 
 // What one frame draws, worked out with no surface.
+#[derive(Default)]
 struct Scene {
 	clear: [u8; 3],
 	rects: Vec<RectInstance>,
@@ -1324,6 +1331,16 @@ struct Scene {
 	tip_texts: Vec<Placed>,
 }
 
+impl Scene {
+	fn emptied(mut self) -> Self {
+		self.rects.clear();
+		self.texts.clear();
+		self.overlay_texts.clear();
+		self.tip_texts.clear();
+		self
+	}
+}
+
 // Shaped dialog text, kept from one frame to the next. Shaping is most of what
 // a frame costs, and a frame mostly shows what the last one did. A buffer is
 // found again by everything shaping reads: the text, its attrs (font, weight,
@@ -1335,13 +1352,17 @@ struct ShapedText {
 	// the text context these were shaped in; a font, size, or scale change
 	// builds a new one, and nothing shaped in the old one is any use
 	generation: u64,
-	// this frame's buffers, in the order first asked for
+	// this frame's buffers, in the order first asked for, and what each was
+	// shaped from, with its hash
 	bufs: Vec<glyphon::Buffer>,
-	index: HashMap<ShapeKey, usize>,
+	keys: Vec<(u64, ShapeKey)>,
+	// Both maps go by the key's hash, so a lookup builds no owned key. The key
+	// kept with each entry is compared, and a hash shared by two keys is a miss.
+	index: HashMap<u64, usize>,
 	// last frame's, until this one asks for them
-	spare: HashMap<ShapeKey, glyphon::Buffer>,
-	// scratch for moving `bufs` into `spare`, kept so a frame doesn't allocate it
-	moving: Vec<Option<glyphon::Buffer>>,
+	spare: HashMap<u64, (ShapeKey, glyphon::Buffer)>,
+	// the flyover's words wrapped and measured, kept while it stays up
+	tip: crate::tip::Wrapped,
 }
 
 #[derive(Clone, PartialEq, Eq, Hash)]
@@ -1354,22 +1375,54 @@ struct ShapeKey {
 	marks: Option<(Vec<(usize, usize)>, [u8; 3], u32)>,
 }
 
+// A `ShapeKey` as a frame asks for it, borrowed from the text item.
+#[derive(Hash)]
+struct ShapeAsk<'a> {
+	text: &'a str,
+	attrs: &'a Attrs<'static>,
+	height: u32,
+	marks: Option<(&'a [(usize, usize)], [u8; 3], u32)>,
+}
+
+impl ShapeAsk<'_> {
+	fn hash_of(&self) -> u64 {
+		use std::hash::{Hash, Hasher};
+		let mut hasher = std::hash::DefaultHasher::new();
+		self.hash(&mut hasher);
+		hasher.finish()
+	}
+
+	fn is(&self, key: &ShapeKey) -> bool {
+		self.text == key.text
+			&& *self.attrs == key.attrs
+			&& self.height == key.height
+			&& self.marks == key.marks.as_ref().map(|(s, c, z)| (s.as_slice(), *c, *z))
+	}
+
+	fn owned(&self) -> ShapeKey {
+		ShapeKey {
+			text: self.text.to_string(),
+			attrs: self.attrs.clone(),
+			height: self.height,
+			marks: self.marks.map(|(s, c, z)| (s.to_vec(), c, z)),
+		}
+	}
+}
+
 impl ShapedText {
 	fn start_frame(&mut self, text: &TextCtx) {
 		self.spare.clear();
 		if self.generation != text.generation {
 			self.generation = text.generation;
 			self.bufs.clear();
+			self.keys.clear();
 			self.index.clear();
 			return;
 		}
-		self.moving.extend(self.bufs.drain(..).map(Some));
-		for (key, slot) in self.index.drain() {
-			if let Some(buf) = self.moving[slot].take() {
-				self.spare.insert(key, buf);
-			}
+		self.index.clear();
+		for (buf, (hash, key)) in self.bufs.drain(..).zip(self.keys.drain(..)) {
+			self.spare.insert(hash, (key, buf));
 		}
-		self.moving.clear();
 	}
 
 	// This frame's buffer for `line` in `attrs`, shaped only when the last frame
@@ -1396,27 +1449,34 @@ impl ShapedText {
 		width: f32,
 		height: f32,
 	) -> usize {
-		let key = ShapeKey {
-			text: line.to_string(),
-			attrs: attrs.clone(),
+		let ask = ShapeAsk {
+			text: line,
+			attrs,
 			height: height.to_bits(),
-			marks: marks.map(|m| (m.spans.clone(), m.color, m.scale.to_bits())),
+			marks: marks.map(|m| (m.spans.as_slice(), m.color, m.scale.to_bits())),
 		};
-		if let Some(&slot) = self.index.get(&key) {
+		let hash = ask.hash_of();
+		if let Some(&slot) = self.index.get(&hash)
+			&& ask.is(&self.keys[slot].1)
+		{
 			return slot;
 		}
-		let buf = match self.spare.remove(&key) {
-			Some(mut kept) => {
+		let (key, buf) = match self.spare.remove(&hash) {
+			Some((key, mut kept)) if ask.is(&key) => {
 				text.resize_buffer(&mut kept, width, height);
-				kept
+				(key, kept)
 			}
-			None => match marks {
-				Some(marks) => shape_marked(text, line, attrs, marks, width, height),
-				None => shape(text, line, attrs, width, height),
-			},
+			_ => {
+				let buf = match marks {
+					Some(marks) => shape_marked(text, line, attrs, marks, width, height),
+					None => shape(text, line, attrs, width, height),
+				};
+				(ask.owned(), buf)
+			}
 		};
 		self.bufs.push(buf);
-		self.index.insert(key, self.bufs.len() - 1);
+		self.keys.push((hash, key));
+		self.index.insert(hash, self.bufs.len() - 1);
 		self.bufs.len() - 1
 	}
 }
@@ -1495,39 +1555,45 @@ fn text_areas<'a>(
 	placed: &[Placed],
 	bufs: &'a [glyphon::Buffer],
 	(w, h): (u32, u32),
-) -> Vec<TextArea<'a>> {
-	placed
-		.iter()
-		.map(|p| {
-			let bounds = match p.clip {
-				Some(rect) => TextBounds {
-					left: rect.x as i32,
-					top: rect.y as i32,
-					right: (rect.x + rect.w) as i32,
-					bottom: (rect.y + rect.h) as i32,
-				},
-				None => TextBounds {
-					left: 0,
-					top: 0,
-					right: w as i32,
-					bottom: h as i32,
-				},
-			};
-			TextArea {
-				buffer: &bufs[p.buf],
-				left: p.x,
-				top: p.y,
-				scale: p.scale,
-				bounds,
-				default_color: GColor::rgb(p.color[0], p.color[1], p.color[2]),
-				custom_glyphs: &[],
-			}
-		})
-		.collect()
+) -> impl Iterator<Item = TextArea<'a>> {
+	placed.iter().map(move |p| {
+		let bounds = match p.clip {
+			Some(rect) => TextBounds {
+				left: rect.x as i32,
+				top: rect.y as i32,
+				right: (rect.x + rect.w) as i32,
+				bottom: (rect.y + rect.h) as i32,
+			},
+			None => TextBounds {
+				left: 0,
+				top: 0,
+				right: w as i32,
+				bottom: h as i32,
+			},
+		};
+		TextArea {
+			buffer: &bufs[p.buf],
+			left: p.x,
+			top: p.y,
+			scale: p.scale,
+			bounds,
+			default_color: GColor::rgb(p.color[0], p.color[1], p.color[2]),
+			custom_glyphs: &[],
+		}
+	})
+}
+
+// A tip found under the pointer, before its words are built.
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum Tip<'a> {
+	Said(&'a str),
+	Settings(crate::settings_ui::TipAt),
 }
 
 // The tip under the pointer, and the rect it hangs from. A frame asks once.
-fn tip_under(content: &Content, (mx, my): (f32, f32)) -> Option<(Cow<'_, str>, Rect)> {
+// The words wait for `tip_words`, since a pointer move and a frame whose tip
+// isn't due yet only need the rect.
+fn tip_under(content: &Content, (mx, my): (f32, f32)) -> Option<(Tip<'_>, Rect)> {
 	match content {
 		Content::About { links, .. } => links
 			.iter()
@@ -1535,9 +1601,20 @@ fn tip_under(content: &Content, (mx, my): (f32, f32)) -> Option<(Cow<'_, str>, R
 			.and_then(|link| {
 				link.tooltip
 					.as_deref()
-					.map(|tip| (Cow::Borrowed(tip), link.rect))
+					.map(|tip| (Tip::Said(tip), link.rect))
 			}),
-		Content::Settings(dialog) => dialog.hover_tip(mx, my),
+		Content::Settings(dialog) => dialog
+			.hover_at(mx, my)
+			.map(|(at, anchor)| (Tip::Settings(at), anchor)),
+	}
+}
+
+fn tip_words<'a>(content: &'a Content, tip: Tip<'a>) -> Cow<'a, str> {
+	match (tip, content) {
+		(Tip::Said(said), _) => Cow::Borrowed(said),
+		(Tip::Settings(at), Content::Settings(dialog)) => dialog.tip_words(at),
+		// a Settings tip only ever comes from a Settings dialog
+		(Tip::Settings(_), Content::About { .. }) => Cow::Borrowed(""),
 	}
 }
 
@@ -1581,7 +1658,33 @@ fn pointer_moved(
 // menus do. A dialog that showed one the moment the pointer crossed a control
 // would read as a different kind of tip. The wake the wait asks for is read
 // through `wake_at`, since a move can start it between frames.
+#[cfg(test)]
 fn compose(
+	content: &Content,
+	text: &mut TextCtx,
+	shaped: &mut ShapedText,
+	dwell: &mut crate::tip::Dwell<Rect>,
+	tips: bool,
+	mouse: (f32, f32),
+	now: std::time::Instant,
+	size: (u32, u32),
+) -> (Scene, Option<Rect>) {
+	compose_into(
+		Scene::default(),
+		content,
+		text,
+		shaped,
+		dwell,
+		tips,
+		mouse,
+		now,
+		size,
+	)
+}
+
+// `compose`, filling `kept`'s lists, which come in empty.
+fn compose_into(
+	kept: Scene,
 	content: &Content,
 	text: &mut TextCtx,
 	shaped: &mut ShapedText,
@@ -1596,10 +1699,15 @@ fn compose(
 	} else {
 		None
 	};
-	let (drawn, _) = tip_gate(dwell, found.as_ref().map(|(_, anchor)| *anchor), now);
-	let tip = found.filter(|(_, anchor)| drawn == Some(*anchor));
+	let (drawn, _) = tip_gate(dwell, found.map(|(_, anchor)| anchor), now);
+	let tip = found
+		.filter(|(_, anchor)| drawn == Some(*anchor))
+		.map(|(tip, anchor)| (tip_words(content, tip), anchor));
 	let tip = tip.as_ref().map(|(tip, anchor)| (tip.as_ref(), *anchor));
-	(scene(content, text, shaped, mouse, tip, size), drawn)
+	(
+		scene_into(kept, content, text, shaped, mouse, tip, size),
+		drawn,
+	)
 }
 
 // Whether a dialog is due a frame with no input. A tip that ripened since the
@@ -1615,7 +1723,21 @@ fn frame_due(
 }
 
 // Everything one frame draws, with `tip` the flyover to draw, if one is up.
+#[cfg(test)]
 fn scene(
+	content: &Content,
+	text: &mut TextCtx,
+	shaped: &mut ShapedText,
+	mouse: (f32, f32),
+	tip: Option<(&str, Rect)>,
+	size: (u32, u32),
+) -> Scene {
+	scene_into(Scene::default(), content, text, shaped, mouse, tip, size)
+}
+
+// `scene`, filling `kept`'s lists, which come in empty.
+fn scene_into(
+	kept: Scene,
 	content: &Content,
 	text: &mut TextCtx,
 	shaped: &mut ShapedText,
@@ -1624,11 +1746,14 @@ fn scene(
 	(w, h): (u32, u32),
 ) -> Scene {
 	shaped.start_frame(text);
-	let mut rects: Vec<RectInstance> = Vec::new();
-	let mut texts: Vec<Placed> = Vec::new();
-	let mut overlay_texts: Vec<Placed> = Vec::new();
+	let Scene {
+		mut rects,
+		mut texts,
+		mut overlay_texts,
+		mut tip_texts,
+		..
+	} = kept;
 	let mut overlay_range: Option<(u32, u32)> = None;
-	let mut tip_texts: Vec<Placed> = Vec::new();
 	let mut tip_range: Option<(u32, u32)> = None;
 	let line_h = text.ui_line_h;
 	let border_col = crate::settings_ui::dialog_border();
@@ -1732,7 +1857,7 @@ fn scene(
 			let attrs = ui_attrs();
 			let (fixed, rows) = dialog.rects(line_h, |s| text.measure_ui_text(s, &attrs));
 			let rect_split = fixed.len();
-			rects = fixed;
+			rects.extend(fixed);
 			rects.extend(rows);
 			let items = dialog.texts(line_h, |s| text.measure_ui_text(s, &attrs));
 			// The dialog centers its text by line box; this drops each buffer so
@@ -1790,11 +1915,11 @@ fn scene(
 			if let Some((tip, anchor)) = tip {
 				let scale = text.scale;
 				let avail = crate::tip::wrap_budget(w as f32, scale);
-				let lines = crate::tip::wrap(tip, avail, |s| text.measure_ui_text(s, &attrs));
-				let tip_w = lines
-					.iter()
-					.map(|l| text.measure_ui_text(l, &attrs))
-					.fold(0.0f32, f32::max);
+				// out for the frame, since shaping each line takes `shaped` whole
+				let mut wrapped = std::mem::take(&mut shaped.tip);
+				let generation = text.generation;
+				let (lines, tip_w) =
+					wrapped.lay(tip, avail, generation, |s| text.measure_ui_text(s, &attrs));
 				let at = crate::tip::lay_out(
 					anchor,
 					lines.len(),
@@ -1822,6 +1947,7 @@ fn scene(
 						buf,
 					});
 				}
+				shaped.tip = wrapped;
 			}
 			Scene {
 				clear: crate::settings_ui::dialog_bg(),
@@ -3857,9 +3983,9 @@ mod tests {
 		let mut shaped = super::ShapedText::default();
 		let keys = |shaped: &super::ShapedText| {
 			shaped
-				.index
-				.keys()
-				.cloned()
+				.keys
+				.iter()
+				.map(|(_, key)| key.clone())
 				.collect::<std::collections::HashSet<_>>()
 		};
 		let _ = frame(&content, &mut text, &mut shaped, (800, 700));
@@ -3925,6 +4051,101 @@ mod tests {
 			reshaped > 0 && kept > 0,
 			"{reshaped} steps shaped and {kept} did not"
 		);
+	}
+
+	// A frame that asks for what the last one shaped finds it by a borrowed
+	// key, so a dialog at rest builds no key, plain or marked. A line asked for
+	// twice in a frame is one buffer, and a new line still builds its key.
+	// Test ID: dfe86
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn kept_text_is_found_without_building_a_key() {
+		let mut text = TextCtx::new_cpu(1.0);
+		let mut shaped = super::ShapedText::default();
+		let line_h = text.ui_line_h;
+		let attrs = ui_attrs();
+		let marks = crate::settings_ui::Marks {
+			spans: vec![(5, 9)],
+			color: [200, 120, 10],
+			scale: 1.2,
+		};
+		let lines = ["General", "Font size", "Scrollback lines"];
+		let ask = |shaped: &mut super::ShapedText, text: &mut TextCtx, slots: &mut Vec<usize>| {
+			shaped.start_frame(text);
+			slots.clear();
+			for line in lines {
+				slots.push(shaped.buffer(text, line, &attrs, 300.0, line_h));
+			}
+			slots.push(shaped.marked(text, lines[1], &attrs, Some(&marks), 300.0, line_h));
+			slots.push(shaped.buffer(text, lines[0], &attrs, 300.0, line_h));
+		};
+		let mut first = Vec::with_capacity(8);
+		ask(&mut shaped, &mut text, &mut first);
+		assert_eq!(first[0], first[4], "the same line twice is one buffer");
+		assert_ne!(first[1], first[3], "marks make another buffer");
+		let shaped_before = shaped_so_far();
+		let mut found = Vec::with_capacity(8);
+		ask(&mut shaped, &mut text, &mut found);
+		let before = crate::perf::thread_allocs();
+		for _ in 0..60 {
+			ask(&mut shaped, &mut text, &mut found);
+			assert_eq!(found, first);
+		}
+		let spent = crate::perf::thread_allocs() - before;
+		assert_eq!(spent, 0, "allocations over 60 frames at rest");
+		assert_eq!(shaped_so_far(), shaped_before, "nothing shaped again");
+		shaped.start_frame(&text);
+		let before = crate::perf::thread_allocs();
+		let _ = shaped.buffer(&mut text, "Bell", &attrs, 300.0, line_h);
+		if cfg!(debug_assertions) {
+			assert!(crate::perf::thread_allocs() > before);
+		}
+	}
+
+	// A dialog frame fills the last frame's lists, which come back with the
+	// buffers they had, so it allocates less than a frame that starts empty.
+	// Test ID: dfe87
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_frame_fills_the_last_frames_lists() {
+		let mut text = TextCtx::new_cpu(1.0);
+		let content = settings_content(&mut text);
+		let mut shaped = super::ShapedText::default();
+		let mut dwell = crate::tip::Dwell::default();
+		let mut run = |kept: super::Scene, text: &mut TextCtx| {
+			let before = crate::perf::thread_allocs();
+			let (scene, _) = super::compose_into(
+				kept,
+				&content,
+				text,
+				&mut shaped,
+				&mut dwell,
+				true,
+				(-1.0, -1.0),
+				Instant::now(),
+				(800, 700),
+			);
+			(scene, crate::perf::thread_allocs() - before)
+		};
+		// a few frames first, so the shaped text's own maps are grown
+		let mut kept = super::Scene::default();
+		for _ in 0..3 {
+			kept = run(kept, &mut text).0.emptied();
+		}
+		let at =
+			|scene: &super::Scene| (scene.rects.as_ptr() as usize, scene.texts.as_ptr() as usize);
+		let was = at(&kept);
+		let (fresh, fresh_cost) = run(super::Scene::default(), &mut text);
+		let (again, kept_cost) = run(kept, &mut text);
+		assert_eq!(at(&again), was, "the same buffers back");
+		assert_eq!(again.texts.len(), fresh.texts.len());
+		assert_eq!(again.rects.len(), fresh.rects.len());
+		if cfg!(debug_assertions) {
+			assert!(
+				kept_cost < fresh_cost,
+				"{kept_cost} kept, {fresh_cost} fresh"
+			);
+		}
 	}
 
 	// A search result's matched text is a step larger and in its own color, on
@@ -4286,6 +4507,117 @@ mod tests {
 				"a frame with the pointer at {at:?} looked the tip up {asks} times"
 			);
 		}
+	}
+
+	// A pointer move used to build the whole tip of each row it crossed, only
+	// to learn whether there was one. Neither a move nor a frame whose tip
+	// isn't due builds the words now, and a frame that draws one builds it once.
+	// Test ID: dfe4h
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn only_a_drawn_tip_builds_its_words() {
+		let mut text = TextCtx::new_cpu(1.0);
+		let mut content = settings_content(&mut text);
+		let mut dwell = crate::tip::Dwell::default();
+		let (w, h) = match &content {
+			super::Content::Settings(dialog) => dialog.size(),
+			super::Content::About { .. } => unreachable!(),
+		};
+		let before = crate::settings_ui::row_tips();
+		let (mut from, mut tipped) = ((0.0, 0.0), None);
+		for row in 0..30 {
+			for col in 0..12 {
+				let to = (w * (col as f32 + 0.5) / 12.0, h * (row as f32 + 0.5) / 30.0);
+				let _ = super::pointer_moved(&mut content, &mut text, &mut dwell, true, from, to);
+				if let Some((super::Tip::Settings(crate::settings_ui::TipAt::Row(..)), _)) =
+					super::tip_under(&content, to)
+				{
+					tipped = tipped.or(Some(to));
+				}
+				from = to;
+			}
+		}
+		assert_eq!(
+			crate::settings_ui::row_tips() - before,
+			0,
+			"pointer moves built tip words"
+		);
+		let at = tipped.expect("no row on the dialog has a tip");
+		let mut shaped = super::ShapedText::default();
+		let mut dwell = crate::tip::Dwell::default();
+		let mut frame = |dwell: &mut crate::tip::Dwell<Rect>| {
+			let before = crate::settings_ui::row_tips();
+			let (_, drawn) = super::compose(
+				&content,
+				&mut text,
+				&mut shaped,
+				dwell,
+				true,
+				at,
+				Instant::now(),
+				(800, 700),
+			);
+			(drawn, crate::settings_ui::row_tips() - before)
+		};
+		let (drawn, built) = frame(&mut dwell);
+		assert_eq!(
+			(drawn, built),
+			(None, 0),
+			"a tip not yet due built its words"
+		);
+		std::thread::sleep(crate::tip::DELAY);
+		let (drawn, built) = frame(&mut dwell);
+		assert!(drawn.is_some(), "a rested pointer got no tip");
+		assert_eq!(built, 1, "a drawn tip built its words {built} times");
+	}
+
+	// A Settings tip on screen was wrapped, and every line measured again, on
+	// each frame. It's wrapped once while it stays up.
+	// Test ID: dfe5v
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_drawn_tip_is_wrapped_once_while_it_stays_up() {
+		let mut text = TextCtx::new_cpu(1.0);
+		let content = settings_content(&mut text);
+		let (w, h) = match &content {
+			super::Content::Settings(dialog) => dialog.size(),
+			super::Content::About { .. } => unreachable!(),
+		};
+		let at = (0..30)
+			.flat_map(|row| {
+				(0..12)
+					.map(move |col| (w * (col as f32 + 0.5) / 12.0, h * (row as f32 + 0.5) / 30.0))
+			})
+			.find(|&to| {
+				matches!(
+					super::tip_under(&content, to),
+					Some((super::Tip::Settings(crate::settings_ui::TipAt::Row(..)), _))
+				)
+			})
+			.expect("no row on the dialog has a tip");
+		let mut shaped = super::ShapedText::default();
+		let mut dwell = crate::tip::Dwell::default();
+		let mut drawn = None;
+		for frame in 0..6 {
+			if frame == 1 {
+				std::thread::sleep(crate::tip::DELAY);
+			}
+			(_, drawn) = super::compose(
+				&content,
+				&mut text,
+				&mut shaped,
+				&mut dwell,
+				true,
+				at,
+				Instant::now(),
+				(800, 700),
+			);
+		}
+		assert!(drawn.is_some(), "a rested pointer got no tip");
+		assert_eq!(
+			shaped.tip.wraps, 1,
+			"the tip was wrapped again with nothing changed"
+		);
 	}
 
 	// A pointer move draws nothing unless something drawn moved with it: a

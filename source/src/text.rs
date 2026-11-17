@@ -1048,11 +1048,11 @@ impl TextCtx {
 		);
 	}
 
-	pub fn prepare(
+	pub fn prepare<'a>(
 		&mut self,
 		device: &wgpu::Device,
 		queue: &wgpu::Queue,
-		areas: Vec<TextArea<'_>>,
+		areas: impl IntoIterator<Item = TextArea<'a>>,
 	) -> Result<(), glyphon::PrepareError> {
 		// Destructured so the color-glyph lookup can borrow alongside the renderer
 		// and font system (disjoint fields of the same struct).
@@ -1086,11 +1086,11 @@ impl TextCtx {
 		gpu.renderer.render(&gpu.atlas, &gpu.viewport, pass)
 	}
 
-	pub fn prepare_overlay(
+	pub fn prepare_overlay<'a>(
 		&mut self,
 		device: &wgpu::Device,
 		queue: &wgpu::Queue,
-		areas: Vec<TextArea<'_>>,
+		areas: impl IntoIterator<Item = TextArea<'a>>,
 	) -> Result<(), glyphon::PrepareError> {
 		let Self {
 			gpu,
@@ -1118,11 +1118,11 @@ impl TextCtx {
 		gpu.overlay.render(&gpu.atlas, &gpu.viewport, pass)
 	}
 
-	pub fn prepare_tip(
+	pub fn prepare_tip<'a>(
 		&mut self,
 		device: &wgpu::Device,
 		queue: &wgpu::Queue,
-		areas: Vec<TextArea<'_>>,
+		areas: impl IntoIterator<Item = TextArea<'a>>,
 	) -> Result<(), glyphon::PrepareError> {
 		let Self {
 			gpu,
@@ -1147,11 +1147,11 @@ impl TextCtx {
 		gpu.tip.render(&gpu.atlas, &gpu.viewport, pass)
 	}
 
-	pub fn prepare_scrim(
+	pub fn prepare_scrim<'a>(
 		&mut self,
 		device: &wgpu::Device,
 		queue: &wgpu::Queue,
-		areas: Vec<TextArea<'_>>,
+		areas: impl IntoIterator<Item = TextArea<'a>>,
 	) -> Result<(), glyphon::PrepareError> {
 		let Self {
 			gpu,
@@ -1294,14 +1294,69 @@ fn shaped_ink(
 	})
 }
 
+/// Whole cells across `len` pixels, one at least. A length a grid asked for
+/// can come back a hair short in f32: 15 cells of 9.6 make 144, and 144 / 9.6
+/// is just under 15. So a length within `CELL_SLACK_PX` of the next whole cell
+/// counts it.
+pub fn cells_across(len: f32, cell: f32) -> usize {
+	((len + CELL_SLACK_PX) / cell).floor().max(1.0) as usize
+}
+
+// Well past the f32 error in a window's width or height, and too little of a
+// cell's last pixel to see.
+const CELL_SLACK_PX: f32 = 0.01;
+
 // A fractional cell to the nearest whole pixel, for the shell.
 fn nearest_px(cell: f32) -> u16 {
 	cell.round().max(1.0) as u16
 }
 
+/// An area list's buffer, emptied and free of the last frame's borrows, so a
+/// frame can keep it and fill it again rather than growing a new one.
+pub fn reuse_areas<'a>(mut areas: Vec<TextArea<'_>>) -> Vec<TextArea<'a>> {
+	areas.clear();
+	// Collecting a Vec's own iterator into an item of the same layout keeps its
+	// buffer (dfe85 checks it). The list is empty, so nothing is ever mapped.
+	#[allow(
+		clippy::unnecessary_filter_map,
+		reason = "filter would keep the old lifetime, which is what this drops"
+	)]
+	areas.into_iter().filter_map(|_| None).collect()
+}
+
 #[cfg(test)]
 mod tests {
 	use super::*;
+
+	// A frame's area list goes back to the frame emptied, with the buffer it
+	// grew, so the next frame fills it without allocating.
+	// Test ID: dfe85
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn reused_areas_keep_their_buffer() {
+		let mut text = TextCtx::new_cpu(1.0);
+		let buf = text.new_ui_buffer(100.0, 20.0);
+		let area = |left| TextArea {
+			buffer: &buf,
+			left,
+			top: 0.0,
+			scale: 1.0,
+			bounds: glyphon::TextBounds::default(),
+			default_color: glyphon::Color::rgb(0, 0, 0),
+			custom_glyphs: &[],
+		};
+		let mut areas: Vec<TextArea> = (0..40).map(|i| area(i as f32)).collect();
+		let (at, room) = (areas.as_ptr() as usize, areas.capacity());
+		let before = crate::perf::thread_allocs();
+		for _ in 0..10 {
+			let mut again = super::reuse_areas(areas);
+			assert!(again.is_empty());
+			assert_eq!((again.as_ptr() as usize, again.capacity()), (at, room));
+			again.extend((0..40).map(|i| area(i as f32)));
+			areas = again;
+		}
+		assert_eq!(crate::perf::thread_allocs() - before, 0);
+	}
 
 	// Text fitted to a `ui_text_dip` width breaks at the same words at any
 	// scale, as a menu tip's does. Each length of x moves where a row ends.
@@ -1337,6 +1392,34 @@ mod tests {
 		assert_eq!(nearest_px(13.4), 13);
 		assert_eq!(nearest_px(16.0), 16);
 		assert_eq!(nearest_px(0.2), 1, "never no cell at all");
+	}
+
+	// A length of exactly N cells counts N at any cell size. In f32, 15 cells
+	// of 9.6 came to 144 px, and 144 / 9.6 to just under 15, so it counted 14.
+	// Test ID: dfe3p
+	#[test]
+	fn a_length_of_whole_cells_counts_every_cell() {
+		assert_eq!(cells_across(144.0, 9.6), 15);
+		assert_eq!(
+			cells_across(143.9, 9.6),
+			14,
+			"a real part cell is still cut"
+		);
+		assert_eq!(cells_across(0.0, 9.6), 1, "never no cells");
+		assert_eq!(cells_across(-5.0, 9.6), 1);
+		for cell in [
+			7.0, 8.4, 9.6, 10.65, 10.8, 12.578_125, 13.33, 16.2, 19.2, 24.0,
+		] {
+			for n in 1..1000 {
+				let len = n as f32 * cell;
+				assert_eq!(cells_across(len, cell), n, "{cell} x {n}");
+				assert_eq!(
+					cells_across(len - 0.5, cell),
+					(n - 1).max(1),
+					"{cell} x {n} short"
+				);
+			}
+		}
 	}
 
 	// A family resolved again, as on every font change and new window, comes

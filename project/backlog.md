@@ -34,6 +34,26 @@ Going forward, new issues in the new template at the bottom of this file will go
 
 ## Issues
 
+- Window auto-resize stopped working
+	- ID: 2026111700130407
+	- Type: Bug
+	- Status: Waiting for answers
+		- Waits on the question in questions.md about which resize is meant.
+	- Opened: 20261117-001304
+	- Opened by: JC
+	- Target version: rc.1
+	- Incorrect behavior: Window auto-resize stopped working.
+	- Notes:
+		- Possibly only when running Muffer?
+	- Reproduced: No. No doc or setting is called auto-resize, so each kind of automatic resize was tried, on the dev build and on the dogfood build from 11-10 that was running when this was filed.
+	- Progress log:
+		- 20261117: On Xvfb, with and without xfwm4, a program in the pane was told each new grid after every window resize. That held on the normal screen, on the alt screen with mouse tracking on, and with a frame every 50 ms in synchronized-output marks, like muffer. It also held for a window resized after its device was let go.
+		- 20261117: With Resize window on zoom on, each zoom resized the window and kept the rows. The columns were one more after the first zoom on the alt screen, and stayed there.
+		- 20261117: dpirand on X11 passed 5 cases, with drags, moves, zooms, resizes and relaunches across 2 to 4 monitors.
+		- 20261117: Not tried: monitors waking on a real desktop, which the rigs can't stand in for.
+	- Decisions:
+		- 20261117: No test yet. Which behavior to pin waits on the answer.
+
 - The window doesn't paint while the GPU is busy or short on memory, and stays blank after the load ends
 	- ID: 2026100312470535
 	- Type: Bug
@@ -195,21 +215,10 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- It's stalled until a cosmic-text release takes fontdb 0.24 or later, and winit's sctk-adwaita drops ab_glyph.
 	- Held for a cosmic-text release on fontdb 0.24 or later, and an sctk-adwaita without ab_glyph.
 
-- Window auto-resize stopped working
-	- ID: 2026111700130407
-	- Type: Bug
-	- Status: Queued
-	- Opened: 20261117-001304
-	- Opened by: JC
-	- Target version: rc.1
-	- Incorrect behavior: Window auto-resize stopped working.
-	- Notes:
-		- Possibly only when running Muffer?
-
 - Tab labels and the window title are worked out again on every frame
 	- ID: 2026111623500001
 	- Type: Enhancement
-	- Status: Queued
+	- Status: Done
 	- Priority: Avg
 	- Opened: 20261116-235000
 	- Opened by: CC
@@ -218,11 +227,25 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- Each frame copies every tab's title, command, and folder only to compare them with the last frame's, and builds the window title's parts before finding it unchanged.
 		- Work them out only when a tab's facts or a title input changed.
 		- Detail: `detail_backlog.md`, under this ID.
+	- Progress log:
+		- 20261117: The tab labels and the window title are done. A tab's facts are lent from its pane and compared where they are, and copied only when one moved. The window title is built only when what follows the app name, or the note after it, changed. The app name and dogfood part is worked out once.
+		- 20261117: At rest, in ddkre's window (2 tabs, 3 panes), the window thread went from 166 allocations per frame to 145, the same in a second pair of runs. A drag went from 325 to 328 per frame down to 304 to 306.
+		- 20261117: The tip and rating banner part of the detail is in child 2026111708444862, Done.
+	- Decisions:
+		- 20261117: The window title's source is now worked out without reading the tab's label, by `suffix_from`, so the caller can borrow it. The old `window_suffix` stays, test-only, so its tests run unchanged.
+		- 20261117: The tip and banner part went to a child. Their lines pass through 3 layout functions and the whole render, the per-line shaping costs more than the copy, and no window test puts a tip up to measure.
+	- Verified: 20261117. Both new tests fail with the old copy-then-compare and build-then-compare put back, and pass with the fix. The quick run passed, all 5 areas. Clippy for Windows is clean. It wasn't run on Windows, where the task probe's code path is the same as before.
+	- Swept: Every caller of `tab_facts`, `task()`, and `title_prefix`. The tab tip reads the lent facts too. The minimap still copies a running program's name each frame, as before, but no longer a finished one's. The tip and the banner are in the child.
+	- Branch: nov17-2026111623500001
+	- Commit: 172c03df
+	- Test case: `idle_frames_copy_no_tab_facts` (dfe46), no allocations over 240 idle frames. `an_unchanged_window_title_builds_nothing` (dfe45), no allocations over 240 frames with the title unchanged, and a new title for each part that moves. ddkre's figures above.
+	- Acceptance signoff: Self-closed: its last child, 2026111708444862, closed.
+	- Closed: 20261117-093908
 
 - Settings: tips, labels, and search results are built again on every frame or pointer move
 	- ID: 2026111623500002
 	- Type: Enhancement
-	- Status: Queued
+	- Status: Done
 	- Priority: Avg
 	- Opened: 20261116-235000
 	- Opened by: CC
@@ -231,25 +254,186 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- A pointer move over the dialog builds a row's whole tip text only to learn whether there is one.
 		- Each frame copies every label into a new string, and rebuilds each visible search result's heading trail.
 		- Detail: `detail_backlog.md`, under this ID.
+	- Progress log:
+		- 20261117: Measured as heap allocations on the test thread, debug build, the default dialog on the General tab. A sweep of 360 pointer spots, 141 of them over a tip, went from 2159 to 1. One frame's text went from 148 to 91 for 69 items. One frame's text with "size" typed in the search box went from 105 to 24.
+		- 20261117: Done: finding the tip under the pointer names it without building its words. The words are built only for a frame that draws the tip. A row's words are built to decide only when it has no help of its own.
+		- 20261117: Done: the dialog's text items borrow the fixed words (labels, tab titles, captions, icons, fixed options) rather than copying them each frame.
+		- 20261117: Done: each search result's line and marks are worked out once per query, not once per frame.
+		- 20261117: Done: the hotkey check that runs for every key of every row each frame turns away a key that isn't a hotkey before it walks the rows.
+	- Decisions:
+		- 20261117: A search result's line is still copied into its text item each frame, since a text item can only borrow fixed words. That copy is one string and one list per shown result, where the old path rebuilt the whole trail.
+		- 20261117: Left alone: the theme list that `choices` builds per call, since the frame path doesn't call it at rest, and `shell_cols`, which is a few sums with no allocation.
+	- Swept: every `TextItem` builder in `settings_ui.rs`, `picker.rs`, `prompt.rs` and `search.rs`. Every caller of `hover_tip`, now test only, and of `tip_under` in `dialog.rs`. Every caller of `dd_closed_label`, which now returns borrowed text for a fixed option. Every caller of `hotkey_for_key`.
+	- Verified: the quick gate passed in all 5 areas. Each new test failed with its part of the change undone (282 tip words built in the sweep, a label copied, 9 result lines worked out again) and passes with it.
+	- Branch: nov17-2026111623500002
+	- Commit: cd8c3861
+	- Test case: `only_a_drawn_tip_builds_its_words` (dfe4h), `a_frame_borrows_the_fixed_words` (dfe4j), `a_frame_reuses_the_result_lines` (dfe4k). The older `a_dialog_frame_looks_up_the_tip_once` (ddgh4) still passes.
+	- Acceptance signoff: Self-closed: the change does what the item asked, and its tests failed before and pass after.
+	- Closed: 20261117-085922
 
 - Window moves and resizes on Linux open a new X server connection for each question they ask
 	- ID: 2026111623500003
 	- Type: Enhancement
-	- Status: Queued
+	- Status: Done
 	- Priority: Avg
 	- Opened: 20261116-235000
 	- Opened by: CC
 	- Target OS: Linux
+	- Test environment: Xvfb with xfwm4; headless sway with Xwayland for herdback
 	- Target version: rc.1
 	- Requirements:
 		- Several monitor and button queries run per resize or move event, and each one connects to the X server again.
 		- Keep one connection per window.
 		- Detail: `detail_backlog.md`, under this ID.
+	- Progress log:
+		- 20261117: Measured on Xvfb under xfwm4, with per-monitor sizes on, as X server connects the process made. Before: 3 per move (layout, button held, monitor under the window), 1 per resize, 17 at launch. After: 0 per move, 0 per resize, 12 at launch.
+	- Decisions:
+		- 20261117: The window's state owns the connection, made at the first read and dropped with the window. A read that fails drops it, and the next read connects again, so a server that comes back is picked up.
+		- 20261117: The XWAYLAND check and the two fullscreen atoms are asked once per connection. The atoms are kept only once a window manager has made both.
+		- 20261117: The monitor list is still read from the server each time, since it changes without telling a connection that never asks for events. Its RandR requests now go out together before the replies are read.
+		- 20261117: Events the server sends every client unasked are read off and dropped after each read, so they can't pile up on a connection that lives as long as the window.
+		- 20261117: 2026100314050005 had left this alone as small. This item asks for it, so it's done here.
+	- Swept: every `x11rb::connect` in the source. The KDE blur hint and the initial window state (app.rs) run at startup or on a toggle. The transient-for hints, restack and work area (dialog.rs) run when a dialog opens or is activated. The GLX error hook and MIT-SHM check (gfx.rs) run at startup. None runs per move or resize.
+	- Verified: 20261117. dfe50 and dfe51 pass, and both fail with the connection dropped after every read. herdback (deqx1) passes all 20 checks and startsize (ddg81) passes, on the new build. Format, clippy and the unit tests (1477) passed in the quick gate. Clippy is clean for the Windows and macOS targets.
+	- Branch: nov17-2026111623500003
+	- Commit: 903fee6c
+	- Test case: `a_window_keeps_one_x_connection_across_its_reads` (dfe50), `a_failed_x_read_drops_the_connection_and_the_next_read_connects_again` (dfe51)
+	- Acceptance signoff: Self-closed: the change does what the item asked, measured before and after, and its tests fail with the keeping broken.
+	- Closed: 20261117-091811
+
+- A menu tip runs off a main window narrower than about 340 DIP
+	- ID: 2026111709545547
+	- Type: Bug
+	- Status: Done
+	- Severity: Low
+	- Opened: 20261117-095455
+	- Opened by: CC
+	- Related IDs: 2026111709403848
+	- Target version: rc.1
+	- Requirements: A menu tip wraps at a fixed 320 DIP, whatever the window's width, and the main window has no minimum width, so in a narrow window the box is wider than the window and its lines are cut off. Found by reading the code while fixing the tab tip, not seen on screen.
+	- Reproduced: 20261117. In a 260 pixel window, the File menu's first tip ran off the right edge mid-word. The new test failed with the old width.
+	- Actual cause: As described.
+	- Actual fix: A menu tip wraps at its 320 DIP width, or at the window's width less the box's padding and edge gap when that's narrower. A wide window wraps as before, so a resize there doesn't wrap the tip again.
+	- Decisions:
+		- 20261117: In a window too narrow for the tip on either side of the menu, it still goes to the left edge, over the menu. There's no room anywhere else.
+		- 20261117: A single word wider than the window still runs off, as in every other tip, since `tip::wrap` never splits a word.
+	- Verified: 20261117. dfe6n fails with the old width (a 324 wide box in a 120 wide window) and passes with the fix. dfe5r passes. ddkre passes, menu tip 23 per frame over rest, limit 28. In a 260 pixel window the same tip wraps onto 2 lines inside it. The quick run passed, all 5 areas.
+	- Swept: every caller of `tip::beside`, which is only the menu tip, and every use of `MENU_TIP_MAX_W`. The Settings tip uses `wrap_budget`, and the tab tip fits to the window since 2026111709403848.
+	- Test case: dfe6n `a_menu_tip_fits_a_window_narrower_than_its_cap`.
+	- Branch: nov17-2026111709545547
+	- Commit: c4edf86d
+	- Acceptance signoff: Self-closed: the bug was reproduced, its test failed before the fix and passes after, and the wrapped tip was checked in a narrow window.
+	- Closed: 20261117-100426
+
+- A tab tip wider than the window runs off its right edge
+	- ID: 2026111709403848
+	- Type: Bug
+	- Status: Done
+	- Severity: Low
+	- Opened: 20261117-094038
+	- Opened by: CC
+	- Target version: rc.1
+	- Requirements: A tab tip with a long path or shell command is wider than a 900 pixel window, starts at the left edge, and its lines are cut off at the right. Seen in ddkre's window, whose shell command is a long temp path. Control: `tab_tip_layout` only clamps the box's left to 0, and never shortens or wraps a line, so any line wider than the window does this.
+	- Reproduced: 20261117 in unit tests. A table line wider than its budget came back as one line, as wide as before.
+	- Actual cause: As described. The tip's box was as wide as its longest line, with nothing that fitted a line to the window.
+	- Actual fix: A line wider than the window, less the box's padding, goes on over more lines indented to the value column. Each line's fit is kept until it, the window's width, or the text context changes, so a clock tick fits only the clock line again.
+	- Decisions:
+		- 20261117: Wrap rather than cut the line short, since the tip is where the whole path is shown, and the other tips already wrap to the window.
+		- 20261117: A line breaks after a slash, a backslash, or a space when one falls in the back half of the room, and anywhere otherwise. A window too narrow for the key column wraps the whole line flush left.
+		- 20261117: The fit is kept per line. Fitting every line on each clock tick took ddkre's tab tip to 90 allocations per frame over rest, against its limit of 43.
+	- Verified: 20261117. Both new tests fail with the wrap turned off and pass with it. dfe5s and ddgfv pass. ddkre passes, 38 per frame over rest with the tab tip up. In ddkre's 900 pixel window, its long shell command and path wrap under the value column inside the window. The quick run passed, all 5 areas.
+	- Swept: every place the tab tip's lines are read: `tab_tip_layout`, the frame's overlay in `render_with`, and `update_tab_tip`. Menu and Settings tips already wrap. A menu tip's wrap width doesn't follow the window, filed as 2026111709545547. The benchmark banner is fixed text.
+	- Test case: dfe67 `a_tip_line_too_wide_wraps_under_its_value`, dfe68 `a_tab_tip_wraps_to_the_window_it_is_in`.
+	- Branch: nov17-2026111709403848
+	- Commit: db50621c
+	- Acceptance signoff: Self-closed: the bug was reproduced in tests, which failed before the fix and pass after, and the wrapped tip was checked in a real window.
+	- Closed: 20261117-095507
+
+- At some cell widths a window or pane exactly N cells wide shows N-1
+	- ID: 2026111708192137
+	- Type: Bug
+	- Status: Done
+	- Severity: Low
+	- Opened: 20261117-081921
+	- Opened by: CC
+	- Related IDs: 2026111708050191
+	- Target OS: All
+	- Incorrect behavior: The grid is counted by dividing the width by the cell width and rounding down in single precision. With a cell of 9.6, 15 cells make 144, which divides back to just under 15, so it counts 14. The window size read back from a grid, and the pane's own column count, both do this.
+	- Expected behavior: A width that holds N whole cells counts as N.
+	- Note: Found while fixing 2026111708050191. Cell sizes that are binary fractions, as in ddyqp, never hit it. Whether a real font's cell lands on one isn't known.
+	- Reproduced: 20261117 in unit tests. At a cell of 9.6, a length of 144 px counted 14 cells, and the window's and the pane's counts failed the same way.
+	- Actual cause: As described. The window's size and the pane's grid each floored the width over the cell in f32, and a product that rounds down a hair reads as one cell short.
+	- Actual fix: Both counts go through one helper, which counts a cell when the length is within a hundredth of a pixel of it.
+	- Decisions:
+		- 20261117: The slack is 0.01 px. It's well past the f32 error at the largest window, and the part of the last cell it lets through can't be seen. The text buffer doesn't wrap, so a column that much over the width still draws.
+		- 20261117: The width a grid asks for, `window_px`, is left as it is. It still rounds up, which the zoom fix in 2026111708050191 relies on.
+	- Swept: every place a grid count comes from a length over a cell. There are 2, the window's `cells_in` and the pane's `content_dims`, and both use the helper now. The other floors over a cell map a mouse point to a cell, and the command line's split size is a ratio, not a count.
+	- Verified: 20261117. The 3 new tests failed with the slack at 0 and pass with it. dfe3c and ddyqp still pass. The quick gate passed, all 5 areas.
+	- Test case: dfe3p `a_length_of_whole_cells_counts_every_cell`, dfe3q `a_grid_reads_back_at_any_cell_size`, dfe3r `a_pane_of_whole_cells_shows_every_cell`.
+	- Branch: nov17-2026111708192137
+	- Commit: 79c98a84
+	- Acceptance signoff: Self-closed: the bug was reproduced in tests, which failed before the fix and pass after.
+	- Closed: 20261117-082900
+
+- With Resize window on zoom on, a zoom on the alt screen adds a column
+	- ID: 2026111708050191
+	- Type: Bug
+	- Status: Done
+	- Severity: Low
+	- Opened: 20261117-080501
+	- Opened by: CC
+	- Related IDs: 2026111700130407
+	- Target OS: All
+	- Steps to reproduce: Turn on Resize window on zoom. Run a full-screen program such as less in a 700x400 window, then press Ctrl+Plus.
+	- Incorrect behavior: The program is told one column more than it had, 64 then 65. On the normal screen the grid is kept, 55 then 55.
+	- Expected behavior: The program keeps its columns and rows.
+	- Note: Found on Xvfb while working 2026111700130407, on the dev build and the 11-10 dogfood build. The alt screen hides the minimap column, which the zoom's size may still count.
+	- Reproduced: 20261117 on Xvfb, with the setting on and a program on the alt screen. The zoom held 64 columns and asked for a window 65 wide.
+	- Origin: e5f8a69, the commit that added Resize window on zoom.
+	- Actual cause: After finding the least width that shows the pane's grid, the zoom rounds it out to whole cells of the window's grid, so the saved size reopens as big. That width was already whole cells, but its pixel count was rounded up, so it read as a bit over 64 cells, and rounding up again made it 65. With the minimap on, the least width usually falls partway into a cell, which is why the normal screen kept its grid. The minimap isn't involved.
+	- Actual fix: A width already at whole cells stays as it is. Any other width goes out to the next whole cell, as before.
+	- Verified: 20261117 on Xvfb, the rig with the fix kept 64 columns on the alt screen and 55 on the normal screen through 2 zooms in and 1 out, and the saved grid stayed 64x15. The new test failed on the old code and passes now. The quick gate passed, all 5 areas.
+	- Swept: the other `ceil` near a cell size in the source is `window_px` itself, which this relies on. The height takes the same path, through the same function.
+	- Decisions:
+		- 20261117: The float edge found on the way, where a width of exactly N cells counts as N-1 at some cell sizes, is its own item, 2026111708192137. It's older than this and touches every grid count.
+	- Test case: dfe3c `a_size_already_at_whole_cells_keeps_its_grid`.
+	- Branch: nov17-2026111708050191
+	- Commit: f8ac2cb1
+	- Acceptance signoff: Self-closed: the bug was reproduced, its test failed before the fix and passes after, and the rig shows the program keeps its grid.
+	- Closed: 20261117-082100
+
+- The tab tip and the rating banner copy every line on each frame they show
+	- ID: 2026111708444862
+	- Type: Enhancement
+	- Status: Done
+	- Priority: Low
+	- Opened: 20261117-084448
+	- Opened by: CC
+	- Parent ID: 2026111623500001
+	- Target version: rc.1
+	- Requirements:
+		- While the tab tip or the rating banner is up, each frame copies all its lines out of the kept copy, since the frame keeps them across calls that change the window's state.
+		- Lend the lines to the frame instead.
+		- Detail: `detail_backlog.md`, under 2026111623500001, third bullet.
+	- Progress log:
+		- 20261117: Done: the tab tip, a menu tip, and the banner hand the frame where their box and lines go, and the frame borrows the words from where they're kept. The banner's words are fixed text, so it never copies them.
+		- 20261117: Measured in ddkre's window as allocations per frame on the window thread. With a tab tip up it went from 190 to 192 down to 184 to 185, 145 at rest in every run. With a menu tip up, 179 down to 168, with 2026111623500004 in.
+		- 20261117: What's left over rest, about 40 with a tab tip and 23 with a menu tip, is mostly the second render pass the tip layer adds. That wasn't split out further.
+	- Decisions:
+		- 20261117: The banner keeps its line lefts in a fixed array of 4. Every banner text has 2 or 3 lines, and dfe5w fails on one with more.
+		- 20261117: ddkre now holds a tab tip and a menu tip up, and checks each frame's count over the frame at rest, so the driver's floor cancels out. Limits 43 and 28. The window prints a note as each tip comes up, so a hover that missed fails rather than passing on nothing.
+	- Verified: 20261117. ddkre passes on the new build and fails both tip limits on the old one (47 and 34 over rest). The quick run passed fmt, clippy, tests, scripts, and docs, the last 2 run again after the first full call ran past 4 minutes.
+	- Swept: every caller of `tab_tip_layout`, `menu_tip_layout`, and `bench_layout`, all in `render_with`. Nothing past them in the frame takes `&mut self`.
+	- Branch: nov17-2026111708444862
+	- Commit: 0aa7ed15
+	- Test case: `an_overlay_lends_its_words` (dfe5s), the frame's lines are the kept strings and placing them allocates nothing. `every_banner_fits_its_kept_lefts` (dfe5w). ddkre's tab tip limit, which the old build fails.
+	- Acceptance signoff: Self-closed: the change does what the item asked, and its window check fails before and passes after.
+	- Closed: 20261117-093908
 
 - Tips and the menu bar measure their text again on each frame or hit test
 	- ID: 2026111623500004
 	- Type: Enhancement
-	- Status: Queued
+	- Status: Done
 	- Priority: Low
 	- Opened: 20261116-235000
 	- Opened by: CC
@@ -258,11 +442,24 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- A tip on screen is wrapped and then measured a second time on every frame.
 		- Every click or hover test on the menu bar measures all its titles again.
 		- Detail: `detail_backlog.md`, under this ID.
+	- Progress log:
+		- 20261117: Done: a menu tip and a Settings tip are wrapped and measured once while they stay up, and again only when the words, the width, or the font change.
+		- 20261117: Done: the menu bar's titles and copy labels are measured once per text context, which a font, size, or scale change replaces. Before, each hit test and frame looked all 9 up again in the width memo.
+		- 20261117: Measured in ddkre's window, a frame with a menu tip up went from 179 allocations to 168, with 2026111708444862 in. 240 frames of a kept tip allocate nothing, where wrapping it each frame took 2640. 240 menu bar lookups measure once, where they measured 241 times.
+	- Decisions:
+		- 20261117: The kept tip lives in the window's state for a menu tip, and beside the dialog's shaped text for a Settings tip, which is taken out for the frame so shaping can use the rest.
+	- Verified: 20261117. Each new test fails with its cache turned off (2640 allocations, 241 measures, 5 wraps over 6 frames) and passes with it. The quick run passed, all 5 areas.
+	- Swept: every `tip::wrap` caller outside tests: the menu tip, the Settings tip, and none else. The About link's tip is one line and was measured once already. Every caller of `menubar_layout` and `copybox_layout`.
+	- Branch: nov17-2026111708444862
+	- Commit: 0aa7ed15
+	- Test case: `a_kept_tip_is_wrapped_once_while_it_stays_up` (dfe5r), `a_drawn_tip_is_wrapped_once_while_it_stays_up` (dfe5v), `the_menu_bar_measures_its_text_once` (dfe5t). ddkre's menu tip limit, which the old build fails.
+	- Acceptance signoff: Self-closed: the change does what the item asked, and its tests failed before and pass after.
+	- Closed: 20261117-093908
 
 - A Settings change copies the whole settings model
 	- ID: 2026111623500005
 	- Type: Enhancement
-	- Status: Queued
+	- Status: Done
 	- Priority: Low
 	- Opened: 20261116-235000
 	- Opened by: CC
@@ -270,11 +467,23 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Requirements:
 		- Each change, including each step of a slider drag, clones the model before setting one value.
 		- Detail: `detail_backlog.md`, under this ID.
+	- Progress log:
+		- 20261117: Measured with every setting stored (96 values): the copy cost 135 allocations, and a change 617, against 480 for the fill after it.
+		- 20261117: The Settings rules now read only the fields they need, never the model, so a change and a reset set the model in place. A theme pick's font does the same. A change now costs 482 allocations, the fill and 2 more.
+	- Decisions:
+		- 20261117: The theme save's what-if for colors under a switch still works on a copy, since it must leave the stored values alone and runs only on a save.
+	- Branch: nov17-2026111623500005
+	- Commit: fb77c7f4
+	- Test case: dfe70 `a_change_does_not_copy_the_model`. A change or a reset with every setting stored costs less than a quarter of the stored count beyond a fill.
+	- Verified: 20261117. dfe70 fails with the copy put back (617 against a fill's 480) and passes with the fix. The quick run passes, all five areas, 1486 unit tests. Miri wasn't run, since the quick run has no Miri area and the new test is skipped under Miri.
+	- Swept: every `model.clone()` in the tree. `set`, `reset` and the theme font path are fixed. The theme save's what-if is kept, per Decisions. The other is in a config test. Every `Env::new` caller still builds through the same fields.
+	- Acceptance signoff: Self-closed: the cost was pinned by a test that fails on the old code, and the rules read the same values as before.
+	- Closed: 20261117-101357
 
 - Launch reads and parses config.shcl about 12 times
 	- ID: 2026111623500006
 	- Type: Enhancement
-	- Status: Queued
+	- Status: Done
 	- Priority: Low
 	- Opened: 20261116-235000
 	- Opened by: CC
@@ -283,11 +492,25 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- Each launch step reads the file again, and the last one parses the same text 3 more times.
 		- Read and parse it once.
 		- Detail: `detail_backlog.md`, under this ID.
+	- Progress log:
+		- 20261117: Counted on a launch with no display, which stops after the settings read. A launch with a current file opened `config.shcl` 10 times and ran 22 shcl parses, 20 of them on the file's text. Now it opens it once and runs 11 parses, 9 on the file's text. A first launch with no file went from 11 opens to 2.
+	- Decisions:
+		- 20261117: The file is read once before the launch steps. Each step works on the text the one before it left, and a write that fails, or that the test guard skips, reads the file again.
+		- 20261117: The last step parses once, and that document feeds the complaints, the values and the settings model. A write's restated messages parse once too.
+		- 20261117: Departs from "parse it once". Each step still checks the text it gets for an older format, since a step can change the text. The check skips its second parse for a file with no errors, which shcl's upgrade leaves as it is anyway. The legacy check parses only when a flat old name is there. The state move parses its second copy only for a file that has state in it.
+		- 20261117: The `walk_settings` path change in the detail was tried and measured at about 2% of a walk, which is about 48 microseconds. Not kept.
+	- Swept: every `std::fs::read` of the settings path inside `load`, all of them now through the one read. `restated_launch_messages` shared the double parse and takes the single one. Saves and the dialog read the file on their own and aren't part of a launch.
+	- Verified: 20261117. dfe7m and dfe7n pass, and both fail with a step that reads the disk again or a write the next step doesn't see. The quick gate passed: format, clippy, 1488 unit tests, script lints, and docs.
+	- Branch: nov17-2026111623500006
+	- Commit: 99bdc11a
+	- Test case: `the_launch_steps_read_the_settings_file_once` (dfe7m), `each_launch_step_reads_what_the_one_before_it_wrote` (dfe7n)
+	- Acceptance signoff: Self-closed: internal change, measured before and after, and its tests fail with the single read broken.
+	- Closed: 20261117-104300
 
 - Smaller allocations made on every frame in the render and dialog paths
 	- ID: 2026111623500007
 	- Type: Enhancement
-	- Status: Queued
+	- Status: Done
 	- Priority: Low
 	- Opened: 20261116-235000
 	- Opened by: CC
@@ -295,11 +518,26 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Requirements:
 		- About 10 places make a new list or string each frame where a kept buffer or a borrow would do. None is large alone.
 		- Detail: `detail_backlog.md`, under this ID.
+	- Progress log:
+		- 20261117: Done: the window's text area lists, main and halo, are kept between frames, and the menu and tip areas go to the renderer without a list. The dialog does the same for its 3 area lists.
+		- 20261117: Done: a rebuild puts the row fingerprints into the list it swapped out last time.
+		- 20261117: Done: the dialog finds kept shaped text by a borrowed key, so a frame at rest builds no key. Its rect and text lists are kept between frames too.
+		- 20261117: Measured in ddkre's window, allocations per frame on the window thread, 3 runs each. A drag went from 307, 302, 302 to 296, 298, 294. At rest and with a tip up it's the same as before, since those frames skip the area build. A default Settings frame at rest, on the test thread, went from 201 to 129 for 69 text items, with the old key build put back for the before figure.
+	- Decisions:
+		- 20261117: Left alone: the template's expanded copies, since tab labels are now built only when something they show changes, and the color emoji fallback's family list, which is built once per character and kept.
+		- 20261117: `snapshot_rows` stays for the tests and the replay, as a wrapper over the new `snapshot_rows_into`. The dialog's `compose` and `scene` do the same over `compose_into` and `scene_into`.
+	- Verified: 20261117. Each new test fails with its part undone (a new list in place of the kept one; a key built for each lookup, 360 allocations over 60 frames; the dialog's lists not kept, 132 against 132) and passes with it. ddgh2 passes. The quick run passed, all 5 areas.
+	- Swept: every caller of the 4 `prepare` functions in `text.rs`, in `app.rs` and `dialog.rs`. Every list of `TextArea` in the source. Every place that sets `last_rows`; `pane/replay.rs` is test-only and keeps its own list.
+	- Test case: `reused_areas_keep_their_buffer` (dfe85), `kept_text_is_found_without_building_a_key` (dfe86), `a_frame_fills_the_last_frames_lists` (dfe87). ddkre's drag figures above.
+	- Branch: nov17-2026111623500007
+	- Commit: 5cc9ed6d
+	- Acceptance signoff: Self-closed: the change does what the item asked, its tests failed before and pass after, and the drag measured lower.
+	- Closed: 20261117-105807
 
 - Windows GUI test pixel checks read one pixel per call
 	- ID: 2026111623500008
 	- Type: Task
-	- Status: Queued
+	- Status: Done
 	- Priority: Low
 	- Opened: 20261116-235000
 	- Opened by: CC
@@ -309,6 +547,19 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- The ink and diff checks call `GetPixel` 35k to 60k times per image, which takes seconds per check.
 		- Read the bitmap's bytes once instead. It needs a Windows box to test.
 		- Detail: `detail_backlog.md`, under this ID.
+	- Actual fix: `fInk` and `fDiff` lock the bitmap as 32-bit ARGB and count in a small C# class, a row at a time. The thresholds, sampling and rounding are the same as before.
+	- Decisions:
+		- 20261117: The C# takes the locked memory and its stride rather than a `Bitmap`, so it needs no System.Drawing reference under either PowerShell, and its counting can be tested on Linux.
+		- 20261117: `fDiff` of a bitmap against itself returns 0 without locking, since a bitmap can't be locked twice. A step under 1 counts as 1, where the old loop never ended.
+	- Verified: 20261117 on b29w. The old and new functions gave the same answer in all 270 cases: 15 images in 32-bit, premultiplied, 24-bit, 16-bit, 8-bit indexed, BMP-loaded, cropped and bottom-up forms, sizes from 1x1 to 1280x720, steps 1 to 7, and edge cases. On a 1280x720 image, ink took 266 ms of CPU before and under 2 ms after, and diff 1.3 to 2.2 s before and 2.3 ms after, at 1 to 4% load. The `smoke` and `settingsdlg` scenarios passed with the change, and `idlewake`'s ink and diff readings looked as before.
+		- `idlewake`'s opaque arm failed "typing reached the shell" in that run. That check types and looks for a file, and doesn't read pixels.
+		- The new test dfe8t failed with the old `_lib.ps1`, with the ink line moved to 40, and with the second bitmap's stride ignored. It passes with the fix.
+	- Swept: every caller of `fInk` and `fDiff` under `cicd/tests/wingui` (`_gpuload`, `idlemin`, `idlewake`, `livecfg`, `perfladder`, `settingsdlg`, `smoke`, `softrender`, `wpremote`). `GetPixel` isn't used anywhere else in the repo.
+	- Test case: `cicd/tests/wingui/pixels-test.bash` (dfe8t), which checks the C# counts against one pixel at a time, rows top first and bottom first. The Windows comparison was a one-off rig, kept outside the repo.
+	- Branch: nov17-2026111623500008
+	- Commit: 2b981c4c
+	- Acceptance signoff: Self-closed: old and new gave the same answers on b29w, and the new test fails on the old code.
+	- Closed: 20261117-112921
 
 - **Stop here to work on releasing rc.1**.
 

@@ -24,7 +24,7 @@
 //!
 //! The path style is passed in rather than read off `cfg!`, so tests cover the
 //! Windows and posix forms on any box. The window title is worked out here too
-//! (`window_suffix`), since it's built from the same parts.
+//! (`suffix_from`), since it's built from the same parts.
 
 use crate::template::{self, Template};
 
@@ -360,8 +360,43 @@ pub fn program_title<'a>(
 /// A typed title is shown as typed, as the tab shows it too, while a
 /// program's is trimmed, since nobody chose its spacing, and has any marker a
 /// console wrote into it taken off. `launched` is the program the pane was
-/// started with, which is how that marker is known in any language. `tab` is
-/// only worked out when it's needed, since that isn't free.
+/// started with, which is how that marker is known in any language. The tab's
+/// own label is only named as the source, not read, since it isn't free, and
+/// nothing is copied, since this is asked on every frame.
+pub fn suffix_from<'a>(
+	rights: Rights,
+	typed: Option<&'a str>,
+	program: Option<&'a str>,
+	launched: Option<&str>,
+	show_tab: bool,
+) -> Option<Suffix<'a>> {
+	let program = program.and_then(|title| program_title(rights, title, launched));
+	// With the tab switched off as a source, both of its answers go: the name
+	// typed on it and the text it works out for itself. A program's own title
+	// still comes through, and a `--title` never gets here.
+	if !show_tab {
+		return program.map(Suffix::Said);
+	}
+	if let Some(typed) = typed {
+		if !typed.trim().is_empty() {
+			return Some(Suffix::Said(typed));
+		}
+		return program.map(Suffix::Said);
+	}
+	Some(program.map_or(Suffix::Tab, Suffix::Said))
+}
+
+/// Where the window title's suffix comes from: text it was given, or the
+/// tab's own label (see `suffix_from`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Suffix<'a> {
+	Said(&'a str),
+	Tab,
+}
+
+/// `suffix_from` with the tab's label worked out by `tab`, only when it's the
+/// one used.
+#[cfg(test)]
 pub fn window_suffix(
 	rights: Rights,
 	typed: Option<&str>,
@@ -370,20 +405,44 @@ pub fn window_suffix(
 	show_tab: bool,
 	tab: impl FnOnce() -> String,
 ) -> Option<String> {
-	let program = program.and_then(|title| program_title(rights, title, launched));
-	// With the tab switched off as a source, both of its answers go: the name
-	// typed on it and the text it works out for itself. A program's own title
-	// still comes through, and a `--title` never gets here.
-	if !show_tab {
-		return program.map(str::to_string);
-	}
-	if let Some(typed) = typed {
-		if !typed.trim().is_empty() {
-			return Some(typed.to_string());
+	suffix_from(rights, typed, program, launched, show_tab).map(|from| match from {
+		Suffix::Said(said) => said.to_string(),
+		Suffix::Tab => tab(),
+	})
+}
+
+/// The window title as last set, kept by what it was made from, so a frame
+/// that changes none of that builds nothing.
+#[derive(Debug, Default)]
+pub struct KeptTitle {
+	made_from: Option<(Option<String>, Option<&'static str>)>,
+}
+
+impl KeptTitle {
+	/// The title to set, or None when it would read as it does now. The rights,
+	/// a `--title` and the prefix are fixed for a window, so only the suffix and
+	/// the note are compared.
+	pub fn update(
+		&mut self,
+		rights: Rights,
+		custom: Option<&str>,
+		prefix: &str,
+		suffix: Option<&str>,
+		note: Option<&'static str>,
+	) -> Option<String> {
+		if self
+			.made_from
+			.as_ref()
+			.is_some_and(|(said, was)| said.as_deref() == suffix && *was == note)
+		{
+			return None;
 		}
-		return program.map(str::to_string);
+		self.made_from = Some((suffix.map(str::to_string), note));
+		Some(with_note(
+			window_title(rights, custom, prefix, suffix),
+			note,
+		))
 	}
-	Some(program.map_or_else(tab, str::to_string))
 }
 
 /// The whole window title. A `--title` given on the command line is used as is,
@@ -941,7 +1000,8 @@ pub fn tip_value(value: &str) -> String {
 /// left the way a table does. That's why the tip is drawn in the terminal font
 /// rather than the interface one, since padding with spaces aligns nothing in a
 /// proportional face. The key is padded, never the value, so a long path runs on
-/// to the right and the box grows for it instead of the column moving.
+/// to the right and the box grows for it instead of the column moving, up to the
+/// window's width (see `fit_tip_line`).
 pub fn tip_lines(rows: &[(&str, String)]) -> Vec<String> {
 	let key_w = rows
 		.iter()
@@ -954,6 +1014,89 @@ pub fn tip_lines(rows: &[(&str, String)]) -> Vec<String> {
 			format!("{key}:{:pad$} {value}", "")
 		})
 		.collect()
+}
+
+/// One of the tip's lines fitted to `budget`, and its width once fitted. A line
+/// that's too wide goes on over more lines, each indented to the value column,
+/// so the keys still read down the left and the whole path still shows. None
+/// when it already fits, which is nearly always, so the caller keeps its own.
+pub fn fit_tip_line(
+	line: &str,
+	budget: f32,
+	mut measure: impl FnMut(&str) -> f32,
+) -> (Option<Vec<String>>, f32) {
+	let w = measure(line);
+	if w <= budget {
+		return (None, w);
+	}
+	let mut pieces = Vec::new();
+	wrap_tip_line(line, budget, &mut measure, &mut pieces);
+	let widest = pieces
+		.iter()
+		.fold(0.0f32, |widest, piece| widest.max(measure(piece)));
+	(Some(pieces), widest)
+}
+
+// One line over the budget, broken after a path separator or a space where one
+// falls in the back half of the room, and anywhere otherwise, since a path or a
+// command can run a long way without either.
+fn wrap_tip_line(
+	line: &str,
+	budget: f32,
+	measure: &mut impl FnMut(&str) -> f32,
+	out: &mut Vec<String>,
+) {
+	// the value starts after the key's colon and its padding (tip_lines)
+	let col = line.find(':').map_or(0, |colon| {
+		line[colon + 1..]
+			.find(|c: char| c != ' ')
+			.map_or(line.len(), |i| colon + 1 + i)
+	});
+	let (mut key, mut rest) = line.split_at(col);
+	let mut indent = " ".repeat(key.chars().count());
+	// a window too narrow for the key column wraps the whole line flush left
+	if measure(&indent) > budget * 0.5 {
+		indent.clear();
+		(key, rest) = ("", line);
+	}
+	let mut head = key.to_string();
+	let mut candidate = String::new();
+	while !rest.is_empty() {
+		let ends: Vec<usize> = rest.char_indices().map(|(i, c)| i + c.len_utf8()).collect();
+		let mut fits = |end: usize| {
+			candidate.clear();
+			candidate.push_str(&head);
+			candidate.push_str(&rest[..end]);
+			measure(&candidate) <= budget
+		};
+		// how many chars fit, at least one so a line always moves on
+		let (mut lo, mut hi) = (1, ends.len());
+		if fits(ends[hi - 1]) {
+			lo = hi;
+		}
+		while lo < hi {
+			let mid = (lo + hi).div_ceil(2);
+			if fits(ends[mid - 1]) {
+				lo = mid;
+			} else {
+				hi = mid - 1;
+			}
+		}
+		let mut take = lo;
+		if take < ends.len() {
+			let room = &rest[..ends[take - 1]];
+			if let Some(at) = room.rfind(['/', '\\', ' ']) {
+				let after = room[..=at].chars().count();
+				if after * 2 >= take {
+					take = after;
+				}
+			}
+		}
+		let (piece, more) = rest.split_at(ends[take - 1]);
+		head.push_str(piece);
+		out.push(std::mem::replace(&mut head, indent.clone()));
+		rest = more;
+	}
 }
 
 /// How long a tab has been open, at the coarseness a person reads at a glance.
@@ -977,10 +1120,10 @@ pub fn elapsed(secs: u64) -> String {
 #[cfg(test)]
 mod tests {
 	use super::{
-		DEFAULT_TAB_TEXT, Demand, Facts, Parts, Rights, Style, Task, clamp_page, elapsed, page_for,
-		path_forms, plain, program_says, program_title, shell_forms, slot_at_x, slot_x,
-		tab_template, tab_template_or_default, tab_text_for, tabs_that_fit, task_name_forms,
-		tip_lines, tip_value, widths, window_suffix, window_title, with_note,
+		DEFAULT_TAB_TEXT, Demand, Facts, Parts, Rights, Style, Task, clamp_page, elapsed,
+		fit_tip_line, page_for, path_forms, plain, program_says, program_title, shell_forms,
+		slot_at_x, slot_x, tab_template, tab_template_or_default, tab_text_for, tabs_that_fit,
+		task_name_forms, tip_lines, tip_value, widths, window_suffix, window_title, with_note,
 	};
 
 	// The tests below were written against the 4 check boxes, so they ask in
@@ -1070,6 +1213,77 @@ mod tests {
 		for line in &lines {
 			assert_eq!(value_col(line), first, "{line:?} is out of column");
 		}
+	}
+
+	// A line wider than the window goes on over more lines indented to the value
+	// column. It breaks after a separator when one is near the end of the room,
+	// and anywhere when there isn't one, and no character is lost or added.
+	// Test ID: dfe67
+	#[test]
+	fn a_tip_line_too_wide_wraps_under_its_value() {
+		// every line fitted, as the tab tip does it
+		fn fit_tip_lines(
+			lines: &[String],
+			budget: f32,
+			measure: &dyn Fn(&str) -> f32,
+		) -> (Option<Vec<String>>, f32) {
+			let mut widest = 0.0f32;
+			let mut fitted = Vec::new();
+			let mut wrapped = false;
+			for line in lines {
+				let (pieces, w) = fit_tip_line(line, budget, measure);
+				widest = widest.max(w);
+				wrapped |= pieces.is_some();
+				fitted.extend(pieces.unwrap_or_else(|| vec![line.clone()]));
+			}
+			(wrapped.then_some(fitted), widest)
+		}
+		let mono = |line: &str| line.chars().count() as f32 * 10.0;
+		let lines = tip_lines(&[
+			(
+				"Shell command",
+				"/home/someone/a/b/c/dddddddddd/eeeeeeeeeeeeeeeeeeeeeeeeeeeeee".to_string(),
+			),
+			("Open", "3s".to_string()),
+		]);
+		assert_eq!(
+			fit_tip_lines(&lines, 1000.0, &mono),
+			(None, 760.0),
+			"all fit"
+		);
+		let (fitted, widest) = fit_tip_lines(&lines, 300.0, &mono);
+		let fitted = fitted.expect("a line wraps");
+		assert!(widest <= 300.0);
+		assert_eq!(
+			fitted,
+			[
+				"Shell command: /home/someone/",
+				"               a/b/c/ddddddddd",
+				"               d/eeeeeeeeeeeee",
+				"               eeeeeeeeeeeeeee",
+				"               ee",
+				"Open:          3s",
+			]
+		);
+		// a window too narrow for the key column still shows every character, and
+		// each line moves on by at least one
+		let (fitted, _) = fit_tip_lines(&lines, 40.0, &mono);
+		let fitted = fitted.expect("everything wraps");
+		assert!(fitted.iter().all(|line| mono(line) <= 40.0), "{fitted:?}");
+		let joined: String = fitted.concat().replace(' ', "");
+		assert_eq!(joined, lines.concat().replace(' ', ""));
+		// a value with spaces breaks after one, wide characters measured as such
+		let wide = |line: &str| {
+			line.chars()
+				.map(|c| if c.is_ascii() { 10.0 } else { 20.0 })
+				.sum::<f32>()
+		};
+		let lines = tip_lines(&[("Running", "\"日本語 のプログラム です\"".to_string())]);
+		let (fitted, widest) = fit_tip_lines(&lines, 200.0, &wide);
+		let fitted = fitted.expect("it wraps");
+		assert!(widest <= 200.0, "{fitted:?}");
+		assert_eq!(fitted[0], "Running: \"日本語 ");
+		assert!(fitted[1..].iter().all(|line| line.starts_with("         ")));
 	}
 
 	// The anchor and the trailing separator are what tell a reader this is a
@@ -2451,6 +2665,60 @@ mod tests {
 			tab_template_or_default("%shell% %Current_Directory%"),
 			tab_template("%SHELL% %CURRENT_DIRECTORY%").expect("reads")
 		);
+	}
+
+	// A frame drawn with the window title's parts as they were. Its suffix used
+	// to be copied out and the whole title built, only to be found unchanged.
+	// Test ID: dfe45
+	#[test]
+	fn an_unchanged_window_title_builds_nothing() {
+		use super::{KeptTitle, Suffix, suffix_from};
+		fn frame(
+			kept: &mut KeptTitle,
+			typed: Option<&str>,
+			program: Option<&str>,
+			note: Option<&'static str>,
+		) -> Option<String> {
+			let rights = Rights::default();
+			let suffix = match suffix_from(rights, typed, program, None, true) {
+				Some(Suffix::Said(said)) => Some(said),
+				Some(Suffix::Tab) => Some("Work shell - ~/src"),
+				None => None,
+			};
+			kept.update(rights, None, "SilkTerm", suffix, note)
+		}
+		let mut kept = KeptTitle::default();
+		assert_eq!(
+			frame(&mut kept, None, Some("vim notes.md"), None).as_deref(),
+			Some("SilkTerm - vim notes.md")
+		);
+		let before = crate::perf::thread_allocs();
+		for _ in 0..240 {
+			assert_eq!(frame(&mut kept, None, Some("vim notes.md"), None), None);
+		}
+		let spent = crate::perf::thread_allocs() - before;
+		assert_eq!(spent, 0, "allocations over 240 frames, title unchanged");
+		// Each part that moves makes a new title.
+		let moves: [(Option<&str>, Option<&str>, Option<&'static str>, &str); 5] = [
+			(None, Some("htop"), None, "SilkTerm - htop"),
+			(None, None, None, "SilkTerm - Work shell - ~/src"),
+			(Some("Logs"), None, None, "SilkTerm - Logs"),
+			(Some("Logs"), None, Some("idle"), "SilkTerm - Logs (idle)"),
+			(Some("Logs"), None, None, "SilkTerm - Logs"),
+		];
+		for (typed, program, note, want) in moves {
+			assert_eq!(
+				frame(&mut kept, typed, program, note).as_deref(),
+				Some(want)
+			);
+			assert_eq!(frame(&mut kept, typed, program, note), None, "{want}");
+		}
+		// The count above means something only where the counter counts.
+		if cfg!(debug_assertions) {
+			let before = crate::perf::thread_allocs();
+			std::hint::black_box(String::from("x"));
+			assert!(crate::perf::thread_allocs() > before);
+		}
 	}
 
 	// What a tab said before the template, kept as it was so the default

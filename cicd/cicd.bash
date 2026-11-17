@@ -1252,6 +1252,8 @@ fScriptTests(){
 	## The Windows scenario harness, which once tested whatever the box last built
 	## and stopped every SilkTerm on a shared box.
 	fRunTest cicd/tests/wingui/harness-test.bash "windows scenario harness"
+	## The scenarios' ink and diff checks, which once took seconds each.
+	fRunTest cicd/tests/wingui/pixels-test.bash "windows scenario pixel checks"
 	## The wine launcher, which once left dead file types on the desktop.
 	fRunTest cicd/tests/wine/run.bash "wine launcher"
 	## The wallpaper gallery and contact sheet are rendered, so they go stale in
