@@ -17,7 +17,8 @@
 //! `vte` handles neither sequence, so `TappedPty` wraps the PTY and scans what
 //! it reads, rather than forking the parser. `EventLoop` is generic over the
 //! public `EventedPty` trait, which allows that. The bytes go on to the parser
-//! unchanged.
+//! unchanged, but for one guard: past `OSC_HELD_MAX`, the rest of an OSC's
+//! payload is blanked, since the parser would hold all of it (see `OscCap`).
 
 use std::io::{self, Read};
 use std::path::PathBuf;
@@ -32,8 +33,19 @@ use polling::{Event as PollEvent, PollMode, Poller};
 // happens to contain.
 const MAX_PAYLOAD: usize = 4096;
 
+/// The parser keeps an OSC's whole payload until the sequence ends, with no
+/// limit of its own outside a `no_std` build, and keeps the memory after it.
+/// This is the most it's let hold: room for the largest clipboard write that's
+/// kept, in base64, and a power of 2, so the buffer's doubling stops at it and
+/// not past.
+pub const OSC_HELD_MAX: usize = 2 << 20;
+const _: () = assert!(OSC_HELD_MAX.is_power_of_two());
+const _: () = assert!(OSC_HELD_MAX >= crate::term::CLIPBOARD_STORE_MAX.div_ceil(3) * 4 + 16);
+
 const ESC: u8 = 0x1b;
 const BEL: u8 = 0x07;
+const CAN: u8 = 0x18;
+const SUB: u8 = 0x1a;
 
 /// What the shell last said about where it is. Written by the PTY reader thread
 /// and read by the window thread, so it's behind a lock. The lock is taken only
@@ -108,10 +120,12 @@ fn still_running(_: u32) -> bool {
 	true
 }
 
-/// The PTY, with its read side scanned on the way past. Everything else is
-/// forwarded untouched, including the child-exit channel and resize.
+/// The PTY, with its read side scanned and an overlong OSC cut on the way past.
+/// Everything else is forwarded untouched, including the child-exit channel and
+/// resize.
 pub struct TappedPty<P> {
 	pty: P,
+	cap: OscCap,
 	scan: Scan,
 	reported: Reported,
 }
@@ -128,6 +142,7 @@ impl<P> TappedPty<P> {
 	pub fn new(pty: P, reported: Reported) -> Self {
 		Self {
 			pty,
+			cap: OscCap::new(OSC_HELD_MAX),
 			scan: Scan::default(),
 			reported,
 		}
@@ -141,6 +156,7 @@ impl<P> TappedPty<P> {
 impl<P: EventedReadWrite> Read for TappedPty<P> {
 	fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
 		let count = self.pty.reader().read(buf)?;
+		self.cap.feed(&mut buf[..count]);
 		self.scan.feed(&buf[..count], &self.reported);
 		Ok(count)
 	}
@@ -192,6 +208,79 @@ impl<P: EventedPty> EventedPty for TappedPty<P> {
 impl<P: OnResize> OnResize for TappedPty<P> {
 	fn on_resize(&mut self, window_size: WindowSize) {
 		self.pty.on_resize(window_size);
+	}
+}
+
+/// Keeps vte's OSC buffer to `limit` bytes. It follows vte 0.15's states only as
+/// far as they decide whether a byte goes into that buffer, and they decide it
+/// exactly: ESC leads to Escape from every state, Escape leads to an OSC only on
+/// `]`, and an OSC ends only on BEL, CAN, SUB or ESC. Past the limit, a byte
+/// that would be stored becomes a NUL, which vte drops inside an OSC. So the
+/// sequence still ends where it would have, and is dispatched cut short, as
+/// vte's own `no_std` build does it. Nothing outside an OSC is touched.
+#[derive(Debug)]
+struct OscCap {
+	limit: usize,
+	state: CapState,
+	held: usize,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CapState {
+	// any of vte's states but Escape and the OSC string, all of which go to
+	// Escape on ESC
+	Other,
+	Esc,
+	Osc,
+}
+
+impl OscCap {
+	fn new(limit: usize) -> Self {
+		Self {
+			limit,
+			state: CapState::Other,
+			held: 0,
+		}
+	}
+
+	fn feed(&mut self, bytes: &mut [u8]) {
+		let mut at = 0;
+		while at < bytes.len() {
+			if self.state == CapState::Other {
+				match bytes[at..].iter().position(|&byte| byte == ESC) {
+					Some(skip) => {
+						at += skip + 1;
+						self.state = CapState::Esc;
+					}
+					None => return,
+				}
+				continue;
+			}
+			let slot = &mut bytes[at];
+			at += 1;
+			self.state = match (self.state, *slot) {
+				(CapState::Esc, b']') => {
+					self.held = 0;
+					CapState::Osc
+				}
+				(CapState::Esc, CAN | SUB | 0x20..=0x7e) | (CapState::Osc, BEL | CAN | SUB) => {
+					CapState::Other
+				}
+				(CapState::Osc, ESC) => CapState::Esc,
+				// vte keeps a parameter break as an index, not a byte
+				(CapState::Osc, byte) if byte >= 0x20 && byte != b';' => {
+					if self.held < self.limit {
+						self.held += 1;
+					} else {
+						*slot = 0;
+					}
+					CapState::Osc
+				}
+				// the rest leave vte where it was, such as a C0 control, DEL or a
+				// high byte in Escape
+				(state, _) => state,
+			};
+		}
 	}
 }
 
@@ -445,7 +534,7 @@ fn host_name() -> String {
 mod tests {
 	use std::path::PathBuf;
 
-	use super::{Reported, Scan, directory};
+	use super::{OSC_HELD_MAX, OscCap, Reported, Scan, directory};
 
 	// Separators are the platform's, so a fixture reads the same in both places.
 	fn native(text: &str) -> PathBuf {
@@ -613,6 +702,173 @@ mod tests {
 		assert_eq!(directory("7;file:///srv/tab%09bed", "box"), None);
 		// and the ordinary case still arrives
 		assert_eq!(directory("9;9;/srv/log", "box"), Some(native("/srv/log")));
+	}
+
+	// What vte reports, with an OSC kept as its length and terminator only, so a
+	// cut one can be told from the rest.
+	#[derive(Debug, PartialEq, Eq)]
+	enum Event {
+		Print(char),
+		Execute(u8),
+		Hook(Vec<Vec<u16>>, Vec<u8>, bool, char),
+		Put(u8),
+		Unhook,
+		Osc(usize, bool),
+		Csi(Vec<Vec<u16>>, Vec<u8>, bool, char),
+		Esc(Vec<u8>, bool, u8),
+	}
+
+	#[derive(Default)]
+	struct Events(Vec<Event>);
+
+	fn params(params: &alacritty_terminal::vte::Params) -> Vec<Vec<u16>> {
+		params.iter().map(<[u16]>::to_vec).collect()
+	}
+
+	impl alacritty_terminal::vte::Perform for Events {
+		fn print(&mut self, c: char) {
+			self.0.push(Event::Print(c));
+		}
+		fn execute(&mut self, byte: u8) {
+			self.0.push(Event::Execute(byte));
+		}
+		fn hook(
+			&mut self,
+			p: &alacritty_terminal::vte::Params,
+			inter: &[u8],
+			ignore: bool,
+			action: char,
+		) {
+			self.0
+				.push(Event::Hook(params(p), inter.to_vec(), ignore, action));
+		}
+		fn put(&mut self, byte: u8) {
+			self.0.push(Event::Put(byte));
+		}
+		fn unhook(&mut self) {
+			self.0.push(Event::Unhook);
+		}
+		fn osc_dispatch(&mut self, p: &[&[u8]], bell: bool) {
+			self.0
+				.push(Event::Osc(p.iter().map(|x| x.len()).sum(), bell));
+		}
+		fn csi_dispatch(
+			&mut self,
+			p: &alacritty_terminal::vte::Params,
+			inter: &[u8],
+			ignore: bool,
+			action: char,
+		) {
+			self.0
+				.push(Event::Csi(params(p), inter.to_vec(), ignore, action));
+		}
+		fn esc_dispatch(&mut self, inter: &[u8], ignore: bool, byte: u8) {
+			self.0.push(Event::Esc(inter.to_vec(), ignore, byte));
+		}
+	}
+
+	// `printf '\e]2;'; yes` grew the parser's buffer by every byte until memory
+	// ran out, and it kept the memory after. It holds at most the cap now, the
+	// sequence still ends where it did, and what follows is read as before.
+	// Test ID: dfeeg
+	#[test]
+	#[cfg_attr(miri, ignore = "8 MiB through the parser takes too long under Miri")]
+	fn an_endless_osc_stops_growing_the_parser_buffer() {
+		let mut cap = OscCap::new(OSC_HELD_MAX);
+		let mut parser = alacritty_terminal::vte::Parser::new();
+		let mut events = Events::default();
+		let mut chunk = b"\x1b]2;".to_vec();
+		chunk.extend(b"y\n".repeat(32 << 10));
+		for _ in 0..128 {
+			cap.feed(&mut chunk);
+			parser.advance(&mut events, &chunk);
+			chunk = b"y\n".repeat(32 << 10);
+		}
+		let mut end = b"\x07ok".to_vec();
+		cap.feed(&mut end);
+		parser.advance(&mut events, &end);
+		assert_eq!(
+			events.0,
+			[
+				Event::Osc(OSC_HELD_MAX, true),
+				Event::Print('o'),
+				Event::Print('k')
+			]
+		);
+
+		// The largest clipboard write that's kept goes through whole.
+		let mut cap = OscCap::new(OSC_HELD_MAX);
+		let mut events = Events::default();
+		let payload = "QUJD".repeat(crate::term::CLIPBOARD_STORE_MAX.div_ceil(3));
+		let whole = format!("\x1b]52;c;{payload}\x1b\\").into_bytes();
+		let mut cut = whole.clone();
+		cap.feed(&mut cut);
+		assert!(cut == whole, "a clipboard write that fits was changed");
+		alacritty_terminal::vte::Parser::new().advance(&mut events, &cut);
+		assert_eq!(events.0[0], Event::Osc(payload.len() + 3, false));
+	}
+
+	// The cap follows vte's states on its own, so it has to stay in step with the
+	// parser through anything a program can send: a byte it blanks outside an
+	// OSC would change what's drawn, and an OSC it misses would grow unchecked.
+	// Test ID: dfeeh
+	#[test]
+	fn a_capped_stream_parses_the_same_but_for_overlong_oscs() {
+		use crate::fuzz;
+
+		const LIMIT: usize = 12;
+		const OPENERS: [&[u8]; 3] = [b"\x1b]", b"\x1bP1|", b"\x1b["];
+		#[rustfmt::skip]
+		const BODY: [u8; 22] = [
+			b'y', b';', b']', b'\\', b'[', b'P', b'X', b'_', b'0', b' ', 0x00,
+			0x07, 0x18, 0x1a, 0x1b, 0x1b, 0x7f, 0x80, 0x9c, 0x9d, 0xc3, 0xff,
+		];
+		fuzz::soak("osccap", |seed| {
+			let mut rng = fuzz::Rng::new(seed);
+			let mut raw = Vec::new();
+			for _ in 0..=rng.below(12) {
+				if rng.chance(2) {
+					raw.extend(fuzz::vt_stream(&mut rng));
+				} else {
+					if rng.chance(2) {
+						raw.extend_from_slice(rng.pick(&OPENERS));
+					}
+					for _ in 0..rng.below(4 * LIMIT) {
+						let byte = if rng.chance(3) {
+							*rng.pick(&BODY)
+						} else {
+							b'y'
+						};
+						raw.push(byte);
+					}
+				}
+			}
+			let mut cap = OscCap::new(LIMIT);
+			let (mut plain, mut capped) = (Events::default(), Events::default());
+			let (mut p1, mut p2) = (
+				alacritty_terminal::vte::Parser::new(),
+				alacritty_terminal::vte::Parser::new(),
+			);
+			let mut rest = raw.as_slice();
+			while !rest.is_empty() {
+				let (chunk, tail) = rest.split_at(1 + rng.below(rest.len()));
+				rest = tail;
+				let mut cut = chunk.to_vec();
+				cap.feed(&mut cut);
+				p1.advance(&mut plain, chunk);
+				p2.advance(&mut capped, &cut);
+			}
+			assert_eq!(plain.0.len(), capped.0.len(), "{raw:?}");
+			for (a, b) in plain.0.iter().zip(&capped.0) {
+				match (a, b) {
+					(Event::Osc(whole, bell_a), Event::Osc(held, bell_b)) => {
+						assert!(*held <= LIMIT, "{held} held from {raw:?}");
+						assert!(held <= whole && bell_a == bell_b, "{raw:?}");
+					}
+					_ => assert_eq!(a, b, "{raw:?}"),
+				}
+			}
+		});
 	}
 
 	// Where a shell says it is decides where the next pane starts, and the shell

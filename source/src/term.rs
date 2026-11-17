@@ -113,9 +113,10 @@ impl EventProxy {
 	}
 }
 
-// A bigger OSC 52 store is dropped whole. A clipped one would paste something the
-// program never sent, and the parser sets no limit of its own.
-const CLIPBOARD_STORE_MAX: usize = 1 << 20;
+/// A bigger OSC 52 store is dropped whole. A clipped one would paste something
+/// the program never sent, and the parser itself holds up to
+/// `cwd::OSC_HELD_MAX` of it.
+pub const CLIPBOARD_STORE_MAX: usize = 1 << 20;
 
 /// What a program that asked for focus changes (`CSI ? 1004 h`) is sent as its
 /// pane gains or loses the keyboard, the same as xterm.
@@ -445,7 +446,7 @@ impl TermInstance {
 			.pid()
 			.map_or(0, std::num::NonZeroU32::get);
 		let notifier = event_proxy.clone();
-		// the tap goes between the PTY and the parser; the bytes are untouched
+		// the tap goes between the PTY and the parser; only an overlong OSC is cut
 		#[cfg(unix)]
 		let reported_cwd = crate::cwd::Reported::for_tty(master_fd);
 		#[cfg(not(unix))]

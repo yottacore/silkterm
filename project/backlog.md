@@ -144,6 +144,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- ID: 2026111713374900
 	- Type: Bug
 	- Status: Queued
+		- The cap is in. Giving the memory back is child 2026111714235965, which closes this one.
 	- Severity: High
 	- Opened: 20261117-133749
 	- Opened by: CC
@@ -159,6 +160,32 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Notes:
 		- Code review 20261117 item 1.
 		- Detail: `detail_backlog.md`, under this ID.
+	- Actual cause: vte 0.15.0 keeps every byte of an OSC under its `std` feature, with no cap, and keeps the memory after the sequence ends. The parser is private to alacritty_terminal's event loop.
+	- Actual fix: The PTY tap blanks an OSC's payload past 2 MiB on its way to the parser, so the parser holds at most that. The sequence still ends where it did and is read cut short, as vte's own `no_std` build does. 2 MiB fits the largest clipboard write that's kept, and matches vte's own sync buffer. Giving the memory back needs vte itself, and is child 2026111714235965.
+	- Decisions: The cap is in the tap, not a vte fork, since a fork needs a new repo on the git host, which a round can't make. The tap follows vte's states only as far as entering and leaving an OSC, which every state does the same way, and a fuzz test holds it to vte. Past the cap a byte becomes a NUL, which vte drops inside an OSC. Ending the sequence early with CAN was ruled out, since the rest of the payload would then print as text.
+	- Test case: dfeeg `an_endless_osc_stops_growing_the_parser_buffer` and dfeeh `a_capped_stream_parses_the_same_but_for_overlong_oscs`.
+	- Swept: vte 0.15.0 caps CSI params at 32, intermediates at 2, OSC params at 16 and the sync buffer at 2 MiB. The tap's own OSC 7 scanner stops collecting at 4 KiB. Title and combining marks are capped in the alacritty fork. No other parser buffer grows with input.
+	- Upstream draft: the vte patch and issue text are in the private upstream drafts, under this ID.
+	- Branch: nov17-2026111713374900
+	- Commit: c298d1a8
+	- Progress log: 20261117: Verified: dfeeg and dfeeh pass. Both fail with the cap made a no-op. dfeeh also fails with the cap left in an OSC after its ESC, and with Escape left early on a C0 control. The quick gate passes. The drafted vte patch passes vte's own tests, and its new test fails without the cap.
+
+- After a long OSC ends, the parser keeps up to 2 MiB of buffer per pane until the pane closes
+	- ID: 2026111714235965
+	- Type: Bug
+	- Status: Stalled
+		- Held for a vte fork branch with the drafted patch, which needs a new repo on the git host.
+	- Severity: Low
+	- Opened: 20261117-142359
+	- Opened by: CC
+	- Parent ID: 2026111713374900
+	- Target OS: All
+	- Target version: rc.2
+	- Incorrect behavior: An OSC that runs to the 2 MiB cap leaves the parser's buffer at that size until the pane closes. vte clears the buffer when a sequence ends but keeps its memory.
+	- Expected behavior: A buffer that grew past a few KiB is given back when its sequence ends.
+	- Possible cause: vte 0.15.0 `osc_end` calls `clear()`, which keeps capacity. The parser is private to alacritty_terminal's event loop, so this can't be fixed from our side.
+	- Estimated effort: Low
+	- Possible fix: The vte patch in the private upstream drafts under 2026111713374900 caps the buffer under `std` and shrinks it in `osc_end`. It goes in a vte fork branch with a `[patch.crates-io]` line, and then `OscCap` in `cwd.rs` can go.
 
 - A settings file with one stray flat key loses its `kept` block when it's converted
 	- ID: 2026111713374901
