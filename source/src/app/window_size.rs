@@ -928,10 +928,16 @@ fn fits(
 
 // Out to whole cells of the window's own grid, which is what gets saved, so
 // the next launch opens at this size. A part cell short of it gave the shell
-// a column less.
+// a column less. A size already at whole cells stays: `window_px` rounds up
+// to a pixel, so its cells read a bit over and a ceil here added one.
 fn whole_cells(px: u32, most: u32, cell: f32, margin: f32, chrome: f32) -> u32 {
-	let cells = ((px as f32 - 2.0 * margin - chrome) / cell).ceil().max(1.0) as usize;
-	let whole = window_px(1, cells, cell, cell, margin, chrome).1;
+	let at = |cells: usize| window_px(1, cells, cell, cell, margin, chrome).1;
+	let cells = cells_in(px, cell, margin, chrome);
+	let whole = if at(cells) >= px {
+		at(cells)
+	} else {
+		at(cells + 1)
+	};
 	if whole <= most { whole.max(px) } else { px }
 }
 
@@ -2498,6 +2504,35 @@ mod tests {
 		assert_eq!(cells_in(whole, 10.65, 4.0, 0.0), 80);
 		assert_eq!(whole_cells(500, 960, 24.0, 4.0, 30.0), 518);
 		assert_eq!(whole_cells(1818, 1818, 30.0, 4.0, 0.0), 1818, "at the edge");
+	}
+
+	// A zoom on the alt screen, where the minimap is off, gave the program a
+	// column more: the least size for its grid was already whole cells, and
+	// rounding it out again added one, 64 then 65 in a 700x400 window.
+	// Test ID: dfe3c
+	#[test]
+	fn a_size_already_at_whole_cells_keeps_its_grid() {
+		use super::whole_cells;
+		assert_eq!(whole_cells(690, 2000, 10.65, 4.0, 0.0), 690, "64 cells");
+		for cell in [7.0, 9.6, 10.65, 10.8, 12.0, 13.33, 24.0] {
+			for chrome in [0.0, 30.0, 31.5] {
+				for n in 1..200 {
+					let at = |n: usize| window_px(1, n, cell, cell, 4.0, chrome).1;
+					assert_eq!(
+						whole_cells(at(n), u32::MAX, cell, 4.0, chrome),
+						at(n),
+						"{cell} {chrome} {n}"
+					);
+					for px in at(n) + 1..at(n + 1) {
+						assert_eq!(
+							whole_cells(px, u32::MAX, cell, 4.0, chrome),
+							at(n + 1),
+							"{cell} {chrome} {px}"
+						);
+					}
+				}
+			}
+		}
 	}
 
 	// X11's work area spans both monitors; the window gets the part on its own.

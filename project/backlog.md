@@ -34,10 +34,23 @@ Going forward, new issues in the new template at the bottom of this file will go
 
 ## Issues
 
+- At some cell widths a window or pane exactly N cells wide shows N-1
+	- ID: 2026111708192137
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261117-081921
+	- Opened by: CC
+	- Related IDs: 2026111708050191
+	- Target OS: All
+	- Incorrect behavior: The grid is counted by dividing the width by the cell width and rounding down in single precision. With a cell of 9.6, 15 cells make 144, which divides back to just under 15, so it counts 14. The window size read back from a grid, and the pane's own column count, both do this.
+	- Expected behavior: A width that holds N whole cells counts as N.
+	- Note: Found while fixing 2026111708050191. Cell sizes that are binary fractions, as in ddyqp, never hit it. Whether a real font's cell lands on one isn't known.
+
 - With Resize window on zoom on, a zoom on the alt screen adds a column
 	- ID: 2026111708050191
 	- Type: Bug
-	- Status: Queued
+	- Status: Done
 	- Severity: Low
 	- Opened: 20261117-080501
 	- Opened by: CC
@@ -47,6 +60,19 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Incorrect behavior: The program is told one column more than it had, 64 then 65. On the normal screen the grid is kept, 55 then 55.
 	- Expected behavior: The program keeps its columns and rows.
 	- Note: Found on Xvfb while working 2026111700130407, on the dev build and the 11-10 dogfood build. The alt screen hides the minimap column, which the zoom's size may still count.
+	- Reproduced: 20261117 on Xvfb, with the setting on and a program on the alt screen. The zoom held 64 columns and asked for a window 65 wide.
+	- Origin: e5f8a69, the commit that added Resize window on zoom.
+	- Actual cause: After finding the least width that shows the pane's grid, the zoom rounds it out to whole cells of the window's grid, so the saved size reopens as big. That width was already whole cells, but its pixel count was rounded up, so it read as a bit over 64 cells, and rounding up again made it 65. With the minimap on, the least width usually falls partway into a cell, which is why the normal screen kept its grid. The minimap isn't involved.
+	- Actual fix: A width already at whole cells stays as it is. Any other width goes out to the next whole cell, as before.
+	- Verified: 20261117 on Xvfb, the rig with the fix kept 64 columns on the alt screen and 55 on the normal screen through 2 zooms in and 1 out, and the saved grid stayed 64x15. The new test failed on the old code and passes now. The quick gate passed, all 5 areas.
+	- Swept: the other `ceil` near a cell size in the source is `window_px` itself, which this relies on. The height takes the same path, through the same function.
+	- Decisions:
+		- 20261117: The float edge found on the way, where a width of exactly N cells counts as N-1 at some cell sizes, is its own item, 2026111708192137. It's older than this and touches every grid count.
+	- Test case: dfe3c `a_size_already_at_whole_cells_keeps_its_grid`.
+	- Branch: nov17-2026111708050191
+	- Commit: f8ac2cb1
+	- Acceptance signoff: Self-closed: the bug was reproduced, its test failed before the fix and passes after, and the rig shows the program keeps its grid.
+	- Closed: 20261117-082100
 
 - The window doesn't paint while the GPU is busy or short on memory, and stays blank after the load ends
 	- ID: 2026100312470535
