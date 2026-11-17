@@ -235,6 +235,8 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Origin: 1d12aa3a, 20260629, then a283cb39, 20260713, which added the busy check. A regression of the closed old-format item "Config file rewriting is proving problematic". Not seen by an earlier review. Confirmed by trace.
 	- Sweep: `commit_baseline` has no other caller.
 	- Related IDs: Old-format item "Config file rewriting is proving problematic", closed 20260713
+	- Decisions:
+		- 20261117: Kept for rc.1, since it loses data. rc.1 takes only Critical and High items and anything that crashes or loses data.
 	- Notes:
 		- Code review 20261117 item 5.
 		- Detail: `detail_backlog.md`, under this ID.
@@ -254,6 +256,8 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Possible cause: `key_horizontal` calls `set_radio` with the clamped index even when it equals the current one. `Model::set` drops theme changes and turns on the parent setting on any set.
 	- Origin: e79a250e, 20260805, with 3a052615, 20261009, which made a set drop changes. Not seen by an earlier round. Confirmed by trace.
 	- Sweep: `step_slider` at either end calls `set_f32` with the same value. Up at the top of Font size turns "Use system size" off, and Columns or Rows at the top turn Remember size off. Picking the same option again from an open popup is a recorded behavior and stays.
+	- Decisions:
+		- 20261117: Kept for rc.1, since it loses data. rc.1 takes only Critical and High items and anything that crashes or loses data.
 	- Notes:
 		- Code review 20261117 item 6.
 		- Detail: `detail_backlog.md`, under this ID.
@@ -273,6 +277,8 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Possible cause: `edit_setting_lines` keeps only the last active line per path. `persist` ignores a `SetStatus::Multiple`. `place_rating_line` handles the same case correctly.
 	- Origin: 9f26b242, 20261003, 5a861038, 20261106, and b043ccbf, 20261009. Not seen by an earlier round. Confirmed by trace.
 	- Sweep: `disabled_text` shares `edit_setting_lines`. `persist_state` and `keep_tested` on the state file stop updating the window size when a key is doubled there.
+	- Decisions:
+		- 20261117: Kept for rc.1, since it loses data. rc.1 takes only Critical and High items and anything that crashes or loses data.
 	- Notes:
 		- Code review 20261117 item 7.
 		- Detail: `detail_backlog.md`, under this ID.
@@ -293,6 +299,8 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Origin: f80e5654, 20260715, and 96da7106, 20260722. Code review 20260914 item 74 fixed the shared publisher only. Confirmed by trace.
 	- Sweep: n8git_backup-and-publish already has the fix. No other `stash push` under cicd/ or utility/.
 	- Related IDs: Code review 20260914 item 74
+	- Decisions:
+		- 20261117: Kept for rc.1, since it loses data. rc.1 takes only Critical and High items and anything that crashes or loses data.
 	- Notes:
 		- Code review 20261117 item 8.
 		- Detail: `detail_backlog.md`, under this ID.
@@ -313,28 +321,10 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Origin: ff7c5829, 20260723. 75ebca3c, 20261005 fixed the insert side only. Same class as Code review 20260914 item F50, fixed for menus only. Confirmed by trace.
 	- Sweep: `Tabs::move_active` also moves tabs without clearing that state.
 	- Related IDs: 2026100513581812, Code review 20260914 F50
+	- Decisions:
+		- 20261117: Kept for rc.1, since it loses data. rc.1 takes only Critical and High items and anything that crashes or loses data.
 	- Notes:
 		- Code review 20261117 item 9.
-		- Detail: `detail_backlog.md`, under this ID.
-
-- Shift+drag of a pane whose shell exits during the drag leaves a blank pane and an orphan
-	- ID: 2026111713374909
-	- Type: Bug
-	- Status: Queued
-	- Severity: Avg
-	- Opened: 20261117-133749
-	- Opened by: CC
-	- Target OS: All
-	- Target version: rc.1
-	- Incorrect behavior: A tab has panes A and B. Shift+press on A starts a drag, and A's shell exits. Dropping on B swaps a pane that no longer exists into the layout. B still draws at its old place but is never resized again, can't be split, and closing it leaves a blank area for good. On macOS, Command+] during a Shift+drag switches tabs, and the drop then swaps across 2 tabs.
-	- Expected behavior: A drag whose pane closed, or whose tab changed, is dropped.
-	- Reproduced: No. Traced for the layout damage. The effects on screen are from reading.
-	- Possible cause: `close_dead_pane` clears the menu but not `dragging_pane`. `swap_leaves` assumes both ids are leaves of this tab's tree.
-	- Origin: c6eaa043, 20260628. Same class as Code review 20260914 F50. Not seen by an earlier round. Confirmed by trace.
-	- Sweep: The other pane-id drag states look the pane up on release and are safe. `resizing` keeps a tree path, which can move a different divider, cosmetic only.
-	- Related IDs: Code review 20260914 F50
-	- Notes:
-		- Code review 20261117 item 10.
 		- Detail: `detail_backlog.md`, under this ID.
 
 - A window resized past the GPU's largest texture size crashes
@@ -352,182 +342,10 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Possible cause: `fit_px` holds only the sizes the app asks for. The Resized path passes the window size straight to `Gfx::resize`. No error handler is set outside tests.
 	- Origin: c6eaa043, 20260628, last changed a44e556f, 20261004. The clamp for the app's own sizes is 7d8ccbef, 20261006. Not seen by an earlier round. Confirmed by trace.
 	- Sweep: `Scrim::resize` makes layers at the surface size. The minimap texture and dialogs are held by their own caps, and the wallpaper by its 4096 edge.
+	- Decisions:
+		- 20261117: Kept for rc.1, since it crashes. rc.1 takes only Critical and High items and anything that crashes or loses data.
 	- Notes:
 		- Code review 20261117 item 11.
-		- Detail: `detail_backlog.md`, under this ID.
-
-- A removed shell comes back, and a new shell line can be switched off by itself
-	- ID: 2026111713374911
-	- Type: Bug
-	- Status: Queued
-	- Severity: Avg
-	- Opened: 20261117-133749
-	- Opened by: CC
-	- Target OS: All
-	- Target version: rc.1
-	- Incorrect behavior: Removing a found shell such as zsh in Settings and pressing OK lasts until the next launch, when the scan adds it back. If the scan finishes while Settings is open, it's added back at once. The same pass switches off a line just made with Add, or one with a half-typed command, and saves it off. It can also drop a duplicate row above the line being edited, so the edit moves to the next entry.
-	- Expected behavior: A removed shell stays removed, and the scan never changes a line made in the dialog.
-	- Reproduced: No. Traced through the code.
-	- Possible cause: `shells::merge_with` only adds, and nothing records a removal. An empty command reads as "not installed".
-	- Origin: 37bd34a0, 20260818, and 36d99d5f, 20260819. Not seen by an earlier round. Confirmed by trace.
-	- Sweep: `app.rs` `fold_shells` at launch has the same cause.
-	- Notes:
-		- Code review 20261117 item 12.
-		- Detail: `detail_backlog.md`, under this ID.
-
-- Combining marks and other zero-width characters aren't drawn, and Copy output drops them
-	- ID: 2026111713374912
-	- Type: Bug
-	- Status: Queued
-	- Severity: Avg
-	- Opened: 20261117-133749
-	- Opened by: CC
-	- Target OS: All
-	- Target version: rc.1
-	- Incorrect behavior: `printf 'e\u0301 \u0915\u093f \u2764\ufe0f 1\ufe0f\u20e3\n'` shows a plain e, a bare क, a text-style heart and a plain 1. Decomposed accents, Indic vowel signs, Thai tone marks, Hebrew points, emoji presentation, keycaps, and ZWJ sequences all lose their marks. Copy on select keeps them, Copy output doesn't.
-	- Expected behavior: Marks are drawn with their base character, and every copy keeps them.
-	- Reproduced: No. Confirmed by search: no code outside tests reads `Cell::zerowidth()`.
-	- Possible cause: Each cell adds only `cell.c` to the row text and the glyph list.
-	- Origin: c6eaa043, 20260628, and 2c09aa5b, 20260802. Code review 20260914 item 65 capped the marks but didn't check that they're drawn. Confirmed by trace.
-	- Sweep: `capture_grid_text` and `strip_cell` drop them the same way. A tab cell copies as a tab plus padding, and a wide spacer at a wrap as a space, minor siblings to fold in.
-	- Related IDs: Code review 20260914 item 65
-	- Notes:
-		- Code review 20261117 item 13.
-		- Detail: `detail_backlog.md`, under this ID.
-
-- With a non-Latin keyboard layout, Ctrl+letter sends nothing, so Ctrl+C doesn't stop a program
-	- ID: 2026111713374913
-	- Type: Bug
-	- Status: Queued
-	- Severity: Avg
-	- Opened: 20261117-133749
-	- Opened by: CC
-	- Target OS: All
-	- Target version: rc.1
-	- Incorrect behavior: With a Russian layout, Ctrl+C gives the letter с, and nothing reaches the shell. The same for Ctrl+D, Ctrl+Z, readline's Ctrl+A, E and R, and the Ctrl+Shift+C, V and T hotkeys. Greek, Hebrew, and Arabic layouts act the same.
-	- Expected behavior: Ctrl with a non-ASCII letter falls back to the key's Latin position, as VTE, Windows Terminal, and kitty do.
-	- Reproduced: No. Traced on the macOS path. X11 and Windows are from reading winit.
-	- Possible cause: Nothing reads `physical_key`. `encode_key` matches only ASCII letters.
-	- Origin: c6eaa043, 20260628. The 20260914 round turned down only Ctrl with a digit or `?`. Plausible.
-	- Sweep: `keys.rs` `Bindings::hotkey`, `input::hotkey_in`, the dialog and tab rename edit keys and the menu accelerators all key on `logical_key`.
-	- Notes:
-		- Code review 20261117 item 14.
-		- Detail: `detail_backlog.md`, under this ID.
-
-- A row that starts with a right-to-left word is drawn mirrored against its cells
-	- ID: 2026111713374914
-	- Type: Bug
-	- Status: Queued
-	- Severity: Avg
-	- Opened: 20261117-133749
-	- Opened by: CC
-	- Target OS: All
-	- Target version: rc.1
-	- Incorrect behavior: With a mono font that covers Hebrew, such as DejaVu Sans Mono, `ls` showing `שלום.txt` at the start of a row draws the row as a right-to-left paragraph. Trailing blanks move to the left and the runs reverse. Cursor, selection, and cell colors stay in cell order, so they sit on the wrong glyphs. A font without Hebrew draws the same row correctly.
-	- Expected behavior: Every row is laid out left to right in cell order, whatever its first strong character.
-	- Reproduced: No. Read from cosmic-text 0.18.2, which picks the paragraph direction from the first strong character.
-	- Possible cause: `set_buffer_rows` shapes with Advanced shaping and sets no base direction.
-	- Origin: 349c92bf, 20260731. Not seen by an earlier round. Plausible.
-	- Sweep: The scrim buffer and the strip lines use the same shaping.
-	- Notes:
-		- Code review 20261117 item 15.
-		- Detail: `detail_backlog.md`, under this ID.
-
-- Settings, About, notices, and the tmux close question can't open on a Linux box with GL but no Vulkan
-	- ID: 2026111713374915
-	- Type: Bug
-	- Status: Queued
-	- Severity: Avg
-	- Opened: 20261117-133749
-	- Opened by: CC
-	- Target OS: Linux
-	- Target version: rc.1
-	- Incorrect behavior: prerequisites.md asks for Vulkan or GL. With no Vulkan driver, the main X11 window draws through GL, but dialogs ask wgpu for Vulkan only and fail. Nothing shows. stderr says "dialog window failed". The close question falls back to ending nothing, and config refusal notices are lost.
-	- Expected behavior: Dialogs open wherever the main window can draw.
-	- Reproduced: No. Read only.
-	- Possible cause: Dialogs use `Backends::PRIMARY` to avoid the wgpu EGL teardown crash, with no other route.
-	- Origin: c6eaa043, 20260628, and 87a79faf, 20260804. Not seen by an earlier round. Plausible.
-	- Sweep: `new_about`, `new_notice`, `new_ask` and `new_settings` all go through `DialogWin::make`.
-	- Notes:
-		- Code review 20261117 item 16.
-		- Detail: `detail_backlog.md`, under this ID.
-
-- macOS: with XQuartz installed, every launch takes the Remote profile
-	- ID: 2026111713374916
-	- Type: Bug
-	- Status: Queued
-	- Severity: Avg
-	- Opened: 20261117-133749
-	- Opened by: CC
-	- Target OS: macOS
-	- Target version: rc.1
-	- Incorrect behavior: XQuartz sets DISPLAY to a launchd socket path for every app. The remote check reads everything before the first `:` as a host, so every session gets the Remote profile, with no wallpaper and the plain look, and nothing says why.
-	- Expected behavior: DISPLAY is ignored on macOS, and a path-form DISPLAY reads as local everywhere.
-	- Reproduced: No. Traced. XQuartz's DISPLAY form is documented but wasn't run here.
-	- Possible cause: `forwarded_display` runs on every non-Windows platform and treats a socket path as a host.
-	- Origin: 91ce68f0, 20260904, broadened by Code review 20260914 item F41. Confirmed by trace.
-	- Sweep: `profile.rs` ~189 is the only DISPLAY reader.
-	- Related IDs: Code review 20260914 F41, test dc6ff
-	- Notes:
-		- Code review 20261117 item 17.
-		- Detail: `detail_backlog.md`, under this ID.
-
-- Windows: a shell whose path has an apostrophe is left out of the shell list
-	- ID: 2026111713374917
-	- Type: Bug
-	- Status: Queued
-	- Severity: Avg
-	- Opened: 20261117-133749
-	- Opened by: CC
-	- Target OS: Windows
-	- Target version: rc.1
-	- Incorrect behavior: With a profile folder like `C:\Users\O'Brien`, pwsh from scoop, a per-user Python, nu, and others are found, then dropped. The command is stored unquoted, the splitter reads `'` as an opening quote to the end of the line, and the result names no program.
-	- Expected behavior: Every found shell is listed and runs, whatever its path holds.
-	- Reproduced: No. Traced through the code.
-	- Possible cause: `quoted()` wraps only on a space, while `shell_split` also gives meaning to quotes and backslashes. An unclosed quote isn't an error.
-	- Origin: 37bd34a0, 20260818. Not seen by an earlier round. Confirmed by trace.
-	- Sweep: `shells::command_line` uses the same space-only rule. `wsl.exe -d` names and the tab tip are safe.
-	- Notes:
-		- Code review 20261117 item 18.
-		- Detail: `detail_backlog.md`, under this ID.
-
-- The pre-push merge gate skips the private runner, the private tests, and the content scrub
-	- ID: 2026111713374918
-	- Type: Bug
-	- Status: Queued
-	- Severity: Avg
-	- Opened: 20261117-133749
-	- Opened by: CC
-	- Target OS: All
-	- Target version: rc.1
-	- Incorrect behavior: On a push to main, the gate runs in a throwaway worktree with no siblings. The private runner reads as not checked out, so the Mac and Store jobs don't run. The private tests and their test-ID check are skipped. The content scrub finds no script and passes quietly. The hook's own scrub reads the working tree rather than the commits being pushed.
-	- Expected behavior: The gate finds the private checkout and the scrub from the real checkout, and the scrub reads the pushed commits.
-	- Reproduced: No. Traced through the code.
-	- Possible cause: These paths are found from `${root}/..`, which in the worktree is the temp folder.
-	- Origin: 2314eb1c, 20261006, 6ddd84a9, 20261028, with 64cc76c3 and b3de0d28. Item 2026102616543943 notes the gate was never run from the hook. Same class as Code review 20260914 F83. Confirmed by trace.
-	- Sweep: These are the only `root}/..` uses in cicd.bash and config.bash.
-	- Related IDs: 2026102616543943, Code review 20260914 F83
-	- Notes:
-		- Code review 20261117 item 19.
-		- Detail: `detail_backlog.md`, under this ID.
-
-- `win-remote.bash sync --ref` reports success when the fetch or reset failed
-	- ID: 2026111713374919
-	- Type: Bug
-	- Status: Queued
-	- Severity: Avg
-	- Opened: 20261117-133749
-	- Opened by: CC
-	- Target OS: Windows
-	- Target version: rc.1
-	- Incorrect behavior: `sync --ref fixbranch` with the branch not pushed, a typo, or the box offline leaves the remote clone where it was, prints its old commit and exits 0. The next `job test` then passes against whatever the clone had.
-	- Expected behavior: A failed clone, fetch, or reset exits non-zero, and the output names the ref the clone ended on.
-	- Reproduced: Yes, the PowerShell part: with `$ErrorActionPreference = "Stop"`, a failing `git reset --hard origin/nope 2>&1 | Out-Null` keeps going and the script exits 0 under pwsh 7.6.10.
-	- Possible cause: Since PowerShell 7.2, Stop doesn't apply to a native program's exit code, and the script never reads `$LASTEXITCODE`.
-	- Origin: 1d2b7719, 20260908, and ccd2ea4d, 20260909. Not seen by an earlier round. Confirmed.
-	- Sweep: The win-jobs build, test, and clippy scripts read `$LASTEXITCODE`. info.ps1 only reads.
-	- Notes:
-		- Code review 20261117 item 20.
 		- Detail: `detail_backlog.md`, under this ID.
 
 - A 3-part setting rename written partly dotted moves the value to a setting nothing reads
@@ -545,65 +363,10 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Possible cause: `migrated_text` picks between the full new path and the new leaf, never the key's prefix plus the new leaf.
 	- Origin: 54351bb6, 20261006, on 78b1919a, 20260804. Not seen by an earlier round. Confirmed by trace.
 	- Sweep: Only `scroll.minimap.keep_for` has 3 parts today. The cursor blink rewrite and the converts have 2 and share the pattern.
+	- Decisions:
+		- 20261117: Kept for rc.1, since it loses data. rc.1 takes only Critical and High items and anything that crashes or loses data.
 	- Notes:
 		- Code review 20261117 item 23.
-		- Detail: `detail_backlog.md`, under this ID.
-
-- Moving old theme colors rewrites the whole settings file in shcl's canonical form
-	- ID: 2026111713374923
-	- Type: Bug
-	- Status: Queued
-	- Severity: Low
-	- Opened: 20261117-133749
-	- Opened by: CC
-	- Target OS: All
-	- Target version: rc.1
-	- Incorrect behavior: The first launch of a file from before 20261009 with colors set over a built-in theme folds dotted lines into blocks, moves top comments, collapses blank lines, and turns spaces into tabs. Every other launch write keeps untouched bytes as they were.
-	- Expected behavior: The move changes only the lines it moves.
-	- Reproduced: No. Traced, and `shcl fmt` shows the canonical rewrite.
-	- Possible cause: `move_theme_colors` loads with `Document::parse` where every other user-file save uses `parse_kept`.
-	- Origin: b043ccbf, 20261009. Not seen by an earlier round. Confirmed by trace.
-	- Sweep: Other `Document::parse` saves are on the template or the program's own state file.
-	- Notes:
-		- Code review 20261117 item 24.
-		- Detail: `detail_backlog.md`, under this ID.
-
-- Line edits turn a CRLF settings file into LF
-	- ID: 2026111713374924
-	- Type: Bug
-	- Status: Queued
-	- Severity: Low
-	- Opened: 20261117-133749
-	- Opened by: CC
-	- Target OS: Windows
-	- Target version: rc.1
-	- Incorrect behavior: On the first launch, the banner refresh writes a CRLF file back as LF with no copy kept. Revert, disable, and rating writes do the same. The code states that every other byte stays as it was.
-	- Expected behavior: A line edit keeps the file's line endings.
-	- Reproduced: No. Traced through the code.
-	- Possible cause: The line editors split with `str::lines()` and join with `\n`. shcl itself keeps CRLF.
-	- Origin: The first line-based migration, with later editors copying it. Not seen by an earlier round. Confirmed by trace.
-	- Sweep: `with_shcl_banner`, `edit_setting_lines`, `placed_rating_lines`, `backfilled_text`, `migrated_text` and `wallpaper_heading_repaired`.
-	- Notes:
-		- Code review 20261117 item 25.
-		- Detail: `detail_backlog.md`, under this ID.
-
-- `--reset-config` says there's no config to reset when the move aside fails, then starts on the old file
-	- ID: 2026111713374925
-	- Type: Bug
-	- Status: Queued
-	- Severity: Low
-	- Opened: 20261117-133749
-	- Opened by: CC
-	- Target OS: All
-	- Target version: rc.1
-	- Incorrect behavior: With 99 `.bak` files already there, or on Windows with the file held open, the move aside fails. The program prints "no config to reset", starts on the old settings, and exits 0.
-	- Expected behavior: A failed reset says so and exits non-zero.
-	- Reproduced: No. Traced through the code.
-	- Possible cause: `reset_config` returns None for both "nothing there" and "failed".
-	- Origin: From before 20260914. Not seen by an earlier round. Confirmed by trace.
-	- Sweep: None found.
-	- Notes:
-		- Code review 20261117 item 26.
 		- Detail: `detail_backlog.md`, under this ID.
 
 - Adopting the old config location copies in place, outside the settings lock
@@ -621,142 +384,10 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Possible cause: `adopt_config_from` uses `std::fs::copy` and runs before `save_lock`.
 	- Origin: eb1dbde0, 20260819. beta2 users on Windows and macOS still take this path. Not seen by an earlier round. Plausible.
 	- Sweep: `import_beta1_config` already runs under the lock and writes atomically.
+	- Decisions:
+		- 20261117: Kept for rc.1, since it loses data. rc.1 takes only Critical and High items and anything that crashes or loses data.
 	- Notes:
 		- Code review 20261117 item 27.
-		- Detail: `detail_backlog.md`, under this ID.
-
-- A theme saved or renamed as "Custom" can't be used
-	- ID: 2026111713374927
-	- Type: Bug
-	- Status: Queued
-	- Severity: Low
-	- Opened: 20261117-133749
-	- Opened by: CC
-	- Target OS: All
-	- Target version: rc.1
-	- Incorrect behavior: Save as "custom" is allowed. Picking it then selects the person's own Custom colors rather than the saved theme, and the list has 2 options that both give Custom. Rename acts the same.
-	- Expected behavior: The name is refused, whatever its case.
-	- Reproduced: No. Traced through the code.
-	- Possible cause: `name_problem` doesn't reserve the group's custom key or label.
-	- Origin: e79a250e, 20260805, with 3a052615, 20261009. Not seen by an earlier round. Confirmed by trace.
-	- Sweep: Only themes take names typed by the user.
-	- Notes:
-		- Code review 20261117 item 28.
-		- Detail: `detail_backlog.md`, under this ID.
-
-- Paste into a Settings field drops line breaks and quietly cuts the text at the length cap
-	- ID: 2026111713374928
-	- Type: Bug
-	- Status: Queued
-	- Severity: Low
-	- Opened: 20261117-133749
-	- Opened by: CC
-	- Target OS: All
-	- Target version: rc.1
-	- Incorrect behavior: "bash\n--login" pastes as "bash--login". A 300-byte wallpaper path is cut at 256 bytes and applied live with no message. The same at 512 bytes for a shell command and 64 for a name. The tab rename box turns line breaks into spaces.
-	- Expected behavior: Line breaks and tabs paste as spaces, as in the tab rename box, and a paste that doesn't fit is refused whole.
-	- Reproduced: No. Traced through the code.
-	- Possible cause: Each pasted char goes through the per-key filter, and chars past the cap are dropped one by one.
-	- Origin: 5e596158, 20260717, caps from 36d99d5f, 20260819. Not seen by an earlier round. Confirmed by trace.
-	- Sweep: The prompt name, shell name, and command caps.
-	- Notes:
-		- Code review 20261117 item 29.
-		- Detail: `detail_backlog.md`, under this ID.
-
-- Settings: a long dropdown runs off the window, and the wheel slides an open one over other parts
-	- ID: 2026111713374929
-	- Type: Bug
-	- Status: Queued
-	- Severity: Low
-	- Opened: 20261117-133749
-	- Opened by: CC
-	- Target OS: All
-	- Target version: rc.1
-	- Incorrect behavior: With about 17 saved themes, the Theme list goes past the window bottom and the lower options can't be seen or clicked. The code says it still shows all its options. A wheel turn with a list open moves it over the search box, the tabs, or the footer, where it stays clickable.
-	- Expected behavior: A list fits the window and scrolls inside itself, and a wheel turn closes it, as a resize does.
-	- Reproduced: No. Traced through the code.
-	- Possible cause: `dd_popup` has no cap or scroll, and `wheel()` closes the context menu but not a list.
-	- Origin: 5456e2a8, 20260709, wheel from fab8a75c, 20260701. Not seen by an earlier round. Confirmed by trace.
-	- Sweep: `em_rect` is already clamped.
-	- Notes:
-		- Code review 20261117 item 30.
-		- Detail: `detail_backlog.md`, under this ID.
-
-- Paste decides on bracketed paste from the mode seen at the last frame
-	- ID: 2026111713374930
-	- Type: Bug
-	- Status: Queued
-	- Severity: Low
-	- Opened: 20261117-133749
-	- Opened by: CC
-	- Target OS: All
-	- Target version: rc.1
-	- Incorrect behavior: A prompt that has just turned on bracketed paste gets a multi-line paste unbracketed if no frame has been built since, so each line runs as it arrives. This lasts about a frame, or longer during an output flood. The other way, a program that just turned it off gets literal `ESC[200~`.
-	- Expected behavior: Paste reads the mode when it pastes, as focus reports already do.
-	- Reproduced: No. Read only.
-	- Possible cause: `Pane::paste` reads `self.mode`, which only `build` refreshes.
-	- Origin: 8e5ea4e0, 20260701. Its twin `report_focus` was fixed in 3d7e0902, 20261013. Not seen by an earlier round. Plausible.
-	- Sweep: App cursor keys and mouse reports use the same cache, where being late is harmless.
-	- Notes:
-		- Code review 20261117 item 31.
-		- Detail: `detail_backlog.md`, under this ID.
-
-- Each reply to a terminal query costs a window event and a wakeup, and unread replies pile up without a limit
-	- ID: 2026111713374931
-	- Type: Bug
-	- Status: Queued
-	- Severity: Low
-	- Opened: 20261117-133749
-	- Opened by: CC
-	- Target OS: All
-	- Target version: rc.1
-	- Incorrect behavior: Output full of `ESC[c`, `ESC[6n` or OSC 11 queries makes one window event and one wakeup per reply, the cost `WakeGate` removed for output. If the program in front isn't reading, the engine's write queue grows without bound.
-	- Expected behavior: Replies from one read are sent together, and replies past a cap are dropped.
-	- Reproduced: No. Read only.
-	- Possible cause: Replies aren't batched, and the engine's write queue has no cap.
-	- Origin: c6eaa043, 20260628. Not seen by an earlier round. Plausible.
-	- Sweep: None found.
-	- Notes:
-		- Code review 20261117 item 32.
-		- Detail: `detail_backlog.md`, under this ID.
-
-- The caches of glyphs the font lacks grow with every new character for the life of the pane
-	- ID: 2026111713374932
-	- Type: Bug
-	- Status: Queued
-	- Severity: Low
-	- Opened: 20261117-133749
-	- Opened by: CC
-	- Target OS: All
-	- Target version: rc.1
-	- Incorrect behavior: Most mono fonts lack CJK, so every distinct CJK character keeps a shaped buffer per pane, per bold and italic mix, until the font changes. Reading Chinese logs or catting a Unicode table keeps adding entries.
-	- Expected behavior: The caches have a size cap and evict what hasn't been drawn lately, as the color glyph cache does.
-	- Reproduced: No. Read only.
-	- Possible cause: `glyph_cache` and `cover_cache` have no cap and are cleared only on a font rebuild.
-	- Origin: 82a7d006, 20260709. Item 2026100418225501 measured the caches but set no bound. Plausible.
-	- Sweep: `TextCtx.text_families` grows the same way, with small entries.
-	- Related IDs: 2026100418225501
-	- Notes:
-		- Code review 20261117 item 33.
-		- Detail: `detail_backlog.md`, under this ID.
-
-- About box links open through an older opener that flashes a console on Windows and leaves a zombie on Unix
-	- ID: 2026111713374933
-	- Type: Bug
-	- Status: Queued
-	- Severity: Low
-	- Opened: 20261117-133749
-	- Opened by: CC
-	- Target OS: All
-	- Target version: rc.1
-	- Incorrect behavior: On Windows, `cmd /C start` runs without CREATE_NO_WINDOW, so each About link click flashes a console. On Linux and macOS the opener child is never waited on and stays a zombie until SilkTerm exits.
-	- Expected behavior: About links open the way terminal links do.
-	- Reproduced: No. Read only.
-	- Possible cause: `links::open` replaced this path for terminal links, but the About box still calls `open_url`.
-	- Origin: c6eaa043, 20260628. 8f95c246, 20260908 fixed `links::open` only. The 20260914 round turned down the shell part, since the URLs are fixed. Plausible.
-	- Sweep: Every other spawn in the app reaps its child.
-	- Notes:
-		- Code review 20261117 item 34.
 		- Detail: `detail_backlog.md`, under this ID.
 
 - The terminal window's close button quits while Settings is open and drops its unapplied changes
@@ -774,123 +405,10 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Possible cause: The dialog's hold on the main window covers keys, wheel, IME, and presses, but not CloseRequested.
 	- Origin: dca3f532, 20260702, and 80f70698, 20261017. Not seen by an earlier round. Confirmed by trace.
 	- Sweep: The notice has the same gap, but holds no changes.
+	- Decisions:
+		- 20261117: Kept for rc.1, since it loses data. rc.1 takes only Critical and High items and anything that crashes or loses data.
 	- Notes:
 		- Code review 20261117 item 35.
-		- Detail: `detail_backlog.md`, under this ID.
-
-- A failed dialog GPU warm-up is tried again after every idle release
-	- ID: 2026111713374935
-	- Type: Bug
-	- Status: Queued
-	- Severity: Low
-	- Opened: 20261117-133749
-	- Opened by: CC
-	- Target OS: All
-	- Target version: rc.1
-	- Incorrect behavior: On a box where the dialog warm-up fails, each idle release resets it to Idle, so the next start spawns another worker that fails the same way and prints the same warning. The Failed state exists to stop this.
-	- Expected behavior: Failed stays failed until the wanted backends change.
-	- Reproduced: No. Confirmed by reading.
-	- Possible cause: `GpuWarm::release` sets Idle whatever the state was.
-	- Origin: 90073855, 20260917. Not seen by an earlier round. Confirmed by trace.
-	- Sweep: None found.
-	- Related IDs: Code review 20261117 item 16 is the case where it fires
-	- Notes:
-		- Code review 20261117 item 36.
-		- Detail: `detail_backlog.md`, under this ID.
-
-- macOS: the system fixed-width font is looked up by a cut-down PostScript name, so most picks are dropped
-	- ID: 2026111713374936
-	- Type: Bug
-	- Status: Queued
-	- Severity: Low
-	- Opened: 20261117-133749
-	- Opened by: CC
-	- Target OS: macOS
-	- Target version: rc.1
-	- Incorrect behavior: "SFMono-Regular", "JetBrainsMono-Regular" or "FiraCode-Retina" become "SFMono", "JetBrainsMono" or "FiraCode". No installed family has that name, so the built-in stack is used, while Settings still shows the cut-down name.
-	- Expected behavior: The system font's family name is used.
-	- Reproduced: No. Read only, macOS code.
-	- Possible cause: Splitting the PostScript name at `-` gives the family only when the family has no spaces.
-	- Origin: ec829224, 20260706, from c6eaa043. Not seen by an earlier round. Plausible.
-	- Sweep: None found.
-	- Notes:
-		- Code review 20261117 item 37.
-		- Detail: `detail_backlog.md`, under this ID.
-
-- A change only in the knobs crate keeps the old build number
-	- ID: 2026111713374937
-	- Type: Bug
-	- Status: Queued
-	- Severity: Low
-	- Opened: 20261117-133749
-	- Opened by: CC
-	- Target OS: All
-	- Target version: rc.1
-	- Incorrect behavior: An edit under `knobs/src` builds a different binary, but the build number isn't updated. The code says any change to the inputs must make a new number. cicd pins the number, so only hand builds are affected.
-	- Expected behavior: Every path dependency is a build input.
-	- Reproduced: No. Confirmed by reading: knobs is a path dependency and isn't in `BUILD_INPUTS`.
-	- Possible cause: Path dependencies added after `BUILD_INPUTS` weren't added to it, and dcq7f checks only included files and the lock.
-	- Origin: f044c78a, 20260916, knobs from 3a052615, 20261009. Not seen by an earlier round. Confirmed by trace.
-	- Sweep: The forks are git dependencies covered by the lock.
-	- Notes:
-		- Code review 20261117 item 38.
-		- Detail: `detail_backlog.md`, under this ID.
-
-- SILK_DUMP writes a fixed /tmp file on every frame, following symlinks, and stalls the frame
-	- ID: 2026111713374938
-	- Type: Bug
-	- Status: Queued
-	- Severity: Low
-	- Opened: 20261117-133749
-	- Opened by: CC
-	- Target OS: Linux
-	- Target version: rc.1
-	- Incorrect behavior: With SILK_DUMP set, every GL frame waits on a readback and saves `/tmp/silk_offscreen.png`. A planted symlink is followed, 2 windows overwrite each other, and the write isn't atomic.
-	- Expected behavior: A dump goes to a per-user folder with a per-process name, once per request.
-	- Reproduced: No. Confirmed by reading.
-	- Possible cause: A diagnostic with a hard-coded shared path.
-	- Origin: 90073855, 20260917, behind `env_flag` since 42380228, 20261003. Not seen by an earlier round. Confirmed by trace.
-	- Sweep: `diagnostics/glyphon_gl.rs` writes `/tmp/glyphon_gl.png` the same way, in a dev example.
-	- Notes:
-		- Code review 20261117 item 39.
-		- Detail: `detail_backlog.md`, under this ID.
-
-- A color emoji whose layers nest past the limit more than once draws layers in the wrong order
-	- ID: 2026111713374939
-	- Type: Bug
-	- Status: Queued
-	- Severity: Low
-	- Opened: 20261117-133749
-	- Opened by: CC
-	- Target OS: All
-	- Target version: rc.1
-	- Incorrect behavior: 2 nested pushes past 24 layers skip 2 layers but count 1, so the second skipped pop really pops a live layer early. Only a broken or hostile font reaches it, and the result is wrong pixels.
-	- Expected behavior: Every skipped push has a matching skipped pop.
-	- Reproduced: No. Confirmed by reading.
-	- Possible cause: `overflowed` is a bool where a depth count is needed.
-	- Origin: 0c28262e, 20260727. The 20260914 round read the file. Confirmed by trace.
-	- Sweep: None found.
-	- Notes:
-		- Code review 20261117 item 40.
-		- Detail: `detail_backlog.md`, under this ID.
-
-- `--open FILE` with a relative path runs nothing, or the wrong file
-	- ID: 2026111713374940
-	- Type: Bug
-	- Status: Queued
-	- Severity: Low
-	- Opened: 20261117-133749
-	- Opened by: CC
-	- Target OS: Linux, macOS
-	- Target version: rc.1
-	- Incorrect behavior: usage.md says it runs FILE from its own folder. `silkterm --open sub/run.sh` changes to `sub` and then runs `sub/run.sh` from there, which fails. `--open run.sh` looks `run.sh` up on PATH. A folder with a literal `$NAME` in it is expanded. Explorer passes absolute paths, so Windows isn't affected.
-	- Expected behavior: A relative FILE is made absolute first, and its folder is used as written.
-	- Reproduced: No. Traced through the code.
-	- Possible cause: The file is used as written, and the derived folder goes through `expand_vars`.
-	- Origin: 9301f8e6, 20260930. Not seen by an earlier round. Confirmed by trace.
-	- Sweep: Other path flags go through `resolve_dir`, which makes them absolute.
-	- Notes:
-		- Code review 20261117 item 41.
 		- Detail: `detail_backlog.md`, under this ID.
 
 - A command-line argument that isn't valid Unicode crashes SilkTerm
@@ -908,104 +426,10 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Possible cause: `std::env::args()` is used rather than `args_os()`.
 	- Origin: c6eaa043, 20260628. Not seen by an earlier round. Confirmed by trace.
 	- Sweep: Only 2 call sites, both in main.rs.
+	- Decisions:
+		- 20261117: Kept for rc.1, since it crashes. rc.1 takes only Critical and High items and anything that crashes or loses data.
 	- Notes:
 		- Code review 20261117 item 42.
-		- Detail: `detail_backlog.md`, under this ID.
-
-- One stalled client blocks a window's control socket
-	- ID: 2026111713374942
-	- Type: Bug
-	- Status: Queued
-	- Severity: Low
-	- Opened: 20261117-133749
-	- Opened by: CC
-	- Target OS: All
-	- Target version: rc.1
-	- Incorrect behavior: Connections are served one at a time, with no read timeout or size cap. A client that connects and never sends a newline blocks every later `--wallpaper`, `--reload-settings` and peer save notice for that window, and those clients hang too. One that never ends its line grows memory. On Windows, the pipe's default security lets other users on the box open it and stall it.
-	- Expected behavior: A read timeout, a line cap, a pipe only its own user can open, and a reply timeout in the client.
-	- Reproduced: No. Read only.
-	- Possible cause: No timeout or cap, a single serving loop, and default pipe security.
-	- Origin: c6eaa043 and the ctl rework. Not seen by an earlier round. Plausible.
-	- Sweep: Peer pokes don't wait for a reply.
-	- Notes:
-		- Code review 20261117 item 43.
-		- Detail: `detail_backlog.md`, under this ID.
-
-- Windows: install.ps1 can leave no binary when the last move fails
-	- ID: 2026111713374943
-	- Type: Bug
-	- Status: Queued
-	- Severity: Low
-	- Opened: 20261117-133749
-	- Opened by: CC
-	- Target OS: Windows
-	- Target version: rc.1
-	- Incorrect behavior: An old copy that isn't running is deleted first. If the move of the new one then fails, for example while antivirus holds it, the staged file is removed too. The Start menu shortcut and PATH point at a missing exe until the next run.
-	- Expected behavior: The old file is renamed aside first and put back if the move fails.
-	- Reproduced: No. Read only.
-	- Possible cause: The old file is destroyed before the new one is in place, with no rollback.
-	- Origin: 07613789, 20260924. Not seen by an earlier round. Plausible.
-	- Sweep: install.bash uses an atomic `mv -f`. n8runterm.ps1 copies to a temp name and moves it.
-	- Related IDs: The closed "can't upgrade over a running copy" item
-	- Notes:
-		- Code review 20261117 item 44.
-		- Detail: `detail_backlog.md`, under this ID.
-
-- `runterm` stops under bash 3.2 when run with no arguments
-	- ID: 2026111713374944
-	- Type: Bug
-	- Status: Queued
-	- Severity: Low
-	- Opened: 20261117-133749
-	- Opened by: CC
-	- Target OS: macOS
-	- Target version: rc.1
-	- Incorrect behavior: A plain `runterm` on a Mac with Apple's bash first in PATH exits 1 with "@: unbound variable" before it finds the launcher. Its history says it runs under 3.2.
-	- Expected behavior: It runs with no arguments under bash 3.2.
-	- Reproduced: Yes, in the `bash:3.2` image: `set -u; f "${@}"` gives "@: unbound variable", rc 1.
-	- Possible cause: bash 3.2 treats an empty `"${@}"` as unset under `set -u`. install.bash already guards against it.
-	- Origin: 4050e29a, 20260908, with 3.2 support claimed 20261001. Not seen by an earlier round. Confirmed.
-	- Sweep: Other scripts that claim 3.2 are guarded or always get arguments.
-	- Notes:
-		- Code review 20261117 item 45.
-		- Detail: `detail_backlog.md`, under this ID.
-
-- release.bash makes the tag before pushing, so a failed push leaves a local tag and the rerun gives the wrong advice
-	- ID: 2026111713374945
-	- Type: Bug
-	- Status: Queued
-	- Severity: Low
-	- Opened: 20261117-133749
-	- Opened by: CC
-	- Target OS: All
-	- Target version: rc.1
-	- Incorrect behavior: `--push` makes the tag, then the push to main runs the merge gate, about an hour. If that fails, the rerun says the tag exists and to bump the version on dev, when the fix is to delete the local tag.
-	- Expected behavior: The tag is made after main is pushed, or removed when the push fails, or the message names the local tag.
-	- Reproduced: No. Traced through the code.
-	- Possible cause: Tag creation comes before the push.
-	- Origin: e68c17a9, 20260711. Not seen by an earlier round. Confirmed by trace.
-	- Sweep: No other tag creation.
-	- Notes:
-		- Code review 20261117 item 46.
-		- Detail: `detail_backlog.md`, under this ID.
-
-- sizebench measures on whatever display is already on :98
-	- ID: 2026111713374946
-	- Type: Bug
-	- Status: Queued
-	- Severity: Low
-	- Opened: 20261117-133749
-	- Opened by: CC
-	- Target OS: Linux
-	- Target version: rc.1
-	- Incorrect behavior: If the cicd profiler's display or another project's is up on :98, sizebench says it's reusing it and puts its terminals there, at that server's size and with its window manager, and disturbs that run.
-	- Expected behavior: It refuses a display that exists, or takes the first free one, as termbench and gui-headless do.
-	- Reproduced: No. Read only.
-	- Possible cause: An existing server is reused rather than refused.
-	- Origin: f8471950, 20260730. Not seen by an earlier round. Plausible.
-	- Sweep: termbench-run.bash and gui-headless.bash already refuse a display that's taken or check who holds it.
-	- Notes:
-		- Code review 20261117 item 47.
 		- Detail: `detail_backlog.md`, under this ID.
 
 - Both installers rewrite a hand-edited launcher on every upgrade
@@ -1023,6 +447,8 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Possible cause: `needBinary` also sets the launcher flags.
 	- Origin: c09beb3e, 20260806. Not seen by an earlier round. Confirmed by trace.
 	- Sweep: No other launcher writers.
+	- Decisions:
+		- 20261117: Kept for rc.1, since it loses data. rc.1 takes only Critical and High items and anything that crashes or loses data.
 	- Notes:
 		- Code review 20261117 item 48.
 		- Detail: `detail_backlog.md`, under this ID.
@@ -1042,85 +468,10 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Possible cause: `git ls-files --others --exclude-standard` is added to the list.
 	- Origin: The first commit, 20260628. Not seen by an earlier round. Confirmed by trace.
 	- Sweep: None found.
+	- Decisions:
+		- 20261117: Kept for rc.1, since it loses data. rc.1 takes only Critical and High items and anything that crashes or loses data.
 	- Notes:
 		- Code review 20261117 item 49.
-		- Detail: `detail_backlog.md`, under this ID.
-
-- Scripts outside cicd/ remove temp folders without the safe removal guard
-	- ID: 2026111713374949
-	- Type: Bug
-	- Status: Queued
-	- Severity: Low
-	- Opened: 20261117-133749
-	- Opened by: CC
-	- Target OS: All
-	- Target version: rc.1
-	- Incorrect behavior: The pre-push and pre-commit hooks, termbench, sizebench, and the wine build script remove their folders with a bare `rm -rf`, and their folders don't follow the temp layout. ci-mac.bash never removes its log folder. No live danger was found, since `rm -rf` doesn't follow links.
-	- Expected behavior: Every script uses the guard and the temp layout.
-	- Reproduced: No. Confirmed by search.
-	- Possible cause: The sweep in 2026102807494121 covered `cicd/` only, and dehwp reads only bash files there.
-	- Origin: a8fe9f7f, 20261006, and the bench and wine scripts as first written. The rule is from the 20261024 CICD directives. Confirmed by search.
-	- Sweep: `utility/git-hooks/pre-push` ~155, `utility/git-hooks/pre-commit` ~34, `utility/include/termbench-run.bash` ~70, `utility/include/sizebench-run.bash` ~61, `utility/run-windows-build-via-wine.bash` ~177, `cicd/ci-mac.bash` ~32.
-	- Related IDs: 2026102807494121
-	- Notes:
-		- Code review 20261117 item 50.
-		- Detail: `detail_backlog.md`, under this ID.
-
-- An open Settings field redraws the dialog about 30 times a second for as long as it's open
-	- ID: 2026111713374953
-	- Type: Enhancement
-	- Status: Queued
-	- Priority: Low
-	- Opened: 20261117-133749
-	- Opened by: CC
-	- Target OS: All
-	- Target version: rc.1
-	- Requirements:
-		- The caret fade asks for a frame every 33 ms, focused or not, with no idle stop. Each frame rebuilds every row.
-		- Stop the fade after about 10 s idle or when the dialog loses focus, as GTK does.
-	- Reproduced: No. The 33 ms wake is confirmed by reading. The cost per frame wasn't measured.
-	- Origin: 404df0f2, 20260717. Not seen by an earlier round.
-	- Sweep: tab_edit's caret, if it shares the fade.
-	- Notes:
-		- Code review 20261117 item 54.
-		- Detail: `detail_backlog.md`, under this ID.
-
-- Drag-selecting in a long Settings field measures every prefix again on each pointer move
-	- ID: 2026111713374954
-	- Type: Enhancement
-	- Status: Queued
-	- Priority: Low
-	- Opened: 20261117-133749
-	- Opened by: CC
-	- Target OS: All
-	- Target version: rc.1
-	- Requirements:
-		- A 512-byte command has 513 prefixes, and the measure cache clears at 512 entries, so each move shapes most of them again. Past the edge it does this every frame.
-		- Shape the text once per edit and hit-test the glyph positions.
-	- Reproduced: No. Read only.
-	- Origin: 5e596158, 20260717, cache from 843e4c91, 20260707. Not seen by an earlier round.
-	- Sweep: tab_edit uses the same helper on short text.
-	- Notes:
-		- Code review 20261117 item 55.
-		- Detail: `detail_backlog.md`, under this ID.
-
-- The console watcher wakes twice a second for the life of every Linux window
-	- ID: 2026111713374955
-	- Type: Enhancement
-	- Status: Queued
-	- Priority: Low
-	- Opened: 20261117-133749
-	- Opened by: CC
-	- Target OS: Linux
-	- Target version: rc.1
-	- Requirements:
-		- It sleeps 500 ms and reads `/sys/class/tty/tty0/active` again, forever, even with the GPU let go. README says idle windows give back CPU.
-		- Wait on the sysfs file with poll for POLLPRI, which the kernel signals on a console change, and keep the sleep loop as the fallback.
-	- Reproduced: No. Read only.
-	- Origin: bb66e6e2, 20261002, from July. Not seen by an earlier round.
-	- Sweep: The 2 s VRAM probe runs only while the device is held, by design.
-	- Notes:
-		- Code review 20261117 item 56.
 		- Detail: `detail_backlog.md`, under this ID.
 
 - Tab labels and the window title are worked out again on every frame
@@ -1485,6 +836,679 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Closed reason: Done
 
 - **Stop here to work on releasing rc.1**.
+
+- Shift+drag of a pane whose shell exits during the drag leaves a blank pane and an orphan
+	- ID: 2026111713374909
+	- Type: Bug
+	- Status: Queued
+	- Severity: Avg
+	- Opened: 20261117-133749
+	- Opened by: CC
+	- Target OS: All
+	- Target version: rc.2
+	- Incorrect behavior: A tab has panes A and B. Shift+press on A starts a drag, and A's shell exits. Dropping on B swaps a pane that no longer exists into the layout. B still draws at its old place but is never resized again, can't be split, and closing it leaves a blank area for good. On macOS, Command+] during a Shift+drag switches tabs, and the drop then swaps across 2 tabs.
+	- Expected behavior: A drag whose pane closed, or whose tab changed, is dropped.
+	- Reproduced: No. Traced for the layout damage. The effects on screen are from reading.
+	- Possible cause: `close_dead_pane` clears the menu but not `dragging_pane`. `swap_leaves` assumes both ids are leaves of this tab's tree.
+	- Origin: c6eaa043, 20260628. Same class as Code review 20260914 F50. Not seen by an earlier round. Confirmed by trace.
+	- Sweep: The other pane-id drag states look the pane up on release and are safe. `resizing` keeps a tree path, which can move a different divider, cosmetic only.
+	- Related IDs: Code review 20260914 F50
+	- Notes:
+		- Code review 20261117 item 10.
+		- Detail: `detail_backlog.md`, under this ID.
+
+- A removed shell comes back, and a new shell line can be switched off by itself
+	- ID: 2026111713374911
+	- Type: Bug
+	- Status: Queued
+	- Severity: Avg
+	- Opened: 20261117-133749
+	- Opened by: CC
+	- Target OS: All
+	- Target version: rc.2
+	- Incorrect behavior: Removing a found shell such as zsh in Settings and pressing OK lasts until the next launch, when the scan adds it back. If the scan finishes while Settings is open, it's added back at once. The same pass switches off a line just made with Add, or one with a half-typed command, and saves it off. It can also drop a duplicate row above the line being edited, so the edit moves to the next entry.
+	- Expected behavior: A removed shell stays removed, and the scan never changes a line made in the dialog.
+	- Reproduced: No. Traced through the code.
+	- Possible cause: `shells::merge_with` only adds, and nothing records a removal. An empty command reads as "not installed".
+	- Origin: 37bd34a0, 20260818, and 36d99d5f, 20260819. Not seen by an earlier round. Confirmed by trace.
+	- Sweep: `app.rs` `fold_shells` at launch has the same cause.
+	- Notes:
+		- Code review 20261117 item 12.
+		- Detail: `detail_backlog.md`, under this ID.
+
+- Combining marks and other zero-width characters aren't drawn, and Copy output drops them
+	- ID: 2026111713374912
+	- Type: Bug
+	- Status: Queued
+	- Severity: Avg
+	- Opened: 20261117-133749
+	- Opened by: CC
+	- Target OS: All
+	- Target version: rc.2
+	- Incorrect behavior: `printf 'e\u0301 \u0915\u093f \u2764\ufe0f 1\ufe0f\u20e3\n'` shows a plain e, a bare क, a text-style heart and a plain 1. Decomposed accents, Indic vowel signs, Thai tone marks, Hebrew points, emoji presentation, keycaps, and ZWJ sequences all lose their marks. Copy on select keeps them, Copy output doesn't.
+	- Expected behavior: Marks are drawn with their base character, and every copy keeps them.
+	- Reproduced: No. Confirmed by search: no code outside tests reads `Cell::zerowidth()`.
+	- Possible cause: Each cell adds only `cell.c` to the row text and the glyph list.
+	- Origin: c6eaa043, 20260628, and 2c09aa5b, 20260802. Code review 20260914 item 65 capped the marks but didn't check that they're drawn. Confirmed by trace.
+	- Sweep: `capture_grid_text` and `strip_cell` drop them the same way. A tab cell copies as a tab plus padding, and a wide spacer at a wrap as a space, minor siblings to fold in.
+	- Related IDs: Code review 20260914 item 65
+	- Notes:
+		- Code review 20261117 item 13.
+		- Detail: `detail_backlog.md`, under this ID.
+
+- With a non-Latin keyboard layout, Ctrl+letter sends nothing, so Ctrl+C doesn't stop a program
+	- ID: 2026111713374913
+	- Type: Bug
+	- Status: Queued
+	- Severity: Avg
+	- Opened: 20261117-133749
+	- Opened by: CC
+	- Target OS: All
+	- Target version: rc.2
+	- Incorrect behavior: With a Russian layout, Ctrl+C gives the letter с, and nothing reaches the shell. The same for Ctrl+D, Ctrl+Z, readline's Ctrl+A, E and R, and the Ctrl+Shift+C, V and T hotkeys. Greek, Hebrew, and Arabic layouts act the same.
+	- Expected behavior: Ctrl with a non-ASCII letter falls back to the key's Latin position, as VTE, Windows Terminal, and kitty do.
+	- Reproduced: No. Traced on the macOS path. X11 and Windows are from reading winit.
+	- Possible cause: Nothing reads `physical_key`. `encode_key` matches only ASCII letters.
+	- Origin: c6eaa043, 20260628. The 20260914 round turned down only Ctrl with a digit or `?`. Plausible.
+	- Sweep: `keys.rs` `Bindings::hotkey`, `input::hotkey_in`, the dialog and tab rename edit keys and the menu accelerators all key on `logical_key`.
+	- Notes:
+		- Code review 20261117 item 14.
+		- Detail: `detail_backlog.md`, under this ID.
+
+- A row that starts with a right-to-left word is drawn mirrored against its cells
+	- ID: 2026111713374914
+	- Type: Bug
+	- Status: Queued
+	- Severity: Avg
+	- Opened: 20261117-133749
+	- Opened by: CC
+	- Target OS: All
+	- Target version: rc.2
+	- Incorrect behavior: With a mono font that covers Hebrew, such as DejaVu Sans Mono, `ls` showing `שלום.txt` at the start of a row draws the row as a right-to-left paragraph. Trailing blanks move to the left and the runs reverse. Cursor, selection, and cell colors stay in cell order, so they sit on the wrong glyphs. A font without Hebrew draws the same row correctly.
+	- Expected behavior: Every row is laid out left to right in cell order, whatever its first strong character.
+	- Reproduced: No. Read from cosmic-text 0.18.2, which picks the paragraph direction from the first strong character.
+	- Possible cause: `set_buffer_rows` shapes with Advanced shaping and sets no base direction.
+	- Origin: 349c92bf, 20260731. Not seen by an earlier round. Plausible.
+	- Sweep: The scrim buffer and the strip lines use the same shaping.
+	- Notes:
+		- Code review 20261117 item 15.
+		- Detail: `detail_backlog.md`, under this ID.
+
+- Settings, About, notices, and the tmux close question can't open on a Linux box with GL but no Vulkan
+	- ID: 2026111713374915
+	- Type: Bug
+	- Status: Queued
+	- Severity: Avg
+	- Opened: 20261117-133749
+	- Opened by: CC
+	- Target OS: Linux
+	- Target version: rc.2
+	- Incorrect behavior: prerequisites.md asks for Vulkan or GL. With no Vulkan driver, the main X11 window draws through GL, but dialogs ask wgpu for Vulkan only and fail. Nothing shows. stderr says "dialog window failed". The close question falls back to ending nothing, and config refusal notices are lost.
+	- Expected behavior: Dialogs open wherever the main window can draw.
+	- Reproduced: No. Read only.
+	- Possible cause: Dialogs use `Backends::PRIMARY` to avoid the wgpu EGL teardown crash, with no other route.
+	- Origin: c6eaa043, 20260628, and 87a79faf, 20260804. Not seen by an earlier round. Plausible.
+	- Sweep: `new_about`, `new_notice`, `new_ask` and `new_settings` all go through `DialogWin::make`.
+	- Notes:
+		- Code review 20261117 item 16.
+		- Detail: `detail_backlog.md`, under this ID.
+
+- macOS: with XQuartz installed, every launch takes the Remote profile
+	- ID: 2026111713374916
+	- Type: Bug
+	- Status: Queued
+	- Severity: Avg
+	- Opened: 20261117-133749
+	- Opened by: CC
+	- Target OS: macOS
+	- Target version: rc.2
+	- Incorrect behavior: XQuartz sets DISPLAY to a launchd socket path for every app. The remote check reads everything before the first `:` as a host, so every session gets the Remote profile, with no wallpaper and the plain look, and nothing says why.
+	- Expected behavior: DISPLAY is ignored on macOS, and a path-form DISPLAY reads as local everywhere.
+	- Reproduced: No. Traced. XQuartz's DISPLAY form is documented but wasn't run here.
+	- Possible cause: `forwarded_display` runs on every non-Windows platform and treats a socket path as a host.
+	- Origin: 91ce68f0, 20260904, broadened by Code review 20260914 item F41. Confirmed by trace.
+	- Sweep: `profile.rs` ~189 is the only DISPLAY reader.
+	- Related IDs: Code review 20260914 F41, test dc6ff
+	- Notes:
+		- Code review 20261117 item 17.
+		- Detail: `detail_backlog.md`, under this ID.
+
+- Windows: a shell whose path has an apostrophe is left out of the shell list
+	- ID: 2026111713374917
+	- Type: Bug
+	- Status: Queued
+	- Severity: Avg
+	- Opened: 20261117-133749
+	- Opened by: CC
+	- Target OS: Windows
+	- Target version: rc.2
+	- Incorrect behavior: With a profile folder like `C:\Users\O'Brien`, pwsh from scoop, a per-user Python, nu, and others are found, then dropped. The command is stored unquoted, the splitter reads `'` as an opening quote to the end of the line, and the result names no program.
+	- Expected behavior: Every found shell is listed and runs, whatever its path holds.
+	- Reproduced: No. Traced through the code.
+	- Possible cause: `quoted()` wraps only on a space, while `shell_split` also gives meaning to quotes and backslashes. An unclosed quote isn't an error.
+	- Origin: 37bd34a0, 20260818. Not seen by an earlier round. Confirmed by trace.
+	- Sweep: `shells::command_line` uses the same space-only rule. `wsl.exe -d` names and the tab tip are safe.
+	- Notes:
+		- Code review 20261117 item 18.
+		- Detail: `detail_backlog.md`, under this ID.
+
+- The pre-push merge gate skips the private runner, the private tests, and the content scrub
+	- ID: 2026111713374918
+	- Type: Bug
+	- Status: Queued
+	- Severity: Avg
+	- Opened: 20261117-133749
+	- Opened by: CC
+	- Target OS: All
+	- Target version: rc.2
+	- Incorrect behavior: On a push to main, the gate runs in a throwaway worktree with no siblings. The private runner reads as not checked out, so the Mac and Store jobs don't run. The private tests and their test-ID check are skipped. The content scrub finds no script and passes quietly. The hook's own scrub reads the working tree rather than the commits being pushed.
+	- Expected behavior: The gate finds the private checkout and the scrub from the real checkout, and the scrub reads the pushed commits.
+	- Reproduced: No. Traced through the code.
+	- Possible cause: These paths are found from `${root}/..`, which in the worktree is the temp folder.
+	- Origin: 2314eb1c, 20261006, 6ddd84a9, 20261028, with 64cc76c3 and b3de0d28. Item 2026102616543943 notes the gate was never run from the hook. Same class as Code review 20260914 F83. Confirmed by trace.
+	- Sweep: These are the only `root}/..` uses in cicd.bash and config.bash.
+	- Related IDs: 2026102616543943, Code review 20260914 F83
+	- Notes:
+		- Code review 20261117 item 19.
+		- Detail: `detail_backlog.md`, under this ID.
+
+- `win-remote.bash sync --ref` reports success when the fetch or reset failed
+	- ID: 2026111713374919
+	- Type: Bug
+	- Status: Queued
+	- Severity: Avg
+	- Opened: 20261117-133749
+	- Opened by: CC
+	- Target OS: Windows
+	- Target version: rc.2
+	- Incorrect behavior: `sync --ref fixbranch` with the branch not pushed, a typo, or the box offline leaves the remote clone where it was, prints its old commit and exits 0. The next `job test` then passes against whatever the clone had.
+	- Expected behavior: A failed clone, fetch, or reset exits non-zero, and the output names the ref the clone ended on.
+	- Reproduced: Yes, the PowerShell part: with `$ErrorActionPreference = "Stop"`, a failing `git reset --hard origin/nope 2>&1 | Out-Null` keeps going and the script exits 0 under pwsh 7.6.10.
+	- Possible cause: Since PowerShell 7.2, Stop doesn't apply to a native program's exit code, and the script never reads `$LASTEXITCODE`.
+	- Origin: 1d2b7719, 20260908, and ccd2ea4d, 20260909. Not seen by an earlier round. Confirmed.
+	- Sweep: The win-jobs build, test, and clippy scripts read `$LASTEXITCODE`. info.ps1 only reads.
+	- Notes:
+		- Code review 20261117 item 20.
+		- Detail: `detail_backlog.md`, under this ID.
+
+- Moving old theme colors rewrites the whole settings file in shcl's canonical form
+	- ID: 2026111713374923
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261117-133749
+	- Opened by: CC
+	- Target OS: All
+	- Target version: rc.2
+	- Incorrect behavior: The first launch of a file from before 20261009 with colors set over a built-in theme folds dotted lines into blocks, moves top comments, collapses blank lines, and turns spaces into tabs. Every other launch write keeps untouched bytes as they were.
+	- Expected behavior: The move changes only the lines it moves.
+	- Reproduced: No. Traced, and `shcl fmt` shows the canonical rewrite.
+	- Possible cause: `move_theme_colors` loads with `Document::parse` where every other user-file save uses `parse_kept`.
+	- Origin: b043ccbf, 20261009. Not seen by an earlier round. Confirmed by trace.
+	- Sweep: Other `Document::parse` saves are on the template or the program's own state file.
+	- Notes:
+		- Code review 20261117 item 24.
+		- Detail: `detail_backlog.md`, under this ID.
+
+- Line edits turn a CRLF settings file into LF
+	- ID: 2026111713374924
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261117-133749
+	- Opened by: CC
+	- Target OS: Windows
+	- Target version: rc.2
+	- Incorrect behavior: On the first launch, the banner refresh writes a CRLF file back as LF with no copy kept. Revert, disable, and rating writes do the same. The code states that every other byte stays as it was.
+	- Expected behavior: A line edit keeps the file's line endings.
+	- Reproduced: No. Traced through the code.
+	- Possible cause: The line editors split with `str::lines()` and join with `\n`. shcl itself keeps CRLF.
+	- Origin: The first line-based migration, with later editors copying it. Not seen by an earlier round. Confirmed by trace.
+	- Sweep: `with_shcl_banner`, `edit_setting_lines`, `placed_rating_lines`, `backfilled_text`, `migrated_text` and `wallpaper_heading_repaired`.
+	- Notes:
+		- Code review 20261117 item 25.
+		- Detail: `detail_backlog.md`, under this ID.
+
+- `--reset-config` says there's no config to reset when the move aside fails, then starts on the old file
+	- ID: 2026111713374925
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261117-133749
+	- Opened by: CC
+	- Target OS: All
+	- Target version: rc.2
+	- Incorrect behavior: With 99 `.bak` files already there, or on Windows with the file held open, the move aside fails. The program prints "no config to reset", starts on the old settings, and exits 0.
+	- Expected behavior: A failed reset says so and exits non-zero.
+	- Reproduced: No. Traced through the code.
+	- Possible cause: `reset_config` returns None for both "nothing there" and "failed".
+	- Origin: From before 20260914. Not seen by an earlier round. Confirmed by trace.
+	- Sweep: None found.
+	- Notes:
+		- Code review 20261117 item 26.
+		- Detail: `detail_backlog.md`, under this ID.
+
+- A theme saved or renamed as "Custom" can't be used
+	- ID: 2026111713374927
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261117-133749
+	- Opened by: CC
+	- Target OS: All
+	- Target version: rc.2
+	- Incorrect behavior: Save as "custom" is allowed. Picking it then selects the person's own Custom colors rather than the saved theme, and the list has 2 options that both give Custom. Rename acts the same.
+	- Expected behavior: The name is refused, whatever its case.
+	- Reproduced: No. Traced through the code.
+	- Possible cause: `name_problem` doesn't reserve the group's custom key or label.
+	- Origin: e79a250e, 20260805, with 3a052615, 20261009. Not seen by an earlier round. Confirmed by trace.
+	- Sweep: Only themes take names typed by the user.
+	- Notes:
+		- Code review 20261117 item 28.
+		- Detail: `detail_backlog.md`, under this ID.
+
+- Paste into a Settings field drops line breaks and quietly cuts the text at the length cap
+	- ID: 2026111713374928
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261117-133749
+	- Opened by: CC
+	- Target OS: All
+	- Target version: rc.2
+	- Incorrect behavior: "bash\n--login" pastes as "bash--login". A 300-byte wallpaper path is cut at 256 bytes and applied live with no message. The same at 512 bytes for a shell command and 64 for a name. The tab rename box turns line breaks into spaces.
+	- Expected behavior: Line breaks and tabs paste as spaces, as in the tab rename box, and a paste that doesn't fit is refused whole.
+	- Reproduced: No. Traced through the code.
+	- Possible cause: Each pasted char goes through the per-key filter, and chars past the cap are dropped one by one.
+	- Origin: 5e596158, 20260717, caps from 36d99d5f, 20260819. Not seen by an earlier round. Confirmed by trace.
+	- Sweep: The prompt name, shell name, and command caps.
+	- Notes:
+		- Code review 20261117 item 29.
+		- Detail: `detail_backlog.md`, under this ID.
+
+- Settings: a long dropdown runs off the window, and the wheel slides an open one over other parts
+	- ID: 2026111713374929
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261117-133749
+	- Opened by: CC
+	- Target OS: All
+	- Target version: rc.2
+	- Incorrect behavior: With about 17 saved themes, the Theme list goes past the window bottom and the lower options can't be seen or clicked. The code says it still shows all its options. A wheel turn with a list open moves it over the search box, the tabs, or the footer, where it stays clickable.
+	- Expected behavior: A list fits the window and scrolls inside itself, and a wheel turn closes it, as a resize does.
+	- Reproduced: No. Traced through the code.
+	- Possible cause: `dd_popup` has no cap or scroll, and `wheel()` closes the context menu but not a list.
+	- Origin: 5456e2a8, 20260709, wheel from fab8a75c, 20260701. Not seen by an earlier round. Confirmed by trace.
+	- Sweep: `em_rect` is already clamped.
+	- Notes:
+		- Code review 20261117 item 30.
+		- Detail: `detail_backlog.md`, under this ID.
+
+- Paste decides on bracketed paste from the mode seen at the last frame
+	- ID: 2026111713374930
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261117-133749
+	- Opened by: CC
+	- Target OS: All
+	- Target version: rc.2
+	- Incorrect behavior: A prompt that has just turned on bracketed paste gets a multi-line paste unbracketed if no frame has been built since, so each line runs as it arrives. This lasts about a frame, or longer during an output flood. The other way, a program that just turned it off gets literal `ESC[200~`.
+	- Expected behavior: Paste reads the mode when it pastes, as focus reports already do.
+	- Reproduced: No. Read only.
+	- Possible cause: `Pane::paste` reads `self.mode`, which only `build` refreshes.
+	- Origin: 8e5ea4e0, 20260701. Its twin `report_focus` was fixed in 3d7e0902, 20261013. Not seen by an earlier round. Plausible.
+	- Sweep: App cursor keys and mouse reports use the same cache, where being late is harmless.
+	- Notes:
+		- Code review 20261117 item 31.
+		- Detail: `detail_backlog.md`, under this ID.
+
+- Each reply to a terminal query costs a window event and a wakeup, and unread replies pile up without a limit
+	- ID: 2026111713374931
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261117-133749
+	- Opened by: CC
+	- Target OS: All
+	- Target version: rc.2
+	- Incorrect behavior: Output full of `ESC[c`, `ESC[6n` or OSC 11 queries makes one window event and one wakeup per reply, the cost `WakeGate` removed for output. If the program in front isn't reading, the engine's write queue grows without bound.
+	- Expected behavior: Replies from one read are sent together, and replies past a cap are dropped.
+	- Reproduced: No. Read only.
+	- Possible cause: Replies aren't batched, and the engine's write queue has no cap.
+	- Origin: c6eaa043, 20260628. Not seen by an earlier round. Plausible.
+	- Sweep: None found.
+	- Notes:
+		- Code review 20261117 item 32.
+		- Detail: `detail_backlog.md`, under this ID.
+
+- The caches of glyphs the font lacks grow with every new character for the life of the pane
+	- ID: 2026111713374932
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261117-133749
+	- Opened by: CC
+	- Target OS: All
+	- Target version: rc.2
+	- Incorrect behavior: Most mono fonts lack CJK, so every distinct CJK character keeps a shaped buffer per pane, per bold and italic mix, until the font changes. Reading Chinese logs or catting a Unicode table keeps adding entries.
+	- Expected behavior: The caches have a size cap and evict what hasn't been drawn lately, as the color glyph cache does.
+	- Reproduced: No. Read only.
+	- Possible cause: `glyph_cache` and `cover_cache` have no cap and are cleared only on a font rebuild.
+	- Origin: 82a7d006, 20260709. Item 2026100418225501 measured the caches but set no bound. Plausible.
+	- Sweep: `TextCtx.text_families` grows the same way, with small entries.
+	- Related IDs: 2026100418225501
+	- Notes:
+		- Code review 20261117 item 33.
+		- Detail: `detail_backlog.md`, under this ID.
+
+- About box links open through an older opener that flashes a console on Windows and leaves a zombie on Unix
+	- ID: 2026111713374933
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261117-133749
+	- Opened by: CC
+	- Target OS: All
+	- Target version: rc.2
+	- Incorrect behavior: On Windows, `cmd /C start` runs without CREATE_NO_WINDOW, so each About link click flashes a console. On Linux and macOS the opener child is never waited on and stays a zombie until SilkTerm exits.
+	- Expected behavior: About links open the way terminal links do.
+	- Reproduced: No. Read only.
+	- Possible cause: `links::open` replaced this path for terminal links, but the About box still calls `open_url`.
+	- Origin: c6eaa043, 20260628. 8f95c246, 20260908 fixed `links::open` only. The 20260914 round turned down the shell part, since the URLs are fixed. Plausible.
+	- Sweep: Every other spawn in the app reaps its child.
+	- Notes:
+		- Code review 20261117 item 34.
+		- Detail: `detail_backlog.md`, under this ID.
+
+- A failed dialog GPU warm-up is tried again after every idle release
+	- ID: 2026111713374935
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261117-133749
+	- Opened by: CC
+	- Target OS: All
+	- Target version: rc.2
+	- Incorrect behavior: On a box where the dialog warm-up fails, each idle release resets it to Idle, so the next start spawns another worker that fails the same way and prints the same warning. The Failed state exists to stop this.
+	- Expected behavior: Failed stays failed until the wanted backends change.
+	- Reproduced: No. Confirmed by reading.
+	- Possible cause: `GpuWarm::release` sets Idle whatever the state was.
+	- Origin: 90073855, 20260917. Not seen by an earlier round. Confirmed by trace.
+	- Sweep: None found.
+	- Related IDs: Code review 20261117 item 16 is the case where it fires
+	- Notes:
+		- Code review 20261117 item 36.
+		- Detail: `detail_backlog.md`, under this ID.
+
+- macOS: the system fixed-width font is looked up by a cut-down PostScript name, so most picks are dropped
+	- ID: 2026111713374936
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261117-133749
+	- Opened by: CC
+	- Target OS: macOS
+	- Target version: rc.2
+	- Incorrect behavior: "SFMono-Regular", "JetBrainsMono-Regular" or "FiraCode-Retina" become "SFMono", "JetBrainsMono" or "FiraCode". No installed family has that name, so the built-in stack is used, while Settings still shows the cut-down name.
+	- Expected behavior: The system font's family name is used.
+	- Reproduced: No. Read only, macOS code.
+	- Possible cause: Splitting the PostScript name at `-` gives the family only when the family has no spaces.
+	- Origin: ec829224, 20260706, from c6eaa043. Not seen by an earlier round. Plausible.
+	- Sweep: None found.
+	- Notes:
+		- Code review 20261117 item 37.
+		- Detail: `detail_backlog.md`, under this ID.
+
+- A change only in the knobs crate keeps the old build number
+	- ID: 2026111713374937
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261117-133749
+	- Opened by: CC
+	- Target OS: All
+	- Target version: rc.2
+	- Incorrect behavior: An edit under `knobs/src` builds a different binary, but the build number isn't updated. The code says any change to the inputs must make a new number. cicd pins the number, so only hand builds are affected.
+	- Expected behavior: Every path dependency is a build input.
+	- Reproduced: No. Confirmed by reading: knobs is a path dependency and isn't in `BUILD_INPUTS`.
+	- Possible cause: Path dependencies added after `BUILD_INPUTS` weren't added to it, and dcq7f checks only included files and the lock.
+	- Origin: f044c78a, 20260916, knobs from 3a052615, 20261009. Not seen by an earlier round. Confirmed by trace.
+	- Sweep: The forks are git dependencies covered by the lock.
+	- Notes:
+		- Code review 20261117 item 38.
+		- Detail: `detail_backlog.md`, under this ID.
+
+- SILK_DUMP writes a fixed /tmp file on every frame, following symlinks, and stalls the frame
+	- ID: 2026111713374938
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261117-133749
+	- Opened by: CC
+	- Target OS: Linux
+	- Target version: rc.2
+	- Incorrect behavior: With SILK_DUMP set, every GL frame waits on a readback and saves `/tmp/silk_offscreen.png`. A planted symlink is followed, 2 windows overwrite each other, and the write isn't atomic.
+	- Expected behavior: A dump goes to a per-user folder with a per-process name, once per request.
+	- Reproduced: No. Confirmed by reading.
+	- Possible cause: A diagnostic with a hard-coded shared path.
+	- Origin: 90073855, 20260917, behind `env_flag` since 42380228, 20261003. Not seen by an earlier round. Confirmed by trace.
+	- Sweep: `diagnostics/glyphon_gl.rs` writes `/tmp/glyphon_gl.png` the same way, in a dev example.
+	- Notes:
+		- Code review 20261117 item 39.
+		- Detail: `detail_backlog.md`, under this ID.
+
+- A color emoji whose layers nest past the limit more than once draws layers in the wrong order
+	- ID: 2026111713374939
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261117-133749
+	- Opened by: CC
+	- Target OS: All
+	- Target version: rc.2
+	- Incorrect behavior: 2 nested pushes past 24 layers skip 2 layers but count 1, so the second skipped pop really pops a live layer early. Only a broken or hostile font reaches it, and the result is wrong pixels.
+	- Expected behavior: Every skipped push has a matching skipped pop.
+	- Reproduced: No. Confirmed by reading.
+	- Possible cause: `overflowed` is a bool where a depth count is needed.
+	- Origin: 0c28262e, 20260727. The 20260914 round read the file. Confirmed by trace.
+	- Sweep: None found.
+	- Notes:
+		- Code review 20261117 item 40.
+		- Detail: `detail_backlog.md`, under this ID.
+
+- `--open FILE` with a relative path runs nothing, or the wrong file
+	- ID: 2026111713374940
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261117-133749
+	- Opened by: CC
+	- Target OS: Linux, macOS
+	- Target version: rc.2
+	- Incorrect behavior: usage.md says it runs FILE from its own folder. `silkterm --open sub/run.sh` changes to `sub` and then runs `sub/run.sh` from there, which fails. `--open run.sh` looks `run.sh` up on PATH. A folder with a literal `$NAME` in it is expanded. Explorer passes absolute paths, so Windows isn't affected.
+	- Expected behavior: A relative FILE is made absolute first, and its folder is used as written.
+	- Reproduced: No. Traced through the code.
+	- Possible cause: The file is used as written, and the derived folder goes through `expand_vars`.
+	- Origin: 9301f8e6, 20260930. Not seen by an earlier round. Confirmed by trace.
+	- Sweep: Other path flags go through `resolve_dir`, which makes them absolute.
+	- Notes:
+		- Code review 20261117 item 41.
+		- Detail: `detail_backlog.md`, under this ID.
+
+- One stalled client blocks a window's control socket
+	- ID: 2026111713374942
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261117-133749
+	- Opened by: CC
+	- Target OS: All
+	- Target version: rc.2
+	- Incorrect behavior: Connections are served one at a time, with no read timeout or size cap. A client that connects and never sends a newline blocks every later `--wallpaper`, `--reload-settings` and peer save notice for that window, and those clients hang too. One that never ends its line grows memory. On Windows, the pipe's default security lets other users on the box open it and stall it.
+	- Expected behavior: A read timeout, a line cap, a pipe only its own user can open, and a reply timeout in the client.
+	- Reproduced: No. Read only.
+	- Possible cause: No timeout or cap, a single serving loop, and default pipe security.
+	- Origin: c6eaa043 and the ctl rework. Not seen by an earlier round. Plausible.
+	- Sweep: Peer pokes don't wait for a reply.
+	- Notes:
+		- Code review 20261117 item 43.
+		- Detail: `detail_backlog.md`, under this ID.
+
+- Windows: install.ps1 can leave no binary when the last move fails
+	- ID: 2026111713374943
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261117-133749
+	- Opened by: CC
+	- Target OS: Windows
+	- Target version: rc.2
+	- Incorrect behavior: An old copy that isn't running is deleted first. If the move of the new one then fails, for example while antivirus holds it, the staged file is removed too. The Start menu shortcut and PATH point at a missing exe until the next run.
+	- Expected behavior: The old file is renamed aside first and put back if the move fails.
+	- Reproduced: No. Read only.
+	- Possible cause: The old file is destroyed before the new one is in place, with no rollback.
+	- Origin: 07613789, 20260924. Not seen by an earlier round. Plausible.
+	- Sweep: install.bash uses an atomic `mv -f`. n8runterm.ps1 copies to a temp name and moves it.
+	- Related IDs: The closed "can't upgrade over a running copy" item
+	- Notes:
+		- Code review 20261117 item 44.
+		- Detail: `detail_backlog.md`, under this ID.
+
+- `runterm` stops under bash 3.2 when run with no arguments
+	- ID: 2026111713374944
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261117-133749
+	- Opened by: CC
+	- Target OS: macOS
+	- Target version: rc.2
+	- Incorrect behavior: A plain `runterm` on a Mac with Apple's bash first in PATH exits 1 with "@: unbound variable" before it finds the launcher. Its history says it runs under 3.2.
+	- Expected behavior: It runs with no arguments under bash 3.2.
+	- Reproduced: Yes, in the `bash:3.2` image: `set -u; f "${@}"` gives "@: unbound variable", rc 1.
+	- Possible cause: bash 3.2 treats an empty `"${@}"` as unset under `set -u`. install.bash already guards against it.
+	- Origin: 4050e29a, 20260908, with 3.2 support claimed 20261001. Not seen by an earlier round. Confirmed.
+	- Sweep: Other scripts that claim 3.2 are guarded or always get arguments.
+	- Notes:
+		- Code review 20261117 item 45.
+		- Detail: `detail_backlog.md`, under this ID.
+
+- release.bash makes the tag before pushing, so a failed push leaves a local tag and the rerun gives the wrong advice
+	- ID: 2026111713374945
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261117-133749
+	- Opened by: CC
+	- Target OS: All
+	- Target version: rc.2
+	- Incorrect behavior: `--push` makes the tag, then the push to main runs the merge gate, about an hour. If that fails, the rerun says the tag exists and to bump the version on dev, when the fix is to delete the local tag.
+	- Expected behavior: The tag is made after main is pushed, or removed when the push fails, or the message names the local tag.
+	- Reproduced: No. Traced through the code.
+	- Possible cause: Tag creation comes before the push.
+	- Origin: e68c17a9, 20260711. Not seen by an earlier round. Confirmed by trace.
+	- Sweep: No other tag creation.
+	- Notes:
+		- Code review 20261117 item 46.
+		- Detail: `detail_backlog.md`, under this ID.
+
+- sizebench measures on whatever display is already on :98
+	- ID: 2026111713374946
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261117-133749
+	- Opened by: CC
+	- Target OS: Linux
+	- Target version: rc.2
+	- Incorrect behavior: If the cicd profiler's display or another project's is up on :98, sizebench says it's reusing it and puts its terminals there, at that server's size and with its window manager, and disturbs that run.
+	- Expected behavior: It refuses a display that exists, or takes the first free one, as termbench and gui-headless do.
+	- Reproduced: No. Read only.
+	- Possible cause: An existing server is reused rather than refused.
+	- Origin: f8471950, 20260730. Not seen by an earlier round. Plausible.
+	- Sweep: termbench-run.bash and gui-headless.bash already refuse a display that's taken or check who holds it.
+	- Notes:
+		- Code review 20261117 item 47.
+		- Detail: `detail_backlog.md`, under this ID.
+
+- Scripts outside cicd/ remove temp folders without the safe removal guard
+	- ID: 2026111713374949
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261117-133749
+	- Opened by: CC
+	- Target OS: All
+	- Target version: rc.2
+	- Incorrect behavior: The pre-push and pre-commit hooks, termbench, sizebench, and the wine build script remove their folders with a bare `rm -rf`, and their folders don't follow the temp layout. ci-mac.bash never removes its log folder. No live danger was found, since `rm -rf` doesn't follow links.
+	- Expected behavior: Every script uses the guard and the temp layout.
+	- Reproduced: No. Confirmed by search.
+	- Possible cause: The sweep in 2026102807494121 covered `cicd/` only, and dehwp reads only bash files there.
+	- Origin: a8fe9f7f, 20261006, and the bench and wine scripts as first written. The rule is from the 20261024 CICD directives. Confirmed by search.
+	- Sweep: `utility/git-hooks/pre-push` ~155, `utility/git-hooks/pre-commit` ~34, `utility/include/termbench-run.bash` ~70, `utility/include/sizebench-run.bash` ~61, `utility/run-windows-build-via-wine.bash` ~177, `cicd/ci-mac.bash` ~32.
+	- Related IDs: 2026102807494121
+	- Notes:
+		- Code review 20261117 item 50.
+		- Detail: `detail_backlog.md`, under this ID.
+
+- An open Settings field redraws the dialog about 30 times a second for as long as it's open
+	- ID: 2026111713374953
+	- Type: Enhancement
+	- Status: Queued
+	- Priority: Low
+	- Opened: 20261117-133749
+	- Opened by: CC
+	- Target OS: All
+	- Target version: rc.2
+	- Requirements:
+		- The caret fade asks for a frame every 33 ms, focused or not, with no idle stop. Each frame rebuilds every row.
+		- Stop the fade after about 10 s idle or when the dialog loses focus, as GTK does.
+	- Reproduced: No. The 33 ms wake is confirmed by reading. The cost per frame wasn't measured.
+	- Origin: 404df0f2, 20260717. Not seen by an earlier round.
+	- Sweep: tab_edit's caret, if it shares the fade.
+	- Notes:
+		- Code review 20261117 item 54.
+		- Detail: `detail_backlog.md`, under this ID.
+
+- Drag-selecting in a long Settings field measures every prefix again on each pointer move
+	- ID: 2026111713374954
+	- Type: Enhancement
+	- Status: Queued
+	- Priority: Low
+	- Opened: 20261117-133749
+	- Opened by: CC
+	- Target OS: All
+	- Target version: rc.2
+	- Requirements:
+		- A 512-byte command has 513 prefixes, and the measure cache clears at 512 entries, so each move shapes most of them again. Past the edge it does this every frame.
+		- Shape the text once per edit and hit-test the glyph positions.
+	- Reproduced: No. Read only.
+	- Origin: 5e596158, 20260717, cache from 843e4c91, 20260707. Not seen by an earlier round.
+	- Sweep: tab_edit uses the same helper on short text.
+	- Notes:
+		- Code review 20261117 item 55.
+		- Detail: `detail_backlog.md`, under this ID.
+
+- The console watcher wakes twice a second for the life of every Linux window
+	- ID: 2026111713374955
+	- Type: Enhancement
+	- Status: Queued
+	- Priority: Low
+	- Opened: 20261117-133749
+	- Opened by: CC
+	- Target OS: Linux
+	- Target version: rc.2
+	- Requirements:
+		- It sleeps 500 ms and reads `/sys/class/tty/tty0/active` again, forever, even with the GPU let go. README says idle windows give back CPU.
+		- Wait on the sysfs file with poll for POLLPRI, which the kernel signals on a console change, and keep the sleep loop as the fallback.
+	- Reproduced: No. Read only.
+	- Origin: bb66e6e2, 20261002, from July. Not seen by an earlier round.
+	- Sweep: The 2 s VRAM probe runs only while the device is held, by design.
+	- Notes:
+		- Code review 20261117 item 56.
+		- Detail: `detail_backlog.md`, under this ID.
 
 - The "Minutes otherwise" release of resources still isn't working
 	- ID: 2026111009560100
