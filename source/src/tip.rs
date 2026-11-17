@@ -197,6 +197,14 @@ pub fn wrap_budget(win_w: f32, scale: f32) -> f32 {
 		.max(config::dip(MIN_WRAP, scale))
 }
 
+/// How wide a tip placed by `beside` may run: its own cap, or less in a window
+/// too narrow for that, so the box and its padding fit between the edges. The
+/// main window has no minimum width (2026111709545547).
+pub fn beside_budget(cap: f32, win_w: f32, pad: f32, edge: f32, scale: f32) -> f32 {
+	cap.min(win_w - 2.0 * (pad + edge))
+		.max(config::dip(MIN_WRAP, scale))
+}
+
 /// Where a tip goes when it must not cover what it describes: clear of the
 /// anchor's right edge, flipped to its left when there is no room there, and top
 /// aligned with it. A menu tip needs this, since a box centered under the row
@@ -321,7 +329,7 @@ impl<T: Copy + PartialEq> Dwell<T> {
 
 #[cfg(test)]
 mod tests {
-	use super::{DELAY, Dwell, Focus, beside, lay_out, place, wrap, wrap_budget};
+	use super::{DELAY, Dwell, Focus, beside, beside_budget, lay_out, place, wrap, wrap_budget};
 	use crate::pane::Rect;
 	use std::time::Duration;
 
@@ -467,6 +475,43 @@ mod tests {
 		let far = rect(230.0, 60.0, 160.0, 24.0);
 		let (left, _) = beside(far, (150.0, 40.0), win, 6.0, 4.0);
 		assert_eq!(left, 74.0);
+	}
+
+	// A menu tip wrapped at its own cap was wider than a narrow window, so its
+	// lines ran off the edge whichever side of the menu it went.
+	// Test ID: dfe6n
+	#[test]
+	fn a_menu_tip_fits_a_window_narrower_than_its_cap() {
+		let said =
+			"Read the config file again, so hand edits made since it was opened take effect.";
+		let (pad, edge, cap) = (6.0, 6.0, 320.0);
+		for win_w in [120.0, 200.0, 300.0, 340.0, 800.0] {
+			let budget = beside_budget(cap, win_w, pad, edge, 1.0);
+			let lines = wrap(said, budget, measure);
+			let widest = lines.iter().map(|line| measure(line)).fold(0.0, f32::max);
+			let size = (widest + 2.0 * pad, 40.0);
+			for row in [
+				rect(0.0, 30.0, 100.0, 24.0),
+				rect(win_w - 100.0, 30.0, 100.0, 24.0),
+			] {
+				let (x, _) = beside(row, size, (win_w, 300.0), pad, edge);
+				assert!(
+					x >= edge && x + size.0 <= win_w - edge,
+					"{win_w} wide: box at {x}, {} wide",
+					size.0
+				);
+			}
+		}
+		assert_eq!(
+			beside_budget(cap, 800.0, pad, edge, 1.0),
+			cap,
+			"a wide window keeps the cap"
+		);
+		assert_eq!(
+			beside_budget(cap, 10.0, pad, edge, 2.0),
+			80.0,
+			"never under the floor"
+		);
 	}
 
 	// A tip left up too long goes away, and moving about on the same target

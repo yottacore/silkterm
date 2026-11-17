@@ -863,7 +863,14 @@ impl State {
 		let attrs = crate::text::ui_attrs();
 		let pad = self.text.dip(MENU_TIP_PAD);
 		let line_h = self.text.ui_line_h;
-		let budget = self.text.ui_text_dip(MENU_TIP_MAX_W);
+		let win = (self.surface_px.0 as f32, self.surface_px.1 as f32);
+		let budget = crate::tip::beside_budget(
+			self.text.ui_text_dip(MENU_TIP_MAX_W),
+			win.0,
+			pad,
+			pad,
+			self.text.scale,
+		);
 		let generation = self.text.generation;
 		let text = &mut self.text;
 		// wrapped and measured once while it stays up, and lent to the frame
@@ -873,7 +880,6 @@ impl State {
 		let count = lines.len();
 		let w = text_w + 2.0 * pad;
 		let h = line_h * count as f32 + 2.0 * pad;
-		let win = (self.surface_px.0 as f32, self.surface_px.1 as f32);
 		let (x, y) = crate::tip::beside(anchor, (w, h), win, self.text.dip(MENU_TIP_GAP), pad);
 		Some(OverlayAt {
 			rect: Rect { x, y, w, h },

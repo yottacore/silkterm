@@ -37,13 +37,26 @@ Going forward, new issues in the new template at the bottom of this file will go
 - A menu tip runs off a main window narrower than about 340 DIP
 	- ID: 2026111709545547
 	- Type: Bug
-	- Status: Queued
+	- Status: Done
 	- Severity: Low
 	- Opened: 20261117-095455
 	- Opened by: CC
 	- Related IDs: 2026111709403848
 	- Target version: rc.1
 	- Requirements: A menu tip wraps at a fixed 320 DIP, whatever the window's width, and the main window has no minimum width, so in a narrow window the box is wider than the window and its lines are cut off. Found by reading the code while fixing the tab tip, not seen on screen.
+	- Reproduced: 20261117. In a 260 pixel window, the File menu's first tip ran off the right edge mid-word. The new test failed with the old width.
+	- Actual cause: As described.
+	- Actual fix: A menu tip wraps at its 320 DIP width, or at the window's width less the box's padding and edge gap when that's narrower. A wide window wraps as before, so a resize there doesn't wrap the tip again.
+	- Decisions:
+		- 20261117: In a window too narrow for the tip on either side of the menu, it still goes to the left edge, over the menu. There's no room anywhere else.
+		- 20261117: A single word wider than the window still runs off, as in every other tip, since `tip::wrap` never splits a word.
+	- Verified: 20261117. dfe6n fails with the old width (a 324 wide box in a 120 wide window) and passes with the fix. dfe5r passes. ddkre passes, menu tip 23 per frame over rest, limit 28. In a 260 pixel window the same tip wraps onto 2 lines inside it. The quick run passed, all 5 areas.
+	- Swept: every caller of `tip::beside`, which is only the menu tip, and every use of `MENU_TIP_MAX_W`. The Settings tip uses `wrap_budget`, and the tab tip fits to the window since 2026111709403848.
+	- Test case: dfe6n `a_menu_tip_fits_a_window_narrower_than_its_cap`.
+	- Branch: nov17-2026111709545547
+	- Commit: c4edf86d
+	- Acceptance signoff: Self-closed: the bug was reproduced, its test failed before the fix and passes after, and the wrapped tip was checked in a narrow window.
+	- Closed: 20261117-100426
 
 - A tab tip wider than the window runs off its right edge
 	- ID: 2026111709403848
