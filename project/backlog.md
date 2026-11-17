@@ -37,8 +37,8 @@ Going forward, new issues in the new template at the bottom of this file will go
 - Add a contributor license agreement, like nano-git-db's
 	- ID: 2026101906582193
 	- Type: Task
-	- Status: Stalled
-		- Held for a first pull request from someone else.
+	- Status: Queued
+		- Goes out with rc.1. The workflow runs from `main`, so it takes effect at that merge.
 	- Priority: Avg
 	- Opened: 20261019-065821
 	- Opened by: JC
@@ -52,6 +52,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Progress log:
 		- 20261019: Added `CLA.md`, a section in contributing.md, and `.github/workflows/cla.yml`, the same as nano-git-db's. Both files need JC's review. The check still needs a first pull request from someone else to prove it.
 		- 20261023: Neither a full run nor Mac CI runs `cla.yml`, which runs only on pull requests.
+		- 20261117: JC asked for it in the next release. `CLA.md`, the contributing.md section and `cla.yml` are on `dev`, not yet on `main`. They go to `main` with the rc.1 merge. The first outside pull request after that proves the check.
 
 - Demo: the cursor should go to 50% width when the cursor size and animation change
 	- ID: 2026092812581720
