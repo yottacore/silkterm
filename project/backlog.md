@@ -284,7 +284,8 @@ Going forward, new issues in the new template at the bottom of this file will go
 - macOS: a character typed with Option reaches the shell with ESC in front of it
 	- ID: 2026111713374903
 	- Type: Bug
-	- Status: Queued
+	- Status: Waiting on automated testing
+	- Needs external testing: On b26, at a shell prompt under `cat -v`, Option+f on a US layout shows "ƒ" with no `^[` in front. With a German layout, if one is set up there, Option+5 and Option+8 type `[` and `{`, and the next keys type as usual. Option+Backspace still erases a word.
 	- Severity: High
 	- Opened: 20261117-133749
 	- Opened by: CC
@@ -300,6 +301,31 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Notes:
 		- Code review 20261117 item 4.
 		- Detail: `detail_backlog.md`, under this ID.
+	- Actual cause: winit on a Mac reports the character Option composes as the key's text, with Alt held. `encode_key` put ESC in front of any text typed with Alt, so `[` went to the shell as `ESC [`.
+	- Actual fix: On a Mac, a character typed with Option goes to the shell as the text alone. Ctrl+Option and the named keys, such as Option+Backspace and Option+arrows, keep their ESC and CSI forms. Linux and Windows are unchanged.
+	- Decisions:
+		- 20261117: Every Option+character on a Mac drops the ESC, rather than only when the text differs from the plain key. winit's plain key ignores Shift too, so that test would get Option+Shift wrong. Once winit's Option as Alt is on, the text it hands over is already the plain key, and the setting can turn the ESC back on.
+		- 20261117: Option+arrows stay `CSI 1;3D`, as in iTerm2 and alacritty. Terminal.app sends `ESC b` and `ESC f` instead, which a person can bind in the shell.
+		- 20261117: The Option as Meta setting is its own child, 2026111715155480. Until it's done, a Mac has no way to send Meta with Option+letter.
+	- Swept: The other arms of `encode_key`, the one `encode` caller in `app.rs`, every other reader of the Alt key (mouse report bits, the text boxes, hotkey matching), and `hotkey_in` and `opens_menu_title`, which already skip a Mac. None of them put ESC in front of typed text.
+	- Test case: `option_types_its_character_on_a_mac` (dfegj). It fails with the fix undone, on `[` sent as `ESC [`, and passes with it.
+	- Verified: The input unit tests on Linux, with the platform passed in.
+	- Branch: nov17-2026111713374903
+	- Commit: 8b8d7703
+
+- macOS: Create a setting to use Option as Meta in the terminal
+	- ID: 2026111715155480
+	- Type: Feature
+	- Status: Queued
+	- Priority: Avg
+	- Opened: 20261117-151554
+	- Opened by: CC
+	- Parent ID: 2026111713374903
+	- Target OS: macOS
+	- Target version: rc.1
+	- Requirements: A setting, off by default, that makes Option send ESC plus the plain key, as Terminal.app's "Use Option as Meta key" does. With it off, Option types the character it composes. Left only, right only, or both, as iTerm2 and alacritty offer. It applies to open windows when changed.
+	- Note: Since the parent's fix, Option+letter on a Mac doesn't send Meta at all, so a Meta binding in emacs or readline needs this setting.
+	- Note: winit's `with_option_as_alt` and `set_option_as_alt` make it report the plain key with Alt held. `encode_key` then has to add the ESC again, which its `mac` flag turns off today.
 
 - Pressing OK again after the "config is open elsewhere" refusal saves nothing
 	- ID: 2026111713374904

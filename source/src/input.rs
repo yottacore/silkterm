@@ -384,7 +384,13 @@ pub fn cursor_seq(letter: u8, app_cursor: bool) -> Vec<u8> {
 /// Translate a key press into the bytes a PTY expects. Returns None for keys
 /// we don't forward (modifiers alone, unhandled named keys, etc.).
 pub fn encode(ev: &KeyEvent, mods: ModifiersState, app_cursor: bool) -> Option<Vec<u8>> {
-	encode_key(&ev.logical_key, ev.text.as_deref(), mods, app_cursor)
+	encode_key(
+		&ev.logical_key,
+		ev.text.as_deref(),
+		mods,
+		app_cursor,
+		cfg!(target_os = "macos"),
+	)
 }
 
 // Windows lets a program hand a window a character instead of a key press, and
@@ -453,6 +459,7 @@ fn encode_key(
 	text: Option<&str>,
 	mods: ModifiersState,
 	app_cursor: bool,
+	mac: bool,
 ) -> Option<Vec<u8>> {
 	let ctrl = mods.control_key();
 	let alt = mods.alt_key();
@@ -539,6 +546,12 @@ fn encode_key(
 			}
 			// printable text from the platform layout
 			let text = text.map(|t| t.as_bytes().to_vec())?;
+			// On a Mac, Option composes a character, and the text is already that
+			// character: Option+8 is "{" on a German layout. Most non-US layouts
+			// type brackets and braces that way, so an ESC in front breaks them.
+			if mac {
+				return Some(text);
+			}
 			Some(with_alt(text))
 		}
 		_ => None,
@@ -555,7 +568,7 @@ mod tests {
 	const NONE: ModifiersState = ModifiersState::empty();
 
 	fn enc(named: NamedKey, mods: ModifiersState, app_cursor: bool) -> Option<Vec<u8>> {
-		encode_key(&Key::Named(named), None, mods, app_cursor)
+		encode_key(&Key::Named(named), None, mods, app_cursor, false)
 	}
 
 	// Test ID: d9b1m
@@ -711,7 +724,7 @@ mod tests {
 		);
 		// what the shell would then get
 		assert_eq!(
-			encode_key(&Key::Character("e".into()), Some("e"), NONE, false).unwrap(),
+			encode_key(&Key::Character("e".into()), Some("e"), NONE, false, false).unwrap(),
 			b"e".to_vec()
 		);
 		// a character no keyboard layout here has a key for
@@ -746,15 +759,44 @@ mod tests {
 	fn ctrl_chars_and_alt_prefix() {
 		let ctrl = ModifiersState::CONTROL;
 		let a = Key::Character("a".into());
-		assert_eq!(encode_key(&a, Some("a"), ctrl, false).unwrap(), [0x01]);
 		assert_eq!(
-			encode_key(&a, Some("a"), NONE, false).unwrap(),
+			encode_key(&a, Some("a"), ctrl, false, false).unwrap(),
+			[0x01]
+		);
+		assert_eq!(
+			encode_key(&a, Some("a"), NONE, false, false).unwrap(),
 			b"a".to_vec()
 		);
 		assert_eq!(
-			encode_key(&a, Some("a"), ModifiersState::ALT, false).unwrap(),
+			encode_key(&a, Some("a"), ModifiersState::ALT, false, false).unwrap(),
 			b"\x1ba".to_vec()
 		);
+	}
+
+	// German Option+5 is "[", which with an ESC in front started an escape
+	// sequence and ate the next keys.
+	// Test ID: dfegj
+	#[test]
+	fn option_types_its_character_on_a_mac() {
+		let alt = ModifiersState::ALT;
+		let typed = |ch: &str, mods: ModifiersState, mac: bool| {
+			encode_key(&Key::Character(ch.into()), Some(ch), mods, false, mac).unwrap()
+		};
+		for ch in ["[", "{", "@", "|", "\\", "~", "\u{192}"] {
+			assert_eq!(typed(ch, alt, true), ch.as_bytes(), "{ch}");
+			let mut meta = vec![0x1b];
+			meta.extend_from_slice(ch.as_bytes());
+			assert_eq!(typed(ch, alt, false), meta, "{ch}");
+		}
+		assert_eq!(typed("}", alt | ModifiersState::SHIFT, true), b"}");
+		// Ctrl rules out a composed character, so these keep their ESC
+		assert_eq!(
+			typed("a", alt | ModifiersState::CONTROL, true),
+			[0x1b, 0x01]
+		);
+		let named = |key: NamedKey| encode_key(&Key::Named(key), None, alt, false, true).unwrap();
+		assert_eq!(named(NamedKey::Backspace), [0x1b, 0x7f]);
+		assert_eq!(named(NamedKey::ArrowLeft), b"\x1b[1;3D");
 	}
 
 	const CTRL: ModifiersState = ModifiersState::CONTROL;
