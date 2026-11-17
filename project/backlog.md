@@ -5607,6 +5607,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Requirements:
 		- The parent's requirements, for the 232 tests in `config`.
 		- Decide whether `sysfont::monospace` gets a stand-in answer under `cfg(miri)`, in place of an ignore on each test that calls it. It's only worth it where the test is under the slow bar.
+			- 20261117: It does, for the interface font too. Under Miri both give their defaults, so no test starts the desktop's font tools. A defaults test that used to stop at that process after about 10 minutes now passes under Miri in 398 s. It stays ignored there as too slow.
 	- Notes:
 		- shcl's save calls `fchown` to keep a file's owner, which Miri can't do, so a test that saves the config likely stops there, as seen on 2026102407430372.
 	- Progress log:
