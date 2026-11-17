@@ -2776,6 +2776,20 @@ fn same_f32(a: f32, b: f32) -> bool {
 	a == b || (a.is_nan() && b.is_nan())
 }
 
+/// `persist` for a Settings Apply. `unsaved` is the baseline the file still has
+/// when an earlier Apply couldn't write it, and the save diffs against that, or
+/// the retry finds nothing changed and writes nothing. Gives back the baseline to
+/// keep when this write didn't go through either.
+#[must_use]
+pub fn persist_apply(
+	orig: &Settings,
+	unsaved: Option<Settings>,
+	edited: &Settings,
+) -> Option<Settings> {
+	let base = unsaved.unwrap_or_else(|| orig.clone());
+	(!persist(&base, edited)).then_some(base)
+}
+
 /// Write the values that differ from `orig` back into the config in place. The
 /// user's comments and blank-line grouping survive (see `to_text`), and untouched
 /// settings stay as they were, commented out or following the system. Returns
@@ -3169,13 +3183,13 @@ struct RawColors {
 fn load() -> Settings {
 	// A launch's own writes come before it says anything about the file.
 	*crate::locks::lock(&LAUNCH_SAID) = None;
+	// a launch rewrites the file in steps, and a save in another window must
+	// not happen between them, nor a second launch's adopt or import
+	let _lock = crate::peers::save_lock();
 	adopt_legacy_config();
 	let Some(path) = config_path() else {
 		return Settings::default();
 	};
-	// a launch rewrites the file in steps, and a save in another window must
-	// not happen between them
-	let _lock = crate::peers::save_lock();
 	import_beta1_config(&path);
 	if !path.exists() && may_write(&path) {
 		if let Some(dir) = path.parent() {
@@ -8047,6 +8061,16 @@ fn adopt_legacy_config() {
 // The move takes the old file away, so a test run may not make it from the
 // box's own folder either.
 fn adopt_config_from(native: &std::path::Path, legacy: &std::path::Path) {
+	adopt_config_with(native, legacy, |from, to| std::fs::rename(from, to));
+}
+
+// The rename is a parameter so a test can fail it the way a move across
+// volumes does.
+fn adopt_config_with(
+	native: &std::path::Path,
+	legacy: &std::path::Path,
+	rename: fn(&std::path::Path, &std::path::Path) -> std::io::Result<()>,
+) {
 	if !legacy.exists() || !may_write(native) || !may_write(legacy) {
 		return;
 	}
@@ -8066,9 +8090,11 @@ fn adopt_config_from(native: &std::path::Path, legacy: &std::path::Path) {
 	}
 	// rename first: same volume is the ordinary case and it is atomic. A cross
 	// volume move fails EXDEV, so fall back to copy-then-remove, and keep the
-	// original if the remove fails rather than risk having neither.
-	let moved = std::fs::rename(legacy, native).is_ok()
-		|| (std::fs::copy(legacy, native).is_ok() && std::fs::remove_file(legacy).is_ok());
+	// original if the remove fails rather than risk having neither. The copy
+	// goes under a name of its own first, so a crash leaves no half file that
+	// the next launch would take over the whole one.
+	let moved = rename(legacy, native).is_ok()
+		|| (copy_whole(legacy, native).is_ok() && std::fs::remove_file(legacy).is_ok());
 	if moved {
 		eprintln!(
 			"{APP_NAME}: moved your config from {} to {}",
@@ -8082,6 +8108,16 @@ fn adopt_config_from(native: &std::path::Path, legacy: &std::path::Path) {
 			native.display()
 		);
 	}
+}
+
+// Never replaces a file already at `to`, unless it has the same bytes.
+fn copy_whole(from: &std::path::Path, to: &std::path::Path) -> std::io::Result<()> {
+	let body = std::fs::read(from)?;
+	#[cfg(unix)]
+	let perms = std::fs::metadata(from).ok().map(|meta| meta.permissions());
+	#[cfg(not(unix))]
+	let perms = None;
+	write_new_file(|_| to.to_path_buf(), &body, perms.as_ref()).map(|_| ())
 }
 
 // SilkTerm v1.0.0-beta1, never released, kept its settings in TOML: beside
@@ -20039,6 +20075,62 @@ mod tests {
 		assert!(path.exists() && !legacy.exists());
 		let _ = std::fs::remove_dir_all(&home);
 		let _ = std::fs::remove_dir_all(&new_dir);
+	}
+
+	// A move across volumes copies the old file, under a name of its own first,
+	// and never over a file already at the new place, such as a second launch's.
+	// The old file stays when the copy can't be made. A launch adopts under the
+	// save lock.
+	// Test ID: dfeh1
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn an_old_config_copied_across_volumes_is_whole_and_replaces_nothing() {
+		fn across(_: &std::path::Path, _: &std::path::Path) -> std::io::Result<()> {
+			Err(std::io::ErrorKind::CrossesDevices.into())
+		}
+		fn raced(_: &std::path::Path, to: &std::path::Path) -> std::io::Result<()> {
+			std::fs::write(to, "font:\n\tsize: 20\n")?;
+			across(to, to)
+		}
+		let _guard = test_config_lock();
+		let dir = format_test_dir("adoptcopy");
+		let legacy = dir.join("old").join("config.shcl");
+		let new_dir = dir.join("new");
+		let native = new_dir.join("config.shcl");
+		std::fs::create_dir_all(legacy.parent().unwrap()).unwrap();
+		let old = "font:\n\tsize: 12\n";
+		std::fs::write(&legacy, old).unwrap();
+
+		adopt_config_with(&native, &legacy, across);
+		assert_eq!(std::fs::read_to_string(&native).unwrap(), old);
+		assert!(!legacy.exists());
+		assert_eq!(dir_names(&new_dir), ["config.shcl"], "no temp file left");
+
+		std::fs::remove_file(&native).unwrap();
+		std::fs::write(&legacy, old).unwrap();
+		adopt_config_with(&native, &legacy, raced);
+		assert_eq!(
+			std::fs::read_to_string(&native).unwrap(),
+			"font:\n\tsize: 20\n",
+			"the other launch's file isn't copied over"
+		);
+		assert_eq!(
+			std::fs::read_to_string(&legacy).unwrap(),
+			old,
+			"the old one stays"
+		);
+		assert_eq!(dir_names(&new_dir), ["config.shcl"], "no temp file left");
+
+		// a Windows checkout has CRLF line ends
+		let src = include_str!("config.rs").replace("\r\n", "\n");
+		let body = &src[src.find("\nfn load() -> Settings {").expect("load")..];
+		let locked = body.find("save_lock()").expect("the lock");
+		let adopted = body.find("adopt_legacy_config();").expect("the adopt");
+		assert!(
+			locked < adopted,
+			"load adopts before it takes the save lock"
+		);
+		let _ = std::fs::remove_dir_all(&dir);
 	}
 
 	// Only a file from before the profiles, with a look of its own, comes up on

@@ -330,7 +330,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 - Pressing OK again after the "config is open elsewhere" refusal saves nothing
 	- ID: 2026111713374904
 	- Type: Bug
-	- Status: Queued
+	- Status: Closed
 	- Severity: Avg
 	- Opened: 20261117-133749
 	- Opened by: CC
@@ -338,16 +338,27 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Target version: rc.1
 	- Incorrect behavior: Another program has config.shcl open. A change in Settings and OK is refused, and the dialog stays open to try again. The other program closes, OK is pressed again, and the dialog closes with nothing written. The value lasts only for the session. Value-row reverts are lost too.
 	- Expected behavior: A retry writes the same changes the first OK tried to write.
-	- Reproduced: No. Traced through the code.
+	- Reproduced: 20261117 on b23, by a unit test that holds the file open from a child process, with the old retry put back. The retry wrote nothing.
 	- Possible cause: `apply_dialog_settings` calls `commit_baseline()` even when the write was refused, so the retry finds no change.
 	- Origin: 1d12aa3a, 20260629, then a283cb39, 20260713, which added the busy check. A regression of the closed old-format item "Config file rewriting is proving problematic". Not seen by an earlier review. Confirmed by trace.
 	- Sweep: `commit_baseline` has no other caller.
 	- Related IDs: Old-format item "Config file rewriting is proving problematic", closed 20260713
 	- Decisions:
 		- 20261117: Kept for rc.1, since it loses data. rc.1 takes only Critical and High items and anything that crashes or loses data.
+		- 20261117: The live baseline still moves on every Apply, rather than only after a write as the possible cause suggests. A second baseline for the file is kept instead. The live one tells a pick made in the dialog from a remote switch made since, and the save's shell list comes from the live list, so by reading of `shells_to_save`, holding back the live baseline alone would still lose a shell edit.
 	- Notes:
 		- Code review 20261117 item 5.
 		- Detail: `detail_backlog.md`, under this ID.
+	- Actual cause: The Apply after a refused write diffed against the values the first Apply had applied live, so it found no change. By reading, a shell list edit was lost the same way, since the save takes the list's baseline from the live list, which the first Apply had already changed.
+	- Actual fix: When a write doesn't go through, the dialog keeps the baseline the file still has, and the next Apply's save diffs against it. The dialog still moves its live baseline on every Apply. A dialog holding such a change counts as changed, so another window's save doesn't replace what it shows, and a shell scan or a window resize is folded into that baseline too.
+	- Swept: `commit_baseline` has its one caller in `apply_dialog_settings`. `persist` callers outside Settings (window size, zoom, ratings, shells at launch) save their own diffs each time and keep no baseline. Hotkey reverts were already kept until a write went through.
+	- Test case: `ok_again_after_a_busy_save_writes_the_same_changes` (dfegz). It failed with the retry diffing against the applied values, at the check that the edit was written, and passes now.
+	- Verified: The backlog quick run passes in all 5 areas, with 1500 unit tests. clippy is clean for Windows.
+	- Branch: nov17-2026111713374904
+	- Commit: 95f85d8b
+	- Acceptance signoff: Self-closed: the retry's test fails without the fix and passes with it.
+	- Closed: 20261117-153635
+	- Closed reason: Done
 
 - Settings: Left or Right at the end of a closed dropdown drops a theme's color changes
 	- ID: 2026111713374905
@@ -491,7 +502,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 - Adopting the old config location copies in place, outside the settings lock
 	- ID: 2026111713374926
 	- Type: Bug
-	- Status: Queued
+	- Status: Closed
 	- Severity: Low
 	- Opened: 20261117-133749
 	- Opened by: CC
@@ -499,15 +510,27 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Target version: rc.1
 	- Incorrect behavior: When the rename to the new location fails across volumes, the file is copied in place. A crash during the copy leaves a partial file, and the next launch uses it and ignores the intact old one. A second launch during the copy does the same, then migrates the partial file.
 	- Expected behavior: The copy goes through a temp file and a rename, under the lock.
-	- Reproduced: No. Read only.
+	- Reproduced: 20261117 on b23, by a unit test that fails the rename the way a move across volumes does, and has a second launch's file turn up before the copy. The old copy wrote over that file.
 	- Possible cause: `adopt_config_from` uses `std::fs::copy` and runs before `save_lock`.
 	- Origin: eb1dbde0, 20260819. beta2 users on Windows and macOS still take this path. Not seen by an earlier round. Plausible.
 	- Sweep: `import_beta1_config` already runs under the lock and writes atomically.
 	- Decisions:
 		- 20261117: Kept for rc.1, since it loses data. rc.1 takes only Critical and High items and anything that crashes or loses data.
+		- 20261117: The temp copy is linked to the new name rather than renamed, so it can't replace a file that turned up there. On a filesystem without hard links, such as FAT, that writer writes the name directly, as it does for the backups.
 	- Notes:
 		- Code review 20261117 item 27.
 		- Detail: `detail_backlog.md`, under this ID.
+	- Actual cause: `adopt_config_from` copied straight to the new name with `std::fs::copy`, and `load` called it before taking the save lock.
+	- Actual fix: `load` takes the save lock before the adopt. The copy is written under a name of its own and then linked to the new name, through the same writer as the format backups. That link never replaces a file that is already there, and the old file stays when the copy fails.
+	- Swept: `import_beta1_config` already runs under the lock and writes atomically. The only other `std::fs::copy` calls are in tests.
+	- Test case: `an_old_config_copied_across_volumes_is_whole_and_replaces_nothing` (dfeh1). It failed with `std::fs::copy` put back, and with the lock taken after the adopt, and passes now.
+	- Verified: The backlog quick run passes in all 5 areas, with 1500 unit tests. clippy is clean for Windows.
+	- Note: The hosted `mac.yml` run on dev will run dfeh1 on macOS.
+	- Branch: nov17-2026111713374904
+	- Commit: 95f85d8b
+	- Acceptance signoff: Self-closed: its test fails with each half of the old behavior and passes now.
+	- Closed: 20261117-153635
+	- Closed reason: Done
 
 - The terminal window's close button quits while Settings is open and drops its unapplied changes
 	- ID: 2026111713374934

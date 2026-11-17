@@ -1534,14 +1534,17 @@ impl State {
 
 	// Apply edited settings from the dialog, save them, and rebuild what the
 	// change touched, such as text metrics, the wallpaper, opacity, or window
-	// size. Returns false when the config file looked open elsewhere and the
-	// write was skipped, and then the dialog's OK keeps it open rather than
-	// closing over an unsaved change. The values apply live either way.
+	// size. Returns the baseline the file still has when the write was skipped,
+	// such as when the config file looked open elsewhere, and then the dialog's
+	// OK keeps it open rather than closing over an unsaved change. `unsaved` is
+	// that baseline from an earlier Apply, so a retry writes its changes too.
+	// The values apply live either way.
 	fn apply_settings_values(
 		&mut self,
 		orig: &config::Settings,
 		mut edited: config::Settings,
-	) -> bool {
+		unsaved: Option<config::Settings>,
+	) -> Option<config::Settings> {
 		// The Shells tab edits the list, so this is the one path allowed to write
 		// it, and the dialog's copy wins. The baseline is the live list rather
 		// than the dialog's own `orig`. A scan that arrived while the dialog was
@@ -1568,9 +1571,9 @@ impl State {
 		// The dialog opened on the file, so the file gets only what was edited,
 		// while this window takes everything that differs from what it runs,
 		// including what another window saved since this one loaded.
-		let wrote = config::persist(&orig, &edited);
+		let unsaved = config::persist_apply(&orig, unsaved, &edited);
 		self.apply_new_settings(&live, edited, false);
-		wrote
+		unsaved
 	}
 
 	// What Settings opens on: the file as it is now, not what this window loaded,

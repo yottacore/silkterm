@@ -1090,6 +1090,8 @@ pub struct SettingsDialog {
 	edited: Settings,
 	// another window saved while this one had changes (`follow_file`)
 	behind: bool,
+	// the file's own baseline after an Apply that couldn't write it, for the retry
+	unsaved: Option<Settings>,
 	#[cfg(test)]
 	defaults: Settings, // the default values, for the tests' own checks
 	reverted: Vec<&'static str>, // config keys reverted this session -> comment out on Apply
@@ -1480,6 +1482,7 @@ impl SettingsDialog {
 			orig: settings.clone(),
 			edited: settings,
 			behind: false,
+			unsaved: None,
 			#[cfg(test)]
 			defaults: Settings::default(),
 			reverted: Vec::new(),
@@ -2271,6 +2274,7 @@ impl SettingsDialog {
 	// Anything begun counts, a value half typed or a color half picked included.
 	fn holds_changes(&self) -> bool {
 		self.orig != self.edited
+			|| self.unsaved.is_some()
 			|| !self.reverted.is_empty()
 			|| self.edit.is_some()
 			|| self.pick.is_some()
@@ -2307,7 +2311,10 @@ impl SettingsDialog {
 		if moved {
 			self.monitor = monitor.map(str::to_string);
 		}
-		for settings in [&mut self.orig, &mut self.edited] {
+		for settings in [&mut self.orig, &mut self.edited]
+			.into_iter()
+			.chain(self.unsaved.as_mut())
+		{
 			if resized {
 				settings.remembered_columns = live.remembered_columns;
 				settings.remembered_rows = live.remembered_rows;
@@ -2933,8 +2940,14 @@ impl SettingsDialog {
 	/// After an Apply, make the applied values the new baseline so a later Apply
 	/// compares against the live state, not the stale open-time snapshot (otherwise
 	/// re-selecting the original value reads as "no change" and isn't applied).
-	pub fn commit_baseline(&mut self) {
+	/// `unsaved` is the baseline the file still has when the Apply's write didn't
+	/// go through, and None once one did.
+	pub fn commit_baseline(&mut self, unsaved: Option<Settings>) {
 		self.orig = self.edited.clone();
+		self.unsaved = unsaved;
+	}
+	pub fn unsaved(&self) -> Option<&Settings> {
+		self.unsaved.as_ref()
 	}
 
 	// Top of row `i` on the active tab (scrolled). Walks visible rows the same
@@ -11630,7 +11643,7 @@ mod tests {
 		assert_eq!(d.edited.margin, loaded.margin + 5.0, "not under the edit");
 		assert!(config::persist(&d.orig, &d.edited));
 		assert!(d.take_behind(), "the Apply reads the file back");
-		d.commit_baseline();
+		d.commit_baseline(None);
 		d.follow_file(config::reload_from_disk());
 		assert_eq!(
 			d.edited.margin,
@@ -11645,6 +11658,76 @@ mod tests {
 			columns,
 			"and this one's"
 		);
+
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
+	// OK again after a save that found the file open in another program writes
+	// what the first OK tried to, a value put back to its default included.
+	// Test ID: dfegz
+	#[cfg(target_os = "linux")]
+	#[test]
+	#[cfg_attr(miri, ignore = "starts a process")]
+	fn ok_again_after_a_busy_save_writes_the_same_changes() {
+		let _guard = config::test_config_lock();
+		let _ = config::settings();
+		let dir = crate::testdir::run_dir().join(format!("silkterm_busyok_{}", std::process::id()));
+		let _ = std::fs::create_dir_all(&dir);
+		let path = dir.join("config.shcl");
+		let _ = std::fs::write(&path, "");
+		config::set_config_override(path.clone());
+		let base = config::reload_from_disk();
+		let mut moved = base.clone();
+		let margin = knobs::Value::Float(f64::from(base.margin + 3.0));
+		crate::fields::set(&mut moved, Key::Margin, &margin, None);
+		assert!(config::persist(&base, &moved));
+		let base = config::reload_from_disk();
+		assert_eq!(base.margin, moved.margin);
+
+		let mut d = mk_dialog(4000.0);
+		d.orig = base.clone();
+		d.edited = base.clone();
+		d.reverted.clear();
+		let columns = crate::fields::grid(&base, None).0 + 7;
+		d.set_f32(Key::Columns, columns as f32);
+		d.revert(Key::Margin);
+		let margin_default = d.edited.margin;
+		assert_ne!(margin_default, base.margin);
+
+		// the file as stdin of a child keeps it open until the child exits
+		let hold = std::fs::File::open(&path).unwrap();
+		let mut child = std::process::Command::new("sleep")
+			.arg("30")
+			.stdin(std::process::Stdio::from(hold))
+			.spawn()
+			.unwrap();
+		let fd0 = format!("/proc/{}/fd/0", child.id());
+		let target = path.canonicalize().unwrap();
+		for _ in 0..50 {
+			if std::fs::read_link(&fd0).is_ok_and(|link| link == target) {
+				break;
+			}
+			std::thread::sleep(std::time::Duration::from_millis(20));
+		}
+		let unsaved = config::persist_apply(&d.orig, d.unsaved().cloned(), &d.edited);
+		d.commit_baseline(unsaved);
+		let _ = child.kill();
+		let _ = child.wait();
+		assert!(d.unsaved().is_some(), "a busy file isn't written");
+		assert_eq!(config::reload_from_disk().margin, base.margin);
+		assert!(d.holds_changes(), "an unwritten change is still a change");
+
+		let unsaved = config::persist_apply(&d.orig, d.unsaved().cloned(), &d.edited);
+		assert!(unsaved.is_none(), "the file is free now");
+		d.commit_baseline(unsaved);
+		let back = config::reload_from_disk();
+		assert_eq!(
+			crate::fields::grid(&back, None).0,
+			columns,
+			"OK again writes the edit"
+		);
+		assert_eq!(back.margin, margin_default, "and the revert");
+		assert!(!d.holds_changes());
 
 		let _ = std::fs::remove_dir_all(&dir);
 	}
@@ -12176,7 +12259,7 @@ mod tests {
 		d.edited.wallpaper_default_fit = config::Fit::Stretch;
 		d.set_radio(Key::BgFit, 1);
 		assert_eq!(d.edited().wallpaper_default_fit, config::Fit::Zoom);
-		d.commit_baseline();
+		d.commit_baseline(None);
 		d.set_radio(Key::BgFit, 0);
 		assert_ne!(
 			d.orig().wallpaper_default_fit,
@@ -12191,7 +12274,7 @@ mod tests {
 			.expect("apply_dialog_settings");
 		let body = &app[at..at + app[at..].find("\n\t}\n").expect("its end")];
 		assert!(
-			body.contains(".commit_baseline()"),
+			body.contains(".commit_baseline("),
 			"Apply no longer resets the baseline"
 		);
 	}

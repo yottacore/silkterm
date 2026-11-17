@@ -452,13 +452,14 @@ impl App {
 	fn apply_dialog_settings(&mut self) -> bool {
 		let mut wrote = true;
 		let mut refused = false;
-		if let Some((orig, edited)) = self
+		if let Some((orig, edited, mut unsaved)) = self
 			.dialog
 			.as_ref()
 			.and_then(crate::dialog::DialogWin::settings_values)
 		{
 			if let Some(state) = self.state.as_mut() {
-				wrote = state.apply_settings_values(&orig, edited);
+				unsaved = state.apply_settings_values(&orig, edited, unsaved);
+				wrote = unsaved.is_none();
 			}
 			if let Some(refusal) = config::take_refusal() {
 				refused = true;
@@ -479,12 +480,13 @@ impl App {
 			}
 			// The applied values are the new baseline, so a later Apply diffs against the
 			// live state. Without this, picking the open-time value again, such as Bg fit
-			// back to Stretch, reads as no change. When another window saved while these
-			// changes were open, the file has both, and the window and the dialog both take
-			// it from there.
+			// back to Stretch, reads as no change. A write that didn't go through keeps
+			// the file's own baseline for the save, so OK again writes the same changes.
+			// When another window saved while these changes were open, the file has
+			// both, and the window and the dialog both take it from there.
 			if let Some(d) = self.dialog.as_mut() {
 				let behind = wrote && d.take_behind();
-				d.commit_baseline();
+				d.commit_baseline(unsaved);
 				if let Some(state) = self.state.as_mut().filter(|_| behind) {
 					state.follow_peer();
 					d.follow_file(state.settings_for_dialog());

@@ -556,10 +556,17 @@ impl DialogWin {
 		}
 	}
 
-	/// (orig, edited) for the app to apply, if this is Settings.
-	pub fn settings_values(&self) -> Option<(config::Settings, config::Settings)> {
+	/// (orig, edited) for the app to apply, if this is Settings, and the baseline
+	/// the file still has when an earlier Apply couldn't write it.
+	pub fn settings_values(
+		&self,
+	) -> Option<(config::Settings, config::Settings, Option<config::Settings>)> {
 		match &self.content {
-			Content::Settings(dialog) => Some((dialog.orig().clone(), dialog.edited().clone())),
+			Content::Settings(dialog) => Some((
+				dialog.orig().clone(),
+				dialog.edited().clone(),
+				dialog.unsaved().cloned(),
+			)),
 			Content::About { .. } => None,
 		}
 	}
@@ -624,9 +631,9 @@ impl DialogWin {
 
 	/// After an Apply, reset the settings baseline to the applied values so a later
 	/// Apply diffs against the live state (see `SettingsDialog::commit_baseline`).
-	pub fn commit_baseline(&mut self) {
+	pub fn commit_baseline(&mut self, unsaved: Option<config::Settings>) {
 		if let Content::Settings(dialog) = &mut self.content {
-			dialog.commit_baseline();
+			dialog.commit_baseline(unsaved);
 		}
 	}
 
