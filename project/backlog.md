@@ -190,7 +190,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 - A settings file with one stray flat key loses its `kept` block when it's converted
 	- ID: 2026111713374901
 	- Type: Bug
-	- Status: Queued
+	- Status: Closed
 	- Severity: High
 	- Opened: 20261117-133749
 	- Opened by: CC
@@ -203,6 +203,20 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Origin: The drop branch is from 8553a335, 20261003. The `kept` block is from b043ccbf, 20261009. A regression of the class in Code review 20260914 item 1, whose fix added `shells.*` only. Confirmed by trace.
 	- Sweep: Callers of `rebuilt_config_text`: `converted_config_text`, `regrown_doc`, `upgrade`, `unreadable`, `dropped` and `imported_beta1_config`. Only the first 2 and `dropped` can meet a `kept` block.
 	- Related IDs: Code review 20260914 item 1, test dcnw4
+	- Actual cause: The rebuild copied template paths, themes, monitor sizes and the shell list, and dropped every other path. The typo check had its own list of the same subtrees, with `kept.*` in it, and the two drifted. The legacy conversion also threw away the count of what it left behind.
+	- Decisions:
+		- 20261117: One list, `copied_as_is`, now serves both the rebuild and the typo check, so a subtree the check accepts is one a rebuild keeps. The `kept` lines are copied as dotted lines at the end, as themes are. The block's comment line isn't carried over.
+		- 20261117: A legacy conversion that leaves a setting behind reports it through the same terminal line and notice as a format conversion that writes a new file. No new wording. A clean conversion still prints the old line.
+		- 20261117: The regrow path after a delete doesn't report its count. What it leaves is typos and settings written twice, which the launch already named.
+	- Actual fix: `kept.*` goes through the rebuild like `themes.*`. `convert_legacy_config` reports what it left behind.
+	- Swept: Every caller of `rebuilt_config_text` goes through the one branch, so `converted_config_text`, `regrown_doc`, `upgrade`, `unreadable` and `dropped` all keep the block. `imported_beta1_config` ignores the count by an earlier decision. 3 older tests that convert a flat file with leftovers now hold the config lock, since the conversion now sets the shared notice.
+	- Branch: nov17-2026111713374901
+	- Commit: 2505c845
+	- Test case: dfef3 `a_rebuilt_file_keeps_the_kept_block`, through the conversion, the launch step with its notice, and a save after a delete. It fails with the old rebuild branch, and fails on the notice with the report taken out.
+	- Verified: The backlog quick run passes in all 5 areas, with 1495 unit tests.
+	- Acceptance signoff: Self-closed: the intent was clear and its test passes.
+	- Closed: 20261117-144029
+	- Closed reason: Done
 	- Notes:
 		- Code review 20261117 item 2.
 		- Detail: `detail_backlog.md`, under this ID.
@@ -378,7 +392,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 - A 3-part setting rename written partly dotted moves the value to a setting nothing reads
 	- ID: 2026111713374922
 	- Type: Bug
-	- Status: Queued
+	- Status: Closed
 	- Severity: Low
 	- Opened: 20261117-133749
 	- Opened by: CC
@@ -392,6 +406,17 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Sweep: Only `scroll.minimap.keep_for` has 3 parts today. The cursor blink rewrite and the converts have 2 and share the pattern.
 	- Decisions:
 		- 20261117: Kept for rc.1, since it loses data. rc.1 takes only Critical and High items and anything that crashes or loses data.
+		- 20261117: Every rename only changes the leaf, so the key keeps whatever part of the path it was written with and takes the new leaf. A key with the whole path still takes the new path as written.
+	- Actual cause: As guessed. A key that was neither the leaf nor the whole path took only the new leaf.
+	- Actual fix: `renamed_key` keeps the key's own parents and swaps the leaf. The renames, the unit converts and the cursor blink rewrite all use it.
+	- Swept: The rename, the unit converts and the `animation: none` rewrite in `migrated_text` share `renamed_key`. No other rename site writes a key.
+	- Branch: nov17-2026111713374901
+	- Commit: 2505c845
+	- Test case: dfef4 `a_rename_written_partly_dotted_keeps_its_parents`. It fails with the old leaf-only rename.
+	- Verified: The backlog quick run passes in all 5 areas, with 1495 unit tests.
+	- Acceptance signoff: Self-closed: mechanical, and its test passes.
+	- Closed: 20261117-144029
+	- Closed reason: Done
 	- Notes:
 		- Code review 20261117 item 23.
 		- Detail: `detail_backlog.md`, under this ID.

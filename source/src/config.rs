@@ -2077,14 +2077,19 @@ fn write_config_keeping(path: &std::path::Path, text: &str) -> anyhow::Result<Op
 		eprintln!("{line}");
 	}
 	if let Some(loss) = kept.as_deref().and_then(|copy| lost_converting(path, copy)) {
-		eprintln!("{}", loss.terminal_line());
-		// a footer put back to the default lost nothing anybody wrote
-		let owed = !matches!(loss.how, Converted::Dropped(_)) || !loss.lines.is_empty();
-		if owed {
-			*crate::locks::lock(&LOST_IN_CONVERSION) = Some(loss);
-		}
+		say_lost(loss);
 	}
 	Ok(kept)
+}
+
+// The terminal hears it now, and the window once it's up.
+fn say_lost(loss: ConversionLoss) {
+	eprintln!("{}", loss.terminal_line());
+	// a footer put back to the default lost nothing anybody wrote
+	let owed = !matches!(loss.how, Converted::Dropped(_)) || !loss.lines.is_empty();
+	if owed {
+		*crate::locks::lock(&LOST_IN_CONVERSION) = Some(loss);
+	}
 }
 
 // The copy is the file exactly as it was before the conversion.
@@ -3451,12 +3456,7 @@ fn complaints_in(doc: &shcl::Document, text: &str) -> Vec<String> {
 	let mut unread: Vec<(String, usize)> = active
 		.iter()
 		.filter(|(path, _)| {
-			!known.contains(path)
-				&& !path.starts_with("shells.")
-				&& !path.starts_with("themes.")
-				// the program's own block, read by the settings model
-				&& !path.starts_with("kept.")
-				&& !is_monitor_size_path(path)
+			!known.contains(path) && !path.starts_with("shells.") && !copied_as_is(path)
 		})
 		.cloned()
 		.collect();
@@ -3857,6 +3857,13 @@ fn write_user_themes(
 }
 
 const MONITOR_SIZE_FIELDS: &[&str] = &["columns", "rows", "font_zoom"];
+
+// The subtrees a rebuild copies line for line, and the typo check leaves
+// alone: the user's themes, the sizes kept per monitor, and the program's own
+// `kept` block. The shell list is copied whole, apart from these.
+fn copied_as_is(path: &str) -> bool {
+	path.starts_with("themes.") || path.starts_with("kept.") || is_monitor_size_path(path)
+}
 
 // `window.monitors.<monitor>.<field>`, for a field an entry is read for.
 fn is_monitor_size_path(path: &str) -> bool {
@@ -5311,9 +5318,10 @@ fn repair_wallpaper_heading(file: &mut LaunchFile) {
 // namespace became nested blocks, and rewriting that in place would shred the old
 // file's comments and grouping. So the old file is copied to a `.bak` and a fresh
 // template is written over it, with every active old value copied to its new
-// path, so settings survive and the file's comments are current. Unknown
-// `themes.*` subtrees are copied as is in dotted form. The rewrite keeps a linked
-// file linked and a private one private.
+// path, so settings survive and the file's comments are current. Themes and
+// the `kept` block are copied as is in dotted form (`copied_as_is`). A setting
+// with nowhere to go is counted and said. The rewrite keeps a linked file
+// linked and a private one private.
 fn convert_legacy_config(file: &mut LaunchFile) {
 	convert_legacy_config_with(file, write_config_atomic);
 }
@@ -5327,7 +5335,7 @@ fn convert_legacy_config_with(
 	let Some(text) = file.text() else {
 		return;
 	};
-	let Some(joined) = converted_config_text(text) else {
+	let Some((joined, left)) = converted_config(text) else {
 		return;
 	};
 	let text = text.to_owned();
@@ -5360,6 +5368,16 @@ fn convert_legacy_config_with(
 		}
 		return;
 	}
+	if left > 0 {
+		say_lost(ConversionLoss {
+			path: path.to_path_buf(),
+			backup: Some(backup),
+			lost: left,
+			how: Converted::Rewritten,
+			lines: Vec::new(),
+		});
+		return;
+	}
 	eprintln!(
 		"{APP_NAME}: config converted to the new nested layout; the old file is kept at {}",
 		backup.display()
@@ -5368,6 +5386,11 @@ fn convert_legacy_config_with(
 
 // The conversion as text: None for a file that isn't pre-nesting.
 fn converted_config_text(text: &str) -> Option<String> {
+	converted_config(text).map(|(text, _)| text)
+}
+
+// The same, with how many settings it left behind.
+fn converted_config(text: &str) -> Option<(String, usize)> {
 	// Only an active flat key marks a file as legacy, since any real old config has
 	// several. A comment that only contains an old name, such as one a save left at
 	// column 0, must never wipe a current-format file.
@@ -5393,7 +5416,7 @@ fn converted_config_text(text: &str) -> Option<String> {
 	if flat.iter().all(|index| unread.contains(&(index + 1))) {
 		return None;
 	}
-	Some(rebuilt_config_text(text, &[]).0)
+	Some(rebuilt_config_text(text, &[]))
 }
 
 // The template with every active setting of `text` that still reads copied
@@ -5517,7 +5540,7 @@ fn rebuilt_config_text(text: &str, garbled: &[usize]) -> (String, usize) {
 					}
 				}
 			}
-		} else if p.starts_with("themes.") || is_monitor_size_path(p) {
+		} else if copied_as_is(p) {
 			extras.push(format!("{p}: {value}"));
 		} else if !p.starts_with("shells.") {
 			// dropped from the new file, still in the copy
@@ -5680,6 +5703,20 @@ fn migrate_config_text(text: &str) -> Option<String> {
 	migrated_text(text, false)
 }
 
+// A line's key is its path less what the headings above it give: the leaf,
+// the whole path, or anything between, such as `minimap.keep_for` under
+// `scroll:`. Renames only change the leaf, so the rest stays as typed.
+fn renamed_key(key: &str, path: &str, new: &str) -> String {
+	if key.eq_ignore_ascii_case(path) {
+		return new.to_string();
+	}
+	let leaf = new.rsplit('.').next().unwrap_or(new);
+	match key.rsplit_once('.') {
+		Some((parents, _)) => format!("{parents}.{leaf}"),
+		None => leaf.to_string(),
+	}
+}
+
 // `keep_default_shell` is for the write to disk. An active `shell.default`
 // leaves with its adoption into the shell list (`adopt_default_shell`), which
 // removes it once that save goes through. Where the save was refused it has to
@@ -5786,17 +5823,9 @@ fn migrated_text(text: &str, keep_default_shell: bool) -> Option<String> {
 		let mut kept = match renamed {
 			Some((_, new, convert)) => {
 				changed = true;
-				// the line has the leaf (nested) or the full path
-				// (dotted); rewrite whichever token is there
 				let old_leaf = path.rsplit('.').next().unwrap_or(path);
-				let new_leaf = new.rsplit('.').next().unwrap_or(new);
 				let key = line_setting_key(line).unwrap_or(old_leaf);
-				let target = if key.eq_ignore_ascii_case(path) {
-					new
-				} else {
-					new_leaf
-				};
-				let line = line.replacen(key, target, 1);
+				let line = line.replacen(key, &renamed_key(key, path, new), 1);
 				convert
 					.and_then(|convert| convert_line_value(&line, convert))
 					.unwrap_or(line)
@@ -5814,11 +5843,7 @@ fn migrated_text(text: &str, keep_default_shell: bool) -> Option<String> {
 			&& line_setting_value(&kept).is_some_and(animation_is_none)
 		{
 			let key = line_setting_key(&kept).unwrap_or("animation");
-			let target = if key.eq_ignore_ascii_case(path) {
-				"cursor.blink"
-			} else {
-				"blink"
-			};
+			let target = renamed_key(key, path, "cursor.blink");
 			let indent = &kept[..kept.len() - kept.trim_start().len()];
 			let value = kept
 				.split_once(':')
@@ -16131,6 +16156,8 @@ mod tests {
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn legacy_config_converts_with_values_kept() {
+		// a conversion that leaves a setting behind leaves word for the window
+		let _guard = test_config_lock();
 		let dir =
 			crate::testdir::run_dir().join(format!("silkterm_convert_{}", std::process::id()));
 		let _ = std::fs::create_dir_all(&dir);
@@ -16320,6 +16347,73 @@ mod tests {
 		let _ = std::fs::remove_dir_all(&dir);
 	}
 
+	// The `kept` block is the program's own: a theme's changes and the values set
+	// aside under a switch. A file rebuilt from the template keeps it, along with
+	// every other subtree the typo check takes for the program's or the user's
+	// own, whether a flat key at the margin converted it or it was deleted while
+	// the program ran. A conversion that leaves a setting behind says so.
+	// Test ID: dfef3
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_rebuilt_file_keeps_the_kept_block() {
+		let _guard = test_config_lock();
+		let _ = take_conversion_loss();
+		let owned = "kept:\n\tchanges:\n\t\ttheme:\n\t\t\tpreset: \"Matrix\"\n\t\t\tvalues:\n\t\t\t\tcolors:\n\t\t\t\t\tbackground: \"#123456\"\n\tset_aside:\n\t\twindow:\n\t\t\tcolumns: 100\nthemes.mine.colors.background: \"#010203\"\nwindow.monitors.m1.columns: 90\n";
+		let holds = |text: &str| {
+			let doc = shcl::Document::parse(text);
+			doc.get_string("kept.changes.theme.preset").as_deref() == Ok("Matrix")
+				&& doc
+					.get_string("kept.changes.theme.values.colors.background")
+					.as_deref() == Ok("#123456")
+				&& doc.get_int("kept.set_aside.window.columns") == Ok(100)
+				&& doc.get_string("themes.mine.colors.background").as_deref() == Ok("#010203")
+		};
+		let has_monitor = |text: &str| {
+			shcl::Document::parse(text).get_int("window.monitors.m1.columns") == Ok(90)
+		};
+		let current = format!("{}{owned}", default_config());
+		assert!(holds(&current) && has_monitor(&current), "{current}");
+		assert_eq!(config_complaints(&current), Vec::<String>::new());
+
+		let out = converted_config_text(&format!("{current}rows: 40\n"))
+			.expect("a flat key at the margin converts");
+		assert!(holds(&out) && has_monitor(&out), "converted:\n{out}");
+		assert_eq!(config_complaints(&out), Vec::<String>::new(), "{out}");
+		assert_eq!(rebuilt_config_text(&current, &[]).1, 0);
+		// a save writes the block again by taking it out whole
+		let mut doc = shcl::Document::parse(&out);
+		doc.remove("kept");
+		let without = doc.to_canonical();
+		assert!(!without.contains("kept."), "{without}");
+
+		let dir = format_test_dir("rebuilt_kept");
+		let path = dir.join("config.shcl");
+		std::fs::write(&path, format!("{current}rows: 40\nwindow.colums: 90\n")).unwrap();
+		convert_legacy_config(&mut LaunchFile::read(&path));
+		let disk = std::fs::read_to_string(&path).unwrap();
+		assert!(holds(&disk) && has_monitor(&disk), "on disk:\n{disk}");
+		let loss = take_conversion_loss().expect("the typo is left behind, and said");
+		assert_eq!((loss.lost, loss.how), (1, Converted::Rewritten));
+		assert_eq!(loss.backup, Some(dir.join("config.shcl.bak")));
+		std::fs::write(&path, format!("{current}rows: 40\n")).unwrap();
+		convert_legacy_config(&mut LaunchFile::read(&path));
+		assert_eq!(take_conversion_loss(), None, "nothing was left behind");
+
+		// deleted while running: the save writes it new from what was read. The
+		// launch moved the monitor size to the state file.
+		std::fs::write(&path, &current).unwrap();
+		set_config_override(path.clone());
+		let loaded = reload_from_disk();
+		std::fs::remove_file(&path).unwrap();
+		let mut sized = loaded.clone();
+		sized.remembered_columns += 1;
+		crate::fields::fill(&mut sized, None);
+		assert!(persist(&loaded, &sized));
+		let regrown = std::fs::read_to_string(&path).unwrap();
+		assert!(holds(&regrown), "regrown:\n{regrown}");
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
 	// A flat `wallpaper:` had the image. It goes to `wallpaper.image`, never the
 	// block heading, whatever order the copied values are placed in, and a save
 	// from Settings then loads every copied value the same.
@@ -16403,6 +16497,7 @@ mod tests {
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_flat_key_named_like_a_block_never_ends_up_on_its_heading() {
+		let _guard = test_config_lock();
 		let dir =
 			crate::testdir::run_dir().join(format!("silkterm_flathead_{}", std::process::id()));
 		let heads = active_headings(default_config());
@@ -16933,6 +17028,44 @@ mod tests {
 			.expect("should migrate");
 		let s = resolve(read_raw(&out, std::path::Path::new("test.shcl")).0);
 		assert_eq!(s.minimap_tui_whitelist, "less vim");
+	}
+
+	// A key can carry part of its path under a heading, such as `minimap.keep_for`
+	// under `scroll:`. The rename swaps only the leaf. It went to
+	// `scroll.tui_process_whitelist`, which nothing reads.
+	// Test ID: dfef4
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_rename_written_partly_dotted_keeps_its_parents() {
+		let out =
+			migrate_config_text("scroll:\n\tminimap.keep_for: \"vim\"\n").expect("should migrate");
+		assert_eq!(out, "scroll:\n\tminimap.tui_process_whitelist: \"vim\"\n");
+		let s = resolve(read_raw(&out, std::path::Path::new("test.shcl")).0);
+		assert_eq!(s.minimap_tui_whitelist, "vim");
+		// the same for a converted unit and the cursor's old "none"
+		let out = migrate_config_text("cursor:\n\tblink_rate_ms: 250\n\tanimation: none\n")
+			.expect("should migrate");
+		assert_eq!(out, "cursor:\n\tblink_rate_s: 0.5\n\tblink: false\n");
+		assert_eq!(
+			renamed_key(
+				"Minimap.keep_for",
+				"scroll.minimap.keep_for",
+				"scroll.minimap.tui_process_whitelist"
+			),
+			"Minimap.tui_process_whitelist"
+		);
+		assert_eq!(
+			renamed_key(
+				"scroll.minimap.keep_for",
+				"scroll.minimap.keep_for",
+				"scroll.minimap.tui_process_whitelist"
+			),
+			"scroll.minimap.tui_process_whitelist"
+		);
+		assert_eq!(
+			renamed_key("focus", "colors.focus", "colors.highlight"),
+			"highlight"
+		);
 	}
 
 	// A rename can hand its old name to a new setting: `colors.focus` became
@@ -18096,6 +18229,7 @@ mod tests {
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn pipeline_convert_migrate_backfill_on_disk() {
+		let _guard = test_config_lock();
 		let dir =
 			crate::testdir::run_dir().join(format!("silkterm_pipeline_{}", std::process::id()));
 		let _ = std::fs::create_dir_all(&dir);
