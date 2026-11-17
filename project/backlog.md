@@ -189,6 +189,16 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- It's stalled until a cosmic-text release takes fontdb 0.24 or later, and winit's sctk-adwaita drops ab_glyph.
 	- Held for a cosmic-text release on fontdb 0.24 or later, and an sctk-adwaita without ab_glyph.
 
+- Window auto-resize stopped working
+	- ID: 2026111700130407
+	- Type: Bug
+	- Status: Queued
+	- Opened: 20261117-001304
+	- Opened by: JC
+	- Incorrect behavior: Window auto-resize stopped working.
+	- Notes:
+		- Possibly only when running Muffer?
+
 - **Stop here to work on releasing rc.1**.
 
 - Tab labels and the window title are worked out again on every frame
