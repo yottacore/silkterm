@@ -78,7 +78,7 @@ impl State {
 		self.pending_size = None;
 		// Read once the size has held, not in the resize event: the window
 		// manager may set the maximized state after the resize it caused.
-		let fullscreen = crate::monitor::fullscreen(&self.window);
+		let fullscreen = crate::monitor::fullscreen(&self.window, &self.x11);
 		let maximized = self.window.is_maximized();
 		let noted = std::mem::take(&mut self.watch.noted);
 		let keep = what_to_keep(
@@ -169,7 +169,8 @@ impl State {
 			return;
 		}
 		let set_on = crate::monitor::outputs_under(&self.window);
-		let Some(now_on) = crate::monitor::MonitorId::of_window(&self.window).map(|m| m.key())
+		let Some(now_on) =
+			crate::monitor::MonitorId::of_window(&self.window, &self.x11).map(|m| m.key())
 		else {
 			return;
 		};
@@ -207,7 +208,8 @@ impl State {
 		if !only_left(&set_on, &now) {
 			return;
 		}
-		let Some(now_on) = crate::monitor::MonitorId::of_window(&self.window).map(|m| m.key())
+		let Some(now_on) =
+			crate::monitor::MonitorId::of_window(&self.window, &self.x11).map(|m| m.key())
 		else {
 			return;
 		};
@@ -229,7 +231,7 @@ impl State {
 		if !move_counts(
 			now < self.watch.ignore_moves_until,
 			&self.watch.layout,
-			|| crate::monitor::layout(&self.window),
+			|| crate::monitor::layout(&self.window, &self.x11),
 		) {
 			self.note_own_place();
 			return;
@@ -263,7 +265,7 @@ impl State {
 		move_counts(
 			own || now < self.watch.ignore_moves_until,
 			&self.watch.layout,
-			|| crate::monitor::layout(&self.window),
+			|| crate::monitor::layout(&self.window, &self.x11),
 		)
 	}
 
@@ -329,9 +331,9 @@ impl State {
 			(self.watch.heard_at, self.watch.stirred_at),
 			(Some(heard), Some(stirred)) if heard > stirred
 		);
-		let layout = crate::monitor::layout(&self.window);
+		let layout = crate::monitor::layout(&self.window, &self.x11);
 		let drag = drag_state(
-			crate::monitor::button_held(&self.window),
+			crate::monitor::button_held(&self.window, &self.x11),
 			self.watch.opening || layout != self.watch.layout_looked,
 			self.watch.pointer == Pointer::Over,
 			heard,
@@ -350,7 +352,7 @@ impl State {
 			Drag::Over => {}
 		}
 		let moved_at = self.watch.moved_at.take();
-		let now_on = crate::monitor::MonitorId::of_window(&self.window).map(|m| m.key());
+		let now_on = crate::monitor::MonitorId::of_window(&self.window, &self.x11).map(|m| m.key());
 		let on_some = now_on.is_some() || self.window.current_monitor().is_some();
 		if look_again(on_some, self.watch.positionless, moved_at, now) {
 			self.watch.moved_at = moved_at;
@@ -432,7 +434,7 @@ impl State {
 			return;
 		};
 		if self.keeps_size()
-			|| crate::monitor::fullscreen(&self.window)
+			|| crate::monitor::fullscreen(&self.window, &self.x11)
 			|| self.window.is_maximized()
 		{
 			return;
@@ -488,7 +490,7 @@ impl State {
 		if self.watch.check_at.is_some()
 			|| self.watch.put_off
 			|| self.window.is_minimized() == Some(true)
-			|| crate::monitor::button_held(&self.window) == Some(true)
+			|| crate::monitor::button_held(&self.window, &self.x11) == Some(true)
 		{
 			self.watch.herd = Some(Herd {
 				poll_at: now + MONITOR_RECHECK,
@@ -498,14 +500,14 @@ impl State {
 		}
 		let place = self.place_now();
 		if self.keeps_size()
-			|| crate::monitor::fullscreen(&self.window)
+			|| crate::monitor::fullscreen(&self.window, &self.x11)
 			|| self.window.is_maximized()
 			|| place.is_none()
 		{
 			self.watch.herd = None;
 			return;
 		}
-		let layout = crate::monitor::layout(&self.window);
+		let layout = crate::monitor::layout(&self.window, &self.x11);
 		match herd_step(&herd, &layout, place, now) {
 			HerdStep::Home => {
 				self.watch.herd = None;
@@ -548,7 +550,7 @@ impl State {
 			return;
 		}
 		// taken on the way back, at the window's own size
-		if crate::monitor::fullscreen(&self.window) || self.window.is_maximized() {
+		if crate::monitor::fullscreen(&self.window, &self.x11) || self.window.is_maximized() {
 			mondbg("later", self.watch.key.as_deref(), None, None);
 			self.watch.take_owed = true;
 			return;
@@ -587,7 +589,7 @@ impl State {
 			at: now,
 			on: crate::monitor::output_drawn_for(&self.window),
 		});
-		self.watch.layout = crate::monitor::layout(&self.window);
+		self.watch.layout = crate::monitor::layout(&self.window, &self.x11);
 		self.request_grid(cols, rows);
 	}
 
@@ -653,7 +655,7 @@ impl State {
 		};
 		let ratio = scale / self.text.scale;
 		let free = !self.no_area
-			&& !crate::monitor::fullscreen(&self.window)
+			&& !crate::monitor::fullscreen(&self.window, &self.x11)
 			&& !self.window.is_maximized();
 		// not a move means a take just happened, since only a take sets that grace
 		let took = !self.rescale_moves(Instant::now());
@@ -758,7 +760,7 @@ impl State {
 			|| !self.revealed
 			|| self.no_area
 			|| self.window.is_maximized()
-			|| crate::monitor::fullscreen(&self.window)
+			|| crate::monitor::fullscreen(&self.window, &self.x11)
 			|| crate::monitor::snapped(&self.window)
 		{
 			return None;

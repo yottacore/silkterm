@@ -339,16 +339,32 @@ Going forward, new issues in the new template at the bottom of this file will go
 - Window moves and resizes on Linux open a new X server connection for each question they ask
 	- ID: 2026111623500003
 	- Type: Enhancement
-	- Status: Queued
+	- Status: Done
 	- Priority: Avg
 	- Opened: 20261116-235000
 	- Opened by: CC
 	- Target OS: Linux
+	- Test environment: Xvfb with xfwm4; headless sway with Xwayland for herdback
 	- Target version: rc.1
 	- Requirements:
 		- Several monitor and button queries run per resize or move event, and each one connects to the X server again.
 		- Keep one connection per window.
 		- Detail: `detail_backlog.md`, under this ID.
+	- Progress log:
+		- 20261117: Measured on Xvfb under xfwm4, with per-monitor sizes on, as X server connects the process made. Before: 3 per move (layout, button held, monitor under the window), 1 per resize, 17 at launch. After: 0 per move, 0 per resize, 12 at launch.
+	- Decisions:
+		- 20261117: The window's state owns the connection, made at the first read and dropped with the window. A read that fails drops it, and the next read connects again, so a server that comes back is picked up.
+		- 20261117: The XWAYLAND check and the two fullscreen atoms are asked once per connection. The atoms are kept only once a window manager has made both.
+		- 20261117: The monitor list is still read from the server each time, since it changes without telling a connection that never asks for events. Its RandR requests now go out together before the replies are read.
+		- 20261117: Events the server sends every client unasked are read off and dropped after each read, so they can't pile up on a connection that lives as long as the window.
+		- 20261117: 2026100314050005 had left this alone as small. This item asks for it, so it's done here.
+	- Swept: every `x11rb::connect` in the source. The KDE blur hint and the initial window state (app.rs) run at startup or on a toggle. The transient-for hints, restack and work area (dialog.rs) run when a dialog opens or is activated. The GLX error hook and MIT-SHM check (gfx.rs) run at startup. None runs per move or resize.
+	- Verified: 20261117. dfe50 and dfe51 pass, and both fail with the connection dropped after every read. herdback (deqx1) passes all 20 checks and startsize (ddg81) passes, on the new build. Format, clippy and the unit tests (1477) passed in the quick gate. Clippy is clean for the Windows and macOS targets.
+	- Branch: nov17-2026111623500003
+	- Commit: 903fee6c
+	- Test case: `a_window_keeps_one_x_connection_across_its_reads` (dfe50), `a_failed_x_read_drops_the_connection_and_the_next_read_connects_again` (dfe51)
+	- Acceptance signoff: Self-closed: the change does what the item asked, measured before and after, and its tests fail with the keeping broken.
+	- Closed: 20261117-091811
 
 - Tips and the menu bar measure their text again on each frame or hit test
 	- ID: 2026111623500004

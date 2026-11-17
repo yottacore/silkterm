@@ -643,6 +643,8 @@ impl Gpu {
 
 struct State {
 	window: Arc<Window>,
+	// the X server connection the monitor checks after a move or resize use
+	x11: crate::monitor::X11Link,
 	// None while the window has let its device go after a long idle, with what
 	// is needed to build it again waiting in `rebirth` (see `release_gpu`).
 	// `render` takes it out for the length of a frame, so nothing a frame calls
@@ -3818,7 +3820,8 @@ impl ApplicationHandler<UserEvent> for App {
 		// An automatic size opens at the last size and font zoom, this monitor's
 		// own where they are kept. A size or font size on the command line wins.
 		let settings = config::settings();
-		let monitor = crate::monitor::MonitorId::of_new_window(&window).map(|m| m.key());
+		let x11 = crate::monitor::X11Link::default();
+		let monitor = crate::monitor::MonitorId::of_new_window(&window, &x11).map(|m| m.key());
 		let kept = config::remembered_window(&settings, monitor.as_deref());
 		let font_pinned = cli_win.style.font_size.is_some();
 		if settings.remember_size && !font_pinned {
@@ -3849,7 +3852,7 @@ impl ApplicationHandler<UserEvent> for App {
 			ignore_resize_until: Instant::now(),
 			ignore_moves_until: Instant::now(),
 			layout: Vec::new(),
-			layout_looked: crate::monitor::layout(&window),
+			layout_looked: crate::monitor::layout(&window, &x11),
 			home: None,
 			place: None,
 			herd: None,
@@ -3961,6 +3964,7 @@ impl ApplicationHandler<UserEvent> for App {
 
 		self.state = Some(State {
 			window,
+			x11,
 			gpu: Some(Gpu {
 				gfx,
 				rects,

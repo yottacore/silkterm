@@ -24,23 +24,23 @@ impl MonitorId {
 	/// The monitor the window is on now, at the scale the window is drawn at.
 	/// None when the platform can't say, which on Wayland is the case until
 	/// the window has been shown.
-	pub fn of_window(window: &Window) -> Option<Self> {
-		Self::find(window, false)
+	pub fn of_window(window: &Window, x11: &X11Link) -> Option<Self> {
+		Self::find(window, x11, false)
 	}
 
 	/// The monitor a window not shown yet will open on. It has no place of its
 	/// own until the window manager maps it, and xfwm4 maps a window that asks
 	/// for no position on the monitor under the pointer. winit guesses the
 	/// window's scale the same way.
-	pub fn of_new_window(window: &Window) -> Option<Self> {
-		Self::find(window, true)
+	pub fn of_new_window(window: &Window, x11: &X11Link) -> Option<Self> {
+		Self::find(window, x11, true)
 	}
 
 	#[cfg_attr(not(target_os = "linux"), allow(unused_variables))]
-	fn find(window: &Window, at_pointer: bool) -> Option<Self> {
+	fn find(window: &Window, x11: &X11Link, at_pointer: bool) -> Option<Self> {
 		let scale = window.scale_factor();
 		#[cfg(target_os = "linux")]
-		if let Some(under) = x11_monitor_under(window, at_pointer) {
+		if let Some(under) = x11.ask(window, |x| x11_monitor_under(x, at_pointer)) {
 			let (px, mm) = under?;
 			return Self::new(px.0, px.1, scale, mm.map(|mm| upright(mm, px)));
 		}
@@ -135,12 +135,13 @@ pub fn same_monitor(a: &str, b: &str) -> bool {
 /// Where every monitor is. The window's own resize can make the window manager
 /// move it, but never changes these, so a move made while they changed is the
 /// window manager's.
-pub fn layout(window: &Window) -> Vec<(i64, i64, i64, i64)> {
+#[cfg_attr(not(target_os = "linux"), allow(unused_variables))]
+pub fn layout(window: &Window, x11: &X11Link) -> Vec<(i64, i64, i64, i64)> {
 	// winit's list on X11 misses an output that comes back without the screen
 	// changing size
 	#[cfg(target_os = "linux")]
-	if let Some(screen) = X11Screen::of(window) {
-		return screen.crtcs.iter().map(crtc_rect).collect();
+	if let Some(crtcs) = x11.ask(window, X11::lit_crtcs) {
+		return crtcs.iter().map(crtc_rect).collect();
 	}
 	window
 		.available_monitors()
@@ -451,69 +452,184 @@ fn edid_mm(edid: &[u8]) -> Option<(u32, u32)> {
 #[cfg(target_os = "linux")]
 type PxMm = ((u32, u32), Option<(u32, u32)>);
 
-#[cfg(target_os = "linux")]
-struct X11Screen {
-	conn: x11rb::rust_connection::RustConnection,
-	root: u32,
-	xid: u32,
-	config_timestamp: u32,
-	// the ones lit, with an output
-	crtcs: Vec<x11rb::protocol::randr::GetCrtcInfoReply>,
+/// The window's own connection to the X server, for the monitor, button and
+/// fullscreen reads made on each move and resize. Made at the first read and
+/// kept until the window goes, rather than a new one per read
+/// (2026111623500003). A read that fails drops it, and the next one connects
+/// again. Nothing is kept off X11.
+#[derive(Default)]
+pub struct X11Link {
+	#[cfg(target_os = "linux")]
+	kept: Kept<X11>,
+}
+
+impl std::fmt::Debug for X11Link {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		let mut out = f.debug_struct("X11Link");
+		#[cfg(target_os = "linux")]
+		out.field(
+			"open",
+			&self.kept.open.try_borrow().map(|open| open.is_some()).ok(),
+		);
+		out.finish()
+	}
 }
 
 #[cfg(target_os = "linux")]
-impl X11Screen {
-	// None when the window isn't an X11 one, or the server won't say.
-	fn of(window: &Window) -> Option<Self> {
-		use raw_window_handle::{HasWindowHandle, RawWindowHandle};
-		use x11rb::connection::Connection;
-		use x11rb::protocol::randr::ConnectionExt as _;
+impl X11Link {
+	// None when the window isn't an X11 one, the server can't be reached, or
+	// `read` fails.
+	fn ask<T>(&self, window: &Window, read: impl FnOnce(&X11) -> Option<T>) -> Option<T> {
+		let xid = x11_window(window)?;
+		self.kept.ask(|| X11::connect(xid), read)
+	}
+}
 
-		let xid = match window.window_handle().ok()?.as_raw() {
-			RawWindowHandle::Xlib(h) => h.window as u32,
-			RawWindowHandle::Xcb(h) => h.window.get(),
-			_ => return None,
-		};
+// A connection made on first use and kept while reads on it work.
+#[cfg(target_os = "linux")]
+struct Kept<C> {
+	open: std::cell::RefCell<Option<C>>,
+}
+
+#[cfg(target_os = "linux")]
+impl<C> Default for Kept<C> {
+	fn default() -> Self {
+		Self {
+			open: std::cell::RefCell::new(None),
+		}
+	}
+}
+
+#[cfg(target_os = "linux")]
+impl<C: Opened> Kept<C> {
+	fn ask<T>(
+		&self,
+		connect: impl FnOnce() -> Option<C>,
+		read: impl FnOnce(&C) -> Option<T>,
+	) -> Option<T> {
+		let mut open = self.open.borrow_mut();
+		if open.is_none() {
+			*open = Some(connect()?);
+		}
+		let conn = open.as_ref()?;
+		let got = read(conn);
+		if got.is_some() {
+			conn.drain();
+		} else {
+			*open = None;
+		}
+		got
+	}
+}
+
+// The live connection and what never changes on it.
+#[cfg(target_os = "linux")]
+struct X11 {
+	conn: x11rb::rust_connection::RustConnection,
+	root: u32,
+	xid: u32,
+	xwayland: bool,
+	// _NET_WM_STATE and its fullscreen value, once a window manager has made
+	// them
+	fullscreen_atoms: std::cell::Cell<Option<(u32, u32)>>,
+}
+
+#[cfg(target_os = "linux")]
+trait Opened {
+	// Throws away what the server sends every client unasked, such as a
+	// keyboard mapping change, which would otherwise pile up unread.
+	fn drain(&self);
+}
+
+#[cfg(target_os = "linux")]
+impl Opened for X11 {
+	fn drain(&self) {
+		use x11rb::connection::Connection;
+		while let Ok(Some(_)) = self.conn.poll_for_event() {}
+	}
+}
+
+#[cfg(target_os = "linux")]
+fn x11_window(window: &Window) -> Option<u32> {
+	use raw_window_handle::{HasWindowHandle, RawWindowHandle};
+	match window.window_handle().ok()?.as_raw() {
+		RawWindowHandle::Xlib(h) => Some(h.window as u32),
+		RawWindowHandle::Xcb(h) => Some(h.window.get()),
+		_ => None,
+	}
+}
+
+#[cfg(target_os = "linux")]
+impl X11 {
+	fn connect(xid: u32) -> Option<Self> {
+		use x11rb::connection::Connection;
+		use x11rb::protocol::xproto::ConnectionExt as _;
+
 		let (conn, screen) = x11rb::connect(None).ok()?;
 		let root = conn.setup().roots.get(screen)?.root;
+		let xwayland = conn
+			.query_extension(b"XWAYLAND")
+			.ok()
+			.and_then(|cookie| cookie.reply().ok())
+			.is_some_and(|reply| reply.present);
+		Some(Self {
+			conn,
+			root,
+			xid,
+			xwayland,
+			fullscreen_atoms: std::cell::Cell::new(None),
+		})
+	}
+
+	// The lit monitors now, and the server's config time they were read at.
+	// The requests for each kind go out together before any reply is read.
+	fn lit_crtcs_at(&self) -> Option<(Vec<x11rb::protocol::randr::GetCrtcInfoReply>, u32)> {
+		use x11rb::protocol::randr::ConnectionExt as _;
+
+		let conn = &self.conn;
 		let resources = conn
-			.randr_get_screen_resources_current(root)
+			.randr_get_screen_resources_current(self.root)
 			.ok()?
 			.reply()
 			.ok()?;
-		let laid = resources
+		let at = resources.config_timestamp;
+		let asked: Vec<_> = resources
 			.crtcs
 			.iter()
-			.filter_map(|&crtc| {
-				conn.randr_get_crtc_info(crtc, resources.config_timestamp)
-					.ok()
-					.and_then(|cookie| cookie.reply().ok())
-			})
+			.filter_map(|&crtc| conn.randr_get_crtc_info(crtc, at).ok())
+			.collect();
+		let laid: Vec<_> = asked
+			.into_iter()
+			.filter_map(|cookie| cookie.reply().ok())
 			.filter(|info| info.mode != 0 && !info.outputs.is_empty())
 			.map(|info| {
-				let ends = info
+				let asked: Vec<_> = info
 					.outputs
 					.iter()
-					.map(|&out| {
-						conn.randr_get_output_info(out, resources.config_timestamp)
-							.ok()
+					.map(|&out| conn.randr_get_output_info(out, at).ok())
+					.collect();
+				(info, asked)
+			})
+			.collect();
+		let laid = laid
+			.into_iter()
+			.map(|(info, asked)| {
+				let ends = asked
+					.into_iter()
+					.map(|cookie| {
+						cookie
 							.and_then(|cookie| cookie.reply().ok())
-							.map_or(x11rb::protocol::randr::Connection::UNKNOWN, |reply| {
-								reply.connection
-							})
+							.map_or(Connection::UNKNOWN, |reply| reply.connection)
 					})
 					.collect();
 				(info, ends)
 			})
 			.collect();
-		let crtcs = lit_crtcs(laid);
-		Some(Self {
-			conn,
-			root,
-			xid,
-			config_timestamp: resources.config_timestamp,
-			crtcs,
-		})
+		Some((lit_crtcs(laid), at))
+	}
+
+	fn lit_crtcs(&self) -> Option<Vec<x11rb::protocol::randr::GetCrtcInfoReply>> {
+		self.lit_crtcs_at().map(|(crtcs, _)| crtcs)
 	}
 }
 
@@ -553,18 +669,15 @@ fn crtc_rect(info: &x11rb::protocol::randr::GetCrtcInfoReply) -> (i64, i64, i64,
 // refreshed since the resolution changed. Some(None) is a window on no
 // monitor at all.
 #[cfg(target_os = "linux")]
-fn x11_monitor_under(window: &Window, at_pointer: bool) -> Option<Option<PxMm>> {
+fn x11_monitor_under(x: &X11, at_pointer: bool) -> Option<Option<PxMm>> {
 	use x11rb::protocol::randr::ConnectionExt as _;
 	use x11rb::protocol::xproto::ConnectionExt as _;
 
-	let screen = X11Screen::of(window)?;
-	let conn = &screen.conn;
-	let size = conn.get_geometry(screen.xid).ok()?.reply().ok()?;
-	let at = conn
-		.translate_coordinates(screen.xid, screen.root, 0, 0)
-		.ok()?
-		.reply()
-		.ok()?;
+	let (crtcs, config_timestamp) = x.lit_crtcs_at()?;
+	let conn = &x.conn;
+	let size = conn.get_geometry(x.xid).ok()?;
+	let at = conn.translate_coordinates(x.xid, x.root, 0, 0).ok()?;
+	let (size, at) = (size.reply().ok()?, at.reply().ok()?);
 	let win = (
 		i64::from(at.dst_x),
 		i64::from(at.dst_y),
@@ -572,16 +685,16 @@ fn x11_monitor_under(window: &Window, at_pointer: bool) -> Option<Option<PxMm>> 
 		i64::from(size.height),
 	);
 	let pointer = at_pointer
-		.then(|| conn.query_pointer(screen.root).ok()?.reply().ok())
+		.then(|| conn.query_pointer(x.root).ok()?.reply().ok())
 		.flatten()
 		.map(|reply| (i64::from(reply.root_x), i64::from(reply.root_y)));
-	let rects: Vec<_> = screen.crtcs.iter().map(crtc_rect).collect();
+	let rects: Vec<_> = crtcs.iter().map(crtc_rect).collect();
 	let Some(index) = monitor_under(win, pointer, &rects) else {
 		return Some(None);
 	};
-	let crtc = &screen.crtcs[index];
+	let crtc = &crtcs[index];
 	let mm = conn
-		.randr_get_output_info(crtc.outputs[0], screen.config_timestamp)
+		.randr_get_output_info(crtc.outputs[0], config_timestamp)
 		.ok()
 		.and_then(|cookie| cookie.reply().ok())
 		.map(|out| (out.mm_width, out.mm_height));
@@ -798,41 +911,24 @@ fn physical_mm(_monitor: &winit::monitor::MonitorHandle) -> Option<(u32, u32)> {
 /// window no buttons but its own, and Xwayland can't see one held on the
 /// compositor's title bar.
 #[cfg(target_os = "linux")]
-pub fn button_held(window: &Window) -> Option<bool> {
-	use raw_window_handle::{HasWindowHandle, RawWindowHandle};
-	use x11rb::connection::Connection;
+pub fn button_held(window: &Window, x11: &X11Link) -> Option<bool> {
 	use x11rb::protocol::xproto::{ConnectionExt as _, KeyButMask};
 
-	let x11 = window.window_handle().is_ok_and(|handle| {
-		matches!(
-			handle.as_raw(),
-			RawWindowHandle::Xlib(_) | RawWindowHandle::Xcb(_)
-		)
-	});
-	if !x11 {
-		return None;
-	}
-	let (conn, screen) = x11rb::connect(None).ok()?;
-	let xwayland = conn
-		.query_extension(b"XWAYLAND")
-		.ok()
-		.and_then(|cookie| cookie.reply().ok())
-		.is_some_and(|reply| reply.present);
-	if xwayland {
-		return None;
-	}
-	let root = conn.setup().roots[screen].root;
-	let reply = conn.query_pointer(root).ok()?.reply().ok()?;
-	Some(
-		reply
-			.mask
-			.intersects(KeyButMask::BUTTON1 | KeyButMask::BUTTON2 | KeyButMask::BUTTON3),
-	)
+	x11.ask(window, |x| {
+		if x.xwayland {
+			return Some(None);
+		}
+		let reply = x.conn.query_pointer(x.root).ok()?.reply().ok()?;
+		Some(Some(reply.mask.intersects(
+			KeyButMask::BUTTON1 | KeyButMask::BUTTON2 | KeyButMask::BUTTON3,
+		)))
+	})
+	.flatten()
 }
 
 #[cfg(windows)]
 #[allow(clippy::unnecessary_wraps, reason = "Linux returns None")]
-pub fn button_held(_window: &Window) -> Option<bool> {
+pub fn button_held(_window: &Window, _x11: &X11Link) -> Option<bool> {
 	use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
 		GetAsyncKeyState, VK_LBUTTON, VK_RBUTTON,
 	};
@@ -846,58 +942,72 @@ pub fn button_held(_window: &Window) -> Option<bool> {
 
 #[cfg(target_os = "macos")]
 #[allow(clippy::unnecessary_wraps, reason = "Linux returns None")]
-pub fn button_held(_window: &Window) -> Option<bool> {
+pub fn button_held(_window: &Window, _x11: &X11Link) -> Option<bool> {
 	Some(objc2_app_kit::NSEvent::pressedMouseButtons() != 0)
 }
 
 #[cfg(not(any(target_os = "linux", windows, target_os = "macos")))]
 #[allow(clippy::unnecessary_wraps, reason = "Linux returns None")]
-pub fn button_held(_window: &Window) -> Option<bool> {
+pub fn button_held(_window: &Window, _x11: &X11Link) -> Option<bool> {
 	Some(false)
 }
 
 /// Is the window fullscreen? winit on X11 knows only of a fullscreen the
 /// program asked for itself, so one the window manager set from its own key
 /// or menu had its size saved as the size to open at (2026101413075422).
-pub fn fullscreen(window: &Window) -> bool {
-	window.fullscreen().is_some() || wm_fullscreen(window)
+pub fn fullscreen(window: &Window, x11: &X11Link) -> bool {
+	window.fullscreen().is_some() || wm_fullscreen(window, x11)
 }
 
 #[cfg(target_os = "linux")]
-fn wm_fullscreen(window: &Window) -> bool {
-	use raw_window_handle::{HasWindowHandle, RawWindowHandle};
+fn wm_fullscreen(window: &Window, x11: &X11Link) -> bool {
 	use x11rb::protocol::xproto::{AtomEnum, ConnectionExt as _};
 
-	let xid = match window.window_handle().map(|handle| handle.as_raw()) {
-		Ok(RawWindowHandle::Xlib(h)) => h.window as u32,
-		Ok(RawWindowHandle::Xcb(h)) => h.window.get(),
-		_ => return false,
-	};
-	let Ok((conn, _)) = x11rb::connect(None) else {
-		return false;
-	};
-	let atom = |name: &[u8]| {
-		conn.intern_atom(true, name)
-			.ok()
-			.and_then(|cookie| cookie.reply().ok())
-			.map(|reply| reply.atom)
-	};
-	let (Some(state), Some(full)) = (atom(b"_NET_WM_STATE"), atom(b"_NET_WM_STATE_FULLSCREEN"))
-	else {
-		return false;
-	};
-	conn.get_property(false, xid, state, AtomEnum::ATOM, 0, 64)
-		.ok()
-		.and_then(|cookie| cookie.reply().ok())
-		.is_some_and(|reply| {
+	x11.ask(window, |x| {
+		let Some((state, full)) = x.fullscreen_atoms() else {
+			return Some(false);
+		};
+		let reply = x
+			.conn
+			.get_property(false, x.xid, state, AtomEnum::ATOM, 0, 64)
+			.ok()?
+			.reply()
+			.ok()?;
+		Some(
 			reply
 				.value32()
-				.is_some_and(|mut atoms| atoms.any(|a| a == full))
-		})
+				.is_some_and(|mut atoms| atoms.any(|a| a == full)),
+		)
+	})
+	.unwrap_or(false)
+}
+
+#[cfg(target_os = "linux")]
+impl X11 {
+	// Asked only for names that exist, so neither is there until a window
+	// manager has made them, and they're kept only once both are.
+	fn fullscreen_atoms(&self) -> Option<(u32, u32)> {
+		use x11rb::protocol::xproto::ConnectionExt as _;
+
+		if let Some(atoms) = self.fullscreen_atoms.get() {
+			return Some(atoms);
+		}
+		let state = self.conn.intern_atom(true, b"_NET_WM_STATE").ok()?;
+		let full = self
+			.conn
+			.intern_atom(true, b"_NET_WM_STATE_FULLSCREEN")
+			.ok()?;
+		let atoms = (state.reply().ok()?.atom, full.reply().ok()?.atom);
+		if atoms.0 == 0 || atoms.1 == 0 {
+			return None;
+		}
+		self.fullscreen_atoms.set(Some(atoms));
+		Some(atoms)
+	}
 }
 
 #[cfg(not(target_os = "linux"))]
-fn wm_fullscreen(_window: &Window) -> bool {
+fn wm_fullscreen(_window: &Window, _x11: &X11Link) -> bool {
 	false
 }
 
@@ -943,6 +1053,68 @@ pub fn snapped(_window: &Window) -> bool {
 #[cfg(test)]
 mod tests {
 	use super::*;
+
+	#[cfg(target_os = "linux")]
+	struct FakeConn(std::rc::Rc<std::cell::Cell<u32>>);
+
+	#[cfg(target_os = "linux")]
+	impl Opened for FakeConn {
+		fn drain(&self) {
+			self.0.set(self.0.get() + 1);
+		}
+	}
+
+	// Test ID: dfe50
+	#[cfg(target_os = "linux")]
+	#[test]
+	fn a_window_keeps_one_x_connection_across_its_reads() {
+		let kept = Kept::<FakeConn>::default();
+		let drained = std::rc::Rc::new(std::cell::Cell::new(0));
+		let mut connects = 0;
+		for n in 0..20 {
+			let got = kept.ask(
+				|| {
+					connects += 1;
+					Some(FakeConn(drained.clone()))
+				},
+				|_| Some(n),
+			);
+			assert_eq!(got, Some(n));
+		}
+		assert_eq!(connects, 1);
+		assert_eq!(drained.get(), 20, "drained after each read");
+	}
+
+	// Test ID: dfe51
+	#[cfg(target_os = "linux")]
+	#[test]
+	fn a_failed_x_read_drops_the_connection_and_the_next_read_connects_again() {
+		let kept = Kept::<FakeConn>::default();
+		let drained = std::rc::Rc::new(std::cell::Cell::new(0));
+		let connects = std::cell::Cell::new(0);
+		let connect = || {
+			connects.set(connects.get() + 1);
+			Some(FakeConn(drained.clone()))
+		};
+		assert_eq!(kept.ask(connect, |_| Some(1)), Some(1));
+		assert_eq!(kept.ask(connect, |_| None::<u32>), None);
+		assert_eq!(connects.get(), 1);
+		assert_eq!(kept.ask(connect, |_| Some(2)), Some(2));
+		assert_eq!(kept.ask(connect, |_| Some(3)), Some(3));
+		assert_eq!(connects.get(), 2, "one more after the failure, then kept");
+		assert_eq!(drained.get(), 3, "a failed read isn't drained");
+
+		// no server: nothing is kept, and each read tries again
+		let none = Kept::<FakeConn>::default();
+		let tries = std::cell::Cell::new(0);
+		let refuse = || {
+			tries.set(tries.get() + 1);
+			None
+		};
+		assert_eq!(none.ask(refuse, |_| Some(1)), None);
+		assert_eq!(none.ask(refuse, |_| Some(1)), None);
+		assert_eq!(tries.get(), 2);
+	}
 
 	// An HDMI monitor asleep: still laid out, its cable reads disconnected.
 	// Test ID: deyvh
