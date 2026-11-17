@@ -4,7 +4,10 @@
 //! The performance benchmark and the profile it picks, and the display watch
 //! that steps a slow session down.
 
-use super::{BENCH_BANNER_MIN, BENCH_BANNER_PAD, State, set_live};
+use super::{
+	BENCH_BANNER_MAX_LINES, BENCH_BANNER_MIN, BENCH_BANNER_PAD, Overlay, OverlayAt, OverlayLefts,
+	OverlayWords, State, set_live,
+};
 use crate::config;
 use crate::gfx::Drawn;
 use crate::pane::Rect;
@@ -231,7 +234,7 @@ impl State {
 	/// The benchmark's banner: one box in the middle of the window, over a dimmed
 	/// screen. It makes the run modal. The window behind keeps drawing, since that's
 	/// what is timed, but takes no input while the banner is up.
-	pub(super) fn bench_layout(&mut self) -> Option<(Rect, Vec<(f32, f32, String)>)> {
+	pub(super) fn bench_layout(&mut self) -> Option<Overlay<'static>> {
 		self.bench_banner.as_ref()?;
 		let lines = if self.bench_stalled {
 			BENCH_STALLED_LINES
@@ -241,9 +244,11 @@ impl State {
 		let attrs = crate::text::ui_attrs();
 		let pad = self.text.dip(BENCH_BANNER_PAD);
 		let line_h = self.text.ui_line_h;
-		let text_w = lines.iter().fold(0.0f32, |widest, line| {
-			widest.max(self.text.measure_ui_text(line, &attrs))
-		});
+		let mut widths = [0.0f32; BENCH_BANNER_MAX_LINES];
+		for (width, line) in widths.iter_mut().zip(lines) {
+			*width = self.text.measure_ui_text(line, &attrs);
+		}
+		let text_w = widths.iter().copied().fold(0.0f32, f32::max);
 		let w = text_w + 2.0 * pad;
 		let h = line_h * lines.len() as f32 + 2.0 * pad;
 		let (win_w, win_h) = (self.surface_px.0 as f32, self.surface_px.1 as f32);
@@ -251,19 +256,17 @@ impl State {
 			((win_w - w) / 2.0).max(0.0).round(),
 			((win_h - h) / 2.0).max(0.0).round(),
 		);
-		let placed = lines
-			.iter()
-			.enumerate()
-			.map(|(i, line)| {
-				let left = x + (w - self.text.measure_ui_text(line, &attrs)) / 2.0;
-				(
-					left.round(),
-					y + pad + line_h * i as f32,
-					(*line).to_string(),
-				)
-			})
-			.collect();
-		Some((Rect { x, y, w, h }, placed))
+		let lefts = widths.map(|width| (x + (w - width) / 2.0).round());
+		// the words are fixed, so the frame borrows them for as long as it likes
+		Some(Overlay {
+			at: OverlayAt {
+				rect: Rect { x, y, w, h },
+				top: y + pad,
+				line_h,
+				lefts: OverlayLefts::Each(lefts),
+			},
+			words: OverlayWords::Fixed(lines),
+		})
 	}
 
 	/// The rating waits for the wallpaper, since that is part of what it times,
@@ -769,5 +772,25 @@ mod tests {
 				"{kept:?}"
 			);
 		}
+	}
+
+	// The banner's lines are centered from lefts kept in a fixed array, so each
+	// thing it can say has to fit in it.
+	// Test ID: dfe5w
+	#[test]
+	fn every_banner_fits_its_kept_lefts() {
+		let all = [
+			None,
+			Some(config::Kept::Written),
+			Some(config::Kept::Busy),
+			Some(config::Kept::Unreadable),
+			Some(config::Kept::Unplaced),
+			Some(config::Kept::Unwritable(String::new())),
+		];
+		for kept in &all {
+			let lines = super::bench_banner_lines(kept.as_ref());
+			assert!(lines.len() <= super::BENCH_BANNER_MAX_LINES, "{kept:?}");
+		}
+		assert!(super::BENCH_STALLED_LINES.len() <= super::BENCH_BANNER_MAX_LINES);
 	}
 }

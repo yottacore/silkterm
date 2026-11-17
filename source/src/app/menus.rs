@@ -6,7 +6,10 @@
 
 #[cfg(any(test, target_os = "macos"))]
 use super::MENU_BAR;
-use super::{MENU_TIP_GAP, MENU_TIP_MAX_W, MENU_TIP_PAD, State, open_link, save_live, shell_argv};
+use super::{
+	MENU_TIP_GAP, MENU_TIP_MAX_W, MENU_TIP_PAD, OverlayAt, OverlayLefts, State, open_link,
+	save_live, shell_argv,
+};
 use crate::config;
 use crate::input::Hotkey;
 use crate::pane::{CopyKind, Dir, Rect};
@@ -845,7 +848,7 @@ impl State {
 	/// The menu tip's box and its wrapped lines, once the pointer has rested on a
 	/// row that has a tip. It stands beside the popup rather than under the row,
 	/// so the rows being chosen between stay readable.
-	pub(super) fn menu_tip_layout(&mut self) -> Option<(Rect, Vec<(f32, f32, String)>)> {
+	pub(super) fn menu_tip_layout(&mut self) -> Option<OverlayAt> {
 		let (depth, row) = self.menu_tip.ripe()?;
 		let (anchor, help) = {
 			let menu = self.menu.as_ref()?.popups().nth(depth)?;
@@ -861,20 +864,23 @@ impl State {
 		let pad = self.text.dip(MENU_TIP_PAD);
 		let line_h = self.text.ui_line_h;
 		let budget = self.text.ui_text_dip(MENU_TIP_MAX_W);
-		let lines = crate::tip::wrap(help, budget, |line| self.text.measure_ui_text(line, &attrs));
-		let text_w = lines.iter().fold(0.0f32, |widest, line| {
-			widest.max(self.text.measure_ui_text(line, &attrs))
+		let generation = self.text.generation;
+		let text = &mut self.text;
+		// wrapped and measured once while it stays up, and lent to the frame
+		let (lines, text_w) = self.menu_tip_text.lay(help, budget, generation, |line| {
+			text.measure_ui_text(line, &attrs)
 		});
+		let count = lines.len();
 		let w = text_w + 2.0 * pad;
-		let h = line_h * lines.len() as f32 + 2.0 * pad;
+		let h = line_h * count as f32 + 2.0 * pad;
 		let win = (self.surface_px.0 as f32, self.surface_px.1 as f32);
 		let (x, y) = crate::tip::beside(anchor, (w, h), win, self.text.dip(MENU_TIP_GAP), pad);
-		let placed = lines
-			.into_iter()
-			.enumerate()
-			.map(|(i, line)| (x + pad, y + pad + line_h * i as f32, line))
-			.collect();
-		Some((Rect { x, y, w, h }, placed))
+		Some(OverlayAt {
+			rect: Rect { x, y, w, h },
+			top: y + pad,
+			line_h,
+			lefts: OverlayLefts::Even(x + pad),
+		})
 	}
 
 	pub(super) fn open_menu(&mut self, target: PaneId, mx: f32, my: f32) {

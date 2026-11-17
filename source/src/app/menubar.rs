@@ -19,6 +19,36 @@ pub(super) fn menu_bar_at_launch(hide_menu: Option<bool>, saved: bool, mac: bool
 	!mac && hide_menu.map_or(saved, |hide| !hide)
 }
 
+/// The menu bar's measured text: each title's box width with its padding, and
+/// each copy-mode label's width. Every hit test and frame used to measure them
+/// all again. Measured once per text context, since a font, size, or scale
+/// change builds a new one.
+#[derive(Debug, Default)]
+pub(super) struct BarWidths {
+	generation: u64,
+	titles: [f32; MENU_BAR.len()],
+	labels: [f32; COPYBOX_LABELS.len()],
+	#[cfg(test)]
+	measured: usize,
+}
+
+impl BarWidths {
+	fn get(&mut self, text: &mut TextCtx) -> ([f32; MENU_BAR.len()], [f32; COPYBOX_LABELS.len()]) {
+		if self.generation != text.generation {
+			let attrs = crate::text::ui_attrs();
+			let pad = text.dip(MENU_BAR_PAD) * 2.0;
+			self.titles = MENU_BAR.map(|title| text.measure_ui_text(title, &attrs) + pad);
+			self.labels = COPYBOX_LABELS.map(|label| text.measure_ui_text(label, &attrs));
+			self.generation = text.generation;
+			#[cfg(test)]
+			{
+				self.measured += 1;
+			}
+		}
+		(self.titles, self.labels)
+	}
+}
+
 /// The menu bar's right-side copy-mode cluster: "Copy on [ ] select [ ] output".
 /// Drawing, label placement, and click hit-testing all read this one layout.
 #[derive(Debug)]
@@ -153,10 +183,9 @@ impl State {
 	/// Per-title (`x_left`, width) layout of the menu bar, used for drawing and
 	/// hit-testing so they can't disagree. Titles use the proportional font.
 	pub(super) fn menubar_layout(&mut self) -> [(f32, f32); MENU_BAR.len()] {
-		let attrs = crate::text::ui_attrs();
+		let (titles, _) = self.bar_widths.get(&mut self.text);
 		let mut x = 0.0;
-		MENU_BAR.map(|title| {
-			let w = self.text.measure_ui_text(title, &attrs) + self.text.dip(MENU_BAR_PAD) * 2.0;
+		titles.map(|w| {
 			let at = (x, w);
 			x += w;
 			at
@@ -177,11 +206,7 @@ impl State {
 	pub(super) fn copybox_layout(&mut self) -> Option<CopyBoxes> {
 		let titles_right =
 			self.menubar_layout().last().map_or(0.0, |&(x, w)| x + w) + self.text.dip(MENU_BAR_PAD);
-		let attrs = crate::text::ui_attrs();
-		let mut label_w = [0.0f32; 3];
-		for (w, label) in label_w.iter_mut().zip(COPYBOX_LABELS) {
-			*w = self.text.measure_ui_text(label, &attrs);
-		}
+		let (_, label_w) = self.bar_widths.get(&mut self.text);
 		let box_sz = (self.text.ui_line_h * 0.6).round();
 		let metrics = CopyMetrics {
 			right: self.surface_px.0 as f32 - self.text.dip(MENU_BAR_PAD),
@@ -396,5 +421,34 @@ mod tests {
 			menubar_text_slot(&text, menu_h, &layout, Some(&narrow), layout.len()),
 			None
 		);
+	}
+
+	// Every hit test on the menu bar measured all its titles and labels again.
+	// They're measured once per text context now, and a new context (a font,
+	// size, or scale change) measures them again.
+	// Test ID: dfe5t
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn the_menu_bar_measures_its_text_once() {
+		use super::super::{COPYBOX_LABELS, MENU_BAR_PAD};
+		let mut text = TextCtx::new_cpu(1.0);
+		let mut kept = super::BarWidths::default();
+		let (titles, labels) = kept.get(&mut text);
+		let attrs = crate::text::ui_attrs();
+		for (w, title) in titles.iter().zip(MENU_BAR) {
+			let want = text.measure_ui_text(title, &attrs) + text.dip(MENU_BAR_PAD) * 2.0;
+			assert_eq!(*w, want, "{title}");
+		}
+		for (w, label) in labels.iter().zip(COPYBOX_LABELS) {
+			assert_eq!(*w, text.measure_ui_text(label, &attrs), "{label}");
+		}
+		for _ in 0..240 {
+			assert_eq!(kept.get(&mut text), (titles, labels));
+		}
+		assert_eq!(kept.measured, 1, "measured again with nothing changed");
+		let mut bigger = TextCtx::new_cpu(2.0);
+		let (titles_2x, _) = kept.get(&mut bigger);
+		assert_eq!(kept.measured, 2, "a new text context kept the old widths");
+		assert!(titles_2x[0] > titles[0] * 1.5);
 	}
 }

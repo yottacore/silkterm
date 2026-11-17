@@ -34,6 +34,16 @@ Going forward, new issues in the new template at the bottom of this file will go
 
 ## Issues
 
+- A tab tip wider than the window runs off its right edge
+	- ID: 2026111709403848
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261117-094038
+	- Opened by: CC
+	- Target version: rc.1
+	- Requirements: A tab tip with a long path or shell command is wider than a 900 pixel window, starts at the left edge, and its lines are cut off at the right. Seen in ddkre's window, whose shell command is a long temp path. Control: `tab_tip_layout` only clamps the box's left to 0, and never shortens or wraps a line, so any line wider than the window does this.
+
 - At some cell widths a window or pane exactly N cells wide shows N-1
 	- ID: 2026111708192137
 	- Type: Bug
@@ -271,7 +281,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 - Tab labels and the window title are worked out again on every frame
 	- ID: 2026111623500001
 	- Type: Enhancement
-	- Status: Started
+	- Status: Done
 	- Priority: Avg
 	- Opened: 20261116-235000
 	- Opened by: CC
@@ -283,7 +293,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Progress log:
 		- 20261117: The tab labels and the window title are done. A tab's facts are lent from its pane and compared where they are, and copied only when one moved. The window title is built only when what follows the app name, or the note after it, changed. The app name and dogfood part is worked out once.
 		- 20261117: At rest, in ddkre's window (2 tabs, 3 panes), the window thread went from 166 allocations per frame to 145, the same in a second pair of runs. A drag went from 325 to 328 per frame down to 304 to 306.
-		- 20261117: The tip and rating banner part of the detail is in child 2026111708444862, still Queued.
+		- 20261117: The tip and rating banner part of the detail is in child 2026111708444862, Done.
 	- Decisions:
 		- 20261117: The window title's source is now worked out without reading the tab's label, by `suffix_from`, so the caller can borrow it. The old `window_suffix` stays, test-only, so its tests run unchanged.
 		- 20261117: The tip and banner part went to a child. Their lines pass through 3 layout functions and the whole render, the per-line shaping costs more than the copy, and no window test puts a tip up to measure.
@@ -292,11 +302,13 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Branch: nov17-2026111623500001
 	- Commit: 172c03df
 	- Test case: `idle_frames_copy_no_tab_facts` (dfe46), no allocations over 240 idle frames. `an_unchanged_window_title_builds_nothing` (dfe45), no allocations over 240 frames with the title unchanged, and a new title for each part that moves. ddkre's figures above.
+	- Acceptance signoff: Self-closed: its last child, 2026111708444862, closed.
+	- Closed: 20261117-093908
 
 - The tab tip and the rating banner copy every line on each frame they show
 	- ID: 2026111708444862
 	- Type: Enhancement
-	- Status: Queued
+	- Status: Done
 	- Priority: Low
 	- Opened: 20261117-084448
 	- Opened by: CC
@@ -306,6 +318,20 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- While the tab tip or the rating banner is up, each frame copies all its lines out of the kept copy, since the frame keeps them across calls that change the window's state.
 		- Lend the lines to the frame instead.
 		- Detail: `detail_backlog.md`, under 2026111623500001, third bullet.
+	- Progress log:
+		- 20261117: Done: the tab tip, a menu tip, and the banner hand the frame where their box and lines go, and the frame borrows the words from where they're kept. The banner's words are fixed text, so it never copies them.
+		- 20261117: Measured in ddkre's window as allocations per frame on the window thread. With a tab tip up it went from 190 to 192 down to 184 to 185, 145 at rest in every run. With a menu tip up, 179 down to 168, with 2026111623500004 in.
+		- 20261117: What's left over rest, about 40 with a tab tip and 23 with a menu tip, is mostly the second render pass the tip layer adds. That wasn't split out further.
+	- Decisions:
+		- 20261117: The banner keeps its line lefts in a fixed array of 4. Every banner text has 2 or 3 lines, and dfe5w fails on one with more.
+		- 20261117: ddkre now holds a tab tip and a menu tip up, and checks each frame's count over the frame at rest, so the driver's floor cancels out. Limits 43 and 28. The window prints a note as each tip comes up, so a hover that missed fails rather than passing on nothing.
+	- Verified: 20261117. ddkre passes on the new build and fails both tip limits on the old one (47 and 34 over rest). The quick run passed fmt, clippy, tests, scripts, and docs, the last 2 run again after the first full call ran past 4 minutes.
+	- Swept: every caller of `tab_tip_layout`, `menu_tip_layout`, and `bench_layout`, all in `render_with`. Nothing past them in the frame takes `&mut self`.
+	- Branch: nov17-2026111708444862
+	- Commit: 0aa7ed15
+	- Test case: `an_overlay_lends_its_words` (dfe5s), the frame's lines are the kept strings and placing them allocates nothing. `every_banner_fits_its_kept_lefts` (dfe5w). ddkre's tab tip limit, which the old build fails.
+	- Acceptance signoff: Self-closed: the change does what the item asked, and its window check fails before and passes after.
+	- Closed: 20261117-093908
 
 - Settings: tips, labels, and search results are built again on every frame or pointer move
 	- ID: 2026111623500002
@@ -369,7 +395,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 - Tips and the menu bar measure their text again on each frame or hit test
 	- ID: 2026111623500004
 	- Type: Enhancement
-	- Status: Queued
+	- Status: Done
 	- Priority: Low
 	- Opened: 20261116-235000
 	- Opened by: CC
@@ -378,6 +404,19 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- A tip on screen is wrapped and then measured a second time on every frame.
 		- Every click or hover test on the menu bar measures all its titles again.
 		- Detail: `detail_backlog.md`, under this ID.
+	- Progress log:
+		- 20261117: Done: a menu tip and a Settings tip are wrapped and measured once while they stay up, and again only when the words, the width, or the font change.
+		- 20261117: Done: the menu bar's titles and copy labels are measured once per text context, which a font, size, or scale change replaces. Before, each hit test and frame looked all 9 up again in the width memo.
+		- 20261117: Measured in ddkre's window, a frame with a menu tip up went from 179 allocations to 168, with 2026111708444862 in. 240 frames of a kept tip allocate nothing, where wrapping it each frame took 2640. 240 menu bar lookups measure once, where they measured 241 times.
+	- Decisions:
+		- 20261117: The kept tip lives in the window's state for a menu tip, and beside the dialog's shaped text for a Settings tip, which is taken out for the frame so shaping can use the rest.
+	- Verified: 20261117. Each new test fails with its cache turned off (2640 allocations, 241 measures, 5 wraps over 6 frames) and passes with it. The quick run passed, all 5 areas.
+	- Swept: every `tip::wrap` caller outside tests: the menu tip, the Settings tip, and none else. The About link's tip is one line and was measured once already. Every caller of `menubar_layout` and `copybox_layout`.
+	- Branch: nov17-2026111708444862
+	- Commit: 0aa7ed15
+	- Test case: `a_kept_tip_is_wrapped_once_while_it_stays_up` (dfe5r), `a_drawn_tip_is_wrapped_once_while_it_stays_up` (dfe5v), `the_menu_bar_measures_its_text_once` (dfe5t). ddkre's menu tip limit, which the old build fails.
+	- Acceptance signoff: Self-closed: the change does what the item asked, and its tests failed before and pass after.
+	- Closed: 20261117-093908
 
 - A Settings change copies the whole settings model
 	- ID: 2026111623500005

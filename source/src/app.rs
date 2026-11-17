@@ -313,6 +313,74 @@ struct ChromeCache {
 	tabs: Vec<(String, f32, Buffer)>,
 }
 
+// Most lines the benchmark banner says, which its kept lefts have room for.
+const BENCH_BANNER_MAX_LINES: usize = 4;
+
+// Where a box of text over everything else goes this frame: a tab tip, a menu
+// tip, or the benchmark banner. Line `i` sits at `top + line_h * i`. Holds no
+// words, so the layout can take `&mut self` and the frame borrows the words
+// after from whoever keeps them (`Overlay`).
+#[derive(Clone, Copy, Debug)]
+struct OverlayAt {
+	rect: Rect,
+	top: f32,
+	line_h: f32,
+	lefts: OverlayLefts,
+}
+
+#[derive(Clone, Copy, Debug)]
+enum OverlayLefts {
+	// a tip: every line starts at one left
+	Even(f32),
+	// the banner: each line centered, so each has its own
+	Each([f32; BENCH_BANNER_MAX_LINES]),
+}
+
+// The words of an overlay, lent rather than copied. A frame used to copy every
+// line out of the kept tip, each frame it was up.
+#[derive(Clone, Copy, Debug)]
+enum OverlayWords<'a> {
+	Kept(&'a [String]),
+	Fixed(&'static [&'static str]),
+}
+
+impl OverlayWords<'_> {
+	fn len(self) -> usize {
+		match self {
+			Self::Kept(lines) => lines.len(),
+			Self::Fixed(lines) => lines.len(),
+		}
+	}
+}
+
+#[derive(Clone, Copy, Debug)]
+struct Overlay<'a> {
+	at: OverlayAt,
+	words: OverlayWords<'a>,
+}
+
+impl<'a> Overlay<'a> {
+	fn rect(&self) -> &Rect {
+		&self.at.rect
+	}
+
+	// Each line as (left, top, words).
+	fn placed(self) -> impl Iterator<Item = (f32, f32, &'a str)> {
+		let at = self.at;
+		(0..self.words.len()).map(move |i| {
+			let line = match self.words {
+				OverlayWords::Kept(lines) => lines[i].as_str(),
+				OverlayWords::Fixed(lines) => lines[i],
+			};
+			let left = match at.lefts {
+				OverlayLefts::Even(left) => left,
+				OverlayLefts::Each(lefts) => lefts.get(i).copied().unwrap_or(at.rect.x),
+			};
+			(left, at.top + at.line_h * i as f32, line)
+		})
+	}
+}
+
 // The lists a frame fills, kept between frames so each frame clears them
 // rather than growing them from empty. `render_with` takes them out for the
 // frame and puts them back emptied; an early return just drops them.
@@ -734,6 +802,9 @@ struct State {
 	// rather than by an event, so "has it changed" has to be asked against what
 	// was last drawn, not against what the timer said a moment ago.
 	menu_tip_up: Option<(usize, usize)>,
+	// that row's tip wrapped and measured, kept while it's up
+	menu_tip_text: crate::tip::Wrapped,
+	bar_widths: menubar::BarWidths, // the menu bar's titles and labels, measured
 	// no tips of any kind while the window is in the background
 	tip_focus: crate::tip::Focus,
 	// The tab last opened beside the active one, and that tab, each by a pane
@@ -1188,6 +1259,9 @@ impl State {
 		self.menu_tip.point_at(self.menu_tip_target());
 		let up = self.menu_tip.ripe();
 		let menu_changed = up != self.menu_tip_up;
+		if menu_changed && up.is_some() {
+			crate::perf::allocs_note("menu tip up");
+		}
 		self.menu_tip_up = up;
 		self.update_tab_tip() || menu_changed
 	}
@@ -2309,9 +2383,19 @@ impl State {
 		// flips to the left of a submenu at the right edge, which puts it over
 		// the parent menu. The tab strip's and a menu row's are the same 2
 		// quads; only what they say and where they sit differ.
-		let tip_layout = self.tab_tip_layout();
-		let menu_tip = self.menu_tip_layout();
+		let tip_at = self.tab_tip_layout();
+		let menu_tip_at = self.menu_tip_layout();
 		let bench_banner = self.bench_layout();
+		// The words are borrowed from where they're kept, so nothing past here
+		// may take `&mut self`, only its fields.
+		let tip_layout = tip_at.zip(self.tab_tip.as_ref()).map(|(at, tip)| Overlay {
+			at,
+			words: OverlayWords::Kept(&tip.lines),
+		});
+		let menu_tip = menu_tip_at.map(|at| Overlay {
+			at,
+			words: OverlayWords::Kept(self.menu_tip_text.lines()),
+		});
 		let border = self.text.dip(CHROME_HAIRLINE);
 		let tip_range = (tip_layout.is_some() || menu_tip.is_some() || bench_banner.is_some())
 			.then(|| {
@@ -2334,11 +2418,11 @@ impl State {
 				let boxes = tip_layout
 					.iter()
 					.chain(menu_tip.iter())
-					.map(|(rect, _)| (rect, tip_edge, tip_fill))
+					.map(|tip| (tip.rect(), tip_edge, tip_fill))
 					.chain(
 						bench_banner
 							.iter()
-							.map(|(rect, _)| (rect, menu_border_rgb, menu_bg_rgb)),
+							.map(|banner| (banner.rect(), menu_border_rgb, menu_bg_rgb)),
 					);
 				for (box_rect, edge, fill) in boxes {
 					instances.push(rect_inst(
@@ -2742,12 +2826,8 @@ impl State {
 				gpu.gfx.config.width.hash(&mut hasher);
 				gpu.gfx.config.height.hash(&mut hasher);
 				self.chrome_rev.hash(&mut hasher); // covers a menu color change
-				for (_, placed) in tip_layout
-					.iter()
-					.chain(menu_tip.iter())
-					.chain(bench_banner.iter())
-				{
-					for (left, top, line) in placed {
+				for overlay in tip_layout.iter().chain(&menu_tip).chain(&bench_banner) {
+					for (left, top, line) in overlay.placed() {
 						left.to_bits().hash(&mut hasher);
 						top.to_bits().hash(&mut hasher);
 						line.hash(&mut hasher);
@@ -2784,12 +2864,12 @@ impl State {
 				let tip_col = Some(GColor::rgb(tip_fg[0], tip_fg[1], tip_fg[2]));
 				// The tip alone shapes in the terminal font: its lines are a table
 				// padded with spaces, which no proportional face can align.
-				if let Some((box_rect, placed)) = &tip_layout {
+				if let Some(tip) = tip_layout {
 					let mut tip_attrs = crate::text::mono_attrs();
 					tip_attrs.color_opt = tip_col;
 					let line_h = self.text.cell_h;
-					for (left, top, line) in placed {
-						let mut buf = self.text.new_buffer(box_rect.w, line_h);
+					for (left, top, line) in tip.placed() {
+						let mut buf = self.text.new_buffer(tip.rect().w, line_h);
 						buf.set_text(
 							&mut self.text.font_system,
 							line,
@@ -2798,7 +2878,7 @@ impl State {
 							None,
 						);
 						buf.shape_until_scroll(&mut self.text.font_system, false);
-						tip_specs.push((*left, *top, buf));
+						tip_specs.push((left, top, buf));
 					}
 				}
 				// a menu row's tip and the benchmark banner shape in the interface
@@ -2806,17 +2886,15 @@ impl State {
 				// tip's text color with its box; the banner stays with the menu.
 				let ui_lines = menu_tip
 					.iter()
-					.map(|(rect, placed)| (rect, placed, tip_col))
-					.chain(
-						bench_banner
-							.iter()
-							.map(|(rect, placed)| (rect, placed, attrs.color_opt)),
-					);
-				for (box_rect, placed, color) in ui_lines {
+					.map(|tip| (tip, tip_col))
+					.chain(bench_banner.iter().map(|banner| (banner, attrs.color_opt)));
+				for (overlay, color) in ui_lines {
 					let mut attrs = attrs.clone();
 					attrs.color_opt = color;
-					for (left, top, line) in placed {
-						let mut buf = self.text.new_ui_buffer(box_rect.w, self.text.ui_line_h);
+					for (left, top, line) in overlay.placed() {
+						let mut buf = self
+							.text
+							.new_ui_buffer(overlay.rect().w, self.text.ui_line_h);
 						buf.set_text(
 							&mut self.text.font_system,
 							line,
@@ -2825,7 +2903,7 @@ impl State {
 							None,
 						);
 						buf.shape_until_scroll(&mut self.text.font_system, false);
-						tip_specs.push((*left, *top, buf));
+						tip_specs.push((left, top, buf));
 					}
 				}
 				for menu in self.menu.iter().flat_map(ContextMenu::chain) {
@@ -4026,6 +4104,8 @@ impl ApplicationHandler<UserEvent> for App {
 			tab_opener: None,
 			tab_hover: crate::tip::Dwell::default(),
 			menu_tip: crate::tip::Dwell::default(),
+			menu_tip_text: crate::tip::Wrapped::default(),
+			bar_widths: menubar::BarWidths::default(),
 			menu_tip_up: None,
 			tip_focus: crate::tip::Focus::default().changed(FOCUSED_AT_START),
 			tab_first: 0,
@@ -6444,5 +6524,63 @@ mod tests {
 			bare_chrome(false, (true, false), (false, true)).1,
 			(true, true)
 		);
+	}
+
+	// The tab tip and the benchmark banner copied every line out for each
+	// frame they were up. The frame borrows them from where they're kept.
+	// Test ID: dfe5s
+	#[test]
+	fn an_overlay_lends_its_words() {
+		use super::{BENCH_BANNER_MAX_LINES, Overlay, OverlayAt, OverlayLefts, OverlayWords};
+		use crate::pane::Rect;
+		const SAID: &[&str] = &["Testing performance", "This takes a few seconds."];
+		let kept = vec!["Shell name:  sh".to_string(), "Open:        3s".to_string()];
+		let rect = Rect {
+			x: 10.0,
+			y: 20.0,
+			w: 200.0,
+			h: 60.0,
+		};
+		let tip = Overlay {
+			at: OverlayAt {
+				rect,
+				top: 28.0,
+				line_h: 18.0,
+				lefts: OverlayLefts::Even(18.0),
+			},
+			words: OverlayWords::Kept(&kept),
+		};
+		let before = crate::perf::thread_allocs();
+		let mut lines = 0;
+		for (i, (left, top, line)) in tip.placed().enumerate() {
+			assert!(std::ptr::eq(line, kept[i].as_str()), "line {i} was copied");
+			assert_eq!((left, top), (18.0, 28.0 + 18.0 * i as f32));
+			lines += 1;
+		}
+		assert_eq!(lines, kept.len());
+		assert_eq!(
+			crate::perf::thread_allocs() - before,
+			0,
+			"placing the lines allocated"
+		);
+		let mut lefts = [0.0; BENCH_BANNER_MAX_LINES];
+		lefts[..2].copy_from_slice(&[40.0, 31.0]);
+		let banner = Overlay {
+			at: OverlayAt {
+				rect,
+				top: 42.0,
+				line_h: 20.0,
+				lefts: OverlayLefts::Each(lefts),
+			},
+			words: OverlayWords::Fixed(SAID),
+		};
+		let before = crate::perf::thread_allocs();
+		let placed: Vec<_> = banner.placed().collect();
+		// collecting them does allocate, which shows the counter counts
+		if cfg!(debug_assertions) {
+			assert!(crate::perf::thread_allocs() > before);
+		}
+		assert_eq!(placed, [(40.0, 42.0, SAID[0]), (31.0, 62.0, SAID[1])]);
+		assert!(std::ptr::eq(placed[1].2, SAID[1]));
 	}
 }

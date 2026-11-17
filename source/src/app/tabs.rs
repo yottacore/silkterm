@@ -5,8 +5,8 @@
 //! closing, and moving tabs.
 
 use super::{
-	CHROME_HAIRLINE, State, TAB_CLOSE_M, TAB_CLOSE_W, TAB_EDIT_INSET, TAB_EDIT_PAD, TAB_TIP_GAP,
-	TAB_TIP_PAD, TAB_TIP_REFRESH, TAB_TITLE_PAD, TAB_TOP_PAD,
+	CHROME_HAIRLINE, OverlayAt, OverlayLefts, State, TAB_CLOSE_M, TAB_CLOSE_W, TAB_EDIT_INSET,
+	TAB_EDIT_PAD, TAB_TIP_GAP, TAB_TIP_PAD, TAB_TIP_REFRESH, TAB_TITLE_PAD, TAB_TOP_PAD,
 };
 use crate::config;
 use crate::pane::{Pane, PaneManager, Rect, TabFacts};
@@ -413,7 +413,8 @@ fn tab_command_line(command: Option<&[String]>) -> String {
 #[derive(Debug)]
 pub(super) struct TabTip {
 	tab: usize,
-	lines: Vec<String>,
+	/// lent to the frame that draws them (`Overlay`)
+	pub(super) lines: Vec<String>,
 	built: Instant,
 	// the widest line, and the text context that measured it
 	width: Option<(u64, f32)>,
@@ -652,6 +653,9 @@ impl State {
 		if !stale {
 			return false;
 		}
+		if self.tab_tip.is_none() {
+			crate::perf::allocs_note("tab tip up");
+		}
 		let lines = self.tab_tip_lines(tab);
 		let kept = self
 			.tab_tip
@@ -743,7 +747,7 @@ impl State {
 	/// key/value table padded with spaces. The box fits the longest line. It hangs
 	/// off its own tab rather than the pointer, so it doesn't jitter, and it's
 	/// pushed back inside the window rather than running off the right edge.
-	pub(super) fn tab_tip_layout(&mut self) -> Option<(Rect, Vec<(f32, f32, String)>)> {
+	pub(super) fn tab_tip_layout(&mut self) -> Option<OverlayAt> {
 		let generation = self.text.generation;
 		let text = &mut self.text;
 		let tip = self.tab_tip.as_mut()?;
@@ -751,24 +755,23 @@ impl State {
 			return None;
 		}
 		let text_w = tip.text_w(generation, |line| text.measure_mono_text(line));
-		// copied out: the tip keeps its own to compare against the next read
-		let (tab, lines) = (tip.tab, tip.lines.clone());
+		let (tab, count) = (tip.tab, tip.lines.len());
 		let pad = self.text.dip(TAB_TIP_PAD);
 		let line_h = self.text.cell_h;
 		let w = text_w + 2.0 * pad;
-		let h = line_h * lines.len() as f32 + 2.0 * pad;
+		let h = line_h * count as f32 + 2.0 * pad;
 		let win_w = self.surface_px.0 as f32;
 		// A tab paged off the strip while its tip was up takes the tip with it.
 		// Otherwise the tip would sit at the bar's left end, pointing at whatever
 		// tab is there.
 		let x = self.tab_box(tab)?.0.min((win_w - w).max(0.0)).max(0.0);
 		let y = self.menubar_h() + self.tab_bar_h() + self.text.dip(TAB_TIP_GAP);
-		let placed = lines
-			.into_iter()
-			.enumerate()
-			.map(|(i, line)| (x + pad, y + pad + line_h * i as f32, line))
-			.collect();
-		Some((Rect { x, y, w, h }, placed))
+		Some(OverlayAt {
+			rect: Rect { x, y, w, h },
+			top: y + pad,
+			line_h,
+			lefts: OverlayLefts::Even(x + pad),
+		})
 	}
 
 	pub(super) fn new_tab(&mut self, proxy: &EventLoopProxy<UserEvent>) {

@@ -1342,6 +1342,8 @@ struct ShapedText {
 	spare: HashMap<ShapeKey, glyphon::Buffer>,
 	// scratch for moving `bufs` into `spare`, kept so a frame doesn't allocate it
 	moving: Vec<Option<glyphon::Buffer>>,
+	// the flyover's words wrapped and measured, kept while it stays up
+	tip: crate::tip::Wrapped,
 }
 
 #[derive(Clone, PartialEq, Eq, Hash)]
@@ -1812,11 +1814,11 @@ fn scene(
 			if let Some((tip, anchor)) = tip {
 				let scale = text.scale;
 				let avail = crate::tip::wrap_budget(w as f32, scale);
-				let lines = crate::tip::wrap(tip, avail, |s| text.measure_ui_text(s, &attrs));
-				let tip_w = lines
-					.iter()
-					.map(|l| text.measure_ui_text(l, &attrs))
-					.fold(0.0f32, f32::max);
+				// out for the frame, since shaping each line takes `shaped` whole
+				let mut wrapped = std::mem::take(&mut shaped.tip);
+				let generation = text.generation;
+				let (lines, tip_w) =
+					wrapped.lay(tip, avail, generation, |s| text.measure_ui_text(s, &attrs));
 				let at = crate::tip::lay_out(
 					anchor,
 					lines.len(),
@@ -1844,6 +1846,7 @@ fn scene(
 						buf,
 					});
 				}
+				shaped.tip = wrapped;
 			}
 			Scene {
 				clear: crate::settings_ui::dialog_bg(),
@@ -4370,6 +4373,55 @@ mod tests {
 		let (drawn, built) = frame(&mut dwell);
 		assert!(drawn.is_some(), "a rested pointer got no tip");
 		assert_eq!(built, 1, "a drawn tip built its words {built} times");
+	}
+
+	// A Settings tip on screen was wrapped, and every line measured again, on
+	// each frame. It's wrapped once while it stays up.
+	// Test ID: dfe5v
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_drawn_tip_is_wrapped_once_while_it_stays_up() {
+		let mut text = TextCtx::new_cpu(1.0);
+		let content = settings_content(&mut text);
+		let (w, h) = match &content {
+			super::Content::Settings(dialog) => dialog.size(),
+			super::Content::About { .. } => unreachable!(),
+		};
+		let at = (0..30)
+			.flat_map(|row| {
+				(0..12)
+					.map(move |col| (w * (col as f32 + 0.5) / 12.0, h * (row as f32 + 0.5) / 30.0))
+			})
+			.find(|&to| {
+				matches!(
+					super::tip_under(&content, to),
+					Some((super::Tip::Settings(crate::settings_ui::TipAt::Row(..)), _))
+				)
+			})
+			.expect("no row on the dialog has a tip");
+		let mut shaped = super::ShapedText::default();
+		let mut dwell = crate::tip::Dwell::default();
+		let mut drawn = None;
+		for frame in 0..6 {
+			if frame == 1 {
+				std::thread::sleep(crate::tip::DELAY);
+			}
+			(_, drawn) = super::compose(
+				&content,
+				&mut text,
+				&mut shaped,
+				&mut dwell,
+				true,
+				at,
+				Instant::now(),
+				(800, 700),
+			);
+		}
+		assert!(drawn.is_some(), "a rested pointer got no tip");
+		assert_eq!(
+			shaped.tip.wraps, 1,
+			"the tip was wrapped again with nothing changed"
+		);
 	}
 
 	// A pointer move draws nothing unless something drawn moved with it: a
