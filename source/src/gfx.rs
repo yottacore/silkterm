@@ -3,7 +3,7 @@
 
 use std::num::NonZeroU32;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicU8, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use std::time::{Duration, Instant};
 
 use glutin::config::GlConfig;
@@ -62,6 +62,8 @@ enum Backend {
 		offscreen_view: wgpu::TextureView,
 		blit: Blit,
 	},
+	// the surface let go ahead of a new device (`regain`), which failed
+	Gone,
 }
 
 // Fullscreen flip-blit of the offscreen texture into the GL default framebuffer.
@@ -204,6 +206,30 @@ impl Retry {
 	}
 }
 
+/// Set once a device is lost: a driver reset, a GPU fault, or video memory
+/// gone after a resume. wgpu reports that only through the device's lost
+/// callback, not as an error, and every frame after it is refused, so a new
+/// device is the only way back. Clones share the flag, as clones of a device
+/// share the device.
+#[derive(Debug, Default, Clone)]
+pub struct Loss(Arc<AtomicBool>);
+
+impl Loss {
+	// wgpu keeps one callback per device, so each device is watched once, as
+	// it's made (`request_device`).
+	fn watch(device: &wgpu::Device) -> Self {
+		let loss = Self::default();
+		let flag = loss.0.clone();
+		// called inside whichever wgpu call ran into the loss, so it only marks it
+		device.set_device_lost_callback(move |_, _| flag.store(true, Ordering::Release));
+		loss
+	}
+
+	pub fn lost(&self) -> bool {
+		self.0.load(Ordering::Acquire)
+	}
+}
+
 pub const FRAME_RETRY_FIRST: Duration = Duration::from_millis(16);
 pub const FRAME_RETRY_MAX: Duration = Duration::from_secs(2);
 
@@ -228,7 +254,8 @@ impl std::fmt::Debug for Frame {
 // reads garbage, and the window goes mostly black. No event reports this, so
 // sentinel textures with a known pattern are probed on a slow tick, and a
 // mismatch makes the app rebuild its uploads (State::recover_gpu). Native
-// backends get Lost or Outdated from the swapchain instead.
+// backends lose the whole device instead, which `Loss` reports, or get Lost or
+// Outdated from the swapchain.
 //
 // There are 2 sentinels, since NVIDIA restores what it has a system-memory copy
 // of and purges the rest (NV_robustness_video_memory_purge). A single small
@@ -486,6 +513,10 @@ pub struct Gfx {
 	pub drawn: Drawn,
 	/// what the device was asked for, so a change of setting can be told
 	pub want: Want,
+	loss: Loss,
+	// the surface reported Lost, which a reconfigure doesn't mend
+	surface_lost: AtomicBool,
+	born: std::time::SystemTime, // read by `lose_on_purpose`
 	_window: Arc<Window>,
 	_vulkan: Option<OnVulkan>,
 }
@@ -621,13 +652,17 @@ impl Gfx {
 			backend,
 			sentinel,
 			gl_route,
+			loss,
 			..
 		} = self;
 		drop(sentinel);
 		match backend {
-			Backend::Native(surface) => {
-				drop(surface);
-				let _ = device.poll(wgpu::PollType::wait_indefinitely());
+			Backend::Native(_) | Backend::Gone => {
+				drop(backend);
+				// a lost device has no work left to wait for
+				if !loss.lost() {
+					let _ = device.poll(wgpu::PollType::wait_indefinitely());
+				}
 				drop(queue);
 				drop(device);
 			}
@@ -763,6 +798,9 @@ impl Gfx {
 			} else {
 				Want::Card
 			},
+			loss: picked.loss,
+			surface_lost: AtomicBool::new(false),
+			born: std::time::SystemTime::now(),
 			_window: window,
 		})
 	}
@@ -843,6 +881,9 @@ impl Gfx {
 			gl_route: None,
 			drawn: gpu.drawn,
 			want: gpu.want,
+			loss: gpu.loss.clone(),
+			surface_lost: AtomicBool::new(false),
+			born: std::time::SystemTime::now(),
 			_window: window,
 			_vulkan: OnVulkan::count(&gpu.adapter_info),
 		})
@@ -977,10 +1018,10 @@ impl Gfx {
 			if log {
 				log_renderer(&adapter_info, true);
 			}
-			let (device, queue) = request_device(&adapter, "silkterm gl device")?;
-			anyhow::Ok((adapter_info, device, queue))
+			let (device, queue, loss) = request_device(&adapter, "silkterm gl device")?;
+			anyhow::Ok((adapter_info, device, queue, loss))
 		})();
-		let (adapter_info, device, queue) = match made {
+		let (adapter_info, device, queue, loss) = match made {
 			Ok(made) => made,
 			Err(e) => {
 				let ctx = ctx.make_not_current();
@@ -1035,22 +1076,43 @@ impl Gfx {
 			gl_route: Some(route.clone()),
 			drawn,
 			want: Want::Card,
+			loss,
+			surface_lost: AtomicBool::new(false),
+			born: std::time::SystemTime::now(),
 			_window: window,
 			_vulkan: None,
 		})
 	}
 
+	/// True once the device or the surface is gone for good, and this whole
+	/// `Gfx` has to be built again. Until then every frame is refused.
+	pub fn lost(&self) -> bool {
+		self.loss.lost() || self.surface_lost.load(Ordering::Relaxed)
+	}
+
 	/// Acquire the frame's render target, or return why there's none this time.
+	/// Never a frame on a lost device, where what draws it could panic in wgpu.
 	pub fn begin_frame(&self) -> Result<Frame, NoFrame> {
+		self.lose_on_purpose();
+		if self.loss.lost() {
+			return Err(NoFrame::Other);
+		}
 		match &self.backend {
 			Backend::Native(surface) => {
 				use wgpu::CurrentSurfaceTexture::{Lost, Occluded, Outdated, Suboptimal, Success};
 				match surface.get_current_texture() {
+					// the acquire is where a loss is often found
+					Success(_) | Suboptimal(_) if self.loss.lost() => Err(NoFrame::Other),
 					Success(surface_tex) | Suboptimal(surface_tex) => {
 						Ok(Frame::Native(surface_tex))
 					}
-					Outdated | Lost => {
+					Outdated => {
 						surface.configure(&self.device, &self.config);
+						Err(NoFrame::Other)
+					}
+					// wants a new surface, which `lost` asks the owner for
+					Lost => {
+						self.surface_lost.store(true, Ordering::Relaxed);
 						Err(NoFrame::Other)
 					}
 					Occluded => Err(NoFrame::Occluded),
@@ -1058,7 +1120,30 @@ impl Gfx {
 				}
 			}
 			Backend::Gl { .. } => Ok(Frame::Gl),
+			Backend::Gone => Err(NoFrame::Other),
 		}
+	}
+
+	/// A dialog's way back from a lost device: the same window on a new one.
+	/// The old surface goes first, since a Wayland window takes only one, and a
+	/// second is a protocol error that ends the connection. Native backends
+	/// only, as dialogs are. A failure leaves no surface and `lost` still true,
+	/// so the next frame tries again.
+	pub fn regain(&mut self, window: &Arc<Window>) -> anyhow::Result<()> {
+		if matches!(self.backend, Backend::Gl { .. }) {
+			anyhow::bail!("a GL window rebuilds through `release`");
+		}
+		self.backend = Backend::Gone;
+		let want = wanted();
+		*self = Self::on(
+			self.instance.clone(),
+			window.clone(),
+			false,
+			&want.order(),
+			None,
+		)
+		.or_else(|_| Self::with_backends(window.clone(), wgpu::Backends::PRIMARY, want))?;
+		Ok(())
 	}
 
 	pub fn frame_view(&self, frame: &Frame) -> wgpu::TextureView {
@@ -1133,6 +1218,7 @@ impl Gfx {
 		self.config.height = h;
 		match &mut self.backend {
 			Backend::Native(surface) => surface.configure(&self.device, &self.config),
+			Backend::Gone => {}
 			Backend::Gl {
 				surface,
 				ctx,
@@ -1302,21 +1388,43 @@ fn f16_to_f32(bits: u16) -> f32 {
 fn request_device(
 	adapter: &wgpu::Adapter,
 	label: &str,
-) -> anyhow::Result<(wgpu::Device, wgpu::Queue)> {
+) -> anyhow::Result<(wgpu::Device, wgpu::Queue, Loss)> {
 	if adapter.get_info().device_type != wgpu::DeviceType::Cpu && card_refused_on_purpose() {
 		anyhow::bail!("refused, SILK_REFUSE_CARD");
 	}
-	Ok(pollster::block_on(adapter.request_device(
-		&wgpu::DeviceDescriptor {
-			label: Some(label),
-			// the wallpaper as BC1 (bc1.rs) where the adapter can; ImageRenderer
-			// keeps it plain where not
-			required_features: adapter.features() & wgpu::Features::TEXTURE_COMPRESSION_BC,
-			required_limits: adapter.limits(),
-			memory_hints: wgpu::MemoryHints::MemoryUsage,
-			..Default::default()
-		},
-	))?)
+	let (device, queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
+		label: Some(label),
+		// the wallpaper as BC1 (bc1.rs) where the adapter can; ImageRenderer
+		// keeps it plain where not
+		required_features: adapter.features() & wgpu::Features::TEXTURE_COMPRESSION_BC,
+		required_limits: adapter.limits(),
+		memory_hints: wgpu::MemoryHints::MemoryUsage,
+		..Default::default()
+	}))?;
+	let loss = Loss::watch(&device);
+	Ok((device, queue, loss))
+}
+
+impl Gfx {
+	// SILK_LOSE_DEVICE=<file>: a device made before the file was last touched
+	// is lost at its next frame, as every device is in a driver reset. One
+	// made after it is left alone, so the way back can be watched, and a
+	// touch loses that one too. wgpu reports a destroyed device on a poll, and
+	// a real loss inside the call that ran into it, so it's polled at once.
+	fn lose_on_purpose(&self) {
+		static FILE: std::sync::OnceLock<Option<std::path::PathBuf>> = std::sync::OnceLock::new();
+		let Some(file) = FILE.get_or_init(|| std::env::var_os("SILK_LOSE_DEVICE").map(Into::into))
+		else {
+			return;
+		};
+		if std::fs::metadata(file)
+			.and_then(|meta| meta.modified())
+			.is_ok_and(|touched| touched > self.born)
+		{
+			self.device.destroy();
+			let _ = self.device.poll(wgpu::PollType::Poll);
+		}
+	}
 }
 
 // SILK_REFUSE_CARD=<file>: while the file is there, a graphics card refuses
@@ -1351,6 +1459,7 @@ struct Picked {
 	adapter: wgpu::Adapter,
 	device: wgpu::Device,
 	queue: wgpu::Queue,
+	loss: Loss,
 	info: wgpu::AdapterInfo,
 	drawn: Drawn,
 }
@@ -1387,7 +1496,7 @@ fn pick_device(
 			continue;
 		}
 		match request_device(&adapter, label) {
-			Ok((device, queue)) => {
+			Ok((device, queue, loss)) => {
 				let drawn = Drawn::of(&info, order.first() == Some(&true), refused.is_some());
 				match (drawn, &refused) {
 					(Drawn::Fallback, Some(why)) => eprintln!(
@@ -1403,6 +1512,7 @@ fn pick_device(
 					adapter,
 					device,
 					queue,
+					loss,
 					info,
 					drawn,
 				});
@@ -1664,6 +1774,7 @@ pub struct DialogGpu {
 	adapter: wgpu::Adapter,
 	device: wgpu::Device,
 	queue: wgpu::Queue,
+	loss: Loss,
 	adapter_info: wgpu::AdapterInfo,
 	drawn: Drawn,
 	want: Want,
@@ -1701,6 +1812,7 @@ impl DialogGpu {
 			adapter: picked.adapter,
 			device: picked.device,
 			queue: picked.queue,
+			loss: picked.loss,
 			adapter_info: picked.info,
 			drawn: picked.drawn,
 			want,
@@ -1765,6 +1877,7 @@ impl GpuWarm {
 	/// adapter that was kept, and a cold build is the fallback when that adapter
 	/// no longer works.
 	pub fn start(&mut self) {
+		self.drop_lost();
 		if !matches!(self.state, Warm::Idle) {
 			return;
 		}
@@ -1803,6 +1916,14 @@ impl GpuWarm {
 		self.state = Warm::Idle;
 	}
 
+	// A lost device is let go like an idle one, so the next `start` builds
+	// another on the same instance and a dialog doesn't open on a dead one.
+	fn drop_lost(&mut self) {
+		if matches!(&self.state, Warm::Ready(gpu) if gpu.loss.lost()) {
+			self.release();
+		}
+	}
+
 	/// The warm device if it's built, without waiting for it.
 	pub fn ready_device(&mut self) -> Option<&wgpu::Device> {
 		if matches!(&self.state, Warm::Building(job) if job.is_finished()) {
@@ -1819,6 +1940,7 @@ impl GpuWarm {
 	/// already under way, and normally it finished seconds ago.
 	pub fn get(&mut self) -> Option<DialogGpu> {
 		self.state = std::mem::replace(&mut self.state, Warm::Failed).settled();
+		self.drop_lost();
 		match &self.state {
 			Warm::Ready(gpu) => Some(gpu.clone()),
 			_ => None,
@@ -3268,5 +3390,55 @@ mod tests {
 			blocked.join().unwrap(),
 			"the outer hold came back after the wait"
 		);
+	}
+
+	// wgpu reports a lost device only through its callback, so a window that
+	// never asked kept drawing into a dead device for good. Destroying the
+	// device is the loss a test can cause, reported on wgpu's next poll.
+	// Test ID: dfefp
+	#[test]
+	#[cfg_attr(miri, ignore = "Miri can't load the graphics driver")]
+	fn a_lost_device_is_seen() {
+		let _loader = hold_loader();
+		let gpu = match DialogGpu::build(Want::Software) {
+			Ok(gpu) => gpu,
+			Err(e) => {
+				eprintln!("skipped: no device ({e})");
+				return;
+			}
+		};
+		let _ = gpu.device.poll(wgpu::PollType::wait_indefinitely());
+		assert!(!gpu.loss.lost(), "a working device read as lost");
+		gpu.device.destroy();
+		let _ = gpu.device.poll(wgpu::PollType::wait_indefinitely());
+		assert!(gpu.loss.lost(), "the loss went unseen");
+		assert!(gpu.clone().loss.lost(), "a clone of the device missed it");
+	}
+
+	// The dialogs' warm device can be lost too, and a dialog opened on it drew
+	// nothing. It's let go like an idle one, keeping the instance to build
+	// the next on.
+	// Test ID: dfefq
+	#[test]
+	#[cfg_attr(miri, ignore = "Miri can't load the graphics driver")]
+	fn a_lost_warm_device_is_let_go() {
+		let _loader = hold_loader();
+		let gpu = match DialogGpu::build(Want::Software) {
+			Ok(gpu) => gpu,
+			Err(e) => {
+				eprintln!("skipped: no device ({e})");
+				return;
+			}
+		};
+		let mut warm = GpuWarm {
+			state: Warm::Ready(gpu.clone()),
+			seed: None,
+		};
+		assert!(warm.get().is_some());
+		gpu.device.destroy();
+		let _ = gpu.device.poll(wgpu::PollType::wait_indefinitely());
+		assert!(warm.get().is_none(), "a dialog was given a lost device");
+		assert!(matches!(warm.state, Warm::Idle));
+		assert!(warm.seed.is_some(), "the instance wasn't kept");
 	}
 }

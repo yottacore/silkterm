@@ -1125,6 +1125,27 @@ impl DialogWin {
 		caps_from(usable_screen(work, monitor), decor_extra(window), scale)
 	}
 
+	// A new device on the same window once the old one is lost, built cold,
+	// since the warm one was most likely lost with it. The text keeps its fonts
+	// and shaping, and only what it put on the device is made again. False
+	// leaves the dialog refusing frames, tried again on the frame backoff.
+	fn regain_gpu(&mut self) -> bool {
+		if self.gfx.regain(&self.window).is_err() {
+			return false;
+		}
+		let size = self.window.inner_size();
+		self.gfx.resize(size.width, size.height);
+		self.text.detach_gpu();
+		self.text
+			.attach_gpu(&self.gfx.device, &self.gfx.queue, self.gfx.format);
+		self.rects = RectRenderer::new(&self.gfx.device, self.gfx.format);
+		eprintln!(
+			"{}: a dialog lost its GPU device and has a new one",
+			config::APP_NAME
+		);
+		true
+	}
+
 	pub fn render(&mut self) {
 		// advance the field-edit animation (view scroll ease, caret ease, blink)
 		// with real frame time before anything is laid out
@@ -1151,6 +1172,11 @@ impl DialogWin {
 			(w, h),
 		);
 		self.tip_drawn = tip_drawn;
+		if self.gfx.lost() && !self.regain_gpu() {
+			self.refused.missed(now, FRAME_RETRY_FIRST, FRAME_RETRY_MAX);
+			self.kept = scene.emptied();
+			return;
+		}
 		let Ok(frame) = self.gfx.begin_frame() else {
 			// nothing else asks again (see the terminal's own refused frame)
 			self.refused.missed(now, FRAME_RETRY_FIRST, FRAME_RETRY_MAX);
@@ -1291,7 +1317,8 @@ impl DialogWin {
 			}
 		}
 		self.gfx.queue.submit(Some(encoder.finish()));
-		if self.gfx.end_frame(frame).is_ok() {
+		// a device lost during this frame showed nothing, and is built again next
+		if self.gfx.end_frame(frame).is_ok() && !self.gfx.lost() {
 			self.refused = Retry::default();
 		} else {
 			self.refused.missed(now, FRAME_RETRY_FIRST, FRAME_RETRY_MAX);

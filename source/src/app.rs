@@ -1839,6 +1839,16 @@ impl State {
 		let Some(mut gpu) = self.gpu.take() else {
 			return false;
 		};
+		// Not even the prepares go onto a lost device, since a buffer grown
+		// there panics in wgpu. The loop lets the device go before the retry.
+		if gpu.gfx.lost() {
+			self.gpu = Some(gpu);
+			let wait = self
+				.frame_retry
+				.missed(Instant::now(), FRAME_RETRY_FIRST, FRAME_RETRY_MAX);
+			idledbg(&format!("frame refused (device lost), again in {wait:?}"));
+			return false;
+		}
 		let animating = self.render_with(&mut gpu, force_rebuild, map_rebuild);
 		self.gpu = Some(gpu);
 		animating
@@ -3317,7 +3327,8 @@ impl State {
 		let submit = crate::perf::mark();
 		gpu.gfx.queue.submit(Some(encoder.finish()));
 		// the GL path's twin of the refused acquire above: a swap that failed
-		let presented = gpu.gfx.end_frame(frame).is_ok();
+		// a device lost during this frame showed nothing either
+		let presented = gpu.gfx.end_frame(frame).is_ok() && !gpu.gfx.lost();
 		if presented {
 			self.frame_retry = Retry::default();
 		} else {
@@ -5770,6 +5781,20 @@ impl ApplicationHandler<UserEvent> for App {
 		// reveal. One left alone for long enough lets it go, unless a dialog is
 		// up (on X11 the dialog's context can't outlive the terminal's).
 		let dialog_up = self.dialog.is_some() || self.notice.is_some();
+		// A lost device, or a surface that has to be made again, refuses every
+		// frame for good. It goes the way an idle release does, and comes back
+		// below at once unless the window is hidden. On the GL path that waits
+		// for the dialogs to close, since there a dialog's context can't outlive
+		// the terminal's.
+		if (!dialog_up || !state.gl) && state.gpu.as_ref().is_some_and(|gpu| gpu.gfx.lost()) {
+			eprintln!(
+				"{}: the GPU device was lost, so building it again",
+				config::APP_NAME
+			);
+			idledbg("device lost");
+			state.release_gpu();
+			state.idle.owe(true);
+		}
 		// Software rendering turned on or off: the device goes and comes back
 		// on what the setting now asks, the dialogs' context with it. Not while
 		// a dialog is up, since it draws on that context.

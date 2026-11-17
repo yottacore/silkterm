@@ -34,6 +34,21 @@ Going forward, new issues in the new template at the bottom of this file will go
 
 ## Issues
 
+- A GPU device lost partway through a frame can end the program when a text buffer grows
+	- ID: 2026111715110622
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261117-151106
+	- Opened by: CC
+	- Related IDs: 2026111713374902
+	- Target OS: All
+	- Target version: rc.1
+	- Incorrect behavior: A buffer made on a lost device is invalid, and wgpu panics when glyphon maps it to grow its vertices. Seen with Settings drawing on a device lost at the start of its frame: 'Buffer with glyphon vertices label is invalid' from Buffer::get_mapped_range.
+	- Expected behavior: A frame that finds its device lost partway through ends quietly, and the device is built again.
+	- Reproduced: 20261117 on b23 under headless sway, with an early build of 2026111713374902's fix that lost the device at the dialog's acquire, before its prepares ran. The final fix doesn't start a frame on a device it knows is lost, so what's left is a loss found by a wgpu call between the prepares.
+	- Possible cause: The prepares run before the acquire in the terminal's frame, and wgpu panics on a mapped range of an invalid buffer whatever the error handler is. A guard between the prepares, or an error scope, may cover it.
+
 - Add a contributor license agreement, like nano-git-db's
 	- ID: 2026101906582193
 	- Type: Task
@@ -224,7 +239,11 @@ Going forward, new issues in the new template at the bottom of this file will go
 - A lost GPU device on Vulkan, DX12, or Metal freezes the window for good
 	- ID: 2026111713374902
 	- Type: Bug
-	- Status: Queued
+	- Status: Waiting on automated testing
+	- Needs external testing:
+		- vm925w (DX12): `SILK_LOSE_DEVICE=<file>`, touched once with only the terminal up and once with Settings up and a key pressed in it, with Transparency off and on. The terminal and Settings each say they built a new device, draw again without input, and nothing panics.
+		- b26 (Metal): the same, without Transparency.
+		- The hosted `mac.yml` run on the round branch, for the macOS build.
 	- Severity: High
 	- Opened: 20261117-133749
 	- Opened by: CC
@@ -236,9 +255,31 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Possible cause: Nothing calls `set_device_lost_callback`. `begin_frame` maps the failure to `NoFrame::Other`. The VRAM sentinel and the console watcher cover the GL path only.
 	- Origin: c6eaa043, 20260628, with the match arms from 4f2fa502, 20261001. Not seen by an earlier round. Plausible.
 	- Sweep: The dialog's own Gfx has the same refused-frame loop, and the warm dialog device can be lost too.
+	- Swept: every device comes from `request_device` in gfx.rs, which now watches it: the terminal's on the native and GL paths, the warm dialog device, and a dialog's cold one (`grep -n request_device source/src`). The terminal, an open dialog, and the warm device each act on it. The notice window is a `DialogWin`, so it has the dialog's handling.
 	- Notes:
 		- Code review 20261117 item 3.
 		- Detail: `detail_backlog.md`, under this ID.
+	- Actual cause: wgpu reports a lost device only through the device's lost callback, which was never set. Every later frame was refused and retried on the same dead device. A surface that reported Lost was only reconfigured, which wgpu says doesn't mend it.
+	- Actual fix:
+		- Each device gets a lost callback that marks it. The terminal lets a lost device go the way the idle release does and builds a new one at once, or at the reveal when hidden. A surface reported Lost does the same.
+		- An open dialog builds a new device on its own window, letting the old surface go first, since Wayland takes one per window. The warm dialog device is let go when lost and built again.
+		- No frame starts on a device known to be lost, and a frame that ran into the loss counts as refused, so the retry finds it.
+		- `SILK_LOSE_DEVICE=<file>` loses every device made before the file was last touched, at its next frame, for tests.
+	- Decisions:
+		- On the X11 GL path with a dialog up, the terminal waits for the dialogs to close before building again, since there a dialog's context can't outlive the terminal's. Its frames are refused on the 2 s backoff until then.
+		- No rebuild after a count of refused frames, which the detail notes offered as a backstop. The loss is now seen directly, and a count would also rebuild under a busy GPU that only times out.
+		- A surface reported Lost rebuilds the whole device rather than only the surface. It's rare, and it reuses the tested release path.
+	- Progress log:
+		- 20261117: Reproduced with `SILK_LOSE_DEVICE` before the app's handling was in: frames were refused every 2 s for good with nothing else said. With Settings up, the dialog ended the program, filed as 2026111715110622.
+		- 20261117: A dialog's first new surface on Wayland was a protocol error ("Tearing control object already exists"), since the old surface was still there. The old surface now goes first.
+	- Verified:
+		- 20261117: `a_lost_device_is_seen` and `a_lost_warm_device_is_let_go` fail with the lost callback taken out and pass with it.
+		- 20261117: `cicd/tests/devlost/run.bash` fails 5 of 11 checks with the terminal's handling taken out and passes 11 of 11 with it, on software Vulkan under headless sway.
+		- 20261117: On b23's RTX 3060 Ti through Vulkan under headless sway, the terminal built a new device about 0.15 s after each loss and kept drawing output, and Settings drew on a new device after a key.
+		- 20261117: The quick gate passed (fmt, clippy, tests, scripts, docs), and Windows-target clippy too.
+	- Branch: nov17-2026111713374902
+	- Commit: e3085ef1
+	- Test case: `a_lost_device_is_seen` (dfefp), `a_lost_warm_device_is_let_go` (dfefq), and `cicd/tests/devlost/run.bash` (dfeg0), in the pipeline after dlgwl.
 
 - macOS: a character typed with Option reaches the shell with ESC in front of it
 	- ID: 2026111713374903

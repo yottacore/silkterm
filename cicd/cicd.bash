@@ -1154,6 +1154,10 @@ fScriptTests(){
 	## sway floats it above the terminal. Exit 3 is a skip: no binary, sway,
 	## wtype, python3, or software Vulkan.
 	fRunTest_MaySkip cicd/tests/dlgwl/run.bash "Settings tied to its window on Wayland"
+	## A lost GPU device is built again, for the terminal and for Settings, and
+	## the window draws again without any input. Exit 3 is a skip: no binary,
+	## sway, wtype, or software Vulkan.
+	fRunTest_MaySkip cicd/tests/devlost/run.bash "a lost GPU device built again"
 	## On native Wayland a window takes each output's own size once moved or
 	## dropped there, even with a sliver left on another output. Exit 3 is a skip: no
 	## binary, sway, python3, or software Vulkan.
