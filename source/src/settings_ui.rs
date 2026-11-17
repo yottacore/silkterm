@@ -174,6 +174,23 @@ thread_local! {
 pub fn hover_tips() -> usize {
 	HOVER_TIPS.with(std::cell::Cell::get)
 }
+// Row tips built on this thread. Test builds only.
+#[cfg(test)]
+thread_local! {
+	static ROW_TIPS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+#[cfg(test)]
+pub fn row_tips() -> usize {
+	ROW_TIPS.with(std::cell::Cell::get)
+}
+
+/// A flyover the pointer is over, named rather than written out: fixed words,
+/// or what row `.0` says about one of its settings.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum TipAt {
+	Said(&'static str),
+	Row(usize, Key),
+}
 
 // The dialog color set for the active mode, with the panel background + text
 // overridden by the configured dialog colors (theme default or a colors
@@ -1011,7 +1028,9 @@ struct EMenu {
 
 #[derive(Debug)]
 pub struct TextItem {
-	pub text: String,
+	// Borrowed for the fixed words (labels, captions, icons), so a frame
+	// doesn't copy each one.
+	pub text: Cow<'static, str>,
 	pub x: f32,
 	pub y: f32,
 	pub color: [u8; 3],
@@ -1034,9 +1053,9 @@ pub struct Marks {
 
 impl TextItem {
 	// Unclipped text at the normal size and weight.
-	fn plain(text: String, x: f32, y: f32, color: [u8; 3]) -> Self {
+	fn plain(text: impl Into<Cow<'static, str>>, x: f32, y: f32, color: [u8; 3]) -> Self {
 		Self {
-			text,
+			text: text.into(),
 			x,
 			y,
 			color,
@@ -1757,12 +1776,26 @@ impl SettingsDialog {
 		self.dd_open(i);
 		self.dd_len(i) > 0
 	}
-	pub fn hover_tip(&self, mx: f32, my: f32) -> Option<(Cow<'static, str>, Rect)> {
+	/// Which tip is under the pointer, and the rect it hangs from, without
+	/// building its words. A pointer move only needs to know there is one.
+	pub fn hover_at(&self, mx: f32, my: f32) -> Option<(TipAt, Rect)> {
 		#[cfg(test)]
 		HOVER_TIPS.with(|n| n.set(n.get() + 1));
 		let s = self.scale;
-		self.hover_tip_dip(mx / s, my / s)
-			.map(|(tip, anchor)| (tip, self.rect_px(anchor)))
+		self.hover_at_dip(mx / s, my / s)
+			.map(|(at, anchor)| (at, self.rect_px(anchor)))
+	}
+	/// The words of a tip `hover_at` found.
+	pub fn tip_words(&self, at: TipAt) -> Cow<'static, str> {
+		match at {
+			TipAt::Said(said) => Cow::Borrowed(said),
+			TipAt::Row(i, key) => self.row_tip(i, key).unwrap_or_default(),
+		}
+	}
+	#[cfg(test)]
+	pub fn hover_tip(&self, mx: f32, my: f32) -> Option<(Cow<'static, str>, Rect)> {
+		self.hover_at(mx, my)
+			.map(|(at, anchor)| (self.tip_words(at), anchor))
 	}
 
 	/// The drawing boundary: the layout is solved in DIP, then everything handed
@@ -2386,15 +2419,17 @@ impl SettingsDialog {
 	// profile or theme with rows changed under it says so with a `*`, as in
 	// `High *`. The popup still highlights the preset the changes were made on.
 	// Drawn every frame, so it reads the one option rather than listing them all.
-	fn dd_closed_label(&self, i: usize) -> String {
+	fn dd_closed_label(&self, i: usize) -> Cow<'static, str> {
 		let key = self.specs[i].key;
 		if Self::has_choices(key) {
-			return fields::shown_choice(&self.edited, key);
+			return fields::shown_choice(&self.edited, key).into();
 		}
 		let sel = radio_of(&self.edited, key);
 		match self.specs[i].kind {
-			Kind::Dropdown(opts) => opts.get(sel).map_or_else(String::new, |o| (*o).to_string()),
-			_ => String::new(),
+			Kind::Dropdown(opts) => opts
+				.get(sel)
+				.map_or(Cow::Borrowed(""), |o| Cow::Borrowed(*o)),
+			_ => Cow::Borrowed(""),
 		}
 	}
 
@@ -2944,8 +2979,12 @@ impl SettingsDialog {
 		}
 	}
 	// The hotkey a row's setting is, found through the declarations so the 2
-	// can't disagree.
+	// can't disagree. Asked for every key of every row each frame, so any
+	// other key is turned away before the walk over the rows.
 	fn hotkey_for_key(&self, key: Key) -> Option<Hotkey> {
+		if !matches!(key, keys_of!(hotkey)) {
+			return None;
+		}
 		let at = self.specs.iter().position(|spec| spec.key == key)?;
 		self.hotkey_of(at)
 	}
@@ -3360,6 +3399,8 @@ impl SettingsDialog {
 	// line saying so (the automatic settings design). Any other value ends with
 	// the value in use and the default, where they differ.
 	fn row_tip(&self, i: usize, key: Key) -> Option<Cow<'static, str>> {
+		#[cfg(test)]
+		ROW_TIPS.with(|n| n.set(n.get() + 1));
 		let text = self.row_tip_text(i, key);
 		let monitor = self.monitor.as_deref();
 		let plain = matches!(
@@ -3487,9 +3528,19 @@ impl SettingsDialog {
 		}
 		Some(Cow::Borrowed(self.specs[i].help)).filter(|help| !help.is_empty())
 	}
-	// The flyover to show while the cursor rests on something that has one:
-	// (text, anchor rect to hang the tip box under).
+	// Whether row `i` has anything to say about `key`. Almost every row has
+	// help, so the words are built here only for one that has none.
+	fn has_row_tip(&self, i: usize, key: Key) -> bool {
+		self.row_tip_text(i, key).is_some() || self.row_tip(i, key).is_some()
+	}
+	#[cfg(test)]
 	fn hover_tip_dip(&self, mx: f32, my: f32) -> Option<(Cow<'static, str>, Rect)> {
+		self.hover_at_dip(mx, my)
+			.map(|(at, anchor)| (self.tip_words(at), anchor))
+	}
+	// The flyover to show while the cursor rests on something that has one:
+	// (which tip, anchor rect to hang the tip box under).
+	fn hover_at_dip(&self, mx: f32, my: f32) -> Option<(TipAt, Rect)> {
 		// A box covers the panel, or a popup owns the pointer until it closes, so
 		// nothing behind either responds.
 		if self.overlay_open() {
@@ -3499,7 +3550,7 @@ impl SettingsDialog {
 			if r.contains(mx, my) {
 				let help = &ui().help;
 				return Some((
-					Cow::Borrowed(match action {
+					TipAt::Said(match action {
 						Action::Cancel => help.cancel,
 						Action::Apply => help.apply,
 						_ => help.ok,
@@ -3520,7 +3571,7 @@ impl SettingsDialog {
 			let arrow = self.revert_box(i);
 			if self.has_revert(i) && !self.specs[i].revert_help.is_empty() && arrow.contains(mx, my)
 			{
-				return Some((Cow::Borrowed(self.specs[i].revert_help), arrow));
+				return Some((TipAt::Said(self.specs[i].revert_help), arrow));
 			}
 			// hover target: the row's label + control span. The shells grid is the
 			// exception, since its "row" is the whole grid and a tip over every line
@@ -3575,8 +3626,8 @@ impl SettingsDialog {
 				Kind::Dual { keys, .. } => (keys[0], ctl),
 				_ => (self.specs[i].key, ctl),
 			};
-			if let Some(tip) = self.row_tip(i, key) {
-				return Some((tip, anchor));
+			if self.has_row_tip(i, key) {
+				return Some((TipAt::Row(i, key), anchor));
 			}
 		}
 		None
@@ -5840,7 +5891,7 @@ impl SettingsDialog {
 	fn texts_dip(&self, line_h: f32, mut measure: impl FnMut(&str) -> f32) -> Vec<TextItem> {
 		let colors = dlg();
 		let mut out = Vec::new();
-		let mk = |text: String, x: f32, y: f32| TextItem::plain(text, x, y, colors.text);
+		let mk = |text: Cow<'static, str>, x: f32, y: f32| TextItem::plain(text, x, y, colors.text);
 		let row_text_y = |y: f32, h: f32| y + (h - line_h) / 2.0;
 		// tab titles: the current one reads at full strength, the rest step back
 		let strip = self.tab_strip();
@@ -5926,7 +5977,7 @@ impl SettingsDialog {
 						color: label_color,
 						clip: Some(clip_rect(val_box, vp)),
 						..mk(
-							txt,
+							txt.into(),
 							val_box.x + lay().field_pad - view(i),
 							row_text_y(val_box.y, val_box.h),
 						)
@@ -5942,7 +5993,7 @@ impl SettingsDialog {
 						color: colors.text,
 						clip: Some(clip_rect(hex_box, vp)),
 						..mk(
-							txt,
+							txt.into(),
 							hex_box.x + lay().field_pad - view(i),
 							row_text_y(hex_box.y, hex_box.h),
 						)
@@ -5970,7 +6021,7 @@ impl SettingsDialog {
 						color,
 						clip: Some(clip_rect(text_box, vp)),
 						..mk(
-							txt,
+							txt.into(),
 							text_box.x + lay().field_pad - view(i),
 							row_text_y(text_box.y, text_box.h),
 						)
@@ -5986,7 +6037,7 @@ impl SettingsDialog {
 						out.push(TextItem {
 							color: if off { colors.dim } else { colors.text },
 							clip: Some(clip_rect(key_box, vp)),
-							..mk(shown, tx, ty)
+							..mk(shown.into(), tx, ty)
 						});
 						tx += width + line_h;
 					}
@@ -5994,7 +6045,7 @@ impl SettingsDialog {
 						out.push(TextItem {
 							color: colors.dim,
 							clip: Some(clip_rect(key_box, vp)),
-							..mk(note, tx, ty)
+							..mk(note.into(), tx, ty)
 						});
 					}
 				}
@@ -6074,7 +6125,7 @@ impl SettingsDialog {
 						out.push(TextItem {
 							color: colors.dim,
 							clip: Some(vp),
-							..mk((*title).to_string(), tx, head_y)
+							..mk(title.into(), tx, head_y)
 						});
 					}
 					for shell_index in 0..self.edited.shells.len() {
@@ -6099,7 +6150,7 @@ impl SettingsDialog {
 							color,
 							clip: Some(clip_rect(name_box, vp)),
 							..mk(
-								text(name_row, &entry.title),
+								text(name_row, &entry.title).into(),
 								name_box.x + lay().field_pad - view(name_row),
 								row_text_y(name_box.y, name_box.h),
 							)
@@ -6114,7 +6165,7 @@ impl SettingsDialog {
 							color: cmd_color,
 							clip: Some(clip_rect(cmd_box, vp)),
 							..mk(
-								cmd,
+								cmd.into(),
 								cmd_box.x + lay().field_pad - view(cmd_row),
 								row_text_y(cmd_box.y, cmd_box.h),
 							)
@@ -6129,7 +6180,7 @@ impl SettingsDialog {
 							color: colors.dim,
 							clip: Some(vp),
 							..mk(
-								seen_text,
+								seen_text.into(),
 								cols.seen,
 								row_text_y(self.shell_line_y(i, shell_index), self.shell_line_h()),
 							)
@@ -6141,7 +6192,7 @@ impl SettingsDialog {
 					out.push(TextItem {
 						clip: Some(vp),
 						band: Some(add),
-						..mk(caption.to_string(), lx, row_text_y(add.y, add.h))
+						..mk(caption.into(), lx, row_text_y(add.y, add.h))
 					});
 				}
 				Kind::Toggle | Kind::Header(_) => {}
@@ -6176,7 +6227,7 @@ impl SettingsDialog {
 		rects.push(quad(popup.x, popup.y, popup.w, popup.h, colors.field_bg));
 		border(&mut rects, popup, 1.0, colors.panel_border);
 		let sel = self.get_radio(self.specs[i].key);
-		let mk = |text: String, x: f32, y: f32| TextItem::plain(text, x, y, colors.text);
+		let mk = |text: Cow<'static, str>, x: f32, y: f32| TextItem::plain(text, x, y, colors.text);
 		for (choice, opt) in options.iter().enumerate() {
 			let r = self.dd_item_rect(i, n, choice);
 			if choice == self.pending {
@@ -6186,7 +6237,7 @@ impl SettingsDialog {
 			if choice == sel {
 				texts.push(mk(ui().icons.dropdown_check.into(), r.x + r.w - 18.0, ty));
 			}
-			texts.push(mk(opt.clone(), r.x + 10.0, ty));
+			texts.push(mk(opt.clone().into(), r.x + 10.0, ty));
 		}
 		(rects, texts)
 	}
@@ -14080,5 +14131,35 @@ mod tests {
 				);
 			}
 		}
+	}
+
+	// Each frame copied every label, tab title, caption and icon into a new
+	// string. The fixed words are borrowed now.
+	// Test ID: dfe4j
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_frame_borrows_the_fixed_words() {
+		let d = mk_dialog(700.0);
+		let fixed: Vec<&str> = d
+			.specs
+			.iter()
+			.map(|spec| spec.label)
+			.chain(tab_titles().iter().copied())
+			.chain([super::ui().icons.revert])
+			.filter(|t| !t.is_empty())
+			.collect();
+		let texts = d.texts_dip(d.line_h, chars7);
+		let mut seen = 0;
+		for item in &texts {
+			if fixed.contains(&item.text.as_ref()) {
+				seen += 1;
+				assert!(
+					matches!(item.text, std::borrow::Cow::Borrowed(_)),
+					"{:?} was copied",
+					item.text
+				);
+			}
+		}
+		assert!(seen >= 10, "only {seen} fixed words drawn");
 	}
 }

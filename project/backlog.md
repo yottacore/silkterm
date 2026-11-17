@@ -310,7 +310,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 - Settings: tips, labels, and search results are built again on every frame or pointer move
 	- ID: 2026111623500002
 	- Type: Enhancement
-	- Status: Queued
+	- Status: Done
 	- Priority: Avg
 	- Opened: 20261116-235000
 	- Opened by: CC
@@ -319,6 +319,22 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- A pointer move over the dialog builds a row's whole tip text only to learn whether there is one.
 		- Each frame copies every label into a new string, and rebuilds each visible search result's heading trail.
 		- Detail: `detail_backlog.md`, under this ID.
+	- Progress log:
+		- 20261117: Measured as heap allocations on the test thread, debug build, the default dialog on the General tab. A sweep of 360 pointer spots, 141 of them over a tip, went from 2159 to 1. One frame's text went from 148 to 91 for 69 items. One frame's text with "size" typed in the search box went from 105 to 24.
+		- 20261117: Done: finding the tip under the pointer names it without building its words. The words are built only for a frame that draws the tip. A row's words are built to decide only when it has no help of its own.
+		- 20261117: Done: the dialog's text items borrow the fixed words (labels, tab titles, captions, icons, fixed options) rather than copying them each frame.
+		- 20261117: Done: each search result's line and marks are worked out once per query, not once per frame.
+		- 20261117: Done: the hotkey check that runs for every key of every row each frame turns away a key that isn't a hotkey before it walks the rows.
+	- Decisions:
+		- 20261117: A search result's line is still copied into its text item each frame, since a text item can only borrow fixed words. That copy is one string and one list per shown result, where the old path rebuilt the whole trail.
+		- 20261117: Left alone: the theme list that `choices` builds per call, since the frame path doesn't call it at rest, and `shell_cols`, which is a few sums with no allocation.
+	- Swept: every `TextItem` builder in `settings_ui.rs`, `picker.rs`, `prompt.rs` and `search.rs`. Every caller of `hover_tip`, now test only, and of `tip_under` in `dialog.rs`. Every caller of `dd_closed_label`, which now returns borrowed text for a fixed option. Every caller of `hotkey_for_key`.
+	- Verified: the quick gate passed in all 5 areas. Each new test failed with its part of the change undone (282 tip words built in the sweep, a label copied, 9 result lines worked out again) and passes with it.
+	- Branch: nov17-2026111623500002
+	- Commit: cd8c3861
+	- Test case: `only_a_drawn_tip_builds_its_words` (dfe4h), `a_frame_borrows_the_fixed_words` (dfe4j), `a_frame_reuses_the_result_lines` (dfe4k). The older `a_dialog_frame_looks_up_the_tip_once` (ddgh4) still passes.
+	- Acceptance signoff: Self-closed: the change does what the item asked, and its tests failed before and pass after.
+	- Closed: 20261117-085922
 
 - Window moves and resizes on Linux open a new X server connection for each question they ask
 	- ID: 2026111623500003

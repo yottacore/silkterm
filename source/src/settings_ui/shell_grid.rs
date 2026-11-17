@@ -952,7 +952,7 @@ mod tests {
 		let (d, i) = mk_shell_dialog(3);
 		let mut measure = |s: &str| s.chars().count() as f32 * 7.0;
 		let texts = d.texts_dip(d.line_h, &mut measure);
-		let said: Vec<&str> = texts.iter().map(|t| t.text.as_str()).collect();
+		let said: Vec<&str> = texts.iter().map(|t| t.text.as_ref()).collect();
 		for want in [
 			"Name",
 			"Command",
@@ -1005,7 +1005,7 @@ mod tests {
 		d.insert_str("Half typed");
 		let mut measure = |s: &str| s.chars().count() as f32 * 7.0;
 		let texts = d.texts_dip(d.line_h, &mut measure);
-		let said: Vec<&str> = texts.iter().map(|t| t.text.as_str()).collect();
+		let said: Vec<&str> = texts.iter().map(|t| t.text.as_ref()).collect();
 		assert!(said.contains(&"Half typed"));
 		assert!(said.contains(&"Shell 0"), "and the other line is untouched");
 	}

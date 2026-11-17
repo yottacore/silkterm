@@ -8,6 +8,7 @@ use crate::config;
 use crate::gfx::{QuadMode, RectInstance};
 use crate::pane::Rect;
 use crate::pick::{self, Picker};
+use std::borrow::Cow;
 
 impl SettingsDialog {
 	// Every measurement the box is built from. The floors come from the
@@ -259,7 +260,7 @@ impl SettingsDialog {
 		let Some(picker) = &self.pick else {
 			return (rects, texts);
 		};
-		let mk = |text: String, x: f32, y: f32| TextItem::plain(text, x, y, colors.text);
+		let mk = |text: Cow<'static, str>, x: f32, y: f32| TextItem::plain(text, x, y, colors.text);
 		let row_text_y = |y: f32, h: f32| y + (h - self.line_h) / 2.0;
 		// a disc: a rounded quad whose radius is its own half-width
 		let disc = |x: f32, y: f32, d: f32, color: [u8; 3]| RectInstance {
@@ -285,11 +286,7 @@ impl SettingsDialog {
 		border(&mut rects, g.outer, 1.0, colors.panel_border);
 		texts.push(TextItem {
 			clip: Some(g.title),
-			..mk(
-				self.specs[picker.row].label.to_string(),
-				g.title.x,
-				g.title.y,
-			)
+			..mk(self.specs[picker.row].label.into(), g.title.x, g.title.y)
 		});
 
 		// The square mixes toward the hue in sRGB, so its `color` is the hue in
@@ -349,11 +346,7 @@ impl SettingsDialog {
 					w: box_r.x - g.labels_x - 6.0,
 					..box_r
 				}),
-				..mk(
-					f.label().to_string(),
-					g.labels_x,
-					row_text_y(box_r.y, box_r.h),
-				)
+				..mk(f.label().into(), g.labels_x, row_text_y(box_r.y, box_r.h))
 			});
 			rects.push(quad(box_r.x, box_r.y, box_r.w, box_r.h, colors.field_bg));
 			let open = picker.focus == pick::Focus::Field(f);
@@ -377,7 +370,7 @@ impl SettingsDialog {
 			texts.push(TextItem {
 				clip: Some(box_r),
 				..mk(
-					txt,
+					txt.into(),
 					box_r.x + lay().field_pad - view,
 					row_text_y(box_r.y, box_r.h),
 				)

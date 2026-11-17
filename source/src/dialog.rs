@@ -1526,8 +1526,17 @@ fn text_areas<'a>(
 		.collect()
 }
 
+// A tip found under the pointer, before its words are built.
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum Tip<'a> {
+	Said(&'a str),
+	Settings(crate::settings_ui::TipAt),
+}
+
 // The tip under the pointer, and the rect it hangs from. A frame asks once.
-fn tip_under(content: &Content, (mx, my): (f32, f32)) -> Option<(Cow<'_, str>, Rect)> {
+// The words wait for `tip_words`, since a pointer move and a frame whose tip
+// isn't due yet only need the rect.
+fn tip_under(content: &Content, (mx, my): (f32, f32)) -> Option<(Tip<'_>, Rect)> {
 	match content {
 		Content::About { links, .. } => links
 			.iter()
@@ -1535,9 +1544,20 @@ fn tip_under(content: &Content, (mx, my): (f32, f32)) -> Option<(Cow<'_, str>, R
 			.and_then(|link| {
 				link.tooltip
 					.as_deref()
-					.map(|tip| (Cow::Borrowed(tip), link.rect))
+					.map(|tip| (Tip::Said(tip), link.rect))
 			}),
-		Content::Settings(dialog) => dialog.hover_tip(mx, my),
+		Content::Settings(dialog) => dialog
+			.hover_at(mx, my)
+			.map(|(at, anchor)| (Tip::Settings(at), anchor)),
+	}
+}
+
+fn tip_words<'a>(content: &'a Content, tip: Tip<'a>) -> Cow<'a, str> {
+	match (tip, content) {
+		(Tip::Said(said), _) => Cow::Borrowed(said),
+		(Tip::Settings(at), Content::Settings(dialog)) => dialog.tip_words(at),
+		// a Settings tip only ever comes from a Settings dialog
+		(Tip::Settings(_), Content::About { .. }) => Cow::Borrowed(""),
 	}
 }
 
@@ -1596,8 +1616,10 @@ fn compose(
 	} else {
 		None
 	};
-	let (drawn, _) = tip_gate(dwell, found.as_ref().map(|(_, anchor)| *anchor), now);
-	let tip = found.filter(|(_, anchor)| drawn == Some(*anchor));
+	let (drawn, _) = tip_gate(dwell, found.map(|(_, anchor)| anchor), now);
+	let tip = found
+		.filter(|(_, anchor)| drawn == Some(*anchor))
+		.map(|(tip, anchor)| (tip_words(content, tip), anchor));
 	let tip = tip.as_ref().map(|(tip, anchor)| (tip.as_ref(), *anchor));
 	(scene(content, text, shaped, mouse, tip, size), drawn)
 }
@@ -4286,6 +4308,68 @@ mod tests {
 				"a frame with the pointer at {at:?} looked the tip up {asks} times"
 			);
 		}
+	}
+
+	// A pointer move used to build the whole tip of each row it crossed, only
+	// to learn whether there was one. Neither a move nor a frame whose tip
+	// isn't due builds the words now, and a frame that draws one builds it once.
+	// Test ID: dfe4h
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn only_a_drawn_tip_builds_its_words() {
+		let mut text = TextCtx::new_cpu(1.0);
+		let mut content = settings_content(&mut text);
+		let mut dwell = crate::tip::Dwell::default();
+		let (w, h) = match &content {
+			super::Content::Settings(dialog) => dialog.size(),
+			super::Content::About { .. } => unreachable!(),
+		};
+		let before = crate::settings_ui::row_tips();
+		let (mut from, mut tipped) = ((0.0, 0.0), None);
+		for row in 0..30 {
+			for col in 0..12 {
+				let to = (w * (col as f32 + 0.5) / 12.0, h * (row as f32 + 0.5) / 30.0);
+				let _ = super::pointer_moved(&mut content, &mut text, &mut dwell, true, from, to);
+				if let Some((super::Tip::Settings(crate::settings_ui::TipAt::Row(..)), _)) =
+					super::tip_under(&content, to)
+				{
+					tipped = tipped.or(Some(to));
+				}
+				from = to;
+			}
+		}
+		assert_eq!(
+			crate::settings_ui::row_tips() - before,
+			0,
+			"pointer moves built tip words"
+		);
+		let at = tipped.expect("no row on the dialog has a tip");
+		let mut shaped = super::ShapedText::default();
+		let mut dwell = crate::tip::Dwell::default();
+		let mut frame = |dwell: &mut crate::tip::Dwell<Rect>| {
+			let before = crate::settings_ui::row_tips();
+			let (_, drawn) = super::compose(
+				&content,
+				&mut text,
+				&mut shaped,
+				dwell,
+				true,
+				at,
+				Instant::now(),
+				(800, 700),
+			);
+			(drawn, crate::settings_ui::row_tips() - before)
+		};
+		let (drawn, built) = frame(&mut dwell);
+		assert_eq!(
+			(drawn, built),
+			(None, 0),
+			"a tip not yet due built its words"
+		);
+		std::thread::sleep(crate::tip::DELAY);
+		let (drawn, built) = frame(&mut dwell);
+		assert!(drawn.is_some(), "a rested pointer got no tip");
+		assert_eq!(built, 1, "a drawn tip built its words {built} times");
 	}
 
 	// A pointer move draws nothing unless something drawn moved with it: a
