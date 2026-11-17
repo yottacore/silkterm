@@ -173,7 +173,7 @@ fStartRig(){
 		for candidate in "${runtimeDir}"/wayland-*; do
 			[[ -S "${candidate}" ]] || continue
 			local -i mtime=$(stat -c %Y "${candidate}" 2>/dev/null || echo 0)
-			if ((mtime >= startedAt)); then export WAYLAND_DISPLAY="$(basename "${candidate}")"; fi
+			if ((mtime >= startedAt)); then export WAYLAND_DISPLAY="${candidate##*/}"; fi
 		done
 		[[ -n "${WAYLAND_DISPLAY:-}" ]] && break
 		sleep 0.2; waited+=1

@@ -81,9 +81,7 @@ def problems(lines: list[str]) -> list[tuple[int, str]]:
 			if in_item and prev.strip():
 				out.append((i + 1, "top-level bullet with no blank line before it"))
 			in_item = True
-		elif not stripped:
-			in_item = False
-		elif not line[0].isspace():
+		elif not stripped or not line[0].isspace():
 			in_item = False
 		if HEADING.match(line):
 			##	The TOC extension's marker sits on the line above its heading.

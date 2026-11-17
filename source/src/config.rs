@@ -757,10 +757,10 @@ fn move_theme_colors(path: &std::path::Path, text: &str, old: &shcl::Document) {
 	let mut changes = Vec::new();
 	for (i, key) in crate::theme::PALETTE_KEYS.iter().enumerate() {
 		let at = format!("colors.{key}");
-		if let Some(rgb) = old.get_string(&at).ok().as_deref().and_then(parse_hex) {
-			if rgb != pal.get(i) {
-				changes.push((at, rgb));
-			}
+		if let Some(rgb) = old.get_string(&at).ok().as_deref().and_then(parse_hex)
+			&& rgb != pal.get(i)
+		{
+			changes.push((at, rgb));
 		}
 	}
 	if changes.is_empty() {
@@ -790,7 +790,8 @@ fn window_memory_from(text: &str, path: &std::path::Path, settings: &mut Setting
 		path,
 		said: std::cell::RefCell::new(Vec::new()),
 	};
-	let d = Settings::default();
+	// the plain defaults, since none of these comes from the model
+	let d = Settings::bare();
 	settings.remembered_columns = numi(
 		reader.read_usize("window.remembered_columns"),
 		d.remembered_columns,
@@ -2877,14 +2878,11 @@ fn write_model(
 	orig: &Settings,
 	edited: &Settings,
 ) -> (Vec<String>, Vec<String>) {
+	fn find<'a>(lines: &'a [(String, knobs::Value)], path: &str) -> Option<&'a knobs::Value> {
+		lines.iter().find(|(p, _)| p == path).map(|(_, v)| v)
+	}
 	let was = orig.model.lines(&crate::fields::Env::new(orig, None));
 	let now = edited.model.lines(&crate::fields::Env::new(edited, None));
-	let find = |lines: &[(String, knobs::Value)], path: &str| {
-		lines
-			.iter()
-			.find(|(p, _)| p == path)
-			.map(|(_, v)| v.clone())
-	};
 	let aside = |lines: &knobs::Lines, path: &str| {
 		lines
 			.kept
@@ -2898,8 +2896,8 @@ fn write_model(
 		match (find(&was.config, path), find(&now.config, path)) {
 			// a line that already says it is left as typed
 			(before, Some(v)) => {
-				if before.as_ref() != Some(&v) && !holds_value(doc, path, &v) {
-					put_value(doc, path, &v);
+				if before != Some(v) && !holds_value(doc, path, v) {
+					put_value(doc, path, v);
 				}
 			}
 			(Some(_), None) if aside(&now, path) => disable.push(path.to_string()),
@@ -3900,12 +3898,12 @@ fn shells_to_save(
 	now: &[crate::shells::ShellEntry],
 ) -> Vec<crate::shells::ShellEntry> {
 	use crate::shells::ShellEntry;
-	let find = |list: &'_ [ShellEntry], slug: &str| -> Option<ShellEntry> {
-		list.iter().find(|e| e.slug == slug).cloned()
-	};
+	fn find<'a>(list: &'a [ShellEntry], slug: &str) -> Option<&'a ShellEntry> {
+		list.iter().find(|e| e.slug == slug)
+	}
 	let resolve = |entry: &ShellEntry| match (find(orig, &entry.slug), find(disk, &entry.slug)) {
 		(Some(_), None) => None,
-		(Some(loaded), Some(stored)) if loaded == *entry => Some(stored),
+		(Some(loaded), Some(stored)) if loaded == entry => Some(stored.clone()),
 		_ => Some(entry.clone()),
 	};
 	let is_new = |entry: &ShellEntry| find(orig, &entry.slug).is_none();
@@ -3925,7 +3923,7 @@ fn shells_to_save(
 		for stored in disk {
 			match (find(orig, &stored.slug), find(now, &stored.slug)) {
 				(Some(_), None) => {}
-				(_, Some(entry)) => out.extend(resolve(&entry)),
+				(_, Some(entry)) => out.extend(resolve(entry)),
 				(None, None) => out.push(stored.clone()),
 			}
 		}
@@ -4418,7 +4416,11 @@ pub fn reset_font_zoom() {
 /// monospace size while automatic), plus any session zoom, clamped to a
 /// renderable range.
 pub fn effective_font_size() -> f32 {
-	(base_font_size(&settings()) + font_zoom_px() as f32).clamp(4.0, 128.0)
+	effective_font_size_in(&settings())
+}
+
+fn effective_font_size_in(settings: &Settings) -> f32 {
+	(base_font_size(settings) + font_zoom_px() as f32).clamp(4.0, 128.0)
 }
 
 // The size before any zoom.
@@ -4441,9 +4443,10 @@ impl FontPick {
 
 /// The font the window has now.
 pub fn font_now() -> FontPick {
+	let live = settings();
 	FontPick {
-		size: effective_font_size(),
-		family: settings().font_family.clone(),
+		size: effective_font_size_in(&live),
+		family: live.font_family.clone(),
 	}
 }
 
@@ -5079,17 +5082,17 @@ fn comment_at(value: &str) -> Option<usize> {
 fn activate_line(lines: &mut [String], path: &str, value: &str) -> bool {
 	let text = lines.join("\n");
 	for w in walk_settings(&text) {
-		if let WalkLine::Setting { index, path: p, .. } = w {
-			if p == path {
-				let line = &lines[index];
-				let trimmed = line.trim_start();
-				let indent = &line[..line.len() - trimmed.len()];
-				let Some(key) = line_setting_key(line) else {
-					return false;
-				};
-				lines[index] = format!("{indent}{key}: {value}");
-				return true;
-			}
+		if let WalkLine::Setting { index, path: p, .. } = w
+			&& p == path
+		{
+			let line = &lines[index];
+			let trimmed = line.trim_start();
+			let indent = &line[..line.len() - trimmed.len()];
+			let Some(key) = line_setting_key(line) else {
+				return false;
+			};
+			lines[index] = format!("{indent}{key}: {value}");
+			return true;
 		}
 	}
 	false
@@ -5443,17 +5446,18 @@ fn migrate_config(path: &std::path::Path) {
 	let Ok(text) = std::fs::read_to_string(path) else {
 		return;
 	};
-	if let Some(out) = migrated_text(&text, true) {
-		if config_open_elsewhere(path) {
-			note_config_busy(path);
-			return;
-		}
-		if let Err(e) = write_config_atomic(path, &out) {
-			eprintln!(
-				"{APP_NAME}: couldn't migrate config {}: {e:#}",
-				path.display()
-			);
-		}
+	let Some(out) = migrated_text(&text, true) else {
+		return;
+	};
+	if config_open_elsewhere(path) {
+		note_config_busy(path);
+		return;
+	}
+	if let Err(e) = write_config_atomic(path, &out) {
+		eprintln!(
+			"{APP_NAME}: couldn't migrate config {}: {e:#}",
+			path.display()
+		);
 	}
 }
 
@@ -7861,10 +7865,10 @@ fn wallpaper_search_dirs() -> Vec<PathBuf> {
 	if let Some(dir) = data_dir() {
 		dirs.push(dir);
 	}
-	if let Some(dir) = config_dir() {
-		if !dirs.contains(&dir) {
-			dirs.push(dir);
-		}
+	if let Some(dir) = config_dir()
+		&& !dirs.contains(&dir)
+	{
+		dirs.push(dir);
 	}
 	dirs
 }
@@ -7913,11 +7917,11 @@ fn adopt_config_from(native: &std::path::Path, legacy: &std::path::Path) {
 		);
 		return;
 	}
-	if let Some(dir) = native.parent() {
-		if let Err(e) = std::fs::create_dir_all(dir) {
-			eprintln!("{APP_NAME}: couldn't create {}: {e}", dir.display());
-			return;
-		}
+	if let Some(dir) = native.parent()
+		&& let Err(e) = std::fs::create_dir_all(dir)
+	{
+		eprintln!("{APP_NAME}: couldn't create {}: {e}", dir.display());
+		return;
 	}
 	// rename first: same volume is the ordinary case and it is atomic. A cross
 	// volume move fails EXDEV, so fall back to copy-then-remove, and keep the

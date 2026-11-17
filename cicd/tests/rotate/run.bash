@@ -38,8 +38,8 @@ GFS_NOW="$(date -d '2026-09-26 12:30:00' +%s)"
 dir="${work}/logs"
 mkdir -p "${dir}"
 declare -a stamps=()
-for ((i = 1; i <= 80; i++)); do stamps+=("$(date -d "@$((GFS_NOW - i * 3300))" +%Y%m%d-%H%M%S)"); done
-for ((i = 0; i < 120; i++)); do stamps+=("$(date -d "@$((GFS_NOW - 3 * 86400 - i * 527000))" +%Y%m%d-%H%M%S)"); done
+for ((i = 1; i <= 80; i++)); do printf -v s '%(%Y%m%d-%H%M%S)T' "$((GFS_NOW - i * 3300))"; stamps+=("${s}"); done
+for ((i = 0; i < 120; i++)); do printf -v s '%(%Y%m%d-%H%M%S)T' "$((GFS_NOW - 3 * 86400 - i * 527000))"; stamps+=("${s}"); done
 for s in "${stamps[@]}"; do : >"${dir}/run_${s}.log"; done
 printf '%s\n' "${stamps[@]}" >"${work}/stamps.txt"
 

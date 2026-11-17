@@ -248,6 +248,9 @@ LINUX_BASE_RE = re.compile(
 	r"^(?:ld-linux.*|libc|libm|libdl|librt|libpthread|libgcc_s|libresolv|libnsl|libutil)\b"
 )
 
+## The header line of each mapping in /proc/<pid>/smaps.
+SMAPS_HEADER_RE = re.compile(r"^[0-9a-f]+-[0-9a-f]+ ")
+
 LINUX_LIB_DIRS = ("/usr/lib/x86_64-linux-gnu", "/lib/x86_64-linux-gnu", "/usr/lib", "/lib")
 
 
@@ -323,7 +326,7 @@ class LinuxBackend:
 		try:
 			with Path(f"/proc/{pid}/smaps").open() as fh:
 				for line in fh:
-					if re.match(r"^[0-9a-f]+-[0-9a-f]+ ", line):
+					if SMAPS_HEADER_RE.match(line):
 						rows.append((path, priv, shared))
 						parts = line.split(None, 5)
 						path = parts[5].strip() if len(parts) >= 6 else ""
@@ -360,11 +363,8 @@ class LinuxBackend:
 			pass
 		#	That file needs a kernel option that is usually but not always on, so fall back
 		#	to reading every process's parent.
-		out = []
-		for entry in Path("/proc").iterdir():
-			if entry.name.isdigit() and self.parent_of(int(entry.name)) == pid:
-				out.append(int(entry.name))
-		return out
+		return [int(entry.name) for entry in Path("/proc").iterdir()
+			if entry.name.isdigit() and self.parent_of(int(entry.name)) == pid]
 
 
 #••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••

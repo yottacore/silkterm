@@ -463,7 +463,10 @@ fn keep_all(items: Vec<String>) -> &'static [&'static str] {
 	have
 }
 
-#[allow(clippy::too_many_lines)] // one straight-line read of one document
+#[allow(
+	clippy::too_many_lines,
+	reason = "one straight-line read of one document"
+)]
 fn parse(text: &str) -> Result<Ui, Vec<String>> {
 	let doc = shcl::Document::parse(text);
 	let mut problems: Vec<String> = doc
@@ -945,11 +948,10 @@ fn read_groups(doc: &shcl::Document, problems: &mut Vec<String>) -> Vec<GroupSpe
 					None => problems.push(format!("{}: no value", p(&name))),
 				}
 			}
+			let kept = keep(key.clone());
 			presets.push(PresetSpec {
-				key: keep(key.clone()),
-				label: doc
-					.get_string(&p("label"))
-					.map_or_else(|_| keep(key.clone()), keep),
+				key: kept,
+				label: doc.get_string(&p("label")).map_or(kept, keep),
 				temporary: doc.get_bool(&p("temporary")).unwrap_or(false),
 				values,
 			});

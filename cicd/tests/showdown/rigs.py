@@ -91,7 +91,7 @@ speed_rig = (INCLUDE / "termbench-run.bash").read_text(encoding="utf-8")
 speed_arms = {key for arm in re.findall(r"^\t([a-z0-9|]+)\)$", speed_rig, re.M) for key in arm.split("|")}
 size_keys = subprocess.run([str(INCLUDE / "sizebench-run.bash"), "--list"],
 	capture_output=True, text=True, timeout=30, check=False).stdout.split()
-for key, row, rigs in us.TERMS:
+for key, _, rigs in us.TERMS:
 	if rigs in ("both", "speed"):
 		check(f"the speed rig has a recipe for {key}", key in speed_arms)
 	if rigs in ("both", "size"):

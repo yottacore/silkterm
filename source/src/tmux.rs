@@ -112,9 +112,8 @@ pub fn session_name(template: &str, date: &str, time: &str, hundredths: u32) -> 
 			.map(|t| clean_name(&t.expand(&values)))
 			.filter(|name| !name.is_empty())
 	};
-	expand(template)
-		.or_else(|| expand(DEFAULT_SESSION_NAME))
-		.unwrap_or_else(|| hhmmssnn.clone())
+	let name = expand(template).or_else(|| expand(DEFAULT_SESSION_NAME));
+	name.unwrap_or(hhmmssnn)
 }
 
 /// A session name tmux keeps as given. tmux itself swaps `.` and `:` for `_`,

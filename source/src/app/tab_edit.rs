@@ -451,10 +451,11 @@ impl State {
 	pub(super) fn tab_edit_offset(&mut self, x: f32) -> Option<usize> {
 		let field = self.tab_edit_field()?;
 		let rel_x = x - (field.x + self.text.dip(TAB_EDIT_PAD));
-		let text = self.tab_edit.as_ref()?.text.clone();
+		let edit = self.tab_edit.as_ref()?;
+		let text_ctx = &mut self.text;
 		let attrs = crate::text::ui_attrs();
-		Some(caret_from_click(&text, rel_x, &mut |s: &str| {
-			self.text.measure_ui_text(s, &attrs)
+		Some(caret_from_click(&edit.text, rel_x, &mut |s: &str| {
+			text_ctx.measure_ui_text(s, &attrs)
 		}))
 	}
 }

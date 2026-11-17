@@ -177,8 +177,8 @@ pub fn install(found: &[Found]) {
 		if done.contains(&profile) {
 			continue;
 		}
-		done.push(profile.clone());
 		install_into(&profile);
+		done.push(profile);
 	}
 }
 
@@ -429,11 +429,11 @@ fn install_into_with(profile: &Path, record: Option<&Path>) {
 	if !backup_once(profile, &existing) {
 		return;
 	}
-	if let Some(parent) = profile.parent() {
-		if let Err(e) = std::fs::create_dir_all(parent) {
-			eprintln!("{}: {}: {e}", config::APP_NAME, parent.display());
-			return;
-		}
+	if let Some(parent) = profile.parent()
+		&& let Err(e) = std::fs::create_dir_all(parent)
+	{
+		eprintln!("{}: {}: {e}", config::APP_NAME, parent.display());
+		return;
 	}
 	match write_atomic(profile, &with_block(&existing, newline)) {
 		Ok(()) => {

@@ -79,10 +79,21 @@ fn leaf_node(nodes: &[TabNode], leaf: usize) -> usize {
 // Top-level tab down to the leaf, by node.
 fn path_to(nodes: &[TabNode], leaf: usize) -> Vec<usize> {
 	let mut path = vec![leaf_node(nodes, leaf)];
-	while let Some(up) = nodes[path[0]].parent {
-		path.insert(0, up);
+	while let Some(up) = nodes[path[path.len() - 1]].parent {
+		path.push(up);
 	}
+	path.reverse();
 	path
+}
+// How many tabs `path_to` would list, without building it: every row top asks.
+fn path_len(nodes: &[TabNode], leaf: usize) -> usize {
+	let mut len = 1;
+	let mut at = leaf_node(nodes, leaf);
+	while let Some(up) = nodes[at].parent {
+		len += 1;
+		at = up;
+	}
+	len
 }
 // A tab with tabs under it shows its first leaf. In strip order a parent's
 // subtree follows it at once, so that is the next leaf along.
@@ -1744,7 +1755,7 @@ impl SettingsDialog {
 			return false;
 		};
 		self.dd_open(i);
-		!self.dd_options(i).is_empty()
+		self.dd_len(i) > 0
 	}
 	pub fn hover_tip(&self, mx: f32, my: f32) -> Option<(Cow<'static, str>, Rect)> {
 		#[cfg(test)]
@@ -1811,7 +1822,7 @@ impl SettingsDialog {
 	fn above_rows_for(line_h: f32, leaf: usize) -> f32 {
 		let strip = match tabs_side() {
 			TabsSide::Top => {
-				Self::gutter_h_for(line_h, path_to(tab_nodes(), leaf).len()) + 1.0 + lay().tabs_gap
+				Self::gutter_h_for(line_h, path_len(tab_nodes(), leaf)) + 1.0 + lay().tabs_gap
 			}
 			TabsSide::Left => lay().pad,
 		};
@@ -1881,7 +1892,7 @@ impl SettingsDialog {
 				x: self.rect.x,
 				y: self.rect.y,
 				w: self.rect.w,
-				h: Self::gutter_h_for(self.line_h, self.active_path().len()),
+				h: Self::gutter_h_for(self.line_h, path_len(tab_nodes(), self.tab)),
 			},
 			TabsSide::Left => Rect {
 				x: self.rect.x,
@@ -1916,9 +1927,9 @@ impl SettingsDialog {
 	// its own rather than following the rows' sideways scroll: a tab panned off the
 	// window couldn't be clicked at all, and the tabs are how you leave a tab
 	// that won't fit. It moves only far enough to keep the current one in view.
-	fn tab_scroll(&self, row: usize) -> f32 {
-		let shown = self.shown_in_row(row);
-		let over = (self.row_w(&shown) - self.rect.w).max(0.0);
+	// `shown` is `shown_in_row(row)`, which the one caller already has.
+	fn tab_scroll(&self, row: usize, shown: &[usize]) -> f32 {
+		let over = (self.row_w(shown) - self.rect.w).max(0.0);
 		let Some(&cur) = self.active_path().get(row) else {
 			return 0.0;
 		};
@@ -1963,7 +1974,7 @@ impl SettingsDialog {
 				let Some(k) = shown.iter().position(|&i| i == node) else {
 					return none;
 				};
-				let x = self.rect.x - self.tab_scroll(row)
+				let x = self.rect.x - self.tab_scroll(row, &shown)
 					+ lay().pad + shown[..k].iter().map(|&i| self.tab_ws[i]).sum::<f32>()
 					+ lay().tab_gap * k as f32;
 				Rect {
@@ -2361,16 +2372,30 @@ impl SettingsDialog {
 			_ => Vec::new(),
 		}
 	}
+	// How many options `dd_options` lists, without copying the fixed ones out.
+	fn dd_len(&self, i: usize) -> usize {
+		if let Some(choices) = self.choices(self.specs[i].key) {
+			return choices.len();
+		}
+		match self.specs[i].kind {
+			Kind::Dropdown(opts) => opts.len(),
+			_ => 0,
+		}
+	}
 	// What the collapsed box says. Same as the highlighted option, except that a
 	// profile or theme with rows changed under it says so with a `*`, as in
 	// `High *`. The popup still highlights the preset the changes were made on.
+	// Drawn every frame, so it reads the one option rather than listing them all.
 	fn dd_closed_label(&self, i: usize) -> String {
 		let key = self.specs[i].key;
-		if self.choices(key).is_some() {
+		if Self::has_choices(key) {
 			return fields::shown_choice(&self.edited, key);
 		}
-		let sel = self.get_radio(self.specs[i].key);
-		self.dd_options(i).get(sel).cloned().unwrap_or_default()
+		let sel = radio_of(&self.edited, key);
+		match self.specs[i].kind {
+			Kind::Dropdown(opts) => opts.get(sel).map_or_else(String::new, |o| (*o).to_string()),
+			_ => String::new(),
+		}
 	}
 
 	// Open row `i`'s popup with the current value highlighted.
@@ -2640,7 +2665,7 @@ impl SettingsDialog {
 			return;
 		}
 		if let Some(i) = self.open {
-			let n = self.dd_options(i).len();
+			let n = self.dd_len(i);
 			if n > 0 {
 				let step = if forward { 1 } else { -1 };
 				self.pending = (self.pending as i32 + step).rem_euclid(n as i32) as usize;
@@ -2749,7 +2774,7 @@ impl SettingsDialog {
 				self.set_radio(key, new_sel as usize);
 			}
 			Kind::Dropdown(_) => {
-				let n = self.dd_options(i).len() as i32;
+				let n = self.dd_len(i) as i32;
 				if n > 0 {
 					let sel = self.get_radio(key) as i32;
 					self.set_radio(key, (sel + dir).clamp(0, n - 1) as usize);
@@ -2893,23 +2918,20 @@ impl SettingsDialog {
 	fn walk_rows(&self, cache: &mut RowTops, first: f32, shells: usize) {
 		#[cfg(test)]
 		ROW_WALKS.with(|n| n.set(n.get() + 1));
-		let mut drawn = vec![false; self.specs.len()];
+		// NaN marks a row the walk doesn't reach, so no second vec says which
 		cache.tops.clear();
-		cache.tops.resize(self.specs.len(), 0.0);
+		cache.tops.resize(self.specs.len(), f32::NAN);
 		let mut y = first;
 		let mut prev: Option<&Spec> = None;
 		for (j, spec) in Self::visible(self.specs, self.tab) {
 			y += Self::gap_above(self.specs, j, self.tab, prev);
 			cache.tops[j] = y;
-			drawn[j] = true;
 			y += Self::row_advance(self.specs, j, self.tab, self.line_h, shells);
 			prev = Some(spec);
 		}
 		cache.end = y;
-		for (top, drawn) in cache.tops.iter_mut().zip(drawn) {
-			if !drawn {
-				*top = y;
-			}
+		for top in cache.tops.iter_mut().filter(|top| top.is_nan()) {
+			*top = y;
 		}
 	}
 
@@ -2957,21 +2979,25 @@ impl SettingsDialog {
 				.join(" or ")
 		};
 		let mut notes = Vec::new();
+		// every hotkey row walks every clash each frame, so only a clash of its
+		// own is spoken
 		for taken in keys.taken() {
-			let spoken = taken.chord.spoken(self.mac);
 			if taken.from == hotkey {
 				notes.push(format!(
-					"{spoken} is set for {}",
+					"{} is set for {}",
+					taken.chord.spoken(self.mac),
 					self.hotkey_label(taken.by)
 				));
 			} else if taken.by == hotkey && taken.both_set {
 				notes.push(format!(
-					"{spoken} is also set for {}",
+					"{} is also set for {}",
+					taken.chord.spoken(self.mac),
 					self.hotkey_label(taken.from)
 				));
 			} else if taken.by == hotkey {
 				notes.push(format!(
-					"took {spoken} from {}",
+					"took {} from {}",
+					taken.chord.spoken(self.mac),
 					self.hotkey_label(taken.from)
 				));
 			}
@@ -3637,8 +3663,11 @@ impl SettingsDialog {
 	}
 	// Is this row at its config default? (drives the revert icon). A Dual row is
 	// "default" only when both its keys are.
+	// Asked per row each frame, so it walks the keys rather than collecting them.
 	fn row_is_default(&self, i: usize) -> bool {
-		self.row_keys(i).iter().all(|&k| self.is_default(k))
+		self.row_span(i)
+			.flat_map(|j| self.own_keys(j))
+			.all(|&k| self.is_default(k))
 	}
 	// A row of push-buttons has no value, and the shells grid is a list rather
 	// than a setting, so neither has a default to go back to. A row drawn beside
@@ -3656,18 +3685,26 @@ impl SettingsDialog {
 	// Every setting one revert arrow resets: the row's own, both halves of a
 	// Dual, and every row drawn beside it on its line.
 	fn row_keys(&self, i: usize) -> Vec<Key> {
-		let own = |i: usize| match self.specs[i].kind {
-			Kind::Dual { keys, .. } => keys.to_vec(),
-			_ => vec![self.specs[i].key],
-		};
-		let mut keys = own(i);
-		if !self.specs[i].beside {
-			let (_, parts, _) = Self::line_of(self.specs, i);
-			for j in i + 1..i + parts {
-				keys.extend(own(j));
-			}
+		self.row_span(i)
+			.flat_map(|j| self.own_keys(j))
+			.copied()
+			.collect()
+	}
+	// The rows one revert arrow stands for: `i`, and every row beside it on its
+	// line unless `i` is itself one of those.
+	fn row_span(&self, i: usize) -> std::ops::Range<usize> {
+		if self.specs[i].beside {
+			return i..i + 1;
 		}
-		keys
+		let (_, parts, _) = Self::line_of(self.specs, i);
+		i..i + parts
+	}
+	// Row `j`'s own settings: both halves of a Dual, else its one key.
+	fn own_keys(&self, j: usize) -> &[Key] {
+		match &self.specs[j].kind {
+			Kind::Dual { keys, .. } => keys,
+			_ => std::slice::from_ref(&self.specs[j].key),
+		}
 	}
 	// Revert a whole row: every key the row's own arrow resets.
 	fn row_revert(&mut self, i: usize) {
@@ -3983,6 +4020,14 @@ impl SettingsDialog {
 			_ => None,
 		}
 	}
+	// Whether `choices` has a list for `key`, without building it.
+	fn has_choices(key: Key) -> bool {
+		match key {
+			Key::PerfProfile => fields::spec().get(key.name()).is_some(),
+			Key::Theme => true,
+			_ => false,
+		}
+	}
 	fn set_radio(&mut self, key: Key, idx: usize) {
 		if let Some(options) = self.choices(key) {
 			let Some((pick, _)) = options.get(idx) else {
@@ -4178,40 +4223,29 @@ impl SettingsDialog {
 		self.last_click = Some((now, x, y));
 		// a click anywhere stops a hotkey row waiting; one on its box starts it again
 		self.capture_end();
-		// the picker is modal over the panel: it takes the click either way
-		if self.pick.is_some() {
-			if self.emenu.is_some() {
-				let hit = (0..EDIT_MENU.len()).find(|&k| self.em_item_rect(k).contains(x, y));
-				let cmd = hit.filter(|&k| self.em_enabled(k)).map(|k| EDIT_MENU[k].1);
-				self.emenu = None;
-				return cmd.map_or(Action::None, Action::Edit);
-			}
-			self.pick_mouse_down(x, y, measure);
-			return Action::None;
-		}
-		// the prompt box is modal over the panel: it takes the click either way
-		if self.prompt.is_some() {
-			if self.emenu.is_some() {
-				let hit = (0..EDIT_MENU.len()).find(|&k| self.em_item_rect(k).contains(x, y));
-				let cmd = hit.filter(|&k| self.em_enabled(k)).map(|k| EDIT_MENU[k].1);
-				self.emenu = None;
-				return cmd.map_or(Action::None, Action::Edit);
-			}
-			self.prompt_mouse_down(x, y, measure);
-			return Action::None;
-		}
-		// An open field context menu takes the click. An enabled item runs its
-		// command (the clipboard side is in dialog.rs), and a click elsewhere closes it.
+		// An open field context menu takes the click, over the picker or the prompt
+		// box as well. An enabled item runs its command (the clipboard side is in
+		// dialog.rs), and a click elsewhere closes it.
 		if self.emenu.is_some() {
 			let hit = (0..EDIT_MENU.len()).find(|&k| self.em_item_rect(k).contains(x, y));
 			let cmd = hit.filter(|&k| self.em_enabled(k)).map(|k| EDIT_MENU[k].1);
 			self.emenu = None;
 			return cmd.map_or(Action::None, Action::Edit);
 		}
+		// the picker is modal over the panel: it takes the click either way
+		if self.pick.is_some() {
+			self.pick_mouse_down(x, y, measure);
+			return Action::None;
+		}
+		// the prompt box is modal over the panel: it takes the click either way
+		if self.prompt.is_some() {
+			self.prompt_mouse_down(x, y, measure);
+			return Action::None;
+		}
 		// An open dropdown takes the click. A click on an option picks it, and one
 		// elsewhere closes it. Either way the click is used up.
 		if let Some(oi) = self.open.take() {
-			let n = self.dd_options(oi).len();
+			let n = self.dd_len(oi);
 			for choice in 0..n {
 				if self.dd_item_rect(oi, n, choice).contains(x, y) {
 					self.set_radio(self.specs[oi].key, choice);
@@ -4520,7 +4554,7 @@ impl SettingsDialog {
 		}
 	}
 
-	// --- field context menu (right-click / Menu key inside an editable field) ---
+	// field context menu (right-click / Menu key inside an editable field)
 	fn em_item_h(&self) -> f32 {
 		self.dd_item_h()
 	}
@@ -4720,22 +4754,15 @@ impl SettingsDialog {
 				let _ = self.mouse_move_dip(mx, my, measure);
 			}
 		}
-		let row = self.edit.as_ref().map(|e| e.row)?;
-		let field = self.field_rect(row)?;
+		let edit = self.edit.as_ref()?;
+		let field = self.field_rect(edit.row)?;
 		let inner_w = (field.w - 2.0 * lay().field_pad).max(1.0);
 		let ahead = (lay().view_ahead * self.ui_scale()).min(inner_w / 3.0);
-		let (caret_x, text_w, sig) = {
-			#[allow(clippy::unwrap_used, reason = "Some: row extracted above")]
-			let edit = self.edit.as_ref().unwrap();
-			(
-				measure(&edit.buf[..edit.cur]),
-				measure(&edit.buf),
-				(edit.cur, edit.sel, edit.buf.len()),
-			)
-		};
+		let caret_x = measure(&edit.buf[..edit.cur]);
+		let text_w = measure(&edit.buf);
+		let sig = (edit.cur, edit.sel, edit.buf.len());
 		let dragging = self.edit_drag.is_some();
-		#[allow(clippy::unwrap_used, reason = "Some: row extracted above")]
-		let edit = self.edit.as_mut().unwrap();
+		let edit = self.edit.as_mut()?;
 		if sig == edit.last_sig {
 			edit.blink_t += dt;
 		} else {
@@ -4833,7 +4860,7 @@ impl SettingsDialog {
 		}
 		if let Some(oi) = self.open {
 			let was = self.pending;
-			let n = self.dd_options(oi).len();
+			let n = self.dd_len(oi);
 			for choice in 0..n {
 				if self.dd_item_rect(oi, n, choice).contains(x, y) {
 					self.pending = choice;
@@ -5012,12 +5039,12 @@ impl SettingsDialog {
 			Kind::Text => !c.is_control() && edit.buf.len() - sel_len < 256,
 			// numeric slider field: digits always; one '.' only for float sliders
 			Kind::Slider { int, .. } => {
-				let kept = match edit.sel_range() {
-					Some((a, b)) => format!("{}{}", &edit.buf[..a], &edit.buf[b..]),
-					None => edit.buf.clone(),
-				};
-				let dot_ok = !int && c == '.' && !kept.contains('.');
-				(c.is_ascii_digit() || dot_ok) && kept.len() < 8
+				// what stays of the buffer, either side of the selection
+				let (head, tail) = edit.sel_range().map_or((edit.buf.as_str(), ""), |(a, b)| {
+					(&edit.buf[..a], &edit.buf[b..])
+				});
+				let dot_ok = !int && c == '.' && !head.contains('.') && !tail.contains('.');
+				(c.is_ascii_digit() || dot_ok) && head.len() + tail.len() < 8
 			}
 			_ => false,
 		};
@@ -5165,6 +5192,7 @@ impl SettingsDialog {
 	}
 	// live-apply the in-progress edit (hex color, or background-image path)
 	fn reparse_edit(&mut self) {
+		// a copy, since every setter below takes the whole dialog mutably
 		let Some((i, buf)) = self.edit.as_ref().map(|edit| (edit.row, edit.buf.clone())) else {
 			return;
 		};

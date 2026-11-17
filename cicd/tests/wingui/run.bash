@@ -52,9 +52,10 @@ fGpuOnly(){ grep -qE '^##[[:space:]]+Box: gpu'$'\r''?$' "${meDir}/${1}.ps1" 2>/d
 ##	fMine <box>: the scenarios left for this box, in the order asked for.
 fMine(){
 	local -r box="${1}"
-	local scenario
+	local scenario ran
+	ran=$'\n'"$(<"${WINGUI_RAN}")"$'\n'
 	for scenario in "${scenarios[@]}"; do
-		grep -qx -- "${scenario}" "${WINGUI_RAN}" && continue
+		[[ "${ran}" != *$'\n'"${scenario}"$'\n'* ]] || continue
 		if fGpuOnly "${scenario}" && [[ "${boxTags[${box}]:-}" != *" gpu "* ]]; then continue; fi
 		echo "${scenario}"
 	done
@@ -62,10 +63,11 @@ fMine(){
 ##	fSkipsLeft: a SKIP line for each scenario no box took.
 ##	A box that was up but couldn't run anything left its reason in WINGUI_RAN.
 fSkipsLeft(){
-	local scenario why
+	local scenario why ran
 	why="$(sed -n 's/^#why //p' "${WINGUI_RAN}" | paste -sd ';' - | sed 's/;/; /g')"
+	ran=$'\n'"$(<"${WINGUI_RAN}")"$'\n'
 	for scenario in "${scenarios[@]}"; do
-		grep -qx -- "${scenario}" "${WINGUI_RAN}" && continue
+		[[ "${ran}" != *$'\n'"${scenario}"$'\n'* ]] || continue
 		if fGpuOnly "${scenario}"; then echo "SKIP wingui: ${scenario}, no box tagged gpu answered${why:+ (${why})}"
 		else echo "SKIP wingui: ${scenario}, no box answered${why:+ (${why})}"; fi
 	done

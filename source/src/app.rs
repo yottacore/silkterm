@@ -261,8 +261,8 @@ fn set_live(edit: impl FnOnce(&mut config::Settings)) {
 // both alone. A config open in another program skips the write, and the
 // session keeps the value anyway.
 fn save_live(edit: impl FnOnce(&mut config::Settings) -> bool) {
-	let orig = (*config::settings()).clone();
-	let mut new = orig.clone();
+	let orig = config::settings();
+	let mut new = (*orig).clone();
 	if edit(&mut new) {
 		let _ = config::persist(&orig, &new);
 		config::update(new);
@@ -273,8 +273,7 @@ fn save_live(edit: impl FnOnce(&mut config::Settings) -> bool) {
 // menu, in which case the new tab falls back to the default shell rather than
 // running something the user didn't pick.
 fn shell_argv(index: usize) -> Option<Vec<String>> {
-	let command = config::settings().shells.get(index)?.command.clone();
-	config::command_argv(&command)
+	config::command_argv(&config::settings().shells.get(index)?.command)
 }
 
 // What Close pane closes, in the cascade the menu and a dead shell both follow.
@@ -1280,15 +1279,15 @@ impl State {
 	// what the active tab has to say. Called on a tab or focus change and on each
 	// frame drawn. set_title runs only when the string changed, to avoid flicker.
 	fn update_title(&mut self) {
-		let custom = self.win_title.clone();
 		// A --title is the whole answer, so nothing else is worked out.
-		let suffix = match custom {
-			Some(_) => None,
-			None => self.title_suffix(),
+		let suffix = if self.win_title.is_some() {
+			None
+		} else {
+			self.title_suffix()
 		};
 		let title = crate::tabtitle::window_title(
 			config::rights(),
-			custom.as_deref(),
+			self.win_title.as_deref(),
 			&config::title_prefix(),
 			suffix.as_deref(),
 		);
@@ -1325,7 +1324,7 @@ impl State {
 	// directory. The child sets up its own control socket and environment at
 	// startup, and a reaper thread waits on it so a closed window can't linger as
 	// a zombie.
-	fn new_window(&mut self) {
+	fn new_window(&self) {
 		let cwd = self
 			.tabs
 			.cur()
@@ -1486,7 +1485,11 @@ impl State {
 	// size. Returns false when the config file looked open elsewhere and the
 	// write was skipped, and then the dialog's OK keeps it open rather than
 	// closing over an unsaved change. The values apply live either way.
-	fn apply_settings_values(&mut self, orig: &config::Settings, edited: config::Settings) -> bool {
+	fn apply_settings_values(
+		&mut self,
+		orig: &config::Settings,
+		mut edited: config::Settings,
+	) -> bool {
 		// The Shells tab edits the list, so this is the one path allowed to write
 		// it, and the dialog's copy wins. The baseline is the live list rather
 		// than the dialog's own `orig`. A scan that arrived while the dialog was
@@ -1500,7 +1503,6 @@ impl State {
 		// the list leaves the dialog.
 		let live = config::settings();
 		let mut orig = orig.clone();
-		let mut edited = edited;
 		orig.shells.clone_from(&live.shells);
 		edited.shells.retain(|e| !e.command.trim().is_empty());
 		// Remote and a watch step are live state the dialog only copied when it
@@ -1538,7 +1540,7 @@ impl State {
 	// without a file watcher. The file is the source here, so nothing is written
 	// back.
 	fn reload_config(&mut self) {
-		let orig = config::settings().as_ref().clone();
+		let orig = config::settings();
 		let edited = settings_after_reload(
 			&orig,
 			config::reload_from_disk(),
@@ -1570,7 +1572,7 @@ impl State {
 	/// stay, unless the save moved the picture or its folder.
 	pub(super) fn follow_peer(&mut self) {
 		self.tell_peers_if_due();
-		let live = config::settings().as_ref().clone();
+		let live = config::settings();
 		let mut fresh = settings_after_reload(
 			&live,
 			config::reload_from_disk(),
@@ -1677,7 +1679,7 @@ impl State {
 		self.apply_as(orig, edited, how);
 	}
 
-	fn apply_as(&mut self, orig: &config::Settings, edited: config::Settings, how: Applied) {
+	fn apply_as(&mut self, orig: &config::Settings, mut edited: config::Settings, how: Applied) {
 		// a size set by hand, or Remember last size turned back on; a size that
 		// only follows the window is the size it already has. Another window's
 		// save sets the size new windows open at, and leaves this one be.
@@ -1697,7 +1699,6 @@ impl State {
 		// stored settings, so the dialog's own diff can be empty while the
 		// picture changes completely.
 		let before = config::settings();
-		let mut edited = edited;
 		// a step, a measured rung, or Remote gets to the fields through the rules
 		crate::fields::fill(&mut edited, None);
 		config::update(edited);
@@ -1711,15 +1712,14 @@ impl State {
 
 		// the backdrop blur hint changed, so set or clear the compositor property now
 		if blur_changed {
-			set_blur_behind(&self.window, config::settings().transparent_background_blur);
+			set_blur_behind(&self.window, after.transparent_background_blur);
 		}
 
 		// Transparency is per pixel, on the terminal background only, so there's
 		// nothing to do for it here. The fill picks up the new opacity next frame.
 		// window dimensions changed in Settings -> resize to the new cell grid
 		if resize {
-			let (columns, rows) =
-				crate::fields::grid(&config::settings(), self.watch.key.as_deref());
+			let (columns, rows) = crate::fields::grid(&after, self.watch.key.as_deref());
 			self.request_grid(columns, rows);
 		}
 		if rebuild {
@@ -1863,10 +1863,8 @@ impl State {
 			mut link_ranges,
 			mut cursor_ranges,
 		} = std::mem::take(&mut self.frame_bufs);
-		let mut animating = bell > 0.0;
-		if self.autoscroll_selection(dt) {
-			animating = true;
-		}
+		// the autoscroll runs every frame, so it goes first in the `||`
+		let mut animating = self.autoscroll_selection(dt) || bell > 0.0;
 		// The outline shares the scrim's source and composite, so the pass runs
 		// for either; only the blur is the halo's alone.
 		let halo_on = cfg.text_scrim && cfg.text_scrim_radius > 0.0;
@@ -1950,10 +1948,10 @@ impl State {
 		for p in self.tabs.cur().panes.values() {
 			if let Some(bar) = p.scrollbar(&self.text, &cfg) {
 				let active = p.bar_drag.is_some() || p.bar_hover;
-				instances.extend(scrollbar_insts(&bar, p.bar_fade(), active));
+				instances.extend(scrollbar_insts(&bar, p.bar_fade(), active, &cfg));
 			}
 			if let Some(g) = p.minimap(&self.text, &cfg) {
-				instances.extend(minimap_insts(&g, p.map_drag.is_some()));
+				instances.extend(minimap_insts(&g, p.map_drag.is_some(), &cfg));
 			}
 		}
 		// The focus ring only tells panes apart when there's more than one. With a
@@ -1961,7 +1959,7 @@ impl State {
 		// background should run to the edge, so it's skipped.
 		if self.tabs.cur().panes.len() > 1 {
 			if let Some(p) = self.tabs.cur().panes.get(&self.tabs.cur().focused) {
-				instances.extend(focus_ring(p.full, self.text.scale));
+				instances.extend(focus_ring(p.full, self.text.scale, &cfg));
 			}
 		}
 		// drop-target tint while drag-reordering a pane
@@ -2036,14 +2034,18 @@ impl State {
 		let menu_h = self.menu_bar_h();
 		let tab_h = self.tab_bar_h();
 
+		// once a frame, for the quads here and the text below, and before borrowing
+		// panes for `areas` (menubar_layout takes &mut self)
+		let bar_layout = self.menubar_layout();
+		let copyboxes = self.copybox_layout();
+
 		// menu bar (File/Edit/...), drawn in the main pass at the very top; the
 		// open menu's title is highlighted.
 		let menubar_range = if self.menu_bar {
 			let start = instances.len() as u32;
 			instances.push(rect_inst(0.0, 0.0, win_w, menu_h, config::TAB_BAR_BG));
-			let layout = self.menubar_layout();
 			if let Some(idx) = self.bar_open {
-				if let Some(&(x, w)) = layout.get(idx) {
+				if let Some(&(x, w)) = bar_layout.get(idx) {
 					instances.push(rect_inst(x, 0.0, w, menu_h, menu_hover_rgb));
 				}
 			}
@@ -2058,7 +2060,7 @@ impl State {
 				let underline_y = self.text.ui_baseline(0.0, menu_h) + rule;
 				let title_pad = self.text.dip(MENU_BAR_PAD);
 				for (i, c) in marks {
-					let Some(&(x, _)) = layout.get(i) else {
+					let Some(&(x, _)) = bar_layout.get(i) else {
 						continue;
 					};
 					let mut buf = [0u8; 4];
@@ -2081,7 +2083,7 @@ impl State {
 				fp.is_some_and(|p| p.copy_select),
 				fp.is_some_and(|p| p.copy_output),
 			];
-			if let Some(cb) = self.copybox_layout() {
+			if let Some(cb) = &copyboxes {
 				let border = copy_dim(menu_border_rgb, self.focused);
 				let fill = copy_dim(menu_fg_rgb, self.focused);
 				let box_rule = self.text.dip(CHROME_HAIRLINE);
@@ -2135,14 +2137,12 @@ impl State {
 			// Where the caret and the selection sit inside the label of a tab being
 			// renamed, measured once before the loop borrows nothing (measuring
 			// wants &mut self.text).
+			let text_ctx = &mut self.text;
 			let edit_marks = self.tab_edit.as_ref().map(|edit| {
 				let (from, to) = edit.range();
-				(edit.tab, edit.text.clone(), from, to, edit.caret)
-			});
-			let edit_marks = edit_marks.map(|(tab, text, from, to, caret)| {
 				let attrs = crate::text::ui_attrs();
-				let mut upto = |at: usize| self.text.measure_ui_text(&text[..at], &attrs);
-				(tab, upto(from), upto(to), upto(caret))
+				let mut upto = |at: usize| text_ctx.measure_ui_text(&edit.text[..at], &attrs);
+				(edit.tab, upto(from), upto(to), upto(edit.caret))
 			});
 			let edit_pad = self.text.dip(TAB_EDIT_PAD);
 			let caret_w = self.text.dip(CHROME_HAIRLINE).max(1.0);
@@ -2387,9 +2387,6 @@ impl State {
 			let c = copy_dim(menu_fg_rgb, self.focused);
 			GColor::rgb(c[0], c[1], c[2])
 		};
-		// compute before borrowing panes for `areas` (menubar_layout takes &mut self)
-		let bar_layout = self.menubar_layout();
-		let copyboxes = self.copybox_layout();
 		// tab titles, as measured above. Each is fitted to the space its own tab
 		// has, which is where a path gets shortened.
 		let (tab_widths, tab_titles): (&[f32], &[String]) = if self.tab_bar_visible() {
@@ -3368,8 +3365,11 @@ fn bar_inst(r: Rect, color: [u8; 3], alpha: f32) -> RectInstance {
 
 // The minimap's viewport marker. The pane's own scrollbar sits at the far edge,
 // over the preview, so the column draws no bar of its own.
-fn minimap_insts(g: &crate::minimap::Geom, active: bool) -> Option<RectInstance> {
-	let cfg = config::settings();
+fn minimap_insts(
+	g: &crate::minimap::Geom,
+	active: bool,
+	cfg: &config::Settings,
+) -> Option<RectInstance> {
 	let handle = g.handle?;
 	let alpha = if active {
 		config::SCROLLBAR_ACTIVE_A
@@ -3391,8 +3391,12 @@ fn minimap_insts(g: &crate::minimap::Geom, active: bool) -> Option<RectInstance>
 
 // The scrollbar's quads for one pane: a faint track with the handle on it. The
 // thumb brightens while hovered or dragged, the usual affordance.
-fn scrollbar_insts(bar: &crate::pane::Bar, fade: f32, active: bool) -> [RectInstance; 2] {
-	let cfg = config::settings();
+fn scrollbar_insts(
+	bar: &crate::pane::Bar,
+	fade: f32,
+	active: bool,
+	cfg: &config::Settings,
+) -> [RectInstance; 2] {
 	let thumb_a = if active {
 		config::SCROLLBAR_ACTIVE_A
 	} else {
@@ -3652,10 +3656,10 @@ fn focus_moves(was: Option<PaneId>, now: Option<PaneId>) -> (Option<PaneId>, Opt
 	if was == now { (None, None) } else { (was, now) }
 }
 
-fn focus_ring(rect: Rect, scale: f32) -> [RectInstance; 4] {
+fn focus_ring(rect: Rect, scale: f32, cfg: &config::Settings) -> [RectInstance; 4] {
 	// the calm one: the ring marks which pane is live, alongside the dialog's own
 	// sliders and revert arrows, rather than the single keyboard-focused control
-	let color = config::srgb_f32(config::settings().highlight);
+	let color = config::srgb_f32(cfg.highlight);
 	let thickness = config::dip(config::FOCUS_RING_PX, scale);
 	[
 		RectInstance {
@@ -4486,13 +4490,13 @@ impl ApplicationHandler<UserEvent> for App {
 					if let Some(at) = state.tab_edit_offset(x) {
 						state.edit_tab(|edit| edit.drag_to(at));
 					}
-				} else if let Some(path) = state.resizing.clone() {
+				} else if let Some(path) = &state.resizing {
 					// drag a pane divider
 					let area = state.area();
 					state
 						.tabs
 						.cur_mut()
-						.drag_divider(&mut state.text, &path, area, x, y);
+						.drag_divider(&mut state.text, path, area, x, y);
 					state.dirty = true;
 				} else if let Some(id) = state.selecting {
 					// extend an in-progress drag-selection. Clamped, not bounded: a
@@ -4975,10 +4979,10 @@ impl ApplicationHandler<UserEvent> for App {
 				// smooth scrollback uses WHEEL_LINES; full-screen apps get their
 				// own (tunable) lines-per-notch via ALT_SCROLL_LINES
 				let (lines, alt_lines) = match delta {
-					MouseScrollDelta::LineDelta(_, y) => (
-						y * config::settings().wheel_lines,
-						y * config::settings().alt_scroll_lines,
-					),
+					MouseScrollDelta::LineDelta(_, y) => {
+						let cfg = config::settings();
+						(y * cfg.wheel_lines, y * cfg.alt_scroll_lines)
+					}
 					MouseScrollDelta::PixelDelta(pos) => {
 						let lines = pos.y as f32 / cell_h;
 						(lines, lines)
@@ -4994,11 +4998,7 @@ impl ApplicationHandler<UserEvent> for App {
 							let letter = if alt_lines > 0.0 { b'A' } else { b'B' };
 							let seq =
 								input::cursor_seq(letter, mode.contains(TermMode::APP_CURSOR));
-							let mut bytes = Vec::with_capacity(seq.len() * n as usize);
-							for _ in 0..n {
-								bytes.extend_from_slice(&seq);
-							}
-							p.write_input(bytes);
+							p.write_input(seq.repeat(n as usize));
 						}
 					} else {
 						p.scroll.wheel(lines);
@@ -5773,7 +5773,7 @@ impl ApplicationHandler<UserEvent> for App {
 					Some(crate::profile::Step::Rung(next)) => state.set_live_profile(next),
 					Some(crate::profile::Step::Done(pick)) => state.finish_bench(pick),
 					Some(crate::profile::Step::Stalled) => state.finish_bench_stalled(),
-					_ => {}
+					Some(crate::profile::Step::Measuring) | None => {}
 				}
 			}
 			match step {
@@ -5911,7 +5911,7 @@ impl ApplicationHandler<UserEvent> for App {
 			(Some(_), Some(cap)) if state.bench_blocked() => Some(cap),
 			(at, _) => at,
 		};
-		let flow = wake_by(flow, bench_wake.or(state.bench_banner_wake()));
+		let flow = wake_by(flow, bench_wake.or_else(|| state.bench_banner_wake()));
 		// wake at the reveal deadline so a hidden startup window is shown even if no
 		// post-resize frame arrives
 		let flow = wake_by(flow, (!state.revealed).then_some(state.reveal_deadline));
@@ -6192,8 +6192,9 @@ mod tests {
 			w: 100.0,
 			h: 100.0,
 		};
-		let thin = focus_ring(rect, 1.0)[0].size[1];
-		let thick = focus_ring(rect, 2.0)[0].size[1];
+		let cfg = config::settings();
+		let thin = focus_ring(rect, 1.0, &cfg)[0].size[1];
+		let thick = focus_ring(rect, 2.0, &cfg)[0].size[1];
 		assert_eq!(thin, config::FOCUS_RING_PX);
 		assert_eq!(thick, thin * 2.0);
 	}

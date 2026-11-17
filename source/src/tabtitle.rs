@@ -157,18 +157,16 @@ fn derived_tiny(name: &str) -> String {
 // One letter per word, plus whatever digits the name ends in, since a version
 // number is most of what tells 2 shells of the same family apart.
 fn initials(core: &str, words: usize) -> String {
-	let digits: Vec<char> = core
-		.chars()
-		.rev()
-		.take_while(char::is_ascii_digit)
-		.collect();
-	let letters: String = core
+	let digit_count = core.chars().rev().take_while(char::is_ascii_digit).count();
+	// ASCII digits are a byte each
+	let digits = &core[core.len() - digit_count..];
+	let mut out: String = core
 		.split(|c: char| !c.is_alphanumeric())
 		.filter(|word| !word.is_empty() && !word.chars().all(|c| c.is_ascii_digit()))
 		.take(words)
 		.filter_map(|word| word.chars().next())
 		.collect();
-	let out: String = letters.chars().chain(digits.into_iter().rev()).collect();
+	out.push_str(digits);
 	if out.is_empty() {
 		core.chars().take(1).collect()
 	} else {
@@ -228,12 +226,15 @@ impl Rights {
 /// any file name can ask for the same reordering, and refusing it would also
 /// refuse the joiners that hold an emoji together.
 pub fn plain(title: &str) -> String {
-	title
+	let kept: String = title
 		.chars()
 		.filter(|&c| !c.is_control() && !('\u{80}'..='\u{9f}').contains(&c))
-		.collect::<String>()
-		.trim()
-		.to_string()
+		.collect();
+	let trimmed = kept.trim();
+	if trimmed.len() == kept.len() {
+		return kept;
+	}
+	trimmed.to_string()
 }
 
 /// What a title set by the running program is worth showing, if anything.
@@ -248,10 +249,10 @@ fn program_says<'a>(title: &'a str, marker: Option<&str>) -> Option<&'a str> {
 	// useful, so the rights come off here and the name is dropped below. Only the
 	// exact word about to be put back is taken off, so a title that only reads like
 	// one survives. A console in another language is caught by `foreign_marker_off`.
-	if let Some(word) = marker {
-		if let Some(rest) = title.strip_prefix(word).and_then(|r| r.strip_prefix(": ")) {
-			title = rest;
-		}
+	if let Some(word) = marker
+		&& let Some(rest) = title.strip_prefix(word).and_then(|r| r.strip_prefix(": "))
+	{
+		title = rest;
 	}
 	let title = title.trim();
 	if title.is_empty() {
@@ -628,7 +629,10 @@ pub fn label_forms(template: &Template, facts: Facts, style: Style) -> Vec<Strin
 pub fn path_forms(raw: &str, home: Option<&str>, style: Style) -> Vec<String> {
 	let sep = style.sep();
 	let (anchor, parts) = split(raw, home, style);
-	let join = |items: &[String]| {
+	let Some((&current, above)) = parts.split_last() else {
+		return vec![anchor];
+	};
+	let join = |items: &[&str]| {
 		let mut out = anchor.clone();
 		for item in items {
 			out.push_str(item);
@@ -636,35 +640,27 @@ pub fn path_forms(raw: &str, home: Option<&str>, style: Style) -> Vec<String> {
 		}
 		out
 	};
-	if parts.is_empty() {
-		return vec![anchor];
-	}
 	let mut forms = vec![join(&parts)];
-	let last = parts.len() - 1;
 	// The ellipsis takes out the middle a directory at a time, and what's left of the
 	// path keeps its real names. The ellipsis costs 4 columns, so a step that covers
 	// a short name is longer than what it replaces, and push_shorter drops it.
-	for keep in (0..last).rev() {
-		let mut items = parts[..keep].to_vec();
-		items.push(ELLIPSIS.to_string());
-		items.push(parts[last].clone());
-		push_shorter(&mut forms, join(&items));
+	for keep in (0..above.len()).rev() {
+		let mut out = join(&above[..keep]);
+		for item in [ELLIPSIS, current] {
+			out.push_str(item);
+			out.push(sep);
+		}
+		push_shorter(&mut forms, out);
 	}
 	// Initials for everything above the current directory, which stays whole.
 	// Only a shallow path gets here: on a deep one the ellipsis has already
 	// covered more ground than a column of single letters would.
-	let abbreviated: Vec<String> = parts
-		.iter()
-		.enumerate()
-		.map(|(i, part)| {
-			if i == last {
-				part.clone()
-			} else {
-				initial(part)
-			}
-		})
-		.collect();
-	push_shorter(&mut forms, join(&abbreviated));
+	let mut abbreviated = anchor.clone();
+	for item in above.iter().copied().map(initial).chain([current]) {
+		abbreviated.push_str(item);
+		abbreviated.push(sep);
+	}
+	push_shorter(&mut forms, abbreviated);
 	push_shorter(&mut forms, format!("{anchor}{ELLIPSIS}{sep}"));
 	forms
 }
@@ -680,15 +676,19 @@ fn push_shorter(forms: &mut Vec<String>, candidate: String) {
 
 // A hidden directory keeps the character after its dot, or every one of them
 // abbreviates to the same thing.
-fn initial(part: &str) -> String {
+fn initial(part: &str) -> &str {
 	let take = if part.starts_with('.') { 2 } else { 1 };
-	part.chars().take(take).collect()
+	let end = part
+		.char_indices()
+		.nth(take)
+		.map_or(part.len(), |(at, _)| at);
+	&part[..end]
 }
 
 // Split a path into the anchor it must always show and the directories under it.
 // An anchor already ends with its separator, so a path with no directories left
 // still reads as one.
-fn split(raw: &str, home: Option<&str>, style: Style) -> (String, Vec<String>) {
+fn split<'a>(raw: &'a str, home: Option<&str>, style: Style) -> (String, Vec<&'a str>) {
 	let trimmed = raw.trim();
 	let (anchor, rest) = match style {
 		Style::Posix => posix_anchor(trimmed, home),
@@ -697,7 +697,6 @@ fn split(raw: &str, home: Option<&str>, style: Style) -> (String, Vec<String>) {
 	let parts = rest
 		.split(|c| style.is_sep(c))
 		.filter(|part| !part.is_empty())
-		.map(str::to_string)
 		.collect();
 	(anchor, parts)
 }
@@ -710,10 +709,10 @@ fn posix_anchor<'a>(path: &'a str, home: Option<&str>) -> (String, &'a str) {
 		if path == home {
 			return ("~/".to_string(), "");
 		}
-		if let Some(rest) = path.strip_prefix(home) {
-			if rest.starts_with('/') {
-				return ("~/".to_string(), rest);
-			}
+		if let Some(rest) = path.strip_prefix(home)
+			&& rest.starts_with('/')
+		{
+			return ("~/".to_string(), rest);
 		}
 	}
 	match path.strip_prefix('/') {
@@ -798,12 +797,12 @@ pub fn widths(
 ) -> Vec<f32> {
 	let (regular, max) = bounds(total, regular_pct, max_pct);
 	let floors: Vec<f32> = demands.iter().map(|d| d.floor.clamp(0.0, max)).collect();
-	let mut alloc = floors.clone();
 	let mut spare = total.max(0.0) - floors.iter().sum::<f32>();
 	// Every tab up to the regular width first, and only then the ones whose
 	// labels want more, so a long path never takes room another tab needs to
 	// reach its ordinary size.
 	let target: Vec<f32> = floors.iter().map(|f| f.max(regular)).collect();
+	let mut alloc = floors;
 	spread(&mut alloc, &target, &mut spare);
 	let want: Vec<f32> = demands
 		.iter()
@@ -951,8 +950,8 @@ pub fn tip_lines(rows: &[(&str, String)]) -> Vec<String> {
 		.unwrap_or(0);
 	rows.iter()
 		.map(|(key, value)| {
-			let pad = " ".repeat(key_w - key.chars().count());
-			format!("{key}:{pad} {value}")
+			let pad = key_w - key.chars().count();
+			format!("{key}:{:pad$} {value}", "")
 		})
 		.collect()
 }

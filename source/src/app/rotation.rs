@@ -47,8 +47,8 @@ impl State {
 	// A wallpaper change from the control socket. Like --background-image at launch,
 	// it's live only and for this window, and nothing is written to config.shcl.
 	fn set_wallpaper(&mut self, image: Option<std::path::PathBuf>) {
-		let orig = config::settings().as_ref().clone();
-		let mut edited = orig.clone();
+		let orig = config::settings();
+		let mut edited = (*orig).clone();
 		config::name_wallpaper(&mut edited, image);
 		self.apply_new_settings(&orig, edited, true);
 	}

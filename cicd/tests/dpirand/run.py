@@ -1409,7 +1409,7 @@ class Case:
 				r = outs[primary[0]]["rect"] if primary else outs[win.output]["rect"]
 				self.before_user(what, step)
 				_, outs, _, primary = self.where()
-				before = {k: LEFT_LATE for k in self.names(outs, primary)} if plan.arm == "wayland" else {}
+				before = dict.fromkeys(self.names(outs, primary), LEFT_LATE) if plan.arm == "wayland" else {}
 				pid = rig.app.pid if rig.app else 0
 				rig.msg(f"[pid={pid}] resize set {int(r['width'] * step.size[0])} {int(r['height'] * step.size[1])}")
 				_, outs, touched, primary = self.where()

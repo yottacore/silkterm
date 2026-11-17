@@ -329,10 +329,10 @@ impl Spec {
 				}
 			}
 			let is_bool = |other: &str| self.get(other).is_some_and(|o| o.kind == Kind::Bool);
-			if let Some(g) = &s.gate {
-				if !is_bool(g) {
-					errs.push(format!("{id}: gate {g} is not a checkbox"));
-				}
+			if let Some(g) = &s.gate
+				&& !is_bool(g)
+			{
+				errs.push(format!("{id}: gate {g} is not a checkbox"));
 			}
 			if let Some(a) = &s.auto {
 				if s.rule.is_none() {
@@ -344,12 +344,12 @@ impl Spec {
 					errs.push(format!("{id}: auto {a} is automatic itself"));
 				}
 			}
-			if let Some(Rule::State(from)) = &s.rule {
-				if self.get(from).is_none_or(|f| f.store != Store::State) {
-					errs.push(format!(
-						"{id}: rule names {from}, which is not a state value"
-					));
-				}
+			if let Some(Rule::State(from)) = &s.rule
+				&& self.get(from).is_none_or(|f| f.store != Store::State)
+			{
+				errs.push(format!(
+					"{id}: rule names {from}, which is not a state value"
+				));
 			}
 			if s.store == Store::State
 				&& (s.auto.is_some() || s.group.is_some() || s.gate.is_some())
@@ -389,7 +389,7 @@ impl Spec {
 		errs.extend(self.read_loops());
 		// gates can chain, but not in a loop
 		for s in &self.settings {
-			let mut at = s.gate.clone();
+			let mut at = s.gate.as_deref();
 			let mut hops = 0;
 			while let Some(g) = at {
 				hops += 1;
@@ -397,7 +397,7 @@ impl Spec {
 					errs.push(format!("{}: its gates go round in a loop", s.id));
 					break;
 				}
-				at = self.get(&g).and_then(|o| o.gate.clone());
+				at = self.get(g).and_then(|o| o.gate.as_deref());
 			}
 		}
 		for g in &self.groups {
@@ -971,10 +971,10 @@ impl Model {
 	}
 
 	fn fallback(&self, s: &Setting, env: &dyn Env) -> Value {
-		if s.auto.is_none() {
-			if let Some(v) = self.rule_answer(s, env) {
-				return v;
-			}
+		if s.auto.is_none()
+			&& let Some(v) = self.rule_answer(s, env)
+		{
+			return v;
 		}
 		s.default.clone()
 	}
@@ -994,10 +994,9 @@ impl Model {
 		if let Some((key, p)) = self.preset_for(s, env) {
 			if !p.temporary
 				&& self.values.changed_on.get(s.group.as_deref().unwrap_or("")) == Some(&key)
+				&& let Some(v) = self.values.changes.get(&s.id)
 			{
-				if let Some(v) = self.values.changes.get(&s.id) {
-					return v.clone();
-				}
+				return v.clone();
 			}
 			return p
 				.values
@@ -1051,8 +1050,7 @@ impl Model {
 	/// Hold a value for this run, over everything else. Nothing is stored, and a
 	/// change on screen takes its place.
 	pub fn hold(&mut self, id: &str, v: &Value) {
-		let spec = Arc::clone(&self.spec);
-		if let Some(v) = spec.get(id).and_then(|s| spec.valid(s, v).ok()) {
+		if let Some(v) = self.spec.get(id).and_then(|s| self.spec.valid(s, v).ok()) {
 			self.values.held.insert(id.to_string(), v);
 		}
 	}
@@ -1090,7 +1088,7 @@ impl Model {
 				.options
 				.iter()
 				.find(|(k, _)| *k == key)
-				.map_or(key.clone(), |(_, l)| l.clone());
+				.map_or(key, |(_, l)| l.clone());
 		};
 		let key = self.chosen(&g.id, env);
 		let label = match preset_of(g, &key, env) {
@@ -1256,6 +1254,7 @@ impl Model {
 	/// The reset arrow: a change goes back to its preset's value, anything else
 	/// to its default. It is the one way a value set by hand is thrown away.
 	pub fn reset(&mut self, id: &str, env: &dyn Env) {
+		// a handle of its own, since the calls below take self mutably
 		let spec = Arc::clone(&self.spec);
 		let s = spec.at(id);
 		if self.values.held.remove(id).is_some() {
@@ -1282,20 +1281,22 @@ impl Model {
 	// Turning on a chooser's auto checkbox is a pick like any other, so the
 	// "*" changes go.
 	fn picking_again(&mut self, id: &str, env: &dyn Env) {
+		// a handle of its own, since drop_changes takes self mutably
 		let spec = Arc::clone(&self.spec);
 		let group = spec
 			.groups
 			.iter()
 			.find(|g| spec.at(&g.chooser).auto.as_deref() == Some(id));
-		if let Some(g) = group {
-			if self.value(id, env).as_bool() {
-				self.drop_changes(&g.id);
-			}
+		if let Some(g) = group
+			&& self.value(id, env).as_bool()
+		{
+			self.drop_changes(&g.id);
 		}
 	}
 
 	/// A change made on screen, with everything it does to the settings around it.
 	pub fn set(&mut self, id: &str, v: &Value, env: &dyn Env) {
+		// a handle of its own, since the calls below take self mutably
 		let spec = Arc::clone(&self.spec);
 		let s = spec.at(id);
 		let Ok(v) = spec.valid(s, v) else {
@@ -1315,24 +1316,24 @@ impl Model {
 			self.temporary(&gr.id, None);
 			self.drop_changes(&gr.id);
 		}
-		if let Some(gate) = &s.gate {
-			if !self.value(gate, env).as_bool() {
-				self.set(gate, &Value::Bool(true), env);
-			}
+		if let Some(gate) = &s.gate
+			&& !self.value(gate, env).as_bool()
+		{
+			self.set(gate, &Value::Bool(true), env);
 		}
-		if let Some(sw) = &s.auto {
-			if self.value(sw, env).as_bool() {
-				// the others under the checkbox keep what they show
-				let others: Vec<(&str, Value)> = spec
-					.under_switch(sw)
-					.into_iter()
-					.filter(|m| *m != id)
-					.map(|m| (m, self.value(m, env)))
-					.collect();
-				self.write(sw, Value::Bool(false), env);
-				for (m, shown) in others {
-					self.write(m, shown, env);
-				}
+		if let Some(sw) = &s.auto
+			&& self.value(sw, env).as_bool()
+		{
+			// the others under the checkbox keep what they show
+			let others: Vec<(&str, Value)> = spec
+				.under_switch(sw)
+				.into_iter()
+				.filter(|m| *m != id)
+				.map(|m| (m, self.value(m, env)))
+				.collect();
+			self.write(sw, Value::Bool(false), env);
+			for (m, shown) in others {
+				self.write(m, shown, env);
 			}
 		}
 		if spec.is_switch(id) && !v.as_bool() && self.value(id, env).as_bool() {
@@ -1356,6 +1357,7 @@ impl Model {
 	// Store a value where its setting keeps one right now: as a change while
 	// a preset is in force, or as its own.
 	fn write(&mut self, id: &str, v: Value, env: &dyn Env) {
+		// a handle of its own, since the calls below take self mutably
 		let spec = Arc::clone(&self.spec);
 		let s = spec.at(id);
 		if let Some(g) = &s.group {
@@ -1384,11 +1386,10 @@ impl Model {
 	// A change to a preset's row stops the machine choosing, and keeps the
 	// preset it had chosen, since a fresh pick would undo the change.
 	fn pin_chooser(&mut self, group: &str, env: &dyn Env) {
-		let spec = Arc::clone(&self.spec);
-		let Some(c) = spec.group(group).map(|g| g.chooser.as_str()) else {
+		let Some(c) = self.spec.group(group).map(|g| g.chooser.as_str()) else {
 			return;
 		};
-		let Some(sw) = spec.at(c).auto.as_deref() else {
+		let Some(sw) = self.spec.at(c).auto.as_deref() else {
 			return;
 		};
 		if self.value(sw, env).as_bool() {
@@ -1399,8 +1400,11 @@ impl Model {
 	}
 
 	fn drop_changes(&mut self, group: &str) {
-		let spec = Arc::clone(&self.spec);
-		for m in spec.group(group).map_or(&[][..], |g| g.members.as_slice()) {
+		for m in self
+			.spec
+			.group(group)
+			.map_or(&[][..], |g| g.members.as_slice())
+		{
 			self.values.changes.remove(m);
 		}
 		self.values.changed_on.remove(group);
@@ -1409,8 +1413,7 @@ impl Model {
 	/// Fill a group's own set from what is showing, if it has none yet. Run
 	/// once on a first launch, so Custom starts as the preset in force.
 	pub fn fill_custom(&mut self, group: &str, env: &dyn Env) {
-		let spec = Arc::clone(&self.spec);
-		let Some(members) = spec.group(group).map(|g| g.members.as_slice()) else {
+		let Some(members) = self.spec.group(group).map(|g| g.members.as_slice()) else {
 			return;
 		};
 		if members.iter().any(|m| self.values.own.contains_key(m)) {
@@ -1418,7 +1421,7 @@ impl Model {
 		}
 		// the preset's own values, not what a rule shows over them
 		for m in members {
-			let v = self.base(spec.at(m), env);
+			let v = self.base(self.spec.at(m), env);
 			self.values.own.insert(m.clone(), v);
 		}
 	}
@@ -1508,7 +1511,7 @@ impl Model {
 		state: &shcl::Document,
 	) -> Model {
 		let mut m = Model::new(spec);
-		let spec = Arc::clone(&m.spec);
+		let spec = &m.spec;
 		for s in &spec.settings {
 			if s.control == Control::Heading {
 				continue;

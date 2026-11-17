@@ -85,7 +85,7 @@ pub fn timed<T>(counter: &AtomicU64, body: impl FnOnce() -> T) -> T {
 // whole process. A frame that blocks on the display costs wall time but no CPU,
 // so a wall-clock render figure alone can't tell working from waiting.
 #[cfg(windows)]
-#[allow(clippy::unnecessary_wraps)] // the other platforms return None
+#[allow(clippy::unnecessary_wraps, reason = "the other platforms return None")]
 fn cpu_seconds() -> Option<(f64, f64)> {
 	use std::ptr::from_mut;
 	use windows_sys::Win32::Foundation::FILETIME;
@@ -302,30 +302,31 @@ fn latency_report() {
 	}
 	let samples = crate::locks::lock(&SAMPLES);
 	if samples.is_empty() {
+		drop(samples);
 		eprintln!("[latency] nothing timed - a keystroke needs an echo to measure against");
 		return;
 	}
+	let count = samples.len();
 	let mean = |leg: fn(&(u32, u32, u32)) -> u32| {
-		samples.iter().map(|s| u64::from(leg(s))).sum::<u64>() as f64 / samples.len() as f64 / 1e3
+		samples.iter().map(|s| u64::from(leg(s))).sum::<u64>() as f64 / count as f64 / 1e3
 	};
+	let legs = [mean(|s| s.0), mean(|s| s.1), mean(|s| s.2)];
 	let mut totals: Vec<u32> = samples.iter().map(|s| s.0 + s.1 + s.2).collect();
+	drop(samples);
 	totals.sort_unstable();
 	let (median, p95) = percentiles(&totals);
 	#[allow(clippy::unwrap_used, reason = "`samples` is not empty, checked above")]
 	let worst = *totals.last().unwrap();
 	let ms = |us: u32| f64::from(us) / 1e3;
 	eprintln!(
-		"[latency] {} keystrokes: median {:.2}ms  p95 {:.2}ms  worst {:.2}ms",
-		samples.len(),
+		"[latency] {count} keystrokes: median {:.2}ms  p95 {:.2}ms  worst {:.2}ms",
 		ms(median),
 		ms(p95),
 		ms(worst),
 	);
 	eprintln!(
 		"[latency] mean legs: send {:.2}ms  echo {:.2}ms  draw {:.2}ms",
-		mean(|s| s.0),
-		mean(|s| s.1),
-		mean(|s| s.2),
+		legs[0], legs[1], legs[2],
 	);
 }
 

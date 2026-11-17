@@ -4,7 +4,9 @@
 //! The About and Settings windows and the save notice, as the main window
 //! drives them.
 
-use super::{App, EnvFlag, RAISE_REASSERT_IVL, RAISE_REASSERTS, env_flag, key_is_typed, open_url};
+use super::{
+	App, EnvFlag, RAISE_REASSERT_IVL, RAISE_REASSERTS, State, env_flag, key_is_typed, open_url,
+};
 use crate::config;
 use crate::input;
 use std::time::Instant;
@@ -85,10 +87,10 @@ impl App {
 			WindowEvent::CursorMoved { position, .. } => {
 				// a move that changes nothing drawn (no drag, no lit item, no tip
 				// coming or going) gets no frame
-				if let Some(d) = &mut self.dialog {
-					if d.set_cursor(position.x as f32, position.y as f32) {
-						self.dialog_dirty = true;
-					}
+				if let Some(d) = &mut self.dialog
+					&& d.set_cursor(position.x as f32, position.y as f32)
+				{
+					self.dialog_dirty = true;
 				}
 			}
 			WindowEvent::MouseInput {
@@ -106,10 +108,7 @@ impl App {
 						}
 						MouseButton::Right => {
 							// gray the menu's Paste when the clipboard is empty
-							let paste_ok = self.state.as_mut().is_some_and(|s| {
-								s.clipboard.get_clipboard().is_some_and(|t| !t.is_empty())
-							});
-							d.mouse_right(paste_ok);
+							d.mouse_right(clipboard_has_text(self.state.as_mut()));
 							self.dialog_dirty = true;
 						}
 						_ => {}
@@ -145,17 +144,11 @@ impl App {
 							act = d.key_enter(clip);
 						}
 						Key::Named(NamedKey::ContextMenu) => {
-							let paste_ok = self.state.as_mut().is_some_and(|s| {
-								s.clipboard.get_clipboard().is_some_and(|t| !t.is_empty())
-							});
-							d.menu_key(paste_ok);
+							d.menu_key(clipboard_has_text(self.state.as_mut()));
 						}
 						// Shift+F10: the other standard context-menu chord
 						Key::Named(NamedKey::F10) if d.shift_held() => {
-							let paste_ok = self.state.as_mut().is_some_and(|s| {
-								s.clipboard.get_clipboard().is_some_and(|t| !t.is_empty())
-							});
-							d.menu_key(paste_ok);
+							d.menu_key(clipboard_has_text(self.state.as_mut()));
 						}
 						Key::Named(NamedKey::Tab) => d.key_tab(),
 						Key::Named(NamedKey::PageUp) => d.key_page(false),
@@ -476,14 +469,13 @@ impl App {
 			// Keys reverted to default get commented back out after persist wrote the diffs,
 			// so the file returns to the template's default line. Skipped when the write was
 			// deferred.
-			if wrote {
-				if let Some(reverted) = self
+			if wrote
+				&& let Some(reverted) = self
 					.dialog
 					.as_mut()
 					.map(crate::dialog::DialogWin::take_reverted)
-				{
-					config::revert_keys(&reverted);
-				}
+			{
+				config::revert_keys(&reverted);
 			}
 			// The applied values are the new baseline, so a later Apply diffs against the
 			// live state. Without this, picking the open-time value again, such as Bg fit
@@ -502,6 +494,11 @@ impl App {
 		}
 		wrote || refused
 	}
+}
+
+// What a field menu's Paste goes by: grayed while the clipboard has no text.
+fn clipboard_has_text(state: Option<&mut State>) -> bool {
+	state.is_some_and(|s| s.clipboard.get_clipboard().is_some_and(|t| !t.is_empty()))
 }
 
 /// Whether a refused save gets a notice. One the user asked for, an OK or Apply

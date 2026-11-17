@@ -194,8 +194,8 @@ def find_ids() -> list[tuple[str, str | None]]:
 			found.append((where, tid or None))
 	private = private_root()
 	if private:
-		for path in script_tests(private):
-			found.append((f"{PRIVATE_NAME}/{path.relative_to(private)}", script_id(path)))
+		found.extend((f"{PRIVATE_NAME}/{path.relative_to(private)}", script_id(path))
+			for path in script_tests(private))
 	return found
 
 

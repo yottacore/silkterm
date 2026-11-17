@@ -733,6 +733,7 @@ impl State {
 			return None;
 		}
 		let text_w = tip.text_w(generation, |line| text.measure_mono_text(line));
+		// copied out: the tip keeps its own to compare against the next read
 		let (tab, lines) = (tip.tab, tip.lines.clone());
 		let pad = self.text.dip(TAB_TIP_PAD);
 		let line_h = self.text.cell_h;

@@ -178,7 +178,7 @@ pub enum NoFrame {
 /// or a device that wouldn't come back. Nothing else asks again once the load
 /// is gone, and a GPU that stays unavailable mustn't cost a spin. The delay
 /// doubles per miss up to a cap, and a success starts it over.
-#[derive(Debug, Default, Clone, Copy, PartialEq)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub struct Retry {
 	pub misses: u32,
 	pub at: Option<Instant>,
@@ -246,9 +246,20 @@ const SENTINEL_BYTES: usize = (SENTINEL_ROW * SENTINEL_PX) as usize;
 // Odd multiplier = a byte permutation tiled over the texture; neither zeroed
 // nor noise VRAM plausibly reproduces 16KB of it.
 fn sentinel_pattern() -> Vec<u8> {
-	(0..SENTINEL_BYTES)
-		.map(|i| (i as u8).wrapping_mul(151).wrapping_add(43))
-		.collect()
+	(0..SENTINEL_BYTES).map(sentinel_byte).collect()
+}
+
+fn sentinel_byte(i: usize) -> u8 {
+	(i as u8).wrapping_mul(151).wrapping_add(43)
+}
+
+// Checked in place, since a probe runs every couple of seconds per window.
+fn holds_sentinel(block: &[u8]) -> bool {
+	block.len() == SENTINEL_BYTES
+		&& block
+			.iter()
+			.enumerate()
+			.all(|(i, &b)| b == sentinel_byte(i))
 }
 
 /// One probe's verdict (see `vram_check_poll`).
@@ -1030,10 +1041,10 @@ impl Gfx {
 	}
 
 	/// Acquire the frame's render target, or return why there's none this time.
-	pub fn begin_frame(&mut self) -> Result<Frame, NoFrame> {
+	pub fn begin_frame(&self) -> Result<Frame, NoFrame> {
 		match &self.backend {
 			Backend::Native(surface) => {
-				use wgpu::CurrentSurfaceTexture::*;
+				use wgpu::CurrentSurfaceTexture::{Lost, Occluded, Outdated, Suboptimal, Success};
 				match surface.get_current_texture() {
 					Success(surface_tex) | Suboptimal(surface_tex) => {
 						Ok(Frame::Native(surface_tex))
@@ -1177,11 +1188,8 @@ impl Gfx {
 	pub fn vram_check_poll(&mut self) -> Option<VramProbe> {
 		let sent = self.sentinel.as_mut()?;
 		let read = sent.read.poll(&self.device, |data| {
-			let pattern = sentinel_pattern();
-			(
-				data[..SENTINEL_BYTES] == pattern[..],
-				data[SENTINEL_BYTES..] == pattern[..],
-			)
+			let (up, fbo) = data.split_at(SENTINEL_BYTES);
+			(holds_sentinel(up), holds_sentinel(fbo))
 		})?;
 		let Ok((up_ok, fbo_ok)) = read else {
 			return Some(VramProbe::MapFailed);
@@ -1370,7 +1378,7 @@ fn pick_device(
 			})) {
 				Ok(adapter) => adapter,
 				Err(e) => {
-					last.get_or_insert(e.into());
+					last.get_or_insert_with(|| e.into());
 					continue;
 				}
 			};

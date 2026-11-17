@@ -41,17 +41,21 @@ pub fn wrap(text: &str, max_w: f32, mut measure: impl FnMut(&str) -> f32) -> Vec
 			continue;
 		}
 		let mut line = String::new();
+		let mut candidate = String::new();
 		for word in paragraph.split_whitespace() {
-			let candidate = if line.is_empty() {
-				word.to_string()
-			} else {
-				format!("{line} {word}")
-			};
-			if !line.is_empty() && measure(&candidate) > max_w {
+			if line.is_empty() {
+				line.push_str(word);
+				continue;
+			}
+			candidate.clear();
+			candidate.push_str(&line);
+			candidate.push(' ');
+			candidate.push_str(word);
+			if measure(&candidate) > max_w {
 				lines.push(std::mem::take(&mut line));
-				line = word.to_string();
+				line.push_str(word);
 			} else {
-				line = candidate;
+				std::mem::swap(&mut line, &mut candidate);
 			}
 		}
 		if !line.is_empty() {

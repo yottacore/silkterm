@@ -50,16 +50,19 @@ mapfile -t candidates < <(
 # Every text file that mentions either name. Narrowing this to Rust and Markdown
 # is what used to leave the pipeline, the packaging and the installers behind.
 # -I skips binaries, so the wallpaper pack and the icons never get rewritten.
-files=()
+texts=()
 for f in "${candidates[@]}"; do
 	[[ -f "${f}" ]] || continue
 	case "${f}" in utility/rename.bash | Cargo.lock | */Cargo.lock) continue ;; esac
-	if grep -qI -e "${oldDisplay}" -e "${oldId}" -- "${f}" 2>/dev/null; then files+=("${f}"); fi
+	texts+=("${f}")
 done
-
-for f in "${files[@]}"; do
-	sed -i "s/${oldDisplay}/${newDisplay}/g; s/${oldId}/${newId}/g" "${f}"
-done
+files=()
+if ((${#texts[@]})); then
+	mapfile -t -d '' files < <(grep -lI --null -e "${oldDisplay}" -e "${oldId}" -- "${texts[@]}" 2>/dev/null || true)
+fi
+if ((${#files[@]})); then
+	sed -i "s/${oldDisplay}/${newDisplay}/g; s/${oldId}/${newId}/g" "${files[@]}"
+fi
 
 # Paths with the id, deepest component first so a rename never invalidates
 # one still to come. source/assets/silkterm.rc.in is the one a build reads by
@@ -80,10 +83,9 @@ mapfile -t paths < <(
 renamed=0
 for p in "${paths[@]}"; do
 	[[ -e "${p}" ]] || continue
-	base="$(basename "${p}")"
-	parent="$(dirname "${p}")"
+	base="${p##*/}"
 	new="${base//${oldId}/${newId}}"
-	[[ "${parent}" == "." ]] || new="${parent}/${new}"
+	[[ "${p}" != */* ]] || new="${p%/*}/${new}"
 	[[ "${p}" != "${new}" ]] || continue
 	git mv "${p}" "${new}" 2>/dev/null || mv "${p}" "${new}"
 	renamed=$((renamed + 1))
