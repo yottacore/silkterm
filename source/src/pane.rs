@@ -4336,8 +4336,8 @@ fn text_buffer_h(content_h: f32, cell_h: f32) -> f32 {
 fn content_dims(rect: Rect, ctx: &TextCtx) -> (f32, f32, usize, usize) {
 	let cw = (rect.w - 2.0 * ctx.margin).max(ctx.cell_w);
 	let ch = (rect.h - 2.0 * ctx.margin).max(ctx.cell_h);
-	let cols = (cw / ctx.cell_w).floor().max(1.0) as usize;
-	let lines = (ch / ctx.cell_h).floor().max(1.0) as usize;
+	let cols = crate::text::cells_across(cw, ctx.cell_w);
+	let lines = crate::text::cells_across(ch, ctx.cell_h);
 	(cw, ch, cols, lines)
 }
 
@@ -10182,6 +10182,31 @@ mod tests {
 				if rule == Rule::Single {
 					assert!(clipped.is_empty());
 				}
+			}
+		}
+	}
+
+	// A pane exactly N cells wide and tall shows N of each. At a cell of 9.6,
+	// a 144 px wide pane gave its program 14 columns.
+	// Test ID: dfe3r
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_pane_of_whole_cells_shows_every_cell() {
+		use super::content_dims;
+		let mut ctx = crate::text::TextCtx::new_cpu(1.0);
+		ctx.margin = 4.0;
+		for (cell_w, cell_h) in [(9.6, 19.2), (10.65, 21.3), (8.4, 16.8)] {
+			ctx.cell_w = cell_w;
+			ctx.cell_h = cell_h;
+			for n in 1..300 {
+				let rect = Rect {
+					x: 0.0,
+					y: 0.0,
+					w: n as f32 * cell_w + 8.0,
+					h: n as f32 * cell_h + 8.0,
+				};
+				let (_, _, cols, lines) = content_dims(rect, &ctx);
+				assert_eq!((cols, lines), (n, n), "{cell_w}x{cell_h}");
 			}
 		}
 	}

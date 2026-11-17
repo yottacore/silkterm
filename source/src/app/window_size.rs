@@ -1001,7 +1001,7 @@ fn coming_px(was: (u32, u32), told: (u32, u32), ratio: f32, free: bool) -> (u32,
 // Whole cells in a window this many pixels across, after the margins either
 // side and the chrome; one at least. The inverse of `window_px`.
 fn cells_in(px: u32, cell: f32, margin: f32, chrome: f32) -> usize {
-	(((px as f32 - 2.0 * margin - chrome) / cell).floor() as i64).max(1) as usize
+	crate::text::cells_across(px as f32 - 2.0 * margin - chrome, cell)
 }
 
 /// The window a grid asks for: the cells, the margins either side, and the chrome
@@ -1664,6 +1664,29 @@ mod tests {
 			}
 		}
 		assert_eq!(cells_in(0, 10.0, 4.0, 30.0), 1, "never no cells");
+	}
+
+	// The same at cell sizes that aren't binary fractions, where a window of
+	// exactly N cells read back as N-1: 15 cells of 9.6 make 144 px, and 144 /
+	// 9.6 came to just under 15 in f32.
+	// Test ID: dfe3q
+	#[test]
+	fn a_grid_reads_back_at_any_cell_size() {
+		for cell in [7.2, 8.4, 9.6, 10.65, 10.8, 13.33, 16.2, 19.2, 25.6] {
+			for (margin, chrome) in [(0.0, 0.0), (4.0, 0.0), (4.0, 30.0), (6.5, 31.5)] {
+				for n in 1..400 {
+					let (w, h) = window_px(n, n, cell, cell, margin, chrome);
+					assert_eq!(
+						(
+							cells_in(w, cell, margin, 0.0),
+							cells_in(h, cell, margin, chrome)
+						),
+						(n, n),
+						"{cell} {margin} {chrome}"
+					);
+				}
+			}
+		}
 	}
 
 	// A resize that leaves a Wayland window wholly on one of the 2 outputs

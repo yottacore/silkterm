@@ -37,7 +37,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 - At some cell widths a window or pane exactly N cells wide shows N-1
 	- ID: 2026111708192137
 	- Type: Bug
-	- Status: Queued
+	- Status: Done
 	- Severity: Low
 	- Opened: 20261117-081921
 	- Opened by: CC
@@ -46,6 +46,19 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Incorrect behavior: The grid is counted by dividing the width by the cell width and rounding down in single precision. With a cell of 9.6, 15 cells make 144, which divides back to just under 15, so it counts 14. The window size read back from a grid, and the pane's own column count, both do this.
 	- Expected behavior: A width that holds N whole cells counts as N.
 	- Note: Found while fixing 2026111708050191. Cell sizes that are binary fractions, as in ddyqp, never hit it. Whether a real font's cell lands on one isn't known.
+	- Reproduced: 20261117 in unit tests. At a cell of 9.6, a length of 144 px counted 14 cells, and the window's and the pane's counts failed the same way.
+	- Actual cause: As described. The window's size and the pane's grid each floored the width over the cell in f32, and a product that rounds down a hair reads as one cell short.
+	- Actual fix: Both counts go through one helper, which counts a cell when the length is within a hundredth of a pixel of it.
+	- Decisions:
+		- 20261117: The slack is 0.01 px. It's well past the f32 error at the largest window, and the part of the last cell it lets through can't be seen. The text buffer doesn't wrap, so a column that much over the width still draws.
+		- 20261117: The width a grid asks for, `window_px`, is left as it is. It still rounds up, which the zoom fix in 2026111708050191 relies on.
+	- Swept: every place a grid count comes from a length over a cell. There are 2, the window's `cells_in` and the pane's `content_dims`, and both use the helper now. The other floors over a cell map a mouse point to a cell, and the command line's split size is a ratio, not a count.
+	- Verified: 20261117. The 3 new tests failed with the slack at 0 and pass with it. dfe3c and ddyqp still pass. The quick gate passed, all 5 areas.
+	- Test case: dfe3p `a_length_of_whole_cells_counts_every_cell`, dfe3q `a_grid_reads_back_at_any_cell_size`, dfe3r `a_pane_of_whole_cells_shows_every_cell`.
+	- Branch: nov17-2026111708192137
+	- Commit: 79c98a84
+	- Acceptance signoff: Self-closed: the bug was reproduced in tests, which failed before the fix and pass after.
+	- Closed: 20261117-082900
 
 - With Resize window on zoom on, a zoom on the alt screen adds a column
 	- ID: 2026111708050191

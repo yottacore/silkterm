@@ -1294,6 +1294,18 @@ fn shaped_ink(
 	})
 }
 
+/// Whole cells across `len` pixels, one at least. A length a grid asked for
+/// can come back a hair short in f32: 15 cells of 9.6 make 144, and 144 / 9.6
+/// is just under 15. So a length within `CELL_SLACK_PX` of the next whole cell
+/// counts it.
+pub fn cells_across(len: f32, cell: f32) -> usize {
+	((len + CELL_SLACK_PX) / cell).floor().max(1.0) as usize
+}
+
+// Well past the f32 error in a window's width or height, and too little of a
+// cell's last pixel to see.
+const CELL_SLACK_PX: f32 = 0.01;
+
 // A fractional cell to the nearest whole pixel, for the shell.
 fn nearest_px(cell: f32) -> u16 {
 	cell.round().max(1.0) as u16
@@ -1337,6 +1349,34 @@ mod tests {
 		assert_eq!(nearest_px(13.4), 13);
 		assert_eq!(nearest_px(16.0), 16);
 		assert_eq!(nearest_px(0.2), 1, "never no cell at all");
+	}
+
+	// A length of exactly N cells counts N at any cell size. In f32, 15 cells
+	// of 9.6 came to 144 px, and 144 / 9.6 to just under 15, so it counted 14.
+	// Test ID: dfe3p
+	#[test]
+	fn a_length_of_whole_cells_counts_every_cell() {
+		assert_eq!(cells_across(144.0, 9.6), 15);
+		assert_eq!(
+			cells_across(143.9, 9.6),
+			14,
+			"a real part cell is still cut"
+		);
+		assert_eq!(cells_across(0.0, 9.6), 1, "never no cells");
+		assert_eq!(cells_across(-5.0, 9.6), 1);
+		for cell in [
+			7.0, 8.4, 9.6, 10.65, 10.8, 12.578_125, 13.33, 16.2, 19.2, 24.0,
+		] {
+			for n in 1..1000 {
+				let len = n as f32 * cell;
+				assert_eq!(cells_across(len, cell), n, "{cell} x {n}");
+				assert_eq!(
+					cells_across(len - 0.5, cell),
+					(n - 1).max(1),
+					"{cell} x {n} short"
+				);
+			}
+		}
 	}
 
 	// A family resolved again, as on every font change and new window, comes
