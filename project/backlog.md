@@ -483,7 +483,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 - Launch reads and parses config.shcl about 12 times
 	- ID: 2026111623500006
 	- Type: Enhancement
-	- Status: Queued
+	- Status: Done
 	- Priority: Low
 	- Opened: 20261116-235000
 	- Opened by: CC
@@ -492,6 +492,20 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- Each launch step reads the file again, and the last one parses the same text 3 more times.
 		- Read and parse it once.
 		- Detail: `detail_backlog.md`, under this ID.
+	- Progress log:
+		- 20261117: Counted on a launch with no display, which stops after the settings read. A launch with a current file opened `config.shcl` 10 times and ran 22 shcl parses, 20 of them on the file's text. Now it opens it once and runs 11 parses, 9 on the file's text. A first launch with no file went from 11 opens to 2.
+	- Decisions:
+		- 20261117: The file is read once before the launch steps. Each step works on the text the one before it left, and a write that fails, or that the test guard skips, reads the file again.
+		- 20261117: The last step parses once, and that document feeds the complaints, the values and the settings model. A write's restated messages parse once too.
+		- 20261117: Departs from "parse it once". Each step still checks the text it gets for an older format, since a step can change the text. The check skips its second parse for a file with no errors, which shcl's upgrade leaves as it is anyway. The legacy check parses only when a flat old name is there. The state move parses its second copy only for a file that has state in it.
+		- 20261117: The `walk_settings` path change in the detail was tried and measured at about 2% of a walk, which is about 48 microseconds. Not kept.
+	- Swept: every `std::fs::read` of the settings path inside `load`, all of them now through the one read. `restated_launch_messages` shared the double parse and takes the single one. Saves and the dialog read the file on their own and aren't part of a launch.
+	- Verified: 20261117. dfe7m and dfe7n pass, and both fail with a step that reads the disk again or a write the next step doesn't see. The quick gate passed: format, clippy, 1488 unit tests, script lints, and docs.
+	- Branch: nov17-2026111623500006
+	- Commit: 99bdc11a
+	- Test case: `the_launch_steps_read_the_settings_file_once` (dfe7m), `each_launch_step_reads_what_the_one_before_it_wrote` (dfe7n)
+	- Acceptance signoff: Self-closed: internal change, measured before and after, and its tests fail with the single read broken.
+	- Closed: 20261117-104300
 
 - Smaller allocations made on every frame in the render and dialog paths
 	- ID: 2026111623500007
