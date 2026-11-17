@@ -34,62 +34,6 @@ Going forward, new issues in the new template at the bottom of this file will go
 
 ## Issues
 
-- The window doesn't paint while the GPU is busy or short on memory, and stays blank after the load ends
-	- ID: 2026100312470535
-	- Type: Bug
-	- Status: Waiting on UAT
-		- 20261025: Only the look on b23's own desktop is left, and that has to be done by hand.
-	- Stand-in: none (20261028). The blank window was seen only on b23's desktop, through the X11 GL swap and a virtual desktop switch. A headless display doesn't have either, and the 10-03 tries on vm925w never reproduced it.
-	- Needs hand testing: Take a dogfood look on b23 with the GPU busy or nearly full. Move to another desktop and back, end the load, and leave the window alone. It should paint on its own. Try it once with "Free resources when idle" on and short idle times too. Started from a terminal with `SILK_IDLEDBG=1`, it prints any refused frame or rebuild.
-		- 20261025: The dogfood pool now has build dedvg for Linux and Windows. It was built from dev at a9daddc and has the 10-24 and 10-25 fixes. A window started before the next launch still runs de5r9.
-	- Severity: High
-	- Opened: 20261003-124705
-	- Opened by: JC
-	- Assigned to: CC
-	- Related IDs: 2026100312470540, 2026100418225504
-	- Target OS: All
-	- Test environment: b23
-	- Target version: rc.1
-	- Steps to reproduce:
-		- Have something else keep the GPU busy, or hold most of its memory.
-		- Move to another virtual desktop and back to one with a SilkTerm window.
-	- Incorrect behavior:
-		- SilkTerm doesn't paint. The only thing visible is the window frame, and other windows and the desktop behind the terminal area.
-		- When whatever was using the GPU ends, the blank window is still not repainted. Switching to a different virtual desktop and back repaints it.
-	- Expected behavior: The window paints as soon as the GPU can take the work, and never stays blank once the load is gone.
-	- Reproduced: No. It was seen on b23 when moving between virtual desktops. It isn't known yet if a window left on screen would also stop painting.
-	- Possible cause: A frame that can't get its surface or GPU device under that load is dropped, and nothing tries again until the desktop asks for a redraw.
-	- Actual cause:
-		- A frame the GPU refused was dropped. The pass that asked for it had already cleared its redraw flag, so nothing asked again until the desktop sent another redraw. That applies to a surface that timed out or went out of date, and on X11 a buffer swap that failed, whose error was ignored.
-		- A device that couldn't be built again after the idle release waited for the next key, click, or focus change.
-		- Which one happened on b23 isn't known. The terminal window always draws through GL on X11, so the failed swap and the rebuild are the likely ones. It also isn't known whether "Free resources when idle" was on at the time.
-	- Notes:
-		- Before RC1.
-		- 20261003: At filing, b23's GPU had 7.7 GB of its 8 GB in use.
-		- 20261003: Settings and the notice window had the same gap, and get the same retry.
-		- 20261003: For 2026100312470540: a rebuild refused after the idle release now tries again by itself while the window shows, with a wait that grows to a few seconds.
-		- 20261003: Some cases aren't handled. A GL error that arrives after the swap has returned isn't seen. A GPU out of memory while getting a surface on the native path ends the program rather than blanking it, from wgpu's default error handler. wgpu expects a lost surface to be made again, but the code only reconfigures it, so a lost surface would keep being refused. While the GPU keeps timing out, each try can stall the window for about a second inside wgpu.
-		- 20261004: Falling back to software rendering when the card can't make a device is filed as 2026100418225504.
-	- Actual fix: A refused frame is drawn again after a short wait that doubles up to a couple of seconds, and starts over once a frame gets through. A refused rebuild stays pending and is tried again the same way, with longer waits, while the window shows. A refused frame no longer requests more animation frames, so the wait sets the pace while the GPU refuses frames.
-	- Progress log:
-		- 20261003: Verified: both new tests fail with the retry taken out and pass with it. The full unit suite, clippy for Linux and Windows, and fmt pass.
-		- 20261003: Verified: SilkTerm tried 3 refused rebuilds again at about 0.25, 0.5, and 1 s, and the device came back without any input. SilkTerm backed off 8 refused frames from 16 ms to 2 s, and the window painted again without any input. An idle release and wake with nothing refused still works.
-		- 20261003: Tried on vm925w (RTX 2060, 6 GB) with another program keeping the GPU at 100% and using 4.6 GB, then again with memory full until the driver refused more and longer GPU work. The build from before the fix and the fixed build both kept painting: on screen while typed into, after minimize and restore, and after a move to another virtual desktop and back. Neither went blank. Both still showed the right picture 3 and 10 s after the load ended, without any input.
-		- 20261003: It was the same with Free resources when idle on and a 5 s idle time. The device was let go and built again under load each time, in about 1 s, and no rebuild was refused. The fixed build logged one refused frame now and then around a minimize, drawn again after 16 ms, never two in a row.
-		- 20261003: With Transparency on, which draws through DX12 on Windows, both builds did the same thing: a window restored without focus was let go after the idle time while still on screen, went black when the load ended, and stayed black until typed into. The fix doesn't change this, since a window let go on purpose doesn't need a frame. It wasn't tried without load, because that run hung vm925w and didn't finish.
-		- 20261003: Also seen in both builds with Free resources when idle on, under load: after waking, the window sometimes showed only the last character of the prompt instead of the earlier text, until typed into.
-		- 20261003: The failed swap path wasn't tested on Windows. The Windows terminal draws through wgpu on Vulkan, or DX12 with Transparency, rather than the X11 GL swap b23 uses. vm925w doesn't have WSL2, so nothing was run through Mesa on the same GPU.
-		- 20261003: The black window and the missing text seen in both builds are filed as 2026100319134501 and 2026100319134502.
-		- 20261023: Both tests passed in the full run at 2da75a7. The b23 look isn't done yet. No dogfood or desktop runs were made then.
-		- 20261025: Both tests passed again in both full runs at e95b81b. The b23 look was moved to the hand testing row, since it needs the visible desktop.
-		- 20261026: Both tests passed again in the full run at fab6815.
-		- 20261028: Both tests passed again in the full run at 64f3584.
-	- Swept: every frame and rebuild site. They're the terminal's acquire and GL swap in `render_with`, called from both `about_to_wait` and the desktop's redraw, the dialog and notice windows' acquire and swap in `DialogWin::render`, and `rebuild_gpu`, which the console-return heal also calls. Nothing else matches `grep -n 'begin_frame\|end_frame\|Gfx::rebuild'`.
-	- Branch: gpuload
-	- Commit: 8cb6a4d
-	- Test case: `a_refused_frame_is_drawn_again_on_a_backoff` (ddf4e) and `a_refused_rebuild_stays_pending_and_is_tried_again` (ddf4f). The GL swap result doesn't have a test, since it needs a real GL context.
-	- Note: 20261003, Free resources when idle was on for some of the windows that went blank and off for others. Which ones isn't remembered, so both the frame path and the rebuild path stay suspects.
-
 - Add a contributor license agreement, like nano-git-db's
 	- ID: 2026101906582193
 	- Type: Task
@@ -11503,6 +11447,63 @@ Going forward, new issues in the new template at the bottom of this file will go
 			- Q: Today, picking a named profile leaves the Custom values for the 16 rows in the config file, unused, so Custom can bring them back later. Under the design a value in the file is set by hand and in use. So on the first launch of the new build, a file like that can either have those lines deleted, and look and act as it does now, or keep them, and they take effect at once with the dropdown reading Custom. Which one?
 				- A: Keep them.
 		- 20261009: It's held. The Settings dialog is going to be rethought again, so the first 3 questions wait for that.
+
+- The window doesn't paint while the GPU is busy or short on memory, and stays blank after the load ends
+	- ID: 2026100312470535
+	- Type: Bug
+	- Status: Deferred
+		- 20261117: Waiting to see if it ever happens again.
+	- Stand-in: none (20261028). The blank window was seen only on b23's desktop, through the X11 GL swap and a virtual desktop switch. A headless display doesn't have either, and the 10-03 tries on vm925w never reproduced it.
+	- Needs hand testing: Take a dogfood look on b23 with the GPU busy or nearly full. Move to another desktop and back, end the load, and leave the window alone. It should paint on its own. Try it once with "Free resources when idle" on and short idle times too. Started from a terminal with `SILK_IDLEDBG=1`, it prints any refused frame or rebuild.
+		- 20261025: The dogfood pool now has build dedvg for Linux and Windows. It was built from dev at a9daddc and has the 10-24 and 10-25 fixes. A window started before the next launch still runs de5r9.
+	- Severity: High
+	- Opened: 20261003-124705
+	- Opened by: JC
+	- Assigned to: CC
+	- Related IDs: 2026100312470540, 2026100418225504
+	- Target OS: All
+	- Test environment: b23
+	- Target version: rc.1
+	- Steps to reproduce:
+		- Have something else keep the GPU busy, or hold most of its memory.
+		- Move to another virtual desktop and back to one with a SilkTerm window.
+	- Incorrect behavior:
+		- SilkTerm doesn't paint. The only thing visible is the window frame, and other windows and the desktop behind the terminal area.
+		- When whatever was using the GPU ends, the blank window is still not repainted. Switching to a different virtual desktop and back repaints it.
+	- Expected behavior: The window paints as soon as the GPU can take the work, and never stays blank once the load is gone.
+	- Reproduced: No. It was seen on b23 when moving between virtual desktops. It isn't known yet if a window left on screen would also stop painting.
+	- Possible cause: A frame that can't get its surface or GPU device under that load is dropped, and nothing tries again until the desktop asks for a redraw.
+	- Actual cause:
+		- A frame the GPU refused was dropped. The pass that asked for it had already cleared its redraw flag, so nothing asked again until the desktop sent another redraw. That applies to a surface that timed out or went out of date, and on X11 a buffer swap that failed, whose error was ignored.
+		- A device that couldn't be built again after the idle release waited for the next key, click, or focus change.
+		- Which one happened on b23 isn't known. The terminal window always draws through GL on X11, so the failed swap and the rebuild are the likely ones. It also isn't known whether "Free resources when idle" was on at the time.
+	- Notes:
+		- Before RC1.
+		- 20261003: At filing, b23's GPU had 7.7 GB of its 8 GB in use.
+		- 20261003: Settings and the notice window had the same gap, and get the same retry.
+		- 20261003: For 2026100312470540: a rebuild refused after the idle release now tries again by itself while the window shows, with a wait that grows to a few seconds.
+		- 20261003: Some cases aren't handled. A GL error that arrives after the swap has returned isn't seen. A GPU out of memory while getting a surface on the native path ends the program rather than blanking it, from wgpu's default error handler. wgpu expects a lost surface to be made again, but the code only reconfigures it, so a lost surface would keep being refused. While the GPU keeps timing out, each try can stall the window for about a second inside wgpu.
+		- 20261004: Falling back to software rendering when the card can't make a device is filed as 2026100418225504.
+	- Actual fix: A refused frame is drawn again after a short wait that doubles up to a couple of seconds, and starts over once a frame gets through. A refused rebuild stays pending and is tried again the same way, with longer waits, while the window shows. A refused frame no longer requests more animation frames, so the wait sets the pace while the GPU refuses frames.
+	- Progress log:
+		- 20261003: Verified: both new tests fail with the retry taken out and pass with it. The full unit suite, clippy for Linux and Windows, and fmt pass.
+		- 20261003: Verified: SilkTerm tried 3 refused rebuilds again at about 0.25, 0.5, and 1 s, and the device came back without any input. SilkTerm backed off 8 refused frames from 16 ms to 2 s, and the window painted again without any input. An idle release and wake with nothing refused still works.
+		- 20261003: Tried on vm925w (RTX 2060, 6 GB) with another program keeping the GPU at 100% and using 4.6 GB, then again with memory full until the driver refused more and longer GPU work. The build from before the fix and the fixed build both kept painting: on screen while typed into, after minimize and restore, and after a move to another virtual desktop and back. Neither went blank. Both still showed the right picture 3 and 10 s after the load ended, without any input.
+		- 20261003: It was the same with Free resources when idle on and a 5 s idle time. The device was let go and built again under load each time, in about 1 s, and no rebuild was refused. The fixed build logged one refused frame now and then around a minimize, drawn again after 16 ms, never two in a row.
+		- 20261003: With Transparency on, which draws through DX12 on Windows, both builds did the same thing: a window restored without focus was let go after the idle time while still on screen, went black when the load ended, and stayed black until typed into. The fix doesn't change this, since a window let go on purpose doesn't need a frame. It wasn't tried without load, because that run hung vm925w and didn't finish.
+		- 20261003: Also seen in both builds with Free resources when idle on, under load: after waking, the window sometimes showed only the last character of the prompt instead of the earlier text, until typed into.
+		- 20261003: The failed swap path wasn't tested on Windows. The Windows terminal draws through wgpu on Vulkan, or DX12 with Transparency, rather than the X11 GL swap b23 uses. vm925w doesn't have WSL2, so nothing was run through Mesa on the same GPU.
+		- 20261003: The black window and the missing text seen in both builds are filed as 2026100319134501 and 2026100319134502.
+		- 20261023: Both tests passed in the full run at 2da75a7. The b23 look isn't done yet. No dogfood or desktop runs were made then.
+		- 20261025: Both tests passed again in both full runs at e95b81b. The b23 look was moved to the hand testing row, since it needs the visible desktop.
+		- 20261026: Both tests passed again in the full run at fab6815.
+		- 20261028: Both tests passed again in the full run at 64f3584.
+		- 20261117: Deferred, to wait and see if it happens again. The b23 look is held until it does.
+	- Swept: every frame and rebuild site. They're the terminal's acquire and GL swap in `render_with`, called from both `about_to_wait` and the desktop's redraw, the dialog and notice windows' acquire and swap in `DialogWin::render`, and `rebuild_gpu`, which the console-return heal also calls. Nothing else matches `grep -n 'begin_frame\|end_frame\|Gfx::rebuild'`.
+	- Branch: gpuload
+	- Commit: 8cb6a4d
+	- Test case: `a_refused_frame_is_drawn_again_on_a_backoff` (ddf4e) and `a_refused_rebuild_stays_pending_and_is_tried_again` (ddf4f). The GL swap result doesn't have a test, since it needs a real GL context.
+	- Note: 20261003, Free resources when idle was on for some of the windows that went blank and off for others. Which ones isn't remembered, so both the frame path and the rebuild path stay suspects.
 
 - Windows Terminal handoff
 	- ID: 2026092810510800
