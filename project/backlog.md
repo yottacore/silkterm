@@ -195,27 +195,6 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- It's stalled until a cosmic-text release takes fontdb 0.24 or later, and winit's sctk-adwaita drops ab_glyph.
 	- Held for a cosmic-text release on fontdb 0.24 or later, and an sctk-adwaita without ab_glyph.
 
-- Window auto-resize stopped working
-	- ID: 2026111700130407
-	- Type: Bug
-	- Status: Queued
-		- 20261117: The answer narrows it to a window moved to another monitor, which doesn't take the size kept for that monitor.
-	- Opened: 20261117-001304
-	- Opened by: JC
-	- Target version: rc.1
-	- Incorrect behavior: Window auto-resize stopped working.
-	- Notes:
-		- Possibly only when running Muffer?
-	- Reproduced: No. No doc or setting is called auto-resize, so each kind of automatic resize was tried, on the dev build and on the dogfood build from 11-10 that was running when this was filed.
-	- Progress log:
-		- 20261117: On Xvfb, with and without xfwm4, a program in the pane was told each new grid after every window resize. That held on the normal screen, on the alt screen with mouse tracking on, and with a frame every 50 ms in synchronized-output marks, like muffer. It also held for a window resized after its device was let go.
-		- 20261117: With Resize window on zoom on, each zoom resized the window and kept the rows. The columns were one more after the first zoom on the alt screen, and stayed there.
-		- 20261117: dpirand on X11 passed 5 cases, with drags, moves, zooms, resizes and relaunches across 2 to 4 monitors.
-		- 20261117: Not tried: monitors waking on a real desktop, which the rigs can't stand in for.
-	- Decisions:
-		- 20261117: No test yet. Which behavior to pin waits on the answer.
-		- 20261117: Work only the move to another monitor. dpirand passes that on X11, so a `SILK_MONDBG=1` log from the desktop where it failed would show where it goes wrong.
-
 - Tab labels and the window title are worked out again on every frame
 	- ID: 2026111623500001
 	- Type: Enhancement
@@ -10894,6 +10873,29 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Test case: dd5nn (`cicd/tests/engine/run.bash`) now checks for at least 5 in the committed config and 5 tries when unset. Both checks failed on the old values.
 	- Acceptance signoff: Self-closed: mechanical.
 	- Closed: 20261007-184756
+
+- Window auto-resize stopped working
+	- ID: 2026111700130407
+	- Type: Bug
+	- Status: Deferred
+		- 20261117: Couldn't reproduce. It works now, even with muffer running.
+	- Opened: 20261117-001304
+	- Opened by: JC
+	- Target version: rc.1
+	- Incorrect behavior: Window auto-resize stopped working.
+	- Notes:
+		- Possibly only when running Muffer?
+	- Reproduced: No. No doc or setting is called auto-resize, so each kind of automatic resize was tried, on the dev build and on the dogfood build from 11-10 that was running when this was filed.
+	- Progress log:
+		- 20261117: On Xvfb, with and without xfwm4, a program in the pane was told each new grid after every window resize. That held on the normal screen, on the alt screen with mouse tracking on, and with a frame every 50 ms in synchronized-output marks, like muffer. It also held for a window resized after its device was let go.
+		- 20261117: With Resize window on zoom on, each zoom resized the window and kept the rows. The columns were one more after the first zoom on the alt screen, and stayed there.
+		- 20261117: dpirand on X11 passed 5 cases, with drags, moves, zooms, resizes and relaunches across 2 to 4 monitors.
+		- 20261117: Not tried: monitors waking on a real desktop, which the rigs can't stand in for.
+		- 20261117: The answer narrowed it to a window moved to another monitor, which doesn't take the size kept for that monitor.
+		- 20261117: JC found it working again, even with muffer running.
+	- Decisions:
+		- 20261117: No test yet. Which behavior to pin waits on the answer.
+		- 20261117: Deferred as couldn't reproduce. If it comes back, a `SILK_MONDBG=1` log from a window moved to the other monitor would show where it goes wrong.
 
 - Performance profile: the Profile dropdown is a presets group read off the rows it sets
 	- ID: 2026100910295902
