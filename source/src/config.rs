@@ -451,15 +451,35 @@ pub fn remembered_window_at(
 	monitor: Option<&str>,
 	per_monitor: bool,
 ) -> KeptWindow {
-	let last = KeptWindow {
+	remembered_in(
+		last_window(settings),
+		&settings.monitor_sizes,
+		monitor,
+		per_monitor,
+	)
+}
+
+/// The last size the window was given anywhere.
+pub fn last_window(settings: &Settings) -> KeptWindow {
+	KeptWindow {
 		columns: settings.remembered_columns,
 		rows: settings.remembered_rows,
 		font_zoom: settings.remembered_font_zoom,
-	};
+	}
+}
+
+/// The same from the fields it reads, for a caller that borrows the model
+/// beside them mutably.
+pub fn remembered_in(
+	last: KeptWindow,
+	sizes: &[MonitorSize],
+	monitor: Option<&str>,
+	per_monitor: bool,
+) -> KeptWindow {
 	monitor
 		.filter(|_| per_monitor)
-		.and_then(|key| monitor_entry(&settings.monitor_sizes, key))
-		.map(|at| &settings.monitor_sizes[at])
+		.and_then(|key| monitor_entry(sizes, key))
+		.map(|at| &sizes[at])
 		.map_or(last, |m| KeptWindow {
 			columns: m.columns,
 			rows: m.rows,

@@ -459,7 +459,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 - A Settings change copies the whole settings model
 	- ID: 2026111623500005
 	- Type: Enhancement
-	- Status: Queued
+	- Status: Done
 	- Priority: Low
 	- Opened: 20261116-235000
 	- Opened by: CC
@@ -467,6 +467,18 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Requirements:
 		- Each change, including each step of a slider drag, clones the model before setting one value.
 		- Detail: `detail_backlog.md`, under this ID.
+	- Progress log:
+		- 20261117: Measured with every setting stored (96 values): the copy cost 135 allocations, and a change 617, against 480 for the fill after it.
+		- 20261117: The Settings rules now read only the fields they need, never the model, so a change and a reset set the model in place. A theme pick's font does the same. A change now costs 482 allocations, the fill and 2 more.
+	- Decisions:
+		- 20261117: The theme save's what-if for colors under a switch still works on a copy, since it must leave the stored values alone and runs only on a save.
+	- Branch: nov17-2026111623500005
+	- Commit: fb77c7f4
+	- Test case: dfe70 `a_change_does_not_copy_the_model`. A change or a reset with every setting stored costs less than a quarter of the stored count beyond a fill.
+	- Verified: 20261117. dfe70 fails with the copy put back (617 against a fill's 480) and passes with the fix. The quick run passes, all five areas, 1486 unit tests. Miri wasn't run, since the quick run has no Miri area and the new test is skipped under Miri.
+	- Swept: every `model.clone()` in the tree. `set`, `reset` and the theme font path are fixed. The theme save's what-if is kept, per Decisions. The other is in a config test. Every `Env::new` caller still builds through the same fields.
+	- Acceptance signoff: Self-closed: the cost was pinned by a test that fails on the old code, and the rules read the same values as before.
+	- Closed: 20261117-101357
 
 - Launch reads and parses config.shcl about 12 times
 	- ID: 2026111623500006

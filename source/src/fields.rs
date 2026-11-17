@@ -506,32 +506,73 @@ pub fn load(config: &shcl::Document) -> knobs::Model {
 /// What the program gives for a rule, and the themes as presets.
 #[derive(Debug)]
 pub struct Env<'a> {
-	settings: &'a Settings,
 	monitor: Option<&'a str>,
-	wallpaper: Option<crate::autotheme::Derived>,
 	mode: crate::theme::Mode,
 	per_monitor: bool,
+	facts: Facts<'a>,
+}
+
+// The settings fields the rules and presets read. Never the model, so a
+// change can borrow the model mutably while an Env lives.
+#[derive(Debug)]
+struct Facts<'a> {
+	wallpaper: Option<crate::autotheme::Derived>,
+	last: config::KeptWindow,
+	monitor_sizes: &'a [config::MonitorSize],
+	stepped_profile: Option<crate::profile::Profile>,
+	tested_profile: Option<crate::profile::Profile>,
+	found_picture: &'a str,
+	user_themes: &'a [crate::theme::UserTheme],
+}
+
+// Field by field rather than through a function, so the borrows stay off
+// `model` beside them.
+macro_rules! facts {
+	($s:expr) => {
+		Facts {
+			wallpaper: $s.wallpaper_derived,
+			last: config::last_window($s),
+			monitor_sizes: &$s.monitor_sizes,
+			stepped_profile: $s.stepped_profile,
+			tested_profile: $s.tested_profile,
+			found_picture: &$s.found_picture,
+			user_themes: &$s.user_themes,
+		}
+	};
 }
 
 impl<'a> Env<'a> {
-	/// Settings fields knobs stores are read off the model, since `settings`
-	/// may not be filled from it yet.
 	pub fn new(settings: &'a Settings, monitor: Option<&'a str>) -> Env<'a> {
-		let plain = |key: Key| settings.model.value(key.name(), &knobs::NoEnv);
+		Env::over(&settings.model, monitor, facts!(settings))
+	}
+
+	/// Settings fields knobs stores are read off the model, since the fields
+	/// may not be filled from it yet.
+	fn over(model: &knobs::Model, monitor: Option<&'a str>, facts: Facts<'a>) -> Env<'a> {
+		let plain = |key: Key| model.value(key.name(), &knobs::NoEnv);
 		Env {
-			settings,
 			monitor,
-			wallpaper: settings.wallpaper_derived,
 			mode: Choice::parse(plain(Key::ThemeMode).as_text())
 				.unwrap_or(crate::theme::Mode::Dark),
 			per_monitor: plain(Key::RememberPerMonitor).as_bool(),
+			facts,
 		}
 	}
 }
 
+// The model to change, and an Env over the rest of the settings, so a change
+// needn't copy the model first.
+fn split<'a>(
+	settings: &'a mut Settings,
+	monitor: Option<&'a str>,
+) -> (&'a mut knobs::Model, Env<'a>) {
+	let env = Env::over(&settings.model, monitor, facts!(settings));
+	(&mut settings.model, env)
+}
+
 impl knobs::Env for Env<'_> {
 	fn rule(&self, name: &str) -> Option<Value> {
-		let s = self.settings;
+		let s = &self.facts;
 		match name {
 			"system_font_family" => crate::sysfont::monospace()
 				.family
@@ -543,7 +584,8 @@ impl knobs::Env for Env<'_> {
 				.filter(|px| *px >= 4.0)
 				.map(float),
 			"remembered_columns" | "remembered_rows" => {
-				let kept = config::remembered_window_at(s, self.monitor, self.per_monitor);
+				let kept =
+					config::remembered_in(s.last, s.monitor_sizes, self.monitor, self.per_monitor);
 				let n = if name == "remembered_columns" {
 					kept.columns
 				} else {
@@ -551,8 +593,8 @@ impl knobs::Env for Env<'_> {
 				};
 				Some(Value::Int(n as i64))
 			}
-			"wallpaper_fg" => self.wallpaper.map(|d| hex(d.fg)),
-			"wallpaper_cursor" => self.wallpaper.map(|d| hex(d.cursor)),
+			"wallpaper_fg" => s.wallpaper.map(|d| hex(d.fg)),
+			"wallpaper_cursor" => s.wallpaper.map(|d| hex(d.cursor)),
 			"machine_profile" => {
 				// a step only ever goes down from the tested pick
 				let pick = match (s.stepped_profile, s.tested_profile) {
@@ -563,7 +605,7 @@ impl knobs::Env for Env<'_> {
 				Some(Value::Text(pick.key().to_string()))
 			}
 			"desktop_opener" => Some(Value::Text(crate::links::desktop_opener().to_string())),
-			"found_picture" => Some(Value::Text(s.found_picture.clone())),
+			"found_picture" => Some(Value::Text(s.found_picture.to_string())),
 			"usual_folder" => Some(Value::Text(config::WALLPAPER_DIR_TOKEN.to_string())),
 			_ => None,
 		}
@@ -573,7 +615,7 @@ impl knobs::Env for Env<'_> {
 		if group != THEME {
 			return None;
 		}
-		let user = &self.settings.user_themes;
+		let user = self.facts.user_themes;
 		let name = crate::theme::all_names(user)
 			.into_iter()
 			.find(|n| n.eq_ignore_ascii_case(key.trim()))?;
@@ -661,10 +703,8 @@ pub fn set(settings: &mut Settings, key: Key, v: &Value, monitor: Option<&str>) 
 	if field(key).is_none() {
 		return;
 	}
-	// a copy to change, since Env borrows the settings the model sits in
-	let mut model = settings.model.clone();
-	model.set(key.name(), v, &Env::new(settings, monitor));
-	settings.model = model;
+	let (model, env) = split(settings, monitor);
+	model.set(key.name(), v, &env);
 	fill(settings, monitor);
 	if key == Key::Theme {
 		follow_theme_font(settings, monitor);
@@ -676,10 +716,8 @@ pub fn reset(settings: &mut Settings, key: Key, monitor: Option<&str>) {
 	if field(key).is_none() {
 		return;
 	}
-	// a copy to change, since Env borrows the settings the model sits in
-	let mut model = settings.model.clone();
-	model.reset(key.name(), &Env::new(settings, monitor));
-	settings.model = model;
+	let (model, env) = split(settings, monitor);
+	model.reset(key.name(), &env);
 	fill(settings, monitor);
 	// the theme's arrow is a pick of the default theme
 	if key == Key::Theme {
@@ -715,9 +753,8 @@ fn follow_theme_font(settings: &mut Settings, monitor: Option<&str>) {
 	let name = chosen(settings, Key::Theme);
 	for (key, v) in theme_font(settings, &name) {
 		if get(settings, key).as_ref() != Some(&v) {
-			let mut model = settings.model.clone();
-			model.set(key.name(), &v, &Env::new(settings, monitor));
-			settings.model = model;
+			let (model, env) = split(settings, monitor);
+			model.set(key.name(), &v, &env);
 			fill(settings, monitor);
 		}
 	}
@@ -925,4 +962,45 @@ pub fn owning(mut settings: Settings, values: &[(Key, Value)]) -> Settings {
 pub fn lines_of(settings: &Settings) -> Vec<(String, Value)> {
 	let lines = settings.model.lines(&Env::new(settings, None));
 	lines.config.into_iter().chain(lines.kept).collect()
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	// A change copied the whole model before setting one value, about 135
+	// allocations with every setting stored, on top of the fill after it.
+	// Test ID: dfe70
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_change_does_not_copy_the_model() {
+		let mut s = Settings::default();
+		for f in FIELDS {
+			let v = (f.get)(&s);
+			s.model.values.own.insert(f.key.name().to_string(), v);
+		}
+		fill(&mut s, None);
+		let stored = s.model.values.own.len();
+		let allocs = |s: &mut Settings, f: &dyn Fn(&mut Settings)| {
+			let before = crate::perf::thread_allocs();
+			f(s);
+			crate::perf::thread_allocs() - before
+		};
+		let filled = allocs(&mut s, &|s| fill(s, None));
+		let margin = number(&get(&s, Key::Margin).expect("a margin")).expect("a number");
+		let set_cost = allocs(&mut s, &|s| set(s, Key::Margin, &float(margin + 1.0), None));
+		assert_eq!(
+			number(&get(&s, Key::Margin).expect("a margin")),
+			Some(margin + 1.0)
+		);
+		let reset_cost = allocs(&mut s, &|s| reset(s, Key::Margin, None));
+		assert!(!s.model.values.own.contains_key(Key::Margin.name()));
+		// a copy costs at least one per stored value, the change itself a few
+		for (what, n) in [("set", set_cost), ("reset", reset_cost)] {
+			assert!(
+				n.saturating_sub(filled) < stored as u64 / 4,
+				"{what} made {n} allocations, a fill alone {filled}"
+			);
+		}
+	}
 }
