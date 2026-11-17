@@ -34,15 +34,40 @@ Going forward, new issues in the new template at the bottom of this file will go
 
 ## Issues
 
+- A menu tip runs off a main window narrower than about 340 DIP
+	- ID: 2026111709545547
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261117-095455
+	- Opened by: CC
+	- Related IDs: 2026111709403848
+	- Target version: rc.1
+	- Requirements: A menu tip wraps at a fixed 320 DIP, whatever the window's width, and the main window has no minimum width, so in a narrow window the box is wider than the window and its lines are cut off. Found by reading the code while fixing the tab tip, not seen on screen.
+
 - A tab tip wider than the window runs off its right edge
 	- ID: 2026111709403848
 	- Type: Bug
-	- Status: Queued
+	- Status: Done
 	- Severity: Low
 	- Opened: 20261117-094038
 	- Opened by: CC
 	- Target version: rc.1
 	- Requirements: A tab tip with a long path or shell command is wider than a 900 pixel window, starts at the left edge, and its lines are cut off at the right. Seen in ddkre's window, whose shell command is a long temp path. Control: `tab_tip_layout` only clamps the box's left to 0, and never shortens or wraps a line, so any line wider than the window does this.
+	- Reproduced: 20261117 in unit tests. A table line wider than its budget came back as one line, as wide as before.
+	- Actual cause: As described. The tip's box was as wide as its longest line, with nothing that fitted a line to the window.
+	- Actual fix: A line wider than the window, less the box's padding, goes on over more lines indented to the value column. Each line's fit is kept until it, the window's width, or the text context changes, so a clock tick fits only the clock line again.
+	- Decisions:
+		- 20261117: Wrap rather than cut the line short, since the tip is where the whole path is shown, and the other tips already wrap to the window.
+		- 20261117: A line breaks after a slash, a backslash, or a space when one falls in the back half of the room, and anywhere otherwise. A window too narrow for the key column wraps the whole line flush left.
+		- 20261117: The fit is kept per line. Fitting every line on each clock tick took ddkre's tab tip to 90 allocations per frame over rest, against its limit of 43.
+	- Verified: 20261117. Both new tests fail with the wrap turned off and pass with it. dfe5s and ddgfv pass. ddkre passes, 38 per frame over rest with the tab tip up. In ddkre's 900 pixel window, its long shell command and path wrap under the value column inside the window. The quick run passed, all 5 areas.
+	- Swept: every place the tab tip's lines are read: `tab_tip_layout`, the frame's overlay in `render_with`, and `update_tab_tip`. Menu and Settings tips already wrap. A menu tip's wrap width doesn't follow the window, filed as 2026111709545547. The benchmark banner is fixed text.
+	- Test case: dfe67 `a_tip_line_too_wide_wraps_under_its_value`, dfe68 `a_tab_tip_wraps_to_the_window_it_is_in`.
+	- Branch: nov17-2026111709403848
+	- Commit: db50621c
+	- Acceptance signoff: Self-closed: the bug was reproduced in tests, which failed before the fix and pass after, and the wrapped tip was checked in a real window.
+	- Closed: 20261117-095507
 
 - At some cell widths a window or pane exactly N cells wide shows N-1
 	- ID: 2026111708192137

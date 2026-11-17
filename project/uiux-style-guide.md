@@ -230,7 +230,7 @@ There are 4 kinds: a Settings row, a menu item, a link or button in the About bo
 
 - A tip that explains a control is prose, with 1 to 3 complete sentences, each ending in a period. Usually 2 is enough, and a third has to answer the obvious follow-on question rather than pad.
 
-- The tab strip's tip is the exception, and it isn't prose at all. It reports facts about a tab as an aligned `Key: value` table, in the terminal font, because spaces don't align anything in a proportional one.
+- The tab strip's tip is the exception, and it isn't prose at all. It reports facts about a tab as an aligned `Key: value` table, in the terminal font, because spaces don't align anything in a proportional one. A value too wide for the window goes on over more lines, starting in the value column, so the keys still read down the left.
 
 - A tip's box stands off whatever it hangs from. In the main window that is a warmed lift off the menu color, since the default menu background is the inactive tab's own. In the dialogs it's the button shade against the panel. None of it can be edited separately, since the tip follows the menu or the panel color it is derived from.
 

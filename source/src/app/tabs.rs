@@ -413,28 +413,100 @@ fn tab_command_line(command: Option<&[String]>) -> String {
 #[derive(Debug)]
 pub(super) struct TabTip {
 	tab: usize,
-	/// lent to the frame that draws them (`Overlay`)
-	pub(super) lines: Vec<String>,
+	// one table row per line, before it's fitted to the window
+	lines: Vec<String>,
 	built: Instant,
-	// the widest line, and the text context that measured it
-	width: Option<(u64, f32)>,
+	fit: Option<TipFit>,
+}
+
+// The lines fitted to a width, and the widest of them, kept until the lines,
+// the width, or the text context change.
+#[derive(Debug)]
+struct TipFit {
+	generation: u64,
+	budget: u32,
+	widest: f32,
+	rows: Vec<FitRow>,
+	// every row's pieces in one list for the frame, None when nothing wrapped
+	wrapped: Option<Vec<String>>,
+}
+
+// One line as fitted. Kept per line, since the clock line moves every second
+// and a long path wrapped again with it measured the path a dozen times more.
+#[derive(Debug)]
+struct FitRow {
+	line: String,
+	widest: f32,
+	pieces: Option<Vec<String>>,
 }
 
 impl TabTip {
-	// The widest line, measured once per set of lines rather than per frame. A
-	// new text context (a font or zoom change) measures again.
-	fn text_w(&mut self, generation: u64, mut measure: impl FnMut(&str) -> f32) -> f32 {
-		if let Some((seen, w)) = self.width {
-			if seen == generation {
-				return w;
+	// The widest line once fitted to `budget`, measured once per line rather than
+	// per frame. A new text context (a font or zoom change) or a new width fits
+	// every line again.
+	fn lay(&mut self, generation: u64, budget: f32, mut measure: impl FnMut(&str) -> f32) -> f32 {
+		let budget_bits = budget.to_bits();
+		let mut old = match self.fit.take() {
+			Some(fit) if fit.generation == generation && fit.budget == budget_bits => {
+				let same = fit.rows.len() == self.lines.len()
+					&& fit
+						.rows
+						.iter()
+						.zip(&self.lines)
+						.all(|(row, line)| row.line == *line);
+				if same {
+					let widest = fit.widest;
+					self.fit = Some(fit);
+					return widest;
+				}
+				fit.rows
 			}
-		}
-		let w = self
+			_ => Vec::new(),
+		};
+		let rows: Vec<FitRow> = self
 			.lines
 			.iter()
-			.fold(0.0f32, |widest, line| widest.max(measure(line)));
-		self.width = Some((generation, w));
-		w
+			.map(|line| {
+				if let Some(at) = old.iter().position(|row| row.line == *line) {
+					return old.swap_remove(at);
+				}
+				let (pieces, widest) = crate::tabtitle::fit_tip_line(line, budget, &mut measure);
+				FitRow {
+					line: line.clone(),
+					widest,
+					pieces,
+				}
+			})
+			.collect();
+		let widest = rows
+			.iter()
+			.fold(0.0f32, |widest, row| widest.max(row.widest));
+		let wrapped = rows.iter().any(|row| row.pieces.is_some()).then(|| {
+			rows.iter()
+				.flat_map(|row| {
+					row.pieces
+						.as_deref()
+						.unwrap_or(std::slice::from_ref(&row.line))
+				})
+				.cloned()
+				.collect()
+		});
+		self.fit = Some(TipFit {
+			generation,
+			budget: budget_bits,
+			widest,
+			rows,
+			wrapped,
+		});
+		widest
+	}
+
+	/// The lines as last laid out, lent to the frame that draws them (`Overlay`).
+	pub(super) fn shown(&self) -> &[String] {
+		self.fit
+			.as_ref()
+			.and_then(|fit| fit.wrapped.as_deref())
+			.unwrap_or(&self.lines)
 	}
 }
 
@@ -659,16 +731,17 @@ impl State {
 		let lines = self.tab_tip_lines(tab);
 		let kept = self
 			.tab_tip
-			.as_ref()
-			.filter(|tip| tip.tab == tab && tip.lines == lines)
-			.map(|tip| tip.width);
+			.take_if(|tip| tip.tab == tab)
+			.map(|tip| (tip.lines == lines, tip.fit));
+		let changed = !kept.as_ref().is_some_and(|(same, _)| *same);
 		self.tab_tip = Some(TabTip {
 			tab,
 			lines,
 			built: now,
-			width: kept.flatten(),
+			// what's fitted is kept per line, so only a line that moved is fitted again
+			fit: kept.and_then(|(_, fit)| fit),
 		});
-		kept.is_none()
+		changed
 	}
 
 	/// When the loop next has to wake for the tip: to raise one once the pointer
@@ -744,9 +817,10 @@ impl State {
 
 	/// The tip's box, and where each of its lines goes in it. Measured in the
 	/// terminal font, the only place the chrome uses it, since the lines are a
-	/// key/value table padded with spaces. The box fits the longest line. It hangs
-	/// off its own tab rather than the pointer, so it doesn't jitter, and it's
-	/// pushed back inside the window rather than running off the right edge.
+	/// key/value table padded with spaces. The box fits the longest line, and a
+	/// line wider than the window wraps. It hangs off its own tab rather than the
+	/// pointer, so it doesn't jitter, and it's pushed back inside the window
+	/// rather than running off the right edge.
 	pub(super) fn tab_tip_layout(&mut self) -> Option<OverlayAt> {
 		let generation = self.text.generation;
 		let text = &mut self.text;
@@ -754,13 +828,15 @@ impl State {
 		if tip.lines.is_empty() {
 			return None;
 		}
-		let text_w = tip.text_w(generation, |line| text.measure_mono_text(line));
-		let (tab, count) = (tip.tab, tip.lines.len());
-		let pad = self.text.dip(TAB_TIP_PAD);
+		let pad = text.dip(TAB_TIP_PAD);
+		let win_w = self.surface_px.0 as f32;
+		// a line wider than the window wraps, so the box always fits in it
+		let budget = (win_w - 2.0 * pad).max(1.0);
+		let text_w = tip.lay(generation, budget, |line| text.measure_mono_text(line));
+		let (tab, count) = (tip.tab, tip.shown().len());
 		let line_h = self.text.cell_h;
 		let w = text_w + 2.0 * pad;
 		let h = line_h * count as f32 + 2.0 * pad;
-		let win_w = self.surface_px.0 as f32;
 		// A tab paged off the strip while its tip was up takes the tip with it.
 		// Otherwise the tip would sit at the bar's left end, pointing at whatever
 		// tab is there.
@@ -1117,7 +1193,7 @@ mod tests {
 			tab: 0,
 			lines: vec!["Shell name: Bash".into(), "Open:       2m".into()],
 			built: Instant::now(),
-			width: None,
+			fit: None,
 		};
 		let measured = std::cell::Cell::new(0);
 		let measure = |line: &str| {
@@ -1125,7 +1201,7 @@ mod tests {
 			line.len() as f32
 		};
 		for _frame in 0..120 {
-			assert_eq!(tip.text_w(1, measure), 16.0);
+			assert_eq!(tip.lay(1, f32::MAX, measure), 16.0);
 		}
 		assert_eq!(
 			measured.get(),
@@ -1134,8 +1210,63 @@ mod tests {
 			measured.get()
 		);
 		// a new text context measures again
-		tip.text_w(2, measure);
+		tip.lay(2, f32::MAX, measure);
 		assert_eq!(measured.get(), 4);
+	}
+
+	// A tip with a long path or command was as wide as its longest line, so in a
+	// narrow window it ran off the right edge. It wraps to the window now, and
+	// keeps the wrap until the lines or the width change.
+	// Test ID: dfe68
+	#[test]
+	fn a_tab_tip_wraps_to_the_window_it_is_in() {
+		let path = "/tmp/a-long-temp-folder/20261117-094038_001/run/sh";
+		let mut tip = super::TabTip {
+			tab: 0,
+			lines: crate::tabtitle::tip_lines(&[
+				("Shell command", path.to_string()),
+				("Open", "2m 05s".to_string()),
+			]),
+			built: Instant::now(),
+			fit: None,
+		};
+		// a monospace face 10 px to the char
+		let mono = |line: &str| line.chars().count() as f32 * 10.0;
+		let wide = tip.lay(1, 2000.0, mono);
+		assert_eq!(
+			tip.shown(),
+			tip.lines.as_slice(),
+			"it fits, so it's the lines as built"
+		);
+		assert_eq!(wide, mono(&tip.lines[0]));
+		let budget = 300.0;
+		let narrow = tip.lay(1, budget, mono);
+		assert!(narrow <= budget, "{narrow} is wider than {budget}");
+		let shown = tip.shown();
+		assert!(shown.len() > tip.lines.len(), "{shown:?}");
+		assert!(shown.iter().all(|line| mono(line) <= budget), "{shown:?}");
+		assert_eq!(
+			shown.last().map(String::as_str),
+			Some("Open:          2m 05s")
+		);
+		// the same width again is kept rather than fitted again
+		let kept = tip.shown().as_ptr();
+		tip.lay(1, budget, |_| panic!("measured again"));
+		assert!(std::ptr::eq(kept, tip.shown().as_ptr()));
+		// a tick of the clock fits that line alone again, not the path
+		let path_lines = tip.shown().len() - 1;
+		tip.lines[1] = "Open:          2m 06s".to_string();
+		let measured = std::cell::Cell::new(0);
+		tip.lay(1, budget, |line| {
+			measured.set(measured.get() + 1);
+			mono(line)
+		});
+		assert_eq!(measured.get(), 1);
+		assert_eq!(tip.shown().len(), path_lines + 1);
+		assert_eq!(
+			tip.shown().last().map(String::as_str),
+			Some("Open:          2m 06s")
+		);
 	}
 
 	// The width a title is fitted to and the width it's shaped at are the the same

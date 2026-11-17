@@ -1000,7 +1000,8 @@ pub fn tip_value(value: &str) -> String {
 /// left the way a table does. That's why the tip is drawn in the terminal font
 /// rather than the interface one, since padding with spaces aligns nothing in a
 /// proportional face. The key is padded, never the value, so a long path runs on
-/// to the right and the box grows for it instead of the column moving.
+/// to the right and the box grows for it instead of the column moving, up to the
+/// window's width (see `fit_tip_line`).
 pub fn tip_lines(rows: &[(&str, String)]) -> Vec<String> {
 	let key_w = rows
 		.iter()
@@ -1013,6 +1014,89 @@ pub fn tip_lines(rows: &[(&str, String)]) -> Vec<String> {
 			format!("{key}:{:pad$} {value}", "")
 		})
 		.collect()
+}
+
+/// One of the tip's lines fitted to `budget`, and its width once fitted. A line
+/// that's too wide goes on over more lines, each indented to the value column,
+/// so the keys still read down the left and the whole path still shows. None
+/// when it already fits, which is nearly always, so the caller keeps its own.
+pub fn fit_tip_line(
+	line: &str,
+	budget: f32,
+	mut measure: impl FnMut(&str) -> f32,
+) -> (Option<Vec<String>>, f32) {
+	let w = measure(line);
+	if w <= budget {
+		return (None, w);
+	}
+	let mut pieces = Vec::new();
+	wrap_tip_line(line, budget, &mut measure, &mut pieces);
+	let widest = pieces
+		.iter()
+		.fold(0.0f32, |widest, piece| widest.max(measure(piece)));
+	(Some(pieces), widest)
+}
+
+// One line over the budget, broken after a path separator or a space where one
+// falls in the back half of the room, and anywhere otherwise, since a path or a
+// command can run a long way without either.
+fn wrap_tip_line(
+	line: &str,
+	budget: f32,
+	measure: &mut impl FnMut(&str) -> f32,
+	out: &mut Vec<String>,
+) {
+	// the value starts after the key's colon and its padding (tip_lines)
+	let col = line.find(':').map_or(0, |colon| {
+		line[colon + 1..]
+			.find(|c: char| c != ' ')
+			.map_or(line.len(), |i| colon + 1 + i)
+	});
+	let (mut key, mut rest) = line.split_at(col);
+	let mut indent = " ".repeat(key.chars().count());
+	// a window too narrow for the key column wraps the whole line flush left
+	if measure(&indent) > budget * 0.5 {
+		indent.clear();
+		(key, rest) = ("", line);
+	}
+	let mut head = key.to_string();
+	let mut candidate = String::new();
+	while !rest.is_empty() {
+		let ends: Vec<usize> = rest.char_indices().map(|(i, c)| i + c.len_utf8()).collect();
+		let mut fits = |end: usize| {
+			candidate.clear();
+			candidate.push_str(&head);
+			candidate.push_str(&rest[..end]);
+			measure(&candidate) <= budget
+		};
+		// how many chars fit, at least one so a line always moves on
+		let (mut lo, mut hi) = (1, ends.len());
+		if fits(ends[hi - 1]) {
+			lo = hi;
+		}
+		while lo < hi {
+			let mid = (lo + hi).div_ceil(2);
+			if fits(ends[mid - 1]) {
+				lo = mid;
+			} else {
+				hi = mid - 1;
+			}
+		}
+		let mut take = lo;
+		if take < ends.len() {
+			let room = &rest[..ends[take - 1]];
+			if let Some(at) = room.rfind(['/', '\\', ' ']) {
+				let after = room[..=at].chars().count();
+				if after * 2 >= take {
+					take = after;
+				}
+			}
+		}
+		let (piece, more) = rest.split_at(ends[take - 1]);
+		head.push_str(piece);
+		out.push(std::mem::replace(&mut head, indent.clone()));
+		rest = more;
+	}
 }
 
 /// How long a tab has been open, at the coarseness a person reads at a glance.
@@ -1036,10 +1120,10 @@ pub fn elapsed(secs: u64) -> String {
 #[cfg(test)]
 mod tests {
 	use super::{
-		DEFAULT_TAB_TEXT, Demand, Facts, Parts, Rights, Style, Task, clamp_page, elapsed, page_for,
-		path_forms, plain, program_says, program_title, shell_forms, slot_at_x, slot_x,
-		tab_template, tab_template_or_default, tab_text_for, tabs_that_fit, task_name_forms,
-		tip_lines, tip_value, widths, window_suffix, window_title, with_note,
+		DEFAULT_TAB_TEXT, Demand, Facts, Parts, Rights, Style, Task, clamp_page, elapsed,
+		fit_tip_line, page_for, path_forms, plain, program_says, program_title, shell_forms,
+		slot_at_x, slot_x, tab_template, tab_template_or_default, tab_text_for, tabs_that_fit,
+		task_name_forms, tip_lines, tip_value, widths, window_suffix, window_title, with_note,
 	};
 
 	// The tests below were written against the 4 check boxes, so they ask in
@@ -1129,6 +1213,77 @@ mod tests {
 		for line in &lines {
 			assert_eq!(value_col(line), first, "{line:?} is out of column");
 		}
+	}
+
+	// A line wider than the window goes on over more lines indented to the value
+	// column. It breaks after a separator when one is near the end of the room,
+	// and anywhere when there isn't one, and no character is lost or added.
+	// Test ID: dfe67
+	#[test]
+	fn a_tip_line_too_wide_wraps_under_its_value() {
+		// every line fitted, as the tab tip does it
+		fn fit_tip_lines(
+			lines: &[String],
+			budget: f32,
+			measure: &dyn Fn(&str) -> f32,
+		) -> (Option<Vec<String>>, f32) {
+			let mut widest = 0.0f32;
+			let mut fitted = Vec::new();
+			let mut wrapped = false;
+			for line in lines {
+				let (pieces, w) = fit_tip_line(line, budget, measure);
+				widest = widest.max(w);
+				wrapped |= pieces.is_some();
+				fitted.extend(pieces.unwrap_or_else(|| vec![line.clone()]));
+			}
+			(wrapped.then_some(fitted), widest)
+		}
+		let mono = |line: &str| line.chars().count() as f32 * 10.0;
+		let lines = tip_lines(&[
+			(
+				"Shell command",
+				"/home/someone/a/b/c/dddddddddd/eeeeeeeeeeeeeeeeeeeeeeeeeeeeee".to_string(),
+			),
+			("Open", "3s".to_string()),
+		]);
+		assert_eq!(
+			fit_tip_lines(&lines, 1000.0, &mono),
+			(None, 760.0),
+			"all fit"
+		);
+		let (fitted, widest) = fit_tip_lines(&lines, 300.0, &mono);
+		let fitted = fitted.expect("a line wraps");
+		assert!(widest <= 300.0);
+		assert_eq!(
+			fitted,
+			[
+				"Shell command: /home/someone/",
+				"               a/b/c/ddddddddd",
+				"               d/eeeeeeeeeeeee",
+				"               eeeeeeeeeeeeeee",
+				"               ee",
+				"Open:          3s",
+			]
+		);
+		// a window too narrow for the key column still shows every character, and
+		// each line moves on by at least one
+		let (fitted, _) = fit_tip_lines(&lines, 40.0, &mono);
+		let fitted = fitted.expect("everything wraps");
+		assert!(fitted.iter().all(|line| mono(line) <= 40.0), "{fitted:?}");
+		let joined: String = fitted.concat().replace(' ', "");
+		assert_eq!(joined, lines.concat().replace(' ', ""));
+		// a value with spaces breaks after one, wide characters measured as such
+		let wide = |line: &str| {
+			line.chars()
+				.map(|c| if c.is_ascii() { 10.0 } else { 20.0 })
+				.sum::<f32>()
+		};
+		let lines = tip_lines(&[("Running", "\"日本語 のプログラム です\"".to_string())]);
+		let (fitted, widest) = fit_tip_lines(&lines, 200.0, &wide);
+		let fitted = fitted.expect("it wraps");
+		assert!(widest <= 200.0, "{fitted:?}");
+		assert_eq!(fitted[0], "Running: \"日本語 ");
+		assert!(fitted[1..].iter().all(|line| line.starts_with("         ")));
 	}
 
 	// The anchor and the trailing separator are what tell a reader this is a

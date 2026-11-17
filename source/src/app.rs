@@ -2390,7 +2390,7 @@ impl State {
 		// may take `&mut self`, only its fields.
 		let tip_layout = tip_at.zip(self.tab_tip.as_ref()).map(|(at, tip)| Overlay {
 			at,
-			words: OverlayWords::Kept(&tip.lines),
+			words: OverlayWords::Kept(tip.shown()),
 		});
 		let menu_tip = menu_tip_at.map(|at| Overlay {
 			at,
