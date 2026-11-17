@@ -510,7 +510,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 - Smaller allocations made on every frame in the render and dialog paths
 	- ID: 2026111623500007
 	- Type: Enhancement
-	- Status: Queued
+	- Status: Done
 	- Priority: Low
 	- Opened: 20261116-235000
 	- Opened by: CC
@@ -518,6 +518,21 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Requirements:
 		- About 10 places make a new list or string each frame where a kept buffer or a borrow would do. None is large alone.
 		- Detail: `detail_backlog.md`, under this ID.
+	- Progress log:
+		- 20261117: Done: the window's text area lists, main and halo, are kept between frames, and the menu and tip areas go to the renderer without a list. The dialog does the same for its 3 area lists.
+		- 20261117: Done: a rebuild puts the row fingerprints into the list it swapped out last time.
+		- 20261117: Done: the dialog finds kept shaped text by a borrowed key, so a frame at rest builds no key. Its rect and text lists are kept between frames too.
+		- 20261117: Measured in ddkre's window, allocations per frame on the window thread, 3 runs each. A drag went from 307, 302, 302 to 296, 298, 294. At rest and with a tip up it's the same as before, since those frames skip the area build. A default Settings frame at rest, on the test thread, went from 201 to 129 for 69 text items, with the old key build put back for the before figure.
+	- Decisions:
+		- 20261117: Left alone: the template's expanded copies, since tab labels are now built only when something they show changes, and the color emoji fallback's family list, which is built once per character and kept.
+		- 20261117: `snapshot_rows` stays for the tests and the replay, as a wrapper over the new `snapshot_rows_into`. The dialog's `compose` and `scene` do the same over `compose_into` and `scene_into`.
+	- Verified: 20261117. Each new test fails with its part undone (a new list in place of the kept one; a key built for each lookup, 360 allocations over 60 frames; the dialog's lists not kept, 132 against 132) and passes with it. ddgh2 passes. The quick run passed, all 5 areas.
+	- Swept: every caller of the 4 `prepare` functions in `text.rs`, in `app.rs` and `dialog.rs`. Every list of `TextArea` in the source. Every place that sets `last_rows`; `pane/replay.rs` is test-only and keeps its own list.
+	- Test case: `reused_areas_keep_their_buffer` (dfe85), `kept_text_is_found_without_building_a_key` (dfe86), `a_frame_fills_the_last_frames_lists` (dfe87). ddkre's drag figures above.
+	- Branch: nov17-2026111623500007
+	- Commit: 5cc9ed6d
+	- Acceptance signoff: Self-closed: the change does what the item asked, its tests failed before and pass after, and the drag measured lower.
+	- Closed: 20261117-105807
 
 - Windows GUI test pixel checks read one pixel per call
 	- ID: 2026111623500008

@@ -584,6 +584,7 @@ fn weld_region_clip(
 // and selection, which don't belong in a kept row. Recycles the
 // caller's row allocations and its contrast memo. One entry per column; a
 // wide-char spacer stays as a wide=0 placeholder so indexes keep matching columns.
+#[cfg(test)]
 fn snapshot_rows(
 	grid: &Grid<Cell>,
 	lines: usize,
@@ -595,7 +596,25 @@ fn snapshot_rows(
 		&mut palette::Readable,
 	)>,
 ) -> Vec<u64> {
-	let mut rows: Vec<u64> = Vec::with_capacity(lines);
+	let mut rows = Vec::with_capacity(lines);
+	snapshot_rows_into(grid, lines, cols, styled, &mut rows);
+	rows
+}
+
+// `snapshot_rows` into the caller's list, so a rebuild reuses last time's.
+fn snapshot_rows_into(
+	grid: &Grid<Cell>,
+	lines: usize,
+	cols: usize,
+	styled: Option<(
+		&Colors,
+		&config::Settings,
+		&mut Vec<Vec<StripCell>>,
+		&mut palette::Readable,
+	)>,
+	rows: &mut Vec<u64>,
+) {
+	rows.clear();
 	let mut styled = styled;
 	if let Some((_, _, out, _)) = &mut styled {
 		out.resize_with(lines, Vec::new);
@@ -610,7 +629,6 @@ fn snapshot_rows(
 				.extend((0..cols).map(|c| strip_cell(&row[Column(c)], colors, settings, readable)));
 		}
 	}
-	rows
 }
 
 // A row's fingerprint, FNV-1a over its chars.
@@ -1617,6 +1635,8 @@ pub struct Pane {
 	// On-screen row fingerprints from the last build, used to detect an app's
 	// repaint-scroll where the engine recorded none (app-scroll easing). See build().
 	last_rows: Vec<u64>,
+	// the list the next build's fingerprints go into, last swapped out of `last_rows`
+	prints_scratch: Vec<u64>,
 	// The same rows by skeleton (`fnv_row_skel`), which still match when a
 	// table's columns move over. Only `repaint_shift` reads them.
 	last_skel: Vec<u64>,
@@ -1909,9 +1929,10 @@ impl Pane {
 			// the new screen, so the app-scroll probe can't diff across the gap.
 			self.scroll.cancel_app_scroll();
 			self.strip.clear();
-			self.last_rows = if settings.smooth_apps() {
+			let mut rows = std::mem::take(&mut self.prints_scratch);
+			if settings.smooth_apps() {
 				let mut cur_cells = std::mem::take(&mut self.cells_scratch);
-				let rows = snapshot_rows(
+				snapshot_rows_into(
 					guard.grid(),
 					lines,
 					cols,
@@ -1921,12 +1942,13 @@ impl Pane {
 						&mut cur_cells,
 						&mut self.readable,
 					)),
+					&mut rows,
 				);
 				self.cells_scratch = std::mem::replace(&mut self.last_cells, cur_cells);
-				rows
 			} else {
-				snapshot_rows(guard.grid(), lines, cols, None)
-			};
+				snapshot_rows_into(guard.grid(), lines, cols, None, &mut rows);
+			}
+			self.prints_scratch = std::mem::replace(&mut self.last_rows, rows);
 			skel_rows(guard.grid(), lines, cols, &mut self.last_skel);
 		}
 		let whole_screen = region == (0..lines);
@@ -2076,7 +2098,8 @@ impl Pane {
 		if (apps || (settings.scroll_smooth && !alt)) && !cut && (force_rebuild || !self.text_built)
 		{
 			let mut cur_cells = std::mem::take(&mut self.cells_scratch);
-			let rows = snapshot_rows(
+			let mut rows = std::mem::take(&mut self.prints_scratch);
+			snapshot_rows_into(
 				guard.grid(),
 				lines,
 				cols,
@@ -2086,6 +2109,7 @@ impl Pane {
 					&mut cur_cells,
 					&mut self.readable,
 				)),
+				&mut rows,
 			);
 			if let (true, Some(step)) = (apps, step) {
 				shift_dbg = step;
@@ -2222,7 +2246,7 @@ impl Pane {
 				let measured = output_band(&rows, &self.last_rows, advanced, hint, blank);
 				self.out_band = adopt_band(self.out_band, measured, was_chasing);
 			}
-			self.last_rows = rows;
+			self.prints_scratch = std::mem::replace(&mut self.last_rows, rows);
 			skel_rows(guard.grid(), lines, cols, &mut self.last_skel);
 			if apps {
 				self.cells_scratch = std::mem::replace(&mut self.last_cells, cur_cells);
@@ -4451,6 +4475,7 @@ fn spawn_pane(
 		lock_misses: 0,
 		depth: DepthSampler::default(),
 		last_rows: Vec::new(),
+		prints_scratch: Vec::new(),
 		last_skel: Vec::new(),
 		slide_static: 0,
 		slide_static_top: 0,

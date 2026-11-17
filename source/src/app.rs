@@ -393,6 +393,8 @@ struct FrameBufs {
 	group_ranges: Vec<(Rect, u32, u32)>,
 	link_ranges: Vec<(Rect, u32, u32)>,
 	cursor_ranges: Vec<(Rect, u32, u32)>,
+	// glyphon's areas, main pass then scrim pass, emptied between uses
+	areas: Vec<TextArea<'static>>,
 }
 
 impl FrameBufs {
@@ -404,6 +406,7 @@ impl FrameBufs {
 		self.group_ranges.clear();
 		self.link_ranges.clear();
 		self.cursor_ranges.clear();
+		self.areas.clear();
 		self
 	}
 }
@@ -1911,6 +1914,7 @@ impl State {
 			mut group_ranges,
 			mut link_ranges,
 			mut cursor_ranges,
+			areas: mut kept_areas,
 		} = std::mem::take(&mut self.frame_bufs);
 		// the autoscroll runs every frame, so it goes first in the `||`
 		let mut animating = self.autoscroll_selection(dt) || bell > 0.0;
@@ -2620,7 +2624,7 @@ impl State {
 				reason = "set at the top of the frame when it was None"
 			)]
 			let chrome = self.chrome.as_ref().unwrap();
-			let mut areas: Vec<TextArea> = Vec::new();
+			let mut areas = crate::text::reuse_areas(std::mem::take(&mut kept_areas));
 			for p in self.tabs.cur().panes.values() {
 				// app-scroll slide: fill the revealed gap from the scrolled-off strip,
 				// draw the current scroll region over it, then the static bands unshifted
@@ -2732,7 +2736,11 @@ impl State {
 				x += tab_w;
 			}
 
-			if let Err(e) = self.text.prepare(&gpu.gfx.device, &gpu.gfx.queue, areas) {
+			let prepared = self
+				.text
+				.prepare(&gpu.gfx.device, &gpu.gfx.queue, areas.drain(..));
+			kept_areas = crate::text::reuse_areas(areas);
+			if let Err(e) = prepared {
 				// Atlas full, after a long session of varied glyphs. The usual trim is
 				// at the end of render, past this early return, so without a trim here
 				// the atlas never recovers and all text goes black for good. Cursor and
@@ -2750,7 +2758,7 @@ impl State {
 			// scrim source pass has its own prepared set: pane text only (no chrome),
 			// with de-bolded buffers where a pane built one (text_scrim_regular_weight)
 			if scrim_on {
-				let mut scrim_areas: Vec<TextArea> = Vec::new();
+				let mut scrim_areas = crate::text::reuse_areas(std::mem::take(&mut kept_areas));
 				for p in self.tabs.cur().panes.values() {
 					// the scrim follows this frame's slide, including the scrolled-off
 					// strip filling the gap. Without it the strip's text, such as the row
@@ -2791,10 +2799,11 @@ impl State {
 					scrim_areas.extend(p.glyph_areas(margin));
 					scrim_areas.extend(p.emoji_area(margin));
 				}
-				if let Err(e) =
+				let prepared =
 					self.text
-						.prepare_scrim(&gpu.gfx.device, &gpu.gfx.queue, scrim_areas)
-				{
+						.prepare_scrim(&gpu.gfx.device, &gpu.gfx.queue, scrim_areas.drain(..));
+				kept_areas = crate::text::reuse_areas(scrim_areas);
+				if let Err(e) = prepared {
 					eprintln!(
 						"{}: scrim prepare failed; trimming atlas to recover: {e:?}",
 						config::APP_NAME
@@ -3366,6 +3375,7 @@ impl State {
 			group_ranges,
 			link_ranges,
 			cursor_ranges,
+			areas: kept_areas,
 		}
 		.emptied();
 		animating && presented
@@ -3501,24 +3511,21 @@ fn spec_areas(
 	specs: &[(f32, f32, Buffer)],
 	(right, bottom): (i32, i32),
 	default_color: GColor,
-) -> Vec<TextArea<'_>> {
-	specs
-		.iter()
-		.map(|(left, top, buffer)| TextArea {
-			buffer,
-			left: *left,
-			top: *top,
-			scale: 1.0,
-			bounds: TextBounds {
-				left: 0,
-				top: 0,
-				right,
-				bottom,
-			},
-			default_color,
-			custom_glyphs: &[],
-		})
-		.collect()
+) -> impl Iterator<Item = TextArea<'_>> {
+	specs.iter().map(move |(left, top, buffer)| TextArea {
+		buffer,
+		left: *left,
+		top: *top,
+		scale: 1.0,
+		bounds: TextBounds {
+			left: 0,
+			top: 0,
+			right,
+			bottom,
+		},
+		default_color,
+		custom_glyphs: &[],
+	})
 }
 
 // Dim a chrome color toward the bar background when the window isn't focused.
