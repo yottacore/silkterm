@@ -34,106 +34,25 @@ Going forward, new issues in the new template at the bottom of this file will go
 
 ## Issues
 
-- A menu tip runs off a main window narrower than about 340 DIP
-	- ID: 2026111709545547
+- Window auto-resize stopped working
+	- ID: 2026111700130407
 	- Type: Bug
-	- Status: Done
-	- Severity: Low
-	- Opened: 20261117-095455
-	- Opened by: CC
-	- Related IDs: 2026111709403848
+	- Status: Waiting for answers
+		- Waits on the question in questions.md about which resize is meant.
+	- Opened: 20261117-001304
+	- Opened by: JC
 	- Target version: rc.1
-	- Requirements: A menu tip wraps at a fixed 320 DIP, whatever the window's width, and the main window has no minimum width, so in a narrow window the box is wider than the window and its lines are cut off. Found by reading the code while fixing the tab tip, not seen on screen.
-	- Reproduced: 20261117. In a 260 pixel window, the File menu's first tip ran off the right edge mid-word. The new test failed with the old width.
-	- Actual cause: As described.
-	- Actual fix: A menu tip wraps at its 320 DIP width, or at the window's width less the box's padding and edge gap when that's narrower. A wide window wraps as before, so a resize there doesn't wrap the tip again.
+	- Incorrect behavior: Window auto-resize stopped working.
+	- Notes:
+		- Possibly only when running Muffer?
+	- Reproduced: No. No doc or setting is called auto-resize, so each kind of automatic resize was tried, on the dev build and on the dogfood build from 11-10 that was running when this was filed.
+	- Progress log:
+		- 20261117: On Xvfb, with and without xfwm4, a program in the pane was told each new grid after every window resize. That held on the normal screen, on the alt screen with mouse tracking on, and with a frame every 50 ms in synchronized-output marks, like muffer. It also held for a window resized after its device was let go.
+		- 20261117: With Resize window on zoom on, each zoom resized the window and kept the rows. The columns were one more after the first zoom on the alt screen, and stayed there.
+		- 20261117: dpirand on X11 passed 5 cases, with drags, moves, zooms, resizes and relaunches across 2 to 4 monitors.
+		- 20261117: Not tried: monitors waking on a real desktop, which the rigs can't stand in for.
 	- Decisions:
-		- 20261117: In a window too narrow for the tip on either side of the menu, it still goes to the left edge, over the menu. There's no room anywhere else.
-		- 20261117: A single word wider than the window still runs off, as in every other tip, since `tip::wrap` never splits a word.
-	- Verified: 20261117. dfe6n fails with the old width (a 324 wide box in a 120 wide window) and passes with the fix. dfe5r passes. ddkre passes, menu tip 23 per frame over rest, limit 28. In a 260 pixel window the same tip wraps onto 2 lines inside it. The quick run passed, all 5 areas.
-	- Swept: every caller of `tip::beside`, which is only the menu tip, and every use of `MENU_TIP_MAX_W`. The Settings tip uses `wrap_budget`, and the tab tip fits to the window since 2026111709403848.
-	- Test case: dfe6n `a_menu_tip_fits_a_window_narrower_than_its_cap`.
-	- Branch: nov17-2026111709545547
-	- Commit: c4edf86d
-	- Acceptance signoff: Self-closed: the bug was reproduced, its test failed before the fix and passes after, and the wrapped tip was checked in a narrow window.
-	- Closed: 20261117-100426
-
-- A tab tip wider than the window runs off its right edge
-	- ID: 2026111709403848
-	- Type: Bug
-	- Status: Done
-	- Severity: Low
-	- Opened: 20261117-094038
-	- Opened by: CC
-	- Target version: rc.1
-	- Requirements: A tab tip with a long path or shell command is wider than a 900 pixel window, starts at the left edge, and its lines are cut off at the right. Seen in ddkre's window, whose shell command is a long temp path. Control: `tab_tip_layout` only clamps the box's left to 0, and never shortens or wraps a line, so any line wider than the window does this.
-	- Reproduced: 20261117 in unit tests. A table line wider than its budget came back as one line, as wide as before.
-	- Actual cause: As described. The tip's box was as wide as its longest line, with nothing that fitted a line to the window.
-	- Actual fix: A line wider than the window, less the box's padding, goes on over more lines indented to the value column. Each line's fit is kept until it, the window's width, or the text context changes, so a clock tick fits only the clock line again.
-	- Decisions:
-		- 20261117: Wrap rather than cut the line short, since the tip is where the whole path is shown, and the other tips already wrap to the window.
-		- 20261117: A line breaks after a slash, a backslash, or a space when one falls in the back half of the room, and anywhere otherwise. A window too narrow for the key column wraps the whole line flush left.
-		- 20261117: The fit is kept per line. Fitting every line on each clock tick took ddkre's tab tip to 90 allocations per frame over rest, against its limit of 43.
-	- Verified: 20261117. Both new tests fail with the wrap turned off and pass with it. dfe5s and ddgfv pass. ddkre passes, 38 per frame over rest with the tab tip up. In ddkre's 900 pixel window, its long shell command and path wrap under the value column inside the window. The quick run passed, all 5 areas.
-	- Swept: every place the tab tip's lines are read: `tab_tip_layout`, the frame's overlay in `render_with`, and `update_tab_tip`. Menu and Settings tips already wrap. A menu tip's wrap width doesn't follow the window, filed as 2026111709545547. The benchmark banner is fixed text.
-	- Test case: dfe67 `a_tip_line_too_wide_wraps_under_its_value`, dfe68 `a_tab_tip_wraps_to_the_window_it_is_in`.
-	- Branch: nov17-2026111709403848
-	- Commit: db50621c
-	- Acceptance signoff: Self-closed: the bug was reproduced in tests, which failed before the fix and pass after, and the wrapped tip was checked in a real window.
-	- Closed: 20261117-095507
-
-- At some cell widths a window or pane exactly N cells wide shows N-1
-	- ID: 2026111708192137
-	- Type: Bug
-	- Status: Done
-	- Severity: Low
-	- Opened: 20261117-081921
-	- Opened by: CC
-	- Related IDs: 2026111708050191
-	- Target OS: All
-	- Incorrect behavior: The grid is counted by dividing the width by the cell width and rounding down in single precision. With a cell of 9.6, 15 cells make 144, which divides back to just under 15, so it counts 14. The window size read back from a grid, and the pane's own column count, both do this.
-	- Expected behavior: A width that holds N whole cells counts as N.
-	- Note: Found while fixing 2026111708050191. Cell sizes that are binary fractions, as in ddyqp, never hit it. Whether a real font's cell lands on one isn't known.
-	- Reproduced: 20261117 in unit tests. At a cell of 9.6, a length of 144 px counted 14 cells, and the window's and the pane's counts failed the same way.
-	- Actual cause: As described. The window's size and the pane's grid each floored the width over the cell in f32, and a product that rounds down a hair reads as one cell short.
-	- Actual fix: Both counts go through one helper, which counts a cell when the length is within a hundredth of a pixel of it.
-	- Decisions:
-		- 20261117: The slack is 0.01 px. It's well past the f32 error at the largest window, and the part of the last cell it lets through can't be seen. The text buffer doesn't wrap, so a column that much over the width still draws.
-		- 20261117: The width a grid asks for, `window_px`, is left as it is. It still rounds up, which the zoom fix in 2026111708050191 relies on.
-	- Swept: every place a grid count comes from a length over a cell. There are 2, the window's `cells_in` and the pane's `content_dims`, and both use the helper now. The other floors over a cell map a mouse point to a cell, and the command line's split size is a ratio, not a count.
-	- Verified: 20261117. The 3 new tests failed with the slack at 0 and pass with it. dfe3c and ddyqp still pass. The quick gate passed, all 5 areas.
-	- Test case: dfe3p `a_length_of_whole_cells_counts_every_cell`, dfe3q `a_grid_reads_back_at_any_cell_size`, dfe3r `a_pane_of_whole_cells_shows_every_cell`.
-	- Branch: nov17-2026111708192137
-	- Commit: 79c98a84
-	- Acceptance signoff: Self-closed: the bug was reproduced in tests, which failed before the fix and pass after.
-	- Closed: 20261117-082900
-
-- With Resize window on zoom on, a zoom on the alt screen adds a column
-	- ID: 2026111708050191
-	- Type: Bug
-	- Status: Done
-	- Severity: Low
-	- Opened: 20261117-080501
-	- Opened by: CC
-	- Related IDs: 2026111700130407
-	- Target OS: All
-	- Steps to reproduce: Turn on Resize window on zoom. Run a full-screen program such as less in a 700x400 window, then press Ctrl+Plus.
-	- Incorrect behavior: The program is told one column more than it had, 64 then 65. On the normal screen the grid is kept, 55 then 55.
-	- Expected behavior: The program keeps its columns and rows.
-	- Note: Found on Xvfb while working 2026111700130407, on the dev build and the 11-10 dogfood build. The alt screen hides the minimap column, which the zoom's size may still count.
-	- Reproduced: 20261117 on Xvfb, with the setting on and a program on the alt screen. The zoom held 64 columns and asked for a window 65 wide.
-	- Origin: e5f8a69, the commit that added Resize window on zoom.
-	- Actual cause: After finding the least width that shows the pane's grid, the zoom rounds it out to whole cells of the window's grid, so the saved size reopens as big. That width was already whole cells, but its pixel count was rounded up, so it read as a bit over 64 cells, and rounding up again made it 65. With the minimap on, the least width usually falls partway into a cell, which is why the normal screen kept its grid. The minimap isn't involved.
-	- Actual fix: A width already at whole cells stays as it is. Any other width goes out to the next whole cell, as before.
-	- Verified: 20261117 on Xvfb, the rig with the fix kept 64 columns on the alt screen and 55 on the normal screen through 2 zooms in and 1 out, and the saved grid stayed 64x15. The new test failed on the old code and passes now. The quick gate passed, all 5 areas.
-	- Swept: the other `ceil` near a cell size in the source is `window_px` itself, which this relies on. The height takes the same path, through the same function.
-	- Decisions:
-		- 20261117: The float edge found on the way, where a width of exactly N cells counts as N-1 at some cell sizes, is its own item, 2026111708192137. It's older than this and touches every grid count.
-	- Test case: dfe3c `a_size_already_at_whole_cells_keeps_its_grid`.
-	- Branch: nov17-2026111708050191
-	- Commit: f8ac2cb1
-	- Acceptance signoff: Self-closed: the bug was reproduced, its test failed before the fix and passes after, and the rig shows the program keeps its grid.
-	- Closed: 20261117-082100
+		- 20261117: No test yet. Which behavior to pin waits on the answer.
 
 - The window doesn't paint while the GPU is busy or short on memory, and stays blank after the load ends
 	- ID: 2026100312470535
@@ -296,26 +215,6 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- It's stalled until a cosmic-text release takes fontdb 0.24 or later, and winit's sctk-adwaita drops ab_glyph.
 	- Held for a cosmic-text release on fontdb 0.24 or later, and an sctk-adwaita without ab_glyph.
 
-- Window auto-resize stopped working
-	- ID: 2026111700130407
-	- Type: Bug
-	- Status: Waiting for answers
-		- Waits on the question in questions.md about which resize is meant.
-	- Opened: 20261117-001304
-	- Opened by: JC
-	- Target version: rc.1
-	- Incorrect behavior: Window auto-resize stopped working.
-	- Notes:
-		- Possibly only when running Muffer?
-	- Reproduced: No. No doc or setting is called auto-resize, so each kind of automatic resize was tried, on the dev build and on the dogfood build from 11-10 that was running when this was filed.
-	- Progress log:
-		- 20261117: On Xvfb, with and without xfwm4, a program in the pane was told each new grid after every window resize. That held on the normal screen, on the alt screen with mouse tracking on, and with a frame every 50 ms in synchronized-output marks, like muffer. It also held for a window resized after its device was let go.
-		- 20261117: With Resize window on zoom on, each zoom resized the window and kept the rows. The columns were one more after the first zoom on the alt screen, and stayed there.
-		- 20261117: dpirand on X11 passed 5 cases, with drags, moves, zooms, resizes and relaunches across 2 to 4 monitors.
-		- 20261117: Not tried: monitors waking on a real desktop, which the rigs can't stand in for.
-	- Decisions:
-		- 20261117: No test yet. Which behavior to pin waits on the answer.
-
 - Tab labels and the window title are worked out again on every frame
 	- ID: 2026111623500001
 	- Type: Enhancement
@@ -341,34 +240,6 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Commit: 172c03df
 	- Test case: `idle_frames_copy_no_tab_facts` (dfe46), no allocations over 240 idle frames. `an_unchanged_window_title_builds_nothing` (dfe45), no allocations over 240 frames with the title unchanged, and a new title for each part that moves. ddkre's figures above.
 	- Acceptance signoff: Self-closed: its last child, 2026111708444862, closed.
-	- Closed: 20261117-093908
-
-- The tab tip and the rating banner copy every line on each frame they show
-	- ID: 2026111708444862
-	- Type: Enhancement
-	- Status: Done
-	- Priority: Low
-	- Opened: 20261117-084448
-	- Opened by: CC
-	- Parent ID: 2026111623500001
-	- Target version: rc.1
-	- Requirements:
-		- While the tab tip or the rating banner is up, each frame copies all its lines out of the kept copy, since the frame keeps them across calls that change the window's state.
-		- Lend the lines to the frame instead.
-		- Detail: `detail_backlog.md`, under 2026111623500001, third bullet.
-	- Progress log:
-		- 20261117: Done: the tab tip, a menu tip, and the banner hand the frame where their box and lines go, and the frame borrows the words from where they're kept. The banner's words are fixed text, so it never copies them.
-		- 20261117: Measured in ddkre's window as allocations per frame on the window thread. With a tab tip up it went from 190 to 192 down to 184 to 185, 145 at rest in every run. With a menu tip up, 179 down to 168, with 2026111623500004 in.
-		- 20261117: What's left over rest, about 40 with a tab tip and 23 with a menu tip, is mostly the second render pass the tip layer adds. That wasn't split out further.
-	- Decisions:
-		- 20261117: The banner keeps its line lefts in a fixed array of 4. Every banner text has 2 or 3 lines, and dfe5w fails on one with more.
-		- 20261117: ddkre now holds a tab tip and a menu tip up, and checks each frame's count over the frame at rest, so the driver's floor cancels out. Limits 43 and 28. The window prints a note as each tip comes up, so a hover that missed fails rather than passing on nothing.
-	- Verified: 20261117. ddkre passes on the new build and fails both tip limits on the old one (47 and 34 over rest). The quick run passed fmt, clippy, tests, scripts, and docs, the last 2 run again after the first full call ran past 4 minutes.
-	- Swept: every caller of `tab_tip_layout`, `menu_tip_layout`, and `bench_layout`, all in `render_with`. Nothing past them in the frame takes `&mut self`.
-	- Branch: nov17-2026111708444862
-	- Commit: 0aa7ed15
-	- Test case: `an_overlay_lends_its_words` (dfe5s), the frame's lines are the kept strings and placing them allocates nothing. `every_banner_fits_its_kept_lefts` (dfe5w). ddkre's tab tip limit, which the old build fails.
-	- Acceptance signoff: Self-closed: the change does what the item asked, and its window check fails before and passes after.
 	- Closed: 20261117-093908
 
 - Settings: tips, labels, and search results are built again on every frame or pointer move
@@ -429,6 +300,135 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Test case: `a_window_keeps_one_x_connection_across_its_reads` (dfe50), `a_failed_x_read_drops_the_connection_and_the_next_read_connects_again` (dfe51)
 	- Acceptance signoff: Self-closed: the change does what the item asked, measured before and after, and its tests fail with the keeping broken.
 	- Closed: 20261117-091811
+
+- A menu tip runs off a main window narrower than about 340 DIP
+	- ID: 2026111709545547
+	- Type: Bug
+	- Status: Done
+	- Severity: Low
+	- Opened: 20261117-095455
+	- Opened by: CC
+	- Related IDs: 2026111709403848
+	- Target version: rc.1
+	- Requirements: A menu tip wraps at a fixed 320 DIP, whatever the window's width, and the main window has no minimum width, so in a narrow window the box is wider than the window and its lines are cut off. Found by reading the code while fixing the tab tip, not seen on screen.
+	- Reproduced: 20261117. In a 260 pixel window, the File menu's first tip ran off the right edge mid-word. The new test failed with the old width.
+	- Actual cause: As described.
+	- Actual fix: A menu tip wraps at its 320 DIP width, or at the window's width less the box's padding and edge gap when that's narrower. A wide window wraps as before, so a resize there doesn't wrap the tip again.
+	- Decisions:
+		- 20261117: In a window too narrow for the tip on either side of the menu, it still goes to the left edge, over the menu. There's no room anywhere else.
+		- 20261117: A single word wider than the window still runs off, as in every other tip, since `tip::wrap` never splits a word.
+	- Verified: 20261117. dfe6n fails with the old width (a 324 wide box in a 120 wide window) and passes with the fix. dfe5r passes. ddkre passes, menu tip 23 per frame over rest, limit 28. In a 260 pixel window the same tip wraps onto 2 lines inside it. The quick run passed, all 5 areas.
+	- Swept: every caller of `tip::beside`, which is only the menu tip, and every use of `MENU_TIP_MAX_W`. The Settings tip uses `wrap_budget`, and the tab tip fits to the window since 2026111709403848.
+	- Test case: dfe6n `a_menu_tip_fits_a_window_narrower_than_its_cap`.
+	- Branch: nov17-2026111709545547
+	- Commit: c4edf86d
+	- Acceptance signoff: Self-closed: the bug was reproduced, its test failed before the fix and passes after, and the wrapped tip was checked in a narrow window.
+	- Closed: 20261117-100426
+
+- A tab tip wider than the window runs off its right edge
+	- ID: 2026111709403848
+	- Type: Bug
+	- Status: Done
+	- Severity: Low
+	- Opened: 20261117-094038
+	- Opened by: CC
+	- Target version: rc.1
+	- Requirements: A tab tip with a long path or shell command is wider than a 900 pixel window, starts at the left edge, and its lines are cut off at the right. Seen in ddkre's window, whose shell command is a long temp path. Control: `tab_tip_layout` only clamps the box's left to 0, and never shortens or wraps a line, so any line wider than the window does this.
+	- Reproduced: 20261117 in unit tests. A table line wider than its budget came back as one line, as wide as before.
+	- Actual cause: As described. The tip's box was as wide as its longest line, with nothing that fitted a line to the window.
+	- Actual fix: A line wider than the window, less the box's padding, goes on over more lines indented to the value column. Each line's fit is kept until it, the window's width, or the text context changes, so a clock tick fits only the clock line again.
+	- Decisions:
+		- 20261117: Wrap rather than cut the line short, since the tip is where the whole path is shown, and the other tips already wrap to the window.
+		- 20261117: A line breaks after a slash, a backslash, or a space when one falls in the back half of the room, and anywhere otherwise. A window too narrow for the key column wraps the whole line flush left.
+		- 20261117: The fit is kept per line. Fitting every line on each clock tick took ddkre's tab tip to 90 allocations per frame over rest, against its limit of 43.
+	- Verified: 20261117. Both new tests fail with the wrap turned off and pass with it. dfe5s and ddgfv pass. ddkre passes, 38 per frame over rest with the tab tip up. In ddkre's 900 pixel window, its long shell command and path wrap under the value column inside the window. The quick run passed, all 5 areas.
+	- Swept: every place the tab tip's lines are read: `tab_tip_layout`, the frame's overlay in `render_with`, and `update_tab_tip`. Menu and Settings tips already wrap. A menu tip's wrap width doesn't follow the window, filed as 2026111709545547. The benchmark banner is fixed text.
+	- Test case: dfe67 `a_tip_line_too_wide_wraps_under_its_value`, dfe68 `a_tab_tip_wraps_to_the_window_it_is_in`.
+	- Branch: nov17-2026111709403848
+	- Commit: db50621c
+	- Acceptance signoff: Self-closed: the bug was reproduced in tests, which failed before the fix and pass after, and the wrapped tip was checked in a real window.
+	- Closed: 20261117-095507
+
+- At some cell widths a window or pane exactly N cells wide shows N-1
+	- ID: 2026111708192137
+	- Type: Bug
+	- Status: Done
+	- Severity: Low
+	- Opened: 20261117-081921
+	- Opened by: CC
+	- Related IDs: 2026111708050191
+	- Target OS: All
+	- Incorrect behavior: The grid is counted by dividing the width by the cell width and rounding down in single precision. With a cell of 9.6, 15 cells make 144, which divides back to just under 15, so it counts 14. The window size read back from a grid, and the pane's own column count, both do this.
+	- Expected behavior: A width that holds N whole cells counts as N.
+	- Note: Found while fixing 2026111708050191. Cell sizes that are binary fractions, as in ddyqp, never hit it. Whether a real font's cell lands on one isn't known.
+	- Reproduced: 20261117 in unit tests. At a cell of 9.6, a length of 144 px counted 14 cells, and the window's and the pane's counts failed the same way.
+	- Actual cause: As described. The window's size and the pane's grid each floored the width over the cell in f32, and a product that rounds down a hair reads as one cell short.
+	- Actual fix: Both counts go through one helper, which counts a cell when the length is within a hundredth of a pixel of it.
+	- Decisions:
+		- 20261117: The slack is 0.01 px. It's well past the f32 error at the largest window, and the part of the last cell it lets through can't be seen. The text buffer doesn't wrap, so a column that much over the width still draws.
+		- 20261117: The width a grid asks for, `window_px`, is left as it is. It still rounds up, which the zoom fix in 2026111708050191 relies on.
+	- Swept: every place a grid count comes from a length over a cell. There are 2, the window's `cells_in` and the pane's `content_dims`, and both use the helper now. The other floors over a cell map a mouse point to a cell, and the command line's split size is a ratio, not a count.
+	- Verified: 20261117. The 3 new tests failed with the slack at 0 and pass with it. dfe3c and ddyqp still pass. The quick gate passed, all 5 areas.
+	- Test case: dfe3p `a_length_of_whole_cells_counts_every_cell`, dfe3q `a_grid_reads_back_at_any_cell_size`, dfe3r `a_pane_of_whole_cells_shows_every_cell`.
+	- Branch: nov17-2026111708192137
+	- Commit: 79c98a84
+	- Acceptance signoff: Self-closed: the bug was reproduced in tests, which failed before the fix and pass after.
+	- Closed: 20261117-082900
+
+- With Resize window on zoom on, a zoom on the alt screen adds a column
+	- ID: 2026111708050191
+	- Type: Bug
+	- Status: Done
+	- Severity: Low
+	- Opened: 20261117-080501
+	- Opened by: CC
+	- Related IDs: 2026111700130407
+	- Target OS: All
+	- Steps to reproduce: Turn on Resize window on zoom. Run a full-screen program such as less in a 700x400 window, then press Ctrl+Plus.
+	- Incorrect behavior: The program is told one column more than it had, 64 then 65. On the normal screen the grid is kept, 55 then 55.
+	- Expected behavior: The program keeps its columns and rows.
+	- Note: Found on Xvfb while working 2026111700130407, on the dev build and the 11-10 dogfood build. The alt screen hides the minimap column, which the zoom's size may still count.
+	- Reproduced: 20261117 on Xvfb, with the setting on and a program on the alt screen. The zoom held 64 columns and asked for a window 65 wide.
+	- Origin: e5f8a69, the commit that added Resize window on zoom.
+	- Actual cause: After finding the least width that shows the pane's grid, the zoom rounds it out to whole cells of the window's grid, so the saved size reopens as big. That width was already whole cells, but its pixel count was rounded up, so it read as a bit over 64 cells, and rounding up again made it 65. With the minimap on, the least width usually falls partway into a cell, which is why the normal screen kept its grid. The minimap isn't involved.
+	- Actual fix: A width already at whole cells stays as it is. Any other width goes out to the next whole cell, as before.
+	- Verified: 20261117 on Xvfb, the rig with the fix kept 64 columns on the alt screen and 55 on the normal screen through 2 zooms in and 1 out, and the saved grid stayed 64x15. The new test failed on the old code and passes now. The quick gate passed, all 5 areas.
+	- Swept: the other `ceil` near a cell size in the source is `window_px` itself, which this relies on. The height takes the same path, through the same function.
+	- Decisions:
+		- 20261117: The float edge found on the way, where a width of exactly N cells counts as N-1 at some cell sizes, is its own item, 2026111708192137. It's older than this and touches every grid count.
+	- Test case: dfe3c `a_size_already_at_whole_cells_keeps_its_grid`.
+	- Branch: nov17-2026111708050191
+	- Commit: f8ac2cb1
+	- Acceptance signoff: Self-closed: the bug was reproduced, its test failed before the fix and passes after, and the rig shows the program keeps its grid.
+	- Closed: 20261117-082100
+
+- The tab tip and the rating banner copy every line on each frame they show
+	- ID: 2026111708444862
+	- Type: Enhancement
+	- Status: Done
+	- Priority: Low
+	- Opened: 20261117-084448
+	- Opened by: CC
+	- Parent ID: 2026111623500001
+	- Target version: rc.1
+	- Requirements:
+		- While the tab tip or the rating banner is up, each frame copies all its lines out of the kept copy, since the frame keeps them across calls that change the window's state.
+		- Lend the lines to the frame instead.
+		- Detail: `detail_backlog.md`, under 2026111623500001, third bullet.
+	- Progress log:
+		- 20261117: Done: the tab tip, a menu tip, and the banner hand the frame where their box and lines go, and the frame borrows the words from where they're kept. The banner's words are fixed text, so it never copies them.
+		- 20261117: Measured in ddkre's window as allocations per frame on the window thread. With a tab tip up it went from 190 to 192 down to 184 to 185, 145 at rest in every run. With a menu tip up, 179 down to 168, with 2026111623500004 in.
+		- 20261117: What's left over rest, about 40 with a tab tip and 23 with a menu tip, is mostly the second render pass the tip layer adds. That wasn't split out further.
+	- Decisions:
+		- 20261117: The banner keeps its line lefts in a fixed array of 4. Every banner text has 2 or 3 lines, and dfe5w fails on one with more.
+		- 20261117: ddkre now holds a tab tip and a menu tip up, and checks each frame's count over the frame at rest, so the driver's floor cancels out. Limits 43 and 28. The window prints a note as each tip comes up, so a hover that missed fails rather than passing on nothing.
+	- Verified: 20261117. ddkre passes on the new build and fails both tip limits on the old one (47 and 34 over rest). The quick run passed fmt, clippy, tests, scripts, and docs, the last 2 run again after the first full call ran past 4 minutes.
+	- Swept: every caller of `tab_tip_layout`, `menu_tip_layout`, and `bench_layout`, all in `render_with`. Nothing past them in the frame takes `&mut self`.
+	- Branch: nov17-2026111708444862
+	- Commit: 0aa7ed15
+	- Test case: `an_overlay_lends_its_words` (dfe5s), the frame's lines are the kept strings and placing them allocates nothing. `every_banner_fits_its_kept_lefts` (dfe5w). ddkre's tab tip limit, which the old build fails.
+	- Acceptance signoff: Self-closed: the change does what the item asked, and its window check fails before and passes after.
+	- Closed: 20261117-093908
 
 - Tips and the menu bar measure their text again on each frame or hit test
 	- ID: 2026111623500004
