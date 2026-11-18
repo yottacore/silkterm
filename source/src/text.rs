@@ -12,6 +12,7 @@ use glyphon::{
 
 use crate::coloremoji::{ColorGlyphs, ColorMetrics};
 use crate::config;
+use crate::gfx::Loss;
 
 // Concrete family name behind `Family::Monospace`, resolved again on each TextCtx
 // build so the Settings font field and "Use system font" apply live. cosmic-text
@@ -543,6 +544,9 @@ struct TextGpu {
 	// separate renderer for the scrim source pass: pane text only (no chrome), and
 	// panes may substitute a de-bolded buffer (text_scrim_regular_weight)
 	scrim: TextRenderer,
+	// glyphon maps a vertex buffer it grows, and wgpu panics mapping one made
+	// on a lost device, so nothing is prepared once this is set (2026111715110622)
+	loss: Loss,
 }
 
 const DETACHED: &str = "text drawn while its GPU half is released";
@@ -564,7 +568,12 @@ fn attached_ref(gpu: Option<&TextGpu>) -> &TextGpu {
 }
 
 impl TextGpu {
-	fn new(device: &wgpu::Device, queue: &wgpu::Queue, format: wgpu::TextureFormat) -> Self {
+	fn new(
+		device: &wgpu::Device,
+		queue: &wgpu::Queue,
+		format: wgpu::TextureFormat,
+		loss: &Loss,
+	) -> Self {
 		let cache = Cache::new(device);
 		let mut atlas = TextAtlas::new(device, queue, &cache, format);
 		// The scrim text pass renders into its own coverage texture
@@ -596,6 +605,7 @@ impl TextGpu {
 			overlay,
 			tip,
 			scrim,
+			loss: loss.clone(),
 		}
 	}
 }
@@ -638,10 +648,11 @@ impl TextCtx {
 		device: &wgpu::Device,
 		queue: &wgpu::Queue,
 		format: wgpu::TextureFormat,
+		loss: &Loss,
 		scale: f32,
 	) -> Self {
 		let mut ctx = Self::new_cpu(scale);
-		ctx.attach_gpu(device, queue, format);
+		ctx.attach_gpu(device, queue, format, loss);
 		ctx
 	}
 
@@ -652,8 +663,9 @@ impl TextCtx {
 		device: &wgpu::Device,
 		queue: &wgpu::Queue,
 		format: wgpu::TextureFormat,
+		loss: &Loss,
 	) {
-		self.gpu = Some(TextGpu::new(device, queue, format));
+		self.gpu = Some(TextGpu::new(device, queue, format, loss));
 	}
 
 	/// Let the device half go, and with it the rasterized glyphs, which are only
@@ -1067,8 +1079,13 @@ impl TextCtx {
 			renderer,
 			atlas,
 			viewport,
+			loss,
 			..
 		} = attached(gpu);
+		// the frame is refused anyway, before or at its acquire or present
+		if loss.lost() {
+			return Ok(());
+		}
 		renderer.prepare_with_custom(
 			device,
 			queue,
@@ -1099,6 +1116,9 @@ impl TextCtx {
 			..
 		} = self;
 		let gpu = attached(gpu);
+		if gpu.loss.lost() {
+			return Ok(());
+		}
 		gpu.overlay.prepare(
 			device,
 			queue,
@@ -1131,6 +1151,9 @@ impl TextCtx {
 			..
 		} = self;
 		let gpu = attached(gpu);
+		if gpu.loss.lost() {
+			return Ok(());
+		}
 		gpu.tip.prepare(
 			device,
 			queue,
@@ -1164,8 +1187,12 @@ impl TextCtx {
 			scrim,
 			scrim_atlas,
 			viewport,
+			loss,
 			..
 		} = attached(gpu);
+		if loss.lost() {
+			return Ok(());
+		}
 		scrim.prepare_with_custom(
 			device,
 			queue,

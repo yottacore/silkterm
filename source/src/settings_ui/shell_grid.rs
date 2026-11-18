@@ -175,6 +175,9 @@ impl SettingsDialog {
 	pub fn fold_shells(&mut self, found: &[crate::shells::Found]) {
 		self.orig.shells = crate::shells::merge(&self.orig.shells, found);
 		self.edited.shells = crate::shells::merge(&self.edited.shells, found);
+		if let Some(unsaved) = self.unsaved.as_mut() {
+			unsaved.shells = crate::shells::merge(&unsaved.shells, found);
+		}
 	}
 
 	/// The spec index of the grid, for the pseudo-row fields, which know which

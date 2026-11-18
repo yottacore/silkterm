@@ -1154,6 +1154,14 @@ fScriptTests(){
 	## sway floats it above the terminal. Exit 3 is a skip: no binary, sway,
 	## wtype, python3, or software Vulkan.
 	fRunTest_MaySkip cicd/tests/dlgwl/run.bash "Settings tied to its window on Wayland"
+	## A lost GPU device is built again, for the terminal and for Settings, and
+	## the window draws again without any input. Exit 3 is a skip: no binary,
+	## sway, wtype, or software Vulkan.
+	fRunTest_MaySkip cicd/tests/devlost/run.bash "a lost GPU device built again"
+	## A window made wider than the device's largest texture stays up, on X11
+	## with and without a window manager and on Wayland. Exit 3 is a skip: no
+	## binary, Xvfb, xfwm4, xdotool, sway, software Vulkan, or free display.
+	fRunTest_MaySkip cicd/tests/oversize/run.bash "a window past the texture limit"
 	## On native Wayland a window takes each output's own size once moved or
 	## dropped there, even with a sliver left on another output. Exit 3 is a skip: no
 	## binary, sway, python3, or software Vulkan.
@@ -1773,9 +1781,14 @@ fi
 ## here, rather than an untested merge. Behind only is safe, as a fast-forward
 ## with a stash around it for a dirty tree. Diverged aborts now rather than at
 ## publish. Offline only warns, since a local build shouldn't need the net.
+## An 'auto-stash' left by a run that stopped between its stash and its pop
+## holds uncommitted work. A build past it leaves that work out, and the next
+## stash buries it deeper, so it stops the run first.
 fJobs
 if ! fStepOpen "Remote sync"; then
 	:
+elif grep -qE ': auto-stash$' <<<"$(git stash list)"; then
+	fDie "an 'auto-stash' from an earlier run is still in 'git stash list'. Pop or drop it, then re-run."
 elif ! git rev-parse --abbrev-ref '@{u}' >/dev/null 2>&1; then
 	fEcho_Clean "no upstream for $(git rev-parse --abbrev-ref HEAD); nothing to sync"
 elif ! fRemoteGit fetch --quiet 2>/dev/null; then
@@ -1801,11 +1814,18 @@ else
 			stashesAfter="$(git stash list | wc -l)"
 			((stashesAfter > stashesBefore)) && didStash=1
 		fi
+		## A failed pull puts the stash back before stopping. Left there, the tree
+		## sits at HEAD with every edit only in the stash.
 		fEcho_Clean "git pull --ff-only ..."
-		fRemoteGit pull --ff-only
+		if ! fRemoteGit pull --ff-only; then
+			if ((didStash)) && ! git stash pop; then
+				fDie "git pull --ff-only failed, and putting the stashed work back failed too. It is still in 'stash@{0}' (auto-stash), which may be the only copy of some of it, so keep it. Settle any conflicts, bring back what's missing, then 'git stash drop' and re-run."
+			fi
+			fDie "git pull --ff-only failed. The working tree is as it was."
+		fi
 		if ((didStash)); then
 			fEcho_Clean "git stash pop ..."
-			git stash pop
+			git stash pop || fDie "git stash pop failed after the fast-forward. The stashed work is still in 'stash@{0}' (auto-stash), which may be the only copy of some of it, so keep it. Settle any conflicts, bring back what's missing, then 'git stash drop' and re-run."
 		fi
 		fEcho "OK: fast-forwarded ${behind} commit(s) from upstream"
 	else
@@ -2523,6 +2543,8 @@ fEcho_Clean
 
 
 ##	History:
+##		- 2026-11-17: Stage 0 puts the stash back when the pull fails, names it when
+##		              a pop fails, and stops when an earlier run's 'auto-stash' is left.
 ##		- 2026-11-10: The profiler's app runs on a settings tree of its own in the run
 ##		              folder, at Max with Choose automatically off, and outside tmux.
 ##		- 2026-11-09: A memory cap with no swap, CICD_MEM_CAP: this side in a systemd

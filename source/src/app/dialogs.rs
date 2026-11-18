@@ -356,18 +356,13 @@ impl App {
 		let Some(n) = &self.notice else {
 			return false;
 		};
-		match event {
-			WindowEvent::KeyboardInput { .. }
-			| WindowEvent::MouseWheel { .. }
-			| WindowEvent::Ime(_) => true,
-			WindowEvent::MouseInput {
-				state: ElementState::Pressed,
-				..
-			} => {
+		match underneath(event) {
+			Underneath::Takes => false,
+			Underneath::Drops => true,
+			Underneath::Raises => {
 				n.window.focus_window();
 				true
 			}
-			_ => false,
 		}
 	}
 
@@ -452,13 +447,14 @@ impl App {
 	fn apply_dialog_settings(&mut self) -> bool {
 		let mut wrote = true;
 		let mut refused = false;
-		if let Some((orig, edited)) = self
+		if let Some((orig, edited, mut unsaved)) = self
 			.dialog
 			.as_ref()
 			.and_then(crate::dialog::DialogWin::settings_values)
 		{
 			if let Some(state) = self.state.as_mut() {
-				wrote = state.apply_settings_values(&orig, edited);
+				unsaved = state.apply_settings_values(&orig, edited, unsaved);
+				wrote = unsaved.is_none();
 			}
 			if let Some(refusal) = config::take_refusal() {
 				refused = true;
@@ -479,12 +475,13 @@ impl App {
 			}
 			// The applied values are the new baseline, so a later Apply diffs against the
 			// live state. Without this, picking the open-time value again, such as Bg fit
-			// back to Stretch, reads as no change. When another window saved while these
-			// changes were open, the file has both, and the window and the dialog both take
-			// it from there.
+			// back to Stretch, reads as no change. A write that didn't go through keeps
+			// the file's own baseline for the save, so OK again writes the same changes.
+			// When another window saved while these changes were open, the file has
+			// both, and the window and the dialog both take it from there.
 			if let Some(d) = self.dialog.as_mut() {
 				let behind = wrote && d.take_behind();
-				d.commit_baseline();
+				d.commit_baseline(unsaved);
 				if let Some(state) = self.state.as_mut().filter(|_| behind) {
 					state.follow_peer();
 					d.follow_file(state.settings_for_dialog());
@@ -594,9 +591,65 @@ fn alert(headline: &str, detail: &str) {
 	alert.runModal();
 }
 
+/// What a window under Settings or a notice does with an event.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum Underneath {
+	Takes,
+	Drops,
+	/// the one on top comes forward instead
+	Raises,
+}
+
+/// The close button counts as a click: let through, it quit with Settings
+/// open and its changes went with it.
+pub(super) fn underneath(event: &WindowEvent) -> Underneath {
+	match event {
+		WindowEvent::KeyboardInput { .. }
+		| WindowEvent::MouseWheel { .. }
+		| WindowEvent::Ime(_) => Underneath::Drops,
+		WindowEvent::MouseInput {
+			state: ElementState::Pressed,
+			..
+		}
+		| WindowEvent::CloseRequested => Underneath::Raises,
+		_ => Underneath::Takes,
+	}
+}
+
 #[cfg(test)]
 mod tests {
 	use super::notice_due;
+
+	// A dialog holds the window under it: keys go nowhere, and a click or the
+	// title bar's close brings the dialog forward. The close used to quit past
+	// Settings and lose what it had changed.
+	// Test ID: dfehe
+	#[test]
+	fn the_window_under_a_dialog_raises_it_on_a_close() {
+		use super::{Underneath, underneath};
+		use winit::event::{DeviceId, ElementState, Ime, MouseButton, WindowEvent};
+		let device_id = DeviceId::dummy();
+		let press = |state| WindowEvent::MouseInput {
+			device_id,
+			state,
+			button: MouseButton::Left,
+		};
+		assert_eq!(underneath(&WindowEvent::CloseRequested), Underneath::Raises);
+		assert_eq!(
+			underneath(&press(ElementState::Pressed)),
+			Underneath::Raises
+		);
+		assert_eq!(
+			underneath(&press(ElementState::Released)),
+			Underneath::Takes
+		);
+		assert_eq!(
+			underneath(&WindowEvent::Ime(Ime::Enabled)),
+			Underneath::Drops
+		);
+		assert_eq!(underneath(&WindowEvent::Focused(true)), Underneath::Takes);
+		assert_eq!(underneath(&WindowEvent::RedrawRequested), Underneath::Takes);
+	}
 
 	// A Mac with no Metal device ended the launch with a line on stderr only,
 	// which a launch from Finder never shows.

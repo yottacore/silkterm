@@ -2077,14 +2077,19 @@ fn write_config_keeping(path: &std::path::Path, text: &str) -> anyhow::Result<Op
 		eprintln!("{line}");
 	}
 	if let Some(loss) = kept.as_deref().and_then(|copy| lost_converting(path, copy)) {
-		eprintln!("{}", loss.terminal_line());
-		// a footer put back to the default lost nothing anybody wrote
-		let owed = !matches!(loss.how, Converted::Dropped(_)) || !loss.lines.is_empty();
-		if owed {
-			*crate::locks::lock(&LOST_IN_CONVERSION) = Some(loss);
-		}
+		say_lost(loss);
 	}
 	Ok(kept)
+}
+
+// The terminal hears it now, and the window once it's up.
+fn say_lost(loss: ConversionLoss) {
+	eprintln!("{}", loss.terminal_line());
+	// a footer put back to the default lost nothing anybody wrote
+	let owed = !matches!(loss.how, Converted::Dropped(_)) || !loss.lines.is_empty();
+	if owed {
+		*crate::locks::lock(&LOST_IN_CONVERSION) = Some(loss);
+	}
 }
 
 // The copy is the file exactly as it was before the conversion.
@@ -2739,23 +2744,60 @@ trait Put {
 }
 impl Put for shcl::Document {
 	fn put_string(&mut self, path: &str, v: &str) {
-		unwritable(path, self.set_string(path, v));
+		put_once(self, path, |doc| doc.set_string(path, v));
 	}
 	fn put_bool(&mut self, path: &str, v: bool) {
-		unwritable(path, self.set_bool(path, v));
+		put_once(self, path, |doc| doc.set_bool(path, v));
 	}
 	fn put_float(&mut self, path: &str, v: f64) {
-		unwritable(path, self.set_float(path, v));
+		put_once(self, path, |doc| doc.set_float(path, v));
 	}
 	fn put_int(&mut self, path: &str, v: i64) {
-		unwritable(path, self.set_int(path, v));
+		put_once(self, path, |doc| doc.set_int(path, v));
 	}
 	fn put_datetime(&mut self, path: &str, v: &shcl::ShclDateTime) {
-		unwritable(path, self.set_datetime(path, v));
+		put_once(self, path, |doc| doc.set_datetime(path, v));
 	}
 	fn put_string_array(&mut self, path: &str, v: &[&str]) {
-		unwritable(path, self.set_string_array(path, v));
+		put_once(self, path, |doc| doc.set_string_array(path, v));
 	}
+}
+
+// A setting written twice reads as neither copy, and shcl refuses to set it,
+// so the save kept the file as it was and the setting stayed at its default.
+// The value being written is the one wanted, so the later copies go and the
+// first takes it, as the rating line does.
+fn put_once(
+	doc: &mut shcl::Document,
+	path: &str,
+	set: impl Fn(&mut shcl::Document) -> shcl::SetStatus,
+) {
+	let mut status = set(doc);
+	if status == shcl::SetStatus::Multiple {
+		let notes = keep_first(doc, path);
+		status = set(doc);
+		if doc.count(path) == 1 {
+			for note in notes {
+				let _ = doc.set_comment(path, &note);
+			}
+		}
+	}
+	unwritable(path, status);
+}
+
+// Every copy of a setting after the first taken out, giving back the comments
+// above them, which a removal takes along. A path that is doubled further up
+// than its last name is left alone, since `(k)` picks among the last name's
+// copies only.
+fn keep_first(doc: &mut shcl::Document, path: &str) -> Vec<String> {
+	let copies = doc.count(path);
+	let notes = (1..copies)
+		.flat_map(|k| doc.comments(&format!("{path}({k})")))
+		.collect();
+	for k in (1..copies).rev() {
+		doc.remove(&format!("{path}({k})"));
+	}
+	notes
 }
 fn unwritable(path: &str, status: shcl::SetStatus) {
 	if status != shcl::SetStatus::Ok {
@@ -2769,6 +2811,20 @@ fn unwritable(path: &str, status: shcl::SetStatus) {
 // refuses one now, but the comparison is where the damage was done.
 fn same_f32(a: f32, b: f32) -> bool {
 	a == b || (a.is_nan() && b.is_nan())
+}
+
+/// `persist` for a Settings Apply. `unsaved` is the baseline the file still has
+/// when an earlier Apply couldn't write it, and the save diffs against that, or
+/// the retry finds nothing changed and writes nothing. Gives back the baseline to
+/// keep when this write didn't go through either.
+#[must_use]
+pub fn persist_apply(
+	orig: &Settings,
+	unsaved: Option<Settings>,
+	edited: &Settings,
+) -> Option<Settings> {
+	let base = unsaved.unwrap_or_else(|| orig.clone());
+	(!persist(&base, edited)).then_some(base)
 }
 
 /// Write the values that differ from `orig` back into the config in place. The
@@ -3164,13 +3220,13 @@ struct RawColors {
 fn load() -> Settings {
 	// A launch's own writes come before it says anything about the file.
 	*crate::locks::lock(&LAUNCH_SAID) = None;
+	// a launch rewrites the file in steps, and a save in another window must
+	// not happen between them, nor a second launch's adopt or import
+	let _lock = crate::peers::save_lock();
 	adopt_legacy_config();
 	let Some(path) = config_path() else {
 		return Settings::default();
 	};
-	// a launch rewrites the file in steps, and a save in another window must
-	// not happen between them
-	let _lock = crate::peers::save_lock();
 	import_beta1_config(&path);
 	if !path.exists() && may_write(&path) {
 		if let Some(dir) = path.parent() {
@@ -3451,12 +3507,7 @@ fn complaints_in(doc: &shcl::Document, text: &str) -> Vec<String> {
 	let mut unread: Vec<(String, usize)> = active
 		.iter()
 		.filter(|(path, _)| {
-			!known.contains(path)
-				&& !path.starts_with("shells.")
-				&& !path.starts_with("themes.")
-				// the program's own block, read by the settings model
-				&& !path.starts_with("kept.")
-				&& !is_monitor_size_path(path)
+			!known.contains(path) && !path.starts_with("shells.") && !copied_as_is(path)
 		})
 		.cloned()
 		.collect();
@@ -3857,6 +3908,13 @@ fn write_user_themes(
 }
 
 const MONITOR_SIZE_FIELDS: &[&str] = &["columns", "rows", "font_zoom"];
+
+// The subtrees a rebuild copies line for line, and the typo check leaves
+// alone: the user's themes, the sizes kept per monitor, and the program's own
+// `kept` block. The shell list is copied whole, apart from these.
+fn copied_as_is(path: &str) -> bool {
+	path.starts_with("themes.") || path.starts_with("kept.") || is_monitor_size_path(path)
+}
 
 // `window.monitors.<monitor>.<field>`, for a field an entry is read for.
 fn is_monitor_size_path(path: &str) -> bool {
@@ -5311,9 +5369,10 @@ fn repair_wallpaper_heading(file: &mut LaunchFile) {
 // namespace became nested blocks, and rewriting that in place would shred the old
 // file's comments and grouping. So the old file is copied to a `.bak` and a fresh
 // template is written over it, with every active old value copied to its new
-// path, so settings survive and the file's comments are current. Unknown
-// `themes.*` subtrees are copied as is in dotted form. The rewrite keeps a linked
-// file linked and a private one private.
+// path, so settings survive and the file's comments are current. Themes and
+// the `kept` block are copied as is in dotted form (`copied_as_is`). A setting
+// with nowhere to go is counted and said. The rewrite keeps a linked file
+// linked and a private one private.
 fn convert_legacy_config(file: &mut LaunchFile) {
 	convert_legacy_config_with(file, write_config_atomic);
 }
@@ -5327,7 +5386,7 @@ fn convert_legacy_config_with(
 	let Some(text) = file.text() else {
 		return;
 	};
-	let Some(joined) = converted_config_text(text) else {
+	let Some((joined, left)) = converted_config(text) else {
 		return;
 	};
 	let text = text.to_owned();
@@ -5360,6 +5419,16 @@ fn convert_legacy_config_with(
 		}
 		return;
 	}
+	if left > 0 {
+		say_lost(ConversionLoss {
+			path: path.to_path_buf(),
+			backup: Some(backup),
+			lost: left,
+			how: Converted::Rewritten,
+			lines: Vec::new(),
+		});
+		return;
+	}
 	eprintln!(
 		"{APP_NAME}: config converted to the new nested layout; the old file is kept at {}",
 		backup.display()
@@ -5368,6 +5437,11 @@ fn convert_legacy_config_with(
 
 // The conversion as text: None for a file that isn't pre-nesting.
 fn converted_config_text(text: &str) -> Option<String> {
+	converted_config(text).map(|(text, _)| text)
+}
+
+// The same, with how many settings it left behind.
+fn converted_config(text: &str) -> Option<(String, usize)> {
 	// Only an active flat key marks a file as legacy, since any real old config has
 	// several. A comment that only contains an old name, such as one a save left at
 	// column 0, must never wipe a current-format file.
@@ -5393,7 +5467,7 @@ fn converted_config_text(text: &str) -> Option<String> {
 	if flat.iter().all(|index| unread.contains(&(index + 1))) {
 		return None;
 	}
-	Some(rebuilt_config_text(text, &[]).0)
+	Some(rebuilt_config_text(text, &[]))
 }
 
 // The template with every active setting of `text` that still reads copied
@@ -5517,7 +5591,7 @@ fn rebuilt_config_text(text: &str, garbled: &[usize]) -> (String, usize) {
 					}
 				}
 			}
-		} else if p.starts_with("themes.") || is_monitor_size_path(p) {
+		} else if copied_as_is(p) {
 			extras.push(format!("{p}: {value}"));
 		} else if !p.starts_with("shells.") {
 			// dropped from the new file, still in the copy
@@ -5680,6 +5754,20 @@ fn migrate_config_text(text: &str) -> Option<String> {
 	migrated_text(text, false)
 }
 
+// A line's key is its path less what the headings above it give: the leaf,
+// the whole path, or anything between, such as `minimap.keep_for` under
+// `scroll:`. Renames only change the leaf, so the rest stays as typed.
+fn renamed_key(key: &str, path: &str, new: &str) -> String {
+	if key.eq_ignore_ascii_case(path) {
+		return new.to_string();
+	}
+	let leaf = new.rsplit('.').next().unwrap_or(new);
+	match key.rsplit_once('.') {
+		Some((parents, _)) => format!("{parents}.{leaf}"),
+		None => leaf.to_string(),
+	}
+}
+
 // `keep_default_shell` is for the write to disk. An active `shell.default`
 // leaves with its adoption into the shell list (`adopt_default_shell`), which
 // removes it once that save goes through. Where the save was refused it has to
@@ -5786,17 +5874,9 @@ fn migrated_text(text: &str, keep_default_shell: bool) -> Option<String> {
 		let mut kept = match renamed {
 			Some((_, new, convert)) => {
 				changed = true;
-				// the line has the leaf (nested) or the full path
-				// (dotted); rewrite whichever token is there
 				let old_leaf = path.rsplit('.').next().unwrap_or(path);
-				let new_leaf = new.rsplit('.').next().unwrap_or(new);
 				let key = line_setting_key(line).unwrap_or(old_leaf);
-				let target = if key.eq_ignore_ascii_case(path) {
-					new
-				} else {
-					new_leaf
-				};
-				let line = line.replacen(key, target, 1);
+				let line = line.replacen(key, &renamed_key(key, path, new), 1);
 				convert
 					.and_then(|convert| convert_line_value(&line, convert))
 					.unwrap_or(line)
@@ -5814,11 +5894,7 @@ fn migrated_text(text: &str, keep_default_shell: bool) -> Option<String> {
 			&& line_setting_value(&kept).is_some_and(animation_is_none)
 		{
 			let key = line_setting_key(&kept).unwrap_or("animation");
-			let target = if key.eq_ignore_ascii_case(path) {
-				"cursor.blink"
-			} else {
-				"blink"
-			};
+			let target = renamed_key(key, path, "cursor.blink");
 			let indent = &kept[..kept.len() - kept.trim_start().len()];
 			let value = kept
 				.split_once(':')
@@ -6160,7 +6236,8 @@ fn edit_setting_lines(
 	line_for: impl Fn(&str, &str, &str, &[&str]) -> LineEdit,
 ) -> Option<String> {
 	let mut lines: Vec<Option<String>> = text.lines().map(|l| Some(l.to_string())).collect();
-	let mut active: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+	let mut active: std::collections::HashMap<String, Vec<usize>> =
+		std::collections::HashMap::new();
 	let mut commented: std::collections::HashMap<String, Vec<usize>> =
 		std::collections::HashMap::new();
 	for w in walk_settings(text) {
@@ -6173,18 +6250,26 @@ fn edit_setting_lines(
 		else {
 			continue;
 		};
-		if is_active {
-			active.insert(path, index);
+		let by_path = if is_active {
+			&mut active
 		} else {
-			commented.entry(path).or_default().push(index);
-		}
+			&mut commented
+		};
+		by_path.entry(path).or_default().push(index);
 	}
 	let mut changed = false;
 	for key in keys {
 		let others = commented.get(*key).map_or(&[][..], Vec::as_slice);
-		let Some(i) = active.get(*key).copied().or_else(|| others.last().copied()) else {
+		// A setting written twice reads as neither copy, so the edit goes on the
+		// first and the later copies go. Editing only one left the other in force.
+		let copies = active.get(*key).map_or(&[][..], Vec::as_slice);
+		let Some(i) = copies.first().copied().or_else(|| others.last().copied()) else {
 			continue;
 		};
+		for &extra in copies.iter().skip(1) {
+			lines[extra] = None;
+			changed = true;
+		}
 		let Some(line) = lines[i].clone() else {
 			continue;
 		};
@@ -8022,6 +8107,16 @@ fn adopt_legacy_config() {
 // The move takes the old file away, so a test run may not make it from the
 // box's own folder either.
 fn adopt_config_from(native: &std::path::Path, legacy: &std::path::Path) {
+	adopt_config_with(native, legacy, |from, to| std::fs::rename(from, to));
+}
+
+// The rename is a parameter so a test can fail it the way a move across
+// volumes does.
+fn adopt_config_with(
+	native: &std::path::Path,
+	legacy: &std::path::Path,
+	rename: fn(&std::path::Path, &std::path::Path) -> std::io::Result<()>,
+) {
 	if !legacy.exists() || !may_write(native) || !may_write(legacy) {
 		return;
 	}
@@ -8041,9 +8136,11 @@ fn adopt_config_from(native: &std::path::Path, legacy: &std::path::Path) {
 	}
 	// rename first: same volume is the ordinary case and it is atomic. A cross
 	// volume move fails EXDEV, so fall back to copy-then-remove, and keep the
-	// original if the remove fails rather than risk having neither.
-	let moved = std::fs::rename(legacy, native).is_ok()
-		|| (std::fs::copy(legacy, native).is_ok() && std::fs::remove_file(legacy).is_ok());
+	// original if the remove fails rather than risk having neither. The copy
+	// goes under a name of its own first, so a crash leaves no half file that
+	// the next launch would take over the whole one.
+	let moved = rename(legacy, native).is_ok()
+		|| (copy_whole(legacy, native).is_ok() && std::fs::remove_file(legacy).is_ok());
 	if moved {
 		eprintln!(
 			"{APP_NAME}: moved your config from {} to {}",
@@ -8057,6 +8154,16 @@ fn adopt_config_from(native: &std::path::Path, legacy: &std::path::Path) {
 			native.display()
 		);
 	}
+}
+
+// Never replaces a file already at `to`, unless it has the same bytes.
+fn copy_whole(from: &std::path::Path, to: &std::path::Path) -> std::io::Result<()> {
+	let body = std::fs::read(from)?;
+	#[cfg(unix)]
+	let perms = std::fs::metadata(from).ok().map(|meta| meta.permissions());
+	#[cfg(not(unix))]
+	let perms = None;
+	write_new_file(|_| to.to_path_buf(), &body, perms.as_ref()).map(|_| ())
 }
 
 // SilkTerm v1.0.0-beta1, never released, kept its settings in TOML: beside
@@ -10632,6 +10739,148 @@ mod tests {
 			"the hotkey went back to its default"
 		);
 		assert_eq!(std::fs::read_to_string(&path).unwrap(), pristine);
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
+	// A setting written twice reads as neither copy. A revert or a cleared box
+	// leaves no copy in force, and a write leaves one copy with the new value,
+	// whether the copies share a block or sit in a block written twice. A note
+	// between them stays.
+	// Test ID: dfehx
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_setting_written_twice_is_written_once() {
+		let doubled = [
+			"font:\n\tsize: 14\n\t# a note\n\tsize: 15\n",
+			"font:\n\tsize: 14\n\t# a note\nwindow:\n\trows: 30\nfont:\n\tsize: 15\n",
+		];
+		let active = |out: &str| {
+			out.lines()
+				.filter(|l| matches!(l.trim(), "size: 14" | "size: 15"))
+				.count()
+		};
+		for text in doubled {
+			let reverted = reverted_text(text, &["font.size"]).expect("something to write");
+			assert_eq!(active(&reverted), 0, "{reverted}");
+			assert!(
+				shcl::Document::parse(&reverted).count("font.size") <= 1,
+				"{reverted}"
+			);
+			let disabled = disabled_text(text, &["font.size"]).expect("something to write");
+			assert_eq!(active(&disabled), 0, "{disabled}");
+			assert_eq!(
+				shcl::Document::parse(&disabled).count("font.size"),
+				0,
+				"{disabled}"
+			);
+			for out in [&reverted, &disabled] {
+				assert!(out.contains("# a note"), "{out}");
+			}
+
+			let mut doc = shcl::Document::parse(text);
+			doc.put_float("font.size", 20.0);
+			assert_eq!(doc.count("font.size"), 1, "{}", saved_text(&doc));
+			assert_eq!(doc.get_float("font.size"), Ok(20.0));
+			let saved = saved_text(&doc);
+			assert!(saved.contains("# a note"), "{saved}");
+			assert_eq!(
+				shcl::Document::parse(&saved).get_float("font.size"),
+				Ok(20.0)
+			);
+		}
+	}
+
+	// A Settings save of a setting written twice in the file writes it, and a
+	// revert takes it back to its default, rather than leaving the file as it
+	// was. The state file's window size and machine test pick update the same.
+	// Test ID: dfehy
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_save_over_a_setting_written_twice_sticks() {
+		let _guard = super::test_config_lock();
+		let _ = settings();
+		let dir = crate::testdir::run_dir().join(format!("silkterm_twice_{}", std::process::id()));
+		let _ = std::fs::create_dir_all(&dir);
+		let path = dir.join("config.shcl");
+		std::fs::write(&path, "").unwrap();
+		set_config_override(path.clone());
+		let template = reload_from_disk();
+		let laid = std::fs::read_to_string(&path).unwrap();
+		std::fs::write(
+			&path,
+			format!("{laid}\nscroll:\n\tscrollback: 7000\n\tscrollback: 8000\n"),
+		)
+		.unwrap();
+		let base = reload_from_disk();
+		assert_eq!(
+			base.scrollback, template.scrollback,
+			"a doubled line reads as neither"
+		);
+		let mut changed = base.clone();
+		changed.scrollback = 9000;
+		assert!(persist(&base, &changed));
+		let text = std::fs::read_to_string(&path).unwrap();
+		assert_eq!(
+			shcl::Document::parse(&text).count("scroll.scrollback"),
+			1,
+			"{text}"
+		);
+		assert_eq!(reload_from_disk().scrollback, 9000);
+
+		let twice = format!("{laid}\ncursor:\n\toutline: true\n\toutline: false\n");
+		std::fs::write(&path, &twice).unwrap();
+		revert_keys(&["cursor.outline"]);
+		let text = std::fs::read_to_string(&path).unwrap();
+		assert!(
+			shcl::Document::parse(&text).count("cursor.outline") <= 1,
+			"{text}"
+		);
+		assert!(
+			reload_from_disk() == template,
+			"a revert leaves neither copy in force"
+		);
+		std::fs::write(&path, &twice).unwrap();
+		let base = reload_from_disk();
+		let on = crate::fields::get(&base, Key::CursorOutline)
+			.unwrap()
+			.as_bool();
+		let mut changed = base.clone();
+		change(&mut changed, Key::CursorOutline, Value::Bool(!on));
+		assert!(persist(&base, &changed));
+		assert!(reload_from_disk() == changed, "the change was saved");
+		let mut back = changed.clone();
+		crate::fields::reset(&mut back, Key::CursorOutline, None);
+		assert!(persist(&changed, &back));
+		let text = std::fs::read_to_string(&path).unwrap();
+		assert!(
+			shcl::Document::parse(&text).count("cursor.outline") <= 1,
+			"{text}"
+		);
+		assert!(
+			reload_from_disk() == base,
+			"the revert went back to the default"
+		);
+
+		let state = dir.join("state.shcl");
+		std::fs::write(
+			&state,
+			"window:\n\tremembered_columns: 90\n\tremembered_columns: 91\nperformance:\n\ttested_profile: low\n\ttested_profile: low\n",
+		)
+		.unwrap();
+		let base = reload_from_disk();
+		let mut moved = base.clone();
+		moved.remembered_columns = 123;
+		assert!(persist(&base, &moved));
+		assert!(matches!(
+			keep_tested(crate::profile::Profile::High, None),
+			Kept::Written
+		));
+		let doc = shcl::Document::parse(&std::fs::read_to_string(&state).unwrap());
+		assert_eq!(doc.get_int("window.remembered_columns"), Ok(123));
+		assert_eq!(
+			doc.get_string("performance.tested_profile").as_deref(),
+			Ok("high")
+		);
 		let _ = std::fs::remove_dir_all(&dir);
 	}
 
@@ -16131,6 +16380,8 @@ mod tests {
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn legacy_config_converts_with_values_kept() {
+		// a conversion that leaves a setting behind leaves word for the window
+		let _guard = test_config_lock();
 		let dir =
 			crate::testdir::run_dir().join(format!("silkterm_convert_{}", std::process::id()));
 		let _ = std::fs::create_dir_all(&dir);
@@ -16320,6 +16571,73 @@ mod tests {
 		let _ = std::fs::remove_dir_all(&dir);
 	}
 
+	// The `kept` block is the program's own: a theme's changes and the values set
+	// aside under a switch. A file rebuilt from the template keeps it, along with
+	// every other subtree the typo check takes for the program's or the user's
+	// own, whether a flat key at the margin converted it or it was deleted while
+	// the program ran. A conversion that leaves a setting behind says so.
+	// Test ID: dfef3
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_rebuilt_file_keeps_the_kept_block() {
+		let _guard = test_config_lock();
+		let _ = take_conversion_loss();
+		let owned = "kept:\n\tchanges:\n\t\ttheme:\n\t\t\tpreset: \"Matrix\"\n\t\t\tvalues:\n\t\t\t\tcolors:\n\t\t\t\t\tbackground: \"#123456\"\n\tset_aside:\n\t\twindow:\n\t\t\tcolumns: 100\nthemes.mine.colors.background: \"#010203\"\nwindow.monitors.m1.columns: 90\n";
+		let holds = |text: &str| {
+			let doc = shcl::Document::parse(text);
+			doc.get_string("kept.changes.theme.preset").as_deref() == Ok("Matrix")
+				&& doc
+					.get_string("kept.changes.theme.values.colors.background")
+					.as_deref() == Ok("#123456")
+				&& doc.get_int("kept.set_aside.window.columns") == Ok(100)
+				&& doc.get_string("themes.mine.colors.background").as_deref() == Ok("#010203")
+		};
+		let has_monitor = |text: &str| {
+			shcl::Document::parse(text).get_int("window.monitors.m1.columns") == Ok(90)
+		};
+		let current = format!("{}{owned}", default_config());
+		assert!(holds(&current) && has_monitor(&current), "{current}");
+		assert_eq!(config_complaints(&current), Vec::<String>::new());
+
+		let out = converted_config_text(&format!("{current}rows: 40\n"))
+			.expect("a flat key at the margin converts");
+		assert!(holds(&out) && has_monitor(&out), "converted:\n{out}");
+		assert_eq!(config_complaints(&out), Vec::<String>::new(), "{out}");
+		assert_eq!(rebuilt_config_text(&current, &[]).1, 0);
+		// a save writes the block again by taking it out whole
+		let mut doc = shcl::Document::parse(&out);
+		doc.remove("kept");
+		let without = doc.to_canonical();
+		assert!(!without.contains("kept."), "{without}");
+
+		let dir = format_test_dir("rebuilt_kept");
+		let path = dir.join("config.shcl");
+		std::fs::write(&path, format!("{current}rows: 40\nwindow.colums: 90\n")).unwrap();
+		convert_legacy_config(&mut LaunchFile::read(&path));
+		let disk = std::fs::read_to_string(&path).unwrap();
+		assert!(holds(&disk) && has_monitor(&disk), "on disk:\n{disk}");
+		let loss = take_conversion_loss().expect("the typo is left behind, and said");
+		assert_eq!((loss.lost, loss.how), (1, Converted::Rewritten));
+		assert_eq!(loss.backup, Some(dir.join("config.shcl.bak")));
+		std::fs::write(&path, format!("{current}rows: 40\n")).unwrap();
+		convert_legacy_config(&mut LaunchFile::read(&path));
+		assert_eq!(take_conversion_loss(), None, "nothing was left behind");
+
+		// deleted while running: the save writes it new from what was read. The
+		// launch moved the monitor size to the state file.
+		std::fs::write(&path, &current).unwrap();
+		set_config_override(path.clone());
+		let loaded = reload_from_disk();
+		std::fs::remove_file(&path).unwrap();
+		let mut sized = loaded.clone();
+		sized.remembered_columns += 1;
+		crate::fields::fill(&mut sized, None);
+		assert!(persist(&loaded, &sized));
+		let regrown = std::fs::read_to_string(&path).unwrap();
+		assert!(holds(&regrown), "regrown:\n{regrown}");
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
 	// A flat `wallpaper:` had the image. It goes to `wallpaper.image`, never the
 	// block heading, whatever order the copied values are placed in, and a save
 	// from Settings then loads every copied value the same.
@@ -16403,6 +16721,7 @@ mod tests {
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn a_flat_key_named_like_a_block_never_ends_up_on_its_heading() {
+		let _guard = test_config_lock();
 		let dir =
 			crate::testdir::run_dir().join(format!("silkterm_flathead_{}", std::process::id()));
 		let heads = active_headings(default_config());
@@ -16933,6 +17252,44 @@ mod tests {
 			.expect("should migrate");
 		let s = resolve(read_raw(&out, std::path::Path::new("test.shcl")).0);
 		assert_eq!(s.minimap_tui_whitelist, "less vim");
+	}
+
+	// A key can carry part of its path under a heading, such as `minimap.keep_for`
+	// under `scroll:`. The rename swaps only the leaf. It went to
+	// `scroll.tui_process_whitelist`, which nothing reads.
+	// Test ID: dfef4
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_rename_written_partly_dotted_keeps_its_parents() {
+		let out =
+			migrate_config_text("scroll:\n\tminimap.keep_for: \"vim\"\n").expect("should migrate");
+		assert_eq!(out, "scroll:\n\tminimap.tui_process_whitelist: \"vim\"\n");
+		let s = resolve(read_raw(&out, std::path::Path::new("test.shcl")).0);
+		assert_eq!(s.minimap_tui_whitelist, "vim");
+		// the same for a converted unit and the cursor's old "none"
+		let out = migrate_config_text("cursor:\n\tblink_rate_ms: 250\n\tanimation: none\n")
+			.expect("should migrate");
+		assert_eq!(out, "cursor:\n\tblink_rate_s: 0.5\n\tblink: false\n");
+		assert_eq!(
+			renamed_key(
+				"Minimap.keep_for",
+				"scroll.minimap.keep_for",
+				"scroll.minimap.tui_process_whitelist"
+			),
+			"Minimap.tui_process_whitelist"
+		);
+		assert_eq!(
+			renamed_key(
+				"scroll.minimap.keep_for",
+				"scroll.minimap.keep_for",
+				"scroll.minimap.tui_process_whitelist"
+			),
+			"scroll.minimap.tui_process_whitelist"
+		);
+		assert_eq!(
+			renamed_key("focus", "colors.focus", "colors.highlight"),
+			"highlight"
+		);
 	}
 
 	// A rename can hand its old name to a new setting: `colors.focus` became
@@ -18096,6 +18453,7 @@ mod tests {
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn pipeline_convert_migrate_backfill_on_disk() {
+		let _guard = test_config_lock();
 		let dir =
 			crate::testdir::run_dir().join(format!("silkterm_pipeline_{}", std::process::id()));
 		let _ = std::fs::create_dir_all(&dir);
@@ -19905,6 +20263,62 @@ mod tests {
 		assert!(path.exists() && !legacy.exists());
 		let _ = std::fs::remove_dir_all(&home);
 		let _ = std::fs::remove_dir_all(&new_dir);
+	}
+
+	// A move across volumes copies the old file, under a name of its own first,
+	// and never over a file already at the new place, such as a second launch's.
+	// The old file stays when the copy can't be made. A launch adopts under the
+	// save lock.
+	// Test ID: dfeh1
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn an_old_config_copied_across_volumes_is_whole_and_replaces_nothing() {
+		fn across(_: &std::path::Path, _: &std::path::Path) -> std::io::Result<()> {
+			Err(std::io::ErrorKind::CrossesDevices.into())
+		}
+		fn raced(_: &std::path::Path, to: &std::path::Path) -> std::io::Result<()> {
+			std::fs::write(to, "font:\n\tsize: 20\n")?;
+			across(to, to)
+		}
+		let _guard = test_config_lock();
+		let dir = format_test_dir("adoptcopy");
+		let legacy = dir.join("old").join("config.shcl");
+		let new_dir = dir.join("new");
+		let native = new_dir.join("config.shcl");
+		std::fs::create_dir_all(legacy.parent().unwrap()).unwrap();
+		let old = "font:\n\tsize: 12\n";
+		std::fs::write(&legacy, old).unwrap();
+
+		adopt_config_with(&native, &legacy, across);
+		assert_eq!(std::fs::read_to_string(&native).unwrap(), old);
+		assert!(!legacy.exists());
+		assert_eq!(dir_names(&new_dir), ["config.shcl"], "no temp file left");
+
+		std::fs::remove_file(&native).unwrap();
+		std::fs::write(&legacy, old).unwrap();
+		adopt_config_with(&native, &legacy, raced);
+		assert_eq!(
+			std::fs::read_to_string(&native).unwrap(),
+			"font:\n\tsize: 20\n",
+			"the other launch's file isn't copied over"
+		);
+		assert_eq!(
+			std::fs::read_to_string(&legacy).unwrap(),
+			old,
+			"the old one stays"
+		);
+		assert_eq!(dir_names(&new_dir), ["config.shcl"], "no temp file left");
+
+		// a Windows checkout has CRLF line ends
+		let src = include_str!("config.rs").replace("\r\n", "\n");
+		let body = &src[src.find("\nfn load() -> Settings {").expect("load")..];
+		let locked = body.find("save_lock()").expect("the lock");
+		let adopted = body.find("adopt_legacy_config();").expect("the adopt");
+		assert!(
+			locked < adopted,
+			"load adopts before it takes the save lock"
+		);
+		let _ = std::fs::remove_dir_all(&dir);
 	}
 
 	// Only a file from before the profiles, with a look of its own, comes up on

@@ -668,11 +668,14 @@ impl State {
 			}
 		};
 		self.rebirth = None;
+		// a new device can have another limit, as software does
+		super::window_size::cap_window(&self.window, gfx.max_side());
 		let (w, h) = (gfx.config.width, gfx.config.height);
 		self.surface_px = (w, h);
 		self.adapter_info = gfx.adapter_info.clone();
 		let drawn = gfx.drawn;
-		self.text.attach_gpu(&gfx.device, &gfx.queue, gfx.format);
+		self.text
+			.attach_gpu(&gfx.device, &gfx.queue, gfx.format, &gfx.loss);
 		let rects = RectRenderer::new(&gfx.device, gfx.format);
 		let minimap = crate::minimap::MapRenderer::new(&gfx.device, gfx.format);
 		let scrim = crate::scrim::Scrim::new(&gfx.device, gfx.format, w, h);

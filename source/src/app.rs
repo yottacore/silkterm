@@ -1486,6 +1486,9 @@ impl State {
 		self.surface_px = (w, h);
 		if let Some(gpu) = self.gpu.as_mut() {
 			gpu.gfx.resize(w, h);
+			// no bigger than the device draws, so the grid fits what shows
+			let (w, h) = (gpu.gfx.config.width, gpu.gfx.config.height);
+			self.surface_px = (w, h);
 			gpu.scrim.resize(&gpu.gfx.device, w, h);
 		}
 	}
@@ -1534,14 +1537,17 @@ impl State {
 
 	// Apply edited settings from the dialog, save them, and rebuild what the
 	// change touched, such as text metrics, the wallpaper, opacity, or window
-	// size. Returns false when the config file looked open elsewhere and the
-	// write was skipped, and then the dialog's OK keeps it open rather than
-	// closing over an unsaved change. The values apply live either way.
+	// size. Returns the baseline the file still has when the write was skipped,
+	// such as when the config file looked open elsewhere, and then the dialog's
+	// OK keeps it open rather than closing over an unsaved change. `unsaved` is
+	// that baseline from an earlier Apply, so a retry writes its changes too.
+	// The values apply live either way.
 	fn apply_settings_values(
 		&mut self,
 		orig: &config::Settings,
 		mut edited: config::Settings,
-	) -> bool {
+		unsaved: Option<config::Settings>,
+	) -> Option<config::Settings> {
 		// The Shells tab edits the list, so this is the one path allowed to write
 		// it, and the dialog's copy wins. The baseline is the live list rather
 		// than the dialog's own `orig`. A scan that arrived while the dialog was
@@ -1568,9 +1574,9 @@ impl State {
 		// The dialog opened on the file, so the file gets only what was edited,
 		// while this window takes everything that differs from what it runs,
 		// including what another window saved since this one loaded.
-		let wrote = config::persist(&orig, &edited);
+		let unsaved = config::persist_apply(&orig, unsaved, &edited);
 		self.apply_new_settings(&live, edited, false);
-		wrote
+		unsaved
 	}
 
 	// What Settings opens on: the file as it is now, not what this window loaded,
@@ -1704,8 +1710,12 @@ impl State {
 	fn retext(&mut self, scale: f32) {
 		self.text = TextCtx::new_cpu(scale);
 		if let Some(gpu) = &self.gpu {
-			self.text
-				.attach_gpu(&gpu.gfx.device, &gpu.gfx.queue, gpu.gfx.format);
+			self.text.attach_gpu(
+				&gpu.gfx.device,
+				&gpu.gfx.queue,
+				gpu.gfx.format,
+				&gpu.gfx.loss,
+			);
 		}
 		self.chrome = None; // cached chrome buffers are tied to the old FontSystem
 		self.invalidate_prepared(); // fresh atlases have nothing to reuse
@@ -1839,6 +1849,16 @@ impl State {
 		let Some(mut gpu) = self.gpu.take() else {
 			return false;
 		};
+		// Not even the prepares go onto a lost device, since a buffer grown
+		// there panics in wgpu. The loop lets the device go before the retry.
+		if gpu.gfx.lost() {
+			self.gpu = Some(gpu);
+			let wait = self
+				.frame_retry
+				.missed(Instant::now(), FRAME_RETRY_FIRST, FRAME_RETRY_MAX);
+			idledbg(&format!("frame refused (device lost), again in {wait:?}"));
+			return false;
+		}
 		let animating = self.render_with(&mut gpu, force_rebuild, map_rebuild);
 		self.gpu = Some(gpu);
 		animating
@@ -3317,7 +3337,8 @@ impl State {
 		let submit = crate::perf::mark();
 		gpu.gfx.queue.submit(Some(encoder.finish()));
 		// the GL path's twin of the refused acquire above: a swap that failed
-		let presented = gpu.gfx.end_frame(frame).is_ok();
+		// a device lost during this frame showed nothing either
+		let presented = gpu.gfx.end_frame(frame).is_ok() && !gpu.gfx.lost();
 		if presented {
 			self.frame_retry = Retry::default();
 		} else {
@@ -3916,7 +3937,7 @@ impl ApplicationHandler<UserEvent> for App {
 		// Transparency only affects the terminal background, per pixel, never the
 		// whole window, so there's no fallback to whole-window opacity.
 		let scale = config::display_scale(window.scale_factor());
-		let mut text = TextCtx::new(&gfx.device, &gfx.queue, gfx.format, scale);
+		let mut text = TextCtx::new(&gfx.device, &gfx.queue, gfx.format, &gfx.loss, scale);
 		let rects = RectRenderer::new(&gfx.device, gfx.format);
 		let minimap = crate::minimap::MapRenderer::new(&gfx.device, gfx.format);
 		let scrim =
@@ -4009,7 +4030,7 @@ impl ApplicationHandler<UserEvent> for App {
 		let (want_w, want_h) = fit_px(
 			cli_win.pixel_width.unwrap_or(grid_w),
 			cli_win.pixel_height.unwrap_or(grid_h),
-			gfx.device.limits().max_texture_dimension_2d,
+			gfx.max_side(),
 		);
 		let want = winit::dpi::PhysicalSize::new(want_w, want_h);
 		let maximize_on_reveal = launch_maximized(&settings, cli_win);
@@ -4018,9 +4039,10 @@ impl ApplicationHandler<UserEvent> for App {
 		// at the final size and the window is shown on it. Otherwise, on X11 and
 		// Wayland, it waits for the surface to reach `want`, so the window never
 		// maps at the default size first.
+		window_size::cap_window(&window, gfx.max_side());
 		let reveal_want = if let Some(applied) = request_size(&window, want) {
 			gfx.resize(applied.width, applied.height);
-			scrim.resize(&gfx.device, applied.width, applied.height);
+			scrim.resize(&gfx.device, gfx.config.width, gfx.config.height);
 			None
 		} else {
 			Some(want)
@@ -4348,20 +4370,15 @@ impl ApplicationHandler<UserEvent> for App {
 			return;
 		}
 		// Simulated modality: while a dialog is open the main window takes no
-		// input, and a click on it raises and focuses the dialog instead.
+		// input, and a click on it or its close button raises the dialog instead.
 		if let Some(d) = &self.dialog {
-			match &event {
-				WindowEvent::KeyboardInput { .. }
-				| WindowEvent::MouseWheel { .. }
-				| WindowEvent::Ime(_) => return,
-				WindowEvent::MouseInput {
-					state: ElementState::Pressed,
-					..
-				} => {
+			match dialogs::underneath(&event) {
+				dialogs::Underneath::Takes => {}
+				dialogs::Underneath::Drops => return,
+				dialogs::Underneath::Raises => {
 					d.window.focus_window();
 					return;
 				}
-				_ => {}
 			}
 		}
 		let Some(state) = self.state.as_mut() else {
@@ -5263,9 +5280,7 @@ impl ApplicationHandler<UserEvent> for App {
 						return;
 					}
 					Some(Hotkey::MoveTab { forward }) => {
-						state.tabs.move_active(forward); // same tab follows - nothing was frozen
-						state.update_title();
-						state.dirty = true;
+						state.move_tab(forward);
 						return;
 					}
 					Some(Hotkey::Copy) => {
@@ -5770,6 +5785,20 @@ impl ApplicationHandler<UserEvent> for App {
 		// reveal. One left alone for long enough lets it go, unless a dialog is
 		// up (on X11 the dialog's context can't outlive the terminal's).
 		let dialog_up = self.dialog.is_some() || self.notice.is_some();
+		// A lost device, or a surface that has to be made again, refuses every
+		// frame for good. It goes the way an idle release does, and comes back
+		// below at once unless the window is hidden. On the GL path that waits
+		// for the dialogs to close, since there a dialog's context can't outlive
+		// the terminal's.
+		if (!dialog_up || !state.gl) && state.gpu.as_ref().is_some_and(|gpu| gpu.gfx.lost()) {
+			eprintln!(
+				"{}: the GPU device was lost, so building it again",
+				config::APP_NAME
+			);
+			idledbg("device lost");
+			state.release_gpu();
+			state.idle.owe(true);
+		}
 		// Software rendering turned on or off: the device goes and comes back
 		// on what the setting now asks, the dialogs' context with it. Not while
 		// a dialog is up, since it draws on that context.
