@@ -118,7 +118,12 @@ fn main() -> anyhow::Result<()> {
 	term::sanitize_shell_env();
 	config::take_handed_down_dir();
 	app::tune_heap();
-	let mut cli = match cli::parse(std::env::args().skip(1)) {
+	let args = cli::utf8_args(std::env::args_os().skip(1)).map_err(|e| e.to_string());
+	let mut cli = match args
+		.clone()
+		.map_err(anyhow::Error::msg)
+		.and_then(cli::parse)
+	{
 		Ok(parsed) => parsed,
 		Err(e) => {
 			open_console();
@@ -193,7 +198,7 @@ fn main() -> anyhow::Result<()> {
 	// With no layout arguments, fall back to the config's command_line. Real CLI
 	// arguments override it. A bare --config still takes the fallback, since it
 	// only picks which config's command_line applies.
-	if cli::only_config_args(std::env::args().skip(1)) {
+	if cli::only_config_args(args.unwrap_or_default()) {
 		let command_line = config::settings().command_line.clone();
 		if !command_line.trim().is_empty() {
 			match cli::shell_split(&command_line).and_then(cli::parse) {

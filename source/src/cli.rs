@@ -326,6 +326,19 @@ fn parse_size(v: &str) -> anyhow::Result<Size> {
 	}
 }
 
+/// The launch arguments as text. A name that isn't Unicode is a parse error, not a panic.
+pub fn utf8_args<I: IntoIterator<Item = std::ffi::OsString>>(
+	args: I,
+) -> anyhow::Result<Vec<String>> {
+	args.into_iter()
+		.map(|a| {
+			a.into_string().map_err(|a| {
+				anyhow::anyhow!("argument is not valid Unicode: {}", a.to_string_lossy())
+			})
+		})
+		.collect()
+}
+
 pub fn parse<I: IntoIterator<Item = String>>(args: I) -> anyhow::Result<Cli> {
 	let mut tokens = Args {
 		items: args.into_iter().collect(),
@@ -1687,6 +1700,23 @@ mod tests {
 			};
 			fold_window_style(&mut s, &c.win.style);
 			assert_eq!(s.wallpaper_default_fit, Fit::Stretch, "{flag}");
+		}
+	}
+
+	// Test ID: dffkj
+	#[test]
+	fn a_non_unicode_argument_is_an_error_not_a_panic() {
+		use std::ffi::OsString;
+		assert_eq!(
+			utf8_args([OsString::from("--rows"), OsString::from("5")]).unwrap(),
+			["--rows", "5"]
+		);
+		#[cfg(unix)]
+		{
+			use std::os::unix::ffi::OsStringExt;
+			let bad = OsString::from_vec(b"/data/caf\xe9".to_vec());
+			let e = utf8_args([OsString::from("--directory"), bad]).unwrap_err();
+			assert!(e.to_string().contains("not valid Unicode"), "{e}");
 		}
 	}
 }

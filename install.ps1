@@ -371,6 +371,31 @@ function fDesktopExec {
 	return ($s -replace '%', '%%')
 }
 
+##	True when an Exec line in the desktop entry names the program, quoted and
+##	escaped the way fDesktopExec writes it, or plain between spaces. Arguments
+##	or a wrapper added by hand still count. An entry that can't be read counts
+##	too, so it's left alone.
+function fLauncherNames {
+	param([string]$Entry, [string]$Program)
+	try { $lines = Get-Content -LiteralPath $Entry -ErrorAction Stop } catch { return $true }
+	$quoted = '"' + (fDesktopExec $Program) + '"'
+	foreach ($line in $lines) {
+		if (-not $line.StartsWith('Exec=')) { continue }
+		$val = ' ' + $line.Substring(5) + ' '
+		if ($val.Contains($quoted) -or $val.Contains(" $Program ")) { return $true }
+	}
+	return $false
+}
+
+##	True when the Windows shortcut starts the program. One that can't be read
+##	counts, so it's left alone.
+function fShortcutNames {
+	param([string]$Shortcut, [string]$Program)
+	try { $target = [string](New-Object -ComObject WScript.Shell).CreateShortcut($Shortcut).TargetPath }
+	catch { return $true }
+	return [string]::Equals($target, $Program, [System.StringComparison]::OrdinalIgnoreCase)
+}
+
 ##	fPathNote <dir> <file> - how to run it when <dir> isn't on PATH (Linux, macOS).
 function fPathNote {
 	param([string]$Dir, [string]$File)
@@ -613,8 +638,9 @@ function fMain {
 
 		##	Already current? Then only the pieces that went missing are left to
 		##	do. With none missing, it says so and stops without a prompt or a
-		##	download. A piece that exists is left as it is, since it may have been
-		##	edited. A file that a running copy has locked can't be read, and that
+		##	download. A piece that exists is left as it is, upgrades included,
+		##	since it may have been edited. It's only rewritten when it names some
+		##	other program. A file that a running copy has locked can't be read, and that
 		##	mustn't throw here. The copy step then fails with a message that says
 		##	what to do about it.
 		$installedSha = ''
@@ -625,8 +651,8 @@ function fMain {
 		$needBinary = $installedSha -ne $wantSha
 		$menuFile = if ($menuDir) { Join-Path $menuDir "$appName.lnk" } else { '' }
 		$appFile = if ($appDir) { Join-Path $appDir "$exeName.desktop" } else { '' }
-		$needMenu = [bool]$menuFile -and ($needBinary -or -not (Test-Path -LiteralPath $menuFile))
-		$needApp = [bool]$appFile -and ($needBinary -or -not (Test-Path -LiteralPath $appFile))
+		$needMenu = [bool]$menuFile -and (-not (Test-Path -LiteralPath $menuFile) -or -not (fShortcutNames $menuFile $destFile))
+		$needApp = [bool]$appFile -and (-not (Test-Path -LiteralPath $appFile) -or -not (fLauncherNames $appFile $destFile))
 		$needPath = $onWindows -and -not (fOnWindowsPath $destDir $pathScope)
 		if (-not ($needBinary -or $needMenu -or $needApp -or $needPath)) {
 			Write-Host ''
@@ -916,4 +942,6 @@ if ($state.failed -and $runningAsScriptFile) { exit 1 }
 ##		- 20261111 JC: A bad -Release or -Target gets a plain error line, not
 ##		  ValidateSet's; one blank line before any error; the PATH note comes
 ##		  after the result, as in install.bash.
+##		- 20261118 JC: An upgrade leaves an existing shortcut or launcher alone
+##		  unless it names some other program.
 

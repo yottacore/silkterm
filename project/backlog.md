@@ -59,6 +59,59 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Test case: `cicd/tests/demo/run.py`, "the cursor scene narrows the cursor to half width".
 	- Closed:
 
+- Add a contributor license agreement, like nano-git-db's
+	- ID: 2026101906582193
+	- Type: Task
+	- Status: Stalled
+		- Goes out with rc.1. The workflow runs from `main`, so it takes effect at that merge.
+	- Priority: Avg
+	- Opened: 20261019-065821
+	- Opened by: JC
+	- Assigned to: CC
+	- Target OS: All
+	- Target version: rc.1
+	- Requirements:
+		- A `CLA.md`, a section on it in contributing.md, and a check on pull requests that blocks a merge until the author has signed. Same as nano-git-db.
+	- Notes:
+		- Pre-next-cut.
+	- Progress log:
+		- 20261019: Added `CLA.md`, a section in contributing.md, and `.github/workflows/cla.yml`, the same as nano-git-db's. Both files need JC's review. The check still needs a first pull request from someone else to prove it.
+		- 20261023: Neither a full run nor Mac CI runs `cla.yml`, which runs only on pull requests.
+		- 20261117: JC asked for it in the next release. `CLA.md`, the contributing.md section and `cla.yml` are on `dev`, not yet on `main`. They go to `main` with the rc.1 merge. The first outside pull request after that proves the check.
+		- 20261118: Held for the rc.1 merge to main, since cla.yml runs from main, then a first pull request from someone else to prove the check. The files and the pull_request_target and issue_comment triggers are on dev.
+
+- macOS: Create a setting to use Option as Meta in the terminal
+	- ID: 2026111715155480
+	- Type: Feature
+	- Status: Stalled
+		- Held for b26's console to be unlocked, for the key check. The rig built the round's code there (81d86b94) on 20261118, then skipped, since CGSSessionScreenIsLocked was Yes.
+	- Needs external testing: On b26, at a shell prompt under `cat -v`, with Use as Meta set to Left: left Option+f shows `^[f`, right Option+f still shows the composed character, and the change works without a restart. Set back to Off, left Option+f types the composed character again. The rig is `private/claude_simple/tools/b26_optmeta.bash`.
+	- Priority: Avg
+	- Opened: 20261117-151554
+	- Opened by: CC
+	- Parent ID: 2026111713374903
+	- Target OS: macOS
+	- Target version: rc.1
+	- Requirements: A setting, off by default, that makes Option send ESC plus the plain key, as Terminal.app's "Use Option as Meta key" does. With it off, Option types the character it composes. Left only, right only, or both, as iTerm2 and alacritty offer. It applies to open windows when changed.
+	- Note: Since the parent's fix, Option+letter on a Mac doesn't send Meta at all, so a Meta binding in emacs or readline needs this setting.
+	- Note: winit's `with_option_as_alt` and `set_option_as_alt` make it report the plain key with Alt held. `encode_key` then has to add the ESC again, which its `mac` flag turns off today.
+	- Progress log:
+		- 20261118: `keys.option_as_meta` in the config file takes off, left, right, or both. Use as Meta under a new Option key group on the Keys tab sets it, in the Mac build only. A window sets winit's Option as Alt from it at launch and again whenever the setting changes, from Settings, Reload config, or another window's save. The key encoder adds the ESC back for a press winit hands over as the plain key.
+		- 20261118: The Settings row needed a Mac-only row flag, `macos:`, kept by test builds the way `windows:` rows are.
+		- 20261118: The b26 key check is in the private tools folder as b26_optmeta.bash. It sends left and right Option+f as CGEvents with the side's device flag, under Left, then Off, then Both, each read live through `silkterm --reload-settings` from the window's own shell. The hosted mac.yml run 44372722100 on 81d86b94 covers dffm4 to dffm7.
+		- 20261118: Verified: hosted mac.yml run 44372722100 on nov18 (81d86b94) passed, 1490 tests, 0 failed, 0 filtered, so dffm4 to dffm7 ran and passed on macOS arm64. Only the b26 key check is left.
+	- Decisions:
+		- 20261118: The setting lives under `keys:` in the file, beside the hotkeys, though it isn't one. The hotkey reader only looks at hotkey names, so it isn't flagged.
+		- 20261118: Whether a press is Meta is judged the way winit judges whether to hand over the plain key: a named side held, with no Ctrl or Command. So the ESC and the plain key always come together. With Ctrl, Option keeps its ESC either way, as before.
+		- 20261118: The Option key group goes first on the Keys tab, so it isn't lost under the hotkey list.
+		- 20261118: With Meta on, Option on that side types the plain key in a tab rename too, as winit hands it over for the whole window. iTerm2 does the same.
+	- Test case: `option_as_meta_sends_esc_for_the_side_it_names` (dffm4), `option_as_meta_reads_from_the_file_and_defaults_off` (dffm5), `the_option_key_group_leaves_every_build_but_the_mac` (dffm6), and `the_option_as_meta_pick_is_the_setting_under_keys` (dffm7). dffm4 and dffm5 fail with the side check or the file path broken.
+		- 20261118: `only_software_rendering_leaves_the_macos_build` (ddkm1) and `the_windows_rows_leave_every_other_build` (ddamq) pass the new Mac-row argument. ddkm1's last check now says a test build keeps every row, since the Windows build no longer does.
+	- Swept: the one `encode` caller in `app.rs`, and the window attributes, which only the terminal window sets. The Settings dialog's own windows don't take shell keys.
+	- Verified: The unit suite on Linux, 1516 tests, and the quick gate. clippy for macOS and Windows is clean. None of it ran on a Mac.
+	- Branch: nov18-2026111715155480
+	- Commit: a162ca4d, df3b970e
+
 - A GPU device lost inside one text prepare still ends the program, since the glyphon fork maps a vertex buffer it grows
 	- ID: 2026111717080404
 	- Type: Bug
@@ -227,102 +280,20 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Commit: c298d1a8
 	- Progress log: 20261117: Verified: dfeeg and dfeeh pass. Both fail with the cap made a no-op. dfeeh also fails with the cap left in an OSC after its ESC, and with Escape left early on a C0 control. The quick gate passes. The drafted vte patch passes vte's own tests, and its new test fails without the cap.
 
-- Add a contributor license agreement, like nano-git-db's
-	- ID: 2026101906582193
-	- Type: Task
-	- Status: Queued
-		- Goes out with rc.1. The workflow runs from `main`, so it takes effect at that merge.
-	- Priority: Avg
-	- Opened: 20261019-065821
-	- Opened by: JC
-	- Assigned to: CC
-	- Target OS: All
-	- Target version: rc.1
-	- Requirements:
-		- A `CLA.md`, a section on it in contributing.md, and a check on pull requests that blocks a merge until the author has signed. Same as nano-git-db.
-	- Notes:
-		- Pre-next-cut.
-	- Progress log:
-		- 20261019: Added `CLA.md`, a section in contributing.md, and `.github/workflows/cla.yml`, the same as nano-git-db's. Both files need JC's review. The check still needs a first pull request from someone else to prove it.
-		- 20261023: Neither a full run nor Mac CI runs `cla.yml`, which runs only on pull requests.
-		- 20261117: JC asked for it in the next release. `CLA.md`, the contributing.md section and `cla.yml` are on `dev`, not yet on `main`. They go to `main` with the rc.1 merge. The first outside pull request after that proves the check.
-
-- macOS: Create a setting to use Option as Meta in the terminal
-	- ID: 2026111715155480
-	- Type: Feature
-	- Status: Queued
-	- Priority: Avg
-	- Opened: 20261117-151554
-	- Opened by: CC
-	- Parent ID: 2026111713374903
-	- Target OS: macOS
-	- Target version: rc.1
-	- Requirements: A setting, off by default, that makes Option send ESC plus the plain key, as Terminal.app's "Use Option as Meta key" does. With it off, Option types the character it composes. Left only, right only, or both, as iTerm2 and alacritty offer. It applies to open windows when changed.
-	- Note: Since the parent's fix, Option+letter on a Mac doesn't send Meta at all, so a Meta binding in emacs or readline needs this setting.
-	- Note: winit's `with_option_as_alt` and `set_option_as_alt` make it report the plain key with Alt held. `encode_key` then has to add the ESC again, which its `mac` flag turns off today.
-
-- A command-line argument that isn't valid Unicode crashes SilkTerm
-	- ID: 2026111713374941
+- Installer signature test errors on a bad signature instead of refusing it
+	- ID: 2026111810462273
 	- Type: Bug
 	- Status: Queued
 	- Severity: Low
-	- Opened: 20261117-133749
+	- Opened: 20261118-104622
 	- Opened by: CC
-	- Target OS: All
+	- Target OS: Windows
 	- Target version: rc.1
-	- Incorrect behavior: `silkterm --directory $'/data/caf\xe9'`, or `--open`, `--config` or `--wallpaper` with a Latin-1 name, aborts. On Linux that's exit 134 with a core dump. A Windows GUI build ends with no message. A bad argument is meant to give exit 2 and "Try --help."
-	- Expected behavior: A non-Unicode argument is a parse error with exit 2, or a path flag takes it as is.
-	- Reproduced: No. std documents that `env::args()` panics on such an argument, and the release build aborts on panic.
-	- Possible cause: `std::env::args()` is used rather than `args_os()`.
-	- Origin: c6eaa043, 20260628. Not seen by an earlier round. Confirmed by trace.
-	- Sweep: Only 2 call sites, both in main.rs.
-	- Decisions:
-		- 20261117: Kept for rc.1, since it crashes. rc.1 takes only Critical and High items and anything that crashes or loses data.
-	- Notes:
-		- Code review 20261117 item 42.
-		- Detail: `detail_backlog.md`, under this ID.
-
-- Both installers rewrite a hand-edited launcher on every upgrade
-	- ID: 2026111713374947
-	- Type: Bug
-	- Status: Queued
-	- Severity: Low
-	- Opened: 20261117-133749
-	- Opened by: CC
-	- Target OS: Linux, Windows
-	- Target version: rc.1
-	- Incorrect behavior: install.bash says an existing launcher is left alone since it may have been edited by hand, but a new binary also forces the launcher, so every upgrade overwrites the .desktop file. On Windows the shortcut keeps its arguments and hotkey, so it's mostly spared.
-	- Expected behavior: The launcher is written only when it's missing or names another binary.
-	- Reproduced: No. Traced through the code.
-	- Possible cause: `needBinary` also sets the launcher flags.
-	- Origin: c09beb3e, 20260806. Not seen by an earlier round. Confirmed by trace.
-	- Sweep: No other launcher writers.
-	- Decisions:
-		- 20261117: Kept for rc.1, since it loses data. rc.1 takes only Critical and High items and anything that crashes or loses data.
-	- Notes:
-		- Code review 20261117 item 48.
-		- Detail: `detail_backlog.md`, under this ID.
-
-- rename.bash also rewrites untracked files
-	- ID: 2026111713374948
-	- Type: Bug
-	- Status: Queued
-	- Severity: Low
-	- Opened: 20261117-133749
-	- Opened by: CC
-	- Target OS: All
-	- Target version: rc.1
-	- Incorrect behavior: Its header says it rewrites tracked files, but untracked files that aren't ignored are edited in place and renamed too, which can include another session's work in progress.
-	- Expected behavior: Only tracked files change, unless untracked ones are asked for.
-	- Reproduced: No. Traced through the code.
-	- Possible cause: `git ls-files --others --exclude-standard` is added to the list.
-	- Origin: The first commit, 20260628. Not seen by an earlier round. Confirmed by trace.
-	- Sweep: None found.
-	- Decisions:
-		- 20261117: Kept for rc.1, since it loses data. rc.1 takes only Critical and High items and anything that crashes or loses data.
-	- Notes:
-		- Code review 20261117 item 49.
-		- Detail: `detail_backlog.md`, under this ID.
+	- Incorrect behavior: verify-sign.ps1 fails on b29w under pwsh 7: its bad-signature case calls install.ps1's fVerifySignature outside fMain, and fFail then reads `$outputStarted`, which strict mode refuses as not set. So the test sees an error rather than the expected refusal.
+	- Expected behavior: A bad signature is refused with OperationCanceledException, and verify-sign.ps1 passes.
+	- Reproduced: Yes. win-guard-check.bash on b29w, 20261118, against round nov18.
+	- Possible cause: `$outputStarted` has no script-level default, so any caller outside fMain trips strict mode.
+	- Origin: d9d7b5b2, 20261111, which made fFail read fMain's `$outputStarted` by dynamic scope. Not from round nov18, which doesn't touch those lines. Confirmed.
 
 - macOS: a character typed with Option reaches the shell with ESC in front of it
 	- ID: 2026111713374903
@@ -739,6 +710,102 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Test case: `a_window_keeps_one_x_connection_across_its_reads` (dfe50), `a_failed_x_read_drops_the_connection_and_the_next_read_connects_again` (dfe51)
 	- Acceptance signoff: Self-closed: the change does what the item asked, measured before and after, and its tests fail with the keeping broken.
 	- Closed: 20261117-091811
+	- Closed reason: Done
+
+- A command-line argument that isn't valid Unicode crashes SilkTerm
+	- ID: 2026111713374941
+	- Type: Bug
+	- Status: Closed
+	- Severity: Low
+	- Opened: 20261117-133749
+	- Opened by: CC
+	- Target OS: All
+	- Target version: rc.1
+	- Incorrect behavior: `silkterm --directory $'/data/caf\xe9'`, or `--open`, `--config` or `--wallpaper` with a Latin-1 name, aborts. On Linux that's exit 134 with a core dump. A Windows GUI build ends with no message. A bad argument is meant to give exit 2 and "Try --help."
+	- Expected behavior: A non-Unicode argument is a parse error with exit 2, or a path flag takes it as is.
+	- Reproduced: No. std documents that `env::args()` panics on such an argument, and the release build aborts on panic.
+	- Possible cause: `std::env::args()` is used rather than `args_os()`.
+	- Origin: c6eaa043, 20260628. Not seen by an earlier round. Confirmed by trace.
+	- Sweep: Only 2 call sites, both in main.rs.
+	- Decisions:
+		- 20261117: Kept for rc.1, since it crashes. rc.1 takes only Critical and High items and anything that crashes or loses data.
+	- Notes:
+		- Code review 20261117 item 42.
+		- 20261118: A non-Unicode argument is a parse error with exit 2, rather than a path flag taking it as is, since the options engine and settings hold text.
+	- Swept: Only 2 call sites in source/src/main.rs, both now read `args_os()` through `cli::utf8_args`. The other `env::args()` calls are in dev tools under cicd/ and knobs/demo.
+	- Test case: dffkj `a_non_unicode_argument_is_an_error_not_a_panic`.
+	- Verified: Before the fix `silkterm --directory $'/data/caf\xe9'` panicked with exit 101 on the debug build. Now it prints "argument is not valid Unicode" and "Try --help." with exit 2. The new test and the quick fmt, clippy and tests areas pass.
+	- Actual cause: main.rs read the arguments with `std::env::args()`, which panics on a non-Unicode one.
+	- Actual fix: `cli::utf8_args` takes `args_os()` and turns a non-Unicode argument into the usual parse error.
+	- Branch: nov18-2026111713374941
+	- Acceptance signoff: Self-closed: the test and a run of the binary show exit 2 where it crashed.
+	- Closed: 20261118-100100
+	- Closed reason: Done
+		- Detail: `detail_backlog.md`, under this ID.
+
+- Both installers rewrite a hand-edited launcher on every upgrade
+	- ID: 2026111713374947
+	- Type: Bug
+	- Status: Closed
+	- Severity: Low
+	- Opened: 20261117-133749
+	- Opened by: CC
+	- Target OS: Linux, Windows
+	- Target version: rc.1
+	- Incorrect behavior: install.bash says an existing launcher is left alone since it may have been edited by hand, but a new binary also forces the launcher, so every upgrade overwrites the .desktop file. On Windows the shortcut keeps its arguments and hotkey, so it's mostly spared.
+	- Expected behavior: The launcher is written only when it's missing or names another binary.
+	- Reproduced: No. Traced through the code.
+	- Possible cause: `needBinary` also sets the launcher flags.
+	- Origin: c09beb3e, 20260806. Not seen by an earlier round. Confirmed by trace.
+	- Sweep: No other launcher writers.
+	- Decisions:
+		- 20261117: Kept for rc.1, since it loses data. rc.1 takes only Critical and High items and anything that crashes or loses data.
+		- 20261118: An Exec line still counts as naming the program with arguments or a wrapper added around it, so those hand edits survive. Only a launcher pointed at some other path is rewritten.
+		- 20261118: The shortcut target is compared as a plain string, ignoring case. If Windows reads a short 8.3 path back in its long form, the shortcut would still be rewritten on upgrade. The Windows test case catches that.
+	- Notes:
+		- Code review 20261117 item 48.
+		- Detail: `detail_backlog.md`, under this ID.
+	- Actual cause: Both installers set the launcher and shortcut flags whenever the program was new, so every upgrade rewrote them.
+	- Actual fix: An existing launcher is rewritten only when no Exec line names the installed program, and an existing shortcut only when its target isn't the installed program. One that can't be read is left alone.
+		- Swept: `needLauncher` in install.bash, `needMenu` and `needApp` in install.ps1. Nothing else writes a launcher or shortcut.
+	- Verified: dcbdz passes for bash, bash 3.2 and pwsh on Linux. Its 5 new checks failed on the old installers, for each of the 3. dd2n3 passed on b29w under pwsh 7 and Windows PowerShell 5.1 (20261118), after its shortcut object was renamed so it no longer overwrote the validated Shell parameter.
+	- Branch: nov18-2026111713374947
+	- Commit: fe27b469, 67e62e2b
+	- Test case: dcbdz `cicd/tests/install/run.bash` ("keeps a launcher edited by hand", "a launcher naming some other program is rewritten"), and dd2n3 `cicd/tests/install/windows.ps1` ("keeps a shortcut edited by hand", "a shortcut that starts some other program is rewritten").
+	- Acceptance signoff: Self-closed: dcbdz failed before the fix and passes after, and dd2n3 passed on b29w under both PowerShells.
+	- Closed: 20261118-104622
+	- Closed reason: Done
+
+- rename.bash also rewrites untracked files
+	- ID: 2026111713374948
+	- Type: Bug
+	- Status: Closed
+	- Severity: Low
+	- Opened: 20261117-133749
+	- Opened by: CC
+	- Target OS: All
+	- Target version: rc.1
+	- Incorrect behavior: Its header says it rewrites tracked files, but untracked files that aren't ignored are edited in place and renamed too, which can include another session's work in progress.
+	- Expected behavior: Only tracked files change, unless untracked ones are asked for.
+	- Reproduced: No. Traced through the code.
+	- Possible cause: `git ls-files --others --exclude-standard` is added to the list.
+	- Origin: The first commit, 20260628. Not seen by an earlier round. Confirmed by trace.
+	- Sweep: None found.
+	- Decisions:
+		- 20261117: Kept for rc.1, since it loses data. rc.1 takes only Critical and High items and anything that crashes or loses data.
+		- 20261118: Untracked files are an opt-in, `--untracked`, rather than dropped outright, per the expected behavior. A name that starts with a dash, or more than one name, now gets the usage line.
+	- Notes:
+		- Code review 20261117 item 49.
+		- Detail: `detail_backlog.md`, under this ID.
+	- Actual cause: The file list took untracked files that aren't ignored along with the tracked ones.
+	- Actual fix: Untracked files are left alone unless `--untracked` is given. The header says so, and that an untracked file inside a renamed directory still moves with it.
+		- Swept: rename.bash is the only script that rewrites the tree by name. Its test was the only caller.
+	- Verified: dcrrk failed its 2 new checks on the old script and passes on the new one. The test clones the committed tree, so it ran after the commit.
+	- Branch: nov18-2026111713374947
+	- Commit: fe27b469
+	- Test case: dcrrk `cicd/tests/rename/run.bash` ("an untracked file is left as it was", "with --untracked, an untracked file is rewritten").
+	- Acceptance signoff: Self-closed: the test failed before the fix and passes after.
+	- Closed: 20261118-100900
 	- Closed reason: Done
 
 - A 3-part setting rename written partly dotted moves the value to a setting nothing reads

@@ -312,6 +312,21 @@ function fDesktopExec() {
 	printf '%s' "${1}" | sed -e 's/[\\"`$]/\\&/g' -e 's/\\/\\\\/g' -e 's/%/%%/g'
 }
 
+##	fLauncherNames <entry> <program> - true when an Exec line in the entry names
+##	the program, quoted and escaped the way fDesktopExec writes it, or plain
+##	between spaces. Arguments or a wrapper added by hand still count. An entry
+##	that can't be read counts too, so it's left alone.
+function fLauncherNames() {
+	local quoted line
+	[[ -r "${1}" ]] || return 0
+	quoted="\"$(fDesktopExec "${2}")\""
+	while IFS= read -r line || [[ -n "${line}" ]]; do
+		case "${line}" in Exec=*) ;; *) continue ;; esac
+		case " ${line#Exec=} " in *"${quoted}"* | *" ${2} "*) return 0 ;; esac
+	done < "${1}"
+	return 1
+}
+
 ##	fPathNote <dir> <file> - how to run it when <dir> isn't on PATH.
 function fPathNote() {
 	case ":${PATH}:" in *":${1}:"*) return 0 ;; esac
@@ -499,10 +514,11 @@ function fMain() {
 
 	##	Already current? Then only a missing launcher is left to do. With nothing
 	##	missing, it says so and stops without a prompt or a download. An existing
-	##	launcher is left as it is, since it may have been edited by hand.
-	local needBinary=1 needLauncher=0
+	##	launcher is left as it is, upgrades included, since it may have been
+	##	edited by hand. It's only rewritten when it names some other program.
+	local needBinary=1 needLauncher=0 entry="${appDir}/${exeName}.desktop"
 	if [[ -f "${destFile}" ]] && [[ "$(fSha256 "${destFile}")" = "${wantSha}" ]]; then needBinary=0; fi
-	if [[ -n "${appDir}" ]] && { [[ "${needBinary}" = "1" ]] || [[ ! -e "${appDir}/${exeName}.desktop" ]]; }; then
+	if [[ -n "${appDir}" ]] && { [[ ! -e "${entry}" ]] || ! fLauncherNames "${entry}" "${destFile}"; }; then
 		needLauncher=1
 	fi
 	if [[ "${needBinary}" = "0" ]] && [[ "${needLauncher}" = "0" ]]; then
@@ -637,3 +653,5 @@ fi
 ##		  a re-run puts back a missing launcher.
 ##		- 20261006 JC: [[ ]] for every test, and version fields compare as base 10.
 ##		- 20261111 JC: One blank line before an error that follows other output.
+##		- 20261118 JC: An upgrade leaves an existing launcher alone unless it
+##		  names some other program.

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Rename the project everywhere (development-time helper).
 #
-#   utility/rename.bash <NewDisplayName>
+#   utility/rename.bash [--untracked] <NewDisplayName>
 #
 # <NewDisplayName> is the display name (e.g. "SilkTerm"). The lowercase
 # identifier used for the cargo package, the binary, and the config directory
@@ -12,6 +12,10 @@
 # id - the resource template a Windows build reads by name, the packaging files,
 # the wallpaper directory. Binaries are left alone, and so is Cargo.lock, which
 # `cargo build` regenerates. Review `git diff` and `git status` afterwards.
+#
+# Untracked files are left alone, since they can be someone's work in progress,
+# unless --untracked is given. Ignored files are never touched. An untracked
+# file inside a directory that gets renamed still moves along with it.
 
 ##	Copyright (c) 2026 Bubbles
 ##	Licensed under The MIT License (MIT). Full text at:
@@ -19,9 +23,11 @@
 ##	SPDX-License-Identifier: MIT
 set -euo pipefail
 
+untracked=0
+if [[ "${1:-}" = "--untracked" ]]; then untracked=1; shift; fi
 newDisplay="${1:-}"
-if [[ -z "${newDisplay}" ]]; then
-	echo "usage: utility/rename.bash <NewDisplayName>" >&2
+if [[ -z "${newDisplay}" ]] || [[ "$#" -gt 1 ]] || [[ "${newDisplay}" = -* ]]; then
+	echo "usage: utility/rename.bash [--untracked] <NewDisplayName>" >&2
 	exit 1
 fi
 case "${newDisplay}" in
@@ -44,7 +50,7 @@ root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${root}"
 
 mapfile -t candidates < <(
-	{ git ls-files; git ls-files --others --exclude-standard; } | sort -u
+	{ git ls-files; [[ "${untracked}" = "0" ]] || git ls-files --others --exclude-standard; } | sort -u
 )
 
 # Every text file that mentions either name. Narrowing this to Rust and Markdown
@@ -104,3 +110,4 @@ echo "  - if you rename the GitHub repo too, update the 'git remote' URL"
 
 ##	History:
 ##		- 20260628: First commit.
+##		- 20261118: Untracked files only with --untracked.
