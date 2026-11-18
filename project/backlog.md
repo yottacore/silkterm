@@ -230,7 +230,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 - Add a contributor license agreement, like nano-git-db's
 	- ID: 2026101906582193
 	- Type: Task
-	- Status: Queued
+	- Status: Stalled
 		- Goes out with rc.1. The workflow runs from `main`, so it takes effect at that merge.
 	- Priority: Avg
 	- Opened: 20261019-065821
@@ -246,6 +246,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- 20261019: Added `CLA.md`, a section in contributing.md, and `.github/workflows/cla.yml`, the same as nano-git-db's. Both files need JC's review. The check still needs a first pull request from someone else to prove it.
 		- 20261023: Neither a full run nor Mac CI runs `cla.yml`, which runs only on pull requests.
 		- 20261117: JC asked for it in the next release. `CLA.md`, the contributing.md section and `cla.yml` are on `dev`, not yet on `main`. They go to `main` with the rc.1 merge. The first outside pull request after that proves the check.
+		- 20261118: Held for the rc.1 merge to main, since cla.yml runs from main, then a first pull request from someone else to prove the check. The files and the pull_request_target and issue_comment triggers are on dev.
 
 - macOS: Create a setting to use Option as Meta in the terminal
 	- ID: 2026111715155480
