@@ -34,43 +34,6 @@ Going forward, new issues in the new template at the bottom of this file will go
 
 ## Issues
 
-- macOS: a character typed with Option reaches the shell with ESC in front of it
-	- ID: 2026111713374903
-	- Type: Bug
-	- Status: Stalled
-		- Held for: b26's console unlocked, so keys can be sent into the program there. It was locked on 20261117.
-	- Needs external testing: On b26, at a shell prompt under `cat -v`, Option+f on a US layout shows "ƒ" with no `^[` in front. With a German layout, if one is set up there, Option+5 and Option+8 type `[` and `{`, and the next keys type as usual. Option+Backspace still erases a word.
-	- Severity: High
-	- Opened: 20261117-133749
-	- Opened by: CC
-	- Target OS: macOS
-	- Target version: rc.1
-	- Incorrect behavior: On a German layout, Option+5 is `[` and Option+8 is `{`. Typing `[` sends `ESC [`, which starts an escape sequence and eats the next keys. `{` sends `ESC {`. On a US layout, Option+f sends ESC plus ƒ. Most non-US Mac layouts type `@ [ ] { } | \ ~` with Option.
-	- Expected behavior: Option types the character it composes, as in Terminal.app, iTerm2, and alacritty. Option as Meta is a setting.
-	- Reproduced: No. Traced through winit 0.30.13's macOS key events. Not run on a Mac.
-	- Possible cause: `encode_key` adds the ESC prefix for Alt on every platform. On a Mac, Option composes characters.
-	- Origin: c6eaa043, 20260628. The 20260914 round read input.rs and found it clean. Item 2026100219240881 fixed the text boxes only. Plausible.
-	- Sweep: Option+arrows send `CSI 1;3D`, which Mac shells don't bind by default. `hotkey_in` and `opens_menu_title` are already off on a Mac.
-	- Related IDs: 2026100219240881
-	- Notes:
-		- Code review 20261117 item 4.
-		- Detail: `detail_backlog.md`, under this ID.
-	- Actual cause: winit on a Mac reports the character Option composes as the key's text, with Alt held. `encode_key` put ESC in front of any text typed with Alt, so `[` went to the shell as `ESC [`.
-	- Actual fix: On a Mac, a character typed with Option goes to the shell as the text alone. Ctrl+Option and the named keys, such as Option+Backspace and Option+arrows, keep their ESC and CSI forms. Linux and Windows are unchanged.
-	- Decisions:
-		- 20261117: Every Option+character on a Mac drops the ESC, rather than only when the text differs from the plain key. winit's plain key ignores Shift too, so that test would get Option+Shift wrong. Once winit's Option as Alt is on, the text it hands over is already the plain key, and the setting can turn the ESC back on.
-		- 20261117: Option+arrows stay `CSI 1;3D`, as in iTerm2 and alacritty. Terminal.app sends `ESC b` and `ESC f` instead, which a person can bind in the shell.
-		- 20261117: The Option as Meta setting is its own child, 2026111715155480. Until it's done, a Mac has no way to send Meta with Option+letter.
-	- Swept: The other arms of `encode_key`, the one `encode` caller in `app.rs`, every other reader of the Alt key (mouse report bits, the text boxes, hotkey matching), and `hotkey_in` and `opens_menu_title`, which already skip a Mac. None of them put ESC in front of typed text.
-	- Test case: `option_types_its_character_on_a_mac` (dfegj). It fails with the fix undone, on `[` sent as `ESC [`, and passes with it.
-	- Verified:
-		- The input unit tests on Linux, with the platform passed in.
-		- 20261117: The hosted `mac.yml` run 44214655794 on nov17 at c19866aa passed its tests on macOS arm64, `option_types_its_character_on_a_mac` among them.
-	- Progress log:
-		- 20261117: The key check on b26 didn't run, since the console was locked. The round's release build there passed.
-	- Branch: nov17-2026111713374903
-	- Commit: 8b8d7703
-
 - Demo: the cursor should go to 50% width when the cursor size and animation change
 	- ID: 2026092812581720
 	- Type: Enhancement
@@ -361,6 +324,46 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- Code review 20261117 item 49.
 		- Detail: `detail_backlog.md`, under this ID.
 
+- macOS: a character typed with Option reaches the shell with ESC in front of it
+	- ID: 2026111713374903
+	- Type: Bug
+	- Status: Closed
+	- Needs external testing: On b26, at a shell prompt under `cat -v`, Option+f on a US layout shows "ƒ" with no `^[` in front. With a German layout, if one is set up there, Option+5 and Option+8 type `[` and `{`, and the next keys type as usual. Option+Backspace still erases a word.
+	- Severity: High
+	- Opened: 20261117-133749
+	- Opened by: CC
+	- Target OS: macOS
+	- Target version: rc.1
+	- Incorrect behavior: On a German layout, Option+5 is `[` and Option+8 is `{`. Typing `[` sends `ESC [`, which starts an escape sequence and eats the next keys. `{` sends `ESC {`. On a US layout, Option+f sends ESC plus ƒ. Most non-US Mac layouts type `@ [ ] { } | \ ~` with Option.
+	- Expected behavior: Option types the character it composes, as in Terminal.app, iTerm2, and alacritty. Option as Meta is a setting.
+	- Reproduced: No. Traced through winit 0.30.13's macOS key events. Not run on a Mac.
+	- Possible cause: `encode_key` adds the ESC prefix for Alt on every platform. On a Mac, Option composes characters.
+	- Origin: c6eaa043, 20260628. The 20260914 round read input.rs and found it clean. Item 2026100219240881 fixed the text boxes only. Plausible.
+	- Sweep: Option+arrows send `CSI 1;3D`, which Mac shells don't bind by default. `hotkey_in` and `opens_menu_title` are already off on a Mac.
+	- Related IDs: 2026100219240881
+	- Notes:
+		- Code review 20261117 item 4.
+		- Detail: `detail_backlog.md`, under this ID.
+	- Actual cause: winit on a Mac reports the character Option composes as the key's text, with Alt held. `encode_key` put ESC in front of any text typed with Alt, so `[` went to the shell as `ESC [`.
+	- Actual fix: On a Mac, a character typed with Option goes to the shell as the text alone. Ctrl+Option and the named keys, such as Option+Backspace and Option+arrows, keep their ESC and CSI forms. Linux and Windows are unchanged.
+	- Decisions:
+		- 20261117: Every Option+character on a Mac drops the ESC, rather than only when the text differs from the plain key. winit's plain key ignores Shift too, so that test would get Option+Shift wrong. Once winit's Option as Alt is on, the text it hands over is already the plain key, and the setting can turn the ESC back on.
+		- 20261117: Option+arrows stay `CSI 1;3D`, as in iTerm2 and alacritty. Terminal.app sends `ESC b` and `ESC f` instead, which a person can bind in the shell.
+		- 20261117: The Option as Meta setting is its own child, 2026111715155480. Until it's done, a Mac has no way to send Meta with Option+letter.
+	- Swept: The other arms of `encode_key`, the one `encode` caller in `app.rs`, every other reader of the Alt key (mouse report bits, the text boxes, hotkey matching), and `hotkey_in` and `opens_menu_title`, which already skip a Mac. None of them put ESC in front of typed text.
+	- Test case: `option_types_its_character_on_a_mac` (dfegj). It fails with the fix undone, on `[` sent as `ESC [`, and passes with it.
+	- Verified:
+		- The input unit tests on Linux, with the platform passed in.
+		- 20261117: The hosted `mac.yml` run 44214655794 on nov17 at c19866aa passed its tests on macOS arm64, `option_types_its_character_on_a_mac` among them.
+		- 20261118: On b26 at 664f75be, release build, US layout: Option+f typed "ƒ" alone, Option+5 typed "∞" alone, Option+Backspace sent ESC DEL, and the next key typed as usual.
+	- Progress log:
+		- 20261117: The key check on b26 didn't run, since the console was locked. The round's release build there passed.
+	- Branch: nov17-2026111713374903
+	- Commit: 8b8d7703
+	- Acceptance signoff: Self-closed: passed on b26 with a US layout and in the hosted Mac tests. No German layout is set up there; the unit test covers `[` from Option+5.
+	- Closed: 20261118-093203
+	- Closed reason: Done
+
 - A settings file with one stray flat key loses its `kept` block when it's converted
 	- ID: 2026111713374901
 	- Type: Bug
@@ -437,6 +440,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- 20261117: On vm925w's RTX 2060 at c19866aa, with Transparency off (Vulkan) and on (DX12): the terminal said it built a new device after each loss, its frames stopped being refused, and output kept changing the picture with no input. With Settings up and Tab pressed, the terminal and Settings each built a new device, Settings drew, nothing panicked, and the program kept running. All 28 checks passed.
 		- 20261117: The hosted `mac.yml` run 44214655794 on nov17 at c19866aa passed build, clippy and tests on macOS arm64, on Metal. `a_lost_device_is_seen` and `a_lost_warm_device_is_let_go` ran there and passed, and neither was among its 2 skips.
 		- 20261117: The window run on b26 was skipped, since its console was locked.
+		- 20261118: On b26's Intel Iris Plus 655 through Metal at 664f75be: the terminal built a new device after a loss and its frames were drawn again. With Settings up, Settings built a new device, and the terminal built one as soon as it was shown again. macOS counted it hidden under Settings, and a hidden window doesn't draw, so it found the loss late. Nothing panicked. 11 of 12 checks passed, the twelfth being that timing.
 	- Branch: nov17-2026111713374902
 	- Commit: e3085ef1
 	- Test case: `a_lost_device_is_seen` (dfefp), `a_lost_warm_device_is_let_go` (dfefq), and `cicd/tests/devlost/run.bash` (dfeg0), in the pipeline after dlgwl.
