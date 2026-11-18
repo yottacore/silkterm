@@ -2744,23 +2744,60 @@ trait Put {
 }
 impl Put for shcl::Document {
 	fn put_string(&mut self, path: &str, v: &str) {
-		unwritable(path, self.set_string(path, v));
+		put_once(self, path, |doc| doc.set_string(path, v));
 	}
 	fn put_bool(&mut self, path: &str, v: bool) {
-		unwritable(path, self.set_bool(path, v));
+		put_once(self, path, |doc| doc.set_bool(path, v));
 	}
 	fn put_float(&mut self, path: &str, v: f64) {
-		unwritable(path, self.set_float(path, v));
+		put_once(self, path, |doc| doc.set_float(path, v));
 	}
 	fn put_int(&mut self, path: &str, v: i64) {
-		unwritable(path, self.set_int(path, v));
+		put_once(self, path, |doc| doc.set_int(path, v));
 	}
 	fn put_datetime(&mut self, path: &str, v: &shcl::ShclDateTime) {
-		unwritable(path, self.set_datetime(path, v));
+		put_once(self, path, |doc| doc.set_datetime(path, v));
 	}
 	fn put_string_array(&mut self, path: &str, v: &[&str]) {
-		unwritable(path, self.set_string_array(path, v));
+		put_once(self, path, |doc| doc.set_string_array(path, v));
 	}
+}
+
+// A setting written twice reads as neither copy, and shcl refuses to set it,
+// so the save kept the file as it was and the setting stayed at its default.
+// The value being written is the one wanted, so the later copies go and the
+// first takes it, as the rating line does.
+fn put_once(
+	doc: &mut shcl::Document,
+	path: &str,
+	set: impl Fn(&mut shcl::Document) -> shcl::SetStatus,
+) {
+	let mut status = set(doc);
+	if status == shcl::SetStatus::Multiple {
+		let notes = keep_first(doc, path);
+		status = set(doc);
+		if doc.count(path) == 1 {
+			for note in notes {
+				let _ = doc.set_comment(path, &note);
+			}
+		}
+	}
+	unwritable(path, status);
+}
+
+// Every copy of a setting after the first taken out, giving back the comments
+// above them, which a removal takes along. A path that is doubled further up
+// than its last name is left alone, since `(k)` picks among the last name's
+// copies only.
+fn keep_first(doc: &mut shcl::Document, path: &str) -> Vec<String> {
+	let copies = doc.count(path);
+	let notes = (1..copies)
+		.flat_map(|k| doc.comments(&format!("{path}({k})")))
+		.collect();
+	for k in (1..copies).rev() {
+		doc.remove(&format!("{path}({k})"));
+	}
+	notes
 }
 fn unwritable(path: &str, status: shcl::SetStatus) {
 	if status != shcl::SetStatus::Ok {
@@ -6199,7 +6236,8 @@ fn edit_setting_lines(
 	line_for: impl Fn(&str, &str, &str, &[&str]) -> LineEdit,
 ) -> Option<String> {
 	let mut lines: Vec<Option<String>> = text.lines().map(|l| Some(l.to_string())).collect();
-	let mut active: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+	let mut active: std::collections::HashMap<String, Vec<usize>> =
+		std::collections::HashMap::new();
 	let mut commented: std::collections::HashMap<String, Vec<usize>> =
 		std::collections::HashMap::new();
 	for w in walk_settings(text) {
@@ -6212,18 +6250,26 @@ fn edit_setting_lines(
 		else {
 			continue;
 		};
-		if is_active {
-			active.insert(path, index);
+		let by_path = if is_active {
+			&mut active
 		} else {
-			commented.entry(path).or_default().push(index);
-		}
+			&mut commented
+		};
+		by_path.entry(path).or_default().push(index);
 	}
 	let mut changed = false;
 	for key in keys {
 		let others = commented.get(*key).map_or(&[][..], Vec::as_slice);
-		let Some(i) = active.get(*key).copied().or_else(|| others.last().copied()) else {
+		// A setting written twice reads as neither copy, so the edit goes on the
+		// first and the later copies go. Editing only one left the other in force.
+		let copies = active.get(*key).map_or(&[][..], Vec::as_slice);
+		let Some(i) = copies.first().copied().or_else(|| others.last().copied()) else {
 			continue;
 		};
+		for &extra in copies.iter().skip(1) {
+			lines[extra] = None;
+			changed = true;
+		}
 		let Some(line) = lines[i].clone() else {
 			continue;
 		};
@@ -10693,6 +10739,148 @@ mod tests {
 			"the hotkey went back to its default"
 		);
 		assert_eq!(std::fs::read_to_string(&path).unwrap(), pristine);
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
+	// A setting written twice reads as neither copy. A revert or a cleared box
+	// leaves no copy in force, and a write leaves one copy with the new value,
+	// whether the copies share a block or sit in a block written twice. A note
+	// between them stays.
+	// Test ID: dfehx
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_setting_written_twice_is_written_once() {
+		let doubled = [
+			"font:\n\tsize: 14\n\t# a note\n\tsize: 15\n",
+			"font:\n\tsize: 14\n\t# a note\nwindow:\n\trows: 30\nfont:\n\tsize: 15\n",
+		];
+		let active = |out: &str| {
+			out.lines()
+				.filter(|l| matches!(l.trim(), "size: 14" | "size: 15"))
+				.count()
+		};
+		for text in doubled {
+			let reverted = reverted_text(text, &["font.size"]).expect("something to write");
+			assert_eq!(active(&reverted), 0, "{reverted}");
+			assert!(
+				shcl::Document::parse(&reverted).count("font.size") <= 1,
+				"{reverted}"
+			);
+			let disabled = disabled_text(text, &["font.size"]).expect("something to write");
+			assert_eq!(active(&disabled), 0, "{disabled}");
+			assert_eq!(
+				shcl::Document::parse(&disabled).count("font.size"),
+				0,
+				"{disabled}"
+			);
+			for out in [&reverted, &disabled] {
+				assert!(out.contains("# a note"), "{out}");
+			}
+
+			let mut doc = shcl::Document::parse(text);
+			doc.put_float("font.size", 20.0);
+			assert_eq!(doc.count("font.size"), 1, "{}", saved_text(&doc));
+			assert_eq!(doc.get_float("font.size"), Ok(20.0));
+			let saved = saved_text(&doc);
+			assert!(saved.contains("# a note"), "{saved}");
+			assert_eq!(
+				shcl::Document::parse(&saved).get_float("font.size"),
+				Ok(20.0)
+			);
+		}
+	}
+
+	// A Settings save of a setting written twice in the file writes it, and a
+	// revert takes it back to its default, rather than leaving the file as it
+	// was. The state file's window size and machine test pick update the same.
+	// Test ID: dfehy
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_save_over_a_setting_written_twice_sticks() {
+		let _guard = super::test_config_lock();
+		let _ = settings();
+		let dir = crate::testdir::run_dir().join(format!("silkterm_twice_{}", std::process::id()));
+		let _ = std::fs::create_dir_all(&dir);
+		let path = dir.join("config.shcl");
+		std::fs::write(&path, "").unwrap();
+		set_config_override(path.clone());
+		let template = reload_from_disk();
+		let laid = std::fs::read_to_string(&path).unwrap();
+		std::fs::write(
+			&path,
+			format!("{laid}\nscroll:\n\tscrollback: 7000\n\tscrollback: 8000\n"),
+		)
+		.unwrap();
+		let base = reload_from_disk();
+		assert_eq!(
+			base.scrollback, template.scrollback,
+			"a doubled line reads as neither"
+		);
+		let mut changed = base.clone();
+		changed.scrollback = 9000;
+		assert!(persist(&base, &changed));
+		let text = std::fs::read_to_string(&path).unwrap();
+		assert_eq!(
+			shcl::Document::parse(&text).count("scroll.scrollback"),
+			1,
+			"{text}"
+		);
+		assert_eq!(reload_from_disk().scrollback, 9000);
+
+		let twice = format!("{laid}\ncursor:\n\toutline: true\n\toutline: false\n");
+		std::fs::write(&path, &twice).unwrap();
+		revert_keys(&["cursor.outline"]);
+		let text = std::fs::read_to_string(&path).unwrap();
+		assert!(
+			shcl::Document::parse(&text).count("cursor.outline") <= 1,
+			"{text}"
+		);
+		assert!(
+			reload_from_disk() == template,
+			"a revert leaves neither copy in force"
+		);
+		std::fs::write(&path, &twice).unwrap();
+		let base = reload_from_disk();
+		let on = crate::fields::get(&base, Key::CursorOutline)
+			.unwrap()
+			.as_bool();
+		let mut changed = base.clone();
+		change(&mut changed, Key::CursorOutline, Value::Bool(!on));
+		assert!(persist(&base, &changed));
+		assert!(reload_from_disk() == changed, "the change was saved");
+		let mut back = changed.clone();
+		crate::fields::reset(&mut back, Key::CursorOutline, None);
+		assert!(persist(&changed, &back));
+		let text = std::fs::read_to_string(&path).unwrap();
+		assert!(
+			shcl::Document::parse(&text).count("cursor.outline") <= 1,
+			"{text}"
+		);
+		assert!(
+			reload_from_disk() == base,
+			"the revert went back to the default"
+		);
+
+		let state = dir.join("state.shcl");
+		std::fs::write(
+			&state,
+			"window:\n\tremembered_columns: 90\n\tremembered_columns: 91\nperformance:\n\ttested_profile: low\n\ttested_profile: low\n",
+		)
+		.unwrap();
+		let base = reload_from_disk();
+		let mut moved = base.clone();
+		moved.remembered_columns = 123;
+		assert!(persist(&base, &moved));
+		assert!(matches!(
+			keep_tested(crate::profile::Profile::High, None),
+			Kept::Written
+		));
+		let doc = shcl::Document::parse(&std::fs::read_to_string(&state).unwrap());
+		assert_eq!(doc.get_int("window.remembered_columns"), Ok(123));
+		assert_eq!(
+			doc.get_string("performance.tested_profile").as_deref(),
+			Ok("high")
+		);
 		let _ = std::fs::remove_dir_all(&dir);
 	}
 

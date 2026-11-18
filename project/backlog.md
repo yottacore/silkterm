@@ -396,7 +396,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 - A setting written twice in the file can't be changed or reverted from Settings, and OK closes as if it saved
 	- ID: 2026111713374906
 	- Type: Bug
-	- Status: Queued
+	- Status: Closed
 	- Severity: Avg
 	- Opened: 20261117-133749
 	- Opened by: CC
@@ -408,8 +408,22 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Possible cause: `edit_setting_lines` keeps only the last active line per path. `persist` ignores a `SetStatus::Multiple`. `place_rating_line` handles the same case correctly.
 	- Origin: 9f26b242, 20261003, 5a861038, 20261106, and b043ccbf, 20261009. Not seen by an earlier round. Confirmed by trace.
 	- Sweep: `disabled_text` shares `edit_setting_lines`. `persist_state` and `keep_tested` on the state file stop updating the window size when a key is doubled there.
+	- Actual cause: shcl refuses to set a path that matches more than one copy, and the program's setters only printed that refusal, so the save wrote the file unchanged and reported success. The line edit for a revert or a cleared box kept only the last active line per path, so the first copy stayed in force.
 	- Decisions:
 		- 20261117: Kept for rc.1, since it loses data. rc.1 takes only Critical and High items and anything that crashes or loses data.
+		- 20261117: Took the first of the 2 expected outcomes. A write keeps the first copy with the new value and removes the later ones, as the rating line does. Refusing the save would leave the user to fix the file by hand for a value they just chose.
+		- 20261117: A comment above a removed copy moves above the kept one, rather than going with the line.
+		- 20261117: A revert or a cleared box acts on the first copy and removes the later ones, rather than commenting them out, so the file doesn't keep stale copies of the value.
+		- 20261117: Other refusals from a setter are still printed only, and the save still counts as written. The doubled copy is the only refusal the trace found that a user's file can cause.
+	- Actual fix: Every program write to the config or the state file goes through one helper, which on a doubled path removes the later copies and sets the value again. The line edit collects every active line per path, edits the first and drops the rest.
+	- Swept: The one helper covers every setter call in `persist`, `persist_state`, `keep_tested`, the shell, theme, key and monitor writes. `reverted_text` and `disabled_text` share `edit_setting_lines`. The rating line already handled it. The other bare shcl setters in config.rs write a fresh document or the rating, which can't hold a doubled line.
+	- Test case: dfehx `a_setting_written_twice_is_written_once` (line edits and a write, in one block and across a block written twice, with a note between the copies) and dfehy `a_save_over_a_setting_written_twice_sticks` (a Settings save, a revert, and the state file's window size and machine test pick). Both fail with the old setter and line edit, and dfehy's revert check fails with the old line edit alone. Both pass now.
+	- Verified: The backlog quick run passes in all 5 areas, with 1505 unit tests.
+	- Branch: nov17-2026111713374906
+	- Commit: d9036094
+	- Acceptance signoff: Self-closed: the intent was clear and its tests fail without the fix and pass with it.
+	- Closed: 20261117-160452
+	- Closed reason: Done
 	- Notes:
 		- Code review 20261117 item 7.
 		- Detail: `detail_backlog.md`, under this ID.
