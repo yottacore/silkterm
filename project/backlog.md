@@ -12848,6 +12848,16 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Closed: 20261003-193000
 	- Closed reason: Moot
 
+- **Stop here to work on releasing v1.0.0 with Windows and macOS store releases**.
+
+- Find text on screen
+	- ID: 2026111809502518
+	- Type: Enhancement
+	- Status: Queued
+	- Opened: 20261118-095025
+	- Opened by: JC
+	- Target version: Post-stable
+
 ## Old format
 
 ### Bugs
