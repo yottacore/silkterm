@@ -467,7 +467,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 - A held tab close button closes a different tab when a background tab closes during the press
 	- ID: 2026111713374908
 	- Type: Bug
-	- Status: Queued
+	- Status: Closed
 	- Severity: Avg
 	- Opened: 20261117-133749
 	- Opened by: CC
@@ -482,9 +482,21 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Related IDs: 2026100513581812, Code review 20260914 F50
 	- Decisions:
 		- 20261117: Kept for rc.1, since it loses data. rc.1 takes only Critical and High items and anything that crashes or loses data.
+		- 20261117: A close anywhere in the strip drops the hold, not only one left of the held tab. That's what the item asks, and a tab closing during a press is rare enough that the simpler rule costs nothing.
 	- Notes:
 		- Code review 20261117 item 9.
 		- Detail: `detail_backlog.md`, under this ID.
+		- The drop wasn't tried in a real window. It's the same call adding a tab already makes.
+	- Actual cause: As above. Closing a tab and moving one with the hotkey both left the pointer's hold on the old position.
+	- Swept: every place in the window code that changes the tab order: adding a tab, closing one, and the move-tab hotkey. A pending close question names its tab by a pane, so it isn't kept by position. The kept labels compare what they show, so they follow their tab.
+	- Actual fix: Closing a tab and moving one now drop the held close button, the double-click and the hover tip, as adding a tab already did.
+	- Branch: nov17-2026111713374908
+	- Commit: 0f025ca1
+	- Test case: dfejm `a_change_to_the_tab_order_drops_what_the_pointer_held`. It fails with the drop taken out of the close, and again with it taken out of the move.
+	- Verified: 20261117, the quick gate (fmt, clippy, 1506 unit tests, scripts, docs).
+	- Acceptance signoff: Self-closed: the change does what the item asked, and its test fails before the fix and passes after.
+	- Closed: 20261117-162600
+	- Closed reason: Done
 
 - A window resized past the GPU's largest texture size crashes
 	- ID: 2026111713374910

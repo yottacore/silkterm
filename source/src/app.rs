@@ -5272,9 +5272,7 @@ impl ApplicationHandler<UserEvent> for App {
 						return;
 					}
 					Some(Hotkey::MoveTab { forward }) => {
-						state.tabs.move_active(forward); // same tab follows - nothing was frozen
-						state.update_title();
-						state.dirty = true;
+						state.move_tab(forward);
 						return;
 					}
 					Some(Hotkey::Copy) => {

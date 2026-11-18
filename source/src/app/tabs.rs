@@ -904,9 +904,9 @@ impl State {
 		}
 	}
 
-	// What the pointer was doing to a tab is keyed by its position, and the tabs
-	// right of a new one have each moved along one. A held close button would
-	// close the wrong tab on release.
+	// What the pointer was doing to a tab is keyed by its position, so any change
+	// to the order drops it. A held close button would close whichever tab took
+	// its place on release.
 	fn forget_tab_pointer(&mut self) {
 		self.tab_close_arm = None;
 		self.tab_dbl = None;
@@ -918,6 +918,14 @@ impl State {
 	/// first (closing.rs).
 	pub(super) fn close_tab(&mut self) {
 		self.request_close_tab(self.tabs.active);
+	}
+
+	/// Carry the shown tab one place left or right, round the end.
+	pub(super) fn move_tab(&mut self, forward: bool) {
+		self.tabs.move_active(forward); // same tab follows - nothing was frozen
+		self.forget_tab_pointer();
+		self.update_title();
+		self.dirty = true;
 	}
 
 	/// the tab to the left or right, round the end
@@ -937,6 +945,7 @@ impl State {
 	pub(super) fn close_tab_at(&mut self, idx: usize) {
 		// A rename is keyed by position, so any change to the list ends it.
 		self.cancel_tab_edit();
+		self.forget_tab_pointer();
 		if self.tabs.list.len() <= 1 {
 			self.quit = true; // closing the only tab closes the window
 			return;
@@ -1336,5 +1345,64 @@ mod tests {
 		assert_eq!(tabs, ['a', 'c', 'b']);
 		let mut one = ['a'];
 		assert_eq!(move_tab(&mut one, 0, true), 0);
+	}
+
+	// A held close button, the double-click and the hover tip are kept by tab
+	// position. A background tab closing under a held press slid the next tab
+	// into its place, and the release closed that one without asking. Every
+	// change to the order has to drop them, wherever it's made.
+	// Test ID: dfejm
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_change_to_the_tab_order_drops_what_the_pointer_held() {
+		let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/app");
+		let mut texts = vec![include_str!("../app.rs").to_string()];
+		for entry in std::fs::read_dir(dir).unwrap().flatten() {
+			texts.push(std::fs::read_to_string(entry.path()).unwrap());
+		}
+		assert!(texts.len() > 1, "found nothing under app/");
+		let reorders = [
+			"tabs.list.remove(",
+			"tabs.list.insert(",
+			"tabs.list.swap(",
+			"tabs.list.retain(",
+			"tabs.list.drain(",
+			"tabs.list.truncate(",
+			"tabs.list.sort",
+			"insert_tab(&mut",
+			"tabs.move_active(",
+		];
+		let mut fns: Vec<String> = Vec::new();
+		for text in &texts {
+			let body = text.replace("\r\n", "\n");
+			let body = body.split("\nmod tests {").next().unwrap_or_default();
+			fns.push(String::new());
+			for line in body.lines() {
+				let head = line.trim_start();
+				let head = head.strip_prefix("pub(super) ").unwrap_or(head);
+				let head = head.strip_prefix("pub(crate) ").unwrap_or(head);
+				let head = head.strip_prefix("pub ").unwrap_or(head);
+				if head.starts_with("fn ") {
+					fns.push(String::new());
+				}
+				let last = fns.last_mut().expect("a chunk");
+				last.push_str(line);
+				last.push('\n');
+			}
+		}
+		let mut seen = 0;
+		for chunk in &fns {
+			if !reorders.iter().any(|r| chunk.contains(r)) {
+				continue;
+			}
+			seen += 1;
+			let name = chunk.lines().next().unwrap_or_default().trim();
+			assert!(
+				chunk.contains("forget_tab_pointer()"),
+				"{name} changes the tab order but keeps the pointer's hold"
+			);
+		}
+		// new_tab_with, close_tab_at and move_tab
+		assert!(seen >= 3, "found {seen} places that change the order");
 	}
 }
