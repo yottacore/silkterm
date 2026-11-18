@@ -353,7 +353,7 @@ impl DialogWin {
 		let size = window.inner_size();
 		gfx.resize(size.width, size.height);
 		let scale = config::display_scale(window.scale_factor());
-		let text = TextCtx::new(&gfx.device, &gfx.queue, gfx.format, scale);
+		let text = TextCtx::new(&gfx.device, &gfx.queue, gfx.format, &gfx.loss, scale);
 		let rects = RectRenderer::new(&gfx.device, gfx.format);
 		Ok((modal, window, gfx, text, rects))
 	}
@@ -982,7 +982,13 @@ impl DialogWin {
 		if (scale - was).abs() < 1e-4 {
 			return;
 		}
-		self.text = TextCtx::new(&self.gfx.device, &self.gfx.queue, self.gfx.format, scale);
+		self.text = TextCtx::new(
+			&self.gfx.device,
+			&self.gfx.queue,
+			self.gfx.format,
+			&self.gfx.loss,
+			scale,
+		);
 		match &mut self.content {
 			Content::About { .. } => self.rescale_about(),
 			Content::Settings(_) => self.rescale_settings(was, scale),
@@ -1143,8 +1149,12 @@ impl DialogWin {
 		let size = self.window.inner_size();
 		self.gfx.resize(size.width, size.height);
 		self.text.detach_gpu();
-		self.text
-			.attach_gpu(&self.gfx.device, &self.gfx.queue, self.gfx.format);
+		self.text.attach_gpu(
+			&self.gfx.device,
+			&self.gfx.queue,
+			self.gfx.format,
+			&self.gfx.loss,
+		);
 		self.rects = RectRenderer::new(&self.gfx.device, self.gfx.format);
 		eprintln!(
 			"{}: a dialog lost its GPU device and has a new one",

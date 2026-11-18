@@ -1710,8 +1710,12 @@ impl State {
 	fn retext(&mut self, scale: f32) {
 		self.text = TextCtx::new_cpu(scale);
 		if let Some(gpu) = &self.gpu {
-			self.text
-				.attach_gpu(&gpu.gfx.device, &gpu.gfx.queue, gpu.gfx.format);
+			self.text.attach_gpu(
+				&gpu.gfx.device,
+				&gpu.gfx.queue,
+				gpu.gfx.format,
+				&gpu.gfx.loss,
+			);
 		}
 		self.chrome = None; // cached chrome buffers are tied to the old FontSystem
 		self.invalidate_prepared(); // fresh atlases have nothing to reuse
@@ -3933,7 +3937,7 @@ impl ApplicationHandler<UserEvent> for App {
 		// Transparency only affects the terminal background, per pixel, never the
 		// whole window, so there's no fallback to whole-window opacity.
 		let scale = config::display_scale(window.scale_factor());
-		let mut text = TextCtx::new(&gfx.device, &gfx.queue, gfx.format, scale);
+		let mut text = TextCtx::new(&gfx.device, &gfx.queue, gfx.format, &gfx.loss, scale);
 		let rects = RectRenderer::new(&gfx.device, gfx.format);
 		let minimap = crate::minimap::MapRenderer::new(&gfx.device, gfx.format);
 		let scrim =
