@@ -85,7 +85,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Type: Feature
 	- Status: Stalled
 		- Held for b26's console to be unlocked, for the key check. The rig built the round's code there (81d86b94) on 20261118, then skipped, since CGSSessionScreenIsLocked was Yes.
-	- Needs external testing: On b26, at a shell prompt under `cat -v`, with Use as Meta set to Left: left Option+f shows `^[f`, right Option+f still shows the composed character, and the change works without a restart. Set back to Off, left Option+f types the composed character again. The rig is `private/claude_simple/tools/b26_optmeta.bash`.
+	- Needs external testing: On b26, at a shell prompt under `cat -v`, with Use as Meta set to Left: left Option+f shows `^[f`, right Option+f still shows the composed character, and the change works without a restart. Set back to Off, left Option+f types the composed character again. The rig is `b26_optmeta.bash` in the private tools folder.
 	- Priority: Avg
 	- Opened: 20261117-151554
 	- Opened by: CC
