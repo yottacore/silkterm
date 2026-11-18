@@ -36,7 +36,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 $ast = [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path -LiteralPath $Pipeline).Path, [ref]$null, [ref]$null)
-foreach ($name in 'fRotateLogs', 'fTargetDir', 'fRemapConfig', 'fHasLocalPaths', 'fExec', 'fScriptTest', 'fPython', 'fCargoTest', 'fInstallerTests', 'fScriptTests', 'fStashIfDirty', 'fRunFlags', 'fWslArgs', 'fQuickRun', 'fStamp', 'fStepLine', 'fStepIf', 'fStepOpen', 'fStepClose', 'fShowSteps', 'fPlanSteps', 'fRunDirMake', 'fRunDirEnd', 'fSweepStaleRuns', 'fOldLedger', 'fDirBytes', 'fCleanupCount', 'fCleanupNote', 'fCleanupLine', 'fTestStep', 'fListTests', 'fLeftOut') {
+foreach ($name in 'fRotateLogs', 'fTargetDir', 'fRemapConfig', 'fHasLocalPaths', 'fExec', 'fScriptTest', 'fPython', 'fCargoTest', 'fInstallerTests', 'fScriptTests', 'fStashIfDirty', 'fNoLeftStash', 'fStashPop', 'fPullStashed', 'fRunFlags', 'fWslArgs', 'fQuickRun', 'fStamp', 'fStepLine', 'fStepIf', 'fStepOpen', 'fStepClose', 'fShowSteps', 'fPlanSteps', 'fRunDirMake', 'fRunDirEnd', 'fSweepStaleRuns', 'fOldLedger', 'fDirBytes', 'fCleanupCount', 'fCleanupNote', 'fCleanupLine', 'fTestStep', 'fListTests', 'fLeftOut') {
 	$fn = $ast.Find({ param($n) $n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq $name }, $true)
 	if (-not $fn) { throw "$name not found in $Pipeline" }
 	. ([scriptblock]::Create($fn.Extent.Text))
@@ -270,6 +270,20 @@ fCheck 'with 2 days for a stale one' ($text -match '(?m)^\$StaleDays = 2\r?$')
 ##	not end up in it. A clean tree stashes nothing; a dirty one is stashed with
 ##	its untracked files.
 function fEcho_Clean { }
+function fDied { param([scriptblock]$Do)
+	try { & $Do; return '' } catch { return "$($_.Exception.Message)" }
+}
+##	The pull: plain git, or with PullFails set, a failed pull. "block" also
+##	leaves an untracked file in the way of the stashed one.
+$script:PullFails = ''
+function fRemoteGit {
+	if ($args[0] -eq 'pull' -and $script:PullFails) {
+		if ($script:PullFails -eq 'block') { Set-Content -LiteralPath 'b.txt' -Value 'theirs' }
+		$global:LASTEXITCODE = 1
+		return
+	}
+	& git @args
+}
 $repo = Join-Path $Work 'stash'
 New-Item -ItemType Directory -Path $repo -Force | Out-Null
 Push-Location -LiteralPath $repo
@@ -288,6 +302,43 @@ try {
 	Set-Content -LiteralPath 'b.txt' -Value 'new'
 	$dirty = fStashIfDirty
 	fCheck 'a dirty tree is, untracked files too, and the answer is only true' ($dirty -is [bool] -and $dirty -and @(& git stash list).Count -eq 1 -and -not (Test-Path -LiteralPath 'b.txt'))
+
+	##	That stash is what a run that stopped before its pop leaves, and it
+	##	stops the next run before anything else.
+	$died = fDied { fNoLeftStash }
+	fCheck 'a leftover auto-stash stops the run' ($died -like "an 'auto-stash' from an earlier run is still in 'git stash list'*")
+	& git stash pop --quiet
+	fCheck 'and none left lets it go on' ((fDied { fNoLeftStash }) -eq '')
+
+	##	A failed pull puts the stash back before stopping. It used to leave the
+	##	tree at HEAD with every edit only in the stash, and nothing said so.
+	$script:PullFails = 'fail'
+	$didStash = fStashIfDirty
+	$died = fDied { fPullStashed $didStash }
+	fCheck 'a failed pull stops the run' ($died -eq 'git pull --ff-only failed (exit 1). The working tree is as it was.')
+	fCheck 'with the edit back, and the untracked file' ((Get-Content -LiteralPath 'a.txt') -eq 'two' -and (Get-Content -LiteralPath 'b.txt') -eq 'new')
+	fCheck 'and nothing left stashed' (@(& git stash list).Count -eq 0)
+
+	##	When putting it back fails too, the stash stays and the message names it.
+	$script:PullFails = 'block'
+	$didStash = fStashIfDirty
+	$died = fDied { fPullStashed $didStash }
+	fCheck 'a failed pull and a failed pop name the stash' ($died -like "git pull --ff-only failed (exit 1), and putting the stashed work back failed too. The stashed work is still in 'stash@{0}' (auto-stash)*")
+	fCheck 'which is kept' (@(& git stash list).Count -eq 1)
+	& git checkout --quiet -- a.txt
+	Remove-Item -LiteralPath 'b.txt'
+	& git stash pop --quiet
+
+	##	A pop that fails after a good pull names it too.
+	$script:PullFails = ''
+	$null = fStashIfDirty
+	Set-Content -LiteralPath 'b.txt' -Value 'theirs'
+	$died = fDied { fStashPop 'git stash pop failed after the pull' }
+	fCheck 'a failed pop names the stash' ($died -like "git stash pop failed after the pull. The stashed work is still in 'stash@{0}' (auto-stash)*")
+	fCheck 'which is kept' (@(& git stash list).Count -eq 1)
+
+	fCheck 'stage 0 and publish check for a leftover stash' (([regex]::Matches($text, '(?m)^\s*fNoLeftStash\r?$')).Count -eq 2)
+	fCheck 'and pull and pop through the helpers, not fExec' ($text -notmatch 'fExec -What "git (pull|stash pop)"' -and ([regex]::Matches($text, 'fPullStashed \$didStash')).Count -eq 2)
 }
 finally { Pop-Location }
 
@@ -506,3 +557,5 @@ exit 0
 ##		- 20261101: The one cleanup line at the end.
 ##		- 20261104: The parts' off options: what stage 3 runs, the plan, -List,
 ##		  -NoRelease and -NoCleanup, and what the Linux half gets.
+##		- 20261117: A failed pull puts the stash back, a failed pop names it, and a
+##		  leftover auto-stash stops the run.

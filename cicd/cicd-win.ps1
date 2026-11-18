@@ -923,12 +923,42 @@ function fStashIfDirty {
 	return ($after -gt $before)
 }
 
+## An 'auto-stash' left by a run that stopped between its stash and its pop
+## holds uncommitted work. A build or publish past it leaves that work out, and
+## the next stash buries it deeper.
+function fNoLeftStash {
+	if (@(& git stash list) -match ': auto-stash$') { fDie "an 'auto-stash' from an earlier run is still in 'git stash list'. Pop or drop it, then re-run." }
+}
+
+## The stash pop, which on a conflict or a pulled file in the way of an
+## untracked one keeps the stash, and the work may be only there.
+function fStashPop {
+	param([Parameter(Mandatory)][string]$What)
+	fEcho_Clean "git stash pop ..."
+	& git stash pop | Out-Host
+	if ($LASTEXITCODE -ne 0) { fDie "${What}. The stashed work is still in 'stash@{0}' (auto-stash), which may be the only copy of some of it, so keep it. Settle any conflicts, bring back what's missing, then 'git stash drop' and re-run." }
+}
+
+## The pull between a stash and its pop. A failed pull puts the stash back
+## before stopping. Left there, the tree sits at HEAD with every edit only in
+## the stash.
+function fPullStashed {
+	param([bool]$DidStash)
+	fEcho_Clean "git pull --ff-only ..."
+	fRemoteGit pull --ff-only | Out-Host
+	if ($LASTEXITCODE -eq 0) { return }
+	$rc = $LASTEXITCODE
+	if ($DidStash) { fStashPop "git pull --ff-only failed (exit $rc), and putting the stashed work back failed too" }
+	fDie "git pull --ff-only failed (exit $rc). The working tree is as it was."
+}
+
 ## Stage 0: check that the local branch can be refreshed from its upstream before
 ## the build, so what stage 8 pushes is what was built and tested here, rather
 ## than an untested merge. Behind only is safe, as a fast-forward with a stash
 ## around it for a dirty tree. Diverged aborts now rather than at publish.
 ## Offline only warns, since a local build shouldn't need the net.
 function fRemoteSync {
+	fNoLeftStash
 	& git rev-parse --abbrev-ref '@{u}' 2>$null | Out-Null
 	if ($LASTEXITCODE -ne 0) {
 		$branch = (& git rev-parse --abbrev-ref HEAD).Trim()
@@ -948,12 +978,8 @@ function fRemoteSync {
 	## Behind only: a fast-forward can't lose anything. Same stash dance as
 	## fPublish so a dirty tree can't block the pull.
 	$didStash = fStashIfDirty
-	fEcho_Clean "git pull --ff-only ..."
-	fExec -What "git pull" -File "fRemoteGit" -CmdArgs @("pull", "--ff-only")
-	if ($didStash) {
-		fEcho_Clean "git stash pop ..."
-		fExec -What "git stash pop" -File "git" -CmdArgs @("stash", "pop")
-	}
+	fPullStashed $didStash
+	if ($didStash) { fStashPop "git stash pop failed after the fast-forward" }
 	fEcho "OK: fast-forwarded $behind commit(s) from upstream"
 }
 
@@ -966,6 +992,8 @@ function fPublish {
 	fNote "branch: $branch"
 
 	## Stash local changes (tracked + untracked) before syncing with upstream.
+	## Stage 0 checks for a leftover stash too, but -NoSync skips it.
+	fNoLeftStash
 	$didStash = fStashIfDirty
 
 	## Sync with this branch's upstream if it has one (a brand-new local branch has
@@ -973,14 +1001,8 @@ function fPublish {
 	## already made sure the branch is only behind, so this never needs a merge.
 	& git rev-parse --abbrev-ref '@{u}' 2>$null | Out-Null
 	$hasUpstream = ($LASTEXITCODE -eq 0)
-	if ($hasUpstream) {
-		fEcho_Clean "git pull --ff-only ..."
-		fExec -What "git pull" -File "fRemoteGit" -CmdArgs @("pull", "--ff-only")
-	}
-	if ($didStash) {
-		fEcho_Clean "git stash pop ..."
-		fExec -What "git stash pop" -File "git" -CmdArgs @("stash", "pop")
-	}
+	if ($hasUpstream) { fPullStashed $didStash }
+	if ($didStash) { fStashPop "git stash pop failed after the pull" }
 
 	fEcho_Clean "git add --all ..."
 	fExec -What "git add" -File "git" -CmdArgs @("add", "--all")
@@ -1475,6 +1497,9 @@ try {
 
 
 ##	History:
+##		- 2026-11-17: Stage 0 and publish put the stash back when the pull fails,
+##		              name it when a pop fails, and stop when an earlier run's
+##		              'auto-stash' is left.
 ##		- 2026-11-05: A dogfood copy that can't be made fails the run, where it used
 ##		              to warn and pass.
 ##		- 2026-11-04: An off option for each part cicd.bash has one for:

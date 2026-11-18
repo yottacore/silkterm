@@ -431,7 +431,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 - A failed pull in the pipeline leaves all uncommitted work in a git stash, with no word of where it went
 	- ID: 2026111713374907
 	- Type: Bug
-	- Status: Queued
+	- Status: Closed
 	- Severity: Avg
 	- Opened: 20261117-133749
 	- Opened by: CC
@@ -439,13 +439,27 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Target version: rc.1
 	- Incorrect behavior: cicd-win.ps1's publish and stage 0 of both pipelines stash the tree, including untracked files, then pull. When the pull fails, the run dies and the tree is left at HEAD. Every edit is only in `stash@{0}`, and nothing names it. A second failed run stacks another stash.
 	- Expected behavior: A failed pull pops the stash before stopping, a leftover stash stops the run before it starts, and a failed pop names the stash.
-	- Reproduced: No. Traced through the code.
+	- Reproduced: 20261117, by dd5np on the old `cicd.bash`: a failed pull left the edits only in the stash.
 	- Possible cause: These are copies of the publisher's stash, pull, and pop sequence from before Code review 20260914 item 74 fixed it there.
 	- Origin: f80e5654, 20260715, and 96da7106, 20260722. Code review 20260914 item 74 fixed the shared publisher only. Confirmed by trace.
 	- Sweep: n8git_backup-and-publish already has the fix. No other `stash push` under cicd/ or utility/.
 	- Related IDs: Code review 20260914 item 74
+	- Actual cause: Both pipelines ran the pull under fail-fast with nothing to catch it, so a failed pull ended the run between the stash and its pop. A failed pop ended it the same way, with git's own message only. Nothing checked for a stash an earlier run had left.
 	- Decisions:
 		- 20261117: Kept for rc.1, since it loses data. rc.1 takes only Critical and High items and anything that crashes or loses data.
+		- 20261117: A leftover `auto-stash` stops stage 0 in both pipelines, and also the Windows publish, since `-NoSync` skips stage 0. With `--no-sync`, `cicd.bash` relies on the publisher's own check, which comes after the build.
+		- 20261117: The leftover check stops a run with a clean tree or no upstream too. A build past it would leave the stashed work out of what gets published.
+		- 20261117: A failed pop names `stash@{0}` and says to keep it, without listing the untracked files left out, as the publisher does. That listing is 30 lines of git plumbing to copy into 2 more places.
+		- 20261117: The sync test now runs the stage under `cicd.bash`'s own shell options. In a command substitution it ran without fail-fast, so a failed git call went on, and the bug didn't show.
+	- Actual fix: Stage 0 in both pipelines and the Windows publish pop the stash before stopping on a failed pull, name the stash when a pop fails, and stop when an earlier run's `auto-stash` is still there. `cicd-win.ps1` does this in one place for both callers.
+	- Swept: `n8git_backup-and-publish` already had the fix. `grep -rn 'stash push'` finds no other site under `cicd/` or `utility/`, outside the copies under `forks/`.
+	- Test case: dd5np `cicd/tests/sync/run.bash` (a failed pull, a failed pull with a failed pop, a leftover stash, and a failed pop after a good pull) and dd5nw `cicd/tests/cicd-win/_lift.ps1` (the same through the lifted helpers, and that stage 0 and publish call them). dd5np's new checks fail on the old `cicd.bash`, with the work left only in the stash, and dd5nw can't lift the helpers from the old `cicd-win.ps1`. Both pass now.
+	- Verified: dd5np and dd5nw pass, and the backlog quick run passes in all 5 areas.
+	- Branch: nov17-2026111713374907
+	- Commit: 8a1c919e
+	- Acceptance signoff: Self-closed: the intent was clear and its tests fail without the fix and pass with it.
+	- Closed: 20261117-161712
+	- Closed reason: Done
 	- Notes:
 		- Code review 20261117 item 8.
 		- Detail: `detail_backlog.md`, under this ID.
