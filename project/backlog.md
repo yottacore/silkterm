@@ -284,11 +284,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 - A lost GPU device on Vulkan, DX12, or Metal freezes the window for good
 	- ID: 2026111713374902
 	- Type: Bug
-	- Status: Waiting on automated testing
-	- Needs external testing:
-		- vm925w (DX12): `SILK_LOSE_DEVICE=<file>`, touched once with only the terminal up and once with Settings up and a key pressed in it, with Transparency off and on. The terminal and Settings each say they built a new device, draw again without input, and nothing panics.
-		- b26 (Metal): the same, without Transparency.
-		- The hosted `mac.yml` run on the round branch, for the macOS build.
+	- Status: Closed
 	- Severity: High
 	- Opened: 20261117-133749
 	- Opened by: CC
@@ -314,6 +310,8 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- On the X11 GL path with a dialog up, the terminal waits for the dialogs to close before building again, since there a dialog's context can't outlive the terminal's. Its frames are refused on the 2 s backoff until then.
 		- No rebuild after a count of refused frames, which the detail notes offered as a backstop. The loss is now seen directly, and a count would also rebuild under a busy GPU that only times out.
 		- A surface reported Lost rebuilds the whole device rather than only the surface. It's rare, and it reuses the tested release path.
+		- 20261117: Closed without the window run on b26, whose console was locked. The Metal half of it, the lost callback firing, ran in the hosted Mac tests on Metal. The rebuild that follows is the same code that passed on Vulkan and DX12.
+		- 20261117: On vm925w the opaque arm runs on Vulkan, which the app picks there, and only the transparent arm runs on DX12. Both were checked as the app runs them, rather than forcing DX12 for the opaque arm.
 	- Progress log:
 		- 20261117: Reproduced with `SILK_LOSE_DEVICE` before the app's handling was in: frames were refused every 2 s for good with nothing else said. With Settings up, the dialog ended the program, filed as 2026111715110622.
 		- 20261117: A dialog's first new surface on Wayland was a protocol error ("Tearing control object already exists"), since the old surface was still there. The old surface now goes first.
@@ -322,14 +320,21 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- 20261117: `cicd/tests/devlost/run.bash` fails 5 of 11 checks with the terminal's handling taken out and passes 11 of 11 with it, on software Vulkan under headless sway.
 		- 20261117: On b23's RTX 3060 Ti through Vulkan under headless sway, the terminal built a new device about 0.15 s after each loss and kept drawing output, and Settings drew on a new device after a key.
 		- 20261117: The quick gate passed (fmt, clippy, tests, scripts, docs), and Windows-target clippy too.
+		- 20261117: On vm925w's RTX 2060 at c19866aa, with Transparency off (Vulkan) and on (DX12): the terminal said it built a new device after each loss, its frames stopped being refused, and output kept changing the picture with no input. With Settings up and Tab pressed, the terminal and Settings each built a new device, Settings drew, nothing panicked, and the program kept running. All 28 checks passed.
+		- 20261117: The hosted `mac.yml` run 44214655794 on nov17 at c19866aa passed build, clippy and tests on macOS arm64, on Metal. `a_lost_device_is_seen` and `a_lost_warm_device_is_let_go` ran there and passed, and neither was among its 2 skips.
+		- 20261117: The window run on b26 was skipped, since its console was locked.
 	- Branch: nov17-2026111713374902
 	- Commit: e3085ef1
 	- Test case: `a_lost_device_is_seen` (dfefp), `a_lost_warm_device_is_let_go` (dfefq), and `cicd/tests/devlost/run.bash` (dfeg0), in the pipeline after dlgwl.
+	- Acceptance signoff: Self-closed: passed on vm925w (DX12 and Vulkan) and in the hosted Mac tests on Metal.
+	- Closed: 20261117-173102
+	- Closed reason: Done
 
 - macOS: a character typed with Option reaches the shell with ESC in front of it
 	- ID: 2026111713374903
 	- Type: Bug
-	- Status: Waiting on automated testing
+	- Status: Stalled
+		- Held for: b26's console unlocked, so keys can be sent into the program there. It was locked on 20261117.
 	- Needs external testing: On b26, at a shell prompt under `cat -v`, Option+f on a US layout shows "ƒ" with no `^[` in front. With a German layout, if one is set up there, Option+5 and Option+8 type `[` and `{`, and the next keys type as usual. Option+Backspace still erases a word.
 	- Severity: High
 	- Opened: 20261117-133749
@@ -354,7 +359,11 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- 20261117: The Option as Meta setting is its own child, 2026111715155480. Until it's done, a Mac has no way to send Meta with Option+letter.
 	- Swept: The other arms of `encode_key`, the one `encode` caller in `app.rs`, every other reader of the Alt key (mouse report bits, the text boxes, hotkey matching), and `hotkey_in` and `opens_menu_title`, which already skip a Mac. None of them put ESC in front of typed text.
 	- Test case: `option_types_its_character_on_a_mac` (dfegj). It fails with the fix undone, on `[` sent as `ESC [`, and passes with it.
-	- Verified: The input unit tests on Linux, with the platform passed in.
+	- Verified:
+		- The input unit tests on Linux, with the platform passed in.
+		- 20261117: The hosted `mac.yml` run 44214655794 on nov17 at c19866aa passed its tests on macOS arm64, `option_types_its_character_on_a_mac` among them.
+	- Progress log:
+		- 20261117: The key check on b26 didn't run, since the console was locked. The round's release build there passed.
 	- Branch: nov17-2026111713374903
 	- Commit: 8b8d7703
 
