@@ -132,16 +132,16 @@ try {
 
 	##	An upgrade keeps a shortcut edited by hand, and rewrites one that starts
 	##	some other program.
-	$shell = New-Object -ComObject WScript.Shell
-	$s = $shell.CreateShortcut($lnk); $s.Description = 'Mine'; $s.WorkingDirectory = $work; $s.Save()
+	$wsh = New-Object -ComObject WScript.Shell
+	$s = $wsh.CreateShortcut($lnk); $s.Description = 'Mine'; $s.WorkingDirectory = $work; $s.Save()
 	fRelease '9.9.11'
 	$out = fInstall
-	$s = $shell.CreateShortcut($lnk)
+	$s = $wsh.CreateShortcut($lnk)
 	fCheck 'an upgrade keeps a shortcut edited by hand' ((fInstalled '9.9.11') -and $s.Description -eq 'Mine' -and $s.WorkingDirectory -eq $work)
 	fCheck 'and does not list it in the plan' ($out -notmatch 'Shortcut:')
 	$s.TargetPath = Join-Path $env:SystemRoot 'System32\PING.EXE'; $s.Save()
 	$out = fInstall
-	fCheck 'a shortcut that starts some other program is rewritten' ($shell.CreateShortcut($lnk).TargetPath -eq $destFile -and $out -match 'Shortcut:')
+	fCheck 'a shortcut that starts some other program is rewritten' ($wsh.CreateShortcut($lnk).TargetPath -eq $destFile -and $out -match 'Shortcut:')
 
 	##	An API failure is an error, never "no full release".
 	$env:STUB_API_CODE = '500'

@@ -34,6 +34,21 @@ Going forward, new issues in the new template at the bottom of this file will go
 
 ## Issues
 
+- Installer signature test errors on a bad signature instead of refusing it
+	- ID: 2026111810462273
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261118-104622
+	- Opened by: CC
+	- Target OS: Windows
+	- Target version: rc.1
+	- Incorrect behavior: verify-sign.ps1 fails on b29w under pwsh 7: its bad-signature case calls install.ps1's fVerifySignature outside fMain, and fFail then reads `$outputStarted`, which strict mode refuses as not set. So the test sees an error rather than the expected refusal.
+	- Expected behavior: A bad signature is refused with OperationCanceledException, and verify-sign.ps1 passes.
+	- Reproduced: Yes. win-guard-check.bash on b29w, 20261118, against round nov18.
+	- Possible cause: `$outputStarted` has no script-level default, so any caller outside fMain trips strict mode.
+	- Origin: d9d7b5b2, 20261111, which made fFail read fMain's `$outputStarted` by dynamic scope. Not from round nov18, which doesn't touch those lines. Confirmed.
+
 - Demo: the cursor should go to 50% width when the cursor size and animation change
 	- ID: 2026092812581720
 	- Type: Enhancement
@@ -251,7 +266,8 @@ Going forward, new issues in the new template at the bottom of this file will go
 - macOS: Create a setting to use Option as Meta in the terminal
 	- ID: 2026111715155480
 	- Type: Feature
-	- Status: Waiting on automated testing
+	- Status: Stalled
+		- Held for b26's console to be unlocked, for the key check. The rig built the round's code there (81d86b94) on 20261118, then skipped, since CGSSessionScreenIsLocked was Yes.
 	- Needs external testing: On b26, at a shell prompt under `cat -v`, with Use as Meta set to Left on the Settings dialog's Keys tab: left Option+f shows `^[f`, right Option+f still shows the composed character, and the change works without a restart. Set back to Off, left Option+f types the composed character again. The hosted `mac.yml` run for dffm4, dffm5, dffm6, and dffm7.
 	- Priority: Avg
 	- Opened: 20261117-151554
@@ -265,6 +281,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Progress log:
 		- 20261118: `keys.option_as_meta` in the config file takes off, left, right, or both. Use as Meta under a new Option key group on the Keys tab sets it, in the Mac build only. A window sets winit's Option as Alt from it at launch and again whenever the setting changes, from Settings, Reload config, or another window's save. The key encoder adds the ESC back for a press winit hands over as the plain key.
 		- 20261118: The Settings row needed a Mac-only row flag, `macos:`, kept by test builds the way `windows:` rows are.
+		- 20261118: The b26 key check is in the private tools folder as b26_optmeta.bash. It sends left and right Option+f as CGEvents with the side's device flag, under Left, then Off, then Both, each read live through `silkterm --reload-settings` from the window's own shell. The hosted mac.yml run 44372722100 on 81d86b94 covers dffm4 to dffm7.
 	- Decisions:
 		- 20261118: The setting lives under `keys:` in the file, beside the hotkeys, though it isn't one. The hotkey reader only looks at hotkey names, so it isn't flagged.
 		- 20261118: Whether a press is Meta is judged the way winit judges whether to hand over the plain key: a named side held, with no Ctrl or Command. So the ESC and the plain key always come together. With Ctrl, Option keeps its ESC either way, as before.
@@ -311,8 +328,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 - Both installers rewrite a hand-edited launcher on every upgrade
 	- ID: 2026111713374947
 	- Type: Bug
-	- Status: Waiting on automated testing
-	- Needs external testing: dd2n3 `cicd/tests/install/windows.ps1` on a Windows box, under pwsh 7 and Windows PowerShell 5.1, for the edited Start Menu shortcut cases. Nothing here reads a real shortcut.
+	- Status: Closed
 	- Severity: Low
 	- Opened: 20261117-133749
 	- Opened by: CC
@@ -334,10 +350,13 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Actual cause: Both installers set the launcher and shortcut flags whenever the program was new, so every upgrade rewrote them.
 	- Actual fix: An existing launcher is rewritten only when no Exec line names the installed program, and an existing shortcut only when its target isn't the installed program. One that can't be read is left alone.
 		- Swept: `needLauncher` in install.bash, `needMenu` and `needApp` in install.ps1. Nothing else writes a launcher or shortcut.
-	- Verified: dcbdz passes for bash, bash 3.2 and pwsh on Linux. Its 5 new checks failed on the old installers, for each of the 3.
+	- Verified: dcbdz passes for bash, bash 3.2 and pwsh on Linux. Its 5 new checks failed on the old installers, for each of the 3. dd2n3 passed on b29w under pwsh 7 and Windows PowerShell 5.1 (20261118), after its shortcut object was renamed so it no longer overwrote the validated Shell parameter.
 	- Branch: nov18-2026111713374947
-	- Commit: fe27b469
-	- Test case: dcbdz `cicd/tests/install/run.bash` ("keeps a launcher edited by hand", "a launcher naming some other program is rewritten"), and dd2n3 `cicd/tests/install/windows.ps1` ("keeps a shortcut edited by hand"), not yet run.
+	- Commit: fe27b469, 67e62e2b
+	- Test case: dcbdz `cicd/tests/install/run.bash` ("keeps a launcher edited by hand", "a launcher naming some other program is rewritten"), and dd2n3 `cicd/tests/install/windows.ps1` ("keeps a shortcut edited by hand", "a shortcut that starts some other program is rewritten").
+	- Acceptance signoff: Self-closed: dcbdz failed before the fix and passes after, and dd2n3 passed on b29w under both PowerShells.
+	- Closed: 20261118-104622
+	- Closed reason: Done
 
 - rename.bash also rewrites untracked files
 	- ID: 2026111713374948
