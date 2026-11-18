@@ -1778,9 +1778,9 @@ impl State {
 			set_blur_behind(&self.window, after.transparent_background_blur);
 		}
 		#[cfg(target_os = "macos")]
-		if after.option_as_meta != before.option_as_meta {
+		if after.option_as_alt != before.option_as_alt {
 			use winit::platform::macos::WindowExtMacOS;
-			self.window.set_option_as_alt(after.option_as_meta.winit());
+			self.window.set_option_as_alt(after.option_as_alt.winit());
 		}
 
 		// Transparency is per pixel, on the terminal background only, so there's
@@ -3849,11 +3849,11 @@ impl ApplicationHandler<UserEvent> for App {
 			.with_transparent(want_transparent)
 			.with_inner_size(initial_size);
 		let attrs = with_app_id(attrs); // stable WM_CLASS/app_id
-		// Option as Meta: winit hands over the plain key, and encode adds the ESC
+		// Option as Alt: winit hands over the plain key, and encode adds the ESC
 		#[cfg(target_os = "macos")]
 		let attrs = {
 			use winit::platform::macos::WindowAttributesExtMacOS;
-			attrs.with_option_as_alt(config::settings().option_as_meta.winit())
+			attrs.with_option_as_alt(config::settings().option_as_alt.winit())
 		};
 		// The composited swapchain (Gfx::new_composited) wants no redirection
 		// surface under it: with one, the desktop manager composes that surface
@@ -5350,10 +5350,10 @@ impl ApplicationHandler<UserEvent> for App {
 					.panes
 					.get(&focused)
 					.is_some_and(|p| p.mode.contains(TermMode::APP_CURSOR));
-				let meta = config::settings()
-					.option_as_meta
+				let as_alt = config::settings()
+					.option_as_alt
 					.held(state.mods, state.alt_sides);
-				if let Some(bytes) = input::encode(&key, state.mods, app_cursor, meta) {
+				if let Some(bytes) = input::encode(&key, state.mods, app_cursor, as_alt) {
 					// a held pane has no shell left to type at, so any key that
 					// would have gone to one closes it instead
 					if state.tabs.cur().panes.get(&focused).is_some_and(|p| p.held) {

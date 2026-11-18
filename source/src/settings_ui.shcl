@@ -1220,18 +1220,18 @@ rows:
 	## under `keys:` in the file.
 	OptionKey:
 		kind: heading
-		label: Option key
-		aliases: ["meta", "alt", "escape prefix", "emacs", "readline"]
+		label: Keyboard
+		aliases: ["option", "alt", "meta", "escape prefix", "emacs", "readline"]
 		tab: Keys
 		macos: true
 
-	OptionAsMeta:
-		label: Use as Meta
+	OptionAsAlt:
+		label: Option key
 		kind: dropdown
-		options: ["Off", "Left", "Right", "Both"]
-		setting: keys.option_as_meta
+		options: ["Types special characters", "Left acts as Alt", "Right acts as Alt", "Both act as Alt"]
+		setting: keys.option_as_alt
 		macos: true
-		help: "Which Option key sends Meta, for emacs and for the shell's word keys, such as Option+B and Option+F. Off types the character Option makes, such as { on a German keyboard."
+		help: "Lets shell and editor shortcuts work, such as Option+B to jump back a word. Types special characters keeps Option typing the character it makes, such as { on a German keyboard."
 
 	KeysFile:
 		kind: heading

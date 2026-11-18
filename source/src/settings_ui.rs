@@ -406,7 +406,7 @@ macro_rules! keys_of {
 			| Key::Theme
 			| Key::ThemeMode
 			| Key::TmuxOnClose
-			| Key::OptionAsMeta
+			| Key::OptionAsAlt
 		] $($rest)*)
 	};
 	(@ [$($acc:tt)*] color $($rest:ident)*) => {
@@ -628,7 +628,7 @@ fn radio_of(settings: &Settings, key: Key) -> usize {
 		Key::CursorAnimation => settings.cursor_animation.index(),
 		Key::ThemeMode => settings.theme_mode.index(),
 		Key::TmuxOnClose => settings.tmux_on_close.index(),
-		Key::OptionAsMeta => settings.option_as_meta.index(),
+		Key::OptionAsAlt => settings.option_as_alt.index(),
 		Key::Theme => crate::theme::all_names(&settings.user_themes)
 			.iter()
 			.position(|n| n.eq_ignore_ascii_case(settings.theme.trim()))
@@ -4155,9 +4155,9 @@ impl SettingsDialog {
 					self.edited.tmux_on_close = choice;
 				}
 			}
-			Key::OptionAsMeta => {
+			Key::OptionAsAlt => {
 				if let Some(choice) = Choice::from_index(idx) {
-					self.edited.option_as_meta = choice;
+					self.edited.option_as_alt = choice;
 				}
 			}
 			keys_of!(slider | toggle | color | text | hotkey | valueless | assoc) => {}
@@ -13447,32 +13447,36 @@ mod tests {
 	// Test ID: dffm7
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
-	fn the_option_as_meta_pick_is_the_setting_under_keys() {
-		use crate::input::OptionMeta;
+	fn the_option_as_alt_pick_is_the_setting_under_keys() {
+		use crate::input::OptionAlt;
 		let mut d = mk_dialog(4000.0);
 		let i = d
 			.specs
 			.iter()
-			.position(|s| s.key == Key::OptionAsMeta)
+			.position(|s| s.key == Key::OptionAsAlt)
 			.unwrap();
-		assert!(matches!(d.specs[i - 1].kind, Kind::Header(label) if label == "Option key"));
+		assert!(matches!(d.specs[i - 1].kind, Kind::Header(label) if label == "Keyboard"));
 		assert!(d.specs[..i - 1].iter().all(|s| s.tab != d.specs[i].tab));
-		assert!(
-			matches!(&d.specs[i].kind, Kind::Dropdown(options) if options[..] == ["Off", "Left", "Right", "Both"])
-		);
+		let choices = [
+			"Types special characters",
+			"Left acts as Alt",
+			"Right acts as Alt",
+			"Both act as Alt",
+		];
+		assert!(matches!(&d.specs[i].kind, Kind::Dropdown(options) if options[..] == choices));
 		assert_eq!(
-			super::ui().settings_of(Key::OptionAsMeta),
-			["keys.option_as_meta"]
+			super::ui().settings_of(Key::OptionAsAlt),
+			["keys.option_as_alt"]
 		);
-		assert_eq!(d.get_radio(Key::OptionAsMeta), 0, "off by default");
+		assert_eq!(d.get_radio(Key::OptionAsAlt), 0, "off by default");
 		for (idx, want) in [
-			(1, OptionMeta::Left),
-			(3, OptionMeta::Both),
-			(0, OptionMeta::Off),
+			(1, OptionAlt::Left),
+			(3, OptionAlt::Both),
+			(0, OptionAlt::Off),
 		] {
-			d.set_radio(Key::OptionAsMeta, idx);
-			assert_eq!(d.edited.option_as_meta, want);
-			assert_eq!(d.get_radio(Key::OptionAsMeta), idx);
+			d.set_radio(Key::OptionAsAlt, idx);
+			assert_eq!(d.edited.option_as_alt, want);
+			assert_eq!(d.get_radio(Key::OptionAsAlt), idx);
 		}
 	}
 

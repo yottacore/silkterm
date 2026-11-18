@@ -383,26 +383,26 @@ pub fn cursor_seq(letter: u8, app_cursor: bool) -> Vec<u8> {
 
 /// Translate a key press into the bytes a PTY expects. Returns None for keys
 /// we don't forward (modifiers alone, unhandled named keys, etc.).
-/// `meta` is Option counting as Meta for this press (`OptionMeta::held`).
+/// `as_alt` is Option acting as Alt for this press (`OptionAlt::held`).
 pub fn encode(
 	ev: &KeyEvent,
 	mods: ModifiersState,
 	app_cursor: bool,
-	meta: bool,
+	as_alt: bool,
 ) -> Option<Vec<u8>> {
 	encode_key(
 		&ev.logical_key,
 		ev.text.as_deref(),
 		mods,
 		app_cursor,
-		cfg!(target_os = "macos") && !meta,
+		cfg!(target_os = "macos") && !as_alt,
 	)
 }
 
-/// Which Option key on a Mac sends Meta, ESC and the plain key, rather than
-/// the character it composes. Off by default, as in Terminal.app.
+/// Which Option key on a Mac acts as Alt, sending ESC and the plain key rather
+/// than the character it composes. Off by default, as in Terminal.app.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub enum OptionMeta {
+pub enum OptionAlt {
 	#[default]
 	Off,
 	Left,
@@ -410,7 +410,7 @@ pub enum OptionMeta {
 	Both,
 }
 
-impl crate::config::Choice for OptionMeta {
+impl crate::config::Choice for OptionAlt {
 	const ALL: &'static [Self] = &[Self::Off, Self::Left, Self::Right, Self::Both];
 
 	fn key(self) -> &'static str {
@@ -423,8 +423,8 @@ impl crate::config::Choice for OptionMeta {
 	}
 }
 
-impl OptionMeta {
-	/// Option is Meta for this press. Judged the way winit judges whether to
+impl OptionAlt {
+	/// Option acts as Alt for this press. Judged the way winit judges whether to
 	/// hand over the plain key, so the ESC and the plain key always come together:
 	/// a side the setting names is held, and neither Ctrl nor Command is.
 	/// `sides` is the left and right Option held.
@@ -609,7 +609,7 @@ fn encode_key(
 			// On a Mac, Option composes a character, and the text is already that
 			// character: Option+8 is "{" on a German layout. Most non-US layouts
 			// type brackets and braces that way, so an ESC in front breaks them.
-			// With Option as Meta, winit hands over the plain key instead.
+			// With Option as Alt, winit hands over the plain key instead.
 			if composes {
 				return Some(text);
 			}
@@ -860,46 +860,46 @@ mod tests {
 		assert_eq!(named(NamedKey::ArrowLeft), b"\x1b[1;3D");
 	}
 
-	// With Option as Meta, the side the setting names sends ESC and the plain
+	// With Option as Alt, the side the setting names sends ESC and the plain
 	// key winit hands over, and the other side still composes. Ctrl and Command
-	// keep winit from handing over the plain key, so they rule Meta out too.
+	// keep winit from handing over the plain key, so they rule Alt out too.
 	// Test ID: dffm4
 	#[test]
-	fn option_as_meta_sends_esc_for_the_side_it_names() {
+	fn option_as_alt_sends_esc_for_the_side_it_names() {
 		use crate::config::Choice;
 		let alt = ModifiersState::ALT;
 		let (left, right, both) = ((true, false), (false, true), (true, true));
-		assert!(!OptionMeta::default().held(alt, both));
-		assert!(OptionMeta::Left.held(alt, left));
-		assert!(!OptionMeta::Left.held(alt, right));
-		assert!(OptionMeta::Right.held(alt, right));
-		assert!(!OptionMeta::Right.held(alt, left));
-		assert!(OptionMeta::Both.held(alt, left) && OptionMeta::Both.held(alt, right));
-		assert!(!OptionMeta::Both.held(ModifiersState::empty(), (false, false)));
-		assert!(!OptionMeta::Both.held(alt | ModifiersState::CONTROL, both));
-		assert!(!OptionMeta::Both.held(alt | ModifiersState::SUPER, both));
+		assert!(!OptionAlt::default().held(alt, both));
+		assert!(OptionAlt::Left.held(alt, left));
+		assert!(!OptionAlt::Left.held(alt, right));
+		assert!(OptionAlt::Right.held(alt, right));
+		assert!(!OptionAlt::Right.held(alt, left));
+		assert!(OptionAlt::Both.held(alt, left) && OptionAlt::Both.held(alt, right));
+		assert!(!OptionAlt::Both.held(ModifiersState::empty(), (false, false)));
+		assert!(!OptionAlt::Both.held(alt | ModifiersState::CONTROL, both));
+		assert!(!OptionAlt::Both.held(alt | ModifiersState::SUPER, both));
 
 		// what `encode` hands `encode_key` on a Mac
-		let typed = |ch: &str, mods: ModifiersState, setting: OptionMeta, sides| {
+		let typed = |ch: &str, mods: ModifiersState, setting: OptionAlt, sides| {
 			let composes = !setting.held(mods, sides);
 			encode_key(&Key::Character(ch.into()), Some(ch), mods, false, composes).unwrap()
 		};
-		assert_eq!(typed("f", alt, OptionMeta::Left, left), b"\x1bf");
+		assert_eq!(typed("f", alt, OptionAlt::Left, left), b"\x1bf");
 		assert_eq!(
-			typed("F", alt | ModifiersState::SHIFT, OptionMeta::Both, right),
+			typed("F", alt | ModifiersState::SHIFT, OptionAlt::Both, right),
 			b"\x1bF"
 		);
 		assert_eq!(
-			typed("\u{192}", alt, OptionMeta::Left, right),
+			typed("\u{192}", alt, OptionAlt::Left, right),
 			"\u{192}".as_bytes()
 		);
-		assert_eq!(typed("{", alt, OptionMeta::Off, left), b"{");
+		assert_eq!(typed("{", alt, OptionAlt::Off, left), b"{");
 
-		for setting in OptionMeta::ALL {
-			assert_eq!(OptionMeta::parse(setting.key()), Some(*setting));
+		for setting in OptionAlt::ALL {
+			assert_eq!(OptionAlt::parse(setting.key()), Some(*setting));
 		}
-		assert_eq!(OptionMeta::parse(" Left "), Some(OptionMeta::Left));
-		assert_eq!(OptionMeta::parse("meta"), None);
+		assert_eq!(OptionAlt::parse(" Left "), Some(OptionAlt::Left));
+		assert_eq!(OptionAlt::parse("meta"), None);
 	}
 
 	const CTRL: ModifiersState = ModifiersState::CONTROL;
