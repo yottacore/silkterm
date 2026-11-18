@@ -197,7 +197,7 @@ fi
 ## The cases both installers have to get right, run once for each. $1 is bash
 ## or ps1.
 fCases() {
-	local kind="${1}" h caseDir rc pid opt
+	local kind="${1}" h caseDir rc pid opt entry
 	local INSTALLER="${kind}"
 	export INSTALLER
 	## Which release: the highest version, not the first listed, with drafts
@@ -279,6 +279,26 @@ fCases() {
 	fCheck "${kind}: and says so" fSaid "${h}" "Restored what was missing"
 	rc=0; fInstall "${h}" || rc=$?
 	fCheck "${kind}: with nothing missing, a re-run does nothing" fSaid "${h}" "Already up to date"
+
+	## An upgrade keeps a launcher edited by hand, an added argument included,
+	## and rewrites one that names some other program.
+	caseDir="${work}/${kind}-rel-edited"
+	fRelease "${caseDir}" 9.9.8 9.9.9
+	printf '[{"tag_name":"v9.9.8","draft":false,"prerelease":false}]\n' > "${caseDir}/releases.json"
+	h="${work}/${kind}-edited"
+	entry="${h}/.local/share/applications/silkterm.desktop"
+	STUB_DIR="${caseDir}" fInstall "${h}" || true
+	sed -i -e 's/^Exec=\(.*\)$/Exec=\1 --hand-edit/' -e 's/^Name=.*/Name=Mine/' "${entry}" 2>/dev/null || true
+	printf '[{"tag_name":"v9.9.9","draft":false,"prerelease":false}]\n' > "${caseDir}/releases.json"
+	STUB_DIR="${caseDir}" fInstall "${h}" || true
+	fCheck "${kind}: an upgrade installs the new program" fInstalled "${h}" 9.9.9
+	fCheck "${kind}: and keeps a launcher edited by hand" fPresent '^Name=Mine$' "${entry}"
+	fCheck "${kind}: with its added argument" fPresent '^Exec=.* --hand-edit$' "${entry}"
+	fCheck "${kind}: and doesn't list it in the plan" fNotSaid "${h}" "Launcher:"
+	sed -i 's|^Exec=.*|Exec=/opt/elsewhere/silkterm|' "${entry}" 2>/dev/null || true
+	rc=0; STUB_DIR="${caseDir}" fInstall "${h}" || rc=$?
+	fCheck "${kind}: a launcher naming some other program is rewritten" fPresent "^Exec=\"${h}/.local/bin/silkterm\"\$" "${entry}"
+	fCheck "${kind}: and the plan says so" fSaid "${h}" "Launcher:"
 
 	## An upgrade over a running copy. A copy over it fails on Linux.
 	caseDir="${work}/${kind}-rel-busy"
@@ -442,3 +462,4 @@ echo "all passed"
 ##		- 20261028 JC: A download that fails its checksum installs nothing.
 ##		- 20261111 JC: install.bash cases under bash 3.2; blank-line layout and a
 ##		               bad target value.
+##		- 20261118 JC: An upgrade keeps a launcher edited by hand.

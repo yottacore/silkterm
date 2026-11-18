@@ -295,7 +295,8 @@ Going forward, new issues in the new template at the bottom of this file will go
 - Both installers rewrite a hand-edited launcher on every upgrade
 	- ID: 2026111713374947
 	- Type: Bug
-	- Status: Queued
+	- Status: Waiting on automated testing
+	- Needs external testing: dd2n3 `cicd/tests/install/windows.ps1` on a Windows box, under pwsh 7 and Windows PowerShell 5.1, for the edited Start Menu shortcut cases. Nothing here reads a real shortcut.
 	- Severity: Low
 	- Opened: 20261117-133749
 	- Opened by: CC
@@ -309,14 +310,23 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Sweep: No other launcher writers.
 	- Decisions:
 		- 20261117: Kept for rc.1, since it loses data. rc.1 takes only Critical and High items and anything that crashes or loses data.
+		- 20261118: An Exec line still counts as naming the program with arguments or a wrapper added around it, so those hand edits survive. Only a launcher pointed at some other path is rewritten.
+		- 20261118: The shortcut target is compared as a plain string, ignoring case. If Windows reads a short 8.3 path back in its long form, the shortcut would still be rewritten on upgrade. The Windows test case catches that.
 	- Notes:
 		- Code review 20261117 item 48.
 		- Detail: `detail_backlog.md`, under this ID.
+	- Actual cause: Both installers set the launcher and shortcut flags whenever the program was new, so every upgrade rewrote them.
+	- Actual fix: An existing launcher is rewritten only when no Exec line names the installed program, and an existing shortcut only when its target isn't the installed program. One that can't be read is left alone.
+		- Swept: `needLauncher` in install.bash, `needMenu` and `needApp` in install.ps1. Nothing else writes a launcher or shortcut.
+	- Verified: dcbdz passes for bash, bash 3.2 and pwsh on Linux. Its 5 new checks failed on the old installers, for each of the 3.
+	- Branch: nov18-2026111713374947
+	- Commit: fe27b469
+	- Test case: dcbdz `cicd/tests/install/run.bash` ("keeps a launcher edited by hand", "a launcher naming some other program is rewritten"), and dd2n3 `cicd/tests/install/windows.ps1` ("keeps a shortcut edited by hand"), not yet run.
 
 - rename.bash also rewrites untracked files
 	- ID: 2026111713374948
 	- Type: Bug
-	- Status: Queued
+	- Status: Closed
 	- Severity: Low
 	- Opened: 20261117-133749
 	- Opened by: CC
@@ -330,9 +340,20 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Sweep: None found.
 	- Decisions:
 		- 20261117: Kept for rc.1, since it loses data. rc.1 takes only Critical and High items and anything that crashes or loses data.
+		- 20261118: Untracked files are an opt-in, `--untracked`, rather than dropped outright, per the expected behavior. A name that starts with a dash, or more than one name, now gets the usage line.
 	- Notes:
 		- Code review 20261117 item 49.
 		- Detail: `detail_backlog.md`, under this ID.
+	- Actual cause: The file list took untracked files that aren't ignored along with the tracked ones.
+	- Actual fix: Untracked files are left alone unless `--untracked` is given. The header says so, and that an untracked file inside a renamed directory still moves with it.
+		- Swept: rename.bash is the only script that rewrites the tree by name. Its test was the only caller.
+	- Verified: dcrrk failed its 2 new checks on the old script and passes on the new one. The test clones the committed tree, so it ran after the commit.
+	- Branch: nov18-2026111713374947
+	- Commit: fe27b469
+	- Test case: dcrrk `cicd/tests/rename/run.bash` ("an untracked file is left as it was", "with --untracked, an untracked file is rewritten").
+	- Acceptance signoff: Self-closed: the test failed before the fix and passes after.
+	- Closed: 20261118-100900
+	- Closed reason: Done
 
 - macOS: a character typed with Option reaches the shell with ESC in front of it
 	- ID: 2026111713374903

@@ -9,6 +9,8 @@
 ##		script. The pipeline, the packaging, and the installers kept it too.
 ##		This clones the repository, renames the clone, and checks that nothing a
 ##		build reads by name went missing and that the old name is gone.
+##		Untracked files, which can be someone's work in progress, stay as they
+##		were unless --untracked asks for them.
 ##	- Test ID: dcrrk
 ##	- History: At bottom of file.
 
@@ -33,7 +35,14 @@ fEnd(){ local -r rc=$?; fTestDir_Rm "${clone%/clone}" || true; fTestDir_End "${r
 trap fEnd EXIT
 git -C "${root}" clone --quiet --shared . "${clone}"
 
+##	Someone's work in progress, named for the project and mentioning it.
+wip="${clone}/source/silkterm-wip.txt"
+printf 'SilkTerm draft\n' > "${wip}"
+
 ( cd "${clone}" && utility/rename.bash Weavterm >/dev/null )
+
+fCheck "an untracked file is left as it was" grep -qx 'SilkTerm draft' "${wip}"
+fCheck "and keeps its name" test ! -e "${clone}/source/weavterm-wip.txt"
 
 ##	Every input build.rs reads by name: the files it watches, the ones it opens
 ##	under the crate directory, and the build-number input list. Anything written
@@ -80,9 +89,16 @@ left="$(cd "${clone}" && git ls-files | grep -i silkterm || true)"
 fCheck "no tracked path still carries the old name" test -z "${left}"
 [[ -z "${left}" ]] || sed 's/^/    /' <<< "${left}" | head -5
 
+##	Asked for, an untracked file is rewritten and renamed too. The tracked ones
+##	already carry the new name, so this run only reaches it.
+( cd "${clone}" && utility/rename.bash --untracked Weavterm >/dev/null )
+fCheck "with --untracked, an untracked file is rewritten" grep -qx 'Weavterm draft' "${clone}/source/weavterm-wip.txt" 2>/dev/null
+fCheck "and renamed" test ! -e "${wip}"
+
 if ((failures)); then echo "${failures} failed"; exit 1; fi
 echo "all passed"
 
 ##	History:
 ##		- 20260917 JC: Created.
 ##		- 20260930 JC: The clone goes in the test run folder, with --shared.
+##		- 20261118 JC: Untracked files stay as they were unless asked for.
