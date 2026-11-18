@@ -207,6 +207,7 @@ pub static FIELDS: &[Field] = &[
 	flag!(TmuxNewSession, tmux_new_session),
 	line!(TmuxSessionName, tmux_session_name),
 	word!(TmuxOnClose, tmux_on_close),
+	word!(OptionAsMeta, option_as_meta),
 	line!(TabTemplate, tab_text),
 	flag!(TitleShowsTab, title_shows_tab),
 	line!(StartupDirectory, startup_directory),

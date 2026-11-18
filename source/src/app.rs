@@ -11,7 +11,7 @@ use alacritty_terminal::selection::SelectionType;
 use winit::application::ApplicationHandler;
 use winit::event::{ElementState, MouseButton, MouseScrollDelta, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoopProxy};
-use winit::keyboard::{Key, ModifiersState, NamedKey};
+use winit::keyboard::{Key, ModifiersKeyState, ModifiersState, NamedKey};
 use winit::window::{CursorIcon, Fullscreen, Window, WindowId};
 
 use alacritty_terminal::term::{ClipboardType, TermMode};
@@ -727,6 +727,7 @@ struct State {
 	proxy: EventLoopProxy<UserEvent>,
 	tabs: Tabs,
 	mods: ModifiersState,
+	alt_sides: (bool, bool), // left and right Option or Alt held; only a Mac reports them
 	mouse: (f32, f32),
 	mouse_btn: Option<input::MouseBtn>, // button held after a reported press (mouse-tracking apps)
 	mouse_cell: Option<(usize, usize)>, // last cell reported, to de-dupe motion
@@ -1775,6 +1776,11 @@ impl State {
 		// the backdrop blur hint changed, so set or clear the compositor property now
 		if blur_changed {
 			set_blur_behind(&self.window, after.transparent_background_blur);
+		}
+		#[cfg(target_os = "macos")]
+		if after.option_as_meta != before.option_as_meta {
+			use winit::platform::macos::WindowExtMacOS;
+			self.window.set_option_as_alt(after.option_as_meta.winit());
 		}
 
 		// Transparency is per pixel, on the terminal background only, so there's
@@ -3843,6 +3849,12 @@ impl ApplicationHandler<UserEvent> for App {
 			.with_transparent(want_transparent)
 			.with_inner_size(initial_size);
 		let attrs = with_app_id(attrs); // stable WM_CLASS/app_id
+		// Option as Meta: winit hands over the plain key, and encode adds the ESC
+		#[cfg(target_os = "macos")]
+		let attrs = {
+			use winit::platform::macos::WindowAttributesExtMacOS;
+			attrs.with_option_as_alt(config::settings().option_as_meta.winit())
+		};
 		// The composited swapchain (Gfx::new_composited) wants no redirection
 		// surface under it: with one, the desktop manager composes that surface
 		// too, and winit's blur-behind hack for it isn't needed either.
@@ -4085,6 +4097,7 @@ impl ApplicationHandler<UserEvent> for App {
 			proxy: self.proxy.clone(),
 			tabs: Tabs { list, active: 0 },
 			mods: ModifiersState::empty(),
+			alt_sides: (false, false),
 			mouse: (0.0, 0.0),
 			mouse_btn: None,
 			mouse_cell: None,
@@ -4468,6 +4481,10 @@ impl ApplicationHandler<UserEvent> for App {
 
 			WindowEvent::ModifiersChanged(mods) => {
 				state.mods = mods.state();
+				state.alt_sides = (
+					mods.lalt_state() == ModifiersKeyState::Pressed,
+					mods.ralt_state() == ModifiersKeyState::Pressed,
+				);
 				if env_flag(EnvFlag::KeyDbg) {
 					eprintln!("[mods] {:?}", mods.state());
 				}
@@ -5333,7 +5350,10 @@ impl ApplicationHandler<UserEvent> for App {
 					.panes
 					.get(&focused)
 					.is_some_and(|p| p.mode.contains(TermMode::APP_CURSOR));
-				if let Some(bytes) = input::encode(&key, state.mods, app_cursor) {
+				let meta = config::settings()
+					.option_as_meta
+					.held(state.mods, state.alt_sides);
+				if let Some(bytes) = input::encode(&key, state.mods, app_cursor, meta) {
 					// a held pane has no shell left to type at, so any key that
 					// would have gone to one closes it instead
 					if state.tabs.cur().panes.get(&focused).is_some_and(|p| p.held) {

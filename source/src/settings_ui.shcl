@@ -196,6 +196,8 @@ icons:
 ##            default back
 ## windows:   true for a row that exists only on Windows. On a heading it takes
 ##            the whole group, and every row in it has to say so as well.
+## macos:     true for a row that exists only on macOS, kept the way
+##            `windows:` rows are.
 ## not_macos: true for a row the macOS build can never use, left out there.
 ## warning:   draws a warning mark after the label, for a row that may not
 ##            work on every desktop. The text goes on the end of `help:`, and
@@ -1213,6 +1215,24 @@ rows:
 	## bar groups what they do. A row is set by pressing the new chord in its box;
 	## the file keeps the same spellings a hand edit would. The tab is a long list
 	## and scrolls, so it is left out of the dialog's height, as the Shell tab is.
+
+	## First, so it isn't lost under the hotkeys. Not a hotkey, though it lives
+	## under `keys:` in the file.
+	OptionKey:
+		kind: heading
+		label: Option key
+		aliases: ["meta", "alt", "escape prefix", "emacs", "readline"]
+		tab: Keys
+		macos: true
+
+	OptionAsMeta:
+		label: Use as Meta
+		kind: dropdown
+		options: ["Off", "Left", "Right", "Both"]
+		setting: keys.option_as_meta
+		macos: true
+		help: "Which Option key sends Meta, for emacs and for the shell's word keys, such as Option+B and Option+F. Off types the character Option makes, such as { on a German keyboard."
+
 	KeysFile:
 		kind: heading
 		label: File

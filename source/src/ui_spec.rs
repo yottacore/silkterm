@@ -77,6 +77,7 @@ keys![
 	HotkeyNewTab, HotkeyCloseTab, HotkeyPrevTab, HotkeyNextTab, HotkeyMoveTabBack, HotkeyMoveTabForward,
 	HotkeySplitRight, HotkeySplitDown, HotkeyClosePane,
 	HotkeyFocusLeft, HotkeyFocusRight, HotkeyFocusUp, HotkeyFocusDown,
+	OptionAsMeta,
 ];
 
 #[derive(Debug)]
@@ -141,6 +142,8 @@ pub struct Spec {
 	/// Only in the Windows build. Test builds keep it everywhere, so its layout
 	/// and behavior are tested on every platform.
 	pub windows: bool,
+	/// Only in the macOS build, kept by test builds as with `windows`.
+	pub macos: bool,
 	/// Left out of the macOS build, for a row that can never work there. Test
 	/// builds keep it, as with `windows`.
 	pub not_macos: bool,
@@ -396,6 +399,7 @@ pub fn ui() -> &'static Ui {
 			keep_platform(
 				&mut ui.specs,
 				cfg!(any(windows, test)),
+				cfg!(any(target_os = "macos", test)),
 				cfg!(all(target_os = "macos", not(test))),
 			);
 			// by the real platform, test or not: a mark that is wrong for the
@@ -416,13 +420,16 @@ pub(crate) fn heap_round() -> usize {
 	let Ok(mut ui) = parse(SOURCE) else {
 		return 0;
 	};
-	keep_platform(&mut ui.specs, true, false);
+	keep_platform(&mut ui.specs, true, true, false);
 	pick_warnings(&mut ui.specs, false);
 	ui.specs.len()
 }
 
-fn keep_platform(specs: &mut Vec<Spec>, windows: bool, macos: bool) {
-	specs.retain(|spec| (windows || !spec.windows) && !(macos && spec.not_macos));
+// `macos` keeps the Mac's own rows, and `mac_build` drops the ones it can't use
+fn keep_platform(specs: &mut Vec<Spec>, windows: bool, macos: bool, mac_build: bool) {
+	specs.retain(|spec| {
+		(windows || !spec.windows) && (macos || !spec.macos) && !(mac_build && spec.not_macos)
+	});
 }
 
 // A row has one tip, shown over its label, its mark, and its controls alike, so
@@ -603,6 +610,7 @@ fn parse(text: &str) -> Result<Ui, Vec<String>> {
 	// a Windows-only heading takes its rows with it, or they would show under
 	// the group above on every other platform
 	let mut group_windows = false;
+	let mut group_macos = false;
 	for name in doc.children("rows") {
 		let at = |field: &str| format!("rows.{name}.{field}");
 		let label = doc.get_string(&at("label")).unwrap_or_default();
@@ -792,6 +800,14 @@ fn parse(text: &str) -> Result<Ui, Vec<String>> {
 				"rows.{name}: a Windows-only group's rows are Windows-only"
 			));
 		}
+		let macos = doc.get_bool(&at("macos")).unwrap_or(false);
+		if matches!(kind, Kind::Header(_)) {
+			group_macos = macos;
+		} else if group_macos && !macos {
+			problems.push(format!(
+				"rows.{name}: a macOS-only group's rows are macOS-only"
+			));
+		}
 		specs.push(Spec {
 			label: keep(label),
 			key,
@@ -804,6 +820,7 @@ fn parse(text: &str) -> Result<Ui, Vec<String>> {
 			beside,
 			revert_help: doc.get_string(&at("revert_help")).map_or("", keep),
 			windows,
+			macos,
 			not_macos: doc.get_bool(&at("not_macos")).unwrap_or(false),
 			warning: keep(warning),
 			windows_warning: keep(windows_warning),
@@ -1087,17 +1104,17 @@ mod tests {
 			panic!("settings_ui.shcl does not parse")
 		};
 		let all = ui.specs.len();
-		keep_platform(&mut ui.specs, false, false);
+		keep_platform(&mut ui.specs, false, true, false);
 		let not_windows = ui.specs.len();
 		assert!(ui.specs.iter().any(|s| s.key == Key::SoftwareRendering));
-		keep_platform(&mut ui.specs, false, true);
+		keep_platform(&mut ui.specs, false, true, true);
 		assert_eq!(ui.specs.len(), not_windows - 1);
 		assert!(!ui.specs.iter().any(|s| s.key == Key::SoftwareRendering));
 		let Ok(mut ui) = parse(SOURCE) else {
 			unreachable!()
 		};
-		keep_platform(&mut ui.specs, true, false);
-		assert_eq!(ui.specs.len(), all, "Windows keeps every row");
+		keep_platform(&mut ui.specs, true, true, false);
+		assert_eq!(ui.specs.len(), all, "a test build keeps every row");
 	}
 
 	// Everywhere but Windows the file-type group is gone, heading and all, and
@@ -1117,7 +1134,7 @@ mod tests {
 				.iter()
 				.any(|s| s.windows && matches!(s.kind, Kind::Header(_)))
 		);
-		keep_platform(&mut ui.specs, false, false);
+		keep_platform(&mut ui.specs, false, true, false);
 		assert_eq!(ui.specs.len(), all - windows);
 		for key in [
 			Key::OpenBatch,
@@ -1238,6 +1255,35 @@ mod tests {
 				"{text}"
 			);
 		}
+	}
+
+	// Off a Mac the Option key group is gone, heading and all, and nothing
+	// else goes with it. A shared row can't sit under its heading.
+	// Test ID: dffm6
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn the_option_key_group_leaves_every_build_but_the_mac() {
+		let Ok(mut ui) = parse(SOURCE) else {
+			panic!("settings_ui.shcl does not parse")
+		};
+		let all = ui.specs.len();
+		let mac: Vec<Key> = ui.specs.iter().filter(|s| s.macos).map(|s| s.key).collect();
+		assert_eq!(mac.len(), 2, "the heading and its row");
+		assert!(mac.contains(&Key::OptionAsMeta));
+		keep_platform(&mut ui.specs, true, false, false);
+		assert_eq!(ui.specs.len(), all - 2);
+		assert!(ui.specs.iter().all(|s| !s.macos));
+
+		let bad = "tabs: \"Only\"\nrows:\n\tHead:\n\t\tkind: heading\n\t\tlabel: Head\n\t\ttab: Only\n\t\tmacos: true\n\tMargin:\n\t\tlabel: x\n\t\tkind: slider\n\t\trange: [0, 1]\n\t\tsetting: margin\n";
+		let Err(problems) = parse(bad) else {
+			panic!("a shared row under a macOS-only heading must be reported")
+		};
+		assert!(
+			problems
+				.iter()
+				.any(|p| p.contains("margin") && p.contains("macOS")),
+			"{problems:?}"
+		);
 	}
 
 	// Test ID: ddamr

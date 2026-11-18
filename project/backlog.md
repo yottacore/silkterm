@@ -251,7 +251,8 @@ Going forward, new issues in the new template at the bottom of this file will go
 - macOS: Create a setting to use Option as Meta in the terminal
 	- ID: 2026111715155480
 	- Type: Feature
-	- Status: Queued
+	- Status: Waiting on automated testing
+	- Needs external testing: On b26, at a shell prompt under `cat -v`, with Use as Meta set to Left on the Settings dialog's Keys tab: left Option+f shows `^[f`, right Option+f still shows the composed character, and the change works without a restart. Set back to Off, left Option+f types the composed character again. The hosted `mac.yml` run for dffm4, dffm5, dffm6, and dffm7.
 	- Priority: Avg
 	- Opened: 20261117-151554
 	- Opened by: CC
@@ -261,6 +262,20 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Requirements: A setting, off by default, that makes Option send ESC plus the plain key, as Terminal.app's "Use Option as Meta key" does. With it off, Option types the character it composes. Left only, right only, or both, as iTerm2 and alacritty offer. It applies to open windows when changed.
 	- Note: Since the parent's fix, Option+letter on a Mac doesn't send Meta at all, so a Meta binding in emacs or readline needs this setting.
 	- Note: winit's `with_option_as_alt` and `set_option_as_alt` make it report the plain key with Alt held. `encode_key` then has to add the ESC again, which its `mac` flag turns off today.
+	- Progress log:
+		- 20261118: `keys.option_as_meta` in the config file takes off, left, right, or both. Use as Meta under a new Option key group on the Keys tab sets it, in the Mac build only. A window sets winit's Option as Alt from it at launch and again whenever the setting changes, from Settings, Reload config, or another window's save. The key encoder adds the ESC back for a press winit hands over as the plain key.
+		- 20261118: The Settings row needed a Mac-only row flag, `macos:`, kept by test builds the way `windows:` rows are.
+	- Decisions:
+		- 20261118: The setting lives under `keys:` in the file, beside the hotkeys, though it isn't one. The hotkey reader only looks at hotkey names, so it isn't flagged.
+		- 20261118: Whether a press is Meta is judged the way winit judges whether to hand over the plain key: a named side held, with no Ctrl or Command. So the ESC and the plain key always come together. With Ctrl, Option keeps its ESC either way, as before.
+		- 20261118: The Option key group goes first on the Keys tab, so it isn't lost under the hotkey list.
+		- 20261118: With Meta on, Option on that side types the plain key in a tab rename too, as winit hands it over for the whole window. iTerm2 does the same.
+	- Test case: `option_as_meta_sends_esc_for_the_side_it_names` (dffm4), `option_as_meta_reads_from_the_file_and_defaults_off` (dffm5), `the_option_key_group_leaves_every_build_but_the_mac` (dffm6), and `the_option_as_meta_pick_is_the_setting_under_keys` (dffm7). dffm4 and dffm5 fail with the side check or the file path broken.
+		- 20261118: `only_software_rendering_leaves_the_macos_build` (ddkm1) and `the_windows_rows_leave_every_other_build` (ddamq) pass the new Mac-row argument. ddkm1's last check now says a test build keeps every row, since the Windows build no longer does.
+	- Swept: the one `encode` caller in `app.rs`, and the window attributes, which only the terminal window sets. The Settings dialog's own windows don't take shell keys.
+	- Verified: The unit suite on Linux, 1516 tests, and the quick gate. clippy for macOS and Windows is clean. None of it ran on a Mac.
+	- Branch: nov18-2026111715155480
+	- Commit: a162ca4d, df3b970e
 
 - A command-line argument that isn't valid Unicode crashes SilkTerm
 	- ID: 2026111713374941
