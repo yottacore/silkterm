@@ -268,7 +268,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Type: Feature
 	- Status: Stalled
 		- Held for b26's console to be unlocked, for the key check. The rig built the round's code there (81d86b94) on 20261118, then skipped, since CGSSessionScreenIsLocked was Yes.
-	- Needs external testing: On b26, at a shell prompt under `cat -v`, with Use as Meta set to Left on the Settings dialog's Keys tab: left Option+f shows `^[f`, right Option+f still shows the composed character, and the change works without a restart. Set back to Off, left Option+f types the composed character again. The hosted `mac.yml` run for dffm4, dffm5, dffm6, and dffm7.
+	- Needs external testing: On b26, at a shell prompt under `cat -v`, with Use as Meta set to Left: left Option+f shows `^[f`, right Option+f still shows the composed character, and the change works without a restart. Set back to Off, left Option+f types the composed character again. The rig is `private/claude_simple/tools/b26_optmeta.bash`.
 	- Priority: Avg
 	- Opened: 20261117-151554
 	- Opened by: CC
@@ -282,6 +282,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- 20261118: `keys.option_as_meta` in the config file takes off, left, right, or both. Use as Meta under a new Option key group on the Keys tab sets it, in the Mac build only. A window sets winit's Option as Alt from it at launch and again whenever the setting changes, from Settings, Reload config, or another window's save. The key encoder adds the ESC back for a press winit hands over as the plain key.
 		- 20261118: The Settings row needed a Mac-only row flag, `macos:`, kept by test builds the way `windows:` rows are.
 		- 20261118: The b26 key check is in the private tools folder as b26_optmeta.bash. It sends left and right Option+f as CGEvents with the side's device flag, under Left, then Off, then Both, each read live through `silkterm --reload-settings` from the window's own shell. The hosted mac.yml run 44372722100 on 81d86b94 covers dffm4 to dffm7.
+		- 20261118: Verified: hosted mac.yml run 44372722100 on nov18 (81d86b94) passed, 1490 tests, 0 failed, 0 filtered, so dffm4 to dffm7 ran and passed on macOS arm64. Only the b26 key check is left.
 	- Decisions:
 		- 20261118: The setting lives under `keys:` in the file, beside the hotkeys, though it isn't one. The hotkey reader only looks at hotkey names, so it isn't flagged.
 		- 20261118: Whether a press is Meta is judged the way winit judges whether to hand over the plain key: a named side held, with no Ctrl or Command. So the ESC and the plain key always come together. With Ctrl, Option keeps its ESC either way, as before.
