@@ -34,85 +34,42 @@ Going forward, new issues in the new template at the bottom of this file will go
 
 ## Issues
 
-- A GPU device lost partway through a frame can end the program when a text buffer grows
-	- ID: 2026111715110622
-	- Type: Bug
-	- Status: Started
-		- What's left is a loss found inside one text prepare, in child 2026111717080404, held for a push to the glyphon fork.
-	- Severity: Low
-	- Opened: 20261117-151106
-	- Opened by: CC
-	- Related IDs: 2026111713374902
-	- Target OS: All
-	- Target version: rc.1
-	- Incorrect behavior: A buffer made on a lost device is invalid, and wgpu panics when glyphon maps it to grow its vertices. Seen with Settings drawing on a device lost at the start of its frame: 'Buffer with glyphon vertices label is invalid' from Buffer::get_mapped_range.
-	- Expected behavior: A frame that finds its device lost partway through ends quietly, and the device is built again.
-	- Reproduced: 20261117 on b23 under headless sway, with an early build of 2026111713374902's fix that lost the device at the dialog's acquire, before its prepares ran. The final fix doesn't start a frame on a device it knows is lost, so what's left is a loss found by a wgpu call between the prepares.
-	- Possible cause: The prepares run before the acquire in the terminal's frame, and wgpu panics on a mapped range of an invalid buffer whatever the error handler is. A guard between the prepares, or an error scope, may cover it.
-	- Actual cause:
-		- glyphon grows a vertex buffer by making it mapped and writing a mapped range, and wgpu panics on a mapped range of a buffer made on a lost device, whatever the error handler is.
-		- Nothing set an uncaptured error handler, so wgpu's own panicked on any validation error. Whatever a frame made after the loss was invalid, and its next use was one.
-		- A texture acquired when the acquire found the loss was dropped, and wgpu panics discarding one on a lost device.
-	- Actual fix:
-		- The text context keeps its device's loss flag, and its 4 prepares do nothing once it's set. The frame is refused at its acquire or present as before.
-		- Each device gets an error handler that lets errors go once the device is lost. Before that an error still panics, as wgpu's own handler does.
-		- A texture acquired on a device found lost goes back through a present, which does nothing there, rather than a drop.
-		- The glyphon change that removes the mapped range is drafted, in child 2026111717080404.
-	- Decisions:
-		- The guard sits in the text context's prepares rather than between the call sites, so a new prepare can't miss it.
-		- An error handler per device rather than error scopes. Scopes are per thread and would have to wrap each frame, and neither covers the mapped range.
-		- Errors before a loss stay fatal, so a real bug still shows the way it did.
-	- Verified:
-		- 20261117: dfekm fails with each of the 4 prepare guards taken out, with the issue's own panic, and passes with them.
-		- 20261117: dfeks fails with a handler that's always fatal and passes with this one. On a working device the error still panics.
-		- 20261117: With the glyphon patch and the prepare guards taken out, dfekm passes.
-		- 20261117: dfeg0 passes 11 of 11 on software Vulkan under headless sway. The quick gate's fmt, clippy and tests areas passed.
-	- Swept:
-		- Every device comes from `request_device`, which sets the lost callback and the error handler together (`grep -n request_device source/src`).
-		- Every glyphon prepare goes through the text context's 4 functions (`grep -rn "\.prepare(" source/src`; the minimap's is its own renderer, with no mapped buffer).
-		- No buffer in the source is made mapped. The sentinel reads a range only after its map succeeds. The `SILK_DUMP` readback ignores a failed map, and is left alone as a debug aid on the GL path.
-		- Every other acquired texture reaches `end_frame` and is presented, in the terminal and in a dialog.
-	- Test case: `no_text_is_prepared_on_a_lost_device` (dfekm), `errors_after_a_loss_go_quietly` (dfeks), and dfeg0.
-	- Branch: nov17-2026111715110622
-	- Commit: 27014141
-
-- A GPU device lost inside one text prepare still ends the program, since the glyphon fork maps a vertex buffer it grows
-	- ID: 2026111717080404
+- macOS: a character typed with Option reaches the shell with ESC in front of it
+	- ID: 2026111713374903
 	- Type: Bug
 	- Status: Stalled
-	- Severity: Low
-	- Opened: 20261117-170804
+		- Held for: b26's console unlocked, so keys can be sent into the program there. It was locked on 20261117.
+	- Needs external testing: On b26, at a shell prompt under `cat -v`, Option+f on a US layout shows "ƒ" with no `^[` in front. With a German layout, if one is set up there, Option+5 and Option+8 type `[` and `{`, and the next keys type as usual. Option+Backspace still erases a word.
+	- Severity: High
+	- Opened: 20261117-133749
 	- Opened by: CC
-	- Parent ID: 2026111715110622
-	- Target OS: All
+	- Target OS: macOS
 	- Target version: rc.1
-	- Requirements: Push the patch drafted in the upstream folder under this item's parent ID to the fork's `text-srgb-blend-0.11.0` branch, then `cargo update -p glyphon`. It fills the buffer with `queue.write_buffer`. Its library tests pass, and with it the parent's dfekm passes with SilkTerm's own guards taken out.
-	- Incorrect behavior: glyphon makes a grown vertex buffer mapped and writes it through a mapped range. When a call inside that same prepare finds the loss first, such as a glyph upload on DX12, the new buffer is invalid and wgpu panics, whatever the error handler is.
-	- Expected behavior: The prepare reports an error, which the device's error handler lets go once the device is lost.
-	- Possible cause: `create_oversized_buffer` in glyphon's `text_render.rs` uses `mapped_at_creation`. Upstream glyphon has the same code.
-	- Estimated effort: Low
-	- Test case: dfekm, run once with the `TextCtx` guards taken out, after the lock takes the new commit.
-	- Held for: a push to the glyphon fork, which a round doesn't make.
-
-- Add a contributor license agreement, like nano-git-db's
-	- ID: 2026101906582193
-	- Type: Task
-	- Status: Queued
-		- Goes out with rc.1. The workflow runs from `main`, so it takes effect at that merge.
-	- Priority: Avg
-	- Opened: 20261019-065821
-	- Opened by: JC
-	- Assigned to: CC
-	- Target OS: All
-	- Target version: rc.1
-	- Requirements:
-		- A `CLA.md`, a section on it in contributing.md, and a check on pull requests that blocks a merge until the author has signed. Same as nano-git-db.
+	- Incorrect behavior: On a German layout, Option+5 is `[` and Option+8 is `{`. Typing `[` sends `ESC [`, which starts an escape sequence and eats the next keys. `{` sends `ESC {`. On a US layout, Option+f sends ESC plus ƒ. Most non-US Mac layouts type `@ [ ] { } | \ ~` with Option.
+	- Expected behavior: Option types the character it composes, as in Terminal.app, iTerm2, and alacritty. Option as Meta is a setting.
+	- Reproduced: No. Traced through winit 0.30.13's macOS key events. Not run on a Mac.
+	- Possible cause: `encode_key` adds the ESC prefix for Alt on every platform. On a Mac, Option composes characters.
+	- Origin: c6eaa043, 20260628. The 20260914 round read input.rs and found it clean. Item 2026100219240881 fixed the text boxes only. Plausible.
+	- Sweep: Option+arrows send `CSI 1;3D`, which Mac shells don't bind by default. `hotkey_in` and `opens_menu_title` are already off on a Mac.
+	- Related IDs: 2026100219240881
 	- Notes:
-		- Pre-next-cut.
+		- Code review 20261117 item 4.
+		- Detail: `detail_backlog.md`, under this ID.
+	- Actual cause: winit on a Mac reports the character Option composes as the key's text, with Alt held. `encode_key` put ESC in front of any text typed with Alt, so `[` went to the shell as `ESC [`.
+	- Actual fix: On a Mac, a character typed with Option goes to the shell as the text alone. Ctrl+Option and the named keys, such as Option+Backspace and Option+arrows, keep their ESC and CSI forms. Linux and Windows are unchanged.
+	- Decisions:
+		- 20261117: Every Option+character on a Mac drops the ESC, rather than only when the text differs from the plain key. winit's plain key ignores Shift too, so that test would get Option+Shift wrong. Once winit's Option as Alt is on, the text it hands over is already the plain key, and the setting can turn the ESC back on.
+		- 20261117: Option+arrows stay `CSI 1;3D`, as in iTerm2 and alacritty. Terminal.app sends `ESC b` and `ESC f` instead, which a person can bind in the shell.
+		- 20261117: The Option as Meta setting is its own child, 2026111715155480. Until it's done, a Mac has no way to send Meta with Option+letter.
+	- Swept: The other arms of `encode_key`, the one `encode` caller in `app.rs`, every other reader of the Alt key (mouse report bits, the text boxes, hotkey matching), and `hotkey_in` and `opens_menu_title`, which already skip a Mac. None of them put ESC in front of typed text.
+	- Test case: `option_types_its_character_on_a_mac` (dfegj). It fails with the fix undone, on `[` sent as `ESC [`, and passes with it.
+	- Verified:
+		- The input unit tests on Linux, with the platform passed in.
+		- 20261117: The hosted `mac.yml` run 44214655794 on nov17 at c19866aa passed its tests on macOS arm64, `option_types_its_character_on_a_mac` among them.
 	- Progress log:
-		- 20261019: Added `CLA.md`, a section in contributing.md, and `.github/workflows/cla.yml`, the same as nano-git-db's. Both files need JC's review. The check still needs a first pull request from someone else to prove it.
-		- 20261023: Neither a full run nor Mac CI runs `cla.yml`, which runs only on pull requests.
-		- 20261117: JC asked for it in the next release. `CLA.md`, the contributing.md section and `cla.yml` are on `dev`, not yet on `main`. They go to `main` with the rc.1 merge. The first outside pull request after that proves the check.
+		- 20261117: The key check on b26 didn't run, since the console was locked. The round's release build there passed.
+	- Branch: nov17-2026111713374903
+	- Commit: 8b8d7703
 
 - Demo: the cursor should go to 50% width when the cursor size and animation change
 	- ID: 2026092812581720
@@ -138,6 +95,41 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Branch: rnd1022
 	- Test case: `cicd/tests/demo/run.py`, "the cursor scene narrows the cursor to half width".
 	- Closed:
+
+- A GPU device lost inside one text prepare still ends the program, since the glyphon fork maps a vertex buffer it grows
+	- ID: 2026111717080404
+	- Type: Bug
+	- Status: Stalled
+	- Severity: Low
+	- Opened: 20261117-170804
+	- Opened by: CC
+	- Parent ID: 2026111715110622
+	- Target OS: All
+	- Target version: rc.1
+	- Requirements: Push the patch drafted in the upstream folder under this item's parent ID to the fork's `text-srgb-blend-0.11.0` branch, then `cargo update -p glyphon`. It fills the buffer with `queue.write_buffer`. Its library tests pass, and with it the parent's dfekm passes with SilkTerm's own guards taken out.
+	- Incorrect behavior: glyphon makes a grown vertex buffer mapped and writes it through a mapped range. When a call inside that same prepare finds the loss first, such as a glyph upload on DX12, the new buffer is invalid and wgpu panics, whatever the error handler is.
+	- Expected behavior: The prepare reports an error, which the device's error handler lets go once the device is lost.
+	- Possible cause: `create_oversized_buffer` in glyphon's `text_render.rs` uses `mapped_at_creation`. Upstream glyphon has the same code.
+	- Estimated effort: Low
+	- Test case: dfekm, run once with the `TextCtx` guards taken out, after the lock takes the new commit.
+	- Held for: a push to the glyphon fork, which a round doesn't make.
+
+- After a long OSC ends, the parser keeps up to 2 MiB of buffer per pane until the pane closes
+	- ID: 2026111714235965
+	- Type: Bug
+	- Status: Stalled
+		- Held for a vte fork branch with the drafted patch, which needs a new repo on the git host.
+	- Severity: Low
+	- Opened: 20261117-142359
+	- Opened by: CC
+	- Parent ID: 2026111713374900
+	- Target OS: All
+	- Target version: rc.2
+	- Incorrect behavior: An OSC that runs to the 2 MiB cap leaves the parser's buffer at that size until the pane closes. vte clears the buffer when a sequence ends but keeps its memory.
+	- Expected behavior: A buffer that grew past a few KiB is given back when its sequence ends.
+	- Possible cause: vte 0.15.0 `osc_end` calls `clear()`, which keeps capacity. The parser is private to alacritty_terminal's event loop, so this can't be fixed from our side.
+	- Estimated effort: Low
+	- Possible fix: The vte patch in the private upstream drafts under 2026111713374900 caps the buffer under `std` and shrinks it in `osc_end`. It goes in a vte fork branch with a `[patch.crates-io]` line, and then `OscCap` in `cwd.rs` can go.
 
 - shcl: a keep-lines save adds a set value as a new line, beside its commented default
 	- ID: 2026100219054510
@@ -200,6 +192,48 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- It's stalled until a cosmic-text release takes fontdb 0.24 or later, and winit's sctk-adwaita drops ab_glyph.
 	- Held for a cosmic-text release on fontdb 0.24 or later, and an sctk-adwaita without ab_glyph.
 
+- A GPU device lost partway through a frame can end the program when a text buffer grows
+	- ID: 2026111715110622
+	- Type: Bug
+	- Status: Started
+		- What's left is a loss found inside one text prepare, in child 2026111717080404, held for a push to the glyphon fork.
+	- Severity: Low
+	- Opened: 20261117-151106
+	- Opened by: CC
+	- Related IDs: 2026111713374902
+	- Target OS: All
+	- Target version: rc.1
+	- Incorrect behavior: A buffer made on a lost device is invalid, and wgpu panics when glyphon maps it to grow its vertices. Seen with Settings drawing on a device lost at the start of its frame: 'Buffer with glyphon vertices label is invalid' from Buffer::get_mapped_range.
+	- Expected behavior: A frame that finds its device lost partway through ends quietly, and the device is built again.
+	- Reproduced: 20261117 on b23 under headless sway, with an early build of 2026111713374902's fix that lost the device at the dialog's acquire, before its prepares ran. The final fix doesn't start a frame on a device it knows is lost, so what's left is a loss found by a wgpu call between the prepares.
+	- Possible cause: The prepares run before the acquire in the terminal's frame, and wgpu panics on a mapped range of an invalid buffer whatever the error handler is. A guard between the prepares, or an error scope, may cover it.
+	- Actual cause:
+		- glyphon grows a vertex buffer by making it mapped and writing a mapped range, and wgpu panics on a mapped range of a buffer made on a lost device, whatever the error handler is.
+		- Nothing set an uncaptured error handler, so wgpu's own panicked on any validation error. Whatever a frame made after the loss was invalid, and its next use was one.
+		- A texture acquired when the acquire found the loss was dropped, and wgpu panics discarding one on a lost device.
+	- Actual fix:
+		- The text context keeps its device's loss flag, and its 4 prepares do nothing once it's set. The frame is refused at its acquire or present as before.
+		- Each device gets an error handler that lets errors go once the device is lost. Before that an error still panics, as wgpu's own handler does.
+		- A texture acquired on a device found lost goes back through a present, which does nothing there, rather than a drop.
+		- The glyphon change that removes the mapped range is drafted, in child 2026111717080404.
+	- Decisions:
+		- The guard sits in the text context's prepares rather than between the call sites, so a new prepare can't miss it.
+		- An error handler per device rather than error scopes. Scopes are per thread and would have to wrap each frame, and neither covers the mapped range.
+		- Errors before a loss stay fatal, so a real bug still shows the way it did.
+	- Verified:
+		- 20261117: dfekm fails with each of the 4 prepare guards taken out, with the issue's own panic, and passes with them.
+		- 20261117: dfeks fails with a handler that's always fatal and passes with this one. On a working device the error still panics.
+		- 20261117: With the glyphon patch and the prepare guards taken out, dfekm passes.
+		- 20261117: dfeg0 passes 11 of 11 on software Vulkan under headless sway. The quick gate's fmt, clippy and tests areas passed.
+	- Swept:
+		- Every device comes from `request_device`, which sets the lost callback and the error handler together (`grep -n request_device source/src`).
+		- Every glyphon prepare goes through the text context's 4 functions (`grep -rn "\.prepare(" source/src`; the minimap's is its own renderer, with no mapped buffer).
+		- No buffer in the source is made mapped. The sentinel reads a range only after its map succeeds. The `SILK_DUMP` readback ignores a failed map, and is left alone as a debug aid on the GL path.
+		- Every other acquired texture reaches `end_frame` and is presented, in the terminal and in a dialog.
+	- Test case: `no_text_is_prepared_on_a_lost_device` (dfekm), `errors_after_a_loss_go_quietly` (dfeks), and dfeg0.
+	- Branch: nov17-2026111715110622
+	- Commit: 27014141
+
 - An OSC sequence that never ends grows the parser's buffer until memory runs out
 	- ID: 2026111713374900
 	- Type: Bug
@@ -230,22 +264,102 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Commit: c298d1a8
 	- Progress log: 20261117: Verified: dfeeg and dfeeh pass. Both fail with the cap made a no-op. dfeeh also fails with the cap left in an OSC after its ESC, and with Escape left early on a C0 control. The quick gate passes. The drafted vte patch passes vte's own tests, and its new test fails without the cap.
 
-- After a long OSC ends, the parser keeps up to 2 MiB of buffer per pane until the pane closes
-	- ID: 2026111714235965
-	- Type: Bug
-	- Status: Stalled
-		- Held for a vte fork branch with the drafted patch, which needs a new repo on the git host.
-	- Severity: Low
-	- Opened: 20261117-142359
-	- Opened by: CC
-	- Parent ID: 2026111713374900
+- Add a contributor license agreement, like nano-git-db's
+	- ID: 2026101906582193
+	- Type: Task
+	- Status: Queued
+		- Goes out with rc.1. The workflow runs from `main`, so it takes effect at that merge.
+	- Priority: Avg
+	- Opened: 20261019-065821
+	- Opened by: JC
+	- Assigned to: CC
 	- Target OS: All
-	- Target version: rc.2
-	- Incorrect behavior: An OSC that runs to the 2 MiB cap leaves the parser's buffer at that size until the pane closes. vte clears the buffer when a sequence ends but keeps its memory.
-	- Expected behavior: A buffer that grew past a few KiB is given back when its sequence ends.
-	- Possible cause: vte 0.15.0 `osc_end` calls `clear()`, which keeps capacity. The parser is private to alacritty_terminal's event loop, so this can't be fixed from our side.
-	- Estimated effort: Low
-	- Possible fix: The vte patch in the private upstream drafts under 2026111713374900 caps the buffer under `std` and shrinks it in `osc_end`. It goes in a vte fork branch with a `[patch.crates-io]` line, and then `OscCap` in `cwd.rs` can go.
+	- Target version: rc.1
+	- Requirements:
+		- A `CLA.md`, a section on it in contributing.md, and a check on pull requests that blocks a merge until the author has signed. Same as nano-git-db.
+	- Notes:
+		- Pre-next-cut.
+	- Progress log:
+		- 20261019: Added `CLA.md`, a section in contributing.md, and `.github/workflows/cla.yml`, the same as nano-git-db's. Both files need JC's review. The check still needs a first pull request from someone else to prove it.
+		- 20261023: Neither a full run nor Mac CI runs `cla.yml`, which runs only on pull requests.
+		- 20261117: JC asked for it in the next release. `CLA.md`, the contributing.md section and `cla.yml` are on `dev`, not yet on `main`. They go to `main` with the rc.1 merge. The first outside pull request after that proves the check.
+
+- macOS: Create a setting to use Option as Meta in the terminal
+	- ID: 2026111715155480
+	- Type: Feature
+	- Status: Queued
+	- Priority: Avg
+	- Opened: 20261117-151554
+	- Opened by: CC
+	- Parent ID: 2026111713374903
+	- Target OS: macOS
+	- Target version: rc.1
+	- Requirements: A setting, off by default, that makes Option send ESC plus the plain key, as Terminal.app's "Use Option as Meta key" does. With it off, Option types the character it composes. Left only, right only, or both, as iTerm2 and alacritty offer. It applies to open windows when changed.
+	- Note: Since the parent's fix, Option+letter on a Mac doesn't send Meta at all, so a Meta binding in emacs or readline needs this setting.
+	- Note: winit's `with_option_as_alt` and `set_option_as_alt` make it report the plain key with Alt held. `encode_key` then has to add the ESC again, which its `mac` flag turns off today.
+
+- A command-line argument that isn't valid Unicode crashes SilkTerm
+	- ID: 2026111713374941
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261117-133749
+	- Opened by: CC
+	- Target OS: All
+	- Target version: rc.1
+	- Incorrect behavior: `silkterm --directory $'/data/caf\xe9'`, or `--open`, `--config` or `--wallpaper` with a Latin-1 name, aborts. On Linux that's exit 134 with a core dump. A Windows GUI build ends with no message. A bad argument is meant to give exit 2 and "Try --help."
+	- Expected behavior: A non-Unicode argument is a parse error with exit 2, or a path flag takes it as is.
+	- Reproduced: No. std documents that `env::args()` panics on such an argument, and the release build aborts on panic.
+	- Possible cause: `std::env::args()` is used rather than `args_os()`.
+	- Origin: c6eaa043, 20260628. Not seen by an earlier round. Confirmed by trace.
+	- Sweep: Only 2 call sites, both in main.rs.
+	- Decisions:
+		- 20261117: Kept for rc.1, since it crashes. rc.1 takes only Critical and High items and anything that crashes or loses data.
+	- Notes:
+		- Code review 20261117 item 42.
+		- Detail: `detail_backlog.md`, under this ID.
+
+- Both installers rewrite a hand-edited launcher on every upgrade
+	- ID: 2026111713374947
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261117-133749
+	- Opened by: CC
+	- Target OS: Linux, Windows
+	- Target version: rc.1
+	- Incorrect behavior: install.bash says an existing launcher is left alone since it may have been edited by hand, but a new binary also forces the launcher, so every upgrade overwrites the .desktop file. On Windows the shortcut keeps its arguments and hotkey, so it's mostly spared.
+	- Expected behavior: The launcher is written only when it's missing or names another binary.
+	- Reproduced: No. Traced through the code.
+	- Possible cause: `needBinary` also sets the launcher flags.
+	- Origin: c09beb3e, 20260806. Not seen by an earlier round. Confirmed by trace.
+	- Sweep: No other launcher writers.
+	- Decisions:
+		- 20261117: Kept for rc.1, since it loses data. rc.1 takes only Critical and High items and anything that crashes or loses data.
+	- Notes:
+		- Code review 20261117 item 48.
+		- Detail: `detail_backlog.md`, under this ID.
+
+- rename.bash also rewrites untracked files
+	- ID: 2026111713374948
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261117-133749
+	- Opened by: CC
+	- Target OS: All
+	- Target version: rc.1
+	- Incorrect behavior: Its header says it rewrites tracked files, but untracked files that aren't ignored are edited in place and renamed too, which can include another session's work in progress.
+	- Expected behavior: Only tracked files change, unless untracked ones are asked for.
+	- Reproduced: No. Traced through the code.
+	- Possible cause: `git ls-files --others --exclude-standard` is added to the list.
+	- Origin: The first commit, 20260628. Not seen by an earlier round. Confirmed by trace.
+	- Sweep: None found.
+	- Decisions:
+		- 20261117: Kept for rc.1, since it loses data. rc.1 takes only Critical and High items and anything that crashes or loses data.
+	- Notes:
+		- Code review 20261117 item 49.
+		- Detail: `detail_backlog.md`, under this ID.
 
 - A settings file with one stray flat key loses its `kept` block when it's converted
 	- ID: 2026111713374901
@@ -329,57 +443,6 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Acceptance signoff: Self-closed: passed on vm925w (DX12 and Vulkan) and in the hosted Mac tests on Metal.
 	- Closed: 20261117-173102
 	- Closed reason: Done
-
-- macOS: a character typed with Option reaches the shell with ESC in front of it
-	- ID: 2026111713374903
-	- Type: Bug
-	- Status: Stalled
-		- Held for: b26's console unlocked, so keys can be sent into the program there. It was locked on 20261117.
-	- Needs external testing: On b26, at a shell prompt under `cat -v`, Option+f on a US layout shows "ƒ" with no `^[` in front. With a German layout, if one is set up there, Option+5 and Option+8 type `[` and `{`, and the next keys type as usual. Option+Backspace still erases a word.
-	- Severity: High
-	- Opened: 20261117-133749
-	- Opened by: CC
-	- Target OS: macOS
-	- Target version: rc.1
-	- Incorrect behavior: On a German layout, Option+5 is `[` and Option+8 is `{`. Typing `[` sends `ESC [`, which starts an escape sequence and eats the next keys. `{` sends `ESC {`. On a US layout, Option+f sends ESC plus ƒ. Most non-US Mac layouts type `@ [ ] { } | \ ~` with Option.
-	- Expected behavior: Option types the character it composes, as in Terminal.app, iTerm2, and alacritty. Option as Meta is a setting.
-	- Reproduced: No. Traced through winit 0.30.13's macOS key events. Not run on a Mac.
-	- Possible cause: `encode_key` adds the ESC prefix for Alt on every platform. On a Mac, Option composes characters.
-	- Origin: c6eaa043, 20260628. The 20260914 round read input.rs and found it clean. Item 2026100219240881 fixed the text boxes only. Plausible.
-	- Sweep: Option+arrows send `CSI 1;3D`, which Mac shells don't bind by default. `hotkey_in` and `opens_menu_title` are already off on a Mac.
-	- Related IDs: 2026100219240881
-	- Notes:
-		- Code review 20261117 item 4.
-		- Detail: `detail_backlog.md`, under this ID.
-	- Actual cause: winit on a Mac reports the character Option composes as the key's text, with Alt held. `encode_key` put ESC in front of any text typed with Alt, so `[` went to the shell as `ESC [`.
-	- Actual fix: On a Mac, a character typed with Option goes to the shell as the text alone. Ctrl+Option and the named keys, such as Option+Backspace and Option+arrows, keep their ESC and CSI forms. Linux and Windows are unchanged.
-	- Decisions:
-		- 20261117: Every Option+character on a Mac drops the ESC, rather than only when the text differs from the plain key. winit's plain key ignores Shift too, so that test would get Option+Shift wrong. Once winit's Option as Alt is on, the text it hands over is already the plain key, and the setting can turn the ESC back on.
-		- 20261117: Option+arrows stay `CSI 1;3D`, as in iTerm2 and alacritty. Terminal.app sends `ESC b` and `ESC f` instead, which a person can bind in the shell.
-		- 20261117: The Option as Meta setting is its own child, 2026111715155480. Until it's done, a Mac has no way to send Meta with Option+letter.
-	- Swept: The other arms of `encode_key`, the one `encode` caller in `app.rs`, every other reader of the Alt key (mouse report bits, the text boxes, hotkey matching), and `hotkey_in` and `opens_menu_title`, which already skip a Mac. None of them put ESC in front of typed text.
-	- Test case: `option_types_its_character_on_a_mac` (dfegj). It fails with the fix undone, on `[` sent as `ESC [`, and passes with it.
-	- Verified:
-		- The input unit tests on Linux, with the platform passed in.
-		- 20261117: The hosted `mac.yml` run 44214655794 on nov17 at c19866aa passed its tests on macOS arm64, `option_types_its_character_on_a_mac` among them.
-	- Progress log:
-		- 20261117: The key check on b26 didn't run, since the console was locked. The round's release build there passed.
-	- Branch: nov17-2026111713374903
-	- Commit: 8b8d7703
-
-- macOS: Create a setting to use Option as Meta in the terminal
-	- ID: 2026111715155480
-	- Type: Feature
-	- Status: Queued
-	- Priority: Avg
-	- Opened: 20261117-151554
-	- Opened by: CC
-	- Parent ID: 2026111713374903
-	- Target OS: macOS
-	- Target version: rc.1
-	- Requirements: A setting, off by default, that makes Option send ESC plus the plain key, as Terminal.app's "Use Option as Meta key" does. With it off, Option types the character it composes. Left only, right only, or both, as iTerm2 and alacritty offer. It applies to open windows when changed.
-	- Note: Since the parent's fix, Option+letter on a Mac doesn't send Meta at all, so a Meta binding in emacs or readline needs this setting.
-	- Note: winit's `with_option_as_alt` and `set_option_as_alt` make it report the plain key with Alt held. `encode_key` then has to add the ESC again, which its `mac` flag turns off today.
 
 - Pressing OK again after the "config is open elsewhere" refusal saves nothing
 	- ID: 2026111713374904
@@ -585,6 +648,95 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Closed: 20261117-164510
 	- Closed reason: Done
 
+- Tab labels and the window title are worked out again on every frame
+	- ID: 2026111623500001
+	- Type: Enhancement
+	- Status: Closed
+	- Priority: Avg
+	- Opened: 20261116-235000
+	- Opened by: CC
+	- Target version: rc.1
+	- Requirements:
+		- Each frame copies every tab's title, command, and folder only to compare them with the last frame's, and builds the window title's parts before finding it unchanged.
+		- Work them out only when a tab's facts or a title input changed.
+		- Detail: `detail_backlog.md`, under this ID.
+	- Progress log:
+		- 20261117: The tab labels and the window title are done. A tab's facts are lent from its pane and compared where they are, and copied only when one moved. The window title is built only when what follows the app name, or the note after it, changed. The app name and dogfood part is worked out once.
+		- 20261117: At rest, in ddkre's window (2 tabs, 3 panes), the window thread went from 166 allocations per frame to 145, the same in a second pair of runs. A drag went from 325 to 328 per frame down to 304 to 306.
+		- 20261117: The tip and rating banner part of the detail is in child 2026111708444862, Done.
+	- Decisions:
+		- 20261117: The window title's source is now worked out without reading the tab's label, by `suffix_from`, so the caller can borrow it. The old `window_suffix` stays, test-only, so its tests run unchanged.
+		- 20261117: The tip and banner part went to a child. Their lines pass through 3 layout functions and the whole render, the per-line shaping costs more than the copy, and no window test puts a tip up to measure.
+	- Verified: 20261117. Both new tests fail with the old copy-then-compare and build-then-compare put back, and pass with the fix. The quick run passed, all 5 areas. Clippy for Windows is clean. It wasn't run on Windows, where the task probe's code path is the same as before.
+	- Swept: Every caller of `tab_facts`, `task()`, and `title_prefix`. The tab tip reads the lent facts too. The minimap still copies a running program's name each frame, as before, but no longer a finished one's. The tip and the banner are in the child.
+	- Branch: nov17-2026111623500001
+	- Commit: 172c03df
+	- Test case: `idle_frames_copy_no_tab_facts` (dfe46), no allocations over 240 idle frames. `an_unchanged_window_title_builds_nothing` (dfe45), no allocations over 240 frames with the title unchanged, and a new title for each part that moves. ddkre's figures above.
+	- Acceptance signoff: Self-closed: its last child, 2026111708444862, closed.
+	- Closed: 20261117-093908
+	- Closed reason: Done
+
+- Settings: tips, labels, and search results are built again on every frame or pointer move
+	- ID: 2026111623500002
+	- Type: Enhancement
+	- Status: Closed
+	- Priority: Avg
+	- Opened: 20261116-235000
+	- Opened by: CC
+	- Target version: rc.1
+	- Requirements:
+		- A pointer move over the dialog builds a row's whole tip text only to learn whether there is one.
+		- Each frame copies every label into a new string, and rebuilds each visible search result's heading trail.
+		- Detail: `detail_backlog.md`, under this ID.
+	- Progress log:
+		- 20261117: Measured as heap allocations on the test thread, debug build, the default dialog on the General tab. A sweep of 360 pointer spots, 141 of them over a tip, went from 2159 to 1. One frame's text went from 148 to 91 for 69 items. One frame's text with "size" typed in the search box went from 105 to 24.
+		- 20261117: Done: finding the tip under the pointer names it without building its words. The words are built only for a frame that draws the tip. A row's words are built to decide only when it has no help of its own.
+		- 20261117: Done: the dialog's text items borrow the fixed words (labels, tab titles, captions, icons, fixed options) rather than copying them each frame.
+		- 20261117: Done: each search result's line and marks are worked out once per query, not once per frame.
+		- 20261117: Done: the hotkey check that runs for every key of every row each frame turns away a key that isn't a hotkey before it walks the rows.
+	- Decisions:
+		- 20261117: A search result's line is still copied into its text item each frame, since a text item can only borrow fixed words. That copy is one string and one list per shown result, where the old path rebuilt the whole trail.
+		- 20261117: Left alone: the theme list that `choices` builds per call, since the frame path doesn't call it at rest, and `shell_cols`, which is a few sums with no allocation.
+	- Swept: every `TextItem` builder in `settings_ui.rs`, `picker.rs`, `prompt.rs` and `search.rs`. Every caller of `hover_tip`, now test only, and of `tip_under` in `dialog.rs`. Every caller of `dd_closed_label`, which now returns borrowed text for a fixed option. Every caller of `hotkey_for_key`.
+	- Verified: the quick gate passed in all 5 areas. Each new test failed with its part of the change undone (282 tip words built in the sweep, a label copied, 9 result lines worked out again) and passes with it.
+	- Branch: nov17-2026111623500002
+	- Commit: cd8c3861
+	- Test case: `only_a_drawn_tip_builds_its_words` (dfe4h), `a_frame_borrows_the_fixed_words` (dfe4j), `a_frame_reuses_the_result_lines` (dfe4k). The older `a_dialog_frame_looks_up_the_tip_once` (ddgh4) still passes.
+	- Acceptance signoff: Self-closed: the change does what the item asked, and its tests failed before and pass after.
+	- Closed: 20261117-085922
+	- Closed reason: Done
+
+- Window moves and resizes on Linux open a new X server connection for each question they ask
+	- ID: 2026111623500003
+	- Type: Enhancement
+	- Status: Closed
+	- Priority: Avg
+	- Opened: 20261116-235000
+	- Opened by: CC
+	- Target OS: Linux
+	- Test environment: Xvfb with xfwm4; headless sway with Xwayland for herdback
+	- Target version: rc.1
+	- Requirements:
+		- Several monitor and button queries run per resize or move event, and each one connects to the X server again.
+		- Keep one connection per window.
+		- Detail: `detail_backlog.md`, under this ID.
+	- Progress log:
+		- 20261117: Measured on Xvfb under xfwm4, with per-monitor sizes on, as X server connects the process made. Before: 3 per move (layout, button held, monitor under the window), 1 per resize, 17 at launch. After: 0 per move, 0 per resize, 12 at launch.
+	- Decisions:
+		- 20261117: The window's state owns the connection, made at the first read and dropped with the window. A read that fails drops it, and the next read connects again, so a server that comes back is picked up.
+		- 20261117: The XWAYLAND check and the two fullscreen atoms are asked once per connection. The atoms are kept only once a window manager has made both.
+		- 20261117: The monitor list is still read from the server each time, since it changes without telling a connection that never asks for events. Its RandR requests now go out together before the replies are read.
+		- 20261117: Events the server sends every client unasked are read off and dropped after each read, so they can't pile up on a connection that lives as long as the window.
+		- 20261117: 2026100314050005 had left this alone as small. This item asks for it, so it's done here.
+	- Swept: every `x11rb::connect` in the source. The KDE blur hint and the initial window state (app.rs) run at startup or on a toggle. The transient-for hints, restack and work area (dialog.rs) run when a dialog opens or is activated. The GLX error hook and MIT-SHM check (gfx.rs) run at startup. None runs per move or resize.
+	- Verified: 20261117. dfe50 and dfe51 pass, and both fail with the connection dropped after every read. herdback (deqx1) passes all 20 checks and startsize (ddg81) passes, on the new build. Format, clippy and the unit tests (1477) passed in the quick gate. Clippy is clean for the Windows and macOS targets.
+	- Branch: nov17-2026111623500003
+	- Commit: 903fee6c
+	- Test case: `a_window_keeps_one_x_connection_across_its_reads` (dfe50), `a_failed_x_read_drops_the_connection_and_the_next_read_connects_again` (dfe51)
+	- Acceptance signoff: Self-closed: the change does what the item asked, measured before and after, and its tests fail with the keeping broken.
+	- Closed: 20261117-091811
+	- Closed reason: Done
+
 - A 3-part setting rename written partly dotted moves the value to a setting nothing reads
 	- ID: 2026111713374922
 	- Type: Bug
@@ -681,158 +833,6 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Verified: 20261117, the quick gate (fmt, clippy, 1503 unit tests, scripts, docs).
 	- Acceptance signoff: Self-closed: the change does what the item asked, and its test fails before the fix and passes after.
 	- Closed: 20261117-155300
-	- Closed reason: Done
-
-- A command-line argument that isn't valid Unicode crashes SilkTerm
-	- ID: 2026111713374941
-	- Type: Bug
-	- Status: Queued
-	- Severity: Low
-	- Opened: 20261117-133749
-	- Opened by: CC
-	- Target OS: All
-	- Target version: rc.1
-	- Incorrect behavior: `silkterm --directory $'/data/caf\xe9'`, or `--open`, `--config` or `--wallpaper` with a Latin-1 name, aborts. On Linux that's exit 134 with a core dump. A Windows GUI build ends with no message. A bad argument is meant to give exit 2 and "Try --help."
-	- Expected behavior: A non-Unicode argument is a parse error with exit 2, or a path flag takes it as is.
-	- Reproduced: No. std documents that `env::args()` panics on such an argument, and the release build aborts on panic.
-	- Possible cause: `std::env::args()` is used rather than `args_os()`.
-	- Origin: c6eaa043, 20260628. Not seen by an earlier round. Confirmed by trace.
-	- Sweep: Only 2 call sites, both in main.rs.
-	- Decisions:
-		- 20261117: Kept for rc.1, since it crashes. rc.1 takes only Critical and High items and anything that crashes or loses data.
-	- Notes:
-		- Code review 20261117 item 42.
-		- Detail: `detail_backlog.md`, under this ID.
-
-- Both installers rewrite a hand-edited launcher on every upgrade
-	- ID: 2026111713374947
-	- Type: Bug
-	- Status: Queued
-	- Severity: Low
-	- Opened: 20261117-133749
-	- Opened by: CC
-	- Target OS: Linux, Windows
-	- Target version: rc.1
-	- Incorrect behavior: install.bash says an existing launcher is left alone since it may have been edited by hand, but a new binary also forces the launcher, so every upgrade overwrites the .desktop file. On Windows the shortcut keeps its arguments and hotkey, so it's mostly spared.
-	- Expected behavior: The launcher is written only when it's missing or names another binary.
-	- Reproduced: No. Traced through the code.
-	- Possible cause: `needBinary` also sets the launcher flags.
-	- Origin: c09beb3e, 20260806. Not seen by an earlier round. Confirmed by trace.
-	- Sweep: No other launcher writers.
-	- Decisions:
-		- 20261117: Kept for rc.1, since it loses data. rc.1 takes only Critical and High items and anything that crashes or loses data.
-	- Notes:
-		- Code review 20261117 item 48.
-		- Detail: `detail_backlog.md`, under this ID.
-
-- rename.bash also rewrites untracked files
-	- ID: 2026111713374948
-	- Type: Bug
-	- Status: Queued
-	- Severity: Low
-	- Opened: 20261117-133749
-	- Opened by: CC
-	- Target OS: All
-	- Target version: rc.1
-	- Incorrect behavior: Its header says it rewrites tracked files, but untracked files that aren't ignored are edited in place and renamed too, which can include another session's work in progress.
-	- Expected behavior: Only tracked files change, unless untracked ones are asked for.
-	- Reproduced: No. Traced through the code.
-	- Possible cause: `git ls-files --others --exclude-standard` is added to the list.
-	- Origin: The first commit, 20260628. Not seen by an earlier round. Confirmed by trace.
-	- Sweep: None found.
-	- Decisions:
-		- 20261117: Kept for rc.1, since it loses data. rc.1 takes only Critical and High items and anything that crashes or loses data.
-	- Notes:
-		- Code review 20261117 item 49.
-		- Detail: `detail_backlog.md`, under this ID.
-
-- Tab labels and the window title are worked out again on every frame
-	- ID: 2026111623500001
-	- Type: Enhancement
-	- Status: Closed
-	- Priority: Avg
-	- Opened: 20261116-235000
-	- Opened by: CC
-	- Target version: rc.1
-	- Requirements:
-		- Each frame copies every tab's title, command, and folder only to compare them with the last frame's, and builds the window title's parts before finding it unchanged.
-		- Work them out only when a tab's facts or a title input changed.
-		- Detail: `detail_backlog.md`, under this ID.
-	- Progress log:
-		- 20261117: The tab labels and the window title are done. A tab's facts are lent from its pane and compared where they are, and copied only when one moved. The window title is built only when what follows the app name, or the note after it, changed. The app name and dogfood part is worked out once.
-		- 20261117: At rest, in ddkre's window (2 tabs, 3 panes), the window thread went from 166 allocations per frame to 145, the same in a second pair of runs. A drag went from 325 to 328 per frame down to 304 to 306.
-		- 20261117: The tip and rating banner part of the detail is in child 2026111708444862, Done.
-	- Decisions:
-		- 20261117: The window title's source is now worked out without reading the tab's label, by `suffix_from`, so the caller can borrow it. The old `window_suffix` stays, test-only, so its tests run unchanged.
-		- 20261117: The tip and banner part went to a child. Their lines pass through 3 layout functions and the whole render, the per-line shaping costs more than the copy, and no window test puts a tip up to measure.
-	- Verified: 20261117. Both new tests fail with the old copy-then-compare and build-then-compare put back, and pass with the fix. The quick run passed, all 5 areas. Clippy for Windows is clean. It wasn't run on Windows, where the task probe's code path is the same as before.
-	- Swept: Every caller of `tab_facts`, `task()`, and `title_prefix`. The tab tip reads the lent facts too. The minimap still copies a running program's name each frame, as before, but no longer a finished one's. The tip and the banner are in the child.
-	- Branch: nov17-2026111623500001
-	- Commit: 172c03df
-	- Test case: `idle_frames_copy_no_tab_facts` (dfe46), no allocations over 240 idle frames. `an_unchanged_window_title_builds_nothing` (dfe45), no allocations over 240 frames with the title unchanged, and a new title for each part that moves. ddkre's figures above.
-	- Acceptance signoff: Self-closed: its last child, 2026111708444862, closed.
-	- Closed: 20261117-093908
-	- Closed reason: Done
-
-- Settings: tips, labels, and search results are built again on every frame or pointer move
-	- ID: 2026111623500002
-	- Type: Enhancement
-	- Status: Closed
-	- Priority: Avg
-	- Opened: 20261116-235000
-	- Opened by: CC
-	- Target version: rc.1
-	- Requirements:
-		- A pointer move over the dialog builds a row's whole tip text only to learn whether there is one.
-		- Each frame copies every label into a new string, and rebuilds each visible search result's heading trail.
-		- Detail: `detail_backlog.md`, under this ID.
-	- Progress log:
-		- 20261117: Measured as heap allocations on the test thread, debug build, the default dialog on the General tab. A sweep of 360 pointer spots, 141 of them over a tip, went from 2159 to 1. One frame's text went from 148 to 91 for 69 items. One frame's text with "size" typed in the search box went from 105 to 24.
-		- 20261117: Done: finding the tip under the pointer names it without building its words. The words are built only for a frame that draws the tip. A row's words are built to decide only when it has no help of its own.
-		- 20261117: Done: the dialog's text items borrow the fixed words (labels, tab titles, captions, icons, fixed options) rather than copying them each frame.
-		- 20261117: Done: each search result's line and marks are worked out once per query, not once per frame.
-		- 20261117: Done: the hotkey check that runs for every key of every row each frame turns away a key that isn't a hotkey before it walks the rows.
-	- Decisions:
-		- 20261117: A search result's line is still copied into its text item each frame, since a text item can only borrow fixed words. That copy is one string and one list per shown result, where the old path rebuilt the whole trail.
-		- 20261117: Left alone: the theme list that `choices` builds per call, since the frame path doesn't call it at rest, and `shell_cols`, which is a few sums with no allocation.
-	- Swept: every `TextItem` builder in `settings_ui.rs`, `picker.rs`, `prompt.rs` and `search.rs`. Every caller of `hover_tip`, now test only, and of `tip_under` in `dialog.rs`. Every caller of `dd_closed_label`, which now returns borrowed text for a fixed option. Every caller of `hotkey_for_key`.
-	- Verified: the quick gate passed in all 5 areas. Each new test failed with its part of the change undone (282 tip words built in the sweep, a label copied, 9 result lines worked out again) and passes with it.
-	- Branch: nov17-2026111623500002
-	- Commit: cd8c3861
-	- Test case: `only_a_drawn_tip_builds_its_words` (dfe4h), `a_frame_borrows_the_fixed_words` (dfe4j), `a_frame_reuses_the_result_lines` (dfe4k). The older `a_dialog_frame_looks_up_the_tip_once` (ddgh4) still passes.
-	- Acceptance signoff: Self-closed: the change does what the item asked, and its tests failed before and pass after.
-	- Closed: 20261117-085922
-	- Closed reason: Done
-
-- Window moves and resizes on Linux open a new X server connection for each question they ask
-	- ID: 2026111623500003
-	- Type: Enhancement
-	- Status: Closed
-	- Priority: Avg
-	- Opened: 20261116-235000
-	- Opened by: CC
-	- Target OS: Linux
-	- Test environment: Xvfb with xfwm4; headless sway with Xwayland for herdback
-	- Target version: rc.1
-	- Requirements:
-		- Several monitor and button queries run per resize or move event, and each one connects to the X server again.
-		- Keep one connection per window.
-		- Detail: `detail_backlog.md`, under this ID.
-	- Progress log:
-		- 20261117: Measured on Xvfb under xfwm4, with per-monitor sizes on, as X server connects the process made. Before: 3 per move (layout, button held, monitor under the window), 1 per resize, 17 at launch. After: 0 per move, 0 per resize, 12 at launch.
-	- Decisions:
-		- 20261117: The window's state owns the connection, made at the first read and dropped with the window. A read that fails drops it, and the next read connects again, so a server that comes back is picked up.
-		- 20261117: The XWAYLAND check and the two fullscreen atoms are asked once per connection. The atoms are kept only once a window manager has made both.
-		- 20261117: The monitor list is still read from the server each time, since it changes without telling a connection that never asks for events. Its RandR requests now go out together before the replies are read.
-		- 20261117: Events the server sends every client unasked are read off and dropped after each read, so they can't pile up on a connection that lives as long as the window.
-		- 20261117: 2026100314050005 had left this alone as small. This item asks for it, so it's done here.
-	- Swept: every `x11rb::connect` in the source. The KDE blur hint and the initial window state (app.rs) run at startup or on a toggle. The transient-for hints, restack and work area (dialog.rs) run when a dialog opens or is activated. The GLX error hook and MIT-SHM check (gfx.rs) run at startup. None runs per move or resize.
-	- Verified: 20261117. dfe50 and dfe51 pass, and both fail with the connection dropped after every read. herdback (deqx1) passes all 20 checks and startsize (ddg81) passes, on the new build. Format, clippy and the unit tests (1477) passed in the quick gate. Clippy is clean for the Windows and macOS targets.
-	- Branch: nov17-2026111623500003
-	- Commit: 903fee6c
-	- Test case: `a_window_keeps_one_x_connection_across_its_reads` (dfe50), `a_failed_x_read_drops_the_connection_and_the_next_read_connects_again` (dfe51)
-	- Acceptance signoff: Self-closed: the change does what the item asked, measured before and after, and its tests fail with the keeping broken.
-	- Closed: 20261117-091811
 	- Closed reason: Done
 
 - A menu tip runs off a main window narrower than about 340 DIP
@@ -1781,6 +1781,174 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Notes:
 		- Code review 20261117 item 56.
 		- Detail: `detail_backlog.md`, under this ID.
+
+- The window doesn't paint while the GPU is busy or short on memory, and stays blank after the load ends
+	- ID: 2026100312470535
+	- Type: Bug
+	- Status: Deferred
+		- 20261117: Waiting to see if it ever happens again.
+	- Stand-in: none (20261028). The blank window was seen only on b23's desktop, through the X11 GL swap and a virtual desktop switch. A headless display doesn't have either, and the 10-03 tries on vm925w never reproduced it.
+	- Needs hand testing: Take a dogfood look on b23 with the GPU busy or nearly full. Move to another desktop and back, end the load, and leave the window alone. It should paint on its own. Try it once with "Free resources when idle" on and short idle times too. Started from a terminal with `SILK_IDLEDBG=1`, it prints any refused frame or rebuild.
+		- 20261025: The dogfood pool now has build dedvg for Linux and Windows. It was built from dev at a9daddc and has the 10-24 and 10-25 fixes. A window started before the next launch still runs de5r9.
+	- Severity: High
+	- Opened: 20261003-124705
+	- Opened by: JC
+	- Assigned to: CC
+	- Related IDs: 2026100312470540, 2026100418225504
+	- Target OS: All
+	- Test environment: b23
+	- Target version: rc.1
+	- Steps to reproduce:
+		- Have something else keep the GPU busy, or hold most of its memory.
+		- Move to another virtual desktop and back to one with a SilkTerm window.
+	- Incorrect behavior:
+		- SilkTerm doesn't paint. The only thing visible is the window frame, and other windows and the desktop behind the terminal area.
+		- When whatever was using the GPU ends, the blank window is still not repainted. Switching to a different virtual desktop and back repaints it.
+	- Expected behavior: The window paints as soon as the GPU can take the work, and never stays blank once the load is gone.
+	- Reproduced: No. It was seen on b23 when moving between virtual desktops. It isn't known yet if a window left on screen would also stop painting.
+	- Possible cause: A frame that can't get its surface or GPU device under that load is dropped, and nothing tries again until the desktop asks for a redraw.
+	- Actual cause:
+		- A frame the GPU refused was dropped. The pass that asked for it had already cleared its redraw flag, so nothing asked again until the desktop sent another redraw. That applies to a surface that timed out or went out of date, and on X11 a buffer swap that failed, whose error was ignored.
+		- A device that couldn't be built again after the idle release waited for the next key, click, or focus change.
+		- Which one happened on b23 isn't known. The terminal window always draws through GL on X11, so the failed swap and the rebuild are the likely ones. It also isn't known whether "Free resources when idle" was on at the time.
+	- Notes:
+		- Before RC1.
+		- 20261003: At filing, b23's GPU had 7.7 GB of its 8 GB in use.
+		- 20261003: Settings and the notice window had the same gap, and get the same retry.
+		- 20261003: For 2026100312470540: a rebuild refused after the idle release now tries again by itself while the window shows, with a wait that grows to a few seconds.
+		- 20261003: Some cases aren't handled. A GL error that arrives after the swap has returned isn't seen. A GPU out of memory while getting a surface on the native path ends the program rather than blanking it, from wgpu's default error handler. wgpu expects a lost surface to be made again, but the code only reconfigures it, so a lost surface would keep being refused. While the GPU keeps timing out, each try can stall the window for about a second inside wgpu.
+		- 20261004: Falling back to software rendering when the card can't make a device is filed as 2026100418225504.
+	- Actual fix: A refused frame is drawn again after a short wait that doubles up to a couple of seconds, and starts over once a frame gets through. A refused rebuild stays pending and is tried again the same way, with longer waits, while the window shows. A refused frame no longer requests more animation frames, so the wait sets the pace while the GPU refuses frames.
+	- Progress log:
+		- 20261003: Verified: both new tests fail with the retry taken out and pass with it. The full unit suite, clippy for Linux and Windows, and fmt pass.
+		- 20261003: Verified: SilkTerm tried 3 refused rebuilds again at about 0.25, 0.5, and 1 s, and the device came back without any input. SilkTerm backed off 8 refused frames from 16 ms to 2 s, and the window painted again without any input. An idle release and wake with nothing refused still works.
+		- 20261003: Tried on vm925w (RTX 2060, 6 GB) with another program keeping the GPU at 100% and using 4.6 GB, then again with memory full until the driver refused more and longer GPU work. The build from before the fix and the fixed build both kept painting: on screen while typed into, after minimize and restore, and after a move to another virtual desktop and back. Neither went blank. Both still showed the right picture 3 and 10 s after the load ended, without any input.
+		- 20261003: It was the same with Free resources when idle on and a 5 s idle time. The device was let go and built again under load each time, in about 1 s, and no rebuild was refused. The fixed build logged one refused frame now and then around a minimize, drawn again after 16 ms, never two in a row.
+		- 20261003: With Transparency on, which draws through DX12 on Windows, both builds did the same thing: a window restored without focus was let go after the idle time while still on screen, went black when the load ended, and stayed black until typed into. The fix doesn't change this, since a window let go on purpose doesn't need a frame. It wasn't tried without load, because that run hung vm925w and didn't finish.
+		- 20261003: Also seen in both builds with Free resources when idle on, under load: after waking, the window sometimes showed only the last character of the prompt instead of the earlier text, until typed into.
+		- 20261003: The failed swap path wasn't tested on Windows. The Windows terminal draws through wgpu on Vulkan, or DX12 with Transparency, rather than the X11 GL swap b23 uses. vm925w doesn't have WSL2, so nothing was run through Mesa on the same GPU.
+		- 20261003: The black window and the missing text seen in both builds are filed as 2026100319134501 and 2026100319134502.
+		- 20261023: Both tests passed in the full run at 2da75a7. The b23 look isn't done yet. No dogfood or desktop runs were made then.
+		- 20261025: Both tests passed again in both full runs at e95b81b. The b23 look was moved to the hand testing row, since it needs the visible desktop.
+		- 20261026: Both tests passed again in the full run at fab6815.
+		- 20261028: Both tests passed again in the full run at 64f3584.
+		- 20261117: Deferred, to wait and see if it happens again. The b23 look is held until it does.
+	- Swept: every frame and rebuild site. They're the terminal's acquire and GL swap in `render_with`, called from both `about_to_wait` and the desktop's redraw, the dialog and notice windows' acquire and swap in `DialogWin::render`, and `rebuild_gpu`, which the console-return heal also calls. Nothing else matches `grep -n 'begin_frame\|end_frame\|Gfx::rebuild'`.
+	- Branch: gpuload
+	- Commit: 8cb6a4d
+	- Test case: `a_refused_frame_is_drawn_again_on_a_backoff` (ddf4e) and `a_refused_rebuild_stays_pending_and_is_tried_again` (ddf4f). The GL swap result doesn't have a test, since it needs a real GL context.
+	- Note: 20261003, Free resources when idle was on for some of the windows that went blank and off for others. Which ones isn't remembered, so both the frame path and the rebuild path stay suspects.
+
+- Window auto-resize stopped working
+	- ID: 2026111700130407
+	- Type: Bug
+	- Status: Deferred
+		- 20261117: Couldn't reproduce. It works now, even with muffer running.
+	- Opened: 20261117-001304
+	- Opened by: JC
+	- Target version: rc.1
+	- Incorrect behavior: Window auto-resize stopped working.
+	- Notes:
+		- Possibly only when running Muffer?
+	- Reproduced: No. No doc or setting is called auto-resize, so each kind of automatic resize was tried, on the dev build and on the dogfood build from 11-10 that was running when this was filed.
+	- Progress log:
+		- 20261117: On Xvfb, with and without xfwm4, a program in the pane was told each new grid after every window resize. That held on the normal screen, on the alt screen with mouse tracking on, and with a frame every 50 ms in synchronized-output marks, like muffer. It also held for a window resized after its device was let go.
+		- 20261117: With Resize window on zoom on, each zoom resized the window and kept the rows. The columns were one more after the first zoom on the alt screen, and stayed there.
+		- 20261117: dpirand on X11 passed 5 cases, with drags, moves, zooms, resizes and relaunches across 2 to 4 monitors.
+		- 20261117: Not tried: monitors waking on a real desktop, which the rigs can't stand in for.
+		- 20261117: The answer narrowed it to a window moved to another monitor, which doesn't take the size kept for that monitor.
+		- 20261117: JC found it working again, even with muffer running.
+	- Decisions:
+		- 20261117: No test yet. Which behavior to pin waits on the answer.
+		- 20261117: Deferred as couldn't reproduce. If it comes back, a `SILK_MONDBG=1` log from a window moved to the other monitor would show where it goes wrong.
+
+- Performance profile: the Profile dropdown is a presets group read off the rows it sets
+	- ID: 2026100910295902
+	- Type: Enhancement
+	- Status: Deferred
+	- Priority: Avg
+	- Opened: 20261009-102959
+	- Opened by: CC
+	- Parent ID: 2026100907341818
+	- Target OS: All
+	- Requirements:
+		- The 16 rows a profile sets follow the automatic settings design, with the Profile dropdown as their presets group control. This also brings the list and on or off controls the design describes.
+	- Notes:
+		- Before RC1.
+		- Today the profile is stored, "Choose automatically" picks it from a hardware test, a slow display steps it down for the session, Remote lays itself over it for the session, and the rows keep the user's own values under it for Custom to bring back. Under the design nothing is stored for a group, and no value is kept while automatic.
+	- Progress log:
+		- 20261009: Q: Is automatic for each row the rated profile's value, so the step down and Remote still reach every row left automatic?
+			- JC asked for it in plainer words.
+			- Q: A row with nothing stored needs a value to use. Should that be its value in the profile the program picks on its own: the one the hardware test rated, a step lower while the display is slow, or Standard terminal under Remote? Then the step down and Remote keep reaching every row that is still automatic. The other way is a fixed value, like the High profile's, and then the step down and Remote need another way in.
+		- 20261009: Q: Does picking a profile store each row's value, so a later step down no longer reaches them, or make them automatic under that profile?
+			- A: JC pointed to the design doc. It says so already: "A preset picked: every member stores that preset's value", in the specification and in the table under "Changing a setting". So picking Low stores Low's values in all 16 rows, and from then on the step down and Remote no longer reach them.
+		- 20261009: Q: Where does "Choose automatically" go, given a group has one control?
+			- JC asked for it in plainer words.
+			- Q: Today "Choose automatically" is its own checkbox above Profile. The design gives a group one control, here the Profile dropdown. Since no control may be removed (2026100913394948), the checkbox could stay as a second control read off the same 16 rows: on while all of them are automatic, a dash when some are, and turning it on clears them all. Is that it?
+		- 20261009: Q: The values held under a profile today would be dropped, per the design's non-goal. Is that wanted for files that have them?
+			- JC asked who holds them and what "dropped" means.
+			- Q: Today, picking a named profile leaves the Custom values for the 16 rows in the config file, unused, so Custom can bring them back later. Under the design a value in the file is set by hand and in use. So on the first launch of the new build, a file like that can either have those lines deleted, and look and act as it does now, or keep them, and they take effect at once with the dropdown reading Custom. Which one?
+				- A: Keep them.
+		- 20261009: It's held. The Settings dialog is going to be rethought again, so the first 3 questions wait for that.
+
+- Windows Terminal handoff
+	- ID: 2026092810510800
+	- Type: Feature
+	- Status: Canceled
+	- Priority|Severity: Avg
+	- Opened: 20260928-105138
+	- Opened by: JC
+	- Assigned to: JC
+	- Target OS: Windows
+	- Test environment:
+	- Version and build:
+	- Requirements:
+		- In order to register as the "default terminal" in Windows, several unusual things are required.
+		- I closed the webpage that describes exactly what, before copying the URL, so do research again.
+		- Open questions:
+			- Generally, I'd like the ability for the user to be able to register the one installed version of SilkTerm as the default terminal.
+			- But for me specifically, I'd like to be able to register 'n8runterm' as the default. (Is that a completely separate thing?)
+	- Estimated effort: Avg
+	- Actual effort:
+	- Progress log:
+		- 20260928: Research so far, moved here from a second copy of this item:
+			- Windows: let SilkTerm be picked as the default terminal, so a console program started from anywhere, such as double-clicking a `.bat`, opens in SilkTerm instead of conhost or Windows Terminal.
+			- There isn't a setting or script that can do this from the outside. Windows stores the choice in `HKCU\Console\%%Startup` as 2 COM class IDs, `DelegationConsole` and `DelegationTerminal`, rather than as program paths. The console host creates that class and calls `ITerminalHandoff::EstablishPtyHandoff`, passing over the pipes of a program that's already running.
+				- 20260930: It takes 2 hops. The built-in conhost only knows `IConsoleHandoff`, and passes the session to the `DelegationConsole` class. That one, Windows Terminal's OpenConsole, then calls `ITerminalHandoff3` on the `DelegationTerminal` class. It was checked in the microsoft/terminal source, and in the conhost and OpenConsole binaries on vm925w.
+			- Checked 2026-09-28: the source doesn't have anything for this, and neither does build `slktrmdf_20260927-175446_gnulwi`. Pointing the registry at SilkTerm today would break every console launch.
+				- 20260930: A failed handoff falls back to conhost, so it isn't a hard break. But COM waits up to 60 seconds for the class to appear, and each launch would also open a plain SilkTerm window, so in practice it's close to the same. It was read from the source rather than tried.
+			- Add a COM local server to SilkTerm that implements the handoff interface. It's defined in microsoft/terminal at `src/host/proxy/ITerminalHandoff.idl`. Newer builds call `ITerminalHandoff3`, so check which version the current console host uses before starting.
+				- 20260930: Confirmed. OpenConsole calls only `ITerminalHandoff3` since Windows Terminal 1.22, and conhost never calls any of them. The OpenConsole in Windows Terminal 1.24 on vm925w has only that interface's ID.
+			- Give the pty backend a second way in. Today it always creates its own ConPTY. A handed-off session arrives with its pipes, signal pipe, and process handles already made, and the tab has to run those.
+				- 20260930: With version 3, the terminal makes the 2 data pipes and gives the console host its ends. The signal pipe, a session reference, and the console host and client process handles arrive ready-made. Resize is a 6-byte packet on the signal pipe, and closing the session is closing those handles, so it doesn't need `conpty.dll`.
+			- Register the class under `HKCU\Software\Classes\CLSID\{guid}\LocalServer32`, pointing at `%LOCALAPPDATA%\Programs\silkterm.exe` with a flag like `--handoff`. That's the symlink the launcher keeps pointed at the newest dogfood build, so the default follows each new build.
+				- A handed-off window skips the launcher, so it won't be elevated.
+					- 20260930: An elevated console program doesn't hand off at all, and stays in conhost. Windows Terminal has the same limit, by design (microsoft/terminal#10276).
+				- 20260930: COM adds ` -Embedding` to the command line on its own, so no flag of ours is needed. The program it starts has 60 seconds to register the class.
+			- Find out what `DelegationConsole` has to be. The belief is that Windows Terminal's OpenConsole, `{2EACA947-7F5F-4CFA-BA87-8F7FBEEFBE69}`, is what passes a session on to a third-party terminal that the built-in conhost doesn't. It wasn't verified. The ConPTY redistributable already being tried here includes its own console host, which may or may not be usable for this.
+				- 20260930: Verified. It has to be Windows Terminal's OpenConsole, with that ID. Conhost's own ID turns handoff off, and conhost can't reach a terminal by itself. So Windows Terminal has to be installed. It also has the parts that pass the call between processes. The redistributable's OpenConsole has the same ID built in, so it can't stand in as a second console host.
+			- Add a way to switch it on and off, either in Settings or as a command-line option. Turning it off means setting both values back to all zeros, which is "Let Windows decide".
+				- 20260930: A missing value means the same. The account on vm925w has Windows Terminal set by name, though, so off may be better as putting back whatever was there. See the open points below.
+			- The Settings app's dropdown only lists packaged apps that declare the handoff extension. An unpackaged SilkTerm could still write the registry values itself, but it would never show up in that list.
+				- 20260930: It takes 2 app extensions in the same package, `com.microsoft.windows.console.host` and `com.microsoft.windows.terminal.host`, so a packaged SilkTerm has to name a console host too. For a pair it doesn't know, Windows Terminal's own Settings page shows "Let Windows decide".
+		- 20260930: The research was redone against the microsoft/terminal source and docs, and checked read-only on vm925w (Windows 11 25H2, Windows Terminal 1.24). Corrections are the dated sub-bullets above. The plan is in details.md, under "Windows Terminal handoff plan (20260930)".
+		- 20260930: No other terminal has released this yet. WezTerm has 2 open requests (wezterm#7534, wezterm#7328). A few small projects have code, 2 of them in Rust, and all take the same route: Windows Terminal's OpenConsole as the console host, and their own class as the terminal.
+		- 20260930: `n8runterm` isn't a separate thing. The registration names a program, and COM starts it by itself. The launcher could be named there, but then PowerShell, and by default a UAC prompt, would come before every console launch. The launcher already keeps `%LOCALAPPDATA%\Programs\silkterm.exe` pointed at the newest build, so registering that path gets the same result without it.
+		- 20260930: Left undecided, and moot since the item is canceled:
+			- Whether to rely on Windows Terminal being installed. It's what passes the session on. Doing without it means building our own console host and bundling it, which is much bigger.
+			- Whether a handed-off program opens in a new SilkTerm window each time, like conhost, or as a tab in a window that's already open, like Windows Terminal. The plan starts with a new window.
+			- Whether the handed-off program's tab closes right away when it exits, as panes and conhost both do now, or stays open with the exit status, as `--keep-open` does.
+			- Whether the switch is a command-line option only at first, or a Settings row too.
+			- Whether switching it off puts back whatever was set before, or always "Let Windows decide".
+			- Whether to register it for the test account on vm925w while testing. It would write that account's console and class keys, and put them back after each run.
+	- Decisions:
+		- 20260930: Canceled for good, and not to be revisited. That includes the COM handoff and any console host of our own. Being the default terminal takes a server that adopts a live console session, and it needs Windows Terminal installed. File associations handle the cases that matter for a small part of the work.
+	- Branch: wthandoff
+	- Commit:
+	- Test case: None, since it was canceled.
+	- Acceptance signoff:
+	- Superseded by ID: 2026093009280571
+	- Closed: 20260930-092805
 
 - The "Minutes otherwise" release of resources still isn't working
 	- ID: 2026111009560100
@@ -6108,6 +6276,67 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Closed: 20260930-125357
 	- Closed reason: Done
 
+- Running with `--software-rendering` on vmKt6m still fails with a complaint about no suitable GPU
+	- ID: 2026102807384202
+	- Type: Bug
+	- Status: Closed
+		- Answered: keep the alert.
+	- Severity: Avg
+	- Opened: 20261028-073842
+	- Opened by: JC
+	- Target OS: macOS
+	- Test environment: vmKt6m
+	- Target version: rc.1
+	- Incorrect behavior: It still fails with a complaint about no suitable GPU.
+	- Reproduced: 20261103 on vmKt6m, launched in the console session. stderr had the no-Metal words, and the alert was up.
+	- Actual cause:
+		- The Mac build has only wgpu's Metal backend, so `--software-rendering` there is refused with a line on stderr, and the launch goes on to look for a card. Without a Metal device there isn't one, per 2026102209035801.
+	- Related IDs: 2026102209035801
+	- Notes:
+		- Pre-next-cut.
+	- Progress log:
+		- 20261103: Tried on vmKt6m. wgpu's GL backend through ANGLE found nothing, since LibreWolf's ANGLE is Metal only, and Chrome and Brave link theirs in. SwiftShader's Vulkan driver, as Chrome bundles it, gave a CPU device once wgpu's `vulkan-portability` feature was on. SilkTerm came up on it and started its shells, but every frame was dropped, since the Metal layer it draws to doesn't have a device to give a picture with.
+		- 20261103: So a fix needs the libraries in the Mac app and a second way to show a frame, drawn off screen and copied back. That's too big for one pass. It gets split once the question is answered.
+		- 20261103: Nothing changed in the code.
+		- 20261104: Answered A in questions.md, so the alert stays and this closes as moot. Nothing changed in the code.
+	- Branch: rnd1103
+	- Decided against: bundling SwiftShader in the Mac app (option B). A Mac without Metal is a VM or a hackintosh, since every Mac that runs a supported macOS has Metal. The no-Metal alert from 2026102209035801 stays.
+	- Test case: None, since no code changed.
+	- Closed: 20261104-010500
+	- Closed reason: Moot
+
+- top quits smooth scrolling at some point
+	- ID: 2026101310563310
+	- Type: Bug
+	- Status: Closed
+	- Severity: Avg
+	- Opened: 20261013-105632
+	- Opened by: JC
+	- Target OS: All
+	- Version and build: Seen in the 10-10 dogfood build (ddrka), with top running since the evening before.
+	- Target version: rc.1
+	- Steps to reproduce:
+		- Run `top` and leave it running.
+	- Incorrect behavior: top quits smooth scrolling at some point.
+	- Expected behavior: Smooth scrolling keeps working however long top runs.
+	- Notes:
+		- Pre-next-cut.
+		- `top` and `htop` used to smoothly animate disappearing and appearing lines. Now they don't. And even when the smooth animation worked in those programs, it would quit working after a while. It's not a high priority to get back, more of a nice-to-have.
+	- Reproduced: No, not as something that fades with time. On dev, top in a window on b23 slid as often after 24 minutes as in its first minute, with its list moved by arrow keys every 20 s. Minimizing until the GPU was let go and restoring didn't stop it, and neither did wheel scrolling.
+	- Possible cause: The cause is the load rather than SilkTerm. top runs on the normal screen and redraws every row each tick. Its list only shifts while some of the rows on screen are processes that didn't use any CPU in the last tick, and a change in how many did moves them up or down. Once more processes use CPU than the window has rows, every visible row is re-sorted each tick, nothing on screen moves as a block, and the redraw cuts, as it should.
+		- With the load held low, then high, then low again, 24 of 43 redraws slid, then 0 of 51, then 14 of 36. A window showed the same: 32 slide steps, none, then 19.
+		- On b23 now, 24 to 39 processes use CPU in a 3 s tick. In 25 minutes of top at 40 rows, every visible row was busy in all 355 timed refreshes, and none slid. A redraw after an arrow key comes after a short tick with fewer busy rows, and 573 of 898 of those slid.
+	- Progress log:
+		- 20261013: Question: Was b23 busy when the sliding stopped, for example a build or test run going? Does top slide again once the box is quiet? If it does, it's top re-sorting its list and the item can close as Moot. If it stays stopped on a quiet box, a window started from a terminal with `SILK_SCROLLDBG=1` prints each redraw's shift, which would show what refuses it.
+		- 20261013: Today's 3 scroll changes don't affect top. It doesn't grow any history after its first clear, so the flatpak repaint check never runs for it, its first clear already snapped, and it doesn't set a mouse or focus mode, so it keeps the minimap column.
+		- 20261013: Answer (JC): A new instance also isn't smooth. So it must have been a quiet box. Which I guess is OK. Even the sliding on a quiet box.
+	- Verified: a slide eases the same after 14 hours of steps every 3 s as at the start.
+	- Branch: topslide
+	- Test case: None, since no code changed.
+	- Acceptance signoff: JC, 20261013.
+	- Closed: 20261013
+	- Closed reason: Moot
+
 - Import a v1.0.0-beta1 `config.toml`
 	- ID: 2026110920480399
 	- Type: Feature
@@ -9365,6 +9594,131 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Closed: 20260928-111812
 	- Closed reason: Done
 
+- Builds clean up stale artifacts and side effects when done
+	- ID: 2026101916054001
+	- Type: Enhancement
+	- Status: Closed
+	- Priority: Avg
+	- Opened: 20261019-160540
+	- Opened by: JC
+	- Assigned to: CC
+	- Target OS: All
+	- Target version: rc.1
+	- Requirements:
+		- Verify or ensure that builds clean up stale artifacts and side effects after they're done: caches, container cruft, tmp files, etc.
+	- Notes:
+		- Before the next cut.
+		- 20261022: It's the same request as 2026101909222600, opened the same morning and built that day as `sweep`. It waits on its full run there.
+	- Superseded by ID: 2026101909222600
+	- Test case: None, since it's the same request as 2026101909222600.
+	- Closed: 20261022-111900
+	- Closed reason: Superseded
+
+- Settings that depend on a master boolean switch follow the automatic settings design
+	- ID: 2026100907341818
+	- Type: Enhancement
+	- Status: Closed
+	- Needs local test suite run?: No. Verified: 20261013, the full pipeline passed at 41789fe, and its builds went to the dogfood pool.
+	- Needs external testing: Windows: the Text and Window tabs, an old config with "Use system font" on, and a window opening at its last size. Windows doesn't name a monospace font, so there the family list stays set by hand when it isn't the built-in one.
+	- Priority: Avg
+	- Opened: 20261009-073418
+	- Opened by: JC
+	- Assigned to: CC
+	- Related IDs: 2026100907341817, 2026100812334385, 2026100114435600, 2026100907341819
+	- Target OS: All
+	- Target version: rc.1
+	- Requirements:
+		- Update all Settings dialog code and logic to follow [Settings with an automatic value](design_docs/20261008-180516_automatic_settings.md).
+	- Notes:
+		- Before RC1.
+	- Inventory: every Settings row with a master switch, a preset, or an automatic value.
+		- Automatic settings, where the design applies:
+			- Family, under "Use system font: Face". Automatic is the desktop's monospace font, else the built-in list. It moved here.
+			- Size, under "Use system font: Size". Automatic is the desktop's monospace size. It moved here.
+			- Columns and Rows, under "Remember last size". Automatic is the last size, this monitor's own where one is kept. The switch is their group's. They moved here.
+			- Foreground and Cursor, under "Text colors from wallpaper". Automatic is the wallpaper's colors. It was split out with questions, as 2026100910295901.
+			- Profile, under "Choose automatically", and the 16 rows a profile sets. Profile is a presets group over those rows, and automatic is the rated profile. It was split out with questions, as 2026100910295902.
+			- The 10 theme colors, whose automatic value is the theme's. Open command, whose empty value is the desktop's opener. File or folder, whose empty value is the usual folder or the built-in picture. They were split out, as 2026100910295903.
+			- Theme mode, whose "System" entry follows the desktop. It was split out with a question, as 2026100910295904.
+		- Rows that only count while a switch is on, which stay live and indented:
+			- Choose automatically: Check for hardware change, Re-test next run.
+			- Text scrim: Strength %, Scrim radius px, Softness %, Function and falloff, and Visibility: Scrim on the Cursor tab.
+			- Outline px above zero: Visibility: Outline on the Cursor tab.
+			- Smooth scrolling: the 5 feel sliders.
+			- Wallpaper: File or folder, Fit, Honor layout tags, Rotate folder, Visibility %, Blur px, Contrast mask.
+			- Contrast mask: Size %, Strength %, Automask mix %.
+			- Transparency: Opacity %, Blur-behind.
+			- Blink: Rate s, Animation, Inactivity timer s. They're already live since 2026100907341817.
+			- Remember last size: Per monitor.
+			- Free resources when idle: Minutes when hidden, Minutes otherwise.
+			- Scrollbar: Width px, Hide when idle.
+			- Minimap: Width px.
+			- Hyperlinks Enabled: Open command.
+		- Neither: Honor layout tags and Honor look tags replace Fit and the 2 sliders for a tagged picture only, so those rows still count for the rest. Minutes when hidden still grays on Wayland, which is the machine rather than a setting.
+	- Decisions:
+		- 20261009: The style guide's "Members gray out when it is off" is now "Members stay live and indented", per the design's last non-goal. Every gate of that kind is gone, and the Blink entry left the known deviations.
+		- 20261009: "Use system font" is gone. Family and Size each have the automatic mark, since a switch over one setting is pointless.
+		- 20261009: "Remember last size" doesn't store anything. It reads on while Columns and Rows are both automatic, off while both are set by hand, and shows a dash in between. It doesn't have a revert arrow, but each member has its own.
+		- 20261009: A launch takes `font.use_system_family`, `font.use_system_size`, and `window.remember_size` out of the file. A value one of them overrode is commented out, and one still in use stays. "Remember last size" off without a size line writes 160 by 48, the old default. A file without a switch line is left alone.
+		- 20261009: The old font switch overrode the family list only when the desktop named a font, so the launch that takes the switch out checks the desktop.
+		- 20261009: An automatic box shows its value in a lighter italic with an "A" mark at its right end. Set by hand, the mark is an x that puts it back, and emptying the box does the same.
+		- 20261009: Typing in an automatic box sets it by hand, even to the value it showed. Opening it without typing leaves it automatic.
+		- 20261009: The presets dropdown and the list and on or off controls wait for the items that need them. Nothing moved here uses them.
+	- Progress log:
+		- 20261009: The table, the one read function, the number and text controls, the group switch with its mixed state, the tip line on automatic rows, and the lint check were built. Family, Size, Columns, and Rows were moved.
+		- 20261009: Notes on the design doc, left as written. Its "Related backlog issues" still names 2026100816170959. It doesn't mention the revert arrow every row has, which on an automatic setting does what the clear icon does. Its screen reader line doesn't have anything to attach to yet, since the program doesn't have an accessibility layer. There's a typo, "Dosn't", in its Tests section. Its line on hand edits while running waits on 2026100907341819.
+		- 20261009: It isn't signed off. The follow-ups filed are 2026100913394946, 2026100913394948, 2026100913394950.
+		- 20261013: It wasn't self-closed. The knobs model replaced most of what this asked for, and JC plans to rethink the Settings dialog again. It may be Moot now. That call is JC's.
+		- 20261013: It's moot, per JC. The knobs model replaced it.
+	- Against: the Settings dialog design doc's "a font switch that follows the desktop grays the fields it overrides", and the earlier fix that grayed "Use system font" where the desktop doesn't name a font. Both went with the switch.
+	- Swept: every gate in settings_ui.shcl; every reader of the 4 settings, which the type change made the compiler find; load, save, the legacy and shcl 2 conversions, the launch size, sizes per monitor, the font zoom, and `--font`, `--font-size`, `--columns`, and `--rows`.
+	- Verified: unit suite, clippy for Linux, Windows, and macOS, fmt, test IDs, the doc, TOC, and table checks, and the new lint check, which failed on an injected read in 2 files. In a real window against a dev build at the default font, the panel stayed 707 by 965, and Cursor, Movement, Themes, Shell, and Keys drew the same pixels apart from the caret, which differs between 2 runs of the dev build too. Columns typed by hand showed the x and a dash in the switch. The x, and a click on the switch from a dash, put them back. OK wrote only the Size typed on the Text tab. A config the dev build wrote opened at the same window size on both builds, with the switches on and with them off.
+	- Not checked: 2x, a large interface font, Windows, macOS.
+	- Branch: autoset
+	- Commit: ac7fbe6
+	- Test case: ddqa3 to ddqac, and ddq9d for the font order. Each new test failed against a mutant of its part. Commented out with the reason: daf5g, daf5f, dcq56, and da8sg, which pinned "Use system font". Assertions moved where the rule changed: dcbdk, d9c2j, d9pk0, dc7fv, dcwqv, and the focus ring test.
+	- Closed: 20261013-123307
+	- Closed reason: Moot
+
+- Theme colors, Open command and File or folder show the automatic mark and a way back to automatic
+	- ID: 2026100910295903
+	- Type: Enhancement
+	- Status: Closed
+	- Needs local test suite run?: No. Verified: 20261013, the full pipeline passed at 41789fe, and its builds went to the dogfood pool.
+	- Needs external testing: Windows: the Themes, Background, and Window tabs, Open command showing explorer.exe, and a config with the usual folder written out in its Windows spelling.
+	- Priority: Avg
+	- Opened: 20261009-102959
+	- Opened by: CC
+	- Parent ID: 2026100907341818
+	- Target OS: All
+	- Target version: rc.1
+	- Requirements:
+		- Each is already automatic in all but name. A missing line means the theme's color, the desktop's opener, or the usual folder or built-in picture. Give each the mark, the lighter italic value, and the x, per the design. A color takes the x beside its picker.
+		- Their rows go in the auto settings table, with the lint check testing them.
+	- Notes:
+		- Before RC1.
+	- Progress log:
+		- 20261009: The 10 theme colors, Open command, and the wallpaper's image and folder are auto settings in the first part's table. An automatic color reads the theme's palette, which is worked out again whenever the theme, the mode, or the desktop's dark or light changes. The lint check tests them through the same stored type.
+		- 20261013: It wasn't self-closed. The knobs model took the mark out, per 2026100913394950, and the revert arrow is the way back. Test ddqbq went with it. It may be Moot now. That call is JC's.
+		- 20261013: It's moot, per JC. The knobs model replaced it.
+	- Decisions:
+		- 20261009: A color's mark and x are at the right end of its hex box, beside the chip, as a text box's do. Emptying the hex box puts it back too, and Cancel in the color picker leaves an automatic color automatic.
+		- 20261009: File or folder edits whichever of the two its box shows. Its x puts back only that one, and its revert arrow puts back both.
+		- 20261009: While a folder rotates, File or folder shows the folder. It used to show the picture on screen, held as the image setting, which would now read as set by hand.
+		- 20261009: The usual folder written out, or typed in Settings, reads as automatic, since that's what older builds wrote for an emptied box.
+		- 20261009: An automatic image with nothing found shows "(built-in picture)", where the box said "(none)".
+		- 20261009: A color set by hand to the theme's own value stays put when the desktop switches between dark and light. Before, a color line that matched the theme followed the switch.
+	- Against: the rotation code's note that Settings shows the picture on screen. No recorded decision names it.
+	- Swept: every reader of the 13 settings, which the type change made the compiler find: drawing in pane, minimap, palette, and term, the menus and chrome in app.rs, the dialogs' colors, autotheme, visibility, `--bg`, a wallpaper named for the session, rotation, reload, load, save, the desktop's dark and light switch, and the theme pick, save, rename, and delete in Settings. A grep for comparisons that still compile didn't find any outside tests.
+	- Verified: unit suite, clippy for Linux, Windows, and macOS, fmt, test IDs, and the doc, TOC, table, and autoread checks. In a real window against a dev build at the default font, the panel stayed 707 by 965. Silk, Text, Cursor, Movement, Shell, and Keys drew the same pixels apart from the caret, which differs between 2 runs of the dev build too. Background, Themes, and Window differ only in the File or folder row, the colors, and the Open command row. The main window drew the same pixels on both builds for a fresh config, a light mode config, and an older config with colors set, a bad color, an empty open command, and the usual folder written out. A config the dev build wrote opened the same, and the launch changed only the Default mark on its commented color lines. A typed color showed the x and its tip, OK wrote it, reopening showed it set by hand, and the x put it back, set the Theme dropdown back to the theme's name, and at OK commented the line out.
+	- Not checked: 2x, a large interface font, Windows, macOS, a folder rotating in a window.
+	- Note: The autoread check's header failed the script header test (copyright form, no History) on dev. It was fixed here, since the item names that check.
+	- Branch: autoset2
+	- Commit: 7fadb59
+	- Test case: ddqbp, ddqbq, ddqbr, ddqbs, and ddqbt, each failing against a mutant of its part. ddqa3 walks the whole table now. Assertions moved where the rule changed: dd5ge, dcrpr, dav9z, daq6b, datef, ddg6v, dcq7g, and dcnvv.
+	- Closed: 20261013-123307
+	- Closed reason: Moot
+
 - A unit test run on macOS or Windows could import and rename the box's own `~/.config/silkterm/config.toml`
 	- ID: 2026111018340691
 	- Type: Bug
@@ -12445,192 +12799,6 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Closed: 20261007-184756
 	- Closed reason: Done
 
-- Running with `--software-rendering` on vmKt6m still fails with a complaint about no suitable GPU
-	- ID: 2026102807384202
-	- Type: Bug
-	- Status: Closed
-		- Answered: keep the alert.
-	- Severity: Avg
-	- Opened: 20261028-073842
-	- Opened by: JC
-	- Target OS: macOS
-	- Test environment: vmKt6m
-	- Target version: rc.1
-	- Incorrect behavior: It still fails with a complaint about no suitable GPU.
-	- Reproduced: 20261103 on vmKt6m, launched in the console session. stderr had the no-Metal words, and the alert was up.
-	- Actual cause:
-		- The Mac build has only wgpu's Metal backend, so `--software-rendering` there is refused with a line on stderr, and the launch goes on to look for a card. Without a Metal device there isn't one, per 2026102209035801.
-	- Related IDs: 2026102209035801
-	- Notes:
-		- Pre-next-cut.
-	- Progress log:
-		- 20261103: Tried on vmKt6m. wgpu's GL backend through ANGLE found nothing, since LibreWolf's ANGLE is Metal only, and Chrome and Brave link theirs in. SwiftShader's Vulkan driver, as Chrome bundles it, gave a CPU device once wgpu's `vulkan-portability` feature was on. SilkTerm came up on it and started its shells, but every frame was dropped, since the Metal layer it draws to doesn't have a device to give a picture with.
-		- 20261103: So a fix needs the libraries in the Mac app and a second way to show a frame, drawn off screen and copied back. That's too big for one pass. It gets split once the question is answered.
-		- 20261103: Nothing changed in the code.
-		- 20261104: Answered A in questions.md, so the alert stays and this closes as moot. Nothing changed in the code.
-	- Branch: rnd1103
-	- Decided against: bundling SwiftShader in the Mac app (option B). A Mac without Metal is a VM or a hackintosh, since every Mac that runs a supported macOS has Metal. The no-Metal alert from 2026102209035801 stays.
-	- Test case: None, since no code changed.
-	- Closed: 20261104-010500
-	- Closed reason: Moot
-
-- top quits smooth scrolling at some point
-	- ID: 2026101310563310
-	- Type: Bug
-	- Status: Closed
-	- Severity: Avg
-	- Opened: 20261013-105632
-	- Opened by: JC
-	- Target OS: All
-	- Version and build: Seen in the 10-10 dogfood build (ddrka), with top running since the evening before.
-	- Target version: rc.1
-	- Steps to reproduce:
-		- Run `top` and leave it running.
-	- Incorrect behavior: top quits smooth scrolling at some point.
-	- Expected behavior: Smooth scrolling keeps working however long top runs.
-	- Notes:
-		- Pre-next-cut.
-		- `top` and `htop` used to smoothly animate disappearing and appearing lines. Now they don't. And even when the smooth animation worked in those programs, it would quit working after a while. It's not a high priority to get back, more of a nice-to-have.
-	- Reproduced: No, not as something that fades with time. On dev, top in a window on b23 slid as often after 24 minutes as in its first minute, with its list moved by arrow keys every 20 s. Minimizing until the GPU was let go and restoring didn't stop it, and neither did wheel scrolling.
-	- Possible cause: The cause is the load rather than SilkTerm. top runs on the normal screen and redraws every row each tick. Its list only shifts while some of the rows on screen are processes that didn't use any CPU in the last tick, and a change in how many did moves them up or down. Once more processes use CPU than the window has rows, every visible row is re-sorted each tick, nothing on screen moves as a block, and the redraw cuts, as it should.
-		- With the load held low, then high, then low again, 24 of 43 redraws slid, then 0 of 51, then 14 of 36. A window showed the same: 32 slide steps, none, then 19.
-		- On b23 now, 24 to 39 processes use CPU in a 3 s tick. In 25 minutes of top at 40 rows, every visible row was busy in all 355 timed refreshes, and none slid. A redraw after an arrow key comes after a short tick with fewer busy rows, and 573 of 898 of those slid.
-	- Progress log:
-		- 20261013: Question: Was b23 busy when the sliding stopped, for example a build or test run going? Does top slide again once the box is quiet? If it does, it's top re-sorting its list and the item can close as Moot. If it stays stopped on a quiet box, a window started from a terminal with `SILK_SCROLLDBG=1` prints each redraw's shift, which would show what refuses it.
-		- 20261013: Today's 3 scroll changes don't affect top. It doesn't grow any history after its first clear, so the flatpak repaint check never runs for it, its first clear already snapped, and it doesn't set a mouse or focus mode, so it keeps the minimap column.
-		- 20261013: Answer (JC): A new instance also isn't smooth. So it must have been a quiet box. Which I guess is OK. Even the sliding on a quiet box.
-	- Verified: a slide eases the same after 14 hours of steps every 3 s as at the start.
-	- Branch: topslide
-	- Test case: None, since no code changed.
-	- Acceptance signoff: JC, 20261013.
-	- Closed: 20261013
-	- Closed reason: Moot
-
-- Builds clean up stale artifacts and side effects when done
-	- ID: 2026101916054001
-	- Type: Enhancement
-	- Status: Closed
-	- Priority: Avg
-	- Opened: 20261019-160540
-	- Opened by: JC
-	- Assigned to: CC
-	- Target OS: All
-	- Target version: rc.1
-	- Requirements:
-		- Verify or ensure that builds clean up stale artifacts and side effects after they're done: caches, container cruft, tmp files, etc.
-	- Notes:
-		- Before the next cut.
-		- 20261022: It's the same request as 2026101909222600, opened the same morning and built that day as `sweep`. It waits on its full run there.
-	- Superseded by ID: 2026101909222600
-	- Test case: None, since it's the same request as 2026101909222600.
-	- Closed: 20261022-111900
-	- Closed reason: Superseded
-
-- Settings that depend on a master boolean switch follow the automatic settings design
-	- ID: 2026100907341818
-	- Type: Enhancement
-	- Status: Closed
-	- Needs local test suite run?: No. Verified: 20261013, the full pipeline passed at 41789fe, and its builds went to the dogfood pool.
-	- Needs external testing: Windows: the Text and Window tabs, an old config with "Use system font" on, and a window opening at its last size. Windows doesn't name a monospace font, so there the family list stays set by hand when it isn't the built-in one.
-	- Priority: Avg
-	- Opened: 20261009-073418
-	- Opened by: JC
-	- Assigned to: CC
-	- Related IDs: 2026100907341817, 2026100812334385, 2026100114435600, 2026100907341819
-	- Target OS: All
-	- Target version: rc.1
-	- Requirements:
-		- Update all Settings dialog code and logic to follow [Settings with an automatic value](design_docs/20261008-180516_automatic_settings.md).
-	- Notes:
-		- Before RC1.
-	- Inventory: every Settings row with a master switch, a preset, or an automatic value.
-		- Automatic settings, where the design applies:
-			- Family, under "Use system font: Face". Automatic is the desktop's monospace font, else the built-in list. It moved here.
-			- Size, under "Use system font: Size". Automatic is the desktop's monospace size. It moved here.
-			- Columns and Rows, under "Remember last size". Automatic is the last size, this monitor's own where one is kept. The switch is their group's. They moved here.
-			- Foreground and Cursor, under "Text colors from wallpaper". Automatic is the wallpaper's colors. It was split out with questions, as 2026100910295901.
-			- Profile, under "Choose automatically", and the 16 rows a profile sets. Profile is a presets group over those rows, and automatic is the rated profile. It was split out with questions, as 2026100910295902.
-			- The 10 theme colors, whose automatic value is the theme's. Open command, whose empty value is the desktop's opener. File or folder, whose empty value is the usual folder or the built-in picture. They were split out, as 2026100910295903.
-			- Theme mode, whose "System" entry follows the desktop. It was split out with a question, as 2026100910295904.
-		- Rows that only count while a switch is on, which stay live and indented:
-			- Choose automatically: Check for hardware change, Re-test next run.
-			- Text scrim: Strength %, Scrim radius px, Softness %, Function and falloff, and Visibility: Scrim on the Cursor tab.
-			- Outline px above zero: Visibility: Outline on the Cursor tab.
-			- Smooth scrolling: the 5 feel sliders.
-			- Wallpaper: File or folder, Fit, Honor layout tags, Rotate folder, Visibility %, Blur px, Contrast mask.
-			- Contrast mask: Size %, Strength %, Automask mix %.
-			- Transparency: Opacity %, Blur-behind.
-			- Blink: Rate s, Animation, Inactivity timer s. They're already live since 2026100907341817.
-			- Remember last size: Per monitor.
-			- Free resources when idle: Minutes when hidden, Minutes otherwise.
-			- Scrollbar: Width px, Hide when idle.
-			- Minimap: Width px.
-			- Hyperlinks Enabled: Open command.
-		- Neither: Honor layout tags and Honor look tags replace Fit and the 2 sliders for a tagged picture only, so those rows still count for the rest. Minutes when hidden still grays on Wayland, which is the machine rather than a setting.
-	- Decisions:
-		- 20261009: The style guide's "Members gray out when it is off" is now "Members stay live and indented", per the design's last non-goal. Every gate of that kind is gone, and the Blink entry left the known deviations.
-		- 20261009: "Use system font" is gone. Family and Size each have the automatic mark, since a switch over one setting is pointless.
-		- 20261009: "Remember last size" doesn't store anything. It reads on while Columns and Rows are both automatic, off while both are set by hand, and shows a dash in between. It doesn't have a revert arrow, but each member has its own.
-		- 20261009: A launch takes `font.use_system_family`, `font.use_system_size`, and `window.remember_size` out of the file. A value one of them overrode is commented out, and one still in use stays. "Remember last size" off without a size line writes 160 by 48, the old default. A file without a switch line is left alone.
-		- 20261009: The old font switch overrode the family list only when the desktop named a font, so the launch that takes the switch out checks the desktop.
-		- 20261009: An automatic box shows its value in a lighter italic with an "A" mark at its right end. Set by hand, the mark is an x that puts it back, and emptying the box does the same.
-		- 20261009: Typing in an automatic box sets it by hand, even to the value it showed. Opening it without typing leaves it automatic.
-		- 20261009: The presets dropdown and the list and on or off controls wait for the items that need them. Nothing moved here uses them.
-	- Progress log:
-		- 20261009: The table, the one read function, the number and text controls, the group switch with its mixed state, the tip line on automatic rows, and the lint check were built. Family, Size, Columns, and Rows were moved.
-		- 20261009: Notes on the design doc, left as written. Its "Related backlog issues" still names 2026100816170959. It doesn't mention the revert arrow every row has, which on an automatic setting does what the clear icon does. Its screen reader line doesn't have anything to attach to yet, since the program doesn't have an accessibility layer. There's a typo, "Dosn't", in its Tests section. Its line on hand edits while running waits on 2026100907341819.
-		- 20261009: It isn't signed off. The follow-ups filed are 2026100913394946, 2026100913394948, 2026100913394950.
-		- 20261013: It wasn't self-closed. The knobs model replaced most of what this asked for, and JC plans to rethink the Settings dialog again. It may be Moot now. That call is JC's.
-		- 20261013: It's moot, per JC. The knobs model replaced it.
-	- Against: the Settings dialog design doc's "a font switch that follows the desktop grays the fields it overrides", and the earlier fix that grayed "Use system font" where the desktop doesn't name a font. Both went with the switch.
-	- Swept: every gate in settings_ui.shcl; every reader of the 4 settings, which the type change made the compiler find; load, save, the legacy and shcl 2 conversions, the launch size, sizes per monitor, the font zoom, and `--font`, `--font-size`, `--columns`, and `--rows`.
-	- Verified: unit suite, clippy for Linux, Windows, and macOS, fmt, test IDs, the doc, TOC, and table checks, and the new lint check, which failed on an injected read in 2 files. In a real window against a dev build at the default font, the panel stayed 707 by 965, and Cursor, Movement, Themes, Shell, and Keys drew the same pixels apart from the caret, which differs between 2 runs of the dev build too. Columns typed by hand showed the x and a dash in the switch. The x, and a click on the switch from a dash, put them back. OK wrote only the Size typed on the Text tab. A config the dev build wrote opened at the same window size on both builds, with the switches on and with them off.
-	- Not checked: 2x, a large interface font, Windows, macOS.
-	- Branch: autoset
-	- Commit: ac7fbe6
-	- Test case: ddqa3 to ddqac, and ddq9d for the font order. Each new test failed against a mutant of its part. Commented out with the reason: daf5g, daf5f, dcq56, and da8sg, which pinned "Use system font". Assertions moved where the rule changed: dcbdk, d9c2j, d9pk0, dc7fv, dcwqv, and the focus ring test.
-	- Closed: 20261013-123307
-	- Closed reason: Moot
-
-- Theme colors, Open command and File or folder show the automatic mark and a way back to automatic
-	- ID: 2026100910295903
-	- Type: Enhancement
-	- Status: Closed
-	- Needs local test suite run?: No. Verified: 20261013, the full pipeline passed at 41789fe, and its builds went to the dogfood pool.
-	- Needs external testing: Windows: the Themes, Background, and Window tabs, Open command showing explorer.exe, and a config with the usual folder written out in its Windows spelling.
-	- Priority: Avg
-	- Opened: 20261009-102959
-	- Opened by: CC
-	- Parent ID: 2026100907341818
-	- Target OS: All
-	- Target version: rc.1
-	- Requirements:
-		- Each is already automatic in all but name. A missing line means the theme's color, the desktop's opener, or the usual folder or built-in picture. Give each the mark, the lighter italic value, and the x, per the design. A color takes the x beside its picker.
-		- Their rows go in the auto settings table, with the lint check testing them.
-	- Notes:
-		- Before RC1.
-	- Progress log:
-		- 20261009: The 10 theme colors, Open command, and the wallpaper's image and folder are auto settings in the first part's table. An automatic color reads the theme's palette, which is worked out again whenever the theme, the mode, or the desktop's dark or light changes. The lint check tests them through the same stored type.
-		- 20261013: It wasn't self-closed. The knobs model took the mark out, per 2026100913394950, and the revert arrow is the way back. Test ddqbq went with it. It may be Moot now. That call is JC's.
-		- 20261013: It's moot, per JC. The knobs model replaced it.
-	- Decisions:
-		- 20261009: A color's mark and x are at the right end of its hex box, beside the chip, as a text box's do. Emptying the hex box puts it back too, and Cancel in the color picker leaves an automatic color automatic.
-		- 20261009: File or folder edits whichever of the two its box shows. Its x puts back only that one, and its revert arrow puts back both.
-		- 20261009: While a folder rotates, File or folder shows the folder. It used to show the picture on screen, held as the image setting, which would now read as set by hand.
-		- 20261009: The usual folder written out, or typed in Settings, reads as automatic, since that's what older builds wrote for an emptied box.
-		- 20261009: An automatic image with nothing found shows "(built-in picture)", where the box said "(none)".
-		- 20261009: A color set by hand to the theme's own value stays put when the desktop switches between dark and light. Before, a color line that matched the theme followed the switch.
-	- Against: the rotation code's note that Settings shows the picture on screen. No recorded decision names it.
-	- Swept: every reader of the 13 settings, which the type change made the compiler find: drawing in pane, minimap, palette, and term, the menus and chrome in app.rs, the dialogs' colors, autotheme, visibility, `--bg`, a wallpaper named for the session, rotation, reload, load, save, the desktop's dark and light switch, and the theme pick, save, rename, and delete in Settings. A grep for comparisons that still compile didn't find any outside tests.
-	- Verified: unit suite, clippy for Linux, Windows, and macOS, fmt, test IDs, and the doc, TOC, table, and autoread checks. In a real window against a dev build at the default font, the panel stayed 707 by 965. Silk, Text, Cursor, Movement, Shell, and Keys drew the same pixels apart from the caret, which differs between 2 runs of the dev build too. Background, Themes, and Window differ only in the File or folder row, the colors, and the Open command row. The main window drew the same pixels on both builds for a fresh config, a light mode config, and an older config with colors set, a bad color, an empty open command, and the usual folder written out. A config the dev build wrote opened the same, and the launch changed only the Default mark on its commented color lines. A typed color showed the x and its tip, OK wrote it, reopening showed it set by hand, and the x put it back, set the Theme dropdown back to the theme's name, and at OK commented the line out.
-	- Not checked: 2x, a large interface font, Windows, macOS, a folder rotating in a window.
-	- Note: The autoread check's header failed the script header test (copyright form, no History) on dev. It was fixed here, since the item names that check.
-	- Branch: autoset2
-	- Commit: 7fadb59
-	- Test case: ddqbp, ddqbq, ddqbr, ddqbs, and ddqbt, each failing against a mutant of its part. ddqa3 walks the whole table now. Assertions moved where the rule changed: dd5ge, dcrpr, dav9z, daq6b, datef, ddg6v, dcq7g, and dcnvv.
-	- Closed: 20261013-123307
-	- Closed reason: Moot
-
 - Theme mode: "System" becomes the automatic entry
 	- ID: 2026100910295904
 	- Type: Enhancement
@@ -12675,174 +12843,6 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Verified: native and Windows-target clippy, and the native unit tests (991 passed).
 	- Closed: 20261003-193000
 	- Closed reason: Moot
-
-- Window auto-resize stopped working
-	- ID: 2026111700130407
-	- Type: Bug
-	- Status: Deferred
-		- 20261117: Couldn't reproduce. It works now, even with muffer running.
-	- Opened: 20261117-001304
-	- Opened by: JC
-	- Target version: rc.1
-	- Incorrect behavior: Window auto-resize stopped working.
-	- Notes:
-		- Possibly only when running Muffer?
-	- Reproduced: No. No doc or setting is called auto-resize, so each kind of automatic resize was tried, on the dev build and on the dogfood build from 11-10 that was running when this was filed.
-	- Progress log:
-		- 20261117: On Xvfb, with and without xfwm4, a program in the pane was told each new grid after every window resize. That held on the normal screen, on the alt screen with mouse tracking on, and with a frame every 50 ms in synchronized-output marks, like muffer. It also held for a window resized after its device was let go.
-		- 20261117: With Resize window on zoom on, each zoom resized the window and kept the rows. The columns were one more after the first zoom on the alt screen, and stayed there.
-		- 20261117: dpirand on X11 passed 5 cases, with drags, moves, zooms, resizes and relaunches across 2 to 4 monitors.
-		- 20261117: Not tried: monitors waking on a real desktop, which the rigs can't stand in for.
-		- 20261117: The answer narrowed it to a window moved to another monitor, which doesn't take the size kept for that monitor.
-		- 20261117: JC found it working again, even with muffer running.
-	- Decisions:
-		- 20261117: No test yet. Which behavior to pin waits on the answer.
-		- 20261117: Deferred as couldn't reproduce. If it comes back, a `SILK_MONDBG=1` log from a window moved to the other monitor would show where it goes wrong.
-
-- Performance profile: the Profile dropdown is a presets group read off the rows it sets
-	- ID: 2026100910295902
-	- Type: Enhancement
-	- Status: Deferred
-	- Priority: Avg
-	- Opened: 20261009-102959
-	- Opened by: CC
-	- Parent ID: 2026100907341818
-	- Target OS: All
-	- Requirements:
-		- The 16 rows a profile sets follow the automatic settings design, with the Profile dropdown as their presets group control. This also brings the list and on or off controls the design describes.
-	- Notes:
-		- Before RC1.
-		- Today the profile is stored, "Choose automatically" picks it from a hardware test, a slow display steps it down for the session, Remote lays itself over it for the session, and the rows keep the user's own values under it for Custom to bring back. Under the design nothing is stored for a group, and no value is kept while automatic.
-	- Progress log:
-		- 20261009: Q: Is automatic for each row the rated profile's value, so the step down and Remote still reach every row left automatic?
-			- JC asked for it in plainer words.
-			- Q: A row with nothing stored needs a value to use. Should that be its value in the profile the program picks on its own: the one the hardware test rated, a step lower while the display is slow, or Standard terminal under Remote? Then the step down and Remote keep reaching every row that is still automatic. The other way is a fixed value, like the High profile's, and then the step down and Remote need another way in.
-		- 20261009: Q: Does picking a profile store each row's value, so a later step down no longer reaches them, or make them automatic under that profile?
-			- A: JC pointed to the design doc. It says so already: "A preset picked: every member stores that preset's value", in the specification and in the table under "Changing a setting". So picking Low stores Low's values in all 16 rows, and from then on the step down and Remote no longer reach them.
-		- 20261009: Q: Where does "Choose automatically" go, given a group has one control?
-			- JC asked for it in plainer words.
-			- Q: Today "Choose automatically" is its own checkbox above Profile. The design gives a group one control, here the Profile dropdown. Since no control may be removed (2026100913394948), the checkbox could stay as a second control read off the same 16 rows: on while all of them are automatic, a dash when some are, and turning it on clears them all. Is that it?
-		- 20261009: Q: The values held under a profile today would be dropped, per the design's non-goal. Is that wanted for files that have them?
-			- JC asked who holds them and what "dropped" means.
-			- Q: Today, picking a named profile leaves the Custom values for the 16 rows in the config file, unused, so Custom can bring them back later. Under the design a value in the file is set by hand and in use. So on the first launch of the new build, a file like that can either have those lines deleted, and look and act as it does now, or keep them, and they take effect at once with the dropdown reading Custom. Which one?
-				- A: Keep them.
-		- 20261009: It's held. The Settings dialog is going to be rethought again, so the first 3 questions wait for that.
-
-- The window doesn't paint while the GPU is busy or short on memory, and stays blank after the load ends
-	- ID: 2026100312470535
-	- Type: Bug
-	- Status: Deferred
-		- 20261117: Waiting to see if it ever happens again.
-	- Stand-in: none (20261028). The blank window was seen only on b23's desktop, through the X11 GL swap and a virtual desktop switch. A headless display doesn't have either, and the 10-03 tries on vm925w never reproduced it.
-	- Needs hand testing: Take a dogfood look on b23 with the GPU busy or nearly full. Move to another desktop and back, end the load, and leave the window alone. It should paint on its own. Try it once with "Free resources when idle" on and short idle times too. Started from a terminal with `SILK_IDLEDBG=1`, it prints any refused frame or rebuild.
-		- 20261025: The dogfood pool now has build dedvg for Linux and Windows. It was built from dev at a9daddc and has the 10-24 and 10-25 fixes. A window started before the next launch still runs de5r9.
-	- Severity: High
-	- Opened: 20261003-124705
-	- Opened by: JC
-	- Assigned to: CC
-	- Related IDs: 2026100312470540, 2026100418225504
-	- Target OS: All
-	- Test environment: b23
-	- Target version: rc.1
-	- Steps to reproduce:
-		- Have something else keep the GPU busy, or hold most of its memory.
-		- Move to another virtual desktop and back to one with a SilkTerm window.
-	- Incorrect behavior:
-		- SilkTerm doesn't paint. The only thing visible is the window frame, and other windows and the desktop behind the terminal area.
-		- When whatever was using the GPU ends, the blank window is still not repainted. Switching to a different virtual desktop and back repaints it.
-	- Expected behavior: The window paints as soon as the GPU can take the work, and never stays blank once the load is gone.
-	- Reproduced: No. It was seen on b23 when moving between virtual desktops. It isn't known yet if a window left on screen would also stop painting.
-	- Possible cause: A frame that can't get its surface or GPU device under that load is dropped, and nothing tries again until the desktop asks for a redraw.
-	- Actual cause:
-		- A frame the GPU refused was dropped. The pass that asked for it had already cleared its redraw flag, so nothing asked again until the desktop sent another redraw. That applies to a surface that timed out or went out of date, and on X11 a buffer swap that failed, whose error was ignored.
-		- A device that couldn't be built again after the idle release waited for the next key, click, or focus change.
-		- Which one happened on b23 isn't known. The terminal window always draws through GL on X11, so the failed swap and the rebuild are the likely ones. It also isn't known whether "Free resources when idle" was on at the time.
-	- Notes:
-		- Before RC1.
-		- 20261003: At filing, b23's GPU had 7.7 GB of its 8 GB in use.
-		- 20261003: Settings and the notice window had the same gap, and get the same retry.
-		- 20261003: For 2026100312470540: a rebuild refused after the idle release now tries again by itself while the window shows, with a wait that grows to a few seconds.
-		- 20261003: Some cases aren't handled. A GL error that arrives after the swap has returned isn't seen. A GPU out of memory while getting a surface on the native path ends the program rather than blanking it, from wgpu's default error handler. wgpu expects a lost surface to be made again, but the code only reconfigures it, so a lost surface would keep being refused. While the GPU keeps timing out, each try can stall the window for about a second inside wgpu.
-		- 20261004: Falling back to software rendering when the card can't make a device is filed as 2026100418225504.
-	- Actual fix: A refused frame is drawn again after a short wait that doubles up to a couple of seconds, and starts over once a frame gets through. A refused rebuild stays pending and is tried again the same way, with longer waits, while the window shows. A refused frame no longer requests more animation frames, so the wait sets the pace while the GPU refuses frames.
-	- Progress log:
-		- 20261003: Verified: both new tests fail with the retry taken out and pass with it. The full unit suite, clippy for Linux and Windows, and fmt pass.
-		- 20261003: Verified: SilkTerm tried 3 refused rebuilds again at about 0.25, 0.5, and 1 s, and the device came back without any input. SilkTerm backed off 8 refused frames from 16 ms to 2 s, and the window painted again without any input. An idle release and wake with nothing refused still works.
-		- 20261003: Tried on vm925w (RTX 2060, 6 GB) with another program keeping the GPU at 100% and using 4.6 GB, then again with memory full until the driver refused more and longer GPU work. The build from before the fix and the fixed build both kept painting: on screen while typed into, after minimize and restore, and after a move to another virtual desktop and back. Neither went blank. Both still showed the right picture 3 and 10 s after the load ended, without any input.
-		- 20261003: It was the same with Free resources when idle on and a 5 s idle time. The device was let go and built again under load each time, in about 1 s, and no rebuild was refused. The fixed build logged one refused frame now and then around a minimize, drawn again after 16 ms, never two in a row.
-		- 20261003: With Transparency on, which draws through DX12 on Windows, both builds did the same thing: a window restored without focus was let go after the idle time while still on screen, went black when the load ended, and stayed black until typed into. The fix doesn't change this, since a window let go on purpose doesn't need a frame. It wasn't tried without load, because that run hung vm925w and didn't finish.
-		- 20261003: Also seen in both builds with Free resources when idle on, under load: after waking, the window sometimes showed only the last character of the prompt instead of the earlier text, until typed into.
-		- 20261003: The failed swap path wasn't tested on Windows. The Windows terminal draws through wgpu on Vulkan, or DX12 with Transparency, rather than the X11 GL swap b23 uses. vm925w doesn't have WSL2, so nothing was run through Mesa on the same GPU.
-		- 20261003: The black window and the missing text seen in both builds are filed as 2026100319134501 and 2026100319134502.
-		- 20261023: Both tests passed in the full run at 2da75a7. The b23 look isn't done yet. No dogfood or desktop runs were made then.
-		- 20261025: Both tests passed again in both full runs at e95b81b. The b23 look was moved to the hand testing row, since it needs the visible desktop.
-		- 20261026: Both tests passed again in the full run at fab6815.
-		- 20261028: Both tests passed again in the full run at 64f3584.
-		- 20261117: Deferred, to wait and see if it happens again. The b23 look is held until it does.
-	- Swept: every frame and rebuild site. They're the terminal's acquire and GL swap in `render_with`, called from both `about_to_wait` and the desktop's redraw, the dialog and notice windows' acquire and swap in `DialogWin::render`, and `rebuild_gpu`, which the console-return heal also calls. Nothing else matches `grep -n 'begin_frame\|end_frame\|Gfx::rebuild'`.
-	- Branch: gpuload
-	- Commit: 8cb6a4d
-	- Test case: `a_refused_frame_is_drawn_again_on_a_backoff` (ddf4e) and `a_refused_rebuild_stays_pending_and_is_tried_again` (ddf4f). The GL swap result doesn't have a test, since it needs a real GL context.
-	- Note: 20261003, Free resources when idle was on for some of the windows that went blank and off for others. Which ones isn't remembered, so both the frame path and the rebuild path stay suspects.
-
-- Windows Terminal handoff
-	- ID: 2026092810510800
-	- Type: Feature
-	- Status: Canceled
-	- Priority|Severity: Avg
-	- Opened: 20260928-105138
-	- Opened by: JC
-	- Assigned to: JC
-	- Target OS: Windows
-	- Test environment:
-	- Version and build:
-	- Requirements:
-		- In order to register as the "default terminal" in Windows, several unusual things are required.
-		- I closed the webpage that describes exactly what, before copying the URL, so do research again.
-		- Open questions:
-			- Generally, I'd like the ability for the user to be able to register the one installed version of SilkTerm as the default terminal.
-			- But for me specifically, I'd like to be able to register 'n8runterm' as the default. (Is that a completely separate thing?)
-	- Estimated effort: Avg
-	- Actual effort:
-	- Progress log:
-		- 20260928: Research so far, moved here from a second copy of this item:
-			- Windows: let SilkTerm be picked as the default terminal, so a console program started from anywhere, such as double-clicking a `.bat`, opens in SilkTerm instead of conhost or Windows Terminal.
-			- There isn't a setting or script that can do this from the outside. Windows stores the choice in `HKCU\Console\%%Startup` as 2 COM class IDs, `DelegationConsole` and `DelegationTerminal`, rather than as program paths. The console host creates that class and calls `ITerminalHandoff::EstablishPtyHandoff`, passing over the pipes of a program that's already running.
-				- 20260930: It takes 2 hops. The built-in conhost only knows `IConsoleHandoff`, and passes the session to the `DelegationConsole` class. That one, Windows Terminal's OpenConsole, then calls `ITerminalHandoff3` on the `DelegationTerminal` class. It was checked in the microsoft/terminal source, and in the conhost and OpenConsole binaries on vm925w.
-			- Checked 2026-09-28: the source doesn't have anything for this, and neither does build `slktrmdf_20260927-175446_gnulwi`. Pointing the registry at SilkTerm today would break every console launch.
-				- 20260930: A failed handoff falls back to conhost, so it isn't a hard break. But COM waits up to 60 seconds for the class to appear, and each launch would also open a plain SilkTerm window, so in practice it's close to the same. It was read from the source rather than tried.
-			- Add a COM local server to SilkTerm that implements the handoff interface. It's defined in microsoft/terminal at `src/host/proxy/ITerminalHandoff.idl`. Newer builds call `ITerminalHandoff3`, so check which version the current console host uses before starting.
-				- 20260930: Confirmed. OpenConsole calls only `ITerminalHandoff3` since Windows Terminal 1.22, and conhost never calls any of them. The OpenConsole in Windows Terminal 1.24 on vm925w has only that interface's ID.
-			- Give the pty backend a second way in. Today it always creates its own ConPTY. A handed-off session arrives with its pipes, signal pipe, and process handles already made, and the tab has to run those.
-				- 20260930: With version 3, the terminal makes the 2 data pipes and gives the console host its ends. The signal pipe, a session reference, and the console host and client process handles arrive ready-made. Resize is a 6-byte packet on the signal pipe, and closing the session is closing those handles, so it doesn't need `conpty.dll`.
-			- Register the class under `HKCU\Software\Classes\CLSID\{guid}\LocalServer32`, pointing at `%LOCALAPPDATA%\Programs\silkterm.exe` with a flag like `--handoff`. That's the symlink the launcher keeps pointed at the newest dogfood build, so the default follows each new build.
-				- A handed-off window skips the launcher, so it won't be elevated.
-					- 20260930: An elevated console program doesn't hand off at all, and stays in conhost. Windows Terminal has the same limit, by design (microsoft/terminal#10276).
-				- 20260930: COM adds ` -Embedding` to the command line on its own, so no flag of ours is needed. The program it starts has 60 seconds to register the class.
-			- Find out what `DelegationConsole` has to be. The belief is that Windows Terminal's OpenConsole, `{2EACA947-7F5F-4CFA-BA87-8F7FBEEFBE69}`, is what passes a session on to a third-party terminal that the built-in conhost doesn't. It wasn't verified. The ConPTY redistributable already being tried here includes its own console host, which may or may not be usable for this.
-				- 20260930: Verified. It has to be Windows Terminal's OpenConsole, with that ID. Conhost's own ID turns handoff off, and conhost can't reach a terminal by itself. So Windows Terminal has to be installed. It also has the parts that pass the call between processes. The redistributable's OpenConsole has the same ID built in, so it can't stand in as a second console host.
-			- Add a way to switch it on and off, either in Settings or as a command-line option. Turning it off means setting both values back to all zeros, which is "Let Windows decide".
-				- 20260930: A missing value means the same. The account on vm925w has Windows Terminal set by name, though, so off may be better as putting back whatever was there. See the open points below.
-			- The Settings app's dropdown only lists packaged apps that declare the handoff extension. An unpackaged SilkTerm could still write the registry values itself, but it would never show up in that list.
-				- 20260930: It takes 2 app extensions in the same package, `com.microsoft.windows.console.host` and `com.microsoft.windows.terminal.host`, so a packaged SilkTerm has to name a console host too. For a pair it doesn't know, Windows Terminal's own Settings page shows "Let Windows decide".
-		- 20260930: The research was redone against the microsoft/terminal source and docs, and checked read-only on vm925w (Windows 11 25H2, Windows Terminal 1.24). Corrections are the dated sub-bullets above. The plan is in details.md, under "Windows Terminal handoff plan (20260930)".
-		- 20260930: No other terminal has released this yet. WezTerm has 2 open requests (wezterm#7534, wezterm#7328). A few small projects have code, 2 of them in Rust, and all take the same route: Windows Terminal's OpenConsole as the console host, and their own class as the terminal.
-		- 20260930: `n8runterm` isn't a separate thing. The registration names a program, and COM starts it by itself. The launcher could be named there, but then PowerShell, and by default a UAC prompt, would come before every console launch. The launcher already keeps `%LOCALAPPDATA%\Programs\silkterm.exe` pointed at the newest build, so registering that path gets the same result without it.
-		- 20260930: Left undecided, and moot since the item is canceled:
-			- Whether to rely on Windows Terminal being installed. It's what passes the session on. Doing without it means building our own console host and bundling it, which is much bigger.
-			- Whether a handed-off program opens in a new SilkTerm window each time, like conhost, or as a tab in a window that's already open, like Windows Terminal. The plan starts with a new window.
-			- Whether the handed-off program's tab closes right away when it exits, as panes and conhost both do now, or stays open with the exit status, as `--keep-open` does.
-			- Whether the switch is a command-line option only at first, or a Settings row too.
-			- Whether switching it off puts back whatever was set before, or always "Let Windows decide".
-			- Whether to register it for the test account on vm925w while testing. It would write that account's console and class keys, and put them back after each run.
-	- Decisions:
-		- 20260930: Canceled for good, and not to be revisited. That includes the COM handoff and any console host of our own. Being the default terminal takes a server that adopts a live console session, and it needs Windows Terminal installed. File associations handle the cases that matter for a small part of the work.
-	- Branch: wthandoff
-	- Commit:
-	- Test case: None, since it was canceled.
-	- Acceptance signoff:
-	- Superseded by ID: 2026093009280571
-	- Closed: 20260930-092805
 
 ## Old format
 
