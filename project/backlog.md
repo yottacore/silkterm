@@ -501,7 +501,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 - A window resized past the GPU's largest texture size crashes
 	- ID: 2026111713374910
 	- Type: Bug
-	- Status: Queued
+	- Status: Closed
 	- Severity: Avg
 	- Opened: 20261117-133749
 	- Opened by: CC
@@ -509,15 +509,27 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Target version: rc.1
 	- Incorrect behavior: A window manager, or a drag across monitors, makes the window wider or taller than the device's texture limit, 8192 on some older Intel and Mali parts and 16384 on most cards. The surface or the offscreen texture is refused, and wgpu's default error handler ends the process.
 	- Expected behavior: The window can't grow past the limit, or draws at the limit when it does.
-	- Reproduced: No. Traced through wgpu 29.0.3.
+	- Reproduced: 20261117 on b23, in software on a private X display and on headless sway. A resize past 16384 ended the program at the offscreen texture on X11 and at the surface on Wayland, with or without a window manager.
 	- Possible cause: `fit_px` holds only the sizes the app asks for. The Resized path passes the window size straight to `Gfx::resize`. No error handler is set outside tests.
 	- Origin: c6eaa043, 20260628, last changed a44e556f, 20261004. The clamp for the app's own sizes is 7d8ccbef, 20261006. Not seen by an earlier round. Confirmed by trace.
 	- Sweep: `Scrim::resize` makes layers at the surface size. The minimap texture and dialogs are held by their own caps, and the wallpaper by its 4096 edge.
 	- Decisions:
 		- 20261117: Kept for rc.1, since it crashes. rc.1 takes only Critical and High items and anything that crashes or loses data.
+		- 20261117: Both halves of the expected behavior. A max size hint keeps the window within the limit where the window manager heeds it, as xfwm4 does. The surface clamp covers the ones that don't, and sway's tiling, where the window is bigger than what is drawn.
 	- Notes:
 		- Code review 20261117 item 11.
 		- Detail: `detail_backlog.md`, under this ID.
+		- The Windows and macOS paths weren't run. On those a window larger than the screen is rare, and the same hint and clamp apply.
+	- Actual cause: Only the sizes the app asks for were held to the limit. A size the window manager gave went straight to the surface, the offscreen texture and the scrim layers, and wgpu ends the program on a refusal.
+	- Actual fix: The window asks the window manager to keep it within the limit, again after each device rebuild. The surface is held at the limit whatever the window's size, at creation and at each resize, and the scrim and the layout follow the surface, so the grid fits what is drawn. Past the limit the rest of the window isn't drawn.
+	- Swept: `Gfx::resize` and both surface setups (GL and native) cover every window, dialogs included. The scrim now takes the surface's size at launch and at each resize. Other textures at the window's size read the surface's size. The minimap, dialogs and wallpaper keep their own caps.
+	- Test case: `cicd/tests/oversize/run.bash` (dfek4). It failed 6 of 7 checks on the old build and passes with the fix.
+	- Verified: The backlog quick run passes in all 5 areas. clippy is clean for Windows. The new test, run both ways.
+	- Branch: nov17-2026111713374910
+	- Commit: b1e1924c
+	- Acceptance signoff: Self-closed: reproduced, and the test fails without the fix and passes with it.
+	- Closed: 20261117-164510
+	- Closed reason: Done
 
 - A 3-part setting rename written partly dotted moves the value to a setting nothing reads
 	- ID: 2026111713374922

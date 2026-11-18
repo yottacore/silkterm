@@ -1158,6 +1158,10 @@ fScriptTests(){
 	## the window draws again without any input. Exit 3 is a skip: no binary,
 	## sway, wtype, or software Vulkan.
 	fRunTest_MaySkip cicd/tests/devlost/run.bash "a lost GPU device built again"
+	## A window made wider than the device's largest texture stays up, on X11
+	## with and without a window manager and on Wayland. Exit 3 is a skip: no
+	## binary, Xvfb, xfwm4, xdotool, sway, software Vulkan, or free display.
+	fRunTest_MaySkip cicd/tests/oversize/run.bash "a window past the texture limit"
 	## On native Wayland a window takes each output's own size once moved or
 	## dropped there, even with a sliver left on another output. Exit 3 is a skip: no
 	## binary, sway, python3, or software Vulkan.

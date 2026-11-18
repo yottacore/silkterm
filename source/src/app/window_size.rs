@@ -10,6 +10,7 @@ use super::{
 	save_live,
 };
 use crate::config;
+pub(super) use crate::gfx::fit_px;
 use std::time::{Duration, Instant};
 use winit::window::Window;
 
@@ -617,9 +618,9 @@ impl State {
 	// The largest window side the device can draw (`fit_px`), or a safe guess
 	// while the device is let go.
 	fn max_window_dim(&self) -> u32 {
-		self.gpu.as_ref().map_or(SAFE_MAX_DIM, |gpu| {
-			gpu.gfx.device.limits().max_texture_dimension_2d
-		})
+		self.gpu
+			.as_ref()
+			.map_or(SAFE_MAX_DIM, |gpu| gpu.gfx.max_side())
 	}
 
 	// No monitor's own size is taken: the switches are off, or the command
@@ -1023,12 +1024,11 @@ pub(super) fn window_px(
 	)
 }
 
-/// A window may be no bigger than the largest texture the device will make: the
-/// GL path renders the scene into an offscreen texture at the window's size, and
-/// wgpu treats a refusal as fatal. So a count out of the config or the command
-/// line is held here, or it ends the launch in `create_texture`.
-pub(super) fn fit_px(w: u32, h: u32, max_dim: u32) -> (u32, u32) {
-	(w.clamp(1, max_dim), h.clamp(1, max_dim))
+/// A window manager that heeds the hint keeps the window within what the
+/// device draws. One that doesn't still gets a window that stays up, drawn up
+/// to the limit (`Gfx::resize`).
+pub(super) fn cap_window(window: &Window, max_dim: u32) {
+	window.set_max_inner_size(Some(winit::dpi::PhysicalSize::new(max_dim, max_dim)));
 }
 
 /// Open maximized? Only when the last window was left that way and the

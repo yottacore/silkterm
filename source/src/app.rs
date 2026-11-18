@@ -1486,6 +1486,9 @@ impl State {
 		self.surface_px = (w, h);
 		if let Some(gpu) = self.gpu.as_mut() {
 			gpu.gfx.resize(w, h);
+			// no bigger than the device draws, so the grid fits what shows
+			let (w, h) = (gpu.gfx.config.width, gpu.gfx.config.height);
+			self.surface_px = (w, h);
 			gpu.scrim.resize(&gpu.gfx.device, w, h);
 		}
 	}
@@ -4023,7 +4026,7 @@ impl ApplicationHandler<UserEvent> for App {
 		let (want_w, want_h) = fit_px(
 			cli_win.pixel_width.unwrap_or(grid_w),
 			cli_win.pixel_height.unwrap_or(grid_h),
-			gfx.device.limits().max_texture_dimension_2d,
+			gfx.max_side(),
 		);
 		let want = winit::dpi::PhysicalSize::new(want_w, want_h);
 		let maximize_on_reveal = launch_maximized(&settings, cli_win);
@@ -4032,9 +4035,10 @@ impl ApplicationHandler<UserEvent> for App {
 		// at the final size and the window is shown on it. Otherwise, on X11 and
 		// Wayland, it waits for the surface to reach `want`, so the window never
 		// maps at the default size first.
+		window_size::cap_window(&window, gfx.max_side());
 		let reveal_want = if let Some(applied) = request_size(&window, want) {
 			gfx.resize(applied.width, applied.height);
-			scrim.resize(&gfx.device, applied.width, applied.height);
+			scrim.resize(&gfx.device, gfx.config.width, gfx.config.height);
 			None
 		} else {
 			Some(want)

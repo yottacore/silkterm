@@ -1038,11 +1038,16 @@ impl Gfx {
 		// all a blurred wallpaper. The blit then does the single linear-to-sRGB encode,
 		// with dither, into the 8-bit fbo 0.
 		let format = wgpu::TextureFormat::Rgba16Float;
+		let (width, height) = fit_px(
+			size.width,
+			size.height,
+			device.limits().max_texture_dimension_2d,
+		);
 		let surface_cfg = wgpu::SurfaceConfiguration {
 			usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
 			format,
-			width: size.width.max(1),
-			height: size.height.max(1),
+			width,
+			height,
 			present_mode: wgpu::PresentMode::AutoVsync,
 			alpha_mode: wgpu::CompositeAlphaMode::PreMultiplied,
 			view_formats: vec![],
@@ -1210,7 +1215,14 @@ impl Gfx {
 		}
 	}
 
+	/// The surface follows the window up to the largest side the device draws,
+	/// and the part of a window past it isn't drawn. A window manager can make
+	/// a window bigger than the window asked to be (`fit_px`).
 	pub fn resize(&mut self, w: u32, h: u32) {
+		if w == 0 || h == 0 {
+			return;
+		}
+		let (w, h) = fit_px(w, h, self.max_side());
 		let (Some(nonzero_w), Some(nonzero_h)) = (NonZeroU32::new(w), NonZeroU32::new(h)) else {
 			return;
 		};
@@ -1237,6 +1249,20 @@ impl Gfx {
 			}
 		}
 	}
+
+	/// The largest window side this device draws.
+	pub fn max_side(&self) -> u32 {
+		self.device.limits().max_texture_dimension_2d
+	}
+}
+
+/// A window may be no bigger than the largest texture the device will make: the
+/// GL path renders the scene into an offscreen texture at the window's size, and
+/// wgpu treats a refusal as fatal. So a count out of the config or the command
+/// line is held here, or it ends the launch in `create_texture`. So is the
+/// surface of a window the window manager made bigger than that.
+pub fn fit_px(w: u32, h: u32, max_dim: u32) -> (u32, u32) {
+	(w.clamp(1, max_dim), h.clamp(1, max_dim))
 }
 
 // VRAM-content probe (see the Sentinel comment above). All no-ops on the
@@ -1564,11 +1590,17 @@ fn surface_config(
 
 	let (alpha_mode, transparent) = pick_alpha_mode(&caps.alpha_modes, adapter.get_info().backend);
 
+	// the device is asked for the adapter's own limits (`request_device`)
+	let (width, height) = fit_px(
+		size.width,
+		size.height,
+		adapter.limits().max_texture_dimension_2d,
+	);
 	let config = wgpu::SurfaceConfiguration {
 		usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
 		format,
-		width: size.width.max(1),
-		height: size.height.max(1),
+		width,
+		height,
 		present_mode: wgpu::PresentMode::AutoVsync,
 		alpha_mode,
 		view_formats: vec![],
