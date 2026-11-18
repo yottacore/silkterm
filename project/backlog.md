@@ -264,7 +264,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 - A command-line argument that isn't valid Unicode crashes SilkTerm
 	- ID: 2026111713374941
 	- Type: Bug
-	- Status: Queued
+	- Status: Closed
 	- Severity: Low
 	- Opened: 20261117-133749
 	- Opened by: CC
@@ -280,6 +280,16 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- 20261117: Kept for rc.1, since it crashes. rc.1 takes only Critical and High items and anything that crashes or loses data.
 	- Notes:
 		- Code review 20261117 item 42.
+		- 20261118: A non-Unicode argument is a parse error with exit 2, rather than a path flag taking it as is, since the options engine and settings hold text.
+	- Swept: Only 2 call sites in source/src/main.rs, both now read `args_os()` through `cli::utf8_args`. The other `env::args()` calls are in dev tools under cicd/ and knobs/demo.
+	- Test case: dffkj `a_non_unicode_argument_is_an_error_not_a_panic`.
+	- Verified: Before the fix `silkterm --directory $'/data/caf\xe9'` panicked with exit 101 on the debug build. Now it prints "argument is not valid Unicode" and "Try --help." with exit 2. The new test and the quick fmt, clippy and tests areas pass.
+	- Actual cause: main.rs read the arguments with `std::env::args()`, which panics on a non-Unicode one.
+	- Actual fix: `cli::utf8_args` takes `args_os()` and turns a non-Unicode argument into the usual parse error.
+	- Branch: nov18-2026111713374941
+	- Acceptance signoff: Self-closed: the test and a run of the binary show exit 2 where it crashed.
+	- Closed: 20261118-100100
+	- Closed reason: Done
 		- Detail: `detail_backlog.md`, under this ID.
 
 - Both installers rewrite a hand-edited launcher on every upgrade
