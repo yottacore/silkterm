@@ -949,7 +949,7 @@ pub struct Settings {
 	pub tmux_on_close: crate::tmux::OnClose, // what closing such a pane does to its session
 	pub hyperlinks: bool,       // underline URLs in output on hover; Ctrl+click opens them
 	pub hyperlink_open_command: String, // opener for a clicked link; its default is the desktop's own
-	pub option_as_meta: crate::input::OptionMeta, // which Mac Option key sends ESC and the plain key
+	pub option_as_alt: crate::input::OptionAlt, // which Mac Option key sends ESC and the plain key
 	pub bg: [u8; 3],
 	pub fg: [u8; 3],
 	pub cursor: [u8; 3],
@@ -1197,7 +1197,7 @@ impl Settings {
 			tmux_on_close: crate::tmux::OnClose::Prompt,
 			hyperlinks: true,
 			hyperlink_open_command: String::new(),
-			option_as_meta: crate::input::OptionMeta::Off,
+			option_as_alt: crate::input::OptionAlt::Off,
 			bg: pal.bg,
 			fg: pal.fg,
 			cursor: pal.cursor,
@@ -3190,7 +3190,7 @@ struct RawConfig {
 	tmux_on_close: Option<String>,
 	hyperlinks: Option<bool>,
 	hyperlink_open_command: Option<String>,
-	option_as_meta: Option<String>,
+	option_as_alt: Option<String>,
 	performance_automatic: Option<bool>,
 	performance_profile: Option<String>,
 	performance_check_hardware: Option<bool>,
@@ -3770,7 +3770,7 @@ fn read_raw_doc(doc: &shcl::Document, path: &std::path::Path) -> (RawConfig, Vec
 		tmux_on_close: reader.read_string("shell.tmux.on_close"),
 		hyperlinks: reader.read_bool("hyperlinks.enabled"),
 		hyperlink_open_command: reader.read_string("hyperlinks.open_command"),
-		option_as_meta: reader.read_string("keys.option_as_meta"),
+		option_as_alt: reader.read_string("keys.option_as_alt"),
 		colors: RawColors {
 			background: reader.read_string("colors.background"),
 			from_wallpaper: reader.read_bool("colors.from_wallpaper"),
@@ -4445,7 +4445,7 @@ fn resolve(raw: RawConfig) -> Settings {
 		tmux_on_close: choice_or(raw.tmux_on_close.as_deref(), d.tmux_on_close),
 		hyperlinks: raw.hyperlinks.unwrap_or(d.hyperlinks),
 		hyperlink_open_command: raw.hyperlink_open_command.unwrap_or_default(),
-		option_as_meta: choice_or(raw.option_as_meta.as_deref(), d.option_as_meta),
+		option_as_alt: choice_or(raw.option_as_alt.as_deref(), d.option_as_alt),
 		bg: color(raw.colors.background, pal.bg),
 		colors_from_wallpaper: raw.colors.from_wallpaper.unwrap_or(d.colors_from_wallpaper),
 		// session only: the summary arrives with a picture
@@ -8817,10 +8817,10 @@ keys:
 	## Down, Menu, and F1 to F12. "none" turns a hotkey off. A combo set here
 	## gets taken away from any other hotkey that had it.
 {KEYS}
-	## Mac only. Which Option key sends Meta, for emacs and readline: off,
-	## left, right, or both. Off types the character Option makes, like { on
-	## a German layout.
-	# option_as_meta: off  ## Default
+	## Mac only. Which Option key acts as Alt, for shell and editor shortcuts
+	## like Option+B: off, left, right, or both. Off types the character Option
+	## makes, like { on a German layout.
+	# option_as_alt: off  ## Default
 
 ## ••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
 ## Shell
@@ -15954,29 +15954,29 @@ mod tests {
 		assert!(!resolve(read_raw("window.idle_release: false\n", p).0).idle_release);
 	}
 
-	// Option as Meta is off unless the file names a side, and a word it doesn't
+	// Option as Alt is off unless the file names a side, and a word it doesn't
 	// know is off too. It sits under `keys:` without being taken for a hotkey.
 	// Test ID: dffm5
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
-	fn option_as_meta_reads_from_the_file_and_defaults_off() {
-		use crate::input::OptionMeta;
+	fn option_as_alt_reads_from_the_file_and_defaults_off() {
+		use crate::input::OptionAlt;
 		let p = std::path::Path::new("test.shcl");
-		assert_eq!(Settings::default().option_as_meta, OptionMeta::Off);
+		assert_eq!(Settings::default().option_as_alt, OptionAlt::Off);
 		let lines: Vec<String> = setting_lines(default_config())
 			.into_iter()
-			.filter(|(name, _)| name == "keys.option_as_meta")
+			.filter(|(name, _)| name == "keys.option_as_alt")
 			.map(|(_, line)| line)
 			.collect();
-		assert_eq!(lines, ["\t# option_as_meta: off  ## Default"]);
+		assert_eq!(lines, ["\t# option_as_alt: off  ## Default"]);
 		for (text, want) in [
-			("keys:\n\toption_as_meta: left\n", OptionMeta::Left),
-			("keys.option_as_meta: Right\n", OptionMeta::Right),
-			("keys.option_as_meta: both\n", OptionMeta::Both),
-			("keys.option_as_meta: meta\n", OptionMeta::Off),
+			("keys:\n\toption_as_alt: left\n", OptionAlt::Left),
+			("keys.option_as_alt: Right\n", OptionAlt::Right),
+			("keys.option_as_alt: both\n", OptionAlt::Both),
+			("keys.option_as_alt: meta\n", OptionAlt::Off),
 		] {
-			assert_eq!(resolve(read_raw(text, p).0).option_as_meta, want, "{text}");
-			assert_eq!(read_text(text).option_as_meta, want, "{text}");
+			assert_eq!(resolve(read_raw(text, p).0).option_as_alt, want, "{text}");
+			assert_eq!(read_text(text).option_as_alt, want, "{text}");
 			assert!(config_complaints(text).is_empty(), "{text}");
 		}
 	}

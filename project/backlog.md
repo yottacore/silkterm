@@ -85,7 +85,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Type: Feature
 	- Status: Stalled
 		- Held for b26's console to be unlocked, for the key check. The rig built the round's code there (81d86b94) on 20261118, then skipped, since CGSSessionScreenIsLocked was Yes.
-	- Needs external testing: On b26, at a shell prompt under `cat -v`, with Use as Meta set to Left: left Option+f shows `^[f`, right Option+f still shows the composed character, and the change works without a restart. Set back to Off, left Option+f types the composed character again. The rig is `b26_optmeta.bash` in the private tools folder.
+	- Needs external testing: On b26, at a shell prompt under `cat -v`, with the Option key setting on Left acts as Alt: left Option+f shows `^[f`, right Option+f still shows the composed character, and the change works without a restart. Set back to Types special characters, left Option+f types the composed character again. The rig is `b26_optmeta.bash` in the private tools folder.
 	- Priority: Avg
 	- Opened: 20261117-151554
 	- Opened by: CC
@@ -100,12 +100,15 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- 20261118: The Settings row needed a Mac-only row flag, `macos:`, kept by test builds the way `windows:` rows are.
 		- 20261118: The b26 key check is in the private tools folder as b26_optmeta.bash. It sends left and right Option+f as CGEvents with the side's device flag, under Left, then Off, then Both, each read live through `silkterm --reload-settings` from the window's own shell. The hosted mac.yml run 44372722100 on 81d86b94 covers dffm4 to dffm7.
 		- 20261118: Verified: hosted mac.yml run 44372722100 on nov18 (81d86b94) passed, 1490 tests, 0 failed, 0 filtered, so dffm4 to dffm7 ran and passed on macOS arm64. Only the b26 key check is left.
+		- 20261118: Renamed, as JC approved: `keys.option_as_alt` in the config file, the same name alacritty, kitty and Ghostty use. On the Keys tab the row is Option key, with Types special characters, Left acts as Alt, Right acts as Alt, and Both act as Alt, under a Keyboard heading. Most Mac users don't know the word Meta.
+		- 20261118: dffm7's pinned labels changed with the rename: the heading from Option key to Keyboard, and the choices from Off, Left, Right, Both to the 4 new ones. Its other checks are as they were.
+		- 20261118: Verified: the quick gate (fmt, clippy, tests, docs) passed after the rename, 1513 tests with dffm4 to dffm7, and clippy for aarch64-apple-darwin is clean.
 	- Decisions:
 		- 20261118: The setting lives under `keys:` in the file, beside the hotkeys, though it isn't one. The hotkey reader only looks at hotkey names, so it isn't flagged.
 		- 20261118: Whether a press is Meta is judged the way winit judges whether to hand over the plain key: a named side held, with no Ctrl or Command. So the ESC and the plain key always come together. With Ctrl, Option keeps its ESC either way, as before.
 		- 20261118: The Option key group goes first on the Keys tab, so it isn't lost under the hotkey list.
 		- 20261118: With Meta on, Option on that side types the plain key in a tab rename too, as winit hands it over for the whole window. iTerm2 does the same.
-	- Test case: `option_as_meta_sends_esc_for_the_side_it_names` (dffm4), `option_as_meta_reads_from_the_file_and_defaults_off` (dffm5), `the_option_key_group_leaves_every_build_but_the_mac` (dffm6), and `the_option_as_meta_pick_is_the_setting_under_keys` (dffm7). dffm4 and dffm5 fail with the side check or the file path broken.
+	- Test case: `option_as_alt_sends_esc_for_the_side_it_names` (dffm4), `option_as_alt_reads_from_the_file_and_defaults_off` (dffm5), `the_option_key_group_leaves_every_build_but_the_mac` (dffm6), and `the_option_as_alt_pick_is_the_setting_under_keys` (dffm7). dffm4 and dffm5 fail with the side check or the file path broken.
 		- 20261118: `only_software_rendering_leaves_the_macos_build` (ddkm1) and `the_windows_rows_leave_every_other_build` (ddamq) pass the new Mac-row argument. ddkm1's last check now says a test build keeps every row, since the Windows build no longer does.
 	- Swept: the one `encode` caller in `app.rs`, and the window attributes, which only the terminal window sets. The Settings dialog's own windows don't take shell keys.
 	- Verified: The unit suite on Linux, 1516 tests, and the quick gate. clippy for macOS and Windows is clean. None of it ran on a Mac.

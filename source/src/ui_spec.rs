@@ -77,7 +77,7 @@ keys![
 	HotkeyNewTab, HotkeyCloseTab, HotkeyPrevTab, HotkeyNextTab, HotkeyMoveTabBack, HotkeyMoveTabForward,
 	HotkeySplitRight, HotkeySplitDown, HotkeyClosePane,
 	HotkeyFocusLeft, HotkeyFocusRight, HotkeyFocusUp, HotkeyFocusDown,
-	OptionAsMeta,
+	OptionAsAlt,
 ];
 
 #[derive(Debug)]
@@ -1269,7 +1269,7 @@ mod tests {
 		let all = ui.specs.len();
 		let mac: Vec<Key> = ui.specs.iter().filter(|s| s.macos).map(|s| s.key).collect();
 		assert_eq!(mac.len(), 2, "the heading and its row");
-		assert!(mac.contains(&Key::OptionAsMeta));
+		assert!(mac.contains(&Key::OptionAsAlt));
 		keep_platform(&mut ui.specs, true, false, false);
 		assert_eq!(ui.specs.len(), all - 2);
 		assert!(ui.specs.iter().all(|s| !s.macos));

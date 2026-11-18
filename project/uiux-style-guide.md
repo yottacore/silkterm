@@ -333,7 +333,7 @@ Rules that go with them:
 	- Ctrl+click is the right-click, so it opens the right-click menu wherever a right-click does.
 	- Nothing typed with Command held goes to the shell, so no Command chord takes a key from it.
 	- With no in-window bar, Option plus a letter always goes to the shell.
-	- Option types the character it makes, as in Terminal.app. Use as Meta on the Keys tab makes the left, right, or both Option keys send ESC and the plain key instead, for emacs and the shell's word keys.
+	- Option types the character it makes, as in Terminal.app. The Option key setting on the Keys tab makes the left, right, or both Option keys act as Alt instead, sending ESC and the plain key, for shell and editor shortcuts.
 
 - Alt plus a menu title's first letter opens that menu. The Menu key opens the right-click menu on the focused pane.
 	- Only Alt alone does it, and the title underlines show only then. With Shift, Ctrl, or Super held too, the letter is some other chord or goes to the shell.
