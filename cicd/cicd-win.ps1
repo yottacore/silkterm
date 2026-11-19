@@ -22,7 +22,9 @@
 	 5. packages       (NSIS installer .exe per built arch, if makensis found)
 	 6. linux half     (-Wsl: hand the Linux-only work to WSL2, below)
 	 7. dogfood        (copy the best x86_64 build to <dogfood>\silkterm.exe)
-	 8. publish        (stash -> pull -> add -> commit -> push, current branch)
+	 8. publish        (stash -> pull -> add -> commit -> push, current branch),
+	                    committing only the tracked files the format step changed
+	                    of those that matched HEAD before it
 
 	What Windows can't do, compared to cicd.bash: the profiler, since pprof's
 	SIGPROF sampler is Unix-only and the profiling feature doesn't compile for
@@ -983,6 +985,22 @@ function fRemoteSync {
 	fEcho "OK: fast-forwarded $behind commit(s) from upstream"
 }
 
+## The tracked files the run itself changed. Publish commits only these, since
+## the rest of the tree can hold another session's edits.
+$script:RunChanged = [System.Collections.Generic.List[string]]::new()
+
+## Runs $Do, then adds to $script:RunChanged the tracked files under $Specs that
+## it changed and that matched HEAD before it ran. A file that was already
+## edited can hold another session's work, so it's never taken.
+function fRunChanged {
+	param([Parameter(Mandatory)][string[]]$Specs, [Parameter(Mandatory)][scriptblock]$Do)
+	$before = @(((& git diff -z --name-only HEAD -- @Specs) -join '') -split "`0" | Where-Object { $_ })
+	& $Do
+	foreach ($f in @(((& git diff -z --name-only HEAD -- @Specs) -join '') -split "`0" | Where-Object { $_ })) {
+		if ($before -cnotcontains $f -and -not $script:RunChanged.Contains($f)) { $script:RunChanged.Add($f) }
+	}
+}
+
 ## Publish: a native port of n8git_backup-and-publish without the rar archive step.
 ## stash (if dirty) -> pull --no-ff (if upstream) -> pop -> add -> commit -> push.
 ## $Msg empty means "let git open its editor" (git uses core.editor / EDITOR).
@@ -1004,17 +1022,23 @@ function fPublish {
 	if ($hasUpstream) { fPullStashed $didStash }
 	if ($didStash) { fStashPop "git stash pop failed after the pull" }
 
-	fEcho_Clean "git add --all ..."
-	fExec -What "git add" -File "git" -CmdArgs @("add", "--all")
-
-	& git diff --cached --quiet; $hasStaged = ($LASTEXITCODE -ne 0)
+	## Only the tracked files the run itself changed, and nothing else already
+	## staged. A path git doesn't track would fail the add.
+	$paths = @($script:RunChanged | ForEach-Object { ":(top,literal)$_" })
+	if ($paths) { $paths = @(& git ls-files --full-name -- @paths | ForEach-Object { ":(top,literal)$_" }) }
+	fEcho_Clean "git add, only what the run changed ($($paths.Count) file(s)) ..."
+	$hasStaged = $false
+	if ($paths) {
+		fExec -What "git add" -File "git" -CmdArgs (@("add", "--") + $paths)
+		& git diff --cached --quiet -- @paths; $hasStaged = ($LASTEXITCODE -ne 0)
+	}
 	if ($hasStaged) {
 		if ($Msg) {
-			fExec -What "git commit" -File "git" -CmdArgs @("commit", "-m", $Msg)
+			fExec -What "git commit" -File "git" -CmdArgs (@("commit", "-m", $Msg, "--") + $paths)
 			fEcho "OK: committed (`"$Msg`")"
 		} else {
 			## No message -> let git open the configured editor (core.editor / EDITOR).
-			& git commit
+			& git commit -- @paths
 			if ($LASTEXITCODE -ne 0) { fDie "git commit failed or was aborted (empty message?)" }
 			fEcho "OK: committed (via editor)"
 		}
@@ -1429,7 +1453,7 @@ function fMain {
 	if (fStepOpen 'Format') {
 		fSetJobs
 		if ($FmtCheck) { fExec -What "format check" -File "cargo" -CmdArgs @("fmt", "--check"); fEcho "OK: formatting clean" }
-		else { fExec -What "format" -File "cargo" -CmdArgs @("fmt"); fEcho "OK: formatted" }
+		else { fRunChanged -Specs '*.rs' -Do { fExec -What "format" -File "cargo" -CmdArgs @("fmt") }; fEcho "OK: formatted" }
 		fStepClose
 	}
 
@@ -1497,6 +1521,9 @@ try {
 
 
 ##	History:
+##		- 2026-11-19: Publish commits only the tracked files the format step
+##		              changed of those that matched HEAD before it, not the
+##		              whole tree.
 ##		- 2026-11-17: Stage 0 and publish put the stash back when the pull fails,
 ##		              name it when a pop fails, and stop when an earlier run's
 ##		              'auto-stash' is left.
