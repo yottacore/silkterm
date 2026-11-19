@@ -41,7 +41,7 @@
 
 </div>
 
-SilkTerm™ is a hardware-accelerated terminal for Linux, Windows, and macOS that scrolls new output smoothly, a pixel at a time, instead of jumping whole lines. Fast output isn't held back; the scroll speeds up to keep pace. It also has an animated cursor, a text halo that keeps text readable over a wallpaper or a see-through window, tabs, and split panes. One executable, written in Rust.
+SilkTerm™ is a hardware-accelerated terminal for Linux, Windows, and macOS that scrolls new output smoothly, a pixel at a time, instead of jumping whole lines. But fast output isn't held back - the scroll speeds up to keep pace. It also has an animated cursor, a text halo that keeps text readable over a wallpaper or a see-through window, tabs, and split panes. One executable, written in Rust.
 
 <!--
 <table style="border: none; border-collapse: collapse;">
