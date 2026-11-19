@@ -1050,7 +1050,7 @@ dependencies = [
 [[package]]
 name = "glyphon"
 version = "0.11.0"
-source = "git+https://github.com/jim-collier/glyphon?branch=text-srgb-blend-0.11.0#bced48745a0ead4959e6dc5f2f46f76b1eb7370d"
+source = "git+https://github.com/jim-collier/glyphon?branch=text-srgb-blend-0.11.0#79c6c97b7550d5c9da220a9ef52e0a0fd96197a3"
 dependencies = [
  "cosmic-text",
  "etagere",
