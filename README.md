@@ -147,6 +147,8 @@ Text can be particularly hard to read, for example when using light text on a no
 
 	- `silkterm --wallpaper PATH` switches the running window's wallpaper from inside a pane.
 
+- **Automatic text colors based on the wallpaper**. The text and cursor take a hue that suits the picture based on color theory, and stays readable on it.
+
 - **Background image blur**. With an optional Gaussian blur radius (without altering the source image), also independent of transparency blur.
 
 - **Background image contrast mask**. Flattens the image's local contrast so it stops competing with the text on top of it, again without altering the source image. The flatten scale and strength are adjustable, and can be blended with values derived from the image itself.
@@ -163,13 +165,19 @@ Text can be particularly hard to read, for example when using light text on a no
 
 	- Accepts custom tab names from the user (double-click to rename), and/or from some programs that like to rename the tab they're in.
 
+	- What a tab says comes from a template you can edit, with macros like `%SHELL%`, `%PROGRAM%`, and `%CURRENT_DIRECTORY%`. [usage.md](usage.md#tab-text) lists them all.
+
 - **New tabs and panes start where you are**. A new tab, split, or window opens in the folder of the pane you're in. Most shells don't need any setup for it.
 
 - **Automatically finds your system's shells**. bash, zsh, fish, PowerShell, cmd, Nushell, WSL distributions and more show up under New tab with shell.
 
+- **A git-aware prompt for bash and PowerShell**. It shows the branch, whether everything is committed, and how far ahead or behind the upstream you are. For bash it's a switch in Settings, and nothing is written to your `.bashrc`. PowerShell gets it only if your prompt is still the stock one.
+
+- **Opens scripts and folders from Explorer on Windows**. A double-click on a `.bat`, `.cmd`, `.ps1`, or `.vbs` file runs it in a SilkTerm pane, and folders get an "Open in SilkTerm" entry on the right-click menu. Each one is a button in Settings, and can be put back the way it was.
+
 - **Window decorations and/or the menu can be disabled**, for "nothing but terminal". Fullscreen can also be toggled.
 
-- **Window size is remembered** between launches.
+- **Window size and font zoom are remembered per monitor**, by its resolution and DPI. A window moved to another monitor takes that monitor's size once it stops moving. On Wayland the monitor isn't known until the window is showing, so there it may resize just after it opens.
 
 - **Robust Unicode and emoji support**. With internal Unicode fallback rendering for the glyphs that the chosen display font can't display.
 
@@ -194,6 +202,8 @@ Text can be particularly hard to read, for example when using light text on a no
 - **Simple and sane configuration**. No pages of nested tabs representing multiple settings metaphors. But if you need to get fancy with multiple sets of wildly different options - that's easy with alternate config files, and/or scripted launch-time arguments.
 
 	- Settings has a search box, and most settings explain themselves in a tip.
+
+- **Settings changes show in every open window**. Save a change in one SilkTerm window, and the others on the same config file pick it up right away. Each window still keeps its own size.
 
 - **Rich command-line syntax**. A simple yet (optionally) powerful CLI syntax, that allows creating multiple tabs and/or complex pane structure(s) at launch time.
 
@@ -223,23 +233,7 @@ The 102 wallpapers SilkTerm was built and tuned against are in [`filesystem/home
 
 Click the sheet for the [browsable gallery](https://yottacore.github.io/silkterm/wallpapers/) - any wallpaper opens full size in place, the arrow keys page through them, and each one shows its credit and license underneath. To fetch them, see [Wallpaper pack](install.md#wallpaper-pack) in install.md.
 
-SilkTerm Pro (coming soon) can rotate through them on its own. The free version can too, with a wrapper that picks one at random each launch:
-
-~~~bash
-silkterm --wallpaper-file "$(shuf -n1 -e ~/.config/silkterm/wallpaper/*.jpg)"
-~~~
-
-To get a new one every time it's started from a shell, put this in `~/.bashrc`:
-
-~~~bash
-silkterm() { local f=(~/.config/silkterm/wallpaper/*.jpg); command silkterm --wallpaper-file "${f[RANDOM % ${#f[@]}]}" "$@"; }
-~~~
-
-Or on Windows, in PowerShell:
-
-~~~powershell
-silkterm --wallpaper-file (Get-ChildItem "$env:LOCALAPPDATA\silkterm\wallpaper\*.jpg" | Get-Random).FullName
-~~~
+SilkTerm can rotate through them on its own. Put them in the wallpaper folder that [usage.md](usage.md#configuration) lists, and it picks one each launch, favoring the ones it hasn't shown lately. Next wallpaper on the View menu and the right-click menu changes it right away. Another folder can be picked under File or folder in Settings, with Rotate folder on. In the config, `wallpaper.rotate.interval_s` changes the picture on a timer, and `wallpaper.rotate.random: false` goes through them in filename order.
 
 ## Terminal showdown - speed and size
 
@@ -300,6 +294,8 @@ Tell other terminal nerds on various socials how this has changed your life!
 ## Legal stuff
 
 SilkTerm is built on the basic plumbing of [Alacritty](https://github.com/alacritty/alacritty), which is dual-licensed under the [Apache License, Version 2.0](https://github.com/alacritty/alacritty/blob/master/LICENSE-APACHE) and [MIT License](https://github.com/alacritty/alacritty/blob/master/LICENSE-MIT).
+
+SilkTerm also includes a copy of [x9ps1-git](https://github.com/jim-collier/x9ps1-git) under the [MIT License](https://opensource.org/licenses/MIT). It's a git-aware bash prompt that SilkTerm can give new bash panes.
 
 SilkTerm's license is specifically compatible with Alacritty's:
 
