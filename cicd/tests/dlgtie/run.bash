@@ -116,7 +116,7 @@ appPid=$!
 
 fOurs(){ fX xdotool search --onlyvisible --pid "${appPid}" 2>/dev/null | sort -n || true; }
 main=""
-for _ in {1..150}; do main="$(fOurs | head -n 1)"; [[ -n "${main}" ]] && break; sleep 0.2; done
+for _ in {1..150}; do main="$(fOurs | head -n 1 || true)"; [[ -n "${main}" ]] && break; sleep 0.2; done
 if [[ -z "${main}" ]]; then echo "  FAIL a window came up"; tail -n 20 "${work}/said.txt" | sed 's/^/    /'; exit 1; fi
 echo "  ok   a window came up"
 sleep 2

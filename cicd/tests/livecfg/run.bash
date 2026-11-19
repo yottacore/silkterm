@@ -256,7 +256,7 @@ fX xdotool key --clearmodifiers n 2>/dev/null || true
 fCheck "d started with the saved minimap" fWaitMinimap "${shared}" false
 
 if ((failures)); then
-	for said in "${work}"/*.said.txt; do echo "  ${said##*/}:"; tail -n 12 "${said}" | sed 's/^/    /'; done
+	for said in "${work}"/*.said.txt; do echo "  ${said##*/}:"; tail -n 12 "${said}" 2>/dev/null | sed 's/^/    /' || true; done
 	echo "${failures} failed"; exit 1
 fi
 echo "all passed"

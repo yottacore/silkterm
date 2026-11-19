@@ -69,7 +69,7 @@ while IFS= read -r hit; do
 	[[ -n "${hit}" ]] || continue
 	file="${hit%%:*}"
 	p="${hit#*:}"
-	[[ -e "$(dirname "${file}")/${p}" ]] || { echo "    ${file} includes ${p}, which is not there"; missing=$((missing + 1)); }
+	[[ -e "${file%/*}/${p}" ]] || { echo "    ${file} includes ${p}, which is not there"; missing=$((missing + 1)); }
 done < <(
 	cd "${clone}" \
 		&& grep -rn --include='*.rs' -oE 'include_(str|bytes)!\("[^"]*"' source/src \
@@ -87,7 +87,7 @@ fCheck "no tracked text file still carries the old name" test -z "${left}"
 ##	The paths themselves. A file or directory named for the project is renamed.
 left="$(cd "${clone}" && git ls-files | grep -i silkterm || true)"
 fCheck "no tracked path still carries the old name" test -z "${left}"
-[[ -z "${left}" ]] || sed 's/^/    /' <<< "${left}" | head -5
+[[ -z "${left}" ]] || head -n 5 <<< "${left}" | sed 's/^/    /'
 
 ##	With --untracked, an untracked file is rewritten and renamed too. The
 ##	tracked files already have the new name, so this run only changes that one.

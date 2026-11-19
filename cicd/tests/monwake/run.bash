@@ -156,18 +156,18 @@ fDance(){  ## fDance <seconds to wait after the look on the landscape output>
 	if [[ -z "$(fWhere)" ]]; then echo "  FAIL +${wait} s: the window never showed"; failures=$((failures + 1)); return 0; fi
 	"${wl[@]}" swaymsg "[pid=${appPid}] move position 100 100" >/dev/null
 	sleep 3
-	portrait="$(fWhere)"
+	portrait="$(fWhere || true)"
 	fCheck "+${wait} s: the window starts on the portrait output" test "${portrait%% *}" == HEADLESS-2
 	"${wl[@]}" swaymsg "output HEADLESS-2 disable" >/dev/null
 	fLeaves "${portrait}" 30 || true
-	herded="$(fWhere)"
+	herded="$(fWhere || true)"
 	## the window's monitor check comes 0.75 s after the move, then its resize
 	fLeaves "${herded}" 40 || true
-	landscape="$(fWhere)"
+	landscape="$(fWhere || true)"
 	sleep "${wait}"
 	"${wl[@]}" swaymsg "output HEADLESS-2 enable" >/dev/null
 	sleep 4
-	final="$(fWhere)"
+	final="$(fWhere || true)"
 	echo "  portrait: ${portrait}, herded: ${herded}, after its look: ${landscape}, back: ${final}"
 	fCheck "+${wait} s: herded onto the landscape output as it was" test "${herded}" == "HEADLESS-1 ${portrait#* }"
 	fCheck "+${wait} s: kept its size there" test "${landscape}" == "${herded}"

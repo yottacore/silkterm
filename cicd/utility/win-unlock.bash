@@ -49,7 +49,7 @@ startedX=0
 if ! DISPLAY="${display}" xdpyinfo >/dev/null 2>&1; then
 	Xvfb "${display}" -screen 0 1280x720x24 -nolisten tcp >/dev/null 2>&1 &
 	startedX=$!
-	for _ in $(seq 1 40); do DISPLAY="${display}" xdpyinfo >/dev/null 2>&1 && break; sleep 0.1; done
+	for _ in {1..40}; do DISPLAY="${display}" xdpyinfo >/dev/null 2>&1 && break; sleep 0.1; done
 fi
 ##	Kill by pid, never by pattern, since a pattern here also matches this script.
 fCleanup() { [[ -n "${rdpPid:-}" ]] && kill "${rdpPid}" 2>/dev/null; ((startedX)) && kill "${startedX}" 2>/dev/null; true; }

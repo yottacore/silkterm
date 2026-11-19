@@ -100,7 +100,7 @@ fCrop() {
 ##	Collect the pack in a stable order - the filenames lead with their source, so
 ##	alphabetical keeps each collection together on the sheet and in the grid.
 declare -a images=()
-while IFS= read -r f; do images+=("${f}"); done < <(find "${src}" -maxdepth 1 -type f \
+mapfile -t images < <(find "${src}" -maxdepth 1 -type f \
 	\( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' \) | LC_ALL=C sort)
 declare -i count="${#images[@]}"
 ((count)) || fSkip "no images in ${src}"
@@ -168,7 +168,8 @@ if ((doSheet)); then
 	declare -i i=0
 	for f in "${images[@]}"; do
 		i+=1
-		fCrop "${f}" "${tmpDir}/$(printf '%03d' "${i}").jpg" "${tileW}" "${tileH}" 2
+		printf -v name '%03d' "${i}"
+		fCrop "${f}" "${tmpDir}/${name}.jpg" "${tileW}" "${tileH}" 2
 	done
 	fEcho "Rendered ${i} sheet tiles"
 
@@ -193,7 +194,8 @@ if ((doPage)); then
 	declare -i i=0
 	for f in "${images[@]}"; do
 		i+=1
-		fCrop "${f}" "${pageDir}/thumb/$(printf '%03d' "${i}").jpg" "${thumbW}" "${thumbH}" "${thumbQuality}"
+		printf -v name '%03d' "${i}"
+		fCrop "${f}" "${pageDir}/thumb/${name}.jpg" "${thumbW}" "${thumbH}" "${thumbQuality}"
 	done
 	fEcho "Rendered ${i} thumbnails ($(du -sh --apparent-size "${pageDir}/thumb" | cut -f1))"
 

@@ -291,7 +291,11 @@ esac; done
 
 cmd="${1:-}"; shift || true
 fLoadConf
-[[ -n "${only}" ]] && { printf '%s\n' "${hostNames[@]}" | grep -qx "${only}" || fFail "unknown host: ${only}" 2; }
+if [[ -n "${only}" ]]; then
+	knownHost=0
+	for h in "${hostNames[@]}"; do [[ "${h}" != "${only}" ]] || knownHost=1; done
+	((knownHost)) || fFail "unknown host: ${only}" 2
+fi
 
 case "${cmd}" in
 	hosts)

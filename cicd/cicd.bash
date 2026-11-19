@@ -273,7 +273,7 @@ if ((fullRun && quick)); then echo "${fullRunName} runs every check of the defau
 if ((long && quick)); then echo "--long runs everything, so not --quick" >&2; exit 2; fi
 if ((long && gate)); then echo "--backlog-run-quick runs the fast checks only, so not --long" >&2; exit 2; fi
 ## TSan and CodeQL take about half an hour each, so they wait for --long, which
-## keeps the default run to about an hour. --leakcheck takes CodeQL too, becuase
+## keeps the default run to about an hour. --leakcheck takes CodeQL too, because
 ## it's every leak check.
 if ((long || (leakAsked && leakcheck))); then codeql=1; fi
 ## Miri takes hours even for the tests it's fast on, so only --leakcheck and
@@ -638,7 +638,7 @@ fWriteSums(){
 	( cd "${artDir}"
 	  ## the signature covers the sums file, so it can never be inside it
 	  files=(); for x in "${EXE_NAME}-${ver}-"*; do [[ "${x}" == "${sums}" || "${x}" == *.sig || ! -f "${x}" ]] && continue; files+=("${x}"); done
-	  ((${#files[@]})) && sha256sum "${files[@]}" > "${sums}" )
+	  if ((${#files[@]})); then sha256sum "${files[@]}" > "${sums}"; fi )
 	local -a expects=()
 	mapfile -t expects < <(fReleaseExpects)
 	fWriteBuiltFrom "${artDir}" "${builtFromState:-}" "${expects[@]}"
@@ -1542,7 +1542,8 @@ fi
 if declare -p TOOL_PINS &>/dev/null; then
 	for pin in "${TOOL_PINS[@]}"; do
 		pinName="${pin%%|*}"; pinRest="${pin#*|}"; pinVer="${pinRest%%|*}"; pinCmd="${pinRest#*|}"
-		have="$(${pinCmd} 2>/dev/null | grep -oE '[0-9]+\.[0-9]+(\.[0-9]+)*' | head -1)" || have=""
+		have="$(${pinCmd} 2>/dev/null || true)"
+		if [[ "${have}" =~ [0-9]+\.[0-9]+(\.[0-9]+)* ]]; then have="${BASH_REMATCH[0]}"; else have=""; fi
 		if [[ -z "${have}" ]]; then
 			fEcho "WARNING: ${pinName} not found (pinned ${pinVer})"
 		elif [[ "${have}" != "${pinVer}" ]]; then
@@ -2088,7 +2089,7 @@ fHasLocalPaths(){ grep -a -q -F -e "${HOME}/" -e "${root}/" "${1}"; }
 fBuildPackages(){
 	((PACKAGE_ENABLE)) || { fEcho_Clean "packages disabled"; return 0; }
 	[[ -n "${artDir:-}" ]] || { fEcho "WARNING: packages skipped (no RELEASE_ARTIFACT_DIR)"; return 0; }
-	local pair osarch bin srcexe triple out nsi rc made=0
+	local pair osarch bin srcexe triple out nsi rc vernum made=0
 	local rpmver="${ver//-/\~}"   ## RPM versions forbid '-' (it splits version-release); 1.0.0-beta1 -> 1.0.0~beta1
 	for pair in "${builtArts[@]}"; do
 		osarch="${pair%%|*}"; bin="${pair#*|}"
@@ -2400,7 +2401,7 @@ fBuildTestRelease(){
 	if fStepOpen "Profiler"; then fJobs; fRunProfiler; fStepClose; fi
 
 	## --no-release: none of stage 5. The steps after it are off too, or find no
-	## binaries, and taht keeps them off an earlier run's.
+	## binaries, and that keeps them off an earlier run's.
 	if ((! noRelease)); then fBuildRelease; fi
 
 	if fStepOpen "Packages"; then fJobs; fBuildPackages; fStepClose; fi

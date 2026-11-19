@@ -183,7 +183,7 @@ fCheck "shrunk below it: held at the window's size" fHolds 600x310
 fCheck "and with no border" fNoBorder
 
 if ((failures)); then
-	sed 's/^/    /' "${said}" | grep -v '^    memdbg pane' | tail -n 30
+	sed 's/^/    /' "${said}" | grep -v '^    memdbg pane' | tail -n 30 || true
 	echo "${failures} failed"; exit 1
 fi
 echo "all passed"

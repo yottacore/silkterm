@@ -52,7 +52,7 @@ fMakeRun(){  ## fMakeRun <dir> <exit code>
 		echo "exit ${rc}"
 	} >"${dir}/run.bash"
 }
-fWait(){ for _ in {1..100}; do [[ -e "${1}" ]] && return 0; sleep 0.05; done; return 1; }
+fWait(){ local _; for _ in {1..100}; do [[ -e "${1}" ]] && return 0; sleep 0.05; done; return 1; }
 
 for rc in 0 1; do
 	dir="${work}/run${rc}"
@@ -60,7 +60,7 @@ for rc in 0 1; do
 	## The block writes no log inside the container, and this is a test of the log.
 	env -u SILK_CICD_IN_CONTAINER bash "${dir}/run.bash" >/dev/null 2>&1 &
 	pid=$!
-	fWait "${dir}/ready" || { echo "  FAIL the lifted run never started"; failures=$((failures + 1)); kill "${pid}"; continue; }
+	fWait "${dir}/ready" || { echo "  FAIL the lifted run never started"; failures=$((failures + 1)); kill "${pid}" 2>/dev/null || true; continue; }
 	sleep 0.2
 	mid="$("${lintGate}" --check --dir "${dir}/lint" 2>&1 || true)"
 	fCheck "exit ${rc}: a look during the run records nothing" bash -c '[[ "$1" != NEW* && "$1" != CLEAN* ]]' _ "${mid}"

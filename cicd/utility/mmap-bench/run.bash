@@ -64,7 +64,7 @@ fWriteScene(){
 }
 
 fXauthority(){
-	local -r current="/tmp/cicd-gui-headless-${USER}/Xauthority-98"
+	local -r current="/tmp/cicd-gui-headless-${USER:-$(id -un)}/Xauthority-98"
 	[[ -f "${current}" ]] && { printf '%s' "${current}"; return 0 ;}
 	printf '/tmp/rpd-gui-headless/Xauthority-98'
 }
