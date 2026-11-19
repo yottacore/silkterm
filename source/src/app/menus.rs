@@ -32,12 +32,21 @@ pub(crate) enum MenuAction {
 	ToggleCopyOutput,
 	NewTab,
 	// a row on the macOS menu bar only; elsewhere it is Ctrl+Shift+N alone
-	#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+	#[cfg_attr(
+		not(target_os = "macos"),
+		allow(dead_code, reason = "macOS menu bar only")
+	)]
 	NewWindow,
 	// the macOS Window menu's tab rows; elsewhere these are keys alone
-	#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+	#[cfg_attr(
+		not(target_os = "macos"),
+		allow(dead_code, reason = "macOS menu bar only")
+	)]
 	PrevTab,
-	#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+	#[cfg_attr(
+		not(target_os = "macos"),
+		allow(dead_code, reason = "macOS menu bar only")
+	)]
 	NextTab,
 	// New tab running the shell at this index in the stored list (config
 	// `shells.*`; see the Tabs menu's "New tab with shell").
@@ -753,12 +762,7 @@ impl ContextMenu {
 		}
 	}
 	/// This popup and every submenu standing open off it, outermost first.
-	pub(super) fn chain(&self) -> Vec<&ContextMenu> {
-		self.popups().collect()
-	}
-	// The same, without allocating anything, for the per-frame and per-move
-	// callers.
-	fn popups(&self) -> impl Iterator<Item = &ContextMenu> {
+	pub(super) fn popups(&self) -> impl Iterator<Item = &ContextMenu> {
 		std::iter::successors(Some(self), |at| at.sub.as_deref())
 	}
 	// The tip for row `row`, or None where the row doesn't have one.
@@ -1473,7 +1477,7 @@ mod tests {
 		assert!(!parent.hit_any(x, y), "nothing is open yet");
 		parent.sub = Some(Box::new(sub));
 		assert!(parent.hit_any(x, y));
-		assert_eq!(parent.chain().len(), 2);
+		assert_eq!(parent.popups().count(), 2);
 	}
 
 	// A dropdown resolves its own padding and separator height from DIP once, at

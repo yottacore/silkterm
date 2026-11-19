@@ -1152,16 +1152,13 @@ impl State {
 				return false;
 			}
 			let cur = self.tabs.cur();
-			if let Some(p) = cur.pane_at(x, y).and_then(|id| cur.panes.get(&id)) {
-				if input::wants_mouse(p.mode) {
-					if let Some((col, row)) = p.screen_cell_at(x, y, &self.text) {
-						if let Some(seq) =
-							input::mouse_report(p.mode, btn, false, false, col, row, self.mods)
-						{
-							p.write_input(seq);
-						}
-					}
-				}
+			if let Some(p) = cur.pane_at(x, y).and_then(|id| cur.panes.get(&id))
+				&& input::wants_mouse(p.mode)
+				&& let Some((col, row)) = p.screen_cell_at(x, y, &self.text)
+				&& let Some(seq) =
+					input::mouse_report(p.mode, btn, false, false, col, row, self.mods)
+			{
+				p.write_input(seq);
 			}
 			self.mouse_cell = None;
 			true
@@ -2036,27 +2033,25 @@ impl State {
 		// The focus ring only tells panes apart when there's more than one. With a
 		// single pane it would be a border around the whole content, where the
 		// background should run to the edge, so it's skipped.
-		if self.tabs.cur().panes.len() > 1 {
-			if let Some(p) = self.tabs.cur().panes.get(&self.tabs.cur().focused) {
-				instances.extend(focus_ring(p.full, self.text.scale, &cfg));
-			}
+		if self.tabs.cur().panes.len() > 1
+			&& let Some(p) = self.tabs.cur().panes.get(&self.tabs.cur().focused)
+		{
+			instances.extend(focus_ring(p.full, self.text.scale, &cfg));
 		}
 		// drop-target tint while drag-reordering a pane
-		if let Some(src) = self.dragging_pane {
-			if let Some(target_id) = self.tabs.cur().pane_at(self.mouse.0, self.mouse.1) {
-				if target_id != src {
-					if let Some(p) = self.tabs.cur().panes.get(&target_id) {
-						let mut color = config::srgb_f32(config::DROP_TARGET);
-						color[3] = 0.30;
-						instances.push(RectInstance {
-							pos: [p.full.x, p.full.y],
-							size: [p.full.w, p.full.h],
-							color,
-							..Default::default()
-						});
-					}
-				}
-			}
+		if let Some(src) = self.dragging_pane
+			&& let Some(target_id) = self.tabs.cur().pane_at(self.mouse.0, self.mouse.1)
+			&& target_id != src
+			&& let Some(p) = self.tabs.cur().panes.get(&target_id)
+		{
+			let mut color = config::srgb_f32(config::DROP_TARGET);
+			color[3] = 0.30;
+			instances.push(RectInstance {
+				pos: [p.full.x, p.full.y],
+				size: [p.full.w, p.full.h],
+				color,
+				..Default::default()
+			});
 		}
 		let ring_end = instances.len() as u32;
 
@@ -2123,10 +2118,10 @@ impl State {
 		let menubar_range = if self.menu_bar {
 			let start = instances.len() as u32;
 			instances.push(rect_inst(0.0, 0.0, win_w, menu_h, config::TAB_BAR_BG));
-			if let Some(idx) = self.bar_open {
-				if let Some(&(x, w)) = bar_layout.get(idx) {
-					instances.push(rect_inst(x, 0.0, w, menu_h, menu_hover_rgb));
-				}
+			if let Some(idx) = self.bar_open
+				&& let Some(&(x, w)) = bar_layout.get(idx)
+			{
+				instances.push(rect_inst(x, 0.0, w, menu_h, menu_hover_rgb));
 			}
 			// Alt held alone (no dropdown open): underline each title's
 			// accelerator letter, like the open-dropdown items do (press the
@@ -2246,51 +2241,45 @@ impl State {
 				// recessed well, an outline in the focus color, then the selection
 				// and the caret. All of it goes down before the text pass, so the
 				// label itself sits on top.
-				if let Some((edit_tab, sel_from, sel_to, caret)) = edit_marks {
-					if i == edit_tab {
-						let field = tab_edit_box(
-							x,
-							tab_w,
-							tab_bar_y,
-							tab_h,
-							self.text.ui_line_h,
-							self.text.scale,
-						);
-						instances.push(rect_inst(
-							field.x - cb_rule,
-							field.y - cb_rule,
-							field.w + 2.0 * cb_rule,
-							field.h + 2.0 * cb_rule,
-							cfg.highlight,
-						));
-						instances.push(rect_inst(
-							field.x,
-							field.y,
-							field.w,
-							field.h,
-							mix_rgb(color, [0x00, 0x00, 0x00], 0.45),
-						));
-						let text_x = field.x + edit_pad;
-						let (top, h) = (field.y + cb_rule, field.h - 2.0 * cb_rule);
-						let inside = |at: f32| (text_x + at).clamp(field.x, field.x + field.w);
-						if sel_to > sel_from {
-							let (from, to) = (inside(sel_from), inside(sel_to));
-							instances.push(rect_inst(
-								from,
-								top,
-								to - from,
-								h,
-								config::SELECTION_BG,
-							));
-						}
-						instances.push(rect_inst(
-							inside(caret).min(field.x + field.w - caret_w),
-							top,
-							caret_w,
-							h,
-							x_rgb,
-						));
+				if let Some((edit_tab, sel_from, sel_to, caret)) = edit_marks
+					&& i == edit_tab
+				{
+					let field = tab_edit_box(
+						x,
+						tab_w,
+						tab_bar_y,
+						tab_h,
+						self.text.ui_line_h,
+						self.text.scale,
+					);
+					instances.push(rect_inst(
+						field.x - cb_rule,
+						field.y - cb_rule,
+						field.w + 2.0 * cb_rule,
+						field.h + 2.0 * cb_rule,
+						cfg.highlight,
+					));
+					instances.push(rect_inst(
+						field.x,
+						field.y,
+						field.w,
+						field.h,
+						mix_rgb(color, [0x00, 0x00, 0x00], 0.45),
+					));
+					let text_x = field.x + edit_pad;
+					let (top, h) = (field.y + cb_rule, field.h - 2.0 * cb_rule);
+					let inside = |at: f32| (text_x + at).clamp(field.x, field.x + field.w);
+					if sel_to > sel_from {
+						let (from, to) = (inside(sel_from), inside(sel_to));
+						instances.push(rect_inst(from, top, to - from, h, config::SELECTION_BG));
 					}
+					instances.push(rect_inst(
+						inside(caret).min(field.x + field.w - caret_w),
+						top,
+						caret_w,
+						h,
+						x_rgb,
+					));
 				}
 				// close button box: a 1px outline, as a border rect and an inner fill.
 				// The active tab's box leans faintly toward a pastel red, so the
@@ -2325,7 +2314,7 @@ impl State {
 		// submenu is another popup in the same pass, drawn after its parent.
 		let menu_range = if let Some(root) = &self.menu {
 			let start = instances.len() as u32;
-			for menu in root.chain() {
+			for menu in root.popups() {
 				let popup_h = menu.height();
 				let border = self.text.dip(CHROME_HAIRLINE);
 				instances.push(rect_inst(
@@ -2384,22 +2373,22 @@ impl State {
 				let acc_x =
 					menu.x + self.text.dip(config::MENU_PAD_X) + self.text.dip(config::MENU_GUTTER);
 				for (i, entry) in menu.entries.iter().enumerate() {
-					if let Some((label, pos)) = entry_accel(entry) {
-						if let Some(c) = label[pos..].chars().next() {
-							let prefix_w = self.text.measure_ui_text(&label[..pos], &acc_attrs);
-							let mut buf = [0u8; 4];
-							let letter_w = self
-								.text
-								.measure_ui_text(c.encode_utf8(&mut buf), &acc_attrs);
-							let top = menu.row_top(i) + (menu.item_h - line_h) / 2.0;
-							instances.push(rect_inst(
-								acc_x + prefix_w,
-								top + line_h - self.text.dip(MENU_ACCEL_DROP),
-								letter_w,
-								acc_rule,
-								menu_fg_rgb,
-							));
-						}
+					if let Some((label, pos)) = entry_accel(entry)
+						&& let Some(c) = label[pos..].chars().next()
+					{
+						let prefix_w = self.text.measure_ui_text(&label[..pos], &acc_attrs);
+						let mut buf = [0u8; 4];
+						let letter_w = self
+							.text
+							.measure_ui_text(c.encode_utf8(&mut buf), &acc_attrs);
+						let top = menu.row_top(i) + (menu.item_h - line_h) / 2.0;
+						instances.push(rect_inst(
+							acc_x + prefix_w,
+							top + line_h - self.text.dip(MENU_ACCEL_DROP),
+							letter_w,
+							acc_rule,
+							menu_fg_rgb,
+						));
 					}
 				}
 			}
@@ -2868,7 +2857,7 @@ impl State {
 						line.hash(&mut hasher);
 					}
 				}
-				for menu in self.menu.iter().flat_map(ContextMenu::chain) {
+				for menu in self.menu.iter().flat_map(ContextMenu::popups) {
 					menu.x.to_bits().hash(&mut hasher);
 					menu.y.to_bits().hash(&mut hasher);
 					menu.w.to_bits().hash(&mut hasher);
@@ -2941,7 +2930,7 @@ impl State {
 						tip_specs.push((left, top, buf));
 					}
 				}
-				for menu in self.menu.iter().flat_map(ContextMenu::chain) {
+				for menu in self.menu.iter().flat_map(ContextMenu::popups) {
 					for (i, entry) in menu.entries.iter().enumerate() {
 						let Some(label) = entry_label(entry) else {
 							continue;
@@ -3699,7 +3688,7 @@ fn preset_wm_state(_window: &Window, _states: &[&[u8]]) {}
 const SAFE_MAX_DIM: u32 = 8192;
 
 /// The window/taskbar icon, decoded from the bundled logo (downscaled so the
-/// _`NET_WM_ICON` payload stays small). The logo is wider than it is tall and every
+/// `_NET_WM_ICON` payload stays small). The logo is wider than it is tall and every
 /// place an icon is shown reserves a square, so it is stretched to fill one
 /// rather than left floating in a band of nothing. None if it can't be decoded.
 pub fn load_icon() -> Option<winit::window::Icon> {
@@ -4590,13 +4579,13 @@ impl ApplicationHandler<UserEvent> for App {
 				state.update_link_hover(Some((x, y)));
 				// hovering a different top-level title with a bar menu open
 				// switches to it (standard menu-bar behavior)
-				if state.bar_open.is_some() && y < state.menu_bar_h() {
-					if let Some(i) = state.menubar_hit(x) {
-						if state.bar_open != Some(i) {
-							state.open_bar_menu(i);
-							state.dirty = true;
-						}
-					}
+				if state.bar_open.is_some()
+					&& y < state.menu_bar_h()
+					&& let Some(i) = state.menubar_hit(x)
+					&& state.bar_open != Some(i)
+				{
+					state.open_bar_menu(i);
+					state.dirty = true;
 				}
 				if state.menu_hover(x, y) {
 					state.dirty = true;
@@ -5028,6 +5017,7 @@ impl ApplicationHandler<UserEvent> for App {
 									.get(&id)
 									.is_some_and(|p| p.copy_select)
 							{
+								// the clipboard and the primary each keep their own
 								state.clipboard.set_clipboard(sel_text.clone());
 							}
 							state.clipboard.set_primary(sel_text);
@@ -5194,16 +5184,16 @@ impl ApplicationHandler<UserEvent> for App {
 							let enter = (!left).then(|| state.submenu_row()).flatten();
 							if let Some(row) = enter {
 								state.menu_activate(row, &self.proxy);
-							} else if !(left && state.close_submenu()) {
-								if let Some(open_idx) = state.bar_open {
-									let n = MENU_BAR.len();
-									let next = if left {
-										(open_idx + n - 1) % n
-									} else {
-										(open_idx + 1) % n
-									};
-									state.open_bar_menu(next);
-								}
+							} else if !(left && state.close_submenu())
+								&& let Some(open_idx) = state.bar_open
+							{
+								let n = MENU_BAR.len();
+								let next = if left {
+									(open_idx + n - 1) % n
+								} else {
+									(open_idx + 1) % n
+								};
+								state.open_bar_menu(next);
 							}
 						}
 						Key::Named(NamedKey::Enter) => {
@@ -5216,15 +5206,11 @@ impl ApplicationHandler<UserEvent> for App {
 						Key::Character(typed) => {
 							let ch = typed.chars().next().map(|c| c.to_ascii_lowercase());
 							let hit = ch.and_then(|ch| {
-								state.menu.as_ref().and_then(|menu| {
-									let chain = menu.chain();
-									chain[chain.len() - 1].entries.iter().position(|entry| {
-										entry_accel(entry).is_some_and(|(label, pos)| {
-											label[pos..]
-												.chars()
-												.next()
-												.map(|c| c.to_ascii_lowercase()) == Some(ch)
-										})
+								let inner = state.menu.as_ref()?.popups().last()?;
+								inner.entries.iter().position(|entry| {
+									entry_accel(entry).is_some_and(|(label, pos)| {
+										label[pos..].chars().next().map(|c| c.to_ascii_lowercase())
+											== Some(ch)
 									})
 								})
 							});
@@ -5307,10 +5293,10 @@ impl ApplicationHandler<UserEvent> for App {
 					}
 					Some(Hotkey::Paste) => {
 						let focused = state.tabs.cur().focused;
-						if let Some(text) = state.clipboard.get_clipboard() {
-							if let Some(p) = state.tabs.cur_mut().panes.get_mut(&focused) {
-								p.paste(&text);
-							}
+						if let Some(text) = state.clipboard.get_clipboard()
+							&& let Some(p) = state.tabs.cur_mut().panes.get_mut(&focused)
+						{
+							p.paste(&text);
 						}
 						state.dirty = true;
 						return;
@@ -5363,15 +5349,15 @@ impl ApplicationHandler<UserEvent> for App {
 					// copy-output: Enter at the shell prompt may launch a command;
 					// arm the capture so its output is copied once the pane settles.
 					let is_enter = matches!(key.logical_key, Key::Named(NamedKey::Enter));
-					if let Some(p) = state.tabs.cur_mut().panes.get_mut(&focused) {
-						if !p.read_only {
-							p.scroll.jump_bottom();
-							p.write_input(bytes);
-							crate::perf::typed(key_at, focused);
-							p.note_typed();
-							if is_enter && p.copy_output {
-								p.arm_capture();
-							}
+					if let Some(p) = state.tabs.cur_mut().panes.get_mut(&focused)
+						&& !p.read_only
+					{
+						p.scroll.jump_bottom();
+						p.write_input(bytes);
+						crate::perf::typed(key_at, focused);
+						p.note_typed();
+						if is_enter && p.copy_output {
+							p.arm_capture();
 						}
 					}
 					state.dirty = true;
@@ -5466,18 +5452,18 @@ impl ApplicationHandler<UserEvent> for App {
 		// on screen. A PATH scan stats every directory the user has on it and the
 		// Windows side reads the registry, so it runs on its own thread and comes
 		// back as UserEvent::ShellsReady.
-		if let Some(state) = self.state.as_mut() {
-			if state.shell_scan_at.is_some_and(|at| Instant::now() >= at) {
-				state.shell_scan_at = None;
-				crate::shells::spawn(&self.proxy);
-			}
+		if let Some(state) = self.state.as_mut()
+			&& state.shell_scan_at.is_some_and(|at| Instant::now() >= at)
+		{
+			state.shell_scan_at = None;
+			crate::shells::spawn(&self.proxy);
 		}
 
 		// Raise a rested pointer's tab tip, and keep an open one's clock ticking.
-		if let Some(state) = self.state.as_mut() {
-			if state.update_tips() {
-				state.dirty = true;
-			}
+		if let Some(state) = self.state.as_mut()
+			&& state.update_tips()
+		{
+			state.dirty = true;
 		}
 
 		// Open the About window if asked for. Window creation needs the event
@@ -5501,18 +5487,17 @@ impl ApplicationHandler<UserEvent> for App {
 				.is_some_and(|s| s.pending_settings.is_some()))
 		.then(|| self.gpu_warm.get())
 		.flatten();
-		if open_about {
-			if let Some(info) = self.state.as_ref().map(|state| state.adapter_info.clone()) {
-				match crate::dialog::DialogWin::new_about(event_loop, &info, parent, warm.as_ref())
-				{
-					Ok(d) => {
-						self.dialog = Some(d);
-						self.center_dialog();
-						self.reveal_dialog();
-						self.dialog_dirty = true;
-					}
-					Err(e) => eprintln!("{}: About window failed: {e}", config::APP_NAME),
+		if open_about
+			&& let Some(info) = self.state.as_ref().map(|state| state.adapter_info.clone())
+		{
+			match crate::dialog::DialogWin::new_about(event_loop, &info, parent, warm.as_ref()) {
+				Ok(d) => {
+					self.dialog = Some(d);
+					self.center_dialog();
+					self.reveal_dialog();
+					self.dialog_dirty = true;
 				}
+				Err(e) => eprintln!("{}: About window failed: {e}", config::APP_NAME),
 			}
 		}
 		let settings_base = self.state.as_mut().and_then(|state| {
@@ -5581,18 +5566,18 @@ impl ApplicationHandler<UserEvent> for App {
 		// A save that couldn't be written. Asked for from Settings, it was
 		// taken there already (apply_dialog_settings); anything here is one of
 		// the saves nobody asked for.
-		if let Some(refusal) = config::take_refusal() {
-			if notice_due(&mut self.told, &refusal.path, false) {
-				self.notice_owed = Some(refusal);
-			}
+		if let Some(refusal) = config::take_refusal()
+			&& notice_due(&mut self.told, &refusal.path, false)
+		{
+			self.notice_owed = Some(refusal);
 		}
 		// A write converted the file and lost settings doing it: the launch's, or a
 		// save that converted a file the launch left alone. Said once the terminal
 		// is on screen, since nothing may hold up the first frame.
-		if self.state.as_ref().is_some_and(|state| state.revealed) {
-			if let Some(loss) = config::take_conversion_loss() {
-				self.loss_owed = Some(loss);
-			}
+		if self.state.as_ref().is_some_and(|state| state.revealed)
+			&& let Some(loss) = config::take_conversion_loss()
+		{
+			self.loss_owed = Some(loss);
 		}
 		if self.notice_owed.is_some() || self.loss_owed.is_some() {
 			self.show_notice(event_loop);
@@ -5966,10 +5951,10 @@ impl ApplicationHandler<UserEvent> for App {
 		// pending, make sure the loop wakes to write it even when idle.
 		state.flush_window_size(false);
 		// Settings shows the automatic size, which is this one
-		if let Some(dialog) = self.dialog.as_mut() {
-			if dialog.follow_window(state.watch.key.as_deref(), &config::settings()) {
-				self.dialog_dirty = true;
-			}
+		if let Some(dialog) = self.dialog.as_mut()
+			&& dialog.follow_window(state.watch.key.as_deref(), &config::settings())
+		{
+			self.dialog_dirty = true;
 		}
 		let flow = if let (ControlFlow::Wait, Some(_)) = (flow, state.pending_size) {
 			let due = state.pending_size_at + SIZE_SAVE_DEBOUNCE;

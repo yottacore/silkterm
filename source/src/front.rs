@@ -550,8 +550,8 @@ fn shown_by(out: &str, client: u32) -> Option<Shown> {
 pub struct Tmux {}
 
 #[cfg(not(any(target_os = "linux", target_os = "macos")))]
-#[allow(clippy::unused_self)]
-#[cfg_attr(windows, allow(dead_code))]
+#[allow(clippy::unused_self, reason = "the same calls as the real one")]
+#[cfg_attr(windows, allow(dead_code, reason = "Windows has no tmux"))]
 impl Tmux {
 	pub fn stir(&self) {}
 
