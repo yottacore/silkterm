@@ -55,15 +55,15 @@ param(
 
 ##	===================  Per-project settings - edit only these  ==================
 
-$installerVersion = '1.3.1'
+$installerVersion = '1.3.2'
 $ownerRepo        = 'yottacore/silkterm'
 $appName          = 'SilkTerm'
 $exeName          = 'silkterm'
 $appComment       = 'Smooth-scrolling GPU terminal with split panes'
 
 ##	Release asset names. {exe} {version} {os} {arch} {ext} are substituted; {ext}
-##	is ".exe" on Windows and empty elsewhere. {os} is windows/linux/macos, {arch}
-##	is x86_64/arm64 - match whatever the release publishes.
+##	is ".exe" on Windows and empty elsewhere. {os} is windows/linux/macos/freebsd,
+##	{arch} is x86_64/arm64 - match whatever the release publishes.
 $assetPattern     = '{exe}-{version}-{os}-{arch}{ext}'
 $sumsPattern      = '{exe}-{version}-sha256sums.txt'
 
@@ -495,7 +495,16 @@ function fMain {
 		$osToken = 'macos'
 		$rawArch = (& uname -m)
 	} else {
-		$osToken = 'linux'
+		##	pwsh also runs on the BSDs, where $IsLinux is false too.
+		$osName = "$(& uname -s)"
+		switch ($osName.ToLower()) {
+			'linux'     { $osToken = 'linux' }
+			'freebsd'   { $osToken = 'freebsd' }
+			'openbsd'   { $osToken = 'openbsd' }
+			'netbsd'    { $osToken = 'netbsd' }
+			'dragonfly' { $osToken = 'dragonfly' }
+			default     { $osProblem = "unrecognized operating system: $osName" }
+		}
 		$rawArch = (& uname -m)
 	}
 	##	Every `break` is needed, because a PowerShell switch runs every branch
@@ -947,4 +956,5 @@ if ($state.failed -and $runningAsScriptFile) { exit 1 }
 ##		  after the result, as in install.bash.
 ##		- 20261118 JC: An upgrade leaves an existing shortcut or launcher alone
 ##		  unless it names some other program.
+##		- 20261119 JC: Detects the BSDs, which it used to take for Linux.
 

@@ -29,7 +29,7 @@ On macOS, SilkTerm is a Mac app sold through an app store. A Microsoft Store ver
 
 Prefer a plain binary? These one-liners work out your operating system and CPU on their own, download the release built for it, check its sha256, and install it. Once a release is signed, the checksums file has to have a good signature from the release key or nothing is installed. Each prints what it's about to do and asks before touching anything, and does nothing at all when you're already up to date. The defaults suit most people. Add `--help` for the handful of things you can change.
 
-Bash, written for 3.2 or newer and tested on 5 (Linux, macOS, WSL):
+Bash, written for 3.2 or newer and tested on 3.2 and 5 (Linux, macOS, WSL):
 
 ~~~bash
 bash <(curl -fsSL https://raw.githubusercontent.com/yottacore/silkterm/main/install.bash)
