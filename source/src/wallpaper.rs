@@ -775,7 +775,7 @@ fn prepare_keeping(
 	let blur = held_blur(blur, scale);
 	if blur > 0.0 || settings.wallpaper_contrast_mask || held != sizing.full {
 		// The float copy is 16 bytes a pixel and the blur is the slow part,
-		// so this is where a superseded request costs the most to carry on.
+		// so this is where a superseded request costs the most to keep going.
 		if stale() {
 			return None;
 		}

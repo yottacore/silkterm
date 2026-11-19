@@ -625,7 +625,6 @@ impl Minimap {
 	/// the newest output the eased view still sits, in whole lines, which is
 	/// where the map has to stop, and `draining` is whether that lag is still
 	/// falling.
-	#[allow(clippy::too_many_arguments)]
 	pub fn update(
 		&mut self,
 		grid: &Grid<Cell>,
@@ -873,14 +872,16 @@ impl Minimap {
 	) -> Plan {
 		self.fit_spans();
 		let mut readable = std::mem::take(&mut self.readable);
-		let mut plan = Plan {
-			clear: std::mem::take(&mut self.owed_clear),
-			front: std::mem::take(&mut self.owed_front),
-			..Default::default()
-		};
 		let mut left = self.budget();
 		let fresh = std::mem::take(&mut self.fresh);
 		let step = fresh.div_ceil(left).max(1);
+		let mut plan = Plan {
+			clear: std::mem::take(&mut self.owed_clear),
+			front: std::mem::take(&mut self.owed_front),
+			groups: Vec::with_capacity(fresh.div_ceil(step)),
+			screen: Vec::with_capacity(self.lines),
+			..Default::default()
+		};
 		let mut k = fresh;
 		while k > 0 {
 			// lines k (the oldest) down to k - group + 1, drawn from the newest
@@ -1523,7 +1524,6 @@ impl MapRenderer {
 
 	/// Upload a pane's column image and place its quad. Must run before the pass
 	/// that draws it.
-	#[allow(clippy::too_many_arguments)]
 	pub fn prepare(
 		&mut self,
 		device: &wgpu::Device,
@@ -2519,7 +2519,7 @@ mod tests {
 	// At 100,000 lines one compose held the terminal for 150 ms, reading every
 	// line of a rebuilt or flooded scrollback and composing all of it. Here a
 	// compose reads no more than its budget, and a whole image goes to a
-	// thread of its own while the builds carry on.
+	// thread of its own while the builds go on.
 	// Test ID: dd8fq
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]

@@ -278,7 +278,7 @@ const SENTINEL_ROW: u32 = SENTINEL_PX * 4; // Rgba8Unorm; multiple of 256 (COPY_
 const SENTINEL_BYTES: usize = (SENTINEL_ROW * SENTINEL_PX) as usize;
 
 // Odd multiplier = a byte permutation tiled over the texture; neither zeroed
-// nor noise VRAM plausibly reproduces 16KB of it.
+// nor noise VRAM plausibly reproduces 256KB of it.
 fn sentinel_pattern() -> Vec<u8> {
 	(0..SENTINEL_BYTES).map(sentinel_byte).collect()
 }

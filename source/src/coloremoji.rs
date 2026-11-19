@@ -272,28 +272,37 @@ impl ColorGlyphs {
 	}
 }
 
-/// Families that can draw `ch` with no color in it, monospaced ones first.
-/// cosmic-text picks a fallback face on its own and will take an emoji face for
-/// a character Unicode presents as text, which then paints in the font's own
-/// colors and ignores the color the cell was set in.
-pub fn text_families(db: &fontdb::Database, ch: char) -> Vec<String> {
-	let mut found: Vec<(bool, String)> = db
-		.faces()
-		.filter_map(|info| {
-			let plain = db.with_face_data(info.id, |data, index| {
-				FontRef::from_index(data, index).is_ok_and(|font| {
-					font.charmap()
-						.map(ch)
-						.is_some_and(|gid| font.color_glyphs().get(gid).is_none())
-				})
-			})?;
-			let name = info.families.first()?.0.clone();
-			plain.then_some((info.monospaced, name))
-		})
-		.collect();
-	found.sort_by_key(|(mono, _)| !mono);
-	found.dedup_by(|a, b| a.1 == b.1);
-	found.into_iter().map(|(_, name)| name).collect()
+/// The first family that can draw `ch` with no color in it, a monospaced one
+/// ahead of the rest. cosmic-text picks a fallback face on its own and will take
+/// an emoji face for a character Unicode presents as text, which then paints in
+/// the font's own colors and ignores the color the cell was set in.
+pub fn text_families(db: &fontdb::Database, ch: char) -> Option<String> {
+	// The first monospaced face ends the walk, since the frame build waits on
+	// it and every face left would be opened for nothing.
+	let mut first: Option<String> = None;
+	for info in db.faces() {
+		if !info.monospaced && first.is_some() {
+			continue;
+		}
+		let plain = db.with_face_data(info.id, |data, index| {
+			FontRef::from_index(data, index).is_ok_and(|font| {
+				font.charmap()
+					.map(ch)
+					.is_some_and(|gid| font.color_glyphs().get(gid).is_none())
+			})
+		});
+		if plain != Some(true) {
+			continue;
+		}
+		let Some((name, _)) = info.families.first() else {
+			continue;
+		};
+		if info.monospaced {
+			return Some(name.clone());
+		}
+		first = Some(name.clone());
+	}
+	first
 }
 
 // Faces with a COLR table. fontdb memory-maps its sources, so this touches

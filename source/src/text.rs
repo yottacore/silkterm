@@ -380,11 +380,11 @@ fn resolve_ui_family(fs: &FontSystem) -> Option<String> {
 	];
 	crate::sysfont::interface()
 		.family
-		.clone()
+		.as_deref()
 		.into_iter()
-		.chain(crate::sysfont::sans_serif().map(str::to_string))
-		.chain(curated.iter().map(std::string::ToString::to_string))
-		.find_map(|fam| installed(&fam))
+		.chain(crate::sysfont::sans_serif())
+		.chain(curated)
+		.find_map(installed)
 }
 
 // The family search order, in full, whether or not any of it is installed. Same
@@ -424,7 +424,6 @@ fn resolve_mono_family(fs: &FontSystem) -> Option<String> {
 
 // The same for a family list other than the one in use.
 fn resolve_mono_family_in(fs: &FontSystem, family: &str) -> Option<String> {
-	use glyphon::cosmic_text::fontdb;
 	let db = fs.db();
 
 	let installed = |fam: &str| {
@@ -917,10 +916,7 @@ impl TextCtx {
 		if let Some(hit) = self.text_families.get(&ch) {
 			return *hit;
 		}
-		let found = crate::coloremoji::text_families(self.font_system.db(), ch)
-			.into_iter()
-			.next()
-			.map(intern);
+		let found = crate::coloremoji::text_families(self.font_system.db(), ch).map(intern);
 		self.text_families.insert(ch, found);
 		found
 	}
@@ -1821,7 +1817,7 @@ mod tests {
 			.collect();
 		assert!(
 			shipped.contains(&mono_bold_weight().0),
-			"bold weight {} not shipped by {want:?} (has {shipped:?})",
+			"bold weight {} not among {want:?}'s faces (has {shipped:?})",
 			mono_bold_weight().0
 		);
 		let mut b = Buffer::new(&mut fs, Metrics::new(16.0, 20.0));
