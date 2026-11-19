@@ -254,18 +254,13 @@ VERSION_MANIFEST="source/Cargo.toml"            # the single version source
 PACKAGE_ENABLE=1
 NSIS_TEMPLATE="cicd/packaging/windows/installer.nsi.in"
 
-## Stage 6, after the packages: the macOS build and the Microsoft Store bundle.
-## Both need signing material that stays out of this repo, so their scripts are
-## in a private one. They run only when that repo is checked out at this path and
-## has its runner, which takes --public <this repo>, does its own waiting on the
-## Mac and the Windows box, and exits 0 when it built or skipped and 1 when a job
-## failed. Its output stays in the private repo. Empty, or --no-private, to skip.
-PRIVATE_RUNNER="${SILK_PRIVATE_RUNNER-$(cd "${root}/../.." && pwd)/silkterm-private/repo/cicd/run.bash}"
-## The private repo's own script tests, beside its runner. They run against
-## stand-ins, so they need no box and run even with --no-private. Empty when
-## that repo isn't checked out here.
-PRIVATE_TESTS="${PRIVATE_RUNNER:+${PRIVATE_RUNNER%/cicd/*}/cicd/tests}"
-[[ -d "${PRIVATE_TESTS}" ]] || PRIVATE_TESTS=""
+## Stage 6, after the packages, is off unless --with-private asks for it. It runs
+## the runner of a private repo, which takes --public <this repo>, does its own
+## waiting on its boxes, and exits 0 when it built or skipped and 1 when a job
+## failed. --with-private looks for it beside this repo, under PRIVATE_DIR, unless
+## SILK_PRIVATE_RUNNER names it. A plain run never looks.
+PRIVATE_DIR="silkterm-private"
+PRIVATE_RUNNER="${SILK_PRIVATE_RUNNER:-}"
 
 ## Stage 4: profiler (non-gating artifact, not a pass/fail test). Builds an
 ## optimized+symbols binary (cargo --profile $PROFILE_PROFILE --features
