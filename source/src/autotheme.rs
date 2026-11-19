@@ -14,7 +14,7 @@
 //!   built-in theme's cursor sits against its foreground.
 //!
 //! `summarize` runs on the wallpaper worker, where the prepared pixels are, and
-//! reduces an image to 6 numbers. `derive` is pure and runs wherever the live
+//! reduces an image to a short summary. `derive` is pure and runs wherever the live
 //! settings are, so a theme change re-colors the text with no second decode.
 //!
 //! This can't guarantee the floor. Over the bundled pack of 104 images, one
@@ -756,7 +756,7 @@ mod tests {
 		assert_eq!((s.fg, s.cursor), (SILK_FG, SILK_CURSOR));
 	}
 
-	// A summary is 6 numbers so that a theme change can re-derive with no
+	// A summary is small so that a theme change can re-derive with no
 	// decode. That only works if the background is read live.
 	// Test ID: dcwvy
 	#[test]

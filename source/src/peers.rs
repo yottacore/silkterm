@@ -6,7 +6,7 @@
 //! `silkterm-<key>` in the runtime folder. Each process leaves an empty file
 //! there named by its pid, and a save holds the `lock` file there while it
 //! reads and writes. A window on another file has another key and never hears
-//! about it. See design.md, "Windows find each other".
+//! about it. See design.md, "Settings across windows".
 
 use std::cell::Cell;
 use std::fs::{File, OpenOptions, TryLockError};

@@ -22,6 +22,7 @@
 	- [Rows under a checkbox](#rows-under-a-checkbox)
 	- [Profiles and themes](#profiles-and-themes)
 	- [Choose automatically, Remote and the step-down](#choose-automatically-remote-and-the-step-down)
+	- [Text colors from wallpaper](#text-colors-from-wallpaper)
 	- [A rule with no switch](#a-rule-with-no-switch)
 	- [The reset arrow](#the-reset-arrow)
 	- [Tips](#tips)
@@ -106,7 +107,7 @@ A switch is a checkbox that makes the settings under it automatic, such as "Use 
 
 - When the rule doesn't have an answer, such as when there isn't a desktop font, the setting uses its own value as if the switch were off.
 
-The switches are "Use system font" over Family, "Use system font size" over Size, "Remember last size" over Columns and Rows, and Choose automatically over Profile.
+The switches are "Use system font" over Family, "Use system font size" over Size, "Remember last size" over Columns and Rows, "Text colors from wallpaper" over Foreground and Cursor, and Choose automatically over Profile.
 
 ### Rows under a checkbox
 
@@ -142,6 +143,16 @@ A dropdown picks a preset, or Custom. The performance profile and the theme both
 	- It lasts until restart and doesn't store anything.
 	- The `*` changes of the stored pick are ignored while it's on, but they're kept.
 	- Changing one of its rows ends it. The change goes on the stored pick as a `*` change.
+
+### Text colors from wallpaper
+
+Text colors from wallpaper is the switch for Foreground and Cursor, and it makes the wallpaper their source.
+
+- When it's on, the 2 colors come from the wallpaper rather than the theme.
+
+- Changing either color turns it off.
+
+- With no wallpaper, the theme's colors are used.
 
 ### A rule with no switch
 
