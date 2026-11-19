@@ -286,7 +286,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 - Installer signature test errors on a bad signature instead of refusing it
 	- ID: 2026111810462273
 	- Type: Bug
-	- Status: Waiting on automated testing
+	- Status: Closed
 	- Severity: Low
 	- Opened: 20261118-104622
 	- Opened by: CC
@@ -297,7 +297,6 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Reproduced: Yes. win-guard-check.bash on b29w, 20261118, against round nov18.
 	- Possible cause: `$outputStarted` has no script-level default, so any caller outside fMain trips strict mode.
 	- Origin: d9d7b5b2, 20261111, which made fFail read fMain's `$outputStarted` by dynamic scope. Not from round nov18, which doesn't touch those lines. Confirmed.
-	- Needs external testing: verify-sign.ps1 (dcrgs) on b29w under pwsh 7, through `cicd-win.ps1`.
 	- Actual cause: fFail read `$outputStarted` as a plain variable, and a caller outside fMain never sets it, so strict mode refused the read.
 	- Actual fix: fFail looks the variable up with Get-Variable, which still sees fMain's by dynamic scope and treats a missing one as not started.
 	- Swept: `$outputStarted` is read only in fFail; fMain is the only place that sets it.
@@ -305,6 +304,10 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Test case: dcrgs `cicd/tests/release/verify-sign.ps1` (refuses a changed checksums file, a missing signature and another key's signature).
 	- Branch: nov18b-2026111810462273
 	- Commit: f255eab7
+	- Verified: 20261118: dcrgs passes on b29w under pwsh 7 (4 checks ok) from the nov18b bundle at ff14fc8b, run directly rather than through cicd-win.ps1.
+	- Acceptance signoff: Self-closed: dcrgs passed on b29w.
+	- Closed: 20261118-162700
+	- Closed reason: Done
 
 - macOS: a character typed with Option reaches the shell with ESC in front of it
 	- ID: 2026111713374903
