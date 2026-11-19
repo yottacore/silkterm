@@ -116,9 +116,10 @@ fParse(){  ## fParse <args...>: prints what the parser leaves for the run inside
 	echo "container=${container} inner=${innerArgs[*]:-}"
 }
 fCheck "--container is an option, and the stage options go in with it" \
-	test "$(fParse --container --quick --no-arm --no-fuzz -y --no-sync --no-dogfood --no-publish --no-private -m msg --demo --no-demo)" = "container=1 inner=--quick --no-arm --no-fuzz"
-fCheck "the host options stay out" test "$(fParse -y --no-sync --no-dogfood --no-publish --no-private --demo -m x)" = "container=0 inner="
+	test "$(fParse --container --quick --no-arm --no-fuzz -y --no-sync --no-dogfood --no-publish -m msg --demo --no-demo)" = "container=1 inner=--quick --no-arm --no-fuzz"
+fCheck "the host options stay out" test "$(fParse -y --no-sync --no-dogfood --no-publish --demo -m x)" = "container=0 inner="
 fCheck "and so does --container itself" test "$(fParse --container)" = "container=1 inner="
+fCheck "--with-private goes in, for the private tests" test "$(fParse --container --with-private)" = "container=1 inner=--with-private"
 fCheck "--no-asan is a stage option" test "$(fParse --container --no-asan)" = "container=1 inner=--no-asan"
 fCheck "--no-tsan is too" test "$(fParse --container --no-tsan)" = "container=1 inner=--no-tsan"
 fCheck "and --no-miri" test "$(fParse --container --no-miri)" = "container=1 inner=--no-miri"
@@ -216,7 +217,7 @@ fRun(){  ## fRun <log name> <options...>: the engine from the copy; sets rc and 
 }
 ## Where the runs put their folders, with HOST_TEMP unset.
 runBase="$(realpath -m "${TMPDIR}")/silkterm"; runRe='[0-9]{8}-[0-9]{6}_[0-9]{3}'
-fRun full.log --container -y --no-sync --no-dogfood --no-publish --no-private --quick --no-fuzz
+fRun full.log --container -y --no-sync --no-dogfood --no-publish --quick --no-fuzz
 fCheck "a run with --container passes with the stand-in" test "${rc}" -eq 0
 runLine="$(grep '^run ' "${work}/full.log" || true)"
 fCheck "it started one container" test "$(grep -c '^run ' "${work}/full.log")" -eq 1
@@ -244,27 +245,26 @@ fCheck "stamped with the zig that filled it" bash -c '[[ "$1" == *"zig version >
 fCheck "the target dir for both sides" bash -c '[[ "$1" == *" CARGO_TARGET_DIR=$2/target/container "* ]]' _ "${runLine}" "${repo}"
 fCheck "the build number pinned here" bash -c '[[ "$1" == *" SILK_BUILD_MINUTES="[0-9]* ]]' _ "${runLine}"
 fCheck "the engine inside gets the stage options and the host stages off" \
-	bash -c '[[ "$1" == *" $2/cicd/cicd.bash -y --no-sync --no-dogfood --no-publish --no-private --no-demo --quick --no-fuzz" ]]' _ "${runLine}" "${repo}"
+	bash -c '[[ "$1" == *" $2/cicd/cicd.bash -y --no-sync --no-dogfood --no-publish --no-demo --quick --no-fuzz" ]]' _ "${runLine}" "${repo}"
 ## The demo is on by default, so a run inside left to itself records it there too.
 fCheck "the demo among them, though nothing here asked for it off" bash -c '[[ "$1" == *"/cicd/cicd.bash "*" --no-demo"* ]]' _ "${runLine}"
 fCheck "and nothing else of this box" test "$(grep -o ' -v ' <<<"${runLine}" | wc -l)" -eq 4
 ## Names stamped inside, such as test folders and flamegraphs, sort with the ones
 ## made here.
-(export TZ=Pacific/Chatham; fRun tz.log --container -y --no-sync --no-dogfood --no-publish --no-private --quick --no-fuzz)
+(export TZ=Pacific/Chatham; fRun tz.log --container -y --no-sync --no-dogfood --no-publish --quick --no-fuzz)
 fCheck "this box's time zone goes in" grep -q -- ' -e TZ=Pacific/Chatham ' "${work}/tz.log"
-## The private repo goes in read only, for the test ID check and its own tests,
-## and its runner runs only here.
+## With --with-private, the private repo goes in read only, for the test ID check
+## and its own tests, and its runner runs only here.
 priv="${work}/private/repo"; mkdir -p "${priv}/cicd/tests/hosts"
-(export SILK_PRIVATE_RUNNER="${priv}/cicd/run.bash"; fRun priv.log --container -y --no-sync --no-dogfood --no-publish --quick --no-fuzz)
+(export SILK_PRIVATE_RUNNER="${priv}/cicd/run.bash"; fRun priv.log --container --with-private -y --no-sync --no-dogfood --no-publish --quick --no-fuzz)
 privLine="$(grep '^run ' "${work}/priv.log" || true)"
 fCheck "the private repo goes in read only, since its tests read its scripts" bash -c '[[ "$1" == *" -v $2:$2:ro "* ]]' _ "${privLine}" "${priv}"
 fCheck "with the path the test ID check finds them by" bash -c '[[ "$1" == *" -e SILK_PRIVATE_RUNNER=$2 "* ]]' _ "${privLine}" "${priv}/cicd/run.bash"
 fCheck "and nothing else of it" test "$(grep -o ' -v ' <<<"${privLine}" | wc -l)" -eq 5
-(export SILK_PRIVATE_RUNNER="${priv}/cicd/run.bash"; fRun privoff.log --container -y --no-sync --no-dogfood --no-publish --no-private --quick --no-fuzz)
-## Its tests need no box, so they go in under --no-private too. Only its runner
-## stays off.
+(export SILK_PRIVATE_RUNNER="${priv}/cicd/run.bash"; fRun privoff.log --container -y --no-sync --no-dogfood --no-publish --quick --no-fuzz)
+## Without the flag it stays out, even with its runner named.
 privOffLine="$(grep '^run ' "${work}/privoff.log" || true)"
-fCheck "--no-private still hands in its tests" bash -c '[[ "$1" == *" -v $2:$2:ro "* ]]' _ "${privOffLine}" "${priv}"
+fCheck "a plain run leaves the private repo out" fNot bash -c '[[ "$1" == *" -v $2:$2:ro "* ]]' _ "${privOffLine}" "${priv}"
 fCheck "the image was there, so nothing was built" fNot grep -q '^build ' "${work}/full.log"
 fCheck "the run here went on to the end" grep -q 'CI/CD: done' <<<"${out}"
 fCheck "with the container's stages marked done" grep -q 'OK: stages 1-6 in the container' <<<"${out}"
@@ -286,7 +286,7 @@ fCheck "the render node test the same, and does not run" bash -c 'grep -qx "    
 inside="$(fRunTest_MaySkip(){ echo "ran ${1}"; }; unset SILK_CICD_IN_CONTAINER; fRenderNodeTest)" || true
 fCheck "outside it runs" grep -qx 'ran cicd/tests/swnoshm/run.bash' <<<"${inside}"
 
-FAKE_IMAGE_MISSING=1 fRun build.log --container -y --no-sync --no-dogfood --no-publish --no-private --quick
+FAKE_IMAGE_MISSING=1 fRun build.log --container -y --no-sync --no-dogfood --no-publish --quick
 buildLine="$(grep '^build ' "${work}/build.log" || true)"
 fCheck "with no image, one is built first" test -n "${buildLine}"
 fCheck "from the recipe folder" bash -c '[[ "$1" == *" $2/cicd/container" ]]' _ "${buildLine}" "${repo}"
@@ -295,7 +295,7 @@ fCheck "with the toolchain and its targets" bash -c '[[ "$1" == *" --build-arg V
 fCheck "the pins" bash -c '[[ "$1" == *" --build-arg VER_zig=0.16.0 "* && "$1" == *" --build-arg VER_cargo_deny="* ]]' _ "${buildLine}"
 fCheck "and the job cap" bash -c '[[ "$1" == *" --build-arg JOBS="[0-9]* ]]' _ "${buildLine}"
 fCheck "labeled as the pipeline's" bash -c '[[ "$1" =~ \ --label\ dev\.project=silkterm\ --label\ dev\.run=[0-9]{8}-[0-9_-]+\  ]]' _ "${buildLine}"
-FAKE_VOLUME_MISSING=1 fRun vol.log --container -y --no-sync --no-dogfood --no-publish --no-private --quick
+FAKE_VOLUME_MISSING=1 fRun vol.log --container -y --no-sync --no-dogfood --no-publish --quick
 fCheck "a volume not there yet is made with the labels" bash -c 'grep -qE "^volume create --label dev\.project=silkterm --label dev\.run=[0-9_-]+ silkterm-zig-cache$" "$1" && grep -qE "^volume create .* silkterm-cicd-cache$" "$1"' _ "${work}/vol.log"
 fCheck "before the container starts" bash -c 'awk "/^volume create/ {v = NR} /^run --rm --init/ {r = NR} END {exit !(v && r && v < r)}" "$1"' _ "${work}/vol.log"
 
@@ -304,14 +304,14 @@ fCheck "before the container starts" bash -c 'awk "/^volume create/ {v = NR} /^r
 ## docker builder prune, older tags go only once a newer one passed and the one
 ## before stays, and the pipeline's label is dev.project. Checked below.
 # FAKE_TAGS="silkterm-cicd:000000000000" FAKE_UNTAGGED="sha256:feedface" FAKE_STOPPED="c0ffee" FAKE_CACHE="7.5GB" \
-# 	FAKE_IMAGE_MISSING=1 fRun tidy.log --container -y --no-sync --no-dogfood --no-publish --no-private --quick
+# 	FAKE_IMAGE_MISSING=1 fRun tidy.log --container -y --no-sync --no-dogfood --no-publish --quick
 # fCheck "after a build the older tag goes" grep -qx 'image rm silkterm-cicd:000000000000' "${work}/tidy.log"
 # fCheck "and so does an untagged image the pipeline labeled" bash -c 'grep -qx "image ls -q --filter dangling=true --filter label=silkterm-cicd=image" "$1" && grep -qx "image rm sha256:feedface" "$1"' _ "${work}/tidy.log"
 # fCheck "a stopped container the pipeline labeled goes" bash -c 'grep -qx "ps -aq --filter label=silkterm-cicd=run --filter status=exited --filter status=created --filter status=dead" "$1" && grep -qx "rm c0ffee" "$1"' _ "${work}/tidy.log"
 # fCheck "the build cache is not pruned" fNot grep -qE '^(builder|buildx|system) prune' "${work}/tidy.log"
 # fCheck "only reported" grep -qF 'docker build cache: 7.5GB reclaimable, shared with other projects, not pruned here' <<<"${out}"
 # fCheck "and the run says what went" grep -qE '^cleanup: removed 1 stopped containers, 2 old container images; ' <<<"${out}"
-# FAKE_TAGS="silkterm-cicd:000000000000" fRun tags.log --container -y --no-sync --no-dogfood --no-publish --no-private --quick
+# FAKE_TAGS="silkterm-cicd:000000000000" fRun tags.log --container -y --no-sync --no-dogfood --no-publish --quick
 # fCheck "with the image there, the older tag still goes" grep -qx 'image rm silkterm-cicd:000000000000' "${work}/tags.log"
 fRun gate.log --gate --container
 fCheck "--gate --container runs the backlog quick run inside, every area named" bash -c '[[ "$(grep "^run " "$1")" == *" $2/cicd/cicd.bash --backlog-run-quick fmt clippy tests scripts docs" ]]' _ "${work}/gate.log" "${repo}"
@@ -327,7 +327,7 @@ fCheck "and the gate ends with the same cleanup" bash -c 'grep -qx "image ls -q 
 fCheck "which leaves the build cache alone" fNot grep -qE '^(builder|buildx|system) prune' "${work}/gate.log"
 ## CICD_MEM_CAP over the default, none for no cap, and a bad one stopping the run
 ## before docker is asked anything. CodeQL inside the engine run gets 48g.
-memRun=(--container -y --no-sync --no-dogfood --no-publish --no-private --quick --no-fuzz)
+memRun=(--container -y --no-sync --no-dogfood --no-publish --quick --no-fuzz)
 CICD_MEM_CAP=7g fRun mem7.log "${memRun[@]}"
 fCheck "CICD_MEM_CAP sets the cap, swap the same" bash -c '[[ "$1" == 0 && "$(grep "^run " "$2")" == *" --cpu-shares 256 --memory 7g --memory-swap 7g --oom-score-adj 1000 --name "* ]]' _ "${rc}" "${work}/mem7.log"
 CICD_MEM_CAP=none fRun memnone.log "${memRun[@]}"
@@ -343,7 +343,7 @@ fCheck "and CICD_MEM_CAP still wins" grep -qE '^run .* --memory 7g --memory-swap
 fRun quickareas.log --backlog-run-quick docs fmt --container
 fCheck "--backlog-run-quick takes the areas named into the container, in order" bash -c '[[ "$(grep "^run " "$1")" == *" $2/cicd/cicd.bash --backlog-run-quick docs fmt" ]]' _ "${work}/quickareas.log" "${repo}"
 
-FAKE_RUN_RC=7 fRun fail.log --container -y --no-sync --no-dogfood --no-publish --no-private --quick
+FAKE_RUN_RC=7 fRun fail.log --container -y --no-sync --no-dogfood --no-publish --quick
 fCheck "a run inside that fails stops the run here" test "${rc}" -ne 0
 fCheck "and says where" grep -q 'the run in the container failed' <<<"${out}"
 ## Commented out 20261031: a failed run removes its folder, /tmp and all, unless
@@ -377,7 +377,7 @@ fStale(){ mkdir -p "${runBase}/${1}"; echo "${2}" >"${runBase}/${1}/run.pid"; to
 fStale 20261001-000000_001 "${deadPid}" "3 days ago"
 fStale 20261001-000000_002 "$$" "3 days ago"
 fStale 20261001-000000_003 "${deadPid}" "1 day ago"
-fRun sweep.log --container -y --no-sync --no-dogfood --no-publish --no-private --quick
+fRun sweep.log --container -y --no-sync --no-dogfood --no-publish --quick
 fCheck "a later run removes what the old ledger names" bash -c 'for d in "${@}"; do [[ ! -e "${d}" ]] || exit 1; done' _ "${planted[@]}"
 fCheck "and the ledger" test ! -e "${repo}/target/container/.cicd-container-tmp"
 fCheck "and one nobody wrote down" test -d "${repo}/target/container/tmp/run_nobody"
@@ -394,7 +394,7 @@ fCheck "with none of the run's containers left, says nothing of them" fNot grep 
 ## daemon's GC.
 oldTags="2026-10-03T07:00|silkterm-cicd:000000000003 2026-10-01T07:00|silkterm-cicd:000000000001 2026-10-02T07:00|silkterm-cicd:000000000002"
 FAKE_TAGS="${oldTags}" FAKE_UNTAGGED="sha256:feedface" FAKE_STOPPED="c0ffee" FAKE_RUN_IDS="beef1 beef2" FAKE_PRUNED="1.2GB" \
-	FAKE_IMAGE_MISSING=1 fRun tidy.log --container -y --no-sync --no-dogfood --no-publish --no-private --quick
+	FAKE_IMAGE_MISSING=1 fRun tidy.log --container -y --no-sync --no-dogfood --no-publish --quick
 fCheck "a stopped container the pipeline labeled goes" bash -c 'grep -qx "ps -aq --filter label=dev.project=silkterm --filter status=exited --filter status=created --filter status=dead" "$1" && grep -qx "rm c0ffee" "$1"' _ "${work}/tidy.log"
 fCheck "the run's containers are stopped and removed by its label" bash -c 'grep -qE "^ps -aq --filter label=dev\.run=[0-9]{8}-[0-9_-]+ --filter label=dev\.project=silkterm$" "$1" && grep -qx "stop -t 10 beef1 beef2" "$1" && grep -qx "rm beef1 beef2" "$1"' _ "${work}/tidy.log"
 ## Changed 20261101: the counts are in the run's one cleanup line (2026110112424508).
@@ -413,7 +413,7 @@ fCheck "with no word of the build cache" fNot grep -qi 'build cache' <<<"${out}"
 fCheck "with about what docker's sizes before and after say it freed" grep -qE "^cleanup: removed .*, the run's temp folder; about 5\.2 GB freed$" <<<"${out}"
 fCheck "and that line is the only one about it" fNot grep -qE '^(docker: |docker build cache|cleanup: stopped)' <<<"${out}"
 fCheck "nothing is removed by force, nor the whole system pruned" fNot grep -qE '^((rm|rmi|image rm|container rm|volume rm) .*(^| )(-f|--force)( |$)|system prune)' "${work}/tidy.log"
-FAKE_TAGS="${oldTags}" FAKE_RUN_RC=7 fRun tagfail.log --container -y --no-sync --no-dogfood --no-publish --no-private --quick
+FAKE_TAGS="${oldTags}" FAKE_RUN_RC=7 fRun tagfail.log --container -y --no-sync --no-dogfood --no-publish --quick
 fCheck "a run that failed removes no tag" fNot grep -q '^image rm silkterm-cicd:' "${work}/tagfail.log"
 ## Changed 20261111: no build cache prune.
 fCheck "but still removes its containers" grep -qE "^ps -aq --filter label=dev\.run=" "${work}/tagfail.log"
@@ -421,7 +421,7 @@ fCheck "but still removes its containers" grep -qE "^ps -aq --filter label=dev\.
 ## The cache volumes: only the pipeline's, one over the cap goes whole, and so does
 ## the Zig one another Zig filled. docker keeps one still in use.
 FAKE_VOLUMES="silkterm-cicd-cache silkterm-zig-cache silkterm-other" FAKE_TIDY="silkterm-cicd-cache|2147483649||0.16.0 silkterm-zig-cache|1000|0.15.1|0.16.0" \
-	fRun volgo.log --container -y --no-sync --no-dogfood --no-publish --no-private --quick
+	fRun volgo.log --container -y --no-sync --no-dogfood --no-publish --quick
 fCheck "the volumes are only the pipeline's" grep -qx 'volume ls -q --filter label=dev.project=silkterm' "${work}/volgo.log"
 ## Commented out 20261109: the tidy container takes the memory cap too. Checked below.
 # fCheck "read by a labeled container of the run's, read only" bash -c 'grep -qE "^run --label dev\.project=silkterm --label dev\.run=[0-9_-]+ --name silkterm-[0-9_-]+-tidy -v silkterm-cicd-cache:/v/silkterm-cicd-cache:ro -v silkterm-zig-cache:/v/silkterm-zig-cache:ro silkterm-cicd:" "$1"' _ "${work}/volgo.log"
@@ -432,15 +432,15 @@ fCheck "the zig one another zig filled goes" grep -qx 'volume rm silkterm-zig-ca
 fCheck "and the run says why" bash -c 'grep -qF "removed the volume silkterm-cicd-cache, over 2048 MB" <<<"$1" && grep -qF "removed the volume silkterm-zig-cache, filled by zig 0.15.1" <<<"$1"' _ "${out}"
 fCheck "a volume that is not one of the caches is left" fNot grep -q 'silkterm-other' "$(grep -v '^volume ls' "${work}/volgo.log" >"${work}/volgo.rest"; echo "${work}/volgo.rest")"
 FAKE_VOLUMES="silkterm-cicd-cache silkterm-zig-cache" FAKE_TIDY="silkterm-cicd-cache|2147483648||0.16.0 silkterm-zig-cache|1000|0.16.0|0.16.0" \
-	fRun volstay.log --container -y --no-sync --no-dogfood --no-publish --no-private --quick
+	fRun volstay.log --container -y --no-sync --no-dogfood --no-publish --quick
 fCheck "at the cap, and stamped by this zig, both stay" fNot grep -q '^volume rm' "${work}/volstay.log"
 FAKE_VOLUMES="silkterm-cicd-cache" FAKE_TIDY="silkterm-cicd-cache|9999999999||0.16.0" FAKE_VOLUME_RM_RC=1 \
-	fRun volheld.log --container -y --no-sync --no-dogfood --no-publish --no-private --quick
+	fRun volheld.log --container -y --no-sync --no-dogfood --no-publish --quick
 fCheck "one still in use is left, and the run says so" grep -qF 'left the volume silkterm-cicd-cache (over 2048 MB), still in use' <<<"${out}"
 
 ## --keep-temp keeps the run's containers, without --rm, and names them.
 FAKE_RUN_IDS="beef1" FAKE_RUN_NAMES="silkterm-x-engine" FAKE_VOLUMES="silkterm-cicd-cache" FAKE_TIDY="silkterm-cicd-cache|9999999999||0.16.0" \
-	fRun keep.log --container -y --no-sync --no-dogfood --no-publish --no-private --quick --keep-temp
+	fRun keep.log --container -y --no-sync --no-dogfood --no-publish --quick --keep-temp
 fCheck "--keep-temp starts the container without --rm" bash -c '[[ "$(grep "^run .*-engine " "$1")" == "run --init "* ]]' _ "${work}/keep.log"
 fCheck "and stops nothing at the end" fNot grep -qE '^(stop|rm) beef1' "${work}/keep.log"
 fCheck "nor touches the volumes the kept ones hold" fNot grep -qE '^volume rm' "${work}/keep.log"
@@ -490,7 +490,7 @@ runsBefore="$(fRunDirs)"
 ( cd "${repo}" && exec env -u SILK_CICD_IN_CONTAINER -u CARGO_TARGET_DIR -u HOST_TEMP FAKE_LOG="${work}/intfull.log" FAKE_RUN_IDS="beef8" FAKE_RUN_SLEEP=30 \
 	FAKE_VOLUMES="silkterm-cicd-cache" FAKE_TIDY="silkterm-cicd-cache|9999999999||0.16.0" \
 	setsid python3 -c 'import os, signal, sys; signal.signal(signal.SIGINT, signal.SIG_DFL); os.execvp(sys.argv[1], sys.argv[1:])' \
-	bash cicd/cicd.bash --container -y --no-sync --no-dogfood --no-publish --no-private --quick >"${work}/intfull.out" 2>&1 ) &
+	bash cicd/cicd.bash --container -y --no-sync --no-dogfood --no-publish --quick >"${work}/intfull.out" 2>&1 ) &
 intPid=$!
 for _ in $(seq 1 200); do grep -q '^run --rm' "${work}/intfull.log" 2>/dev/null && break; sleep 0.1; done
 sleep 0.5; kill -INT -- "-${intPid}" 2>/dev/null || true; wait "${intPid}" 2>/dev/null || true
@@ -630,7 +630,7 @@ tar -C "${repo}" --exclude=./target -cf - . | tar -xf - -C "${linked}"
 ln -s "${work}/real-target" "${linked}/target"
 realTarget="$(cd -P "${work}/real-target" && pwd -P)"
 export FAKE_LOG="${work}/linked.log"
-rc=0; out="$(cd "${linked}" && env -u SILK_CICD_IN_CONTAINER -u CARGO_TARGET_DIR bash cicd/cicd.bash --container -y --no-sync --no-dogfood --no-publish --no-private --quick --no-fuzz 2>&1)" || rc=$?
+rc=0; out="$(cd "${linked}" && env -u SILK_CICD_IN_CONTAINER -u CARGO_TARGET_DIR bash cicd/cicd.bash --container -y --no-sync --no-dogfood --no-publish --quick --no-fuzz 2>&1)" || rc=$?
 runLine="$(grep '^run ' "${work}/linked.log" || true)"
 fCheck "a linked target dir: the run passes" test "${rc}" -eq 0
 fCheck "with the target dir mounted at its real path" bash -c '[[ "$1" == *" -v $2/container:$2/container "* ]]' _ "${runLine}" "${realTarget}"
@@ -640,6 +640,8 @@ if ((failures)); then echo "${failures} failed"; exit 1; fi
 echo "all passed"
 
 ##	History:
+##		- 20261119: The private repo goes in only with --with-private, which
+##		  replaced --no-private.
 ##		- 20261103: The options that turn off one part of stage 3 or 5 go in.
 ##		- 20261101: What went and what it freed, in the run's one cleanup line.
 ##		- 20261010 JC: Created.

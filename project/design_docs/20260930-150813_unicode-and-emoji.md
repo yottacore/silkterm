@@ -24,7 +24,6 @@
 	- [Rejected](#rejected)
 	- [Superseded](#superseded)
 - [Research findings](#research-findings)
-- [Roadmap](#roadmap)
 - [Related backlog issues](#related-backlog-issues)
 - [Copyright and license](#copyright-and-license)
 
@@ -169,12 +168,6 @@ The text and color glyph caches are cleared together, and a missing raster is sk
 - Other terminals show the same emoji fonts in color because their rasterizers read COLRv1.
 
 - gsettings returns schema defaults on an Xfce box, so it has to be read second there.
-
-## Roadmap
-
-- The fallback order hasn't been checked on Windows with a fresh config. Backlog: "The font fallback stack is only partly implemented".
-
-- A font size per pane. All panes in a window share one set of text metrics, so it needs a renderer per pane. Backlog: "Hotkeys to increase and decrease font size".
 
 ## Related backlog issues
 

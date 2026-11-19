@@ -10,8 +10,8 @@
 ##		of its own, such as the scroll harness's scenes, gives each its ID as
 ##		the first word of its row in a case table, listed in CASE_TABLES. Each
 ##		fuzz target is a Rust test of its own, so it has its own ID. The test
-##		scripts of silkterm-private, when it is checked out beside this repo
-##		as the pipeline expects, share the one set of IDs.
+##		scripts of silkterm-private share the one set of IDs, when cicd's
+##		--with-private names that repo through SILK_PRIVATE_RUNNER.
 ##	Syntax:
 ##		test-id.py [N]            print N new IDs for now (default 1)
 ##		test-id.py --at WHEN [N]  the same for a past time, "YYYY-MM-DD HH:MM" local
@@ -107,15 +107,12 @@ def rust_files() -> Iterator[Path]:
 
 
 def private_root() -> Path | None:
-	##	Found the way cicd/config.bash finds the private runner, and turned
-	##	off the same way, by an empty SILK_PRIVATE_RUNNER.
+	##	Only when cicd's --with-private names its runner, so a plain clone
+	##	never looks for it.
 	runner = os.environ.get("SILK_PRIVATE_RUNNER")
-	if runner is None:
-		path = ROOT.parents[1] / PRIVATE_NAME / "repo"
-	elif runner:
-		path = Path(runner).parents[1]
-	else:
+	if not runner:
 		return None
+	path = Path(runner).parents[1]
 	return path if (path / "cicd" / "tests").is_dir() else None
 
 
@@ -381,3 +378,5 @@ if __name__ == "__main__":
 ##		  ID of its own, and refuses 2 fuzz targets in one test.
 ##		- 20261031: The private repo's test scripts too, when it is beside
 ##		  this one.
+##		- 20261119: Only when SILK_PRIVATE_RUNNER names it, as cicd's
+##		  --with-private does.

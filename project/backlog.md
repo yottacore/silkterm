@@ -18234,16 +18234,6 @@ Going forward, new issues in the new template at the bottom of this file will go
 
 ### Deferred
 
-- ✋ Save settings by editing only the lines that changed, so a file with a line that can't be read still takes the window size, menu switches and new shells.
-	- The performance rating already saves this way. The shell list and Settings Apply would still refuse.
-	- ✋ It's waiting for shcl 3.0, which should change how such a file is read and written. Look again once it's out.
-	- Note: 20260924, shcl 3.0 still counts a line it can't place as lost and doesn't have a save that edits single lines, so this isn't waiting on shcl anymore.
-	- Decision: 20260924, it stays held for now.
-	- Note: 20260925, shcl now keeps a stray line indented with spaces as written, so a save goes through beside one. A tab-indented line that steps back to a depth nothing uses is still dropped, and a save still refuses over it.
-	- Note: 20260925, saves now use shcl's new line-keeping save, so lines that weren't changed are written back as they were. A file with a dropped tab-indented line still gets the whole-file save from shcl, which deletes that line, so the refusal stays.
-	- Target version: rc.2
-	- Opened: 20260918
-
 - ✋ t2nsn - old stray versions of executables and launchers: Find and move old GFS versions, and trash any out-of-place stray executables and scripts. Update '.desktop' files to run the correct bash script, launcher chain minimized or hidden, and use the icon from the 'latest version' symlink.
 	- Note: the launcher copies outside the repo are older than the ones in `utility/`, and nothing copies them over.
 	- Note: 20260924, t2nsn itself hasn't been looked at yet. On the main workstation, the desktop entry and keyboard shortcut run a stale mirror copy of the launcher, and there are a few strays. That list is in the private notes.
@@ -18281,11 +18271,6 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- ✋ Can't replicate on different monitors that also have different DPI. Don't have access to original setup. Only observed once, and was in a hurry to shut down, so it could have been a fluke. Leaving open on backlog just in case.
 	- Target version: rc.2
 	- Opened: 20260816-103257
-
-- ✋ Build packages when cicd.bash `--quick` isn't specified:
-	- ✋ Deferred (no cross toolchain): macOS `.dmg` (needs an Apple SDK / osxcross - license-gated) and BSD packages (needs a FreeBSD sysroot). AppImage and Flatpak are also for the future.
-	- Target version: rc.2
-	- Opened: 20260724-080316
 
 - ✋ Feature: (Git) Implement branch protection rules on main:
 	- ✋ Require a pull request before merging (blocks direct pushes), and

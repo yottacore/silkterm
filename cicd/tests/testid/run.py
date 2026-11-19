@@ -164,9 +164,9 @@ public = tree(["decp8"], root=pair / "silkterm-floss" / "repo")
 private("Eu0WzDd", pair / "silkterm-private" / "repo")
 unset = {k: v for k, v in ENV.items() if k != "SILK_PRIVATE_RUNNER"}
 rc, out = run(public, "--check", env=unset)
-check("the private repo is found beside this one, as the pipeline finds it", rc == 1 and "test ID Eu0WzDd" in out, out.strip())
+check("a private repo beside this one is left out unless it's named", rc == 0 and "2 test IDs, all unique" in out, out.strip())
 rc, out = run(public, "--check")
-check("and an empty SILK_PRIVATE_RUNNER leaves it out", rc == 0 and "2 test IDs, all unique" in out, out.strip())
+check("and so is one an empty SILK_PRIVATE_RUNNER names", rc == 0 and "2 test IDs, all unique" in out, out.strip())
 
 results = "test tests::case_0 ... ok\ntest tests::gone ... FAILED\ntest tests::case_1 ... ignored, needs b29w\ntest tests::case_0 ... bench\nrunning 2 tests\n"
 rc, out = run(tree(["decp8", "decp9"]), "--annotate", stdin=results)

@@ -52,7 +52,8 @@
 ##	   --no-windows        skip the Windows cross targets (Linux artifacts only) -
 ##	                       what a Windows box's own pipeline delegates here
 ##	   --no-package        skip the packages stage (.deb/.rpm/installer)
-##	   --no-private        skip the private runner (macOS, Microsoft Store)
+##	   --with-private      also run the private repo beside this one: its script
+##	                       tests, and its runner as stage 6 (macOS, Microsoft Store)
 ##	   --no-remote         skip every other box: the Windows scenarios, the ARM64
 ##	                       smoke run, and the private runner's Mac and Microsoft
 ##	                       Store jobs
@@ -114,8 +115,8 @@
 ##	   --ci                another name for --merge-gate
 ##	   --fmt-check         check the format instead of rewriting it
 ##	   --container         stages 1-6 in the pinned image from cicd/container/Dockerfile,
-##	                       with its own target dir (target/container); sync, the private
-##	                       runner, dogfood, the demo, and publish stay here, and so do
+##	                       with its own target dir (target/container); sync, stage 6,
+##	                       dogfood, the demo, and publish stay here, and so do
 ##	                       the steps that need the card: the profiler and the render
 ##	                       node test, run here once the container is done. With
 ##	                       --backlog-run-quick, that runs there. The default whenever
@@ -195,7 +196,7 @@ cd "${root}"
 stamp="$(date +%Y%m%d-%H%M%S)"
 
 ## Parse options.
-assumeYes=0; quiet=0; quick=0; long=0; noRemote=0; skipLog=""; gate=0; gateAreas=(); fullRun=0; fullRunName=""; fmtCheck=0; leakcheck=1; leakAsked=0; codeql=0; demoAsked=0; noArm=0; noWindows=0; sync=1; cliMessage=""; container="${useContainer:-0}"; noContainer=0; keepTemp=0; listing=0; innerArgs=()
+assumeYes=0; quiet=0; quick=0; long=0; noRemote=0; skipLog=""; gate=0; gateAreas=(); fullRun=0; fullRunName=""; fmtCheck=0; leakcheck=1; leakAsked=0; codeql=0; demoAsked=0; noArm=0; noWindows=0; withPrivate=0; sync=1; cliMessage=""; container="${useContainer:-0}"; noContainer=0; keepTemp=0; listing=0; innerArgs=()
 noRustTests=0; noClippy=0; noScriptLint=0; noScrub=0; noDeny=0; noScriptTests=0; noDocs=0; noScroll=0; noWingui=0; noRelease=0; noCleanup=0
 while (($#)); do case "${1}" in
 	-y|--yes)                 assumeYes=1; shift ;;
@@ -214,7 +215,7 @@ while (($#)); do case "${1}" in
 	--no-arm)                 noArm=1; innerArgs+=("${1}"); shift ;;                ## drop ARM64 builds + packages
 	--no-windows)             noWindows=1; innerArgs+=("${1}"); shift ;;            ## drop the Windows cross targets
 	--no-package)             PACKAGE_ENABLE=0; innerArgs+=("${1}"); shift ;;
-	--no-private)             PRIVATE_RUNNER=""; shift ;;
+	--with-private)           withPrivate=1; innerArgs+=("${1}"); shift ;;       ## its tests run inside too
 	--no-remote)              noRemote=1; shift ;;              ## no other box; the container never connects to one anyway
 	--no-profile)             PROFILE_ENABLE=0; innerArgs+=("${1}"); shift ;;
 	--no-dogfood)             DOGFOOD_DESTS=(); shift ;;
@@ -249,6 +250,19 @@ while (($#)); do case "${1}" in
 	*) echo "unknown option: ${1} (try --help)" >&2; exit 2 ;;
 esac; done
 if ((noContainer)); then container=0; fi
+## The private repo is opt-in, so a plain clone never looks for it.
+if ((withPrivate)); then
+	PRIVATE_RUNNER="${PRIVATE_RUNNER:-$(cd "${root}/../.." && pwd)/${PRIVATE_DIR}/repo/cicd/run.bash}"
+	export SILK_PRIVATE_RUNNER="${PRIVATE_RUNNER}"   ## the test ID check reads it
+else
+	PRIVATE_RUNNER=""; unset SILK_PRIVATE_RUNNER
+fi
+## Its own script tests, beside its runner. They run against stand-ins, so they
+## need no box.
+PRIVATE_TESTS="${PRIVATE_RUNNER:+${PRIVATE_RUNNER%/cicd/*}/cicd/tests}"
+[[ -d "${PRIVATE_TESTS}" ]] || PRIVATE_TESTS=""
+## Inside the container only those tests run. Stage 6 runs out here.
+[[ -z "${SILK_CICD_IN_CONTAINER:-}" ]] || PRIVATE_RUNNER=""
 ## The backlog runs and the merge gate never sync, dogfood, publish, rewrite a
 ## tracked file or prompt. The demo rewrites the README gif, so it stays off too.
 gateAreasAll="fmt clippy tests scripts docs"
@@ -964,8 +978,8 @@ if ((container || asanInImage || tsanInImage || miriInImage || codeqlInImage || 
 fi
 if ((container)); then
 	## The engine inside takes this run's stage options and none of the stages that
-	## need this box: sync, the private runner, dogfood, the demo, and publish.
-	innerArgs=(-y --no-sync --no-dogfood --no-publish --no-private --no-demo "${innerArgs[@]}")
+	## need this box: sync, dogfood, the demo, and publish. Stage 6 stays out here.
+	innerArgs=(-y --no-sync --no-dogfood --no-publish --no-demo "${innerArgs[@]}")
 	((quiet)) && innerArgs[0]=-q
 fi
 
@@ -1383,7 +1397,8 @@ fPlanSteps(){
 	fi
 	if ((quick)); then why="--quick"; elif ((noRemote)); then why="--no-remote"
 	elif [[ -n "${PRIVATE_RUNNER:-}" && -x "${PRIVATE_RUNNER}" ]]; then why=""
-	else why="--no-private, or not checked out"; fi
+	elif ((! withPrivate)); then why="needs --with-private"
+	else why="not checked out"; fi
 	fStepIf "Private runner" "${why}"
 	why="${rel}"; ((${#DOGFOOD_DESTS[@]})) || why="$(fStepOff_Why --no-dogfood)"; fStepIf "Dogfood" "${why}"
 	if ! ((${DEMO_ENABLE:-0})); then why="$(fStepOff_Why --no-demo)"
@@ -1651,6 +1666,8 @@ elif ((noRemote)); then
 	fEcho_Clean "Private runner ......: (skipped --no-remote)"
 elif [[ -n "${PRIVATE_RUNNER:-}" && -x "${PRIVATE_RUNNER}" ]]; then
 	fEcho_Clean "Private runner ......: ${PRIVATE_RUNNER} (macOS, Microsoft Store)"
+elif ((! withPrivate)); then
+	fEcho_Clean "Private runner ......: (off; --with-private turns it on)"
 else
 	fEcho_Clean "Private runner ......: (not checked out)"
 fi
@@ -2543,6 +2560,8 @@ fEcho_Clean
 
 
 ##	History:
+##		- 2026-11-19: The private repo is opt-in, by --with-private, and --no-private
+##		              is gone. A plain run never looks for it.
 ##		- 2026-11-17: Stage 0 puts the stash back when the pull fails, names it when
 ##		              a pop fails, and stops when an earlier run's 'auto-stash' is left.
 ##		- 2026-11-10: The profiler's app runs on a settings tree of its own in the run
