@@ -268,8 +268,7 @@ pub fn unregister(assoc: Assoc, store: &mut dyn Store) -> anyhow::Result<()> {
 	}
 	// state first, then the 2 parents it may have been the last thing in
 	for name in
-		["count"]
-			.into_iter()
+		std::iter::once("count")
 			.map(String::from)
 			.chain((0..count).flat_map(|i| {
 				["key", "name", "mine", "prev", "made"].map(|field| format!("{field}{i}"))
@@ -301,12 +300,10 @@ fn first_missing(key: &str, store: &dyn Store) -> Option<String> {
 pub fn exe_to_register(current: &Path, exists: &dyn Fn(&Path) -> bool) -> PathBuf {
 	let versions = current.parent();
 	if let Some(dir) = versions.filter(|d| d.file_name().is_some_and(|n| n == "silkterm_versions"))
+		&& let Some(link) = dir.parent().map(|up| up.join("silkterm.exe"))
+		&& exists(&link)
 	{
-		if let Some(link) = dir.parent().map(|up| up.join("silkterm.exe")) {
-			if exists(&link) {
-				return link;
-			}
-		}
+		return link;
 	}
 	current.to_path_buf()
 }
@@ -330,7 +327,20 @@ pub fn open_argv(
 		"ps1" if windows => {
 			// The same policy step as Windows' own "Run with PowerShell": a
 			// script runs unless the machine insists on signed ones.
-			let quote = |s: &str| format!("'{}'", s.replace('\'', "''"));
+			// PowerShell takes the curly single quotes as quotes too, and a quote of
+			// any kind is escaped by doubling it.
+			let quote = |s: &str| {
+				let mut quoted = String::with_capacity(s.len() + 2);
+				quoted.push('\'');
+				for c in s.chars() {
+					if matches!(c, '\'' | '\u{2018}'..='\u{201b}') {
+						quoted.push(c);
+					}
+					quoted.push(c);
+				}
+				quoted.push('\'');
+				quoted
+			};
 			let mut script = format!(
 				"if((Get-ExecutionPolicy) -ne 'AllSigned') {{ Set-ExecutionPolicy -Scope Process Bypass }}; & {}",
 				quote(file)
@@ -861,6 +871,23 @@ mod tests {
 		assert_eq!(
 			open_argv("/tmp/x.ps1", &[], false, &|| true),
 			["/tmp/x.ps1"]
+		);
+	}
+
+	// PowerShell ends a single-quoted string on a curly quote as well, so a file
+	// or argument with one in its name could close the quote early and run the
+	// rest as a command.
+	// Test ID: dfh8y
+	#[test]
+	fn a_curly_quote_stays_inside_the_script_text() {
+		let args = vec!["x\u{2018}; evil; \u{2019}".to_string()];
+		let ps = open_argv("C:\\a\u{2019}b\\s.ps1", &args, true, &|| true);
+		assert!(
+			ps[3].ends_with(
+				"& 'C:\\a\u{2019}\u{2019}b\\s.ps1' 'x\u{2018}\u{2018}; evil; \u{2019}\u{2019}'"
+			),
+			"{}",
+			ps[3]
 		);
 	}
 

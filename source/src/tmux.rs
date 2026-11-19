@@ -61,9 +61,7 @@ pub fn program() -> Option<PathBuf> {
 	if cfg!(windows) {
 		return None;
 	}
-	let mut found = FOUND
-		.lock()
-		.unwrap_or_else(std::sync::PoisonError::into_inner);
+	let mut found = crate::locks::lock(&FOUND);
 	if let Some((at, path)) = found.as_ref()
 		&& at.elapsed() < KEEP
 	{
@@ -200,9 +198,7 @@ pub fn free_name(base: &str, mut taken: impl FnMut(&str) -> bool) -> String {
 // second would otherwise both find the name free.
 fn issued(name: &str) -> bool {
 	static ISSUED: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
-	let mut issued = ISSUED
-		.lock()
-		.unwrap_or_else(std::sync::PoisonError::into_inner);
+	let mut issued = crate::locks::lock(&ISSUED);
 	if issued.iter().any(|seen| seen == name) {
 		return true;
 	}

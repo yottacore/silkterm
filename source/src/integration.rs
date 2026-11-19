@@ -1695,7 +1695,7 @@ Write-Host \"COLOR=$global:__SilkTermHostColor\"",
 		let snippet = SNIPPET.replace("\r\n", "\n");
 		assert!(
 			doc.contains(snippet.trim_end()),
-			"shell-integration.md no longer carries the snippet verbatim"
+			"shell-integration.md no longer has the snippet verbatim"
 		);
 	}
 
