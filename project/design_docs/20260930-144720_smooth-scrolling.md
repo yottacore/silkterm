@@ -424,7 +424,7 @@ The wheel sends cursor keys only on the alt screen, with alternate-scroll on and
 
 - Side-by-side tmux panes still cut, since tmux repaints them.
 
-- A per-program list that turns smooth scrolling off while that program runs. The scroll part could be done per pane. Backlog: "Config file: For each feature listed below, allow user to list programs" (deferred, Opened 20260708-115155).
+- A per-program list that turns smooth scrolling off while that program runs. The scroll part could be done per pane.
 
 - A single progress line that changes on the same frame a new line arrives still drops for that step.
 
@@ -465,8 +465,6 @@ The wheel sends cursor keys only on the alt screen, with alternate-scroll on and
 - "In `nano`, scrolling isn't smooth" (canceled 20260713-142351)
 
 - "With two tmux panes stacked and both printing, only one pane slides at a time" (deferred, Opened 20260911-113647)
-
-- "Config file: For each feature listed below, allow user to list programs" (deferred, Opened 20260708-115155)
 
 ## Copyright and license
 

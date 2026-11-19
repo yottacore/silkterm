@@ -623,7 +623,7 @@ fn advance_cells(advance: f32, unit: f32) -> u8 {
 impl TextCtx {
 	/// The cell as the shell is told it, in whole pixels. A cell is fractional,
 	/// and cut down it told the shell 13 for 13.64, so a picture sized by the
-	/// cell came out 5% small (2026101716374843).
+	/// cell came out 5% small.
 	pub fn cell_told(&self) -> (u16, u16) {
 		(nearest_px(self.cell_w), nearest_px(self.cell_h))
 	}

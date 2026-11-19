@@ -105,7 +105,7 @@ impl State {
 		}
 		// Moved while fullscreen or maximized, and now back: a look takes the
 		// size. Taken at once, a slow frame at the size back from fullscreen
-		// came back from sway late and undid it (2026101417045856).
+		// came back from sway late and undid it.
 		if !force && keep.back && self.watch.take_owed {
 			self.watch.check_at = Some(Instant::now() + MONITOR_SETTLE);
 		}
@@ -142,8 +142,7 @@ impl State {
 	/// The grid to save, for the font the window opens at next time. That's
 	/// the font now, unless `--font-size` or `--font-name` gave it: then the
 	/// grid is kept if it fits the screen at the font a launch without them
-	/// has, and else the grid that font shows in the window's size now
-	/// (2026101412292756, 2026101422190936).
+	/// has, and else the grid that font shows in the window's size now.
 	fn grid_to_open_at(&mut self, grid: (usize, usize), zoom: Option<i32>) -> (usize, usize) {
 		let zoom = zoom.unwrap_or_else(|| {
 			config::remembered_window(&config::settings(), self.watch.key.as_deref()).font_zoom
@@ -164,7 +163,7 @@ impl State {
 	/// so it may still count itself on the one it left. A size the user sets
 	/// is for the output the window is on as it's set, so it looks then. Not
 	/// just before saving: a size set just before a move would go to the new
-	/// output. A look already on its way decides as usual (2026101413420431).
+	/// output. A look already on its way decides as usual.
 	pub(super) fn look_unseen(&mut self) {
 		if !self.watch.positionless || self.watch.check_at.is_some() || self.watch.put_off {
 			return;
@@ -192,7 +191,7 @@ impl State {
 	/// The user's own resize can take a Wayland window off an output, but the
 	/// window is told so only once a frame at the new size is up. Between 2
 	/// outputs at one scale it named the first one entered as the size was
-	/// set, though the resize left it wholly on the other (2026101614100001).
+	/// set, though the resize left it wholly on the other.
 	/// So once the size has held, a window that has only left outputs since
 	/// counts itself on what's left. One that entered another has moved, and
 	/// keeps the one it named.
@@ -244,7 +243,7 @@ impl State {
 	/// leaves most of the window on an output at another scale, but only once
 	/// a frame at the new size is up. Drawn in software that took over 4 s,
 	/// well past the grace, so it counted as a move, the look took the other
-	/// output's size, and that moved the window back (2026101614100002). So
+	/// output's size, and that moved the window back. So
 	/// the first scale change after a take is the take's, unless the person
 	/// was back at the window in between.
 	pub(super) fn note_rescaled(&mut self) {
@@ -634,17 +633,17 @@ impl State {
 	/// over. Left to the system, the window keeps its size on the desktop, and
 	/// a font's cells don't grow in step with the scale, so the grid moved a
 	/// few cells. A Wayland window learns its scale after it opens, so it
-	/// opened at 78x23 for 80x24 (2026101412003308). Where a kept size will
+	/// opened at 78x23 for 80x24. Where a kept size will
 	/// take over, the window is left to the system: on sway a resize of the
 	/// window's own comes back from the compositor late, and undid the take.
 	/// A scale change right after a take that isn't a move is the take's own,
 	/// so no other size takes over after it, and the take's grid is kept too.
-	/// Left to the system it went 69x33 to 67x32 (2026101513385000). Not when
+	/// Left to the system it went 69x33 to 67x32. Not when
 	/// the monitors changed, as an output's own scale does: that counts as a
 	/// move, and the take after it was undone by sway's late answer to this
 	/// resize. Where that look then finds the window on the monitor it was on,
 	/// it takes the monitor's size again, so the grid doesn't stay off by the
-	/// drift (2026101716374842).
+	/// drift.
 	/// Either way the panes are laid out for the size coming, not the old one,
 	/// or the shell is told a grid half or twice the size until the resize
 	/// arrives (2026101412311921).
@@ -662,8 +661,7 @@ impl State {
 		let took = !self.rescale_moves(Instant::now());
 		let grid = (free && (took || self.keeps_size())).then(|| self.grid_at(w, h));
 		// Left to the system for another monitor's size to take over, and if
-		// the look finds none, the monitor's own size is taken again
-		// (2026101716374842).
+		// the look finds none, the monitor's own size is taken again.
 		self.watch.drifted = grid.is_none() && !self.keeps_size();
 		self.retext(scale);
 		let mut asked = None;
@@ -712,8 +710,8 @@ impl State {
 	/// A compositor answers a size the window set for itself with a configure
 	/// for that size, once it sees a frame drawn at it. After a slow frame sway
 	/// sent one for the size from before a take, winit took it as given, and
-	/// the take was undone seconds later, with that size saved as the user's
-	/// (2026101417045856). On Wayland a resize back to exactly the size the
+	/// the take was undone seconds later, with that size saved as the user's.
+	/// On Wayland a resize back to exactly the size the
 	/// window had before its own request, soon after it, is that late answer:
 	/// the size is asked for once more, and the resize isn't the user's.
 	/// True when this resize was that.
@@ -1046,7 +1044,7 @@ pub(super) fn launch_maximized(settings: &config::Settings, cli: &crate::cli::Wi
 /// What the command line gave that sets the window's size, but for the font
 /// options, which `State::cli_style` has. While any of them is left, the
 /// window saves nothing of its size: not the size, the font zoom, or
-/// maximized, for a monitor or as the last size anywhere (2026101422190936).
+/// maximized, for a monitor or as the last size anywhere.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub(super) struct CliSize {
 	pub(super) columns: bool,  // --columns or --pixel-width
@@ -1261,8 +1259,8 @@ struct Keep {
 // What a save keeps. Going fullscreen or maximized and back are the window
 // manager's resizes, not the user's. Taken for one, the way back kept the
 // size for the monitor, written over the one kept there, and a zoom saved
-// alone while fullscreen made an entry for a monitor nobody sized
-// (2026101412392529). A zoom while fullscreen is kept, and its grid once the
+// alone while fullscreen made an entry for a monitor nobody sized.
+// A zoom while fullscreen is kept, and its grid once the
 // window is back, since the grid shown at the old size has changed.
 fn what_to_keep(noted: Noted, free: bool) -> Keep {
 	let back = free && noted.full;
@@ -1282,8 +1280,7 @@ fn what_to_keep(noted: Noted, free: bool) -> Keep {
 
 /// A size kept at the font a launch without `--font-size` and `--font-name`
 /// has, for a window at another font: the same grid if it fits the screen at
-/// the font the window has, else the grid that keeps the kept window's size
-/// (2026101422190936).
+/// the font the window has, else the grid that keeps the kept window's size.
 pub(super) fn kept_grid_here(
 	text: &mut crate::text::TextCtx,
 	window: &Window,
@@ -1390,8 +1387,8 @@ enum Drag {
 // Could the window still be held in a drag? Where the buttons can be seen
 // they say. Wayland and Xwayland show a window none held on the compositor's
 // title bar, and nothing at all comes while a drag is held still, so looking
-// once things went quiet took a monitor's size before the drop
-// (2026101411555009). There the pointer over the window, or a key or focus
+// once things went quiet took a monitor's size before the drop.
+// There the pointer over the window, or a key or focus
 // since the last move, says the person has let go. A keyboard move ends on a
 // modifier coming up, so it isn't held up. A move nobody touches the window
 // after waits until they do. Except the first look, or one after the monitors
@@ -1422,7 +1419,7 @@ enum Settle {
 // resizes itself, and left it straddling the 2 monitors (2026102807384201).
 // A window found on the monitor it was on, after a scale change left its
 // size to the system, arrives there again: the system kept its size on the
-// desktop, which is a grid a cell or so off (2026101716374842).
+// desktop, which is a grid a cell or so off.
 fn settle(
 	kept_for: Option<&str>,
 	now_on: Option<&str>,
@@ -1471,10 +1468,10 @@ fn look_again(on_some: bool, positionless: bool, moved_at: Option<Instant>, now:
 // it for, so a window that straddles 2 monitors doesn't swap sizes back
 // and forth. A scale change counts as a move here too. On Wayland it's the
 // only sign of one, and a take there flipped which output most of the window
-// was on, and so its scale, again and again (2026101420262300). Unless the
+// was on, and so its scale, again and again. Unless the
 // monitors changed in the meantime: then the window manager is herding
 // windows as one goes dark or comes back after a power save, and the window
-// may be back where it started (2026100907341816).
+// may be back where it started.
 fn move_counts(
 	in_grace: bool,
 	layout_then: &[(i64, i64, i64, i64)],
@@ -1495,8 +1492,8 @@ fn takes_scale(took_at: Option<Instant>, heard_at: Option<Instant>, now: Instant
 // can leave most of it on an output at another scale, which is the scale it
 // brings. Off that output altogether, it was moved, or the size it took is
 // for somewhere it isn't. A key move onto an output at another scale, 4 s
-// after a take, was taken for the take's scale and brought no look
-// (2026101617573401). Where the outputs can't be read, it is.
+// after a take, was taken for the take's scale and brought no look.
+// Where the outputs can't be read, it is.
 fn still_on(
 	took_on: Option<(i64, i64, i64, i64)>,
 	now_on: impl FnOnce() -> Option<Vec<(i64, i64, i64, i64)>>,
@@ -1511,7 +1508,7 @@ fn still_on(
 // window's own take, which is the system's. But a window that was fullscreen
 // or maximized notes the way back in it too: that saves nothing, and sway
 // sends a scale as a window leaves fullscreen, so the grace hid the way back
-// and the user's next resize was taken for it (2026101516013920).
+// and the user's next resize was taken for it.
 fn resize_counts(in_grace: bool, noted: Noted) -> bool {
 	!in_grace || noted.full
 }

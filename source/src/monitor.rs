@@ -217,7 +217,7 @@ fn logical_size(window: &Window, scale: f64) -> (f64, f64) {
 // monitor is the first output the window entered and still touches, while the
 // scale is the one of the output most of it is on. Dropped with a sliver left
 // on another output, the 2 differ, and the key read one output's resolution
-// at the other's scale (2026101409220514). Elsewhere they agree. On Wayland
+// at the other's scale. Elsewhere they agree. On Wayland
 // this is the fallback, for when winit's own state can't be read.
 fn drawn_on(window: &Window, scale: f64) -> Option<winit::monitor::MonitorHandle> {
 	let first = window.current_monitor()?;
@@ -704,7 +704,7 @@ fn x11_monitor_under(x: &X11, at_pointer: bool) -> Option<Option<PxMm>> {
 // The outputs a Wayland window is on and where each is in the layout, read
 // from winit's own toolkit state on its own connection. winit gives only the
 // first output, and each one's scale rounded up, so 125%, 150%, and 200% all
-// read 2 (2026101411554909). The toolkit stores the rest as user data on
+// read 2. The toolkit stores the rest as user data on
 // winit's surface and outputs. None when the window isn't a Wayland one or
 // that state can't be read, as when winit moves to another toolkit release.
 // Then the rounded numbers are all there is.
@@ -954,7 +954,7 @@ pub fn button_held(_window: &Window, _x11: &X11Link) -> Option<bool> {
 
 /// Is the window fullscreen? winit on X11 knows only of a fullscreen the
 /// program asked for itself, so one the window manager set from its own key
-/// or menu had its size saved as the size to open at (2026101413075422).
+/// or menu had its size saved as the size to open at.
 pub fn fullscreen(window: &Window, x11: &X11Link) -> bool {
 	window.fullscreen().is_some() || wm_fullscreen(window, x11)
 }
@@ -1309,7 +1309,7 @@ mod tests {
 
 	// winit reads a 125%, a 150% and a 200% output all as 2, so a window
 	// astride 2 of them was named for one at the other's scale, a monitor
-	// that isn't there (2026101411554909). The outputs it is on, with their
+	// that isn't there. The outputs it is on, with their
 	// sizes in the layout, tell them apart.
 	// Test ID: de01p
 	#[test]

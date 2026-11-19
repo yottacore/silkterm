@@ -494,7 +494,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- Detail: `detail_backlog.md`, under this ID.
 		- The drop wasn't tried in a real window. It's the same call adding a tab already makes.
 	- Actual cause: Closing a tab and moving one with the hotkey both left the pointer's hold on the old position.
-	- Swept: every place in the window code that changes the tab order: adding a tab, closing one, and the move-tab hotkey. A pending close question names its tab by a pane, so it isn't kept by position. The kept labels compare what they show, so they follow their tab.
+	- Swept: every place in the window code that changes the tab order: adding a tab, closing one, and the move-tab hotkey. The kept labels compare what they show, so they follow their tab.
 	- Actual fix: Closing a tab and moving one now drop the held close button, the double-click and the hover tip, as adding a tab already did.
 	- Branch: nov17-2026111713374908
 	- Commit: 0f025ca1
@@ -518,7 +518,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Reproduced: 20261117 on b23, in software on a private X display and on headless sway. A resize past 16384 ended the program at the offscreen texture on X11 and at the surface on Wayland, with or without a window manager.
 	- Possible cause: `fit_px` limits only the sizes the app asks for. The Resized path passes the window size straight to `Gfx::resize`. No error handler is set outside tests.
 	- Origin: c6eaa043, 20260628, last changed a44e556f, 20261004. The clamp for the app's own sizes is 7d8ccbef, 20261006. Not seen by an earlier round. Confirmed by trace.
-	- Sweep: `Scrim::resize` makes layers at the surface size. The minimap texture and dialogs are held by their own caps, and the wallpaper by its 4096 edge.
+	- Sweep: `Scrim::resize` makes layers at the surface size. Dialogs are held by their own caps, and the wallpaper by its 4096 edge.
 	- Decisions:
 		- 20261117: Kept for rc.1, since it crashes. rc.1 takes only Critical and High items and anything that crashes or loses data.
 		- 20261117: The fix does both halves of the expected behavior. A max size hint keeps the window within the limit where the window manager heeds it, as xfwm4 does. The surface clamp handles the ones that don't, and sway's tiling, where the window is bigger than what is drawn.
@@ -528,7 +528,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- The Windows and macOS paths weren't run. On those a window larger than the screen is rare, and the same hint and clamp apply.
 	- Actual cause: Only the sizes the app asks for were held to the limit. A size the window manager gave went straight to the surface, the offscreen texture and the scrim layers, and wgpu ends the program on a refusal.
 	- Actual fix: The window asks the window manager to keep it within the limit, again after each device rebuild. The surface is held at the limit whatever the window's size, at creation and at each resize, and the scrim and the layout follow the surface, so the grid fits what is drawn. Past the limit the rest of the window isn't drawn.
-	- Swept: `Gfx::resize` and both surface setups, GL and native, handle every window, dialogs included. The scrim now takes the surface's size at launch and at each resize. Other textures at the window's size read the surface's size. The minimap, dialogs and wallpaper keep their own caps.
+	- Swept: `Gfx::resize` and both surface setups, GL and native, handle every window, dialogs included. The scrim now takes the surface's size at launch and at each resize. Other textures at the window's size read the surface's size. Dialogs and the wallpaper keep their own caps.
 	- Test case: `cicd/tests/oversize/run.bash` (dfek4). It failed 6 of 7 checks on the old build and passes with the fix.
 	- Verified: The backlog quick run passes in all 5 areas. clippy is clean for Windows. The new test was run both ways.
 	- Branch: nov17-2026111713374910
@@ -557,7 +557,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- 20261117: The window title's source is now worked out without reading the tab's label, by `suffix_from`, so the caller can borrow it. The old `window_suffix` stays, test-only, so its tests run unchanged.
 		- 20261117: The tip and banner part went to a child. Their lines pass through 3 layout functions and the whole render, the per-line shaping costs more than the copy, and no window test puts a tip up to measure.
 	- Verified: 20261117. Both new tests fail with the old copy-then-compare and build-then-compare put back, and pass with the fix. The quick run passed in all 5 areas. Clippy for Windows is clean. It wasn't run on Windows, where the task probe's code path is the same as before.
-	- Swept: Every caller of `tab_facts`, `task()`, and `title_prefix`. The tab tip reads the lent facts too. The minimap still copies a running program's name each frame, as before, but no longer a finished one's. The tip and the banner are in the child.
+	- Swept: Every caller of `tab_facts`, `task()`, and `title_prefix`. The tab tip reads the lent facts too. The tip and the banner are in the child.
 	- Branch: nov17-2026111623500001
 	- Commit: 172c03df
 	- Test case: `idle_frames_copy_no_tab_facts` (dfe46), no allocations over 240 idle frames. `an_unchanged_window_title_builds_nothing` (dfe45), no allocations over 240 frames with the title unchanged, and a new title for each part that moves. ddkre's figures above.
@@ -706,7 +706,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- 20261117: dfeg0 passes 11 of 11 on software Vulkan under headless sway. The quick gate's fmt, clippy and tests areas passed.
 	- Swept:
 		- Every device comes from `request_device`, which sets the lost callback and the error handler together (`grep -n request_device source/src`).
-		- Every glyphon prepare goes through the text context's 4 functions (`grep -rn "\.prepare(" source/src`; the minimap's is its own renderer, with no mapped buffer).
+		- Every glyphon prepare goes through the text context's 4 functions (`grep -rn "\.prepare(" source/src`).
 		- No buffer in the source is made mapped. The sentinel reads a range only after its map succeeds. The `SILK_DUMP` readback ignores a failed map, and is left alone as a debug aid on the GL path.
 		- Every other acquired texture is passed to `end_frame` and presented, in the terminal and in a dialog.
 	- Test case: `no_text_is_prepared_on_a_lost_device` (dfekm), `errors_after_a_loss_go_quietly` (dfeks), and dfeg0. Child 2026111717080404 adds dfekm run once with the `TextCtx` guards taken out.
@@ -847,12 +847,12 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Opened by: CC
 	- Target OS: All
 	- Target version: rc.1
-	- Incorrect behavior: `scroll:` with `minimap.keep_for: "vim"` under it is renamed to `scroll.tui_process_whitelist` rather than `scroll.minimap.tui_process_whitelist`. The value is lost.
+	- Incorrect behavior: A 3-part key written as its first part's heading, with the other 2 parts dotted under it, is renamed to the first part plus the new leaf, without the middle part. The value is lost.
 	- Expected behavior: The rename replaces only the last part of the key.
 	- Reproduced: No, but it was traced through the code.
 	- Possible cause: `migrated_text` picks between the full new path and the new leaf, never the key's prefix plus the new leaf.
 	- Origin: 54351bb6, 20261006, on 78b1919a, 20260804. Not seen by an earlier round. Confirmed by trace.
-	- Sweep: Only `scroll.minimap.keep_for` has 3 parts today. The cursor blink rewrite and the converts have 2 and share the pattern.
+	- Sweep: Only one renamed key has 3 parts today. The cursor blink rewrite and the converts have 2 and share the pattern.
 	- Decisions:
 		- 20261117: Kept for rc.1, since it loses data. rc.1 takes only Critical and High items and anything that crashes or loses data.
 		- 20261117: Every rename only changes the leaf, so the key keeps whatever part of the path it was written with and takes the new leaf. A key with the whole path still takes the new path as written.
@@ -1027,10 +1027,10 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Steps to reproduce: Turn on Resize window on zoom. Run a full-screen program such as less in a 700x400 window, then press Ctrl+Plus.
 	- Incorrect behavior: The program is told one column more than it had, 64 then 65. On the normal screen the grid is kept, 55 then 55.
 	- Expected behavior: The program keeps its columns and rows.
-	- Note: It was found on Xvfb during work on 2026111700130407, on the dev build and the 11-10 dogfood build. The alt screen hides the minimap column, which the zoom's size may still count.
+	- Note: It was found on Xvfb during work on 2026111700130407, on the dev build and the 11-10 dogfood build.
 	- Reproduced: 20261117 on Xvfb, with the setting on and a program on the alt screen. The zoom held 64 columns and asked for a window 65 wide.
 	- Origin: e5f8a69, the commit that added Resize window on zoom.
-	- Actual cause: After finding the least width that shows the pane's grid, the zoom rounds it out to whole cells of the window's grid, so the saved size reopens as big. That width was already whole cells, but its pixel count was rounded up, so it read as a bit over 64 cells, and rounding up again made it 65. With the minimap on, the least width usually falls partway into a cell, which is why the normal screen kept its grid. The minimap isn't involved.
+	- Actual cause: After finding the least width that shows the pane's grid, the zoom rounds it out to whole cells of the window's grid, so the saved size reopens as big. That width was already whole cells, but its pixel count was rounded up, so it read as a bit over 64 cells, and rounding up again made it 65. On the normal screen the least width usually falls partway into a cell, which is why it kept its grid.
 	- Actual fix: A width already at whole cells stays as it is. Any other width goes out to the next whole cell, as before.
 	- Verified: 20261117 on Xvfb, the fixed build kept 64 columns on the alt screen and 55 on the normal screen through 2 zooms in and 1 out, and the saved grid stayed 64x15. The new test failed on the old code and passes now. The quick gate passed in all 5 areas.
 	- Swept: the other `ceil` near a cell size in the source is `window_px` itself, which this relies on. The height takes the same path, through the same function.
@@ -1307,7 +1307,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- Code review 20261117 item 15.
 		- Detail: `detail_backlog.md`, under this ID.
 
-- Settings, About, notices, and the tmux close question can't open on a Linux box with GL but no Vulkan
+- Settings, About, and notices can't open on a Linux box with GL but no Vulkan
 	- ID: 2026111713374915
 	- Type: Bug
 	- Status: Queued
@@ -1316,7 +1316,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Opened by: CC
 	- Target OS: Linux
 	- Target version: rc.2
-	- Incorrect behavior: prerequisites.md asks for Vulkan or GL. Without a Vulkan driver, the main X11 window draws through GL, but dialogs ask wgpu for Vulkan only and fail. Nothing shows. stderr says "dialog window failed". The close question falls back to ending nothing, and config refusal notices are lost.
+	- Incorrect behavior: prerequisites.md asks for Vulkan or GL. Without a Vulkan driver, the main X11 window draws through GL, but dialogs ask wgpu for Vulkan only and fail. Nothing shows. stderr says "dialog window failed". Config refusal notices are lost.
 	- Expected behavior: Dialogs open wherever the main window can draw.
 	- Reproduced: No. It was only read from the code.
 	- Possible cause: Dialogs use `Backends::PRIMARY` to avoid the wgpu EGL teardown crash, without any fallback.
@@ -1365,7 +1365,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- Code review 20261117 item 18.
 		- Detail: `detail_backlog.md`, under this ID.
 
-- The pre-push merge gate skips the private runner, the private tests, and the content scrub
+- The pre-push merge gate skips the content scrub
 	- ID: 2026111713374918
 	- Type: Bug
 	- Status: Queued
@@ -1374,8 +1374,8 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Opened by: CC
 	- Target OS: All
 	- Target version: rc.2
-	- Incorrect behavior: On a push to main, the gate runs in a throwaway worktree without any siblings. The private runner reads as not checked out, so the Mac and Store jobs don't run. The private tests and their test-ID check are skipped. The content scrub doesn't find its script and passes quietly. The hook's own scrub reads the working tree rather than the commits being pushed.
-	- Expected behavior: The gate finds the private checkout and the scrub from the real checkout, and the scrub reads the pushed commits.
+	- Incorrect behavior: On a push to main, the gate runs in a throwaway worktree without any siblings. The content scrub doesn't find its script and passes quietly. The hook's own scrub reads the working tree rather than the commits being pushed.
+	- Expected behavior: The gate finds the scrub from the real checkout, and the scrub reads the pushed commits.
 	- Reproduced: No, but it was traced through the code.
 	- Possible cause: These paths are found from `${root}/..`, which in the worktree is the temp folder.
 	- Origin: 2314eb1c, 20261006, 6ddd84a9, 20261028, with 64cc76c3 and b3de0d28. Item 2026102616543943 notes the gate was never run from the hook. It's the same class as Code review 20260914 F83. Confirmed by trace.
@@ -2049,7 +2049,6 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Commit:
 	- Test case: None, since it was canceled.
 	- Acceptance signoff:
-	- Superseded by ID: 2026093009280571
 	- Closed: 20260930-092805
 
 - The "Minutes otherwise" release of resources still isn't working
@@ -2141,7 +2140,6 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Opened: 20261001-142748
 	- Opened by: JC
 	- Assigned to: CC
-	- Related IDs: 2026100113403226
 	- Target OS: macOS
 	- Test environment: b26, Intel Iris Plus 655, macOS 15.8
 	- Target version: rc.1
@@ -2210,19 +2208,18 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Opened: 20261028-073842
 	- Opened by: JC
 	- Assigned to: CC
-	- Related IDs: 2026100907341816
 	- Target OS: Linux
 	- Test environment: b23, xfwm4 4.20
 	- Target version: rc.1
 	- Incorrect behavior: When two screens return after screen power sleep or off, SilkTerm seems to reposition itself in between them.
 	- Expected behavior: It stays where it was. None of the other ~dozen application windows move, other terminals included.
 	- Reproduced: 20261101, headless, with 2 outputs under xfwm4. When the portrait output was turned off, its window was moved onto the landscape one and took that one's size. When it was turned on again, the window stayed there, but an xterm beside it went back.
-	- Actual cause: xfwm4 notes where each window was as a monitor goes, and puts it back once the monitor returns, unless the window resized itself in between. SilkTerm took the size kept for the monitor it was herded onto, so xfwm4 left it where it had herded it. Since 2026100907341816 that took place even within a second of the move.
+	- Actual cause: xfwm4 notes where each window was as a monitor goes, and puts it back once the monitor returns, unless the window resized itself in between. SilkTerm took the size kept for the monitor it was herded onto, so xfwm4 left it where it had herded it. Since an earlier fix for the monitor wake, that took place even within a second of the move.
 	- Notes:
 		- Pre-next-cut.
 		- Work first after the CICD issues.
 	- Decisions:
-		- 20261101: A window herded off a monitor that went dark, or changed, keeps its size and doesn't take any other. It notes the monitor it is on, so a size the user sets there is kept for that one. This reverses 2026100907341816's choice that a herded window takes the other monitor's size. Other windows keep their size too.
+		- 20261101: A window herded off a monitor that went dark, or changed, keeps its size and doesn't take any other. It notes the monitor it is on, so a size the user sets there is kept for that one. This reverses the earlier choice that a herded window takes the other monitor's size. Other windows keep their size too.
 		- 20261101: A herd is told from a user's drag by the monitor the window was on at its last look being gone from the layout. Where the window can't say where it is, as on native Wayland, nothing changed.
 		- 20261101: Updated an assert, `monwake` (ddq75): "took the landscape size there" is now "kept its size there". In ddq74 the herd step doesn't take a size now.
 		- 20261101: Moved back to Queued after the answer to the Check entry. A window can't jump between monitors each time they sleep. The answer asked for 2 things: add a warning to the per-monitor size tip text that the feature can fight the window manager when screens sleep and come back, with unexpected size and placement; and note the window's place and size when a screen goes dark, and if the user didn't move or resize it, put it back there when the screen returns.
@@ -2281,7 +2278,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Notes:
 		- Pre-next-cut.
 	- Reproduced: Yes, 20261106, headless under X11. The test scene had left out the pointer, so nothing was ever over the window. With the pointer resting over an unfocused window and another program grabbing the pointer and letting it go every 8 s, the window never let go in 100 s. A single grab after a release took the device back.
-		- Tried and ruled out, each let go at 62 to 65 s: cursor blink, the minimap, the hardware rating, every setting at its default, an interactive bash, xfwm4 with focus moved to an xterm, a second window on the same settings file, the pointer resting over it alone, and a window mapped and closed beside the pointer.
+		- Tried and ruled out, each let go at 62 to 65 s: cursor blink, the hardware rating, every setting at its default, an interactive bash, xfwm4 with focus moved to an xterm, a second window on the same settings file, the pointer resting over it alone, and a window mapped and closed beside the pointer.
 	- Actual cause: Any pointer grab let go on the desktop, such as a menu, a window drag, or a screen locker in another program, makes the X server tell the window under the pointer that it entered, with one move to where it already was. winit passes on every one. The idle clock took each as a person at the window, so the wait started over. The look after a move already ignored them, and counts the pointer only once it moves inside.
 	- Actual fix: The idle clock counts the pointer by that same rule. Being told it entered isn't a sign of life. Moving inside the window still is.
 	- Decisions:
@@ -2489,7 +2486,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Steps to reproduce:
 		- In a git repo, so the prompt has 2 rows, `clear`, then run a command whose output leaves the prompt one row above the bottom of the window (`seq 36` in a 43-row window).
 		- Run `nano`, and quit it.
-	- Reproduced: 20261014 on b23, on dev at b754777, about 1 quit in 4. ble.sh draws the prompt again in place once the minimap column comes back, and that redraw slid down from under the rows above.
+	- Reproduced: 20261014 on b23, on dev at b754777, about 1 quit in 4. ble.sh draws the prompt again in place once the pane's width changes back, and that redraw slid down from under the rows above.
 	- Actual cause:
 		- When ble.sh redraws a prompt already on screen, it erases the old prompt and then makes room with insert- and delete-line, all in one write. The check that a recorded scroll moved something visible looked at the last frame, where the old prompt still showed, so it read the scroll as visible. With the prompt one row above the bottom, the row under it wasn't blank either, so the "room, not a scroll" check didn't catch it.
 		- There's a second, rarer path. A relayout drops the frame-old snapshot, and a prompt redraw that gets to a build before a new snapshot slid by default.
@@ -2587,7 +2584,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Test case: `a_warm_up_never_overlaps_what_the_window_draws` (ddp6r) crashed 3 of 3 runs with the warm-up's hold taken out and passes with it. `a_loader_hold_nests_and_lets_go_for_a_wait` (ddp6s). `only_a_window_on_vulkan_holds_the_loader_through_its_callbacks` (ddp72) fails when every window holds.
 	- Verified: 20261008, the full unit suite, clippy for Linux, Windows, and macOS, `cicd/tests/swnoshm/run.bash` 3 times, and 20 more software launches without a crash. Before the fix the same launches crashed 1 in 15 at load 18, at the filed spot.
 	- Notes:
-		- 20261007: The validation layer also reports an overlapping `vkCmdCopyBufferToImage` on the minimap and wallpaper textures, in passing runs too.
+		- 20261007: The validation layer also reports an overlapping `vkCmdCopyBufferToImage` on the wallpaper texture, in passing runs too.
 	- Acceptance signoff: Self-closed: reproduced, and the 3 tests fail without the fix. On dev at 07f3f6a the gate passed and `cicd/tests/swnoshm/run.bash` passed 4 runs in a row at load 6 to 15.
 	- Closed: 20261013-105632
 	- Closed reason: Done
@@ -2816,7 +2813,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Opened: 20261005-142116
 	- Opened by: JC
 	- Assigned to: CC
-	- Related IDs: 2026100114435600, 2026100408214201
+	- Related IDs: 2026100408214201
 	- Target OS: macOS
 	- Test environment: b26
 	- Target version: rc.1
@@ -2932,7 +2929,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- Start SilkTerm.
 	- Incorrect behavior: The window shows at one size, then resizes itself.
 	- Expected behavior: The window is already at its final size when it first shows.
-	- Possible cause: This was fixed on 20260720 under Done, in "On open, when it becomes visible, it should already be at its final size". The per-monitor size work on 20261003 (2026100114435600) changed how the starting size is chosen, so it's the first suspect. It wasn't checked.
+	- Possible cause: This was fixed on 20260720 under Done, in "On open, when it becomes visible, it should already be at its final size". The per-monitor size work on 20261003 changed how the starting size is chosen, so it's the first suspect. It wasn't checked.
 	- Reproduced: 20261004 on b23, under xfwm4, and with 2 monitors. Opened from the second monitor, the window was sized for the first and changed size about a second after it showed. With Remember maximized on, or `--fullscreen`, it showed at its restored size and then grew.
 	- Actual cause:
 		- The launch chose the monitor by where the hidden window was, which is always the top-left corner. The window manager then opened it under the pointer, and the check after a move gave it that monitor's size. It came from `permon`.
@@ -3422,7 +3419,6 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- 20261028: The ID tool makes, reads, and checks IDs in the new form. The check refuses a missing, malformed, old base 62, future, or shared ID.
 		- 20261028: All 1543 test IDs were converted, and 34 more that the backlog and code comments name for tests that are gone, 1577 in all, in the 161 files that name them. Of them, 1038 took a later minute, up to 104 minutes on, where many tests were made in one minute.
 		- 20261028: The warning filter, `--list` and `-List` take the 5-character form.
-		- 20261028: silkterm-private's tests keep their old IDs for now. The one this backlog names is dehx0 here, and that repo needs the same change.
 	- Decisions:
 		- 20261028: It's one pass in time order over the live IDs and those of gone tests together, so each takes the minute it would have taken when it was made.
 		- 20261028: The IDs of gone tests are converted too, so a closed item's test ID still reads as its time, and none can be handed out again.
@@ -3449,16 +3445,16 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Requirements:
 		- Per `Other hosts and VMs` in the shared CICD rules. The Windows runs already take the boxes through the shared host lock's `wrap`, and a box that's off is a skip.
 		- A VM is put back the way it was found, through the VM state helper, for vm925w and vmKt6m.
-		- `--no-remote` skips every other box: the Windows scenarios, the Windows runner tests, and the private runner's Mac and store parts.
+		- `--no-remote` skips every other box: the Windows scenarios and the Windows runner tests.
 		- The Windows scenarios favor b29w. The GPU and timed ones, such as `perfladder`, run on vm925w only, since b29w's GPU is integrated. Every scenario runs on both boxes now.
 		- Windows testing names `b29w` only. The boxes' host config outside the repo still lists `b29w-wif` as a second address for it. Drop it, since the hosts file points `b29w` at the link that works.
 		- A skipped box shows as `SKIP` in its step's line and in the summary at the end.
 		- The Linux ARM64 build gets a `--version` smoke run on the arm64 Linux VM. Nothing runs it now.
 		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
 	- Progress log:
-		- 20261025: It was split in 4, since it's too big for one go: 2026102507245255 (the Windows boxes), 2026102507245260 (`--no-remote` and `SKIP`), 2026102507245265 (vmKt6m in the private runner), and 2026102507245270 (the ARM64 smoke run). This one closes with the last of them.
-	- Test case: The children's tests: dd5nr, dct7r, dd5nn, dehx0 in `silkterm-private`, and dehx3.
-	- Acceptance signoff: Self-closed: all 4 children are Done with their tests.
+		- 20261025: It was split, since it's too big for one go: 2026102507245255 (the Windows boxes), 2026102507245260 (`--no-remote` and `SKIP`), and 2026102507245270 (the ARM64 smoke run). This one closes with the last of them.
+	- Test case: The children's tests: dd5nr, dct7r, dd5nn, and dehx3.
+	- Acceptance signoff: Self-closed: all the children are Done with their tests.
 	- Closed: 20261028-190205
 	- Closed reason: Done
 
@@ -3685,36 +3681,6 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Closed: 20261028-192335
 	- Closed reason: Done
 
-- CICD reset: vmKt6m put back through the VM state helper
-	- ID: 2026102507245265
-	- Type: Task
-	- Status: Closed
-		- 20261028: It's in on `silkterm-private` branch `wip/rnd1028-2026102507245265` (30c64f1), since that repo doesn't have a branch other than `main`. It needs merging there.
-	- Priority: High
-	- Opened: 20261025-072452
-	- Opened by: CC
-	- Parent ID: 2026102416233802
-	- Target OS: macOS
-	- Target version: rc.1
-	- Requirements:
-		- The private runner's Mac part puts vmKt6m back the way it found it, through the VM state helper. The runner is in `silkterm-private`.
-		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
-	- Progress log:
-		- 20261028: `privrig.conf` takes an `@vmstate <command>` line, as `winrig.conf` does. With it, a job's box is held through the VM state helper, which wakes a VM that's paused or off and puts it back after. A VM that never wakes is a skip. A job's host may list fallbacks, `mac b26,vmKt6m`, tried in order.
-		- 20261028: The box config is outside the repo and still doesn't have an `@vmstate` line, so nothing changes until it's added.
-		- 20261028: The runner was run from the wip branch with a stand-in config: `mac nosuchbox,vmKt6m`, the host lock and `@vmstate`, with vmKt6m paused. It passed over the missing box, woke vmKt6m, sent the tree, and paused vmKt6m again after the job. The build itself failed there, since the account the job runs in doesn't have rustup. That's 2026102811082502.
-		- 20261028: `privrig.conf` has the `@vmstate` line and `mac b26,vmKt6m` now. Until 2026102811082502 is fixed, a run with b26 off fails on vmKt6m instead of skipping.
-	- Decisions:
-		- 20261028: Fallback boxes go in the job's line, so vmKt6m can stand in when b26 is off, with b26 still first for the timing tests. Without it vmKt6m would only run if named alone.
-		- 20261028: A non-VM box behind the helper is left alone by it, so one code path handles b26 and vmKt6m.
-		- 20261028: It was closed on the put-back, which is the requirement. The build on vmKt6m is 2026102811082502's. The wip branch still needs merging into silkterm-private's main.
-	- Verified: 20261028. The new stand-in test (dehx0) had 12 of its 19 checks fail against the old runner, and all pass after. shellcheck passes on both files. The real helper's `status` output matches what the runner reads.
-	- Verified: 20261028. dehx0 passed on the wip branch. The stand-in run above used the real VM state helper, and vmKt6m was paused before and after.
-	- Test case: `silkterm-private` `cicd/tests/hosts/run.bash` (dehx0).
-	- Branch: `silkterm-private` `wip/rnd1028-2026102507245265`
-	- Closed: 20261028-111636
-	- Closed reason: Done
-
 - CICD reset: a `--version` smoke run of the Linux ARM64 build
 	- ID: 2026102507245270
 	- Type: Task
@@ -3739,7 +3705,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Verified: 20261028. On vmDebARM64, paused at the start, with the real helper and the beta3 ARM64 build, the step resumed the VM, printed `SilkTerm v1.0.0-beta3 build defw9`, passed, and paused it again, in 9 s. The stand-in test (dehx3) and the engine test's new step and plan checks pass. shellcheck, the test ID check, and `--backlog-run-quick docs` pass.
 	- Verified: 20261028. The stand-in run above. dehx3 and dd5nn passed in the full run at 64f3584.
 	- Test case: `cicd/tests/armsmoke/run.bash` (dehx3), and the arm64 smoke checks in `cicd/tests/engine/run.bash`.
-		- Swept: the other steps that use a box, the Windows scenarios and the private runner, skip under the same flags and in the container. `--no-remote` help and install.md name the new step.
+		- Swept: the other step that uses a box, the Windows scenarios, skips under the same flags and in the container. `--no-remote` help and install.md name the new step.
 	- Branch: rnd1028
 	- Closed: 20261028-111636
 	- Closed reason: Done
@@ -3871,7 +3837,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Progress log:
 		- 20261025: From 2026102507245260, a step that left something out on another box ends with a `SKIP:` line, through `fStepDone`, and the run lists the `SKIP` lines again at the end. The plan has a Windows scenarios line. The closing-line form here should keep the `SKIP` case.
 		- 20261028: It's done in all 3 scripts. Each step opens after a 79-wide rule with a stamped `Starting` line, numbered of the steps the run takes, and closes with `PASS`, `SKIP`, or `FAIL`. `fDie`, or an error that ends the run, closes an open step with `FAIL`. The plan says how many steps there are and lists the ones turned off, with the flag or reason. `--list` numbers the steps. The backlog quick run lists the areas not named as off.
-		- 20261028: Test asserts were given new values for the new lines. ddrp2: `4/8  Profiler (here)` after the render node test is now the render node test inside `Checks on this box`, with the order checked in `--list`; `profiler disabled` is now the plan's `Profiler (--quick)`; `0/8  Remote sync` is `Starting Remote sync`; `Quick 1/2  Docs checks` is `Step 1 of 2  Docs checks`. dd5np: under `--no-sync`, `remote sync skipped` isn't printed at all now. dd5nn: the private runner's `skipped (--no-remote)` line isn't printed now, and the plan check tests it. dd5nw: `Quick 1/1  Format check` is `Step 1 of 1  Format check`.
+		- 20261028: Test asserts were given new values for the new lines. ddrp2: `4/8  Profiler (here)` after the render node test is now the render node test inside `Checks on this box`, with the order checked in `--list`; `profiler disabled` is now the plan's `Profiler (--quick)`; `0/8  Remote sync` is `Starting Remote sync`; `Quick 1/2  Docs checks` is `Step 1 of 2  Docs checks`. dd5np: under `--no-sync`, `remote sync skipped` isn't printed at all now. dd5nw: `Quick 1/1  Format check` is `Step 1 of 1  Format check`.
 		- 20261028: The full run at 64f3584 numbered 13 steps across both sides of the container, from the image step on, each with its rule, stamped `Starting` line, and `PASS` or `SKIP` line, and listed the 4 steps off with the flag. `mac.yml` run 40731102746 printed 9 steps the same way. On b29w, `-BacklogRunQuick fmt scripts` and `-MergeGate -List` printed theirs.
 		- 20261028: Over ssh the Windows rule comes out as bell characters, as it did before rnd1028. That's 2026102811082453.
 	- Decisions:
@@ -4001,7 +3967,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- 20261026: Priority goes on the run's own shell with `renice` and `ionice -p` rather than a re-exec under `nice`, so arguments and traps stay as they are. Each script in the container lowers itself the same way.
 		- 20261026: A `CICD_MAX_JOBS` set by config.bash or handed down by the outer run is a ceiling. `CICD_CORES` goes into the container too, so a `--cpus` cap isn't counted twice.
 		- 20261026: Windows doesn't keep a load average, so busy there is the CPU load percentage over 50. cicd-win.ps1 doesn't have a hard step of its own. Its WSL half is cicd.bash, which lowers itself.
-		- 20261026: `ci-mac.bash` on the hosted runner is left alone, filed as a Check in questions.md. The private runner on b26 is in silkterm-private.
+		- 20261026: `ci-mac.bash` on the hosted runner is left alone, filed as a Check in questions.md.
 		- 20261028: That call was changed. `ci-mac.bash` takes its job count and low priority from `jobs.bash` too, per the rule's "on another host, the same rules apply". On the 3-CPU hosted Mac that's 1 job.
 	- Verified: 20261028. Mac CI run 40750006918 at ce3d9fb printed `jobs: 1 of 3 CPUs` and passed in 11.5 min, against 7.2 min for the run before it. The build took 3:43 against 1:31, clippy 2:18 against 0:44, and tests 5:17 against 4:43. The jobs test's 2 new checks fail on the old `ci-mac.bash`.
 	- Verified: 20261026. defn6 (new), ddrp2, and the backlog quick run in all 5 areas passed. The quick run printed `jobs: 8 of 32 CPUs (busy, load 19.63)`. cicd-win.ps1's `fSetJobs`, lifted out and run under pwsh here, gave 8 at BelowNormal, then 4 at Idle for a hard step, and 1 on 2 CPUs.
@@ -4143,18 +4109,17 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Target OS: All
 	- Target version: rc.1
 	- Requirements:
-		- `--no-remote` skips every other box: the Windows scenarios, the Windows runner tests, and the private runner's Mac and store parts.
+		- `--no-remote` skips every other box: the Windows scenarios and the Windows runner tests.
 		- A skipped box shows as `SKIP` in its step's line and in the summary at the end.
 		- Sweeping override, 2026-10-24: this supersedes any earlier decision on this project that conflicts with it.
 	- Progress log:
-		- 20261025: `--no-remote` skips the Windows scenarios and the private runner, and the plan says so for each. The plan has a Windows scenarios line now.
+		- 20261025: `--no-remote` skips the Windows scenarios, and the plan says so. The plan has a Windows scenarios line now.
 		- 20261025: A step that uses another box hands its scripts the run's skip list as `SILK_CICD_SKIPS`. The Windows scenarios write their `SKIP wingui:` lines there. A step that skipped anything ends with a `SKIP:` line rather than `OK:`, and the run lists every `SKIP` line again at the end.
 		- 20261025: `cicd-win.ps1 -NoRemote` passes `--no-remote` to the Linux half, which is the half that uses the boxes.
-		- 20261025: The private runner doesn't write to the list yet, so its skips are still only warnings. That half is silkterm-private's 2026102416285601.
 	- Decisions:
 		- 20261025: A step turned off by `--no-remote` is in the plan rather than in the end list, which is for boxes that weren't there, per the shared rules.
-	- Verified: the engine, Windows scenario harness, Windows pipeline, and container tests pass, and each new check failed against a broken copy of what it checks. shellcheck, the bash style check, the PowerShell lint, and the test ID and docs checks pass. The plan printed by a real `cicd.bash` showed both lines for no options, `--no-remote`, and `--quick`.
-	- Swept: everything `cicd.bash` runs that uses a box: the Windows scenarios and the private runner. The script tests under `cicd/tests`, `win-remote` included, use stand-ins. `cicd-win.ps1`'s Linux half got the flag. The demo and `ci-mac.bash` don't use any other box.
+	- Verified: the engine, Windows scenario harness, Windows pipeline, and container tests pass, and each new check failed against a broken copy of what it checks. shellcheck, the bash style check, the PowerShell lint, and the test ID and docs checks pass. The plan printed by a real `cicd.bash` showed the Windows scenarios line for no options, `--no-remote`, and `--quick`.
+	- Swept: everything `cicd.bash` runs that uses a box, which is the Windows scenarios. The script tests under `cicd/tests`, `win-remote` included, use stand-ins. `cicd-win.ps1`'s Linux half got the flag. The demo and `ci-mac.bash` don't use any other box.
 	- Branch: rnd1026
 	- Commit: e673d53
 	- Test case: `cicd/tests/engine/run.bash` (dd5nn), 23 new checks for `--no-remote`, the plan lines, the `SKIP` step lines, and the end list. `cicd/tests/wingui/harness-test.bash` (dct7r), 4 for the skip list. `cicd/tests/cicd-win/run.bash` (dd5nw), 2 for `-NoRemote`.
@@ -4231,7 +4196,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- 20261006: the light palettes can ease back toward lighter now that the text is heavier, but not too light.
 	- Against: the themes design doc accepted that the menu and tab labels got the light-mode correction in the wrong direction. With the stronger lift that would show, so each glyph now says which side of the pair it is on.
 	- Verified: dark mode draws exactly the pixels it drew before, in all 4 themes, with and without a wallpaper, on Vulkan and GL. Light mode's halo moves the picture as far as before. The full unit suite, clippy, and the glyphon fork's tests pass.
-	- Swept: every caller of the contrast floor goes through `Settings::min_contrast` (pane cells, link underline, cursor plate, minimap, wallpaper-derived text). The Settings dialog and the scrim's text pass share the lift through the same correction. Chrome tips are never repainted, so they keep the plain floor.
+	- Swept: every caller of the contrast floor goes through `Settings::min_contrast` (pane cells, link underline, cursor plate, wallpaper-derived text). The Settings dialog and the scrim's text pass share the lift through the same correction. Chrome tips are never repainted, so they keep the plain floor.
 	- Branch: lightweight
 	- Commit: 531f6c7
 	- Test case: `light_text_puts_down_the_ink_dark_text_does` (ddk4n) and `a_light_theme_keeps_text_a_little_further_off` (ddk4p), both seen failing with the lift or the stretch taken out. In the glyphon fork, `the_contrast_boost_adds_ink_between_the_ends` and the shader text check, both seen failing on a broken mirror.
@@ -4450,7 +4415,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Notes:
 		- 20261004: `cicd/utility/release.bash` writes the notes now. They say only "See the README for details." and the build number.
 	- Decisions:
-		- 20261004: There's no macOS row for now. The public release doesn't have a macOS download, and macOS is sold through an app store. A universal macOS binary is its own item, 2026100313404572.
+		- 20261004: There's no macOS row for now. The public release doesn't have a macOS download.
 	- Progress log:
 		- 20261004: The notes now have a download table, x86_64 and ARM64 across, Linux and Windows down. Linux cells link the binary, .deb, and .rpm, and Windows cells the installer and the portable .exe.
 		- The table is built from the files being uploaded. A missing file doesn't get a link, and a cell without any says "Not available". A file without a place in the table goes on an "Other downloads" line.
@@ -4542,7 +4507,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Opened: 20261004-182255
 	- Opened by: JC
 	- Assigned to: CC
-	- Related IDs: 2026100312470535, 2026100418225506, 2026100421153746
+	- Related IDs: 2026100312470535, 2026100418225506
 	- Target OS: All
 	- Target version: rc.1
 	- Requirements:
@@ -4567,7 +4532,6 @@ Going forward, new issues in the new template at the bottom of this file will go
 			- The dialogs' kept context fell back the same way.
 		- 20261004: Verified on b23: with the setting on at launch, the window drew in software and the card's rating was left alone. Turned on and off through Settings and through a settings reload, on both X11 and Wayland, the window changed device each time and drew. The running profile went to Low and back, and the profile in the file didn't change. Without a software renderer to be found, the card drew and stderr said so.
 		- 20261004: Windows, where the software adapter is WARP, was only compiled, for the ordinary window and the DX12 one used with Transparency on. The macOS gray is checked by a unit test, rather than seen on a Mac. A Wayland rebuild after an idle release wasn't run; rebuilds there came from a setting change.
-		- 20261004: Filed as 2026100421153746, seen along the way. Debug builds on lavapipe report a Vulkan validation error for the minimap upload. It shows on the plain no-card path too, so it's older than this item.
 		- 20261005: Verified on vm925w, with Transparency off and on: with the setting on, and with the card refused through `SILK_REFUSE_CARD`. Each window drew on WARP (Dx12 / Cpu) and took typing, and the refused ones said they fell back. Settings and About weren't opened there.
 	- Against: the UI style guide leaves a row that can never work on a platform out of that build, rather than graying it. The requirement asks for gray with a tip on macOS. It's listed under the guide's Known deviations.
 	- Swept: every device and adapter request. The window's native path, the X11 GL path at launch and at a rebuild, the Windows composited path, the dialogs' kept context and the one a dialog builds without it, and the adapter `--about` reports. `grep -rn 'request_adapter\|request_device(' source/src` finds only `gl_on`, `pick_device`, `probe_adapter_info`, and a test.
@@ -4632,7 +4596,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- Before RC1.
 		- One window was seen using about 330 MB of graphics memory. Find where it goes before changing anything.
 		- Read a real window's use from the driver at a few window sizes. Scrim on and off, wallpaper on and off, and Settings opened once.
-		- Do the same for regular memory: scrollback, the minimap's store and the glyph caches.
+		- Do the same for regular memory: scrollback and the glyph caches.
 		- Put the numbers in the design doc, in place of the estimate.
 	- Notes:
 		- 20261004: Design in the [reducing resources design doc](design_docs/20261004-182255_reduce-resources.md). The estimate there puts the scrim at about 150 MB of a 2560x1440 window.
@@ -4640,14 +4604,14 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- Note: 20261004, for 2026100418225503: on X11 a 2560x1440 wallpaper costs 32 MiB of graphics memory for a 15 MiB texture, and 44 MiB of regular memory, 14 MiB of it a copy the size of the image that stays mapped. A 4096x2731 one costs 88 and 106 MiB.
 		- Note: 20261004, for 2026100418225505: the kept context costs about 200 MiB of graphics memory and 16 MiB of regular memory per process. With wgpu's `MemoryUsage` memory hint it's 18 MiB, and Settings still opens from it. The open time with the hint wasn't measured.
 	- Progress log:
-		- 20261004: Measured one window at 3 sizes on b23, with the scrim, the wallpaper and the dialogs' context each on and off, a full scrollback, the minimap off, and Settings opened once. The numbers are in the design doc's [Measure first](design_docs/20261004-182255_reduce-resources.md#measure-first) section, in place of the estimate.
+		- 20261004: Measured one window at 3 sizes on b23, with the scrim, the wallpaper and the dialogs' context each on and off, a full scrollback, and Settings opened once. The numbers are in the design doc's [Measure first](design_docs/20261004-182255_reduce-resources.md#measure-first) section, in place of the estimate.
 		- Graphics memory is the driver's figure for the process. Single textures are from wgpu's allocator report, on the Vulkan path. Regular memory is the unique resident footprint less the driver's libraries.
 		- The 330 MB was a window plus the dialogs' kept context, which is about 200 MiB rather than 52. Most of it is 2 blocks wgpu's allocator reserves up front. Filed as 2026100419463460, since it also costs the main window on Wayland, and on Windows going by the code.
 		- The new `SILK_MEMDBG=1` prints the allocator report and the heap counts. `cicd/utility/mem-per-window/run.bash` measures one window again.
 	- Verified: repeat runs of the same window gave the same driver figure to the MiB (469 on all 3 runs, 268 on all 3). At each size the parts add up to the measured total. The heap counts match the measured growth within a few percent.
 	- Branch: memmeasure
 	- Commit: 8d4782c
-	- Test case: None for the figures, which are a measurement. `SILK_MEMDBG` is tested by `each_debug_switch_reads_its_own_variable` (ddf59). Its minimap count is pinned by `the_memory_count_covers_every_stored_row` (ddgtx), which was seen to fail with the stored rows left out.
+	- Test case: None for the figures, which are a measurement. `SILK_MEMDBG` is tested by `each_debug_switch_reads_its_own_variable` (ddf59). Its stored row count is pinned by `the_memory_count_covers_every_stored_row` (ddgtx), which was seen to fail with the stored rows left out.
 	- Acceptance signoff: Self-closed: the numbers are in the design doc and nothing is left to judge.
 	- Closed: 20261004-194634
 	- Closed reason: Done
@@ -4823,7 +4787,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- Plain, double, curly, dotted, and dashed underlines are drawn under their run of cells, in the color set with SGR 58, or else the text color. Concealed text doesn't draw any.
 		- Curly, dotted, and dashed are drawn by the quad shader, so a run is one quad and the pattern runs on across cells.
 		- An app's scroll slide moves them along with the rows it reveals.
-	- Swept: Every place cells are styled for drawing: the pane's cell loop and the scrolled-off strip. The link underline now takes its place from the same helper. The minimap doesn't draw any lines, and is left as is. Engine flags now read: all 5 underline styles, the underline color, strike-through and hidden.
+	- Swept: Every place cells are styled for drawing: the pane's cell loop and the scrolled-off strip. The link underline now takes its place from the same helper. Engine flags now read: all 5 underline styles, the underline color, strike-through and hidden.
 	- Verified: 20261102, the backlog quick run (fmt, clippy, tests, scripts, docs), and every style seen drawn in a window, with SGR 58 colors in both its forms.
 	- Branch: rnd1102
 	- Commit: 87f070f
@@ -4871,38 +4835,6 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Closed: 20261105-161500
 	- Closed reason: Done
 
-- The tmux end test fails in the whole suite on vmKt6m, and passes alone there
-	- ID: 2026110313290006
-	- Type: Bug
-	- Status: Closed
-	- Severity: Avg
-	- Opened: 20261103-132900
-	- Opened by: CC
-	- Related IDs: 2026102811082502
-	- Target OS: macOS
-	- Test environment: vmKt6m, as mactest, with MacPorts tmux 3.8 at /opt/local/bin
-	- Target version: rc.1
-	- Steps to reproduce: Run the private runner's Mac job on vmKt6m with its tests, or `cargo test --workspace` there as mactest.
-	- Incorrect behavior: `ending_kills_the_session_started_and_no_other` (de30d) fails at tmux.rs:506 with "silk-test_1": the first `new-session` on the test's own server didn't succeed. The other 1401 pass.
-	- Expected behavior: It passes, or skips when there is no tmux.
-	- Reproduced: 20261103, once in the whole suite. Control: alone on the same build it passed 3 of 3, and 5 of 5 with 12 busy loops on the VM's 8 cores (load about 7).
-	- Possible cause: It's unmeasured. `run` gives a tmux call 800 ms (ASK_FOR), and the first `new-session` also starts the server, during the suite's process churn. Or another test used the same server.
-	- Progress log:
-		- 20261103: Measured in the whole suite on vmKt6m, 3 runs, all passed: the first `new-session` takes 35 to 47 ms, at 8 and 16 test threads and with 12 busy loops (guest load 27), and the others about 15 ms. On b23 it's 6 to 13 ms. So a fail at 800 ms is a stall of 20 times that or more, rather than the usual cost.
-		- 20261103: Another test on the same server was ruled out, since only this test sets its socket, per thread, in its own run folder, and every other ask goes to `/dev/null/no-tmux`. So was a stale socket folder, since there isn't one in `/tmp`, and the failing run's folder didn't have any `tmuxend` left in it.
-		- 20261103: What stalled is still open. The guest can stall that long. While it was loaded, an ssh to it timed out in the banner exchange after 20 s. A spawn that failed for the 256 open files a Mac allows is the other candidate, and the new message would tell it apart.
-		- 20261103: Verified: the whole unit suite on vmKt6m as mactest, at dcbec71, 3 runs in a row. Each time, 1405 passed and 0 failed, de30d included, against the real tmux. No setup call took over 800 ms, so no fail message came up to tell the causes apart. The stall stays unexplained, and the next fail will say which it was.
-	- Decisions:
-		- 20261103: The test's own setup and cleanup calls get 10 s rather than ASK_FOR, since they aren't what it tests. The asks it does test, `has_session`, `current_path` and `end`, still use the app's 800 ms. Its message gives what tmux said or why there was no answer, and a setup call past 800 ms is noted in its output.
-		- 20261103: `run` is now `ask` with ASK_FOR, and `ask` says why it came back empty. Nothing changes for the app.
-	- Actual fix: It's a workaround, since the stall isn't explained. The test's setup waits up to 10 s, and a fail says why.
-	- Verified: 20261103. With the first `new-session` held 1.2 s, de30d failed at it with "silk-test_1" under the old wait, as on vmKt6m, and passes now. The quick gate, clippy for Windows and the test ID check pass.
-	- Swept: every `run` caller in tmux.rs. de541 asks without a socket and doesn't expect any answer, so it passes either way. No other test starts a tmux server.
-	- Test case: `ending_kills_the_session_started_and_no_other` (de30d).
-	- Branch: rnd1103
-	- Closed: 20261103-163000
-	- Closed reason: Done
-
 - Running on macOS without a GPU fails to launch
 	- ID: 2026102209035801
 	- Type: Bug
@@ -4946,41 +4878,6 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Test case: `no_device_on_macos_says_why_and_that_nothing_can_stand_in` (de9m1)
 	- Acceptance signoff: Self-closed: the stock build on vmKt6m, launched in the console session, put the alert up and wrote its words to stderr (20261103).
 	- Closed: 20261103-163000
-	- Closed reason: Done
-
-- The private runner's Mac job can't build on vmKt6m: rustup isn't there for the account it uses
-	- ID: 2026102811082502
-	- Type: Bug
-	- Status: Closed
-	- Opened: 20261028-110825
-	- Opened by: CC
-	- Related IDs: 2026102507245265
-	- Target OS: macOS
-	- Test environment: vmKt6m
-	- Steps to reproduce: Point the `mac` job at vmKt6m in a `privrig.conf` with `@vmstate`, and run the private runner.
-	- Incorrect behavior: "macos: rustup could not add x86_64-apple-darwin aarch64-apple-darwin", and the job fails. vmKt6m is still put back.
-	- Expected behavior: The job builds there, as on b26.
-	- Reproduced: 20261028, with the runner from silkterm-private `wip/rnd1028-2026102507245265`.
-	- Possible cause: `ssh vmKt6m` logs in as collierjr, who has only a MacPorts cargo at /opt/local/bin. rustup is set up for mactest only. Either the box gets rustup for that account, or the job line takes an ssh account, which the lock and VM state helper names would then need kept apart from.
-	- Severity: Avg
-	- Target version: rc.1
-	- Actual cause: The job ssh'd to the bare box name, so it ran in whatever account ssh picked there, collierjr on vmKt6m. The runner didn't have any way to name another.
-	- Actual fix: A box in `privrig.conf` can be `user@box`, such as `mac b26,mactest@vmKt6m`. The job's ssh and scp use it as written. The host lock, its list of known boxes, and the VM state helper get the bare box. README says so.
-	- Progress log:
-		- 20261103: The `@vmstate` runner is on silkterm-private's main now, so the fix is on its `rnd1103`.
-		- 20261103: The real `privrig.conf` still says `mac b26,vmKt6m`. It needs `mac b26,mactest@vmKt6m`. It's outside the repo, so it wasn't changed here.
-		- 20261103: With tests on, the job on vmKt6m got through the build and ran the suite. The tmux end test, de30d, failed, and it passed alone there. That is 2026110313290006.
-	- Decisions:
-		- 20261103: The job line names the account, rather than the box getting rustup for collierjr. That would put a second Rust next to that account's MacPorts cargo, and build as the admin account rather than the test one. mactest already has rustup 1.96.
-		- 20261103: The lower-case `vmkt6m` logs in as mactest through ssh's own config, but wasn't used. The lock and the VM state helper know the box as `vmKt6m`, and a case difference would be easy to break.
-	- Verified: 20261103. dehx0 passes with 10 new checks, and 7 of them failed against the old runner. shellcheck passes on both files.
-	- Verified: 20261103. A copy of the runner with `mac mactest@vmKt6m`, the host lock and `@vmstate`, vmKt6m paused, `--no-test`: it woke vmKt6m, both release builds and the .app, .zip, and .dmg were made as mactest, and the 4 files came back. vmKt6m was paused again after.
-	- Verified: 20261103. The same with `mac b26-nosuchbox,mactest@vmKt6m` and tests on: it fell back to vmKt6m, the silkterm unit tests ran there with 1401 passed and 1 failed (de30d, above), and vmKt6m was paused again after.
-	- Swept: every use of the job's host in run.bash. The pick, `fAsleep`, the lock's list, `check`, `wrap`, and the skip messages take the bare box. ssh and scp in both jobs take it as written, the store job's included.
-	- Test case: `silkterm-private` `cicd/tests/hosts/run.bash` (dehx0).
-	- Branch: `silkterm-private` `rnd1103`
-	- Commit: `silkterm-private` 09298a8
-	- Closed: 20261103-132943
 	- Closed reason: Done
 
 - Two SilkTerm windows on one headless display: an idle release sometimes never shows, or never happens
@@ -5087,7 +4984,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- 20261022: usage.md has a "Programs over ssh" section, with the command that copies the entry to a remote host, and the setting as the other way out.
 		- 20261022: The default, and any ssh handling of its own, were left open. A question was filed.
 		- 20261022: The pane test failed on macOS: without TERM set it read `dumb`. bash, which is macOS's `/bin/sh`, makes up an unexported `TERM=dumb` when none is inherited, so the test's own shell said so, rather than the engine or `login`. The test now reads the environment through `printenv`. It was reproduced on Linux under bash with TERM unset, and passes there and on Linux with TERM set and unset.
-		- 20261022: `the_configured_term_reaches_the_program` fails on macOS, at `term.rs:2124`, the empty-setting case: left "dumb", right "". The program sees `TERM=dumb` where the test expects the test process's own TERM, which is unset there. It failed on the Mac CI (run 39842974082, arm64), again when run alone, and on b26 in the private runner, which failed the full pipeline run at stage 6. Linux passes, on the host and in the container. It wasn't fixed here.
+		- 20261022: `the_configured_term_reaches_the_program` fails on macOS, at `term.rs:2124`, the empty-setting case: left "dumb", right "". The program sees `TERM=dumb` where the test expects the test process's own TERM, which is unset there. It failed on the Mac CI (run 39842974082, arm64), again when run alone, and on b26. Linux passes, on the host and in the container. It wasn't fixed here.
 		- 20261022: The fixed test passed on Mac CI run 39858608191, with the whole suite.
 		- 20261102: An empty `shell.term`, the default, now gives each pane `TERM=xterm-256color` on every OS. The config template comment, usage.md's "Programs over ssh", and the alacritty fork design doc say so.
 		- 20261102: `the_configured_term_reaches_the_program` (de9kn): the empty case expected this process's TERM and now expects `xterm-256color`. It also checks the pane's environment directly, since a test run's own TERM may already be xterm-256color, and that `alacritty` set by hand gets through.
@@ -5289,7 +5186,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- 20261023: A full container run at 2da75a7 passed end to end. The run inside got `--no-demo`, its plan showed the demo as disabled, and its stage 7 said "demo video disabled". No "recording demo video ..." showed. The host's stage 7 said "demo video disabled" too.
 	- Actual fix: `--no-demo` is added to the fixed options in `cicd.bash` for the run inside.
 	- Verified: 20261023. The new check failed before the fix and passes after. The container and engine tests, shellcheck at the pipeline's level, the bash style check, `lint-report.bash --check`, and the docs check pass.
-		- Swept: every `fContainerRun` call. The gate, ASan, and CodeQL calls run their own script rather than the engine's later stages. Of the rest of the host-only steps, sync, the private runner, dogfood, and publish have their flags in the list, and the content scrub, the Windows scenarios, and the run log check `SILK_CICD_IN_CONTAINER`. `cicd-win.ps1 -Wsl` doesn't start a container. design.md already says the demo stays outside.
+		- Swept: every `fContainerRun` call. The gate, ASan, and CodeQL calls run their own script rather than the engine's later stages. Of the rest of the host-only steps, sync, dogfood, and publish have their flags in the list, and the content scrub, the Windows scenarios, and the run log check `SILK_CICD_IN_CONTAINER`. `cicd-win.ps1 -Wsl` doesn't start a container. design.md already says the demo stays outside.
 	- Branch: rnd1023
 	- Test case: `cicd/tests/container/run.bash` (ddrp2), "the demo among them, though nothing here asked for it off": the run inside gets `--no-demo` when nothing asked for it.
 	- Acceptance signoff: Self-closed: the full container run showed the demo off inside and on the host.
@@ -5430,7 +5327,6 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Severity: Avg
 	- Opened: 20261014-083844
 	- Opened by: CC
-	- Related IDs: 2026101321365912
 	- Target OS: Windows
 	- Test environment: b29w
 	- Target version: rc.1
@@ -5507,7 +5403,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Branch: clearsnap, bleclear
 	- Commit: 9c99883, engine fork 0068fdd on `scroll-ledger-0.26.0`; 8ed1a1b
 	- Test case: `a_clear_shows_at_once_and_only_what_follows_it_eases` (ddx6k), `the_ease_floor_does_not_reach_back_past_a_clear` (ddx6m), and the inverted dct9e, each red before the fix and green after. Scroll scene `clear` (`cicd/tests/scroll/run.bash`). Engine fork test `scroll_ledger_counts_what_went_up_after_a_clear`. For ble.sh: `a_prompt_ble_redraws_after_a_clear_shows_at_once` (ddxf1), red before and green after. `blank_lines_that_move_ink_still_ease` (ddxf2) pins what still eases. Scroll scene `clear`, with ble.sh's redraw.
-	- Swept: the engine pushes the screen into history in one place, the erase of the whole screen, and a reset empties it. Both are noted. Erasing only the scrollback is left out, since the screen stays put. The alt screen doesn't keep any history and has its own slide. The output ease has one caller, the pane build. SilkTerm doesn't have a clear or reset command of its own. The blank line rule applies to both output ease paths, with a clear in the span and without one. A recorded region scroll already had its own rule for blank rows. The minimap's line count is unchanged.
+	- Swept: the engine pushes the screen into history in one place, the erase of the whole screen, and a reset empties it. Both are noted. Erasing only the scrollback is left out, since the screen stays put. The alt screen doesn't keep any history and has its own slide. The output ease has one caller, the pane build. SilkTerm doesn't have a clear or reset command of its own. The blank line rule applies to both output ease paths, with a clear in the span and without one. A recorded region scroll already had its own rule for blank rows.
 	- Note: the 2 blank lines stay in the scrollback above the prompt, since the engine sends any rows a delete at the top row takes into the scrollback. It's left as is.
 
 - Flyover text for the wallpaper option uses "carries"
@@ -5597,32 +5493,6 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Test case: ddwhr `the_font_switches_are_there_and_an_automatic_value_draws_like_any_other`. Family and Size each draw only their value in the box, in the normal color and not italic, and set by hand to the same value they draw exactly the same, without the x.
 	- Acceptance signoff: Self-closed: a commit already fixed it, b043ccb, and a test now pins it.
 	- Closed: 20261013-034224
-	- Closed reason: Done
-
-- The allocations-per-frame test fails at rest now and then: every frame rebuilds both panes
-	- ID: 2026101007274798
-	- Type: Bug
-	- Status: Closed
-	- Severity: Avg
-	- Opened: 20261010-072747
-	- Opened by: CC
-	- Assigned to: CC
-	- Target OS: All
-	- Test environment: b23, the pipeline's headless display
-	- Target version: rc.1
-	- Steps to reproduce:
-		- Open a window with 2 panes and the minimap on. A few seconds after the window is up, have both shells print a few hundred lines.
-	- Incorrect behavior: Once the output ease has settled, every frame shapes both panes again, at rest, for as long as the window is up. The test read 338 allocations a frame against a limit of 178. The pipeline run of 20261010 06:38 failed on it. The run the evening before passed on the same tree.
-	- Expected behavior: A frame at rest is a cursor frame, about 166 allocations.
-	- Reproduced: 20261010 on b23, about 1 run in 4 with the shells' output held back 3 seconds.
-	- Actual cause:
-		- A minimap compose that comes due marks the window dirty, which rebuilds every pane. The other pane's minimap is then updated inside its own 90 ms throttle gap, and that branch marked a compose as due whether or not the build had folded anything. Its wake came about half a gap later, rebuilt the first pane inside its gap, and so on. It starts whenever the 2 panes' compose clocks end up about half a gap apart, which output arriving after the window is up can do.
-	- Actual fix:
-		- A build inside the gap needs a compose only for what it folded: new history, a rebuild, stand-ins left, or a lag still draining. The end of a compose already used that rule.
-		- The test's drag check capped the frame plus what came before it at one limit. On a slow box more pointer moves fold into each frame, so that share rose with the load and failed at 361 against 360 right after the fix. The frame is now capped on its own, and what came before it per pointer move.
-	- Branch: allocsflake
-	- Test case: `a_build_inside_the_gap_owes_nothing_new` (ddrhw), seen failing without the fix. The window test is ddkre.
-	- Closed: 20261010-072747
 	- Closed reason: Done
 
 - A blink rate setting of 500 ms blinks at more like 1000 ms
@@ -5747,7 +5617,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Actual cause: The key handling took the Ctrl chords on every platform, and on a Mac took the Command ones beside them. The Settings text boxes, the tab rename, the link click, and the block selection read Ctrl alone. On a Mac the menu bar takes Command+C and V first, and a pick with Settings open only brought it forward.
 	- Actual fix:
 		- On a Mac the program's chords are the Command ones from the one table the menu bar reads, and no Ctrl chord is the program's. The Ctrl chords go to the shell. Linux and Windows are unchanged.
-		- The tab chords move too: Command+PageUp and PageDown walk the tabs, and Shift with them moves the tab, as Ctrl does elsewhere. Command+Shift+[ and ] are 2026100219054497.
+		- The tab chords move too: Command+PageUp and PageDown walk the tabs, and Shift with them moves the tab, as Ctrl does elsewhere.
 		- Command+click opens a link and Command held at a press selects a block.
 		- A Settings text box takes Command+A, C, X, and V. Edit > Copy and Paste on the menu bar now act on the box when Settings is open. Moving by words is Option, the Mac's word key, since Command+Left and Right go to either end in a Mac text box. Command+Backspace erases to the start. Ctrl plus a letter doesn't type anything.
 		- The tab rename takes Command+A, and Command+V when it is pressed as a key. Neither Command nor Ctrl plus a letter types into the name. Paste from the menu bar is 2026100219054483.
@@ -6067,7 +5937,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Reproduced: 20261004 on b26. The system log shows the test binary starting the same second the file was written.
 	- Notes:
 		- Note: 20261004, the change on b26 didn't alter behavior, since the set value below it was untouched. The next dogfood launch would make the same edit.
-		- Note: 20261004, the private pipeline's test runs on b26 do this too. There are 2 ways out: test runs default to a throwaway home, or loading never writes under test. The tests that read the live config on purpose (G6) need checking either way.
+		- Note: 20261004, the test runs on b26 do this too. There are 2 ways out: test runs default to a throwaway home, or loading never writes under test. The tests that read the live config on purpose (G6) need checking either way.
 	- Actual cause: The first settings read in a test process runs the launch steps, and those write the file back when a newer build would change it. Nothing told a test run apart.
 	- Decisions:
 		- 20261004: A test process never writes the box's own config or anything in its folder, the data folder included. Reading it stays as it was, so the tests that read it on purpose (G6) still do. A write to a file a test picked for itself still goes through.
@@ -6161,21 +6031,20 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Severity: Avg
 	- Opened: 20261004-100532
 	- Opened by: CC
-	- Related IDs: 2026100408214204
 	- Target OS: macOS
 	- Test environment: b26
 	- Target version: rc.1
 	- Incorrect behavior: The tab label never shows the program running in the shell, such as an editor.
 	- Expected behavior: The same as on Linux.
 	- Reproduced: 20261004 on b26, through the lookup a tab uses. It didn't give a name for a running `sleep`.
-	- Possible cause: The running program's name is read from `/proc` (`proc_comm` in term.rs), which macOS doesn't have. The shell's folder had the same fault, fixed under 2026100408214204.
+	- Possible cause: The running program's name is read from `/proc` (`proc_comm` in term.rs), which macOS doesn't have. The shell's folder had the same fault, fixed earlier.
 	- Actual cause:
-		- The name came only from `/proc`, so on macOS every lookup came back empty. The same lookup decides the minimap's per-program switch, which never saw a program there either.
+		- The name came only from `/proc`, so on macOS every lookup came back empty.
 	- Progress log:
 		- 20261013: The test failed on b26 once GNU coreutils was on PATH: there `sleep` is a link to `gsleep`, and a Mac names the file a link points to, so the code was right and the test wasn't. It now starts `/bin/sleep` by full path. Verified: it fails before and passes after on b26, and passes on Linux. Swept: the 6 other tests that start `sleep` never check its name, and nothing else reads a spawned program's name. It's on branch macfix.
 	- Actual fix:
 		- On macOS the name comes from the process's short BSD info, the first 16 bytes of its name, about the same as Linux's 15. That works for another user's process too. `proc_name` was tried first and doesn't give anything for a root process, so a `sudo` command would have stayed unnamed. Linux is unchanged.
-	- Swept: every `/proc` read in the source, and everything that names a pane's foreground program. The tab label and the minimap both go through `proc_comm`. Copy-output and the reported-folder check use the foreground process group only, which macOS reports. The config busy check, wallpaper memory test, and profiler CPU name are Linux only on purpose.
+	- Swept: every `/proc` read in the source, and everything that names a pane's foreground program. The tab label goes through `proc_comm`. Copy-output and the reported-folder check use the foreground process group only, which macOS reports. The config busy check, wallpaper memory test, and profiler CPU name are Linux only on purpose.
 	- Verified: on b26 the new test fails with the old lookup (no name) and with `proc_name` (no name for pid 1), and passes with the fix. All 24 terminal tests pass there. The terminal tests on Linux, rustfmt, and clippy for Linux and macOS x86_64 pass.
 	- Branch: maccomm
 	- Commit: 0db9f44
@@ -6425,7 +6294,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- On b23 now, 24 to 39 processes use CPU in a 3 s tick. In 25 minutes of top at 40 rows, every visible row was busy in all 355 timed refreshes, and none slid. A redraw after an arrow key comes after a short tick with fewer busy rows, and 573 of 898 of those slid.
 	- Progress log:
 		- 20261013: Question: Was b23 busy when the sliding stopped, for example a build or test run going? Does top slide again once the box is quiet? If it does, it's top re-sorting its list and the item can close as Moot. If it stays stopped on a quiet box, a window started from a terminal with `SILK_SCROLLDBG=1` prints each redraw's shift, which would show what refuses it.
-		- 20261013: Today's 3 scroll changes don't affect top. It doesn't grow any history after its first clear, so the flatpak repaint check never runs for it, its first clear already snapped, and it doesn't set a mouse or focus mode, so it keeps the minimap column.
+		- 20261013: Today's 3 scroll changes don't affect top. It doesn't grow any history after its first clear, so the flatpak repaint check never runs for it, and its first clear already snapped.
 		- 20261013: Answer (JC): A new instance also isn't smooth. So it must have been a quiet box. Which I guess is OK. Even the sliding on a quiet box.
 	- Verified: a slide eases the same after 14 hours of steps every 3 s as at the start.
 	- Branch: topslide
@@ -6965,7 +6834,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- 20261102: Miri didn't report any UB or leak.
 		- 20261102: The other 112 didn't fit in the time, at a load of 40 to 57 on 32 cores. They went to 2026110219042006. This item closes with it.
 		- 20261102: It's closed. The rest went in through 2026110219042006.
-	- Verified: 20261102. The 90 new ignores each show as ignored under Miri (`--ignored --list`), and the one that passed doesn't. The fmt check and clippy for Linux pass. The 203 settings_ui tests pass in a plain run but one, which fails on the live config, filed as 2026110219042107.
+	- Verified: 20261102. The 90 new ignores each show as ignored under Miri (`--ignored --list`), and the one that passed doesn't. The fmt check and clippy for Linux pass. The 203 settings_ui tests pass in a plain run but one, which fails on the live config, filed separately.
 	- Swept: the 91 tests above.
 	- Test case: Miri's --ignored --list over settings_ui shows the 200 slow tests, per children 2026110219042006 and this item's 90
 	- Branch: rnd1102
@@ -7280,34 +7149,6 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Closed: 20261101-2010
 	- Closed reason: Done
 
-- CICD reset: the private runner's tests still use old base 62 test IDs
-	- ID: 2026102819390388
-	- Type: Task
-	- Status: Closed
-	- Priority: Avg
-	- Opened: 20261028-193903
-	- Opened by: CC
-	- Related IDs: 2026102819264421
-	- Target OS: All
-	- Target version: rc.1
-	- Requirements:
-		- The private repo's tests weren't part of the 10-28 conversion. Its one ID this backlog names, Eu0WzDd, became dehx0 here, so the private repo's own test should use that.
-		- Convert with the same old-to-new map the 10-28 conversion used, and its ID check should refuse the old form too.
-	- Progress log:
-		- 20261031: silkterm-private's host test is dehx0 now. Its backlog's 112 mentions of this repo's old IDs went through the same map. No old ID was left there that the map doesn't have.
-		- 20261031: `test-id.py --check` takes silkterm-private's test scripts too, when it's beside this repo, found the way `config.bash` finds the private runner. They share one set of IDs, so the check refuses an old, missing, or shared ID there, and a new ID skips one the private repo has. An empty `SILK_PRIVATE_RUNNER` leaves it out.
-		- 20261031: The container gets the private repo's `cicd/tests` read only, so the check inside sees it too. `--no-private` leaves it out.
-	- Decisions:
-		- 20261031: The check stays in this repo's ID tool rather than a copy in the private repo. The private repo doesn't have a check of its own, and one tool over both trees keeps the IDs unique across them.
-		- 20261031: Only the tests folder goes into the container rather than the private runner, since stage 6 runs on this side.
-	- Verified: 20261031. dejjp passes, and 6 of its 7 new checks failed against the old tool. The seventh, an empty `SILK_PRIVATE_RUNNER`, passes on both by design. ddrp2 passes, and 3 of its 4 new checks failed against the old `cicd.bash`. With the old ID put back in the private host test, `test-id.py --check` and `--backlog-run-quick docs` in the container both refused it, and both pass on dehx0. The private host test (dehx0) passes. `--backlog-run-quick scripts docs` passed.
-		- Swept: every place that reads test IDs from files, which is only `find_ids` in `test-id.py`, used by `--check` and new IDs. `--list` and `--annotate` read Rust tests only, and the private repo doesn't have any. No doc describes what the check looks at.
-	- Branch: rnd1031
-	- Commit: silkterm-private f867b51
-	- Test case: dejjp `cicd/tests/testid/run.py`, ddrp2 `cicd/tests/container/run.bash`.
-	- Closed: 20261031-141601
-	- Closed reason: Done
-
 - CICD reset: run folders under HOST_TEMP, removed at the end
 	- ID: 2026102807494157
 	- Type: Task
@@ -7474,12 +7315,12 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Progress log:
 		- 20261031: `cicd/utility/include/saferm.py` has `rm` and `rm_under`, with `saferm.bash`'s rules and the HOST_TEMP refusals from 2026103115170424. It walks the tree itself and stays on one filesystem.
 		- 20261031: `_testdir.py` loads it and has a new `rm()`, as `fTestDir_Rm`. Its own run folder goes through the one-parent form, under the temp folder it was made in.
-		- 20261031: The tests' own folders go through `_testdir.rm()`. `dpirand`'s short socket folder in `/tmp` goes through `rm`. `demo-video.py` and the vhist recorder remove through `rm_under`, under the temp folder they made theirs in, resolved once.
+		- 20261031: The tests' own folders go through `_testdir.rm()`. `dpirand`'s short socket folder in `/tmp` goes through `rm`. `demo-video.py` and the other recorder remove through `rm_under`, under the temp folder they made theirs in, resolved once.
 		- 20261031: dehwp runs the new test depj1, and fails on a bare `rmtree` in any tracked Python file in `cicd/`.
 	- Decisions:
 		- 20261031: The guard returns True or False, with one line on stderr, as the PowerShell one does. A refusal at a test's end is printed and the test's result stands.
 		- 20261031: It takes POSIX paths only. No Python script in `cicd/` removes anything on Windows.
-	- Verified: 20261031. depj1 passes, and broken copies of the guard failed it: without the HOST_TEMP check (12 checks), without the link check (2), and with a walk that crosses filesystems (1). dehwp's new check names the 13 lines in the old files. The test ID, showdown table, showdown rig, demo recorder, and cleanup tests pass. dpirand passed a case with its socket folder in `/tmp`, and didn't leave one behind. The vhist recorder ran under `less` and didn't leave any folder.
+	- Verified: 20261031. depj1 passes, and broken copies of the guard failed it: without the HOST_TEMP check (12 checks), without the link check (2), and with a walk that crosses filesystems (1). dehwp's new check names the 13 lines in the old files. The test ID, showdown table, showdown rig, demo recorder, and cleanup tests pass. dpirand passed a case with its socket folder in `/tmp`, and didn't leave one behind. The other recorder ran under `less` and didn't leave any folder.
 		- `demo-video.py`'s own cleanup wasn't verified, since it needs the video recording setup.
 		- Swept: `rmtree` in every tracked Python file in `cicd/`. `os.removedirs` and `shutil.rmtree` outside `cicd/` aren't used.
 	- Test case: `cicd/tests/saferm/run.py` (depj1), run by `cicd/tests/saferm/run.bash` (dehwp), with its check for a bare `rmtree`.
@@ -7609,10 +7450,10 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Progress log:
 		- 20261018: `--quick` now builds the Windows x86_64 release too, and drops only the ARM64 ones. Packages, profiling, and the fuzz soak are still skipped.
 		- 20261018: `--quick` also skips the 5 window tests that took 33 s to 103 s each here: monwl, mapfollow, livecfg, wpresize, and wpkept. The other 9 took 22 s or less, and the script tests 17 s or less.
-		- 20261018: The test boxes were already skipped under `--quick`: the Windows scenarios and the private runner. The script tests that look like they contact a host all use stand-ins.
+		- 20261018: The test boxes were already skipped under `--quick`. The script tests that look like they contact a host all use stand-ins.
 		- 20261018: The plan lists the demo now.
-		- 20261022: Both no-options full runs failed, on other things. The container one passed stages 1 to 6 and the Windows scenarios, then failed in the private runner on b26, on 2026102114411311's test. The plain one failed at mapfollow's tmux checks under a tmux wrapper earlier on that shell's PATH; with the real tmux first they pass. The Mac failure needs fixing before a full run can pass.
-		- 20261023: A full container run, `-y --no-publish --no-dogfood --no-demo`, passed end to end at 2da75a7 in about 91 minutes. Its plan had every other stage on, the ARM64 builds, packages, and the profiler included. The private runner's Mac part passed on b26. Its store part skipped, since vm925w was in use elsewhere, and so did the Windows scenarios.
+		- 20261022: Both no-options full runs failed, on other things. The container one passed stages 1 to 6 and the Windows scenarios, then failed on b26, on 2026102114411311's test. The plain one failed at mapfollow's tmux checks under a tmux wrapper earlier on that shell's PATH; with the real tmux first they pass. The Mac failure needs fixing before a full run can pass.
+		- 20261023: A full container run, `-y --no-publish --no-dogfood --no-demo`, passed end to end at 2da75a7 in about 91 minutes. Its plan had every other stage on, the ARM64 builds, packages, and the profiler included. The Windows scenarios skipped, since vm925w was in use elsewhere.
 	- Verified: 20261018. shellcheck, house style, and the pipeline step, container run, docs, and hooks tests passed. A real `--gate` run passed.
 	- Test case: New cases in `cicd/tests/engine/run.bash` (dd5nn) for `--quick`, no options, `--no-demo`, and `--gate`. The `--container` run in `cicd/tests/container/run.bash` (ddrp2) now expects the Windows x86_64 binary under `--quick`, and failed until its stand-in made one.
 	- Branch: ciflags
@@ -7683,7 +7524,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 			| Xvfb, sway, tmux                           | None left by a pipeline run. 7 `dash scene.sh` from a hand test folder of 10-13 still running             | Not touched
 			| Run logs, flamegraphs, release dirs, shots | Rotated or replaced each run                                                                              | Unchanged
 
-		- 20261022: It's done locally. The gate run's image build removed the old image ("cleanup: removed 1 old container images") and reported the build cache. Both full runs' plans show the Cleanup line. The container one ended "cleanup: nothing stale" inside the image and left no `target/container/tmp/run_*`, then failed in the private runner before the host's own cleanup. The plain one wrote `.cicd-toolchain` and `.cicd-build-dirs` at its start, then failed in stage 3 before its cleanup. Then came a container `--quick` run killed in stage 3, which left its `run_20261022-14022525`, and a container and a plain `--quick` run that passed. Each ended "cleanup: nothing stale", no build dir went, and nothing new was left in the test temp dir, `target/container/tmp` or `docker ps -a`. Left: the Windows half.
+		- 20261022: It's done locally. The gate run's image build removed the old image ("cleanup: removed 1 old container images") and reported the build cache. Both full runs' plans show the Cleanup line. The container one ended "cleanup: nothing stale" inside the image and left no `target/container/tmp/run_*`, then failed on b26 before the host's own cleanup. The plain one wrote `.cicd-toolchain` and `.cicd-build-dirs` at its start, then failed in stage 3 before its cleanup. Then came a container `--quick` run killed in stage 3, which left its `run_20261022-14022525`, and a container and a plain `--quick` run that passed. Each ended "cleanup: nothing stale", no build dir went, and nothing new was left in the test temp dir, `target/container/tmp` or `docker ps -a`. Left: the Windows half.
 		- Left as found: the 343 local and 4 `/tmp` test folders, which no run wrote down; the `tmp.*.ps1` scripts and the b29w test folders on the boxes; the 7 `dash` processes; the remote clones' target dirs, built by hand jobs. The Windows pipeline's own target dir isn't swept yet.
 		- Verified: the 4 tests below pass, and their new checks failed against the pipeline as it was before.
 		- 20261023: The full run at 2da75a7 ended "cleanup: nothing stale" in the image and on the host, and the cleanup test passed. The Windows half is still left. No Windows box was free then.
@@ -7956,11 +7797,10 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- 20261019: It was split. CodeQL went to 2026101913360695 and the soak test to 2026101913370214. This item has the flag and the dhat test.
 	- Progress log:
 		- 20261019: `cicd.bash --leakcheck` adds the slow leak checks to stage 3, after the ASan run. A plain full run leaves them out, `--quick` keeps them when asked, `--gate` refuses the flag, and `--container` passes it in.
-		- 20261019: The heap-growth test runs the main actions in-process with dhat as the allocator, 20 rounds and then 20 more, and fails when an action's heap at round 40 is over round 20 by more than 4 KiB or 10 blocks. The actions are a tab's engine opened, fed, and closed, output into a full scrollback, the minimap, text shaping with fallback and color glyphs, the config read and saved, and the Settings spec parsed. It takes about 30 s.
+		- 20261019: The heap-growth test runs the main actions in-process with dhat as the allocator, 20 rounds and then 20 more, and fails when an action's heap at round 40 is over round 20 by more than 4 KiB or 10 blocks. The actions are a tab's engine opened, fed, and closed, output into a full scrollback, text shaping with fallback and color glyphs, the config read and saved, and the Settings spec parsed. It takes about 30 s.
 		- 20261019: A planted leak is one of the actions, and the test fails unless it's caught. The step fails too when the test didn't write a report, such as a filter that matched nothing or a build without the feature.
 		- 20261019: dhat runs under the debug build's allocation counter, only in test builds with the `dhat-heap` feature, so release builds don't change. It builds in the debug dir, since the feature changes only the silkterm crate, so there's no new build dir for the cleanup. dhat is a dev-dependency pinned at 0.3.3. The lock gained only its 5 new crates.
 		- 20261019: It didn't find anything new. Every action but the Settings spec reads exactly flat, and that one is 2026101912070933's leak, about 22 KB a parse, reported with its ID and not failed.
-		- Note: `tmux.rs` keeps every tmux session name the process handed out, one short string per tmux pane opened, by design. That's not filed.
 		- Note: It doesn't run on Windows. Since 20261022 `cicd-win.ps1` has `-Leakcheck` and `-NoLeakcheck`, which are only passed to the Linux half under `-Wsl` (2026101916054002).
 		- 20261022: In the full runs, container and plain, without a flag, the planted leak was caught after the ASan run, all 6 actions read flat, the Settings spec included, and there was no known line. The reports are `heap_20261022-124647_first.txt` and `heap_20261022-132520_latest.txt`. With `--no-leakcheck` the plan shows "(skipped)". The ASan step's ignored count under `--no-leakcheck` wasn't checked.
 	- Verified: 20261019. The test, run through the step lifted from cicd.bash with the real config, caught the canary, read the rest flat, and kept the report. A static cache planted in text shaping failed it, and so did the Settings spec with its known ID taken out, with the dhat profile saved. The step failed on a filter matching nothing and on a build without the feature. The engine cases were each watched to fail against a mutated cicd.bash. The unit suite (1397 + 28, 3 ignored), clippy for Linux with and without the feature, Windows, and macOS, fmt, the advisory scan, shellcheck, house style, and test IDs pass.
@@ -8080,13 +7920,13 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Decisions:
 		- 20261019: This is a best guess, since the question of what "change window size too" means went unanswered, and it's easy to reverse. With it on, a zoom in, out, or reset resizes the window so each pane keeps its columns and rows. It stops at the right and bottom edges of the work area on the window's monitor, and past them the grid gets smaller as it does today.
 		- The row is "Resize window on zoom" on the Window tab, under "Remember maximized". The setting is `window.resize_on_zoom`, off by default, so nothing changes until it's turned on.
-		- The panes' grids are kept rather than the window's. The minimap is fixed in pixels, so keeping the window's grid gave the shell an extra column at each step in.
+		- The panes' grids are kept rather than the window's. Part of the window is fixed in pixels, so keeping the window's grid gave the shell an extra column at each step in.
 		- The window grows right and down from where it is, and is never moved. Zooming back to where a run of zooms began puts back the size it had then.
 		- A maximized or fullscreen window keeps its size. So does one snapped on Windows. A Wayland compositor refuses a tiled window's resize by itself. X11 and macOS don't say when a window is tiled, so there it resizes.
 		- The size saved after a zoom is the one the zoom requested, saved for the monitor as with any zoom. Each window reads the setting when it zooms, so a change in Settings applies to every open window.
 	- Progress log:
 		- 20261019: Done. A zoom requests the smallest size, in whole cells, that gives each pane its grid. A zoom in a row keeps the grids from before the first one, until the window is resized some other way, the font changes, or a pane is split.
-	- Verified: On X11 with xfwm4, with a window at 80x24 and the minimap, each zoom in kept the shell at 70x24 (71 at some steps) up to the screen edge, then the grid shrank. A zoom back and a reset gave back the first size, and the saved size went back to 80x24. With the setting off the window kept its size. A maximized window kept its size, and a split pane kept its grid. The row and its tip were checked at a 24 pt interface font. The unit tests, and clippy for Linux, Windows, and macOS, pass.
+	- Verified: On X11 with xfwm4, with a window at 80x24, each zoom in kept the shell at 70x24 (71 at some steps) up to the screen edge, then the grid shrank. A zoom back and a reset gave back the first size, and the saved size went back to 80x24. With the setting off the window kept its size. A maximized window kept its size, and a split pane kept its grid. The row and its tip were checked at a 24 pt interface font. The unit tests, and clippy for Linux, Windows, and macOS, pass.
 	- Swept: Every way to zoom goes through the 2 changed functions, including the keys, the View menu, and the macOS menu. The setting is in the config template, its reader, the dialog spec, and every key list, and the dialog's completeness tests pass.
 	- Branch: zoomsize
 	- Commit: e5f8a69
@@ -8154,22 +7994,19 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Priority: Avg
 	- Opened: 20261016-113216
 	- Opened by: JC
-	- Related IDs: 2026101611321632
 	- Target version: rc.1
 	- Requirements:
 		- New tab, "Program".
 		- Move to it:
 			- Window|Resource use
-		- New features in it:
-			- Always run in new tmux session, 2026101611321632.
 	- Notes:
 		- Pre-next-cut.
 		- It moves Resource use off the Window tab, where it was put as the last group by 2026100418225506.
 	- Progress log:
-		- 20261016: It's built. Program comes after Window. Resource use is on it with its rows, flyovers, warning mark, and search aliases, and still ends the tab, so the tmux setting can go above it under a heading of its own. The config keys stay under `window:`.
+		- 20261016: It's built. Program comes after Window. Resource use is on it with its rows, flyovers, warning mark, and search aliases, and still ends the tab. The config keys stay under `window:`.
 		- 20261017: It was signed off.
 	- Decisions:
-		- 20261016, best guess: Program is between Window and Shell. Its one group came from Window, and tmux is next to the shell in subject. That makes 7 tabs at the top level, which is the most the style guide allows.
+		- 20261016, best guess: Program is between Window and Shell. Its one group came from Window. That makes 7 tabs at the top level, which is the most the style guide allows.
 		- 20261016, best guess: There's no heading named Program. Its first heading is Resource use, which shows, as Silk and Keys start with a heading of their own.
 	- Test case: `the_resource_use_group_ends_the_program_tab` (de1am), seen failing with the group put back on Window. `silkterms_tabs_go_down_the_left_with_appearance_over_four` (ddwk0) pins the tab list. It replaces `the_resource_use_group_ends_the_window_tab` (ddkgw), commented out. The nested tab tests now find tabs by name.
 	- Verified:
@@ -8284,34 +8121,33 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Opened: 20261013-133811
 	- Opened by: JC
 	- Assigned to: CC
-	- Related IDs: 2026100307115829, 2026100907341819
+	- Related IDs: 2026100307115829
 	- Target OS: All
 	- Target version: rc.1
 	- Requirements:
 		- Copy on select should be a persistent setting that new starts take up, but changes *not* shared between currently running sessions.
-			- Ditto minimap.
 			- Ditto tab strip, menu bar. Other settings that also observe this are OK.
 	- Notes:
 		- Pre-next-cut.
 	- Progress log:
-		- 20261013: Copy on select, the minimap, the tab strip, and the menu bar are saved when changed, and windows opened after start with them. Other running windows on the same settings file keep what they show. The window it was changed in takes it, its existing panes included for copy on select.
+		- 20261013: Copy on select, the tab strip, and the menu bar are saved when changed, and windows opened after start with them. Other running windows on the same settings file keep what they show. The window it was changed in takes it, its existing panes included for copy on select.
 		- 20261013: The menu bar wasn't saved before. It is now `window.menu_bar`, on by default, and `--hide-menu` still outranks it. It doesn't have a Settings row, like the tab strip.
 		- 20261013: Settings opened in a window shows that window's own value for these, so another window's save of one never shows there as changed, and an Apply of something else doesn't write it back.
 	- Decisions:
 		- 20261013: Best guess, for JC to confirm: the rule applies wherever the change came from, whether the View menu, the right-click menu, the menu bar's copy box, or Settings.
-		- 20261013: The best guess on which settings follow it is the 4 named. Window frame and Bare window were never saved and stay per window. Everything else still shows in every window at once.
+		- 20261013: The best guess on which settings follow it is the ones named. Window frame and Bare window were never saved and stay per window. Everything else still shows in every window at once.
 		- 20261013: A new tab in a running window starts with that window's copy on select rather than another window's.
 		- 20261013: Reload config in a window takes the file's values for these in that window. The other windows still keep theirs.
 		- 20261014: JC confirmed both best guesses above, and that a saved hidden menu bar means new windows open without one.
 	- Verified:
 		- The unit tests and clippy with warnings as errors for Linux, Windows, and macOS pass.
 		- The new tests fail with the fix taken out. The window test fails on "b keeps its own" with only the window's keep taken out.
-		- `cicd/tests/livecfg/run.bash` on Linux: a minimap change in one window leaves the other alone, and a window opened after starts with it.
+		- `cicd/tests/livecfg/run.bash` on Linux: a view change in one window leaves the other alone, and a window opened after starts with it.
 		- Copy on select, the tab strip, and the menu bar weren't checked in a real window, but the unit tests check them. Windows and macOS were compiled only.
-	- Swept: every place a window takes another window's save (`follow_peer`, an open Settings following the file, Settings opening, Apply), and every menu that saves one of the 4.
+	- Swept: every place a window takes another window's save (`follow_peer`, an open Settings following the file, Settings opening, Apply), and every menu that saves one of them.
 	- Branch: ownview
 	- Commit: 0a81ab6
-	- Test case: `another_windows_save_leaves_this_windows_view`, `an_open_dialog_shows_this_windows_view_over_another_windows_save`, `the_menu_bar_is_on_and_survives_a_save`, `a_new_window_opens_with_the_saved_menu_bar`, `cicd/tests/livecfg/run.bash` (ddwnj, its "b keeps its own" and "d started with the saved minimap" checks).
+	- Test case: `another_windows_save_leaves_this_windows_view`, `an_open_dialog_shows_this_windows_view_over_another_windows_save`, `the_menu_bar_is_on_and_survives_a_save`, `a_new_window_opens_with_the_saved_menu_bar`, `cicd/tests/livecfg/run.bash` (ddwnj, its "b keeps its own" check and the check that a later window starts with the saved value).
 	- Acceptance signoff: JC, 20261014.
 	- Closed: 20261014-062737
 	- Closed reason: Done
@@ -8362,7 +8198,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 			- Keep on the host: anything that reads the real card (GPU memory, frame times, the profiler), the dogfood install into the synced app dir, the demo render, and the stages that talk to the other boxes over ssh with the host lock.
 			- It doesn't go on the other boxes. vm925w has its hypervisor off, so it can't run WSL2 or Windows containers, and the Windows tests need a logged-on desktop anyway. On b26 a Linux container doesn't help a macOS build, and the Windows and Mac builds are already made here.
 			- Suggested first step: `cicd.bash --gate` inside the container, as an opt-in flag, until it has run clean a few times. Then come the package stages.
-		- 20261010: It was built after "ok do the container work". `cicd.bash --container` runs stages 1 to 6 in the image from `cicd/container/Dockerfile`, with `--gate --container` for the gate alone. The image has Debian trixie, the pinned rustc with its 3 cross targets, the 4 cargo helpers, zig, makensis 3.12 from the snapshot archive, pwsh with PSScriptAnalyzer, ruff, mypy, shellcheck 0.11, Xvfb, xfwm4, sway, cage, and Mesa. Versions come from `tool-pins.txt` and `rust-toolchain.toml` as build args, and the tag hashes the recipe plus those, so a pin bump is a new image. The run inside has its own target dir, `target/container`, and a named cache volume. Outside, this box runs the sync first and the private runner, dogfood, demo, and publish after, plus the content scrub and the Windows scenarios, which the run inside skips. shellcheck, ruff, and mypy joined the pin list, and the pin probe reads the first version anywhere in a tool's output, since shellcheck's is on its second line.
+		- 20261010: It was built after "ok do the container work". `cicd.bash --container` runs stages 1 to 6 in the image from `cicd/container/Dockerfile`, with `--gate --container` for the gate alone. The image has Debian trixie, the pinned rustc with its 3 cross targets, the 4 cargo helpers, zig, makensis 3.12 from the snapshot archive, pwsh with PSScriptAnalyzer, ruff, mypy, shellcheck 0.11, Xvfb, xfwm4, sway, cage, and Mesa. Versions come from `tool-pins.txt` and `rust-toolchain.toml` as build args, and the tag hashes the recipe plus those, so a pin bump is a new image. The run inside has its own target dir, `target/container`, and a named cache volume. Outside, this box runs the sync first and dogfood, demo, and publish after, plus the content scrub and the Windows scenarios, which the run inside skips. shellcheck, ruff, and mypy joined the pin list, and the pin probe reads the first version anywhere in a tool's output, since shellcheck's is on its second line.
 		- 20261010: These were the first runs. The gate passed inside once the run got a passwd entry for its uid, since the terminal looks its user up. A full run then found 3 more gaps, fixed in turn: the publish test wanted rar on PATH even with the backup off (its own stub rar is on PATH now), xfwm4 needs a session bus (the run inside gets one from dbus-run-session), and the ARM64 Windows exe needs llvm-windres for its icon (llvm-19 is in the image). Inside, every window test but the one that needs a render node runs. That one skips, as on any box without a GPU. The image is 5 GB and takes about 20 minutes to build the first time.
 		- 20261010: Run 4 got to the Windows resource check and stopped there again. llvm-windres preprocesses the .rc with clang, so clang-19 was added to the recipe. Everything before that passed inside, both scroll harness arms and the 4 release builds included. It wasn't run again yet, and work stopped at noon.
 		- 20261013: This branch has dev merged in. The full run `cicd.bash --container -y --no-publish --no-dogfood --no-private` passes at a2d83b1. Its log is `target/container/run7_20261013-064920.log`, and the copy the run keeps is `cicd/artifacts/lint/run_20261013-064920.log`. The image with clang-19 built in about 9 minutes, with docker's cache warm.
@@ -8413,7 +8249,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Priority: Avg
 	- Opened: 20261008-123343
 	- Opened by: JC
-	- Related IDs: 2026100418225510, 2026100812334387
+	- Related IDs: 2026100812334387
 	- Target OS: All
 	- Target version: rc.1
 	- Requirements:
@@ -8421,7 +8257,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- Show that one text over the label, the warning mark and the checkbox.
 	- Notes:
 		- Before RC1.
-		- 20261008: Q: SilkTerm doesn't have a single-process mode yet. Is one planned, or does this mean something else? A: One is planned (2026100418225510), after the cut.
+		- 20261008: Q: SilkTerm doesn't have a single-process mode yet. Is one planned, or does this mean something else? A: One is planned, after the cut.
 		- 20261008: Q: The row has a tip and a warning now. Does this replace both? A: No. Drop the text first asked for, and merge the two instead, per the requirements.
 	- Decisions:
 		- 20261008: First asked-for text, dropped: "When not in single-process mode, this can help conserve GPU memory at little discernible cost. It helps when regularly running numerous instances open on a low-memory GPU, and/or if something else wants all the GPU memory."
@@ -8486,7 +8322,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Decisions:
 		- 20261008: This is a best guess, since the question went unanswered. A typed value can go past the slider's end, up to a cap set per row. For both waits the cap is a week, 10080. A value below the slider's start still clamps, since 0 or less doesn't mean anything for a wait. The handle stays at the end, and the box shows the number.
 		- 20261008: Rows that take a typed value past the slider, with their caps: Minutes when hidden and Minutes otherwise 10080, Blur px 100, Size 128 (the largest the text is drawn at), Line height 4, Blink rate ms 10000, Inactivity timer s 3600, Wheel lines 100, Columns and Rows 1000 (what `--columns` and `--rows` take), Margin px 200.
-		- 20261008: Rows kept at their slider, besides every row with a %: Scrim radius px, since the halo can't extend past 20. Outline px, since the outline is 8 taps around each letter and should break into dots past a few px (read in the shader rather than looked at). Scrollbar width px and Minimap width px, since the config clamps both to the slider's range on purpose.
+		- 20261008: Rows kept at their slider, besides every row with a %: Scrim radius px, since the halo can't extend past 20. Outline px, since the outline is 8 taps around each letter and should break into dots past a few px (read in the shader rather than looked at). Scrollbar width px, since the config clamps it to the slider's range on purpose.
 		- 20261008: Only those 2 waits get a log track. Arrows step a hundredth of the track as a ratio, a tenth with Shift, and always at least 1. A press never takes a value further past the end than it already is, so Up stops at the end and Down from a typed number steps down from it.
 	- Progress log:
 		- 20261008: The config already read both waits up to 10080, so the file side didn't need any change. Every capped value saves and reads back as typed, and the launch doesn't say anything about it.
@@ -9162,7 +8998,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- Each new test failed with its part taken out: the launch complaint, the Close pane row's hotkey, the tie order, and the "_" rule.
 		- 20261003, Option+Command+W: the unit suite passes, 1057 tests, and fmt plus clippy for Linux, macOS, and Windows are clean. With the Mac default put back to "none", 5 tests fail: the menu bar list, the Panes row label, the Keys tab row, the default check, and the macOS chord test. The refresh of an old "none" line passed for a Linux template. The macOS-only entry itself wasn't run. None of it ran on a Mac.
 		- In a real window on Linux, the 4 Alt chords split, closed and moved as listed, both ways and back, and the Panes and Tabs menus showed the chords. With `keys:` set in a config file, a moved chord worked, the old one went to the shell, a misspelled value kept its default, and both launch notes printed.
-	- Swept: for Option+Command+W, every Mac chord in `keys.rs`, the app menu and Window menu rows in `macmenu.rs`, the template, the Keys tab, the UI style guide, and the split-panes design doc.
+	- Swept: for Option+Command+W, every Mac chord in `keys.rs`, the app menu rows in `macmenu.rs`, the template, the Keys tab, the UI style guide, and the split-panes design doc.
 	- Swept: every menu that opens goes through `with_shortcuts` (the menu bar dropdowns, the right-click menu, and their submenus). The tab rename menu doesn't have any hotkey rows. The macOS bar reads the same bindings, and its rebuild check includes them. The copy chord on an unfocused window reads them too. No menu label in `app.rs` writes out a chord by hand any more.
 	- Branch: panekeys, mackeys
 	- Commit: 4cafdde, f4bd3f7
@@ -9719,7 +9555,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Opened: 20261009-073418
 	- Opened by: JC
 	- Assigned to: CC
-	- Related IDs: 2026100907341817, 2026100812334385, 2026100114435600, 2026100907341819
+	- Related IDs: 2026100907341817, 2026100812334385
 	- Target OS: All
 	- Target version: rc.1
 	- Requirements:
@@ -9731,7 +9567,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 			- Family, under "Use system font: Face". Automatic is the desktop's monospace font, else the built-in list. It moved here.
 			- Size, under "Use system font: Size". Automatic is the desktop's monospace size. It moved here.
 			- Columns and Rows, under "Remember last size". Automatic is the last size, this monitor's own where one is kept. The switch is their group's. They moved here.
-			- Foreground and Cursor, under "Text colors from wallpaper". Automatic is the wallpaper's colors. It was split out with questions, as 2026100910295901.
+			- Foreground and Cursor, under "Text colors from wallpaper". Automatic is the wallpaper's colors. It was split out with questions.
 			- Profile, under "Choose automatically", and the 16 rows a profile sets. Profile is a presets group over those rows, and automatic is the rated profile. It was split out with questions, as 2026100910295902.
 			- The 10 theme colors, whose automatic value is the theme's. Open command, whose empty value is the desktop's opener. File or folder, whose empty value is the usual folder or the built-in picture. They were split out, as 2026100910295903.
 			- Theme mode, whose "System" entry follows the desktop. It was split out with a question, as 2026100910295904.
@@ -9747,7 +9583,6 @@ Going forward, new issues in the new template at the bottom of this file will go
 			- Remember last size: Per monitor.
 			- Free resources when idle: Minutes when hidden, Minutes otherwise.
 			- Scrollbar: Width px, Hide when idle.
-			- Minimap: Width px.
 			- Hyperlinks Enabled: Open command.
 		- Neither: Honor layout tags and Honor look tags replace Fit and the 2 sliders for a tagged picture only, so those rows still count for the rest. Minutes when hidden still grays on Wayland, which is the machine rather than a setting.
 	- Decisions:
@@ -9761,7 +9596,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- 20261009: The presets dropdown and the list and on or off controls wait for the items that need them. Nothing moved here uses them.
 	- Progress log:
 		- 20261009: The table, the one read function, the number and text controls, the group switch with its mixed state, the tip line on automatic rows, and the lint check were built. Family, Size, Columns, and Rows were moved.
-		- 20261009: Notes on the design doc, left as written. Its "Related backlog issues" still names 2026100816170959. It doesn't mention the revert arrow every row has, which on an automatic setting does what the clear icon does. Its screen reader line doesn't have anything to attach to yet, since the program doesn't have an accessibility layer. There's a typo, "Dosn't", in its Tests section. Its line on hand edits while running waits on 2026100907341819.
+		- 20261009: Notes on the design doc, left as written. Its "Related backlog issues" still names 2026100816170959. It doesn't mention the revert arrow every row has, which on an automatic setting does what the clear icon does. Its screen reader line doesn't have anything to attach to yet, since the program doesn't have an accessibility layer. There's a typo, "Dosn't", in its Tests section. Its line on hand edits while running waits on live settings across windows.
 		- 20261009: It isn't signed off. The follow-ups filed are 2026100913394946, 2026100913394948, 2026100913394950.
 		- 20261013: It wasn't self-closed. The knobs model replaced most of what this asked for, and JC plans to rethink the Settings dialog again. It may be Moot now. That call is JC's.
 		- 20261013: It's moot, per JC. The knobs model replaced it.
@@ -9804,7 +9639,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- 20261009: An automatic image with nothing found shows "(built-in picture)", where the box said "(none)".
 		- 20261009: A color set by hand to the theme's own value stays put when the desktop switches between dark and light. Before, a color line that matched the theme followed the switch.
 	- Against: the rotation code's note that Settings shows the picture on screen. No recorded decision names it.
-	- Swept: every reader of the 13 settings, which the type change made the compiler find: drawing in pane, minimap, palette, and term, the menus and chrome in app.rs, the dialogs' colors, autotheme, visibility, `--bg`, a wallpaper named for the session, rotation, reload, load, save, the desktop's dark and light switch, and the theme pick, save, rename, and delete in Settings. A grep for comparisons that still compile didn't find any outside tests.
+	- Swept: every reader of the 13 settings, which the type change made the compiler find: drawing in pane, palette, and term, the menus and chrome in app.rs, the dialogs' colors, autotheme, visibility, `--bg`, a wallpaper named for the session, rotation, reload, load, save, the desktop's dark and light switch, and the theme pick, save, rename, and delete in Settings. A grep for comparisons that still compile didn't find any outside tests.
 	- Verified: unit suite, clippy for Linux, Windows, and macOS, fmt, test IDs, and the doc, TOC, table, and autoread checks. In a real window against a dev build at the default font, the panel stayed 707 by 965. Silk, Text, Cursor, Movement, Shell, and Keys drew the same pixels apart from the caret, which differs between 2 runs of the dev build too. Background, Themes, and Window differ only in the File or folder row, the colors, and the Open command row. The main window drew the same pixels on both builds for a fresh config, a light mode config, and an older config with colors set, a bad color, an empty open command, and the usual folder written out. A config the dev build wrote opened the same, and the launch changed only the Default mark on its commented color lines. A typed color showed the x and its tip, OK wrote it, reopening showed it set by hand, and the x put it back, set the Theme dropdown back to the theme's name, and at OK commented the line out.
 	- Not checked: 2x, a large interface font, Windows, macOS, a folder rotating in a window.
 	- Note: The autoread check's header failed the script header test (copyright form, no History) on dev. It was fixed here, since the item names that check.
@@ -9878,11 +9713,11 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Notes:
 		- The notice text was changed to "used but not kept" so dd5nh passes. The test passes or fails on where the words fall, rather than on the layout rule.
 	- Actual cause: The UI font size is rounded to a whole pixel at each scale, 17 at 1x and 35 at 2x here, so text at 2x measured 2.06 times its 1x width. The wrap width was the scale factor times 440, exactly double.
-	- Actual fix: A notice, the tmux question, and a menu tip wrap at a width that follows the UI font as drawn, from the new `TextCtx::ui_text_dip`. At 1x it's the width as written, so nothing changes there. design.md's "Measurements and display scaling" says so.
+	- Actual fix: A notice and a menu tip wrap at a width that follows the UI font as drawn, from the new `TextCtx::ui_text_dip`. At 1x it's the width as written, so nothing changes there. design.md's "Measurements and display scaling" says so.
 	- Decisions:
 		- 20261110: The notice keeps "used but not kept". It was picked in the wording pass, and the layout no longer depends on it.
 		- 20261110: The wrap width follows the font, rather than the font being made exactly double. A rounded font size keeps text sharp, and only the wrap decision needed to match.
-	- Swept: every word wrap against a fixed width: `wrap_paras` (notice and tmux question) and the menu tip in `app/menus.rs`. The Settings and About tips wrap to the window's width, which isn't a fixed width, and were left alone.
+	- Swept: every word wrap against a fixed width: `wrap_paras` (notice) and the menu tip in `app/menus.rs`. The Settings and About tips wrap to the window's width, which isn't a fixed width, and were left alone.
 	- Verified: 20261110. With the issue's sentence in `refusal_notice`, dd5nh failed (234 -> 521) before the fix and passed after. df4rf and df4rg failed with the old wrap width and pass now. The quick run passes in all 5 areas.
 	- Branch: rnd1111
 	- Test case: `a_notice_wraps_at_the_same_words_at_any_scale` (df4rf) and `text_fitted_to_a_ui_width_wraps_the_same_at_any_scale` (df4rg), at 1.25, 1.5, 2 and 3 against 1x. dd5nh, unchanged.
@@ -9961,36 +9796,6 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Test case: d9j4v itself. With the hold put in, it failed before the fix and passed after. less, vim, nano, and muffer pass on X11 and Wayland without it.
 	- Acceptance signoff: Self-closed: the cause was made to happen on purpose, and the fix stops it.
 	- Closed: 20261109-210500
-	- Closed reason: Done
-
-- The allocations per frame test once saw the minimap compose during a drag select
-	- ID: 2026110718055000
-	- Type: Bug
-	- Status: Closed
-	- Severity: Low
-	- Opened: 20261107-180550
-	- Opened by: CC
-	- Assigned to: CC
-	- Related IDs: 2026102407065861
-	- Target OS: All
-	- Test environment: b23, the pipeline's container run of 20261107 07:44
-	- Target version: rc.1
-	- Incorrect behavior: `cicd/tests/allocs/run.bash` (ddkre) failed with "drag: the map composed 1 times, none wanted". The drag read 82 frames and 4.9 pointer moves per frame, so the box was busy. Every other check passed. The pipeline's cleanup deleted the run's folder.
-	- Expected behavior: A drag select composes the map 0 times.
-	- Reproduced: No, 20261107. None of 11 runs composed: 3 at load 12, 4 with 8 cores busy at nice 19, 2 with 16 busy at normal priority, and 2 more on the new build.
-		- 20261108: Seen again in the container full run at 20f4836, with the new notes: one "map composed" with nothing before it, and its frame's line past the end of the drag. Reproduced every time with the count read half a second after the mouse button comes up.
-	- Possible cause: Anything that marks the whole window between drag frames lets a due compose through. The timed ones are a refused or unpresented frame's retry, a parked cursor's wake, a deferred compose's wake, and a tab's program check. The refused frame fits a busy box best, since its retry redraws a selection frame as a full one. It wasn't confirmed.
-	- Actual cause: It was a test fault. The drag's count was read right after the mouse button came up. Letting go redraws the whole window, which composes both panes' maps, and now and then that frame was drawn before the count was read. The drag itself composed nothing.
-	- Actual fix: ddkre reads the drag's count before it lets go of the button.
-	- Progress log:
-		- 20261107: With `SILK_ALLOCS=1`, each of those paths, plus a scrollbar hover change, a title change, a bell, and a child gone, now prints a note. When either compose check fails, ddkre lists the notes in that span, with what each composing frame was drawn for, up to 20 lines. It was seen working with the drag put back on the whole-window flag: 54 composes, each pair in a frame for rebuild+cursor.
-		- 20261108: Letting go composed the map twice, in a rebuild+cursor frame, in 3 of 3 runs with the count read 2 s after.
-	- Test case: ddkre itself.
-	- Verified: 20261108. With the old order and half a second between letting go and the count, ddkre failed with 2 composes. With the count first it passed 2 of 2.
-	- Branch: mapflake, mapup
-	- Commit: 428e035
-	- Acceptance signoff: Self-closed: the cause was reproduced on demand, and the reordered test can't count the release's frame.
-	- Closed: 20261108-123115
 	- Closed reason: Done
 
 - Window test fixtures write a monitor's key bare, which shcl 3.0 flags as E014
@@ -10194,7 +9999,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- 20261103: There isn't a modal hint yet. Wayland's is the staging xdg-dialog protocol, which needs its global bound from the registry. That's 2026110317323442.
 		- 20261103: Taskbar and alt+tab entries are each desktop's call on Wayland, without any state a client can set the way X11's skip hints do. The parent is all a client can give, so that part is left to the hand test.
 	- Verified: 20261103. dlgwl passes 6 of 6 checks, and fails 3 with the parent call taken out: no set_parent on the wire, and the dialog tiled rather than floating, which fails its focus check too. dlgtie still passes 13 of 13 on X11. The quick gate, all 5 areas, plus clippy for Windows and macOS, pass.
-		- Swept: About, the notices, and the close question are made by the same code, so they get the parent too. A notice over Settings names Settings. Off Wayland the toplevels are None and nothing is sent.
+		- Swept: About and the notices are made by the same code, so they get the parent too. A notice over Settings names Settings. Off Wayland the toplevels are None and nothing is sent.
 	- Branch: rnd1104
 	- Test case: `cicd/tests/dlgwl/run.bash` (detyk).
 	- Acceptance signoff: Self-closed: xdg-shell set_parent is the only tie Wayland gives a dialog, and dlgwl (detyk) shows it sent, with sway floating Settings over the terminal and giving it focus. It fails without the fix.
@@ -10216,33 +10021,6 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- 20261104: The step line now says what the script does, and points at `cicd/utility/asan.bash`. The private script isn't named.
 	- Test case: Not applicable, since it's a docs wording fix. A grep for the script name doesn't find anything in the backlog.
 	- Closed: 20261104-013900
-	- Closed reason: Done
-
-- The private Mac build prints empty sizes and 5 `stat` errors on b26
-	- ID: 2026102811082478
-	- Type: Bug
-	- Status: Closed
-	- Opened: 20261028-110824
-	- Opened by: CC
-	- Target OS: macOS
-	- Test environment: b26, through the private runner
-	- Steps to reproduce: A full run with stage 6, or the private runner's `mac` job on b26.
-	- Incorrect behavior: "stat: invalid option -- '%'" 5 times, then "bytes: x86_64 , arm64 , universal , zip , dmg" with no numbers.
-	- Expected behavior: The 5 sizes in bytes.
-	- Reproduced: 20261028, in the full run at 64f3584.
-	- Possible cause: `fSize` in silkterm-private `macos/build.bash` calls `stat -f%z`, the BSD form. The `stat` first on PATH there is GNU, which wants `-c%s`.
-	- Severity: Low
-	- Target version: rc.1
-	- Actual cause: It was as guessed. On b26 the login PATH puts Homebrew's GNU coreutils (`gnubin`) ahead of `/usr/bin`, so `stat` is GNU's.
-	- Actual fix: `fSize` counts bytes with `wc -c`, which gives the same count from GNU or BSD, and drops the padding BSD's `wc` adds. It's now with the other helpers at the top of the script.
-	- Decisions:
-		- 20261103: `wc -c` rather than a fixed `/usr/bin/stat`, so the line works whichever tools come first on PATH, on b26 and on vmKt6m as mactest.
-	- Swept: the rest of `macos/build.bash` and the private `cicd/run.bash` for other calls that differ between GNU and BSD. None were found. `stat` appeared only in `fSize`.
-	- Verified: 20261103. On b26, under bash 3.2 and Homebrew's bash 5.3 with the build's PATH, `fSize` gave the same sizes as `/usr/bin/stat -f%z`, and with only `/usr/bin` on PATH it stripped BSD wc's padding. detz1 passes, and fails on the old `fSize`.
-	- Branch: silkterm-private `rnd1104`
-	- Commit: silkterm-private 34c9833
-	- Test case: silkterm-private `cicd/tests/macsize/run.bash` (detz1), run by hand like dehx0.
-	- Closed: 20261103-173834
 	- Closed reason: Done
 
 - Help|About: "Acceleration" shows as "Unknown"
@@ -10296,7 +10074,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- 20261022: The failure text was never in the CI log. `ci-mac.bash` now prints each failed test's panic text from the first run, runs the failed tests again with their output shown, and prints every `measured:` line a test writes. The test writes its ratios and each pair's times that way, and puts the times in its failure message too.
 		- 20261022: Mac CI run 39842974082 on rnd1022 passed it. The median was 1.005 over 15 pairs, from 0.766 to 1.211. Kept was above bare in 9 of 15 pairs, each by a little. The big swings were on the bare side, 24.5 against 32.0 and 23.3 against 27.7 ms, which reads more like the core or host changing than a steady keep cost. That's one run, so it isn't settled. The run failed on another test, filed on 2026102114411311.
 		- 20261022: Mac CI run 39858608191 passed it again. The median was 1.038, with pairs from 0.841 to 2.112, and kept above bare in 10 of 15.
-		- 20261023: Mac CI runs 39859635085, 40049932196, 40051324149, and 40062142185 passed it. The medians were 1.008, 1.032, 1.035, and 1.032, with kept above bare in 8, 9, 15, and 9 of 15 pairs. Run 40051324149 had tight pairs, about 20.2 against 19.4 ms, which is the steady keep cost seen on b23. It failed on the header test, 2026102320070112. The private runner's run on b26 in the full run passed it too.
+		- 20261023: Mac CI runs 39859635085, 40049932196, 40051324149, and 40062142185 passed it. The medians were 1.008, 1.032, 1.035, and 1.032, with kept above bare in 8, 9, 15, and 9 of 15 pairs. Run 40051324149 had tight pairs, about 20.2 against 19.4 ms, which is the steady keep cost seen on b23. It failed on the header test, 2026102320070112. The run on b26 in the full run passed it too.
 		- 20261024: Mac CI run 40099145373 on dev at 936658b failed it again: kept cost 18% more, pairs from 0.768 to 1.568, with kept above bare in most. Run again alone it passed, median 1.002 over pairs from 0.623 to 1.643. The merge's run 40118767927 passed. So it's still live, and the spread on both sides is wide.
 		- 20261104: Verified: hosted run 41761962307 on rnd1104 passed, 1407 passed and 0 failed.
 	- Verified: `ci-mac.bash`'s extraction works on a test binary with a failing assert, a multi-line `assert_eq!`, and a `measured:` line. shellcheck, fmt, and clippy on Linux, Windows, and macOS targets pass. The test passes here and prints the new line.
@@ -10469,31 +10247,6 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Closed: 20261103-151705
 	- Closed reason: Done
 
-- The tmux rows test fails when the live config turns tmux sessions on
-	- ID: 2026110219042107
-	- Type: Bug
-	- Status: Closed
-	- Severity: Low
-	- Opened: 20261102-190421
-	- Opened by: CC
-	- Target version: rc.1
-	- Steps to reproduce:
-		- Set `tmux: always_new_session: true` in the user's config, then run `cargo test -p silkterm --bin silkterm -- --exact settings_ui::tests::the_tmux_rows_gray_and_say_why_where_there_is_no_tmux`.
-	- Incorrect behavior: it fails at settings_ui.rs:13044. The tip has "Current value: On" and "Default value: Off" after the no-tmux text, since the value isn't the default.
-	- Expected behavior: the test gives the same result whatever the live config has.
-	- Possible cause: the test reads the live user config (G6), and doesn't pin the setting.
-	- Reproduced: 20261103, with a config that turns that switch on, de30r failed with the 2 value lines. With the idle wait when hidden off its default as well, ddkgx failed the same way.
-	- Actual cause: Every settings_ui test helper opened the dialog on the live config, so a value off its default there added the value lines to a tip, or changed what a toggle started at.
-	- Actual fix: The 2 dialog helpers in the tests start from the default values. The one test that sets the live settings on purpose, dcww4, opens the dialog on them itself.
-	- Decisions:
-		- 20261103: Fixed in the helpers rather than in de30r alone, so a new test can't pick up the live config by accident. The tests that already reset to the defaults keep doing so.
-	- Verified: 20261103. The 204 settings_ui tests, detqs among them, pass without a config, and with a config that sets 13 values, most of them off their defaults. Before, that config failed de30r and ddkgx. detqs fails with the helpers on the live config and passes now. The quick gate passes.
-	- Swept: every `SettingsDialog::new` in the tests. The other 7 pass under that config too.
-	- Test case: `a_test_dialog_opens_on_the_shipped_values_whatever_the_config_holds` (detqs). de30r and ddkgx pass under any config.
-	- Branch: rnd1103
-	- Closed: 20261103-141323
-	- Closed reason: Done
-
 - The rotate test's fork count went over its limit once inside the test run folder test
 	- ID: 2026102518360001
 	- Type: Bug
@@ -10618,7 +10371,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Severity: Low
 	- Opened: 20261023-212300
 	- Opened by: CC
-	- Related IDs: 2026102407065855, 2026102407065861
+	- Related IDs: 2026102407065855
 	- Target OS: Linux
 	- Test environment: b23 at load 23 to 25, the quick gate in the container on `rnd1023`, llvmpipe
 	- Target version: rc.1
@@ -10631,12 +10384,12 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Possible cause: The test's own comment says the per-frame count in a drag rises with load, since a slow box folds more moves into each frame. The frame's own count still drifts with it, and 360 leaves about 4% over the measured 340.
 	- Actual cause:
 		- The drag frame had 2 shares that grow with load. Measured per frame on the debug build:
-			- The minimap recomposes once its 90 ms gap is up, about 20 allocations. An idle box composes on every third drag frame or so, a busy one on every frame. With the map off, a one-row drag read a flat 320.
+			- A throttled recompose runs once its 90 ms gap is up, about 20 allocations. An idle box composes on every third drag frame or so, a busy one on every frame. With it off, a one-row drag read a flat 320.
 			- Each row the selection newly spans costs about 17. At 80 frames for 80 moves a frame spans a third of a row. At 13 frames each spans 2 or more, which read 359 to 370.
 		- The first has a ceiling, one compose a frame. The second doesn't.
 	- Actual fix:
 		- The drag goes down to select the rows first, waits a second for that frame, and only then is counted, moving along that one row. A busy box can then add no more than the compose. The limit stays 360.
-		- The at-rest check at load 50 (2026102407065855) and the drag's needless minimap compose (2026102407065861) were filed separately.
+		- The at-rest check at load 50 (2026102407065855) and the drag's needless compose were filed separately.
 	- Verified: 20261024, the new drag check passed 6 runs at load 30 to 52, at 336, 339, and 345 with no extra load, adn 335, 335, and 331 with 8 cores loaded. The old one, alternated with it under that load, failed 2 of 3.
 		- At load 52 both versions failed the at-rest check instead, which is 2026102407065855.
 		- shellcheck is clean.
@@ -10654,7 +10407,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Severity: Low
 	- Opened: 20261024-070658
 	- Opened by: CC
-	- Related IDs: 2026102321230038, 2026102407065861
+	- Related IDs: 2026102321230038
 	- Target OS: Linux
 	- Test environment: b23 at load 42 to 52, with 8 cores also loaded, llvmpipe
 	- Target version: rc.1
@@ -10780,7 +10533,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Severity: Low
 	- Opened: 20261014-123119
 	- Opened by: CC
-	- Related IDs: 2026100114435600, 2026101412025603
+	- Related IDs: 2026101412025603
 	- Target OS: All
 	- Test environment: b23, headless sway, seen on Wayland
 	- Target version: rc.1
@@ -10794,7 +10547,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Notes:
 		- The random test allows it by this ID until it's fixed.
 	- Decisions:
-		- 20261014: Fixed together with 2026101412003308, and its decision applies. See there for what changed per platform.
+		- 20261014: Fixed together with the Wayland bug where a window opened a few cells off its size on a monitor whose scale isn't 100%, under the same decision.
 	- Actual fix: The panes are laid out for the size the window is about to be. That's the size asked for to keep the grid, or else the system's own. On Wayland and macOS the window already reports it during the change, and on Windows and X11 it's the old size scaled by the change.
 		- The same thing happened when a monitor's kept font zoom was taken: the new cells were laid out in the old size, then the window was resized. A grid of 89x16 showed on the way from 110x20 to 60x35. It's laid out once, at the new size, now.
 		- On X11, winit reports the old size once more right after a scale change, so the moment can still come there. This was read in winit's code and not seen. X11 changes scale only between monitors of different DPI, with no Xft.dpi set.
@@ -10850,7 +10603,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- New Linux window test `quiettab`: 5 of 5 failed on dev and with the new look turned off, all pass on the branch, twice.
 		- New Windows scenario `quiettab`: failed on dev on b29w and vm925w, passes on the branch on both.
 		- `cmdgui` and `conmap` pass on both boxes with the same build.
-	- Swept: The tab, the window title, and the minimap column all read the one answer, so the one look is enough for all of them. Copy-output's at-prompt answer is the same scan on Windows, and is only fresher.
+	- Swept: The tab and the window title both read the one answer, so the one look is enough for both. Copy-output's at-prompt answer is the same scan on Windows, and is only fresher.
 	- Branch: conload
 	- Commit: af9559d
 	- Test case: `cicd/tests/quiettab/run.bash` (ddydc) and wingui scenario `quiettab` (ddydp), both seen failing on dev; `a_quiet_command_is_looked_for_again_after_the_last_stir` (ddydg) pins when the looks come.
@@ -10907,7 +10660,6 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Opened: 20261013-151558
 	- Opened by: CC
 	- Assigned to: CC
-	- Related IDs: 2026101310563323
 	- Target OS: All
 	- Target version: rc.1
 	- Steps to reproduce:
@@ -10915,7 +10667,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- Click another window, then back.
 	- Incorrect behavior: the program gets nothing. The engine notes the mode, but the window's focus change never sends `CSI I` or `CSI O`.
 	- Expected behavior: focus in sends `CSI I` and focus out sends `CSI O` while the mode is on, as xterm does.
-	- Reproduced: 20261013, by reading the code. Nothing reads the mode outside the minimap, and the window's focus handler doesn't write anything to the shell.
+	- Reproduced: 20261013, by reading the code. Nothing sends anything when the mode is on, and the window's focus handler doesn't write anything to the shell.
 	- Decisions:
 		- 20261013: The pane that has the keyboard is the one told. A pane or tab switch sends `CSI O` to the program leaving and `CSI I` to the one coming in, as kitty, wezterm, and tmux with focus-events do. Losing the window sends `CSI O` to that pane only.
 		- 20261013: Nothing is sent when a program first turns the mode on, as in xterm.
@@ -10924,7 +10676,6 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Actual fix:
 		- Each pass works out which pane has the keyboard, or none while the window is unfocused. When that changes, the old pane gets `CSI O` and the new one `CSI I`, each only if its program has the mode on. The mode is read live.
 		- Windows: the same bytes go to ConPTY. Since Windows 11 ConPTY turns the mode on itself and hands focus on to the console program. It wasn't checked on a Windows box.
-	- Note: The minimap rule (G95) only reads the mode. Nothing there reads focus reports, so it's unchanged.
 	- Verified:
 		- Unit suite, clippy, and fmt pass.
 		- In a window with 2 panes, each running a program that turns the mode on and logs what it reads: window out and back, a click into the other pane, then window out. Each program got `CSI I` and `CSI O` at the right moments, and a click on the pane that already had focus didn't send anything.
@@ -10944,7 +10695,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Severity: Low
 	- Opened: 20261013-045516
 	- Opened by: CC
-	- Related IDs: 2026100910295901, 2026100907341818
+	- Related IDs: 2026100907341818
 	- Target OS: All
 	- Target version: rc.1
 	- Steps to reproduce:
@@ -11215,7 +10966,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Expected behavior: a failed test's output ends up in the log or in a file the failure line names.
 	- Actual cause: `fRunTest` and `fRunTest_MaySkip` both sent a test's stdout to `/dev/null`. Its stderr already went to the log.
 	- Actual fix: A test's stdout goes to a file in the test run folder. A pass or a skip deletes it. A failure prints it to the log, the last 200 lines when it's longer, and the failure line names the file. The run folder is kept after a failed run, so the file is still there.
-	- Swept: `cicd-win.ps1` runs its tests through `fExec`, which shows their output, so it doesn't have that pattern. Nothing else under `cicd` sends a test script's output to `/dev/null`, `$null`, or `Out-Null`. The private runner in `silkterm-private` drops only ssh output, never a test's. The NSIS step in both pipelines drops `makensis` output on a failure too, but it's a warning rather than a test, so it wasn't changed.
+	- Swept: `cicd-win.ps1` runs its tests through `fExec`, which shows their output, so it doesn't have that pattern. Nothing else under `cicd` sends a test script's output to `/dev/null`, `$null`, or `Out-Null`. The NSIS step in both pipelines drops `makensis` output on a failure too, but it's a warning rather than a test, so it wasn't changed.
 	- Verified: 20261008, `cicd/tests/testout/run.bash` failed 9 of 21 checks against the old `fRunTest` and passes now. `cicd/tests/engine/run.bash`, test IDs, shellcheck, and the bash style check pass.
 	- Branch: testlog
 	- Commit: e1e77b5
@@ -11652,7 +11403,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- The shell list is still three-way against the file. The new file has the list, so no entry reads as removed. A file the program never saw gets the list the window loaded.
 		- Like any fresh file from the template, the new one doesn't keep the old file's comments or layout, or a line the template doesn't have a place for.
 		- Only the settings file counts as the file last seen. A shell profile goes through the same writer, and the one written at launch used to take its place, so the save started from the bare template.
-	- Swept: Every caller of `persist`: Settings OK, window size, font zoom and per-monitor sizes, the copy, minimap and single tab toggles, and shells found at launch. The revert arrow's write and the cleared font's write run after `persist`, so they find the new file. The rating write still says it couldn't read a missing file, so it doesn't claim to have saved. That was left alone. The launch steps run after a launch lays the template down.
+	- Swept: Every caller of `persist`: Settings OK, window size, font zoom and per-monitor sizes, the copy and single tab toggles, and shells found at launch. The revert arrow's write and the cleared font's write run after `persist`, so they find the new file. The rating write still says it couldn't read a missing file, so it doesn't claim to have saved. That was left alone. The launch steps run after a launch lays the template down.
 	- Test case: `a_save_on_a_deleted_file_writes_it_new` (ddg6v) and `a_save_on_a_deleted_file_keeps_the_shell_list` (ddg6w). Both fail with the old answer put back and pass now. The first also fails when the save starts from the bare template without the old settings. `cicd/tests/delcfg/run.bash` (ddhms), in the pipeline, and `a_save_on_a_deleted_file_keeps_it_after_a_profile_write` (ddhmt). Both fail on the old code.
 	- Verified: The unit suite passes, 1085 tests. fmt is clean, clippy is clean for Linux and Windows, and the test ID check passes. It wasn't checked in a real window. The 2 app-side callers were read rather than run.
 	- Verified: 20261005 on b23, in a real window: after the delete, a resize and Ctrl+Plus each wrote a new file with the old file's settings and the new value. Before the profile fix it didn't keep any of them.
@@ -11988,7 +11739,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Closed: 20261003-122100
 	- Closed reason: Done
 
-- A cursor blink or fade can wait for an unrelated event, like the minimap's redraw did
+- A cursor blink or fade can wait for an unrelated event
 	- ID: 2026092821452948
 	- Type: Bug
 	- Status: Closed
@@ -11999,18 +11750,17 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Target OS: All
 	- Incorrect behavior: `about_to_wait` collects each pane's cursor wake before the frame is drawn. A wake the frame itself sets isn't seen until something else wakes the loop.
 	- Expected behavior: A wake set while drawing is honored on time.
-	- Reproduced: No. It was read from the code while fixing the minimap's version of the same gap, which waited up to 2 seconds when idle.
-	- Related IDs: the done old-format item "Minimap: with a very deep scrollback, redrawing the map under heavy output stops the terminal for a moment each time".
+	- Reproduced: No. It was read from the code while fixing another pane wake with the same gap, which waited up to 2 seconds when idle.
 	- Target version: rc.1
 	- Actual cause:
 		- A cursor that parks sets its resume time in the frame. The loop read that time before drawing, so a cursor that parked in the frame didn't have a wake at all, and one whose resume moved earlier kept the old time.
 		- The same order affected 4 window wakes. The idle release and the rating banner were missed when the frame revealed the window or a rating ended. The rating's start waited for its cap when the wallpaper showed in the frame. A frame asked for after drawing, when a rating ended or stepped the profile down, waited for the next event.
 	- Progress log:
 		- 20260929: It wasn't seen on screen. It was checked by unit test and clippy on b23 only.
-	- Actual fix: Every pane wake, the cursor's and the minimap's, is read after the frame from one list (`PaneWakes`). The idle release, the rating's start and banner, and the reveal deadline are read after it too. A frame asked for after drawing is drawn on the next pass.
+	- Actual fix: Every pane wake, the cursor's included, is read after the frame from one list (`PaneWakes`). The idle release, the rating's start and banner, and the reveal deadline are read after it too. A frame asked for after drawing is drawn on the next pass.
 	- Branch: curwake
-	- Test case: `a_wake_set_while_drawing_is_kept` (dd9nh). It was seen to fail with only the minimap's wake read after the frame. The window wakes don't have a test, since they're in the event loop.
-	- Swept: every wake `about_to_wait` waits on. Per pane, the cursor and the minimap. Per window, the capture, dialog, dialog raise, idle release, restored title, second heal, wallpaper rotation, shell scan, tab tip, rating start and banner, reveal, and VRAM probe wakes. The ones not listed in the fix were already read after the frame, or the frame doesn't set them.
+	- Test case: `a_wake_set_while_drawing_is_kept` (dd9nh). It was seen to fail with the cursor's wake read before the frame. The window wakes don't have a test, since they're in the event loop.
+	- Swept: every wake `about_to_wait` waits on. Per pane, the cursor and the other pane wake. Per window, the capture, dialog, dialog raise, idle release, restored title, second heal, wallpaper rotation, shell scan, tab tip, rating start and banner, reveal, and VRAM probe wakes. The ones not listed in the fix were already read after the frame, or the frame doesn't set them.
 	- Closed: 20260930-153118
 	- Closed reason: Done
 
@@ -12130,7 +11880,6 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Severity: Low
 	- Opened: 20261014-070141
 	- Opened by: CC
-	- Related IDs: 2026100907341819
 	- Target OS: Windows
 	- Test environment: b29w
 	- Target version: rc.1
@@ -12149,7 +11898,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Verified:
 		- The new Windows scenario `cmdgui` failed on dev and passes on the branch, where the tab read `[last: nap]` without anything typed. `livecfg`'s window E now reads `Windows Cmd [last: silkterm]`.
 		- `a_watched_command_says_when_it_ends` passes on b29w and fails with the wait's callback emptied. Unit suite, clippy for Linux and Windows, and fmt pass.
-	- Swept: `command_child` is the one probe on Windows. It feeds the tab label, the minimap's running program, and copy-output's at-prompt check, so all 3 get the news. From reading the code, copy-output also stayed armed for such a command until the next key. Unix asks the foreground process group, which a program the shell didn't wait for isn't in.
+	- Swept: `command_child` is the one probe on Windows. It feeds the tab label and copy-output's at-prompt check, so both get the news. From reading the code, copy-output also stayed armed for such a command until the next key. Unix asks the foreground process group, which a program the shell didn't wait for isn't in.
 	- Branch: conpty
 	- Commit: ca25198
 	- Test case: `a_watched_command_says_when_it_ends` (ddy7y), seen failing with the callback emptied; wingui scenario `cmdgui` (ddy7c), seen failing on dev.
@@ -12164,7 +11913,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Severity: Low
 	- Opened: 20261014-120256
 	- Opened by: CC
-	- Related IDs: 2026100114435600, 2026101412311921
+	- Related IDs: 2026101412311921
 	- Target OS: All
 	- Target version: rc.1
 	- Steps to reproduce:
@@ -12221,14 +11970,14 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- Run the profiled app on a settings tree of its own in the test run folder, with a fixed profile, so one flamegraph compares with the last.
 		- The workload runs plain, never in tmux.
 	- Notes:
-		- On 11-09 the live file had `tmux.always_new_session` on. Since c2e52357 that puts a plain launch in tmux, and the shaping share went from about 40% to 80%. The rating, the minimap, and the wallpaper change the numbers the same way.
+		- On 11-09 a setting in the live file put a plain launch in tmux, and the shaping share went from about 40% to 80%. The rating and the wallpaper change the numbers the same way.
 	- Progress log:
 		- 20261110: The profiler's app now runs on its own config, data, state and cache folders in the test run folder. Its settings file turns Choose automatically off at Max and tmux off, and the rest stays at the build's defaults. The app runs with `TMUX` unset too.
 		- 20261110: A launch on that tree keeps the 3 values, doesn't write a rating, and doesn't convert the file, since it has the Format line.
 	- Decisions:
 		- 20261110: Choose automatically is turned off at Max, rather than a rating being put in the state file. A rating only applies to the card's own hardware id, which the script can't work out, and with automatic off there is also no step down part way through a run. Max is what the pipeline read from 10-28 to 11-06.
 		- 20261110: The app gets its own XDG folders, as the A/B rig does, rather than `--config`, so its numbers compare with the rig's.
-		- 20261110: The minimap and the wallpaper stay at the build's defaults, so a change to one of those defaults still shows in the graph.
+		- 20261110: The wallpaper stays at the build's default, so a change to that default still shows in the graph.
 	- Test case: `cicd/tests/profsettings/run.bash` (df4v4), in the full run. It runs the script's own profiler step with a stand-in app. Of its 9 checks, 8 fail on the old step, and all pass on the new one.
 		- Swept: `fRunProfiler` is the only place that sets `SILK_PROFILE_OUT`. The scroll harness already has its own config.
 	- Verified: 20261110. df4v4 was run both ways, a debug build was run on a private Xvfb with the tree, and the backlog quick run passed in all 5 areas.
@@ -12254,8 +12003,8 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Progress log:
 		- 20261110: The control ran first. 0b16ae9 on the card with no settings file read 50 to 52%, as on 10-26. 327d97e read 46 to 50% beside it. Both builds alternated on one headless sway, 3 rounds each, each run on its own settings tree.
 		- 20261110: With a copy of the live settings and the rating that skips the startup test, both read 39 to 44%, the same as the pipeline from 10-28 to 11-06.
-		- 20261110: With `tmux.always_new_session` on, 327d97e read 81 to 82% and stepped down to High, the same message and flamegraph as the 11-09 runs. 0b16ae9 read 40 to 45%, since it doesn't start a plain launch in tmux. With the workload started in tmux by hand, both read 79 to 83%.
-		- 20261110: So the jump is a profile setup difference. The pipeline's profiler reads the live settings. The tmux setting is off in them now, but the 11-09 flamegraphs have the same frames as the tmux runs here and none of a plain one's scrollback growth, so it was on then. c2e52357 (11-07) made it cover a plain launch, so the workload ran in tmux. In tmux the scrolled-off strip is shaped again every frame, and the drawing share drops.
+		- 20261110: With the setting that puts a plain launch in tmux on, 327d97e read 81 to 82% and stepped down to High, the same message and flamegraph as the 11-09 runs. 0b16ae9 read 40 to 45%, since it doesn't start a plain launch in tmux. With the workload started in tmux by hand, both read 79 to 83%.
+		- 20261110: So the jump is a profile setup difference. The pipeline's profiler reads the live settings. The tmux setting is off in them now, but the 11-09 flamegraphs have the same frames as the tmux runs here and none of a plain one's scrollback growth, so it was on then. Since 11-07 it covers a plain launch, so the workload ran in tmux. In tmux the scrolled-off strip is shaped again every frame, and the drawing share drops.
 	- Decisions:
 		- There's no code change here. The profiler's own settings tree is filed as 2026111017285305, and the cost in tmux as 2026111017285320.
 	- Test case: None, since nothing changed. Builds were compared back to back.
@@ -12275,51 +12024,15 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Target version: rc.1
 	- Notes:
 		- Pre-next-cut.
-	- Actual fix: Every dialog button's caption centers on its capitals, by the side tabs' rule: the Settings footer, the buttons in a row, the shell list's Add, About's Support, the notice's OK, and the tmux question's buttons. A button grows when the font's descent needs more room, the same way a tab does.
+	- Actual fix: Every dialog button's caption centers on its capitals, by the side tabs' rule: the Settings footer, the buttons in a row, the shell list's Add, About's Support, and the notice's OK. A button grows when the font's descent needs more room, the same way a tab does.
 	- Progress log:
 		- 20261110: Checked in the Settings dialog at scale 1. In the OK button the capitals had 14 rows above and 11 below. Now they have 12 above and 13 below, with the baseline snapped to a whole pixel.
 	- Decisions:
 		- 20261110: The main tab bar and the menu bar keep their own rules, per the 11-10 call on 2026110609500003. Their buttons show paths and menu titles rather than sentence-case captions.
 	- Branch: btncap
-	- Test case: `every_button_caption_centers_in_its_button` (df4cx) walks every Settings tab at 2 scales. `each_button_caption_centers_its_capitals_in_the_button` (df4cw) tests About, the notice, and the tmux question. Each fails with the band taken off one button.
+	- Test case: `every_button_caption_centers_in_its_button` (df4cx) walks every Settings tab at 2 scales. `each_button_caption_centers_its_capitals_in_the_button` (df4cw) tests About and the notice. Each fails with the band taken off one button.
 	- Acceptance signoff: Self-closed: measured in the dialog, and its tests fail without it.
 	- Closed: 20261110-104200
-	- Closed reason: Done
-
-- A drag select recomposes the minimap about 11 times a second, though the map shows no selection
-	- ID: 2026102407065861
-	- Type: Enhancement
-	- Status: Closed
-	- Needs hand testing: With the map on, a drag select, a link hover, typing on the prompt line, and a color change in Settings, all in a real window.
-	- Stand-in: none (20261028). The machine part already ran: ddkre and the scroll harness passed at e95b81b. What's left is how the map looks.
-		- 20261025: The dogfood pool now has build dedvg, from dev at a9daddc, for Linux and Windows, with the fixes from 10-24 and 10-25. A window started before the next launch still runs de5r9.
-	- Priority: Low
-	- Opened: 20261024-070658
-	- Opened by: CC
-	- Related IDs: 2026102321230038, 2026102407065855
-	- Target OS: All
-	- Target version: rc.1
-	- Requirements:
-		- A pane rebuild that changes nothing the map shows, such as a selection change, doesn't recompose the map.
-		- Typing on the prompt line, output, a scroll, a resize, and a color change still update the map.
-	- Notes:
-		- `Pane::build` calls `map.update` on every forced rebuild, and that composes whenever the 90 ms gap is up. A drag rebuilds every frame, so the map composes on every frame past the gap. That costs about 20 allocations a time on b23, plus the compose's own CPU.
-		- The due compose is also what picks up a changed screen row without new history, so skipping it needs some other sign the screen's text changed. `last_rows` already has a hash per row.
-		- ddkre's drag limit has the compose in every frame, so this lowers its figure.
-	- Decisions:
-		- 20261024: It's done by where the rebuild comes from, rather than by a hash of the screen. A moved selection and a link hover probe now mark the window with their own flag. The panes draw again as before, but the map is only updated for the window's other causes, a pane's own output and its scroll. So typing, output, a scroll, a resize, and a color change take the same path to the map as before.
-	- Progress log:
-		- 20261024: The selection alone wasn't enough. A pointer moving over text also starts a link hover probe, which marked the whole window, so both panes still composed on every drag frame. The hover probe takes the same flag now.
-		- 20261025: Verified: the scroll harness on X11 and on Wayland (d9j4r) and the allocations per frame test (ddkre) passed in the full run at e95b81b, and in the gate. Only the hand look is left.
-		- 20261026: ddkre and the scroll harness on X11 and Wayland (d9j4r) passed again at fab6815.
-		- 20261028: ddkre and the scroll harness on X11 and Wayland (d9j4r) passed again at 64f3584.
-		- 20261105: ddkre now counts map composes too, and fails on any at rest or in the drag (closetests, 0a83ff6). It read 0 and 0. With the gate put back to the forced rebuild, the drag composed 52 times and failed that check, while its allocation figure, 334, still passed the limit. Typing, output, a scroll, a resize, and a color change update the map by the same flags as before the change.
-	- Verified: 20261024, with a compose logged for the run, a drag frame under load composed both panes every frame before and none after, bar the press. ddkre's drag frame read 315 and 317 with 8 cores loaded, against 333 to 370 before, and 327 idle against 332. With the map off it reads 321. Unit suite, clippy for Linux and Windows, fmt, and shellcheck pass.
-	- Swept: every `state.dirty` set on a pointer move. The thumb and map drags move the view, and a divider drag and a pane drag change the layout, so they still compose. The menu, tab, and bar hovers don't touch a pane. The wake after a frame looks at the new flag too.
-	- Branch: rnd1024
-	- Test case: ddkre's map compose checks at rest and in the drag, and its drag figure, under Verified. The limit stays 360, since the saving is about 5% and the 2026102321230038 margin was set by load.
-	- Acceptance signoff: Self-closed: the drag doesn't compose anything, now checked by ddkre, and every other cause takes the path it took before.
-	- Closed: 20261105-161500
 	- Closed reason: Done
 
 - `--about` should only show the first line of the existing output
@@ -12369,7 +12082,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- 20261104: Every dialog asks to be modal, About, the notices, and the questions too, as each is modal on X11.
 		- 20261104: Neither sway 1.10.1 here nor sway 1.12 offers xdg_wm_dialog_v1, so dlgwl says so and checks nothing asks for it. labwc 0.20 does, and stood in for the modal half.
 	- Verified: 20261104. dlgwl passes 8 of 8 on sway, through the note branch, Escape closing Settings among them. On labwc 0.20.2 the dialog's toplevel gets set_parent, an xdg_dialog_v1 and set_modal, and on close the xdg_dialog_v1 goes before the toplevel. Of those checks, 3 fail on the build before the change. dlgwl's own modal checks pass against that labwc log. The quick gate, all 5 areas, plus clippy for Windows and macOS, pass.
-		- Swept: About, the notices, and the close question are made by the same code, so they ask too. Off Wayland no toplevel is given and nothing is bound.
+		- Swept: About and the notices are made by the same code, so they ask too. Off Wayland no toplevel is given and nothing is bound.
 	- Branch: rnd1104b
 	- Test case: `cicd/tests/dlgwl/run.bash` (detyk). Its modal checks run only where the compositor offers the protocol.
 	- Acceptance signoff: Self-closed: the request is sent where the protocol is offered, its object goes before the window, and the test fails without it.
@@ -12773,14 +12486,14 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- 20261006: Measured as heap allocations on the window thread per frame, with 2 tabs, a split pane of colored rows, and the halo on. At rest it was 189 before and 167 after. In a drag select it was 382 before and 340 after. About 130 of each are the graphics driver's own. A debug build counts them, and `SILK_ALLOCS=1` prints them per frame.
 		- 20261006: Done: `render_with` keeps its frame lists from one frame to the next and clears them. `tops` and `slides` are gone, since `p.draw()` already has both. The scrim's color map reads the background quads straight out of the frame's quad list, so nothing is copied. That's 11 a frame at rest.
 		- 20261006: Done: the menu bar layout is a fixed array, and the tab strip's widths and titles are read in place. That's 8 a frame at rest with 2 tabs.
-		- 20261006: Done: `Pane::build` reuses last frame's background quad list. `snapshot_rows` and `strip_rows` use the pane's own contrast memo, and the minimap keeps its memo between plans too. That's about 5 a frame in the drag. The snapshot still works out each cell's colors a second time. Moving it into the cell loop is a larger change than this item.
+		- 20261006: Done: `Pane::build` reuses last frame's background quad list. `snapshot_rows` and `strip_rows` use the pane's own contrast memo. That's about 5 a frame in the drag. The snapshot still works out each cell's colors a second time. Moving it into the cell loop is a larger change than this item.
 		- 20261006: Done: the menu and tip colors come from the frame's settings snapshot. Their getters didn't have any other caller and are gone, bar `menu_fg()`. The allocations didn't change, but it saves a settings read per menu row.
 		- 20261006: Done: a drag select takes the terminal lock once per move, for the pointer move and the edge scroll both (`drag_selection_to`). The allocations didn't change.
 		- 20261006: `TextCtx::prepare` taking a `Vec` was left alone. The text areas borrow the pane and chrome buffers, so a kept list can't outlive the frame, and it's only built on frames that prepare text again. `task()` and `cwd()` per tab per frame were also left, about 10 a frame with 2 tabs, since the kept tab labels (2026100314050002) see a change by comparing them. `update_title` costs about 12 a frame reading the same facts and was left for the same reason.
 	- Origin: c6eaa04 (2026-06-28) for the frame vectors and the quad list, 349c92bf (2026-07-31) for `scrim_cells`, a92aeb1 (2026-08-30) for `snapshot_rows`, ec82922 (2026-07-06) for the drag. There's no earlier review item. It was plausible when filed, and measured 20261006.
 	- Verified: the new window test fails both limits on the old code (189 and 381 against 178 and 360) and passes on the branch (167 and 338).
 	- Verified: full unit suite passes. Clippy is clean for Linux, Windows, and macOS targets.
-	- Swept: every `Vec::new`, `HashMap::new`, `.clone()`, and `collect()` left in `render_with` (the rest are the text area lists, the overlay's shaped lines, and clones made only while a tab is renamed or a title shaped again). Every `config::menu_*` and `config::tip_*` call. Both `point_clamped` plus `update_selection` pairs. Every `Readable::default()` outside tests: the pane's own and the minimap plan's.
+	- Swept: every `Vec::new`, `HashMap::new`, `.clone()`, and `collect()` left in `render_with` (the rest are the text area lists, the overlay's shaped lines, and clones made only while a tab is renamed or a title shaped again). Every `config::menu_*` and `config::tip_*` call. Both `point_clamped` plus `update_selection` pairs. Every `Readable::default()` outside tests.
 	- Branch: framework
 	- Commit: 3d74d15, fd408fb
 	- Test case: `cicd/tests/allocs/run.bash` (ddkre), in pipeline stage 3. It checks allocations per frame at rest and in a drag select, with limits of 178 and 360.
@@ -12954,7 +12667,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 
 - **Stop here to work on releasing rc.1**.
 
-- **Stop here to work on releasing v1.0.0 with Windows and macOS store releases**.
+- **Stop here to work on releasing v1.0.0**.
 
 ### Done
 
@@ -13955,7 +13668,6 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- ✅ Code review 20260914 item 92 (F124, should-fix): The speed benchmark runs SilkTerm and the other terminals on the measuring user's own settings, and changes that user's settings file and PowerShell profile.
 		- Every terminal the speed benchmark starts gets a home folder, settings and data folders, and a session bus that the benchmark makes and removes. The session bus is included because GNOME Terminal and xfce4-terminal store their settings through it.
 		- Published rows are left as they are. xfce4-terminal re-measured through the new launch reads 94.0 MB/s ASCII against 94.2 published.
-		- The plain row's settings now turn the minimap off as well. It had become a default after that file was written.
 		- The grid fitter takes a size only when 2 reports agree, and takes the middle of 2 near misses. A new account's default font made it hop either side of 160x42 forever.
 		- Pinned by dcrz2 `cicd/tests/showdown/run.py`, with a stand-in terminal that rewrites whatever settings file it is given. It fails on the old benchmarks.
 	- ✅ Code review 20260914 item 93 (F125, should-fix): The size benchmark measures the "SilkTerm +candy" row with its effects turned down.
@@ -15308,9 +15020,6 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- ✅ Keep the opening of panes, but don't show closing them. (That eats up time.)
 		- The panes close off camera. The demo is 5 seconds shorter.
 		- There's no test, since it's a demo script edit.
-	- ✅ Call out the minimap in the yellow text.
-		- The scroll-back caption now names the minimap.
-		- There's no test, since it's demo caption text.
 	- ✅ Cursor animation: When changing to thinner cursor, also make it "Phase" effect.
 		- There's no test, since it's a demo animation choice.
 	- Target version: rc.1
@@ -15627,7 +15336,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- "Temporarily free resources when idle" checkbox. (Disabled by default.)
 		- Idle minutes when definitely hidden (default 30).
 		- Idle minutes otherwise (default 240).
-	- Done: the device, the swapchain, the atlases, the scrim, the minimap, and the wallpaper all go, and the dialogs' warm device with them. What stays is the wgpu instance and, on X11, the GL config, which is enough to build it all again on the same window. The X11 path survives it, so nothing is disabled under transparency.
+	- Done: the device, the swapchain, the atlases, the scrim, and the wallpaper all go, and the dialogs' warm device with them. What stays is the wgpu instance and, on X11, the GL config, which is enough to build it all again on the same window. The X11 path survives it, so nothing is disabled under transparency.
 	- Measured on the Linux box under software GL, it took about 3 ms to let go and about 25 ms to take back, without any CPU use while released. It hasn't been measured under the NVIDIA driver, on Wayland, or on Windows.
 	- Another fault was fixed with it. glibc kept each wallpaper decode's buffers resident in the worker's arena, about 50 MB per window from the first decode alone. The mmap threshold is pinned now, which cut launch memory by about 60 MB with a wallpaper. And every Vulkan instance destroyed on NVIDIA left 2 file descriptors open, so the warm dialog context keeps its instance across a release.
 	- The rows on the Window tab are "Free resources when idle", "Minutes when hidden" (30), and "Minutes otherwise" (240). The config keys are `window.idle_release`, `window.idle_release_hidden_min`, and `window.idle_release_min`.
@@ -15818,7 +15527,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 
 - ✅ Settings dialog: gather the performance-related sections onto one "Silk" tab.
 	- The tab has Performance, Text readability, and Scrolling, in that order. The old Performance tab is gone.
-	- Text readability came off the Text tab, which now has only the font. The scrolling feel came off the Movement tab, which now has the wheel, the scrollbar, and the minimap. Both of those tabs are sparse as a result.
+	- Text readability came off the Text tab, which now has only the font. The scrolling feel came off the Movement tab, which now has the wheel and the scrollbar. Both of those tabs are sparse as a result.
 	- The section heading is "Scrolling" rather than "Smooth scrolling", because the master toggle directly under it is already called that.
 	- The 2 scrollbar colors moved to the Themes tab, at the end of the palette. They still aren't part of a theme, and their row says so.
 	- It's provisional and easy to put back if it reads worse in use.
@@ -18640,7 +18349,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Decided against: `path_forms` being quadratic on deep paths. The result is cached in the tab labels.
 	- Decided against: The stage 0 stash pop conflicting on a file upstream added. It was turned down in Code review 20260914.
 	- Decided against: The Zig cache volume removed whole over 2 GB. That was settled in item 2026102416233805.
-	- Decided against: No macOS installer asset. That's settled, and the universal binary has its own item.
+	- Decided against: No macOS installer asset. That's settled.
 	- Decided against: `cargo test` and `cargo build` without `--locked` in the gate. They change the lock only after Cargo.toml changed, when it needs updating anyway.
 	- Decided against: `git clean -fdx` and `reset --hard` on the Windows remote clone. That clone is documented as a scratch checkout.
 	- Decided against: gui-headless.bash keeping its state in /tmp. Its pid and auth state outlive any run, so the rule for a run's temp folder doesn't apply.

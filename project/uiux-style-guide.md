@@ -75,7 +75,6 @@ For prose, comments, naming, and Rust conventions, see [`style-guide.md`](../sty
 - The menu bar is File, Edit, View, Tabs, Panes, and Help. A new action goes in the menu whose noun it acts on.
 
 - On macOS the same menus go in the system menu bar, after an app menu with About, Settings…, Hide, and Quit. There isn't any in-window bar there, so View doesn't have a Menu bar row and `--hide-menu` does nothing. File gains New window. Help is left off, since About was its only row. Each row with an Apple standard shortcut takes its Command chord.
-	- A Window menu comes last, with Minimize, Zoom, Show previous tab, Show next tab, and Bring all to front. macOS adds the list of open windows under them. Each window is its own process, so that list has only the one window and its dialogs.
 
 - The right side of the menu bar has the focused pane's 2 auto-copy checkboxes, so their state is visible without opening anything. It's the only thing on the bar that isn't a menu. When the window narrows it sheds its lead-in, then its words, then itself, rather than overlapping the titles.
 
@@ -96,7 +95,6 @@ For prose, comments, naming, and Rust conventions, see [`style-guide.md`](../sty
 - Accelerator letters are unique within one menu, and the first match wins, so a letter spent early is spent. A row that can't get a distinct letter goes without one rather than stealing one.
 
 - Nothing in a menu is disabled and left visible unless its absence would be more confusing than its being gray.
-	- "New tab in tmux" is left out where tmux can't be found, which is always on Windows.
 
 ## Settings dialog
 
@@ -210,7 +208,7 @@ The dialog is declared in `settings_ui.shcl`, which is the file to edit when add
 
 - OK is the default in every prompt, including a confirmation to delete. Nothing SilkTerm deletes is unrecoverable enough to justify making the reader reach for the other button every time.
 
-- A question with more than one answer names each answer on its own button, with Cancel first and the default last, at the bottom right. Closing a pane SilkTerm started in tmux asks Cancel, End, or Detach, and Detach is the default, since it loses nothing. A "Don't ask me next time" box above the buttons stores the answer given in the setting the question stands for.
+- A question with more than one answer names each answer on its own button, with Cancel first and the default last, at the bottom right. A "Don't ask me next time" box above the buttons stores the answer given in the setting the question stands for.
 
 - A red mark is only for removal. Nothing else in the interface is red.
 
@@ -381,9 +379,7 @@ Things the built interface does differently from the rules above. Each is a smal
 
 - The Tab text template's flyover runs well past 3 sentences. It's the one place the dialog lists the macros, and a list of them can't be cut down to prose.
 
-- Program makes 10, and 7 at the top level, which is the ceiling. It has what the program does as a whole rather than how a window looks: running in tmux, then Resource use.
-
-- The tmux switch's flyover runs well past 3 sentences. It lists the pros and the cons of running in tmux, and the cons are what its warning mark is for.
+- Program makes 10, and 7 at the top level, which is the ceiling. It has what the program does as a whole rather than how a window looks, which is Resource use.
 
 ## Copyright and license
 

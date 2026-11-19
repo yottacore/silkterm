@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 // Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
 
-//! A probe for 2026101318475899: can a history be rebuilt for a full-screen program
+//! A probe: can a history be rebuilt for a full-screen program
 //! by watching what it draws? `Probe` keeps a transcript of the rows it has seen and
 //! where the program's scroll region sits in it. Each frame the ledger, or the row
 //! fingerprints where the ledger is empty, says how far the region moved. A frame

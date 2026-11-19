@@ -7074,7 +7074,7 @@ mod tests {
 			}
 		}
 		// Commented out 20261017: the tab text line, the one with 4 parts, is
-		// one template row now (2026101611405210).
+		// one template row now.
 		// assert!(lines >= 3, "expected shared lines, saw {lines}");
 		// assert!(widest >= 4, "the tab text line has four parts");
 		assert!(lines >= 2, "expected shared lines, saw {lines}");
@@ -7131,7 +7131,7 @@ mod tests {
 	}
 
 	// Commented out 20261017: the 4 Tab text toggles are gone, replaced by the
-	// one template row (2026101611405210). What these checked on the toggles is
+	// one template row. What these checked on the toggles is
 	// still checked for the packed line that is left, by
 	// `a_shared_line_puts_its_parts_side_by_side` and
 	// `a_line_of_toggles_packs_each_label_against_its_box_off_the_column`.
@@ -7348,7 +7348,7 @@ mod tests {
 	}
 
 	// Commented out 20261017: the tab text line of 4 toggles is one template
-	// row now (2026101611405210), and a text row's box is checked against the panel by
+	// row now, and a text row's box is checked against the panel by
 	// the generic layout tests.
 	// // At its natural width the panel fits the whole line: each label ends before
 	// // its own box, each box inside its part, and the last before the arrow. Also
@@ -7565,8 +7565,8 @@ mod tests {
 					"runs into the arrow"
 				);
 			}
-			// Commented out 20261017: the tab text toggles became one template row
-			// (2026101611405210), so the re-test line is the one packed line left.
+			// Commented out 20261017: the tab text toggles became one template row,
+			// so the re-test line is the one packed line left.
 			// assert!(packed >= 2, "the tab text and re-test lines, saw {packed}");
 			assert!(packed >= 1, "the re-test line, saw {packed}");
 			assert!(split >= 1, "the scrim dropdown pair, saw {split}");
@@ -7582,7 +7582,7 @@ mod tests {
 			// and only a label in the column is measured for it
 			let in_column = |key: Key| SettingsDialog::in_label_column(d.specs, row(key));
 			assert!(in_column(Key::PerfCheckHardware) && in_column(Key::PerfAuto));
-			// Commented out 20261017: the tab text toggles are gone (2026101611405210).
+			// Commented out 20261017: the tab text toggles are gone.
 			// assert!(!in_column(Key::PerfCheckNext) && !in_column(Key::TabShowsTitle));
 			assert!(!in_column(Key::PerfCheckNext));
 		}
@@ -7653,8 +7653,8 @@ mod tests {
 						near(d.label_x(i) - (prev.x + prev.w), pack_gap, d.specs[i].label);
 					}
 				}
-				// Commented out 20261017: the Tab text toggles became one template row
-				// (2026101611405210), so only Re-test packs now.
+				// Commented out 20261017: the Tab text toggles became one template row,
+				// so only Re-test packs now.
 				// assert!(
 				// 	packed >= 4,
 				// 	"the Tab text line and Re-test, saw {packed} at {at}"
@@ -13247,7 +13247,7 @@ mod tests {
 			.map(|s| s.key)
 			.collect();
 		// Changed 20261017: the tmux switch warns too, above Resource use on the
-		// Program tab, so that tab has 2 marks (2026101611321632).
+		// Program tab, so that tab has 2 marks.
 		// assert_eq!(warned, [Key::Transparency, Key::IdleRelease]);
 		// Changed 20261101: Per monitor warns too, of screens that sleep and
 		// wake (2026102807384201).
