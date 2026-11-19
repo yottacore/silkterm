@@ -257,7 +257,7 @@ impl Chord {
 }
 
 /// What a key press makes of a hotkey being set in Settings.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum Press {
 	/// a modifier on its own, so the key is still to come
 	Held,
@@ -436,7 +436,7 @@ pub fn template_lines(mac: bool) -> String {
 /// A chord one hotkey lost to another: one the file set for `by` that `from`
 /// has by default, or one the file set for both, which the first in the table
 /// keeps.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Taken {
 	pub chord: Chord,
 	pub from: Hotkey,

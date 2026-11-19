@@ -739,18 +739,19 @@ fn shown_cursor_shape(mode: TermMode, shape: CursorShape) -> CursorShape {
 // app-set Beam or Underline (DECSCUSR) maps to a thin bar or underline. A plain
 // Block uses the configured cursor_size_*, except on the alt screen, where the
 // app (vim, less) gets a full block.
-fn cursor_geometry(shape: CursorShape, alt_screen: bool) -> (f32, f32) {
+fn cursor_geometry(
+	shape: CursorShape,
+	alt_screen: bool,
+	settings: &config::Settings,
+) -> (f32, f32) {
 	match shape {
 		CursorShape::Beam => (0.15, 1.0),      // thin vertical bar
 		CursorShape::Underline => (1.0, 0.15), // thin bottom strip
 		_ if alt_screen => (1.0, 1.0),         // alt-screen app owns its block cursor
-		_ => {
-			let settings = config::settings();
-			(
-				(settings.cursor_size_width / 100.0).clamp(0.02, 1.0), // width, from left
-				(settings.cursor_size_height / 100.0).clamp(0.02, 1.0), // height, from bottom
-			)
-		}
+		_ => (
+			(settings.cursor_size_width / 100.0).clamp(0.02, 1.0), // width, from left
+			(settings.cursor_size_height / 100.0).clamp(0.02, 1.0), // height, from bottom
+		),
 	}
 }
 
@@ -937,7 +938,7 @@ fn fnv_row_skel(chars: impl Iterator<Item = char>) -> (u64, usize) {
 }
 
 // The char to give the shaper for a grid cell. A cell may hold a literal
-// control char, since alacritty leaves the '\t' in the first tab cell adn fills
+// control char, since alacritty leaves the '\t' in the first tab cell and fills
 // to the tab stop with spaces. cosmic-text shapes a raw tab as a full 8-column
 // stop, which shifts the rest of the row off the col*cell_w grid, so the text
 // no longer lines up with the cells, and double-click missed on tabbed output
@@ -1248,7 +1249,10 @@ struct PauseState {
 }
 
 impl PauseState {
-	#[allow(clippy::too_many_arguments)] // private helper; the inputs are the whole story
+	#[allow(
+		clippy::too_many_arguments,
+		reason = "private helper; the inputs are the whole story"
+	)]
 	fn advance(
 		&mut self,
 		blink_t: f32,
@@ -1389,8 +1393,6 @@ pub fn neighbor_toward(
 		.min_by(|a, b| a.1.cmp(&b.1).then(a.2.cmp(&b.2)).then(a.3.total_cmp(&b.3)))
 		.map(|(id, ..)| id)
 }
-
-// Scrollbar
 
 // Seconds the bar stays up after the last user scroll before it starts fading.
 const BAR_HOLD_S: f32 = 1.1;
@@ -2483,8 +2485,11 @@ impl Pane {
 		};
 		// Alt-screen apps own their cursor shape; on the primary screen it's the
 		// configured geometry (or the app's DECSCUSR). See cursor_geometry.
-		let cursor_geom =
-			cursor_geometry(cursor_shape, guard.mode().contains(TermMode::ALT_SCREEN));
+		let cursor_geom = cursor_geometry(
+			cursor_shape,
+			guard.mode().contains(TermMode::ALT_SCREEN),
+			&settings,
+		);
 		let following = desired == 0;
 
 		// Fast path: a frame that only animates the cursor, with no content,
@@ -2512,7 +2517,7 @@ impl Pane {
 				margin,
 				voff,
 				dt,
-				settings.cursor,
+				&settings,
 				active,
 			);
 			// the fast path only animates the cursor and is never taken while a
@@ -2683,11 +2688,12 @@ impl Pane {
 				};
 				if let Some(col) = bg_color {
 					let (mut rect_top, mut rect_bot) = (y, y + cell_h);
-					if let Some((clip_t, clip_b)) = region_rect_clip {
-						if screen_row >= top_split_row && screen_row < split_row {
-							rect_top = rect_top.max(clip_t);
-							rect_bot = rect_bot.min(clip_b);
-						}
+					if let Some((clip_t, clip_b)) = region_rect_clip
+						&& screen_row >= top_split_row
+						&& screen_row < split_row
+					{
+						rect_top = rect_top.max(clip_t);
+						rect_bot = rect_bot.min(clip_b);
 					}
 					if rect_bot > rect_top {
 						bg.push(RectInstance {
@@ -2763,21 +2769,21 @@ impl Pane {
 			margin,
 			voff_of(cursor_pt.line.0 + display_offset),
 			dt,
-			settings.cursor,
+			&settings,
 			active,
 		);
 		// the cursor moves with the sliding region too, so clamp it like the
 		// background rects, only when it's a region row, since nano parks it in
 		// the status band on ^W
-		if let Some((clip_t, clip_b)) = region_rect_clip {
-			let cursor_row = cursor_pt.line.0 + display_offset;
-			if cursor_row >= top_split_row && cursor_row < split_row {
-				if let Some(q) = &mut cursor {
-					let bot = (q.pos[1] + q.size[1]).min(clip_b);
-					q.pos[1] = q.pos[1].max(clip_t);
-					q.size[1] = (bot - q.pos[1]).max(0.0);
-				}
-			}
+		let cursor_row = cursor_pt.line.0 + display_offset;
+		if let Some((clip_t, clip_b)) = region_rect_clip
+			&& cursor_row >= top_split_row
+			&& cursor_row < split_row
+			&& let Some(q) = &mut cursor
+		{
+			let bot = (q.pos[1] + q.size[1]).min(clip_b);
+			q.pos[1] = q.pos[1].max(clip_t);
+			q.size[1] = (bot - q.pos[1]).max(0.0);
 		}
 		// Update the buffer a line at a time rather than through set_rich_text,
 		// which rebuilds every line and drops its cached shaping, so a single
@@ -2838,13 +2844,13 @@ impl Pane {
 		// Move the scrolled-off strip to the rows on screen when they changed: new
 		// rows pushed, or the ease moved the window (see OffStrip::visible). Only
 		// rows new to the window are shaped.
-		if let Some(sl) = &slide {
-			if !sl.strip_rows.is_empty() && (self.strip_dirty || self.strip.shaped != sl.strip_rows)
-			{
-				self.strip_dirty = false;
-				self.strip
-					.shape(ctx, settings.fg, self.rect.w, sl.strip_rows.clone());
-			}
+		if let Some(sl) = &slide
+			&& !sl.strip_rows.is_empty()
+			&& (self.strip_dirty || self.strip.shaped != sl.strip_rows)
+		{
+			self.strip_dirty = false;
+			self.strip
+				.shape(ctx, settings.fg, self.rect.w, sl.strip_rows.clone());
 		}
 		// Strip cells with their own background (inverse video, colored bg) keep it
 		// while revealed: emit their rects at the strip's slide position, clamped to
@@ -3039,17 +3045,16 @@ impl Pane {
 	/// once, with no resume delay as a keystroke has, from the top of the cycle.
 	/// That's the same full-size point a pause always parks at.
 	pub fn poke_cursor(&mut self) {
+		let now = std::time::Instant::now();
 		self.cursor_idle_t = 0.0;
-		self.cursor_step_at = Some(std::time::Instant::now());
-		self.cursor_active_at = std::time::Instant::now();
+		self.cursor_step_at = Some(now);
+		self.cursor_active_at = now;
 		let settings = config::settings();
 		let (period, full_phase) =
 			cursor_cycle(settings.cursor_animation, settings.cursor_blink_rate_s);
 		self.blink_t = full_phase * period;
 		self.cursor_pause.resume();
 	}
-
-	// Scrollbar
 
 	fn bar_applies(&self, cfg: &config::Settings) -> bool {
 		bar_applies_to(
@@ -3366,7 +3371,7 @@ impl Pane {
 		margin: f32,
 		voff: f32,
 		dt: f32,
-		cursor_rgb: [u8; 3],
+		settings: &config::Settings,
 		active: bool,
 	) -> Option<RectInstance> {
 		let cursor_screen_row = cursor_pt.line.0 + display_offset;
@@ -3422,7 +3427,7 @@ impl Pane {
 		// delay of its own (resume_delay), so the cursor is alive again as soon as
 		// a command stops writing. A parked cursor draws no frames. The timed
 		// resume comes from cursor_wake, and a refocus ends the park (poke_cursor).
-		let settings = config::settings();
+		let cursor_rgb = settings.cursor;
 		let anim = settings.cursor_blink.then_some(settings.cursor_animation);
 		let (period, full_phase) =
 			cursor_cycle(settings.cursor_animation, settings.cursor_blink_rate_s);
@@ -3517,10 +3522,10 @@ impl Pane {
 	/// the halo weight matches non-bold text while the crisp text keeps its weight.
 	pub fn scrim_text_area(&self, top: f32, margin: f32) -> TextArea<'_> {
 		let mut area = self.text_area(top, margin);
-		if self.scrim_debold {
-			if let Some(scrim_buffer) = &self.scrim_buf {
-				area.buffer = scrim_buffer;
-			}
+		if self.scrim_debold
+			&& let Some(scrim_buffer) = &self.scrim_buf
+		{
+			area.buffer = scrim_buffer;
 		}
 		area
 	}
@@ -3943,7 +3948,7 @@ impl Pane {
 }
 
 /// See `PaneManager::tab_facts`.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct TabFacts<'a> {
 	/// the tab's own title, typed or from `--title`
 	pub title_override: Option<&'a str>,
@@ -4205,19 +4210,20 @@ impl PaneManager {
 				pane.map_modes = screen;
 				pane.term.retask();
 			}
+			// lent, since this runs every frame and the name rarely changes
 			let running = match pane.term.task() {
-				crate::term::Task::Running(name) => Some(name.clone()),
+				crate::term::Task::Running(name) => Some(name.as_str()),
 				crate::term::Task::Last(_) | crate::term::Task::Idle => None,
 			};
 			let now = std::time::Instant::now();
 			let own = pane.map_hold.update(
 				minimap::draws_own_screen(screen, running.is_some()),
-				running.as_deref(),
+				running,
 				now,
 			);
-			let mut want = minimap::wanted(cfg, own, running.as_deref());
+			let mut want = minimap::wanted(cfg, own, running);
 			// tmux is listed for what it draws itself, not for what runs in it
-			if want && cfg.minimap && running.as_deref() == Some("tmux") {
+			if want && cfg.minimap && running == Some("tmux") {
 				if let Some(inner) = pane.term.tmux_inner(now) {
 					want = minimap::wanted(cfg, inner.own_screen, inner.program.as_deref());
 				}
@@ -4414,11 +4420,12 @@ fn spawn_pane(
 	// It stays None only when nothing is switched on at all, where the engine
 	// picks its own default and there is nothing to report.
 	let command = command.or_else(config::default_shell_argv);
+	let settings = config::settings();
 	// With no tmux to be had the pane gets the plain shell, as it would anyway.
 	let started = if in_tmux {
 		let env = crate::integration::pane_env(command.as_deref());
 		crate::tmux::start(
-			&config::settings().tmux_session_name,
+			&settings.tmux_session_name,
 			command.as_deref(),
 			cwd.as_deref(),
 			&env,
@@ -4430,7 +4437,7 @@ fn spawn_pane(
 		Some((session, argv)) => (Some(session), Some(argv)),
 		None => (None, command.clone()),
 	};
-	let text = minimap::text_rect(rect, &config::settings(), ctx.scale, true);
+	let text = minimap::text_rect(rect, &settings, ctx.scale, true);
 	let (cw, ch, cols, lines) = content_dims(text, ctx);
 	let (cell_w, cell_h) = ctx.cell_told();
 	let term = TermInstance::spawn(
@@ -4521,7 +4528,7 @@ fn spawn_pane(
 		map_hold: minimap::Hold::default(),
 		map_modes: TermMode::empty(),
 		content_dirty: true,
-		copy_select: config::settings().copy_on_select,
+		copy_select: settings.copy_on_select,
 		copy_output: false,
 		prompt_above: Vec::new(),
 		prompt_block: Vec::new(),
@@ -4608,6 +4615,7 @@ fn capture_grid_text<T: alacritty_terminal::event::EventListener>(
 	let hist = grid.history_size() as i64;
 	let cols = grid.columns();
 	let mut out = String::new();
+	let mut row_text = String::with_capacity(cols);
 	let mut abs_line = start_abs;
 	while abs_line < end_abs {
 		let grid_line = abs_line as i64 - hist; // screen top is absolute `hist`; history is negative
@@ -4616,7 +4624,7 @@ fn capture_grid_text<T: alacritty_terminal::event::EventListener>(
 			continue;
 		}
 		let row = &grid[Line(grid_line as i32)];
-		let mut row_text = String::new();
+		row_text.clear();
 		for c in 0..cols {
 			let cell = &row[Column(c)];
 			if cell.flags.contains(Flags::WIDE_CHAR_SPACER) {
@@ -4771,24 +4779,24 @@ fn pair_inside(row: &[char], col: usize, pairs: &[(char, char)]) -> Option<(usiz
 		} else {
 			distinct_pair(row, col, open, close)
 		};
-		if let Some((open_idx, close_idx)) = found {
-			if close_idx > open_idx + 1 {
-				// Exclude runs of spaces directly against the delimiters (keep any
-				// interior spaces): `" Now is the time. "` selects `Now is the time.`.
-				let (mut start, mut end) = (open_idx + 1, close_idx - 1);
-				while start < end && row[start] == ' ' {
-					start += 1;
-				}
-				while end > start && row[end] == ' ' {
-					end -= 1;
-				}
-				// all-spaces inside: fall back to the full inside span
-				return Some(if row[start] == ' ' {
-					(open_idx + 1, close_idx - 1)
-				} else {
-					(start, end)
-				});
+		if let Some((open_idx, close_idx)) = found
+			&& close_idx > open_idx + 1
+		{
+			// Exclude runs of spaces directly against the delimiters (keep any
+			// interior spaces): `" Now is the time. "` selects `Now is the time.`.
+			let (mut start, mut end) = (open_idx + 1, close_idx - 1);
+			while start < end && row[start] == ' ' {
+				start += 1;
 			}
+			while end > start && row[end] == ' ' {
+				end -= 1;
+			}
+			// all-spaces inside: fall back to the full inside span
+			return Some(if row[start] == ' ' {
+				(open_idx + 1, close_idx - 1)
+			} else {
+				(start, end)
+			});
 		}
 	}
 	None
@@ -4903,10 +4911,10 @@ fn place_split(
 	}
 	if new_ratio.is_none() {
 		equalize_dir_run(root, new_id, dir);
-	} else if let Some(path) = path_to(root, new_id) {
-		if let Node::Split { manual, .. } = node_at_mut(root, &path[..path.len() - 1]) {
-			*manual = true;
-		}
+	} else if let Some(path) = path_to(root, new_id)
+		&& let Node::Split { manual, .. } = node_at_mut(root, &path[..path.len() - 1])
+	{
+		*manual = true;
 	}
 	true
 }
@@ -4991,14 +4999,13 @@ fn equalize(node: &mut Node, dir: Dir) {
 		second,
 		..
 	} = node
+		&& *node_dir == dir
 	{
-		if *node_dir == dir {
-			let leaves_a = group_leaf_count(first, dir);
-			let leaves_b = group_leaf_count(second, dir);
-			*ratio = leaves_a as f32 / (leaves_a + leaves_b) as f32;
-			equalize(first, dir);
-			equalize(second, dir);
-		}
+		let leaves_a = group_leaf_count(first, dir);
+		let leaves_b = group_leaf_count(second, dir);
+		*ratio = leaves_a as f32 / (leaves_a + leaves_b) as f32;
+		equalize(first, dir);
+		equalize(second, dir);
 	}
 }
 
@@ -9585,17 +9592,22 @@ mod tests {
 			cursor_size_height: 60.0,
 			..Default::default()
 		});
-		assert_eq!(cursor_geometry(CursorShape::Block, false), (0.4, 0.6));
-		assert_eq!(cursor_geometry(CursorShape::Block, true), (1.0, 1.0));
-		assert_eq!(cursor_geometry(CursorShape::Beam, false), (0.15, 1.0));
-		assert_eq!(cursor_geometry(CursorShape::Underline, false), (1.0, 0.15));
+		let s = config::settings();
+		assert_eq!(cursor_geometry(CursorShape::Block, false, &s), (0.4, 0.6));
+		assert_eq!(cursor_geometry(CursorShape::Block, true, &s), (1.0, 1.0));
+		assert_eq!(cursor_geometry(CursorShape::Beam, false, &s), (0.15, 1.0));
+		assert_eq!(
+			cursor_geometry(CursorShape::Underline, false, &s),
+			(1.0, 0.15)
+		);
 		// a zero never makes the cursor vanish
 		config::update(config::Settings {
 			cursor_size_width: 0.0,
 			cursor_size_height: 0.0,
 			..Default::default()
 		});
-		assert_eq!(cursor_geometry(CursorShape::Block, false), (0.02, 0.02));
+		let s = config::settings();
+		assert_eq!(cursor_geometry(CursorShape::Block, false, &s), (0.02, 0.02));
 		config::update(config::Settings::default());
 	}
 

@@ -160,6 +160,7 @@ fn requested_color(index: usize) -> Option<alacritty_terminal::vte::ansi::Rgb> {
 	Some(alacritty_terminal::vte::ansi::Rgb { r, g, b })
 }
 
+#[cfg(test)]
 fn engine_config() -> Config {
 	engine_config_for(&crate::config::settings())
 }
@@ -403,31 +404,20 @@ impl TermInstance {
 		let dims = grid_dims(cols, lines);
 		let (cols, lines) = (dims.columns, dims.screen_lines);
 
-		let config = engine_config();
-		let event_proxy = EventProxy::new(
-			id,
-			proxy,
-			WindowSize {
-				num_cols: cols as u16,
-				num_lines: lines as u16,
-				cell_width: cell_w,
-				cell_height: cell_h,
-			},
-		);
-		let mut engine = Term::new(config, &dims, event_proxy.clone());
-		// the rows a region scroll pushes off, for the slide's reveal strip
-		engine.set_scroll_ledger_rows(crate::scroll::SLIDE_ROWS);
-		let term = Arc::new(FairMutex::new(engine));
-
+		let settings = crate::config::settings();
 		let win = WindowSize {
 			num_cols: cols as u16,
 			num_lines: lines as u16,
 			cell_width: cell_w,
 			cell_height: cell_h,
 		};
+		let event_proxy = EventProxy::new(id, proxy, win);
+		let mut engine = Term::new(engine_config_for(&settings), &dims, event_proxy.clone());
+		// the rows a region scroll pushes off, for the slide's reveal strip
+		engine.set_scroll_ledger_rows(crate::scroll::SLIDE_ROWS);
+		let term = Arc::new(FairMutex::new(engine));
 
-		let term_name = &crate::config::settings().term;
-		let opts = pane_options(command.as_deref(), cwd, tmux_client, term_name);
+		let opts = pane_options(command.as_deref(), cwd, tmux_client, &settings.term);
 		let pty = tty::new(&opts, win, id)?;
 		// Capture the master fd + shell pid before the event loop takes the pty;
 		// they drive the tab title (foreground program). The fd stays valid for
@@ -999,8 +989,10 @@ fn session_env() -> Option<std::collections::HashMap<String, String>> {
 // variables a session never sets, since a name a login profile exports would
 // be dropped here rather than restored.
 #[cfg(not(windows))]
-// The Option is the Windows arm's failure, kept so both arms read the same.
-#[allow(clippy::unnecessary_wraps)]
+#[allow(
+	clippy::unnecessary_wraps,
+	reason = "the Option is the Windows arm's failure, kept so both arms read the same"
+)]
 fn session_env() -> Option<std::collections::HashMap<String, String>> {
 	Some(std::collections::HashMap::new())
 }
@@ -1251,7 +1243,7 @@ fn find_child(
 	found
 }
 
-// Git for Windows installs bin\bash.exe adn bin\sh.exe as launchers: each sets
+// Git for Windows installs bin\bash.exe and bin\sh.exe as launchers: each sets
 // up the environment, starts usr\bin\<same name> as its child and waits. So
 // the pid a pane has is the launcher's, which never moves and is always
 // "running" the real shell. The layout is what gives it away: MSYS2 and
