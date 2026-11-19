@@ -115,24 +115,6 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Branch: nov18-2026111715155480
 	- Commit: a162ca4d, df3b970e
 
-- A GPU device lost inside one text prepare still ends the program, since the glyphon fork maps a vertex buffer it grows
-	- ID: 2026111717080404
-	- Type: Bug
-	- Status: Stalled
-	- Severity: Low
-	- Opened: 20261117-170804
-	- Opened by: CC
-	- Parent ID: 2026111715110622
-	- Target OS: All
-	- Target version: rc.1
-	- Requirements: Push the patch drafted in the upstream folder under this item's parent ID to the fork's `text-srgb-blend-0.11.0` branch, then `cargo update -p glyphon`. It fills the buffer with `queue.write_buffer`. Its library tests pass, and with it the parent's dfekm passes with SilkTerm's own guards taken out.
-	- Incorrect behavior: glyphon makes a grown vertex buffer mapped and writes it through a mapped range. When a call inside that same prepare finds the loss first, such as a glyph upload on DX12, the new buffer is invalid and wgpu panics, whatever the error handler is.
-	- Expected behavior: The prepare reports an error, which the device's error handler lets go once the device is lost.
-	- Possible cause: `create_oversized_buffer` in glyphon's `text_render.rs` uses `mapped_at_creation`. Upstream glyphon has the same code.
-	- Estimated effort: Low
-	- Test case: dfekm, run once with the `TextCtx` guards taken out, after the lock takes the new commit.
-	- Held for: a push to the glyphon fork, which a round doesn't make.
-
 - After a long OSC ends, the parser keeps up to 2 MiB of buffer per pane until the pane closes
 	- ID: 2026111714235965
 	- Type: Bug
@@ -210,48 +192,6 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- 20261019: It's still stuck upstream. `cargo update --dry-run` doesn't move any of fontdb, cosmic-text, ab_glyph, sctk-adwaita, glyphon, or winit, and ttf-parser 0.25.1 still comes in both ways. On crates.io, fontdb 0.24.0 drops it, but the newest cosmic-text, 0.19.0, still asks for fontdb 0.23. sctk-adwaita 0.12.0 still pulls in ab_glyph. Even glyphon 0.12, a breaking bump, still brings cosmic-text 0.19.
 		- It's stalled until a cosmic-text release takes fontdb 0.24 or later, and winit's sctk-adwaita drops ab_glyph.
 	- Held for a cosmic-text release on fontdb 0.24 or later, and an sctk-adwaita without ab_glyph.
-
-- A GPU device lost partway through a frame can end the program when a text buffer grows
-	- ID: 2026111715110622
-	- Type: Bug
-	- Status: Started
-		- What's left is a loss found inside one text prepare, in child 2026111717080404, held for a push to the glyphon fork.
-	- Severity: Low
-	- Opened: 20261117-151106
-	- Opened by: CC
-	- Related IDs: 2026111713374902
-	- Target OS: All
-	- Target version: rc.1
-	- Incorrect behavior: A buffer made on a lost device is invalid, and wgpu panics when glyphon maps it to grow its vertices. Seen with Settings drawing on a device lost at the start of its frame: 'Buffer with glyphon vertices label is invalid' from Buffer::get_mapped_range.
-	- Expected behavior: A frame that finds its device lost partway through ends quietly, and the device is built again.
-	- Reproduced: 20261117 on b23 under headless sway, with an early build of 2026111713374902's fix that lost the device at the dialog's acquire, before its prepares ran. The final fix doesn't start a frame on a device it knows is lost, so what's left is a loss found by a wgpu call between the prepares.
-	- Possible cause: The prepares run before the acquire in the terminal's frame, and wgpu panics on a mapped range of an invalid buffer whatever the error handler is. A guard between the prepares, or an error scope, may cover it.
-	- Actual cause:
-		- glyphon grows a vertex buffer by making it mapped and writing a mapped range, and wgpu panics on a mapped range of a buffer made on a lost device, whatever the error handler is.
-		- Nothing set an uncaptured error handler, so wgpu's own panicked on any validation error. Whatever a frame made after the loss was invalid, and its next use was one.
-		- A texture acquired when the acquire found the loss was dropped, and wgpu panics discarding one on a lost device.
-	- Actual fix:
-		- The text context keeps its device's loss flag, and its 4 prepares do nothing once it's set. The frame is refused at its acquire or present as before.
-		- Each device gets an error handler that lets errors go once the device is lost. Before that an error still panics, as wgpu's own handler does.
-		- A texture acquired on a device found lost goes back through a present, which does nothing there, rather than a drop.
-		- The glyphon change that removes the mapped range is drafted, in child 2026111717080404.
-	- Decisions:
-		- The guard sits in the text context's prepares rather than between the call sites, so a new prepare can't miss it.
-		- An error handler per device rather than error scopes. Scopes are per thread and would have to wrap each frame, and neither covers the mapped range.
-		- Errors before a loss stay fatal, so a real bug still shows the way it did.
-	- Verified:
-		- 20261117: dfekm fails with each of the 4 prepare guards taken out, with the issue's own panic, and passes with them.
-		- 20261117: dfeks fails with a handler that's always fatal and passes with this one. On a working device the error still panics.
-		- 20261117: With the glyphon patch and the prepare guards taken out, dfekm passes.
-		- 20261117: dfeg0 passes 11 of 11 on software Vulkan under headless sway. The quick gate's fmt, clippy and tests areas passed.
-	- Swept:
-		- Every device comes from `request_device`, which sets the lost callback and the error handler together (`grep -n request_device source/src`).
-		- Every glyphon prepare goes through the text context's 4 functions (`grep -rn "\.prepare(" source/src`; the minimap's is its own renderer, with no mapped buffer).
-		- No buffer in the source is made mapped. The sentinel reads a range only after its map succeeds. The `SILK_DUMP` readback ignores a failed map, and is left alone as a debug aid on the GL path.
-		- Every other acquired texture reaches `end_frame` and is presented, in the terminal and in a dialog.
-	- Test case: `no_text_is_prepared_on_a_lost_device` (dfekm), `errors_after_a_loss_go_quietly` (dfeks), and dfeg0.
-	- Branch: nov17-2026111715110622
-	- Commit: 27014141
 
 - An OSC sequence that never ends grows the parser's buffer until memory runs out
 	- ID: 2026111713374900
@@ -699,6 +639,73 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Acceptance signoff: Self-closed: the change does what the item asked, measured before and after, and its tests fail with the keeping broken.
 	- Closed: 20261117-091811
 	- Closed reason: Done
+
+- A GPU device lost inside one text prepare still ends the program, since the glyphon fork maps a vertex buffer it grows
+	- ID: 2026111717080404
+	- Type: Bug
+	- Status: Closed
+	- Severity: Low
+	- Opened: 20261117-170804
+	- Opened by: CC
+	- Parent ID: 2026111715110622
+	- Target OS: All
+	- Target version: rc.1
+	- Requirements: Push the patch drafted in the upstream folder under this item's parent ID to the fork's `text-srgb-blend-0.11.0` branch, then `cargo update -p glyphon`. It fills the buffer with `queue.write_buffer`. Its library tests pass, and with it the parent's dfekm passes with SilkTerm's own guards taken out.
+	- Incorrect behavior: glyphon makes a grown vertex buffer mapped and writes it through a mapped range. When a call inside that same prepare finds the loss first, such as a glyph upload on DX12, the new buffer is invalid and wgpu panics, whatever the error handler is.
+	- Expected behavior: The prepare reports an error, which the device's error handler lets go once the device is lost.
+	- Possible cause: `create_oversized_buffer` in glyphon's `text_render.rs` uses `mapped_at_creation`. Upstream glyphon has the same code.
+	- Estimated effort: Low
+	- Test case: dfekm, run once with the `TextCtx` guards taken out, after the lock takes the new commit.
+	- Actual fix: The fork's `create_oversized_buffer` fills the grown buffer with `queue.write_buffer` rather than a mapped range (fork 79c6c97 on `text-srgb-blend-0.11.0`). The lock takes that commit.
+	- Verified: 20261118: with the 4 `TextCtx` prepare guards taken out, dfekm passes on the new glyphon and panics on the old one with 'Buffer with glyphon vertices label is invalid'. The fork's own tests pass. The quick gate (fmt, clippy, tests) passed with the guards back, 1513 tests.
+	- Acceptance signoff: Self-closed: dfekm passes without the guards on the new fork commit and fails on the old one.
+	- Closed: 20261118-163612
+	- Closed reason: Done
+
+- A GPU device lost partway through a frame can end the program when a text buffer grows
+	- ID: 2026111715110622
+	- Type: Bug
+	- Status: Closed
+		- 20261118: The last part, a loss found inside one text prepare, closed with child 2026111717080404 once the fork took the glyphon patch.
+	- Severity: Low
+	- Opened: 20261117-151106
+	- Opened by: CC
+	- Related IDs: 2026111713374902
+	- Target OS: All
+	- Target version: rc.1
+	- Incorrect behavior: A buffer made on a lost device is invalid, and wgpu panics when glyphon maps it to grow its vertices. Seen with Settings drawing on a device lost at the start of its frame: 'Buffer with glyphon vertices label is invalid' from Buffer::get_mapped_range.
+	- Expected behavior: A frame that finds its device lost partway through ends quietly, and the device is built again.
+	- Reproduced: 20261117 on b23 under headless sway, with an early build of 2026111713374902's fix that lost the device at the dialog's acquire, before its prepares ran. The final fix doesn't start a frame on a device it knows is lost, so what's left is a loss found by a wgpu call between the prepares.
+	- Possible cause: The prepares run before the acquire in the terminal's frame, and wgpu panics on a mapped range of an invalid buffer whatever the error handler is. A guard between the prepares, or an error scope, may cover it.
+	- Actual cause:
+		- glyphon grows a vertex buffer by making it mapped and writing a mapped range, and wgpu panics on a mapped range of a buffer made on a lost device, whatever the error handler is.
+		- Nothing set an uncaptured error handler, so wgpu's own panicked on any validation error. Whatever a frame made after the loss was invalid, and its next use was one.
+		- A texture acquired when the acquire found the loss was dropped, and wgpu panics discarding one on a lost device.
+	- Actual fix:
+		- The text context keeps its device's loss flag, and its 4 prepares do nothing once it's set. The frame is refused at its acquire or present as before.
+		- Each device gets an error handler that lets errors go once the device is lost. Before that an error still panics, as wgpu's own handler does.
+		- A texture acquired on a device found lost goes back through a present, which does nothing there, rather than a drop.
+		- The glyphon change that removes the mapped range is drafted, in child 2026111717080404.
+	- Decisions:
+		- The guard sits in the text context's prepares rather than between the call sites, so a new prepare can't miss it.
+		- An error handler per device rather than error scopes. Scopes are per thread and would have to wrap each frame, and neither covers the mapped range.
+		- Errors before a loss stay fatal, so a real bug still shows the way it did.
+	- Verified:
+		- 20261117: dfekm fails with each of the 4 prepare guards taken out, with the issue's own panic, and passes with them.
+		- 20261117: dfeks fails with a handler that's always fatal and passes with this one. On a working device the error still panics.
+		- 20261117: With the glyphon patch and the prepare guards taken out, dfekm passes.
+		- 20261117: dfeg0 passes 11 of 11 on software Vulkan under headless sway. The quick gate's fmt, clippy and tests areas passed.
+	- Swept:
+		- Every device comes from `request_device`, which sets the lost callback and the error handler together (`grep -n request_device source/src`).
+		- Every glyphon prepare goes through the text context's 4 functions (`grep -rn "\.prepare(" source/src`; the minimap's is its own renderer, with no mapped buffer).
+		- No buffer in the source is made mapped. The sentinel reads a range only after its map succeeds. The `SILK_DUMP` readback ignores a failed map, and is left alone as a debug aid on the GL path.
+		- Every other acquired texture reaches `end_frame` and is presented, in the terminal and in a dialog.
+	- Test case: `no_text_is_prepared_on_a_lost_device` (dfekm), `errors_after_a_loss_go_quietly` (dfeks), and dfeg0. Child 2026111717080404 adds dfekm run once with the `TextCtx` guards taken out.
+	- Branch: nov17-2026111715110622
+	- Commit: 27014141
+	- Closed: 20261118-163612
+	- Closed reason: Done
+	- Acceptance signoff: Self-closed: every part is in and its tests pass, the last through child 2026111717080404.
 
 - Installer signature test errors on a bad signature instead of refusing it
 	- ID: 2026111810462273
