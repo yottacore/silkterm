@@ -23,7 +23,6 @@
 	- [Rejected](#rejected)
 	- [Superseded](#superseded)
 - [Research findings](#research-findings)
-- [Roadmap](#roadmap)
 - [Related backlog issues](#related-backlog-issues)
 - [Copyright and license](#copyright-and-license)
 
@@ -189,15 +188,6 @@ So the switch is detected instead. A watcher notes the console the window starte
 - Idle went from 26.4% of a core to 14.5% once unchanged frames reused their text, and a parked cursor costs about 0.2% against about 14% with the pulse running. A minimized window with busy output went from about 83% of a core to about 0%.
 
 - NVIDIA's video memory purge is hidden from any readback, so a texture that was wiped reads back intact.
-
-## Roadmap
-
-- The GPU release hasn't been measured under the NVIDIA driver on Linux, on Wayland, or on macOS. It isn't known what a released window shows on Wayland and macOS.
-	- 20261005: Under sway, on Wayland and through Xwayland, a released window keeps its last frame. On an X server without a compositor a minimized window doesn't have anything to show, and a restore shows the empty window until the first frame. macOS is still not known.
-
-- The warm dialog context's 52 MiB is now tracked in the [Reducing resources](20261004-182255_reduce-resources.md) design doc.
-
-- `~/silk_vramdbg.txt` is at its cap, and has to be moved aside before the next console switch can be logged.
 
 ## Related backlog issues
 

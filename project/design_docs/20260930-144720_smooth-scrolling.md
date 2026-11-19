@@ -32,11 +32,10 @@
 	- [The wheel in full-screen programs](#the-wheel-in-full-screen-programs)
 	- [The scrollbar](#the-scrollbar)
 - [Alternative ideas](#alternative-ideas)
-	- [Unconsidered](#unconsidered)
 	- [Rejected](#rejected)
 	- [Superseded](#superseded)
 - [Research findings](#research-findings)
-- [Roadmap](#roadmap)
+- [Known gaps](#known-gaps)
 - [Related backlog issues](#related-backlog-issues)
 - [Copyright and license](#copyright-and-license)
 
@@ -358,10 +357,6 @@ The wheel sends cursor keys only on the alt screen, with alternate-scroll on and
 
 ## Alternative ideas
 
-### Unconsidered
-
-- Turn smooth scrolling off when a program is seen writing to the screen directly. It was raised in "When running `sudo apt update`, the progress bar at the bottom bounces" (Opened 20260628-083740). The ledger fixed that case.
-
 ### Rejected
 
 - Snap the output ease during a burst of lines. It stopped apt's status bar bouncing, but a command's output arrives in one burst under a millisecond, so every multi-line output snapped. Any burst threshold above one frame breaks the feature. Backlog: "Smooth scrolling is broken" (Opened 20260628-083740).
@@ -418,15 +413,11 @@ The wheel sends cursor keys only on the alt screen, with alternate-scroll on and
 
 - At the start of the project, WezTerm, kitty, foot, Alacritty, GNOME Terminal, and Konsole all snapped to whole rows.
 
-## Roadmap
+## Known gaps
 
 - When stacked tmux panes print at once, only one slides, and the other jumps. The fix is a ledger entry and a slide per region. Backlog: "With two tmux panes stacked and both printing, only one pane slides at a time" (deferred, Opened 20260911-113647).
 
 - Side-by-side tmux panes still cut, since tmux repaints them.
-
-- A per-program list that turns smooth scrolling off while that program runs. The scroll part could be done per pane.
-
-- A single progress line that changes on the same frame a new line arrives still drops for that step.
 
 ## Related backlog issues
 

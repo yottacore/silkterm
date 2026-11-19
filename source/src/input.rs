@@ -1051,7 +1051,7 @@ mod tests {
 	// 	// a different modifier set is a different chord
 	// 	assert_eq!(on("t", COMMAND.union(ModifiersState::SHIFT), true), None);
 	// 	assert_eq!(on("c", COMMAND.union(ModifiersState::ALT), true), None);
-	// 	assert_eq!(on("f", COMMAND, true), None, "no Find yet");
+	// 	assert_eq!(on("f", COMMAND, true), None, "Command+F isn't bound");
 	// 	assert_eq!(on("k", COMMAND, true), None);
 	// 	// every Ctrl chord means what it meant before
 	// 	let mut keys: Vec<String> = ('a'..='z').map(String::from).collect();
@@ -1181,7 +1181,7 @@ mod tests {
 		// a different modifier set is a different chord
 		assert_eq!(on("t", COMMAND.union(ModifiersState::SHIFT), true), None);
 		assert_eq!(on("c", COMMAND.union(ModifiersState::ALT), true), None);
-		assert_eq!(on("f", COMMAND, true), None, "no Find yet");
+		assert_eq!(on("f", COMMAND, true), None, "Command+F isn't bound");
 		assert_eq!(on("k", COMMAND, true), None);
 		// no Ctrl or Alt chord is the program's on a Mac, though many are elsewhere
 		let mut keys: Vec<String> = ('a'..='z').map(String::from).collect();

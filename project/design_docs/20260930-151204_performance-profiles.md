@@ -23,11 +23,9 @@
 	- [Writing the rating](#writing-the-rating)
 	- [The watch](#the-watch)
 - [Alternative ideas](#alternative-ideas)
-	- [Unconsidered](#unconsidered)
 	- [Rejected](#rejected)
 	- [Superseded](#superseded)
 - [Research findings](#research-findings)
-- [Roadmap](#roadmap)
 - [Related backlog issues](#related-backlog-issues)
 - [Copyright and license](#copyright-and-license)
 
@@ -178,10 +176,6 @@ This reverses an earlier rule, which wrote the step down. A written step made on
 
 ## Alternative ideas
 
-### Unconsidered
-
-- A visible alert around a setting that a profile change moved.
-
 ### Rejected
 
 - Naming the adapter to pick the profile. The name doesn't mark an integrated chip as slow.
@@ -215,12 +209,6 @@ This reverses an earlier rule, which wrote the step down. A written step made on
 - A discrete card at 3440 by 1440 on Windows got the top rung. That was the first rating taken on real hardware there.
 
 - The "+candy" speed row uses the default settings with the automatic profile pinned off, and it measured 125.6 MiB against 167.7 published.
-
-## Roadmap
-
-- Blur quality isn't part of a profile yet. A profile could drive it once the setting exists. See the [Text scrim](20260930-145304_scrim.md) design doc.
-
-- The profile hasn't been watched on a display that isn't 60 Hz, or on 2 real monitors at different rates.
 
 ## Related backlog issues
 

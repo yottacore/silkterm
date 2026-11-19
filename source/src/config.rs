@@ -201,7 +201,7 @@ pub fn dip(v: f32, scale: f32) -> f32 {
 	}
 }
 
-// internal, not user-tunable (yet); DIP, see `dip`
+// internal, not user-tunable; DIP, see `dip`
 pub const PANE_GAP_PX: f32 = 1.0;
 pub const DIVIDER_GRAB_PX: f32 = 5.0; // mouse tolerance for grabbing a pane divider
 pub const FOCUS_RING_PX: f32 = 2.0;

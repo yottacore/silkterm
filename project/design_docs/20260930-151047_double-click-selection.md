@@ -25,7 +25,6 @@
 	- [Rejected](#rejected)
 	- [Superseded](#superseded)
 - [Research findings](#research-findings)
-- [Roadmap](#roadmap)
 - [Related backlog issues](#related-backlog-issues)
 - [Copyright and license](#copyright-and-license)
 
@@ -175,12 +174,6 @@ On X11, owning the selection has one more trap. When another program takes the s
 - Under a stock `x11-clipboard`, 19 of 900 tries lost a copy. With the patch, 0 of 900 did.
 
 - A drag held past the edge picked up 133 and 127 lines in 3 seconds at 24 rows, and didn't cost any extra CPU once pinned.
-
-## Roadmap
-
-- A double-click on a Windows drive path hasn't been rechecked on Windows against a fresh config. Backlog: "Double-clicking a Windows path leaves off the drive letter".
-
-- A PowerShell background job reads as a command still running, so copy on output waits until it ends. Windows doesn't give any way to tell a background child from a foreground one.
 
 ## Related backlog issues
 

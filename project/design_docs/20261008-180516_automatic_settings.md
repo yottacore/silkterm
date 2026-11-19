@@ -38,11 +38,9 @@
 	- [Tests](#tests)
 	- [Needs more thought](#needs-more-thought)
 - [Alternative ideas](#alternative-ideas)
-	- [Unconsidered](#unconsidered)
 	- [Rejected](#rejected)
 	- [Superseded](#superseded)
 - [Research findings](#research-findings)
-- [Roadmap](#roadmap)
 - [Related backlog issues](#related-backlog-issues)
 - [Copyright and license](#copyright-and-license)
 
@@ -331,12 +329,6 @@ kept:
 
 ## Alternative ideas
 
-### Unconsidered
-
-- A "what changed" list under Profile. The tip on the dropdown names the rows for now.
-
-- More than one Custom, named. Nobody has asked for it.
-
 ### Rejected
 
 - Automatic stored as a missing line, without anything kept. It lost the value behind every switch.
@@ -375,20 +367,6 @@ kept:
 - Firefox about:config and VS Code settings give a changed value a reset arrow, and store only what was changed.
 
 - Accessibility guidance advises against disabling form controls for state, because a disabled control doesn't say why or what to do. WCAG exempts only inactive controls from the contrast minimum, so a control that takes focus has to meet it.
-
-## Roadmap
-
-- Done: the knobs crate and its demo, 2026-10-09.
-
-- knobs: a spec built from code, a rule that gives a default, presets from the program, a temporary preset set by the program, and saving into a file that keeps its comments.
-
-- SilkTerm: the relations and groups in `settings_ui.shcl`, the field table, the stored values in `Settings`, `state.shcl`, and old files.
-
-- The dialog through knobs: the switches back, the `*`, the reset arrow, and the tip lines.
-
-- Prove the old and new paths agree on old files and on each profile's values, then remove the old code in one go. That's the profile's shadow and values, the wallpaper colors' shadow, `config::auto` and its lint check, the graying block, and the launch step that took the switches out.
-
-- No control is removed. This design changes how controls work rather than which ones exist.
 
 ## Related backlog issues
 

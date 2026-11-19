@@ -31,7 +31,6 @@
 	- [Rejected](#rejected)
 	- [Superseded](#superseded)
 - [Research findings](#research-findings)
-- [Roadmap](#roadmap)
 - [Related backlog issues](#related-backlog-issues)
 - [Copyright and license](#copyright-and-license)
 
@@ -409,8 +408,6 @@ What a window already gives back while unused is described in the [Releasing res
 	- Sharing the main window's device can't work on X11, where the window draws through GL. Elsewhere it would save about 20 MiB.
 	- `WARM_DIALOG_GPU` in app.rs is still the one-line way back to building the context on each open.
 
-- This was in the releasing resources doc's roadmap before.
-
 ### A shorter wait for a minimized window
 
 - A minimized window and a covered one share "Minutes when hidden", which is now 1 by default. It was 30.
@@ -501,18 +498,6 @@ What a window already gives back while unused is described in the [Releasing res
 - The scrim's blur takes 25 taps a pass and spaces them more than a pixel apart once the radius passes about 4 pixels.
 
 - The wallpaper's default blur is a sigma of 10, in pixels of the image after the 4096 cut.
-
-## Roadmap
-
-1. Measure.
-
-2. Shrink the scrim and hold the wallpaper at window size. Settle the dialogs' context. Shorten the wait for a minimized window.
-
-3. "Always use software rendering" and the fallback on device failure.
-
-4. The Resource use group and its warning marks.
-
-5. Block compression for the wallpaper, once the size cut has been measured.
 
 ## Related backlog issues
 
