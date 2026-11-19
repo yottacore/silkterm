@@ -278,7 +278,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Decisions: The cap is in the tap, not a vte fork, since a fork needs a new repo on the git host, which a round can't make. The tap follows vte's states only as far as entering and leaving an OSC, which every state does the same way, and a fuzz test holds it to vte. Past the cap a byte becomes a NUL, which vte drops inside an OSC. Ending the sequence early with CAN was ruled out, since the rest of the payload would then print as text.
 	- Test case: dfeeg `an_endless_osc_stops_growing_the_parser_buffer` and dfeeh `a_capped_stream_parses_the_same_but_for_overlong_oscs`.
 	- Swept: vte 0.15.0 caps CSI params at 32, intermediates at 2, OSC params at 16 and the sync buffer at 2 MiB. The tap's own OSC 7 scanner stops collecting at 4 KiB. Title and combining marks are capped in the alacritty fork. No other parser buffer grows with input.
-	- Upstream draft: the vte patch and issue text are in the private upstream drafts, under this ID.
+	- Upstream draft: the vte patch and issue text are in the private upstream drafts, under this ID. Not filed: vte closed the same report as #151 in 2026-05. The patch is kept for a vte fork branch.
 	- Branch: nov17-2026111713374900
 	- Commit: c298d1a8
 	- Progress log: 20261117: Verified: dfeeg and dfeeh pass. Both fail with the cap made a no-op. dfeeh also fails with the cap left in an OSC after its ESC, and with Escape left early on a C0 control. The quick gate passes. The drafted vte patch passes vte's own tests, and its new test fails without the cap.
