@@ -63,7 +63,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- ID: 2026101906582193
 	- Type: Task
 	- Status: Stalled
-		- Goes out with rc.1. The workflow runs from `main`, so it takes effect at that merge.
+		- Held for the rc.1 merge to main, since the workflow runs from `main`.
 	- Priority: Avg
 	- Opened: 20261019-065821
 	- Opened by: JC
