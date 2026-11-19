@@ -183,7 +183,7 @@ impl SettingsDialog {
 			pick::Focus::Cancel => self.pick_cancel(),
 			pick::Focus::Ok => self.pick_accept(),
 			pick::Focus::Field(_) => self.char_input(' '),
-			_ => {}
+			pick::Focus::Square | pick::Focus::Hue => {}
 		}
 	}
 

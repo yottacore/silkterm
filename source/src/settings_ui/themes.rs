@@ -153,8 +153,8 @@ impl SettingsDialog {
 				}
 			})
 			.collect();
-		let base = base.trim_matches('_').to_string();
-		let base = if base.is_empty() { "theme" } else { &base }.to_string();
+		let trimmed = base.trim_matches('_');
+		let base = if trimmed.is_empty() { "theme" } else { trimmed }.to_string();
 		let taken = |s: &str| self.edited.user_themes.iter().any(|t| t.slug == s);
 		if !taken(&base) {
 			return base;
@@ -250,14 +250,13 @@ impl SettingsDialog {
 		let Some(theme_index) = self.user_theme_index() else {
 			return;
 		};
-		let name = self.edited.user_themes[theme_index].name.clone();
-		self.edited.user_themes.remove(theme_index);
+		let name = self.edited.user_themes.remove(theme_index).name;
 		let next = if crate::theme::is_builtin(&name) {
 			name
 		} else {
 			crate::theme::all_names(&self.edited.user_themes)
-				.first()
-				.cloned()
+				.into_iter()
+				.next()
 				.unwrap_or(name)
 		};
 		self.pick_theme(&next);

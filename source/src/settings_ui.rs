@@ -8,7 +8,7 @@
 //! text; an open dropdown's popup draws in a second (`LoadOp::Load`) pass on top so
 //! covered rows' text can't bleed through it (see `dropdown_overlay`).
 //!
-//! Sections are grouped into tabs (see `tab_titles()`/`tab_for_section`) so the
+//! Sections are grouped into tabs (see `tab_titles()`) so the
 //! dialog stays well under screen height; if a tab still doesn't fit (huge UI
 //! font / short screen) the rows region scrolls (wheel + draggable thumb) and
 //! the window height is capped instead of clipping the buttons.
@@ -187,7 +187,7 @@ pub fn row_tips() -> usize {
 
 /// Which flyover the pointer is over, without its words. It's either fixed
 /// text, or row `.0`'s tip for one of its settings.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TipAt {
 	Said(&'static str),
 	Row(usize, Key),
@@ -689,6 +689,14 @@ fn warning_room(line_h: f32) -> f32 {
 	line_h * (WARN_GAP + WARN_W)
 }
 
+// A rect for something that isn't on show.
+const NO_RECT: Rect = Rect {
+	x: 0.0,
+	y: 0.0,
+	w: 0.0,
+	h: 0.0,
+};
+
 // `r` cut down to what falls inside `to`. Zero width when nothing does.
 fn clip_rect(r: Rect, to: Rect) -> Rect {
 	let x0 = r.x.max(to.x);
@@ -940,7 +948,7 @@ fn fmt_number(value: f32, int: bool) -> String {
 	}
 }
 
-#[derive(Clone, Copy, PartialEq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Action {
 	None,
 	Apply,
@@ -2000,18 +2008,12 @@ impl SettingsDialog {
 	// is every sub-tab of a tab that isn't current.
 	fn tab_rect(&self, node: usize) -> Rect {
 		let n = &tab_nodes()[node];
-		let none = Rect {
-			x: 0.0,
-			y: 0.0,
-			w: 0.0,
-			h: 0.0,
-		};
 		match tabs_side() {
 			TabsSide::Top => {
 				let row = usize::from(n.depth);
 				let shown = self.shown_in_row(row);
 				let Some(k) = shown.iter().position(|&i| i == node) else {
-					return none;
+					return NO_RECT;
 				};
 				let x = self.rect.x - self.tab_scroll(row, &shown)
 					+ lay().pad + shown[..k].iter().map(|&i| self.tab_ws[i]).sum::<f32>()
@@ -2721,26 +2723,24 @@ impl SettingsDialog {
 			self.search_step(forward);
 			return;
 		}
-		if forward && self.alt {
-			if let Some(Focus::Row(i, _)) = self.focus {
-				if matches!(self.specs[i].kind, Kind::Dropdown(_))
-					&& !self.disabled(self.specs[i].key)
-				{
-					self.dd_open(i);
-					return;
-				}
-			}
+		if forward
+			&& self.alt
+			&& let Some(Focus::Row(i, _)) = self.focus
+			&& matches!(self.specs[i].kind, Kind::Dropdown(_))
+			&& !self.disabled(self.specs[i].key)
+		{
+			self.dd_open(i);
+			return;
 		}
 		// Up/Down step a focused numeric field (spinbox feel; Shift = 10x). Tab still
 		// walks between controls. Works whether the field is just focused or open.
 		// forward = Down (decrease); !forward = Up (increase).
-		if let Some(Focus::Row(i, _)) = self.focus {
-			if matches!(self.specs[i].kind, Kind::Slider { .. })
-				&& !self.disabled(self.specs[i].key)
-			{
-				self.step_slider(i, if forward { -1 } else { 1 }, self.shift);
-				return;
-			}
+		if let Some(Focus::Row(i, _)) = self.focus
+			&& matches!(self.specs[i].kind, Kind::Slider { .. })
+			&& !self.disabled(self.specs[i].key)
+		{
+			self.step_slider(i, if forward { -1 } else { 1 }, self.shift);
+			return;
 		}
 		self.focus_move(forward);
 	}
@@ -2793,11 +2793,11 @@ impl SettingsDialog {
 		}
 		// in the prompt box, the field owns Left/Right while it has focus and the
 		// 2 buttons share them otherwise
-		if let Some(prompt) = self.prompt.as_ref() {
-			if prompt.focus != PromptFocus::Field {
-				self.prompt_focus_move(dir > 0);
-				return;
-			}
+		if let Some(prompt) = self.prompt.as_ref()
+			&& prompt.focus != PromptFocus::Field
+		{
+			self.prompt_focus_move(dir > 0);
+			return;
 		}
 		if self.edit.is_some() {
 			if dir < 0 {
@@ -4004,12 +4004,11 @@ impl SettingsDialog {
 			Key::StartupDirectory => (key, false),
 			keys_of!(slider | toggle | radio | color | hotkey | valueless | assoc) => return,
 		};
-		let monitor = self.monitor.clone();
 		if empty {
-			fields::reset(&mut self.edited, key, monitor.as_deref());
+			fields::reset(&mut self.edited, key, self.monitor.as_deref());
 		} else {
 			let v = knobs::Value::Text(trimmed);
-			fields::set(&mut self.edited, key, &v, monitor.as_deref());
+			fields::set(&mut self.edited, key, &v, self.monitor.as_deref());
 		}
 	}
 	fn get_toggle(&self, key: Key) -> bool {
@@ -4246,15 +4245,14 @@ impl SettingsDialog {
 		if key == Key::PerfProfile {
 			self.edited.stepped_profile = None;
 		}
-		let monitor = self.monitor.clone();
 		let keys: &[Key] = if key == Key::BgImage {
 			&[Key::BgImage, Key::BgFolder]
 		} else {
 			&[key]
 		};
-		for k in keys {
-			if fields::field(*k).is_some() {
-				fields::reset(&mut self.edited, *k, monitor.as_deref());
+		for &k in keys {
+			if fields::field(k).is_some() {
+				fields::reset(&mut self.edited, k, self.monitor.as_deref());
 			}
 		}
 	}
@@ -4271,13 +4269,9 @@ impl SettingsDialog {
 	/// the rows still at their default go back to the template's line.
 	pub fn take_reverted(&mut self) -> Vec<&'static str> {
 		let mut reverted = std::mem::take(&mut self.reverted);
-		let keys: Vec<Key> = self
-			.specs
-			.iter()
-			.flat_map(|spec| match spec.kind {
-				Kind::Dual { keys, .. } => keys.to_vec(),
-				_ => vec![spec.key],
-			})
+		let keys: Vec<Key> = (0..self.specs.len())
+			.flat_map(|j| self.own_keys(j))
+			.copied()
 			.collect();
 		reverted.retain(|cfg_key| {
 			keys.iter()
@@ -4646,12 +4640,7 @@ impl SettingsDialog {
 	}
 	fn em_rect(&self) -> Rect {
 		let Some(menu) = &self.emenu else {
-			return Rect {
-				x: 0.0,
-				y: 0.0,
-				w: 0.0,
-				h: 0.0,
-			};
+			return NO_RECT;
 		};
 		let w = lay().edit_menu_width * self.ui_scale();
 		let h = EDIT_MENU.len() as f32 * self.em_item_h();
@@ -4958,7 +4947,9 @@ impl SettingsDialog {
 		if let Some(grab) = self.drag_thumb {
 			let was = self.scroll;
 			let vp = self.viewport();
-			let thumb_h = self.thumb().map_or(lay().scrollbar_thumb_min, |t| t.h);
+			let thumb_h = self
+				.thumb()
+				.map_or_else(|| lay().scrollbar_thumb_min, |t| t.h);
 			let frac = ((y - grab - vp.y) / (vp.h - thumb_h).max(1.0)).clamp(0.0, 1.0);
 			self.scroll = frac * self.max_scroll();
 			return self.scroll.to_bits() != was.to_bits();
@@ -4966,7 +4957,9 @@ impl SettingsDialog {
 		if let Some(grab) = self.drag_hthumb {
 			let was = self.hscroll;
 			let track = self.htrack();
-			let thumb_w = self.hthumb().map_or(lay().scrollbar_thumb_min, |t| t.w);
+			let thumb_w = self
+				.hthumb()
+				.map_or_else(|| lay().scrollbar_thumb_min, |t| t.w);
 			let frac = ((x - grab - track.x) / (track.w - thumb_w).max(1.0)).clamp(0.0, 1.0);
 			self.hscroll = frac * self.max_hscroll();
 			return self.hscroll.to_bits() != was.to_bits();
@@ -4998,20 +4991,20 @@ impl SettingsDialog {
 		self.drag_hthumb = None;
 		self.edit_drag = None;
 		// an empty drag-selection collapses back to a plain caret
-		if let Some(edit) = &mut self.edit {
-			if edit.sel == Some(edit.cur) {
-				edit.sel = None;
-			}
+		if let Some(edit) = &mut self.edit
+			&& edit.sel == Some(edit.cur)
+		{
+			edit.sel = None;
 		}
 		// a fresh single-click field entry that never became a drag selects all, so
 		// the next keystroke replaces the value (standard field entry)
-		if std::mem::take(&mut self.select_all_on_up) {
-			if let Some(edit) = &mut self.edit {
-				if edit.sel.is_none() && !edit.buf.is_empty() {
-					edit.sel = Some(0);
-					edit.cur = edit.buf.len();
-				}
-			}
+		if std::mem::take(&mut self.select_all_on_up)
+			&& let Some(edit) = &mut self.edit
+			&& edit.sel.is_none()
+			&& !edit.buf.is_empty()
+		{
+			edit.sel = Some(0);
+			edit.cur = edit.buf.len();
 		}
 		if let Some(btn_idx) = self.pressed.take() {
 			let (action, r, _) = self.buttons()[btn_idx];
@@ -5160,13 +5153,12 @@ impl SettingsDialog {
 			if self.focus == Some(Focus::Search) {
 				self.open_edit(SEARCH_ROW, true);
 			}
-			if let Some(Focus::Row(i, _)) = self.focus {
-				if matches!(
+			if let Some(Focus::Row(i, _)) = self.focus
+				&& matches!(
 					self.specs[i].kind,
 					Kind::Text | Kind::Color | Kind::Slider { .. }
 				) {
-					self.open_edit(i, true);
-				}
+				self.open_edit(i, true);
 			}
 			return;
 		}
@@ -5181,10 +5173,10 @@ impl SettingsDialog {
 		Some(edit.buf[a..b].to_string())
 	}
 	pub fn delete_selection(&mut self) {
-		if let Some(edit) = &mut self.edit {
-			if edit.remove_selection() {
-				self.reparse_edit();
-			}
+		if let Some(edit) = &mut self.edit
+			&& edit.remove_selection()
+		{
+			self.reparse_edit();
 		}
 	}
 	pub fn backspace(&mut self) {
@@ -5247,22 +5239,24 @@ impl SettingsDialog {
 		let Some(edit) = &self.edit else { return };
 		let reach = self.reach();
 		// plain Left with a selection collapses to its start
-		if !self.shift && reach != Reach::End {
-			if let Some((a, _)) = edit.sel_range() {
-				self.move_caret(a);
-				return;
-			}
+		if !self.shift
+			&& reach != Reach::End
+			&& let Some((a, _)) = edit.sel_range()
+		{
+			self.move_caret(a);
+			return;
 		}
 		self.move_caret(reach_left(&edit.buf, edit.cur, reach));
 	}
 	pub fn cursor_right(&mut self) {
 		let Some(edit) = &self.edit else { return };
 		let reach = self.reach();
-		if !self.shift && reach != Reach::End {
-			if let Some((_, b)) = edit.sel_range() {
-				self.move_caret(b);
-				return;
-			}
+		if !self.shift
+			&& reach != Reach::End
+			&& let Some((_, b)) = edit.sel_range()
+		{
+			self.move_caret(b);
+			return;
 		}
 		self.move_caret(reach_right(&edit.buf, edit.cur, reach));
 	}
@@ -5836,22 +5830,23 @@ impl SettingsDialog {
 		}
 		// keyboard-focus ring around the active control row (scrolls + clips with
 		// the rows; a focused button is ringed below, in the fixed chrome).
-		if let Some(Focus::Row(fr, fp)) = self.focus.filter(|_| rows_shown) {
-			if self.specs[fr].tab == self.tab && !matches!(self.specs[fr].kind, Kind::Header(_)) {
-				let r = self.focus_ctl_rect(fr, fp);
-				let inset = if self.ring_is_the_box(fr, fp) {
-					0.0
-				} else {
-					2.0
-				};
-				let ring = Rect {
-					x: r.x - inset,
-					y: r.y - inset,
-					w: r.w + inset * 2.0,
-					h: r.h + inset * 2.0,
-				};
-				border(&mut out, ring, 1.0, colors.focus_out);
-			}
+		if let Some(Focus::Row(fr, fp)) = self.focus.filter(|_| rows_shown)
+			&& self.specs[fr].tab == self.tab
+			&& !matches!(self.specs[fr].kind, Kind::Header(_))
+		{
+			let r = self.focus_ctl_rect(fr, fp);
+			let inset = if self.ring_is_the_box(fr, fp) {
+				0.0
+			} else {
+				2.0
+			};
+			let ring = Rect {
+				x: r.x - inset,
+				y: r.y - inset,
+				w: r.w + inset * 2.0,
+				h: r.h + inset * 2.0,
+			};
+			border(&mut out, ring, 1.0, colors.focus_out);
 		}
 		for (btn_idx, (_, r, label)) in self.buttons().into_iter().enumerate() {
 			// pressed button fills with the highlight for click feedback
@@ -6040,23 +6035,18 @@ impl SettingsDialog {
 						Some(edit) if edit.row == i => edit.buf.clone(),
 						_ => self.get_text(self.specs[i].key),
 					};
-					let (txt, color) = if val.is_empty() || self.disabled(self.specs[i].key) {
-						(
-							if val.is_empty() {
-								"(none)".to_string()
-							} else {
-								val
-							},
-							colors.dim,
-						)
+					let (txt, color): (Cow<'static, str>, _) = if val.is_empty() {
+						(Cow::Borrowed("(none)"), colors.dim)
+					} else if self.disabled(self.specs[i].key) {
+						(val.into(), colors.dim)
 					} else {
-						(val, colors.text)
+						(val.into(), colors.text)
 					};
 					out.push(TextItem {
 						color,
 						clip: Some(clip_rect(text_box, vp)),
 						..mk(
-							txt.into(),
+							txt,
 							text_box.x + lay().field_pad - view(i),
 							row_text_y(text_box.y, text_box.h),
 						)
@@ -6191,31 +6181,31 @@ impl SettingsDialog {
 							)
 						});
 						let cmd = text(cmd_row, &entry.command);
-						let (cmd, cmd_color) = if cmd.is_empty() {
-							("(required)".to_string(), colors.dim)
+						let (cmd, cmd_color): (Cow<'static, str>, _) = if cmd.is_empty() {
+							(Cow::Borrowed("(required)"), colors.dim)
 						} else {
-							(cmd, color)
+							(cmd.into(), color)
 						};
 						out.push(TextItem {
 							color: cmd_color,
 							clip: Some(clip_rect(cmd_box, vp)),
 							..mk(
-								cmd.into(),
+								cmd,
 								cmd_box.x + lay().field_pad - view(cmd_row),
 								row_text_y(cmd_box.y, cmd_box.h),
 							)
 						});
 						// Last seen is the program's own note, never edited here
-						let seen_text = if entry.last_seen.is_empty() {
-							shell_grid::NEVER_SEEN.to_string()
+						let seen_text: Cow<'static, str> = if entry.last_seen.is_empty() {
+							Cow::Borrowed(shell_grid::NEVER_SEEN)
 						} else {
-							entry.last_seen.clone()
+							entry.last_seen.clone().into()
 						};
 						out.push(TextItem {
 							color: colors.dim,
 							clip: Some(vp),
 							..mk(
-								seen_text.into(),
+								seen_text,
 								cols.seen,
 								row_text_y(self.shell_line_y(i, shell_index), self.shell_line_h()),
 							)
@@ -6263,7 +6253,7 @@ impl SettingsDialog {
 		border(&mut rects, popup, 1.0, colors.panel_border);
 		let sel = self.get_radio(self.specs[i].key);
 		let mk = |text: Cow<'static, str>, x: f32, y: f32| TextItem::plain(text, x, y, colors.text);
-		for (choice, opt) in options.iter().enumerate() {
+		for (choice, opt) in options.into_iter().enumerate() {
 			let r = self.dd_item_rect(i, n, choice);
 			if choice == self.pending {
 				rects.push(quad(r.x + 1.0, r.y, r.w - 2.0, r.h, colors.btn_hl));
@@ -6272,7 +6262,7 @@ impl SettingsDialog {
 			if choice == sel {
 				texts.push(mk(ui().icons.dropdown_check.into(), r.x + r.w - 18.0, ty));
 			}
-			texts.push(mk(opt.clone().into(), r.x + 10.0, ty));
+			texts.push(mk(opt.into(), r.x + 10.0, ty));
 		}
 		(rects, texts)
 	}
@@ -6320,18 +6310,12 @@ impl SettingsDialog {
 			if enabled && hover == Some(item) {
 				rects.push(quad(r.x + 1.0, r.y, r.w - 2.0, r.h, colors.btn_hl));
 			}
-			texts.push(TextItem {
-				text: (*label).into(),
-				x: r.x + 10.0,
-				y: r.y + (r.h - self.line_h) / 2.0,
-				color: if enabled { colors.text } else { colors.dim },
-				clip: None,
-				bold: false,
-				italic: false,
-				scale: 1.0,
-				marks: None,
-				band: None,
-			});
+			texts.push(TextItem::plain(
+				*label,
+				r.x + 10.0,
+				r.y + (r.h - self.line_h) / 2.0,
+				if enabled { colors.text } else { colors.dim },
+			));
 		}
 		(rects, texts)
 	}
@@ -6563,6 +6547,8 @@ pub fn wallpaper_changed(old: &Settings, new: &Settings) -> bool {
 		|| old.wallpaper_contrast_mask_size != new.wallpaper_contrast_mask_size
 		|| old.wallpaper_contrast_mask_strength != new.wallpaper_contrast_mask_strength
 		|| old.wallpaper_contrast_mask_auto != new.wallpaper_contrast_mask_auto
+		// another folder while rotation is on is another picture
+		|| old.rotation_folder() != new.rotation_folder()
 		// a profile change can move how small a blurred picture is stored
 		|| crate::wallpaper::per_sigma(old) != crate::wallpaper::per_sigma(new)
 		// and whether it goes up as BC1 or BC7
@@ -14384,5 +14370,29 @@ mod tests {
 			}
 		}
 		assert!(seen >= 10, "only {seen} fixed words drawn");
+	}
+
+	// Another rotation folder picked in the dialog left the old picture up until
+	// the timer next fired, since nothing compared the folder.
+	// Test ID: dfh8y
+	#[test]
+	fn another_rotation_folder_reloads_the_wallpaper() {
+		let on = config::Settings {
+			wallpaper_enabled: true,
+			wallpaper_rotate_enabled: true,
+			wallpaper_folder: Some("/w/a".into()),
+			..config::Settings::default()
+		};
+		let moved = config::Settings {
+			wallpaper_folder: Some("/w/b".into()),
+			..on.clone()
+		};
+		assert!(super::wallpaper_changed(&on, &moved));
+		// with rotation off the folder isn't what shows
+		let off = |s: &config::Settings| config::Settings {
+			wallpaper_rotate_enabled: false,
+			..s.clone()
+		};
+		assert!(!super::wallpaper_changed(&off(&on), &off(&moved)));
 	}
 }

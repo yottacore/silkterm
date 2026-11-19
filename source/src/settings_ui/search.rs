@@ -743,9 +743,10 @@ impl SettingsDialog {
 		let field = self.search_box();
 		let text_y = |y: f32, h: f32| y + (h - self.line_h) / 2.0;
 		let editing = self.edit.as_ref().filter(|e| e.row == SEARCH_ROW);
-		let (typed, view) = editing.map_or((self.search.query.clone(), 0.0), |e| {
-			(e.buf.clone(), e.view)
-		});
+		let (typed, view) = editing.map_or_else(
+			|| (self.search.query.clone(), 0.0),
+			|e| (e.buf.clone(), e.view),
+		);
 		let x = field.x + lay().field_pad - view;
 		if typed.is_empty() {
 			let chord = if self.mac { "Command+F" } else { "Ctrl+F" };
@@ -784,7 +785,11 @@ impl SettingsDialog {
 		}
 		for (k, (line, spans)) in self.search.lines.iter().enumerate() {
 			let r = self.hit_rect_in(vp, k);
-			if r.y + r.h < vp.y || r.y > vp.y + vp.h {
+			// the lines go down in order, so the rest are under the viewport too
+			if r.y > vp.y + vp.h {
+				break;
+			}
+			if r.y + r.h < vp.y {
 				continue;
 			}
 			out.push(TextItem {
