@@ -80,6 +80,7 @@ fSyntax(){  { ((doQuietly)) || ((wasShown_Syntax)); } && return; wasShown_Syntax
 	fEcho_Clean "  GIT_BACKUP_AND_PUBLISH_NOBACKUP=1     skip the rar backup, publish only"
 	fEcho_Clean "  GIT_BACKUP_AND_PUBLISH_MESSAGE        same as --message"
 	fEcho_Clean "  GIT_AUTO_MESSAGE                      same as --message (cicd convention)"
+	fEcho_Clean "  GIT_BACKUP_AND_PUBLISH_PATHS          commit only these tracked files, one per line"
 	fEcho_Clean "  GIT_BACKUP_AND_PUBLISH_RAR_EXCLUDES   extra rar patterns, one per line"
 	fEcho_Clean "  CPU_CAP                               rar thread cap (-mt)"
 	fEcho_Clean ""
@@ -366,19 +367,40 @@ fMain(){
 		return 1
 	fi
 
-	# Stage everything tracked/new (still honors .gitignore).
-	fEcho; fEcho "git add --all ..."
-	git add --all
+	## With GIT_BACKUP_AND_PUBLISH_PATHS set, only the tracked files it names are
+	## committed, and anything else already staged stays staged. The cicd engines
+	## set it to what the run itself changed, since the rest of the tree can hold
+	## another session's edits. Unset, everything is staged, as by hand.
+	local -a onlyPaths=() specs=()
+	if [[ -v GIT_BACKUP_AND_PUBLISH_PATHS ]]; then
+		local line=""
+		while IFS= read -r line; do [[ -n "${line}" ]] && specs+=(":(top,literal)${line}"); done <<< "${GIT_BACKUP_AND_PUBLISH_PATHS}"
+		## A path git doesn't track would fail the add, so keep only the tracked ones.
+		((${#specs[@]})) && mapfile -t onlyPaths < <(git ls-files --full-name -- "${specs[@]}")
+		specs=(); for line in "${onlyPaths[@]}"; do specs+=(":(top,literal)${line}"); done
+		fEcho; fEcho "git add, only what the run changed (${#specs[@]} file(s)) ..."
+		((${#specs[@]})) && git add -- "${specs[@]}"
+	else
+		fEcho; fEcho "git add --all ..."
+		git add --all
+	fi
 
-	if ! git diff --cached --quiet; then
+	local -i staged=0
+	if [[ -v GIT_BACKUP_AND_PUBLISH_PATHS ]]; then
+		((${#specs[@]})) && ! git diff --cached --quiet -- "${specs[@]}" && staged=1
+	else
+		git diff --cached --quiet || staged=1
+	fi
+	if ((staged)); then
 		fEcho; fEcho "git commit ..."
 		## Message precedence: --message (or either message env) wins; otherwise when
 		## quiet, auto-generate one so an unattended run never blocks on an editor;
-		## otherwise open the editor as usual.
-		if   [[ -n "${commitMessage}" ]]; then git commit -m "${commitMessage}"
-		elif ((doQuietly));               then git commit -m "$(fAutoMessage "${dirName_Top} ${serialDT}")"
-		else                                   git commit
+		## otherwise open the editor as usual. A path list commits those paths only.
+		local -a msgArgs=()
+		if   [[ -n "${commitMessage}" ]]; then msgArgs=(-m "${commitMessage}")
+		elif ((doQuietly));               then msgArgs=(-m "$(fAutoMessage "${dirName_Top} ${serialDT}")")
 		fi
+		git commit "${msgArgs[@]}" ${specs[@]+-- "${specs[@]}"}
 	fi
 
 	# Push only if we're ahead of the remote
@@ -812,3 +834,5 @@ fMain  "${@}"
 ##		- 20261107: A failed stash pop names the untracked files it couldn't put
 ##		  back and says to keep the stash, rather than advising a drop that
 ##		  deletes their only copy.
+##		- 20261119: GIT_BACKUP_AND_PUBLISH_PATHS commits only the tracked files it
+##		  names, so a cicd run leaves other edits in the tree alone.

@@ -775,6 +775,8 @@ fCheck "--help names each" fOffHelp
 ## Stage 3 with every command a stand-in, which says what ran.
 fStage(){ (
 	eval "$(fLift '^fBuildTestRelease(){' '^}')"
+	eval "$(fLift '^fRunChanged(){' '^}')"
+	local SILK_PUBLISH_LEDGER="" FMT_PATHS=('*.rs')
 	local noRustTests=0 noClippy=0 noScriptLint=0 noDeny=0 noRelease=0 fmtCheck=0 root="${work}/stage3" kv
 	mkdir -p "${root}"
 	FMT_CMD=(echo RAN fmt); DEBUG_BUILD_CMD=(echo RAN debug); TEST_CMD=(cargo test); FUZZ_CMD=(); FUZZ_SECS=0

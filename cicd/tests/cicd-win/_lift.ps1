@@ -36,12 +36,12 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 $ast = [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path -LiteralPath $Pipeline).Path, [ref]$null, [ref]$null)
-foreach ($name in 'fRotateLogs', 'fTargetDir', 'fRemapConfig', 'fHasLocalPaths', 'fExec', 'fScriptTest', 'fPython', 'fCargoTest', 'fInstallerTests', 'fScriptTests', 'fStashIfDirty', 'fNoLeftStash', 'fStashPop', 'fPullStashed', 'fRunFlags', 'fWslArgs', 'fQuickRun', 'fStamp', 'fStepLine', 'fStepIf', 'fStepOpen', 'fStepClose', 'fShowSteps', 'fPlanSteps', 'fRunDirMake', 'fRunDirEnd', 'fSweepStaleRuns', 'fOldLedger', 'fDirBytes', 'fCleanupCount', 'fCleanupNote', 'fCleanupLine', 'fTestStep', 'fListTests', 'fLeftOut') {
+foreach ($name in 'fRotateLogs', 'fTargetDir', 'fRemapConfig', 'fHasLocalPaths', 'fExec', 'fScriptTest', 'fPython', 'fCargoTest', 'fInstallerTests', 'fScriptTests', 'fStashIfDirty', 'fNoLeftStash', 'fStashPop', 'fPullStashed', 'fRunChanged', 'fPublish', 'fRunFlags', 'fWslArgs', 'fQuickRun', 'fStamp', 'fStepLine', 'fStepIf', 'fStepOpen', 'fStepClose', 'fShowSteps', 'fPlanSteps', 'fRunDirMake', 'fRunDirEnd', 'fSweepStaleRuns', 'fOldLedger', 'fDirBytes', 'fCleanupCount', 'fCleanupNote', 'fCleanupLine', 'fTestStep', 'fListTests', 'fLeftOut') {
 	$fn = $ast.Find({ param($n) $n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq $name }, $true)
 	if (-not $fn) { throw "$name not found in $Pipeline" }
 	. ([scriptblock]::Create($fn.Extent.Text))
 }
-foreach ($name in '$QuickAreas', '$QuickTitles', '$script:StepsOn', '$script:StepsOff', '$script:Letterbox', '$script:StepNum', '$script:StepName', '$Targets', '$script:CleanupKinds', '$script:CleanupBytes', '$script:CleanupDue') {
+foreach ($name in '$QuickAreas', '$QuickTitles', '$script:StepsOn', '$script:StepsOff', '$script:Letterbox', '$script:StepNum', '$script:StepName', '$Targets', '$script:CleanupKinds', '$script:CleanupBytes', '$script:CleanupDue', '$script:RunChanged') {
 	$set = $ast.Find({ param($n) $n -is [System.Management.Automation.Language.AssignmentStatementAst] -and $n.Left.Extent.Text -eq $name }, $true)
 	if (-not $set) { throw "$name not found in $Pipeline" }
 	. ([scriptblock]::Create($set.Extent.Text))
@@ -342,6 +342,40 @@ try {
 }
 finally { Pop-Location }
 
+##	Publish commits only what the run changed. The format step takes a file it
+##	changed that matched HEAD, and leaves one already edited, which can hold
+##	another session's work, and anything outside its paths.
+$pub = Join-Path $Work 'publish'
+New-Item -ItemType Directory -Path $pub -Force | Out-Null
+& git init --quiet --bare -b main (Join-Path $pub 'remote.git')
+& git clone --quiet (Join-Path $pub 'remote.git') (Join-Path $pub 'proj') 2>$null
+Push-Location -LiteralPath (Join-Path $pub 'proj')
+try {
+	& git config user.name 'test'
+	& git config user.email 'test@example.invalid'
+	& git config commit.gpgsign false
+	& git config core.hooksPath (Join-Path $Work 'nohooks')
+	Set-Content -LiteralPath 'clean.rs' -Value 'fn a() {}'
+	Set-Content -LiteralPath 'dirty.rs' -Value 'fn b() {}'
+	Set-Content -LiteralPath 'notes.txt' -Value 'c'
+	& git add clean.rs dirty.rs notes.txt
+	& git commit --quiet -m 'first'
+	& git push --quiet origin main 2>$null
+	Add-Content -LiteralPath 'dirty.rs' -Value '// mine'
+	$script:RunChanged.Clear()
+	fRunChanged -Specs '*.rs' -Do { Add-Content -LiteralPath 'clean.rs' -Value '//'; Add-Content -LiteralPath 'dirty.rs' -Value '//'; Add-Content -LiteralPath 'notes.txt' -Value 'more' }
+	fCheck 'the format step takes a clean file it changed, only' (($script:RunChanged -join ',') -ceq 'clean.rs')
+	$script:PullFails = ''
+	fPublish -Msg 'only'
+	fCheck 'publish commits that file' (((& git log -1 --format=%s) -eq 'only') -and ((& git show --format= --name-only HEAD) -join ',') -eq 'clean.rs')
+	fCheck 'and pushes it' ((& git rev-parse HEAD) -eq (& git rev-parse origin/main))
+	fCheck 'leaving the other edits in the tree' (((& git diff HEAD --name-only) -join ',') -eq 'dirty.rs,notes.txt')
+	$script:RunChanged.Clear()
+	fPublish -Msg 'none'
+	fCheck 'with nothing changed by the run it commits nothing' ((& git log -1 --format=%s) -eq 'only')
+}
+finally { Pop-Location }
+
 ##	The run options. Each case starts from none set, as a bare run does, and
 ##	notes the refusal, the one-line notices and what the Linux half gets.
 $offNames = 'NoRustTests', 'NoClippy', 'NoScriptLint', 'NoScrub', 'NoDeny', 'NoScriptTests', 'NoDocs', 'NoScroll', 'NoWingui', 'NoRelease', 'NoCleanup'
@@ -559,3 +593,5 @@ exit 0
 ##		  -NoRelease and -NoCleanup, and what the Linux half gets.
 ##		- 20261117: A failed pull puts the stash back, a failed pop names it, and a
 ##		  leftover auto-stash stops the run.
+##		- 20261119: Publish commits only what the format step changed of files that
+##		  matched HEAD.

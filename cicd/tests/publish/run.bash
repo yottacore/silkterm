@@ -164,6 +164,54 @@ fCheck "the prompt block is found in cicd.bash" test -n "${prompt}"
 fCheck "a typed message is the only line read" test "$(fAsk $'typed\nn')" = $'msg=typed\nrest=n'
 fCheck "a blank line takes the automatic message" test "$(fAsk $'\nn')" = $'msg=Silk CI/CD 20260101-000000\nrest=n'
 
+## With a path list, only the tracked files named are committed. Another edit in
+## the tree, and one already staged, stay out of the commit.
+fOnly(){  ## fOnly <name> <paths>: publish with that list; another edit and a staged one wait in the tree
+	fRepo "${1}"
+	local -r dir="${work}/${1}/proj"
+	printf 'x\n' >"${dir}/other.txt"; printf 'y\n' >"${dir}/staged.txt"
+	git -C "${dir}" add other.txt staged.txt; git -C "${dir}" commit -qm more; git -C "${dir}" push -q origin main 2>/dev/null
+	echo fmt >>"${dir}/file.txt"; echo theirs >>"${dir}/other.txt"
+	echo staged >>"${dir}/staged.txt"; git -C "${dir}" add staged.txt
+	rc=0; out="$(cd "${dir}" && PATH="${stubs}:${PATH}" GIT_BACKUP_AND_PUBLISH_PATHS="${2}" bash "${publish}" -q -m only 2>&1)" || rc=$?
+}
+fOnly only "file.txt
+not-tracked.txt"
+fCheck "a path list publishes, a path git doesn't track skipped" test "${rc}" -eq 0
+fCheck "with the named file" test "$(git -C "${work}/only/remote.git" show main:file.txt | tail -1)" = fmt
+fCheck "and nothing else" test "$(git -C "${work}/only/remote.git" show --format= --name-only main)" = file.txt
+## The stash pop puts a staged edit back unstaged, as it always has. Its text stays.
+fCheck "the other edits are still in the tree, uncommitted" test "$(git -C "${work}/only/proj" diff HEAD --name-only | tr '\n' ' ')" = "other.txt staged.txt "
+fOnly none ""
+fCheck "an empty list publishes" test "${rc}" -eq 0
+fCheck "and commits nothing" test "$(fLastMsg none)" = more
+fCheck "leaving both edits" test "$(git -C "${work}/none/proj" diff HEAD --name-only | tr '\n' ' ')" = "file.txt other.txt staged.txt "
+
+## cicd.bash hands the publisher what its ledger names, and the ledger takes only
+## files a step changed that matched HEAD before it.
+fCheck "cicd.bash passes the ledger to the publisher" grep -qF 'GIT_BACKUP_AND_PUBLISH_PATHS="${pubPaths}"' "${root}/cicd.bash"
+fCheck "the format step adds to it" grep -qF 'fRunChanged "${FMT_PATHS[@]}" -- "${FMT_CMD[@]}"' "${root}/cicd.bash"
+fCheck "and so does the demo" grep -qF 'fRunChanged "${DEMO_PATHS[@]}" -- python3' "${root}/cicd.bash"
+fCheck "a run in the container gets the ledger" grep -qF -- '-v "${SILK_PUBLISH_LEDGER%/*}:${SILK_PUBLISH_LEDGER%/*}" -e SILK_PUBLISH_LEDGER' "${root}/cicd.bash"
+# shellcheck disable=SC1090
+source <(sed -n '/^fRunChanged(){$/,/^}$/p' "${root}/cicd.bash")
+fRepo ledger
+lroot="${work}/ledger/proj"
+printf 'fn a() {}\n' >"${lroot}/clean.rs"; printf 'fn b() {}\n' >"${lroot}/dirty.rs"; printf 'c\n' >"${lroot}/notes.txt"
+git -C "${lroot}" add clean.rs dirty.rs notes.txt; git -C "${lroot}" commit -qm rs
+echo '// mine' >>"${lroot}/dirty.rs"
+fFmt(){ echo '//' >>"${lroot}/clean.rs"; echo '//' >>"${lroot}/dirty.rs"; echo more >>"${lroot}/notes.txt"; }
+export SILK_PUBLISH_LEDGER="${work}/ledger/changed.txt"; : >"${SILK_PUBLISH_LEDGER}"
+(root="${lroot}"; fRunChanged '*.rs' -- fFmt)
+fCheck "a clean file the step changed goes in the ledger" grep -qx clean.rs "${SILK_PUBLISH_LEDGER}"
+fCheck "one already edited doesn't" bash -c '! grep -q dirty "$1"' _ "${SILK_PUBLISH_LEDGER}"
+fCheck "nor one outside the step's paths" bash -c '! grep -q notes "$1"' _ "${SILK_PUBLISH_LEDGER}"
+rc=0; (root="${lroot}"; fRunChanged '*.rs' -- false) || rc=$?
+fCheck "the step's failure comes back" test "${rc}" -eq 1
+unset SILK_PUBLISH_LEDGER
+rc=0; (root="${lroot}"; fRunChanged '*.rs' -- true) || rc=$?
+fCheck "with no ledger the step still runs" test "${rc}" -eq 0
+
 if ((failures)); then echo "${failures} failed"; exit 1; fi
 echo "all passed"
 
@@ -173,3 +221,5 @@ echo "all passed"
 ##		- 20260917 JC: The excludes go through the publisher's own reader to a stub rar.
 ##		- 20260922 JC: The release packages stay in the backup.
 ##		- 20260926 JC: The commit message prompt asks nothing after it.
+##		- 20261119 JC: A path list commits only the files named, and cicd.bash's
+##		  ledger takes only what a step changed of files that matched HEAD.

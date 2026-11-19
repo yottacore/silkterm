@@ -4690,6 +4690,34 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Closed: 20261106-210424
 	- Closed reason: Done
 
+- The publish stage commits every edit in the tree, not only what the run changed
+	- ID: 2026111913483696
+	- Type: Bug
+	- Status: Closed
+	- Severity: Avg
+	- Opened: 20261119-134836
+	- Opened by: CC
+	- Related IDs: 2026102416233812
+	- Target OS: All
+	- Test environment: b23
+	- Target version: rc.2
+	- Steps to reproduce:
+		- Edit a tracked file by hand, then run `cicd/cicd.bash -y -m test` or `cicd-win.ps1 -Yes -Message test`.
+	- Incorrect behavior: The publish stage stages the whole tree, so the hand edit is committed and pushed with the run.
+	- Expected behavior: Publish commits only the tracked files the run itself changed. Any other edit stays in the tree, uncommitted.
+	- Reproduced: 20261119 on b23, by reading both publish stages. Each stages the whole tree before it commits.
+	- Actual cause: The publisher was written for use by hand, where staging everything is what's wanted, and the pipeline called it the same way.
+	- Actual fix: The format step, and the demo in `cicd.bash`, record each tracked file they change, if it matched HEAD before the step. A file that was already edited is never taken, since it can hold someone's work in progress. Publish commits only the recorded files. A run in the container records into the same list. Run by hand, the publisher still stages everything.
+	- Decisions:
+		- 20261119: The stash and pop around the pull put a staged edit back unstaged, as before. Its text stays in the tree, and the commit leaves it out.
+		- 20261119: A file the formatter changed that was already edited stays out of the commit. The pre-commit hook formats it when it's committed.
+		- 20261119: Part of the CICD reset, which overrides earlier calls. It supersedes the note in project memory that a publish commits the whole tree.
+	- Branch: pubscope
+	- Test case: dcbdv `cicd/tests/publish/run.bash`, 14 new checks. dd5nw `cicd/tests/cicd-win/run.bash`, 5 new checks. Both fail against the old scripts, and against a step that takes an already edited file.
+	- Acceptance signoff: Self-closed: the tests fail on the old code and pass on the new. The engine (dd5nn), container (ddrp2), and cleanup (de5e9) tests pass, and so does the backlog quick run for scripts and docs.
+	- Closed: 20261119-134836
+	- Closed reason: Done
+
 - A window that never gets focus thinks it has it, and never lets its device go
 	- ID: 2026111011350600
 	- Type: Bug
@@ -11731,7 +11759,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Reproduced: 20261003 on b23, on the pipeline run at 8877157.
 	- Cause: The report greps every line with "warning", and cicd's test result lines include the test name.
 	- Fix: The report drops cargo test result lines (status, test ID, name) and script `[ OK: ... (ID) ]` lines before counting.
-	- Test case: ddf08, in `cicd/tests/gates/run.bash`. It fails before the fix and passes after.
+	- Test case: dcry4 `cicd/tests/gates/run.bash`, its check marked ddf08. It fails before the fix and passes after.
 	- Verified: On a copy of the 20261003-112257 log the count drops from 32 to 31. A planted `warning: unused variable` line still counts. Shellcheck is clean.
 	- Swept: No other cicd script greps logs for warnings.
 	- Branch: lint-test-names

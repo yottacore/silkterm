@@ -47,6 +47,9 @@ FMT_CMD=(cargo fmt)
 ## Non-mutating variant for --backlog-run-quick, --fmt-check, and the full runs
 ## (fails on drift instead of rewriting).
 FMT_CHECK_CMD=(cargo fmt --check)
+## The files the formatter may rewrite, as git pathspecs. Publish commits the
+## ones it changed that matched HEAD before it ran, and nothing else of the tree.
+FMT_PATHS=('*.rs')
 
 ## Pinned helper tools, "name|version|command..." each. The list is in
 ## tool-pins.txt beside this file, which cicd-win.ps1 reads too; the engine warns
@@ -282,6 +285,8 @@ PROFILE_STRICT=0                        # 1 = any profiler failure aborts the pi
 ## unless --demo is given too. Video GFS-rotates into ../private/demo-video/; the
 ## README highlight gif goes in assets/demo.gif.
 DEMO_ENABLE=1
+## The tracked files the demo may rewrite, as git pathspecs, read the same way.
+DEMO_PATHS=(assets/demo.gif)
 
 ## Full run output is tee'd here (gitignored) so warnings from any stage can be
 ## reviewed after the fact. Kept rotated like the flamegraphs.

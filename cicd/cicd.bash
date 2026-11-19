@@ -38,7 +38,9 @@
 ##	   6. packages (.deb/.rpm per Linux arch; NSIS installer .exe per Windows arch),
 ##	      then the private runner (macOS on a Mac, the Microsoft Store bundle)
 ##	   7. dogfood (install each build to the synced app dir for its platform)
-##	   8. backup + publish to git (runs from repo root)
+##	   8. backup + publish to git (runs from repo root), committing only the
+##	      tracked files the run changed: what the formatter and the demo rewrote
+##	      of files that matched HEAD before the step
 ##	- Syntax:
 ##	  cicd/cicd.bash [options]
 ##	  Options:
@@ -685,6 +687,28 @@ fRunDir_Make(){
 	[[ -n "${SILKTERM_TEST_DIR:-}" ]] || export SILKTERM_TEST_DIR="${runDir}"
 	fTestDir_Make || return 1
 	runName="${runDir##*/}"
+	## The publish ledger. A run in the container is handed the one outside.
+	if ((${#GIT_PUBLISH[@]})) && [[ -z "${SILK_PUBLISH_LEDGER:-}" ]]; then
+		mkdir "${runDir}/publish" && : >"${runDir}/publish/changed.txt" || return 1
+		export SILK_PUBLISH_LEDGER="${runDir}/publish/changed.txt"
+	fi
+}
+## fRunChanged <pathspec>... -- <command>...: runs the command, then adds to the
+## publish ledger the tracked files under the pathspecs that it changed and that
+## matched HEAD before it ran. Publish commits only those. A file that was already
+## edited can hold another session's work, so it's never taken.
+fRunChanged(){
+	local -a specs=() list=(); local -A before=(); local f="" rc=0
+	while (($#)) && [[ "${1}" != -- ]]; do specs+=("${1}"); shift; done; shift
+	if [[ -z "${SILK_PUBLISH_LEDGER:-}" || ${#specs[@]} -eq 0 ]]; then "${@}"; return; fi
+	mapfile -d '' list < <(git -C "${root}" diff -z --name-only HEAD -- "${specs[@]}" 2>/dev/null)
+	for f in "${list[@]}"; do before["${f}"]=1; done
+	"${@}" || rc=$?
+	mapfile -d '' list < <(git -C "${root}" diff -z --name-only HEAD -- "${specs[@]}" 2>/dev/null)
+	for f in "${list[@]}"; do
+		[[ -n "${before["${f}"]:-}" || "${f}" == *$'\n'* ]] || printf '%s\n' "${f}" >>"${SILK_PUBLISH_LEDGER}"
+	done
+	return "${rc}"
 }
 ## fRunDir_End <status>: removes the run's folder, failed or not. --keep-temp
 ## keeps it and says where.
@@ -887,6 +911,8 @@ fContainerRun(){
 	[[ "${containerTarget}" == "${root}/"* ]] || mounts+=(-v "${containerTarget}:${containerTarget}")
 	gitCommon="$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null || true)"
 	[[ -z "${gitCommon}" || "${gitCommon}" == "${root}/"* ]] || mounts+=(-v "${gitCommon}:${gitCommon}")
+	## The publish ledger, so the format step inside adds to the one out here.
+	[[ -z "${SILK_PUBLISH_LEDGER:-}" ]] || mounts+=(-v "${SILK_PUBLISH_LEDGER%/*}:${SILK_PUBLISH_LEDGER%/*}" -e SILK_PUBLISH_LEDGER)
 	## The private repo, read only, so the test ID check inside sees its tests as
 	## it does here, and they run. Those tests read its runner, helpers, and build
 	## scripts, so the whole repo is mounted. The runner itself isn't run inside,
@@ -2293,7 +2319,7 @@ fBuildTestRelease(){
 	fSweepBuilds
 	if fStepOpen "Format"; then
 		fJobs
-		"${FMT_CMD[@]}" || fDie "format $( ((fmtCheck)) && echo 'check ')failed (${FMT_CMD[*]})"
+		fRunChanged "${FMT_PATHS[@]}" -- "${FMT_CMD[@]}" || fDie "format $( ((fmtCheck)) && echo 'check ')failed (${FMT_CMD[*]})"
 		fEcho "OK: $( ((fmtCheck)) && echo 'formatting clean' || echo 'formatted') (${FMT_CMD[*]})"
 		fStepClose
 	fi
@@ -2519,7 +2545,7 @@ if fStepOpen "Demo video"; then
 	## relative path would resolve against the wrong directory.
 	silkBin="${RELEASE_NATIVE_BIN}"
 	[[ "${silkBin}" = /* ]] || silkBin="${root}/${silkBin}"
-	if SILK_BIN="${silkBin}" python3 "${demoHook}"; then
+	if SILK_BIN="${silkBin}" fRunChanged "${DEMO_PATHS[@]}" -- python3 "${demoHook}"; then
 		fEcho "OK: demo video"
 	else
 		fEcho "WARNING: demo video hook failed (non-fatal)"
@@ -2534,7 +2560,11 @@ if fStepOpen "Backup + publish"; then
 	## The publisher commits with -m, so no editor opens. GIT_EDITOR is there in
 	## case some other git step ever wants one, so it can't stall the run.
 	fEcho_Clean "hands-off publish (commit message: \"${publishMsg}\")"
-	GIT_BACKUP_AND_PUBLISH_QUIET=1 GIT_AUTO_MESSAGE="${publishMsg}" \
+	## Only the tracked files the run itself changed. The rest of the tree can
+	## hold another session's edits.
+	pubPaths=""; [[ ! -s "${SILK_PUBLISH_LEDGER:-}" ]] || pubPaths="$(sort -u -- "${SILK_PUBLISH_LEDGER}")"
+	fEcho_Clean "the run changed $(grep -c . <<<"${pubPaths}") tracked file(s)${pubPaths:+: ${pubPaths//$'\n'/, }}"
+	GIT_BACKUP_AND_PUBLISH_PATHS="${pubPaths}" GIT_BACKUP_AND_PUBLISH_QUIET=1 GIT_AUTO_MESSAGE="${publishMsg}" \
 		GIT_EDITOR="${here}/utility/git-auto-msg.bash" "${GIT_PUBLISH[@]}" "${pubFlags[@]}"
 	fEcho "OK: published"
 	fStepClose
