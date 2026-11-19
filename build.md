@@ -134,7 +134,7 @@ wgpu uses the Metal backend automatically. No extra system packages are needed b
 
 - What the pipeline makes in docker is labeled `dev.project=silkterm` and `dev.run=<run>`, and only that is ever cleaned up. When a run ends, even a failed or stopped one, its containers are removed. Then our untagged images are removed, and once a run has passed, so is every image tag older than the one it used and the one before that. Build cache over a week old is removed as well, for every project, so the next build stays warm. The run ends with one cleanup line, which names what was removed, including its own temp folder and stale build output, and about how much that freed. For docker that's `docker system df` before the cleanup against after it. `--keep-temp` keeps the run's containers, and its temp folders too, and says where they are.
 
-- Everything that needs this machine stays outside and runs once the container is done: the remote sync, the Windows boxes, the private runner, dogfood, the demo, and publish. So do the steps that need the graphics card, since the window tests inside run on software rendering: the render node test and the profiler.
+- Everything that needs this machine stays outside and runs once the container is done: the remote sync, the Windows boxes, dogfood, the demo, and publish. So do the steps that need the graphics card, since the window tests inside run on software rendering: the render node test and the profiler.
 
 - The profiler draws on the card through a headless sway with its own Xwayland, on the card's render node, so nothing shows on the desktop. Without sway, Xwayland, or a render node it falls back to a private Xvfb, which renders in software, and says so.
 

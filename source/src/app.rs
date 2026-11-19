@@ -440,10 +440,10 @@ const HERD_POLL: Duration = Duration::from_secs(1);
 const HERD_POLL_LATER: Duration = Duration::from_secs(5); // after a minute dark
 const PUT_BACK_WAIT: Duration = Duration::from_secs(2);
 // A Wayland window is on no output until its first frame is up there, which
-// software rendering can take seconds to draw (2026101411504818).
+// software rendering can take seconds to draw.
 const NO_OUTPUT_YET: Duration = Duration::from_secs(10);
 // The scale a window's own take brings comes once a frame at the new size is
-// up, which took over 4 s with software rendering (2026101614100002).
+// up, which took over 4 s with software rendering.
 const TAKE_SCALE_WAIT: Duration = Duration::from_secs(10);
 // A resize this soon after one the window asked for, or one the system made
 // for a new scale, isn't the user's.

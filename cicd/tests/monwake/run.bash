@@ -11,7 +11,7 @@
 ##		at the portrait size.
 ##			- Turned on right after the window's look on the landscape output, and
 ##			  again 0.8 s after. Both were inside the grace after the window's
-##			  own resize, where a move back was dropped (2026100907341816).
+##			  own resize, where a move back was dropped.
 ##			- A herded window took the landscape size until 2026102807384201.
 ##			- Neither the dance nor the window's own resizes saves a size.
 ##	- Syntax: run.bash [--bin PATH]   (default: the debug build, then release)

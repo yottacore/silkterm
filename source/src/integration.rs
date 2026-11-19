@@ -659,8 +659,8 @@ mod tests {
 	// The value is handed to bash as a command string, so a Windows path has to
 	// arrive as something bash reads rather than as a run of escapes.
 	// Commented out 20261006: it pinned the old `PS1=$("$BASH" path)` form, which
-	// started a bash every prompt. The pane now sources the script once
-	// (2026100314050019); ddkjj checks the same paths in the new form.
+	// started a bash every prompt. The pane now sources the script once, and
+	// ddkjj checks the same paths in the new form.
 	// // Test ID: dbzdx
 	// #[test]
 	// fn a_prompt_command_survives_a_windows_path() {
@@ -692,7 +692,7 @@ mod tests {
 	// truncated or mangled vendoring shouldn't end up in anybody's prompt.
 	// Commented out 20261006: `fMain` was renamed, since the script is now
 	// sourced into the pane's shell and a bare name could clobber the user's
-	// own (2026100314050019). ddkjk checks for the function the pane calls.
+	// own. ddkjk checks for the function the pane calls.
 	// // Test ID: dbzdy
 	// #[test]
 	// fn the_bash_prompt_script_is_a_whole_script() {

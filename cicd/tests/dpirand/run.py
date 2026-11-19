@@ -720,10 +720,10 @@ def key_of(arm: str, out: dict[str, Any], scale: float) -> str:
 ## The grids a scale change can leave a window at when it keeps its size on
 ## the desktop. A font's cell doesn't grow in step with the scale, so the grid
 ## goes by how far the cell grew against the scale: at font zoom -2 a cell is
-## 9x18 at 100% and 19x38 at 200%, and 24 rows became 22 (2026101513385002).
+## 9x18 at 100% and 19x38 at 200%, and 24 rows became 22.
 ## One more either way allows for the margins, the chrome, and a part cell.
 ## The shell is told the cell in whole pixels, so the real one can be up to
-## half a pixel off (2026101716374843).
+## half a pixel off.
 def drift_band(grid: Grid, was: tuple[tuple[int, int], float], now: tuple[tuple[int, int], float]) -> set[Grid]:
 	(cell_was, scale_was), (cell, scale) = was, now
 	spans = []
@@ -886,8 +886,7 @@ class Case:
 		time.sleep(2.2)
 		## A window on no output yet keeps looking, for up to 10 s after it opens.
 		## A big window drawn in software at 200% takes seconds a frame, and the
-		## look waits for the frame, so one the step needs gets long
-		## (2026101714445006).
+		## look waits for the frame, so one the step needs gets long.
 		if looks:
 			if look_wait is None:
 				look_wait = 3.0 if None in allowed else 15.0
@@ -935,7 +934,7 @@ class Case:
 		if win_now and (win_now.rect[2] >= lw - 4 or win_now.rect[3] + win_now.deco >= lh - 4):
 			grids |= {(c, r) for c in range(1, max(g[0] for g in grids) + 1) for r in range(1, max(g[1] for g in grids) + 1)}
 		## A window drawing in software can be seconds late with a frame, and so
-		## is the look after a scale change that waits on it (2026101614100002).
+		## is the look after a scale change that waits on it.
 		## So the grid may take one more step to a grid it can end at, and then
 		## it has to stay there.
 		if got is not None and later_lines:
@@ -1084,7 +1083,7 @@ class Case:
 		if [t for t in trace if t.split()[1] == "arrive"]:
 			raise CheckError(f"{what}: looked for its monitor again: {trace}")
 		## A Wayland window looks as the user sets a size, in case it moved
-		## without being told, and keeps the size it has (2026101413420431).
+		## without being told, and keeps the size it has.
 		found = [t for t in trace if t.split()[1] == "found"]
 		if found:
 			named = trace_field(found[-1], "key")
@@ -1114,8 +1113,8 @@ class Case:
 		self.check_font(what)
 
 	## A window opened with a size or a font size from the command line saves
-	## nothing the user sets, unless --persist came with it
-	## (2026101422190936). It still looks for its output as a save would.
+	## nothing the user sets, unless --persist came with it.
+	## It still looks for its output as a save would.
 	def user_unsaved(self, what: str, allowed: dict[str | None, str], zoom: int | None) -> None:
 		model = self.model
 		trace: list[str] = []
@@ -1497,7 +1496,6 @@ class Case:
 					allowed = {None: "an X11 window is told nothing when the layout shifts under it"}
 				## sway tells the window under a resting pointer that the pointer
 				## left and came back as the layout changes, which is a look
-				## (2026101422190941)
 				reentered = plan.arm == "wayland" and not looks and self.under_pointer(outs)
 				if reentered:
 					allowed = {**allowed, None: TOLD_NOTHING}
@@ -1514,7 +1512,7 @@ class Case:
 
 	## An output that shrinks with a scale change can leave the window's title
 	## bar or middle over a gap, where no pointer can go, so a drag would grab
-	## nothing (2026101614100000). A person would move it back by key, so the
+	## nothing. A person would move it back by key, so the
 	## window goes to the middle of its output, with the pointer away. The
 	## monitors changed since the window last looked, so it may look at once
 	## rather than wait for the person.

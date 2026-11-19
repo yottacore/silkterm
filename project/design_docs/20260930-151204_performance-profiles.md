@@ -180,7 +180,7 @@ This reverses an earlier rule, which wrote the step down. A written step made on
 
 ### Unconsidered
 
-- A visible alert around a setting that a profile change moved. Backlog: "When other settings are changed automatically based on a user action to a different setting" (Opened 20260919-154614).
+- A visible alert around a setting that a profile change moved.
 
 ### Rejected
 
@@ -253,8 +253,6 @@ This reverses an earlier rule, which wrote the step down. A written step made on
 - "Wallpaper vanishes instead of falling back, and a profile round trip does not bring it back" (Opened 20260905-113000)
 
 - "Wallpaper disappears from the background." (Opened 20260910-071431)
-
-- "When other settings are changed automatically based on a user action to a different setting" (Opened 20260919-154614)
 
 ## Copyright and license
 

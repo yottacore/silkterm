@@ -4,7 +4,7 @@
 <!-- TOC ignore:true -->
 # Using SilkTerm
 
-This page explains where the config is, what a tab says, panes in tmux, the command line, shell integration, programs over ssh, and opening scripts and folders on Windows.
+This page explains where the config is, what a tab says, the command line, shell integration, programs over ssh, and opening scripts and folders on Windows.
 
 <!-- TOC ignore:true -->
 ## Table of contents
@@ -13,7 +13,6 @@ This page explains where the config is, what a tab says, panes in tmux, the comm
 
 - [Configuration](#configuration)
 - [Tab text](#tab-text)
-- [Panes in tmux](#panes-in-tmux)
 - [Command line](#command-line)
 	- [Information](#information)
 	- [Window options](#window-options)
@@ -90,46 +89,6 @@ On a narrow tab the parts give way in a set order. A program's own title goes fi
 A template that can't be read, such as one with a `{` and no `}`, is kept as typed, and tabs use the default until it's fixed. The row's flyover in Settings says what's wrong, and so does a message at launch.
 
 A config from before the template had 4 check boxes for this: `window.tab_shows_title`, `tab_shows_shell`, `tab_shows_program`, and `tab_shows_directory`. The first launch of a newer SilkTerm swaps them for a template that says the same.
-
-## Panes in tmux
-
-SilkTerm can start a pane in a tmux session of its own, so what runs in it outlives the window. If the desktop crashes, the session is still there, and it can be attached to again from SilkTerm, another terminal, or over ssh. It needs tmux 3.2 or later, so it isn't available on Windows. Where tmux can't be found, the rows below are grayed in Settings and the menu row is left out.
-
-- "Always run in new tmux session", under Tmux on the Program tab of Settings, starts each split in a new session. A new tab, and the window's first pane, still start the plain shell.
-
-- "New tab in tmux" on the Tabs menu opens a tab whose pane starts in a new session, whether the switch is on or not.
-
-- The pane runs the same shell it would have otherwise, in the directory it would have started in. A split made from a pane in tmux starts where tmux says that pane is now.
-
-The session's name comes from a template, "Session name template" under the switch, or `shell.tmux.session_name` in the config. It works like the tab text template, with 3 macros:
-
-| Macro        | Value
-| :----------- | :-----------------------------------
-| `%YYYYmmDD%` | The date
-| `%HHMMSS%`   | The time
-| `%HHMMSSNN%` | The time, to a hundredth of a second
-
-The default is `%YYYYmmDD%-%HHMMSSNN%`, such as `20261017-17332704`. tmux won't keep a `.` or `:` in a name, and treats `#` as the start of one of its own formats, so all 3 become `_`. A name tmux already has gets `-2`, `-3`, and so on after it.
-
-Closing a tab, a pane, or the window does what "When closed" says to each session SilkTerm started in it:
-
-- Detach leaves the session running, to attach to later.
-
-- End kills the session, and everything running in it.
-
-- Prompt, the default, asks each time. The question has a "Don't ask me next time" box, which saves the answer given as the new setting.
-
-End only ever kills the session SilkTerm started for that pane, found by the name it was given. If the session was renamed, or something else was switched to inside the pane, that one is left alone. A pane whose tmux exits on its own, through a detach inside it or the session ending, closes without asking.
-
-In the config:
-
-~~~shcl
-shell:
-	tmux:
-		always_new_session: true
-		session_name: "work-%HHMMSS%"
-		on_close: detach  ## detach, end or prompt
-~~~
 
 ## Command line
 

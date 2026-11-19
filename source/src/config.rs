@@ -9751,7 +9751,7 @@ mod tests {
 		let _ = std::fs::remove_dir_all(&dir);
 	}
 
-	// 2026100910295901: an old file with "Text colors from wallpaper" off keeps
+	// An old file with "Text colors from wallpaper" off keeps
 	// the theme's text colors with a picture up. The switch is stored, so no
 	// color line has to be written for it, and one written by hand stays.
 	// Test ID: ddwm5
