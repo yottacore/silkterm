@@ -11,7 +11,7 @@
 ##	  bash <(curl -fsSL https://raw.githubusercontent.com/yottacore/silkterm/main/install.bash) [options]
 ##	- Options: --release stable|dev, --target user|system, --yes, --version, --help.
 ##	  The OS, the CPU architecture and the asset name are all detected.
-##	- Needs: bash >= 3.2 (the macOS system bash; tested on 5 only), curl or
+##	- Needs: bash >= 3.2 (the macOS system bash; tested on 3.2 and 5), curl or
 ##	  wget, and one of sha256sum / shasum / openssl.
 ##	- History: At bottom of file.
 
@@ -23,7 +23,7 @@
 
 ##	•••••••••••••••••••  Per-project settings - edit only these  ••••••••••••••••••
 
-installerVersion="1.3.1"
+installerVersion="1.3.2"
 ownerRepo="yottacore/silkterm"
 appName="SilkTerm"
 exeName="silkterm"
@@ -655,3 +655,4 @@ fi
 ##		- 20261111 JC: One blank line before an error that follows other output.
 ##		- 20261118 JC: An upgrade leaves an existing launcher alone unless it
 ##		  names some other program.
+##		- 20261119 JC: Version kept in step with install.ps1.

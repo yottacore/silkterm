@@ -99,6 +99,15 @@ if [[ -n "${out}" ]]; then fServe >"${out}"; else fServe; fi
 STUB
 chmod +x "${stubDir}/curl"
 
+## STUB_UNAME_S stands in for the OS name. Everything else goes to the real uname.
+cat > "${stubDir}/uname" <<'STUB'
+#!/bin/sh
+if [ "${1:-}" = "-s" ] && [ -n "${STUB_UNAME_S:-}" ]; then echo "${STUB_UNAME_S}"; exit 0; fi
+for u in /usr/bin/uname /bin/uname; do [ -x "${u}" ] && exec "${u}" "$@"; done
+exit 1
+STUB
+chmod +x "${stubDir}/uname"
+
 ## Run an installer in a home and temp folder of its own. $1 is the home, the
 ## rest are extra environment, and what it printed goes to out.log there.
 ## INSTALLER is bash or ps1, and STUB_DIR, STUB_API_CODE, and INSTALL_ARGS pick
@@ -333,6 +342,17 @@ if command -v pwsh >/dev/null 2>&1; then
 else
 	echo "  skip install.ps1 cases (no pwsh)"
 fi
+
+## A BSD is told the release has no build for it. The ps1 used to take any OS
+## that wasn't Windows or macOS for Linux, and install the Linux binary.
+for kind in bash ps1; do
+	if [[ "${kind}" = "ps1" ]] && ! command -v pwsh >/dev/null 2>&1; then echo "  skip ps1 on FreeBSD (no pwsh)"; continue; fi
+	h="${work}/${kind}-freebsd"
+	rc=0; INSTALLER="${kind}" fInstall "${h}" STUB_UNAME_S=FreeBSD || rc=$?
+	fCheck "${kind}: FreeBSD fails" test "${rc}" -ne 0
+	fCheck "${kind}: and says the release has no build for it" fSaid "${h}" "has no build for freebsd-"
+	fCheck "${kind}: and installs nothing" test ! -e "${h}/.local/bin/silkterm"
+done
 
 ## An option with no value says which one, rather than exiting in silence.
 for opt in --release --target; do
