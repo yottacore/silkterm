@@ -283,32 +283,6 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Commit: c298d1a8
 	- Progress log: 20261117: Verified: dfeeg and dfeeh pass. Both fail with the cap made a no-op. dfeeh also fails with the cap left in an OSC after its ESC, and with Escape left early on a C0 control. The quick gate passes. The drafted vte patch passes vte's own tests, and its new test fails without the cap.
 
-- Installer signature test errors on a bad signature instead of refusing it
-	- ID: 2026111810462273
-	- Type: Bug
-	- Status: Closed
-	- Severity: Low
-	- Opened: 20261118-104622
-	- Opened by: CC
-	- Target OS: Windows
-	- Target version: rc.1
-	- Incorrect behavior: verify-sign.ps1 fails on b29w under pwsh 7: its bad-signature case calls install.ps1's fVerifySignature outside fMain, and fFail then reads `$outputStarted`, which strict mode refuses as not set. So the test sees an error rather than the expected refusal.
-	- Expected behavior: A bad signature is refused with OperationCanceledException, and verify-sign.ps1 passes.
-	- Reproduced: Yes. win-guard-check.bash on b29w, 20261118, against round nov18.
-	- Possible cause: `$outputStarted` has no script-level default, so any caller outside fMain trips strict mode.
-	- Origin: d9d7b5b2, 20261111, which made fFail read fMain's `$outputStarted` by dynamic scope. Not from round nov18, which doesn't touch those lines. Confirmed.
-	- Actual cause: fFail read `$outputStarted` as a plain variable, and a caller outside fMain never sets it, so strict mode refused the read.
-	- Actual fix: fFail looks the variable up with Get-Variable, which still sees fMain's by dynamic scope and treats a missing one as not started.
-	- Swept: `$outputStarted` is read only in fFail; fMain is the only place that sets it.
-	- Verified: On Linux pwsh 7, verify-sign.ps1 failed on the old install.ps1 with the strict mode error and passes with the fix, and the install test (dcbdz) and ps-lint pass.
-	- Test case: dcrgs `cicd/tests/release/verify-sign.ps1` (refuses a changed checksums file, a missing signature and another key's signature).
-	- Branch: nov18b-2026111810462273
-	- Commit: f255eab7
-	- Verified: 20261118: dcrgs passes on b29w under pwsh 7 (4 checks ok) from the nov18b bundle at ff14fc8b, run directly rather than through cicd-win.ps1.
-	- Acceptance signoff: Self-closed: dcrgs passed on b29w.
-	- Closed: 20261118-162700
-	- Closed reason: Done
-
 - macOS: a character typed with Option reaches the shell with ESC in front of it
 	- ID: 2026111713374903
 	- Type: Bug
@@ -724,6 +698,32 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Test case: `a_window_keeps_one_x_connection_across_its_reads` (dfe50), `a_failed_x_read_drops_the_connection_and_the_next_read_connects_again` (dfe51)
 	- Acceptance signoff: Self-closed: the change does what the item asked, measured before and after, and its tests fail with the keeping broken.
 	- Closed: 20261117-091811
+	- Closed reason: Done
+
+- Installer signature test errors on a bad signature instead of refusing it
+	- ID: 2026111810462273
+	- Type: Bug
+	- Status: Closed
+	- Severity: Low
+	- Opened: 20261118-104622
+	- Opened by: CC
+	- Target OS: Windows
+	- Target version: rc.1
+	- Incorrect behavior: verify-sign.ps1 fails on b29w under pwsh 7: its bad-signature case calls install.ps1's fVerifySignature outside fMain, and fFail then reads `$outputStarted`, which strict mode refuses as not set. So the test sees an error rather than the expected refusal.
+	- Expected behavior: A bad signature is refused with OperationCanceledException, and verify-sign.ps1 passes.
+	- Reproduced: Yes. win-guard-check.bash on b29w, 20261118, against round nov18.
+	- Possible cause: `$outputStarted` has no script-level default, so any caller outside fMain trips strict mode.
+	- Origin: d9d7b5b2, 20261111, which made fFail read fMain's `$outputStarted` by dynamic scope. Not from round nov18, which doesn't touch those lines. Confirmed.
+	- Actual cause: fFail read `$outputStarted` as a plain variable, and a caller outside fMain never sets it, so strict mode refused the read.
+	- Actual fix: fFail looks the variable up with Get-Variable, which still sees fMain's by dynamic scope and treats a missing one as not started.
+	- Swept: `$outputStarted` is read only in fFail; fMain is the only place that sets it.
+	- Verified: On Linux pwsh 7, verify-sign.ps1 failed on the old install.ps1 with the strict mode error and passes with the fix, and the install test (dcbdz) and ps-lint pass.
+	- Test case: dcrgs `cicd/tests/release/verify-sign.ps1` (refuses a changed checksums file, a missing signature and another key's signature).
+	- Branch: nov18b-2026111810462273
+	- Commit: f255eab7
+	- Verified: 20261118: dcrgs passes on b29w under pwsh 7 (4 checks ok) from the nov18b bundle at ff14fc8b, run directly rather than through cicd-win.ps1.
+	- Acceptance signoff: Self-closed: dcrgs passed on b29w.
+	- Closed: 20261118-162700
 	- Closed reason: Done
 
 - A command-line argument that isn't valid Unicode crashes SilkTerm
