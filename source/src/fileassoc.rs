@@ -877,7 +877,7 @@ mod tests {
 	// PowerShell ends a single-quoted string on a curly quote as well, so a file
 	// or argument with one in its name could close the quote early and run the
 	// rest as a command.
-	// Test ID: dfh8y
+	// Test ID: dfh9j
 	#[test]
 	fn a_curly_quote_stays_inside_the_script_text() {
 		let args = vec!["x\u{2018}; evil; \u{2019}".to_string()];
