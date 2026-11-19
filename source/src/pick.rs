@@ -202,12 +202,20 @@ pub struct Picker {
 }
 
 impl Picker {
-	pub fn stops() -> Vec<Focus> {
-		let mut stops = vec![Focus::Square, Focus::Hue];
-		stops.extend(Field::ALL.map(Focus::Field));
-		stops.push(Focus::Cancel);
-		stops.push(Focus::Ok);
-		stops
+	pub fn stops() -> [Focus; 10] {
+		let [red, green, blue, brightness, saturation, hex] = Field::ALL.map(Focus::Field);
+		[
+			Focus::Square,
+			Focus::Hue,
+			red,
+			green,
+			blue,
+			brightness,
+			saturation,
+			hex,
+			Focus::Cancel,
+			Focus::Ok,
+		]
 	}
 	pub fn rgb(&self) -> [u8; 3] {
 		to_rgb(self.hsv)
