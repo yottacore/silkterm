@@ -40,7 +40,7 @@ def headings(lines: list[str]) -> Iterator[tuple[int, str]]:
 	prev_ignored = False
 	for line in lines:
 		stripped = line.strip()
-		if stripped.startswith("~~~") or stripped.startswith("```"):
+		if stripped.startswith(("~~~", "```")):
 			mark = stripped[:3]
 			if fence is None:
 				fence = mark
@@ -129,7 +129,7 @@ def main() -> int:
 		checked += 1
 		ok = check(path, args.fix) and ok
 	if not checked:
-		print("no .md carries a TOC block", file=sys.stderr)
+		print("no .md has a TOC block", file=sys.stderr)
 		return 2
 	if ok:
 		print(f"OK: {checked} TOC blocks current")

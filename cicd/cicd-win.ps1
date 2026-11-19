@@ -224,8 +224,7 @@ if (-not $IsWindows) {
 $Unattended = ($Yes -or $Quiet)
 
 
-#==============================================================================
-# Configuration
+## Configuration
 
 ## Repo root = the parent of this script's cicd/ dir. All cargo commands run here.
 $Root    = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
@@ -317,8 +316,7 @@ $CargoBin  = Join-Path $env:USERPROFILE ".cargo\bin"
 $MingwBin  = "C:\ProgramData\mingw64\mingw64\bin"
 
 
-#==============================================================================
-# Output helpers (mirror cicd.bash: fEcho / fEcho_Clean / fSection / steps)
+## Output helpers (mirror cicd.bash: fEcho / fEcho_Clean / fSection / steps)
 
 $script:WasLastEchoBlank = $false
 $script:Letterbox = ([string][char]0x2022) * 79
@@ -409,8 +407,7 @@ function fWarn     { param([string]$Msg); fEcho "WARNING: $Msg" }
 function fDie      { param([string]$Msg); fEcho "FAILED: $Msg"; fStepClose FAIL; exit 1 }
 
 
-#==============================================================================
-# Functions
+## Functions
 
 ## The run options as one set: the other names, what each run implies, and the
 ## pairs that make no sense, as cicd.bash has them. Returns why a run is refused,
@@ -1142,8 +1139,7 @@ function fLeftOut {
 }
 
 
-#==============================================================================
-# The Linux half, handed to WSL2
+## The Linux half, handed to WSL2
 
 ## A box with both can cover the whole matrix. Windows builds what only Windows
 ## can (msvc above all); WSL builds what only Linux can - .deb/.rpm, the profiler,
@@ -1336,8 +1332,7 @@ function fQuickRun {
 }
 
 
-#==============================================================================
-# Entry point
+## Entry point
 
 function fMain {
 	$refused = fRunFlags

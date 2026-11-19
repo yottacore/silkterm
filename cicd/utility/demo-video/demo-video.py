@@ -1474,8 +1474,8 @@ def rotate(out_dir: Path, prefix: str, ext: str, no_rotate: bool) -> None:
 	if no_rotate:
 		return
 	inc = REPO / "cicd/utility/include/gfs-rotate.bash"
-	subprocess.run(["bash", "-c",
-		f'source "{inc}" && gfs_rotate "{out_dir}" {prefix} {ext}'], check=False)
+	subprocess.run(["bash", "-c", 'source "$1" && gfs_rotate "$2" "$3" "$4"', "bash",
+		str(inc), str(out_dir), prefix, ext], check=False)
 
 def place_video(mp4: Path, out_dir: Path, no_rotate: bool) -> None:
 	out_dir.mkdir(parents=True, exist_ok=True)

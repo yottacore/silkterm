@@ -12,6 +12,9 @@ column's alignment spelled out, so a plain dash row comes back as left. Shared b
 2 tools that write the showdown table in comparison.md, so they can't drift apart.
 """
 
+#	termbench.py imports this and runs on 3.8, where these hints can't be evaluated.
+from __future__ import annotations
+
 from collections.abc import Iterable, Sequence
 
 
