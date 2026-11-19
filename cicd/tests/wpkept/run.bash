@@ -144,9 +144,9 @@ fCheck "and drawn" fHolds 768x397
 fCheck "and nothing prepared" fNeverSays "copy: stored"
 fStop
 
-copy="$(find "${kept}" -maxdepth 1 -name '*.wpc' | head -n 1)"
-size="$(stat -c %s "${copy}")"
-truncate -s $((size / 2)) "${copy}"
+copy="$(find "${kept}" -maxdepth 1 -name '*.wpc' 2>/dev/null | head -n 1 || true)"
+size=""
+if [[ -n "${copy}" ]]; then size="$(stat -c %s "${copy}")"; truncate -s $((size / 2)) "${copy}"; fi
 fLaunch third
 fCheck "a copy cut short is prepared again" fSays "memdbg wallpaper copy: stored 770x399"
 fCheck "and not used" fNeverSays "copy: used"
@@ -209,6 +209,6 @@ echo "all passed"
 ##	History:
 ##		- 20261006 JC: Created.
 ##		- 20261006 JC: The blur holds the picture at 768x397 plus a border, so
-##		  the the copy is 770x399.
+##		  the copy is 770x399.
 ##		- 20261007 JC: A light blur case, kept as BC1.
 ##		- 20261007 JC: BC1 pinned for that case, and a BC7 case beside it.

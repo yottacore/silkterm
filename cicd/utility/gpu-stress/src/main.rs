@@ -58,7 +58,14 @@ fn parse() -> Opts {
 			"--chunk-mb" => opts.chunk_mb = value().parse().unwrap_or_else(|_| usage()),
 			"--touch" => opts.touch = true,
 			"--busy" => opts.busy = value().parse().unwrap_or_else(|_| usage()),
-			"--slice-ms" => opts.slice_ms = value().parse().unwrap_or_else(|_| usage()),
+			// a negative, NaN or huge slice panics in Duration::from_secs_f64
+			"--slice-ms" => {
+				opts.slice_ms = value()
+					.parse()
+					.ok()
+					.filter(|ms| (1.0..=1500.0).contains(ms))
+					.unwrap_or_else(|| usage());
+			}
 			"--secs" => opts.secs = value().parse().ok(),
 			"--stop-file" => opts.stop_file = Some(PathBuf::from(value())),
 			"--backend" => {

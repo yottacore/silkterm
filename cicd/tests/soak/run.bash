@@ -8,7 +8,7 @@
 ##		and closes the Settings dialog, opens a second window, types into it and
 ##		closes it, then closes the tab. heaptrack sees every allocation in the
 ##		process, the graphics driver, and the other C libraries included.
-##		Every shell is soak-shell.sh, from --shell adn the test config's shell
+##		Every shell is soak-shell.sh, from --shell and the test config's shell
 ##		list, with HOME and the XDG dirs in the run's own folder.
 ##	- Syntax: run.bash [--bin PATH] [--rounds N] [--out DIR] [--stamp STAMP] [--plant]
 ##		--bin     the program (default: the debug build, a plain one)
@@ -179,7 +179,7 @@ fRound(){
 	fWaitCount 1 || fLost "${n}" "the Settings dialog stayed up"
 	fKey "${main}" ctrl+shift+n
 	if fWaitCount 2; then
-		w="$(fWindows | grep -vxF "${main}" | head -n 1)"
+		w="$(fWindows | grep -vxF "${main}" | head -n 1 || true)"
 		sleep 1
 		fType "${w}" "round ${n} window"
 		winPid="$(fTyped "round ${n} window")" || fLost "${n}" "the new window's shell got nothing"

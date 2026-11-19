@@ -1061,8 +1061,10 @@ fn wrap_tip_line(
 	}
 	let mut head = key.to_string();
 	let mut candidate = String::new();
+	let mut ends: Vec<usize> = Vec::new();
 	while !rest.is_empty() {
-		let ends: Vec<usize> = rest.char_indices().map(|(i, c)| i + c.len_utf8()).collect();
+		ends.clear();
+		ends.extend(rest.char_indices().map(|(i, c)| i + c.len_utf8()));
 		let mut fits = |end: usize| {
 			candidate.clear();
 			candidate.push_str(&head);
@@ -2583,7 +2585,7 @@ mod tests {
 		assert_eq!(cases, 16 * 5 * 4 * 5 * 7 * 3);
 		// A name typed on the tab was the whole answer, as typed, whatever the
 		// boxes said. One typed blank made a blank tab.
-		let template = tab_template(DEFAULT_TAB_TEXT).expect("shipped");
+		let template = tab_template(DEFAULT_TAB_TEXT).expect("the default");
 		for typed in ["my tab", "  spaced  out ", "", "  "] {
 			let facts = Facts {
 				typed: Some(typed),
@@ -2652,7 +2654,7 @@ mod tests {
 	// Test ID: de2zn
 	#[test]
 	fn a_malformed_or_blank_tab_text_reads_as_the_shipped_one() {
-		let shipped = tab_template(DEFAULT_TAB_TEXT).expect("shipped");
+		let shipped = tab_template(DEFAULT_TAB_TEXT).expect("the default");
 		for text in ["", "   ", "{ %SHELL%", "%SHELL", "%DIRECTORY%", "%SHELL% ]"] {
 			assert!(
 				text.trim().is_empty() || tab_template(text).is_err(),

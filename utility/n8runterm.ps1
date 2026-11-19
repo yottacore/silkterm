@@ -51,8 +51,7 @@
 #>
 
 
-#==============================================================================
-# Configuration
+## Configuration
 
 ## Which OS we are on. $IsWindows/$IsLinux/$IsMacOS are PowerShell 7 automatics.
 $Platform = if ($IsWindows) { "windows" } elseif ($IsMacOS) { "macos" } else { "linux" }
@@ -173,8 +172,7 @@ $WrapperCandidates = switch ($Platform) {
 $RunAsAdmin = $false
 
 
-#==============================================================================
-# Functions
+## Functions
 
 ## Entry point: what this launcher runs. Edit this to launch a different terminal.
 function fMain {
@@ -922,7 +920,7 @@ function fWarn {
 	param([string]$Msg, [switch]$Gui)
 	fLog "WARN: $Msg"
 	Write-Warning "runterm: $Msg"
-	if ($Gui) { $script:RunWarnings += $Msg }
+	if ($Gui) { $script:RunWarnings.Add($Msg) }
 }
 
 ## Fatal error, then stop. Pops a dialog first when GUI feedback is on, so a
@@ -1016,15 +1014,14 @@ function fGuiShow {
 }
 
 
-#==============================================================================
-# Script entry point
+## Script entry point
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
 ## Problems to show at the end, shown in a dialog when launched from a
 ## shortcut. Must exist before any fWarn -Gui / fFail can run.
-$script:RunWarnings = @()
+$script:RunWarnings = [System.Collections.Generic.List[string]]::new()
 
 ## Consume our own flags; forward everything else to the terminal.
 ##   --no-admin  run without elevating (Windows only; elsewhere there's nothing

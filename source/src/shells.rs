@@ -298,19 +298,17 @@ const COSMETIC_FLAGS: &[&str] = &["-nologo"];
 
 impl Ident {
 	fn of(command: &str, resolve: &dyn Fn(&str) -> Option<PathBuf>) -> Option<Self> {
-		let argv = crate::config::command_argv(command)?;
-		let (prog, args) = argv.split_first()?;
+		let mut argv = crate::config::command_argv(command)?.into_iter();
+		let prog = argv.next()?;
 		Some(Self {
-			exe: resolve(prog).map(|p| norm(&p)),
-			base: base_name(prog),
-			args: args
-				.iter()
+			exe: resolve(&prog).map(|p| norm(&p)),
+			base: base_name(&prog),
+			args: argv
 				.filter(|arg| {
 					!COSMETIC_FLAGS
 						.iter()
 						.any(|flag| arg.eq_ignore_ascii_case(flag))
 				})
-				.cloned()
 				.collect(),
 		})
 	}
@@ -371,16 +369,20 @@ fn same_command_with(a: &str, b: &str, resolve: &dyn Fn(&str) -> Option<PathBuf>
 /// write one, so `friendly` can be called for a pane launched from the CLI,
 /// where the shell arrives already split.
 pub fn command_line(argv: &[String]) -> String {
-	argv.iter()
-		.map(|arg| {
-			if arg.contains(' ') {
-				format!("\"{arg}\"")
-			} else {
-				arg.clone()
-			}
-		})
-		.collect::<Vec<_>>()
-		.join(" ")
+	let mut line = String::new();
+	for (at, arg) in argv.iter().enumerate() {
+		if at > 0 {
+			line.push(' ');
+		}
+		if arg.contains(' ') {
+			line.push('"');
+			line.push_str(arg);
+			line.push('"');
+		} else {
+			line.push_str(arg);
+		}
+	}
+	line
 }
 
 /// What a tab calls the shell it's running. The stored list comes first, since
@@ -440,10 +442,11 @@ fn list_stamp(stored: &[ShellEntry]) -> u64 {
 }
 
 fn friendly_uncached(command: &str, stored: &[ShellEntry]) -> String {
-	if let Some(entry) = stored
-		.iter()
-		.find(|entry| same_command(&entry.command, command))
-		&& !entry.title.trim().is_empty()
+	// `same_command` for each entry, with this side resolved once
+	if let Some(target) = Ident::of(command, &which)
+		&& let Some(entry) = stored.iter().find(|entry| {
+			Ident::of(&entry.command, &which).is_some_and(|id| id.same(&target) || target.same(&id))
+		}) && !entry.title.trim().is_empty()
 	{
 		return entry.title.clone();
 	}
@@ -1305,10 +1308,10 @@ fn wsl_distributions() -> Vec<(String, bool)> {
 		if more != ERROR_SUCCESS {
 			break;
 		}
-		let sub = wide(&String::from_utf16_lossy(&name[..len as usize]));
 		let mut distro: HKEY = std::ptr::null_mut();
-		// SAFETY: read-only open of a subkey just enumerated; closed below.
-		let opened = unsafe { RegOpenKeyExW(lxss, sub.as_ptr(), 0, KEY_READ, &raw mut distro) };
+		// SAFETY: read-only open of a subkey just enumerated, by the NUL-ended
+		// name the enumeration wrote; closed below.
+		let opened = unsafe { RegOpenKeyExW(lxss, name.as_ptr(), 0, KEY_READ, &raw mut distro) };
 		if opened != ERROR_SUCCESS {
 			continue;
 		}

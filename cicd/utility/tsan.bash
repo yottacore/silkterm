@@ -36,7 +36,7 @@ source "${root}/cicd/tests/_testdir.bash"
 
 ((${#TSAN_CMD[@]})) || { fEcho_Clean "TSan run disabled (TSAN_CMD is empty)"; exit 0; }
 [[ -n "${SANITIZER_TOOLCHAIN}" ]] || fDie "no nightly named in rust-toolchain.toml"
-rustup toolchain list 2>/dev/null | grep -q "^${SANITIZER_TOOLCHAIN}" \
+grep -q "^${SANITIZER_TOOLCHAIN}" <<<"$(rustup toolchain list 2>/dev/null || true)" \
 	|| fDie "${SANITIZER_TOOLCHAIN} isn't installed here; cicd.bash runs this in the container image"
 fTestDir_Make || fDie "couldn't make the test run folder"
 fJobs_LowPriority; fJobs hard

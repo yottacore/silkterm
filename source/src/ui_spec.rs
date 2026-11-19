@@ -86,32 +86,32 @@ pub enum Kind {
 		min: f32,
 		max: f32,
 		int: bool,
-		// even travel per doubling, for a range spanning orders of magnitude
+		/// even travel per doubling, for a range spanning orders of magnitude
 		log: bool,
-		// how far a typed value may go past `max`; `max` itself when it may not
+		/// how far a typed value may go past `max`; `max` itself when it may not
 		typed_max: f32,
 	},
 	Color,
 	Text,   // free-text field (path / font family; empty = default)
 	Toggle, // checkbox (e.g. use system font)
-	// two labeled checkboxes on one row sharing the row label + revert (e.g.
-	// Cursor: Scrim / Outline); each checkbox is a separate focus stop
+	/// two labeled checkboxes on one row sharing the row label + revert (e.g.
+	/// Cursor: Scrim / Outline); each checkbox is a separate focus stop
 	Dual {
 		keys: [Key; 2],
 		labels: [&'static str; 2],
 	},
 	Radio(&'static [&'static str]), // pick one of N mutually-exclusive options
 	Dropdown(&'static [&'static str]), // one-of-N via a collapsed box + popup list
-	// a row of push-buttons that act on the row above rather than holding a value
-	// (Save / Save as / Rename / Delete); each is its own focus stop
+	/// a row of push-buttons that act on the row above rather than holding a value
+	/// (Save / Save as / Rename / Delete); each is its own focus stop
 	Buttons(&'static [&'static str]),
-	// The shells grid: one line per stored shell (name, command, last seen,
-	// active, and the buttons that move or remove it), plus an Add button. It is
-	// one row here and many on screen, so its height follows the list's length
-	// rather than the row metrics. See `SettingsDialog::row_h_for`.
+	/// The shells grid: one line per stored shell (name, command, last seen,
+	/// active, and the button that removes it), plus an Add button. It is
+	/// one row here and many on screen, so its height follows the list's length
+	/// rather than the row metrics. See `SettingsDialog::row_h_for`.
 	ShellList,
-	// One hotkey's chords, set by pressing the new ones. The hotkey is the one
-	// the row's `setting:` binds under `keys:`.
+	/// One hotkey's chords, set by pressing the new ones. The hotkey is the one
+	/// the row's `setting:` binds under `keys:`.
 	Hotkey(crate::input::Hotkey),
 	Header(&'static str), // a section heading, no control
 }
@@ -205,7 +205,7 @@ pub enum TabsSide {
 /// being B under A, so the tree is a flat list where a child follows its
 /// parent. Rows go on the leaves only: `leaf` is the index among them, the
 /// one a `Spec::tab` stores, and None for a tab that only contains other tabs.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TabNode {
 	pub title: &'static str,
 	pub path: &'static str,
@@ -368,7 +368,7 @@ pub struct Ui {
 	/// Settings with no row of their own: key and the label a tip names it by.
 	pub hidden: Vec<(Key, &'static str)>,
 	pub groups: Vec<GroupSpec>,
-	// config path per addressable setting, in row order (parallel to `keys`)
+	// config path per addressable setting, in row order
 	settings: Vec<(Key, &'static [&'static str])>,
 	relations: Vec<(Key, Rel)>,
 }
@@ -613,7 +613,7 @@ fn parse(text: &str) -> Result<Ui, Vec<String>> {
 	let mut group_macos = false;
 	for name in doc.children("rows") {
 		let at = |field: &str| format!("rows.{name}.{field}");
-		let label = doc.get_string(&at("label")).unwrap_or_default();
+		let label = keep(doc.get_string(&at("label")).unwrap_or_default());
 		let kind_text = doc.get_string(&at("kind")).unwrap_or_default();
 		// A heading names its section, not a setting. Every other row's name is
 		// its setting unless the row says otherwise.
@@ -644,7 +644,7 @@ fn parse(text: &str) -> Result<Ui, Vec<String>> {
 					)),
 					None => problems.push(format!("rows.{name}: not one of the tabs")),
 				}
-				Kind::Header(keep(label.clone()))
+				Kind::Header(label)
 			}
 			"toggle" => Kind::Toggle,
 			"shells" => Kind::ShellList,
@@ -809,7 +809,7 @@ fn parse(text: &str) -> Result<Ui, Vec<String>> {
 			));
 		}
 		specs.push(Spec {
-			label: keep(label),
+			label,
 			key,
 			kind,
 			tab,
@@ -851,12 +851,13 @@ fn parse(text: &str) -> Result<Ui, Vec<String>> {
 	let groups = read_groups(&doc, &mut problems);
 
 	// one step in from the checkbox above a row, unless it says otherwise
-	let rel_of = |key: Key| {
-		relations
+	let up_of = |key: Key| {
+		let rel = relations
 			.iter()
 			.find(|(k, _)| *k == key)
 			.map(|(_, rel)| *rel)
-			.unwrap_or_default()
+			.unwrap_or_default();
+		rel.gate.or(rel.auto)
 	};
 	let declared: Vec<(Key, u8)> = specs.iter().map(|s| (s.key, s.indent)).collect();
 	let declared_of = |key: Key| {
@@ -873,13 +874,14 @@ fn parse(text: &str) -> Result<Ui, Vec<String>> {
 		let mut steps = 0u8;
 		let mut base = 0u8;
 		let mut at = spec.key;
-		while let Some(up) = rel_of(at).gate.or(rel_of(at).auto) {
+		while let Some(up) = up_of(at) {
 			steps += 1;
 			if steps >= 4 {
 				break;
 			}
-			if declared_of(up) != u8::MAX {
-				base = declared_of(up);
+			let declared = declared_of(up);
+			if declared != u8::MAX {
+				base = declared;
 				break;
 			}
 			at = up;

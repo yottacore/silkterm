@@ -10,9 +10,8 @@ use std::time::Duration;
 use x11_clipboard::Clipboard;
 
 fn readable() -> Option<String> {
-	let out = Command::new("sh")
-		.arg("-c")
-		.arg("timeout 2 xclip -selection clipboard -o")
+	let out = Command::new("timeout")
+		.args(["2", "xclip", "-selection", "clipboard", "-o"])
 		.output()
 		.ok()?;
 	out.status
@@ -36,14 +35,11 @@ fn main() {
 		// the thief takes it, queueing a SelectionClear at our end, and we take it
 		// straight back with no chance for our event thread to read the clear
 		thief.store(sel, utf8, "THIEF").expect("thief store");
-		ours.store(sel, utf8, format!("OURS-{i}")).expect("restore");
+		let want = format!("OURS-{i}");
+		ours.store(sel, utf8, want.as_str()).expect("restore");
 		std::thread::sleep(Duration::from_millis(30));
-		match readable() {
-			Some(text) if text == format!("OURS-{i}") => {}
-			other => {
-				broken += 1;
-				let _ = other;
-			}
+		if readable().as_deref() != Some(want.as_str()) {
+			broken += 1;
 		}
 	}
 	println!("{broken} broken out of {rounds} rounds");

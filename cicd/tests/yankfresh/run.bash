@@ -35,7 +35,7 @@ trap fEnd EXIT
 ## A cargo home of our own: a copy of the index cache, which gets planted on,
 ## and links to the downloads and the advisory db, which don't.
 realHome="${CARGO_HOME:-${HOME}/.cargo}"
-index="$(find "${realHome}/registry/index" -maxdepth 1 -name 'index.crates.io-*' | head -n 1)"
+index="$(find "${realHome}/registry/index" -maxdepth 1 -name 'index.crates.io-*' 2>/dev/null | head -n 1 || true)"
 [[ -n "${index}" && -d "${index}/.cache" ]] || { echo "  skip: no crates.io index cache in ${realHome}"; exit 3; }
 export CARGO_HOME="${work}/cargo"
 mkdir -p "${CARGO_HOME}/registry"
@@ -45,7 +45,7 @@ for sub in registry/cache registry/src git advisory-dbs; do
 done
 entry="${CARGO_HOME}/registry/index/$(basename "${index}")/.cache/cl/ip/clipboard-win"
 [[ -f "${entry}" ]] || { echo "  skip: clipboard-win not in the index cache"; exit 3; }
-locked="$(grep -A1 '^name = "clipboard-win"$' "${root}/Cargo.lock" | sed -n 's/^version = "\(.*\)"$/\1/p')"
+locked="$(grep -A1 '^name = "clipboard-win"$' "${root}/Cargo.lock" | sed -n 's/^version = "\(.*\)"$/\1/p' || true)"
 [[ -n "${locked}" ]] || { echo "  FAIL clipboard-win not in Cargo.lock"; exit 1; }
 
 ## Marks the locked version yanked and blanks the etag, so the server sends the

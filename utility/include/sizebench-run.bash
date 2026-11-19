@@ -39,12 +39,13 @@ declare -r display=":98"
 declare -r screen="1920x1080x24"
 declare -i settleSecs=22
 
-declare _work=""
+declare _work="" _tmpBase=""
 declare -i _xvfbPid=0 _rootPid=0
 declare -ai _termPids=()
 declare _winId=""
 
 source "${scriptDir}/bench-common.bash"                            ## fEcho, fKillPids, fCollectTree
+source "${repoDir}/cicd/utility/include/saferm.bash"               ## fSafeRm_Under
 
 #•••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
 ##  Teardown
@@ -57,8 +58,8 @@ fCleanup() {
 	if [[ -n "${_work}" ]]; then mapfile -t launched < <(fOwnedPids "${_work}/home" "${_rootPid}"); fi
 	fKillPids "${_termPids[@]:-0}" "${launched[@]:-0}"
 	((_xvfbPid > 0)) && kill "${_xvfbPid}" 2>/dev/null || true
-	if [[ -n "${_work}" && -z "${optKeep:-}" && "${_work}" == "${TMPDIR:-/tmp}"/sizebench.* ]]; then
-		rm -rf "${_work}" || true
+	if [[ -n "${_work}" && -z "${optKeep:-}" && "${_work}" == "${_tmpBase}"/sizebench.* ]]; then
+		fSafeRm_Under "${_tmpBase}" "${_work}" || true
 	fi
 	return 0
 }
@@ -275,7 +276,9 @@ fMain() {
 	local bin=""
 	bin="$(fTermBinary "${key}")" || exit 1
 
-	_work="$(mktemp -d "${TMPDIR:-/tmp}/sizebench.XXXXXX")"
+	## Resolved, so the guard can name it as the one parent.
+	_tmpBase="$(realpath -e -- "${TMPDIR:-/tmp}")"
+	_work="$(mktemp -d "${_tmpBase}/sizebench.XXXXXX")"
 
 	fSection "Rig"
 	fEcho "terminal ${key} -> ${bin}"

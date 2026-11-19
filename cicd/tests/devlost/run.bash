@@ -149,7 +149,7 @@ fCheck "and nothing panicked" test "$(fSaid "panicked")" -eq 0
 fCheck "and it's still running" fAlive
 
 if ((failures)); then
-	echo "  said:"; grep -v 'wait restarted' "${said}" | tail -n 30 | sed 's/^/    /'
+	echo "  said:"; grep -v 'wait restarted' "${said}" | tail -n 30 | sed 's/^/    /' || true
 	echo "  ${failures} check(s) failed; files kept in ${work}"; exit 1
 fi
 echo "all passed"

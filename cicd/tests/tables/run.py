@@ -38,7 +38,7 @@ def tables(lines: list[str]) -> Iterator[tuple[int, int]]:
 	i = 0
 	while i < len(lines):
 		stripped = lines[i].strip()
-		if stripped.startswith("~~~") or stripped.startswith("```"):
+		if stripped.startswith(("~~~", "```")):
 			mark = stripped[:3]
 			if fence is None:
 				fence = mark

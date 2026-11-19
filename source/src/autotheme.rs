@@ -299,8 +299,9 @@ impl Summary {
 	}
 }
 
-/// The derived pair. `None` for either means the theme's own color stands.
-#[derive(Clone, Copy, PartialEq, Debug)]
+/// The derived pair. `None` in `Settings::wallpaper_derived` means the theme's
+/// own colors stand.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Derived {
 	pub fg: [u8; 3],
 	pub cursor: [u8; 3],

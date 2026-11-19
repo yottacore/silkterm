@@ -567,7 +567,7 @@ pub fn parse<I: IntoIterator<Item = String>>(args: I) -> anyhow::Result<Cli> {
 		match name {
 			"shell" => style.shell = Some(shell_split(&tokens.value(name, inline)?)?),
 			// Kept unexpanded: `~` and the env-var spellings are resolved at spawn
-			// time by config::spawn_dir, the same way the config setting is.
+			// time by config::cli_dir, the same way the config setting is.
 			"directory" | "dir" => style.directory = Some(tokens.value(name, inline)?),
 			"keep-open" => style.keep_open = Some(tokens.bool_value(name, inline)?),
 			// A file opened from Explorer. Everything after it is the file's own

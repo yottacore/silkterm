@@ -189,7 +189,7 @@ fDone
 if ((failures)); then
 	for said in "${work}"/*/said.txt; do
 		echo "  ${said#"${work}/"}:"
-		grep -v VALIDATION "${said}" | sed 's/^/    /' | tail -n 12
+		grep -v VALIDATION "${said}" | sed 's/^/    /' | tail -n 12 || true
 	done
 	echo "${failures} failed"; exit 1
 fi

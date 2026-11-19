@@ -380,12 +380,12 @@ impl Scan {
 		};
 	}
 
-	fn finish(&mut self, reported: &Reported) {
-		let payload = std::mem::take(&mut self.payload);
-		if let Ok(text) = std::str::from_utf8(&payload) {
-			if let Some(dir) = directory(text, local_host()) {
-				reported.set(dir);
-			}
+	// The payload is left in place, so its buffer serves the next OSC.
+	fn finish(&self, reported: &Reported) {
+		if let Ok(text) = std::str::from_utf8(&self.payload)
+			&& let Some(dir) = directory(text, local_host())
+		{
+			reported.set(dir);
 		}
 	}
 }
@@ -502,20 +502,16 @@ fn local_host() -> &'static str {
 
 #[cfg(unix)]
 fn host_name() -> String {
-	// c_char is signed on x86_64 and unsigned on aarch64, so a bare i8 fails to
-	// compile for the ARM targets.
-	let mut buf = [0 as libc::c_char; 256];
+	let mut buf = [0u8; 256];
 	// SAFETY: the buffer outlives the call and its length is passed with it.
-	let ok = unsafe { libc::gethostname(buf.as_mut_ptr(), buf.len() - 1) } == 0;
+	// The last byte stays 0, so the name always ends.
+	let ok = unsafe { libc::gethostname(buf.as_mut_ptr().cast(), buf.len() - 1) } == 0;
 	if !ok {
 		return String::new();
 	}
-	let bytes: Vec<u8> = buf
-		.iter()
-		.take_while(|&&byte| byte != 0)
-		.map(|&byte| u8::try_from(byte).unwrap_or(b'?'))
-		.collect();
-	String::from_utf8_lossy(&bytes).into_owned()
+	std::ffi::CStr::from_bytes_until_nul(&buf)
+		.map(|name| name.to_string_lossy().into_owned())
+		.unwrap_or_default()
 }
 
 // %COMPUTERNAME% rather than GetComputerNameEx: it's always set, and it saves

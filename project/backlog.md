@@ -1404,6 +1404,71 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- Code review 20261117 item 20.
 		- Detail: `detail_backlog.md`, under this ID.
 
+- A silent client can stall the control socket for good
+	- ID: 2026111914450001
+	- Type: Bug
+	- Status: Queued
+	- Severity: Avg
+	- Opened: 20261119-144500
+	- Opened by: CC
+	- Target OS: Linux, macOS
+	- Target version: rc.2
+	- Incorrect behavior: The control socket answers one connection at a time, and its line read has no timeout and no length cap. A client that connects and sends nothing blocks the listener thread, so later "saved" notices from other windows are lost. A client that never sends a newline grows memory without limit.
+	- Expected behavior: A stuck or oversized request is dropped, and the listener keeps serving.
+	- Reproduced: No. Found by reading `ctl.rs`.
+	- Possible cause: `ctl.rs` reads each stream with `read_line` and no timeout.
+	- Notes:
+		- Code fixup 20261119.
+		- Detail: `detail_backlog.md`, under this ID.
+
+- Output capture scans the whole scrollback when the prompt row has moved
+	- ID: 2026111914450002
+	- Type: Bug
+	- Status: Queued
+	- Severity: Avg
+	- Opened: 20261119-144500
+	- Opened by: CC
+	- Target OS: All
+	- Target version: rc.2
+	- Incorrect behavior: When the prompt row's fingerprint isn't found, such as after a shell redraws its prompt on Enter, the capture scans every scrollback row under the terminal lock. With 100k lines of history that's every cell, once per command, and the pane stalls while it runs.
+	- Expected behavior: The scan stops near the rows written since the capture was armed.
+	- Reproduced: No. Found by reading `pane.rs`.
+	- Notes:
+		- Code fixup 20261119.
+		- Detail: `detail_backlog.md`, under this ID.
+
+- Clearing the alternate screen isn't noted in the scroll ledger
+	- ID: 2026111914450003
+	- Type: Bug
+	- Status: Queued
+	- Severity: Avg
+	- Opened: 20261119-144500
+	- Opened by: CC
+	- Target OS: All
+	- Target version: rc.2
+	- Incorrect behavior: In the alacritty fork, a full clear on the alternate screen doesn't call `note_clear`. A full-screen program that scrolls and then clears may leave a stale slide record, so the next frame can animate a scroll that no longer applies.
+	- Expected behavior: Every full clear is noted, as the ledger's own doc says.
+	- Reproduced: No. Found by reading the fork's diff.
+	- Notes:
+		- Code fixup 20261119.
+		- Detail: `detail_backlog.md`, under this ID.
+
+- Test scripts that pass on a skip, or die without a FAIL line
+	- ID: 2026111914450004
+	- Type: Bug
+	- Status: Queued
+	- Severity: Avg
+	- Opened: 20261119-144500
+	- Opened by: CC
+	- Target OS: Linux
+	- Target version: rc.2
+	- Incorrect behavior: `cicd-win` without pwsh and `hooks` without rustfmt print "skip" and exit 0, so the run records a PASS. `dlgtie`, `testdir` and `mapfollow` each have a path that ends the run with no verdict, or fails where it should skip.
+	- Expected behavior: A skip is reported as a skip, and every failure prints a FAIL line.
+	- Reproduced: No. Found by reading the scripts.
+	- Notes:
+		- Code fixup 20261119. The same pass fixed 19 other scripts of this kind.
+		- Detail: `detail_backlog.md`, under this ID.
+
 - Moving old theme colors rewrites the whole settings file in shcl's canonical form
 	- ID: 2026111713374923
 	- Type: Bug
@@ -1826,6 +1891,37 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- Code review 20261117 item 50.
 		- Detail: `detail_backlog.md`, under this ID.
 
+- File association bookkeeping is lost after a partial registry write
+	- ID: 2026111914450005
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261119-144500
+	- Opened by: CC
+	- Target OS: Windows
+	- Target version: rc.2
+	- Incorrect behavior: `register` writes its entry count last. If a registry write fails partway, a later unregister reads a count of 0, can't restore the values already changed, and never prunes the state key.
+	- Expected behavior: Unregister puts back whatever register changed.
+	- Reproduced: No. Found by reading `fileassoc.rs`.
+	- Possible cause: The count should be written after each entry.
+	- Notes:
+		- Code fixup 20261119.
+
+- A config backup can overwrite a file that appears at its name
+	- ID: 2026111914450006
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261119-144500
+	- Opened by: CC
+	- Target OS: All
+	- Target version: rc.2
+	- Incorrect behavior: `backup_aside` in `config.rs` checks that the `.bak` name is free and then renames onto it. A file made at that name in between is overwritten.
+	- Expected behavior: The backup never replaces an existing file, as `backup_copy` already does with an exclusive create.
+	- Reproduced: No. Found by reading `config.rs`.
+	- Notes:
+		- Code fixup 20261119.
+
 - An open Settings field redraws the dialog about 30 times a second for as long as it's open
 	- ID: 2026111713374953
 	- Type: Enhancement
@@ -1881,6 +1977,83 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Sweep: The 2 s VRAM probe runs only while the device is held, by design.
 	- Notes:
 		- Code review 20261117 item 56.
+		- Detail: `detail_backlog.md`, under this ID.
+
+- The OSC buffer cap is now in 2 places
+	- ID: 2026111914450007
+	- Type: Task
+	- Status: Queued
+	- Priority: Low
+	- Opened: 20261119-144500
+	- Opened by: CC
+	- Target version: rc.2
+	- Requirements:
+		- The vte fork caps its OSC buffer itself since 92970ac. The `OSC_HELD_MAX` doc in `cwd.rs` still says the parser has no limit of its own.
+		- Either drop `OscCap` or keep it as a second guard, and fix the doc either way.
+	- Notes:
+		- Code fixup 20261119.
+
+- The clipboard-race test crate is on edition 2021 and has no lock file
+	- ID: 2026111914450008
+	- Type: Task
+	- Status: Queued
+	- Priority: Low
+	- Opened: 20261119-144500
+	- Opened by: CC
+	- Target version: rc.2
+	- Requirements:
+		- Move `cicd/tests/clipboard-race` to edition 2024.
+		- Building it in place leaves an untracked `Cargo.lock` beside its manifest. Track one, or build it in the run's own folder.
+	- Notes:
+		- Code fixup 20261119.
+
+- Glyphon fork: work out the text colors once per draw
+	- ID: 2026111914450009
+	- Type: Enhancement
+	- Status: Queued
+	- Priority: Low
+	- Opened: 20261119-144500
+	- Opened by: CC
+	- Target version: rc.2
+	- Requirements:
+		- The fork's shader converts the text and background colors to linear for every text pixel, though both are the same for the whole draw. Do it on the CPU, in the 2 spare `Params` slots.
+		- `set_text_contrast` takes any value, and -1 or below divides by zero in the shader. Clamp it.
+	- Notes:
+		- Code fixup 20261119.
+		- Detail: `detail_backlog.md`, under this ID.
+
+- Alacritty fork: fewer reader wakes on Windows
+	- ID: 2026111914450010
+	- Type: Enhancement
+	- Status: Queued
+	- Priority: Low
+	- Opened: 20261119-144500
+	- Opened by: CC
+	- Target OS: Windows
+	- Target version: rc.2
+	- Requirements:
+		- The reader thread posts an IOCP packet after every pipe fill, even while the consumer is busy. Under heavy output that queues packets nobody needs.
+		- Measure it first, against G42. Post only when the thread is about to park on a full pipe, if the numbers say so.
+	- Notes:
+		- Code fixup 20261119.
+		- Detail: `detail_backlog.md`, under this ID.
+
+- Per-frame settings reads and allocations to measure
+	- ID: 2026111914450011
+	- Type: Enhancement
+	- Status: Queued
+	- Priority: Low
+	- Opened: 20261119-144500
+	- Opened by: CC
+	- Target version: rc.2
+	- Requirements:
+		- Profile these and change only what the numbers show is worth it.
+		- `Pane::buf_area` reads the settings once per text area per frame.
+		- `cursor_alpha` runs a 12-step color search per pane per frame.
+		- The Settings dialog's `rects()` and `texts()` build new lists and strings every dialog frame.
+		- On macOS, `bar_menus_key` hashes the menu state, the shells and every key binding on each event-loop pass.
+	- Notes:
+		- Code fixup 20261119.
 		- Detail: `detail_backlog.md`, under this ID.
 
 - The window doesn't paint while the GPU is busy or short on memory, and stays blank after the load ends

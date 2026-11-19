@@ -120,7 +120,7 @@ def measure(pids: list[int], exe_paths: list[str], be: Collector, verbose: bool 
 	def resolve(name: str) -> str | None:
 		"""Prefer the copy this process mapped, so a bundled lib wins over a system one."""
 		hit = by_name.get(be.base_name(name))
-		return hit if hit else be.find_library(name)
+		return hit or be.find_library(name)
 
 	# Injected rather than depended on. Windows machines often have libraries such as font
 	# hooks and security shims pushed into every process, and billing the terminal for
@@ -259,12 +259,18 @@ class LinuxBackend:
 
 	def __init__(self) -> None:
 		self._needed: dict[str, list[str]] = {}
+		self._real: dict[str, str] = {}
 
+	#	maps and smaps name each library once per mapping, several times over.
 	def norm(self, path: str) -> str:
-		try:
-			return str(Path(path).resolve())
-		except OSError:
-			return path
+		real = self._real.get(path)
+		if real is None:
+			try:
+				real = str(Path(path).resolve())
+			except OSError:
+				real = path
+			self._real[path] = real
+		return real
 
 	def base_name(self, path: str) -> str:
 		"""Strip the version tail so libX11.so.6.4.0 and libX11.so.6 compare equal."""
@@ -372,7 +378,7 @@ class LinuxBackend:
 #••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
 
 # Vendor drivers, the runtime loaders in front of them, and the software back ends that
-# bundled browsers ship. Matched on the stem, case-folded.
+# bundled browsers bring along. Matched on the stem, case-folded.
 WIN_GFX_RE = re.compile(
 	r"""^(?:
 		  opengl32 | glu32 | vulkan-\d+ | dxgi | dxcore | dxil | d3d\d+.* | d3dcompiler.*
@@ -420,6 +426,7 @@ class WindowsBackend:
 		self._page = 4096
 		self._devmap: dict[str, str] | None = None
 		self._handles: dict[int, int | None] = {}
+		self._procs: dict[int, int] | None = None
 		self._declare()
 
 	#	API declarations
@@ -727,6 +734,8 @@ class WindowsBackend:
 
 	def _snapshot(self) -> dict[int, int]:
 		"""(pid -> parent) for every process, read once."""
+		if self._procs is not None:
+			return self._procs
 		ct = self.ct
 		out: dict[int, int] = {}
 		snap = self._k32.CreateToolhelp32Snapshot(0x2, 0)                  ## SNAPPROCESS
@@ -741,6 +750,7 @@ class WindowsBackend:
 				ok = self._k32.Process32NextW(snap, ct.byref(entry))
 		finally:
 			self._k32.CloseHandle(snap)
+		self._procs = out
 		return out
 
 	def parent_of(self, pid: int) -> int:
@@ -914,18 +924,17 @@ INTERPRETERS = {"python", "python3", "pythonw", "py"}
 
 def stem_of(path: str) -> str:
 	name = Path(path).name.lower()
-	return name[:-4] if name.endswith(".exe") else name
+	return name.removesuffix(".exe")
 
 
 def tree_of(be: Backend, root: int) -> list[int]:
 	"""A pid and everything under it."""
-	out, queue = [root], [root]
-	while queue:
-		pid = queue.pop(0)
+	out, seen = [root], {root}
+	for pid in out:
 		for kid in be.children_of(pid):
-			if kid not in out:
+			if kid not in seen:
+				seen.add(kid)
 				out.append(kid)
-				queue.append(kid)
 	return out
 
 

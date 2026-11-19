@@ -66,7 +66,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 	// host instead, and that went wrong twice: an msvc host runs rc.exe even for a
 	// gnu target, whose .res mingw's ld can't link; and for aarch64 it found no
 	// compiler at all and answered "not attempted", which manifest_optional() reads
-	// as success - so the ARM64 exe carried no icon and no version strings and
+	// as success - so the ARM64 exe had no icon and no version strings and
 	// nothing said so. msvc still goes through embed-resource, which knows how to
 	// find rc.exe.
 	if target.ends_with("-windows-msvc") {

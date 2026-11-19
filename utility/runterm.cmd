@@ -27,7 +27,6 @@ SETLOCAL
 ::		https://mit-license.org/
 ::	SPDX-License-Identifier: MIT
 
-::----------------------------------------------------------------------------
 :MAIN
 
 	set "PSFILE="
@@ -37,9 +36,7 @@ SETLOCAL
 	call :FIND "C:\opt\0-0\common\exec\synced\util\0_crossplatform\n8runterm.ps1"
 	call :FIND "C:\0-0\common\exec\synced\util\0_crossplatform\n8runterm.ps1"
 
-	::
 	:: Validate
-	::
 
 	:: Script
 	if defined PSFILE goto :OK005
@@ -48,7 +45,7 @@ SETLOCAL
 	:OK005
 
 	:: PowerShell 7. The script is pwsh-only, so do not fall back to the
-	:: Windows PowerShell 5.1 that ships in the box.
+	:: Windows PowerShell 5.1 that comes with Windows.
 	set "PWSH="
 	for /f "delims=" %%P in ('where pwsh.exe 2^>nul') do call :FINDPWSH "%%P"
 	:: The machine install before the Store's. Its own App Paths entry names a
@@ -62,27 +59,22 @@ SETLOCAL
 		goto :ERROR
 	:OK010
 
-	::
 	:: Execute
-	::
 	"%PWSH%" -NoProfile -ExecutionPolicy Bypass -File "%PSFILE%" %*
 	set RC=%ERRORLEVEL%
 
 ENDLOCAL & exit /b %RC%
 
-::----------------------------------------------------------------------------
 :FIND
 	if defined PSFILE goto :EOF
 	if exist "%~1" set "PSFILE=%~1"
 goto :EOF
 
-::----------------------------------------------------------------------------
 :FINDPWSH
 	if defined PWSH goto :EOF
 	if exist "%~1" set "PWSH=%~1"
 goto :EOF
 
-::----------------------------------------------------------------------------
 :: One line of 'reg query': everything after the type is the path. The call
 :: expands a REG_EXPAND_SZ value's variables.
 :APPPATH
@@ -91,7 +83,6 @@ goto :EOF
 	for /f "tokens=*" %%T in ("%LINE%") do call :FINDPWSH "%%~T"
 goto :EOF
 
-::----------------------------------------------------------------------------
 :ERROR
 	echo [ An error occurred. ]
 ENDLOCAL & exit /b 1

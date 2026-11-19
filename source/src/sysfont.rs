@@ -214,11 +214,11 @@ mod platform {
 		let mut tokens: Vec<&str> = desc.split_whitespace().collect();
 
 		let mut size_pt = None;
-		if let Some(last) = tokens.last() {
-			if let Ok(size) = last.parse::<f32>() {
-				size_pt = Some(size);
-				tokens.pop();
-			}
+		if let Some(last) = tokens.last()
+			&& let Ok(size) = last.parse::<f32>()
+		{
+			size_pt = Some(size);
+			tokens.pop();
 		}
 		// Peel trailing weight/style/stretch words so only the family remains.
 		let (mut bold, mut italic) = (false, false);

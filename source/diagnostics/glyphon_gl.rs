@@ -211,15 +211,11 @@ fn run(event_loop: &ActiveEventLoop) {
 			}
 		}
 	}
-	let _ = image::save_buffer(
-		"/tmp/glyphon_gl.png",
-		&pixels,
-		W,
-		H,
-		image::ExtendedColorType::Rgba8,
-	);
+	let png = std::env::temp_dir().join("glyphon_gl.png");
+	let _ = image::save_buffer(&png, &pixels, W, H, image::ExtendedColorType::Rgba8);
 	println!(
-		"bright (text) pixels: {bright_count}  -> {}",
+		"{}: bright (text) pixels: {bright_count}  -> {}",
+		png.display(),
 		if bright_count > 50 {
 			"TEXT RENDERED"
 		} else {

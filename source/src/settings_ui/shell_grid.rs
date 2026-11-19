@@ -126,8 +126,8 @@ impl SettingsDialog {
 		self.line_row_h()
 	}
 
-	/// Space or Enter on a grid stop: open a field, flip the switch, move the
-	/// entry, or ask before dropping it.
+	/// Space or Enter on a grid stop: open a field, flip the switch, or ask
+	/// before dropping the entry.
 	pub(super) fn shell_activate(&mut self, i: usize, part: u16) {
 		match shell_stop(part, self.edited.shells.len()) {
 			ShellStop::Add => self.shell_add(i),
@@ -382,8 +382,6 @@ impl SettingsDialog {
 	}
 
 	/// A click somewhere in the grid. Returns whether it hit something.
-	/// The move and remove buttons arm on press and fire on release, the same way
-	/// the footer and the theme buttons do, so a press that drifts off cancels.
 	pub(super) fn shell_mouse_down(
 		&mut self,
 		i: usize,
@@ -455,16 +453,16 @@ impl SettingsDialog {
 					self.shell_cmd_box(i, shell_index),
 					part,
 				)),
-				_ => None,
+				ShellStop::Add | ShellStop::Entry(_, ShellPart::Remove | ShellPart::Active) => None,
 			};
 		}
 		None
 	}
 
-	/// The grid's own quads: the 2 field boxes and the checkbox per entry, the
-	/// 5 icon buttons, and the Add button. The arrows are drawn by the shader,
-	/// mode 3 with a quarter-turn, as the tab close mark is, since no interface
-	/// font can be relied on to have one, and a glyph's metrics would place it.
+	/// The grid's own quads: the 2 field boxes, the checkbox, the grip and the
+	/// remove button per entry, and the Add button. The remove mark is drawn by
+	/// the shader, as the tab close mark is, since no interface font can be
+	/// relied on to have one, and a glyph's metrics would place it.
 	pub(super) fn shell_rects(
 		&self,
 		colors: &Dlg,

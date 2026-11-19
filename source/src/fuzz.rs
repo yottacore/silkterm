@@ -176,8 +176,8 @@ pub fn input(
 	if corpus.is_empty() || rng.chance(2) {
 		return generate(rng);
 	}
-	let parent = corpus[rng.below(corpus.len())].clone();
-	mutate(rng, &parent)
+	let parent = &corpus[rng.below(corpus.len())];
+	mutate(rng, parent)
 }
 
 /// Text with the awkward parts of Unicode in it, for anything that takes a string

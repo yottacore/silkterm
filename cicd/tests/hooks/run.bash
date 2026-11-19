@@ -228,9 +228,9 @@ eval "$(sed -n '/^fNeedsGate() {/,/^}/p' "${hooks}/pre-push")"
 fGated(){ local f IFS=$'\n'; set -f; for f in "${@}"; do fNeedsGate "${f}" || { set +f; echo "    not gated: ${f}"; return 1; }; done; set +f; }
 fSkipped(){ local f IFS=$'\n'; set -f; for f in "${@}"; do ! fNeedsGate "${f}" || { set +f; echo "    gated: ${f}"; return 1; }; done; set +f; }
 mapfile -t built < <(cd "${root}" && git grep -o -E 'include_(str|bytes)!\("[^"]+"\)' -- source knobs \
-	| sed -E 's/^([^:]+):include_[a-z]+!\("([^"]+)"\)$/\1 \2/' \
-	| while read -r file inc; do realpath -m --relative-to=. "$(dirname "${file}")/${inc}"; done | sort -u)
-mapfile -t -O "${#built[@]}" built < <(cd "${root}/source" && grep -o -E '"\.\./[^"]+"' Cargo.toml | tr -d '"' | while read -r f; do realpath -m --relative-to=.. "${f}"; done)
+	| sed -E 's#^(.*)/[^/:]+:include_[a-z]+!\("([^"]+)"\)$#\1/\2#' \
+	| xargs -r -d '\n' realpath -m --relative-to=. | sort -u)
+mapfile -t -O "${#built[@]}" built < <(cd "${root}/source" && grep -o -E '"\.\./[^"]+"' Cargo.toml | tr -d '"' | xargs -r -d '\n' realpath -m --relative-to=..)
 fCheck "the list holds patterns, and a build reads ${#built[@]} files" test "${#built[@]}" -gt 10
 fCheck "and none of them is skipped" fGated "${built[@]}"
 fCheck "nor any doc a test reads" fGated README.md build.md prerequisites.md comparison.md filesystem/home/.config/silkterm/wallpaper-attribution.md \

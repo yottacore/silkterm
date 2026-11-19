@@ -132,7 +132,7 @@ pub fn apply(img: &mut Linear, size: f32, strength: f32, auto: f32, scale: f32) 
 	if w == 0 || h == 0 {
 		return;
 	}
-	let mut rgb: Vec<[f32; 3]> = img.pixels().map(|p| [p[0], p[1], p[2]]).collect();
+	let rgb: Vec<[f32; 3]> = img.pixels().map(|p| [p[0], p[1], p[2]]).collect();
 
 	let (eff_size, eff_strength) = if auto > 0.0 {
 		let (a_size, a_strength) = auto_params(busyness(&rgb, w, h, scale));
@@ -148,15 +148,10 @@ pub fn apply(img: &mut Linear, size: f32, strength: f32, auto: f32, scale: f32) 
 		return; // localMean == pixel -> nothing to flatten
 	}
 	let mean = box_mean(&rgb, w, h, r);
-	for (p, m) in rgb.iter_mut().zip(mean.iter()) {
-		for (pc, mc) in p.iter_mut().zip(m.iter()) {
-			*pc = lerp(*pc, *mc, eff_strength);
+	for ((dst, src), m) in img.pixels_mut().zip(&rgb).zip(&mean) {
+		for c in 0..3 {
+			dst[c] = lerp(src[c], m[c], eff_strength);
 		}
-	}
-	for (dst, src) in img.pixels_mut().zip(rgb.iter()) {
-		dst[0] = src[0];
-		dst[1] = src[1];
-		dst[2] = src[2];
 	}
 }
 

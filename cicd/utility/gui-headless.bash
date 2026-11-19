@@ -86,10 +86,10 @@ xLock="/tmp/.X${num}-lock"
 ## A pid alone isn't a process: a run killed before `stop` leaves its pid file,
 ## and the number can come back as anything. The start time from /proc goes with
 ## it, so a record names one process and no other.
-fStartedAt() { local s; s="$(cat "/proc/${1}/stat" 2>/dev/null)" || return 1; s="${s##*) }"; set -- ${s}; echo "${20}"; }
+fStartedAt() { local s; { read -r s <"/proc/${1}/stat"; } 2>/dev/null || return 1; s="${s##*) }"; set -- ${s}; echo "${20}"; }
 fRecord() { echo "${1} $(fStartedAt "${1}")"; }
 fSame() { local p t; read -r p t <<<"${1}"; [[ -n "${t}" && "$(fStartedAt "${p}" || true)" == "${t}" ]]; }
-fAlive() { [[ -f "${1}" ]] && fSame "$(cat "${1}")"; }
+fAlive() { [[ -f "${1}" ]] && fSame "$(<"${1}")"; }
 fPidOf() { local p _; read -r p _ <"${1}"; echo "${p}"; }
 ## Kill a recorded process and wait for it to go. A server still shutting down
 ## holds the lock, and a start right after a stop found the number taken.
@@ -103,7 +103,7 @@ fEndIt() {
 
 ## Who is asking: the script that ran this one.
 me="$(fRecord "${PPID}")"
-fOwnedByOther() { [[ -f "${ownerFile}" ]] && [[ "$(cat "${ownerFile}")" != "${me}" ]] && fSame "$(cat "${ownerFile}")"; }
+fOwnedByOther() { [[ -f "${ownerFile}" ]] && [[ "$(<"${ownerFile}")" != "${me}" ]] && fSame "$(<"${ownerFile}")"; }
 
 fStart() {
 	local fresh=""
@@ -131,7 +131,7 @@ fStart() {
 		echo "${me}" > "${ownerFile}"
 		## Up means ours is still running, has the number, and takes connections.
 		local ok=""
-		for _ in $(seq 1 50); do
+		for _ in {1..50}; do
 			kill -0 "${pid}" 2>/dev/null || break
 			if [[ "$(tr -dc '0-9' 2>/dev/null <"${xLock}" || true)" == "${pid}" ]] \
 				&& DISPLAY="${display}" xdpyinfo >/dev/null 2>&1; then ok=1; break; fi
@@ -215,7 +215,7 @@ fStop() {
 		echo "Xvfb on ${display} belongs to another run (pid $(fPidOf "${ownerFile}")); leaving it" >&2
 		return 1
 	fi
-	local line
+	local line f
 	if [[ -f "${appsPids}" ]]; then
 		while read -r line; do fEndIt "${line}"; done < "${appsPids}"
 		rm -f "${appsPids}"
