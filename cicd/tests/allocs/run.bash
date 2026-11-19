@@ -11,8 +11,8 @@
 ##			  along the last one.
 ##			- Tips: a tab's tip held up, then a menu row's, each counted over
 ##			  the frame at rest.
-##		Neither the rest nor the drag composes the minimap, since it shows no selection and
-##		nothing printed.
+##		Neither the rest nor the drag composes the minimap, since the minimap
+##		shows no selection and nothing was printed.
 ##	- Syntax: run.bash [--bin PATH] [--report]   (default: the debug build)
 ##		--report prints the figures and checks no limit.
 ##	- Exit: 0 passed, 1 a check failed, 3 nothing ran (no debug binary,
@@ -42,9 +42,9 @@ headless="${root}/cicd/utility/gui-headless.bash"
 idleLimit="${ALLOCS_IDLE_LIMIT:-178}"
 dragLimit="${ALLOCS_DRAG_LIMIT:-360}"
 moveLimit="${ALLOCS_MOVE_LIMIT:-6}"
-## A frame with a tip up, over the frame at rest. Each pays for a second
-## render pass. Copying the tab tip's lines out for each frame cost 6 more,
-## and wrapping and measuring the menu tip 11 more.
+## Limits for a frame with a tip up, over the frame at rest. Each tip pays for
+## a second render pass. Copying the tab tip's lines out for each frame cost 6
+## more, and wrapping and measuring the menu tip cost 11 more.
 tabTipLimit="${ALLOCS_TAB_TIP_LIMIT:-43}"
 menuTipLimit="${ALLOCS_MENU_TIP_LIMIT:-28}"
 ## Where to hover: a tab's middle, and the File menu's first row, which has a
@@ -207,11 +207,11 @@ dragPerMove="$(awk -v b="${dragBetween}" -v m="${moves}" 'BEGIN { printf "%.1f",
 dragMaps="$(fComposes "${from}" "${to}")"; dragFrom="${from}"; dragTo="${to}"
 echo "    drag: ${dragFrames} frames, ${dragFrame} allocations drawing each, ${dragTotal} with what came before, ${dragPerMove} per pointer move between frames, ${dragMaps} map composes"
 
-## A tip held up: a tab's, then a menu row's. Each is counted as frames over
-## the frame at rest, which takes the graphics driver's floor out of it. The
-## tip's own frames cost more than that, since they add a render pass. The
-## note the window prints as a tip comes up shows the hover found one.
-## Prints the frames, the mean frame, and how many notes came.
+## A tip held up: a tab's, then a menu row's. Each is counted over the frame at
+## rest, which takes out the graphics driver's floor. The tip's own frames cost
+## more than that, since they add a render pass. The window prints a note when
+## a tip comes up, which shows the hover found one. Prints the frames, the mean
+## frame, and how many notes came.
 fTipFrames(){
 	local -r note="${1}" mark="${2}"
 	local from up n f

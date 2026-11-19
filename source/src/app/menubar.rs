@@ -21,8 +21,8 @@ pub(super) fn menu_bar_at_launch(hide_menu: Option<bool>, saved: bool, mac: bool
 
 /// The menu bar's measured text: each title's box width with its padding, and
 /// each copy-mode label's width. Every hit test and frame used to measure them
-/// all again. Measured once per text context, since a font, size, or scale
-/// change builds a new one.
+/// all again. Now they're measured once per text context, since a font, size,
+/// or scale change builds a new one.
 #[derive(Debug, Default)]
 pub(super) struct BarWidths {
 	generation: u64,
@@ -424,8 +424,8 @@ mod tests {
 	}
 
 	// Every hit test on the menu bar measured all its titles and labels again.
-	// They're measured once per text context now, and a new context (a font,
-	// size, or scale change) measures them again.
+	// They're measured once per text context now, and measured again after a
+	// font, size, or scale change makes a new context.
 	// Test ID: dfe5t
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]

@@ -77,7 +77,7 @@ SilkTerm™ is a hardware-accelerated terminal for Linux, Windows, and macOS tha
 
 ### Why smooth-scrolling output
 
-All other terminal emulators in existence at the time this was written currently snap scrolling output to fixed lines. Nothing can appear in-between those lines (except when mouse-scrolling on some terminals).
+All other terminal emulators in existence at the time this was written snap scrolling output to fixed lines. Nothing can appear in-between those lines (except when mouse-scrolling on some terminals).
 
 For output that can be sporadic - e.g. something scrolling slowly one line at a time sometimes, then jumping several lines at once other times (e.g. while watching a live log file with `tail -f`) - [the eye/brain combo can struggle to track the output](https://www.youtube.com/watch?v=yQaC-ZzTf78), and you get "lost" trying to follow it.
 
@@ -105,7 +105,7 @@ SilkTerm's smooth-scrolling output is a joy to work with. You really have to try
 
 ### Why text scrim
 
-A text *scrim* is a subtle halo drawn behind each glyph - usually of the opposite luminosity to the text - purely as a readability aid. It's the same technique graphic designers use, sometimes called "outer glow". (And is different from angled "drop-shadow", which is a creative effect.)
+A text *scrim* is a subtle halo drawn behind each glyph - usually of the opposite luminosity to the text - purely as a readability aid. It's the same technique graphic designers use, sometimes called "outer glow". (It's different from an angled "drop-shadow", which is a creative effect.)
 
 SilkTerm calls it a "scrim" because that's its whole job: keeping text legible, not decoration. (Though this isn't a hard-and-fast graphic design "rule" - there's lots of overlap in both directions.)
 
@@ -163,6 +163,8 @@ Text can be particularly hard to read, for example when using light text on a no
 
 	- Accepts custom tab names from the user (double-click to rename), and/or from some programs that like to rename the tab they're in.
 
+- **New tabs and panes start where you are**. A new tab, split, or window opens in the folder of the pane you're in. Most shells don't need any setup for it.
+
 - **Automatically finds your system's shells**. bash, zsh, fish, PowerShell, cmd, Nushell, WSL distributions and more show up under New tab with shell.
 
 - **Window decorations and/or the menu can be disabled**, for "nothing but terminal". Fullscreen can also be toggled.
@@ -183,7 +185,7 @@ Text can be particularly hard to read, for example when using light text on a no
 
 - **Copy on select, and/or copy on output**. Both optional, both per-pane. Copy-on-output grabs what a command printed without the prompt around it. A program in the pane you're using can set the clipboard too, the way tmux and editors over ssh do.
 
-- **Themes**. Comes with four color themes - each with a dark and a light variant. Or create and save your own.
+- **Themes**. Comes with 4 color themes - each with a dark and a light variant, which can follow the system's setting. Or create and save your own.
 
 - **Performance profiles**. SilkTerm measures performance on the first run, and picks a performance profile. If the display can't keep up, it steps down on its own.
 
@@ -191,11 +193,13 @@ Text can be particularly hard to read, for example when using light text on a no
 
 - **Simple and sane configuration**. No pages of nested tabs representing multiple settings metaphors. But if you need to get fancy with multiple sets of wildly different options - that's easy with alternate config files, and/or scripted launch-time arguments.
 
+	- Settings has a search box, and most settings explain themselves in a tip.
+
 - **Rich command-line syntax**. A simple yet (optionally) powerful CLI syntax, that allows creating multiple tabs and/or complex pane structure(s) at launch time.
 
 - **Arbitrary alternate config files**, another way to launch SilkTerm with wildly different options, without overwriting the main config file.
 
-- **Written in Rust as a single self-contained binary**. No runtime dependencies. Fast. The one binary bundles the entire GPU and text-rendering stack, which is why it's about 11 MiB; [the FAQ explains how that *actually* compares to a GTK terminal's few-hundred-KiB launcher](FAQ.md).
+- **Written in Rust as a single self-contained binary**. No runtime dependencies. Fast. The one binary bundles the entire GPU and text-rendering stack, which is why it's over 10 MiB; [the FAQ explains how that *actually* compares to a GTK terminal's few-hundred-KiB launcher](FAQ.md).
 
 - **One codebase for Linux + Windows + macOS, all with x86_64 and ARM builds**. The Windows and ARM versions all build in one pass on x86_64 Linux. *macOS builds from the same codebase on a Mac*.
 
@@ -203,7 +207,7 @@ Text can be particularly hard to read, for example when using light text on a no
 
 - **GPU-accelerated with software fallback**. An idle window can also give its GPU memory back.
 
-- **Releases memory, CPU, and GPU resources when idle**. Without affecting running programs. The timeouts are tunable. The only way you even knew something happened is the wallpaper reloads in about a quarter second, and "... (resources restored)" appears for a few seconds in the window title.
+- **Releases memory, CPU, and GPU resources when idle**. Without affecting running programs. The timeouts are tunable. The only way you'd even know something happened is that the wallpaper reloads in about a quarter second, and "... (resources restored)" appears for a few seconds in the window title.
 
 - Loosely based on [Alacritty](https://github.com/alacritty/alacritty), for the basement plumbing - to avoid rewriting the complex but solved problems of terminal emulation. (Alacritty is also a high-performance, open-source terminal written in Rust.)
 

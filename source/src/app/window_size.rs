@@ -930,9 +930,9 @@ fn fits(
 }
 
 // Out to whole cells of the window's own grid, which is what gets saved, so
-// the next launch opens at this size. A part cell short of it gave the shell
-// a column less. A size already at whole cells stays: `window_px` rounds up
-// to a pixel, so its cells read a bit over and a ceil here added one.
+// the next launch opens at this size. A part cell short of it cost the shell
+// a column. A size already at whole cells is left alone, since `window_px`
+// rounds up to a pixel, so its cells read a bit over and a ceil here added one.
 fn whole_cells(px: u32, most: u32, cell: f32, margin: f32, chrome: f32) -> u32 {
 	let at = |cells: usize| window_px(1, cells, cell, cell, margin, chrome).1;
 	let cells = cells_in(px, cell, margin, chrome);
@@ -2531,9 +2531,9 @@ mod tests {
 		assert_eq!(whole_cells(1818, 1818, 30.0, 4.0, 0.0), 1818, "at the edge");
 	}
 
-	// A zoom on the alt screen, where the minimap is off, gave the program a
-	// column more: the least size for its grid was already whole cells, and
-	// rounding it out again added one, 64 then 65 in a 700x400 window.
+	// A zoom on the alt screen, where the minimap is off, gave the program an
+	// extra column. The least size for its grid was already whole cells, and
+	// rounding it out again added one, so 64 became 65 in a 700x400 window.
 	// Test ID: dfe3c
 	#[test]
 	fn a_size_already_at_whole_cells_keeps_its_grid() {

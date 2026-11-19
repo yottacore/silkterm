@@ -468,7 +468,7 @@ mod tests {
 
 	// Left on the first theme, or Right on Custom at the end, can't move the
 	// box. It used to pick the same theme again, which put its colors back
-	// with nothing on screen to say so, and the next OK wrote that.
+	// without anything on screen to show it, and the next OK saved them.
 	// Test ID: dfehd
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]

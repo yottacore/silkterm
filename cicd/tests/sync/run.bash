@@ -106,7 +106,7 @@ fCheck "and the branch where it was" test "$(git -C "${work}/mine" rev-parse HEA
 ## When putting it back fails too, the stash stays and the message names it.
 pullFails=block fStage "${work}/mine"
 fCheck "a failed pull and a failed pop stop the run" test "${rc}" -ne 0
-fCheck "and name the stash" grep -qF "putting the stashed work back failed too. It is still in 'stash@{0}' (auto-stash)" <<<"${out}"
+fCheck "and name the stash" grep -qF "putting the stashed work back failed too. It's still in 'stash@{0}' (auto-stash)" <<<"${out}"
 fCheck "which is kept" test "$(fStashes "${work}/mine")" -eq 1
 ## The pop may have put the tracked edit back before it stopped.
 git -C "${work}/mine" checkout -q -- file.txt; rm -f "${work}/mine/untracked.txt"; git -C "${work}/mine" stash pop -q

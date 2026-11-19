@@ -1432,7 +1432,7 @@ mod tests {
 			14,
 			"a real part cell is still cut"
 		);
-		assert_eq!(cells_across(0.0, 9.6), 1, "never no cells");
+		assert_eq!(cells_across(0.0, 9.6), 1, "always at least one cell");
 		assert_eq!(cells_across(-5.0, 9.6), 1);
 		for cell in [
 			7.0, 8.4, 9.6, 10.65, 10.8, 12.578_125, 13.33, 16.2, 19.2, 24.0,

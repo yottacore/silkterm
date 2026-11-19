@@ -18,7 +18,7 @@
 //! it reads, rather than forking the parser. `EventLoop` is generic over the
 //! public `EventedPty` trait, which allows that. The bytes go on to the parser
 //! unchanged, but for one guard: past `OSC_HELD_MAX`, the rest of an OSC's
-//! payload is blanked, since the parser would hold all of it (see `OscCap`).
+//! payload is blanked, since the parser would keep all of it (see `OscCap`).
 
 use std::io::{self, Read};
 use std::path::PathBuf;
@@ -35,9 +35,9 @@ const MAX_PAYLOAD: usize = 4096;
 
 /// The parser keeps an OSC's whole payload until the sequence ends, with no
 /// limit of its own outside a `no_std` build, and keeps the memory after it.
-/// This is the most it's let hold: room for the largest clipboard write that's
-/// kept, in base64, and a power of 2, so the buffer's doubling stops at it and
-/// not past.
+/// This is the most it's allowed to keep. It has room for the largest clipboard
+/// write that's kept, in base64, and it's a power of 2, so the buffer's doubling
+/// stops at it rather than past it.
 pub const OSC_HELD_MAX: usize = 2 << 20;
 const _: () = assert!(OSC_HELD_MAX.is_power_of_two());
 const _: () = assert!(OSC_HELD_MAX >= crate::term::CLIPBOARD_STORE_MAX.div_ceil(3) * 4 + 16);
@@ -214,7 +214,7 @@ impl<P: OnResize> OnResize for TappedPty<P> {
 /// Keeps vte's OSC buffer to `limit` bytes. It follows vte 0.15's states only as
 /// far as they decide whether a byte goes into that buffer, and they decide it
 /// exactly: ESC leads to Escape from every state, Escape leads to an OSC only on
-/// `]`, and an OSC ends only on BEL, CAN, SUB or ESC. Past the limit, a byte
+/// `]`, and an OSC ends only on BEL, CAN, SUB, or ESC. Past the limit, a byte
 /// that would be stored becomes a NUL, which vte drops inside an OSC. So the
 /// sequence still ends where it would have, and is dispatched cut short, as
 /// vte's own `no_std` build does it. Nothing outside an OSC is touched.
@@ -276,7 +276,7 @@ impl OscCap {
 					}
 					CapState::Osc
 				}
-				// the rest leave vte where it was, such as a C0 control, DEL or a
+				// the rest leave vte where it was, such as a C0 control, DEL, or a
 				// high byte in Escape
 				(state, _) => state,
 			};
@@ -768,8 +768,8 @@ mod tests {
 	}
 
 	// `printf '\e]2;'; yes` grew the parser's buffer by every byte until memory
-	// ran out, and it kept the memory after. It holds at most the cap now, the
-	// sequence still ends where it did, and what follows is read as before.
+	// ran out, and it kept the memory after. Now the buffer stops at the cap,
+	// the sequence still ends where it did, and what follows is read as before.
 	// Test ID: dfeeg
 	#[test]
 	#[cfg_attr(miri, ignore = "8 MiB through the parser takes too long under Miri")]
@@ -813,7 +813,7 @@ mod tests {
 	// OSC would change what's drawn, and an OSC it misses would grow unchecked.
 	// Test ID: dfeeh
 	#[test]
-	fn a_capped_stream_parses_the_same_but_for_overlong_oscs() {
+	fn capped_stream_parses_the_same() {
 		use crate::fuzz;
 
 		const LIMIT: usize = 12;

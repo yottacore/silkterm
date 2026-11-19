@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
 
 ##	- Purpose:
-##		Makes the real program's window wider than the device's largest
-##		texture, as a window manager or a drag across monitors can, in
-##		software, where the limit is 16384. Before the fix the program died at
-##		the resize, in wgpu's error handler.
-##			- X11 with no window manager, so the window does get that big: it
-##			  stays up, drawn up to the limit.
-##			- X11 under xfwm4: the window is held at the limit.
-##			- Native Wayland on headless sway, tiled on an output wider than
-##			  the limit: it stays up on the Vulkan surface.
+##		Makes the program's window wider than the device's largest texture,
+##		which a window manager or a drag across monitors can do. It renders in
+##		software, where the limit is 16384. Before the fix the program died in
+##		wgpu's error handler at the resize.
+##			- On X11 with no window manager, the window gets that big. It stays
+##			  up and draws up to the limit.
+##			- On X11 under xfwm4, the window is held at the limit.
+##			- On native Wayland, headless sway tiles it on an output wider than
+##			  the limit, and it stays up on the Vulkan surface.
 ##	- Syntax: run.bash [--bin PATH]   (default: the debug build, then release)
 ##	- Exit: 0 passed, 1 a check failed, 3 nothing ran (no binary, Xvfb,
 ##	  xfwm4, xdotool, sway, software Vulkan, or free display).
@@ -127,7 +127,7 @@ if fLaunchX x11bare; then
 	fCheck "x11: and the program is still up" fAlive
 	DISPLAY="${display}" xdotool windowsize "${win}" 1000 600 2>/dev/null || true
 	sleep 2
-	fCheck "x11: and after it's back under it" fAlive
+	fCheck "x11: and once it's back under the limit" fAlive
 else
 	fCheck "x11: the window came up on software GL" false
 fi

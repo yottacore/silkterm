@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 
 ##	- Purpose:
-##		Loses the GPU device of the real program on headless sway, native
-##		Wayland, as a driver reset or a resume without video memory does,
-##		through SILK_LOSE_DEVICE:
+##		Makes the program lose its GPU device through SILK_LOSE_DEVICE, the
+##		way a driver reset or a resume without video memory would. It runs on
+##		native Wayland under headless sway.
 ##			- With only the terminal up, it sees the loss, builds a new
 ##			  device, and draws again without any input.
 ##			- With Settings up, both get new devices, and nothing panics.
@@ -114,7 +114,7 @@ appPid=$!
 
 fAlive(){ kill -0 "${appPid}" 2>/dev/null; }
 fSaid(){ grep -cF -- "${1}" "${said}" || true; }
-## fWaitSaid <text> <count>: until the text has been said that many times
+## fWaitSaid <text> <count>: waits until the log has the text that many times
 fWaitSaid(){ local _; for _ in {1..100}; do (($(fSaid "${1}") >= ${2})) && return 0; fAlive || return 1; sleep 0.1; done; return 1; }
 
 for _ in {1..150}; do grep -qF 'renderer = ' "${said}" && break; sleep 0.2; done
@@ -122,8 +122,8 @@ if ! grep -qF 'renderer = ' "${said}"; then echo "  FAIL the window came up"; ta
 echo "  ok   the window came up"
 sleep 3
 
-## The terminal alone. Before the fix every frame after the loss was refused,
-## at most 2 s apart, for good.
+## The terminal alone. Before the fix, every frame after the loss was refused
+## for good, and frames come at most 2 s apart.
 touch "${lose}"
 fCheck "the terminal sees its device is lost" fWaitSaid "the GPU device was lost" 1
 fCheck "and builds a new one" fWaitSaid "device rebuilt" 1
@@ -132,8 +132,8 @@ sleep 3
 fCheck "and its frames are drawn again" test "$(fSaid "frame refused")" -eq "${refused}"
 fCheck "and it's still running" fAlive
 
-## Settings up, drawing on the dialogs' kept device. Settings draws only when
-## asked, and a loss is found only by drawing, so a key asks.
+## Settings up, drawing on the device kept for dialogs. Settings only draws
+## when asked to, and a loss is only found by drawing, so a key press asks.
 "${wl[@]}" wtype -M ctrl -k comma -m ctrl
 fCheck "Settings opened" fWaitSaid "kept: a dialog is up" 1
 sleep 2

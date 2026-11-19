@@ -668,7 +668,7 @@ impl State {
 			}
 		};
 		self.rebirth = None;
-		// a new device can have another limit, as software does
+		// a new device can have a different size limit, and software rendering does
 		super::window_size::cap_window(&self.window, gfx.max_side());
 		let (w, h) = (gfx.config.width, gfx.config.height);
 		self.surface_px = (w, h);

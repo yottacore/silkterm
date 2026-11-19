@@ -923,15 +923,15 @@ function fStashIfDirty {
 	return ($after -gt $before)
 }
 
-## An 'auto-stash' left by a run that stopped between its stash and its pop
-## holds uncommitted work. A build or publish past it leaves that work out, and
-## the next stash buries it deeper.
+## A run that stopped between its stash and its pop leaves an 'auto-stash' with
+## uncommitted work in it. A build or publish would leave that work out, and the
+## next stash would bury it deeper, so the run stops here first.
 function fNoLeftStash {
 	if (@(& git stash list) -match ': auto-stash$') { fDie "an 'auto-stash' from an earlier run is still in 'git stash list'. Pop or drop it, then re-run." }
 }
 
-## The stash pop, which on a conflict or a pulled file in the way of an
-## untracked one keeps the stash, and the work may be only there.
+## A pop that hits a conflict, or a pulled file in the way of an untracked one,
+## keeps the stash, and the stash may have the only copy of the work.
 function fStashPop {
 	param([Parameter(Mandatory)][string]$What)
 	fEcho_Clean "git stash pop ..."
@@ -940,7 +940,7 @@ function fStashPop {
 }
 
 ## The pull between a stash and its pop. A failed pull puts the stash back
-## before stopping. Left there, the tree sits at HEAD with every edit only in
+## before stopping, or the tree would be left at HEAD with every edit only in
 ## the stash.
 function fPullStashed {
 	param([bool]$DidStash)

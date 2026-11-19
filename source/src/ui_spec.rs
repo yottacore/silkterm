@@ -142,7 +142,7 @@ pub struct Spec {
 	/// Only in the Windows build. Test builds keep it everywhere, so its layout
 	/// and behavior are tested on every platform.
 	pub windows: bool,
-	/// Only in the macOS build, kept by test builds as with `windows`.
+	/// Only in the macOS build. Test builds keep it everywhere, as with `windows`.
 	pub macos: bool,
 	/// Left out of the macOS build, for a row that can never work there. Test
 	/// builds keep it, as with `windows`.
@@ -1257,14 +1257,14 @@ mod tests {
 		}
 	}
 
-	// Off a Mac the Option key group is gone, heading and all, and nothing
-	// else goes with it. A shared row can't sit under its heading.
+	// Off a Mac the Option key group is gone, heading and all, and no other row
+	// goes with it. A shared row can't be under a macOS-only heading.
 	// Test ID: dffm6
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
 	fn the_option_key_group_leaves_every_build_but_the_mac() {
 		let Ok(mut ui) = parse(SOURCE) else {
-			panic!("settings_ui.shcl does not parse")
+			panic!("settings_ui.shcl doesn't parse")
 		};
 		let all = ui.specs.len();
 		let mac: Vec<Key> = ui.specs.iter().filter(|s| s.macos).map(|s| s.key).collect();

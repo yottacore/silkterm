@@ -77,14 +77,14 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Progress log:
 		- 20261019: Added `CLA.md`, a section in contributing.md, and `.github/workflows/cla.yml`, the same as nano-git-db's. Both files need JC's review. The check still needs a first pull request from someone else to prove it.
 		- 20261023: Neither a full run nor Mac CI runs `cla.yml`, which runs only on pull requests.
-		- 20261117: JC asked for it in the next release. `CLA.md`, the contributing.md section and `cla.yml` are on `dev`, not yet on `main`. They go to `main` with the rc.1 merge. The first outside pull request after that proves the check.
-		- 20261118: Held for the rc.1 merge to main, since cla.yml runs from main, then a first pull request from someone else to prove the check. The files and the pull_request_target and issue_comment triggers are on dev.
+		- 20261117: JC asked for it in the next release. `CLA.md`, the contributing.md section and `cla.yml` are on `dev`, not yet on `main`. They'll go to `main` with the rc.1 merge. The first outside pull request after that proves the check.
+		- 20261118: It's held for the rc.1 merge to main, since cla.yml runs from main, and then for a first pull request from someone else to prove the check. The files and the pull_request_target and issue_comment triggers are on dev.
 
 - macOS: Create a setting to use Option as Meta in the terminal
 	- ID: 2026111715155480
 	- Type: Feature
 	- Status: Stalled
-		- Held for b26's console to be unlocked, for the key check. The rig built the round's code there (81d86b94) on 20261118, then skipped, since CGSSessionScreenIsLocked was Yes.
+		- Held for b26's console to be unlocked, for the key check. Commit 81d86b94 was built there on 20261118, and then the check was skipped, since CGSSessionScreenIsLocked was Yes.
 	- Needs external testing: On b26, at a shell prompt under `cat -v`, with the Option key setting on Left acts as Alt: left Option+f shows `^[f`, right Option+f still shows the composed character, and the change works without a restart. Set back to Types special characters, left Option+f types the composed character again. The rig is `b26_optmeta.bash` in the private tools folder.
 	- Priority: Avg
 	- Opened: 20261117-151554
@@ -92,20 +92,20 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Parent ID: 2026111713374903
 	- Target OS: macOS
 	- Target version: rc.1
-	- Requirements: A setting, off by default, that makes Option send ESC plus the plain key, as Terminal.app's "Use Option as Meta key" does. With it off, Option types the character it composes. Left only, right only, or both, as iTerm2 and alacritty offer. It applies to open windows when changed.
+	- Requirements: A setting, off by default, that makes Option send ESC plus the plain key, as Terminal.app's "Use Option as Meta key" does. With it off, Option types the character it composes. It can be left only, right only, or both, as iTerm2 and alacritty offer. It applies to open windows when changed.
 	- Note: Since the parent's fix, Option+letter on a Mac doesn't send Meta at all, so a Meta binding in emacs or readline needs this setting.
 	- Note: winit's `with_option_as_alt` and `set_option_as_alt` make it report the plain key with Alt held. `encode_key` then has to add the ESC again, which its `mac` flag turns off today.
 	- Progress log:
 		- 20261118: `keys.option_as_meta` in the config file takes off, left, right, or both. Use as Meta under a new Option key group on the Keys tab sets it, in the Mac build only. A window sets winit's Option as Alt from it at launch and again whenever the setting changes, from Settings, Reload config, or another window's save. The key encoder adds the ESC back for a press winit hands over as the plain key.
 		- 20261118: The Settings row needed a Mac-only row flag, `macos:`, kept by test builds the way `windows:` rows are.
-		- 20261118: The b26 key check is in the private tools folder as b26_optmeta.bash. It sends left and right Option+f as CGEvents with the side's device flag, under Left, then Off, then Both, each read live through `silkterm --reload-settings` from the window's own shell. The hosted mac.yml run 44372722100 on 81d86b94 covers dffm4 to dffm7.
+		- 20261118: The b26 key check is in the private tools folder as b26_optmeta.bash. It sends left and right Option+f as CGEvents with the side's device flag, under Left, then Off, then Both, each read live through `silkterm --reload-settings` from the window's own shell. The hosted mac.yml run 44372722100 on 81d86b94 ran dffm4 to dffm7.
 		- 20261118: Verified: hosted mac.yml run 44372722100 on nov18 (81d86b94) passed, 1490 tests, 0 failed, 0 filtered, so dffm4 to dffm7 ran and passed on macOS arm64. Only the b26 key check is left.
 		- 20261118: Renamed, as JC approved: `keys.option_as_alt` in the config file, the same name alacritty, kitty and Ghostty use. On the Keys tab the row is Option key, with Types special characters, Left acts as Alt, Right acts as Alt, and Both act as Alt, under a Keyboard heading. Most Mac users don't know the word Meta.
 		- 20261118: dffm7's pinned labels changed with the rename: the heading from Option key to Keyboard, and the choices from Off, Left, Right, Both to the 4 new ones. Its other checks are as they were.
 		- 20261118: Verified: the quick gate (fmt, clippy, tests, docs) passed after the rename, 1513 tests with dffm4 to dffm7, and clippy for aarch64-apple-darwin is clean.
 	- Decisions:
-		- 20261118: The setting lives under `keys:` in the file, beside the hotkeys, though it isn't one. The hotkey reader only looks at hotkey names, so it isn't flagged.
-		- 20261118: Whether a press is Meta is judged the way winit judges whether to hand over the plain key: a named side held, with no Ctrl or Command. So the ESC and the plain key always come together. With Ctrl, Option keeps its ESC either way, as before.
+		- 20261118: The setting is under `keys:` in the file, beside the hotkeys, even though it isn't a hotkey. The hotkey reader only looks at hotkey names, so it isn't flagged.
+		- 20261118: Whether a press is Meta is judged the way winit judges whether to hand over the plain key, which is a named side held with no Ctrl or Command. So the ESC and the plain key always come together. With Ctrl, Option keeps its ESC either way, as before.
 		- 20261118: The Option key group goes first on the Keys tab, so it isn't lost under the hotkey list.
 		- 20261118: With Meta on, Option on that side types the plain key in a tab rename too, as winit hands it over for the whole window. iTerm2 does the same.
 	- Test case: `option_as_alt_sends_esc_for_the_side_it_names` (dffm4), `option_as_alt_reads_from_the_file_and_defaults_off` (dffm5), `the_option_key_group_leaves_every_build_but_the_mac` (dffm6), and `the_option_as_alt_pick_is_the_setting_under_keys` (dffm7). dffm4 and dffm5 fail with the side check or the file path broken.
@@ -188,20 +188,20 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Target version: rc.1
 	- Incorrect behavior: `printf '\e]2;'; yes` in a pane appends every byte to the parser's OSC buffer with no limit. The memory stays allocated after the sequence ends, until the pane closes. A 500 MB OSC 52 is also buffered whole before the 1 MiB clipboard cap drops it.
 	- Expected behavior: An OSC longer than the largest one the program accepts is cut off, and a large buffer is given back when the sequence ends.
-	- Reproduced: No. Traced in vte 0.15.0: the buffer is capped only in the `no_std` build.
+	- Reproduced: No. It was traced in vte 0.15.0, where the buffer is capped only in the `no_std` build.
 	- Possible cause: vte's `osc_raw` is a plain `Vec` under the `std` feature, which alacritty_terminal turns on.
-	- Origin: The vte dependency, since the first commit, c6eaa043, 20260628. Same class as Code review 20260914 item 65, which capped the other parser buffers. Not seen by an earlier round. Confirmed by trace.
+	- Origin: The vte dependency, since the first commit, c6eaa043, 20260628. It's the same class as Code review 20260914 item 65, which capped the other parser buffers. Not seen by an earlier round. Confirmed by trace.
 	- Sweep: Every other parser buffer is bounded: CSI params, intermediates, the sync buffer, the title and title stack, and combining marks.
 	- Related IDs: Code review 20260914 item 65
 	- Notes:
 		- Code review 20261117 item 1.
 		- Detail: `detail_backlog.md`, under this ID.
-	- Actual cause: vte 0.15.0 keeps every byte of an OSC under its `std` feature, with no cap, and keeps the memory after the sequence ends. The parser is private to alacritty_terminal's event loop.
-	- Actual fix: The PTY tap blanks an OSC's payload past 2 MiB on its way to the parser, so the parser holds at most that. The sequence still ends where it did and is read cut short, as vte's own `no_std` build does. 2 MiB fits the largest clipboard write that's kept, and matches vte's own sync buffer. Giving the memory back needs vte itself, and is child 2026111714235965.
-	- Decisions: The cap is in the tap, not a vte fork, since a fork needs a new repo on the git host, which a round can't make. The tap follows vte's states only as far as entering and leaving an OSC, which every state does the same way, and a fuzz test holds it to vte. Past the cap a byte becomes a NUL, which vte drops inside an OSC. Ending the sequence early with CAN was ruled out, since the rest of the payload would then print as text.
-	- Test case: dfeeg `an_endless_osc_stops_growing_the_parser_buffer` and dfeeh `a_capped_stream_parses_the_same_but_for_overlong_oscs`.
+	- Actual cause: Under its `std` feature, vte 0.15.0 stores every byte of an OSC without a cap, and doesn't free the memory after the sequence ends. The parser is private to alacritty_terminal's event loop.
+	- Actual fix: The PTY tap blanks an OSC's payload past 2 MiB on its way to the parser, so the parser's buffer never grows past that. The sequence still ends where it did and is read cut short, as vte's own `no_std` build does. A 2 MiB cap fits the largest clipboard write that's kept, and matches vte's own sync buffer. Giving the memory back needs vte itself, and is child 2026111714235965.
+	- Decisions: The cap is in the tap rather than in a vte fork, since a fork needs a new repo on the git host first. The tap follows vte's states only as far as entering and leaving an OSC, which every state does the same way, and a fuzz test holds it to vte. Past the cap a byte becomes a NUL, which vte drops inside an OSC. Ending the sequence early with CAN was ruled out, since the rest of the payload would then print as text.
+	- Test case: dfeeg `an_endless_osc_stops_growing_the_parser_buffer` and dfeeh `capped_stream_parses_the_same`.
 	- Swept: vte 0.15.0 caps CSI params at 32, intermediates at 2, OSC params at 16 and the sync buffer at 2 MiB. The tap's own OSC 7 scanner stops collecting at 4 KiB. Title and combining marks are capped in the alacritty fork. No other parser buffer grows with input.
-	- Upstream draft: the vte patch and issue text are in the private upstream drafts, under this ID. Not filed: vte closed the same report as #151 in 2026-05. The patch is kept for a vte fork branch.
+	- Upstream draft: the vte patch and issue text are in the private upstream drafts, under this ID. It wasn't filed, since vte closed the same report as #151 in 2026-05. The patch is kept for a vte fork branch.
 	- Branch: nov17-2026111713374900
 	- Commit: c298d1a8
 	- Progress log: 20261117: Verified: dfeeg and dfeeh pass. Both fail with the cap made a no-op. dfeeh also fails with the cap left in an OSC after its ESC, and with Escape left early on a C0 control. The quick gate passes. The drafted vte patch passes vte's own tests, and its new test fails without the cap.
@@ -209,7 +209,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Closed: 20261119-071644
 	- Closed reason: Done
 
-- macOS: a character typed with Option reaches the shell with ESC in front of it
+- macOS: a character typed with Option is sent to the shell with ESC in front of it
 	- ID: 2026111713374903
 	- Type: Bug
 	- Status: Closed
@@ -221,9 +221,9 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Target version: rc.1
 	- Incorrect behavior: On a German layout, Option+5 is `[` and Option+8 is `{`. Typing `[` sends `ESC [`, which starts an escape sequence and eats the next keys. `{` sends `ESC {`. On a US layout, Option+f sends ESC plus ƒ. Most non-US Mac layouts type `@ [ ] { } | \ ~` with Option.
 	- Expected behavior: Option types the character it composes, as in Terminal.app, iTerm2, and alacritty. Option as Meta is a setting.
-	- Reproduced: No. Traced through winit 0.30.13's macOS key events. Not run on a Mac.
+	- Reproduced: No. It was traced through winit 0.30.13's macOS key events, but not run on a Mac.
 	- Possible cause: `encode_key` adds the ESC prefix for Alt on every platform. On a Mac, Option composes characters.
-	- Origin: c6eaa043, 20260628. The 20260914 round read input.rs and found it clean. Item 2026100219240881 fixed the text boxes only. Plausible.
+	- Origin: c6eaa043, 20260628. Code review 20260914 found input.rs clean. Item 2026100219240881 fixed the text boxes only. Plausible.
 	- Sweep: Option+arrows send `CSI 1;3D`, which Mac shells don't bind by default. `hotkey_in` and `opens_menu_title` are already off on a Mac.
 	- Related IDs: 2026100219240881
 	- Notes:
@@ -234,7 +234,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Decisions:
 		- 20261117: Every Option+character on a Mac drops the ESC, rather than only when the text differs from the plain key. winit's plain key ignores Shift too, so that test would get Option+Shift wrong. Once winit's Option as Alt is on, the text it hands over is already the plain key, and the setting can turn the ESC back on.
 		- 20261117: Option+arrows stay `CSI 1;3D`, as in iTerm2 and alacritty. Terminal.app sends `ESC b` and `ESC f` instead, which a person can bind in the shell.
-		- 20261117: The Option as Meta setting is its own child, 2026111715155480. Until it's done, a Mac has no way to send Meta with Option+letter.
+		- 20261117: The Option as Meta setting is its own child, 2026111715155480. Until it's done, a Mac doesn't have a way to send Meta with Option+letter.
 	- Swept: The other arms of `encode_key`, the one `encode` caller in `app.rs`, every other reader of the Alt key (mouse report bits, the text boxes, hotkey matching), and `hotkey_in` and `opens_menu_title`, which already skip a Mac. None of them put ESC in front of typed text.
 	- Test case: `option_types_its_character_on_a_mac` (dfegj). It fails with the fix undone, on `[` sent as `ESC [`, and passes with it.
 	- Verified:
@@ -245,7 +245,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- 20261117: The key check on b26 didn't run, since the console was locked. The round's release build there passed.
 	- Branch: nov17-2026111713374903
 	- Commit: 8b8d7703
-	- Acceptance signoff: Self-closed: passed on b26 with a US layout and in the hosted Mac tests. No German layout is set up there; the unit test covers `[` from Option+5.
+	- Acceptance signoff: Self-closed: passed on b26 with a US layout and in the hosted Mac tests. There's no German layout set up there, but the unit test checks `[` from Option+5.
 	- Closed: 20261118-093203
 	- Closed reason: Done
 
@@ -260,18 +260,18 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Target version: rc.1
 	- Incorrect behavior: A current config.shcl with a `kept:` block, such as theme color changes, gets one line at the left margin, like `rows: 40`. At launch the file is rebuilt from the template, and every `kept.changes.*` and `kept.set_aside.*` line is dropped. The launch says only that the config was converted and the old file kept. Nothing says settings were lost. Deleting the file while the program runs does the same through the regrow path.
 	- Expected behavior: A rebuild keeps every block the program owns, and a conversion that drops lines says so.
-	- Reproduced: No. Traced through the code.
+	- Reproduced: No, but it was traced through the code.
 	- Possible cause: `rebuilt_config_text` copies template paths, `themes.*`, monitor sizes and `shells.*`, and drops everything else. `kept.*` was never added to that list.
-	- Origin: The drop branch is from 8553a335, 20261003. The `kept` block is from b043ccbf, 20261009. A regression of the class in Code review 20260914 item 1, whose fix added `shells.*` only. Confirmed by trace.
+	- Origin: The drop branch is from 8553a335, 20261003. The `kept` block is from b043ccbf, 20261009. It's a regression of the class in Code review 20260914 item 1, whose fix added `shells.*` only. Confirmed by trace.
 	- Sweep: Callers of `rebuilt_config_text`: `converted_config_text`, `regrown_doc`, `upgrade`, `unreadable`, `dropped` and `imported_beta1_config`. Only the first 2 and `dropped` can meet a `kept` block.
 	- Related IDs: Code review 20260914 item 1, test dcnw4
-	- Actual cause: The rebuild copied template paths, themes, monitor sizes and the shell list, and dropped every other path. The typo check had its own list of the same subtrees, with `kept.*` in it, and the two drifted. The legacy conversion also threw away the count of what it left behind.
+	- Actual cause: The rebuild copied template paths, themes, monitor sizes and the shell list, and dropped every other path. The typo check had its own list of the same subtrees, with `kept.*` in it, and the 2 lists drifted apart. The legacy conversion also threw away the count of what it left behind.
 	- Decisions:
-		- 20261117: One list, `copied_as_is`, now serves both the rebuild and the typo check, so a subtree the check accepts is one a rebuild keeps. The `kept` lines are copied as dotted lines at the end, as themes are. The block's comment line isn't carried over.
-		- 20261117: A legacy conversion that leaves a setting behind reports it through the same terminal line and notice as a format conversion that writes a new file. No new wording. A clean conversion still prints the old line.
+		- 20261117: The rebuild and the typo check now share one list, `copied_as_is`, so a subtree the check accepts is one a rebuild keeps. The `kept` lines are copied as dotted lines at the end, as themes are. The block's comment line isn't copied.
+		- 20261117: A legacy conversion that leaves a setting behind reports it through the same terminal line and notice as a format conversion that writes a new file, with no new wording. A clean conversion still prints the old line.
 		- 20261117: The regrow path after a delete doesn't report its count. What it leaves is typos and settings written twice, which the launch already named.
 	- Actual fix: `kept.*` goes through the rebuild like `themes.*`. `convert_legacy_config` reports what it left behind.
-	- Swept: Every caller of `rebuilt_config_text` goes through the one branch, so `converted_config_text`, `regrown_doc`, `upgrade`, `unreadable` and `dropped` all keep the block. `imported_beta1_config` ignores the count by an earlier decision. 3 older tests that convert a flat file with leftovers now hold the config lock, since the conversion now sets the shared notice.
+	- Swept: Every caller of `rebuilt_config_text` goes through the one branch, so `converted_config_text`, `regrown_doc`, `upgrade`, `unreadable` and `dropped` all keep the block. `imported_beta1_config` ignores the count by an earlier decision. The 3 older tests that convert a flat file with leftovers now hold the config lock, since the conversion now sets the shared notice.
 	- Branch: nov17-2026111713374901
 	- Commit: 2505c845
 	- Test case: dfef3 `a_rebuilt_file_keeps_the_kept_block`, through the conversion, the launch step with its notice, and a save after a delete. It fails with the old rebuild branch, and fails on the notice with the report taken out.
@@ -292,10 +292,10 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Opened by: CC
 	- Target OS: All
 	- Target version: rc.1
-	- Incorrect behavior: A Windows driver reset, an NVIDIA Xid, or a resume without saved video memory loses the device. Every later frame fails, the app backs off to its 2 s cap and retries on the same dead device forever. The window shows its last frame or black while the shell keeps running.
+	- Incorrect behavior: A Windows driver reset, an NVIDIA Xid, or a resume without saved video memory loses the device. Every later frame fails, and the app backs off to its 2 s cap and retries on the same dead device forever. The window shows its last frame or black while the shell keeps running.
 	- Expected behavior: A lost device is seen, and the window rebuilds its GPU state the way an idle release and wake does.
-	- Reproduced: No. Traced through wgpu-core 29.0.3, which drops device-lost errors and leaves them to a callback that's never set.
-	- Possible cause: Nothing calls `set_device_lost_callback`. `begin_frame` maps the failure to `NoFrame::Other`. The VRAM sentinel and the console watcher cover the GL path only.
+	- Reproduced: No. It was traced through wgpu-core 29.0.3, which drops device-lost errors and leaves them to a callback that's never set.
+	- Possible cause: Nothing calls `set_device_lost_callback`. `begin_frame` maps the failure to `NoFrame::Other`. The VRAM sentinel and the console watcher watch only the GL path.
 	- Origin: c6eaa043, 20260628, with the match arms from 4f2fa502, 20261001. Not seen by an earlier round. Plausible.
 	- Sweep: The dialog's own Gfx has the same refused-frame loop, and the warm dialog device can be lost too.
 	- Swept: every device comes from `request_device` in gfx.rs, which now watches it: the terminal's on the native and GL paths, the warm dialog device, and a dialog's cold one (`grep -n request_device source/src`). The terminal, an open dialog, and the warm device each act on it. The notice window is a `DialogWin`, so it has the dialog's handling.
@@ -310,7 +310,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- `SILK_LOSE_DEVICE=<file>` loses every device made before the file was last touched, at its next frame, for tests.
 	- Decisions:
 		- On the X11 GL path with a dialog up, the terminal waits for the dialogs to close before building again, since there a dialog's context can't outlive the terminal's. Its frames are refused on the 2 s backoff until then.
-		- No rebuild after a count of refused frames, which the detail notes offered as a backstop. The loss is now seen directly, and a count would also rebuild under a busy GPU that only times out.
+		- There's no rebuild after a count of refused frames, which the detail notes listed as a backstop. The loss is now seen directly, and a count would also rebuild under a busy GPU that only times out.
 		- A surface reported Lost rebuilds the whole device rather than only the surface. It's rare, and it reuses the tested release path.
 		- 20261117: Closed without the window run on b26, whose console was locked. The Metal half of it, the lost callback firing, ran in the hosted Mac tests on Metal. The rebuild that follows is the same code that passed on Vulkan and DX12.
 		- 20261117: On vm925w the opaque arm runs on Vulkan, which the app picks there, and only the transparent arm runs on DX12. Both were checked as the app runs them, rather than forcing DX12 for the opaque arm.
@@ -325,7 +325,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- 20261117: On vm925w's RTX 2060 at c19866aa, with Transparency off (Vulkan) and on (DX12): the terminal said it built a new device after each loss, its frames stopped being refused, and output kept changing the picture with no input. With Settings up and Tab pressed, the terminal and Settings each built a new device, Settings drew, nothing panicked, and the program kept running. All 28 checks passed.
 		- 20261117: The hosted `mac.yml` run 44214655794 on nov17 at c19866aa passed build, clippy and tests on macOS arm64, on Metal. `a_lost_device_is_seen` and `a_lost_warm_device_is_let_go` ran there and passed, and neither was among its 2 skips.
 		- 20261117: The window run on b26 was skipped, since its console was locked.
-		- 20261118: On b26's Intel Iris Plus 655 through Metal at 664f75be: the terminal built a new device after a loss and its frames were drawn again. With Settings up, Settings built a new device, and the terminal built one as soon as it was shown again. macOS counted it hidden under Settings, and a hidden window doesn't draw, so it found the loss late. Nothing panicked. 11 of 12 checks passed, the twelfth being that timing.
+		- 20261118: On b26's Intel Iris Plus 655 through Metal at 664f75be: the terminal built a new device after a loss and its frames were drawn again. With Settings up, Settings built a new device, and the terminal built one as soon as it was shown again. macOS counted the terminal as hidden under Settings, and a hidden window doesn't draw, so the terminal found the loss late. Nothing panicked. 11 of 12 checks passed, the twelfth being that timing.
 	- Branch: nov17-2026111713374902
 	- Commit: e3085ef1
 	- Test case: `a_lost_device_is_seen` (dfefp), `a_lost_warm_device_is_let_go` (dfefq), and `cicd/tests/devlost/run.bash` (dfeg0), in the pipeline after dlgwl.
@@ -342,22 +342,22 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Opened by: CC
 	- Target OS: Linux
 	- Target version: rc.1
-	- Incorrect behavior: Another program has config.shcl open. A change in Settings and OK is refused, and the dialog stays open to try again. The other program closes, OK is pressed again, and the dialog closes with nothing written. The value lasts only for the session. Value-row reverts are lost too.
+	- Incorrect behavior: Another program has config.shcl open. A change made in Settings is refused on OK, and the dialog stays open to try again. The other program closes, OK is pressed again, and the dialog closes with nothing written. The value lasts only for the session. Value-row reverts are lost too.
 	- Expected behavior: A retry writes the same changes the first OK tried to write.
 	- Reproduced: 20261117 on b23, by a unit test that holds the file open from a child process, with the old retry put back. The retry wrote nothing.
 	- Possible cause: `apply_dialog_settings` calls `commit_baseline()` even when the write was refused, so the retry finds no change.
-	- Origin: 1d12aa3a, 20260629, then a283cb39, 20260713, which added the busy check. A regression of the closed old-format item "Config file rewriting is proving problematic". Not seen by an earlier review. Confirmed by trace.
-	- Sweep: `commit_baseline` has no other caller.
+	- Origin: 1d12aa3a, 20260629, then a283cb39, 20260713, which added the busy check. It's a regression of the closed old-format item "Config file rewriting is proving problematic". Not seen by an earlier review. Confirmed by trace.
+	- Sweep: `commit_baseline` doesn't have any other caller.
 	- Related IDs: Old-format item "Config file rewriting is proving problematic", closed 20260713
 	- Decisions:
 		- 20261117: Kept for rc.1, since it loses data. rc.1 takes only Critical and High items and anything that crashes or loses data.
-		- 20261117: The live baseline still moves on every Apply, rather than only after a write as the possible cause suggests. A second baseline for the file is kept instead. The live one tells a pick made in the dialog from a remote switch made since, and the save's shell list comes from the live list, so by reading of `shells_to_save`, holding back the live baseline alone would still lose a shell edit.
+		- 20261117: The live baseline still moves on every Apply, rather than only after a write as the possible cause suggests. A second baseline for the file is kept instead. The live one tells a pick made in the dialog from a remote switch made since. The save's shell list also comes from the live list, so going by `shells_to_save`, holding back only the live baseline would still lose a shell edit.
 	- Notes:
 		- Code review 20261117 item 5.
 		- Detail: `detail_backlog.md`, under this ID.
-	- Actual cause: The Apply after a refused write diffed against the values the first Apply had applied live, so it found no change. By reading, a shell list edit was lost the same way, since the save takes the list's baseline from the live list, which the first Apply had already changed.
+	- Actual cause: The Apply after a refused write diffed against the values the first Apply had applied live, so it found no change. Going by the code, a shell list edit was lost the same way, since the save takes the list's baseline from the live list, which the first Apply had already changed.
 	- Actual fix: When a write doesn't go through, the dialog keeps the baseline the file still has, and the next Apply's save diffs against it. The dialog still moves its live baseline on every Apply. A dialog holding such a change counts as changed, so another window's save doesn't replace what it shows, and a shell scan or a window resize is folded into that baseline too.
-	- Swept: `commit_baseline` has its one caller in `apply_dialog_settings`. `persist` callers outside Settings (window size, zoom, ratings, shells at launch) save their own diffs each time and keep no baseline. Hotkey reverts were already kept until a write went through.
+	- Swept: `commit_baseline` has its one caller in `apply_dialog_settings`. `persist` callers outside Settings (window size, zoom, ratings, shells at launch) save their own diffs each time and don't keep a baseline. Hotkey reverts were already kept until a write went through.
 	- Test case: `ok_again_after_a_busy_save_writes_the_same_changes` (dfegz). It failed with the retry diffing against the applied values, at the check that the edit was written, and passes now.
 	- Verified: The backlog quick run passes in all 5 areas, with 1500 unit tests. clippy is clean for Windows.
 	- Branch: nov17-2026111713374904
@@ -379,7 +379,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Expected behavior: A key that can't move the choice does nothing.
 	- Reproduced: 20261117, by test. dfehc and dfehd fail on the code before the fix.
 	- Possible cause: `key_horizontal` calls `set_radio` with the clamped index even when it equals the current one. `Model::set` drops theme changes and turns on the parent setting on any set.
-	- Actual cause: `key_horizontal` and `step_slider` set the value even when the press can't move it. Any set counts as a change. It drops a theme's changes, turns the row's switch on and lifts the automatic mark.
+	- Actual cause: `key_horizontal` and `step_slider` set the value even when the press can't move it. Any set counts as a change, which drops a theme's changes, turns the row's switch on, and lifts the automatic mark.
 	- Origin: e79a250e, 20260805, with 3a052615, 20261009, which made a set drop changes. Not seen by an earlier round. Confirmed by trace.
 	- Sweep: `step_slider` at either end calls `set_f32` with the same value. Up at the top of Font size turns "Use system size" off, and Columns or Rows at the top turn Remember size off. Picking the same option again from an open popup is a recorded behavior and stays.
 	- Swept: the Radio and Dropdown arms of `key_horizontal`, and `step_slider`, which Left, Right, Up and Down all go through. The other `set_radio` and `set_f32` callers are picks by hand and stay as they are: a popup option, a click on a radio, a slider drag, a typed number, and the theme buttons. dfehc walks every slider, radio and dropdown at both ends.
@@ -393,7 +393,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- Detail: `detail_backlog.md`, under this ID.
 	- Branch: nov17-2026111713374905
 	- Commit: b889657c
-	- Test case: dfehc (every slider, radio and dropdown at both ends, with its switch off, changes nothing), dfehd (the theme box at both ends keeps an edited color). dfehc fails at "Function, falloff" with the dropdown check taken out, and at "Opacity %" with the slider check taken out. dfehd fails with the dropdown check taken out. The automatic mark case isn't pinned, since the desktop's size would have to sit at the top.
+	- Test case: dfehc (every slider, radio and dropdown at both ends, with its switch off, changes nothing), dfehd (the theme box at both ends keeps an edited color). dfehc fails at "Function, falloff" with the dropdown check taken out, and at "Opacity %" with the slider check taken out. dfehd fails with the dropdown check taken out. The automatic mark case isn't pinned, since the desktop's size would have to be at the top.
 	- Verified: 20261117, the quick gate (fmt, clippy, 1503 unit tests, scripts, docs).
 	- Acceptance signoff: Self-closed: the change does what the item asked, and its tests fail before the fix and pass after.
 	- Closed: 20261117-155300
@@ -410,19 +410,19 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Target version: rc.1
 	- Incorrect behavior: A key written twice reads as its default, with a warning on stderr. Changing it in Settings fails inside the write and is reported only on stderr, and OK closes the dialog anyway. The next launch is back at the default. Revert edits only the last copy, so the setting then reads as the first copy's value.
 	- Expected behavior: Settings writes one copy and removes the others, as the rating line already does, or refuses the save with a notice.
-	- Reproduced: No. Traced, and the shcl CLI confirms a set on a doubled path fails with "matches multiple instances".
+	- Reproduced: No. It was traced, and the shcl CLI shows that a set on a doubled path fails with "matches multiple instances".
 	- Possible cause: `edit_setting_lines` keeps only the last active line per path. `persist` ignores a `SetStatus::Multiple`. `place_rating_line` handles the same case correctly.
 	- Origin: 9f26b242, 20261003, 5a861038, 20261106, and b043ccbf, 20261009. Not seen by an earlier round. Confirmed by trace.
 	- Sweep: `disabled_text` shares `edit_setting_lines`. `persist_state` and `keep_tested` on the state file stop updating the window size when a key is doubled there.
 	- Actual cause: shcl refuses to set a path that matches more than one copy, and the program's setters only printed that refusal, so the save wrote the file unchanged and reported success. The line edit for a revert or a cleared box kept only the last active line per path, so the first copy stayed in force.
 	- Decisions:
 		- 20261117: Kept for rc.1, since it loses data. rc.1 takes only Critical and High items and anything that crashes or loses data.
-		- 20261117: Took the first of the 2 expected outcomes. A write keeps the first copy with the new value and removes the later ones, as the rating line does. Refusing the save would leave the user to fix the file by hand for a value they just chose.
+		- 20261117: The fix takes the first of the 2 expected outcomes. A write keeps the first copy with the new value and removes the later ones, as the rating line does. Refusing the save would leave the user to fix the file by hand for a value they just chose.
 		- 20261117: A comment above a removed copy moves above the kept one, rather than going with the line.
 		- 20261117: A revert or a cleared box acts on the first copy and removes the later ones, rather than commenting them out, so the file doesn't keep stale copies of the value.
 		- 20261117: Other refusals from a setter are still printed only, and the save still counts as written. The doubled copy is the only refusal the trace found that a user's file can cause.
 	- Actual fix: Every program write to the config or the state file goes through one helper, which on a doubled path removes the later copies and sets the value again. The line edit collects every active line per path, edits the first and drops the rest.
-	- Swept: The one helper covers every setter call in `persist`, `persist_state`, `keep_tested`, the shell, theme, key and monitor writes. `reverted_text` and `disabled_text` share `edit_setting_lines`. The rating line already handled it. The other bare shcl setters in config.rs write a fresh document or the rating, which can't hold a doubled line.
+	- Swept: Every setter call in `persist`, `persist_state`, `keep_tested`, and the shell, theme, key and monitor writes goes through the one helper. `reverted_text` and `disabled_text` share `edit_setting_lines`. The rating line already handled it. The other bare shcl setters in config.rs write a fresh document or the rating, which can't have a doubled line.
 	- Test case: dfehx `a_setting_written_twice_is_written_once` (line edits and a write, in one block and across a block written twice, with a note between the copies) and dfehy `a_save_over_a_setting_written_twice_sticks` (a Settings save, a revert, and the state file's window size and machine test pick). Both fail with the old setter and line edit, and dfehy's revert check fails with the old line edit alone. Both pass now.
 	- Verified: The backlog quick run passes in all 5 areas, with 1505 unit tests.
 	- Branch: nov17-2026111713374906
@@ -445,10 +445,10 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Target version: rc.1
 	- Incorrect behavior: cicd-win.ps1's publish and stage 0 of both pipelines stash the tree, including untracked files, then pull. When the pull fails, the run dies and the tree is left at HEAD. Every edit is only in `stash@{0}`, and nothing names it. A second failed run stacks another stash.
 	- Expected behavior: A failed pull pops the stash before stopping, a leftover stash stops the run before it starts, and a failed pop names the stash.
-	- Reproduced: 20261117, by dd5np on the old `cicd.bash`: a failed pull left the edits only in the stash.
+	- Reproduced: 20261117, by dd5np on the old `cicd.bash`, where a failed pull left the edits only in the stash.
 	- Possible cause: These are copies of the publisher's stash, pull, and pop sequence from before Code review 20260914 item 74 fixed it there.
 	- Origin: f80e5654, 20260715, and 96da7106, 20260722. Code review 20260914 item 74 fixed the shared publisher only. Confirmed by trace.
-	- Sweep: n8git_backup-and-publish already has the fix. No other `stash push` under cicd/ or utility/.
+	- Sweep: n8git_backup-and-publish already has the fix. There isn't any other `stash push` under cicd/ or utility/.
 	- Related IDs: Code review 20260914 item 74
 	- Actual cause: Both pipelines ran the pull under fail-fast with nothing to catch it, so a failed pull ended the run between the stash and its pop. A failed pop ended it the same way, with git's own message only. Nothing checked for a stash an earlier run had left.
 	- Decisions:
@@ -479,26 +479,26 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Opened by: CC
 	- Target OS: All
 	- Target version: rc.1
-	- Incorrect behavior: Tabs A, B, C. The close button on B is pressed and held. A's shell exits and A closes, so C moves into B's place. On release C closes, and its programs are ended without a question. The double-click and hover tip state point at the wrong tab too.
+	- Incorrect behavior: There are tabs A, B, and C. The close button on B is pressed and held. A's shell exits and A closes, so C moves into B's place. On release C closes, and its programs are ended without a question. The double-click and hover tip state point at the wrong tab too.
 	- Expected behavior: A tab closing under a held press cancels the press.
-	- Reproduced: No. Traced. The pointer is over the new tab's close box whenever tabs sit at their natural width.
+	- Reproduced: No, but it was traced. The pointer is over the new tab's close box whenever tabs are at their natural width.
 	- Possible cause: `close_tab_at` cancels a rename but leaves `tab_close_arm`, `tab_dbl`, `tab_hover` and the tab tip, which are all kept by position. `forget_tab_pointer()` exists for this and is called on insert only.
-	- Origin: ff7c5829, 20260723. 75ebca3c, 20261005 fixed the insert side only. Same class as Code review 20260914 item F50, fixed for menus only. Confirmed by trace.
+	- Origin: ff7c5829, 20260723. 75ebca3c, 20261005 fixed the insert side only. It's the same class as Code review 20260914 item F50, fixed for menus only. Confirmed by trace.
 	- Sweep: `Tabs::move_active` also moves tabs without clearing that state.
 	- Related IDs: 2026100513581812, Code review 20260914 F50
 	- Decisions:
 		- 20261117: Kept for rc.1, since it loses data. rc.1 takes only Critical and High items and anything that crashes or loses data.
-		- 20261117: A close anywhere in the strip drops the hold, not only one left of the held tab. That's what the item asks, and a tab closing during a press is rare enough that the simpler rule costs nothing.
+		- 20261117: A close anywhere in the strip drops the hold, rather than only one left of the held tab. That's what the item asks, and a tab closing during a press is rare enough that the simpler rule costs nothing.
 	- Notes:
 		- Code review 20261117 item 9.
 		- Detail: `detail_backlog.md`, under this ID.
 		- The drop wasn't tried in a real window. It's the same call adding a tab already makes.
-	- Actual cause: As above. Closing a tab and moving one with the hotkey both left the pointer's hold on the old position.
+	- Actual cause: Closing a tab and moving one with the hotkey both left the pointer's hold on the old position.
 	- Swept: every place in the window code that changes the tab order: adding a tab, closing one, and the move-tab hotkey. A pending close question names its tab by a pane, so it isn't kept by position. The kept labels compare what they show, so they follow their tab.
 	- Actual fix: Closing a tab and moving one now drop the held close button, the double-click and the hover tip, as adding a tab already did.
 	- Branch: nov17-2026111713374908
 	- Commit: 0f025ca1
-	- Test case: dfejm `a_change_to_the_tab_order_drops_what_the_pointer_held`. It fails with the drop taken out of the close, and again with it taken out of the move.
+	- Test case: dfejm `tab_reorder_drops_pointer_state`. It fails with the drop taken out of the close, and again with it taken out of the move.
 	- Verified: 20261117, the quick gate (fmt, clippy, 1506 unit tests, scripts, docs).
 	- Acceptance signoff: Self-closed: the change does what the item asked, and its test fails before the fix and passes after.
 	- Closed: 20261117-162600
@@ -516,21 +516,21 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Incorrect behavior: A window manager, or a drag across monitors, makes the window wider or taller than the device's texture limit, 8192 on some older Intel and Mali parts and 16384 on most cards. The surface or the offscreen texture is refused, and wgpu's default error handler ends the process.
 	- Expected behavior: The window can't grow past the limit, or draws at the limit when it does.
 	- Reproduced: 20261117 on b23, in software on a private X display and on headless sway. A resize past 16384 ended the program at the offscreen texture on X11 and at the surface on Wayland, with or without a window manager.
-	- Possible cause: `fit_px` holds only the sizes the app asks for. The Resized path passes the window size straight to `Gfx::resize`. No error handler is set outside tests.
+	- Possible cause: `fit_px` limits only the sizes the app asks for. The Resized path passes the window size straight to `Gfx::resize`. No error handler is set outside tests.
 	- Origin: c6eaa043, 20260628, last changed a44e556f, 20261004. The clamp for the app's own sizes is 7d8ccbef, 20261006. Not seen by an earlier round. Confirmed by trace.
 	- Sweep: `Scrim::resize` makes layers at the surface size. The minimap texture and dialogs are held by their own caps, and the wallpaper by its 4096 edge.
 	- Decisions:
 		- 20261117: Kept for rc.1, since it crashes. rc.1 takes only Critical and High items and anything that crashes or loses data.
-		- 20261117: Both halves of the expected behavior. A max size hint keeps the window within the limit where the window manager heeds it, as xfwm4 does. The surface clamp covers the ones that don't, and sway's tiling, where the window is bigger than what is drawn.
+		- 20261117: The fix does both halves of the expected behavior. A max size hint keeps the window within the limit where the window manager heeds it, as xfwm4 does. The surface clamp handles the ones that don't, and sway's tiling, where the window is bigger than what is drawn.
 	- Notes:
 		- Code review 20261117 item 11.
 		- Detail: `detail_backlog.md`, under this ID.
 		- The Windows and macOS paths weren't run. On those a window larger than the screen is rare, and the same hint and clamp apply.
 	- Actual cause: Only the sizes the app asks for were held to the limit. A size the window manager gave went straight to the surface, the offscreen texture and the scrim layers, and wgpu ends the program on a refusal.
 	- Actual fix: The window asks the window manager to keep it within the limit, again after each device rebuild. The surface is held at the limit whatever the window's size, at creation and at each resize, and the scrim and the layout follow the surface, so the grid fits what is drawn. Past the limit the rest of the window isn't drawn.
-	- Swept: `Gfx::resize` and both surface setups (GL and native) cover every window, dialogs included. The scrim now takes the surface's size at launch and at each resize. Other textures at the window's size read the surface's size. The minimap, dialogs and wallpaper keep their own caps.
+	- Swept: `Gfx::resize` and both surface setups, GL and native, handle every window, dialogs included. The scrim now takes the surface's size at launch and at each resize. Other textures at the window's size read the surface's size. The minimap, dialogs and wallpaper keep their own caps.
 	- Test case: `cicd/tests/oversize/run.bash` (dfek4). It failed 6 of 7 checks on the old build and passes with the fix.
-	- Verified: The backlog quick run passes in all 5 areas. clippy is clean for Windows. The new test, run both ways.
+	- Verified: The backlog quick run passes in all 5 areas. clippy is clean for Windows. The new test was run both ways.
 	- Branch: nov17-2026111713374910
 	- Commit: b1e1924c
 	- Acceptance signoff: Self-closed: reproduced, and the test fails without the fix and passes with it.
@@ -556,7 +556,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Decisions:
 		- 20261117: The window title's source is now worked out without reading the tab's label, by `suffix_from`, so the caller can borrow it. The old `window_suffix` stays, test-only, so its tests run unchanged.
 		- 20261117: The tip and banner part went to a child. Their lines pass through 3 layout functions and the whole render, the per-line shaping costs more than the copy, and no window test puts a tip up to measure.
-	- Verified: 20261117. Both new tests fail with the old copy-then-compare and build-then-compare put back, and pass with the fix. The quick run passed, all 5 areas. Clippy for Windows is clean. It wasn't run on Windows, where the task probe's code path is the same as before.
+	- Verified: 20261117. Both new tests fail with the old copy-then-compare and build-then-compare put back, and pass with the fix. The quick run passed in all 5 areas. Clippy for Windows is clean. It wasn't run on Windows, where the task probe's code path is the same as before.
 	- Swept: Every caller of `tab_facts`, `task()`, and `title_prefix`. The tab tip reads the lent facts too. The minimap still copies a running program's name each frame, as before, but no longer a finished one's. The tip and the banner are in the child.
 	- Branch: nov17-2026111623500001
 	- Commit: 172c03df
@@ -578,14 +578,14 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- Each frame copies every label into a new string, and rebuilds each visible search result's heading trail.
 		- Detail: `detail_backlog.md`, under this ID.
 	- Progress log:
-		- 20261117: Measured as heap allocations on the test thread, debug build, the default dialog on the General tab. A sweep of 360 pointer spots, 141 of them over a tip, went from 2159 to 1. One frame's text went from 148 to 91 for 69 items. One frame's text with "size" typed in the search box went from 105 to 24.
+		- 20261117: It was measured as heap allocations on the test thread, in a debug build, with the default dialog on the General tab. A sweep of 360 pointer spots, 141 of them over a tip, went from 2159 to 1. One frame's text went from 148 to 91 for 69 items. One frame's text with "size" typed in the search box went from 105 to 24.
 		- 20261117: Done: finding the tip under the pointer names it without building its words. The words are built only for a frame that draws the tip. A row's words are built to decide only when it has no help of its own.
 		- 20261117: Done: the dialog's text items borrow the fixed words (labels, tab titles, captions, icons, fixed options) rather than copying them each frame.
-		- 20261117: Done: each search result's line and marks are worked out once per query, not once per frame.
+		- 20261117: Done: each search result's line and marks are worked out once per query, rather than once per frame.
 		- 20261117: Done: the hotkey check that runs for every key of every row each frame turns away a key that isn't a hotkey before it walks the rows.
 	- Decisions:
 		- 20261117: A search result's line is still copied into its text item each frame, since a text item can only borrow fixed words. That copy is one string and one list per shown result, where the old path rebuilt the whole trail.
-		- 20261117: Left alone: the theme list that `choices` builds per call, since the frame path doesn't call it at rest, and `shell_cols`, which is a few sums with no allocation.
+		- 20261117: The theme list that `choices` builds per call is left alone, since the frame path doesn't call it at rest. So is `shell_cols`, which is a few sums without any allocation.
 	- Swept: every `TextItem` builder in `settings_ui.rs`, `picker.rs`, `prompt.rs` and `search.rs`. Every caller of `hover_tip`, now test only, and of `tip_under` in `dialog.rs`. Every caller of `dd_closed_label`, which now returns borrowed text for a fixed option. Every caller of `hotkey_for_key`.
 	- Verified: the quick gate passed in all 5 areas. Each new test failed with its part of the change undone (282 tip words built in the sweep, a label copied, 9 result lines worked out again) and passes with it.
 	- Branch: nov17-2026111623500002
@@ -610,18 +610,18 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- Keep one connection per window.
 		- Detail: `detail_backlog.md`, under this ID.
 	- Progress log:
-		- 20261117: Measured on Xvfb under xfwm4, with per-monitor sizes on, as X server connects the process made. Before: 3 per move (layout, button held, monitor under the window), 1 per resize, 17 at launch. After: 0 per move, 0 per resize, 12 at launch.
+		- 20261117: It was measured on Xvfb under xfwm4, with per-monitor sizes on, as the number of X server connects the process made. Before: 3 per move (layout, button held, monitor under the window), 1 per resize, 17 at launch. After: 0 per move, 0 per resize, 12 at launch.
 	- Decisions:
 		- 20261117: The window's state owns the connection, made at the first read and dropped with the window. A read that fails drops it, and the next read connects again, so a server that comes back is picked up.
-		- 20261117: The XWAYLAND check and the two fullscreen atoms are asked once per connection. The atoms are kept only once a window manager has made both.
+		- 20261117: The XWAYLAND check and the 2 fullscreen atoms are looked up once per connection. The atoms are kept only once a window manager has made both.
 		- 20261117: The monitor list is still read from the server each time, since it changes without telling a connection that never asks for events. Its RandR requests now go out together before the replies are read.
-		- 20261117: Events the server sends every client unasked are read off and dropped after each read, so they can't pile up on a connection that lives as long as the window.
-		- 20261117: 2026100314050005 had left this alone as small. This item asks for it, so it's done here.
+		- 20261117: Events the server sends every client unasked are read off and dropped after each read, so they can't pile up on a connection that stays open as long as the window.
+		- 20261117: Item 2026100314050005 had left this alone as small. This item asks for it, so it's done here.
 	- Swept: every `x11rb::connect` in the source. The KDE blur hint and the initial window state (app.rs) run at startup or on a toggle. The transient-for hints, restack and work area (dialog.rs) run when a dialog opens or is activated. The GLX error hook and MIT-SHM check (gfx.rs) run at startup. None runs per move or resize.
 	- Verified: 20261117. dfe50 and dfe51 pass, and both fail with the connection dropped after every read. herdback (deqx1) passes all 20 checks and startsize (ddg81) passes, on the new build. Format, clippy and the unit tests (1477) passed in the quick gate. Clippy is clean for the Windows and macOS targets.
 	- Branch: nov17-2026111623500003
 	- Commit: 903fee6c
-	- Test case: `a_window_keeps_one_x_connection_across_its_reads` (dfe50), `a_failed_x_read_drops_the_connection_and_the_next_read_connects_again` (dfe51)
+	- Test case: `one_x_connection_per_window` (dfe50), `a_failed_x_read_reconnects` (dfe51)
 	- Acceptance signoff: Self-closed: the change does what the item asked, measured before and after, and its tests fail with the keeping broken.
 	- Closed: 20261117-091811
 	- Closed reason: Done
@@ -664,8 +664,8 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Expected behavior: The prepare reports an error, which the device's error handler lets go once the device is lost.
 	- Possible cause: `create_oversized_buffer` in glyphon's `text_render.rs` uses `mapped_at_creation`. Upstream glyphon has the same code.
 	- Estimated effort: Low
-	- Test case: dfekm, run once with the `TextCtx` guards taken out, after the lock takes the new commit.
-	- Actual fix: The fork's `create_oversized_buffer` fills the grown buffer with `queue.write_buffer` rather than a mapped range (fork 79c6c97 on `text-srgb-blend-0.11.0`). The lock takes that commit.
+	- Test case: dfekm, run once with the `TextCtx` guards taken out, after Cargo.lock moves to the new commit.
+	- Actual fix: The fork's `create_oversized_buffer` fills the grown buffer with `queue.write_buffer` rather than a mapped range (fork 79c6c97 on `text-srgb-blend-0.11.0`). Cargo.lock points at that commit.
 	- Verified: 20261118: with the 4 `TextCtx` prepare guards taken out, dfekm passes on the new glyphon and panics on the old one with 'Buffer with glyphon vertices label is invalid'. The fork's own tests pass. The quick gate (fmt, clippy, tests) passed with the guards back, 1513 tests.
 	- Acceptance signoff: Self-closed: dfekm passes without the guards on the new fork commit and fails on the old one.
 	- Closed: 20261118-163612
@@ -682,13 +682,13 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Related IDs: 2026111713374902
 	- Target OS: All
 	- Target version: rc.1
-	- Incorrect behavior: A buffer made on a lost device is invalid, and wgpu panics when glyphon maps it to grow its vertices. Seen with Settings drawing on a device lost at the start of its frame: 'Buffer with glyphon vertices label is invalid' from Buffer::get_mapped_range.
+	- Incorrect behavior: A buffer made on a lost device is invalid, and wgpu panics when glyphon maps it to grow its vertices. It was seen with Settings drawing on a device lost at the start of its frame: 'Buffer with glyphon vertices label is invalid' from Buffer::get_mapped_range.
 	- Expected behavior: A frame that finds its device lost partway through ends quietly, and the device is built again.
 	- Reproduced: 20261117 on b23 under headless sway, with an early build of 2026111713374902's fix that lost the device at the dialog's acquire, before its prepares ran. The final fix doesn't start a frame on a device it knows is lost, so what's left is a loss found by a wgpu call between the prepares.
-	- Possible cause: The prepares run before the acquire in the terminal's frame, and wgpu panics on a mapped range of an invalid buffer whatever the error handler is. A guard between the prepares, or an error scope, may cover it.
+	- Possible cause: The prepares run before the acquire in the terminal's frame, and wgpu panics on a mapped range of an invalid buffer whatever the error handler is. A guard between the prepares, or an error scope, could prevent it.
 	- Actual cause:
 		- glyphon grows a vertex buffer by making it mapped and writing a mapped range, and wgpu panics on a mapped range of a buffer made on a lost device, whatever the error handler is.
-		- Nothing set an uncaptured error handler, so wgpu's own panicked on any validation error. Whatever a frame made after the loss was invalid, and its next use was one.
+		- Nothing set an uncaptured error handler, so wgpu's own panicked on any validation error. Whatever a frame made after the loss was invalid, and its next use raised such an error.
 		- A texture acquired when the acquire found the loss was dropped, and wgpu panics discarding one on a lost device.
 	- Actual fix:
 		- The text context keeps its device's loss flag, and its 4 prepares do nothing once it's set. The frame is refused at its acquire or present as before.
@@ -696,8 +696,8 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- A texture acquired on a device found lost goes back through a present, which does nothing there, rather than a drop.
 		- The glyphon change that removes the mapped range is drafted, in child 2026111717080404.
 	- Decisions:
-		- The guard sits in the text context's prepares rather than between the call sites, so a new prepare can't miss it.
-		- An error handler per device rather than error scopes. Scopes are per thread and would have to wrap each frame, and neither covers the mapped range.
+		- The guard is in the text context's prepares rather than between the call sites, so a new prepare can't miss it.
+		- Each device gets an error handler rather than error scopes. Scopes are per thread and would have to wrap each frame, and neither one prevents the mapped range panic.
 		- Errors before a loss stay fatal, so a real bug still shows the way it did.
 	- Verified:
 		- 20261117: dfekm fails with each of the 4 prepare guards taken out, with the issue's own panic, and passes with them.
@@ -708,7 +708,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- Every device comes from `request_device`, which sets the lost callback and the error handler together (`grep -n request_device source/src`).
 		- Every glyphon prepare goes through the text context's 4 functions (`grep -rn "\.prepare(" source/src`; the minimap's is its own renderer, with no mapped buffer).
 		- No buffer in the source is made mapped. The sentinel reads a range only after its map succeeds. The `SILK_DUMP` readback ignores a failed map, and is left alone as a debug aid on the GL path.
-		- Every other acquired texture reaches `end_frame` and is presented, in the terminal and in a dialog.
+		- Every other acquired texture is passed to `end_frame` and presented, in the terminal and in a dialog.
 	- Test case: `no_text_is_prepared_on_a_lost_device` (dfekm), `errors_after_a_loss_go_quietly` (dfeks), and dfeg0. Child 2026111717080404 adds dfekm run once with the `TextCtx` guards taken out.
 	- Branch: nov17-2026111715110622
 	- Commit: 27014141
@@ -725,14 +725,14 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Opened by: CC
 	- Target OS: Windows
 	- Target version: rc.1
-	- Incorrect behavior: verify-sign.ps1 fails on b29w under pwsh 7: its bad-signature case calls install.ps1's fVerifySignature outside fMain, and fFail then reads `$outputStarted`, which strict mode refuses as not set. So the test sees an error rather than the expected refusal.
+	- Incorrect behavior: verify-sign.ps1 fails on b29w under pwsh 7. Its bad-signature case calls install.ps1's fVerifySignature outside fMain, and fFail then reads `$outputStarted`, which strict mode refuses as not set. So the test sees an error rather than the expected refusal.
 	- Expected behavior: A bad signature is refused with OperationCanceledException, and verify-sign.ps1 passes.
-	- Reproduced: Yes. win-guard-check.bash on b29w, 20261118, against round nov18.
-	- Possible cause: `$outputStarted` has no script-level default, so any caller outside fMain trips strict mode.
+	- Reproduced: Yes, by win-guard-check.bash on b29w on 20261118, against round nov18.
+	- Possible cause: `$outputStarted` doesn't have a script-level default, so any caller outside fMain trips strict mode.
 	- Origin: d9d7b5b2, 20261111, which made fFail read fMain's `$outputStarted` by dynamic scope. Not from round nov18, which doesn't touch those lines. Confirmed.
 	- Actual cause: fFail read `$outputStarted` as a plain variable, and a caller outside fMain never sets it, so strict mode refused the read.
 	- Actual fix: fFail looks the variable up with Get-Variable, which still sees fMain's by dynamic scope and treats a missing one as not started.
-	- Swept: `$outputStarted` is read only in fFail; fMain is the only place that sets it.
+	- Swept: `$outputStarted` is read only in fFail, and fMain is the only place that sets it.
 	- Verified: On Linux pwsh 7, verify-sign.ps1 failed on the old install.ps1 with the strict mode error and passes with the fix, and the install test (dcbdz) and ps-lint pass.
 	- Test case: dcrgs `cicd/tests/release/verify-sign.ps1` (refuses a changed checksums file, a missing signature and another key's signature).
 	- Branch: nov18b-2026111810462273
@@ -751,27 +751,27 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Opened by: CC
 	- Target OS: All
 	- Target version: rc.1
-	- Incorrect behavior: `silkterm --directory $'/data/caf\xe9'`, or `--open`, `--config` or `--wallpaper` with a Latin-1 name, aborts. On Linux that's exit 134 with a core dump. A Windows GUI build ends with no message. A bad argument is meant to give exit 2 and "Try --help."
+	- Incorrect behavior: `silkterm --directory $'/data/caf\xe9'`, or `--open`, `--config` or `--wallpaper` with a Latin-1 name, aborts. On Linux that's exit 134 with a core dump. A Windows GUI build ends without any message. A bad argument is meant to give exit 2 and "Try --help."
 	- Expected behavior: A non-Unicode argument is a parse error with exit 2, or a path flag takes it as is.
 	- Reproduced: No. std documents that `env::args()` panics on such an argument, and the release build aborts on panic.
 	- Possible cause: `std::env::args()` is used rather than `args_os()`.
 	- Origin: c6eaa043, 20260628. Not seen by an earlier round. Confirmed by trace.
-	- Sweep: Only 2 call sites, both in main.rs.
+	- Sweep: There are only 2 call sites, both in main.rs.
 	- Decisions:
 		- 20261117: Kept for rc.1, since it crashes. rc.1 takes only Critical and High items and anything that crashes or loses data.
 	- Notes:
 		- Code review 20261117 item 42.
-		- 20261118: A non-Unicode argument is a parse error with exit 2, rather than a path flag taking it as is, since the options engine and settings hold text.
-	- Swept: Only 2 call sites in source/src/main.rs, both now read `args_os()` through `cli::utf8_args`. The other `env::args()` calls are in dev tools under cicd/ and knobs/demo.
+		- Detail: `detail_backlog.md`, under this ID.
+		- 20261118: A non-Unicode argument is a parse error with exit 2, rather than a path flag taking it as is, since the options engine and settings store text.
+	- Swept: There are only 2 call sites, in source/src/main.rs, and both now read `args_os()` through `cli::utf8_args`. The other `env::args()` calls are in dev tools under cicd/ and knobs/demo.
 	- Test case: dffkj `a_non_unicode_argument_is_an_error_not_a_panic`.
-	- Verified: Before the fix `silkterm --directory $'/data/caf\xe9'` panicked with exit 101 on the debug build. Now it prints "argument is not valid Unicode" and "Try --help." with exit 2. The new test and the quick fmt, clippy and tests areas pass.
+	- Verified: Before the fix `silkterm --directory $'/data/caf\xe9'` panicked with exit 101 on the debug build. Now it prints "argument isn't valid Unicode" and "Try --help." with exit 2. The new test and the quick fmt, clippy and tests areas pass.
 	- Actual cause: main.rs read the arguments with `std::env::args()`, which panics on a non-Unicode one.
 	- Actual fix: `cli::utf8_args` takes `args_os()` and turns a non-Unicode argument into the usual parse error.
 	- Branch: nov18-2026111713374941
 	- Acceptance signoff: Self-closed: the test and a run of the binary show exit 2 where it crashed.
 	- Closed: 20261118-100100
 	- Closed reason: Done
-		- Detail: `detail_backlog.md`, under this ID.
 
 - Both installers rewrite a hand-edited launcher on every upgrade
 	- ID: 2026111713374947
@@ -784,10 +784,10 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Target version: rc.1
 	- Incorrect behavior: install.bash says an existing launcher is left alone since it may have been edited by hand, but a new binary also forces the launcher, so every upgrade overwrites the .desktop file. On Windows the shortcut keeps its arguments and hotkey, so it's mostly spared.
 	- Expected behavior: The launcher is written only when it's missing or names another binary.
-	- Reproduced: No. Traced through the code.
+	- Reproduced: No, but it was traced through the code.
 	- Possible cause: `needBinary` also sets the launcher flags.
 	- Origin: c09beb3e, 20260806. Not seen by an earlier round. Confirmed by trace.
-	- Sweep: No other launcher writers.
+	- Sweep: There aren't any other launcher writers.
 	- Decisions:
 		- 20261117: Kept for rc.1, since it loses data. rc.1 takes only Critical and High items and anything that crashes or loses data.
 		- 20261118: An Exec line still counts as naming the program with arguments or a wrapper added around it, so those hand edits survive. Only a launcher pointed at some other path is rewritten.
@@ -817,10 +817,10 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Target version: rc.1
 	- Incorrect behavior: Its header says it rewrites tracked files, but untracked files that aren't ignored are edited in place and renamed too, which can include another session's work in progress.
 	- Expected behavior: Only tracked files change, unless untracked ones are asked for.
-	- Reproduced: No. Traced through the code.
+	- Reproduced: No, but it was traced through the code.
 	- Possible cause: `git ls-files --others --exclude-standard` is added to the list.
 	- Origin: The first commit, 20260628. Not seen by an earlier round. Confirmed by trace.
-	- Sweep: None found.
+	- Sweep: There weren't any other sites.
 	- Decisions:
 		- 20261117: Kept for rc.1, since it loses data. rc.1 takes only Critical and High items and anything that crashes or loses data.
 		- 20261118: Untracked files are an opt-in, `--untracked`, rather than dropped outright, per the expected behavior. A name that starts with a dash, or more than one name, now gets the usage line.
@@ -849,14 +849,14 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Target version: rc.1
 	- Incorrect behavior: `scroll:` with `minimap.keep_for: "vim"` under it is renamed to `scroll.tui_process_whitelist` rather than `scroll.minimap.tui_process_whitelist`. The value is lost.
 	- Expected behavior: The rename replaces only the last part of the key.
-	- Reproduced: No. Traced through the code.
+	- Reproduced: No, but it was traced through the code.
 	- Possible cause: `migrated_text` picks between the full new path and the new leaf, never the key's prefix plus the new leaf.
 	- Origin: 54351bb6, 20261006, on 78b1919a, 20260804. Not seen by an earlier round. Confirmed by trace.
 	- Sweep: Only `scroll.minimap.keep_for` has 3 parts today. The cursor blink rewrite and the converts have 2 and share the pattern.
 	- Decisions:
 		- 20261117: Kept for rc.1, since it loses data. rc.1 takes only Critical and High items and anything that crashes or loses data.
 		- 20261117: Every rename only changes the leaf, so the key keeps whatever part of the path it was written with and takes the new leaf. A key with the whole path still takes the new path as written.
-	- Actual cause: As guessed. A key that was neither the leaf nor the whole path took only the new leaf.
+	- Actual cause: A key that was neither the leaf nor the whole path took only the new leaf, as the possible cause said.
 	- Actual fix: `renamed_key` keeps the key's own parents and swaps the leaf. The renames, the unit converts and the cursor blink rewrite all use it.
 	- Swept: The rename, the unit converts and the `animation: none` rewrite in `migrated_text` share `renamed_key`. No other rename site writes a key.
 	- Branch: nov17-2026111713374901
@@ -887,7 +887,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Sweep: `import_beta1_config` already runs under the lock and writes atomically.
 	- Decisions:
 		- 20261117: Kept for rc.1, since it loses data. rc.1 takes only Critical and High items and anything that crashes or loses data.
-		- 20261117: The temp copy is linked to the new name rather than renamed, so it can't replace a file that turned up there. On a filesystem without hard links, such as FAT, that writer writes the name directly, as it does for the backups.
+		- 20261117: The temp copy is linked to the new name rather than renamed, so it can't replace a file that turned up there. On a filesystem without hard links, such as FAT, the shared writer writes the name directly, as it does for the backups.
 	- Notes:
 		- Code review 20261117 item 27.
 		- Detail: `detail_backlog.md`, under this ID.
@@ -915,14 +915,14 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Incorrect behavior: With Settings open and changed, a click on the terminal's title-bar X quits and the changes are lost. Ctrl+Q, the macOS Quit menu and a click on the terminal are all held back by the dialog instead.
 	- Expected behavior: With a dialog up, closing the main window focuses the dialog, as a click does.
 	- Reproduced: 20261117, by test. dfehe fails without the close request in the hold.
-	- Possible cause: The dialog's hold on the main window covers keys, wheel, IME, and presses, but not CloseRequested.
-	- Actual cause: As above.
+	- Possible cause: The dialog's hold on the main window applies to keys, wheel, IME, and presses, but not CloseRequested.
+	- Actual cause: The possible cause was right.
 	- Origin: dca3f532, 20260702, and 80f70698, 20261017. Not seen by an earlier round. Confirmed by trace.
-	- Sweep: The notice has the same gap, but holds no changes.
+	- Sweep: The notice has the same gap, but doesn't have any changes to lose.
 	- Swept: the dialog's hold in `window_event` and `notice_holds` both use one rule now, `underneath` in `app/dialogs.rs`. The benchmark banner lets a close through on purpose, and isn't a dialog.
 	- Decisions:
 		- 20261117: Kept for rc.1, since it loses data. rc.1 takes only Critical and High items and anything that crashes or loses data.
-		- 20261117: The notice holds a close too, per the Sweep, so a notice and a dialog follow one rule. That covers About, and Settings' own close while a notice is in front of it, which now brings the notice forward.
+		- 20261117: The notice holds a close too, per the Sweep, so a notice and a dialog follow one rule. That includes About, and Settings' own close while a notice is in front of it, which now brings the notice forward.
 	- Actual fix: A close request on a window under a dialog or notice brings the one on top forward, as a click does.
 	- Notes:
 		- Code review 20261117 item 35.
@@ -945,14 +945,14 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Opened by: CC
 	- Related IDs: 2026111709403848
 	- Target version: rc.1
-	- Requirements: A menu tip wraps at a fixed 320 DIP, whatever the window's width, and the main window has no minimum width, so in a narrow window the box is wider than the window and its lines are cut off. Found by reading the code while fixing the tab tip, not seen on screen.
+	- Requirements: A menu tip wraps at a fixed 320 DIP, whatever the window's width, and the main window doesn't have a minimum width, so in a narrow window the box is wider than the window and its lines are cut off. It was found in the code while the tab tip was being fixed, rather than seen on screen.
 	- Reproduced: 20261117. In a 260 pixel window, the File menu's first tip ran off the right edge mid-word. The new test failed with the old width.
-	- Actual cause: As described.
+	- Actual cause: A menu tip wrapped at a fixed 320 DIP, whatever the window's width.
 	- Actual fix: A menu tip wraps at its 320 DIP width, or at the window's width less the box's padding and edge gap when that's narrower. A wide window wraps as before, so a resize there doesn't wrap the tip again.
 	- Decisions:
 		- 20261117: In a window too narrow for the tip on either side of the menu, it still goes to the left edge, over the menu. There's no room anywhere else.
 		- 20261117: A single word wider than the window still runs off, as in every other tip, since `tip::wrap` never splits a word.
-	- Verified: 20261117. dfe6n fails with the old width (a 324 wide box in a 120 wide window) and passes with the fix. dfe5r passes. ddkre passes, menu tip 23 per frame over rest, limit 28. In a 260 pixel window the same tip wraps onto 2 lines inside it. The quick run passed, all 5 areas.
+	- Verified: 20261117. dfe6n fails with the old width (a 324 wide box in a 120 wide window) and passes with the fix. dfe5r passes. ddkre passes, with the menu tip at 23 allocations per frame over rest, against a limit of 28. In a 260 pixel window the same tip wraps onto 2 lines inside it. The quick run passed in all 5 areas.
 	- Swept: every caller of `tip::beside`, which is only the menu tip, and every use of `MENU_TIP_MAX_W`. The Settings tip uses `wrap_budget`, and the tab tip fits to the window since 2026111709403848.
 	- Test case: dfe6n `a_menu_tip_fits_a_window_narrower_than_its_cap`.
 	- Branch: nov17-2026111709545547
@@ -969,15 +969,15 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Opened: 20261117-094038
 	- Opened by: CC
 	- Target version: rc.1
-	- Requirements: A tab tip with a long path or shell command is wider than a 900 pixel window, starts at the left edge, and its lines are cut off at the right. Seen in ddkre's window, whose shell command is a long temp path. Control: `tab_tip_layout` only clamps the box's left to 0, and never shortens or wraps a line, so any line wider than the window does this.
+	- Requirements: A tab tip with a long path or shell command is wider than a 900 pixel window, starts at the left edge, and its lines are cut off at the right. It was seen in ddkre's window, whose shell command is a long temp path. `tab_tip_layout` only clamps the box's left to 0, and never shortens or wraps a line, so any line wider than the window does this.
 	- Reproduced: 20261117 in unit tests. A table line wider than its budget came back as one line, as wide as before.
-	- Actual cause: As described. The tip's box was as wide as its longest line, with nothing that fitted a line to the window.
+	- Actual cause: The tip's box was as wide as its longest line, with nothing that fitted a line to the window.
 	- Actual fix: A line wider than the window, less the box's padding, goes on over more lines indented to the value column. Each line's fit is kept until it, the window's width, or the text context changes, so a clock tick fits only the clock line again.
 	- Decisions:
 		- 20261117: Wrap rather than cut the line short, since the tip is where the whole path is shown, and the other tips already wrap to the window.
 		- 20261117: A line breaks after a slash, a backslash, or a space when one falls in the back half of the room, and anywhere otherwise. A window too narrow for the key column wraps the whole line flush left.
 		- 20261117: The fit is kept per line. Fitting every line on each clock tick took ddkre's tab tip to 90 allocations per frame over rest, against its limit of 43.
-	- Verified: 20261117. Both new tests fail with the wrap turned off and pass with it. dfe5s and ddgfv pass. ddkre passes, 38 per frame over rest with the tab tip up. In ddkre's 900 pixel window, its long shell command and path wrap under the value column inside the window. The quick run passed, all 5 areas.
+	- Verified: 20261117. Both new tests fail with the wrap turned off and pass with it. dfe5s and ddgfv pass. ddkre passes, with 38 allocations per frame over rest with the tab tip up. In ddkre's 900 pixel window, its long shell command and path wrap under the value column inside the window. The quick run passed in all 5 areas.
 	- Swept: every place the tab tip's lines are read: `tab_tip_layout`, the frame's overlay in `render_with`, and `update_tab_tip`. Menu and Settings tips already wrap. A menu tip's wrap width doesn't follow the window, filed as 2026111709545547. The benchmark banner is fixed text.
 	- Test case: dfe67 `a_tip_line_too_wide_wraps_under_its_value`, dfe68 `a_tab_tip_wraps_to_the_window_it_is_in`.
 	- Branch: nov17-2026111709403848
@@ -997,16 +997,16 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Target OS: All
 	- Target version: rc.1
 	- Incorrect behavior: The grid is counted by dividing the width by the cell width and rounding down in single precision. With a cell of 9.6, 15 cells make 144, which divides back to just under 15, so it counts 14. The window size read back from a grid, and the pane's own column count, both do this.
-	- Expected behavior: A width that holds N whole cells counts as N.
-	- Note: Found while fixing 2026111708050191. Cell sizes that are binary fractions, as in ddyqp, never hit it. Whether a real font's cell lands on one isn't known.
+	- Expected behavior: A width that fits N whole cells counts as N.
+	- Note: It was found while 2026111708050191 was being fixed. Cell sizes that are binary fractions, as in ddyqp, never hit it. It isn't known whether a real font's cell width is ever one of the sizes that do.
 	- Reproduced: 20261117 in unit tests. At a cell of 9.6, a length of 144 px counted 14 cells, and the window's and the pane's counts failed the same way.
-	- Actual cause: As described. The window's size and the pane's grid each floored the width over the cell in f32, and a product that rounds down a hair reads as one cell short.
+	- Actual cause: The window's size and the pane's grid each floored the width over the cell in f32, and a product that rounds down a hair reads as one cell short.
 	- Actual fix: Both counts go through one helper, which counts a cell when the length is within a hundredth of a pixel of it.
 	- Decisions:
 		- 20261117: The slack is 0.01 px. It's well past the f32 error at the largest window, and the part of the last cell it lets through can't be seen. The text buffer doesn't wrap, so a column that much over the width still draws.
 		- 20261117: The width a grid asks for, `window_px`, is left as it is. It still rounds up, which the zoom fix in 2026111708050191 relies on.
-	- Swept: every place a grid count comes from a length over a cell. There are 2, the window's `cells_in` and the pane's `content_dims`, and both use the helper now. The other floors over a cell map a mouse point to a cell, and the command line's split size is a ratio, not a count.
-	- Verified: 20261117. The 3 new tests failed with the slack at 0 and pass with it. dfe3c and ddyqp still pass. The quick gate passed, all 5 areas.
+	- Swept: every place a grid count comes from a length over a cell. There are 2, the window's `cells_in` and the pane's `content_dims`, and both use the helper now. The other floors over a cell map a mouse point to a cell, and the command line's split size is a ratio rather than a count.
+	- Verified: 20261117. The 3 new tests failed with the slack at 0 and pass with it. dfe3c and ddyqp still pass. The quick gate passed in all 5 areas.
 	- Test case: dfe3p `a_length_of_whole_cells_counts_every_cell`, dfe3q `a_grid_reads_back_at_any_cell_size`, dfe3r `a_pane_of_whole_cells_shows_every_cell`.
 	- Branch: nov17-2026111708192137
 	- Commit: 79c98a84
@@ -1027,19 +1027,19 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Steps to reproduce: Turn on Resize window on zoom. Run a full-screen program such as less in a 700x400 window, then press Ctrl+Plus.
 	- Incorrect behavior: The program is told one column more than it had, 64 then 65. On the normal screen the grid is kept, 55 then 55.
 	- Expected behavior: The program keeps its columns and rows.
-	- Note: Found on Xvfb while working 2026111700130407, on the dev build and the 11-10 dogfood build. The alt screen hides the minimap column, which the zoom's size may still count.
+	- Note: It was found on Xvfb during work on 2026111700130407, on the dev build and the 11-10 dogfood build. The alt screen hides the minimap column, which the zoom's size may still count.
 	- Reproduced: 20261117 on Xvfb, with the setting on and a program on the alt screen. The zoom held 64 columns and asked for a window 65 wide.
 	- Origin: e5f8a69, the commit that added Resize window on zoom.
 	- Actual cause: After finding the least width that shows the pane's grid, the zoom rounds it out to whole cells of the window's grid, so the saved size reopens as big. That width was already whole cells, but its pixel count was rounded up, so it read as a bit over 64 cells, and rounding up again made it 65. With the minimap on, the least width usually falls partway into a cell, which is why the normal screen kept its grid. The minimap isn't involved.
 	- Actual fix: A width already at whole cells stays as it is. Any other width goes out to the next whole cell, as before.
-	- Verified: 20261117 on Xvfb, the rig with the fix kept 64 columns on the alt screen and 55 on the normal screen through 2 zooms in and 1 out, and the saved grid stayed 64x15. The new test failed on the old code and passes now. The quick gate passed, all 5 areas.
+	- Verified: 20261117 on Xvfb, the fixed build kept 64 columns on the alt screen and 55 on the normal screen through 2 zooms in and 1 out, and the saved grid stayed 64x15. The new test failed on the old code and passes now. The quick gate passed in all 5 areas.
 	- Swept: the other `ceil` near a cell size in the source is `window_px` itself, which this relies on. The height takes the same path, through the same function.
 	- Decisions:
 		- 20261117: The float edge found on the way, where a width of exactly N cells counts as N-1 at some cell sizes, is its own item, 2026111708192137. It's older than this and touches every grid count.
 	- Test case: dfe3c `a_size_already_at_whole_cells_keeps_its_grid`.
 	- Branch: nov17-2026111708050191
 	- Commit: f8ac2cb1
-	- Acceptance signoff: Self-closed: the bug was reproduced, its test failed before the fix and passes after, and the rig shows the program keeps its grid.
+	- Acceptance signoff: Self-closed: the bug was reproduced, its test failed before the fix and passes after, and the program kept its grid on Xvfb.
 	- Closed: 20261117-082100
 	- Closed reason: Done
 
@@ -1058,12 +1058,12 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- Detail: `detail_backlog.md`, under 2026111623500001, third bullet.
 	- Progress log:
 		- 20261117: Done: the tab tip, a menu tip, and the banner hand the frame where their box and lines go, and the frame borrows the words from where they're kept. The banner's words are fixed text, so it never copies them.
-		- 20261117: Measured in ddkre's window as allocations per frame on the window thread. With a tab tip up it went from 190 to 192 down to 184 to 185, 145 at rest in every run. With a menu tip up, 179 down to 168, with 2026111623500004 in.
+		- 20261117: It was measured in ddkre's window as allocations per frame on the window thread. With a tab tip up it went from 190 to 192 down to 184 to 185, and 145 at rest in every run. With a menu tip up it went from 179 down to 168, with 2026111623500004 in.
 		- 20261117: What's left over rest, about 40 with a tab tip and 23 with a menu tip, is mostly the second render pass the tip layer adds. That wasn't split out further.
 	- Decisions:
 		- 20261117: The banner keeps its line lefts in a fixed array of 4. Every banner text has 2 or 3 lines, and dfe5w fails on one with more.
-		- 20261117: ddkre now holds a tab tip and a menu tip up, and checks each frame's count over the frame at rest, so the driver's floor cancels out. Limits 43 and 28. The window prints a note as each tip comes up, so a hover that missed fails rather than passing on nothing.
-	- Verified: 20261117. ddkre passes on the new build and fails both tip limits on the old one (47 and 34 over rest). The quick run passed fmt, clippy, tests, scripts, and docs, the last 2 run again after the first full call ran past 4 minutes.
+		- 20261117: ddkre now puts a tab tip and a menu tip up, and checks each frame's count over the frame at rest, so the driver's floor cancels out. The limits are 43 and 28. The window prints a note as each tip comes up, so a hover that missed fails rather than passing on nothing.
+	- Verified: 20261117. ddkre passes on the new build and fails both tip limits on the old one (47 and 34 over rest). The quick run passed fmt, clippy, tests, scripts, and docs.
 	- Swept: every caller of `tab_tip_layout`, `menu_tip_layout`, and `bench_layout`, all in `render_with`. Nothing past them in the frame takes `&mut self`.
 	- Branch: nov17-2026111708444862
 	- Commit: 0aa7ed15
@@ -1087,11 +1087,11 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Progress log:
 		- 20261117: Done: a menu tip and a Settings tip are wrapped and measured once while they stay up, and again only when the words, the width, or the font change.
 		- 20261117: Done: the menu bar's titles and copy labels are measured once per text context, which a font, size, or scale change replaces. Before, each hit test and frame looked all 9 up again in the width memo.
-		- 20261117: Measured in ddkre's window, a frame with a menu tip up went from 179 allocations to 168, with 2026111708444862 in. 240 frames of a kept tip allocate nothing, where wrapping it each frame took 2640. 240 menu bar lookups measure once, where they measured 241 times.
+		- 20261117: In ddkre's window, a frame with a menu tip up went from 179 allocations to 168, with 2026111708444862 in. A kept tip allocates nothing over 240 frames, where wrapping it each frame took 2640. Over 240 menu bar lookups the titles are measured once, where they were measured 241 times.
 	- Decisions:
-		- 20261117: The kept tip lives in the window's state for a menu tip, and beside the dialog's shaped text for a Settings tip, which is taken out for the frame so shaping can use the rest.
-	- Verified: 20261117. Each new test fails with its cache turned off (2640 allocations, 241 measures, 5 wraps over 6 frames) and passes with it. The quick run passed, all 5 areas.
-	- Swept: every `tip::wrap` caller outside tests: the menu tip, the Settings tip, and none else. The About link's tip is one line and was measured once already. Every caller of `menubar_layout` and `copybox_layout`.
+		- 20261117: The kept tip is stored in the window's state for a menu tip, and beside the dialog's shaped text for a Settings tip, which is taken out for the frame so shaping can use the rest.
+	- Verified: 20261117. Each new test fails with its cache turned off (2640 allocations, 241 measures, 5 wraps over 6 frames) and passes with it. The quick run passed in all 5 areas.
+	- Swept: every `tip::wrap` caller outside tests, which are the menu tip and the Settings tip. The About link's tip is one line and was measured once already. Every caller of `menubar_layout` and `copybox_layout`.
 	- Branch: nov17-2026111708444862
 	- Commit: 0aa7ed15
 	- Test case: `a_kept_tip_is_wrapped_once_while_it_stays_up` (dfe5r), `a_drawn_tip_is_wrapped_once_while_it_stays_up` (dfe5v), `the_menu_bar_measures_its_text_once` (dfe5t). ddkre's menu tip limit, which the old build fails.
@@ -1111,15 +1111,15 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- Each change, including each step of a slider drag, clones the model before setting one value.
 		- Detail: `detail_backlog.md`, under this ID.
 	- Progress log:
-		- 20261117: Measured with every setting stored (96 values): the copy cost 135 allocations, and a change 617, against 480 for the fill after it.
-		- 20261117: The Settings rules now read only the fields they need, never the model, so a change and a reset set the model in place. A theme pick's font does the same. A change now costs 482 allocations, the fill and 2 more.
+		- 20261117: With every setting stored, 96 values, the copy cost 135 allocations, and a change cost 617, against 480 for the fill after it.
+		- 20261117: The Settings rules now read only the fields they need rather than the whole model, so a change and a reset set the model in place. A theme pick's font does the same. A change now costs 482 allocations, the fill and 2 more.
 	- Decisions:
 		- 20261117: The theme save's what-if for colors under a switch still works on a copy, since it must leave the stored values alone and runs only on a save.
 	- Branch: nov17-2026111623500005
 	- Commit: fb77c7f4
 	- Test case: dfe70 `a_change_does_not_copy_the_model`. A change or a reset with every setting stored costs less than a quarter of the stored count beyond a fill.
-	- Verified: 20261117. dfe70 fails with the copy put back (617 against a fill's 480) and passes with the fix. The quick run passes, all five areas, 1486 unit tests. Miri wasn't run, since the quick run has no Miri area and the new test is skipped under Miri.
-	- Swept: every `model.clone()` in the tree. `set`, `reset` and the theme font path are fixed. The theme save's what-if is kept, per Decisions. The other is in a config test. Every `Env::new` caller still builds through the same fields.
+	- Verified: 20261117. dfe70 fails with the copy put back (617 against a fill's 480) and passes with the fix. The quick run passes in all 5 areas, with 1486 unit tests. Miri wasn't run, since the quick run doesn't have a Miri area and the new test is skipped under Miri.
+	- Swept: every `model.clone()` in the tree. `set`, `reset` and the theme font path are fixed. The theme save's what-if is kept, per Decisions. The remaining one is in a config test. Every `Env::new` caller still builds through the same fields.
 	- Acceptance signoff: Self-closed: the cost was pinned by a test that fails on the old code, and the rules read the same values as before.
 	- Closed: 20261117-101357
 	- Closed reason: Done
@@ -1137,12 +1137,12 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- Read and parse it once.
 		- Detail: `detail_backlog.md`, under this ID.
 	- Progress log:
-		- 20261117: Counted on a launch with no display, which stops after the settings read. A launch with a current file opened `config.shcl` 10 times and ran 22 shcl parses, 20 of them on the file's text. Now it opens it once and runs 11 parses, 9 on the file's text. A first launch with no file went from 11 opens to 2.
+		- 20261117: It was counted on a launch without a display, which stops after the settings read. A launch with a current file opened `config.shcl` 10 times and ran 22 shcl parses, 20 of them on the file's text. Now it opens it once and runs 11 parses, 9 on the file's text. A first launch without a file went from 11 opens to 2.
 	- Decisions:
 		- 20261117: The file is read once before the launch steps. Each step works on the text the one before it left, and a write that fails, or that the test guard skips, reads the file again.
 		- 20261117: The last step parses once, and that document feeds the complaints, the values and the settings model. A write's restated messages parse once too.
-		- 20261117: Departs from "parse it once". Each step still checks the text it gets for an older format, since a step can change the text. The check skips its second parse for a file with no errors, which shcl's upgrade leaves as it is anyway. The legacy check parses only when a flat old name is there. The state move parses its second copy only for a file that has state in it.
-		- 20261117: The `walk_settings` path change in the detail was tried and measured at about 2% of a walk, which is about 48 microseconds. Not kept.
+		- 20261117: This departs from "parse it once". Each step still checks the text it gets for an older format, since a step can change the text. The check skips its second parse for a file without any errors, which shcl's upgrade leaves as it is anyway. The legacy check parses only when a flat old name is there. The state move parses its second copy only for a file that has state in it.
+		- 20261117: The `walk_settings` path change in the detail was tried and measured at about 2% of a walk, which is about 48 microseconds. It wasn't kept.
 	- Swept: every `std::fs::read` of the settings path inside `load`, all of them now through the one read. `restated_launch_messages` shared the double parse and takes the single one. Saves and the dialog read the file on their own and aren't part of a launch.
 	- Verified: 20261117. dfe7m and dfe7n pass, and both fail with a step that reads the disk again or a write the next step doesn't see. The quick gate passed: format, clippy, 1488 unit tests, script lints, and docs.
 	- Branch: nov17-2026111623500006
@@ -1166,13 +1166,13 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Progress log:
 		- 20261117: Done: the window's text area lists, main and halo, are kept between frames, and the menu and tip areas go to the renderer without a list. The dialog does the same for its 3 area lists.
 		- 20261117: Done: a rebuild puts the row fingerprints into the list it swapped out last time.
-		- 20261117: Done: the dialog finds kept shaped text by a borrowed key, so a frame at rest builds no key. Its rect and text lists are kept between frames too.
-		- 20261117: Measured in ddkre's window, allocations per frame on the window thread, 3 runs each. A drag went from 307, 302, 302 to 296, 298, 294. At rest and with a tip up it's the same as before, since those frames skip the area build. A default Settings frame at rest, on the test thread, went from 201 to 129 for 69 text items, with the old key build put back for the before figure.
+		- 20261117: Done: the dialog finds kept shaped text by a borrowed key, so a frame at rest doesn't build a key. Its rect and text lists are kept between frames too.
+		- 20261117: It was measured in ddkre's window as allocations per frame on the window thread, over 3 runs each. A drag went from 307, 302, 302 to 296, 298, 294. At rest and with a tip up it's the same as before, since those frames skip the area build. A default Settings frame at rest, on the test thread, went from 201 to 129 for 69 text items, with the old key build put back for the before figure.
 	- Decisions:
-		- 20261117: Left alone: the template's expanded copies, since tab labels are now built only when something they show changes, and the color emoji fallback's family list, which is built once per character and kept.
+		- 20261117: The template's expanded copies are left alone, since tab labels are now built only when something they show changes. So is the color emoji fallback's family list, which is built once per character and kept.
 		- 20261117: `snapshot_rows` stays for the tests and the replay, as a wrapper over the new `snapshot_rows_into`. The dialog's `compose` and `scene` do the same over `compose_into` and `scene_into`.
-	- Verified: 20261117. Each new test fails with its part undone (a new list in place of the kept one; a key built for each lookup, 360 allocations over 60 frames; the dialog's lists not kept, 132 against 132) and passes with it. ddgh2 passes. The quick run passed, all 5 areas.
-	- Swept: every caller of the 4 `prepare` functions in `text.rs`, in `app.rs` and `dialog.rs`. Every list of `TextArea` in the source. Every place that sets `last_rows`; `pane/replay.rs` is test-only and keeps its own list.
+	- Verified: 20261117. Each new test fails with its part undone (a new list in place of the kept one; a key built for each lookup, 360 allocations over 60 frames; the dialog's lists not kept, 132 against 132) and passes with it. ddgh2 passes. The quick run passed in all 5 areas.
+	- Swept: every caller of the 4 `prepare` functions in `text.rs`, in `app.rs` and `dialog.rs`. Every list of `TextArea` in the source. Every place that sets `last_rows`. `pane/replay.rs` is test-only and keeps its own list.
 	- Test case: `reused_areas_keep_their_buffer` (dfe85), `kept_text_is_found_without_building_a_key` (dfe86), `a_frame_fills_the_last_frames_lists` (dfe87). ddkre's drag figures above.
 	- Branch: nov17-2026111623500007
 	- Commit: 5cc9ed6d
@@ -1195,7 +1195,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- Detail: `detail_backlog.md`, under this ID.
 	- Actual fix: `fInk` and `fDiff` lock the bitmap as 32-bit ARGB and count in a small C# class, a row at a time. The thresholds, sampling and rounding are the same as before.
 	- Decisions:
-		- 20261117: The C# takes the locked memory and its stride rather than a `Bitmap`, so it needs no System.Drawing reference under either PowerShell, and its counting can be tested on Linux.
+		- 20261117: The C# takes the locked memory and its stride rather than a `Bitmap`, so it doesn't need a System.Drawing reference under either PowerShell, and its counting can be tested on Linux.
 		- 20261117: `fDiff` of a bitmap against itself returns 0 without locking, since a bitmap can't be locked twice. A step under 1 counts as 1, where the old loop never ended.
 	- Verified: 20261117 on b29w. The old and new functions gave the same answer in all 270 cases: 15 images in 32-bit, premultiplied, 24-bit, 16-bit, 8-bit indexed, BMP-loaded, cropped and bottom-up forms, sizes from 1x1 to 1280x720, steps 1 to 7, and edge cases. On a 1280x720 image, ink took 266 ms of CPU before and under 2 ms after, and diff 1.3 to 2.2 s before and 2.3 ms after, at 1 to 4% load. The `smoke` and `settingsdlg` scenarios passed with the change, and `idlewake`'s ink and diff readings looked as before.
 		- `idlewake`'s opaque arm failed "typing reached the shell" in that run. That check types and looks for a file, and doesn't read pixels.
@@ -1221,10 +1221,10 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Target version: rc.2
 	- Incorrect behavior: A tab has panes A and B. Shift+press on A starts a drag, and A's shell exits. Dropping on B swaps a pane that no longer exists into the layout. B still draws at its old place but is never resized again, can't be split, and closing it leaves a blank area for good. On macOS, Command+] during a Shift+drag switches tabs, and the drop then swaps across 2 tabs.
 	- Expected behavior: A drag whose pane closed, or whose tab changed, is dropped.
-	- Reproduced: No. Traced for the layout damage. The effects on screen are from reading.
+	- Reproduced: No. The layout damage was traced, and the effects on screen were read from the code.
 	- Possible cause: `close_dead_pane` clears the menu but not `dragging_pane`. `swap_leaves` assumes both ids are leaves of this tab's tree.
-	- Origin: c6eaa043, 20260628. Same class as Code review 20260914 F50. Not seen by an earlier round. Confirmed by trace.
-	- Sweep: The other pane-id drag states look the pane up on release and are safe. `resizing` keeps a tree path, which can move a different divider, cosmetic only.
+	- Origin: c6eaa043, 20260628. It's the same class as Code review 20260914 F50. Not seen by an earlier round. Confirmed by trace.
+	- Sweep: The other pane-id drag states look the pane up on release and are safe. `resizing` keeps a tree path, which can move a different divider, but that's only cosmetic.
 	- Related IDs: Code review 20260914 F50
 	- Notes:
 		- Code review 20261117 item 10.
@@ -1239,9 +1239,9 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Opened by: CC
 	- Target OS: All
 	- Target version: rc.2
-	- Incorrect behavior: Removing a found shell such as zsh in Settings and pressing OK lasts until the next launch, when the scan adds it back. If the scan finishes while Settings is open, it's added back at once. The same pass switches off a line just made with Add, or one with a half-typed command, and saves it off. It can also drop a duplicate row above the line being edited, so the edit moves to the next entry.
+	- Incorrect behavior: A found shell such as zsh, removed in Settings with OK, stays removed only until the next launch, when the scan adds it back. If the scan finishes while Settings is open, it's added back at once. The same pass switches off a line just made with Add, or one with a half-typed command, and saves it off. It can also drop a duplicate row above the line being edited, so the edit moves to the next entry.
 	- Expected behavior: A removed shell stays removed, and the scan never changes a line made in the dialog.
-	- Reproduced: No. Traced through the code.
+	- Reproduced: No, but it was traced through the code.
 	- Possible cause: `shells::merge_with` only adds, and nothing records a removal. An empty command reads as "not installed".
 	- Origin: 37bd34a0, 20260818, and 36d99d5f, 20260819. Not seen by an earlier round. Confirmed by trace.
 	- Sweep: `app.rs` `fold_shells` at launch has the same cause.
@@ -1258,12 +1258,12 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Opened by: CC
 	- Target OS: All
 	- Target version: rc.2
-	- Incorrect behavior: `printf 'e\u0301 \u0915\u093f \u2764\ufe0f 1\ufe0f\u20e3\n'` shows a plain e, a bare क, a text-style heart and a plain 1. Decomposed accents, Indic vowel signs, Thai tone marks, Hebrew points, emoji presentation, keycaps, and ZWJ sequences all lose their marks. Copy on select keeps them, Copy output doesn't.
+	- Incorrect behavior: `printf 'e\u0301 \u0915\u093f \u2764\ufe0f 1\ufe0f\u20e3\n'` shows a plain e, a bare क, a text-style heart and a plain 1. Decomposed accents, Indic vowel signs, Thai tone marks, Hebrew points, emoji presentation, keycaps, and ZWJ sequences all lose their marks. Copy on select keeps them, but Copy output doesn't.
 	- Expected behavior: Marks are drawn with their base character, and every copy keeps them.
-	- Reproduced: No. Confirmed by search: no code outside tests reads `Cell::zerowidth()`.
+	- Reproduced: No, but a search confirmed that no code outside tests reads `Cell::zerowidth()`.
 	- Possible cause: Each cell adds only `cell.c` to the row text and the glyph list.
 	- Origin: c6eaa043, 20260628, and 2c09aa5b, 20260802. Code review 20260914 item 65 capped the marks but didn't check that they're drawn. Confirmed by trace.
-	- Sweep: `capture_grid_text` and `strip_cell` drop them the same way. A tab cell copies as a tab plus padding, and a wide spacer at a wrap as a space, minor siblings to fold in.
+	- Sweep: `capture_grid_text` and `strip_cell` drop them the same way. A tab cell copies as a tab plus padding, and a wide spacer at a wrap as a space. Those are minor siblings to fold in.
 	- Related IDs: Code review 20260914 item 65
 	- Notes:
 		- Code review 20261117 item 13.
@@ -1278,9 +1278,9 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Opened by: CC
 	- Target OS: All
 	- Target version: rc.2
-	- Incorrect behavior: With a Russian layout, Ctrl+C gives the letter с, and nothing reaches the shell. The same for Ctrl+D, Ctrl+Z, readline's Ctrl+A, E and R, and the Ctrl+Shift+C, V and T hotkeys. Greek, Hebrew, and Arabic layouts act the same.
+	- Incorrect behavior: With a Russian layout, Ctrl+C gives the letter с, and nothing is sent to the shell. It's the same for Ctrl+D, Ctrl+Z, readline's Ctrl+A, E and R, and the Ctrl+Shift+C, V and T hotkeys. Greek, Hebrew, and Arabic layouts act the same.
 	- Expected behavior: Ctrl with a non-ASCII letter falls back to the key's Latin position, as VTE, Windows Terminal, and kitty do.
-	- Reproduced: No. Traced on the macOS path. X11 and Windows are from reading winit.
+	- Reproduced: No. It was traced on the macOS path, and the X11 and Windows paths were read from winit.
 	- Possible cause: Nothing reads `physical_key`. `encode_key` matches only ASCII letters.
 	- Origin: c6eaa043, 20260628. The 20260914 round turned down only Ctrl with a digit or `?`. Plausible.
 	- Sweep: `keys.rs` `Bindings::hotkey`, `input::hotkey_in`, the dialog and tab rename edit keys and the menu accelerators all key on `logical_key`.
@@ -1297,10 +1297,10 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Opened by: CC
 	- Target OS: All
 	- Target version: rc.2
-	- Incorrect behavior: With a mono font that covers Hebrew, such as DejaVu Sans Mono, `ls` showing `שלום.txt` at the start of a row draws the row as a right-to-left paragraph. Trailing blanks move to the left and the runs reverse. Cursor, selection, and cell colors stay in cell order, so they sit on the wrong glyphs. A font without Hebrew draws the same row correctly.
+	- Incorrect behavior: With a mono font that has Hebrew, such as DejaVu Sans Mono, `ls` showing `שלום.txt` at the start of a row draws the row as a right-to-left paragraph. Trailing blanks move to the left and the runs reverse. Cursor, selection, and cell colors stay in cell order, so they're drawn on the wrong glyphs. A font without Hebrew draws the same row correctly.
 	- Expected behavior: Every row is laid out left to right in cell order, whatever its first strong character.
-	- Reproduced: No. Read from cosmic-text 0.18.2, which picks the paragraph direction from the first strong character.
-	- Possible cause: `set_buffer_rows` shapes with Advanced shaping and sets no base direction.
+	- Reproduced: No. It was read from cosmic-text 0.18.2, which picks the paragraph direction from the first strong character.
+	- Possible cause: `set_buffer_rows` shapes with Advanced shaping and doesn't set a base direction.
 	- Origin: 349c92bf, 20260731. Not seen by an earlier round. Plausible.
 	- Sweep: The scrim buffer and the strip lines use the same shaping.
 	- Notes:
@@ -1316,10 +1316,10 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Opened by: CC
 	- Target OS: Linux
 	- Target version: rc.2
-	- Incorrect behavior: prerequisites.md asks for Vulkan or GL. With no Vulkan driver, the main X11 window draws through GL, but dialogs ask wgpu for Vulkan only and fail. Nothing shows. stderr says "dialog window failed". The close question falls back to ending nothing, and config refusal notices are lost.
+	- Incorrect behavior: prerequisites.md asks for Vulkan or GL. Without a Vulkan driver, the main X11 window draws through GL, but dialogs ask wgpu for Vulkan only and fail. Nothing shows. stderr says "dialog window failed". The close question falls back to ending nothing, and config refusal notices are lost.
 	- Expected behavior: Dialogs open wherever the main window can draw.
-	- Reproduced: No. Read only.
-	- Possible cause: Dialogs use `Backends::PRIMARY` to avoid the wgpu EGL teardown crash, with no other route.
+	- Reproduced: No. It was only read from the code.
+	- Possible cause: Dialogs use `Backends::PRIMARY` to avoid the wgpu EGL teardown crash, without any fallback.
 	- Origin: c6eaa043, 20260628, and 87a79faf, 20260804. Not seen by an earlier round. Plausible.
 	- Sweep: `new_about`, `new_notice`, `new_ask` and `new_settings` all go through `DialogWin::make`.
 	- Notes:
@@ -1337,7 +1337,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Target version: rc.2
 	- Incorrect behavior: XQuartz sets DISPLAY to a launchd socket path for every app. The remote check reads everything before the first `:` as a host, so every session gets the Remote profile, with no wallpaper and the plain look, and nothing says why.
 	- Expected behavior: DISPLAY is ignored on macOS, and a path-form DISPLAY reads as local everywhere.
-	- Reproduced: No. Traced. XQuartz's DISPLAY form is documented but wasn't run here.
+	- Reproduced: No, but it was traced. XQuartz's DISPLAY form is documented, but it wasn't tried here.
 	- Possible cause: `forwarded_display` runs on every non-Windows platform and treats a socket path as a host.
 	- Origin: 91ce68f0, 20260904, broadened by Code review 20260914 item F41. Confirmed by trace.
 	- Sweep: `profile.rs` ~189 is the only DISPLAY reader.
@@ -1355,9 +1355,9 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Opened by: CC
 	- Target OS: Windows
 	- Target version: rc.2
-	- Incorrect behavior: With a profile folder like `C:\Users\O'Brien`, pwsh from scoop, a per-user Python, nu, and others are found, then dropped. The command is stored unquoted, the splitter reads `'` as an opening quote to the end of the line, and the result names no program.
-	- Expected behavior: Every found shell is listed and runs, whatever its path holds.
-	- Reproduced: No. Traced through the code.
+	- Incorrect behavior: With a profile folder like `C:\Users\O'Brien`, pwsh from scoop, a per-user Python, nu, and others are found, then dropped. The command is stored unquoted, the splitter reads `'` as an opening quote to the end of the line, and the result doesn't name any program.
+	- Expected behavior: Every found shell is listed and runs, whatever its path contains.
+	- Reproduced: No, but it was traced through the code.
 	- Possible cause: `quoted()` wraps only on a space, while `shell_split` also gives meaning to quotes and backslashes. An unclosed quote isn't an error.
 	- Origin: 37bd34a0, 20260818. Not seen by an earlier round. Confirmed by trace.
 	- Sweep: `shells::command_line` uses the same space-only rule. `wsl.exe -d` names and the tab tip are safe.
@@ -1374,11 +1374,11 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Opened by: CC
 	- Target OS: All
 	- Target version: rc.2
-	- Incorrect behavior: On a push to main, the gate runs in a throwaway worktree with no siblings. The private runner reads as not checked out, so the Mac and Store jobs don't run. The private tests and their test-ID check are skipped. The content scrub finds no script and passes quietly. The hook's own scrub reads the working tree rather than the commits being pushed.
+	- Incorrect behavior: On a push to main, the gate runs in a throwaway worktree without any siblings. The private runner reads as not checked out, so the Mac and Store jobs don't run. The private tests and their test-ID check are skipped. The content scrub doesn't find its script and passes quietly. The hook's own scrub reads the working tree rather than the commits being pushed.
 	- Expected behavior: The gate finds the private checkout and the scrub from the real checkout, and the scrub reads the pushed commits.
-	- Reproduced: No. Traced through the code.
+	- Reproduced: No, but it was traced through the code.
 	- Possible cause: These paths are found from `${root}/..`, which in the worktree is the temp folder.
-	- Origin: 2314eb1c, 20261006, 6ddd84a9, 20261028, with 64cc76c3 and b3de0d28. Item 2026102616543943 notes the gate was never run from the hook. Same class as Code review 20260914 F83. Confirmed by trace.
+	- Origin: 2314eb1c, 20261006, 6ddd84a9, 20261028, with 64cc76c3 and b3de0d28. Item 2026102616543943 notes the gate was never run from the hook. It's the same class as Code review 20260914 F83. Confirmed by trace.
 	- Sweep: These are the only `root}/..` uses in cicd.bash and config.bash.
 	- Related IDs: 2026102616543943, Code review 20260914 F83
 	- Notes:
@@ -1396,7 +1396,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Target version: rc.2
 	- Incorrect behavior: `sync --ref fixbranch` with the branch not pushed, a typo, or the box offline leaves the remote clone where it was, prints its old commit and exits 0. The next `job test` then passes against whatever the clone had.
 	- Expected behavior: A failed clone, fetch, or reset exits non-zero, and the output names the ref the clone ended on.
-	- Reproduced: Yes, the PowerShell part: with `$ErrorActionPreference = "Stop"`, a failing `git reset --hard origin/nope 2>&1 | Out-Null` keeps going and the script exits 0 under pwsh 7.6.10.
+	- Reproduced: Yes, for the PowerShell part. With `$ErrorActionPreference = "Stop"`, a failing `git reset --hard origin/nope 2>&1 | Out-Null` keeps going and the script exits 0 under pwsh 7.6.10.
 	- Possible cause: Since PowerShell 7.2, Stop doesn't apply to a native program's exit code, and the script never reads `$LASTEXITCODE`.
 	- Origin: 1d2b7719, 20260908, and ccd2ea4d, 20260909. Not seen by an earlier round. Confirmed.
 	- Sweep: The win-jobs build, test, and clippy scripts read `$LASTEXITCODE`. info.ps1 only reads.
@@ -1415,7 +1415,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Target version: rc.2
 	- Incorrect behavior: The first launch of a file from before 20261009 with colors set over a built-in theme folds dotted lines into blocks, moves top comments, collapses blank lines, and turns spaces into tabs. Every other launch write keeps untouched bytes as they were.
 	- Expected behavior: The move changes only the lines it moves.
-	- Reproduced: No. Traced, and `shcl fmt` shows the canonical rewrite.
+	- Reproduced: No, but it was traced, and `shcl fmt` shows the canonical rewrite.
 	- Possible cause: `move_theme_colors` loads with `Document::parse` where every other user-file save uses `parse_kept`.
 	- Origin: b043ccbf, 20261009. Not seen by an earlier round. Confirmed by trace.
 	- Sweep: Other `Document::parse` saves are on the template or the program's own state file.
@@ -1432,9 +1432,9 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Opened by: CC
 	- Target OS: Windows
 	- Target version: rc.2
-	- Incorrect behavior: On the first launch, the banner refresh writes a CRLF file back as LF with no copy kept. Revert, disable, and rating writes do the same. The code states that every other byte stays as it was.
+	- Incorrect behavior: On the first launch, the banner refresh writes a CRLF file back as LF without keeping a copy. Revert, disable, and rating writes do the same. A comment in the code says every other byte stays as it was.
 	- Expected behavior: A line edit keeps the file's line endings.
-	- Reproduced: No. Traced through the code.
+	- Reproduced: No, but it was traced through the code.
 	- Possible cause: The line editors split with `str::lines()` and join with `\n`. shcl itself keeps CRLF.
 	- Origin: The first line-based migration, with later editors copying it. Not seen by an earlier round. Confirmed by trace.
 	- Sweep: `with_shcl_banner`, `edit_setting_lines`, `placed_rating_lines`, `backfilled_text`, `migrated_text` and `wallpaper_heading_repaired`.
@@ -1453,10 +1453,10 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Target version: rc.2
 	- Incorrect behavior: With 99 `.bak` files already there, or on Windows with the file held open, the move aside fails. The program prints "no config to reset", starts on the old settings, and exits 0.
 	- Expected behavior: A failed reset says so and exits non-zero.
-	- Reproduced: No. Traced through the code.
+	- Reproduced: No, but it was traced through the code.
 	- Possible cause: `reset_config` returns None for both "nothing there" and "failed".
 	- Origin: From before 20260914. Not seen by an earlier round. Confirmed by trace.
-	- Sweep: None found.
+	- Sweep: There weren't any other sites.
 	- Notes:
 		- Code review 20261117 item 26.
 		- Detail: `detail_backlog.md`, under this ID.
@@ -1472,7 +1472,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Target version: rc.2
 	- Incorrect behavior: Save as "custom" is allowed. Picking it then selects the person's own Custom colors rather than the saved theme, and the list has 2 options that both give Custom. Rename acts the same.
 	- Expected behavior: The name is refused, whatever its case.
-	- Reproduced: No. Traced through the code.
+	- Reproduced: No, but it was traced through the code.
 	- Possible cause: `name_problem` doesn't reserve the group's custom key or label.
 	- Origin: e79a250e, 20260805, with 3a052615, 20261009. Not seen by an earlier round. Confirmed by trace.
 	- Sweep: Only themes take names typed by the user.
@@ -1489,9 +1489,9 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Opened by: CC
 	- Target OS: All
 	- Target version: rc.2
-	- Incorrect behavior: "bash\n--login" pastes as "bash--login". A 300-byte wallpaper path is cut at 256 bytes and applied live with no message. The same at 512 bytes for a shell command and 64 for a name. The tab rename box turns line breaks into spaces.
+	- Incorrect behavior: "bash\n--login" pastes as "bash--login". A 300-byte wallpaper path is cut at 256 bytes and applied live without any message. The same happens at 512 bytes for a shell command and 64 for a name. The tab rename box turns line breaks into spaces.
 	- Expected behavior: Line breaks and tabs paste as spaces, as in the tab rename box, and a paste that doesn't fit is refused whole.
-	- Reproduced: No. Traced through the code.
+	- Reproduced: No, but it was traced through the code.
 	- Possible cause: Each pasted char goes through the per-key filter, and chars past the cap are dropped one by one.
 	- Origin: 5e596158, 20260717, caps from 36d99d5f, 20260819. Not seen by an earlier round. Confirmed by trace.
 	- Sweep: The prompt name, shell name, and command caps.
@@ -1508,10 +1508,10 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Opened by: CC
 	- Target OS: All
 	- Target version: rc.2
-	- Incorrect behavior: With about 17 saved themes, the Theme list goes past the window bottom and the lower options can't be seen or clicked. The code says it still shows all its options. A wheel turn with a list open moves it over the search box, the tabs, or the footer, where it stays clickable.
+	- Incorrect behavior: With about 17 saved themes, the Theme list goes past the window bottom and the lower options can't be seen or clicked. A comment in the code says the list still shows all its options. A wheel turn with a list open moves it over the search box, the tabs, or the footer, where it stays clickable.
 	- Expected behavior: A list fits the window and scrolls inside itself, and a wheel turn closes it, as a resize does.
-	- Reproduced: No. Traced through the code.
-	- Possible cause: `dd_popup` has no cap or scroll, and `wheel()` closes the context menu but not a list.
+	- Reproduced: No, but it was traced through the code.
+	- Possible cause: `dd_popup` doesn't have a cap or a scroll, and `wheel()` closes the context menu but not a list.
 	- Origin: 5456e2a8, 20260709, wheel from fab8a75c, 20260701. Not seen by an earlier round. Confirmed by trace.
 	- Sweep: `em_rect` is already clamped.
 	- Notes:
@@ -1529,7 +1529,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Target version: rc.2
 	- Incorrect behavior: A prompt that has just turned on bracketed paste gets a multi-line paste unbracketed if no frame has been built since, so each line runs as it arrives. This lasts about a frame, or longer during an output flood. The other way, a program that just turned it off gets literal `ESC[200~`.
 	- Expected behavior: Paste reads the mode when it pastes, as focus reports already do.
-	- Reproduced: No. Read only.
+	- Reproduced: No. It was only read from the code.
 	- Possible cause: `Pane::paste` reads `self.mode`, which only `build` refreshes.
 	- Origin: 8e5ea4e0, 20260701. Its twin `report_focus` was fixed in 3d7e0902, 20261013. Not seen by an earlier round. Plausible.
 	- Sweep: App cursor keys and mouse reports use the same cache, where being late is harmless.
@@ -1548,10 +1548,10 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Target version: rc.2
 	- Incorrect behavior: Output full of `ESC[c`, `ESC[6n` or OSC 11 queries makes one window event and one wakeup per reply, the cost `WakeGate` removed for output. If the program in front isn't reading, the engine's write queue grows without bound.
 	- Expected behavior: Replies from one read are sent together, and replies past a cap are dropped.
-	- Reproduced: No. Read only.
-	- Possible cause: Replies aren't batched, and the engine's write queue has no cap.
+	- Reproduced: No. It was only read from the code.
+	- Possible cause: Replies aren't batched, and the engine's write queue doesn't have a cap.
 	- Origin: c6eaa043, 20260628. Not seen by an earlier round. Plausible.
-	- Sweep: None found.
+	- Sweep: There weren't any other sites.
 	- Notes:
 		- Code review 20261117 item 32.
 		- Detail: `detail_backlog.md`, under this ID.
@@ -1567,9 +1567,9 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Target version: rc.2
 	- Incorrect behavior: Most mono fonts lack CJK, so every distinct CJK character keeps a shaped buffer per pane, per bold and italic mix, until the font changes. Reading Chinese logs or catting a Unicode table keeps adding entries.
 	- Expected behavior: The caches have a size cap and evict what hasn't been drawn lately, as the color glyph cache does.
-	- Reproduced: No. Read only.
-	- Possible cause: `glyph_cache` and `cover_cache` have no cap and are cleared only on a font rebuild.
-	- Origin: 82a7d006, 20260709. Item 2026100418225501 measured the caches but set no bound. Plausible.
+	- Reproduced: No. It was only read from the code.
+	- Possible cause: `glyph_cache` and `cover_cache` don't have a cap, and are cleared only on a font rebuild.
+	- Origin: 82a7d006, 20260709. Item 2026100418225501 measured the caches but didn't set a bound. Plausible.
 	- Sweep: `TextCtx.text_families` grows the same way, with small entries.
 	- Related IDs: 2026100418225501
 	- Notes:
@@ -1587,7 +1587,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Target version: rc.2
 	- Incorrect behavior: On Windows, `cmd /C start` runs without CREATE_NO_WINDOW, so each About link click flashes a console. On Linux and macOS the opener child is never waited on and stays a zombie until SilkTerm exits.
 	- Expected behavior: About links open the way terminal links do.
-	- Reproduced: No. Read only.
+	- Reproduced: No. It was only read from the code.
 	- Possible cause: `links::open` replaced this path for terminal links, but the About box still calls `open_url`.
 	- Origin: c6eaa043, 20260628. 8f95c246, 20260908 fixed `links::open` only. The 20260914 round turned down the shell part, since the URLs are fixed. Plausible.
 	- Sweep: Every other spawn in the app reaps its child.
@@ -1606,10 +1606,10 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Target version: rc.2
 	- Incorrect behavior: On a box where the dialog warm-up fails, each idle release resets it to Idle, so the next start spawns another worker that fails the same way and prints the same warning. The Failed state exists to stop this.
 	- Expected behavior: Failed stays failed until the wanted backends change.
-	- Reproduced: No. Confirmed by reading.
+	- Reproduced: No, but it was confirmed by reading the code.
 	- Possible cause: `GpuWarm::release` sets Idle whatever the state was.
 	- Origin: 90073855, 20260917. Not seen by an earlier round. Confirmed by trace.
-	- Sweep: None found.
+	- Sweep: There weren't any other sites.
 	- Related IDs: Code review 20261117 item 16 is the case where it fires
 	- Notes:
 		- Code review 20261117 item 36.
@@ -1624,12 +1624,12 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Opened by: CC
 	- Target OS: macOS
 	- Target version: rc.2
-	- Incorrect behavior: "SFMono-Regular", "JetBrainsMono-Regular" or "FiraCode-Retina" become "SFMono", "JetBrainsMono" or "FiraCode". No installed family has that name, so the built-in stack is used, while Settings still shows the cut-down name.
+	- Incorrect behavior: "SFMono-Regular", "JetBrainsMono-Regular" or "FiraCode-Retina" become "SFMono", "JetBrainsMono" or "FiraCode". There isn't any installed family with that name, so the built-in stack is used, while Settings still shows the cut-down name.
 	- Expected behavior: The system font's family name is used.
-	- Reproduced: No. Read only, macOS code.
-	- Possible cause: Splitting the PostScript name at `-` gives the family only when the family has no spaces.
+	- Reproduced: No. It's macOS code, and was only read.
+	- Possible cause: Splitting the PostScript name at `-` gives the family only when the family doesn't have any spaces.
 	- Origin: ec829224, 20260706, from c6eaa043. Not seen by an earlier round. Plausible.
-	- Sweep: None found.
+	- Sweep: There weren't any other sites.
 	- Notes:
 		- Code review 20261117 item 37.
 		- Detail: `detail_backlog.md`, under this ID.
@@ -1643,12 +1643,12 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Opened by: CC
 	- Target OS: All
 	- Target version: rc.2
-	- Incorrect behavior: An edit under `knobs/src` builds a different binary, but the build number isn't updated. The code says any change to the inputs must make a new number. cicd pins the number, so only hand builds are affected.
+	- Incorrect behavior: An edit under `knobs/src` builds a different binary, but the build number isn't updated. A comment in the code says any change to the inputs must make a new number. cicd pins the number, so only hand builds are affected.
 	- Expected behavior: Every path dependency is a build input.
-	- Reproduced: No. Confirmed by reading: knobs is a path dependency and isn't in `BUILD_INPUTS`.
+	- Reproduced: No, but the code confirms that knobs is a path dependency and isn't in `BUILD_INPUTS`.
 	- Possible cause: Path dependencies added after `BUILD_INPUTS` weren't added to it, and dcq7f checks only included files and the lock.
 	- Origin: f044c78a, 20260916, knobs from 3a052615, 20261009. Not seen by an earlier round. Confirmed by trace.
-	- Sweep: The forks are git dependencies covered by the lock.
+	- Sweep: The forks are git dependencies pinned by the lock.
 	- Notes:
 		- Code review 20261117 item 38.
 		- Detail: `detail_backlog.md`, under this ID.
@@ -1664,8 +1664,8 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Target version: rc.2
 	- Incorrect behavior: With SILK_DUMP set, every GL frame waits on a readback and saves `/tmp/silk_offscreen.png`. A planted symlink is followed, 2 windows overwrite each other, and the write isn't atomic.
 	- Expected behavior: A dump goes to a per-user folder with a per-process name, once per request.
-	- Reproduced: No. Confirmed by reading.
-	- Possible cause: A diagnostic with a hard-coded shared path.
+	- Reproduced: No, but it was confirmed by reading the code.
+	- Possible cause: It's a diagnostic with a hard-coded shared path.
 	- Origin: 90073855, 20260917, behind `env_flag` since 42380228, 20261003. Not seen by an earlier round. Confirmed by trace.
 	- Sweep: `diagnostics/glyphon_gl.rs` writes `/tmp/glyphon_gl.png` the same way, in a dev example.
 	- Notes:
@@ -1681,12 +1681,12 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Opened by: CC
 	- Target OS: All
 	- Target version: rc.2
-	- Incorrect behavior: 2 nested pushes past 24 layers skip 2 layers but count 1, so the second skipped pop really pops a live layer early. Only a broken or hostile font reaches it, and the result is wrong pixels.
+	- Incorrect behavior: With 2 nested pushes past 24 layers, 2 layers are skipped but only 1 is counted, so the second skipped pop pops a live layer early. Only a broken or hostile font triggers it, and the result is wrong pixels.
 	- Expected behavior: Every skipped push has a matching skipped pop.
-	- Reproduced: No. Confirmed by reading.
+	- Reproduced: No, but it was confirmed by reading the code.
 	- Possible cause: `overflowed` is a bool where a depth count is needed.
 	- Origin: 0c28262e, 20260727. The 20260914 round read the file. Confirmed by trace.
-	- Sweep: None found.
+	- Sweep: There weren't any other sites.
 	- Notes:
 		- Code review 20261117 item 40.
 		- Detail: `detail_backlog.md`, under this ID.
@@ -1702,7 +1702,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Target version: rc.2
 	- Incorrect behavior: usage.md says it runs FILE from its own folder. `silkterm --open sub/run.sh` changes to `sub` and then runs `sub/run.sh` from there, which fails. `--open run.sh` looks `run.sh` up on PATH. A folder with a literal `$NAME` in it is expanded. Explorer passes absolute paths, so Windows isn't affected.
 	- Expected behavior: A relative FILE is made absolute first, and its folder is used as written.
-	- Reproduced: No. Traced through the code.
+	- Reproduced: No, but it was traced through the code.
 	- Possible cause: The file is used as written, and the derived folder goes through `expand_vars`.
 	- Origin: 9301f8e6, 20260930. Not seen by an earlier round. Confirmed by trace.
 	- Sweep: Other path flags go through `resolve_dir`, which makes them absolute.
@@ -1719,17 +1719,17 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Opened by: CC
 	- Target OS: All
 	- Target version: rc.2
-	- Incorrect behavior: Connections are served one at a time, with no read timeout or size cap. A client that connects and never sends a newline blocks every later `--wallpaper`, `--reload-settings` and peer save notice for that window, and those clients hang too. One that never ends its line grows memory. On Windows, the pipe's default security lets other users on the box open it and stall it.
-	- Expected behavior: A read timeout, a line cap, a pipe only its own user can open, and a reply timeout in the client.
-	- Reproduced: No. Read only.
-	- Possible cause: No timeout or cap, a single serving loop, and default pipe security.
+	- Incorrect behavior: Connections are served one at a time, without a read timeout or a size cap. A client that connects and never sends a newline blocks every later `--wallpaper`, `--reload-settings` and peer save notice for that window, and those clients hang too. One that never ends its line grows memory. On Windows, the pipe's default security lets other users on the box open it and stall it.
+	- Expected behavior: The server has a read timeout, a line cap, and a pipe only its own user can open, and the client has a reply timeout.
+	- Reproduced: No. It was only read from the code.
+	- Possible cause: There's no timeout or cap, a single serving loop, and the default pipe security.
 	- Origin: c6eaa043 and the ctl rework. Not seen by an earlier round. Plausible.
 	- Sweep: Peer pokes don't wait for a reply.
 	- Notes:
 		- Code review 20261117 item 43.
 		- Detail: `detail_backlog.md`, under this ID.
 
-- Windows: install.ps1 can leave no binary when the last move fails
+- Windows: install.ps1 can leave the install without a binary when the last move fails
 	- ID: 2026111713374943
 	- Type: Bug
 	- Status: Queued
@@ -1738,10 +1738,10 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Opened by: CC
 	- Target OS: Windows
 	- Target version: rc.2
-	- Incorrect behavior: An old copy that isn't running is deleted first. If the move of the new one then fails, for example while antivirus holds it, the staged file is removed too. The Start menu shortcut and PATH point at a missing exe until the next run.
+	- Incorrect behavior: An old copy that isn't running is deleted first. If the move of the new one then fails, for example while antivirus has it locked, the staged file is removed too. The Start menu shortcut and PATH point at a missing exe until the next run.
 	- Expected behavior: The old file is renamed aside first and put back if the move fails.
-	- Reproduced: No. Read only.
-	- Possible cause: The old file is destroyed before the new one is in place, with no rollback.
+	- Reproduced: No. It was only read from the code.
+	- Possible cause: The old file is destroyed before the new one is in place, without a rollback.
 	- Origin: 07613789, 20260924. Not seen by an earlier round. Plausible.
 	- Sweep: install.bash uses an atomic `mv -f`. n8runterm.ps1 copies to a temp name and moves it.
 	- Related IDs: The closed "can't upgrade over a running copy" item
@@ -1759,8 +1759,8 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Target OS: macOS
 	- Target version: rc.2
 	- Incorrect behavior: A plain `runterm` on a Mac with Apple's bash first in PATH exits 1 with "@: unbound variable" before it finds the launcher. Its history says it runs under 3.2.
-	- Expected behavior: It runs with no arguments under bash 3.2.
-	- Reproduced: Yes, in the `bash:3.2` image: `set -u; f "${@}"` gives "@: unbound variable", rc 1.
+	- Expected behavior: It runs without arguments under bash 3.2.
+	- Reproduced: Yes, in the `bash:3.2` image, where `set -u; f "${@}"` gives "@: unbound variable" and exit 1.
 	- Possible cause: bash 3.2 treats an empty `"${@}"` as unset under `set -u`. install.bash already guards against it.
 	- Origin: 4050e29a, 20260908, with 3.2 support claimed 20261001. Not seen by an earlier round. Confirmed.
 	- Sweep: Other scripts that claim 3.2 are guarded or always get arguments.
@@ -1777,12 +1777,12 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Opened by: CC
 	- Target OS: All
 	- Target version: rc.2
-	- Incorrect behavior: `--push` makes the tag, then the push to main runs the merge gate, about an hour. If that fails, the rerun says the tag exists and to bump the version on dev, when the fix is to delete the local tag.
+	- Incorrect behavior: `--push` makes the tag, and then the push to main runs the merge gate, which takes about an hour. If that fails, the rerun says the tag exists and to bump the version on dev, when the fix is to delete the local tag.
 	- Expected behavior: The tag is made after main is pushed, or removed when the push fails, or the message names the local tag.
-	- Reproduced: No. Traced through the code.
+	- Reproduced: No, but it was traced through the code.
 	- Possible cause: Tag creation comes before the push.
 	- Origin: e68c17a9, 20260711. Not seen by an earlier round. Confirmed by trace.
-	- Sweep: No other tag creation.
+	- Sweep: Nothing else creates a tag.
 	- Notes:
 		- Code review 20261117 item 46.
 		- Detail: `detail_backlog.md`, under this ID.
@@ -1798,10 +1798,10 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Target version: rc.2
 	- Incorrect behavior: If the cicd profiler's display or another project's is up on :98, sizebench says it's reusing it and puts its terminals there, at that server's size and with its window manager, and disturbs that run.
 	- Expected behavior: It refuses a display that exists, or takes the first free one, as termbench and gui-headless do.
-	- Reproduced: No. Read only.
+	- Reproduced: No. It was only read from the code.
 	- Possible cause: An existing server is reused rather than refused.
 	- Origin: f8471950, 20260730. Not seen by an earlier round. Plausible.
-	- Sweep: termbench-run.bash and gui-headless.bash already refuse a display that's taken or check who holds it.
+	- Sweep: termbench-run.bash and gui-headless.bash already refuse a display that's taken or check whose it is.
 	- Notes:
 		- Code review 20261117 item 47.
 		- Detail: `detail_backlog.md`, under this ID.
@@ -1815,10 +1815,10 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Opened by: CC
 	- Target OS: All
 	- Target version: rc.2
-	- Incorrect behavior: The pre-push and pre-commit hooks, termbench, sizebench, and the wine build script remove their folders with a bare `rm -rf`, and their folders don't follow the temp layout. ci-mac.bash never removes its log folder. No live danger was found, since `rm -rf` doesn't follow links.
+	- Incorrect behavior: The pre-push and pre-commit hooks, termbench, sizebench, and the wine build script remove their folders with a bare `rm -rf`, and their folders don't follow the temp layout. ci-mac.bash never removes its log folder. There isn't any live danger, since `rm -rf` doesn't follow links.
 	- Expected behavior: Every script uses the guard and the temp layout.
-	- Reproduced: No. Confirmed by search.
-	- Possible cause: The sweep in 2026102807494121 covered `cicd/` only, and dehwp reads only bash files there.
+	- Reproduced: No, but a search confirmed it.
+	- Possible cause: The sweep in 2026102807494121 was limited to `cicd/`, and dehwp reads only bash files there.
 	- Origin: a8fe9f7f, 20261006, and the bench and wine scripts as first written. The rule is from the 20261024 CICD directives. Confirmed by search.
 	- Sweep: `utility/git-hooks/pre-push` ~155, `utility/git-hooks/pre-commit` ~34, `utility/include/termbench-run.bash` ~70, `utility/include/sizebench-run.bash` ~61, `utility/run-windows-build-via-wine.bash` ~177, `cicd/ci-mac.bash` ~32.
 	- Related IDs: 2026102807494121
@@ -1836,9 +1836,9 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Target OS: All
 	- Target version: rc.2
 	- Requirements:
-		- The caret fade asks for a frame every 33 ms, focused or not, with no idle stop. Each frame rebuilds every row.
+		- The caret fade asks for a frame every 33 ms, focused or not, without an idle stop. Each frame rebuilds every row.
 		- Stop the fade after about 10 s idle or when the dialog loses focus, as GTK does.
-	- Reproduced: No. The 33 ms wake is confirmed by reading. The cost per frame wasn't measured.
+	- Reproduced: No. The 33 ms wake was confirmed in the code, but the cost per frame wasn't measured.
 	- Origin: 404df0f2, 20260717. Not seen by an earlier round.
 	- Sweep: tab_edit's caret, if it shares the fade.
 	- Notes:
@@ -1857,7 +1857,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Requirements:
 		- A 512-byte command has 513 prefixes, and the measure cache clears at 512 entries, so each move shapes most of them again. Past the edge it does this every frame.
 		- Shape the text once per edit and hit-test the glyph positions.
-	- Reproduced: No. Read only.
+	- Reproduced: No. It was only read from the code.
 	- Origin: 5e596158, 20260717, cache from 843e4c91, 20260707. Not seen by an earlier round.
 	- Sweep: tab_edit uses the same helper on short text.
 	- Notes:
@@ -1876,7 +1876,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Requirements:
 		- It sleeps 500 ms and reads `/sys/class/tty/tty0/active` again, forever, even with the GPU let go. README says idle windows give back CPU.
 		- Wait on the sysfs file with poll for POLLPRI, which the kernel signals on a console change, and keep the sleep loop as the fallback.
-	- Reproduced: No. Read only.
+	- Reproduced: No. It was only read from the code.
 	- Origin: bb66e6e2, 20261002, from July. Not seen by an earlier round.
 	- Sweep: The 2 s VRAM probe runs only while the device is held, by design.
 	- Notes:
@@ -1887,7 +1887,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- ID: 2026100312470535
 	- Type: Bug
 	- Status: Deferred
-		- 20261117: Waiting to see if it ever happens again.
+		- 20261117: It's put off until it happens again.
 	- Stand-in: none (20261028). The blank window was seen only on b23's desktop, through the X11 GL swap and a virtual desktop switch. A headless display doesn't have either, and the 10-03 tries on vm925w never reproduced it.
 	- Needs hand testing: Take a dogfood look on b23 with the GPU busy or nearly full. Move to another desktop and back, end the load, and leave the window alone. It should paint on its own. Try it once with "Free resources when idle" on and short idle times too. Started from a terminal with `SILK_IDLEDBG=1`, it prints any refused frame or rebuild.
 		- 20261025: The dogfood pool now has build dedvg for Linux and Windows. It was built from dev at a9daddc and has the 10-24 and 10-25 fixes. A window started before the next launch still runs de5r9.
@@ -1933,7 +1933,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- 20261025: Both tests passed again in both full runs at e95b81b. The b23 look was moved to the hand testing row, since it needs the visible desktop.
 		- 20261026: Both tests passed again in the full run at fab6815.
 		- 20261028: Both tests passed again in the full run at 64f3584.
-		- 20261117: Deferred, to wait and see if it happens again. The b23 look is held until it does.
+		- 20261117: It's deferred until it happens again, and the b23 look is held until then.
 	- Swept: every frame and rebuild site. They're the terminal's acquire and GL swap in `render_with`, called from both `about_to_wait` and the desktop's redraw, the dialog and notice windows' acquire and swap in `DialogWin::render`, and `rebuild_gpu`, which the console-return heal also calls. Nothing else matches `grep -n 'begin_frame\|end_frame\|Gfx::rebuild'`.
 	- Branch: gpuload
 	- Commit: 8cb6a4d
@@ -1944,7 +1944,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- ID: 2026111700130407
 	- Type: Bug
 	- Status: Deferred
-		- 20261117: Couldn't reproduce. It works now, even with muffer running.
+		- 20261117: It couldn't be reproduced, and it works now, even with muffer running.
 	- Opened: 20261117-001304
 	- Opened by: JC
 	- Target version: rc.1
@@ -1956,12 +1956,12 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- 20261117: On Xvfb, with and without xfwm4, a program in the pane was told each new grid after every window resize. That held on the normal screen, on the alt screen with mouse tracking on, and with a frame every 50 ms in synchronized-output marks, like muffer. It also held for a window resized after its device was let go.
 		- 20261117: With Resize window on zoom on, each zoom resized the window and kept the rows. The columns were one more after the first zoom on the alt screen, and stayed there.
 		- 20261117: dpirand on X11 passed 5 cases, with drags, moves, zooms, resizes and relaunches across 2 to 4 monitors.
-		- 20261117: Not tried: monitors waking on a real desktop, which the rigs can't stand in for.
-		- 20261117: The answer narrowed it to a window moved to another monitor, which doesn't take the size kept for that monitor.
+		- 20261117: Monitors waking on a real desktop weren't tried, since a headless display can't stand in for them.
+		- 20261117: JC's answer narrowed it down to a window moved to another monitor, which doesn't take the size kept for that monitor.
 		- 20261117: JC found it working again, even with muffer running.
 	- Decisions:
-		- 20261117: No test yet. Which behavior to pin waits on the answer.
-		- 20261117: Deferred as couldn't reproduce. If it comes back, a `SILK_MONDBG=1` log from a window moved to the other monitor would show where it goes wrong.
+		- 20261117: There's no test yet, since the behavior to pin depended on the answer.
+		- 20261117: It's deferred, since it couldn't be reproduced. If it comes back, a `SILK_MONDBG=1` log from a window moved to the other monitor would show where it goes wrong.
 
 - Performance profile: the Profile dropdown is a presets group read off the rows it sets
 	- ID: 2026100910295902
@@ -1972,6 +1972,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Opened by: CC
 	- Parent ID: 2026100907341818
 	- Target OS: All
+	- Target version: rc.1
 	- Requirements:
 		- The 16 rows a profile sets follow the automatic settings design, with the Profile dropdown as their presets group control. This also brings the list and on or off controls the design describes.
 	- Notes:
@@ -2722,7 +2723,6 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Verified: The unit tests on Linux, and clippy for Linux, Windows, and macOS.
 	- Branch: macsize
 	- Commit: 747356f
-	- Closed:
 
 - A shell is listed twice by name, with a different command each time
 	- ID: 2026100408214203
@@ -4267,7 +4267,6 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Branch: memhint
 	- Commit: b1ddf3a, 157a2cc
 	- Test case: `a_new_device_reserves_little_graphics_memory` (ddgvg) builds the dialogs' device and fails above 32 MiB reserved. It skips where there isn't a device or an allocator report (GL, Metal).
-	- Closed:
 
 - Tabs: a setting for new tabs to open next to the current one
 	- ID: 2026100513581812
@@ -5795,7 +5794,6 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Verified: The unit tests on Linux, and clippy for Linux, Windows, and macOS.
 	- Branch: macsize
 	- Commit: 747356f
-	- Closed:
 
 - macOS: window transparency does not work
 	- ID: 2026100114435574
@@ -5825,7 +5823,6 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- 20261002: It was reported again that the transparency settings don't do anything on macOS. It isn't known yet whether that build had this fix.
 	- Branch: macglass
 	- Commit: c79e3aa
-	- Closed:
 
 - macOS: the menu is inside the window, not in the macOS menu bar
 	- ID: 2026100114435587
@@ -5868,7 +5865,6 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Verified: The unit tests on Linux, and clippy for Linux, Windows, and macOS. Each new test was seen failing with its part of the change undone.
 	- Branch: macmenu, macmenu2
 	- Commit: 02482bb, bb66e6e
-	- Closed:
 
 - Tab rename: Paste from the menu bar goes into the shell, and the box has only basic editing
 	- ID: 2026100219054483
@@ -9117,7 +9113,6 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Branch: keystab
 	- Commit: e217029
 	- Test case: `a_hotkey_row_takes_the_next_chord_pressed` (ddev0), `a_chord_another_hotkey_had_is_said_on_both_rows` (ddev1), `the_keys_tab_shows_the_mac_chords_on_a_mac` (ddev2), `a_hotkey_row_draws_its_chords_and_its_note_in_the_box` (ddev3), `a_hotkey_set_in_settings_saves_as_a_hand_edit_would` (ddev4), `a_pressed_chord_is_the_one_the_press_matches` (ddety), `the_files_own_values_are_kept_apart_from_the_result` (ddetz), `every_hotkey_has_one_row_on_the_keys_tab` (ddev6), `the_dialog_is_as_tall_as_its_tallest_fixed_tab` (extended), `a_resize_settles_on_the_natural_size_and_lets_go_past_the_snap` (extended), and the generic `every_row_survives_a_save_and_a_relaunch` and `a_row_changed_after_its_revert_keeps_the_change`.
-	- Closed:
 
 - Hotkeys for splitting panes and moving between them, and menus that show the hotkey they share
 	- ID: 2026100220292607
@@ -9172,7 +9167,6 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Branch: panekeys, mackeys
 	- Commit: 4cafdde, f4bd3f7
 	- Test case: `alt_shift_chords_split_and_close_panes_and_alt_arrows_move`, `command_d_splits_and_command_option_arrows_move_on_macos`, `a_focus_move_goes_to_the_pane_beside_it`, the 7 tests in `keys.rs`, `a_hotkey_set_in_the_file_loads_and_a_bad_one_is_reported`, `a_changed_hotkey_is_written_back_by_its_name`, `an_older_file_gains_the_keys_block_commented`, `a_menu_row_shows_the_chord_its_hotkey_answers_to`, `the_mac_menu_bar_follows_the_bindings`. For Option+Command+W: `the_mac_menu_bar_shows_the_command_chords`, `the_keys_tab_shows_the_mac_chords_on_a_mac`, and `migrate_refreshes_a_superseded_commented_default` on a Mac.
-	- Closed:
 
 - Settings: every label is shaped again on each pointer move
 	- ID: 2026100314050003
@@ -11263,7 +11257,6 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Verified: The unit tests on Linux, and clippy for Linux, Windows, and macOS.
 	- Branch: macmenu, macmenu2
 	- Commit: 02482bb, bb66e6e
-	- Closed:
 
 - macOS: Option plus a letter types nothing into a Settings text box
 	- ID: 2026100219240881
@@ -13114,6 +13107,9 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- Pinned by: dd5ns `cicd/tests/pins/run.bash`.
 		- Opened: 20260924-115032
 		- Closed: 20260924-115032
+	- Each child says how it's tested.
+	- Opened: 20260924-115032
+	- Closed: 20260924-175509
 
 - ✅ Muffer: When several lines of text are entered, upon hitting "Enter" key, different lines of text scroll up at seemingly different rates. There is at least one horizontal seam between two moving at different rates.
 	- Reproduced: on a 50-row window, Enter with a 5-line message moves the conversation up 3 rows and the message up 6, since the input box collapses under it.
@@ -13136,7 +13132,8 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- UAT accepted.
 	- There's no test, since it was never reproduced and it needs a desktop switch on a real GPU.
 	- Target version: rc.1
-	- Opened: n/a. Closed: 20260921
+	- Opened: 20260905-121846
+	- Closed: 20260921-101340
 
 - ✅ CTRL+shift+C is not working consistently, nor is auto-copy selected text, nor is the auto-copy of a program running in a pane. Right-click then copy does work when CTRL+shift+C doesn't. This is a regression.
 	- All 3 routes read the same selection and write the clipboard the same way. The 2 that fail also wait on the window-focus flag, but the one that works doesn't.
@@ -13150,7 +13147,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Target version: rc.1
 	- Opened: 20260905-175000
 	- UAT accepted.
-	- Closed: 20260921
+	- Closed: 20260921-101340
 
 - ✅ Text needs to be darker and thicker in light mode.
 	- `Cause:` the correction made on 20260920 was a coverage exponent, and an exponent is the wrong curve rather than the wrong number. Matching what an sRGB blend of the pair would have drawn needs about 0.53 at a quarter coverage, 0.35 at a half, and 0.18 at three quarters, so no single value fits. The one that filled the stems smudged the faint edge pixels, and the one that left the edges alone left the stems pale.
@@ -13388,6 +13385,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 - ✅ The new-window test fails on Windows.
 	- dcq7d `a_new_window_keeps_the_settings_file_and_the_panes_directory` expects `--config /x/alt.shcl`, and Windows makes that path absolute as `C:\x\alt.shcl`. The fault is in the test's expectation rather than the new window.
 	- Fixed: the test builds its path from the home folder, so it is absolute on both. It passes on b29w.
+	- Pinned by: dcq7d, the test this item fixed.
 	- Target version: rc.1
 	- Opened: 20260916-160355
 	- Closed: 20260918-175529
@@ -13815,6 +13813,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- The desktop's own store is asked first, xfconf on Xfce and gsettings elsewhere, for both the interface font and the monospace one. Pinned by dcrcr `the_desktop_decides_which_font_store_answers_first`. KDE, MATE, and Cinnamon are still untested.
 	- ✅ Code review 20260914 item 47 (F79, blocking): With the release signing key filled in, the PowerShell installer refuses every correctly signed release.
 		- On Linux and macOS the checksums file's own bytes now go to ssh-keygen down a pipe. Windows keeps the file handle it already had, since its OpenSSH never sees the end of a pipe that was closed before it started up. The release test, dcbe0, now runs each installer's own verify function against a throwaway key, install.ps1 through `verify-sign.ps1`, which the Windows pipeline runs as well. It was seen passing on the Linux box and on vm925w under PowerShell 7 and 5.1.
+		- Pinned by: dcbe0 `cicd/tests/release/run.bash`.
 	- ✅ Code review 20260914 item 48 (F80, blocking): The pre-commit hook commits every change in a partly staged Rust file, the unstaged ones included.
 		- The hook formats the staged content and writes that back to the index, so a file with half its changes staged commits half. The working copy is formatted too, but only where it doesn't have anything unstaged to lose.
 		- The staged copy is formatted outside the tree, so the hook names `rustfmt.toml` rather than leaving rustfmt to hunt for it.
@@ -13975,6 +13974,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- The publish test, dcbdv, runs the publisher itself with a stand-in `rar` and checks what it's handed.
 		- The install test, dcbdz, runs install.ps1's own temp folder step and checks that a folder already there is refused. The Windows pipeline runs it too.
 		- Both go red on the changes the review named.
+		- Pinned by: dcbdv and dcbdz, the 2 tests this item fixed.
 	- ✅ Code review 20260914 item 97 (F129, should-fix): README gives a wrong wallpaper count, a wrong size ratio against the Alacritty core, and an unreleased version for SilkTerm in the showdown table.
 		- It now says 104 wallpapers, about 5 times the core, and 1.0.0-beta2 for the build both SilkTerm rows were measured on.
 		- The gallery check in the pipeline now also fails when README's count differs from the pack.
@@ -15291,6 +15291,9 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- There's no test, since only names and output spacing changed.
 		- Opened: 20260924-115032
 		- Closed: 20260924-172529
+	- Each child says how it's tested.
+	- Opened: 20260924-115032
+	- Closed: 20260924-185501
 
 - ✅ New menu item (right-click and view):
 	- Next wallpaper
@@ -15345,6 +15348,9 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- There's no test, since it's a tag deletion on the git host.
 		- Opened: 20260924-115032
 		- Closed: 20260924-131246
+	- There's no test, since every child changed only docs, the wallpaper pack, or tags.
+	- Opened: 20260924-115032
+	- Closed: 20260924-131246
 
 - ✅ When settings are changed in one instance, the settings of another instance shows what it loaded with, not the updated settings. Any given instance doesn't need to change itself whenever something else changes the settings - it just needs to load the latest, when Settings is opened. (And be able to apply whatever has changed, when OK is pressed.)
 	- `Fixed:` Settings reads the file each time it opens. The file gets only what was edited in the dialog, and OK or Apply puts everything that differs from what the window runs live, another window's changes included. Opening Settings doesn't change anything on screen, and neither does Cancel.
@@ -15399,7 +15405,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- `Note:` a setting of 0 gives exactly the old look.
 	- `Note:` this is the one part that deliberately changes dark mode, which the light mode entry above forbade. The 2 entries disagreed, and this one is older and more specific. `even_visibility: 0` is the way back.
 	- `Pinned by:` 7 tests in visibility.rs, dcx76, dcx77, dcx78, dcx79, dcx7a, dcx7b, and dcx7c, each watched red against its own mutation. Dropping the bright end from the brightness statistic left every other test green, so a test for a dark picture with a bright area was added.
-	- Opened: 20260703-100322. Closed: 20260920
+	- Closed: 20260920-204921
 
 - ✅ Dark mode is just about perfect, so don't make ANY changes that affect dark mode. But light mode is badly miscalibrated. Various settings may need to work differently in light mode. (Either different defaults, and/or different ways of calculating them depending on dark or light mode.) For example:
 	- Wallpaper is practically invisible at the dark mode's visibility %.
@@ -15414,7 +15420,8 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- ✅ `Update, same day:` the mechanism here is superseded. Matching one reading or blending 2 didn't fix it, since light mode needed a different blend. See the 2 entries above, which drop `PRESENCE` and the whole calibration with it.
 		- There's no test, since the old way was replaced, and its replacement is pinned above.
 	- Target version: rc.1
-	- Opened: 20260920. Closed: 20260920
+	- Opened: 20260920-174824
+	- Closed: 20260920-190859
 
 - ✅ When theme colors are changed by the user, change the theme in the dropdown to "[unsaved]".
 	- `Fixed:` the collapsed Theme box says `[unsaved]` while any palette color disagrees with the theme. `dd_closed_label` in settings_ui.rs is the one place that decides, so no other dropdown is affected.
@@ -15540,7 +15547,8 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- `Pinned by:` dcwj7 `a_tab_says_only_the_parts_that_are_switched_on` and dcwj8 `a_window_title_can_stop_naming_its_tab`, with 6 mutations between them, all red.
 	- `Note:` checked at each setting. Shell off gives `/usr/share/doc/`, directory off gives `Dash`, all 3 off gives `Dash`, and the title switch off leaves the title bar reading `SilkTerm` alone. The dialog rows draw on the Window tab with the panel width unchanged.
 	- Target version: rc.1
-	- Opened: 20260920. Closed: 20260920
+	- Opened: 20260920-082641
+	- Closed: 20260920-093959
 
 - ✅ Tab flyover help text: Make a different color than the tabs. Maybe slightly lighter background and subtly different, complementary shade, and a different font color. Maybe flyover help needs its own theme colors.
 	- Cause: the default menu background is the inactive tab's own bytes, and the tip filled with it. Hanging under the strip, it drew as a tab that had grown downward. A menu row's tip had the same fault against the popup beside it.
@@ -18524,12 +18532,14 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Decision: 20260924, it stays held for now.
 	- Note: 20260925, shcl now keeps a stray line indented with spaces as written, so a save goes through beside one. A tab-indented line that steps back to a depth nothing uses is still dropped, and a save still refuses over it.
 	- Note: 20260925, saves now use shcl's new line-keeping save, so lines that weren't changed are written back as they were. A file with a dropped tab-indented line still gets the whole-file save from shcl, which deletes that line, so the refusal stays.
+	- Target version: rc.2
 	- Opened: 20260918
 
 - ✋ t2nsn - old stray versions of executables and launchers: Find and move old GFS versions, and trash any out-of-place stray executables and scripts. Update '.desktop' files to run the correct bash script, launcher chain minimized or hidden, and use the icon from the 'latest version' symlink.
 	- Note: the launcher copies outside the repo are older than the ones in `utility/`, and nothing copies them over.
 	- Note: 20260924, t2nsn itself hasn't been looked at yet. On the main workstation, the desktop entry and keyboard shortcut run a stale mirror copy of the launcher, and there are a few strays. That list is in the private notes.
 	- ✋ Deferred: 20260924, nothing is being built or tested on t2nsn for now.
+	- Target version: rc.2
 	- Opened: 20260924-113215
 
 - ✋ With two tmux panes stacked and both printing, only one pane slides at a time, and the other jumps whole lines. Each time the other pane scrolls, the slide in progress jumps the rest of the way.
@@ -18537,6 +18547,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- It was split from the smooth scrolling seams item. It shows on builds from before the scroll ledger too.
 	- The fix needs a ledger per region in the engine fork, and one slide per region. That's design work across the fork, the pane, and the renderer, so it's deferred until it can be worked on by itself.
 	- Since 20260917 the ledger keeps going across a region that shares rows with the one in flight, which was the nano fix, so only regions that don't share any still start it over. Stacked panes are that case, so they still need a ledger entry and a slide per region, as section 5 says.
+	- Target version: rc.2
 	- Opened: 20260911-113647
 
 - ✋ Terminal throughput benchmark: the Windows speed rows.
@@ -18547,9 +18558,11 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- The console host replies to the barrier rather than the terminal, so a Windows row wouldn't mean what the column heading says even if the rest were solved.
 	- Alacritty can't be run at all. It deadlocks partway through, which is its own bug.
 	- Retry only if the console host stops being the limit. Getting the deadlock fix merged upstream would let Alacritty be measured, but it would hit the same ceiling as everything else.
+	- Target version: rc.2
 	- Opened: 20260802-094409
 
 - ✋ The publish stage stays unrun under WSL2. It commits and pushes the working tree, and writes a backup archive to a synced path that doesn't exist there.
+	- Target version: rc.2
 	- Opened: 20260824-123142
 
 - ✋ Severe windows multiscreen bug:
@@ -18557,10 +18570,12 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Steps to reproduce: Easy to reproduce. Essentially the description.
 	- Workaround: Stop dragging the window. Maximize it on the target screen. Finish work, close, relaunch (or just accept a maximized state for that terminal session).
 	- ✋ Can't replicate on different monitors that also have different DPI. Don't have access to original setup. Only observed once, and was in a hurry to shut down, so it could have been a fluke. Leaving open on backlog just in case.
+	- Target version: rc.2
 	- Opened: 20260816-103257
 
 - ✋ Build packages when cicd.bash `--quick` isn't specified:
 	- ✋ Deferred (no cross toolchain): macOS `.dmg` (needs an Apple SDK / osxcross - license-gated) and BSD packages (needs a FreeBSD sysroot). AppImage and Flatpak are also for the future.
+	- Target version: rc.2
 	- Opened: 20260724-080316
 
 - ✋ Feature: (Git) Implement branch protection rules on main:
@@ -18568,65 +18583,67 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- ✋ Require review from Code Owners.
 	- ✋ In more distant future: Do not allow bypassing / include administrators
 		- Without this, I (as OG admin) can still merge around it, which is good early on.
+	- Target version: rc.2
 	- Opened: 20260706-202218
 
 - ✋ Bug: Modal Bug - About only (almost certainly a Compiz issue): with the About/Settings dialog open, selecting another window then re-selecting the dialog leaves the terminal buried behind whatever got in front, instead of both coming to the top together. Settings now works; About still does this on some Compiz desktops.
 	- Almost certainly a Compiz WM issue, not a SilkTerm bug. About and Settings use the exact same dialog code path, so a difference between them is the WM's handling.
 	- Note: the general case is fixed. The hints are set before the window maps, and since Compiz won't raise a transient's parent, the terminal is restacked under the dialog on focus and re-asserted briefly to outlast Compiz's animated settle. The About-only failure hasn't been reproduced.
 	- 🔘 Is probably fixed. Test on non-compiz WM.
+	- Target version: rc.2
 	- Opened: 20260707-022408
 
 ### Canceled
 
 - 🚫 Code review 20261117: observations not filed.
-	- Decided against: Renaming `colors.focus` to the highlight setting in a hand-written file. It's a recorded call, pinned by a config.rs test.
-	- Decided against: Converting a current file with one flat key wholesale. Settled in Code review 20260914 item 1, test dcnw4. Only the lost `kept` block is filed, as item 2.
-	- Decided against: A launch write replacing a read-only config file. shcl does this on purpose, clearing and restoring the flag on Windows.
-	- Decided against: `config_open_elsewhere` scanning every open file under /proc. About 22 ms for 7,600 descriptors, a few times per Settings OK.
-	- Decided against: The `app.rs` comment that says a reload writes nothing back. It's wrong, but `follow_peer` documents the writes. Wording only.
-	- Decided against: The knobs demo's fixed temp path and its NaN for an unbounded range. Dev-only, not in the release binary.
-	- Decided against: Monitor sizes in the state file growing without pruning. One small entry per distinct monitor size.
-	- Decided against: A raw-block value can't be reverted. No setting takes a raw block.
-	- Decided against: A slider's number box taking Left and Right as caret keys. A recorded call, pinned by dcrps.
-	- Decided against: Shell reorder being mouse-only. Settled in the Shell tab item.
-	- Decided against: File-type Register acting at once despite Cancel's tip. A recorded design in the `assoc_set` comment.
-	- Decided against: AltGr in Settings fields. winit filters it out of the modifiers on Windows, and macOS reports alt false.
-	- Decided against: Hand edits to config.shcl while Settings is open. `persist` writes diffs and shells use a 3-way merge, so nothing is clobbered.
+	- Decided against: Renaming `colors.focus` to the highlight setting in a hand-written file. It's a recorded call, and a config.rs test pins it.
+	- Decided against: Converting a current file with one flat key wholesale. It was settled in Code review 20260914 item 1, and test dcnw4 pins it. Only the lost `kept` block was filed, as item 2.
+	- Decided against: A launch write replacing a read-only config file. shcl does this on purpose. On Windows it clears the flag and then sets it again.
+	- Decided against: `config_open_elsewhere` scanning every open file under /proc. It takes about 22 ms for 7,600 descriptors, and it runs only a few times per Settings OK.
+	- Decided against: The `app.rs` comment that says a reload doesn't write anything back. It's wrong, but `follow_peer` documents the writes, so only the comment's wording is off.
+	- Decided against: The knobs demo's fixed temp path and its NaN for an unbounded range. The demo is a dev tool, and it isn't in the release binary.
+	- Decided against: Monitor sizes in the state file growing without pruning. Each distinct monitor size adds only one small entry.
+	- Decided against: A raw-block value can't be reverted. There isn't any setting that takes a raw block.
+	- Decided against: A slider's number box taking Left and Right as caret keys. It's a recorded call, and dcrps pins it.
+	- Decided against: Shell reorder being mouse-only. That was settled in the Shell tab item.
+	- Decided against: File-type Register acting at once despite Cancel's tip. The design is recorded in the `assoc_set` comment.
+	- Decided against: AltGr in Settings fields. winit filters it out of the modifiers on Windows, and macOS reports alt as false.
+	- Decided against: Hand edits to config.shcl while Settings is open. `persist` writes diffs and shells use a 3-way merge, so a hand edit isn't lost.
 	- Decided against: Bidi control characters accepted in the shell command field. Only the user can paste them in.
-	- Decided against: The unreachable "click outside the panel cancels" branch in the Settings window, where the panel fills the window. A few harmless lines.
-	- Decided against: OSC 52 from the active pane of an unfocused window applied at once on X11, macOS and Windows. 2026101607585700 keeps X11 as it is.
-	- Decided against: A bracketed paste keeping `\x03`. The design's paste rule covers ESC only.
-	- Decided against: Ctrl with a digit, `/` or `?` sending nothing. Turned down in Code review 20260914.
-	- Decided against: The x11-clipboard fork keeping the last text after another program takes the selection. It's never served while not owned.
-	- Decided against: `wsl_cd` taking the folder before the `usable_cwd` check on Windows. Discussed in Code review 20260914.
-	- Decided against: Selection and mouse cells ignoring the part-row scroll offset during an ease. It lasts only during the ease.
-	- Decided against: No question before closing a tab or window with programs running outside tmux. By design, and no doc promises one.
-	- Decided against: `open_url` running through `cmd /C`. Turned down in Code review 20260914, since its URLs are fixed. The new effects are item 34.
+	- Decided against: The unreachable "click outside the panel cancels" branch in the Settings window, where the panel fills the window. It's only a few harmless lines.
+	- Decided against: OSC 52 from the active pane of an unfocused window applied at once on X11, macOS, and Windows. X11 stays as it is, per item 2026101607585700.
+	- Decided against: A bracketed paste keeping `\x03`. The paste rule in design.md removes only escapes.
+	- Decided against: Ctrl with a digit, `/`, or `?` sending nothing. It was turned down in Code review 20260914.
+	- Decided against: The x11-clipboard fork keeping the last text after another program takes the selection. The text is never served while the fork doesn't own the selection.
+	- Decided against: `wsl_cd` taking the folder before the `usable_cwd` check on Windows. It was discussed in Code review 20260914.
+	- Decided against: Selection and mouse cells ignoring the part-row scroll offset during an ease. The offset only exists while the ease runs.
+	- Decided against: No question before closing a tab or window with programs running outside tmux. That's by design, and the docs don't promise one.
+	- Decided against: `open_url` running through `cmd /C`. It was turned down in Code review 20260914, because its URLs are fixed. The new effects are filed as item 34.
 	- Decided against: A rename canceled when a background tab closes. The `close_tab_at` comment says it's intended.
-	- Decided against: A huge SILK_IDLE_SECS panicking. A debug switch.
-	- Decided against: One waiter thread per window opened by `new_window`. Bounded by the windows opened.
-	- Decided against: The peers marker left after a `process::exit`. The next save that finds nobody there removes it.
-	- Decided against: A macOS Dock Quit or logout perhaps skipping the size flush on exit. Not checked. Reopens if a size is seen lost that way.
-	- Decided against: A divider drag path going stale after a pane closes. It moves another divider, cosmetic only.
-	- Decided against: The non-sRGB surface fallback with no encode. No supported platform offers no sRGB format.
-	- Decided against: The rect renderer's instance buffer never shrinking. Bounded by the largest frame seen.
-	- Decided against: Cmd+Q and Cmd+W doing nothing with a modal dialog up on macOS. Documented in the `app.rs` comment.
-	- Decided against: `parse_pango` not stripping a trailing comma in a family list. No desktop tool writes one by default.
-	- Decided against: The VRAM sentinel comment saying 16 KB where the buffer is 256 KB. Wording only.
-	- Decided against: `shapes.rs` `path_span` being quadratic at worst. It returns at the nearest anchor on real lines.
-	- Decided against: The control socket in a shared /tmp when XDG_RUNTIME_DIR is unset. The socket's mode keeps other users out, and the peers folder is checked private.
-	- Decided against: OSC 9;9 and bare OSC 7 believed without a host check. Documented in cwd.rs, and a report is dropped when its program exits.
-	- Decided against: The wallpaper cache deleting a copy whose key bytes differ. Only on a 64-bit hash collision.
+	- Decided against: A huge SILK_IDLE_SECS panicking. It's only a debug switch.
+	- Decided against: One waiter thread per window opened by `new_window`. The thread count can't grow past the number of windows opened.
+	- Decided against: The peers marker left after a `process::exit`. The next save that doesn't find anybody there removes it.
+	- Decided against: A macOS Dock Quit or logout perhaps skipping the size flush on exit. It hasn't been checked. Reopen it if a size is seen lost that way.
+	- Decided against: A divider drag path going stale after a pane closes. The drag then moves another divider, which is only cosmetic.
+	- Decided against: The non-sRGB surface fallback with no encode. Every supported platform offers an sRGB format.
+	- Decided against: The rect renderer's instance buffer never shrinking. Its size can't grow past what the largest frame seen needed.
+	- Decided against: Cmd+Q and Cmd+W doing nothing with a modal dialog up on macOS. That's documented in the `app.rs` comment.
+	- Decided against: `parse_pango` not stripping a trailing comma in a family list. Desktop tools don't write one by default.
+	- Decided against: The VRAM sentinel comment saying 16 KB where the buffer is 256 KB. Only the comment is wrong.
+	- Decided against: `path_span` in `shapes.rs` being quadratic at worst. On real lines it returns at the nearest anchor.
+	- Decided against: The control socket in a shared /tmp when XDG_RUNTIME_DIR is unset. The socket's mode keeps other users out, and the peers folder is checked to be private.
+	- Decided against: OSC 9;9 and bare OSC 7 believed without a host check. That's documented in cwd.rs, and a report is dropped when its program exits.
+	- Decided against: The wallpaper cache deleting a copy whose key bytes differ. That only happens on a 64-bit hash collision.
 	- Decided against: `bash_prompt_path` writing its script with a plain `fs::write`. A shell that reads half a file tries again at its next prompt.
 	- Decided against: `--help` after an earlier bad flag giving exit 2. Parsing stops at the first error by design.
-	- Decided against: Tab titles without a cap. Already capped in term.rs.
+	- Decided against: Tab titles without a cap. They're already capped in term.rs.
 	- Decided against: `path_forms` being quadratic on deep paths. The result is cached in the tab labels.
-	- Decided against: The stage 0 stash pop conflicting on a file upstream added. Turned down in Code review 20260914.
-	- Decided against: The Zig cache volume removed whole over 2 GB. Settled in 2026102416233805.
-	- Decided against: No macOS installer asset. Settled, and the universal binary is its own item.
+	- Decided against: The stage 0 stash pop conflicting on a file upstream added. It was turned down in Code review 20260914.
+	- Decided against: The Zig cache volume removed whole over 2 GB. That was settled in item 2026102416233805.
+	- Decided against: No macOS installer asset. That's settled, and the universal binary has its own item.
 	- Decided against: `cargo test` and `cargo build` without `--locked` in the gate. They change the lock only after Cargo.toml changed, when it needs updating anyway.
-	- Decided against: `git clean -fdx` and `reset --hard` on the Windows remote clone. Documented as a scratch checkout.
-	- Decided against: gui-headless.bash keeping its state in /tmp. Long-lived pid and auth state, not a run's temp folder.
+	- Decided against: `git clean -fdx` and `reset --hard` on the Windows remote clone. That clone is documented as a scratch checkout.
+	- Decided against: gui-headless.bash keeping its state in /tmp. Its pid and auth state outlive any run, so the rule for a run's temp folder doesn't apply.
 	- Decided against: The dogfood copy writing in place rather than renaming. Dogfood runs only on request and checks for a running copy first.
 	- Opened: 20261117-133749
 	- Closed: 20261117-133749

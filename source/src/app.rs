@@ -313,13 +313,13 @@ struct ChromeCache {
 	tabs: Vec<(String, f32, Buffer)>,
 }
 
-// Most lines the benchmark banner says, which its kept lefts have room for.
+// The most lines the benchmark banner shows, and so the size of its lefts array.
 const BENCH_BANNER_MAX_LINES: usize = 4;
 
 // Where a box of text over everything else goes this frame: a tab tip, a menu
-// tip, or the benchmark banner. Line `i` sits at `top + line_h * i`. Holds no
-// words, so the layout can take `&mut self` and the frame borrows the words
-// after from whoever keeps them (`Overlay`).
+// tip, or the benchmark banner. Line `i` is drawn at `top + line_h * i`. It has
+// no words in it, so the layout can take `&mut self`, and the frame borrows the
+// words later from wherever they're kept (`Overlay`).
 #[derive(Clone, Copy, Debug)]
 struct OverlayAt {
 	rect: Rect,
@@ -336,8 +336,8 @@ enum OverlayLefts {
 	Each([f32; BENCH_BANNER_MAX_LINES]),
 }
 
-// The words of an overlay, lent rather than copied. A frame used to copy every
-// line out of the kept tip, each frame it was up.
+// The words of an overlay, lent rather than copied, since a tip stays up for
+// many frames.
 #[derive(Clone, Copy, Debug)]
 enum OverlayWords<'a> {
 	Kept(&'a [String]),
@@ -714,7 +714,7 @@ impl Gpu {
 
 struct State {
 	window: Arc<Window>,
-	// the X server connection the monitor checks after a move or resize use
+	// the X server connection the monitor checks after a move or resize uses
 	x11: crate::monitor::X11Link,
 	// None while the window has let its device go after a long idle, with what
 	// is needed to build it again waiting in `rebirth` (see `release_gpu`).
@@ -1317,7 +1317,7 @@ impl State {
 	// The window title in the taskbar and alt-tab: a --title from the command line
 	// as given, else the app name, with the dogfood build when this is one, and
 	// what the active tab has to say. Called on a tab or focus change and on each
-	// frame drawn, so it's only built when what it says moved, and set_title
+	// frame drawn, so it's only built when what it says changed, and set_title
 	// runs only then, to avoid flicker.
 	fn update_title(&mut self) {
 		use crate::tabtitle::Suffix;
@@ -1325,8 +1325,8 @@ impl State {
 		// A --title is the whole answer, so nothing else is worked out.
 		let custom = self.win_title.is_some();
 		// The tab's label in full, since the window title has the whole title bar
-		// and the system shortens it itself. It's brought up to date only when
-		// it's the one used, and the strip may be hidden.
+		// and the system shortens it itself. It's refreshed here when the title
+		// uses it, since the strip that would refresh it may be hidden.
 		if !custom && title_from(&self.tabs) == Some(Suffix::Tab) {
 			self.refresh_tab_labels(Some(self.tabs.active));
 		}
@@ -5805,14 +5805,14 @@ impl ApplicationHandler<UserEvent> for App {
 		// reveal. One left alone for long enough lets it go, unless a dialog is
 		// up (on X11 the dialog's context can't outlive the terminal's).
 		let dialog_up = self.dialog.is_some() || self.notice.is_some();
-		// A lost device, or a surface that has to be made again, refuses every
-		// frame for good. It goes the way an idle release does, and comes back
-		// below at once unless the window is hidden. On the GL path that waits
-		// for the dialogs to close, since there a dialog's context can't outlive
-		// the terminal's.
+		// A lost device, or a surface that has to be made again, fails every
+		// frame from then on. The device is let go as in an idle release, and
+		// built again below at once unless the window is hidden. On the GL path
+		// the rebuild waits for the dialogs to close, since a dialog's context
+		// can't outlive the terminal's there.
 		if (!dialog_up || !state.gl) && state.gpu.as_ref().is_some_and(|gpu| gpu.gfx.lost()) {
 			eprintln!(
-				"{}: the GPU device was lost, so building it again",
+				"{}: the GPU device was lost, so it's being built again",
 				config::APP_NAME
 			);
 			idledbg("device lost");

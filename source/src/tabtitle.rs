@@ -361,8 +361,8 @@ pub fn program_title<'a>(
 /// program's is trimmed, since nobody chose its spacing, and has any marker a
 /// console wrote into it taken off. `launched` is the program the pane was
 /// started with, which is how that marker is known in any language. The tab's
-/// own label is only named as the source, not read, since it isn't free, and
-/// nothing is copied, since this is asked on every frame.
+/// own label is named as the source rather than read, because building it costs
+/// something. Nothing is copied, since this runs on every frame.
 pub fn suffix_from<'a>(
 	rights: Rights,
 	typed: Option<&'a str>,
@@ -1037,9 +1037,9 @@ pub fn fit_tip_line(
 	(Some(pieces), widest)
 }
 
-// One line over the budget, broken after a path separator or a space where one
-// falls in the back half of the room, and anywhere otherwise, since a path or a
-// command can run a long way without either.
+// A line over the budget breaks after a path separator or a space in the back
+// half of the room, or anywhere when there isn't one, since a path or a command
+// can go a long way without either.
 fn wrap_tip_line(
 	line: &str,
 	budget: f32,
@@ -1069,7 +1069,7 @@ fn wrap_tip_line(
 			candidate.push_str(&rest[..end]);
 			measure(&candidate) <= budget
 		};
-		// how many chars fit, at least one so a line always moves on
+		// how many chars fit, at least one so every line takes some of the text
 		let (mut lo, mut hi) = (1, ends.len());
 		if fits(ends[hi - 1]) {
 			lo = hi;
@@ -1266,7 +1266,7 @@ mod tests {
 			]
 		);
 		// a window too narrow for the key column still shows every character, and
-		// each line moves on by at least one
+		// each line takes at least one
 		let (fitted, _) = fit_tip_lines(&lines, 40.0, &mono);
 		let fitted = fitted.expect("everything wraps");
 		assert!(fitted.iter().all(|line| mono(line) <= 40.0), "{fitted:?}");
@@ -2698,7 +2698,7 @@ mod tests {
 		}
 		let spent = crate::perf::thread_allocs() - before;
 		assert_eq!(spent, 0, "allocations over 240 frames, title unchanged");
-		// Each part that moves makes a new title.
+		// A change to any part builds a new title.
 		let moves: [(Option<&str>, Option<&str>, Option<&'static str>, &str); 5] = [
 			(None, Some("htop"), None, "SilkTerm - htop"),
 			(None, None, None, "SilkTerm - Work shell - ~/src"),

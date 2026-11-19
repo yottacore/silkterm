@@ -163,8 +163,9 @@ fn in_order(hay: &Folded, query: &str) -> Option<((usize, usize), Vec<(usize, us
 	Some((key, marks))
 }
 
-// Edits apart, a swap of 2 neighbors counting as one. One flat table, since
-// this runs for every word of every row on each key typed.
+// How many edits apart `a` and `b` are, with a swap of 2 neighbors counted as
+// one. It uses one flat table, since this runs for every word of every row on
+// each key typed.
 fn typos(a: &[char], b: &[char]) -> usize {
 	let w = b.len() + 1;
 	let mut table = vec![0usize; (a.len() + 1) * w];
@@ -672,7 +673,7 @@ impl SettingsDialog {
 	pub(super) fn flash_step(&mut self, dt: f32) -> Option<u64> {
 		let (_, t) = self.flash.as_mut()?;
 		*t += dt;
-		// done, but one more frame, to draw it gone
+		// done, but it still asks for one more frame to draw the mark gone
 		if *t >= FLASH_S {
 			self.flash = None;
 		}

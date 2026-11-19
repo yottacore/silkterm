@@ -1154,10 +1154,10 @@ fScriptTests(){
 	## sway floats it above the terminal. Exit 3 is a skip: no binary, sway,
 	## wtype, python3, or software Vulkan.
 	fRunTest_MaySkip cicd/tests/dlgwl/run.bash "Settings tied to its window on Wayland"
-	## A lost GPU device is built again, for the terminal and for Settings, and
-	## the window draws again without any input. Exit 3 is a skip: no binary,
-	## sway, wtype, or software Vulkan.
-	fRunTest_MaySkip cicd/tests/devlost/run.bash "a lost GPU device built again"
+	## After a lost GPU device, the terminal and Settings each get a new one,
+	## and the window draws again without any input. Exit 3 is a skip: no
+	## binary, sway, wtype, or software Vulkan.
+	fRunTest_MaySkip cicd/tests/devlost/run.bash "a new device after a lost GPU device"
 	## A window made wider than the device's largest texture stays up, on X11
 	## with and without a window manager and on Wayland. Exit 3 is a skip: no
 	## binary, Xvfb, xfwm4, xdotool, sway, software Vulkan, or free display.
@@ -1781,9 +1781,9 @@ fi
 ## here, rather than an untested merge. Behind only is safe, as a fast-forward
 ## with a stash around it for a dirty tree. Diverged aborts now rather than at
 ## publish. Offline only warns, since a local build shouldn't need the net.
-## An 'auto-stash' left by a run that stopped between its stash and its pop
-## holds uncommitted work. A build past it leaves that work out, and the next
-## stash buries it deeper, so it stops the run first.
+## A run that stopped between its stash and its pop leaves an 'auto-stash' with
+## uncommitted work in it. A build would leave that work out, and the next
+## stash would bury it deeper, so the run stops here first.
 fJobs
 if ! fStepOpen "Remote sync"; then
 	:
@@ -1814,12 +1814,12 @@ else
 			stashesAfter="$(git stash list | wc -l)"
 			((stashesAfter > stashesBefore)) && didStash=1
 		fi
-		## A failed pull puts the stash back before stopping. Left there, the tree
-		## sits at HEAD with every edit only in the stash.
+		## A failed pull puts the stash back before stopping, or the tree would be
+		## left at HEAD with every edit only in the stash.
 		fEcho_Clean "git pull --ff-only ..."
 		if ! fRemoteGit pull --ff-only; then
 			if ((didStash)) && ! git stash pop; then
-				fDie "git pull --ff-only failed, and putting the stashed work back failed too. It is still in 'stash@{0}' (auto-stash), which may be the only copy of some of it, so keep it. Settle any conflicts, bring back what's missing, then 'git stash drop' and re-run."
+				fDie "git pull --ff-only failed, and putting the stashed work back failed too. It's still in 'stash@{0}' (auto-stash), which may be the only copy of some of it, so keep it. Settle any conflicts, bring back what's missing, then 'git stash drop' and re-run."
 			fi
 			fDie "git pull --ff-only failed. The working tree is as it was."
 		fi

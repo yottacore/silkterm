@@ -70,7 +70,8 @@ pub fn wrap(text: &str, max_w: f32, mut measure: impl FnMut(&str) -> f32) -> Vec
 
 /// A tip's words wrapped and measured, kept while the tip stays up. A frame
 /// used to wrap them and then measure every line again for the box's width.
-/// Wrapped again only when the words, the budget, or the text context change.
+/// Now they're wrapped again only when the words, the budget, or the text
+/// context change.
 #[derive(Debug, Default)]
 pub struct Wrapped {
 	said: String,
@@ -84,8 +85,8 @@ pub struct Wrapped {
 }
 
 impl Wrapped {
-	/// The lines and the widest of them. `generation` is the text context's
-	/// (`TextCtx::generation`), which a font, size, or scale change moves.
+	/// The lines and the widest of them. `generation` is `TextCtx::generation`,
+	/// which is new after a font, size, or scale change.
 	pub fn lay(
 		&mut self,
 		said: &str,
@@ -115,7 +116,7 @@ impl Wrapped {
 		(&self.lines, self.widest)
 	}
 
-	/// The lines as last laid out, for a frame that laid them out first.
+	/// The lines from the last `lay`, for a caller that already called it.
 	pub fn lines(&self) -> &[String] {
 		&self.lines
 	}
@@ -594,7 +595,7 @@ mod tests {
 	}
 
 	// A menu or Settings tip on screen was wrapped and then measured line by
-	// line on every frame. Kept, it's wrapped once while it stays up, and a
+	// line on every frame. Now it's wrapped once while it stays up, and a
 	// change to the words, the width, or the text context wraps it again.
 	// Test ID: dfe5r
 	#[test]

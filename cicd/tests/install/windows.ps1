@@ -138,7 +138,7 @@ try {
 	$out = fInstall
 	$s = $wsh.CreateShortcut($lnk)
 	fCheck 'an upgrade keeps a shortcut edited by hand' ((fInstalled '9.9.11') -and $s.Description -eq 'Mine' -and $s.WorkingDirectory -eq $work)
-	fCheck 'and does not list it in the plan' ($out -notmatch 'Shortcut:')
+	fCheck 'and doesn''t list it in the plan' ($out -notmatch 'Shortcut:')
 	$s.TargetPath = Join-Path $env:SystemRoot 'System32\PING.EXE'; $s.Save()
 	$out = fInstall
 	fCheck 'a shortcut that starts some other program is rewritten' ($wsh.CreateShortcut($lnk).TargetPath -eq $destFile -and $out -match 'Shortcut:')
