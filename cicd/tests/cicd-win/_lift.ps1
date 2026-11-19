@@ -303,8 +303,8 @@ try {
 	$dirty = fStashIfDirty
 	fCheck 'a dirty tree is, untracked files too, and the answer is only true' ($dirty -is [bool] -and $dirty -and @(& git stash list).Count -eq 1 -and -not (Test-Path -LiteralPath 'b.txt'))
 
-	##	That stash is what a run that stopped before its pop leaves, and it
-	##	stops the next run before anything else.
+	##	A run that stopped before its pop leaves that stash, and the next run
+	##	stops on it before anything else.
 	$died = fDied { fNoLeftStash }
 	fCheck 'a leftover auto-stash stops the run' ($died -like "an 'auto-stash' from an earlier run is still in 'git stash list'*")
 	& git stash pop --quiet
@@ -329,7 +329,7 @@ try {
 	Remove-Item -LiteralPath 'b.txt'
 	& git stash pop --quiet
 
-	##	A pop that fails after a good pull names it too.
+	##	A pop that fails after a good pull names the stash too.
 	$script:PullFails = ''
 	$null = fStashIfDirty
 	Set-Content -LiteralPath 'b.txt' -Value 'theirs'

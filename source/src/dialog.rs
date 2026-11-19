@@ -525,7 +525,7 @@ impl DialogWin {
 		))
 	}
 
-	// What every dialog starts with, past its window and its content.
+	// The state every dialog starts with, given its window and its content.
 	fn assemble(
 		(modal, window, gfx, text, rects): (ModalHint, Arc<Window>, Gfx, TextCtx, RectRenderer),
 		content: Content,
@@ -1059,7 +1059,8 @@ impl DialogWin {
 		// the natural size is a different number of pixels now, so let the snap
 		// have another go at whatever size we end up with
 		self.snapped = false;
-		// a platform that resizes synchronously answers here and sends no Resized
+		// a platform that resizes synchronously returns the size here and doesn't
+		// send a Resized
 		if want != now
 			&& let Some(applied) = crate::app::request_size(&self.window, want)
 		{
@@ -1140,8 +1141,8 @@ impl DialogWin {
 
 	// A new device on the same window once the old one is lost, built cold,
 	// since the warm one was most likely lost with it. The text keeps its fonts
-	// and shaping, and only what it put on the device is made again. False
-	// leaves the dialog refusing frames, tried again on the frame backoff.
+	// and shaping, and only what it put on the device is made again. On false
+	// the dialog refuses frames, and this is tried again on the frame backoff.
 	fn regain_gpu(&mut self) -> bool {
 		if self.gfx.regain(&self.window).is_err() {
 			return false;
@@ -1400,8 +1401,9 @@ struct ShapedText {
 	// shaped from, with its hash
 	bufs: Vec<glyphon::Buffer>,
 	keys: Vec<(u64, ShapeKey)>,
-	// Both maps go by the key's hash, so a lookup builds no owned key. The key
-	// kept with each entry is compared, and a hash shared by two keys is a miss.
+	// Both maps go by the key's hash, so a lookup doesn't build an owned key.
+	// The key kept with each entry is compared, and a hash shared by 2 keys is a
+	// miss.
 	index: HashMap<u64, usize>,
 	// last frame's, until this one asks for them
 	spare: HashMap<u64, (ShapeKey, glyphon::Buffer)>,
@@ -2463,7 +2465,7 @@ const ABOUT_BORDER: f32 = 1.0; // 1px rule around the Support button
 // tip.rs, since both windows draw the same box.
 
 // Ask for a laid-out box's size, and follow it at once where the platform
-// resizes synchronously and sends no Resized.
+// resizes synchronously and doesn't send a Resized.
 fn fit_window(window: &Window, gfx: &mut Gfx, size: (f32, f32)) {
 	let want = winit::dpi::PhysicalSize::new(size.0.ceil() as u32, size.1.ceil() as u32);
 	if let Some(applied) = crate::app::request_size(window, want) {
@@ -4098,7 +4100,7 @@ mod tests {
 	}
 
 	// A frame that asks for what the last one shaped finds it by a borrowed
-	// key, so a dialog at rest builds no key, plain or marked. A line asked for
+	// key, so a dialog at rest doesn't build any key, plain or marked. A line asked for
 	// twice in a frame is one buffer, and a new line still builds its key.
 	// Test ID: dfe86
 	#[test]

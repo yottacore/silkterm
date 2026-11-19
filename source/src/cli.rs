@@ -326,14 +326,15 @@ fn parse_size(v: &str) -> anyhow::Result<Size> {
 	}
 }
 
-/// The launch arguments as text. A name that isn't Unicode is a parse error, not a panic.
+/// The launch arguments as text. An argument that isn't Unicode is a parse error
+/// rather than a panic.
 pub fn utf8_args<I: IntoIterator<Item = std::ffi::OsString>>(
 	args: I,
 ) -> anyhow::Result<Vec<String>> {
 	args.into_iter()
 		.map(|a| {
 			a.into_string().map_err(|a| {
-				anyhow::anyhow!("argument is not valid Unicode: {}", a.to_string_lossy())
+				anyhow::anyhow!("argument isn't valid Unicode: {}", a.to_string_lossy())
 			})
 		})
 		.collect()
@@ -1716,7 +1717,7 @@ mod tests {
 			use std::os::unix::ffi::OsStringExt;
 			let bad = OsString::from_vec(b"/data/caf\xe9".to_vec());
 			let e = utf8_args([OsString::from("--directory"), bad]).unwrap_err();
-			assert!(e.to_string().contains("not valid Unicode"), "{e}");
+			assert!(e.to_string().contains("isn't valid Unicode"), "{e}");
 		}
 	}
 }

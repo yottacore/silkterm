@@ -42,7 +42,7 @@ pub(super) enum RatingStep {
 /// it gets no say in the profile.
 #[allow(
 	clippy::fn_params_excessive_bools,
-	reason = "4 independent gates, all 16 cases tested"
+	reason = "the 4 gates are independent, and all 16 cases are tested"
 )]
 pub(super) fn rating_step(
 	bench: bool,
@@ -774,8 +774,8 @@ mod tests {
 		}
 	}
 
-	// The banner's lines are centered from lefts kept in a fixed array, so each
-	// thing it can say has to fit in it.
+	// The banner's lines are centered from lefts kept in a fixed array, so every
+	// message the banner shows has to fit in that array.
 	// Test ID: dfe5w
 	#[test]
 	fn every_banner_fits_its_kept_lefts() {

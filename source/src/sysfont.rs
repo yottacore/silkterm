@@ -15,7 +15,7 @@ pub struct Monospace {
 /// Cached system monospace description.
 pub fn monospace() -> &'static Monospace {
 	static M: OnceLock<Monospace> = OnceLock::new();
-	// Miri can't start the desktop's settings tools, and every config test reaches
+	// Miri can't start the desktop's settings tools, and every config test calls
 	// this through the defaults.
 	if cfg!(miri) {
 		return M.get_or_init(Monospace::default);

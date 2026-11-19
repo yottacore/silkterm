@@ -85,7 +85,8 @@ fn path_to(nodes: &[TabNode], leaf: usize) -> Vec<usize> {
 	path.reverse();
 	path
 }
-// How many tabs `path_to` would list, without building it: every row top asks.
+// How many tabs `path_to` would list, without building the list. Every row top
+// needs it.
 fn path_len(nodes: &[TabNode], leaf: usize) -> usize {
 	let mut len = 1;
 	let mut at = leaf_node(nodes, leaf);
@@ -184,8 +185,8 @@ pub fn row_tips() -> usize {
 	ROW_TIPS.with(std::cell::Cell::get)
 }
 
-/// A flyover the pointer is over, named rather than written out: fixed words,
-/// or what row `.0` says about one of its settings.
+/// Which flyover the pointer is over, without its words. It's either fixed
+/// text, or row `.0`'s tip for one of its settings.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum TipAt {
 	Said(&'static str),
@@ -1030,7 +1031,7 @@ struct EMenu {
 
 #[derive(Debug)]
 pub struct TextItem {
-	// Borrowed for the fixed words (labels, captions, icons), so a frame
+	// Borrowed for fixed words such as labels, captions, and icons, so a frame
 	// doesn't copy each one.
 	pub text: Cow<'static, str>,
 	pub x: f32,
@@ -2756,9 +2757,9 @@ impl SettingsDialog {
 		}
 		let now = self.get_f32(key);
 		let next = scale.stepped(now, dir, shift);
-		// same as a dropdown at its end: setting the same number still lifts the
-		// automatic mark and turns the sub-group on. The slack is for a value
-		// read back through a percent or speed conversion.
+		// Same as a dropdown at its end. Setting the same number again still lifts
+		// the automatic mark and turns the sub-group on. The slack is for a value
+		// that went through a percent or speed conversion.
 		if (next - now).abs() > f32::EPSILON * 8.0 * now.abs().max(1.0) {
 			self.set_f32(key, next);
 		}
@@ -2982,7 +2983,7 @@ impl SettingsDialog {
 	fn walk_rows(&self, cache: &mut RowTops, first: f32, shells: usize) {
 		#[cfg(test)]
 		ROW_WALKS.with(|n| n.set(n.get() + 1));
-		// NaN marks a row the walk doesn't reach, so no second vec says which
+		// NaN marks a row the walk skips, so there's no need for a second vec
 		cache.tops.clear();
 		cache.tops.resize(self.specs.len(), f32::NAN);
 		let mut y = first;
@@ -3008,8 +3009,8 @@ impl SettingsDialog {
 		}
 	}
 	// The hotkey a row's setting is, found through the declarations so the 2
-	// can't disagree. Asked for every key of every row each frame, so any
-	// other key is turned away before the walk over the rows.
+	// can't disagree. It's asked for every key of every row each frame, so a
+	// key that isn't a hotkey returns early, before the walk over the rows.
 	fn hotkey_for_key(&self, key: Key) -> Option<Hotkey> {
 		if !matches!(key, keys_of!(hotkey)) {
 			return None;
@@ -3047,8 +3048,8 @@ impl SettingsDialog {
 				.join(" or ")
 		};
 		let mut notes = Vec::new();
-		// every hotkey row walks every clash each frame, so only a clash of its
-		// own is spoken
+		// every hotkey row walks every clash each frame, so the chord's name is
+		// only built for a clash of its own
 		for taken in keys.taken() {
 			if taken.from == hotkey {
 				notes.push(format!(
@@ -3557,8 +3558,8 @@ impl SettingsDialog {
 		}
 		Some(Cow::Borrowed(self.specs[i].help)).filter(|help| !help.is_empty())
 	}
-	// Whether row `i` has anything to say about `key`. Almost every row has
-	// help, so the words are built here only for one that has none.
+	// Whether row `i` has a tip for `key`. Almost every row has help, so the
+	// words are only built here for a row without any.
 	fn has_row_tip(&self, i: usize, key: Key) -> bool {
 		self.row_tip_text(i, key).is_some() || self.row_tip(i, key).is_some()
 	}
@@ -3567,8 +3568,8 @@ impl SettingsDialog {
 		self.hover_at_dip(mx, my)
 			.map(|(at, anchor)| (self.tip_words(at), anchor))
 	}
-	// The flyover to show while the cursor rests on something that has one:
-	// (which tip, anchor rect to hang the tip box under).
+	// The flyover for whatever the cursor rests on, if it has one, and the rect
+	// the tip box hangs under.
 	fn hover_at_dip(&self, mx: f32, my: f32) -> Option<(TipAt, Rect)> {
 		// A box covers the panel, or a popup owns the pointer until it closes, so
 		// nothing behind either responds.
@@ -4308,9 +4309,9 @@ impl SettingsDialog {
 		self.last_click = Some((now, x, y));
 		// a click anywhere stops a hotkey row waiting; one on its box starts it again
 		self.capture_end();
-		// An open field context menu takes the click, over the picker or the prompt
-		// box as well. An enabled item runs its command (the clipboard side is in
-		// dialog.rs), and a click elsewhere closes it.
+		// An open field context menu takes the click, even over the picker or the
+		// prompt box. A click on an enabled item runs its command, and one anywhere
+		// else closes the menu. dialog.rs does the clipboard part.
 		if self.emenu.is_some() {
 			let hit = (0..EDIT_MENU.len()).find(|&k| self.em_item_rect(k).contains(x, y));
 			let cmd = hit.filter(|&k| self.em_enabled(k)).map(|k| EDIT_MENU[k].1);
@@ -10460,9 +10461,9 @@ mod tests {
 	}
 
 	// An arrow that can't move a slider or a closed dropdown any further used
-	// to set the same value again, which turned the row's switch on (Text
-	// scrim, Wallpaper) and put a theme's colors back. Every such row, both
-	// ends, with its switch off.
+	// to set the same value again, which turned the row's switch on, as on Text
+	// scrim and Wallpaper, and put a theme's colors back. This tries every such
+	// row at both ends, with its switch off.
 	// Test ID: dfehc
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
@@ -11761,8 +11762,9 @@ mod tests {
 		let _ = std::fs::remove_dir_all(&dir);
 	}
 
-	// OK again after a save that found the file open in another program writes
-	// what the first OK tried to, a value put back to its default included.
+	// A second OK, after a save that found the file open in another program,
+	// writes what the first OK tried to, including a value that was put back to
+	// its default.
 	// Test ID: dfegz
 	#[cfg(target_os = "linux")]
 	#[test]
@@ -13442,8 +13444,8 @@ mod tests {
 		);
 	}
 
-	// The Option key group opens the Keys tab, and its pick is the setting the
-	// file has under `keys:`, which the window reads on Apply.
+	// The Option key group comes first on the Keys tab, and its choice is saved
+	// under `keys:` in the file, which the window reads on Apply.
 	// Test ID: dffm7
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
@@ -14354,7 +14356,7 @@ mod tests {
 		}
 	}
 
-	// Each frame copied every label, tab title, caption and icon into a new
+	// Each frame copied every label, tab title, caption, and icon into a new
 	// string. The fixed words are borrowed now.
 	// Test ID: dfe4j
 	#[test]

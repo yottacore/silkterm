@@ -13,7 +13,7 @@
 # the wallpaper directory. Binaries are left alone, and so is Cargo.lock, which
 # `cargo build` regenerates. Review `git diff` and `git status` afterwards.
 #
-# Untracked files are left alone, since they can be someone's work in progress,
+# Untracked files can be someone's work in progress, so they're left alone
 # unless --untracked is given. Ignored files are never touched. An untracked
 # file inside a directory that gets renamed still moves along with it.
 

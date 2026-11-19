@@ -224,7 +224,7 @@ impl Loss {
 		device.set_device_lost_callback(move |_, _| flag.store(true, Ordering::Release));
 		// Whatever is made on a lost device is invalid, and the rest of the
 		// frame using it is a validation error, which wgpu's own handler panics
-		// on. Those go quietly; any other error stays fatal, as it was.
+		// on. Those are ignored, and any other error is still fatal.
 		let flag = loss.0.clone();
 		device.on_uncaptured_error(Arc::new(move |err: wgpu::Error| {
 			assert!(flag.load(Ordering::Acquire), "wgpu error: {err}");
@@ -1113,9 +1113,9 @@ impl Gfx {
 			Backend::Native(surface) => {
 				use wgpu::CurrentSurfaceTexture::{Lost, Occluded, Outdated, Suboptimal, Success};
 				match surface.get_current_texture() {
-					// The acquire is where a loss is often found. Dropping the texture
-					// discards it, which wgpu panics on for a lost device, so it goes
-					// back through a present, which does nothing there.
+					// A loss often shows up first at the acquire. Dropping the texture
+					// discards it, and wgpu panics on that for a lost device, so it's
+					// presented instead, which does nothing there.
 					Success(surface_tex) | Suboptimal(surface_tex) if self.loss.lost() => {
 						surface_tex.present();
 						Err(NoFrame::Other)
@@ -1127,7 +1127,7 @@ impl Gfx {
 						surface.configure(&self.device, &self.config);
 						Err(NoFrame::Other)
 					}
-					// wants a new surface, which `lost` asks the owner for
+					// wants a new surface, which `lost` asks the caller for
 					Lost => {
 						self.surface_lost.store(true, Ordering::Relaxed);
 						Err(NoFrame::Other)
@@ -1268,11 +1268,11 @@ impl Gfx {
 	}
 }
 
-/// A window may be no bigger than the largest texture the device will make: the
+/// A window may be no bigger than the largest texture the device will make. The
 /// GL path renders the scene into an offscreen texture at the window's size, and
-/// wgpu treats a refusal as fatal. So a count out of the config or the command
-/// line is held here, or it ends the launch in `create_texture`. So is the
-/// surface of a window the window manager made bigger than that.
+/// wgpu treats a refusal as fatal. So a size from the config or the command line
+/// is capped here, or it ends the launch in `create_texture`. The same cap
+/// applies to the surface of a window the window manager made bigger than that.
 pub fn fit_px(w: u32, h: u32, max_dim: u32) -> (u32, u32) {
 	(w.clamp(1, max_dim), h.clamp(1, max_dim))
 }
@@ -3568,7 +3568,7 @@ mod tests {
 			gpu.queue.write_buffer(&buf, 64, &[0; 4]);
 		};
 		let live = crate::testdir::catch_expected_panic(std::panic::AssertUnwindSafe(write));
-		assert!(live.is_err(), "an error on a working device went unheard");
+		assert!(live.is_err(), "an error on a working device went unseen");
 		gpu.device.destroy();
 		let _ = gpu.device.poll(wgpu::PollType::wait_indefinitely());
 		assert!(gpu.loss.lost());

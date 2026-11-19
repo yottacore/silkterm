@@ -513,8 +513,8 @@ pub struct Env<'a> {
 	facts: Facts<'a>,
 }
 
-// The settings fields the rules and presets read. Never the model, so a
-// change can borrow the model mutably while an Env lives.
+// The settings fields that the rules and presets read. The model is left out,
+// so a change can borrow the model mutably while an Env is alive.
 #[derive(Debug)]
 struct Facts<'a> {
 	wallpaper: Option<crate::autotheme::Derived>,
@@ -526,8 +526,8 @@ struct Facts<'a> {
 	user_themes: &'a [crate::theme::UserTheme],
 }
 
-// Field by field rather than through a function, so the borrows stay off
-// `model` beside them.
+// Field by field rather than through a function, so the borrows don't
+// include `model` beside them.
 macro_rules! facts {
 	($s:expr) => {
 		Facts {
@@ -547,8 +547,8 @@ impl<'a> Env<'a> {
 		Env::over(&settings.model, monitor, facts!(settings))
 	}
 
-	/// Settings fields knobs stores are read off the model, since the fields
-	/// may not be filled from it yet.
+	/// Settings fields that knobs stores are read from the model, since the
+	/// fields may not be filled from it yet.
 	fn over(model: &knobs::Model, monitor: Option<&'a str>, facts: Facts<'a>) -> Env<'a> {
 		let plain = |key: Key| model.value(key.name(), &knobs::NoEnv);
 		Env {
@@ -562,7 +562,7 @@ impl<'a> Env<'a> {
 }
 
 // The model to change, and an Env over the rest of the settings, so a change
-// needn't copy the model first.
+// doesn't have to copy the model first.
 fn split<'a>(
 	settings: &'a mut Settings,
 	monitor: Option<&'a str>,

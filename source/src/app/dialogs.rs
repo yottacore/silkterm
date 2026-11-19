@@ -493,7 +493,8 @@ impl App {
 	}
 }
 
-// What a field menu's Paste goes by: grayed while the clipboard has no text.
+// Whether a field menu's Paste is enabled. It's grayed while the clipboard
+// doesn't have any text.
 fn clipboard_has_text(state: Option<&mut State>) -> bool {
 	state.is_some_and(|s| s.clipboard.get_clipboard().is_some_and(|t| !t.is_empty()))
 }
@@ -600,8 +601,8 @@ pub(super) enum Underneath {
 	Raises,
 }
 
-/// The close button counts as a click: let through, it quit with Settings
-/// open and its changes went with it.
+/// The close button counts as a click. When it was let through, it quit with
+/// Settings open and lost the changes.
 pub(super) fn underneath(event: &WindowEvent) -> Underneath {
 	match event {
 		WindowEvent::KeyboardInput { .. }
@@ -620,7 +621,7 @@ pub(super) fn underneath(event: &WindowEvent) -> Underneath {
 mod tests {
 	use super::notice_due;
 
-	// A dialog holds the window under it: keys go nowhere, and a click or the
+	// A dialog blocks the window under it. Keys are dropped, and a click or the
 	// title bar's close brings the dialog forward. The close used to quit past
 	// Settings and lose what it had changed.
 	// Test ID: dfehe

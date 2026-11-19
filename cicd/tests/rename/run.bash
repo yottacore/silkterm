@@ -9,8 +9,8 @@
 ##		script. The pipeline, the packaging, and the installers kept it too.
 ##		This clones the repository, renames the clone, and checks that nothing a
 ##		build reads by name went missing and that the old name is gone.
-##		Untracked files, which can be someone's work in progress, stay as they
-##		were unless --untracked asks for them.
+##		Untracked files can be someone's work in progress, so they stay as they
+##		were unless --untracked is given.
 ##	- Test ID: dcrrk
 ##	- History: At bottom of file.
 
@@ -89,8 +89,8 @@ left="$(cd "${clone}" && git ls-files | grep -i silkterm || true)"
 fCheck "no tracked path still carries the old name" test -z "${left}"
 [[ -z "${left}" ]] || sed 's/^/    /' <<< "${left}" | head -5
 
-##	Asked for, an untracked file is rewritten and renamed too. The tracked ones
-##	already carry the new name, so this run only reaches it.
+##	With --untracked, an untracked file is rewritten and renamed too. The
+##	tracked files already have the new name, so this run only changes that one.
 ( cd "${clone}" && utility/rename.bash --untracked Weavterm >/dev/null )
 fCheck "with --untracked, an untracked file is rewritten" grep -qx 'Weavterm draft' "${clone}/source/weavterm-wip.txt" 2>/dev/null
 fCheck "and renamed" test ! -e "${wip}"

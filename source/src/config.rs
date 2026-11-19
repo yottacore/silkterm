@@ -2084,10 +2084,10 @@ fn write_config_keeping(path: &std::path::Path, text: &str) -> anyhow::Result<Op
 	Ok(kept)
 }
 
-// The terminal hears it now, and the window once it's up.
+// Printed to the terminal now, and shown in the window once it's up.
 fn say_lost(loss: ConversionLoss) {
 	eprintln!("{}", loss.terminal_line());
-	// a footer put back to the default lost nothing anybody wrote
+	// a footer put back to the default didn't lose anything anybody wrote
 	let owed = !matches!(loss.how, Converted::Dropped(_)) || !loss.lines.is_empty();
 	if owed {
 		*crate::locks::lock(&LOST_IN_CONVERSION) = Some(loss);
@@ -2766,9 +2766,9 @@ impl Put for shcl::Document {
 }
 
 // A setting written twice reads as neither copy, and shcl refuses to set it,
-// so the save kept the file as it was and the setting stayed at its default.
-// The value being written is the one wanted, so the later copies go and the
-// first takes it, as the rating line does.
+// so the save used to leave the file as it was, with the setting at its
+// default. The value being written is the one wanted, so the later copies are
+// removed and the first gets the value, as the rating line does.
 fn put_once(
 	doc: &mut shcl::Document,
 	path: &str,
@@ -2787,10 +2787,10 @@ fn put_once(
 	unwritable(path, status);
 }
 
-// Every copy of a setting after the first taken out, giving back the comments
-// above them, which a removal takes along. A path that is doubled further up
-// than its last name is left alone, since `(k)` picks among the last name's
-// copies only.
+// Removes every copy of a setting after the first, and returns the comments
+// above them, since a removal deletes those too. A path that's doubled further
+// up than its last name is left alone, since `(k)` only picks among the last
+// name's copies.
 fn keep_first(doc: &mut shcl::Document, path: &str) -> Vec<String> {
 	let copies = doc.count(path);
 	let notes = (1..copies)
@@ -2816,9 +2816,9 @@ fn same_f32(a: f32, b: f32) -> bool {
 }
 
 /// `persist` for a Settings Apply. `unsaved` is the baseline the file still has
-/// when an earlier Apply couldn't write it, and the save diffs against that, or
-/// the retry finds nothing changed and writes nothing. Gives back the baseline to
-/// keep when this write didn't go through either.
+/// when an earlier Apply couldn't write it. The save diffs against that, or the
+/// retry would find nothing changed and write nothing. Returns the baseline to
+/// keep when this write doesn't go through either.
 #[must_use]
 pub fn persist_apply(
 	orig: &Settings,
@@ -3223,8 +3223,8 @@ struct RawColors {
 fn load() -> Settings {
 	// A launch's own writes come before it says anything about the file.
 	*crate::locks::lock(&LAUNCH_SAID) = None;
-	// a launch rewrites the file in steps, and a save in another window must
-	// not happen between them, nor a second launch's adopt or import
+	// a launch rewrites the file in steps, and neither a save in another window
+	// nor a second launch's adopt or import can run between them
 	let _lock = crate::peers::save_lock();
 	adopt_legacy_config();
 	let Some(path) = config_path() else {
@@ -3321,7 +3321,7 @@ impl<'a> LaunchFile<'a> {
 	}
 
 	// A failed write can leave either file, and the test seam skips writes
-	// outside its folders, so those read the disk again.
+	// outside its folders, so both cases read the disk again.
 	fn wrote(&mut self, ok: bool, out: String) {
 		if ok && may_write(self.path) {
 			self.body = Some(out.into_bytes());
@@ -5376,7 +5376,7 @@ fn repair_wallpaper_heading(file: &mut LaunchFile) {
 // template is written over it, with every active old value copied to its new
 // path, so settings survive and the file's comments are current. Themes and
 // the `kept` block are copied as is in dotted form (`copied_as_is`). A setting
-// with nowhere to go is counted and said. The rewrite keeps a linked file
+// with nowhere to go is counted and reported. The rewrite keeps a linked file
 // linked and a private one private.
 fn convert_legacy_config(file: &mut LaunchFile) {
 	convert_legacy_config_with(file, write_config_atomic);
@@ -8142,8 +8142,8 @@ fn adopt_config_with(
 	// rename first: same volume is the ordinary case and it is atomic. A cross
 	// volume move fails EXDEV, so fall back to copy-then-remove, and keep the
 	// original if the remove fails rather than risk having neither. The copy
-	// goes under a name of its own first, so a crash leaves no half file that
-	// the next launch would take over the whole one.
+	// goes under a name of its own first, so a crash can't leave a half-written
+	// file that the next launch would take for the whole one.
 	let moved = rename(legacy, native).is_ok()
 		|| (copy_whole(legacy, native).is_ok() && std::fs::remove_file(legacy).is_ok());
 	if moved {
@@ -10753,7 +10753,7 @@ mod tests {
 	}
 
 	// A setting written twice reads as neither copy. A revert or a cleared box
-	// leaves no copy in force, and a write leaves one copy with the new value,
+	// doesn't leave any copy in force, and a write leaves one copy with the new value,
 	// whether the copies share a block or sit in a block written twice. A note
 	// between them stays.
 	// Test ID: dfehx
@@ -10802,7 +10802,8 @@ mod tests {
 
 	// A Settings save of a setting written twice in the file writes it, and a
 	// revert takes it back to its default, rather than leaving the file as it
-	// was. The state file's window size and machine test pick update the same.
+	// was. The state file's window size and machine test pick are updated the
+	// same way.
 	// Test ID: dfehy
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
@@ -15955,7 +15956,7 @@ mod tests {
 	}
 
 	// Option as Alt is off unless the file names a side, and a word it doesn't
-	// know is off too. It sits under `keys:` without being taken for a hotkey.
+	// know is off too. The setting is under `keys:`, but it isn't read as a hotkey.
 	// Test ID: dffm5
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
@@ -16612,7 +16613,7 @@ mod tests {
 	// aside under a switch. A file rebuilt from the template keeps it, along with
 	// every other subtree the typo check takes for the program's or the user's
 	// own, whether a flat key at the margin converted it or it was deleted while
-	// the program ran. A conversion that leaves a setting behind says so.
+	// the program ran. A setting left behind by a conversion is reported.
 	// Test ID: dfef3
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
@@ -16660,8 +16661,8 @@ mod tests {
 		convert_legacy_config(&mut LaunchFile::read(&path));
 		assert_eq!(take_conversion_loss(), None, "nothing was left behind");
 
-		// deleted while running: the save writes it new from what was read. The
-		// launch moved the monitor size to the state file.
+		// a block deleted while the program runs is written again from what was
+		// read. The launch moved the monitor size to the state file.
 		std::fs::write(&path, &current).unwrap();
 		set_config_override(path.clone());
 		let loaded = reload_from_disk();
@@ -17291,9 +17292,9 @@ mod tests {
 		assert_eq!(s.minimap_tui_whitelist, "less vim");
 	}
 
-	// A key can carry part of its path under a heading, such as `minimap.keep_for`
-	// under `scroll:`. The rename swaps only the leaf. It went to
-	// `scroll.tui_process_whitelist`, which nothing reads.
+	// A key can include part of its path under a heading, such as
+	// `minimap.keep_for` under `scroll:`. The rename swaps only the leaf. It used
+	// to write `scroll.tui_process_whitelist`, which nothing reads.
 	// Test ID: dfef4
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]

@@ -756,11 +756,12 @@ impl ContextMenu {
 	pub(super) fn chain(&self) -> Vec<&ContextMenu> {
 		self.popups().collect()
 	}
-	// The same, with nothing allocated, for the per-frame and per-move callers.
+	// The same, without allocating anything, for the per-frame and per-move
+	// callers.
 	fn popups(&self) -> impl Iterator<Item = &ContextMenu> {
 		std::iter::successors(Some(self), |at| at.sub.as_deref())
 	}
-	// The tip for row `row`, or None where it has none to give.
+	// The tip for row `row`, or None where the row doesn't have one.
 	fn row_help(&self, row: usize) -> Option<&'static str> {
 		let help = match self.entries.get(row)? {
 			Entry::Item { action, .. } => action.help(),
@@ -1055,7 +1056,7 @@ impl State {
 			return;
 		};
 		let target = menu.target;
-		// the innermost hit wins: a submenu is drawn over whatever it covers
+		// the innermost hit wins, since a submenu is drawn over whatever it covers
 		let found = menu
 			.popups()
 			.enumerate()

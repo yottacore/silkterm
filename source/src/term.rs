@@ -114,7 +114,7 @@ impl EventProxy {
 }
 
 /// A bigger OSC 52 store is dropped whole. A clipped one would paste something
-/// the program never sent, and the parser itself holds up to
+/// the program never sent, and the parser itself buffers up to
 /// `cwd::OSC_HELD_MAX` of it.
 pub const CLIPBOARD_STORE_MAX: usize = 1 << 20;
 

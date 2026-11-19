@@ -394,10 +394,11 @@ function fShot([IntPtr]$H, [string]$Name) {
 	$bmp | Add-Member -NotePropertyName How -NotePropertyValue $how -PassThru
 }
 
-##	GetPixel is one interop call a pixel, and a check samples 35k to 60k of them,
-##	which took seconds. These read the locked bitmap a row at a time instead.
-##	Format32bppArgb is B, G, R, A in memory, whatever the source format, and a
-##	row is stride bytes after the one above it, stride being negative bottom-up.
+##	GetPixel makes one interop call per pixel, and a check samples 35k to 60k
+##	of them, which took seconds. These read the locked bitmap a row at a time.
+##	Format32bppArgb is B, G, R, A in memory, whatever the source format. Each
+##	row starts stride bytes after the one above it, and the stride is negative
+##	for a bitmap stored bottom-up.
 Add-Type -TypeDefinition @'
 using System;
 using System.Runtime.InteropServices;

@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
 
 ##	- Purpose:
-##		The Windows scenarios' ink and diff checks, without a box. They called
-##		GetPixel once a sampled pixel, which took seconds a check, and now read the
-##		locked bitmap a row at a time in _lib.ps1's SilkPix. Its counts are checked
-##		here against a pixel-at-a-time reference, over rows stored top first and
-##		bottom first, sizes that don't divide by the step, and colors at each
-##		threshold. System.Drawing doesn't run here, so the bitmap is plain memory.
+##		Checks the Windows scenarios' ink and diff counts without a Windows
+##		machine. Those checks used to call GetPixel once per sampled pixel, which
+##		took seconds per check. Now SilkPix in _lib.ps1 reads the locked bitmap a
+##		row at a time. Its counts are compared here with a reference that reads
+##		one pixel at a time, over rows stored top first and bottom first, sizes
+##		the step doesn't divide, and colors at each threshold. System.Drawing
+##		doesn't run on Linux, so the bitmap here is plain memory.
 ##	- Test ID: dfe8t
 ##	- History: At bottom of file.
 
@@ -29,14 +30,14 @@ trap 'rc=$?; fTestDir_Rm "${work}" || true; fTestDir_End "${rc}"' EXIT
 failures=0
 fCheck(){ local -r what="${1}"; shift; if "${@}"; then echo "  ok   ${what}"; else echo "  FAIL ${what}"; failures=$((failures + 1)); fi; }
 
-## fInk and fDiff themselves, by the AST, so a comment that names GetPixel doesn't count.
+## Only the bodies of fInk and fDiff, read through the AST, so a comment that names GetPixel doesn't count.
 fNoGetPixel(){ pwsh -NoProfile -NonInteractive -Command "
 	\$ast = [System.Management.Automation.Language.Parser]::ParseFile('${meDir}/_lib.ps1', [ref]\$null, [ref]\$null)
 	foreach (\$name in 'fInk', 'fDiff') {
 		\$fn = \$ast.Find({ param(\$n) \$n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and \$n.Name -eq \$name }, \$true)
 		if (-not \$fn -or \$fn.Body.Extent.Text -match 'GetPixel') { exit 1 }
 	}" ;}
-fCheck "fInk and fDiff don't read a pixel a call" fNoGetPixel
+fCheck "fInk and fDiff don't call GetPixel" fNoGetPixel
 
 cat > "${work}/pixels.ps1" <<'PS'
 param([string]$Lib)
@@ -48,7 +49,7 @@ Invoke-Expression $add.Extent.Text
 
 $rng = [System.Random]::new(8)
 $bad = 0; $cases = 0
-## B G R A, rows top first, as GetPixel would hand them out one by one.
+## Pixels are B G R A, rows top first, read one at a time the way GetPixel would.
 function fRef([byte[]]$P, [int]$W, [int]$H, [int]$Step, [scriptblock]$Hit) {
 	$hits = 0; $seen = 0
 	for ($y = 0; $y -lt $h; $y += $step) {
@@ -56,8 +57,8 @@ function fRef([byte[]]$P, [int]$W, [int]$H, [int]$Step, [scriptblock]$Hit) {
 	}
 	[math]::Round($hits / $seen, 4)
 }
-## The pixels into unmanaged memory with a stride of its own, padded, and bottom
-## row first when $Up. Returns the pointer for row 0 and the stride.
+## Copies the pixels into unmanaged memory with a padded stride, bottom row
+## first when $Up. Returns the pointer for row 0 and the stride.
 function fPlace([byte[]]$P, [int]$W, [int]$H, [bool]$Up) {
 	$row = $w * 4; $stride = $row + 8
 	$mem = [System.Runtime.InteropServices.Marshal]::AllocHGlobal($stride * $h)
@@ -74,7 +75,7 @@ function fSame([string]$What, $Want, $Got) {
 	if ($want -ne $got) { $script:bad++; "FAIL ${What}: want $want got $got" }
 }
 
-## Dim pixels, so R+G+B lands either side of the ink line, alpha anything.
+## Dim pixels, so R+G+B falls on both sides of the ink line. Alpha is random.
 function fPixels([int]$W, [int]$H, [int]$Max) {
 	$p = New-Object byte[] ($w * $h * 4)
 	for ($i = 0; $i -lt $p.Length; $i++) { $p[$i] = if (($i % 4) -eq 3) { $rng.Next(0, 256) } else { $rng.Next(0, $max) } }
@@ -96,8 +97,8 @@ foreach ($size in @(@(1, 1), @(7, 5), @(13, 11), @(64, 37))) {
 	}
 }
 
-## The lines themselves: 40 is dark and 41 lit, alpha aside; a move of 24 is
-## still and 25 moved, counted across channels.
+## The thresholds. A sum of 40 is dark and 41 is lit, whatever the alpha. A
+## change of 24 across the channels counts as still, and 25 as moved.
 $edge = [byte[]](40, 0, 0, 255,  14, 14, 13, 0,  0, 0, 41, 0,  0, 0, 0, 255)
 $p = fPlace $edge 4 1 $false
 fSame "ink counts R+G+B over 40, not alpha" 0.5 ([SilkPix]::Ink($p[0], $p[1], 4, 1, 1))

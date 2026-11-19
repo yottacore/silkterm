@@ -63,7 +63,7 @@ struct LabelFacts {
 }
 
 // The same facts lent from the tab, so a frame compares them where they are and
-// copies them only when they moved.
+// copies them only when they changed.
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct LabelView<'a> {
 	edit: Option<&'a str>,
@@ -153,7 +153,7 @@ impl TabLabels {
 	}
 
 	// Bring tab `index` up to date with `facts`, building its forms only if they
-	// moved since last time. Nothing is copied or allocated when they didn't.
+	// changed since last time. Nothing is copied or allocated when they didn't.
 	fn keep(
 		&mut self,
 		index: usize,
@@ -431,8 +431,9 @@ struct TipFit {
 	wrapped: Option<Vec<String>>,
 }
 
-// One line as fitted. Kept per line, since the clock line moves every second
-// and a long path wrapped again with it measured the path a dozen times more.
+// One line as fitted. It's kept per line, since the clock line changes every
+// second, and wrapping a long path again with it measured the path a dozen
+// more times.
 #[derive(Debug)]
 struct FitRow {
 	line: String,
@@ -738,7 +739,7 @@ impl State {
 			tab,
 			lines,
 			built: now,
-			// what's fitted is kept per line, so only a line that moved is fitted again
+			// what's fitted is kept per line, so only a line that changed is fitted again
 			fit: kept.and_then(|(_, fit)| fit),
 		});
 		changed
@@ -920,7 +921,7 @@ impl State {
 		self.request_close_tab(self.tabs.active);
 	}
 
-	/// Carry the shown tab one place left or right, round the end.
+	/// Move the shown tab one place left or right, wrapping at the ends.
 	pub(super) fn move_tab(&mut self, forward: bool) {
 		self.tabs.move_active(forward); // same tab follows - nothing was frozen
 		self.forget_tab_pointer();
@@ -1042,7 +1043,8 @@ mod tests {
 	}
 
 	// A frame used to copy every tab's facts only to compare them with the last
-	// frame's. Compared where they are, an idle frame allocates nothing.
+	// frame's. Now they're compared where they are, so an idle frame allocates
+	// nothing.
 	// Test ID: dfe46
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
@@ -1064,7 +1066,7 @@ mod tests {
 		}
 		let spent = crate::perf::thread_allocs() - before;
 		assert_eq!(spent, 0, "allocations over 240 idle frames");
-		// a fact that moved is still copied, which also shows the counter counts
+		// a fact that changed is still copied, which also shows the counter counts
 		tabs[1].cwd = Some("/srv/elsewhere".into());
 		let before = crate::perf::thread_allocs();
 		assert_eq!(label_frame(&mut labels, &tabs, &settings, &mut text), 1);
@@ -1354,7 +1356,7 @@ mod tests {
 	// Test ID: dfejm
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
-	fn a_change_to_the_tab_order_drops_what_the_pointer_held() {
+	fn tab_reorder_drops_pointer_state() {
 		let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/app");
 		let mut texts = vec![include_str!("../app.rs").to_string()];
 		for entry in std::fs::read_dir(dir).unwrap().flatten() {
@@ -1402,7 +1404,7 @@ mod tests {
 				"{name} changes the tab order but keeps the pointer's hold"
 			);
 		}
-		// new_tab_with, close_tab_at and move_tab
+		// new_tab_with, close_tab_at, and move_tab
 		assert!(seen >= 3, "found {seen} places that change the order");
 	}
 }

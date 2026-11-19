@@ -643,8 +643,8 @@ function fMain {
 		##	do. With none missing, it says so and stops without a prompt or a
 		##	download. A piece that exists is left as it is, upgrades included,
 		##	since it may have been edited. It's only rewritten when it names some
-		##	other program. A file that a running copy has locked can't be read, and that
-		##	mustn't throw here. The copy step then fails with a message that says
+		##	other program. A file that a running copy has locked can't be read,
+		##	and that mustn't throw here. The copy step then fails with a message that says
 		##	what to do about it.
 		$installedSha = ''
 		if (Test-Path -LiteralPath $destFile) {

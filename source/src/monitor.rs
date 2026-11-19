@@ -1067,7 +1067,7 @@ mod tests {
 	// Test ID: dfe50
 	#[cfg(target_os = "linux")]
 	#[test]
-	fn a_window_keeps_one_x_connection_across_its_reads() {
+	fn one_x_connection_per_window() {
 		let kept = Kept::<FakeConn>::default();
 		let drained = std::rc::Rc::new(std::cell::Cell::new(0));
 		let mut connects = 0;
@@ -1088,7 +1088,7 @@ mod tests {
 	// Test ID: dfe51
 	#[cfg(target_os = "linux")]
 	#[test]
-	fn a_failed_x_read_drops_the_connection_and_the_next_read_connects_again() {
+	fn a_failed_x_read_reconnects() {
 		let kept = Kept::<FakeConn>::default();
 		let drained = std::rc::Rc::new(std::cell::Cell::new(0));
 		let connects = std::cell::Cell::new(0);
