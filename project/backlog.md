@@ -115,23 +115,6 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Branch: nov18-2026111715155480
 	- Commit: a162ca4d, df3b970e
 
-- After a long OSC ends, the parser keeps up to 2 MiB of buffer per pane until the pane closes
-	- ID: 2026111714235965
-	- Type: Bug
-	- Status: Stalled
-		- Held for a vte fork branch with the drafted patch, which needs a new repo on the git host.
-	- Severity: Low
-	- Opened: 20261117-142359
-	- Opened by: CC
-	- Parent ID: 2026111713374900
-	- Target OS: All
-	- Target version: rc.2
-	- Incorrect behavior: An OSC that runs to the 2 MiB cap leaves the parser's buffer at that size until the pane closes. vte clears the buffer when a sequence ends but keeps its memory.
-	- Expected behavior: A buffer that grew past a few KiB is given back when its sequence ends.
-	- Possible cause: vte 0.15.0 `osc_end` calls `clear()`, which keeps capacity. The parser is private to alacritty_terminal's event loop, so this can't be fixed from our side.
-	- Estimated effort: Low
-	- Possible fix: The vte patch in the private upstream drafts under 2026111713374900 caps the buffer under `std` and shrinks it in `osc_end`. It goes in a vte fork branch with a `[patch.crates-io]` line, and then `OscCap` in `cwd.rs` can go.
-
 - shcl: a keep-lines save adds a set value as a new line, beside its commented default
 	- ID: 2026100219054510
 	- Type: Task
@@ -196,8 +179,8 @@ Going forward, new issues in the new template at the bottom of this file will go
 - An OSC sequence that never ends grows the parser's buffer until memory runs out
 	- ID: 2026111713374900
 	- Type: Bug
-	- Status: Queued
-		- The cap is in. Giving the memory back is child 2026111714235965, which closes this one.
+	- Status: Closed
+		- 20261119: The cap is in, and child 2026111714235965 gives the memory back through the vte fork.
 	- Severity: High
 	- Opened: 20261117-133749
 	- Opened by: CC
@@ -222,6 +205,9 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Branch: nov17-2026111713374900
 	- Commit: c298d1a8
 	- Progress log: 20261117: Verified: dfeeg and dfeeh pass. Both fail with the cap made a no-op. dfeeh also fails with the cap left in an OSC after its ESC, and with Escape left early on a C0 control. The quick gate passes. The drafted vte patch passes vte's own tests, and its new test fails without the cap.
+	- Acceptance signoff: Self-closed: the cap is in and tested, and the memory is given back through child 2026111714235965.
+	- Closed: 20261119-071644
+	- Closed reason: Done
 
 - macOS: a character typed with Option reaches the shell with ESC in front of it
 	- ID: 2026111713374903
@@ -638,6 +624,29 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Test case: `a_window_keeps_one_x_connection_across_its_reads` (dfe50), `a_failed_x_read_drops_the_connection_and_the_next_read_connects_again` (dfe51)
 	- Acceptance signoff: Self-closed: the change does what the item asked, measured before and after, and its tests fail with the keeping broken.
 	- Closed: 20261117-091811
+	- Closed reason: Done
+
+- After a long OSC ends, the parser keeps up to 2 MiB of buffer per pane until the pane closes
+	- ID: 2026111714235965
+	- Type: Bug
+	- Status: Closed
+		- 20261119: The fork is `jim-collier/vte`, and the patch is on its `osc-buffer-0.15.0` branch.
+	- Severity: Low
+	- Opened: 20261117-142359
+	- Opened by: CC
+	- Parent ID: 2026111713374900
+	- Target OS: All
+	- Target version: rc.2
+	- Incorrect behavior: An OSC that runs to the 2 MiB cap leaves the parser's buffer at that size until the pane closes. vte clears the buffer when a sequence ends but keeps its memory.
+	- Expected behavior: A buffer that grew past a few KiB is given back when its sequence ends.
+	- Possible cause: vte 0.15.0 `osc_end` calls `clear()`, which keeps capacity. The parser is private to alacritty_terminal's event loop, so this can't be fixed from our side.
+	- Estimated effort: Low
+	- Possible fix: The vte patch in the private upstream drafts under 2026111713374900 caps the buffer under `std` and shrinks it in `osc_end`. It goes in a vte fork branch with a `[patch.crates-io]` line, and then `OscCap` in `cwd.rs` can go.
+	- Actual fix: vte is taken from the fork's `osc-buffer-0.15.0` branch (92970ac) through `[patch.crates-io]`. It caps the OSC buffer at 2 MiB under `std`, and shrinks it back to 4 KiB in `osc_end` once a long sequence ends. `OscCap` in `cwd.rs` stays, since it still blanks over-long payloads before the parser sees them.
+	- Test case: `unterminated_osc_is_bounded` in the vte fork. It fails with the cap and the shrink taken out, and passes with them.
+	- Verified: 20261119: the fork's 32 tests, a `no_std` build and clippy passed, and `unterminated_osc_is_bounded` failed with the fix taken out. The quick gate (fmt, clippy, tests) passed with the fork in the lock, 1513 tests.
+	- Acceptance signoff: Self-closed: the fork's test fails without the fix and passes with it, and silkterm builds and passes on the fork.
+	- Closed: 20261119-071644
 	- Closed reason: Done
 
 - A GPU device lost inside one text prepare still ends the program, since the glyphon fork maps a vertex buffer it grows
