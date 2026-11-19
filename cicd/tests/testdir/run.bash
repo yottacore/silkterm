@@ -44,7 +44,6 @@ longName="$(printf 'l%.0s' {1..100})"
 fLocked(){ mkdir "${1}/r"; chmod 555 "${1}"; locked+=("${1}"); }
 fOnlyRun(){ [[ "$(ls -A "${1}")" == "r" ]]; }
 fInside(){ [[ -n "${1}" && "${2}" == "${1}"/* ]]; }  ## fInside <folder> <path>
-fStamped(){ [[ "$(basename "${1}")" =~ ${stampRe} ]]; }
 ##	fOneStamped <base>: exactly one entry in base/silkterm, a 0700 folder named
 ##	for the time, with a counter, and a PID in its run.pid.
 fOneStamped(){
@@ -63,7 +62,7 @@ if ! ( cd "${root}" && cargo test --no-run ) >"${work}/build.log" 2>&1; then fSh
 baseA="$(mktemp -d "${TMPDIR}/${longName}XXX")"; fLocked "${baseA}"
 rc=0; ( cd "${root}" && SILKTERM_TEST_DIR="${baseA}/r" TMPDIR="${baseA}" TEMP="${baseA}" TMP="${baseA}" cargo test ) >"${work}/a.log" 2>&1 || rc=$?
 fCheck "the Rust suite passes with the temp dir read-only" test "${rc}" -eq 0
-((rc == 0)) || grep -E 'FAILED|panicked' "${work}/a.log" | head -n 20 | sed 's/^/      /'
+((rc == 0)) || grep -m 20 -E 'FAILED|panicked' "${work}/a.log" | sed 's/^/      /' || true
 fCheck "and writes nothing beside the run folder" fOnlyRun "${baseA}"
 
 ##	A2: a lone run, with nothing handed down, removes its folder when it passes,
@@ -185,32 +184,41 @@ for path in mod.script_tests():
 ' "${root}/cicd/utility/test-id.py")
 fCheck "the test ID check lists the script tests" test "${#scripts[@]}" -gt 10
 scripts+=(wingui/run.bash)
-skipped=""
+##	fLacking <has> <lacks> <rel...>: " rel" for each file that matches has and
+##	not lacks, in the order given. Two grep passes over the lot, not two per file.
+fLacking(){
+	local -r has="${1}" lacks="${2}"; shift 2
+	local -a with=() without=()
+	local -A lacking=()
+	local rel
+	((${#})) || return 0
+	mapfile -t with < <(cd "${tests}" && grep -lE -- "${has}" "${@}" || true)
+	((${#with[@]})) || return 0
+	mapfile -t without < <(cd "${tests}" && grep -LE -- "${lacks}" "${with[@]}" || true)
+	for rel in "${without[@]}"; do lacking["${rel}"]=1; done
+	for rel in "${@}"; do if [[ -n "${lacking["${rel}"]:-}" ]]; then printf ' %s' "${rel}"; fi; done
+}
+declare -a inScope=()
 for rel in "${scripts[@]}"; do
 	[[ "${rel}" == wingui/* && "${rel}" != wingui/harness-test.bash && "${rel}" != wingui/pixels-test.bash && "${rel}" != wingui/run.bash ]] && continue
-	grep -qE 'mktemp|tempfile|GetTempPath|\$env:TEMP' "${tests}/${rel}" || continue
-	grep -qE 'fTestDir_Use|_testdir\.use\(\)' "${tests}/${rel}" || skipped+=" ${rel}"
+	inScope+=("${rel}")
 done
+skipped="$(fLacking 'mktemp|tempfile|GetTempPath|\$env:TEMP' 'fTestDir_Use|_testdir\.use\(\)' "${inScope[@]}")"
 fCheck "every script test that makes scratch uses the run folder${skipped:+ (not:${skipped})}" test -z "${skipped}"
 ##	A guard for what C2 can't run. The pipelines are on the list too.
-unended=""
-for rel in "${scripts[@]}" ../cicd.bash ../cicd-win.ps1; do
-	[[ "${rel}" == wingui/* && "${rel}" != wingui/harness-test.bash && "${rel}" != wingui/pixels-test.bash && "${rel}" != wingui/run.bash ]] && continue
-	grep -qE 'fTestDir_(Use|Make)|_testdir\.use\(\)' "${tests}/${rel}" || continue
-	grep -qE 'fTestDir_End|_testdir\.end\(' "${tests}/${rel}" || unended+=" ${rel}"
-done
+unended="$(fLacking 'fTestDir_(Use|Make)|_testdir\.use\(\)' 'fTestDir_End|_testdir\.end\(' "${inScope[@]}" ../cicd.bash ../cicd-win.ps1)"
 fCheck "and every one that makes a run folder ends it${unended:+ (not:${unended})}" test -z "${unended}"
 ##	A socket bound under a run folder in a long temp dir is past the 107-byte
 ##	limit, so sway never comes up and the control socket never replies. A script
 ##	that starts sway or talks to that socket moves its runtime dir to a short
 ##	folder when the path is long.
-unshortened=""
+declare -a bindScope=()
 for rel in "${scripts[@]}"; do
 	## This file names the patterns, so it matches them.
 	[[ "${rel}" == wingui/* || "${rel}" == testdir/run.bash ]] && continue
-	grep -qE 'sway -c|"sway", "-c"|SILKTERM_SOCKET=|--reload-settings' "${tests}/${rel}" || continue
-	grep -qE '\(\(\$\{#runDir\} > 70\)\)|len\(str\(run\)\) > 70' "${tests}/${rel}" || unshortened+=" ${rel}"
+	bindScope+=("${rel}")
 done
+unshortened="$(fLacking 'sway -c|"sway", "-c"|SILKTERM_SOCKET=|--reload-settings' '\(\(\$\{#runDir\} > 70\)\)|len\(str\(run\)\) > 70' "${bindScope[@]}")"
 fCheck "and every one that binds sockets there keeps them short${unshortened:+ (not:${unshortened})}" test -z "${unshortened}"
 stray="$(git -C "${root}" grep -n 'temp_dir' -- 'source/src/*.rs' \
 	| grep -v '^source/src/testdir\.rs:' \

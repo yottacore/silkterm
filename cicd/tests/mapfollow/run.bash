@@ -184,7 +184,7 @@ fCheck "the scene ran to the end" grep -qx "done" "${work}/step"
 fCheck "nothing from the scene is left running" fNoneLeft
 
 ## The width the shell had at the start, with the column showing.
-narrow="$(grep '^start ' "${sizes}" 2>/dev/null | tail -n 1 | awk '{print $3}')"
+narrow="$(grep '^start ' "${sizes}" 2>/dev/null | tail -n 1 | awk '{print $3}' || true)"
 fWide(){ awk -v step="${1}" -v narrow="${narrow:-0}" '$1 == step && $3 > narrow {found = 1} END {exit !found}' "${sizes}"; }
 fNarrow(){ ! fWide "${1}"; }
 fNone(){ ! grep -q "^${1} " "${sizes}"; }

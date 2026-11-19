@@ -50,9 +50,12 @@ set -Eeuo pipefail
 
 declare -r _here="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
 declare -r _repo="$(cd "${_here}/../.." && pwd)"
-declare -r _work="$(mktemp -d -t termbench-XXXXXX)"
+## Resolved, so the guard can name it as the one parent.
+declare -r _tmpBase="$(realpath -e -- "${TMPDIR:-/tmp}")"
+declare -r _work="$(mktemp -d "${_tmpBase}/termbench-XXXXXX")"
 
 source "${_here}/bench-common.bash"                                ## fEcho, fKillPids
+source "${_repo}/cicd/utility/include/saferm.bash"                 ## fSafeRm_Under
 
 declare -i _swayPid=0 _termPid=0 _xvfbPid=0
 declare -i _keepRig=0
@@ -67,7 +70,7 @@ fCleanup(){
 	fi
 	if ((_swayPid)) && ((!_keepRig)); then kill ${_swayPid} 2>/dev/null || true; fi
 	if ((_xvfbPid)) && ((!_keepRig)); then kill ${_xvfbPid} 2>/dev/null || true; fi
-	if ((!_keepRig)); then rm -rf "${_work}" 2>/dev/null || true; fi
+	if ((!_keepRig)); then fSafeRm_Under "${_tmpBase}" "${_work}" 2>/dev/null || true; fi
 	exit ${rc}
 }
 trap fCleanup EXIT INT TERM

@@ -231,7 +231,7 @@ auth="${runDir}/Xauthority-${display#:}"
 ## run started it. Wayland doesn't need a lasting display, since each scene runs
 ## its own cage kiosk.
 startedHeadless=0
-if ! ((wayland)) && "${headless}" status 2>/dev/null | grep -q 'no Xvfb'; then
+if ! ((wayland)) && [[ "$("${headless}" status 2>/dev/null || true)" == *"no Xvfb"* ]]; then
 	if "${headless}" start --wm >/dev/null 2>&1; then startedHeadless=1
 	else
 		((strict)) && { fSceneLines FAIL "headless display failed to start"; fDie "headless display failed to start"; }
@@ -260,7 +260,7 @@ fKillOurs(){
 	local exe; exe="$(realpath -e "/proc/${pid}/exe" 2>/dev/null || true)"
 	if [[ -n "${want}" && "${exe}" == "${want}" ]]; then
 		kill "${pid}" 2>/dev/null || true
-		local _; for _ in $(seq 1 20); do kill -0 "${pid}" 2>/dev/null || break; sleep 0.1; done
+		local _; for _ in {1..20}; do kill -0 "${pid}" 2>/dev/null || break; sleep 0.1; done
 		kill -9 "${pid}" 2>/dev/null || true
 	fi
 }
@@ -295,7 +295,7 @@ fStopSilk(){
 	local pid="${1}"
 	if ((wayland)); then
 		kill "${pid}" 2>/dev/null || true
-		local _; for _ in $(seq 1 20); do kill -0 "${pid}" 2>/dev/null || break; sleep 0.1; done
+		local _; for _ in {1..20}; do kill -0 "${pid}" 2>/dev/null || break; sleep 0.1; done
 		kill -9 "${pid}" 2>/dev/null || true
 	else
 		fKillOurs "${pid}" "${bin}"
@@ -408,7 +408,7 @@ fi
 
 fSection "Summary"
 fEcho_Clean "pass ${pass}   fail ${fail}   skip ${miss}"
-verdict="$(fScrollVerdict "${pass}" "${fail}" "${miss}" "${strict}")"; rc=$?
+rc=0; verdict="$(fScrollVerdict "${pass}" "${fail}" "${miss}" "${strict}")" || rc=$?
 fEcho "${verdict}"
 exit "${rc}"
 

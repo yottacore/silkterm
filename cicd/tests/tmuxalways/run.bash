@@ -132,7 +132,8 @@ fLaunch(){  ## fLaunch <args...>: the program on the private display, logs reset
 	appPid=$!
 }
 fX(){ DISPLAY="${display}" XAUTHORITY="${auth}" "${@}"; }
-fCount(){ grep -cx "${2}" "${work}/${1}" 2>/dev/null || echo 0; }
+## grep -c prints 0 and exits 1 on no match, so `|| echo 0` would print 0 twice.
+fCount(){ local n; n="$(grep -cx "${2}" "${work}/${1}" 2>/dev/null || true)"; echo "${n:-0}"; }
 fWaitFor(){  ## fWaitFor <log> <word> <count>: up to 30 s for that many lines
 	local _
 	for _ in {1..300}; do [[ "$(fCount "${1}" "${2}")" -ge "${3}" ]] && return 0; sleep 0.1; done

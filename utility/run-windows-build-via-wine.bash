@@ -174,7 +174,11 @@ fResolveExe(){
 fStagePrefix(){
 	if (( optRestage )) && [[ -d "${winePrefix}" ]]; then
 		fEcho "Restaging: removing the old wineprefix"
-		rm -rf "${winePrefix}"
+		## Sourced only here, since the launcher also runs from a bare copy of itself.
+		# shellcheck source=cicd/utility/include/saferm.bash
+		source "${repoRoot}/cicd/utility/include/saferm.bash"
+		local real; real="$(realpath -e -- "${stageDir}")"
+		fSafeRm_Under "${real}" "${real}/${winePrefix##*/}" || fDie "couldn't remove the old wineprefix"
 	fi
 	[[ -d "${winePrefix}/drive_c" ]] && return 0
 	fEcho "Creating a private wineprefix (first run, takes a few seconds)"
@@ -192,7 +196,10 @@ fLinkFonts(){
 	local dir linkName
 	for dir in "${hostFontDirs[@]}"; do
 		[[ -d "${dir}" ]] || continue
-		linkName="host-$(echo "${dir}" | tr -c 'a-zA-Z0-9' '-' | sed 's/^-*//; s/-*$//')"
+		linkName="${dir//[^a-zA-Z0-9]/-}"
+		while [[ "${linkName}" == -* ]]; do linkName="${linkName#-}"; done
+		while [[ "${linkName}" == *- ]]; do linkName="${linkName%-}"; done
+		linkName="host-${linkName}"
 		ln -sfn "${dir}" "${fontDir}/${linkName}"
 	done
 }

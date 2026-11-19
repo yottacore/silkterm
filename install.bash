@@ -227,17 +227,19 @@ function fReleaseRows() {
 	}'
 }
 
-##	fFieldCmp <a> <b> - prints -1, 0 or 1 for one dotted field. Numbers compare
-##	as numbers and sort below words. Words with the same letters and a
-##	trailing number compare by that number, so beta10 is above beta3.
+##	fFieldCmp <a> <b> - sets cmpOut to -1, 0 or 1 for one dotted field. Numbers
+##	compare as numbers and sort below words. Words with the same letters and a
+##	trailing number compare by that number, so beta10 is above beta3. A global
+##	rather than printed, since a $( ) per field forks for every release compared.
+cmpOut=""
 function fFieldCmp() {
 	local a="${1}" b="${2}" num='^[0-9]+$' word='^([^0-9]*)([0-9]+)$'
 	if [[ ${a} =~ ${num} ]] && [[ ${b} =~ ${num} ]]; then
-		if ((10#${a} > 10#${b})); then echo 1; elif ((10#${a} < 10#${b})); then echo -1; else echo 0; fi
+		if ((10#${a} > 10#${b})); then cmpOut=1; elif ((10#${a} < 10#${b})); then cmpOut=-1; else cmpOut=0; fi
 		return 0
 	fi
-	if [[ ${a} =~ ${num} ]]; then echo -1; return 0; fi
-	if [[ ${b} =~ ${num} ]]; then echo 1; return 0; fi
+	if [[ ${a} =~ ${num} ]]; then cmpOut=-1; return 0; fi
+	if [[ ${b} =~ ${num} ]]; then cmpOut=1; return 0; fi
 	local aStem="" aNum="" bStem="" bNum=""
 	if [[ ${a} =~ ${word} ]]; then aStem="${BASH_REMATCH[1]}"; aNum="${BASH_REMATCH[2]}"; fi
 	if [[ ${b} =~ ${word} ]]; then bStem="${BASH_REMATCH[1]}"; bNum="${BASH_REMATCH[2]}"; fi
@@ -245,42 +247,44 @@ function fFieldCmp() {
 		fFieldCmp "${aNum}" "${bNum}"
 		return 0
 	fi
-	if [[ ${a} < ${b} ]]; then echo -1; elif [[ ${a} > ${b} ]]; then echo 1; else echo 0; fi
+	if [[ ${a} < ${b} ]]; then cmpOut=-1; elif [[ ${a} > ${b} ]]; then cmpOut=1; else cmpOut=0; fi
 }
 
-##	fListCmp <a> <b> <missing> - dotted lists, field by field. <missing> is what
-##	a list that runs out first counts as: -1 for a pre-release, where fewer
-##	fields sort lower, or 0 for the core, where 1.0 is 1.0.0.
+##	fListCmp <a> <b> <missing> - dotted lists, field by field, into cmpOut.
+##	<missing> is what a list that runs out first counts as: -1 for a
+##	pre-release, where fewer fields sort lower, or 0 for the core, where 1.0 is
+##	1.0.0.
 function fListCmp() {
-	local a="${1}" b="${2}" missing="${3}" c=""
+	local a="${1}" b="${2}" missing="${3}"
 	while [[ -n "${a}" ]] || [[ -n "${b}" ]]; do
 		if [[ -z "${a}" ]]; then
-			if [[ "${missing}" = "0" ]]; then a="0"; else echo -1; return 0; fi
+			if [[ "${missing}" = "0" ]]; then a="0"; else cmpOut=-1; return 0; fi
 		fi
 		if [[ -z "${b}" ]]; then
-			if [[ "${missing}" = "0" ]]; then b="0"; else echo 1; return 0; fi
+			if [[ "${missing}" = "0" ]]; then b="0"; else cmpOut=1; return 0; fi
 		fi
-		c="$(fFieldCmp "${a%%.*}" "${b%%.*}")"
-		[[ "${c}" = "0" ]] || { echo "${c}"; return 0; }
+		fFieldCmp "${a%%.*}" "${b%%.*}"
+		[[ "${cmpOut}" = "0" ]] || return 0
 		case "${a}" in *.*) a="${a#*.}" ;; *) a="" ;; esac
 		case "${b}" in *.*) b="${b#*.}" ;; *) b="" ;; esac
 	done
-	echo 0
+	cmpOut=0
 }
 
 ##	fNewer <a> <b> - true when tag <a> is a higher version than <b>, in semver
 ##	order: 1.0.0-alpha.2 is below 1.0.0, where sort -V and git put it above.
 function fNewer() {
-	local a="${1#v}" b="${2#v}" aPre="" bPre="" c=""
+	local a="${1#v}" b="${2#v}" aPre="" bPre=""
 	a="${a%%+*}"; b="${b%%+*}"
 	case "${a}" in *-*) aPre="${a#*-}"; a="${a%%-*}" ;; esac
 	case "${b}" in *-*) bPre="${b#*-}"; b="${b%%-*}" ;; esac
-	c="$(fListCmp "${a}" "${b}" 0)"
-	[[ "${c}" = "0" ]] || { [[ "${c}" = "1" ]]; return; }
+	fListCmp "${a}" "${b}" 0
+	[[ "${cmpOut}" = "0" ]] || { [[ "${cmpOut}" = "1" ]]; return; }
 	##	Same core: a release is above any of its pre-releases.
 	[[ -n "${aPre}" ]] || { [[ -n "${bPre}" ]]; return; }
 	[[ -n "${bPre}" ]] || return 1
-	[[ "$(fListCmp "${aPre}" "${bPre}" -1)" = "1" ]]
+	fListCmp "${aPre}" "${bPre}" -1
+	[[ "${cmpOut}" = "1" ]]
 }
 
 ##	fPickTag <stable|dev> - the highest version in the release rows on stdin,
@@ -656,3 +660,4 @@ fi
 ##		- 20261118 JC: An upgrade leaves an existing launcher alone unless it
 ##		  names some other program.
 ##		- 20261119 JC: Version kept in step with install.ps1.
+##		- 20261119: Versions compare without a subshell per field.

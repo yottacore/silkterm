@@ -152,7 +152,7 @@ fWhere(){
 	local -r id="${1}"
 	local X Y WIDTH HEIGHT
 	eval "$(fX xdotool getwindowgeometry --shell "${id}" 2>/dev/null | grep -E '^(X|Y|WIDTH|HEIGHT)=[0-9-]+$' || true)"
-	[[ -n "${X-}" ]] && echo "${X},${Y} ${WIDTH}x${HEIGHT}"
+	if [[ -n "${X-}" ]]; then echo "${X},${Y} ${WIDTH}x${HEIGHT}"; fi
 }
 
 ## Is "<x>,<y> <width>x<height>" wholly on the portrait output, which is 1200 wide?
@@ -166,6 +166,7 @@ fOnPortrait(){
 ## windows with it.
 fGone(){
 	local -r id="${1}"
+	local _
 	for _ in {1..30}; do
 		fX xprop -id "${id}" WM_NAME >/dev/null 2>&1 || return 0
 		sleep 0.1
@@ -207,6 +208,7 @@ fToPortrait(){
 ## Wait for the X server to show this many monitors.
 fMonitors(){
 	local -r want="${1}"
+	local _
 	for _ in {1..50}; do
 		[[ "$(fX xrandr --listactivemonitors 2>/dev/null | head -n 1)" == "Monitors: ${want}" ]] && return 0
 		sleep 0.1
@@ -217,7 +219,7 @@ fMonitors(){
 ## A window of its own for each dance, so one that ends wrong can't spoil the next.
 fDance(){  ## fDance <seconds the portrait output stays off>
 	local -r off="${1}"
-	local id="" start="" herded final
+	local id="" start="" herded final _
 	fX --bg XDG_RUNTIME_DIR="${runDir}" LIBGL_ALWAYS_SOFTWARE=1 \
 		HOME="${work}/home" XDG_CONFIG_HOME="${cfgHome}" XDG_DATA_HOME="${work}/home/.local/share" XDG_CACHE_HOME="${work}/home/.cache" \
 		XDG_STATE_HOME="${work}/home/.local/state" \
@@ -247,7 +249,7 @@ fDance 4
 fDance 1
 
 ## No window manager from here on. Under dbus-run-session xfwm4 is its child.
-wmWin="$(fX xprop -root _NET_SUPPORTING_WM_CHECK 2>/dev/null | sed -n 's/.*window id # //p')"
+wmWin="$(fX xprop -root _NET_SUPPORTING_WM_CHECK 2>/dev/null | sed -n 's/.*window id # //p' || true)"
 wmOnly="$(pgrep -P "${wmPid}" -x xfwm4 2>/dev/null || true)"
 kill "${wmOnly:-${wmPid}}" 2>/dev/null || true
 wait "${wmPid}" 2>/dev/null || true
@@ -262,7 +264,7 @@ fCheck "xfwm4's window has gone from the X server" fGone "${wmWin:-0}"
 ## A window manager that herds but never puts back, played by hand.
 fDanceBare(){  ## fDanceBare back|moved|resized
 	local -r how="${1}"
-	local id="" start="" herded left final
+	local id="" start="" herded left final _
 	fX --bg XDG_RUNTIME_DIR="${runDir}" LIBGL_ALWAYS_SOFTWARE=1 \
 		HOME="${work}/home" XDG_CONFIG_HOME="${cfgHome}" XDG_DATA_HOME="${work}/home/.local/share" XDG_CACHE_HOME="${work}/home/.cache" \
 		XDG_STATE_HOME="${work}/home/.local/state" \

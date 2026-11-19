@@ -560,8 +560,8 @@ fCheck "and this box gets a line" test -n "$(fHostLine)"
 ## --no-remote leaves out every other box, and a box that wasn't there is a SKIP
 ## in its step's line and again at the end.
 fLiftF(){  ## fLiftF <first line, exactly>: from that line to the first top-level fi
-	local n; n="$(grep -m1 -nxF -- "${1}" "${engine}" | cut -d: -f1)"
-	[[ -n "${n}" ]] && sed -n "${n},\$ { p; /^fi\$/q }" "${engine}"
+	local n; n="$(grep -m1 -nxF -- "${1}" "${engine}" | cut -d: -f1 || true)"
+	if [[ -n "${n}" ]]; then sed -n "${n},\$ { p; /^fi\$/q }" "${engine}"; fi
 }
 fParseRemote(){ fParse "${@}" >/dev/null; eval "${parse}"; echo "noremote=${noRemote} inner=${innerArgs[*]}"; }
 fCheck "a run with no options reaches the other boxes" test "$(fParseRemote)" = "noremote=0 inner="
@@ -724,7 +724,7 @@ fCheck "--no-remote leaves it out, and says so" test "${out}" = "arm64 smoke run
 fCheck "without starting it" test ! -s "${STUB_RAN}"
 fArm 0 "linux-x86_64|a"
 fCheck "with no ARM64 build there's nothing to run" test -z "${out}" -a ! -s "${STUB_RAN}"
-armPlan="$(n="$(grep -m1 -nF '"ARM64 smoke run .....: (no Linux ARM64 build)"' "${engine}" | cut -d: -f1)"; sed -n "$((n - 1)),\$ { p; /^fi\$/q }" "${engine}")"
+armPlan="$(n="$(grep -m1 -nF '"ARM64 smoke run .....: (no Linux ARM64 build)"' "${engine}" | cut -d: -f1 || true)"; if [[ -n "${n}" ]]; then sed -n "$((n - 1)),\$ { p; /^fi\$/q }" "${engine}"; fi)"
 fArmPlan(){ local quick=0 noRemote="${1}" container=0 BUILD_CROSS=1 SILK_CICD_IN_CONTAINER=""; local -a CROSS_TARGETS=(); read -ra CROSS_TARGETS <<<"${2}"; eval "${armPlan}"; }
 fCheck "the plan has an ARM64 smoke run line" test "$(fArmPlan 0 "x|linux-arm64|y")" = "ARM64 smoke run .....: --version on the arm64 box, woken and put back if it's a VM"
 fCheck "which says --no-remote left it out" test "$(fArmPlan 1 "x|linux-arm64|y")" = "ARM64 smoke run .....: (skipped --no-remote)"

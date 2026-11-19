@@ -174,7 +174,7 @@ else
 fi
 
 if ((failures)); then
-	for f in "${work}"/*.txt; do echo "  ${f##*/}:"; tail -n 8 "${f}" | sed 's/^/    /'; done
+	for f in "${work}"/*.txt; do echo "  ${f##*/}:"; tail -n 8 "${f}" 2>/dev/null | sed 's/^/    /' || true; done
 	echo "  ${failures} check(s) failed; files kept in ${work}"; exit 1
 fi
 echo "all passed"
