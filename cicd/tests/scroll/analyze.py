@@ -20,7 +20,7 @@ supposed to hold:
                     must stay 0 across every frame (a plain page redraw).
   --mode pinned   : output easing on the normal screen under a live block redrawn
                     in place (muffer's shape). The block must be held still:
-                    most easing frames carry ob == --expect-sb, and none more.
+                    most easing frames have ob == --expect-sb, and none more.
   --mode still    : the alt screen took over while plain output was still easing.
                     There is no scrollback behind it, so the view must be at rest
                     on the spot: frac stays 0 on every frame. A leftover ease shows
@@ -34,7 +34,7 @@ supposed to hold:
   --mode instant  : screen clears on the normal screen, between an alt-screen trip
                     that scrolls down a line at a time and one that scrolls down
                     9 lines at once. A clear shows at
-                    once, so no normal-screen frame between them carries a
+                    once, so no normal-screen frame between them has a
                     fraction. Output must be seen easing before the first trip,
                     or the check tested nothing.
   --mode wipe     : clears inside tmux, which tmux draws on the alt screen as
@@ -153,7 +153,7 @@ def main() -> int:
         moving = [f for f in frames[start:end] if f["alt"] == 0 and f["frac"] > a.eps]
         if moving:
             worst = max(f["frac"] for f in moving)
-            out("FAIL", f"a clear eased: {len(moving)} frame(s) carry a fraction (max {worst:.3f})")
+            out("FAIL", f"a clear eased: {len(moving)} frame(s) have a fraction (max {worst:.3f})")
             return 1
         out("PASS", "every clear showed at once")
         return 0
@@ -203,7 +203,7 @@ def main() -> int:
         if moving:
             worst = max(f["frac"] for f in moving)
             out("FAIL", f"view still easing on the alt screen: {len(moving)} of "
-                       f"{len(frames)} frame(s) carry a fraction (max {worst:.3f})")
+                       f"{len(frames)} frame(s) have a fraction (max {worst:.3f})")
             return 1
         out("PASS", f"landed at rest: frac 0 across {len(frames)} frame(s)")
         return 0

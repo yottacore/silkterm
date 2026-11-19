@@ -87,6 +87,7 @@ def mypy_cache() -> Path:
 
 def mypy_findings(mypy: str, paths: list[Path]) -> list[str]:
 	out: list[str] = []
+	seen: set[str] = set()
 	for group in mypy_groups(paths):
 		checked = subprocess.run(
 			[mypy, "--config-file", str(ROOT / "mypy.ini"), "--cache-dir", str(mypy_cache()), "--no-error-summary", "--no-pretty", *map(str, group)],
@@ -98,7 +99,10 @@ def mypy_findings(mypy: str, paths: list[Path]) -> list[str]:
 		errors = [line for line in checked.stdout.splitlines() if ": error:" in line]
 		if checked.returncode and not errors:
 			errors = [checked.stdout.strip() or f"mypy exited {checked.returncode}"]
-		out += [line for line in errors if line not in out]
+		for line in errors:
+			if line not in seen:
+				seen.add(line)
+				out.append(line)
 	return out
 
 

@@ -402,7 +402,8 @@ function fShortcutNames {
 ##	fPathNote <dir> <file> - how to run it when <dir> isn't on PATH (Linux, macOS).
 function fPathNote {
 	param([string]$Dir, [string]$File)
-	if (":$($env:PATH):" -like "*:$Dir`:*") { return }
+	##	Not -like, which reads [ and ] in a folder name as wildcards.
+	if (":$($env:PATH):".Contains(":${Dir}:")) { return }
 	Write-Host ''
 	Write-Host "Note: $Dir isn't on your PATH, so '$exeName' won't be found by name yet."
 	Write-Host "  Add it with:  echo 'export PATH=`"$Dir`:`$PATH`"' >> ~/.profile"
@@ -893,7 +894,7 @@ public static extern IntPtr SendMessageTimeout(IntPtr hWnd, uint Msg, UIntPtr wP
 		##	HWND_BROADCAST, WM_SETTINGCHANGE, SMTO_ABORTIFHUNG, and 5 s for a window that is stuck
 		[void][SilkInstall.Env]::SendMessageTimeout([IntPtr]0xffff, 0x1A, [UIntPtr]::Zero, 'Environment', 2, 5000, [ref]$ignored)
 	} catch {
-		Write-Host "  A console opened from the Start menu may not find it until you sign out and in again."
+		Write-Host '  A console opened from the Start menu may not find it until you sign out and in again.'
 	}
 }
 
@@ -956,5 +957,6 @@ if ($state.failed -and $runningAsScriptFile) { exit 1 }
 ##		  after the result, as in install.bash.
 ##		- 20261118 JC: An upgrade leaves an existing shortcut or launcher alone
 ##		  unless it names some other program.
-##		- 20261119 JC: Detects the BSDs, which it used to take for Linux.
+##		- 20261119 JC: Detects the BSDs, which it used to take for Linux. The PATH
+##		  note reads a folder with brackets in its name right.
 
