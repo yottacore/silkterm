@@ -92,7 +92,7 @@ pub enum Store {
 	State,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Rule {
 	/// A stored state value, by setting id.
 	State(String),

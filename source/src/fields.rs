@@ -486,8 +486,7 @@ pub fn load(config: &shcl::Document) -> knobs::Model {
 	// unless it has a size of its own.
 	let line = |path: &str| config.get_string(path).is_ok_and(|v| !v.trim().is_empty());
 	let switch = |path: &str| config.get_bool(path).is_ok();
-	let own = |m: &knobs::Model, key: Key| m.values.own.get(key.name()).cloned();
-	let face_on = match own(&m, Key::SystemFont) {
+	let face_on = match m.values.own.get(Key::SystemFont.name()) {
 		Some(on) => on.as_bool(),
 		None => !line("font.family"),
 	};

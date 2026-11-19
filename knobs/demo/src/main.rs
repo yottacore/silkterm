@@ -513,7 +513,7 @@ impl Demo {
 				.on_hover_text("Forget every value, as on a first run")
 				.clicked()
 			{
-				let spec = self.model.spec.clone();
+				let spec = Arc::clone(&self.model.spec);
 				self.change("start fresh", |m, d| *m = first_run(spec, d));
 			}
 		});

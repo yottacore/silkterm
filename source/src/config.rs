@@ -56,7 +56,7 @@ fn build_label_for(
 /// several at once, so the window title has to say which one is running. Anything
 /// else (a release install, a cargo build) returns None.
 pub fn dogfood_detail() -> Option<&'static str> {
-	static DETAIL: std::sync::OnceLock<Option<String>> = std::sync::OnceLock::new();
+	static DETAIL: OnceLock<Option<String>> = OnceLock::new();
 	DETAIL
 		.get_or_init(|| {
 			let exe = std::env::current_exe().ok()?;
@@ -172,7 +172,6 @@ pub fn uptime() -> std::time::Duration {
 /// `SILK_MAX_FPS`, since `var_os` takes the env lock and scans environ. Off X11
 /// winit has no setting for this at all.
 pub fn display_scale(reported: f64) -> f32 {
-	use std::sync::OnceLock;
 	static OVERRIDE: OnceLock<Option<f32>> = OnceLock::new();
 	let over = OVERRIDE.get_or_init(|| {
 		std::env::var("SILK_SCALE")
@@ -1304,7 +1303,7 @@ fn find_wallpaper(settings: &mut Settings) {
 		&& settings.wallpaper_rotate_enabled
 		&& settings.wallpaper_folder.is_some();
 	settings.wallpaper = if pinned {
-		resolve_wallpaper(Some(settings.wallpaper_raw.clone()))
+		resolve_wallpaper(Some(&settings.wallpaper_raw))
 	} else if rotating {
 		// the first rotation pick goes on screen
 		None
@@ -3040,7 +3039,7 @@ pub fn srgb_f32(c: [u8; 3]) -> [f32; 4] {
 /// LUT, since this runs per background cell per rebuilt frame, which would be
 /// thousands of powf calls (see pane.rs build).
 pub fn to_linear(b: u8) -> f32 {
-	static LUT: std::sync::OnceLock<[f32; 256]> = std::sync::OnceLock::new();
+	static LUT: OnceLock<[f32; 256]> = OnceLock::new();
 	LUT.get_or_init(|| std::array::from_fn(|i| linear_of(i as u8)))[b as usize]
 }
 
@@ -3503,9 +3502,12 @@ fn complaints_in(doc: &shcl::Document, text: &str) -> Vec<String> {
 
 	// A key nothing reads is almost always a typo, and it looks exactly like a
 	// setting that isn't working.
-	let known: std::collections::HashSet<String> = setting_lines(default_config())
+	let known: std::collections::HashSet<String> = walk_settings(default_config())
 		.into_iter()
-		.map(|(path, _)| path)
+		.filter_map(|w| match w {
+			WalkLine::Setting { path, .. } => Some(path),
+			_ => None,
+		})
 		.collect();
 	let mut unread: Vec<(String, usize)> = active
 		.iter()
@@ -3931,6 +3933,8 @@ fn is_monitor_size_path(path: &str) -> bool {
 // and a number missing from one takes the default.
 fn read_monitor_sizes(reader: &Reader) -> Vec<MonitorSize> {
 	let mut out = Vec::new();
+	// the plain defaults, since none of these comes from the model
+	let d = Settings::bare();
 	for key in reader.doc.children("window.monitors") {
 		let at = format!("window.monitors.{key}");
 		let columns = reader.read_usize(&format!("{at}.columns"));
@@ -3939,7 +3943,6 @@ fn read_monitor_sizes(reader: &Reader) -> Vec<MonitorSize> {
 		if columns.is_none() && rows.is_none() && font_zoom.is_none() {
 			continue;
 		}
-		let d = Settings::default();
 		out.push(MonitorSize {
 			columns: numi(columns, d.remembered_columns, limits::GRID),
 			rows: numi(rows, d.remembered_rows, limits::GRID),
@@ -4021,10 +4024,11 @@ fn write_shells(
 	// default shell. A reorder changes no entry, so the per-entry path below would
 	// write nothing and lose it. So a moved entry rewrites the whole subtree in the
 	// new order.
-	let order = |list: &[crate::shells::ShellEntry]| -> Vec<String> {
-		list.iter().map(|e| e.slug.clone()).collect()
-	};
-	if order(&disk) != order(&want) {
+	if disk
+		.iter()
+		.map(|e| &e.slug)
+		.ne(want.iter().map(|e| &e.slug))
+	{
 		for old in &disk {
 			doc.remove(&format!("shells.{}", old.slug));
 		}
@@ -4060,21 +4064,20 @@ fn shells_to_save(
 	fn find<'a>(list: &'a [ShellEntry], slug: &str) -> Option<&'a ShellEntry> {
 		list.iter().find(|e| e.slug == slug)
 	}
+	fn kept<'a>(list: &'a [ShellEntry], other: &'a [ShellEntry]) -> impl Iterator<Item = &'a str> {
+		list.iter()
+			.filter(|e| other.iter().any(|o| o.slug == e.slug))
+			.map(|e| e.slug.as_str())
+	}
 	let resolve = |entry: &ShellEntry| match (find(orig, &entry.slug), find(disk, &entry.slug)) {
 		(Some(_), None) => None,
 		(Some(loaded), Some(stored)) if loaded == entry => Some(stored.clone()),
 		_ => Some(entry.clone()),
 	};
 	let is_new = |entry: &ShellEntry| find(orig, &entry.slug).is_none();
-	let kept = |list: &[ShellEntry], other: &[ShellEntry]| -> Vec<String> {
-		list.iter()
-			.filter(|e| other.iter().any(|o| o.slug == e.slug))
-			.map(|e| e.slug.clone())
-			.collect()
-	};
 	let added = now.iter().filter(|e| is_new(e)).count();
 	let moved =
-		kept(now, orig) != kept(orig, now) || now[now.len() - added..].iter().any(|e| !is_new(e));
+		!kept(now, orig).eq(kept(orig, now)) || now[now.len() - added..].iter().any(|e| !is_new(e));
 	let mut out: Vec<ShellEntry> = Vec::new();
 	if moved {
 		out.extend(now.iter().filter_map(resolve));
@@ -4647,7 +4650,7 @@ fn unheld_font_in(live: &Settings, zoom: i32) -> FontPick {
 /// under the config dir. The value is text a person edits by hand, so it goes
 /// through the same expander the startup directory does, for `~` and the 3 forms
 /// of an environment variable.
-pub fn resolve_wallpaper(explicit: Option<String>) -> Option<PathBuf> {
+pub fn resolve_wallpaper(explicit: Option<&str>) -> Option<PathBuf> {
 	let dir = config_dir()?;
 	if let Some(given) = explicit.filter(|value| !value.trim().is_empty()) {
 		let path = PathBuf::from(expand_vars(given.trim()));
@@ -4686,7 +4689,7 @@ pub fn resolve_wallpaper(explicit: Option<String>) -> Option<PathBuf> {
 /// dir, like the single wallpaper. It isn't checked for existence here, since the
 /// scan runs off the startup thread and reports an unreadable folder itself, so a
 /// typo still leaves rotation off.
-pub fn resolve_wallpaper_folder(explicit: Option<String>) -> Option<PathBuf> {
+pub fn resolve_wallpaper_folder(explicit: Option<&str>) -> Option<PathBuf> {
 	let given = explicit.filter(|value| {
 		let value = value.trim();
 		!value.is_empty() && value != WALLPAPER_DIR_TOKEN
@@ -4833,7 +4836,7 @@ pub fn is_image_file(path: &std::path::Path) -> bool {
 /// A named image outranks a folder found that way but not one configured. The
 /// loader and the Settings dialog both come here, so the 2 can't disagree.
 pub fn rotation_folder_for(raw: &str, pinned_wallpaper: bool) -> (Option<PathBuf>, bool) {
-	match resolve_wallpaper_folder(Some(raw.to_string())) {
+	match resolve_wallpaper_folder(Some(raw)) {
 		Some(folder) => (Some(folder), false),
 		None => (
 			(!pinned_wallpaper).then(default_wallpaper_folder).flatten(),
@@ -5913,11 +5916,12 @@ fn migrated_text(text: &str, keep_default_shell: bool) -> Option<String> {
 			kept = refreshed;
 			changed = true;
 		}
-		if path == "font.family" && !kept.trim_start().starts_with('#') {
-			if let Some(refreshed) = refresh_font_stack(&kept) {
-				kept = refreshed;
-				changed = true;
-			}
+		if path == "font.family"
+			&& !kept.trim_start().starts_with('#')
+			&& let Some(refreshed) = refresh_font_stack(&kept)
+		{
+			kept = refreshed;
+			changed = true;
 		}
 		out.push(kept);
 	}
@@ -6420,11 +6424,11 @@ fn backfilled_text(text: &str) -> Result<Option<String>, Buried> {
 	// it are in, so the groups are tried again until a round adds nothing. That
 	// is what the next launch would do, and it would write the file again.
 	let mut changed = false;
+	// walked again only after an insertion, not once per group: it was 7 ms a launch
+	let mut at = paths_at(&lines);
 	loop {
 		let mut round = false;
 		for group in &groups {
-			// fresh view after any earlier insertion
-			let at = paths_at(&lines);
 			let present = group.iter().filter(|(p, _)| has(&at, p)).count();
 			if present == group.len() {
 				continue;
@@ -6468,13 +6472,13 @@ fn backfilled_text(text: &str) -> Result<Option<String>, Buried> {
 				let mut now = (lines, origin);
 				round |= settle(text, &mut now, saved, &paths);
 				(lines, origin) = now;
+				at = paths_at(&lines);
 				continue;
 			}
 			// part-present group: the comments are already in the file next to the
 			// siblings, so each straggler goes back beside them, line only, in template
 			// order
 			for (p, block) in group {
-				let at = paths_at(&lines);
 				if has(&at, p) {
 					continue;
 				}
@@ -6493,6 +6497,7 @@ fn backfilled_text(text: &str) -> Result<Option<String>, Buried> {
 				let mut now = (lines, origin);
 				round |= settle(text, &mut now, saved, &[p]);
 				(lines, origin) = now;
+				at = paths_at(&lines);
 			}
 		}
 		changed |= round;
@@ -7709,10 +7714,10 @@ fn anchor_for(
 			return Anchor::After(end);
 		}
 	}
-	if !parent.is_empty() {
-		if let Some(index) = at.get(parent) {
-			return Anchor::After(*index);
-		}
+	if !parent.is_empty()
+		&& let Some(index) = at.get(parent)
+	{
+		return Anchor::After(*index);
 	}
 	Anchor::Append
 }
@@ -7748,7 +7753,7 @@ pub fn set_config_override(path: PathBuf) {
 	let _ = CONFIG_OVERRIDE.set(path);
 }
 
-// `--config` is decided once, before any setting is read, which is waht a
+// `--config` is decided once, before any setting is read, which is what a
 // OnceLock is for. But a test installs several configs in one process, and the
 // second `set` there is quietly ignored, so every later test wrote its own file
 // and read the first one's. So a test build gets a settable override beside the
@@ -18069,10 +18074,7 @@ mod tests {
 		std::fs::write(&current, b"").unwrap();
 		assert_eq!(resolve_wallpaper(None), Some(current));
 
-		assert_eq!(
-			resolve_wallpaper(Some("x.png".to_string())),
-			Some(dir.join("x.png"))
-		);
+		assert_eq!(resolve_wallpaper(Some("x.png")), Some(dir.join("x.png")));
 		let _ = std::fs::remove_dir_all(&dir);
 	}
 
@@ -20530,10 +20532,7 @@ mod peer_tests {
 		));
 		keep_window_state(&live, &mut named);
 		// Windows puts the config dir's drive on a path with none
-		assert_eq!(
-			named.wallpaper,
-			resolve_wallpaper(Some("/pics/one.png".into()))
-		);
+		assert_eq!(named.wallpaper, resolve_wallpaper(Some("/pics/one.png")));
 		assert_ne!(named.wallpaper, live.wallpaper);
 	}
 
