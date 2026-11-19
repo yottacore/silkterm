@@ -283,12 +283,13 @@ fn hotkey_in(
 	}
 	// This shadows the shell's Meta+<those letters> (Meta-f word-forward), the
 	// usual menu-bar tradeoff.
-	if !mac && menu_bar && opens_menu_title(mods) {
-		if let Key::Character(typed) = key {
-			if let Some(ch) = typed.chars().next() {
-				return Some(Hotkey::MenuTitle(ch.to_ascii_uppercase()));
-			}
-		}
+	if !mac
+		&& menu_bar
+		&& opens_menu_title(mods)
+		&& let Key::Character(typed) = key
+		&& let Some(ch) = typed.chars().next()
+	{
+		return Some(Hotkey::MenuTitle(ch.to_ascii_uppercase()));
 	}
 	None
 }
@@ -527,14 +528,11 @@ fn encode_key(
 	// xterm modifier parameter: 1 + shift(1) + alt(2) + ctrl(4)
 	let mod_param = 1 + shift as u8 + ((alt as u8) << 1) + ((ctrl as u8) << 2);
 
-	let with_alt = |bytes: Vec<u8>| -> Vec<u8> {
+	let with_alt = |mut bytes: Vec<u8>| -> Vec<u8> {
 		if alt {
-			let mut prefixed = vec![0x1b];
-			prefixed.extend_from_slice(&bytes);
-			prefixed
-		} else {
-			bytes
+			bytes.insert(0, 0x1b);
 		}
+		bytes
 	};
 
 	match key {
