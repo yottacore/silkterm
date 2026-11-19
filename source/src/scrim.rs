@@ -712,7 +712,6 @@ impl Scrim {
 	}
 }
 
-#[allow(clippy::too_many_arguments)]
 fn binds(
 	device: &wgpu::Device,
 	blur_bgl: &wgpu::BindGroupLayout,
@@ -853,7 +852,6 @@ fn pipeline_blend(
 	)
 }
 
-#[allow(clippy::too_many_arguments)]
 fn make_pipeline(
 	device: &wgpu::Device,
 	shader: &wgpu::ShaderModule,
