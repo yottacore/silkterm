@@ -322,7 +322,8 @@ pub fn is_builtin(name: &str) -> bool {
 /// Every selectable theme name, saved ones first so a saved theme that took a
 /// built-in's name appears once, as itself.
 pub fn all_names(user: &[UserTheme]) -> Vec<String> {
-	let mut out: Vec<String> = user.iter().map(|t| t.name.clone()).collect();
+	let mut out = Vec::with_capacity(user.len() + THEMES.len());
+	out.extend(user.iter().map(|t| t.name.clone()));
 	for name in names() {
 		if !out.iter().any(|n| n.eq_ignore_ascii_case(name)) {
 			out.push(name.to_string());

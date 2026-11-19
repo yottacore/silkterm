@@ -6,7 +6,7 @@
 //! every click and key while it is up, so the panel behind it can be left exactly
 //! as it was.
 
-use super::{Dlg, PROMPT_ROW, SettingsDialog, TextItem, ThemeBtn, border, lay, quad};
+use super::{Dlg, NO_RECT, PROMPT_ROW, SettingsDialog, TextItem, ThemeBtn, border, lay, quad};
 use crate::gfx::RectInstance;
 use crate::pane::Rect;
 use std::borrow::Cow;
@@ -101,12 +101,7 @@ impl SettingsDialog {
 	// the same way the dialog's own footer reads.
 	fn prompt_rect(&self) -> Rect {
 		let Some(prompt) = &self.prompt else {
-			return Rect {
-				x: 0.0,
-				y: 0.0,
-				w: 0.0,
-				h: 0.0,
-			};
+			return NO_RECT;
 		};
 		let w = (self.rect.w - lay().pad * 6.0).max(240.0);
 		let row = self.line_h + lay().row_pad;
@@ -188,17 +183,17 @@ impl SettingsDialog {
 			}
 			match part {
 				PromptFocus::Ok => self.prompt_accept(),
-				_ => self.prompt_close(),
+				PromptFocus::Cancel | PromptFocus::Field => self.prompt_close(),
 			}
 			return;
 		}
-		if let Some(field) = self.prompt_field_rect() {
-			if field.contains(x, y) {
-				if let Some(prompt) = self.prompt.as_mut() {
-					prompt.focus = PromptFocus::Field;
-				}
-				self.field_click(PROMPT_ROW, None, field, x, measure);
+		if let Some(field) = self.prompt_field_rect()
+			&& field.contains(x, y)
+		{
+			if let Some(prompt) = self.prompt.as_mut() {
+				prompt.focus = PromptFocus::Field;
 			}
+			self.field_click(PROMPT_ROW, None, field, x, measure);
 		}
 	}
 
