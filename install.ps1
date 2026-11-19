@@ -110,10 +110,13 @@ if ($PSVersionTable.PSVersion.Major -lt 5) {
 
 ##	fFail <message> [hint ...] - one error line, then any hints, then abort.
 ##	A blank line first, unless nothing but the opening one has been printed.
-##	$outputStarted is fMain's, seen here by dynamic scope.
+##	$outputStarted is fMain's, seen here by dynamic scope. Looked up with
+##	Get-Variable, since a caller outside fMain never sets it and strict mode
+##	refuses a plain read.
 function fFail {
 	param([string]$Message, [string[]]$Hints = @())
-	if ($outputStarted) { Write-Host '' }
+	$started = Get-Variable -Name outputStarted -ValueOnly -ErrorAction SilentlyContinue
+	if ($started) { Write-Host '' }
 	Write-Host "Error: $Message" -ForegroundColor Red
 	foreach ($hint in $Hints) { Write-Host "  $hint" }
 	Write-Host ''
