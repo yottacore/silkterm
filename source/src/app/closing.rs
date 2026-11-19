@@ -43,7 +43,10 @@ pub(super) fn remembered(end: bool) -> OnClose {
 }
 
 /// The question's window title and paragraphs.
-#[cfg_attr(target_os = "windows", allow(dead_code))]
+#[cfg_attr(
+	target_os = "windows",
+	allow(dead_code, reason = "Windows has no tmux to ask about")
+)]
 pub(super) fn ask_text(closing: Closing, names: &[String]) -> (String, Vec<String>) {
 	let (title, what) = match closing {
 		Closing::Pane(_) => ("Close pane", "this pane"),

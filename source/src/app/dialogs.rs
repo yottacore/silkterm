@@ -241,9 +241,8 @@ impl App {
 			.window
 			.set_outer_position(winit::dpi::PhysicalPosition::new(x, y));
 	}
-	/// self kept for call-site parity with the version above
 	#[cfg(not(any(target_os = "windows", target_os = "macos")))]
-	#[allow(clippy::unused_self)]
+	#[allow(clippy::unused_self, reason = "the same call as the version above")]
 	pub(super) fn center_dialog(&self) {}
 
 	/// Windows: the dialog is created hidden (see `dialog::make`), so after centering,
@@ -256,9 +255,11 @@ impl App {
 			d.window.set_visible(true);
 		}
 	}
-	/// self kept for call-site parity with the Windows version above
 	#[cfg(not(target_os = "windows"))]
-	#[allow(clippy::unused_self)]
+	#[allow(
+		clippy::unused_self,
+		reason = "the same call as the Windows version above"
+	)]
 	pub(super) fn reveal_dialog(&self) {}
 
 	// Drop the dialog window, remembering a Settings view on the way out so a

@@ -53,7 +53,7 @@ impl State {
 		self.apply_new_settings(&orig, edited, true);
 	}
 
-	/// Hand the wallpaper to a worker thread and carry on drawing. `scan` also reads
+	/// Hand the wallpaper to a worker thread and keep drawing. `scan` also reads
 	/// the rotation folder again and picks from it. The folder, the image, and its tags
 	/// can all be on a slow share, so none of it runs on this thread.
 	pub(super) fn request_wallpaper(&mut self, scan: bool) {

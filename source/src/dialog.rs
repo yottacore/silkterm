@@ -100,7 +100,10 @@ impl AboutSource {
 /// What closing a pane in tmux asks (app/closing.rs): its paragraphs, the
 /// "Don't ask me next time" box, and which part the keyboard is on.
 #[derive(Debug)]
-#[cfg_attr(target_os = "windows", allow(dead_code))]
+#[cfg_attr(
+	target_os = "windows",
+	allow(dead_code, reason = "Windows has no tmux to ask about")
+)]
 struct Ask {
 	paras: Vec<String>,
 	remember: bool,
@@ -289,7 +292,7 @@ impl DialogWin {
 		warm: Option<&crate::gfx::DialogGpu>,
 	) -> anyhow::Result<(ModalHint, Arc<Window>, Gfx, TextCtx, RectRenderer)> {
 		let handle = parent.map(Parent::handle);
-		#[allow(unused_mut)] // reassigned on linux/windows/macos below
+		#[allow(unused_mut, reason = "reassigned on linux, windows, and macos below")]
 		let mut attrs = Window::default_attributes()
 			.with_title(title)
 			.with_window_icon(crate::app::load_icon())
@@ -2013,7 +2016,10 @@ fn scene_into(
 
 // The question's check box, and the ring round whatever the keyboard is on. A
 // ring hugs a button's own outline and stands a little off the box and label.
-#[cfg_attr(target_os = "windows", allow(dead_code))]
+#[cfg_attr(
+	target_os = "windows",
+	allow(dead_code, reason = "Windows has no tmux to ask about")
+)]
 fn ask_quads(ask: &Ask, links: &[AboutLink], text: &TextCtx, rects: &mut Vec<RectInstance>) {
 	let b = text.dip(ABOUT_BORDER);
 	for link in links {
@@ -2058,7 +2064,10 @@ fn ask_quads(ask: &Ask, links: &[AboutLink], text: &TextCtx, rects: &mut Vec<Rec
 }
 
 // The 4 quads round `r`, `t` thick, drawn inside it.
-#[cfg_attr(target_os = "windows", allow(dead_code))]
+#[cfg_attr(
+	target_os = "windows",
+	allow(dead_code, reason = "only the tmux question draws one")
+)]
 fn ring(rects: &mut Vec<RectInstance>, r: Rect, t: f32, color: [u8; 3]) {
 	rects.push(quad(r.x, r.y, r.w, t, color));
 	rects.push(quad(r.x, r.y + r.h - t, r.w, t, color));
@@ -2955,7 +2964,10 @@ fn layout_ask(text: &mut TextCtx, ask: &Ask) -> (Vec<Line>, Vec<AboutLink>, (f32
 }
 
 // Side of the question's check box, for a UI line `line_h` tall.
-#[cfg_attr(target_os = "windows", allow(dead_code))]
+#[cfg_attr(
+	target_os = "windows",
+	allow(dead_code, reason = "Windows has no tmux to ask about")
+)]
 fn ask_box(line_h: f32) -> f32 {
 	(line_h * 0.8).round()
 }
@@ -3137,7 +3149,10 @@ pub fn work_area_of(_handle: RawWindowHandle) -> Option<(i32, i32, i32, i32)> {
 
 // Cocoa measures the screen in points from the bottom-left of the primary
 // display, y up. winit measures in physical pixels from its top-left, y down.
-#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+#[cfg_attr(
+	not(target_os = "macos"),
+	allow(dead_code, reason = "Cocoa only, tested everywhere")
+)]
 fn flip_cocoa_rect(
 	origin: (f64, f64),
 	size: (f64, f64),
@@ -3157,7 +3172,13 @@ fn flip_cocoa_rect(
 /// work area, or a tall dialog centered on a tall terminal puts its own buttons
 /// under the taskbar or the Dock. With no work area to go by it only keeps off
 /// the negative side of the origin.
-#[cfg_attr(not(any(target_os = "windows", target_os = "macos")), allow(dead_code))]
+#[cfg_attr(
+	not(any(target_os = "windows", target_os = "macos")),
+	allow(
+		dead_code,
+		reason = "Linux window managers place transients themselves"
+	)
+)]
 pub fn dialog_origin(
 	parent_pos: (i32, i32),
 	parent_size: (u32, u32),
