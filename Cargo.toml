@@ -72,6 +72,12 @@ x11-clipboard = { git = "https://github.com/jim-collier/x11-clipboard", branch =
 # standing so an older lock resolves.
 glyphon = { git = "https://github.com/jim-collier/glyphon", branch = "text-srgb-blend-0.11.0" }
 
+# vte 0.15.0 clears its OSC buffer when a sequence ends but keeps the memory,
+# so one long OSC left a pane holding up to 2 MiB until it closed. Our branch
+# is the published 0.15.0 plus a 2 MiB cap on that buffer, and a shrink back to
+# 4 KiB once a long sequence ends, with a test for both.
+vte = { git = "https://github.com/jim-collier/vte", branch = "osc-buffer-0.15.0" }
+
 # silk_asan and silk_tsan are set by the sanitizer runs (cicd/config.bash), for
 # the few tests that can't mean anything under them.
 [workspace.lints.rust]
