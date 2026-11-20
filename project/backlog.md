@@ -34,6 +34,36 @@ Going forward, new issues in the new template at the bottom of this file will go
 
 ## Issues
 
+- Does not release resources in tmux and/or muffer
+	- ID: 2026112006320249
+	- Type: Bug
+	- Status: Waiting on UAT
+		- 20261120: It needs a look on b23 with muffer idle in tmux, per the hand testing row. The rigs used a quiet shell in tmux, not muffer.
+	- Needs hand testing: On b23, leave a window with muffer idle in tmux in the front tab, unfocused and on screen. It should let go after "Minutes otherwise". Started from a terminal with `SILK_IDLEDBG=1`, "wait restarted: output" names anything else that still holds it.
+	- Severity: High
+	- Opened: 20261120-063202
+	- Opened by: JC
+	- Assigned to: CC
+	- Target version: rc.1
+	- Incorrect behavior: Does not release resources in tmux and/or muffer. (In this case muffer in tmux.)
+	- Notes:
+		- Pre-next-cut.
+		- 20261120: The item's words are the idle release's own, so the work went there. Leaks of memory, file descriptors, threads or child processes when muffer exits or a pane closes weren't measured. muffer itself wasn't run, since test windows never run it.
+	- Reproduced: 20261120.
+		- tmux 3.7 with no config and a quiet shell wrote 87 bytes once a minute: its status line, with the clock's new minute. It wrote nothing else in 130 s, and nothing at all with the status line off.
+		- In SilkTerm under Xvfb, an unfocused window with "Minutes otherwise" at 1 and tmux in front, its clock redrawn every 5 s, logged "wait restarted: output" at each tick. It still held its device at 100 s.
+	- Actual cause: tmux redraws the clock in its status line once a minute with nobody there. Any output in the front tab of a window on screen counted as a sign of life and started the wait over. So a window showing tmux never let go, whatever ran inside it.
+	- Actual fix: Output that only redrew one row the cursor isn't on, and left the cursor where it was, isn't a sign of life. It's drawn while the device is held. A released window keeps its last frame up until a sign of life. The releasing-resources design doc says so.
+	- Decisions:
+		- 20261120: A status line is told apart by what the output changed on screen, from the engine's change tracking, rather than by knowing it's tmux. So a tmux started by hand is covered, and so are GNU screen, a clock in vim, and `watch`.
+		- 20261120: A released window doesn't take its device back for a status line, so its clock stays as it was until a sign of life. The other choice was one frame per tick, as a repaint gets. See the Check entry in questions.md.
+		- 20261120: Output that changes nothing on screen, such as a new title alone, still counts, as before. New lines, a scroll, a progress bar on the cursor's row, and 2 rows or more all still count.
+	- Swept: output reaches the idle clock in one place, the wakeup in app.rs, then `note_output`. Nothing read the engine's change tracking before, so reading and clearing it at each wakeup takes it from nobody.
+	- Verified: 20261120. idletmux fails on the build before the fix, where the clock window never let go in 100 s. It passes after: the window let go at 61 s, a tick after that left it let go, and the window whose shell prints inside tmux kept its device. The quick gate passes in all 5 areas.
+	- Test case: `only_a_status_line_redraw_away_from_the_cursor_is_a_status_line` (dfj7p), and `cicd/tests/idletmux/run.bash` (dfj7n), new, in the full run.
+	- Branch: nov20-2026112006320249
+	- Commit: a7e25bfe
+
 - Demo: the cursor should go to 50% width when the cursor size and animation change
 	- ID: 2026092812581720
 	- Type: Enhancement
@@ -96,18 +126,6 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- 20261019: It's still stuck upstream. `cargo update --dry-run` doesn't move any of fontdb, cosmic-text, ab_glyph, sctk-adwaita, glyphon, or winit, and ttf-parser 0.25.1 still comes in both ways. On crates.io, fontdb 0.24.0 drops it, but the newest cosmic-text, 0.19.0, still asks for fontdb 0.23. sctk-adwaita 0.12.0 still pulls in ab_glyph. Even glyphon 0.12, a breaking bump, still brings cosmic-text 0.19.
 		- It's stalled until a cosmic-text release takes fontdb 0.24 or later, and winit's sctk-adwaita drops ab_glyph.
 	- Held for a cosmic-text release on fontdb 0.24 or later, and an sctk-adwaita without ab_glyph.
-
-- Does not release resources in tmux and/or muffer
-	- ID: 2026112006320249
-	- Type: Bug
-	- Status: Queued
-	- Severity: High
-	- Opened: 20261120-063202
-	- Opened by: JC
-	- Target version: rc.1
-	- Incorrect behavior: Does not release resources in tmux and/or muffer. (In this case muffer in tmux.)
-	- Notes:
-		- Pre-next-cut.
 
 - An OSC sequence that never ends grows the parser's buffer until memory runs out
 	- ID: 2026111713374900

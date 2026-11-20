@@ -6,8 +6,9 @@ use std::sync::Arc;
 use alacritty_terminal::event::{Event, EventListener, WindowSize};
 use alacritty_terminal::event_loop::{EventLoop, EventLoopSender, Msg};
 use alacritty_terminal::grid::Dimensions;
+use alacritty_terminal::index::Point;
 use alacritty_terminal::sync::FairMutex;
-use alacritty_terminal::term::{ClipboardType, Config, Osc52, Term, TermMode};
+use alacritty_terminal::term::{ClipboardType, Config, Osc52, Term, TermDamage, TermMode};
 use alacritty_terminal::tty;
 use winit::event_loop::EventLoopProxy;
 
@@ -368,6 +369,9 @@ pub struct TermInstance {
 	child_watch: std::cell::RefCell<Option<ChildWatch>>,
 	#[allow(clippy::type_complexity)]
 	cwd_cache: std::cell::RefCell<Option<(std::time::Instant, Option<std::path::PathBuf>)>>,
+	// where the cursor was at the last look at what output changed (see
+	// only_a_status_line)
+	status_cursor: std::cell::Cell<Option<Point>>,
 }
 
 impl std::fmt::Debug for TermInstance {
@@ -477,6 +481,7 @@ impl TermInstance {
 			#[cfg(windows)]
 			child_watch: std::cell::RefCell::new(None),
 			cwd_cache: std::cell::RefCell::new(None),
+			status_cursor: std::cell::Cell::new(None),
 		})
 	}
 
@@ -779,6 +784,17 @@ impl TermInstance {
 		let _ = self.sender.send(Msg::Input(bytes.into().into()));
 	}
 
+	/// What the output since the last call changed, read and cleared. True when
+	/// all it did was redraw one row the cursor isn't on, and the cursor is
+	/// where it was, as when tmux's status line clock ticks. Anything else is
+	/// false, such as new lines, a scroll, a redraw of the cursor's own row (a
+	/// progress bar), or the view scrolled back.
+	pub fn only_a_status_line(&self) -> bool {
+		let (only, cursor) = status_line_only(&mut self.term.lock(), self.status_cursor.get());
+		self.status_cursor.set(Some(cursor));
+		only
+	}
+
 	/// Put text on screen without a PTY behind it. The engine's thread owns the
 	/// parser and dies with the shell, so anything added afterwards (the
 	/// --keep-open exit line) needs a parser of our own.
@@ -823,6 +839,32 @@ type Sized = (usize, usize, (u16, u16));
 fn resize_changes(was: Sized, now: Sized) -> (bool, bool) {
 	let regrid = (was.0, was.1) != (now.0, now.1);
 	(regrid, regrid || was.2 != now.2)
+}
+
+// The engine always counts the cursor's own cell as changed, so that cell alone
+// on the cursor's row isn't a row redrawn. Returns the cursor, for next time.
+fn status_line_only<T: EventListener>(term: &mut Term<T>, was: Option<Point>) -> (bool, Point) {
+	let cursor = term.grid().cursor.point;
+	let scrolled_back = term.grid().display_offset() != 0;
+	let mut rows = 0;
+	let mut on_cursor_row = false;
+	if let TermDamage::Partial(lines) = term.damage() {
+		for line in lines {
+			let at_cursor = usize::try_from(cursor.line.0).is_ok_and(|row| row == line.line);
+			if at_cursor && line.left == cursor.column.0 && line.right == cursor.column.0 {
+				continue;
+			}
+			on_cursor_row |= at_cursor;
+			rows += 1;
+		}
+	} else {
+		rows = usize::MAX;
+	}
+	term.reset_damage();
+	(
+		rows == 1 && !on_cursor_row && !scrolled_back && was == Some(cursor),
+		cursor,
+	)
 }
 
 impl Drop for TermInstance {
@@ -1753,6 +1795,53 @@ mod tests {
 		grid_dims, is_command_child, join_for, parse_env_block, query_reply, requested_color,
 		resize_changes, usable_cwd, wsl_cd,
 	};
+
+	// tmux redraws its status line clock with nobody there, and that kept the
+	// idle release from ever starting on a window showing tmux. Only a redraw of
+	// one row away from the cursor, with the cursor back where it was, is let
+	// through as a status line. The bytes are what tmux 3.7 wrote for a tick.
+	// Test ID: dfj7p
+	#[test]
+	fn only_a_status_line_redraw_away_from_the_cursor_is_a_status_line() {
+		use alacritty_terminal::event::VoidListener;
+		use alacritty_terminal::vte::ansi::{Processor, StdSyncHandler};
+		const TICK: &[u8] = b"\x1b[?25l\x1b[30m\x1b[42m\x1b[30;1H[0] 0:sh*\x1b[70X\x1b[70C\"b23\" 06:41 20-Nov-26\x1b(B\x1b[m\x1b[?12l\x1b[?25h\x1b[1;3H";
+		let dims = super::TermDimensions {
+			columns: 100,
+			screen_lines: 30,
+		};
+		let mut term = super::Term::new(super::engine_config(), &dims, VoidListener);
+		let mut parser = Processor::<StdSyncHandler>::default();
+		let mut was = None;
+		let mut after = |bytes: &[u8]| {
+			parser.advance(&mut term, bytes);
+			let (only, cursor) = super::status_line_only(&mut term, was);
+			was = Some(cursor);
+			only
+		};
+		assert!(
+			!after(b"\x1b[1;1H$ "),
+			"the first look, with everything new"
+		);
+		assert!(after(TICK), "a tick of tmux's clock");
+		assert!(after(TICK), "and the next");
+		assert!(!after(b"tick\r\n$ "), "a line printed");
+		assert!(
+			!after(b"\r[====    ] 40%\r"),
+			"a progress bar on the cursor's row"
+		);
+		assert!(
+			!after(b"\x1b7\x1b[29;1Hab\x1b[30;1Hcd\x1b8"),
+			"2 rows redrawn"
+		);
+		assert!(!after(b"\x1b[5;5H"), "the cursor moved");
+		assert!(
+			!after(b"\x1b7\x1b[30;1Hab\x1b8x"),
+			"a status line and a key echoed"
+		);
+		assert!(!after(b"\x1b]2;title\x07"), "nothing redrawn, as before");
+		assert!(after(b"\x1b7\x1b[1;1Hclock\x1b8"), "a clock on the top row");
+	}
 
 	// A window moved to a monitor at another scale, or zoomed, can keep its
 	// grid with a new cell size. The shell is told the size in pixels as well,
