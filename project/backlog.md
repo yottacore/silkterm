@@ -101,6 +101,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- ID: 2026112006320249
 	- Type: Bug
 	- Status: Queued
+	- Severity: High
 	- Opened: 20261120-063202
 	- Opened by: JC
 	- Target version: rc.1
