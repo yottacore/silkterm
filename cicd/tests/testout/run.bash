@@ -48,6 +48,7 @@ fScript skip.bash  'echo "skip-chatter"' 'exit 3'
 fScript skipwhy.bash  'echo "  skip: no frobnicator"' 'echo "skip-chatter"' 'echo "  skip: no widget either"' 'exit 3'
 fScript skiptool.bash  'echo "  skip: no wtype"' 'exit 3'
 fScript skipother.bash  'echo "  skip: no software Vulkan (/x/lvp.json)"' 'exit 3'
+fScript ledger.bash  'if [[ -v SILK_PUBLISH_LEDGER ]]; then echo "ledger: ${SILK_PUBLISH_LEDGER}"; exit 1; fi'
 fScript long.bash  'for ((i = 1; i <= 250; i++)); do echo "long-line-${i}"; done' 'exit 1'
 
 ## fRun <log> <function> <script>: one call in a subshell, as cicd would make
@@ -132,6 +133,12 @@ fRun "${work}/hosttool.log" fRunTest_MaySkip t/skiptool.bash "tool one"
 fCheck "a missing tool here is a skip" test "${rc}" -eq 0
 fCheck "with its SKIP line" grep -qxF 'SKIP zzzzz tool one, no wtype' "${work}/hosttool.log"
 
+## The engine runs a test starts would write to this run's publish ledger.
+SILK_PUBLISH_LEDGER="${work}/ledger.txt" fRun "${work}/ledger.log" fRunTest t/ledger.bash "ledger one"
+fCheck "a test never sees the run's publish ledger" test "${rc}" -eq 0
+SILK_PUBLISH_LEDGER="${work}/ledger.txt" fRun "${work}/mledger.log" fRunTest_MaySkip t/ledger.bash "ledger two"
+fCheck "nor one that may skip" test "${rc}" -eq 0
+
 fRun "${work}/long.log" fRunTest t/long.bash "long one"
 fCheck "a long output shows its end" grep -q '^long-line-250$' "${work}/long.log"
 fCheck "and says how much was cut" grep -q '^last 200 of 250 lines of output:$' "${work}/long.log"
@@ -146,3 +153,4 @@ echo "all passed"
 ##		- 20261028: PASS, FAIL and SKIP lines, and the why of a skip.
 ##		- 20261031: The failure line names the file only when it outlives the run.
 ##		- 20261106: In the image a skip for a missing tool fails.
+##		- 20261120: A test never sees the run's publish ledger.

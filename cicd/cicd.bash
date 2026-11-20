@@ -350,6 +350,8 @@ fTestOut_Fail(){
 ## if it is there. Its PASS line on a pass, with its output dropped. The failure
 ## text, by default "<label> test failed", aborts the run, after the test's
 ## output and its FAIL line.
+## A test never sees this run's publish ledger. The engine runs a test starts
+## would add their own files to it, and add its mount to their docker lines.
 fRunTest(){
 	local -r script="${1}" label="${2}" failure="${3:-${2} test failed}"
 	[[ -x "${root}/${script}" ]] || return 0
@@ -357,7 +359,7 @@ fRunTest(){
 	if ((listing)); then fListTest "${script}" "${label}"; return 0; fi
 	fEcho_Clean "${label} ..."
 	local out; out="$(fTestOut "${script}")"
-	"${root}/${script}" >"${out}" || fTestOut_Fail "${out}" "${script}" "${label}" "${failure}"
+	env -u SILK_PUBLISH_LEDGER "${root}/${script}" >"${out}" || fTestOut_Fail "${out}" "${script}" "${label}" "${failure}"
 	rm -f "${out}"
 	fTestLine PASS "${script}" "${label}"
 }
@@ -373,7 +375,7 @@ fRunTest_MaySkip(){
 	if ((listing)); then fListTest "${script}" "${label}"; return 0; fi
 	fEcho_Clean "${label} ..."
 	local rc=0 out said; out="$(fTestOut "${script}")"
-	"${root}/${script}" >"${out}" || rc=$?
+	env -u SILK_PUBLISH_LEDGER "${root}/${script}" >"${out}" || rc=$?
 	if ((rc == 3)); then
 		said="$(sed -n 's/^[[:space:]]*skip: //p' "${out}" | tail -n 1)"
 		if [[ -n "${SILK_CICD_IN_CONTAINER:-}" && "${said}" =~ ^no\ [^[:space:]]+$ ]]; then
