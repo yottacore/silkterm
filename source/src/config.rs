@@ -1910,9 +1910,116 @@ fn parse_kept(text: &str) -> shcl::Document {
 }
 
 // What a save writes. shcl falls back to the canonical form where it can't keep
-// the lines.
+// the lines. Where it keeps them, a value it added takes the place of the
+// commented default line for it.
 fn saved_text(doc: &shcl::Document) -> String {
-	doc.to_text_keep_lines().0
+	let (text, kept) = doc.to_text_keep_lines();
+	if !kept {
+		return text;
+	}
+	filled_defaults(&text, doc).unwrap_or(text)
+}
+
+// shcl's save that keeps the lines writes a value the file didn't have as a new
+// line, and leaves the commented default where it was, so every line below it
+// moves down. A launch message names lines, and a later save then makes it
+// wrong. So each new line goes where its commented default was, in place of
+// it, when the text still reads the same. Only a commented line the program
+// wrote is taken, since one commented out by hand may hold the person's note.
+// shcl has it as 2026102910482345, deferred to its v4.
+fn filled_defaults(text: &str, doc: &shcl::Document) -> Option<String> {
+	// a node the setters built has no source line
+	let added: Vec<String> = walk_settings(text)
+		.into_iter()
+		.filter_map(|w| match w {
+			WalkLine::Setting {
+				path,
+				active: true,
+				header: false,
+				..
+			} => {
+				let at = doc.read_line(&path);
+				(at.status == shcl::Status::Good && at.value == 0).then_some(path)
+			}
+			_ => None,
+		})
+		.collect();
+	if added.is_empty() {
+		return None;
+	}
+	let want = setting_reads(&shcl::Document::parse(text));
+	let mut out: Vec<String> = text.split_inclusive('\n').map(str::to_string).collect();
+	let mut moved = false;
+	for path in &added {
+		let mut own = Vec::new();
+		let mut spot = None;
+		for w in walk_settings(&out.concat()) {
+			let WalkLine::Setting {
+				index,
+				path: p,
+				active,
+				header,
+			} = w
+			else {
+				continue;
+			};
+			if !p.eq_ignore_ascii_case(path) {
+				continue;
+			}
+			if active && !header {
+				own.push(index);
+			} else if !active && is_default_line(&out[index], path) {
+				spot = Some(index);
+			}
+		}
+		let (&[from], Some(to)) = (own.as_slice(), spot) else {
+			continue;
+		};
+		let mut trial = out.clone();
+		let body = out[from].trim_end_matches(['\r', '\n']);
+		let ending = &out[to][out[to].trim_end_matches(['\r', '\n']).len()..];
+		trial[to] = format!("{body}{ending}");
+		trial.remove(from);
+		// the last line keeps the file's own ending, newline or not
+		if from == out.len() - 1
+			&& !out[from].ends_with('\n')
+			&& let Some(last) = trial.last_mut()
+		{
+			let cut = last.trim_end_matches(['\r', '\n']).len();
+			last.truncate(cut);
+		}
+		if setting_reads(&shcl::Document::parse(&trial.concat())) == want {
+			out = trial;
+			moved = true;
+		}
+	}
+	moved.then(|| out.concat())
+}
+
+// A commented line the program wrote for a setting: the template's own line for
+// it, or an older template's, which ends in the default marker.
+fn is_default_line(line: &str, path: &str) -> bool {
+	let line = line.trim();
+	line.ends_with("## Default")
+		|| setting_lines(default_config())
+			.iter()
+			.any(|(p, shipped)| p.eq_ignore_ascii_case(path) && shipped.trim() == line)
+}
+
+// How every setting reads, sorted by path, so a line moved within its block
+// compares the same and one moved out of it doesn't.
+fn setting_reads(doc: &shcl::Document) -> (usize, Vec<(String, Vec<String>, shcl::ValueKind)>) {
+	let mut reads: Vec<_> = doc
+		.paths()
+		.into_iter()
+		.map(|path| {
+			let instances = doc.instances(&path);
+			let kind = doc.kind(&path);
+			(path, instances, kind)
+		})
+		.collect();
+	reads.sort_by(|a, b| a.0.cmp(&b.0));
+	(doc.lost_count(), reads)
 }
 
 // shcl's save_file_keep_lines gate. A line the parse dropped is written back as
@@ -7056,8 +7163,13 @@ fn place_rating_line(lines: &mut Vec<String>, leaf: &str, spelled: &str) -> Opti
 		}
 		_ => format!("{}\t", indent(&lines[header])),
 	};
-	let at = commented.map_or(header + 1, |index| index + 1);
-	lines.insert(at, format!("{lead}{leaf}: {spelled}"));
+	let line = format!("{lead}{leaf}: {spelled}");
+	// the commented default is filled in where it is, so no line below moves
+	match commented {
+		Some(index) if is_default_line(&lines[index], &path) => lines[index] = line,
+		Some(index) => lines.insert(index + 1, line),
+		None => lines.insert(header + 1, line),
+	}
 	Some(())
 }
 
@@ -11133,9 +11245,14 @@ mod tests {
 				"performance:\n\tcheck_next_run: false  ## note\n",
 			),
 			(
-				"only the commented default: directly after it",
+				"only the commented default: in its place",
 				"performance:\n\n\t# automatic: true  ## Default\n\t# check_next_run: false  ## Default\n\t# profile: \"max\"  ## Default\n\n## next\n",
-				"performance:\n\n\t# automatic: true  ## Default\n\t# check_next_run: false  ## Default\n\tcheck_next_run: false\n\t# profile: \"max\"  ## Default\n\n## next\n",
+				"performance:\n\n\t# automatic: true  ## Default\n\tcheck_next_run: false\n\t# profile: \"max\"  ## Default\n\n## next\n",
+			),
+			(
+				"a comment typed by hand: directly after it",
+				"performance:\n\t# check_next_run: true  ## mine\n\tautomatic: true\n",
+				"performance:\n\t# check_next_run: true  ## mine\n\tcheck_next_run: false\n\tautomatic: true\n",
 			),
 			(
 				"only the header: first in the block, at its children's depth",
@@ -11361,7 +11478,8 @@ mod tests {
 	}
 
 	// On those files the line goes in on its own: every line already there stays,
-	// byte for byte and in order, apart from the cleared value that gets one.
+	// byte for byte and in order, apart from the cleared value that gets one and
+	// the commented default that the value takes the place of.
 	// Test ID: dcfan
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
@@ -11373,7 +11491,12 @@ mod tests {
 			let out =
 				with_rating_lines(&text, lines).unwrap_or_else(|kept| panic!("{what}: {kept:?}"));
 			let mut rest = out.lines();
-			for line in text.lines().filter(|line| line.trim() != "check_next_run:") {
+			let taken = |line: &str| {
+				line.trim() == "check_next_run:"
+					|| is_default_line(line, "performance.check_next_run")
+						&& line.trim_start().starts_with("# check_next_run:")
+			};
+			for line in text.lines().filter(|line| !taken(line)) {
 				assert!(
 					rest.any(|kept| kept == line),
 					"{what}: {line:?} is not where it was"
@@ -12061,7 +12184,7 @@ mod tests {
 		assert_eq!(keep_rating(lines), Kept::Written);
 		assert_eq!(
 			std::fs::read_to_string(&path).unwrap(),
-			"themes:\n\tone:\n\t\t\tname: One\n\t\tstray: 1\n\nperformance:\n\t# profile: \"max\"  ## Default\n\t# check_next_run: false  ## Default\n\tcheck_next_run: true\n",
+			"themes:\n\tone:\n\t\t\tname: One\n\t\tstray: 1\n\nperformance:\n\t# profile: \"max\"  ## Default\n\tcheck_next_run: true\n",
 			"the unreadable line and its neighbours are as they were"
 		);
 		let reloaded = reload_from_disk();
@@ -15192,6 +15315,83 @@ mod tests {
 			text.replace("columns: 90", "columns: 100")
 		);
 		let _ = std::fs::remove_dir_all(&dir);
+	}
+
+	// A value set in a file that has only its commented default goes in that
+	// line's place, so no line below it moves, and a revert puts the file back.
+	// shcl's own save adds it as a new line beside the comment.
+	// Test ID: dfhh2
+	#[test]
+	fn a_set_value_fills_its_commented_default_where_it_is() {
+		let text = "performance:\n\t# automatic: true  ## Default\n\t# profile: \"max\"  ## Default\n\t# check_hardware: true  ## Default\n\nwindow:\n\topacity: 1.0\n";
+		let mut doc = parse_kept(text);
+		doc.put_string("performance.profile", "low");
+		assert_eq!(
+			saved_text(&doc),
+			text.replace("\t# profile: \"max\"  ## Default", "\tprofile: low")
+		);
+
+		let template = default_config();
+		let commented = |path: &str| {
+			walk_settings(template)
+				.into_iter()
+				.find_map(|w| match w {
+					WalkLine::Setting {
+						index,
+						path: p,
+						active: false,
+						..
+					} if p == path => Some(index),
+					_ => None,
+				})
+				.unwrap_or_else(|| panic!("the template has no commented {path}"))
+		};
+		let mut doc = parse_kept(template);
+		doc.put_bool("performance.automatic", false);
+		doc.put_float("font.size", 13.0);
+		doc.put_bool("wallpaper.rotate.enabled", false);
+		let out = saved_text(&doc);
+		let lines: Vec<&str> = out.lines().collect();
+		assert_eq!(lines.len(), template.lines().count(), "{out}");
+		for (path, line) in [
+			("performance.automatic", "\tautomatic: false"),
+			("font.size", "\tsize: 13"),
+			("wallpaper.rotate.enabled", "\t\tenabled: false"),
+		] {
+			assert_eq!(lines[commented(path)], line, "{path}");
+		}
+		let reread = shcl::Document::parse(&out);
+		assert_eq!(reread.get_bool("performance.automatic"), Ok(false));
+		assert_eq!(reread.get_float("font.size"), Ok(13.0));
+		assert_eq!(reread.get_bool("wallpaper.rotate.enabled"), Ok(false));
+		let keys = [
+			"performance.automatic",
+			"font.size",
+			"wallpaper.rotate.enabled",
+		];
+		assert_eq!(reverted_text(&out, &keys).as_deref(), Some(template));
+	}
+
+	// A line commented out by hand may hold the person's own note, so a value
+	// set beside it is a new line and the comment stays as typed.
+	// Test ID: dfhh3
+	#[test]
+	fn a_set_value_leaves_a_comment_typed_by_hand() {
+		let text = "performance:\n\t# profile: low  ## for the laptop\n\tautomatic: false\n";
+		let mut doc = parse_kept(text);
+		doc.put_string("performance.profile", "high");
+		let out = saved_text(&doc);
+		assert!(
+			out.contains("\t# profile: low  ## for the laptop\n"),
+			"{out}"
+		);
+		assert_eq!(out.lines().count(), 4, "{out}");
+		assert_eq!(
+			shcl::Document::parse(&out)
+				.get_string("performance.profile")
+				.as_deref(),
+			Ok("high")
+		);
 	}
 
 	// #136 convention: explanatory comments use '## '; commented-out (disabled)
@@ -18452,9 +18652,11 @@ mod tests {
 		let _ = std::fs::remove_dir_all(&dir);
 	}
 
-	// The launch names a line it can't read, and the rating then writes 2
-	// lines above it once the window is up. The last word on the console has to
-	// name the line where the file has it after that.
+	// The launch names a line it can't read, and the rating then writes a line
+	// above it once the window is up. The last word on the console has to name
+	// the line where the file has it after that. The rating fills in the
+	// commented default where it is, which moves nothing, so here that line is
+	// one typed by hand and the rating's line goes in after it.
 	// Test ID: ddcf0
 	#[test]
 	#[cfg_attr(miri, ignore = "too slow under Miri")]
@@ -18486,6 +18688,18 @@ mod tests {
 			said()
 		);
 
+		let launched = std::fs::read_to_string(&path).unwrap();
+		let typed = launched.replacen(
+			"\t# check_next_run: false  ## Default\n",
+			"\t# check_next_run: false  ## typed by hand\n",
+			1,
+		);
+		assert_ne!(
+			typed, launched,
+			"the template has no commented check_next_run"
+		);
+		std::fs::write(&path, &typed).unwrap();
+
 		let kept = keep_rating(RatingLines {
 			check_next_run: Some(true),
 		});
@@ -18500,6 +18714,46 @@ mod tests {
 		] {
 			assert!(said.iter().any(|m| m.contains(&cites)), "{cites}: {said:?}");
 		}
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
+	// The rating fills in the template's commented line where it is, so the line
+	// the launch named is still where the file has it.
+	// Test ID: dfhh4
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_rating_write_moves_no_line_the_launch_named() {
+		let _guard = super::test_config_lock();
+		let dir =
+			crate::testdir::run_dir().join(format!("silkterm_cfgfill_{}", std::process::id()));
+		let _ = std::fs::remove_dir_all(&dir);
+		std::fs::create_dir_all(&dir).unwrap();
+		let path = dir.join("config.shcl");
+		std::fs::write(&path, "window:\n\t\topacity: 1.0\n\tmargin: 4\n").unwrap();
+		set_config_override(path.clone());
+		let _ = load();
+		let at = |text: &str| text.lines().position(|l| l == "\tmargin: 4").unwrap() + 1;
+		let launched = std::fs::read_to_string(&path).unwrap();
+		let before = at(&launched);
+		let kept = keep_rating(RatingLines {
+			check_next_run: Some(true),
+		});
+		assert_eq!(kept, Kept::Written);
+		let rated = std::fs::read_to_string(&path).unwrap();
+		assert_eq!(at(&rated), before, "{rated}");
+		assert_eq!(rated.lines().count(), launched.lines().count());
+		assert!(rated.contains("\tcheck_next_run: true\n"), "{rated}");
+		assert!(!rated.contains("# check_next_run:"), "{rated}");
+		let said = LAUNCH_SAID
+			.lock()
+			.unwrap()
+			.clone()
+			.map(|(_, said)| said)
+			.unwrap_or_default();
+		assert!(
+			said.iter().any(|m| m.contains(&format!("line {before}:"))),
+			"{said:?}"
+		);
 		let _ = std::fs::remove_dir_all(&dir);
 	}
 

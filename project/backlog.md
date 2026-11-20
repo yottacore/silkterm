@@ -133,7 +133,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 - shcl: a keep-lines save adds a set value as a new line, beside its commented default
 	- ID: 2026100219054510
 	- Type: Task
-	- Status: Queued
+	- Status: Closed
 	- Priority: Low
 	- Opened: 20261002-190545
 	- Opened by: CC
@@ -149,8 +149,20 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- It's stalled until a shcl beta has a fix.
 		- 20261007: It's still there, run against shcl dev d7903b73 rather than inferred. The step above with `set_string("performance.profile", "low")` writes `profile: low` as a new line above the commented one, and keeps the commented line, so 5 lines in become 6 out. Nothing in shcl's changelog or log since b10c2009 is for it. There isn't a 3.0 beta yet, and crates.io still has 2.0.0.
 		- 20261110: Still there on shcl 3.0.0-beta1 and shcl dev 4901ecac. The new line goes at the end of the block now. shcl has it as 2026102910482345, deferred to v4, and a note with this repro was added there.
+		- 20261119: Worked around in SilkTerm. Every save that keeps the lines goes through one writer. There, each value the save added takes the place of its commented default line, and the move is kept only when the file still reads the same. The rating's own line writer fills in the commented line the same way, rather than adding a line under it. The rating now writes only `check_next_run` to the config, since `profile` and `rated_hardware` moved to the state file.
+		- 20261119: 3 tests pinned the old placement, and only their expected layout changed. dcf83's "only the commented default" case was the value added under the comment, and is now the value in its place. dcf85's expected file kept `# check_next_run: false  ## Default` above the new line, and now has the value in its place. dcfan now also lets the commented default go. ddcf0 checks the restate after a write that moves a line, and the rating no longer moves one, so its file's commented line is made a hand-typed one first. What it checks is the same.
 	- Decisions:
 		- 20261119: JC: work around it in SilkTerm if that can be done. If it's too much trouble, the next release is another beta rather than rc.1.
+		- 20261119: Only a commented line the program wrote is filled in: the template's own line, or one that ends in `## Default`. A line commented out by hand may hold the person's note, so a value set beside it still goes in as a new line.
+		- 20261119: The move is done on the text shcl writes, and kept only when a parse of the result reads every setting the same. Where it doesn't, the save is shcl's as before.
+	- Swept: `saved_text` is the one writer for every save that keeps the lines: Settings saves and hotkeys, the theme colors moved to `kept`, the shell list adoption, and the conversion's profile step. The rating writes its line through `place_rating_line`, fixed too. The state file and the canonical-form writes have no commented lines to fill. `revert_keys` already edits a line in place, and puts the template line back where the value was.
+	- Branch: nov20-2026100219054510
+	- Commit: c93f3519
+	- Test case: dfhh2 `a_set_value_fills_its_commented_default_where_it_is`, dfhh3 `a_set_value_leaves_a_comment_typed_by_hand`, dfhh4 `a_rating_write_moves_no_line_the_launch_named`, and dcf83 `rating_lines_replace_insert_and_collapse`. dfhh2, dfhh4 and dcf83 fail with the fix taken out and pass with it.
+	- Verified: the backlog quick run passes in all 5 areas, with 1524 unit tests.
+	- Acceptance signoff: Self-closed: the intent was clear, and its tests failed before the fix and pass after.
+	- Closed: 20261119-185310
+	- Closed reason: Done
 
 - shcl: `migrate_unstamped` can't say a migration didn't finish
 	- ID: 2026100315553545
