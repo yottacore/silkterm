@@ -13,6 +13,8 @@
 ##			- One shcl can't migrate (a raw block that never closes) and one it
 ##			  can't read (not UTF-8), each written new from the template with the
 ##			  settings that still read.
+##		Every release tag must also have a row in source/src/testdata/releases.tsv
+##		naming config files that release wrote, which the Rust tests convert.
 ##		A second launch on each must change nothing. A file in the current format
 ##		that isn't UTF-8 is written again without the lines that don't decode,
 ##		kept the same way, and the launch says which lines went. Where Xvfb is
@@ -44,14 +46,39 @@ if [[ -z "${bin}" ]]; then
 		if [[ -x "${candidate}" ]]; then bin="${candidate}"; break; fi
 	done
 fi
-if [[ -z "${bin}" || ! -x "${bin}" ]]; then echo "  skip: no SilkTerm binary (build it first, or pass --bin)"; exit 3; fi
+failures=0
+fCheck(){ local -r what="${1}"; shift; if "${@}"; then echo "  ok   ${what}"; else echo "  FAIL ${what}"; failures=$((failures + 1)); fi; }
+
+## Each release's own config files are fixtures the Rust tests convert, and
+## releases.tsv names them. A tag with no row there is a release whose files
+## nothing converts yet. Needs no binary.
+fReleaseRows(){
+	local -r ledger="${root}/source/src/testdata/releases.tsv"
+	local tag="" files="" file="" ok=1
+	local tags=()
+	mapfile -t tags < <(git -C "${root}" tag -l 'v*' 2>/dev/null)
+	if ((${#tags[@]} == 0)); then echo "  SKIP release fixtures: no release tags in this checkout"; return 0; fi
+	for tag in "${tags[@]}"; do
+		files="$(awk -F'\t' -v tag="${tag}" '$1 == tag { print $2 }' "${ledger}")"
+		if [[ -z "${files}" ]]; then echo "  ${tag} has no row in releases.tsv"; ok=0; continue; fi
+		for file in ${files}; do
+			[[ -f "${root}/source/src/testdata/${file}" ]] || { echo "  ${tag}: ${file} is missing"; ok=0; }
+		done
+	done
+	((ok))
+}
+fCheck "every release tag has config files to convert" fReleaseRows
+
+if [[ -z "${bin}" || ! -x "${bin}" ]]; then
+	echo "  skip: no SilkTerm binary (build it first, or pass --bin)"
+	((failures == 0)) || exit 1
+	exit 3
+fi
 echo "  binary: ${bin}"
 
 # shellcheck source=cicd/tests/_testdir.bash
 source "${meDir}/../_testdir.bash"; fTestDir_Use
 
-failures=0
-fCheck(){ local -r what="${1}"; shift; if "${@}"; then echo "  ok   ${what}"; else echo "  FAIL ${what}"; failures=$((failures + 1)); fi; }
 
 work="$(mktemp -d "${TMPDIR:-/tmp}/silk-convert.XXXXXX")"
 noticePid=""; startedDisplay=0
@@ -329,3 +356,4 @@ echo "all passed"
 ##		- 20261003 JC: That file is written again without the lines, not left.
 ##		- 20261101 JC: A file v1.0.0-beta3 saved.
 ##		- 20261106 JC: shcl 3.0.0-beta1 spellings: single backslashes, lists in brackets.
+##		- 20261119 JC: Every release tag has config files to convert.

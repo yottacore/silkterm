@@ -20095,6 +20095,609 @@ mod tests {
 		let _ = std::fs::remove_dir_all(&dir);
 	}
 
+	// What the released v1.0.0-beta3 binary made of beta2's 2 files at its
+	// launch: the shell list from `shell.default`, and beta3's new settings as
+	// comments. A beta2 user who then ran beta3 has one of these.
+	const BETA2_FIRST_LAUNCH_VIA_BETA3: &str =
+		include_str!("testdata/beta2_first_launch_via_beta3.shcl");
+	const BETA2_SAVED_VIA_BETA3: &str = include_str!("testdata/beta2_saved_via_beta3.shcl");
+
+	// A beta2 save that beta3 launched converts as one beta2 left does.
+	// Test ID: dfhf3
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_beta2_file_beta3_launched_keeps_every_setting() {
+		an_old_save_keeps_every_setting(
+			BETA2_SAVED_VIA_BETA3,
+			"beta2_saved_b3",
+			assert_beta2_saved_kept,
+		);
+	}
+
+	// The same for beta2's template after a beta3 launch.
+	// Test ID: dfhf4
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_beta2_template_beta3_launched_stays_automatic() {
+		an_old_template_stays_automatic(BETA2_FIRST_LAUNCH_VIA_BETA3, "beta2_first_b3");
+	}
+
+	// The settings a launch reads from `old` and how many it said it lost. The
+	// folder is the same on every call, so paths read from it compare equal. A
+	// second launch must leave the file and the settings as they are.
+	fn upgraded(old: &[u8], what: &str) -> (Settings, Option<usize>) {
+		let _ = take_conversion_loss();
+		let dir = format_test_dir("upgpath");
+		let path = dir.join("config.shcl");
+		std::fs::write(&path, old).unwrap();
+		set_config_override(path.clone());
+		let s = load();
+		let lost = take_conversion_loss().map(|loss| loss.lost);
+		let now = std::fs::read_to_string(&path).unwrap();
+		assert_eq!(
+			shcl::format_version(&now),
+			Some(shcl::FORMAT_MAJOR),
+			"{what}:\n{now}"
+		);
+		let again = load();
+		assert_eq!(
+			std::fs::read_to_string(&path).unwrap(),
+			now,
+			"{what}: settled"
+		);
+		assert!(again == s, "{what}: the next launch reads it the same");
+		let _ = std::fs::remove_dir_all(&dir);
+		(s, lost)
+	}
+
+	// Where 2 launches read a file differently, setting by setting, then the
+	// rest of `Settings` line by line.
+	fn settings_diff(a: &Settings, b: &Settings) -> Vec<String> {
+		let mut out: Vec<String> = crate::fields::FIELDS
+			.iter()
+			.filter_map(|f| {
+				let (x, y) = (
+					(
+						crate::fields::get(a, f.key),
+						crate::fields::by_hand(a, f.key),
+					),
+					(
+						crate::fields::get(b, f.key),
+						crate::fields::by_hand(b, f.key),
+					),
+				);
+				(x != y).then(|| format!("{:?}: {x:?} vs {y:?}", f.key))
+			})
+			.collect();
+		if out.is_empty() && a != b {
+			let (x, y) = (format!("{a:#?}"), format!("{b:#?}"));
+			out.extend(
+				x.lines()
+					.zip(y.lines())
+					.filter(|(x, y)| x != y)
+					.take(10)
+					.map(|(x, y)| format!("{} vs {}", x.trim(), y.trim())),
+			);
+			if out.is_empty() {
+				out.push("differ".to_string());
+			}
+		}
+		out
+	}
+
+	// Every config file a release wrote, by its name in testdata.
+	const RELEASE_FILES: [(&str, &str); 6] = [
+		("beta2_first_launch.shcl", BETA2_FIRST_LAUNCH),
+		("beta2_saved.shcl", BETA2_SAVED),
+		(
+			"beta2_first_launch_via_beta3.shcl",
+			BETA2_FIRST_LAUNCH_VIA_BETA3,
+		),
+		("beta2_saved_via_beta3.shcl", BETA2_SAVED_VIA_BETA3),
+		("beta3_first_launch.shcl", BETA3_FIRST_LAUNCH),
+		("beta3_saved.shcl", BETA3_SAVED),
+	];
+
+	// Every route a released file can take to the current format ends on the
+	// same settings. A first launch's template from beta2, from beta3, or from
+	// beta2 and then beta3 reads the same, and so does a beta2 save converted
+	// directly or after a beta3 launch. Each settles and loses nothing, and so
+	// does a beta3 save, which has only the one route. `releases.tsv` lists the
+	// same files, and cicd checks that every release tag has a row there, so a
+	// new release's files have to join a route here.
+	// Test ID: dfhf5
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn every_route_from_a_release_ends_the_same() {
+		let _guard = test_config_lock();
+		let _store = test_store_lock();
+		let groups: [(&str, &[(&str, &str)]); 3] = [
+			(
+				"a first launch",
+				&[
+					("beta2", "beta2_first_launch.shcl"),
+					("beta3", "beta3_first_launch.shcl"),
+					("beta2 then beta3", "beta2_first_launch_via_beta3.shcl"),
+				],
+			),
+			(
+				"a beta2 save",
+				&[
+					("beta2", "beta2_saved.shcl"),
+					("beta2 then beta3", "beta2_saved_via_beta3.shcl"),
+				],
+			),
+			("a beta3 save", &[("beta3", "beta3_saved.shcl")]),
+		];
+		let listed: std::collections::BTreeSet<&str> = include_str!("testdata/releases.tsv")
+			.lines()
+			.filter_map(|line| line.split_once('\t'))
+			.flat_map(|(_, files)| files.split_whitespace())
+			.collect();
+		let here: std::collections::BTreeSet<&str> =
+			RELEASE_FILES.iter().map(|(name, _)| *name).collect();
+		assert_eq!(listed, here, "releases.tsv and RELEASE_FILES");
+		let routed: std::collections::BTreeSet<&str> = groups
+			.iter()
+			.flat_map(|(_, routes)| routes.iter().map(|(_, name)| *name))
+			.collect();
+		assert_eq!(routed, here, "every release file is on a route");
+		for (what, routes) in groups {
+			let mut first: Option<(&str, Settings)> = None;
+			for (route, name) in routes {
+				let label = format!("{what} from {route}");
+				let old = RELEASE_FILES
+					.iter()
+					.find(|(file, _)| file == name)
+					.map(|(_, text)| *text)
+					.unwrap();
+				let (s, lost) = upgraded(old.replace("\r\n", "\n").as_bytes(), &label);
+				assert_eq!(lost, None, "{label}");
+				if let Some((was, before)) = &first {
+					let diff = settings_diff(before, &s);
+					assert!(
+						diff.is_empty(),
+						"{label} against {was}:\n{}",
+						diff.join("\n")
+					);
+				} else {
+					first = Some((route, s));
+				}
+			}
+		}
+	}
+
+	// A value for one setting that differs from its default, of the type the
+	// template's line for it has, for the paths the tables name.
+	fn sample_value(path: &str) -> String {
+		match path {
+			"shell.default" => return "\"/usr/bin/zsh -l\"".to_string(),
+			"window.remembered_columns" => return "140".to_string(),
+			"window.remembered_rows" => return "42".to_string(),
+			"window.remembered_maximized" => return "true".to_string(),
+			"window.remembered_font_zoom" => return "2".to_string(),
+			"performance.rated_hardware" => return "\"gpu 1\"".to_string(),
+			"cursor.blink_rate_ms" => return "400".to_string(),
+			_ if path.starts_with("window.tab_shows_") => return "false".to_string(),
+			_ => {}
+		}
+		let template = default_config();
+		let lines: Vec<&str> = template.lines().collect();
+		let found = walk_settings(template).into_iter().find_map(|w| match w {
+			WalkLine::Setting {
+				index,
+				path: p,
+				header: false,
+				..
+			} if p == path => line_setting_value(lines[index]).map(strip_trailing_comment),
+			_ => None,
+		});
+		let value = found.unwrap_or("5").trim();
+		// a backslash reads differently in 2.x, and that is a test of its own
+		if value.contains('\\') {
+			return "\"; ()\"".to_string();
+		}
+		let value = value.to_string();
+		if value == "true" {
+			return "false".to_string();
+		}
+		if value == "false" {
+			return "true".to_string();
+		}
+		if value.starts_with("\"#") {
+			return "\"#123456\"".to_string();
+		}
+		if let Ok(n) = value.parse::<i64>() {
+			return (n + 1).to_string();
+		}
+		if let Ok(n) = value.parse::<f64>() {
+			return format!("{:.3}", n * 0.75 + 0.5);
+		}
+		value
+	}
+
+	// Settings under dotted names as nested lines, each block written once.
+	fn nested_lines(settings: &[(String, String)]) -> String {
+		let mut sorted = settings.to_vec();
+		sorted.sort();
+		let mut out = String::new();
+		let mut open: Vec<String> = Vec::new();
+		for (path, value) in &sorted {
+			let parts: Vec<&str> = path.split('.').collect();
+			let same = open
+				.iter()
+				.zip(&parts)
+				.take_while(|(a, b)| a.as_str() == **b)
+				.count();
+			open.truncate(same);
+			for (depth, part) in parts.iter().enumerate().skip(same) {
+				out.push_str(&"\t".repeat(depth));
+				out.push_str(part);
+				out.push(':');
+				if depth + 1 == parts.len() {
+					out.push(' ');
+					out.push_str(value);
+				} else {
+					open.push((*part).to_string());
+				}
+				out.push('\n');
+			}
+		}
+		out
+	}
+
+	// One old setting: its lines under the old name, the name it reads as today,
+	// and whether it is from before the nested layout.
+	struct OldSetting {
+		lines: Vec<(String, String)>,
+		new: String,
+		flat: bool,
+	}
+
+	// Every renamed, converted, retired, and pre-nesting name, read from the
+	// tables, so a new entry joins on its own.
+	fn old_settings() -> Vec<OldSetting> {
+		let one = |old: &str, new: &str, flat| OldSetting {
+			lines: vec![(old.to_string(), sample_value(new))],
+			new: new.to_string(),
+			flat,
+		};
+		let mut out = Vec::new();
+		for (old, new) in CONFIG_RENAMES {
+			out.push(one(old, new, false));
+		}
+		for (old, ..) in CONFIG_CONVERTS {
+			out.push(one(old, old, false));
+		}
+		for path in CONFIG_REMOVED {
+			if *path == "window.monitors" {
+				let at = "window.monitors.\"1920x1080_100pct\"";
+				out.push(OldSetting {
+					lines: vec![
+						(format!("{at}.columns"), "100".to_string()),
+						(format!("{at}.rows"), "30".to_string()),
+					],
+					new: (*path).to_string(),
+					flat: false,
+				});
+			} else {
+				out.push(one(path, path, false));
+			}
+		}
+		for (old, new) in LEGACY_KEYS {
+			out.push(one(old, new, true));
+		}
+		out
+	}
+
+	// The old settings as a few files, so the matrix stays quick. 2 names that
+	// read as one setting go in different files, and so do flat and nested
+	// names, since one flat name makes a whole file pre-nesting. `kept` is what a
+	// launch makes of a theme color in a file from before shcl 3, written as
+	// today's save would.
+	struct OldFile {
+		names: Vec<String>,
+		flat: bool,
+		body: String,
+		today: String,
+		kept: String,
+	}
+
+	fn old_files() -> Vec<OldFile> {
+		use std::fmt::Write;
+		let mut groups: Vec<Vec<OldSetting>> = Vec::new();
+		for setting in old_settings() {
+			let free = groups.iter().position(|group| {
+				group[0].flat == setting.flat && group.iter().all(|other| other.new != setting.new)
+			});
+			match free {
+				Some(at) => groups[at].push(setting),
+				None => groups.push(vec![setting]),
+			}
+		}
+		groups
+			.into_iter()
+			.map(|group| {
+				let lines: Vec<(String, String)> =
+					group.iter().flat_map(|s| s.lines.iter().cloned()).collect();
+				// A flat name is only ever in a file from before shcl 3, where the
+				// same setting today is under its nested name. A retired one is
+				// left under it, for the launch to move.
+				let (body, today) = if group[0].flat {
+					let new: Vec<(String, String)> = group
+						.iter()
+						.map(|s| (s.new.clone(), s.lines[0].1.clone()))
+						.collect();
+					let mut body = String::new();
+					for (old, value) in &lines {
+						let _ = writeln!(body, "{old}: {value}");
+					}
+					(body, nested_lines(&new))
+				} else {
+					let body = nested_lines(&lines);
+					(body.clone(), body)
+				};
+				let mut kept: Vec<(String, String)> = group
+					.iter()
+					.filter(|s| {
+						s.new
+							.strip_prefix("colors.")
+							.is_some_and(|key| crate::theme::PALETTE_KEYS.contains(&key))
+					})
+					.map(|s| {
+						let at = format!("kept.changes.{}.values.{}", crate::fields::THEME, s.new);
+						(at, s.lines[0].1.clone())
+					})
+					.collect();
+				if !kept.is_empty() {
+					let at = format!("kept.changes.{}.preset", crate::fields::THEME);
+					kept.push((at, "SilkTerm".to_string()));
+				}
+				OldFile {
+					names: lines.into_iter().map(|(old, _)| old).collect(),
+					flat: group[0].flat,
+					body,
+					today,
+					kept: nested_lines(&kept),
+				}
+			})
+			.collect()
+	}
+
+	// Each form an old file can take: the footers of every shcl release, no
+	// footer, Windows line ends, the spellings of a 3.0 build from before beta1,
+	// and the 2 that are written new from the template, one shcl can't migrate
+	// and one that isn't UTF-8. Each gives the old file, the same settings
+	// written today, and how many lines it can't copy.
+	struct Era {
+		name: &'static str,
+		old: fn(&str) -> Vec<u8>,
+		now: fn(&str) -> String,
+		before_3: bool,
+		lost: usize,
+	}
+
+	// 3.0 betas wrote a theme's colors as a comma list, which beta1 reads as an
+	// error and turns into a list.
+	const ANSI: [&str; 16] = [
+		"#000000", "#111111", "#222222", "#333333", "#444444", "#555555", "#666666", "#777777",
+		"#888888", "#999999", "#aaaaaa", "#bbbbbb", "#cccccc", "#dddddd", "#eeeeee", "#ffffff",
+	];
+	fn beta_theme(list: &str) -> String {
+		format!("themes:\n\tupgpath:\n\t\tname: Upgrade path\n\t\tdark:\n\t\t\tansi: {list}\n")
+	}
+	fn quoted_ansi() -> Vec<String> {
+		ANSI.iter().map(|c| format!("\"{c}\"")).collect()
+	}
+
+	fn with_footer(body: &str, footer: &str) -> String {
+		if footer.is_empty() {
+			body.to_string()
+		} else {
+			format!("{body}\n{footer}")
+		}
+	}
+
+	const ERAS: [Era; 9] = [
+		Era {
+			name: "the first 3.0 footer",
+			old: |body| with_footer(body, SHCL_BANNER_OLD_V3).into_bytes(),
+			now: str::to_string,
+			before_3: false,
+			lost: 0,
+		},
+		Era {
+			name: "a 3.0 build from before beta1",
+			old: |body| {
+				let list = quoted_ansi().join(", ");
+				with_footer(&format!("{body}{}", beta_theme(&list)), SHCL_BANNER_OLD_V3)
+					.into_bytes()
+			},
+			now: |body| {
+				let list = format!("[{}]", quoted_ansi().join(", "));
+				format!("{body}{}", beta_theme(&list))
+			},
+			before_3: false,
+			lost: 0,
+		},
+		Era {
+			name: "shcl 2.x",
+			old: |body| with_footer(body, SHCL_BANNER_OLD_MAIN).into_bytes(),
+			now: str::to_string,
+			before_3: true,
+			lost: 0,
+		},
+		Era {
+			name: "shcl 2.x with Windows line ends",
+			old: |body| {
+				with_footer(body, SHCL_BANNER_OLD_MAIN)
+					.replace('\n', "\r\n")
+					.into_bytes()
+			},
+			now: str::to_string,
+			before_3: true,
+			lost: 0,
+		},
+		Era {
+			name: "shcl before the yottacore move",
+			old: |body| with_footer(body, SHCL_BANNER_OLD_HOME).into_bytes(),
+			now: str::to_string,
+			before_3: true,
+			lost: 0,
+		},
+		Era {
+			name: "shcl 1.x",
+			old: |body| with_footer(body, SHCL_BANNER_OLD).into_bytes(),
+			now: str::to_string,
+			before_3: true,
+			lost: 0,
+		},
+		Era {
+			name: "no footer",
+			old: |body| body.as_bytes().to_vec(),
+			now: str::to_string,
+			before_3: true,
+			lost: 0,
+		},
+		Era {
+			name: "shcl 2.x that shcl can't migrate",
+			old: |body| {
+				let open = "notes: ```\nwritten before the block was closed\n";
+				with_footer(&format!("{body}{open}"), SHCL_BANNER_OLD_MAIN).into_bytes()
+			},
+			now: str::to_string,
+			before_3: true,
+			lost: 1,
+		},
+		Era {
+			name: "shcl 2.x that isn't UTF-8",
+			old: |body| {
+				let mut out = b"## caf\xe9\n".to_vec();
+				out.extend(with_footer(body, SHCL_BANNER_OLD_MAIN).into_bytes());
+				out
+			},
+			now: str::to_string,
+			before_3: true,
+			lost: 0,
+		},
+	];
+
+	// Routes that are known to read a file wrong, as (era, flat names, backlog
+	// ID). Each must still fail, so its entry goes with the fix.
+	const KNOWN_GAPS: [(&str, bool, &str); 9] = [
+		(
+			"shcl 2.x that shcl can't migrate",
+			false,
+			"2026111917525263",
+		),
+		("shcl 2.x that isn't UTF-8", false, "2026111917525263"),
+		("shcl 2.x that shcl can't migrate", true, "2026111917525263"),
+		("shcl 2.x", true, "2026111917532694"),
+		("shcl 2.x with Windows line ends", true, "2026111917532694"),
+		("shcl before the yottacore move", true, "2026111917532694"),
+		("shcl 1.x", true, "2026111917532694"),
+		("no footer", true, "2026111917532694"),
+		("shcl 2.x that isn't UTF-8", true, "2026111917532694"),
+	];
+
+	// Every old setting the tables know, in a file from every format, reads after
+	// one launch as the same setting written today does, loses only what the
+	// format itself can't keep, and settles. A file from before shcl 3 is
+	// compared with today's file as that launch marks it, since it is from
+	// before the profiles: a look set by hand comes up as Custom, and its theme
+	// colors as changes to the theme. Flat names only come in files from before
+	// shcl 3.
+	// Test ID: dfhf6
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn every_old_setting_upgrades_the_same_from_every_format() {
+		let _guard = test_config_lock();
+		let _store = test_store_lock();
+		let mut failed = Vec::new();
+		let mut gap_seen = [false; KNOWN_GAPS.len()];
+		for (n, file) in old_files().iter().enumerate() {
+			let kind = if file.flat { "flat" } else { "nested" };
+			let case = format!("{kind} file {n}");
+			let mut wrong = Vec::new();
+			for era in ERAS.iter().filter(|era| era.before_3 || !file.flat) {
+				let label = format!("{case} from {}", era.name);
+				let now = (era.now)(&file.today);
+				let now = if era.before_3 {
+					let now = format!("{now}{}", file.kept);
+					with_own_look(&now, now.clone())
+				} else {
+					now
+				};
+				let (want, want_lost) = upgraded(
+					with_footer(&now, SHCL_BANNER).as_bytes(),
+					&format!("{label}, today"),
+				);
+				let (got, lost) = upgraded(&(era.old)(&file.body), &label);
+				let mut here = settings_diff(&want, &got);
+				let want_lost = want_lost.unwrap_or(0) + era.lost;
+				if lost.unwrap_or(0) != want_lost {
+					here.push(format!("lost {lost:?}, not {want_lost}"));
+				}
+				if here.is_empty() {
+					continue;
+				}
+				let gap = KNOWN_GAPS
+					.iter()
+					.position(|(name, flat, _)| *name == era.name && *flat == file.flat);
+				match gap {
+					Some(at) => gap_seen[at] = true,
+					None => wrong.push(format!("{label}:\n\t{}", here.join("\n\t"))),
+				}
+			}
+			if !wrong.is_empty() {
+				failed.push(format!("{case}: {}", file.names.join(", ")));
+				failed.extend(wrong);
+			}
+		}
+		for ((era, flat, id), seen) in KNOWN_GAPS.iter().zip(gap_seen) {
+			if !seen {
+				let kind = if *flat { "flat" } else { "nested" };
+				failed.push(format!(
+					"{kind} names from {era} read right now; drop the gap for {id}"
+				));
+			}
+		}
+		assert!(failed.is_empty(), "{}", failed.join("\n"));
+	}
+
+	// The 3.0 beta era must reach `from_a_beta`, and the 2 written new must be
+	// written new, or the matrix above passes on routes it never took.
+	// Test ID: dfhf7
+	#[test]
+	fn every_era_takes_its_own_route() {
+		let body = "font:\n\tsize: 15\n";
+		let route = |name: &str| {
+			let era = ERAS.iter().find(|e| e.name == name).unwrap();
+			upgrade(&(era.old)(body))
+		};
+		assert!(matches!(
+			route("a 3.0 build from before beta1"),
+			Upgrade::InPlace { .. }
+		));
+		assert!(matches!(
+			route("shcl 2.x that shcl can't migrate"),
+			Upgrade::Rewritten { .. }
+		));
+		assert!(!matches!(
+			route("shcl 2.x that isn't UTF-8"),
+			Upgrade::Current | Upgrade::InPlace { .. }
+		));
+		for name in [
+			"shcl 2.x",
+			"shcl 1.x",
+			"no footer",
+			"shcl before the yottacore move",
+		] {
+			assert!(matches!(route(name), Upgrade::InPlace { .. }), "{name}");
+		}
+		assert_eq!(route("the first 3.0 footer"), Upgrade::Current);
+	}
+
 	const BETA1_SAVED: &str = include_str!("testdata/beta1_saved.toml");
 	const BETA1_FIRST_LAUNCH: &str = include_str!("testdata/beta1_first_launch.toml");
 
