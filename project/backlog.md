@@ -80,45 +80,27 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- 20261117: JC asked for it in the next release. `CLA.md`, the contributing.md section and `cla.yml` are on `dev`, not yet on `main`. They'll go to `main` with the rc.1 merge. The first outside pull request after that proves the check.
 		- 20261118: It's held for the rc.1 merge to main, since cla.yml runs from main, and then for a first pull request from someone else to prove the check. The files and the pull_request_target and issue_comment triggers are on dev.
 
-- macOS: Create a setting to use Option as Meta in the terminal
-	- ID: 2026111715155480
-	- Type: Feature
+- ttf-parser is unmaintained, and the advisory scan ignores that until the crates that pull it in move off it
+	- ID: 2026101715240000
+	- Type: Task
 	- Status: Stalled
-		- Held for b26's console to be unlocked, for the key check. Commit 81d86b94 was built there on 20261118, and then the check was skipped, since CGSSessionScreenIsLocked was Yes.
-	- Needs external testing: On b26, at a shell prompt under `cat -v`, with the Option key setting on Left acts as Alt: left Option+f shows `^[f`, right Option+f still shows the composed character, and the change works without a restart. Set back to Types special characters, left Option+f types the composed character again. The rig is `b26_optmeta.bash` in the private tools folder.
-	- Priority: Avg
-	- Opened: 20261117-151554
+	- Priority: Low
+	- Opened: 20261017-152400
 	- Opened by: CC
-	- Parent ID: 2026111713374903
-	- Target OS: macOS
+	- Related IDs: 2026101714445001
 	- Target version: rc.1
-	- Requirements: A setting, off by default, that makes Option send ESC plus the plain key, as Terminal.app's "Use Option as Meta key" does. With it off, Option types the character it composes. It can be left only, right only, or both, as iTerm2 and alacritty offer. It applies to open windows when changed.
-	- Note: Since the parent's fix, Option+letter on a Mac doesn't send Meta at all, so a Meta binding in emacs or readline needs this setting.
-	- Note: winit's `with_option_as_alt` and `set_option_as_alt` make it report the plain key with Alt held. `encode_key` then has to add the ESC again, which its `mac` flag turns off today.
+	- Requirements:
+		- RUSTSEC-2026-0192 says ttf-parser is unmaintained. It comes in through fontdb under glyphon's cosmic-text, and through winit's sctk-adwaita. Neither has a release that drops it yet.
+		- `deny.toml` ignores the advisory with this ID beside it. On a glyphon, cosmic-text, or winit bump, check whether ttf-parser is still in the tree, and take the ignore out once it's gone. The scan fails on an ignore that doesn't match anything, so a stale one shows up by itself.
 	- Progress log:
-		- 20261118: `keys.option_as_meta` in the config file takes off, left, right, or both. Use as Meta under a new Option key group on the Keys tab sets it, in the Mac build only. A window sets winit's Option as Alt from it at launch and again whenever the setting changes, from Settings, Reload config, or another window's save. The key encoder adds the ESC back for a press winit hands over as the plain key.
-		- 20261118: The Settings row needed a Mac-only row flag, `macos:`, kept by test builds the way `windows:` rows are.
-		- 20261118: The b26 key check is in the private tools folder as b26_optmeta.bash. It sends left and right Option+f as CGEvents with the side's device flag, under Left, then Off, then Both, each read live through `silkterm --reload-settings` from the window's own shell. The hosted mac.yml run 44372722100 on 81d86b94 ran dffm4 to dffm7.
-		- 20261118: Verified: hosted mac.yml run 44372722100 on nov18 (81d86b94) passed, 1490 tests, 0 failed, 0 filtered, so dffm4 to dffm7 ran and passed on macOS arm64. Only the b26 key check is left.
-		- 20261118: Renamed, as JC approved: `keys.option_as_alt` in the config file, the same name alacritty, kitty and Ghostty use. On the Keys tab the row is Option key, with Types special characters, Left acts as Alt, Right acts as Alt, and Both act as Alt, under a Keyboard heading. Most Mac users don't know the word Meta.
-		- 20261118: dffm7's pinned labels changed with the rename: the heading from Option key to Keyboard, and the choices from Off, Left, Right, Both to the 4 new ones. Its other checks are as they were.
-		- 20261118: Verified: the quick gate (fmt, clippy, tests, docs) passed after the rename, 1513 tests with dffm4 to dffm7, and clippy for aarch64-apple-darwin is clean.
-	- Decisions:
-		- 20261118: The setting is under `keys:` in the file, beside the hotkeys, even though it isn't a hotkey. The hotkey reader only looks at hotkey names, so it isn't flagged.
-		- 20261118: Whether a press is Meta is judged the way winit judges whether to hand over the plain key, which is a named side held with no Ctrl or Command. So the ESC and the plain key always come together. With Ctrl, Option keeps its ESC either way, as before.
-		- 20261118: The Option key group goes first on the Keys tab, so it isn't lost under the hotkey list.
-		- 20261118: With Meta on, Option on that side types the plain key in a tab rename too, as winit hands it over for the whole window. iTerm2 does the same.
-	- Test case: `option_as_alt_sends_esc_for_the_side_it_names` (dffm4), `option_as_alt_reads_from_the_file_and_defaults_off` (dffm5), `the_option_key_group_leaves_every_build_but_the_mac` (dffm6), and `the_option_as_alt_pick_is_the_setting_under_keys` (dffm7). dffm4 and dffm5 fail with the side check or the file path broken.
-		- 20261118: `only_software_rendering_leaves_the_macos_build` (ddkm1) and `the_windows_rows_leave_every_other_build` (ddamq) pass the new Mac-row argument. ddkm1's last check now says a test build keeps every row, since the Windows build no longer does.
-	- Swept: the one `encode` caller in `app.rs`, and the window attributes, which only the terminal window sets. The Settings dialog's own windows don't take shell keys.
-	- Verified: The unit suite on Linux, 1516 tests, and the quick gate. clippy for macOS and Windows is clean. None of it ran on a Mac.
-	- Branch: nov18-2026111715155480
-	- Commit: a162ca4d, df3b970e
+		- 20261019: It's still stuck upstream. `cargo update --dry-run` doesn't move any of fontdb, cosmic-text, ab_glyph, sctk-adwaita, glyphon, or winit, and ttf-parser 0.25.1 still comes in both ways. On crates.io, fontdb 0.24.0 drops it, but the newest cosmic-text, 0.19.0, still asks for fontdb 0.23. sctk-adwaita 0.12.0 still pulls in ab_glyph. Even glyphon 0.12, a breaking bump, still brings cosmic-text 0.19.
+		- It's stalled until a cosmic-text release takes fontdb 0.24 or later, and winit's sctk-adwaita drops ab_glyph.
+	- Held for a cosmic-text release on fontdb 0.24 or later, and an sctk-adwaita without ab_glyph.
 
 - shcl: a keep-lines save adds a set value as a new line, beside its commented default
 	- ID: 2026100219054510
 	- Type: Task
-	- Status: Stalled
+	- Status: Queued
 	- Priority: Low
 	- Opened: 20261002-190545
 	- Opened by: CC
@@ -134,12 +116,13 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- It's stalled until a shcl beta has a fix.
 		- 20261007: It's still there, run against shcl dev d7903b73 rather than inferred. The step above with `set_string("performance.profile", "low")` writes `profile: low` as a new line above the commented one, and keeps the commented line, so 5 lines in become 6 out. Nothing in shcl's changelog or log since b10c2009 is for it. There isn't a 3.0 beta yet, and crates.io still has 2.0.0.
 		- 20261110: Still there on shcl 3.0.0-beta1 and shcl dev 4901ecac. The new line goes at the end of the block now. shcl has it as 2026102910482345, deferred to v4, and a note with this repro was added there.
-	- Held for a shcl beta that fills in a commented default in place.
+	- Decisions:
+		- 20261119: JC: work around it in SilkTerm if that can be done. If it's too much trouble, the next release is another beta rather than rc.1.
 
 - shcl: `migrate_unstamped` can't say a migration didn't finish
 	- ID: 2026100315553545
 	- Type: Task
-	- Status: Stalled
+	- Status: Queued
 	- Priority: Low
 	- Opened: 20261003-155535
 	- Opened by: CC
@@ -157,24 +140,8 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- 20261007: It's still there, run against shcl dev d7903b73 rather than inferred. The step above still returns `current: false`, `ambiguous: 0`, `lost: 0`, and the stamped `migrate` still shows it only by leaving the Format line off. `Migration` doesn't have a new field. shcl's CLI `migrate` now refuses such a file with exit 7, by the same Format line check. There isn't a 3.0 beta yet, and crates.io still has 2.0.0.
 		- shcl dev now has `upgrade()` and `upgrade_file()` for the swap. They convert a whole file with a timestamped backup, close the open raw block, and stamp it. The CLI backup is now `config_backup_<time>_format-v2.shcl` rather than `config_old_v2.shcl`.
 		- 20261110: Still there on shcl 3.0.0-beta1 and shcl dev 4901ecac. Filed in shcl's backlog as 2026111014552300.
-	- Held for a shcl beta whose `Migration` says when it couldn't finish.
-
-- ttf-parser is unmaintained, and the advisory scan ignores that until the crates that pull it in move off it
-	- ID: 2026101715240000
-	- Type: Task
-	- Status: Stalled
-	- Priority: Low
-	- Opened: 20261017-152400
-	- Opened by: CC
-	- Related IDs: 2026101714445001
-	- Target version: rc.1
-	- Requirements:
-		- RUSTSEC-2026-0192 says ttf-parser is unmaintained. It comes in through fontdb under glyphon's cosmic-text, and through winit's sctk-adwaita. Neither has a release that drops it yet.
-		- `deny.toml` ignores the advisory with this ID beside it. On a glyphon, cosmic-text, or winit bump, check whether ttf-parser is still in the tree, and take the ignore out once it's gone. The scan fails on an ignore that doesn't match anything, so a stale one shows up by itself.
-	- Progress log:
-		- 20261019: It's still stuck upstream. `cargo update --dry-run` doesn't move any of fontdb, cosmic-text, ab_glyph, sctk-adwaita, glyphon, or winit, and ttf-parser 0.25.1 still comes in both ways. On crates.io, fontdb 0.24.0 drops it, but the newest cosmic-text, 0.19.0, still asks for fontdb 0.23. sctk-adwaita 0.12.0 still pulls in ab_glyph. Even glyphon 0.12, a breaking bump, still brings cosmic-text 0.19.
-		- It's stalled until a cosmic-text release takes fontdb 0.24 or later, and winit's sctk-adwaita drops ab_glyph.
-	- Held for a cosmic-text release on fontdb 0.24 or later, and an sctk-adwaita without ab_glyph.
+	- Decisions:
+		- 20261119: JC: work around it in SilkTerm if that can be done. If it's too much trouble, the next release is another beta rather than rc.1.
 
 - An OSC sequence that never ends grows the parser's buffer until memory runs out
 	- ID: 2026111713374900
@@ -535,6 +502,44 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Commit: b1e1924c
 	- Acceptance signoff: Self-closed: reproduced, and the test fails without the fix and passes with it.
 	- Closed: 20261117-164510
+	- Closed reason: Done
+
+- macOS: Create a setting to use Option as Meta in the terminal
+	- ID: 2026111715155480
+	- Type: Feature
+	- Status: Closed
+	- Needs external testing: On b26, at a shell prompt under `cat -v`, with the Option key setting on Left acts as Alt: left Option+f shows `^[f`, right Option+f still shows the composed character, and the change works without a restart. Set back to Types special characters, left Option+f types the composed character again. The rig is `b26_optmeta.bash` in the private tools folder.
+	- Priority: Avg
+	- Opened: 20261117-151554
+	- Opened by: CC
+	- Parent ID: 2026111713374903
+	- Target OS: macOS
+	- Target version: rc.1
+	- Requirements: A setting, off by default, that makes Option send ESC plus the plain key, as Terminal.app's "Use Option as Meta key" does. With it off, Option types the character it composes. It can be left only, right only, or both, as iTerm2 and alacritty offer. It applies to open windows when changed.
+	- Note: Since the parent's fix, Option+letter on a Mac doesn't send Meta at all, so a Meta binding in emacs or readline needs this setting.
+	- Note: winit's `with_option_as_alt` and `set_option_as_alt` make it report the plain key with Alt held. `encode_key` then has to add the ESC again, which its `mac` flag turns off today.
+	- Progress log:
+		- 20261118: `keys.option_as_meta` in the config file takes off, left, right, or both. Use as Meta under a new Option key group on the Keys tab sets it, in the Mac build only. A window sets winit's Option as Alt from it at launch and again whenever the setting changes, from Settings, Reload config, or another window's save. The key encoder adds the ESC back for a press winit hands over as the plain key.
+		- 20261118: The Settings row needed a Mac-only row flag, `macos:`, kept by test builds the way `windows:` rows are.
+		- 20261118: The b26 key check is in the private tools folder as b26_optmeta.bash. It sends left and right Option+f as CGEvents with the side's device flag, under Left, then Off, then Both, each read live through `silkterm --reload-settings` from the window's own shell. The hosted mac.yml run 44372722100 on 81d86b94 ran dffm4 to dffm7.
+		- 20261118: Verified: hosted mac.yml run 44372722100 on nov18 (81d86b94) passed, 1490 tests, 0 failed, 0 filtered, so dffm4 to dffm7 ran and passed on macOS arm64. Only the b26 key check is left.
+		- 20261118: Renamed, as JC approved: `keys.option_as_alt` in the config file, the same name alacritty, kitty and Ghostty use. On the Keys tab the row is Option key, with Types special characters, Left acts as Alt, Right acts as Alt, and Both act as Alt, under a Keyboard heading. Most Mac users don't know the word Meta.
+		- 20261118: dffm7's pinned labels changed with the rename: the heading from Option key to Keyboard, and the choices from Off, Left, Right, Both to the 4 new ones. Its other checks are as they were.
+		- 20261118: Verified: the quick gate (fmt, clippy, tests, docs) passed after the rename, 1513 tests with dffm4 to dffm7, and clippy for aarch64-apple-darwin is clean.
+	- Decisions:
+		- 20261118: The setting is under `keys:` in the file, beside the hotkeys, even though it isn't a hotkey. The hotkey reader only looks at hotkey names, so it isn't flagged.
+		- 20261118: Whether a press is Meta is judged the way winit judges whether to hand over the plain key, which is a named side held with no Ctrl or Command. So the ESC and the plain key always come together. With Ctrl, Option keeps its ESC either way, as before.
+		- 20261118: The Option key group goes first on the Keys tab, so it isn't lost under the hotkey list.
+		- 20261118: With Meta on, Option on that side types the plain key in a tab rename too, as winit hands it over for the whole window. iTerm2 does the same.
+	- Test case: `option_as_alt_sends_esc_for_the_side_it_names` (dffm4), `option_as_alt_reads_from_the_file_and_defaults_off` (dffm5), `the_option_key_group_leaves_every_build_but_the_mac` (dffm6), and `the_option_as_alt_pick_is_the_setting_under_keys` (dffm7). dffm4 and dffm5 fail with the side check or the file path broken.
+		- 20261118: `only_software_rendering_leaves_the_macos_build` (ddkm1) and `the_windows_rows_leave_every_other_build` (ddamq) pass the new Mac-row argument. ddkm1's last check now says a test build keeps every row, since the Windows build no longer does.
+	- Swept: the one `encode` caller in `app.rs`, and the window attributes, which only the terminal window sets. The Settings dialog's own windows don't take shell keys.
+	- Verified: The unit suite on Linux, 1516 tests, and the quick gate. clippy for macOS and Windows is clean. None of it ran on a Mac.
+		- 20261119: On b26 at 2a97eb46, release build, US layout, reading the bytes the shell got. With Left acts as Alt, left Option+f sent ESC f and right Option+f typed "ƒ". Set to Types special characters through `--reload-settings`, both sides typed "ƒ". With Both act as Alt, both sent ESC f. It was the same window the whole time.
+	- Branch: nov18-2026111715155480
+	- Commit: a162ca4d, df3b970e
+	- Acceptance signoff: Self-closed: passed on b26 for each side and each choice, with the setting changed in a running window.
+	- Closed: 20261119-171500
 	- Closed reason: Done
 
 - Tab labels and the window title are worked out again on every frame

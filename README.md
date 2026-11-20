@@ -141,6 +141,8 @@ Text can be particularly hard to read, for example when using light text on a no
 
 - **Background transparency blur**. If using background transparency and this is enabled, everything behind the terminal is blurred. Currently supported on X11 with KWin or picom. (But limited to the compositor's options. SilkTerm just talks to the WM to enable it.)
 
+- **Scroll buffer Minimap**. A column beside the text shows the whole scrollback in miniature. Click or drag it to jump. Switch it off to get more space back.
+
 - **User-selectable background image**. One is built in. A pack of >100 more carefully created or curated wallpapers is a separate download, or use your own. All with open licenses.
 
 	- The background image can be dimmed with adjustable %, relative to the background color - and independent of main background transparency.

@@ -19,6 +19,7 @@
 	- [Logical code organization](#logical-code-organization)
 	- [API (alacritty_terminal)](#api-alacritty_terminal)
 	- [Smooth scrolling](#smooth-scrolling)
+	- [Minimap](#minimap)
 	- [Text readability scrim](#text-readability-scrim)
 	- [Themes and text color](#themes-and-text-color)
 	- [Wallpaper](#wallpaper)
@@ -52,6 +53,7 @@
 	- [Tabs report what they are running, and where (2026-08-21)](#tabs-report-what-they-are-running-and-where-2026-08-21)
 	- [A tab is as wide as its own label needs (2026-08-23)](#a-tab-is-as-wide-as-its-own-label-needs-2026-08-23)
 	- [PowerShell gets the same prompt bash does (2026-08-21, reworked 2026-08-30)](#powershell-gets-the-same-prompt-bash-does-2026-08-21-reworked-2026-08-30)
+	- [A split can start in a tmux session of its own (2026-10-17)](#a-split-can-start-in-a-tmux-session-of-its-own-2026-10-17)
 - [Copyright and license](#copyright-and-license)
 
 <!-- /TOC -->
@@ -79,6 +81,8 @@ Each of these has its own design doc, which is the source of truth for that feat
 - [Settings dialog](design_docs/20260930-145721_settings-dialog.md)
 
 - [Wallpaper and see-through windows](design_docs/20260930-150052_wallpaper.md)
+
+- [Minimap](design_docs/20260930-150325_minimap.md)
 
 - [Themes and text color](design_docs/20260930-150458_themes.md)
 
@@ -146,6 +150,10 @@ The engine knows only whole lines (`display_offset`), so smooth scrolling is don
 The engine stores whole lines, and the renderer draws a fractional offset over them. The wheel, the scrollbar, new output, and full-screen programs all ease by moving that offset. New output runs through the output chase, a speed curve made of 5 named segments, one per setting. Full-screen programs are read from a scroll ledger in the engine fork, with row fingerprints as the fallback.
 
 Full design: [Smooth scrolling](design_docs/20260930-144720_smooth-scrolling.md).
+
+### Minimap
+
+The minimap is a column beside each pane that shows the whole scroll buffer in miniature. The buffer always maps linearly onto the column and never slides, and the map stops where the eased text has reached. Lines are drawn as colored strokes, weighted by how much ink each character has. The full design is in [Minimap](design_docs/20260930-150325_minimap.md).
 
 ### Text readability scrim
 
@@ -434,7 +442,7 @@ What a window costs while in use is worked out in [Reducing resources](design_do
 	- On X11 the maximized state, and a fullscreen from the command line, are written on the window before it is shown. A window manager ignores a request for a window it doesn't manage yet, and one sent after showing it showed the window at its restored size first.
 
 - The font zoom is remembered with the size, as px on the font size. Zooming keeps the window's pixel size and changes its grid, so both are saved, and the next launch opens at the same pixel size rather than the old grid drawn bigger. A font size on the command line wins, and its zoom isn't saved.
-	- With `resize_on_zoom` on, which is off by default, a zoom resizes the window instead, so each pane keeps its columns and rows. The window grows only out to the right and bottom edges of the work area on its monitor, and past them the grid gets smaller as it does with the setting off. Zooming back to where a run of zooms started puts back the size the window had then. A maximized or fullscreen window keeps its size. So does a snapped one on Windows, which is the only system that reports whether a window is snapped, and a Wayland compositor refuses a tiled window's resize itself. The size saved is the one the zoom asked for, in whole cells of the window's grid.
+	- With `resize_on_zoom` on, which is off by default, a zoom resizes the window instead, so each pane keeps its columns and rows. The minimap column is fixed in pixels, so it's the panes' grids that are kept and not the window's. The window grows only out to the right and bottom edges of the work area on its monitor, and past them the grid gets smaller as it does with the setting off. Zooming back to where a run of zooms started puts back the size the window had then. A maximized or fullscreen window keeps its size. So does a snapped one on Windows, which is the only system that reports whether a window is snapped, and a Wayland compositor refuses a tiled window's resize itself. The size saved is the one the zoom asked for, in whole cells of the window's grid.
 
 - With `remember_per_monitor` on as well, each monitor keeps its own size and zoom under `window.monitors`. The last size set anywhere is still kept, and a monitor with no entry of its own opens at it. A monitor is named for its resolution, its scale, and its physical size in mm where that is cheap to read: from the X server on X11, the EDID Windows keeps in the registry, and `CGDisplayScreenSize` on macOS. Wayland gives a program no physical size, so there it is resolution and scale. Readings under a cm apart on either side count as one monitor, since the X server gives an EDID's size either to the mm or in whole cm, and which one it gives can change after a power save. The first entry in the file that matches is the one used.
 	- A window moved to another monitor takes that monitor's size once it has been still for a moment with no mouse button down, so never in the middle of a drag. A size the user set after the move began wins over it, and one set before the move is saved for the monitor it was set on.
@@ -476,7 +484,7 @@ What a window costs while in use is worked out in [Reducing resources](design_do
 
 - When a window is told about a save, it reads the file the way Reload config does. It keeps what belongs to the session, such as the command line, Remote, and a display step, and then keeps what's its own:
 	- Its size. A size set in Settings is the size new windows open at. The window it was set in takes it, and the others stay as they are.
-	- Its view switches, such as copy on select, the tab strip, and the menu bar. A change to one is saved, from a menu or from Settings, and windows opened after that start with it. The window it was changed in takes it, and the others keep what they show. Settings opened in a window shows that window's own, so another window's save of one never shows there as a change.
+	- Its view switches, such as copy on select, the minimap, the tab strip, and the menu bar. A change to one is saved, from a menu or from Settings, and windows opened after that start with it. The window it was changed in takes it, and the others keep what they show. Settings opened in a window shows that window's own, so another window's save of one never shows there as a change.
 	- What's in the state file, which is remembered sizes, zoom, monitor sizes, and the machine test. These belong to one window or one machine and aren't settings.
 	- The picture that rotation picked. A change to another wallpaper setting redraws the same picture. Naming one picture shows that picture in every window. A new folder makes each window pick from it on its own, at random when random is on. The window it was changed in picks again too, which it didn't before.
 
@@ -620,7 +628,7 @@ Guiding constraint: GitHub is dumb git hosting plus optional release storage, no
 	- The canary goes first, each of its tests alone, since a report stops the whole test binary. The step stops unless Miri reports the race as a data race and the forgotten Vec as leaked memory.
 
 - Heap growth (2026-10-19): `cicd.bash` runs the leak checks in stage 3, after the ASan run. A full run has had them since 2026-10-22, and `--quick` since 2026-11-01, because this test takes under a minute. `--no-leakcheck` drops them, `--leakcheck` adds the slow ones too, and `--backlog-run-quick` refuses `--leakcheck`. The first is a heap-growth test, `source/src/heap_growth.rs`, run in-process with dhat as the allocator. Each of the main actions runs 20 rounds to fill its caches, then 20 more, and the heap in use at round 40 may be at most 4 KiB or 10 blocks over round 20. That catches what the sanitizers can't, such as a cache in a static or a list that only grows, since that memory is still reachable at exit.
-	- The actions are a tab's engine opened, fed, and closed, output into a full scrollback with a frame per read, text shaping with fallback and color glyphs, the config read at launch and a value saved, and the Settings dialog's spec parsed. The third-party crates under them run as they do in the program.
+	- The actions are a tab's engine opened, fed, and closed, output into a full scrollback with a frame per read, the minimap folding new output, text shaping with fallback and color glyphs, the config read at launch and a value saved, and the Settings dialog's spec parsed. The third-party crates under them run as they do in the program.
 	- A planted leak is one of the actions, and the test fails unless it's caught, so readings that stopped counting can't pass. A growth that already has a backlog item is reported with its ID and doesn't fail the test.
 	- dhat counts every thread, so the test gets a run of its own, with one thread and its module as the filter. The `dhat-heap` feature puts dhat under the counting allocator in test builds only, so a release build is the same either way. Only the silkterm crate changes with it, so it builds in the debug dir.
 	- The report goes to `cicd/artifacts/leakcheck/`, rotated like the flamegraphs, with the dhat profile beside it when the test fails. It takes about 30 seconds here.
@@ -781,6 +789,22 @@ These decisions came out of the port.
 Cost was the other problem in the port, since 3 `git` calls per prompt go unnoticed on unix but not on Windows. The search for the working tree is done in the shell rather than by asking git, so a directory outside a repository doesn't cost any process at all. Inside one, a single `git status --porcelain=v2 --branch` returns the branch, the clean state, and the upstream together. The remote URL is read once per branch, and again when the branch gets an upstream, and then remembered.
 
 The block is also updated in place from then on, between its 2 markers. It gains things over time, and an install that only ever appended would leave everyone who already had it on the first version. That edit is safe only because SilkTerm wrote the markers around the region. The stored shell list doesn't have markers like that, which is why that list is still only ever added to.
+
+### A split can start in a tmux session of its own (2026-10-17)
+
+With `shell.tmux.always_new_session` on, a split runs tmux in place of the shell, and tmux starts a new session that runs the shell. "New tab in tmux" on the Tabs menu does the same for one tab with the setting off. Since 2026-11-07 a new tab and a plain launch's first pane take the setting too. Before that, a window always had a pane outside tmux. [usage.md](../usage.md) says how it works for the user, and the [split panes](design_docs/20260930-150948_split-panes.md) design doc has the detail.
+
+- The pane's command stays the shell rather than tmux, so the tab names the shell, and a split or new tab made from it runs that shell too. The tab also names tmux as the running program, the way it does for tmux started from a shell, and the minimap is hidden for it the same way.
+
+- The session's name is a template, read by the same parser the tab text uses. The pane stores the name tmux will use, so `.`, `:`, and `#` are changed to `_` first, since tmux changes the first 2 and reads `#` as a format.
+
+- Ending a session goes by that name, matched exactly, and never by what the pane shows. A user can switch the pane's client to another session, and End must not take that one with it. A renamed session is left alone too, which errs on the side of not killing anything.
+
+- The `shell.tmux.on_close` choice applies only to a close that somebody asked for. A client that exits on its own, after a detach inside it or when its session ends, closes the pane as any exiting program does.
+
+- The question is asked in a small window where the notice would be, with Detach as the default since it doesn't lose anything. Its "Don't ask me next time" box saves the answer to the same setting that the Settings row edits.
+
+- SilkTerm looks for tmux on PATH, then in the Homebrew and MacPorts folders, which an app started from the macOS Dock doesn't have on its PATH. The result is cached for 10 seconds, so a menu can check each time it opens. Windows doesn't have tmux, so the rows are grayed there and the menu row is left out.
 
 ## Copyright and license
 
