@@ -97,104 +97,6 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- It's stalled until a cosmic-text release takes fontdb 0.24 or later, and winit's sctk-adwaita drops ab_glyph.
 	- Held for a cosmic-text release on fontdb 0.24 or later, and an sctk-adwaita without ab_glyph.
 
-- A settings file from before shcl 3 that is written new loses renamed and moved settings
-	- ID: 2026111917525263
-	- Type: Bug
-	- Status: Closed
-	- Severity: Avg
-	- Opened: 20261119-175252
-	- Opened by: CC
-	- Target OS: All
-	- Target version: rc.1
-	- Steps to reproduce:
-		- Write a config with no Format line that shcl can't migrate, such as one with a raw block that never closes, or one with a line that isn't UTF-8.
-		- Put `scroll.inview_tau_ms`, `colors.focus`, `shell.default`, a `window.tab_shows_*` box, or `window.remembered_columns` in it.
-		- Launch.
-	- Incorrect behavior: The file is written new from the template. Each of those settings is left out and counted as lost, and a theme color isn't moved into the theme's changes. Retired settings with nowhere to go are counted as lost too. A pre-nesting file loses `default_shell`, `remembered_columns`, and `remembered_rows` the same way.
-	- Expected behavior: The settings read as they do when the file converts in place. Renamed ones are renamed, and moved ones go to the shell list, the tab text, and the state file. Theme colors are kept as changes to the theme. Retired settings are dropped without being counted.
-	- Reproduced: 20261119, by dfhf6 in a test build. A file with every renamed and retired name counted 17 or 18 settings as lost, where 0 or 1 is right.
-	- Possible cause: `rebuilt_config_text` maps only current names, pre-nesting names, and `CONFIG_CONVERTS`. It never applies `CONFIG_RENAMES`, and it drops every `CONFIG_REMOVED` path before the later launch steps can move it.
-	- Decisions:
-		- 20261119: JC: rc.1. It loses settings, though the old file is kept and the launch says how many it couldn't copy.
-		- 20261119: A rename applies in the rebuild only while the file doesn't have the new name, as the launch's rename does. So `colors.focus` beside `colors.highlight` stays the newer focus color.
-		- 20261119: A retired setting that a later launch step moves is kept in the new file as a dotted line, before the footer, so that step moves it as it does after a conversion in place. Any other retired setting is dropped there.
-		- 20261119: A pre-nesting file's `colors.focus` now goes to `colors.highlight` too, since the rename came after the nesting. 2 tests that asserted `focus: "#abcdef"` after a pre-nesting conversion now assert `highlight: "#abcdef"`: `legacy_config_converts_with_values_kept` and `pipeline_convert_migrate_backfill_on_disk` (daq6c).
-	- Actual cause: The rebuild never applied the renames, and it dropped every retired setting before the later launch steps could move it, counting the nested ones as lost.
-	- Actual fix: `rebuilt_config_text` puts a renamed setting under its new name, keeps a retired one that is moved later for the step that moves it, and drops the rest without counting them. The state paths are one list, `MOVED_TO_STATE`, shared with `move_state_out`.
-	- Swept: Every caller of `rebuilt_config_text` goes through the one change: `upgrade`, `unreadable`, `dropped`, `converted_config` for pre-nesting files, `regrown_doc` and `imported_beta1_config`. `regrown_doc` reads text the renames already ran on. `imported_beta1_config` now leaves beta1's remembered size for the state move, where it was dropped before. `migrated_text` uses the same `retired` check.
-	- Verified: dfhf6 failed with its 3 gap entries for this item taken out, counting 17 and 18 lost, and passes with the fix. dfhga fails with the rename and the retired carry turned off, and passes with them. The backlog quick run passes in all 5 areas, with 1521 unit tests.
-	- Test case: dfhf6 `every_old_setting_upgrades_the_same_from_every_format`, with this item's 3 `KNOWN_GAPS` entries removed, and dfhga `a_file_written_new_renames_and_retires_as_a_launch_does`.
-	- Branch: nov20-2026111917525263
-	- Commit: f36ae382
-	- Acceptance signoff: Self-closed: the intent was clear, and its tests failed before the fix and pass after.
-	- Closed: 20261119-183538
-	- Closed reason: Done
-
-- shcl: a keep-lines save adds a set value as a new line, beside its commented default
-	- ID: 2026100219054510
-	- Type: Task
-	- Status: Closed
-	- Priority: Low
-	- Opened: 20261002-190545
-	- Opened by: CC
-	- Related IDs: 2026100115322366
-	- Target version: rc.1
-	- Steps to reproduce:
-		- Take a file with `performance:` and under it `# profile: "max"  ## Default`. Load it keeping lines, set `performance.profile`, and save keeping lines.
-	- Incorrect behavior: the comment stays and the value goes in as a new line, so every line below moves down one.
-	- Expected behavior: the commented line is filled in where it is, so nothing below it moves.
-	- Reproduced: 20261001 on b23, on the real program with shcl b10c2009. The rating added `profile:` and `rated_hardware:`, and kept the template's 2 commented lines. shcl's dev branch didn't have a fix for it as of 20261002.
-	- Progress log:
-		- It's a rough edge, for shcl to look at. It's why a launch message about a bad line can name a line 2 short once the rating writes (2026100115322366).
-		- It's stalled until a shcl beta has a fix.
-		- 20261007: It's still there, run against shcl dev d7903b73 rather than inferred. The step above with `set_string("performance.profile", "low")` writes `profile: low` as a new line above the commented one, and keeps the commented line, so 5 lines in become 6 out. Nothing in shcl's changelog or log since b10c2009 is for it. There isn't a 3.0 beta yet, and crates.io still has 2.0.0.
-		- 20261110: Still there on shcl 3.0.0-beta1 and shcl dev 4901ecac. The new line goes at the end of the block now. shcl has it as 2026102910482345, deferred to v4, and a note with this repro was added there.
-		- 20261119: Worked around in SilkTerm. Every save that keeps the lines goes through one writer. There, each value the save added takes the place of its commented default line, and the move is kept only when the file still reads the same. The rating's own line writer fills in the commented line the same way, rather than adding a line under it. The rating now writes only `check_next_run` to the config, since `profile` and `rated_hardware` moved to the state file.
-		- 20261119: 3 tests pinned the old placement, and only their expected layout changed. dcf83's "only the commented default" case was the value added under the comment, and is now the value in its place. dcf85's expected file kept `# check_next_run: false  ## Default` above the new line, and now has the value in its place. dcfan now also lets the commented default go. ddcf0 checks the restate after a write that moves a line, and the rating no longer moves one, so its file's commented line is made a hand-typed one first. What it checks is the same.
-	- Decisions:
-		- 20261119: JC: work around it in SilkTerm if that can be done. If it's too much trouble, the next release is another beta rather than rc.1.
-		- 20261119: Only a commented line the program wrote is filled in: the template's own line, or one that ends in `## Default`. A line commented out by hand may hold the person's note, so a value set beside it still goes in as a new line.
-		- 20261119: The move is done on the text shcl writes, and kept only when a parse of the result reads every setting the same. Where it doesn't, the save is shcl's as before.
-	- Swept: `saved_text` is the one writer for every save that keeps the lines: Settings saves and hotkeys, the theme colors moved to `kept`, the shell list adoption, and the conversion's profile step. The rating writes its line through `place_rating_line`, fixed too. The state file and the canonical-form writes have no commented lines to fill. `revert_keys` already edits a line in place, and puts the template line back where the value was.
-	- Branch: nov20-2026100219054510
-	- Commit: c93f3519
-	- Test case: dfhh2 `a_set_value_fills_its_commented_default_where_it_is`, dfhh3 `a_set_value_leaves_a_comment_typed_by_hand`, dfhh4 `a_rating_write_moves_no_line_the_launch_named`, and dcf83 `rating_lines_replace_insert_and_collapse`. dfhh2, dfhh4 and dcf83 fail with the fix taken out and pass with it.
-	- Verified: the backlog quick run passes in all 5 areas, with 1524 unit tests.
-	- Acceptance signoff: Self-closed: the intent was clear, and its tests failed before the fix and pass after.
-	- Closed: 20261119-185310
-	- Closed reason: Done
-
-- shcl: `migrate_unstamped` can't say a migration didn't finish
-	- ID: 2026100315553545
-	- Type: Task
-	- Status: Closed
-	- Priority: Low
-	- Opened: 20261003-155535
-	- Opened by: CC
-	- Related IDs: 2026100312470546
-	- Target version: rc.1
-	- Steps to reproduce:
-		- `shcl::migrate_unstamped("notes: ```\nnever closed\n", true)`, at b10c2009 or dev e9e4a6c.
-	- Incorrect behavior: it returns `current: false`, `ambiguous: 0`, and `lost: 0`, the same as a migration that finished. A program that then writes its own footer, which is what `migrate_unstamped` is for, puts the Format line inside the raw block, so the file never reads as current. Only the stamped `migrate` shows it, by leaving the Format line off.
-	- Expected behavior: `Migration` says when the migration couldn't finish, so the caller can tell without running the stamped call as well.
-	- Reproduced: 20261003 on b23, through SilkTerm. A 2.x file with a raw block that never closed was converted in place and no copy of the old file was kept, because the result never read as a newer format.
-	- Progress log:
-		- It's a missing capability, and a silent wrong answer for a caller that writes its own footer. SilkTerm also calls the stamped `migrate`, in `upgrade` in config.rs, and writes such a file new (2026100312470546).
-		- The library also doesn't have a whole-file conversion that keeps a copy of the old file. Only the CLI's `migrate --write` does that, as `config_old_v2.shcl`.
-		- It's stalled until a shcl beta has it.
-		- 20261007: It's still there, run against shcl dev d7903b73 rather than inferred. The step above still returns `current: false`, `ambiguous: 0`, `lost: 0`, and the stamped `migrate` still shows it only by leaving the Format line off. `Migration` doesn't have a new field. shcl's CLI `migrate` now refuses such a file with exit 7, by the same Format line check. There isn't a 3.0 beta yet, and crates.io still has 2.0.0.
-		- shcl dev now has `upgrade()` and `upgrade_file()` for the swap. They convert a whole file with a timestamped backup, close the open raw block, and stamp it. The CLI backup is now `config_backup_<time>_format-v2.shcl` rather than `config_old_v2.shcl`.
-		- 20261110: Still there on shcl 3.0.0-beta1 and shcl dev 4901ecac. Filed in shcl's backlog as 2026111014552300.
-	- Decisions:
-		- 20261119: JC: work around it in SilkTerm if that can be done. If it's too much trouble, the next release is another beta rather than rc.1.
-		- 20261119: Worked around in SilkTerm, which departs from the wording, since the ask is for shcl. `upgrade` in config.rs also asks the stamped `migrate`, and writes a file it doesn't stamp new from the template. That file now keeps its renamed and moved settings (2026111917525263). The shcl side stays in shcl's backlog as 2026111014552300.
-	- Test case: ddf6d `a_file_shcl_cannot_migrate_is_written_new`, dfhf7 `every_era_takes_its_own_route`, dfhf6 and dfhga.
-	- Verified: those 4 pass in the backlog quick run.
-	- Commit: f36ae382
-	- Acceptance signoff: Self-closed: worked around in SilkTerm, per the decision.
-	- Closed: 20261119-183538
-	- Closed reason: Done
-
 - An OSC sequence that never ends grows the parser's buffer until memory runs out
 	- ID: 2026111713374900
 	- Type: Bug
@@ -350,6 +252,39 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Test case: `a_lost_device_is_seen` (dfefp), `a_lost_warm_device_is_let_go` (dfefq), and `cicd/tests/devlost/run.bash` (dfeg0), in the pipeline after dlgwl.
 	- Acceptance signoff: Self-closed: passed on vm925w (DX12 and Vulkan) and in the hosted Mac tests on Metal.
 	- Closed: 20261117-173102
+	- Closed reason: Done
+
+- A settings file from before shcl 3 that is written new loses renamed and moved settings
+	- ID: 2026111917525263
+	- Type: Bug
+	- Status: Closed
+	- Severity: Avg
+	- Opened: 20261119-175252
+	- Opened by: CC
+	- Target OS: All
+	- Target version: rc.1
+	- Steps to reproduce:
+		- Write a config with no Format line that shcl can't migrate, such as one with a raw block that never closes, or one with a line that isn't UTF-8.
+		- Put `scroll.inview_tau_ms`, `colors.focus`, `shell.default`, a `window.tab_shows_*` box, or `window.remembered_columns` in it.
+		- Launch.
+	- Incorrect behavior: The file is written new from the template. Each of those settings is left out and counted as lost, and a theme color isn't moved into the theme's changes. Retired settings with nowhere to go are counted as lost too. A pre-nesting file loses `default_shell`, `remembered_columns`, and `remembered_rows` the same way.
+	- Expected behavior: The settings read as they do when the file converts in place. Renamed ones are renamed, and moved ones go to the shell list, the tab text, and the state file. Theme colors are kept as changes to the theme. Retired settings are dropped without being counted.
+	- Reproduced: 20261119, by dfhf6 in a test build. A file with every renamed and retired name counted 17 or 18 settings as lost, where 0 or 1 is right.
+	- Possible cause: `rebuilt_config_text` maps only current names, pre-nesting names, and `CONFIG_CONVERTS`. It never applies `CONFIG_RENAMES`, and it drops every `CONFIG_REMOVED` path before the later launch steps can move it.
+	- Decisions:
+		- 20261119: JC: rc.1. It loses settings, though the old file is kept and the launch says how many it couldn't copy.
+		- 20261119: A rename applies in the rebuild only while the file doesn't have the new name, as the launch's rename does. So `colors.focus` beside `colors.highlight` stays the newer focus color.
+		- 20261119: A retired setting that a later launch step moves is kept in the new file as a dotted line, before the footer, so that step moves it as it does after a conversion in place. Any other retired setting is dropped there.
+		- 20261119: A pre-nesting file's `colors.focus` now goes to `colors.highlight` too, since the rename came after the nesting. 2 tests that asserted `focus: "#abcdef"` after a pre-nesting conversion now assert `highlight: "#abcdef"`: `legacy_config_converts_with_values_kept` and `pipeline_convert_migrate_backfill_on_disk` (daq6c).
+	- Actual cause: The rebuild never applied the renames, and it dropped every retired setting before the later launch steps could move it, counting the nested ones as lost.
+	- Actual fix: `rebuilt_config_text` puts a renamed setting under its new name, keeps a retired one that is moved later for the step that moves it, and drops the rest without counting them. The state paths are one list, `MOVED_TO_STATE`, shared with `move_state_out`.
+	- Swept: Every caller of `rebuilt_config_text` goes through the one change: `upgrade`, `unreadable`, `dropped`, `converted_config` for pre-nesting files, `regrown_doc` and `imported_beta1_config`. `regrown_doc` reads text the renames already ran on. `imported_beta1_config` now leaves beta1's remembered size for the state move, where it was dropped before. `migrated_text` uses the same `retired` check.
+	- Verified: dfhf6 failed with its 3 gap entries for this item taken out, counting 17 and 18 lost, and passes with the fix. dfhga fails with the rename and the retired carry turned off, and passes with them. The backlog quick run passes in all 5 areas, with 1521 unit tests.
+	- Test case: dfhf6 `every_old_setting_upgrades_the_same_from_every_format`, with this item's 3 `KNOWN_GAPS` entries removed, and dfhga `a_file_written_new_renames_and_retires_as_a_launch_does`.
+	- Branch: nov20-2026111917525263
+	- Commit: f36ae382
+	- Acceptance signoff: Self-closed: the intent was clear, and its tests failed before the fix and pass after.
+	- Closed: 20261119-183538
 	- Closed reason: Done
 
 - Pressing OK again after the "config is open elsewhere" refusal saves nothing
@@ -1098,6 +1033,71 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Commit: f8ac2cb1
 	- Acceptance signoff: Self-closed: the bug was reproduced, its test failed before the fix and passes after, and the program kept its grid on Xvfb.
 	- Closed: 20261117-082100
+	- Closed reason: Done
+
+- shcl: a keep-lines save adds a set value as a new line, beside its commented default
+	- ID: 2026100219054510
+	- Type: Task
+	- Status: Closed
+	- Priority: Low
+	- Opened: 20261002-190545
+	- Opened by: CC
+	- Related IDs: 2026100115322366
+	- Target version: rc.1
+	- Steps to reproduce:
+		- Take a file with `performance:` and under it `# profile: "max"  ## Default`. Load it keeping lines, set `performance.profile`, and save keeping lines.
+	- Incorrect behavior: the comment stays and the value goes in as a new line, so every line below moves down one.
+	- Expected behavior: the commented line is filled in where it is, so nothing below it moves.
+	- Reproduced: 20261001 on b23, on the real program with shcl b10c2009. The rating added `profile:` and `rated_hardware:`, and kept the template's 2 commented lines. shcl's dev branch didn't have a fix for it as of 20261002.
+	- Progress log:
+		- It's a rough edge, for shcl to look at. It's why a launch message about a bad line can name a line 2 short once the rating writes (2026100115322366).
+		- It's stalled until a shcl beta has a fix.
+		- 20261007: It's still there, run against shcl dev d7903b73 rather than inferred. The step above with `set_string("performance.profile", "low")` writes `profile: low` as a new line above the commented one, and keeps the commented line, so 5 lines in become 6 out. Nothing in shcl's changelog or log since b10c2009 is for it. There isn't a 3.0 beta yet, and crates.io still has 2.0.0.
+		- 20261110: Still there on shcl 3.0.0-beta1 and shcl dev 4901ecac. The new line goes at the end of the block now. shcl has it as 2026102910482345, deferred to v4, and a note with this repro was added there.
+		- 20261119: Worked around in SilkTerm. Every save that keeps the lines goes through one writer. There, each value the save added takes the place of its commented default line, and the move is kept only when the file still reads the same. The rating's own line writer fills in the commented line the same way, rather than adding a line under it. The rating now writes only `check_next_run` to the config, since `profile` and `rated_hardware` moved to the state file.
+		- 20261119: 3 tests pinned the old placement, and only their expected layout changed. dcf83's "only the commented default" case was the value added under the comment, and is now the value in its place. dcf85's expected file kept `# check_next_run: false  ## Default` above the new line, and now has the value in its place. dcfan now also lets the commented default go. ddcf0 checks the restate after a write that moves a line, and the rating no longer moves one, so its file's commented line is made a hand-typed one first. What it checks is the same.
+	- Decisions:
+		- 20261119: JC: work around it in SilkTerm if that can be done. If it's too much trouble, the next release is another beta rather than rc.1.
+		- 20261119: Only a commented line the program wrote is filled in: the template's own line, or one that ends in `## Default`. A line commented out by hand may hold the person's note, so a value set beside it still goes in as a new line.
+		- 20261119: The move is done on the text shcl writes, and kept only when a parse of the result reads every setting the same. Where it doesn't, the save is shcl's as before.
+	- Swept: `saved_text` is the one writer for every save that keeps the lines: Settings saves and hotkeys, the theme colors moved to `kept`, the shell list adoption, and the conversion's profile step. The rating writes its line through `place_rating_line`, fixed too. The state file and the canonical-form writes have no commented lines to fill. `revert_keys` already edits a line in place, and puts the template line back where the value was.
+	- Branch: nov20-2026100219054510
+	- Commit: c93f3519
+	- Test case: dfhh2 `a_set_value_fills_its_commented_default_where_it_is`, dfhh3 `a_set_value_leaves_a_comment_typed_by_hand`, dfhh4 `a_rating_write_moves_no_line_the_launch_named`, and dcf83 `rating_lines_replace_insert_and_collapse`. dfhh2, dfhh4 and dcf83 fail with the fix taken out and pass with it.
+	- Verified: the backlog quick run passes in all 5 areas, with 1524 unit tests.
+	- Acceptance signoff: Self-closed: the intent was clear, and its tests failed before the fix and pass after.
+	- Closed: 20261119-185310
+	- Closed reason: Done
+
+- shcl: `migrate_unstamped` can't say a migration didn't finish
+	- ID: 2026100315553545
+	- Type: Task
+	- Status: Closed
+	- Priority: Low
+	- Opened: 20261003-155535
+	- Opened by: CC
+	- Related IDs: 2026100312470546
+	- Target version: rc.1
+	- Steps to reproduce:
+		- `shcl::migrate_unstamped("notes: ```\nnever closed\n", true)`, at b10c2009 or dev e9e4a6c.
+	- Incorrect behavior: it returns `current: false`, `ambiguous: 0`, and `lost: 0`, the same as a migration that finished. A program that then writes its own footer, which is what `migrate_unstamped` is for, puts the Format line inside the raw block, so the file never reads as current. Only the stamped `migrate` shows it, by leaving the Format line off.
+	- Expected behavior: `Migration` says when the migration couldn't finish, so the caller can tell without running the stamped call as well.
+	- Reproduced: 20261003 on b23, through SilkTerm. A 2.x file with a raw block that never closed was converted in place and no copy of the old file was kept, because the result never read as a newer format.
+	- Progress log:
+		- It's a missing capability, and a silent wrong answer for a caller that writes its own footer. SilkTerm also calls the stamped `migrate`, in `upgrade` in config.rs, and writes such a file new (2026100312470546).
+		- The library also doesn't have a whole-file conversion that keeps a copy of the old file. Only the CLI's `migrate --write` does that, as `config_old_v2.shcl`.
+		- It's stalled until a shcl beta has it.
+		- 20261007: It's still there, run against shcl dev d7903b73 rather than inferred. The step above still returns `current: false`, `ambiguous: 0`, `lost: 0`, and the stamped `migrate` still shows it only by leaving the Format line off. `Migration` doesn't have a new field. shcl's CLI `migrate` now refuses such a file with exit 7, by the same Format line check. There isn't a 3.0 beta yet, and crates.io still has 2.0.0.
+		- shcl dev now has `upgrade()` and `upgrade_file()` for the swap. They convert a whole file with a timestamped backup, close the open raw block, and stamp it. The CLI backup is now `config_backup_<time>_format-v2.shcl` rather than `config_old_v2.shcl`.
+		- 20261110: Still there on shcl 3.0.0-beta1 and shcl dev 4901ecac. Filed in shcl's backlog as 2026111014552300.
+	- Decisions:
+		- 20261119: JC: work around it in SilkTerm if that can be done. If it's too much trouble, the next release is another beta rather than rc.1.
+		- 20261119: Worked around in SilkTerm, which departs from the wording, since the ask is for shcl. `upgrade` in config.rs also asks the stamped `migrate`, and writes a file it doesn't stamp new from the template. That file now keeps its renamed and moved settings (2026111917525263). The shcl side stays in shcl's backlog as 2026111014552300.
+	- Test case: ddf6d `a_file_shcl_cannot_migrate_is_written_new`, dfhf7 `every_era_takes_its_own_route`, dfhf6 and dfhga.
+	- Verified: those 4 pass in the backlog quick run.
+	- Commit: f36ae382
+	- Acceptance signoff: Self-closed: worked around in SilkTerm, per the decision.
+	- Closed: 20261119-183538
 	- Closed reason: Done
 
 - The tab tip and the rating banner copy every line on each frame they show
