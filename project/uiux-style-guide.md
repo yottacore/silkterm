@@ -95,6 +95,7 @@ For prose, comments, naming, and Rust conventions, see [`style-guide.md`](../sty
 - Accelerator letters are unique within one menu, and the first match wins, so a letter spent early is spent. A row that can't get a distinct letter goes without one rather than stealing one.
 
 - Nothing in a menu is disabled and left visible unless its absence would be more confusing than its being gray.
+	- "New tab in tmux" is left out where tmux can't be found, which is always on Windows.
 
 ## Settings dialog
 
@@ -208,7 +209,7 @@ The dialog is declared in `settings_ui.shcl`, which is the file to edit when add
 
 - OK is the default in every prompt, including a confirmation to delete. Nothing SilkTerm deletes is unrecoverable enough to justify making the reader reach for the other button every time.
 
-- A question with more than one answer names each answer on its own button, with Cancel first and the default last, at the bottom right. A "Don't ask me next time" box above the buttons stores the answer given in the setting the question stands for.
+- A question with more than one answer names each answer on its own button, with Cancel first and the default last, at the bottom right. Closing a pane SilkTerm started in tmux asks Cancel, End, or Detach, and Detach is the default, since it loses nothing. A "Don't ask me next time" box above the buttons stores the answer given in the setting the question stands for.
 
 - A red mark is only for removal. Nothing else in the interface is red.
 
@@ -295,7 +296,7 @@ Attention:
 
 Scrollbar, outside the theme:
 
-- `scrollbar_thumb`, `scrollbar_trough`: shown in the dialog as Scrollbar handle and Track, at the end of the palette. Their row says they aren't part of the theme, since everything above them is.
+- `scrollbar_thumb`, `scrollbar_trough`: shown in the dialog as Scrollbar handle and Track, at the end of the palette. Their row says they aren't part of the theme, since everything above them is. The minimap's marker and its own bar take them too, so they still matter with the scrollbar switched off.
 
 Rules that go with them:
 
@@ -355,7 +356,7 @@ Rules that go with them:
 	- On a log slider the step is that share of the track, so it is the same ratio anywhere along it, and never less than 1 for a whole number.
 	- A step never takes a value further past the slider's end than it already is. Up stops at the end, and Down from a typed number steps down from that number.
 
-- Every action reachable by mouse should be reachable by keyboard, and the reverse doesn't have to be true. Direct manipulation is the standing exception. Dragging a divider, reordering a tab or a shell, and renaming a tab in place have no keyboard equivalent today.
+- Every action reachable by mouse should be reachable by keyboard, and the reverse doesn't have to be true. Direct manipulation is the standing exception. Dragging a divider, reordering a tab or a shell, dragging the minimap marker, and renaming a tab in place have no keyboard equivalent today.
 
 - A key that goes to a dialog never also goes to the terminal underneath.
 
@@ -373,13 +374,15 @@ Things the built interface does differently from the rules above. Each is a smal
 
 - The About box pads its `Key: value` lines with extra spaces, which don't line anything up in a proportional font. It's cosmetic, and the text `--about` prints has it too.
 
-- The Silk tab made 8, one past the ceiling above, before Appearance took in 4 tabs and left 6 at the top level. Its subject is what the look costs, which is a stretch over 3 sections: the profile, text readability, and the scrolling feel. It was put first because the profile governs most of what is under it. Emptying those sections out left the Text tab with only the font, and the Movement tab with only the wheel and the scrollbar.
+- The Silk tab made 8, one past the ceiling above, before Appearance took in 4 tabs and left 6 at the top level. Its subject is what the look costs, which is a stretch over 3 sections: the profile, text readability, and the scrolling feel. It was put first because the profile governs most of what is under it. Emptying those sections out left the Text tab with only the font, and the Movement tab with only the wheel, the scrollbar, and the minimap.
 
 - The Keys tab makes 9. No other tab's subject takes in the hotkeys. Down the left, the list adds its own width to the panel, set by its widest entry.
 
 - The Tab text template's flyover runs well past 3 sentences. It's the one place the dialog lists the macros, and a list of them can't be cut down to prose.
 
-- Program makes 10, and 7 at the top level, which is the ceiling. It has what the program does as a whole rather than how a window looks, which is Resource use.
+- Program makes 10, and 7 at the top level, which is the ceiling. It has what the program does as a whole rather than how a window looks: running in tmux, then Resource use.
+
+- The tmux switch's flyover runs well past 3 sentences. It lists the pros and the cons of running in tmux, and the cons are what its warning mark is for.
 
 ## Copyright and license
 

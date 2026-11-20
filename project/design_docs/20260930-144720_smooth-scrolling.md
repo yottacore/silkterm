@@ -355,6 +355,8 @@ The wheel sends cursor keys only on the alt screen, with alternate-scroll on and
 
 - Full-screen programs don't keep any scrollback, so they don't get a scrollbar.
 
+- With the minimap on, there is still one scrollbar, at the far right over the map's edge. The minimap marker and the scrollbar handle are pinned together during either drag.
+
 ## Alternative ideas
 
 ### Rejected
