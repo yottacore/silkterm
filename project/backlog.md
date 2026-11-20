@@ -58,6 +58,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- 20261120: A status line is told apart by what the output changed on screen, from the engine's change tracking, rather than by knowing it's tmux. So a tmux started by hand is covered, and so are GNU screen, a clock in vim, and `watch`.
 		- 20261120: A released window doesn't take its device back for a status line, so its clock stays as it was until a sign of life. The other choice was one frame per tick, as a repaint gets. See the Check entry in questions.md.
 		- 20261120: Output that changes nothing on screen, such as a new title alone, still counts, as before. New lines, a scroll, a progress bar on the cursor's row, and 2 rows or more all still count.
+		- 20261120: A released window stays asleep for a status line tick, as built. Confirmed by JC.
 	- Swept: output reaches the idle clock in one place, the wakeup in app.rs, then `note_output`. Nothing read the engine's change tracking before, so reading and clearing it at each wakeup takes it from nobody.
 	- Verified: 20261120. idletmux fails on the build before the fix, where the clock window never let go in 100 s. It passes after: the window let go at 61 s, a tick after that left it let go, and the window whose shell prints inside tmux kept its device. The quick gate passes in all 5 areas.
 	- Test case: `only_a_status_line_redraw_away_from_the_cursor_is_a_status_line` (dfj7p), and `cicd/tests/idletmux/run.bash` (dfj7n), new, in the full run.
