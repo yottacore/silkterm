@@ -274,6 +274,11 @@ impl IdleTrace {
 		self.say("not a wake", why);
 	}
 
+	// heard, and neither starts the wait over nor wakes
+	fn not_a_sign(&mut self, why: &'static str) {
+		self.say("not a sign of life", why);
+	}
+
 	fn say(&mut self, what: &'static str, why: &'static str) {
 		if !env_flag(EnvFlag::IdleDbg) {
 			return;
@@ -444,6 +449,9 @@ pub(super) fn sign_of_life(
 /// What `sign_of_life` calls the pointer moving over the window.
 pub(super) const POINTER: &str = "pointer";
 
+/// Output that only redrew one row away from the cursor (`only_a_status_line`).
+pub(super) const STATUS_LINE: &str = "output that only redrew a status line";
+
 /// The window's minimized state as last asked, so a pass asks at most once per
 /// `MINIMIZED_RECHECK` rather than every time.
 #[derive(Debug, Default)]
@@ -569,11 +577,18 @@ impl State {
 
 	/// Output from `pane`, which counts only while it can be seen: the window
 	/// shown and the pane in the tab in front (`IdleClock::output`). The hidden
-	/// flag is the one the last pass settled on.
-	pub(super) fn note_output(&mut self, pane: crate::term::PaneId) {
+	/// flag is the one the last pass settled on. Output that only redrew a
+	/// status line, such as tmux's clock ticking, doesn't count at all. It's
+	/// drawn while the device is held, and a released window keeps its last
+	/// frame up.
+	pub(super) fn note_output(&mut self, pane: crate::term::PaneId, status_line: bool) {
 		let in_front = self.tabs.cur().panes.contains_key(&pane);
 		let shown = !self.was_hidden && in_front;
-		if self
+		if status_line {
+			if shown {
+				self.idle_trace.not_a_sign(STATUS_LINE);
+			}
+		} else if self
 			.idle
 			.output(self.gpu.is_none(), self.was_hidden, in_front)
 		{

@@ -4232,17 +4232,18 @@ impl ApplicationHandler<UserEvent> for App {
 				// scrolls, not on every content change. Only the pane
 				// that produced output is marked; a background tab's flag
 				// waits until its tab is shown (the switch forces a rebuild).
-				crate::perf::timed(&crate::perf::NOTE_NS, || {
-					if let Some(p) = state.tabs.find_pane_mut(id) {
-						p.term.wake_handled();
-						p.content_dirty = true;
-						p.note_output(); // copy-output: push the settle deadline out
-						// scrollback depth, sampled per read cycle, which is the only
-						// granularity that sees a `clear` cut it
-						p.note_history();
-					}
+				let status_line = crate::perf::timed(&crate::perf::NOTE_NS, || {
+					let p = state.tabs.find_pane_mut(id)?;
+					p.term.wake_handled();
+					p.content_dirty = true;
+					p.note_output(); // copy-output: push the settle deadline out
+					// scrollback depth, sampled per read cycle, which is the only
+					// granularity that sees a `clear` cut it
+					p.note_history();
+					Some(p.term.only_a_status_line())
 				});
-				state.note_output(id); // a shell that prints isn't idle, if seen
+				// a shell that prints isn't idle, if seen
+				state.note_output(id, status_line == Some(true));
 			}
 			UserEvent::ChildGone(id) => {
 				if let Some(p) = state.tabs.find_pane_mut(id) {

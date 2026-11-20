@@ -1248,6 +1248,10 @@ fScriptTests(){
 	## binary, display, dash, xdotool, or xprop.
 	((quick)) || fRunTest_MaySkip cicd/tests/idleother/run.bash "idle release after Minutes otherwise"
 	((quick)) || fRunTest_MaySkip cicd/tests/deskswitch/run.bash "idle release through a desktop switch"
+	## A window showing tmux lets go though its status line clock ticks, and
+	## one whose shell prints inside tmux holds on. About 90 s. Exit 3 is a
+	## skip: no binary, display, tmux, dash, xdotool, or xprop.
+	((quick)) || fRunTest_MaySkip cicd/tests/idletmux/run.bash "idle release with a tmux clock"
 	## Heap allocations per frame at rest and in a drag select, against a limit.
 	## Exit 3 is a skip: no debug binary, display, window manager, or xdotool.
 	fRunTest_MaySkip cicd/tests/allocs/run.bash "allocations per frame"
