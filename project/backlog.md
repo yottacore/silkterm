@@ -97,6 +97,27 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- It's stalled until a cosmic-text release takes fontdb 0.24 or later, and winit's sctk-adwaita drops ab_glyph.
 	- Held for a cosmic-text release on fontdb 0.24 or later, and an sctk-adwaita without ab_glyph.
 
+- A settings file from before shcl 3 that is written new loses renamed and moved settings
+	- ID: 2026111917525263
+	- Type: Bug
+	- Status: Queued
+	- Severity: Avg
+	- Opened: 20261119-175252
+	- Opened by: CC
+	- Target OS: All
+	- Target version: rc.1
+	- Steps to reproduce:
+		- Write a config with no Format line that shcl can't migrate, such as one with a raw block that never closes, or one with a line that isn't UTF-8.
+		- Put `scroll.inview_tau_ms`, `colors.focus`, `shell.default`, a `window.tab_shows_*` box, or `window.remembered_columns` in it.
+		- Launch.
+	- Incorrect behavior: The file is written new from the template. Each of those settings is left out and counted as lost, and a theme color isn't moved into the theme's changes. Retired settings with nowhere to go are counted as lost too. A pre-nesting file loses `default_shell`, `remembered_columns`, and `remembered_rows` the same way.
+	- Expected behavior: The settings read as they do when the file converts in place. Renamed ones are renamed, and moved ones go to the shell list, the tab text, and the state file. Theme colors are kept as changes to the theme. Retired settings are dropped without being counted.
+	- Reproduced: 20261119, by dfhf6 in a test build. A file with every renamed and retired name counted 17 or 18 settings as lost, where 0 or 1 is right.
+	- Possible cause: `rebuilt_config_text` maps only current names, pre-nesting names, and `CONFIG_CONVERTS`. It never applies `CONFIG_RENAMES`, and it drops every `CONFIG_REMOVED` path before the later launch steps can move it.
+	- Decisions:
+		- 20261119: JC: rc.1. It loses settings, though the old file is kept and the launch says how many it couldn't copy.
+	- Test case: dfhf6 lists these routes as known gaps, and fails once they pass, so the entry goes with the fix.
+
 - shcl: a keep-lines save adds a set value as a new line, beside its commented default
 	- ID: 2026100219054510
 	- Type: Task
@@ -1473,27 +1494,6 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Notes:
 		- Code fixup 20261119. The same pass fixed 19 other scripts of this kind.
 		- Detail: `detail_backlog.md`, under this ID.
-
-- A settings file from before shcl 3 that is written new loses renamed and moved settings
-	- ID: 2026111917525263
-	- Type: Bug
-	- Status: Queued
-	- Severity: Avg
-	- Opened: 20261119-175252
-	- Opened by: CC
-	- Target OS: All
-	- Target version: rc.2
-	- Steps to reproduce:
-		- Write a config with no Format line that shcl can't migrate, such as one with a raw block that never closes, or one with a line that isn't UTF-8.
-		- Put `scroll.inview_tau_ms`, `colors.focus`, `shell.default`, a `window.tab_shows_*` box, or `window.remembered_columns` in it.
-		- Launch.
-	- Incorrect behavior: The file is written new from the template. Each of those settings is left out and counted as lost, and a theme color isn't moved into the theme's changes. Retired settings with nowhere to go are counted as lost too. A pre-nesting file loses `default_shell`, `remembered_columns`, and `remembered_rows` the same way.
-	- Expected behavior: The settings read as they do when the file converts in place. Renamed ones are renamed, and moved ones go to the shell list, the tab text, and the state file. Theme colors are kept as changes to the theme. Retired settings are dropped without being counted.
-	- Reproduced: 20261119, by dfhf6 in a test build. A file with every renamed and retired name counted 17 or 18 settings as lost, where 0 or 1 is right.
-	- Possible cause: `rebuilt_config_text` maps only current names, pre-nesting names, and `CONFIG_CONVERTS`. It never applies `CONFIG_RENAMES`, and it drops every `CONFIG_REMOVED` path before the later launch steps can move it.
-	- Decisions:
-		- 20261119: rc.2, not rc.1. Nothing crashes, the old file is kept beside the new one, and the launch says how many settings it couldn't copy.
-	- Test case: dfhf6 lists these routes as known gaps, and fails once they pass, so the entry goes with the fix.
 
 - A pre-nesting file's look settings stop applying after it converts
 	- ID: 2026111917532694
