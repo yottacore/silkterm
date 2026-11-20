@@ -27,6 +27,8 @@ recipe="${root}/cicd/container/Dockerfile"
 unset SILK_PRIVATE_RUNNER
 ## The memory cap: the default unless a case sets one.
 unset CICD_MEM_CAP
+## A full run's publish ledger would add its own mount to every run line here.
+unset SILK_PUBLISH_LEDGER
 
 failures=0
 fCheck(){ local -r what="${1}"; shift; if "${@}"; then echo "  ok   ${what}"; else echo "  FAIL ${what}"; failures=$((failures + 1)); fi; }
@@ -662,3 +664,4 @@ echo "all passed"
 ##		  handed down from a full run is dropped.
 ##		- 20261108: The whole private repo goes in read only, not only its tests.
 ##		- 20261109: The memory cap on the step and tidy containers.
+##		- 20261120: A full run's publish ledger stays out of the runs here.
