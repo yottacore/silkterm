@@ -97,6 +97,17 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- It's stalled until a cosmic-text release takes fontdb 0.24 or later, and winit's sctk-adwaita drops ab_glyph.
 	- Held for a cosmic-text release on fontdb 0.24 or later, and an sctk-adwaita without ab_glyph.
 
+- Does not release resources in tmux and/or muffer
+	- ID: 2026112006320249
+	- Type: Bug
+	- Status: Queued
+	- Opened: 20261120-063202
+	- Opened by: JC
+	- Target version: rc.1
+	- Incorrect behavior: Does not release resources in tmux and/or muffer. (In this case muffer in tmux.)
+	- Notes:
+		- Pre-next-cut.
+
 - An OSC sequence that never ends grows the parser's buffer until memory runs out
 	- ID: 2026111713374900
 	- Type: Bug
