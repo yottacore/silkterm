@@ -100,7 +100,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 - A settings file from before shcl 3 that is written new loses renamed and moved settings
 	- ID: 2026111917525263
 	- Type: Bug
-	- Status: Queued
+	- Status: Closed
 	- Severity: Avg
 	- Opened: 20261119-175252
 	- Opened by: CC
@@ -116,7 +116,19 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Possible cause: `rebuilt_config_text` maps only current names, pre-nesting names, and `CONFIG_CONVERTS`. It never applies `CONFIG_RENAMES`, and it drops every `CONFIG_REMOVED` path before the later launch steps can move it.
 	- Decisions:
 		- 20261119: JC: rc.1. It loses settings, though the old file is kept and the launch says how many it couldn't copy.
-	- Test case: dfhf6 lists these routes as known gaps, and fails once they pass, so the entry goes with the fix.
+		- 20261119: A rename applies in the rebuild only while the file doesn't have the new name, as the launch's rename does. So `colors.focus` beside `colors.highlight` stays the newer focus color.
+		- 20261119: A retired setting that a later launch step moves is kept in the new file as a dotted line, before the footer, so that step moves it as it does after a conversion in place. Any other retired setting is dropped there.
+		- 20261119: A pre-nesting file's `colors.focus` now goes to `colors.highlight` too, since the rename came after the nesting. 2 tests that asserted `focus: "#abcdef"` after a pre-nesting conversion now assert `highlight: "#abcdef"`: `legacy_config_converts_with_values_kept` and `pipeline_convert_migrate_backfill_on_disk` (daq6c).
+	- Actual cause: The rebuild never applied the renames, and it dropped every retired setting before the later launch steps could move it, counting the nested ones as lost.
+	- Actual fix: `rebuilt_config_text` puts a renamed setting under its new name, keeps a retired one that is moved later for the step that moves it, and drops the rest without counting them. The state paths are one list, `MOVED_TO_STATE`, shared with `move_state_out`.
+	- Swept: Every caller of `rebuilt_config_text` goes through the one change: `upgrade`, `unreadable`, `dropped`, `converted_config` for pre-nesting files, `regrown_doc` and `imported_beta1_config`. `regrown_doc` reads text the renames already ran on. `imported_beta1_config` now leaves beta1's remembered size for the state move, where it was dropped before. `migrated_text` uses the same `retired` check.
+	- Verified: dfhf6 failed with its 3 gap entries for this item taken out, counting 17 and 18 lost, and passes with the fix. dfhga fails with the rename and the retired carry turned off, and passes with them. The backlog quick run passes in all 5 areas, with 1521 unit tests.
+	- Test case: dfhf6 `every_old_setting_upgrades_the_same_from_every_format`, with this item's 3 `KNOWN_GAPS` entries removed, and dfhga `a_file_written_new_renames_and_retires_as_a_launch_does`.
+	- Branch: nov20-2026111917525263
+	- Commit: f36ae382
+	- Acceptance signoff: Self-closed: the intent was clear, and its tests failed before the fix and pass after.
+	- Closed: 20261119-183538
+	- Closed reason: Done
 
 - shcl: a keep-lines save adds a set value as a new line, beside its commented default
 	- ID: 2026100219054510
@@ -143,7 +155,7 @@ Going forward, new issues in the new template at the bottom of this file will go
 - shcl: `migrate_unstamped` can't say a migration didn't finish
 	- ID: 2026100315553545
 	- Type: Task
-	- Status: Queued
+	- Status: Closed
 	- Priority: Low
 	- Opened: 20261003-155535
 	- Opened by: CC
@@ -163,6 +175,13 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- 20261110: Still there on shcl 3.0.0-beta1 and shcl dev 4901ecac. Filed in shcl's backlog as 2026111014552300.
 	- Decisions:
 		- 20261119: JC: work around it in SilkTerm if that can be done. If it's too much trouble, the next release is another beta rather than rc.1.
+		- 20261119: Worked around in SilkTerm, which departs from the wording, since the ask is for shcl. `upgrade` in config.rs also asks the stamped `migrate`, and writes a file it doesn't stamp new from the template. That file now keeps its renamed and moved settings (2026111917525263). The shcl side stays in shcl's backlog as 2026111014552300.
+	- Test case: ddf6d `a_file_shcl_cannot_migrate_is_written_new`, dfhf7 `every_era_takes_its_own_route`, dfhf6 and dfhga.
+	- Verified: those 4 pass in the backlog quick run.
+	- Commit: f36ae382
+	- Acceptance signoff: Self-closed: worked around in SilkTerm, per the decision.
+	- Closed: 20261119-183538
+	- Closed reason: Done
 
 - An OSC sequence that never ends grows the parser's buffer until memory runs out
 	- ID: 2026111713374900

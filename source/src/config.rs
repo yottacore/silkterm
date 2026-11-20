@@ -697,8 +697,7 @@ fn move_state_out(file: &mut LaunchFile, unstamped: bool) {
 		"window.monitors",
 		"performance.rated_hardware",
 	);
-	let others = [maximized, monitors, hardware];
-	let state_paths = || ints.iter().chain(&others);
+	let state_paths = || MOVED_TO_STATE.iter();
 	let has_state = state_paths().any(|p| raw.exists(p));
 	let named = |path: &str| {
 		state_paths().any(|p| {
@@ -5024,6 +5023,35 @@ const CONFIG_REMOVED: &[&str] = &[
 	"performance.rated_hardware",
 ];
 
+// The retired paths `move_state_out` moves to the state file.
+const MOVED_TO_STATE: [&str; 6] = [
+	"window.remembered_columns",
+	"window.remembered_rows",
+	"window.remembered_maximized",
+	"window.remembered_font_zoom",
+	"window.monitors",
+	"performance.rated_hardware",
+];
+
+// A retired path that a launch step after the conversions still reads: the
+// default shell goes to the shell list, the check boxes to the tab text, and
+// the window's state to the state file.
+fn moved_later(path: &str) -> bool {
+	path == "shell.default"
+		|| OLD_TAB_PARTS.contains(&path)
+		|| MOVED_TO_STATE.iter().any(|at| at_or_under(path, at))
+}
+
+// A path in `CONFIG_REMOVED`, or under one.
+fn retired(path: &str) -> bool {
+	CONFIG_REMOVED.iter().any(|at| at_or_under(path, at))
+}
+
+fn at_or_under(path: &str, at: &str) -> bool {
+	path.strip_prefix(at)
+		.is_some_and(|rest| rest.is_empty() || rest.starts_with('.'))
+}
+
 // Defaults that changed, as (path, the value that used to be the default). An
 // existing config has the template's commented lines verbatim, so after a
 // default changes those lines quietly describe the old behavior. A commented
@@ -5481,7 +5509,11 @@ fn converted_config(text: &str) -> Option<(String, usize)> {
 // The template with every active setting of `text` that still reads copied
 // over, and how many lines with a setting it left behind: each one shcl
 // can't read, and each setting it reads that has nowhere to go. Lines listed
-// in `garbled` (0-based) didn't decode and are never copied.
+// in `garbled` (0-based) didn't decode and are never copied. A renamed
+// setting goes under its new name, as the launch's rename would put it. A
+// retired one isn't counted. Where a later launch step moves it, to the shell
+// list, the tab text or the state file, it is kept as a dotted line for that
+// step, as for a file converted in place, and otherwise it is dropped.
 fn rebuilt_config_text(text: &str, garbled: &[usize]) -> (String, usize) {
 	let lines: Vec<&str> = text.lines().collect();
 	let walked = walk_settings(text);
@@ -5519,6 +5551,30 @@ fn rebuilt_config_text(text: &str, garbled: &[usize]) -> (String, usize) {
 			_ => None,
 		})
 		.collect();
+	// what the launch's rename checks for its new name, read only when a
+	// file has an old one
+	let present = std::cell::OnceCell::new();
+	let has = |new: &str| {
+		present
+			.get_or_init(|| {
+				saved_paths(text).unwrap_or_else(|| {
+					walked
+						.iter()
+						.filter_map(|w| match w {
+							WalkLine::Setting { path, .. } => Some(path.clone()),
+							_ => None,
+						})
+						.collect()
+				})
+			})
+			.contains(new)
+	};
+	let renamed = |path: String| {
+		CONFIG_RENAMES
+			.iter()
+			.find(|(old, new)| *old == path && !has(new))
+			.map_or(path, |(_, new)| (*new).to_string())
+	};
 	let mut carry: std::collections::HashMap<String, (usize, String)> =
 		std::collections::HashMap::new();
 	let mut extras: Vec<String> = Vec::new();
@@ -5563,12 +5619,13 @@ fn rebuilt_config_text(text: &str, garbled: &[usize]) -> (String, usize) {
 				.position(|(old, _)| old == p)
 				.map(|rank| (rank + 1, LEGACY_KEYS[rank].1.to_string()))
 				.or_else(|| {
-					CONFIG_CONVERTS
-						.iter()
-						.any(|(old, ..)| old == p)
-						.then(|| (LEGACY_KEYS.len() + 1, p.clone()))
+					(CONFIG_CONVERTS.iter().any(|(old, ..)| old == p)
+						|| CONFIG_RENAMES.iter().any(|(old, _)| old == p)
+						|| retired(p))
+					.then(|| (LEGACY_KEYS.len() + 1, p.clone()))
 				})
-		};
+		}
+		.map(|(rank, new)| (rank, renamed(new)));
 		// an old unit has a template line only under its new name, and a value
 		// that isn't a number keeps its text, as a launch's rename would
 		let (target, value) = match target {
@@ -5583,19 +5640,18 @@ fn rebuilt_config_text(text: &str, garbled: &[usize]) -> (String, usize) {
 		};
 		let value = value.as_str();
 		if let Some((rank, new)) = target {
-			// a mapped path that has since been retired stays retired. The old value is
-			// still in the .bak
-			if !CONFIG_REMOVED.contains(&new.as_str()) {
-				match carry.entry(new) {
-					std::collections::hash_map::Entry::Vacant(slot) => {
+			if retired(&new) && !moved_later(&new) {
+				continue;
+			}
+			match carry.entry(new) {
+				std::collections::hash_map::Entry::Vacant(slot) => {
+					slot.insert((rank, value.to_string()));
+				}
+				// a setting written 2 ways keeps one
+				std::collections::hash_map::Entry::Occupied(mut slot) => {
+					left.insert(*index);
+					if rank < slot.get().0 {
 						slot.insert((rank, value.to_string()));
-					}
-					// a setting written 2 ways keeps one
-					std::collections::hash_map::Entry::Occupied(mut slot) => {
-						left.insert(*index);
-						if rank < slot.get().0 {
-							slot.insert((rank, value.to_string()));
-						}
 					}
 				}
 			}
@@ -5608,8 +5664,11 @@ fn rebuilt_config_text(text: &str, garbled: &[usize]) -> (String, usize) {
 		// a shell list is copied whole, below
 	}
 	let mut out: Vec<String> = default_config().lines().map(str::to_string).collect();
+	let mut later: Vec<String> = Vec::new();
 	for (new_path, (_, value)) in &carry {
-		if !activate_line(&mut out, new_path, value) {
+		if retired(new_path) {
+			later.push(format!("{new_path}: {value}"));
+		} else if !activate_line(&mut out, new_path, value) {
 			// no template line, which shouldn't happen, so keep it as a dotted line
 			extras.push(format!("{new_path}: {value}"));
 		}
@@ -5628,6 +5687,15 @@ fn rebuilt_config_text(text: &str, garbled: &[usize]) -> (String, usize) {
 		let mut doc = shcl::Document::parse(&joined);
 		write_shells(&mut doc, &[], &shells);
 		joined = doc.to_canonical();
+	}
+	// After the shell list, which would move them into the blocks they name,
+	// and before the footer, which a step that removes one would take with it
+	if !later.is_empty() {
+		later.sort();
+		joined = format!("{}\n\n{}\n", joined.trim_end(), later.join("\n"));
+		if let Some(moved) = with_shcl_banner(&joined) {
+			joined = moved;
+		}
 	}
 	(joined, left.len())
 }
@@ -5855,13 +5923,7 @@ fn migrated_text(text: &str, keep_default_shell: bool) -> Option<String> {
 			changed = true;
 			continue;
 		}
-		let gone = CONFIG_REMOVED.iter().any(|removed| {
-			path == removed
-				|| path
-					.strip_prefix(removed)
-					.is_some_and(|rest| rest.starts_with('.'))
-		});
-		if gone && !keep.contains(&index) {
+		if retired(path) && !keep.contains(&index) {
 			changed = true;
 			continue; // drop
 		}
@@ -14232,6 +14294,55 @@ mod tests {
 		assert_eq!(next_launch_text(text), next_launch_text(&out));
 	}
 
+	// A file written new takes the launch's renames: an old name goes under
+	// its new one unless the file has that already, as `colors.focus` beside
+	// `colors.highlight` is the newer setting. A retired one is left for the
+	// launch steps that move or drop it, and isn't counted.
+	// Test ID: dfhga
+	#[test]
+	#[cfg_attr(miri, ignore = "too slow under Miri")]
+	fn a_file_written_new_renames_and_retires_as_a_launch_does() {
+		let open = "notes: ```\nnever closed\n";
+		let both = format!(
+			"colors:\n\tfocus: \"#123456\"\n\thighlight: \"#654321\"\n\
+			scroll:\n\tinview_tau_ms: 300\n\ttau_ms: 5\n\
+			shell:\n\tdefault: \"/usr/bin/zsh -l\"\n{open}"
+		);
+		let Upgrade::Rewritten { text: out, lost } = upgrade(both.as_bytes()) else {
+			panic!("not written new");
+		};
+		assert_eq!(lost, 1, "only the raw block:\n{out}");
+		let next = next_launch_text(&out);
+		let doc = shcl::Document::parse(&next);
+		assert_eq!(doc.get_string("colors.focus").as_deref(), Ok("#123456"));
+		assert_eq!(doc.get_string("colors.highlight").as_deref(), Ok("#654321"));
+		assert_eq!(
+			doc.get_int("scroll.single_screen_tau_ms"),
+			Ok(300),
+			"{next}"
+		);
+		for gone in ["scroll.inview_tau_ms", "scroll.tau_ms", "shell.default"] {
+			assert!(!doc.exists(gone), "{gone}:\n{next}");
+		}
+		let shells = read_shells(&doc);
+		assert_eq!(
+			shells.first().map(|s| s.command.as_str()),
+			Some("/usr/bin/zsh -l"),
+			"{next}"
+		);
+		let alone = format!("colors:\n\tfocus: \"#123456\"\n{open}");
+		let Upgrade::Rewritten { text: out, lost } = upgrade(alone.as_bytes()) else {
+			panic!("not written new");
+		};
+		assert_eq!(lost, 1);
+		let doc = shcl::Document::parse(&next_launch_text(&out));
+		assert_eq!(doc.get_string("colors.highlight").as_deref(), Ok("#123456"));
+		assert!(
+			!doc.get_string("colors.focus").is_ok_and(|v| v == "#123456"),
+			"{out}"
+		);
+	}
+
 	// A file a dogfood build on shcl b10c2009 wrote says Format 3, in that
 	// build's spellings. It is converted where it stands: the comma list goes in
 	// brackets, the doubled backslashes are halved and the monitor key is quoted,
@@ -16496,8 +16607,9 @@ mod tests {
 			out.contains("themes.mine.dark.background: \"#010203\""),
 			"future-feature user data carried:\n{out}"
 		);
+		// the old file's focus color is the one renamed to highlight
 		assert!(
-			out.contains("\tfocus: \"#abcdef\""),
+			out.contains("\thighlight: \"#abcdef\""),
 			"color override carried"
 		);
 		assert!(out.contains("theme: Matrix"), "theme choice carried");
@@ -18526,7 +18638,11 @@ mod tests {
 			"values landed nested:\n{out}"
 		);
 		assert!(out.contains("\tscrollback: 5000"), "scrollback value kept");
-		assert!(out.contains("\tfocus: \"#abcdef\""), "color override kept");
+		// the old file's focus color is the one renamed to highlight
+		assert!(
+			out.contains("\thighlight: \"#abcdef\""),
+			"color override kept"
+		);
 		assert!(
 			out.contains("themes.mine.dark.background"),
 			"unknown key kept"
@@ -20584,14 +20700,7 @@ mod tests {
 
 	// Routes that are known to read a file wrong, as (era, flat names, backlog
 	// ID). Each must still fail, so its entry goes with the fix.
-	const KNOWN_GAPS: [(&str, bool, &str); 9] = [
-		(
-			"shcl 2.x that shcl can't migrate",
-			false,
-			"2026111917525263",
-		),
-		("shcl 2.x that isn't UTF-8", false, "2026111917525263"),
-		("shcl 2.x that shcl can't migrate", true, "2026111917525263"),
+	const KNOWN_GAPS: [(&str, bool, &str); 6] = [
 		("shcl 2.x", true, "2026111917532694"),
 		("shcl 2.x with Windows line ends", true, "2026111917532694"),
 		("shcl before the yottacore move", true, "2026111917532694"),
