@@ -272,6 +272,26 @@ Going forward, new issues in the new template at the bottom of this file will go
 		- On rc.1 as a gap in an rc.1 fix that loses user edits.
 		- Detail: `detail_backlog.md`, under this ID.
 
+- Remove the line length limit from the rustfmt and ruff settings
+	- ID: 2026112016030047
+	- Type: Enhancement
+	- Status: Queued
+	- Priority: Low
+	- Opened: 20261120-160300
+	- Opened by: CC
+	- Target OS: All
+	- Target version: rc.1
+	- Requirements:
+		- rustfmt.toml sets `max_width` as high as rustfmt allows.
+		- ruff.toml sets `line-length = 320`, its highest.
+	- Origin: Directive 20261118, Line length. Not a defect.
+	- Decisions:
+		- 20261120: JC: go ahead, at the start of the next backlog run, in a commit of its own. Moved above the rc.1 cut so that run takes it.
+	- Notes:
+		- Code review 20261120 item 47.
+		- The house rule since 20261118 is no line length limit in code or comments. Raising rustfmt's width reflows every Rust file once, so it goes in a commit of its own, with nothing else in flight. The forks keep their own settings.
+		- Detail: `detail_backlog.md`, under this ID.
+
 - An OSC sequence that never ends grows the parser's buffer until memory runs out
 	- ID: 2026111713374900
 	- Type: Bug
@@ -2929,24 +2949,6 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Notes:
 		- Code review 20261120 item 46.
 		- The next launch opens unsnapped at the snapped size now. design.md says the size written down is an ordinary window's, and zoom already treats a snapped window's size as the window manager's.
-		- Detail: `detail_backlog.md`, under this ID.
-
-- Remove the line length limit from the rustfmt and ruff settings
-	- ID: 2026112016030047
-	- Type: Enhancement
-	- Status: Queued
-	- Priority: Low
-	- Opened: 20261120-160300
-	- Opened by: CC
-	- Target OS: All
-	- Target version: rc.2
-	- Requirements:
-		- rustfmt.toml sets `max_width` as high as rustfmt allows.
-		- ruff.toml sets `line-length = 320`, its highest.
-	- Origin: Directive 20261118, Line length. Not a defect.
-	- Notes:
-		- Code review 20261120 item 47.
-		- The house rule since 20261118 is no line length limit in code or comments. Raising rustfmt's width reflows every Rust file once, so it goes in a commit of its own, with nothing else in flight. The forks keep their own settings.
 		- Detail: `detail_backlog.md`, under this ID.
 
 - The OSC buffer cap is now in 2 places
