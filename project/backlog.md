@@ -34,35 +34,6 @@ Going forward, new issues in the new template at the bottom of this file will go
 
 ## Issues
 
-- Dragging the scrollbar thumb while output arrives can make the text jump
-	- ID: 2026112017124593
-	- Type: Bug
-	- Status: Closed
-	- Severity: Low
-	- Opened: 20261120-171245
-	- Opened by:
-	- Related IDs: 2026112016030002, 2026112016030026
-	- Target OS: All
-	- Target version: rc.1
-	- Incorrect behavior: While output arrives, a drag of the scrollbar thumb sets the view's place directly, so the next pointer move can jump the text.
-	- Expected behavior: The text under the view stays put during a drag, as it does since 2026112016030002 when the view is parked.
-	- Reproduced: No. Found while fixing 2026112016030002.
-	- Note: not a duplicate of 2026112016030026. That one is the grab during an ease, measured against the drawn thumb. This one is output arriving during a drag.
-	- Actual cause: each drag move set the place from the pointer alone. Output moves a parked view up with its text, and the next move put it back. The minimap marker went back by every line that went up. The thumb went back by most of them, since a deeper scrollback also rescales the track.
-	- Decisions:
-		- 20261120: the minimap marker drag had the same fault and is fixed with it.
-		- 20261120: while output arrives during a drag with the pointer still, the text stays put and the thumb moves a little, since the same text sits higher in a deeper scrollback. The handle tracks the pointer's moves rather than its exact spot then.
-		- 20261120: a view held at the top of a full scrollback doesn't move with the output, and the drag doesn't count those lines either, so dragging down moves it at once.
-	- Actual fix [Bug]: a handle drag goes on from where it started, moved by the lines output has carried the view up since. The thumb drag maps the pointer's move from the grab at the current scrollback's scale.
-	- Swept: the thumb drag and the marker drag are the only drags that set the place from the pointer. A track click, a marker jump and a selection's edge scroll are one-shot or relative.
-	- Test case: dfjwf `a_handle_drag_keeps_the_text_still_while_output_arrives`.
-	- Verified: 20261120. dfjwf passes, with the scrollback growing and full. With the shift taken out of the drag it fails, the view going back to where it was grabbed. Counting the lines that went up rather than what the view moved fails its top-of-scrollback case. daqnd, dfjtz, dfjv0 and dc0b5 pass. The quick gate's format, lint, test, script and docs areas pass.
-	- Acceptance signoff: Self-closed: the behavior the item asked for, red before and green after.
-	- Closed: 20261120-175800
-	- Closed reason: Done
-	- Branch: nov20b-2026112017124593
-	- Commit: bb874dd1
-
 - Does not release resources in tmux and/or muffer
 	- ID: 2026112006320249
 	- Type: Bug
@@ -224,199 +195,6 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Branch: nov20b-2026112016030002
 	- Commit: 0a5f5823
 
-- An environment variable that isn't valid UTF-8 crashes SilkTerm at launch
-	- ID: 2026112016030003
-	- Type: Bug
-	- Status: Closed
-	- Severity: Avg
-	- Opened: 20261120-160300
-	- Opened by: CC
-	- Target OS: Linux, macOS
-	- Target version: rc.1
-	- Incorrect behavior: One variable with bytes that aren't UTF-8 aborts every launch, `--version` included, with exit 134. `OLDPWD` after a `cd` into a folder with a Latin-1 name is enough.
-	- Expected behavior: SilkTerm starts, and the variable reaches the shell as it was.
-	- Reproduced: Yes, 20261120. `FOO=$'\xe9' silkterm --version` aborted with exit 134.
-	- Possible cause: The shell environment cleanup reads the environment with `std::env::vars()`, which panics on a value that isn't Unicode.
-	- Origin: 393b34ef, 20260821. The fix for 2026111713374941 checked command-line arguments only. Confirmed.
-	- Sweep: Every read of the whole environment, or of one variable, that assumes Unicode.
-	- Related IDs: 2026111713374941
-	- Notes:
-		- Code review 20261120 item 3.
-		- It crashes, so it's on rc.1 by the rule used for Code review 20261117.
-		- Detail: `detail_backlog.md`, under this ID.
-	- Decisions:
-		- 20261120: A variable whose name isn't Unicode is skipped by the cleanup, since no listed name can match it. A value that isn't Unicode is compared in lossy form, since only listed names are ever written back.
-	- Actual cause: `sanitize_shell_env` in term.rs read the whole environment with `std::env::vars()`, which panics on the first entry that isn't Unicode. It runs at the top of main, before the arguments are read.
-	- Actual fix: The cleanup reads `vars_os()` through a new `inherited_env`, which skips a non-Unicode name and keeps a non-Unicode value in lossy form. Nothing else in the environment is rewritten, so other variables reach the shell as raw bytes.
-	- Swept: `std::env::vars()` had one caller, in term.rs. There are none in forks/, knobs/ or cicd/. Single reads with `std::env::var` return an error rather than panic on a non-Unicode value, and none unwraps it outside build.rs, which reads cargo's own variables. Those reads treat such a value as unset, such as `SHELL` in shells.rs and in the alacritty fork, which then fall back.
-	- Verified: Before the fix, `FOO=$'\xe9' silkterm --version` panicked in `sanitize_shell_env` with exit 101 on the debug build. Now it prints the version with exit 0. On a private Xvfb, a pane started with `FOO=$'caf\xe9'` and `OLDPWD=$'/data/caf\xe9'` got `FOO` byte for byte and no `OLDPWD`, as designed. dfjva fails with `inherited_env` unwrapping as `vars()` does, and passes with the fix. The backlog quick run passes in all 5 areas, with 1529 unit tests, and clippy is clean for the Windows target. It wasn't run on macOS.
-	- Test case: dfjva `a_variable_that_is_not_unicode_does_not_stop_the_launch`.
-	- Branch: nov20b-2026112016030003
-	- Commit: 118dfd62
-	- Acceptance signoff: Self-closed: reproduced, and the test and a run of the binary fail before the fix and pass after.
-	- Closed: 20261120-172900
-	- Closed reason: Done
-
-- With a menu open, a Ctrl or Ctrl+Shift chord picks a menu row, so the copy chord can close the tab
-	- ID: 2026112016030004
-	- Type: Bug
-	- Status: Closed
-	- Severity: Avg
-	- Opened: 20261120-160300
-	- Opened by: CC
-	- Target OS: All
-	- Target version: rc.1
-	- Incorrect behavior: An open menu takes any typed letter as its accelerator, whatever modifiers are held. Ctrl+Shift+C with the Tabs menu open closes the tab, and with the Panes menu open it closes the pane. Neither asks, so what was running there is gone. Ctrl+Shift+V in the right-click menu splits the pane.
-	- Expected behavior: A letter picks a row only on its own or with Shift. Other chords do nothing in the menu, or close it and run as hotkeys.
-	- Reproduced: No. Traced through the menu key handler.
-	- Possible cause: The menu's letter handling never looks at the modifiers, and winit leaves Ctrl out of the key it reports.
-	- Origin: c6eaa043, 20260628, and ec829224, 20260706. Not seen by an earlier round. Confirmed by trace.
-	- Sweep: Any other place that matches an accelerator letter, such as Settings dropdowns.
-	- Notes:
-		- Code review 20261120 item 4.
-		- On rc.1 since it can end a running program, by the rule used for Code review 20261117.
-		- Detail: `detail_backlog.md`, under this ID.
-	- Actual cause: The open menu's key handler matched the typed letter against the rows and never read the held modifiers. winit reports Ctrl+Shift+C as a plain "C", so it picked the Tabs menu's Close tab row.
-	- Decisions:
-		- 20261120: A chord does nothing while a menu is open, the first of the 2 readings offered. The menu stays up. Closing it and running the hotkey could close a tab or send a control byte to the shell from a press aimed at the menu.
-		- 20261120: Alt alone still picks a row, beyond the wording's "on its own or with Shift". That keeps Alt+F then Alt+N working with Alt held, as on Windows, and it's the same rule that makes Alt plus a letter open a menu title. Alt+Shift picks nothing, since the pane chords use it, such as Alt+Shift+W.
-	- Actual fix: A letter picks its row on its own, with Shift, or with Alt alone. With Ctrl or Super held (Command on a Mac) it picks nothing. The UI style guide says so under the menu rules.
-	- Swept: The only place a letter is matched to a menu row is the open menu's key handler, which every in-window menu goes through: the bar dropdowns, their submenus, the right-click menu, and the tab rename's menu. The Settings dropdowns and its field menu have no letter keys, and its Alt button keys already need Alt. The macOS menu bar is drawn by macOS.
-	- Test case: `a_ctrl_or_command_chord_picks_no_menu_row` (dfjvn), which walks every menu and letter, and `a_letter_picks_a_menu_row_only_alone_or_with_shift_or_alt` (dfjvm). dfjvn fails with the modifier check taken out.
-	- Verified: The quick gate, all 5 areas, and clippy for Windows.
-	- Branch: nov20b-2026112016030004
-	- Commit: f624b3bb
-	- Acceptance signoff: Self-closed: the intent was clear, and the test failed before the fix and passes after.
-	- Closed: 20261120-173128
-	- Closed reason: Done
-
-- Saving or renaming a theme drops the comments in its block and moves it to the end of the list
-	- ID: 2026112016030005
-	- Type: Bug
-	- Status: Closed
-	- Severity: Avg
-	- Opened: 20261120-160300
-	- Opened by: CC
-	- Target OS: All
-	- Target version: rc.1
-	- Incorrect behavior: A theme's comments, inside its block and on the line above it, are lost when it's saved or renamed in Settings. The block is written again after the other user themes, so the order in the theme dropdown changes too. design.md says a user's comments and grouping survive a save, and theme.rs says a rename rewrites only the name.
-	- Expected behavior: A save changes only the lines that changed. A rename changes only `name`. Comments and order stay.
-	- Reproduced: Yes, 20261120, with the same remove and set steps through the shcl command line on a scratch file.
-	- Possible cause: The theme writer removes the whole block, then writes it again.
-	- Origin: e79a250e, 20260805. Not seen by an earlier round. Confirmed.
-	- Actual cause: `write_user_themes` removed a changed theme's whole block and wrote it again, which took its comments with it and added it after the other themes.
-	- Decisions:
-		- 20261120: G30 rewrites a theme's whole subtree on purpose, so stale colors can't survive. A fix keeps that by removing the keys the theme no longer has, rather than the block.
-		- 20261120: A value that already reads the same is left as written, quotes and case included, since a save never rewrites a value. Any other line under the block goes, a key typed in by hand included, as it did when the block was rewritten.
-		- 20261120: A block shaped so a value can't be set where it is, such as an ANSI list written as a block, is still written again whole. That's checked by reading the theme back.
-	- Actual fix: A changed theme is edited in its block. Each value that doesn't read the same is set, and every other line under the block is taken out. The block's path is quoted the way the file lists it, so a slug such as `80s` is found.
-	- Swept: The shell list edits its entries in place, and rewrites the whole list only for a reorder, on purpose. Monitor sizes are set in place. The `kept` block is the program's own. Deleting a theme still removes its block.
-	- Verified: dfjvz and dfjw0 failed on the old writer and pass with the fix. Switching off the whole-block fallback, or the quoting, makes dfjw0 fail. The backlog quick run passes in all 5 areas, with 1534 unit tests.
-	- Branch: nov20b-2026112016030005
-	- Commit: 130ad220
-	- Test case: dfjvz `a_theme_save_changes_only_its_changed_lines`, and dfjw0 `a_theme_save_drops_what_the_theme_no_longer_has`.
-	- Acceptance signoff: Self-closed: the intent was clear, and its tests failed before the fix and pass after.
-	- Closed: 20261120-174609
-	- Closed reason: Done
-	- Notes:
-		- Code review 20261120 item 5.
-		- On rc.1 since it loses text the user wrote, by the rule used for Code review 20261117.
-		- Detail: `detail_backlog.md`, under this ID.
-
-- Saving a new theme can delete a theme block of the same name that Settings didn't list
-	- ID: 2026112016030006
-	- Type: Bug
-	- Status: Closed
-	- Severity: Low
-	- Opened: 20261120-160300
-	- Opened by: CC
-	- Target OS: All
-	- Target version: rc.1
-	- Incorrect behavior: A new theme whose name makes the same key as a block already in the file removes that block. That happens when another window saved a theme of that name while this Settings was open, or when a hand-typed theme didn't load, such as one with an unquoted color.
-	- Expected behavior: A new theme takes a key that's free in the file as it is at save time.
-	- Reproduced: No. The remove step was checked with the shcl command line.
-	- Possible cause: The free-key check looks only at the themes the dialog loaded.
-	- Origin: e79a250e, 20260805. Not seen by an earlier round. Plausible.
-	- Related IDs: The shell list got a 3-way merge against the file for the same case, in c6d68c11
-	- Actual cause: Confirmed. A new theme's key was checked only against the themes the dialog loaded, and the save removed whatever block the file had under it before writing.
-	- Decisions:
-		- 20261120: A new theme whose key the file already has takes the next free number after it, as the dialog numbers a second theme of one name. The block it would have hit is left as it is.
-		- 20261120: After an Apply that moved a key, the window and the dialog read the file again, as they do after another window's save. Without that, a later Apply in the same dialog would edit the block the new theme kept off.
-	- Actual fix: `write_user_themes` picks a new theme's key against the file at save time. The dialog's numbering and the save's are one helper, `theme::free_slug`.
-	- Verified: dfjw1 failed on the old writer, where the hand-typed block was gone, and passes with the fix. The reread after a moved key was read, not run.
-	- Swept: The dialog's `free_slug` and the save use the one helper. The shell list already merges against the file.
-	- Branch: nov20b-2026112016030005
-	- Commit: 130ad220
-	- Test case: dfjw1 `a_new_theme_keeps_off_a_block_it_never_read`.
-	- Acceptance signoff: Self-closed: the test failed before the fix and passes after.
-	- Closed: 20261120-174609
-	- Closed reason: Done
-	- Notes:
-		- Code review 20261120 item 6.
-		- On rc.1 since it can delete user text, by the rule used for Code review 20261117.
-		- Detail: `detail_backlog.md`, under this ID.
-
-- Both installers still rewrite a hand-edited launcher that wraps the program in `sh -c` or names it bare
-	- ID: 2026112016030007
-	- Type: Bug
-	- Status: Closed
-	- Severity: Low
-	- Opened: 20261120-160300
-	- Opened by: CC
-	- Target OS: Linux, Windows
-	- Target version: rc.1
-	- Incorrect behavior: An upgrade keeps a launcher whose Exec line names the installed program, but it misses `Exec=sh -c "/home/u/.local/bin/silkterm --x"` and `Exec=silkterm --x`. Those launchers are overwritten and the edits are lost. The 20261118 decision on 2026111713374947 says a wrapper around the program counts as naming it.
-	- Expected behavior: Both forms are kept, by install.bash and install.ps1.
-	- Reproduced: No. Traced through `fLauncherNames` in both installers.
-	- Possible cause: The match wants the path after a space or after the quote that opens the value, and never takes the bare name.
-	- Origin: 5c03a06a, 20261118, the fix for 2026111713374947. Confirmed by trace.
-	- Related IDs: 2026111713374947
-	- Notes:
-		- Code review 20261120 item 7.
-		- On rc.1 as a gap in an rc.1 fix that loses user edits.
-		- Detail: `detail_backlog.md`, under this ID.
-	- Decisions:
-		- 20261120: The bare name counts only as a whole word, after a space, a quote or `=`, and before a space or a quote. So `silkterm-old` and `/opt/elsewhere/silkterm` are still rewritten. A bare name that PATH resolves to some other copy is kept too, since the launcher can't tell which one it gets.
-	- Actual cause: `fLauncherNames` matched the plain path only between spaces, and never matched the bare name.
-	- Actual fix: Both installers also take the path or the bare name after a quote or `=`, and before a quote. Installer version 1.3.3.
-		- Swept: `fLauncherNames` in install.bash and install.ps1 are the only launcher matchers. The Windows shortcut check compares the target path and isn't touched, so Target OS Windows has nothing to change.
-	- Verified: dcbdz passes for bash, bash 3.2 and pwsh on Linux. Its 2 new keep checks failed on the old installers, for each of the 3. The quick gate passed.
-	- Branch: nov20b-2026112016030007
-	- Commit: 73434409
-	- Test case: dcbdz `cicd/tests/install/run.bash` ("an upgrade keeps a launcher that wraps it in sh -c", "an upgrade keeps a launcher that names it bare", "a launcher naming silkterm-old is rewritten").
-	- Acceptance signoff: Self-closed: dcbdz failed before the fix and passes after.
-	- Closed: 20261120-181000
-	- Closed reason: Done
-
-- Remove the line length limit from the rustfmt and ruff settings
-	- ID: 2026112016030047
-	- Type: Enhancement
-	- Status: Closed
-	- Priority: Low
-	- Opened: 20261120-160300
-	- Opened by: CC
-	- Target OS: All
-	- Target version: rc.1
-	- Requirements:
-		- rustfmt.toml sets `max_width` as high as rustfmt allows.
-		- ruff.toml sets `line-length = 320`, its highest.
-	- Origin: Directive 20261118, Line length. Not a defect.
-	- Decisions:
-		- 20261120: JC: go ahead, at the start of the next backlog run, in a commit of its own. Moved above the rc.1 cut so that run takes it.
-	- Notes:
-		- Code review 20261120 item 47.
-		- The house rule since 20261118 is no line length limit in code or comments. Raising rustfmt's width reflows every Rust file once, so it goes in a commit of its own, with nothing else in flight. The forks keep their own settings.
-		- Detail: `detail_backlog.md`, under this ID.
-	- Decisions (cont.):
-		- 20261121: `max_width = 65535`, rustfmt's highest. The 4 nested-call rules scale with it, so calls and chains now stay on one line. Two fallouts: rustfmt leaves a trailing comma before `)` in one-lined macro calls, which clippy's `unnecessary_trailing_comma` rejects, so those were removed. A comment above a match arm made clippy's `match_same_arms` fire on `pd_factors` in `coloremoji.rs`, so the arms were merged.
-	- Verified: 20261121 `cargo fmt --check` and `cicd/cicd.bash --backlog-run-quick` with all 5 areas pass. No file under `forks/` changed.
-	- Branch: nov20b-2026112016030047
-	- Commit: bb94fb96
-	- Test case: none, a formatter setting. `cargo fmt --check` and the quick run's fmt area pin it.
-	- Closed: 20261121-021500
-	- Closed reason: Done
-	- Acceptance signoff: Self-closed: mechanical, the formatter and the gates pass.
-
 - An OSC sequence that never ends grows the parser's buffer until memory runs out
 	- ID: 2026111713374900
 	- Type: Bug
@@ -573,6 +351,105 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Acceptance signoff: Self-closed: passed on vm925w (DX12 and Vulkan) and in the hosted Mac tests on Metal.
 	- Closed: 20261117-173102
 	- Closed reason: Done
+
+- An environment variable that isn't valid UTF-8 crashes SilkTerm at launch
+	- ID: 2026112016030003
+	- Type: Bug
+	- Status: Closed
+	- Severity: Avg
+	- Opened: 20261120-160300
+	- Opened by: CC
+	- Target OS: Linux, macOS
+	- Target version: rc.1
+	- Incorrect behavior: One variable with bytes that aren't UTF-8 aborts every launch, `--version` included, with exit 134. `OLDPWD` after a `cd` into a folder with a Latin-1 name is enough.
+	- Expected behavior: SilkTerm starts, and the variable reaches the shell as it was.
+	- Reproduced: Yes, 20261120. `FOO=$'\xe9' silkterm --version` aborted with exit 134.
+	- Possible cause: The shell environment cleanup reads the environment with `std::env::vars()`, which panics on a value that isn't Unicode.
+	- Origin: 393b34ef, 20260821. The fix for 2026111713374941 checked command-line arguments only. Confirmed.
+	- Sweep: Every read of the whole environment, or of one variable, that assumes Unicode.
+	- Related IDs: 2026111713374941
+	- Notes:
+		- Code review 20261120 item 3.
+		- It crashes, so it's on rc.1 by the rule used for Code review 20261117.
+		- Detail: `detail_backlog.md`, under this ID.
+	- Decisions:
+		- 20261120: A variable whose name isn't Unicode is skipped by the cleanup, since no listed name can match it. A value that isn't Unicode is compared in lossy form, since only listed names are ever written back.
+	- Actual cause: `sanitize_shell_env` in term.rs read the whole environment with `std::env::vars()`, which panics on the first entry that isn't Unicode. It runs at the top of main, before the arguments are read.
+	- Actual fix: The cleanup reads `vars_os()` through a new `inherited_env`, which skips a non-Unicode name and keeps a non-Unicode value in lossy form. Nothing else in the environment is rewritten, so other variables reach the shell as raw bytes.
+	- Swept: `std::env::vars()` had one caller, in term.rs. There are none in forks/, knobs/ or cicd/. Single reads with `std::env::var` return an error rather than panic on a non-Unicode value, and none unwraps it outside build.rs, which reads cargo's own variables. Those reads treat such a value as unset, such as `SHELL` in shells.rs and in the alacritty fork, which then fall back.
+	- Verified: Before the fix, `FOO=$'\xe9' silkterm --version` panicked in `sanitize_shell_env` with exit 101 on the debug build. Now it prints the version with exit 0. On a private Xvfb, a pane started with `FOO=$'caf\xe9'` and `OLDPWD=$'/data/caf\xe9'` got `FOO` byte for byte and no `OLDPWD`, as designed. dfjva fails with `inherited_env` unwrapping as `vars()` does, and passes with the fix. The backlog quick run passes in all 5 areas, with 1529 unit tests, and clippy is clean for the Windows target. It wasn't run on macOS.
+	- Test case: dfjva `a_variable_that_is_not_unicode_does_not_stop_the_launch`.
+	- Branch: nov20b-2026112016030003
+	- Commit: 118dfd62
+	- Acceptance signoff: Self-closed: reproduced, and the test and a run of the binary fail before the fix and pass after.
+	- Closed: 20261120-172900
+	- Closed reason: Done
+
+- With a menu open, a Ctrl or Ctrl+Shift chord picks a menu row, so the copy chord can close the tab
+	- ID: 2026112016030004
+	- Type: Bug
+	- Status: Closed
+	- Severity: Avg
+	- Opened: 20261120-160300
+	- Opened by: CC
+	- Target OS: All
+	- Target version: rc.1
+	- Incorrect behavior: An open menu takes any typed letter as its accelerator, whatever modifiers are held. Ctrl+Shift+C with the Tabs menu open closes the tab, and with the Panes menu open it closes the pane. Neither asks, so what was running there is gone. Ctrl+Shift+V in the right-click menu splits the pane.
+	- Expected behavior: A letter picks a row only on its own or with Shift. Other chords do nothing in the menu, or close it and run as hotkeys.
+	- Reproduced: No. Traced through the menu key handler.
+	- Possible cause: The menu's letter handling never looks at the modifiers, and winit leaves Ctrl out of the key it reports.
+	- Origin: c6eaa043, 20260628, and ec829224, 20260706. Not seen by an earlier round. Confirmed by trace.
+	- Sweep: Any other place that matches an accelerator letter, such as Settings dropdowns.
+	- Notes:
+		- Code review 20261120 item 4.
+		- On rc.1 since it can end a running program, by the rule used for Code review 20261117.
+		- Detail: `detail_backlog.md`, under this ID.
+	- Actual cause: The open menu's key handler matched the typed letter against the rows and never read the held modifiers. winit reports Ctrl+Shift+C as a plain "C", so it picked the Tabs menu's Close tab row.
+	- Decisions:
+		- 20261120: A chord does nothing while a menu is open, the first of the 2 readings offered. The menu stays up. Closing it and running the hotkey could close a tab or send a control byte to the shell from a press aimed at the menu.
+		- 20261120: Alt alone still picks a row, beyond the wording's "on its own or with Shift". That keeps Alt+F then Alt+N working with Alt held, as on Windows, and it's the same rule that makes Alt plus a letter open a menu title. Alt+Shift picks nothing, since the pane chords use it, such as Alt+Shift+W.
+	- Actual fix: A letter picks its row on its own, with Shift, or with Alt alone. With Ctrl or Super held (Command on a Mac) it picks nothing. The UI style guide says so under the menu rules.
+	- Swept: The only place a letter is matched to a menu row is the open menu's key handler, which every in-window menu goes through: the bar dropdowns, their submenus, the right-click menu, and the tab rename's menu. The Settings dropdowns and its field menu have no letter keys, and its Alt button keys already need Alt. The macOS menu bar is drawn by macOS.
+	- Test case: `a_ctrl_or_command_chord_picks_no_menu_row` (dfjvn), which walks every menu and letter, and `a_letter_picks_a_menu_row_only_alone_or_with_shift_or_alt` (dfjvm). dfjvn fails with the modifier check taken out.
+	- Verified: The quick gate, all 5 areas, and clippy for Windows.
+	- Branch: nov20b-2026112016030004
+	- Commit: f624b3bb
+	- Acceptance signoff: Self-closed: the intent was clear, and the test failed before the fix and passes after.
+	- Closed: 20261120-173128
+	- Closed reason: Done
+
+- Saving or renaming a theme drops the comments in its block and moves it to the end of the list
+	- ID: 2026112016030005
+	- Type: Bug
+	- Status: Closed
+	- Severity: Avg
+	- Opened: 20261120-160300
+	- Opened by: CC
+	- Target OS: All
+	- Target version: rc.1
+	- Incorrect behavior: A theme's comments, inside its block and on the line above it, are lost when it's saved or renamed in Settings. The block is written again after the other user themes, so the order in the theme dropdown changes too. design.md says a user's comments and grouping survive a save, and theme.rs says a rename rewrites only the name.
+	- Expected behavior: A save changes only the lines that changed. A rename changes only `name`. Comments and order stay.
+	- Reproduced: Yes, 20261120, with the same remove and set steps through the shcl command line on a scratch file.
+	- Possible cause: The theme writer removes the whole block, then writes it again.
+	- Origin: e79a250e, 20260805. Not seen by an earlier round. Confirmed.
+	- Actual cause: `write_user_themes` removed a changed theme's whole block and wrote it again, which took its comments with it and added it after the other themes.
+	- Decisions:
+		- 20261120: G30 rewrites a theme's whole subtree on purpose, so stale colors can't survive. A fix keeps that by removing the keys the theme no longer has, rather than the block.
+		- 20261120: A value that already reads the same is left as written, quotes and case included, since a save never rewrites a value. Any other line under the block goes, a key typed in by hand included, as it did when the block was rewritten.
+		- 20261120: A block shaped so a value can't be set where it is, such as an ANSI list written as a block, is still written again whole. That's checked by reading the theme back.
+	- Actual fix: A changed theme is edited in its block. Each value that doesn't read the same is set, and every other line under the block is taken out. The block's path is quoted the way the file lists it, so a slug such as `80s` is found.
+	- Swept: The shell list edits its entries in place, and rewrites the whole list only for a reorder, on purpose. Monitor sizes are set in place. The `kept` block is the program's own. Deleting a theme still removes its block.
+	- Verified: dfjvz and dfjw0 failed on the old writer and pass with the fix. Switching off the whole-block fallback, or the quoting, makes dfjw0 fail. The backlog quick run passes in all 5 areas, with 1534 unit tests.
+	- Branch: nov20b-2026112016030005
+	- Commit: 130ad220
+	- Test case: dfjvz `a_theme_save_changes_only_its_changed_lines`, and dfjw0 `a_theme_save_drops_what_the_theme_no_longer_has`.
+	- Acceptance signoff: Self-closed: the intent was clear, and its tests failed before the fix and pass after.
+	- Closed: 20261120-174609
+	- Closed reason: Done
+	- Notes:
+		- Code review 20261120 item 5.
+		- On rc.1 since it loses text the user wrote, by the rule used for Code review 20261117.
+		- Detail: `detail_backlog.md`, under this ID.
 
 - A settings file from before shcl 3 that is written new loses renamed and moved settings
 	- ID: 2026111917525263
@@ -936,6 +813,100 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Test case: `one_x_connection_per_window` (dfe50), `a_failed_x_read_reconnects` (dfe51)
 	- Acceptance signoff: Self-closed: the change does what the item asked, measured before and after, and its tests fail with the keeping broken.
 	- Closed: 20261117-091811
+	- Closed reason: Done
+
+- Dragging the scrollbar thumb while output arrives can make the text jump
+	- ID: 2026112017124593
+	- Type: Bug
+	- Status: Closed
+	- Severity: Low
+	- Opened: 20261120-171245
+	- Opened by:
+	- Related IDs: 2026112016030002, 2026112016030026
+	- Target OS: All
+	- Target version: rc.1
+	- Incorrect behavior: While output arrives, a drag of the scrollbar thumb sets the view's place directly, so the next pointer move can jump the text.
+	- Expected behavior: The text under the view stays put during a drag, as it does since 2026112016030002 when the view is parked.
+	- Reproduced: No. Found while fixing 2026112016030002.
+	- Note: not a duplicate of 2026112016030026. That one is the grab during an ease, measured against the drawn thumb. This one is output arriving during a drag.
+	- Actual cause: each drag move set the place from the pointer alone. Output moves a parked view up with its text, and the next move put it back. The minimap marker went back by every line that went up. The thumb went back by most of them, since a deeper scrollback also rescales the track.
+	- Decisions:
+		- 20261120: the minimap marker drag had the same fault and is fixed with it.
+		- 20261120: while output arrives during a drag with the pointer still, the text stays put and the thumb moves a little, since the same text sits higher in a deeper scrollback. The handle tracks the pointer's moves rather than its exact spot then.
+		- 20261120: a view held at the top of a full scrollback doesn't move with the output, and the drag doesn't count those lines either, so dragging down moves it at once.
+	- Actual fix [Bug]: a handle drag goes on from where it started, moved by the lines output has carried the view up since. The thumb drag maps the pointer's move from the grab at the current scrollback's scale.
+	- Swept: the thumb drag and the marker drag are the only drags that set the place from the pointer. A track click, a marker jump and a selection's edge scroll are one-shot or relative.
+	- Test case: dfjwf `a_handle_drag_keeps_the_text_still_while_output_arrives`.
+	- Verified: 20261120. dfjwf passes, with the scrollback growing and full. With the shift taken out of the drag it fails, the view going back to where it was grabbed. Counting the lines that went up rather than what the view moved fails its top-of-scrollback case. daqnd, dfjtz, dfjv0 and dc0b5 pass. The quick gate's format, lint, test, script and docs areas pass.
+	- Acceptance signoff: Self-closed: the behavior the item asked for, red before and green after.
+	- Closed: 20261120-175800
+	- Closed reason: Done
+	- Branch: nov20b-2026112017124593
+	- Commit: bb874dd1
+
+- Saving a new theme can delete a theme block of the same name that Settings didn't list
+	- ID: 2026112016030006
+	- Type: Bug
+	- Status: Closed
+	- Severity: Low
+	- Opened: 20261120-160300
+	- Opened by: CC
+	- Target OS: All
+	- Target version: rc.1
+	- Incorrect behavior: A new theme whose name makes the same key as a block already in the file removes that block. That happens when another window saved a theme of that name while this Settings was open, or when a hand-typed theme didn't load, such as one with an unquoted color.
+	- Expected behavior: A new theme takes a key that's free in the file as it is at save time.
+	- Reproduced: No. The remove step was checked with the shcl command line.
+	- Possible cause: The free-key check looks only at the themes the dialog loaded.
+	- Origin: e79a250e, 20260805. Not seen by an earlier round. Plausible.
+	- Related IDs: The shell list got a 3-way merge against the file for the same case, in c6d68c11
+	- Actual cause: Confirmed. A new theme's key was checked only against the themes the dialog loaded, and the save removed whatever block the file had under it before writing.
+	- Decisions:
+		- 20261120: A new theme whose key the file already has takes the next free number after it, as the dialog numbers a second theme of one name. The block it would have hit is left as it is.
+		- 20261120: After an Apply that moved a key, the window and the dialog read the file again, as they do after another window's save. Without that, a later Apply in the same dialog would edit the block the new theme kept off.
+	- Actual fix: `write_user_themes` picks a new theme's key against the file at save time. The dialog's numbering and the save's are one helper, `theme::free_slug`.
+	- Verified: dfjw1 failed on the old writer, where the hand-typed block was gone, and passes with the fix. The reread after a moved key was read, not run.
+	- Swept: The dialog's `free_slug` and the save use the one helper. The shell list already merges against the file.
+	- Branch: nov20b-2026112016030005
+	- Commit: 130ad220
+	- Test case: dfjw1 `a_new_theme_keeps_off_a_block_it_never_read`.
+	- Acceptance signoff: Self-closed: the test failed before the fix and passes after.
+	- Closed: 20261120-174609
+	- Closed reason: Done
+	- Notes:
+		- Code review 20261120 item 6.
+		- On rc.1 since it can delete user text, by the rule used for Code review 20261117.
+		- Detail: `detail_backlog.md`, under this ID.
+
+- Both installers still rewrite a hand-edited launcher that wraps the program in `sh -c` or names it bare
+	- ID: 2026112016030007
+	- Type: Bug
+	- Status: Closed
+	- Severity: Low
+	- Opened: 20261120-160300
+	- Opened by: CC
+	- Target OS: Linux, Windows
+	- Target version: rc.1
+	- Incorrect behavior: An upgrade keeps a launcher whose Exec line names the installed program, but it misses `Exec=sh -c "/home/u/.local/bin/silkterm --x"` and `Exec=silkterm --x`. Those launchers are overwritten and the edits are lost. The 20261118 decision on 2026111713374947 says a wrapper around the program counts as naming it.
+	- Expected behavior: Both forms are kept, by install.bash and install.ps1.
+	- Reproduced: No. Traced through `fLauncherNames` in both installers.
+	- Possible cause: The match wants the path after a space or after the quote that opens the value, and never takes the bare name.
+	- Origin: 5c03a06a, 20261118, the fix for 2026111713374947. Confirmed by trace.
+	- Related IDs: 2026111713374947
+	- Notes:
+		- Code review 20261120 item 7.
+		- On rc.1 as a gap in an rc.1 fix that loses user edits.
+		- Detail: `detail_backlog.md`, under this ID.
+	- Decisions:
+		- 20261120: The bare name counts only as a whole word, after a space, a quote or `=`, and before a space or a quote. So `silkterm-old` and `/opt/elsewhere/silkterm` are still rewritten. A bare name that PATH resolves to some other copy is kept too, since the launcher can't tell which one it gets.
+	- Actual cause: `fLauncherNames` matched the plain path only between spaces, and never matched the bare name.
+	- Actual fix: Both installers also take the path or the bare name after a quote or `=`, and before a quote. Installer version 1.3.3.
+		- Swept: `fLauncherNames` in install.bash and install.ps1 are the only launcher matchers. The Windows shortcut check compares the target path and isn't touched, so Target OS Windows has nothing to change.
+	- Verified: dcbdz passes for bash, bash 3.2 and pwsh on Linux. Its 2 new keep checks failed on the old installers, for each of the 3. The quick gate passed.
+	- Branch: nov20b-2026112016030007
+	- Commit: 73434409
+	- Test case: dcbdz `cicd/tests/install/run.bash` ("an upgrade keeps a launcher that wraps it in sh -c", "an upgrade keeps a launcher that names it bare", "a launcher naming silkterm-old is rewritten").
+	- Acceptance signoff: Self-closed: dcbdz failed before the fix and passes after.
+	- Closed: 20261120-181000
 	- Closed reason: Done
 
 - After a long OSC ends, the parser keeps up to 2 MiB of buffer per pane until the pane closes
@@ -1354,6 +1325,35 @@ Going forward, new issues in the new template at the bottom of this file will go
 	- Acceptance signoff: Self-closed: the bug was reproduced, its test failed before the fix and passes after, and the program kept its grid on Xvfb.
 	- Closed: 20261117-082100
 	- Closed reason: Done
+
+- Remove the line length limit from the rustfmt and ruff settings
+	- ID: 2026112016030047
+	- Type: Enhancement
+	- Status: Closed
+	- Priority: Low
+	- Opened: 20261120-160300
+	- Opened by: CC
+	- Target OS: All
+	- Target version: rc.1
+	- Requirements:
+		- rustfmt.toml sets `max_width` as high as rustfmt allows.
+		- ruff.toml sets `line-length = 320`, its highest.
+	- Origin: Directive 20261118, Line length. Not a defect.
+	- Decisions:
+		- 20261120: JC: go ahead, at the start of the next backlog run, in a commit of its own. Moved above the rc.1 cut so that run takes it.
+	- Notes:
+		- Code review 20261120 item 47.
+		- The house rule since 20261118 is no line length limit in code or comments. Raising rustfmt's width reflows every Rust file once, so it goes in a commit of its own, with nothing else in flight. The forks keep their own settings.
+		- Detail: `detail_backlog.md`, under this ID.
+	- Decisions (cont.):
+		- 20261121: `max_width = 65535`, rustfmt's highest. The 4 nested-call rules scale with it, so calls and chains now stay on one line. Two fallouts: rustfmt leaves a trailing comma before `)` in one-lined macro calls, which clippy's `unnecessary_trailing_comma` rejects, so those were removed. A comment above a match arm made clippy's `match_same_arms` fire on `pd_factors` in `coloremoji.rs`, so the arms were merged.
+	- Verified: 20261121 `cargo fmt --check` and `cicd/cicd.bash --backlog-run-quick` with all 5 areas pass. No file under `forks/` changed.
+	- Branch: nov20b-2026112016030047
+	- Commit: bb94fb96
+	- Test case: none, a formatter setting. `cargo fmt --check` and the quick run's fmt area pin it.
+	- Closed: 20261121-021500
+	- Closed reason: Done
+	- Acceptance signoff: Self-closed: mechanical, the formatter and the gates pass.
 
 - shcl: a keep-lines save adds a set value as a new line, beside its commented default
 	- ID: 2026100219054510
