@@ -34,6 +34,18 @@ Going forward, new issues in the new template at the bottom of this file will go
 
 ## Issues
 
+- Dragging the scrollbar thumb while output arrives can make the text jump
+	- ID: 2026112017124593
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261120-171245
+	- Opened by:
+	- Related IDs: 2026112016030002
+	- Incorrect behavior: While output arrives, a drag of the scrollbar thumb sets the view's place directly, so the next pointer move can jump the text.
+	- Expected behavior: The text under the view stays put during a drag, as it does since 2026112016030002 when the view is parked.
+	- Reproduced: No. Found while fixing 2026112016030002.
+
 - Does not release resources in tmux and/or muffer
 	- ID: 2026112006320249
 	- Type: Bug
